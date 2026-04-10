@@ -1,0 +1,11 @@
+.git
+.next
+node_modules
+.env.local
+.env.*.local
+.env.production
+npm-debug.log*
+README.md
+.vscode
+.claude
+.agents

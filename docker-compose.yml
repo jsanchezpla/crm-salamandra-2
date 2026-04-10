@@ -1,0 +1,54 @@
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: salamandra
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d salamandra"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - crm-net
+
+  # ── Next.js app ─────────────────────────────────────────────────────────────
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env.production
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - crm-net
+    # En producción nginx hace de proxy — el puerto 3000 no se expone al exterior
+    expose:
+      - "3000"
+
+  # ── Nginx reverse proxy ─────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro      # SSL: pegar aquí cert + key
+    depends_on:
+      - app
+    networks:
+      - crm-net
+
+volumes:
+  pgdata:
+
+networks:
+  crm-net:
+    driver: bridge

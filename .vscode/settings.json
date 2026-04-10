@@ -1,0 +1,13 @@
+{
+    // 1. Esto hace que al guardar (Ctrl + S) se formatee automáticamente
+    "editor.formatOnSave": true,
+    // 2. Esto hace que el formateador por defecto (el que usa Alt + Shift + F) sea Prettier
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    // (Opcional pero recomendado) Asegurarnos de que JS y React usen Prettier siempre
+    "[javascript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[javascriptreact]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    }
+}
