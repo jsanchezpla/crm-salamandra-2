@@ -3,7 +3,7 @@ import { jwtVerify } from "jose";
 
 const ACCESS_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
-const PUBLIC_API_PATHS = ["/api/auth/login", "/api/auth/refresh"];
+const PUBLIC_API_PATHS = ["/api/auth/login", "/api/auth/refresh", "/api/public/"];
 const PUBLIC_PAGE_PATHS = ["/login"];
 
 function isPublicPath(pathname) {
@@ -18,7 +18,12 @@ function isApiPath(pathname) {
 }
 
 export async function middleware(request) {
-  const { pathname } = request.nextUrl;
+  const { pathname, method } = request.nextUrl;
+
+  // Dejar pasar preflight CORS sin token
+  if (request.method === "OPTIONS") {
+    return NextResponse.next();
+  }
 
   // Dejar pasar rutas públicas sin token
   if (isPublicPath(pathname)) {
