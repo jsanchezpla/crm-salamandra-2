@@ -11,7 +11,8 @@
     "db:sync": "node --env-file=.env.local scripts/db-sync.js",
     "db:seed": "node --env-file=.env.local scripts/db-seed.js",
     "db:seed:qec": "node --env-file=.env.local scripts/seed-quality-energy.js",
-    "db:seed:aumenta": "node --env-file=.env.local scripts/seed-aumenta.js"
+    "db:seed:aumenta": "node --env-file=.env.local scripts/seed-aumenta.js",
+    "db:clear:aumenta": "node --env-file=.env.local scripts/clear-aumenta-leads.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
