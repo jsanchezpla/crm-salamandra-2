@@ -3,7 +3,7 @@ services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
-    env_file: .env.production          # postgres lee POSTGRES_USER/PASSWORD/DB directamente
+    env_file: .env.production
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -22,23 +22,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    networks:
-      - crm-net
-    expose:
-      - "3000"
-
-  # ── Nginx reverse proxy ─────────────────────────────────────────────────────
-  nginx:
-    image: nginx:alpine
-    restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/certs:/etc/nginx/certs:ro
-    depends_on:
-      - app
+      - "127.0.0.1:3000:3000"   # solo accesible desde el propio VPS (nginx nativo hace de proxy)
     networks:
       - crm-net
 
