@@ -3,14 +3,11 @@ services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: salamandra
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    env_file: .env.production          # postgres lee POSTGRES_USER/PASSWORD/DB directamente
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d salamandra"]
+      test: ["CMD-SHELL", "pg_isready -U crm_user -d salamandra"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -27,7 +24,6 @@ services:
         condition: service_healthy
     networks:
       - crm-net
-    # En producción nginx hace de proxy — el puerto 3000 no se expone al exterior
     expose:
       - "3000"
 
@@ -40,7 +36,7 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/certs:/etc/nginx/certs:ro      # SSL: pegar aquí cert + key
+      - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:
       - app
     networks:
