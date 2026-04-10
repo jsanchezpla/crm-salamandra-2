@@ -6,6 +6,12 @@ const ACCESS_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 const PUBLIC_API_PATHS = ["/api/auth/login", "/api/auth/refresh", "/api/public/"];
 const PUBLIC_PAGE_PATHS = ["/login"];
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, x-tenant",
+};
+
 function isPublicPath(pathname) {
   return (
     PUBLIC_API_PATHS.some((p) => pathname.startsWith(p)) ||
@@ -18,11 +24,11 @@ function isApiPath(pathname) {
 }
 
 export async function middleware(request) {
-  const { pathname, method } = request.nextUrl;
+  const { pathname } = request.nextUrl;
 
-  // Dejar pasar preflight CORS sin token
-  if (request.method === "OPTIONS") {
-    return NextResponse.next();
+  // Responder preflight CORS directamente desde el middleware
+  if (request.method === "OPTIONS" && pathname.startsWith("/api/public/")) {
+    return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
   }
 
   // Dejar pasar rutas públicas sin token
