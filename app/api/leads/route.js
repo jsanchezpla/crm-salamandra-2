@@ -12,12 +12,14 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   const where = {};
   const stage = searchParams.get("stage");
   const search = searchParams.get("search");
+  const empresa = searchParams.get("empresa");
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "100"), 200);
   const offset = parseInt(searchParams.get("offset") ?? "0");
 
   const motivo = searchParams.get("motivo");
   if (stage) where.stage = stage;
   if (motivo) where.motivo = motivo;
+  if (empresa) where.customFields = { [Op.contains]: { empresa } };
   if (search) {
     where[Op.or] = [
       { name: { [Op.iLike]: `%${search}%` } },

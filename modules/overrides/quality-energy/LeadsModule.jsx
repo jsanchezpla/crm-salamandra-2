@@ -4,6 +4,20 @@ import { useEffect, useState, useCallback } from "react";
 
 // ─── Configuración QEC ────────────────────────────────────────────────────────
 
+const EMPRESAS = [
+  { key: "Quality Energy Consulting", label: "Quality Energy" },
+  { key: "Made of Energy", label: "Made of Energy" },
+  { key: "AbarcaIA", label: "AbarcaIA" },
+  { key: "Iluminia Quantum", label: "Iluminia Quantum" },
+];
+
+const EMPRESA_STYLE = {
+  "Quality Energy Consulting": "bg-green-100 text-green-700",
+  "Made of Energy": "bg-amber-100 text-amber-700",
+  AbarcaIA: "bg-blue-100 text-blue-700",
+  "Iluminia Quantum": "bg-purple-100 text-purple-700",
+};
+
 const STAGES = [
   { key: "new", label: "Nuevo lead" },
   { key: "contacted", label: "Contactado" },
@@ -44,6 +58,7 @@ export default function QECLeadsModule() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activeStage, setActiveStage] = useState("all");
+  const [activeEmpresa, setActiveEmpresa] = useState("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -53,6 +68,7 @@ export default function QECLeadsModule() {
     setLoading(true);
     const params = new URLSearchParams({ limit: "200" });
     if (activeStage !== "all") params.set("stage", activeStage);
+    if (activeEmpresa !== "all") params.set("empresa", activeEmpresa);
     if (search.trim()) params.set("search", search.trim());
 
     fetch(`/api/leads?${params}`)
@@ -64,7 +80,7 @@ export default function QECLeadsModule() {
         }
       })
       .finally(() => setLoading(false));
-  }, [activeStage, search]);
+  }, [activeStage, activeEmpresa, search]);
 
   useEffect(() => {
     fetchLeads();
@@ -152,8 +168,8 @@ export default function QECLeadsModule() {
             ))}
           </div>
 
-          {/* Filtros — buscador + tabs scrollables */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
+          {/* Filtros — fila 1: buscador + empresa */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-2">
             {/* Búsqueda */}
             <div className="relative flex-1">
               <svg
@@ -175,32 +191,44 @@ export default function QECLeadsModule() {
               />
             </div>
 
-            {/* Tabs de estado — scroll horizontal en móvil */}
-            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 shadow-sm overflow-x-auto shrink-0 min-w-0">
+            {/* Filtro empresa */}
+            <select
+              value={activeEmpresa}
+              onChange={(e) => setActiveEmpresa(e.target.value)}
+              className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors shadow-sm shrink-0"
+            >
+              <option value="all">Todas las empresas</option>
+              {EMPRESAS.map((e) => (
+                <option key={e.key} value={e.key}>
+                  {e.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtros — fila 2: tabs de estado */}
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 shadow-sm overflow-x-auto min-w-0 mb-4">
+            <button
+              onClick={() => setActiveStage("all")}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                activeStage === "all" ? "bg-[var(--color-primary)] text-white" : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Todos
+            </button>
+            {STAGES.map((s) => (
               <button
-                onClick={() => setActiveStage("all")}
+                key={s.key}
+                onClick={() => setActiveStage(s.key)}
                 className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                  activeStage === "all"
+                  activeStage === s.key
                     ? "bg-[var(--color-primary)] text-white"
                     : "text-gray-500 hover:text-gray-700"
                 }`}
               >
-                Todos
+                {s.label}
               </button>
-              {STAGES.map((s) => (
-                <button
-                  key={s.key}
-                  onClick={() => setActiveStage(s.key)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                    activeStage === s.key
-                      ? "bg-[var(--color-primary)] text-white"
-                      : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
+            ))}
           </div>
         </div>
 
@@ -217,7 +245,7 @@ export default function QECLeadsModule() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      {["Nombre", "Teléfono", "Email", "Experiencia", "Zona", "Estado", "Recibido"].map((h) => (
+                      {["Nombre", "Teléfono", "Email", "Empresa", "Experiencia", "Zona", "Estado", "Recibido"].map((h) => (
                         <th
                           key={h}
                           className="text-left py-3 px-4 text-[10px] font-semibold text-gray-500 uppercase tracking-wide"
@@ -231,6 +259,7 @@ export default function QECLeadsModule() {
                     {leads.map((lead) => {
                       const exp = lead.customFields?.experience;
                       const zone = lead.customFields?.zone;
+                      const empresa = lead.customFields?.empresa;
                       const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.new;
                       return (
                         <tr
@@ -254,6 +283,17 @@ export default function QECLeadsModule() {
                           </td>
                           <td className="py-3 px-4">
                             <span className="text-gray-500">{lead.email || "—"}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            {empresa ? (
+                              <span
+                                className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EMPRESA_STYLE[empresa] ?? "bg-gray-100 text-gray-600"}`}
+                              >
+                                {empresa}
+                              </span>
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
                           </td>
                           <td className="py-3 px-4">
                             {exp ? (
@@ -296,6 +336,7 @@ export default function QECLeadsModule() {
                 {leads.map((lead) => {
                   const exp = lead.customFields?.experience;
                   const zone = lead.customFields?.zone;
+                  const empresa = lead.customFields?.empresa;
                   const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.new;
                   return (
                     <div
@@ -315,8 +356,17 @@ export default function QECLeadsModule() {
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-2 mt-2">
+                        {empresa && (
+                          <span
+                            className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EMPRESA_STYLE[empresa] ?? "bg-gray-100 text-gray-600"}`}
+                          >
+                            {empresa}
+                          </span>
+                        )}
                         {exp && (
-                          <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EXPERIENCE_STYLE[exp] ?? "bg-gray-100 text-gray-600"}`}>
+                          <span
+                            className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EXPERIENCE_STYLE[exp] ?? "bg-gray-100 text-gray-600"}`}
+                          >
                             {EXPERIENCE_LABELS[exp] ?? exp}
                           </span>
                         )}
@@ -384,6 +434,7 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onNotesCh
 
   const exp = lead.customFields?.experience;
   const zone = lead.customFields?.zone;
+  const empresa = lead.customFields?.empresa;
   const utmSource = lead.customFields?.utmSource;
   const utmMedium = lead.customFields?.utmMedium;
   const utmCampaign = lead.customFields?.utmCampaign;
@@ -455,6 +506,18 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onNotesCh
         <div>
           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-3">Perfil comercial</p>
           <div className="space-y-2.5">
+            <div className="flex items-start gap-3">
+              <span className="text-gray-400 w-24 shrink-0 text-xs mt-0.5">Empresa</span>
+              {empresa ? (
+                <span
+                  className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EMPRESA_STYLE[empresa] ?? "bg-gray-100 text-gray-600"}`}
+                >
+                  {empresa}
+                </span>
+              ) : (
+                <span className="text-gray-300 text-xs">No indicado</span>
+              )}
+            </div>
             <div className="flex items-start gap-3">
               <span className="text-gray-400 w-24 shrink-0 text-xs mt-0.5">Experiencia</span>
               {exp ? (

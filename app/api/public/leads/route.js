@@ -37,7 +37,8 @@ export async function POST(request) {
       curso,
       taller,
       mensaje,
-      source,
+      empresa,
+      customFields: customFieldsBody,
     } = body;
 
     // Accept both naming conventions:
@@ -50,20 +51,25 @@ export async function POST(request) {
       return Response.json({ ok: false, error: "Se requiere nombre o email" }, { status: 400, headers: CORS_HEADERS });
     }
 
+    // Merge customFields from body and empresa field
+    const customFields = {
+      ...(customFieldsBody && typeof customFieldsBody === "object" ? customFieldsBody : {}),
+      ...(empresa ? { empresa: String(empresa).trim() } : {}),
+    };
+
     const lead = await Lead.create({
       name: fullName,
       email: email?.trim().toLowerCase() ?? null,
       phone,
       title: fullName,
       stage: "new",
-      source: source ?? "web",
       tipo_usuario: tipo_usuario ?? "ciudadano",
       motivo: motivo ?? null,
       servicio: servicio?.trim() ?? null,
       curso: curso?.trim() ?? null,
       taller: taller?.trim() ?? null,
       mensaje: mensaje?.trim() ?? null,
-      customFields: {},
+      customFields,
     });
 
     return Response.json({ ok: true, id: lead.id }, { status: 201, headers: CORS_HEADERS });
