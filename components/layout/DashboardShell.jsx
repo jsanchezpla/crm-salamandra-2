@@ -8,7 +8,7 @@ export default function DashboardShell({ tenant, user, modules, primaryColor, se
 
   return (
     <div
-      className="flex h-screen bg-gray-50"
+      className="flex h-screen bg-[#EDE8DE]"
       style={{
         "--color-primary": primaryColor,
         "--color-secondary": secondaryColor,
@@ -24,10 +24,10 @@ export default function DashboardShell({ tenant, user, modules, primaryColor, se
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Mobile top bar */}
-        <header className="lg:hidden sticky top-0 z-30 h-14 bg-white border-b border-gray-100 flex items-center px-4 gap-3 shrink-0 shadow-sm">
+        <header className="lg:hidden sticky top-0 z-30 h-14 bg-white border-b border-neutral-100 flex items-center px-4 gap-3 shrink-0">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-100 transition-colors"
             aria-label="Abrir menú"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
@@ -47,10 +47,10 @@ export default function DashboardShell({ tenant, user, modules, primaryColor, se
                   className="w-full h-full object-contain"
                 />
               ) : (
-                <span className="text-white font-black text-xs leading-none">S</span>
+                <span className="text-[#1B3A2D] font-black text-xs leading-none">S</span>
               )}
             </div>
-            <span className="text-sm font-semibold text-gray-900 truncate">{tenant?.name ?? "CRM"}</span>
+            <span className="text-sm font-semibold text-neutral-800 truncate">{tenant?.name ?? "CRM"}</span>
           </div>
         </header>
 

@@ -198,7 +198,7 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
     onClose?.();
   }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const primaryColor = tenant?.settings?.brand?.primaryColor ?? "#2EE59D";
+  const primaryColor = tenant?.settings?.brand?.primaryColor ?? "#1B3A2D";
   const logoUrl = tenant?.settings?.brand?.logoUrl ?? null;
 
   const enabledModules = new Set(modules.filter((m) => m.enabled).map((m) => m.moduleKey));
@@ -225,7 +225,7 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
       <aside
         className={`
           fixed lg:sticky top-0 left-0 h-screen z-50 lg:z-auto
-          w-[260px] lg:w-[220px] bg-[#0F0F0F] flex flex-col shrink-0
+          w-[260px] lg:w-[220px] bg-[#152B22] flex flex-col shrink-0
           transition-transform duration-300 ease-in-out
           ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         `}
@@ -241,7 +241,7 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
                 {logoUrl ? (
                   <img src={logoUrl} alt={tenant?.name ?? "Logo"} className="w-full h-full object-contain" />
                 ) : (
-                  <span className="text-[#0F0F0F] font-black text-sm leading-none">S</span>
+                  <span className="text-[#EDE8DE] font-black text-sm leading-none">S</span>
                 )}
               </div>
               <span className="text-white font-bold text-sm tracking-wide truncate">Salamandra</span>
@@ -250,7 +250,7 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
             {/* Cerrar (solo móvil) */}
             <button
               onClick={onClose}
-              className="lg:hidden text-neutral-600 hover:text-neutral-400 transition-colors p-1"
+              className="lg:hidden text-white/40 hover:text-white/70 transition-colors p-1"
               aria-label="Cerrar menú"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
@@ -260,17 +260,17 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
           </div>
 
           {/* Tenant activo */}
-          <div className="bg-[#161616] rounded-lg px-3 py-2.5 flex items-center gap-2.5">
+          <div className="bg-black/20 rounded-lg px-3 py-2.5 flex items-center gap-2.5">
             <div className="w-2 h-2 rounded-full shrink-0 animate-pulse" style={{ backgroundColor: primaryColor }} />
             <div className="min-w-0">
               <div className="text-white text-xs font-medium truncate">{tenant?.name ?? "Sin tenant"}</div>
-              <div className="text-neutral-600 text-[10px] mt-0.5 capitalize">{tenant?.plan ?? "—"}</div>
+              <div className="text-white/30 text-[10px] mt-0.5 capitalize">{tenant?.plan ?? "—"}</div>
             </div>
           </div>
         </div>
 
         {/* Navegación */}
-        <nav className="flex-1 overflow-y-auto px-3 space-y-4 pb-4">
+        <nav className="flex-1 overflow-y-auto px-3 space-y-4 pb-4 slim-scroll">
           {navigation.map((section) => {
             const visibleItems = section.items.filter(
               (item) => item.key === "inicio" || enabledModules.has(item.key) || enabledModules.size === 0
@@ -279,7 +279,7 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
 
             return (
               <div key={section.label}>
-                <div className="px-2 mb-1.5 text-[9px] font-semibold text-neutral-700 uppercase tracking-[0.12em]">
+                <div className="px-2 mb-1.5 text-[9px] font-semibold text-white/25 uppercase tracking-[0.12em]">
                   {section.label}
                 </div>
                 <div className="space-y-px">
@@ -290,20 +290,20 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
                         key={item.key}
                         href={item.href}
                         className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md transition-colors group ${
-                          isActive ? "bg-[#1a1a1a]" : "hover:bg-[#161616]"
+                          isActive ? "bg-white/[0.10]" : "hover:bg-white/[0.06]"
                         }`}
                       >
                         <span
                           className="shrink-0 transition-colors"
                           style={{ color: isActive ? primaryColor : undefined }}
                         >
-                          <span className={!isActive ? "text-neutral-700 group-hover:text-neutral-500" : ""}>
+                          <span className={!isActive ? "text-white/30 group-hover:text-white/60" : ""}>
                             {item.icon}
                           </span>
                         </span>
                         <span
                           className={`text-xs transition-colors flex-1 truncate ${
-                            isActive ? "text-white font-medium" : "text-neutral-600 group-hover:text-neutral-400"
+                            isActive ? "text-white font-medium" : "text-white/40 group-hover:text-white/70"
                           }`}
                         >
                           {item.label}
@@ -326,18 +326,18 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
         </nav>
 
         {/* Usuario + logout */}
-        <div className="px-3 py-4 border-t border-[#161616]">
+        <div className="px-3 py-4 border-t border-white/[0.08]">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] flex items-center justify-center text-[10px] font-semibold text-neutral-500 shrink-0">
+            <div className="w-7 h-7 rounded-full bg-white/[0.08] border border-white/10 flex items-center justify-center text-[10px] font-semibold text-white/50 shrink-0">
               {initials}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-neutral-400 text-[11px] truncate">{user?.email ?? "Usuario"}</div>
-              <div className="text-neutral-700 text-[10px] capitalize">{user?.role ?? "—"}</div>
+              <div className="text-white/50 text-[11px] truncate">{user?.email ?? "Usuario"}</div>
+              <div className="text-white/25 text-[10px] capitalize">{user?.role ?? "—"}</div>
             </div>
             <button
               onClick={handleLogout}
-              className="text-neutral-700 hover:text-neutral-400 transition-colors shrink-0 cursor-pointer"
+              className="text-white/25 hover:text-white/60 transition-colors shrink-0 cursor-pointer"
               title="Cerrar sesión"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">

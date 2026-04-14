@@ -96,8 +96,8 @@ async function main() {
       status: "active",
       settings: {
         brand: {
-          primaryColor: "#2EE59D",
-          secondaryColor: "#0F0F0F",
+          primaryColor: "#1B3A2D",
+          secondaryColor: "#FAFAF8",
           logoUrl: null,
         },
       },

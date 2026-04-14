@@ -470,5 +470,5 @@ en lugar de colores fijos, de modo que cada cliente ve su propia identidad visua
 - Logo por tenant — imprescindible, se muestra en el sidebar y cabecera
 - Fuente tipográfica — una sola fuente fija para todo el CRM (no por tenant)
 
-**El login de Salamandra** usa la paleta Obsidiana fija (`#0F0F0F` + `#2EE59D`).
+**El login de Salamandra** usa la paleta (`#FAFAF8` + `#1B3A2D`).
 La personalización por tenant solo aplica dentro del dashboard, una vez autenticado.

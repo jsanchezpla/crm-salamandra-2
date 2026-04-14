@@ -13,13 +13,13 @@ const STAGE_LABELS = {
 };
 
 const STAGE_COLORS = {
-  new: "bg-neutral-800 text-neutral-300",
-  contacted: "bg-blue-950 text-blue-300",
-  qualified: "bg-emerald-950 text-emerald-300",
-  proposal: "bg-violet-950 text-violet-300",
-  negotiation: "bg-amber-950 text-amber-300",
-  won: "bg-green-950 text-green-300",
-  lost: "bg-red-950 text-red-400",
+  new: "bg-neutral-100 text-neutral-600",
+  contacted: "bg-blue-50 text-blue-700",
+  qualified: "bg-emerald-50 text-emerald-700",
+  proposal: "bg-violet-50 text-violet-700",
+  negotiation: "bg-amber-50 text-amber-700",
+  won: "bg-green-50 text-green-700",
+  lost: "bg-red-50 text-red-500",
 };
 
 export default function LeadsModule() {
@@ -37,41 +37,43 @@ export default function LeadsModule() {
 
   return (
     <div className="p-8">
-      <h1 className="text-xl font-semibold text-white mb-6">Leads</h1>
+      <h1 className="text-xl font-extrabold text-neutral-900 mb-6">Leads</h1>
       {loading ? (
-        <p className="text-neutral-500 text-sm">Cargando…</p>
+        <p className="text-neutral-400 text-sm">Cargando…</p>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-neutral-800 text-neutral-500 text-xs uppercase tracking-wide">
-              <th className="text-left py-2 pr-4">Nombre / Título</th>
-              <th className="text-left py-2 pr-4">Email</th>
-              <th className="text-left py-2 pr-4">Teléfono</th>
-              <th className="text-left py-2">Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {leads.map((lead) => (
-              <tr key={lead.id} className="border-b border-neutral-900 hover:bg-neutral-900 transition-colors">
-                <td className="py-3 pr-4 text-white">{lead.name || lead.title || "—"}</td>
-                <td className="py-3 pr-4 text-neutral-400">{lead.email || "—"}</td>
-                <td className="py-3 pr-4 text-neutral-400">{lead.phone || "—"}</td>
-                <td className="py-3">
-                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${STAGE_COLORS[lead.stage]}`}>
-                    {STAGE_LABELS[lead.stage] ?? lead.stage}
-                  </span>
-                </td>
+        <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-neutral-100">
+                <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Nombre / Título</th>
+                <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Email</th>
+                <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Teléfono</th>
+                <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Estado</th>
               </tr>
-            ))}
-            {leads.length === 0 && (
-              <tr>
-                <td colSpan={4} className="py-8 text-center text-neutral-600 text-sm">
-                  No hay leads todavía
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {leads.map((lead) => (
+                <tr key={lead.id} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">
+                  <td className="px-4 py-3 text-neutral-800 font-medium">{lead.name || lead.title || "—"}</td>
+                  <td className="px-4 py-3 text-neutral-500">{lead.email || "—"}</td>
+                  <td className="px-4 py-3 text-neutral-500">{lead.phone || "—"}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${STAGE_COLORS[lead.stage] ?? "bg-neutral-100 text-neutral-600"}`}>
+                      {STAGE_LABELS[lead.stage] ?? lead.stage}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {leads.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-12 text-center text-neutral-400 text-sm">
+                    No hay leads todavía
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

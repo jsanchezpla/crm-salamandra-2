@@ -15,16 +15,16 @@ function fmt(n) {
 function KpiCard({ label, value, sub, variant = "white" }) {
   const styles = {
     dark: {
-      wrap: "bg-[#0F0F0F] border-[#0F0F0F]",
+      wrap: "bg-[#152B22] border-[#152B22]",
       label: "text-white/40",
       value: "text-white",
       sub: "text-white/40",
     },
     green: {
       wrap: "border-transparent",
-      label: "text-black/40",
-      value: "text-[#0F0F0F]",
-      sub: "text-black/40",
+      label: "text-white/50",
+      value: "text-white",
+      sub: "text-white/50",
     },
     amber: {
       wrap: "bg-[#FFF8ED] border-[#FDDBA0]",
@@ -33,16 +33,16 @@ function KpiCard({ label, value, sub, variant = "white" }) {
       sub: "text-amber-600",
     },
     white: {
-      wrap: "bg-white border-neutral-200",
+      wrap: "bg-white border-neutral-100",
       label: "text-neutral-400",
       value: "text-neutral-900",
       sub: "text-neutral-400",
     },
     emerald: {
-      wrap: "bg-white border-emerald-200",
-      label: "text-emerald-800",
-      value: "text-emerald-600",
-      sub: "text-emerald-300",
+      wrap: "bg-[#3E5C57]/[0.08] border-[#3E5C57]/25",
+      label: "text-[#3E5C57]",
+      value: "text-[#152B22]",
+      sub: "text-[#3E5C57]/70",
     },
   };
 
@@ -54,8 +54,8 @@ function KpiCard({ label, value, sub, variant = "white" }) {
       style={
         variant === "green"
           ? {
-              background: "var(--color-primary, #2EE59D)",
-              borderColor: "var(--color-primary, #2EE59D)",
+              background: "#3E5C57",
+              borderColor: "#3E5C57",
             }
           : {}
       }
@@ -86,7 +86,7 @@ function MonthBar({ month, value, max }) {
           style={{
             height: `${pct}%`,
             marginTop: `${100 - pct}%`,
-            background: "var(--color-primary, #2EE59D)",
+            background: "#EDE8DE",
           }}
         />
       </div>
@@ -99,20 +99,12 @@ function QuickLink({ href, label, desc, icon }) {
   return (
     <Link
       href={href}
-      className="group bg-white border border-neutral-200 rounded-xl p-4 hover:border-transparent transition-all block"
-      style={{ "--hover-border": "var(--color-primary, #2EE59D)" }}
-      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--color-primary, #2EE59D)")}
+      className="group bg-white border border-neutral-100 rounded-xl p-4 transition-all block"
+      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--color-primary, #152B22)")}
       onMouseLeave={(e) => (e.currentTarget.style.borderColor = "")}
     >
-      <div
-        className="w-8 h-8 bg-neutral-100 rounded-lg flex items-center justify-center mb-3 transition-colors"
-        style={{}}
-        onMouseEnter={() => {}}
-      >
-        <span
-          className="text-neutral-500 group-hover:text-[#0F0F0F] transition-colors"
-          style={{ lineHeight: 0 }}
-        >
+      <div className="w-8 h-8 bg-neutral-100 rounded-lg flex items-center justify-center mb-3 transition-colors">
+        <span className="text-neutral-500 transition-colors" style={{ lineHeight: 0 }}>
           {icon}
         </span>
       </div>
@@ -164,9 +156,9 @@ export default function FacturacionOverview() {
   const pendingPct = income ? Math.round((income.pendingCollection / totalBilled) * 100) : 0;
 
   return (
-    <div className="h-screen flex flex-col gap-4 p-6 bg-[#F5F5F3] overflow-hidden">
+    <div className="min-h-screen lg:h-screen flex flex-col gap-4 p-4 lg:p-6 bg-[#EDE8DE] overflow-auto lg:overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
         <div>
           <h1
             className="text-xl font-extrabold text-neutral-900"
@@ -176,43 +168,33 @@ export default function FacturacionOverview() {
           </h1>
           <p className="text-xs text-neutral-400 mt-0.5">Resumen financiero del período</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="border border-neutral-200 rounded-lg px-2.5 py-1.5 text-xs text-neutral-600 bg-white focus:outline-none focus:border-neutral-400"
+            className="flex-1 min-w-0 rounded-lg px-2.5 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition"
           />
-          <span className="text-neutral-300 text-xs">—</span>
+          <span className="text-neutral-300 text-xs shrink-0">—</span>
           <input
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="border border-neutral-200 rounded-lg px-2.5 py-1.5 text-xs text-neutral-600 bg-white focus:outline-none focus:border-neutral-400"
+            className="flex-1 min-w-0 rounded-lg px-2.5 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition"
           />
           <button
             onClick={load}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide text-[#0F0F0F] disabled:opacity-50 transition-opacity"
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-50 transition-opacity"
             style={{
               fontFamily: "'Syne', sans-serif",
-              background: "var(--color-primary, #2EE59D)",
+              background: "var(--color-primary, #152B22)",
             }}
           >
-            <svg
-              className="w-3 h-3"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
-              />
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
             </svg>
-            {loading ? "Cargando..." : "Exportar"}
+            <span className="hidden sm:inline">{loading ? "Cargando..." : "Exportar"}</span>
           </button>
         </div>
       </div>
@@ -224,12 +206,9 @@ export default function FacturacionOverview() {
       )}
 
       {!data && !error && (
-        <div className="grid grid-cols-4 gap-3 shrink-0">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
           {[...Array(4)].map((_, i) => (
-            <div
-              key={i}
-              className="bg-white border border-neutral-100 rounded-xl h-20 animate-pulse"
-            />
+            <div key={i} className="bg-neutral-100 border border-neutral-100 rounded-xl h-20 animate-pulse" />
           ))}
         </div>
       )}
@@ -237,7 +216,7 @@ export default function FacturacionOverview() {
       {data && (
         <>
           {/* KPIs */}
-          <div className="grid grid-cols-4 gap-3 shrink-0">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
             <KpiCard
               label="Facturado"
               value={income?.totalBilled}
@@ -265,10 +244,10 @@ export default function FacturacionOverview() {
           </div>
 
           {/* Main grid */}
-          <div className="grid grid-cols-[1.4fr_1fr] gap-3 flex-1 min-h-0">
+          <div className="flex flex-col lg:grid lg:grid-cols-[1.4fr_1fr] gap-3 lg:flex-1 lg:min-h-0">
             {/* Columna izquierda — gráfico + servicios */}
-            <div className="flex flex-col gap-3 min-h-0">
-              <div className="bg-[#0F0F0F] rounded-xl p-4 flex-1 min-h-0 flex flex-col">
+            <div className="flex flex-col gap-3 lg:min-h-0">
+              <div className="bg-[#152B22] rounded-xl p-4 h-52 lg:h-auto lg:flex-1 lg:min-h-0 flex flex-col">
                 <h2
                   className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-3 shrink-0"
                   style={{ fontFamily: "'Syne', sans-serif" }}
@@ -287,7 +266,7 @@ export default function FacturacionOverview() {
                 </div>
               </div>
 
-              <div className="bg-[#0F0F0F] rounded-xl p-4 shrink-0">
+              <div className="bg-[#152B22] rounded-xl p-4 shrink-0">
                 <h2
                   className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-3"
                   style={{ fontFamily: "'Syne', sans-serif" }}
@@ -301,18 +280,10 @@ export default function FacturacionOverview() {
                       <div key={s.serviceType}>
                         <div className="flex justify-between mb-1">
                           <span className="text-xs text-white/60 capitalize">{s.serviceType}</span>
-                          <span className="text-xs font-medium text-white">
-                            {fmt(s.totalBilled)} €
-                          </span>
+                          <span className="text-xs font-medium text-white">{fmt(s.totalBilled)} €</span>
                         </div>
                         <div className="h-1 bg-white/10 rounded-full overflow-hidden">
-                          <div
-                            className="h-1 rounded-full"
-                            style={{
-                              width: `${pct}%`,
-                              background: "var(--color-primary, #2EE59D)",
-                            }}
-                          />
+                          <div className="h-1 rounded-full" style={{ width: `${pct}%`, background: "#EDE8DE" }} />
                         </div>
                       </div>
                     );
@@ -322,41 +293,37 @@ export default function FacturacionOverview() {
             </div>
 
             {/* Columna derecha — costes + márgenes */}
-            <div className="flex flex-col gap-3 min-h-0">
-              <div className="bg-white border border-neutral-200 rounded-xl p-4 flex-1 min-h-0 flex flex-col">
+            <div className="flex flex-col gap-3 lg:min-h-0">
+              <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:flex-1 lg:min-h-0 flex flex-col">
                 <h2
                   className="text-[10px] font-bold uppercase tracking-widest text-neutral-400 mb-3 shrink-0"
                   style={{ fontFamily: "'Syne', sans-serif" }}
                 >
                   Desglose de costes
                 </h2>
-                <div className="flex flex-col gap-0 flex-1 justify-between">
-                  {[
-                    { label: "Salarios", value: costs?.salaries },
-                    { label: "Costes fijos", value: costs?.fixed },
-                    { label: "Variables", value: costs?.variable },
-                    { label: "CAPEX", value: costs?.capex },
-                    { label: "OPEX", value: costs?.opex },
-                  ].map(({ label, value }) => (
-                    <div
-                      key={label}
-                      className="flex items-center justify-between py-1.5 border-b border-neutral-50 last:border-0"
-                    >
-                      <span className="text-xs text-neutral-500">{label}</span>
-                      <span className="text-xs font-medium text-neutral-800">{fmt(value)} €</span>
-                    </div>
-                  ))}
-                  <div className="flex items-center justify-between pt-2 mt-1 border-t-2 border-neutral-900">
-                    <span
-                      className="text-xs font-extrabold text-neutral-900"
-                      style={{ fontFamily: "'Syne', sans-serif" }}
-                    >
+                <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                  <div className="flex-1 overflow-hidden">
+                    {[
+                      { label: "Salarios", value: costs?.salaries },
+                      { label: "Costes fijos", value: costs?.fixed },
+                      { label: "Variables", value: costs?.variable },
+                      { label: "CAPEX", value: costs?.capex },
+                      { label: "OPEX", value: costs?.opex },
+                    ].map(({ label, value }) => (
+                      <div
+                        key={label}
+                        className="flex items-center justify-between py-1.5 border-b border-neutral-50 last:border-0"
+                      >
+                        <span className="text-xs text-neutral-500">{label}</span>
+                        <span className="text-xs font-medium text-neutral-800">{fmt(value)} €</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between pt-2 mt-2 border-t-2 border-neutral-900 shrink-0">
+                    <span className="text-xs font-extrabold text-neutral-900" style={{ fontFamily: "'Syne', sans-serif" }}>
                       Total
                     </span>
-                    <span
-                      className="text-xs font-extrabold text-neutral-900"
-                      style={{ fontFamily: "'Syne', sans-serif" }}
-                    >
+                    <span className="text-xs font-extrabold text-neutral-900" style={{ fontFamily: "'Syne', sans-serif" }}>
                       {fmt(costs?.total)} €
                     </span>
                   </div>
@@ -365,46 +332,29 @@ export default function FacturacionOverview() {
 
               {/* Márgenes */}
               <div className="grid grid-cols-2 gap-3 shrink-0">
-                <div className="bg-white border border-emerald-200 rounded-xl p-4">
-                  <div className="text-[10px] font-medium uppercase tracking-widest text-emerald-800 mb-2">
-                    Margen bruto
-                  </div>
-                  <div
-                    className="text-xl font-extrabold text-emerald-600 leading-none mb-1"
-                    style={{ fontFamily: "'Syne', sans-serif" }}
-                  >
+                <div className="bg-white border border-[#3E5C57]/20 rounded-xl p-4">
+                  <div className="text-[10px] font-medium uppercase tracking-widest text-[#3E5C57] mb-2">Margen bruto</div>
+                  <div className="text-xl font-extrabold text-[#152B22] leading-none mb-1" style={{ fontFamily: "'Syne', sans-serif" }}>
                     {fmt(margins?.grossMargin)}
-                    <span className="text-sm font-normal text-emerald-300 ml-1">€</span>
+                    <span className="text-sm font-normal text-[#3E5C57]/70 ml-1">€</span>
                   </div>
-                  <div className="text-[10px] text-emerald-400">
-                    {margins?.grossMarginPct ?? 0}%
-                  </div>
+                  <div className="text-[10px] text-[#3E5C57]/70">{margins?.grossMarginPct ?? 0}%</div>
                 </div>
-                <div className="bg-white border border-emerald-200 rounded-xl p-4">
-                  <div className="text-[10px] font-medium uppercase tracking-widest text-emerald-800 mb-2">
-                    Margen neto
-                  </div>
-                  <div
-                    className="text-xl font-extrabold text-emerald-600 leading-none mb-1"
-                    style={{ fontFamily: "'Syne', sans-serif" }}
-                  >
+                <div className="bg-white border border-[#3E5C57]/20 rounded-xl p-4">
+                  <div className="text-[10px] font-medium uppercase tracking-widest text-[#3E5C57] mb-2">Margen neto</div>
+                  <div className="text-xl font-extrabold text-[#152B22] leading-none mb-1" style={{ fontFamily: "'Syne', sans-serif" }}>
                     {fmt(margins?.netMargin)}
-                    <span className="text-sm font-normal text-emerald-300 ml-1">€</span>
+                    <span className="text-sm font-normal text-[#3E5C57]/70 ml-1">€</span>
                   </div>
-                  <div className="text-[10px] text-emerald-400">{margins?.netMarginPct ?? 0}%</div>
+                  <div className="text-[10px] text-[#3E5C57]/70">{margins?.netMarginPct ?? 0}%</div>
                 </div>
-                <div className="col-span-2 bg-white border border-emerald-200 rounded-xl p-4">
-                  <div className="text-[10px] font-medium uppercase tracking-widest text-emerald-800 mb-2">
-                    EBITDA
-                  </div>
-                  <div
-                    className="text-xl font-extrabold text-emerald-600 leading-none mb-1"
-                    style={{ fontFamily: "'Syne', sans-serif" }}
-                  >
+                <div className="col-span-2 bg-white border border-[#3E5C57]/20 rounded-xl p-4">
+                  <div className="text-[10px] font-medium uppercase tracking-widest text-[#3E5C57] mb-2">EBITDA</div>
+                  <div className="text-xl font-extrabold text-[#152B22] leading-none mb-1" style={{ fontFamily: "'Syne', sans-serif" }}>
                     {fmt(margins?.ebitda)}
-                    <span className="text-sm font-normal text-emerald-300 ml-1">€</span>
+                    <span className="text-sm font-normal text-[#3E5C57]/70 ml-1">€</span>
                   </div>
-                  <div className="text-[10px] text-emerald-400">
+                  <div className="text-[10px] text-[#3E5C57]/70">
                     {Math.round(((margins?.ebitda ?? 0) / totalBilled) * 100)}% margen
                   </div>
                 </div>
@@ -413,25 +363,15 @@ export default function FacturacionOverview() {
           </div>
 
           {/* Quick links */}
-          <div className="grid grid-cols-4 gap-3 shrink-0">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
             {[
               {
                 href: "/facturacion/facturas",
                 label: "Facturas",
                 desc: "Gestión de facturas",
                 icon: (
-                  <svg
-                    className="w-4 h-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-                    />
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                   </svg>
                 ),
               },
@@ -440,18 +380,8 @@ export default function FacturacionOverview() {
                 label: "Cobros",
                 desc: "Pagos y tesorería",
                 icon: (
-                  <svg
-                    className="w-4 h-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z"
-                    />
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
                   </svg>
                 ),
               },
@@ -460,18 +390,8 @@ export default function FacturacionOverview() {
                 label: "Costes",
                 desc: "Gastos operativos",
                 icon: (
-                  <svg
-                    className="w-4 h-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5"
-                    />
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
                   </svg>
                 ),
               },
@@ -480,18 +400,8 @@ export default function FacturacionOverview() {
                 label: "Analítica",
                 desc: "Por terapeuta",
                 icon: (
-                  <svg
-                    className="w-4 h-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zm9.75-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.625c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.25zm-6.75 9.75c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-2.25A1.125 1.125 0 016 20.25v-2.25z"
-                    />
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zm9.75-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.625c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.25zm-6.75 9.75c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-2.25A1.125 1.125 0 016 20.25v-2.25z" />
                   </svg>
                 ),
               },
@@ -499,11 +409,10 @@ export default function FacturacionOverview() {
               <Link
                 key={href}
                 href={href}
-                className="group bg-white border border-neutral-200 rounded-xl p-3.5 transition-colors block"
+                className="group bg-white border border-neutral-100 rounded-xl p-3.5 transition-all block"
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "var(--color-primary, #2EE59D)";
-                  e.currentTarget.querySelector(".ql-icon").style.background =
-                    "var(--color-primary, #2EE59D)";
+                  e.currentTarget.style.borderColor = "var(--color-primary, #152B22)";
+                  e.currentTarget.querySelector(".ql-icon").style.background = "var(--color-primary, #152B22)";
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.borderColor = "";
@@ -511,14 +420,9 @@ export default function FacturacionOverview() {
                 }}
               >
                 <div className="ql-icon w-7 h-7 bg-neutral-100 rounded-lg flex items-center justify-center mb-2.5 transition-colors">
-                  <span className="text-neutral-500 transition-colors" style={{ lineHeight: 0 }}>
-                    {icon}
-                  </span>
+                  <span className="text-neutral-500 transition-colors" style={{ lineHeight: 0 }}>{icon}</span>
                 </div>
-                <div
-                  className="text-xs font-bold text-neutral-900 mb-0.5"
-                  style={{ fontFamily: "'Syne', sans-serif" }}
-                >
+                <div className="text-xs font-bold text-neutral-900 mb-0.5" style={{ fontFamily: "'Syne', sans-serif" }}>
                   {label}
                 </div>
                 <div className="text-[10px] text-neutral-400">{desc}</div>

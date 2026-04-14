@@ -51,7 +51,6 @@ export default function AnaliticaPage() {
 
   useEffect(() => { load(); }, [from, to]);
 
-  // Totales
   const totals = therapists.reduce(
     (acc, t) => ({
       income: acc.income + t.income,
@@ -67,36 +66,26 @@ export default function AnaliticaPage() {
   const totalMarginPct = totals.income > 0 ? (totals.margin / totals.income) * 100 : 0;
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 lg:p-8 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-900">Analítica por terapeuta</h1>
-          <p className="text-sm text-neutral-400 mt-0.5">Rendimiento económico individual</p>
+          <h1 className="text-xl font-extrabold text-neutral-900">Analítica por terapeuta</h1>
+          <p className="text-xs text-neutral-400 mt-0.5">Rendimiento económico individual</p>
         </div>
-        <div className="flex items-center gap-3">
-          <Link href="/facturacion" className="text-sm text-neutral-500 hover:text-neutral-700 transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 self-start sm:self-auto">
+          <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">
             ← Volver
           </Link>
           <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className="border border-neutral-200 rounded-lg px-3 py-1.5 text-sm text-neutral-700 focus:outline-none focus:border-neutral-400"
-            />
-            <span className="text-neutral-400 text-sm">—</span>
-            <input
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="border border-neutral-200 rounded-lg px-3 py-1.5 text-sm text-neutral-700 focus:outline-none focus:border-neutral-400"
-            />
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
+              className="flex-1 rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition" />
+            <span className="text-neutral-300 text-xs shrink-0">—</span>
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
+              className="flex-1 rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition" />
           </div>
         </div>
       </div>
 
-      {/* Resumen global */}
       {therapists.length > 0 && (
         <div className="grid grid-cols-2 gap-3 mb-6 sm:grid-cols-4">
           {[
@@ -114,39 +103,37 @@ export default function AnaliticaPage() {
       )}
 
       {error && (
-        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-600">{error}</div>
+        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{error}</div>
       )}
 
-      {/* Tabla de terapeutas */}
       <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[800px]">
           <thead>
             <tr className="border-b border-neutral-100">
-              <th className="text-left px-4 py-3 text-xs font-medium text-neutral-400 uppercase tracking-wide">Terapeuta</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-neutral-400 uppercase tracking-wide">Cargo</th>
-              <th className="text-right px-4 py-3 text-xs font-medium text-neutral-400 uppercase tracking-wide">Ingresos</th>
-              <th className="text-right px-4 py-3 text-xs font-medium text-neutral-400 uppercase tracking-wide">Facturas</th>
-              <th className="text-right px-4 py-3 text-xs font-medium text-neutral-400 uppercase tracking-wide">Clientes</th>
-              <th className="text-right px-4 py-3 text-xs font-medium text-neutral-400 uppercase tracking-wide">Ticket medio</th>
-              <th className="text-right px-4 py-3 text-xs font-medium text-neutral-400 uppercase tracking-wide">Coste salarial</th>
-              <th className="text-right px-4 py-3 text-xs font-medium text-neutral-400 uppercase tracking-wide">Margen</th>
-              <th className="text-right px-4 py-3 text-xs font-medium text-neutral-400 uppercase tracking-wide">Cancelaciones</th>
+              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Terapeuta</th>
+              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Cargo</th>
+              <th className="text-right px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Ingresos</th>
+              <th className="text-right px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Facturas</th>
+              <th className="text-right px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Clientes</th>
+              <th className="text-right px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Ticket medio</th>
+              <th className="text-right px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Coste salarial</th>
+              <th className="text-right px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Margen</th>
+              <th className="text-right px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Cancelaciones</th>
             </tr>
           </thead>
           <tbody>
             {loading && therapists.length === 0 && (
-              <tr><td colSpan={9} className="text-center py-12 text-sm text-neutral-400">Cargando...</td></tr>
+              <tr><td colSpan={9} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
             )}
             {!loading && therapists.length === 0 && (
-              <tr><td colSpan={9} className="text-center py-12 text-sm text-neutral-400">Sin datos para el período seleccionado</td></tr>
+              <tr><td colSpan={9} className="text-center py-12 text-xs text-neutral-400">Sin datos para el período seleccionado</td></tr>
             )}
             {therapists.map((t) => (
-              <tr key={t.therapistId} className="border-b border-neutral-50 hover:bg-neutral-50/50 transition-colors">
-                <td className="px-4 py-3">
-                  <div className="font-medium text-neutral-800 text-sm">{t.therapistName}</div>
-                </td>
+              <tr key={t.therapistId} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">
+                <td className="px-4 py-3"><div className="font-medium text-neutral-800 text-sm">{t.therapistName}</div></td>
                 <td className="px-4 py-3 text-xs text-neutral-500 capitalize">{t.position ?? "—"}</td>
-                <td className="px-4 py-3 text-right font-semibold text-neutral-800">{fmt(t.income)} €</td>
+                <td className="px-4 py-3 text-right font-semibold text-neutral-900">{fmt(t.income)} €</td>
                 <td className="px-4 py-3 text-right text-neutral-600">{t.invoiceCount}</td>
                 <td className="px-4 py-3 text-right text-neutral-600">{t.clientCount}</td>
                 <td className="px-4 py-3 text-right text-neutral-600">{fmt(t.averageTicket)} €</td>
@@ -154,9 +141,7 @@ export default function AnaliticaPage() {
                 <MarginCell value={t.margin} pctValue={t.marginPct} />
                 <td className="px-4 py-3 text-right">
                   {t.cancelledCount > 0 ? (
-                    <span className="text-amber-600 text-xs font-medium">
-                      {t.cancelledCount} ({pct(t.cancellationRate)})
-                    </span>
+                    <span className="text-amber-600 text-xs font-medium">{t.cancelledCount} ({pct(t.cancellationRate)})</span>
                   ) : (
                     <span className="text-neutral-400 text-xs">—</span>
                   )}
@@ -165,17 +150,16 @@ export default function AnaliticaPage() {
             ))}
           </tbody>
 
-          {/* Totales */}
           {therapists.length > 1 && (
             <tfoot>
               <tr className="border-t border-neutral-200 bg-neutral-50">
-                <td colSpan={2} className="px-4 py-3 text-xs font-semibold text-neutral-600 uppercase tracking-wide">
+                <td colSpan={2} className="px-4 py-3 text-[10px] font-semibold text-neutral-500 uppercase tracking-widest">
                   Total ({therapists.length} terapeutas)
                 </td>
-                <td className="px-4 py-3 text-right font-bold text-neutral-800">{fmt(totals.income)} €</td>
+                <td className="px-4 py-3 text-right font-bold text-neutral-900">{fmt(totals.income)} €</td>
                 <td className="px-4 py-3 text-right font-semibold text-neutral-700">{totals.invoiceCount}</td>
                 <td className="px-4 py-3 text-right font-semibold text-neutral-700">{totals.clientCount}</td>
-                <td className="px-4 py-3 text-right text-neutral-500">—</td>
+                <td className="px-4 py-3 text-right text-neutral-400">—</td>
                 <td className="px-4 py-3 text-right font-semibold text-neutral-700">{fmt(totals.salaryCost)} €</td>
                 <MarginCell value={totals.margin} pctValue={totalMarginPct} />
                 <td className="px-4 py-3 text-right font-semibold text-neutral-700">{totals.cancelledCount}</td>
@@ -183,6 +167,7 @@ export default function AnaliticaPage() {
             </tfoot>
           )}
         </table>
+        </div>
       </div>
     </div>
   );

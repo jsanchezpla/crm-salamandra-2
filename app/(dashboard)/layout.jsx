@@ -3,8 +3,8 @@ import { getMasterModels } from "../../lib/db/masterDb.js";
 import DashboardShell from "../../components/layout/DashboardShell.jsx";
 
 const DEFAULT_BRAND = {
-  primaryColor: "#4F46E5",
-  secondaryColor: "#0F0F0F",
+  primaryColor: "#152B22",
+  secondaryColor: "#EDE8DE",
   logoUrl: null,
 };
 

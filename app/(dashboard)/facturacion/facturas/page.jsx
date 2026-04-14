@@ -27,7 +27,6 @@ export default function FacturasPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Filters
   const [status, setStatus] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -60,115 +59,88 @@ export default function FacturasPage() {
   const totalPages = Math.ceil(total / limit);
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 lg:p-8 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-900">Facturas</h1>
-          <p className="text-sm text-neutral-400 mt-0.5">{total} registros</p>
+          <h1 className="text-xl font-extrabold text-neutral-900">Facturas</h1>
+          <p className="text-xs text-neutral-400 mt-0.5">{total} registros</p>
         </div>
-        <Link
-          href="/facturacion"
-          className="text-sm text-neutral-500 hover:text-neutral-700 transition-colors"
-        >
+        <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors self-start sm:self-auto">
           ← Volver
         </Link>
       </div>
 
-      {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2 mb-5">
         <select
           value={status}
           onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-          className="border border-neutral-200 rounded-lg px-3 py-1.5 text-sm text-neutral-700 focus:outline-none focus:border-neutral-400 bg-white"
+          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition"
         >
           <option value="">Todos los estados</option>
           {Object.entries(STATUS_LABELS).map(([k, v]) => (
             <option key={k} value={k}>{v.label}</option>
           ))}
         </select>
-        <input
-          type="date"
-          value={from}
-          onChange={(e) => { setFrom(e.target.value); setPage(1); }}
-          placeholder="Desde"
-          className="border border-neutral-200 rounded-lg px-3 py-1.5 text-sm text-neutral-700 focus:outline-none focus:border-neutral-400"
-        />
-        <input
-          type="date"
-          value={to}
-          onChange={(e) => { setTo(e.target.value); setPage(1); }}
-          placeholder="Hasta"
-          className="border border-neutral-200 rounded-lg px-3 py-1.5 text-sm text-neutral-700 focus:outline-none focus:border-neutral-400"
-        />
+        <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }}
+          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition" />
+        <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1); }}
+          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition" />
         {(status || from || to) && (
-          <button
-            onClick={() => { setStatus(""); setFrom(""); setTo(""); setPage(1); }}
-            className="text-xs text-neutral-400 hover:text-neutral-600 transition-colors px-2 py-1.5"
-          >
+          <button onClick={() => { setStatus(""); setFrom(""); setTo(""); setPage(1); }}
+            className="text-xs text-neutral-400 hover:text-neutral-600 transition-colors px-2 py-1.5">
             Limpiar filtros
           </button>
         )}
       </div>
 
       {error && (
-        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-600">{error}</div>
+        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{error}</div>
       )}
 
-      {/* Tabla */}
       <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[600px]">
           <thead>
             <tr className="border-b border-neutral-100">
-              <th className="text-left px-4 py-3 text-xs font-medium text-neutral-400 uppercase tracking-wide">Número</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-neutral-400 uppercase tracking-wide">Cliente</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-neutral-400 uppercase tracking-wide">Terapeuta</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-neutral-400 uppercase tracking-wide">Fecha</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-neutral-400 uppercase tracking-wide">Estado</th>
-              <th className="text-right px-4 py-3 text-xs font-medium text-neutral-400 uppercase tracking-wide">Total</th>
+              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Número</th>
+              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Cliente</th>
+              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Terapeuta</th>
+              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Fecha</th>
+              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Estado</th>
+              <th className="text-right px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Total</th>
             </tr>
           </thead>
           <tbody>
             {loading && invoices.length === 0 && (
-              <tr>
-                <td colSpan={6} className="text-center py-12 text-sm text-neutral-400">Cargando...</td>
-              </tr>
+              <tr><td colSpan={6} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
             )}
             {!loading && invoices.length === 0 && (
-              <tr>
-                <td colSpan={6} className="text-center py-12 text-sm text-neutral-400">Sin resultados</td>
-              </tr>
+              <tr><td colSpan={6} className="text-center py-12 text-xs text-neutral-400">Sin resultados</td></tr>
             )}
             {invoices.map((inv) => (
-              <tr key={inv.id} className="border-b border-neutral-50 hover:bg-neutral-50/50 transition-colors">
-                <td className="px-4 py-3 font-mono text-xs text-neutral-600">{inv.number ?? "—"}</td>
-                <td className="px-4 py-3 text-neutral-700">{inv.client?.name ?? inv.clientId ?? "—"}</td>
+              <tr key={inv.id} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">
+                <td className="px-4 py-3 font-mono text-xs text-neutral-500">{inv.number ?? "—"}</td>
+                <td className="px-4 py-3 text-neutral-800">{inv.client?.name ?? inv.clientId ?? "—"}</td>
                 <td className="px-4 py-3 text-neutral-500 text-xs">{inv.therapist?.displayName ?? "—"}</td>
                 <td className="px-4 py-3 text-neutral-500 text-xs">{inv.issueDate?.slice(0, 10) ?? "—"}</td>
                 <td className="px-4 py-3"><StatusBadge status={inv.status} /></td>
-                <td className="px-4 py-3 text-right font-semibold text-neutral-800">{fmt(inv.total)} €</td>
+                <td className="px-4 py-3 text-right font-semibold text-neutral-900">{fmt(inv.total)} €</td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
 
-        {/* Paginación */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-100">
             <span className="text-xs text-neutral-400">Página {page} de {totalPages}</span>
             <div className="flex gap-1">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3 py-1.5 text-xs border border-neutral-200 rounded-md hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+                className="px-3 py-1.5 text-xs border border-neutral-200 text-neutral-500 rounded-md hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition">
                 Anterior
               </button>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="px-3 py-1.5 text-xs border border-neutral-200 rounded-md hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
+              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                className="px-3 py-1.5 text-xs border border-neutral-200 text-neutral-500 rounded-md hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition">
                 Siguiente
               </button>
             </div>
