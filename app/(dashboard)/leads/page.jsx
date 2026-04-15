@@ -4,10 +4,12 @@ import { getMasterModels } from "../../../lib/db/masterDb.js";
 import DefaultLeadsModule from "../../../modules/leads/LeadsModule.jsx";
 import QECLeadsModule from "../../../modules/overrides/quality-energy/LeadsModule.jsx";
 import AumentaLeadsModule from "../../../modules/overrides/aumenta/LeadsModule.jsx";
+import AbarcaIALeadsModule from "../../../modules/overrides/abarcaia/LeadsModule.jsx";
 
 const UI_OVERRIDES = {
   quality_energy: QECLeadsModule,
   aumenta: AumentaLeadsModule,
+  abarcaia: AbarcaIALeadsModule,
 };
 
 export const metadata = { title: "Leads" };
