@@ -66,7 +66,7 @@ export default function QECLeadsModule() {
 
   const fetchLeads = useCallback(() => {
     setLoading(true);
-    const params = new URLSearchParams({ limit: "200" });
+    const params = new URLSearchParams({ limit: "200", exclude_referidos: "true" });
     if (activeStage !== "all") params.set("stage", activeStage);
     if (activeEmpresa !== "all") params.set("empresa", activeEmpresa);
     if (search.trim()) params.set("search", search.trim());

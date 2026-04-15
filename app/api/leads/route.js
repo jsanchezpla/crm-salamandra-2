@@ -1,7 +1,7 @@
 import { withTenant } from "../../../lib/tenant/withTenant.js";
-import { ok, created, error, forbidden } from "../../../lib/utils/apiResponse.js";
+import { ok, created, forbidden } from "../../../lib/utils/apiResponse.js";
 import { ValidationError } from "../../../lib/utils/errors.js";
-import { Op } from "sequelize";
+import { Op, literal } from "sequelize";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("leads") && !hasModule("sales")) return forbidden();
@@ -17,9 +17,17 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   const offset = parseInt(searchParams.get("offset") ?? "0");
 
   const motivo = searchParams.get("motivo");
+  const excludeReferidos = searchParams.get("exclude_referidos") === "true";
+
   if (stage) where.stage = stage;
   if (motivo) where.motivo = motivo;
   if (empresa) where.customFields = { [Op.contains]: { empresa } };
+  if (excludeReferidos) {
+    where[Op.and] = [
+      ...(where[Op.and] ?? []),
+      literal(`NOT ("customFields" @> '{"source":"referido_abarcaia"}'::jsonb)`),
+    ];
+  }
   if (search) {
     where[Op.or] = [
       { name: { [Op.iLike]: `%${search}%` } },

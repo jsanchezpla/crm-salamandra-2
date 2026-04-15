@@ -140,7 +140,7 @@ function LoginForm() {
       </div>
 
       <p className="text-center text-xs text-white/20">
-        ¿Problemas? <span className="text-white/35">soporte@salamandrasolutions.com</span>
+        ¿Problemas? <span className="text-white/35">info@salamandrasolutions.com</span>
       </p>
     </form>
   );
