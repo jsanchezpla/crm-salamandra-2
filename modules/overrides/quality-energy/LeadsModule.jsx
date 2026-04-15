@@ -66,7 +66,7 @@ export default function QECLeadsModule() {
 
   const fetchLeads = useCallback(() => {
     setLoading(true);
-    const params = new URLSearchParams({ limit: "200", exclude_referidos: "true" });
+    const params = new URLSearchParams({ limit: "200" });
     if (activeStage !== "all") params.set("stage", activeStage);
     if (activeEmpresa !== "all") params.set("empresa", activeEmpresa);
     if (search.trim()) params.set("search", search.trim());
@@ -75,8 +75,11 @@ export default function QECLeadsModule() {
       .then((r) => r.json())
       .then((data) => {
         if (data.ok) {
-          setLeads(data.data.leads);
-          setTotal(data.data.total);
+          const filtered = data.data.leads.filter(
+            (l) => l.customFields?.source !== "referido_abarcaia"
+          );
+          setLeads(filtered);
+          setTotal(data.data.total - (data.data.leads.length - filtered.length));
         }
       })
       .finally(() => setLoading(false));
