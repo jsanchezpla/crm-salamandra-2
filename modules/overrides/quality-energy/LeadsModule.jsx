@@ -324,7 +324,7 @@ export default function QECLeadsModule() {
                         <td colSpan={7} className="py-16 text-center text-gray-400 text-sm">
                           {search || activeStage !== "all"
                             ? "Sin resultados para ese filtro"
-                            : "Todavía no hay leads. Los nuevos llegarán aquí desde n8n."}
+                            : "Todavía no hay leads."}
                         </td>
                       </tr>
                     )}
@@ -396,7 +396,7 @@ export default function QECLeadsModule() {
                   <div className="py-16 text-center text-gray-400 text-sm">
                     {search || activeStage !== "all"
                       ? "Sin resultados para ese filtro"
-                      : "Todavía no hay leads. Los nuevos llegarán aquí desde n8n."}
+                      : "Todavía no hay leads."}
                   </div>
                 )}
               </div>
