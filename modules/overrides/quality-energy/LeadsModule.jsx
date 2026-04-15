@@ -7,14 +7,12 @@ import { useEffect, useState, useCallback } from "react";
 const EMPRESAS = [
   { key: "Quality Energy Consulting", label: "Quality Energy" },
   { key: "Made of Energy", label: "Made of Energy" },
-  { key: "AbarcaIA", label: "AbarcaIA" },
   { key: "Iluminia Quantum", label: "Iluminia Quantum" },
 ];
 
 const EMPRESA_STYLE = {
   "Quality Energy Consulting": "bg-green-100 text-green-700",
   "Made of Energy": "bg-amber-100 text-amber-700",
-  AbarcaIA: "bg-blue-100 text-blue-700",
   "Iluminia Quantum": "bg-purple-100 text-purple-700",
 };
 
