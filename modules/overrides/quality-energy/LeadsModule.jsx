@@ -260,8 +260,8 @@ export default function QECLeadsModule() {
                   </thead>
                   <tbody>
                     {leads.map((lead) => {
-                      const exp = lead.customFields?.experience;
-                      const zone = lead.customFields?.zone;
+                      const exp = lead.customFields?.experience ?? lead.customFields?.experiencia;
+                      const zone = lead.customFields?.zone ?? lead.customFields?.zona;
                       const empresa = lead.customFields?.empresa;
                       const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.new;
                       return (
@@ -435,8 +435,8 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onNotesCh
 
   if (!lead) return null;
 
-  const exp = lead.customFields?.experience;
-  const zone = lead.customFields?.zone;
+  const exp = lead.customFields?.experience ?? lead.customFields?.experiencia;
+  const zone = lead.customFields?.zone ?? lead.customFields?.zona;
   const empresa = lead.customFields?.empresa;
   const utmSource = lead.customFields?.utmSource;
   const utmMedium = lead.customFields?.utmMedium;
