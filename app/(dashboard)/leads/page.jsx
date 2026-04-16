@@ -5,11 +5,13 @@ import DefaultLeadsModule from "../../../modules/leads/LeadsModule.jsx";
 import QECLeadsModule from "../../../modules/overrides/quality-energy/LeadsModule.jsx";
 import AumentaLeadsModule from "../../../modules/overrides/aumenta/LeadsModule.jsx";
 import AbarcaIALeadsModule from "../../../modules/overrides/abarcaia/LeadsModule.jsx";
+import DemoLeadsModule from "../../../modules/overrides/demo/LeadsModule.jsx";
 
 const UI_OVERRIDES = {
   quality_energy: QECLeadsModule,
   aumenta: AumentaLeadsModule,
   abarcaia: AbarcaIALeadsModule,
+  demo: DemoLeadsModule,
 };
 
 export const metadata = { title: "Leads" };
