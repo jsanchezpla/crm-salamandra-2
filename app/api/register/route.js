@@ -13,6 +13,15 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }
 
+// Acepta DD/MM/YYYY (WordPress) y YYYY-MM-DD (ISO)
+function normalizarFecha(fecha) {
+  if (!fecha) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return fecha;
+  const [d, m, y] = fecha.split("/");
+  if (d && m && y) return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  return null;
+}
+
 // POST /api/register
 // Recibe el formulario [registro_privado] de WordPress y crea el TrainingUser.
 // Endpoint público — sin JWT. El campo "password" lo gestiona WordPress, aquí se ignora.
@@ -22,6 +31,7 @@ export async function POST(request) {
     const { TrainingUser } = ctx.tenantModels;
 
     const body = await request.json();
+    // password se desestructura para excluirlo explícitamente — nunca se guarda
     const { name_1, name_2, text_1, email_1, select_1, date_1 } = body;
 
     if (!email_1) {
@@ -41,7 +51,7 @@ export async function POST(request) {
       lastName: name_2 ? String(name_2).trim() : null,
       username: text_1 ? String(text_1).trim() : null,
       country: select_1 ? String(select_1).trim() : null,
-      birthDate: date_1 || null,
+      birthDate: normalizarFecha(date_1),
       type: "private",
       active: true,
     });
