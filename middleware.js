@@ -9,6 +9,7 @@ const PUBLIC_API_PATHS = [
   "/api/public/",
   "/api/cursos-empresas/",
   "/api/webhooks/",
+  "/api/register",
 ];
 const PUBLIC_PAGE_PATHS = ["/login"];
 
