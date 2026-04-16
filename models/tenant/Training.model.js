@@ -55,6 +55,14 @@ export function defineTraining(sequelize) {
         type: DataTypes.JSONB,
         defaultValue: {},
       },
+      courseId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      trainingUserId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
     },
     {
       tableName: "trainings",

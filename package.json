@@ -14,7 +14,11 @@
     "db:seed:aumenta": "node --env-file=.env.local scripts/seed-aumenta.js",
     "db:clear:aumenta": "node --env-file=.env.local scripts/clear-aumenta-leads.js",
     "db:seed:cuestionarios": "node --env-file=.env.local scripts/seed-cuestionarios-demo.js",
-    "db:add-leads-demo": "node --env-file=.env.local scripts/add-leads-module-demo.js"
+    "db:add-leads-demo": "node --env-file=.env.local scripts/add-leads-module-demo.js",
+    "db:add-training-demo": "node --env-file=.env.local scripts/add-training-module-demo.js",
+    "db:seed:master": "node --env-file=.env.local scripts/seed-master.js",
+    "db:seed:retorika": "node --env-file=.env.local scripts/seed-retorika.js",
+    "db:seed:retorika:all": "npm run db:seed:master && npm run db:seed:retorika"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
@@ -24,6 +28,7 @@
     "pg-hstore": "^2.3.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "exceljs": "^4.4.0",
     "sequelize": "^6.37.8"
   },
   "devDependencies": {

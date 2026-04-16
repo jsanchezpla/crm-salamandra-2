@@ -202,7 +202,12 @@ la conexión del tenant en `tenantDb.js`.
 - `Invoice` — facturas con líneas, IVA, PDF, facturantiaId, qrUrl, verifactuStatus
 - `TeamMember` — perfil extendido del user en el tenant
 - `Asset` — inventario (equipos, licencias, materiales)
-- `Training` — formación y certificados por usuario
+- `Training` — formación y certificados por usuario (ampliado con `courseId`, `trainingUserId`)
+- `Company` — empresas cliente del módulo de formación (no confundir con `Client`)
+- `Course` — cursos disponibles, con `wpCourseId` (TutorLMS) y `wcProductId` (WooCommerce)
+- `CompanyCourse` — pivot empresa↔curso (qué cursos tiene contratados una empresa)
+- `TrainingUser` — alumnos del módulo de formación (tipo `private` o `company`, con `companyId` nullable)
+- `CourseEnrollment` — matrículas de alumnos en cursos, con `enrolledAt` y metadata JSONB
 - `Notification` — notificaciones por canal único
 - `Message` — chat interno del equipo por canal
 
@@ -222,7 +227,7 @@ la conexión del tenant en `tenantDb.js`.
 | documents      | #8 Documentación & Contratos  | Pendiente |
 | —              | #9 Filtro global por cliente  | Pendiente |
 | inventory      | #10 Inventario & Activos      | Pendiente |
-| training       | #11 Formación & Conocimiento  | Pendiente |
+| training       | #11 Formación & Conocimiento  | Implementado (Retorika) |
 | automations    | #12 Automatizaciones & Flujos | Pendiente |
 | ai             | #13 IA & Asistente            | Pendiente |
 | integrations   | #14 Integraciones & API       | Pendiente |
@@ -254,6 +259,48 @@ la conexión del tenant en `tenantDb.js`.
 
 - API OpenAI para informes en lenguaje natural y sugerencias de calendario
 - Patrón: datos del tenant a JSON → prompt → parsear respuesta → pintar resultado
+
+### Módulo de Formación (training) — Retorika
+
+Implementado para el tenant `retorika` (academia online con WordPress + TutorLMS + WooCommerce).
+Reutilizable en cualquier otro tenant con `moduleKey: "training"`.
+
+**Modelos nuevos:** `Company`, `Course`, `CompanyCourse`, `TrainingUser`, `CourseEnrollment`
+
+**Endpoints internos** (requieren JWT + `hasModule("training")`):
+- `GET/POST /api/training/companies` — listado y creación de empresas
+- `GET /api/training/companies/:id` — detalle con cursos asignados
+- `POST /api/training/companies/:id/courses` — asignar curso a empresa (idempotente)
+- `DELETE /api/training/companies/:id/courses/:courseId` — desasignar curso
+- `GET/POST /api/training/courses` — cursos disponibles
+- `PUT/DELETE /api/training/courses/:id` — editar/borrar curso (toggle activo)
+- `GET /api/training/users` — alumnos con paginación y filtros
+- `POST /api/training/users/import` — importación masiva desde Excel (ExcelJS)
+- `GET /api/training/users/export` — exportación Excel de alumnos
+- `GET /api/training/enrollments` — matrículas con filtros (curso, empresa, búsqueda)
+- `GET /api/training/enrollments/export` — exportación Excel de matrículas
+
+**Endpoints WordPress** (SIN JWT, SIN `hasModule`, URL invariable):
+- `GET /api/cursos-empresas/codigos-cursos/:email` — devuelve array de `wpCourseId` para
+  saber qué cursos tiene contratados el alumno. Respuesta: `[1234, 5678]` (array plano).
+- `POST /api/webhooks/tutorlms/quiz-attempt` — recibe resultado de cuestionario desde
+  TutorLMS. Verifica HMAC SHA256 con cabecera `X-Retorika-Signature`.
+  Secret: `CabalooGalopante726517893561378`. Guarda en `Training` con `userId` sentinel
+  `'00000000-0000-0000-0000-000000000000'` (NOT NULL constraint del modelo base).
+
+**UI** (`app/(dashboard)/formacion/`):
+- `page.jsx` — overview con 4 métricas + acceso rápido a subsecciones
+- `empresas/page.jsx` — listado con búsqueda + modal nueva empresa
+- `empresas/[id]/page.jsx` — detalle empresa: datos + gestión de cursos asignados
+- `cursos/page.jsx` — listado + toggle activo/inactivo + modal nuevo curso
+- `usuarios/page.jsx` — listado con filtros + importar Excel + exportar Excel
+- `alumnos/page.jsx` — matrículas con filtros + exportar Excel + paginación
+
+**Componentes compartidos** (`components/training/`):
+- `TrainingTable.jsx` — tabla con header de color primario, skeleton loading, `Tr` y `Td`
+- `TrainingBadge.jsx` — `TypeBadge` (privado/empresa) y `ActiveBadge` (activo/inactivo)
+
+**Dependencia añadida:** `exceljs ^4.4.0`
 
 ---
 
@@ -311,6 +358,11 @@ salamandra-crm/
 │       ├── TeamMember.model.js
 │       ├── Asset.model.js
 │       ├── Training.model.js
+│       ├── Company.model.js
+│       ├── Course.model.js
+│       ├── CompanyCourse.model.js
+│       ├── TrainingUser.model.js
+│       ├── CourseEnrollment.model.js
 │       ├── Notification.model.js
 │       └── Message.model.js
 │
