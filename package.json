@@ -12,7 +12,9 @@
     "db:seed": "node --env-file=.env.local scripts/db-seed.js",
     "db:seed:qec": "node --env-file=.env.local scripts/seed-quality-energy.js",
     "db:seed:aumenta": "node --env-file=.env.local scripts/seed-aumenta.js",
-    "db:clear:aumenta": "node --env-file=.env.local scripts/clear-aumenta-leads.js"
+    "db:clear:aumenta": "node --env-file=.env.local scripts/clear-aumenta-leads.js",
+    "db:seed:cuestionarios": "node --env-file=.env.local scripts/seed-cuestionarios-demo.js",
+    "db:add-leads-demo": "node --env-file=.env.local scripts/add-leads-module-demo.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

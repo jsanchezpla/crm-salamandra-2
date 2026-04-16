@@ -4,7 +4,8 @@ import DashboardShell from "../../components/layout/DashboardShell.jsx";
 
 const DEFAULT_BRAND = {
   primaryColor: "#152B22",
-  secondaryColor: "#EDE8DE",
+  secondaryColor: "#3E5C57",
+  accentColor: "#EDE8DE",
   logoUrl: null,
 };
 
@@ -32,6 +33,7 @@ export default async function DashboardLayout({ children }) {
       modules={modules.map((m) => m.toJSON())}
       primaryColor={brand.primaryColor}
       secondaryColor={brand.secondaryColor}
+      accentColor={brand.accentColor}
     >
       {children}
     </DashboardShell>

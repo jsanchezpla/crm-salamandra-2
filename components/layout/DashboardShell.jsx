@@ -3,15 +3,19 @@
 import { useState } from "react";
 import Sidebar from "./Sidebar.jsx";
 
-export default function DashboardShell({ tenant, user, modules, primaryColor, secondaryColor, children }) {
+export default function DashboardShell({ tenant, user, modules, primaryColor, secondaryColor, accentColor, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div
-      className="flex h-screen bg-[#EDE8DE]"
+      className="flex h-screen"
       style={{
         "--color-primary": primaryColor,
         "--color-secondary": secondaryColor,
+        "--color-accent": accentColor,
+        "--color-black": "#000000",
+        "--color-white": "#ffffff",
+        backgroundColor: accentColor,
       }}
     >
       <Sidebar
