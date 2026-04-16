@@ -3,7 +3,13 @@ import { jwtVerify } from "jose";
 
 const ACCESS_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
-const PUBLIC_API_PATHS = ["/api/auth/login", "/api/auth/refresh", "/api/public/"];
+const PUBLIC_API_PATHS = [
+  "/api/auth/login",
+  "/api/auth/refresh",
+  "/api/public/",
+  "/api/cursos-empresas/",
+  "/api/webhooks/",
+];
 const PUBLIC_PAGE_PATHS = ["/login"];
 
 const CORS_HEADERS = {
