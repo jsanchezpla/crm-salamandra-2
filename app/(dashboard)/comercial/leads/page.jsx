@@ -122,8 +122,56 @@ export default function LeadsPage() {
         </select>
       </div>
 
-      {/* Tabla */}
-      <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
+      {/* Vista móvil: tarjetas */}
+      <div className="md:hidden flex flex-col gap-3">
+        {loading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="bg-white border border-neutral-100 rounded-xl p-4 animate-pulse">
+              <div className="h-4 bg-neutral-100 rounded w-1/2 mb-2" />
+              <div className="h-3 bg-neutral-100 rounded w-3/4 mb-2" />
+              <div className="h-3 bg-neutral-100 rounded w-1/3" />
+            </div>
+          ))
+        ) : leads.length === 0 ? (
+          <p className="text-center text-neutral-400 text-sm py-12">No hay leads con los filtros aplicados</p>
+        ) : (
+          leads.map((lead) => (
+            <div key={lead.id} className="bg-white border border-neutral-100 rounded-xl p-4 flex flex-col gap-2">
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-semibold text-neutral-900 text-sm">{lead.name ?? "—"}</span>
+                <PromoBadge promo={lead.metadata?.promo} />
+              </div>
+              {lead.email && <span className="text-xs text-neutral-500">{lead.email}</span>}
+              {lead.phone && <span className="text-xs text-neutral-500">{lead.phone}</span>}
+              {lead.mensaje && (
+                <p className="text-xs text-neutral-500 line-clamp-2">{lead.mensaje}</p>
+              )}
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-[11px] text-neutral-400">
+                  {lead.createdAt
+                    ? new Date(lead.createdAt).toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" })
+                    : "—"}
+                </span>
+                <button
+                  onClick={() => aceptarPromocion(lead)}
+                  className="px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-opacity hover:opacity-80"
+                  style={{ backgroundColor: "var(--color-primary)" }}
+                >
+                  Aceptar promoción
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+        {!loading && leads.length > 0 && (
+          <p className="text-xs text-neutral-400 text-right">
+            {leads.length} lead{leads.length !== 1 ? "s" : ""}
+          </p>
+        )}
+      </div>
+
+      {/* Vista desktop: tabla */}
+      <div className="hidden md:block bg-white border border-neutral-100 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
