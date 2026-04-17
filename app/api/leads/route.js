@@ -96,6 +96,9 @@ export async function POST(request) {
     const resolvedMetadata = metadata ?? {};
     if (promo) resolvedMetadata.promo = promo;
 
+    const VALID_TIPO_USUARIO = ["ciudadano", "profesional"];
+    const VALID_MOTIVO = ["diagnostico", "servicios", "cursos", "talleres"];
+
     const lead = await Lead.create({
       name: name?.trim() ?? null,
       phone: phone?.trim() ?? null,
@@ -108,8 +111,8 @@ export async function POST(request) {
       assignedTo: assignedTo ?? null,
       notes: notes ?? null,
       customFields: customFields ?? {},
-      tipo_usuario: tipo_usuario ?? null,
-      motivo: motivo ?? null,
+      tipo_usuario: VALID_TIPO_USUARIO.includes(tipo_usuario) ? tipo_usuario : null,
+      motivo: VALID_MOTIVO.includes(motivo) ? motivo : null,
       servicio: servicio?.trim() ?? null,
       curso: curso?.trim() ?? null,
       taller: taller?.trim() ?? null,
