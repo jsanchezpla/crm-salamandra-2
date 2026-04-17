@@ -87,6 +87,14 @@ export function defineLead(sequelize) {
         type: DataTypes.JSONB,
         defaultValue: {},
       },
+      source: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      metadata: {
+        type: DataTypes.JSONB,
+        defaultValue: {},
+      },
     },
     {
       tableName: "leads",

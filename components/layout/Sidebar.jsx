@@ -32,7 +32,7 @@ const navigation = [
       {
         key: "leads",
         label: "Leads",
-        href: "/leads",
+        href: "/comercial/leads",
         badge: null,
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">

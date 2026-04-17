@@ -17,9 +17,11 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   const offset = parseInt(searchParams.get("offset") ?? "0");
 
   const motivo = searchParams.get("motivo");
+  const promo = searchParams.get("promo");
 
   if (stage) where.stage = stage;
   if (motivo) where.motivo = motivo;
+  if (promo) where.metadata = { [Op.contains]: { promo } };
   if (empresa) where.customFields = { [Op.contains]: { empresa } };
   if (search) {
     where[Op.or] = [
@@ -64,9 +66,16 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
     curso,
     taller,
     mensaje,
+    message,
+    source,
+    promo,
+    metadata,
   } = body;
 
   if (!name && !title) throw new ValidationError("Se requiere nombre o título del lead");
+
+  const resolvedMetadata = metadata ?? {};
+  if (promo) resolvedMetadata.promo = promo;
 
   const lead = await Lead.create({
     name: name?.trim() ?? null,
@@ -85,7 +94,9 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
     servicio: servicio?.trim() ?? null,
     curso: curso?.trim() ?? null,
     taller: taller?.trim() ?? null,
-    mensaje: mensaje?.trim() ?? null,
+    mensaje: mensaje?.trim() ?? message?.trim() ?? null,
+    source: source?.trim() ?? null,
+    metadata: resolvedMetadata,
   });
 
   return created(lead);
