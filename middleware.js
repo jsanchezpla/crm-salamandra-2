@@ -10,6 +10,8 @@ const PUBLIC_API_PATHS = [
   "/api/cursos-empresas/",
   "/api/webhooks/",
   "/api/register",
+  "/api/leads",
+  "/api/usuarios/register/",
 ];
 const PUBLIC_PAGE_PATHS = ["/login"];
 
@@ -33,8 +35,8 @@ function isApiPath(pathname) {
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
 
-  // Responder preflight CORS directamente desde el middleware
-  if (request.method === "OPTIONS" && pathname.startsWith("/api/public/")) {
+  // Dejar pasar todos los preflights CORS — los Route Handlers añaden sus propios headers
+  if (request.method === "OPTIONS") {
     return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
   }
 
