@@ -34,7 +34,7 @@ export async function POST(request) {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
 
-      if (!row.name && !row.email && !row.phone) {
+      if (!row.email && !row.phone) {
         results.skipped++;
         continue;
       }
@@ -54,7 +54,7 @@ export async function POST(request) {
         if (row.experience) payload.customFields.experience = row.experience.toString().trim();
         if (row.zone) payload.customFields.zone = row.zone.toString().trim();
 
-        if (!payload.name && !payload.email) {
+        if (!payload.email && !payload.phone) {
           results.skipped++;
           continue;
         }
