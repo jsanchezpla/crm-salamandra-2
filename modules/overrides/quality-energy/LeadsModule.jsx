@@ -194,6 +194,13 @@ export default function QECLeadsModule() {
     setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, notes } : l)));
   }
 
+  async function handleDelete(leadId) {
+    await fetch(`/api/leads/${leadId}`, { method: "DELETE" });
+    setLeads((prev) => prev.filter((l) => l.id !== leadId));
+    setTotal((prev) => prev - 1);
+    closePanel();
+  }
+
   return (
     <div className="flex h-full bg-gray-50">
       {/* ── Lista principal ─────────────────────────────────────────────────── */}
@@ -488,6 +495,7 @@ export default function QECLeadsModule() {
         onClose={closePanel}
         onStageChange={handleStageChange}
         onNotesChange={handleNotesChange}
+        onDelete={handleDelete}
       />
 
       {/* ── Modal de importación ────────────────────────────────────────────── */}
@@ -762,14 +770,16 @@ function ImportModal({ onClose, onImported }) {
 
 // ─── Panel de detalle ─────────────────────────────────────────────────────────
 
-function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onNotesChange }) {
+function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onNotesChange, onDelete }) {
   const [notes, setNotes] = useState("");
   const [notesDirty, setNotesDirty] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     if (lead) {
       setNotes(lead.notes ?? "");
       setNotesDirty(false);
+      setConfirmDelete(false);
     }
   }, [lead?.id]);
 
@@ -911,6 +921,39 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onNotesCh
               className="mt-2 text-xs text-[var(--color-primary)] hover:opacity-80 transition-opacity font-medium"
             >
               Guardar notas
+            </button>
+          )}
+        </div>
+
+        {/* Borrar lead */}
+        <div className="pt-2 border-t border-gray-100">
+          {confirmDelete ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <p className="text-red-700 text-xs font-medium mb-3">¿Eliminar este lead? Esta acción no se puede deshacer.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => onDelete(lead.id)}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
+                >
+                  Sí, eliminar
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="flex-1 bg-white border border-gray-200 text-gray-600 text-xs font-semibold py-2 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="flex items-center gap-2 text-gray-400 hover:text-red-500 text-xs font-medium transition-colors py-1"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+              Eliminar lead
             </button>
           )}
         </div>
