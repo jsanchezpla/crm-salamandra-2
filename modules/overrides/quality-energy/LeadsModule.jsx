@@ -32,16 +32,9 @@ const STAGE_STYLE = {
   lost: { dot: "bg-red-400", bg: "bg-red-100 text-red-600" },
 };
 
-const EXPERIENCE_LABELS = {
-  experienced: "Con experiencia",
-  other_sector: "Otro sector",
-  freelancer: "Autónomo",
-};
-
-const EXPERIENCE_STYLE = {
-  experienced: "bg-green-100 text-green-700",
-  other_sector: "bg-gray-100 text-gray-600",
-  freelancer: "bg-amber-100 text-amber-700",
+const CARGO_STYLE = {
+  "Autónomo": "bg-amber-100 text-amber-700",
+  "Trabajador por cuenta ajena": "bg-blue-100 text-blue-700",
 };
 
 function formatDate(iso) {
@@ -328,7 +321,7 @@ export default function QECLeadsModule() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      {["Nombre", "Teléfono", "Email", "Empresa", "Experiencia", "Zona", "Estado", "Recibido"].map((h) => (
+                      {["Nombre", "Teléfono", "Email", "Empresa", "Cargo", "Zona", "Estado", "Recibido"].map((h) => (
                         <th
                           key={h}
                           className="text-left py-3 px-4 text-[10px] font-semibold text-gray-500 uppercase tracking-wide"
@@ -340,8 +333,8 @@ export default function QECLeadsModule() {
                   </thead>
                   <tbody>
                     {leads.map((lead) => {
-                      const exp = lead.customFields?.experience ?? lead.customFields?.experiencia;
-                      const zone = lead.customFields?.zone ?? lead.customFields?.zona;
+                      const cargo = lead.customFields?.cargo;
+                      const zone = lead.customFields?.zona ?? lead.customFields?.zone;
                       const empresa = lead.customFields?.empresa;
                       const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.new;
                       return (
@@ -369,9 +362,7 @@ export default function QECLeadsModule() {
                           </td>
                           <td className="py-3 px-4">
                             {empresa ? (
-                              <span
-                                className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EMPRESA_STYLE[empresa] ?? "bg-gray-100 text-gray-600"}`}
-                              >
+                              <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EMPRESA_STYLE[empresa] ?? "bg-gray-100 text-gray-600"}`}>
                                 {empresa}
                               </span>
                             ) : (
@@ -379,11 +370,9 @@ export default function QECLeadsModule() {
                             )}
                           </td>
                           <td className="py-3 px-4">
-                            {exp ? (
-                              <span
-                                className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EXPERIENCE_STYLE[exp] ?? "bg-gray-100 text-gray-600"}`}
-                              >
-                                {EXPERIENCE_LABELS[exp] ?? exp}
+                            {cargo ? (
+                              <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${CARGO_STYLE[cargo] ?? "bg-gray-100 text-gray-600"}`}>
+                                {cargo}
                               </span>
                             ) : (
                               <span className="text-gray-300">—</span>
@@ -417,8 +406,8 @@ export default function QECLeadsModule() {
               {/* Mobile: tarjetas */}
               <div className="lg:hidden space-y-3">
                 {leads.map((lead) => {
-                  const exp = lead.customFields?.experience;
-                  const zone = lead.customFields?.zone;
+                  const cargo = lead.customFields?.cargo;
+                  const zone = lead.customFields?.zona ?? lead.customFields?.zone;
                   const empresa = lead.customFields?.empresa;
                   const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.new;
                   return (
@@ -440,17 +429,13 @@ export default function QECLeadsModule() {
                       </div>
                       <div className="flex flex-wrap gap-2 mt-2">
                         {empresa && (
-                          <span
-                            className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EMPRESA_STYLE[empresa] ?? "bg-gray-100 text-gray-600"}`}
-                          >
+                          <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EMPRESA_STYLE[empresa] ?? "bg-gray-100 text-gray-600"}`}>
                             {empresa}
                           </span>
                         )}
-                        {exp && (
-                          <span
-                            className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EXPERIENCE_STYLE[exp] ?? "bg-gray-100 text-gray-600"}`}
-                          >
-                            {EXPERIENCE_LABELS[exp] ?? exp}
+                        {cargo && (
+                          <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${CARGO_STYLE[cargo] ?? "bg-gray-100 text-gray-600"}`}>
+                            {cargo}
                           </span>
                         )}
                         {zone && (
@@ -785,8 +770,9 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onNotesCh
 
   if (!lead) return null;
 
-  const exp = lead.customFields?.experience ?? lead.customFields?.experiencia;
-  const zone = lead.customFields?.zone ?? lead.customFields?.zona;
+  const cargo = lead.customFields?.cargo;
+  const empresaActual = lead.customFields?.empresa_actual;
+  const zone = lead.customFields?.zona ?? lead.customFields?.zone;
   const empresa = lead.customFields?.empresa;
   const utmSource = lead.customFields?.utmSource;
   const utmMedium = lead.customFields?.utmMedium;
@@ -860,11 +846,9 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onNotesCh
           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-3">Perfil comercial</p>
           <div className="space-y-2.5">
             <div className="flex items-start gap-3">
-              <span className="text-gray-400 w-24 shrink-0 text-xs mt-0.5">Empresa</span>
+              <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Empresa</span>
               {empresa ? (
-                <span
-                  className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EMPRESA_STYLE[empresa] ?? "bg-gray-100 text-gray-600"}`}
-                >
+                <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EMPRESA_STYLE[empresa] ?? "bg-gray-100 text-gray-600"}`}>
                   {empresa}
                 </span>
               ) : (
@@ -872,19 +856,23 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onNotesCh
               )}
             </div>
             <div className="flex items-start gap-3">
-              <span className="text-gray-400 w-24 shrink-0 text-xs mt-0.5">Experiencia</span>
-              {exp ? (
-                <span
-                  className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EXPERIENCE_STYLE[exp] ?? "bg-gray-100 text-gray-600"}`}
-                >
-                  {EXPERIENCE_LABELS[exp] ?? exp}
+              <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Cargo</span>
+              {cargo ? (
+                <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${CARGO_STYLE[cargo] ?? "bg-gray-100 text-gray-600"}`}>
+                  {cargo}
                 </span>
               ) : (
                 <span className="text-gray-300 text-xs">No indicado</span>
               )}
             </div>
+            {cargo === "Trabajador por cuenta ajena" && (
+              <div className="flex items-start gap-3">
+                <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Empresa actual</span>
+                <span className="text-gray-700 text-xs">{empresaActual || "No indicado"}</span>
+              </div>
+            )}
             <div className="flex items-start gap-3">
-              <span className="text-gray-400 w-24 shrink-0 text-xs mt-0.5">Zona</span>
+              <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Zona</span>
               <span className="text-gray-700 text-xs">{zone || "No indicado"}</span>
             </div>
           </div>
