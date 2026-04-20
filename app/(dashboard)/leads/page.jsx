@@ -3,12 +3,14 @@ import { getMasterModels } from "../../../lib/db/masterDb.js";
 
 import DefaultLeadsModule from "../../../modules/leads/LeadsModule.jsx";
 import QECLeadsModule from "../../../modules/overrides/quality-energy/LeadsModule.jsx";
+import RetorikaLeadsModule from "../../../modules/overrides/retorika/LeadsModule.jsx";
 import AumentaLeadsModule from "../../../modules/overrides/aumenta/LeadsModule.jsx";
 import AbarcaIALeadsModule from "../../../modules/overrides/abarcaia/LeadsModule.jsx";
 import DemoLeadsModule from "../../../modules/overrides/demo/LeadsModule.jsx";
 
 const UI_OVERRIDES = {
   quality_energy: QECLeadsModule,
+  retorika: RetorikaLeadsModule,
   aumenta: AumentaLeadsModule,
   abarcaia: AbarcaIALeadsModule,
   demo: DemoLeadsModule,
