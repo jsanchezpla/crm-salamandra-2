@@ -20,28 +20,6 @@ const STAGE_STYLE = {
   lost: { dot: "bg-red-400", bg: "bg-red-100 text-red-600" },
 };
 
-const PROMO_LABELS = {
-  "pack-ia": "Pack IA",
-  "formacion-presencial": "Formación Presencial",
-};
-
-const PROMO_STYLE = {
-  "pack-ia": "bg-violet-100 text-violet-700",
-  "formacion-presencial": "bg-sky-100 text-sky-700",
-};
-
-const ASUNTOS = {
-  "pack-ia": "¡Tu Pack IA + 2 Herramientas Gratis está listo!",
-  "formacion-presencial": "¡Formación Presencial confirmada!",
-};
-
-const CUERPOS = {
-  "pack-ia": (name) =>
-    `Hola ${name},\n\nNos complace confirmarte que tu solicitud del Pack IA + 2 Herramientas Gratis ha sido aceptada.\n\nEn breve recibirás más información.\n\nUn saludo,\nEl equipo de Retorika`,
-  "formacion-presencial": (name) =>
-    `Hola ${name},\n\nNos complace confirmarte que tu solicitud de Formación Presencial en Grupo ha sido aceptada.\n\nEn breve nos pondremos en contacto contigo para coordinar los detalles.\n\nUn saludo,\nEl equipo de Retorika`,
-};
-
 function formatDate(iso) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("es-ES", {
@@ -51,16 +29,8 @@ function formatDate(iso) {
   });
 }
 
-function getPromo(lead) {
-  return lead.customFields?.promo || lead.metadata?.promo || null;
-}
-
 function getMensaje(lead) {
   return lead.customFields?.mensaje || lead.mensaje || null;
-}
-
-function getOrigen(lead) {
-  return lead.customFields?.origen || lead.source || null;
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -70,7 +40,6 @@ export default function RetorikaLeadsModule() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activeStage, setActiveStage] = useState("all");
-  const [promoFilter, setPromoFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -86,18 +55,12 @@ export default function RetorikaLeadsModule() {
       .then((r) => r.json())
       .then((data) => {
         if (data.ok) {
-          let rows = data.data.leads;
-          if (promoFilter !== "all") {
-            rows = rows.filter(
-              (l) => (l.customFields?.promo || l.metadata?.promo) === promoFilter
-            );
-          }
-          setLeads(rows);
+          setLeads(data.data.leads);
           setTotal(data.data.total);
         }
       })
       .finally(() => setLoading(false));
-  }, [activeStage, promoFilter, search]);
+  }, [activeStage, search]);
 
   useEffect(() => {
     fetchLeads();
@@ -193,9 +156,9 @@ export default function RetorikaLeadsModule() {
             ))}
           </div>
 
-          {/* Filtros */}
-          <div className="flex flex-col sm:flex-row gap-2 mb-2">
-            <div className="relative flex-1">
+          {/* Búsqueda */}
+          <div className="mb-2">
+            <div className="relative">
               <svg
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400"
                 viewBox="0 0 24 24"
@@ -214,16 +177,6 @@ export default function RetorikaLeadsModule() {
                 className="w-full bg-white border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[var(--color-primary)] transition-colors shadow-sm"
               />
             </div>
-            <select
-              value={promoFilter}
-              onChange={(e) => setPromoFilter(e.target.value)}
-              className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors shadow-sm shrink-0"
-            >
-              <option value="all">Todas las promos</option>
-              <option value="pack-ia">Pack IA</option>
-              <option value="formacion-presencial">Formación Presencial</option>
-              <option value="">Sin promo</option>
-            </select>
           </div>
 
           {/* Tabs de estado */}
@@ -267,22 +220,19 @@ export default function RetorikaLeadsModule() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      {["Nombre", "Email", "Teléfono", "Promo", "Origen", "Estado", "Recibido"].map(
-                        (h) => (
-                          <th
-                            key={h}
-                            className="text-left py-3 px-4 text-[10px] font-semibold text-gray-500 uppercase tracking-wide"
-                          >
-                            {h}
-                          </th>
-                        )
-                      )}
+                      {["Nombre", "Email", "Teléfono", "Mensaje", "Estado", "Recibido"].map((h) => (
+                        <th
+                          key={h}
+                          className="text-left py-3 px-4 text-[10px] font-semibold text-gray-500 uppercase tracking-wide"
+                        >
+                          {h}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
                     {leads.map((lead) => {
-                      const promo = getPromo(lead);
-                      const origen = getOrigen(lead);
+                      const mensaje = getMensaje(lead);
                       const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.new;
                       return (
                         <tr
@@ -309,18 +259,15 @@ export default function RetorikaLeadsModule() {
                               <span className="text-gray-300">—</span>
                             )}
                           </td>
-                          <td className="py-3 px-4">
-                            {promo ? (
-                              <span
-                                className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${PROMO_STYLE[promo] ?? "bg-gray-100 text-gray-600"}`}
-                              >
-                                {PROMO_LABELS[promo] ?? promo}
+                          <td className="py-3 px-4 max-w-[260px]">
+                            {mensaje ? (
+                              <span className="text-gray-500 text-xs line-clamp-2 leading-relaxed">
+                                {mensaje}
                               </span>
                             ) : (
                               <span className="text-gray-300">—</span>
                             )}
                           </td>
-                          <td className="py-3 px-4 text-gray-400 text-xs">{origen || "—"}</td>
                           <td className="py-3 px-4">
                             <span
                               className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${style.bg}`}
@@ -336,8 +283,8 @@ export default function RetorikaLeadsModule() {
                     })}
                     {leads.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="py-16 text-center text-gray-400 text-sm">
-                          {search || activeStage !== "all" || promoFilter !== "all"
+                        <td colSpan={6} className="py-16 text-center text-gray-400 text-sm">
+                          {search || activeStage !== "all"
                             ? "Sin resultados para ese filtro"
                             : "Todavía no hay leads."}
                         </td>
@@ -350,7 +297,7 @@ export default function RetorikaLeadsModule() {
               {/* Mobile: tarjetas */}
               <div className="lg:hidden space-y-3">
                 {leads.map((lead) => {
-                  const promo = getPromo(lead);
+                  const mensaje = getMensaje(lead);
                   const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.new;
                   return (
                     <div
@@ -371,15 +318,11 @@ export default function RetorikaLeadsModule() {
                           {STAGES.find((s) => s.key === lead.stage)?.label ?? lead.stage}
                         </span>
                       </div>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {promo && (
-                          <span
-                            className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${PROMO_STYLE[promo] ?? "bg-gray-100 text-gray-600"}`}
-                          >
-                            {PROMO_LABELS[promo] ?? promo}
-                          </span>
-                        )}
-                      </div>
+                      {mensaje && (
+                        <p className="text-xs text-gray-500 line-clamp-2 mt-1 leading-relaxed">
+                          {mensaje}
+                        </p>
+                      )}
                       <div className="flex items-center justify-between mt-3">
                         <span className="text-xs text-gray-400">{formatDate(lead.createdAt)}</span>
                         {lead.phone && (
@@ -437,21 +380,11 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onNotesCh
 
   if (!lead) return null;
 
-  const promo = getPromo(lead);
   const mensaje = getMensaje(lead);
-  const origen = getOrigen(lead);
 
   async function saveNotes() {
     await onNotesChange(lead.id, notes);
     setNotesDirty(false);
-  }
-
-  function aceptarPromocion() {
-    const asunto = ASUNTOS[promo] ?? "Tu solicitud ha sido aceptada";
-    const cuerpoFn =
-      CUERPOS[promo] ??
-      ((n) => `Hola ${n},\n\nTu solicitud ha sido aceptada.\n\nUn saludo,\nEl equipo de Retorika`);
-    window.location.href = `mailto:${lead.email}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpoFn(lead.name ?? ""))}`;
   }
 
   return (
@@ -524,58 +457,16 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onNotesCh
           </div>
         </div>
 
-        {/* Solicitud */}
-        <div>
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-3">
-            Solicitud
-          </p>
-          <div className="space-y-2.5">
-            <div className="flex items-start gap-3">
-              <span className="text-gray-400 w-20 shrink-0 text-xs mt-0.5">Promo</span>
-              {promo ? (
-                <span
-                  className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${PROMO_STYLE[promo] ?? "bg-gray-100 text-gray-600"}`}
-                >
-                  {PROMO_LABELS[promo] ?? promo}
-                </span>
-              ) : (
-                <span className="text-gray-300 text-xs">Sin promo</span>
-              )}
-            </div>
-            <div className="flex items-start gap-3">
-              <span className="text-gray-400 w-20 shrink-0 text-xs mt-0.5">Origen</span>
-              <span className="text-gray-600 text-xs">{origen || "—"}</span>
-            </div>
-            {mensaje && (
-              <div className="flex items-start gap-3">
-                <span className="text-gray-400 w-20 shrink-0 text-xs mt-0.5">Mensaje</span>
-                <p className="text-gray-700 text-xs leading-relaxed">{mensaje}</p>
-              </div>
-            )}
+        {/* Mensaje */}
+        {mensaje && (
+          <div>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
+              Mensaje
+            </p>
+            <p className="text-gray-700 text-sm leading-relaxed bg-gray-50 rounded-lg px-3 py-2.5">
+              {mensaje}
+            </p>
           </div>
-        </div>
-
-        {/* Botón aceptar promoción */}
-        {promo && lead.email && (
-          <button
-            onClick={aceptarPromocion}
-            className="w-full flex items-center justify-center gap-2 bg-[var(--color-primary)] hover:opacity-90 text-white text-sm font-semibold py-2.5 rounded-xl transition-opacity"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              className="w-4 h-4"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
-              />
-            </svg>
-            Aceptar promoción
-          </button>
         )}
 
         {/* Notas */}
