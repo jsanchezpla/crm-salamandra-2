@@ -119,6 +119,7 @@ export default function QECLeadsModule() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const fetchLeads = useCallback(() => {
     setLoading(true);
@@ -187,6 +188,27 @@ export default function QECLeadsModule() {
     setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, notes } : l)));
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (activeStage !== "all") params.set("stage", activeStage);
+      if (activeEmpresa !== "all") params.set("empresa", activeEmpresa);
+      if (search.trim()) params.set("search", search.trim());
+
+      const res = await fetch(`/api/leads/export?${params}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `leads_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function handleDelete(leadId) {
     await fetch(`/api/leads/${leadId}`, { method: "DELETE" });
     setLeads((prev) => prev.filter((l) => l.id !== leadId));
@@ -209,16 +231,32 @@ export default function QECLeadsModule() {
                 {total} candidato{total !== 1 ? "s" : ""} en total
               </p>
             </div>
-            <button
-              onClick={() => setImportOpen(true)}
-              className="flex items-center gap-2 bg-[var(--color-primary)] hover:opacity-90 text-white text-sm font-medium px-4 py-2 rounded-lg transition-opacity shadow-sm"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-              </svg>
-              <span className="hidden sm:inline">Importar CSV</span>
-              <span className="sm:hidden">Importar</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                className="flex items-center gap-2 bg-white border border-gray-200 hover:border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm disabled:opacity-50"
+              >
+                {exporting ? (
+                  <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M12 3v13.5m0 0l-4.5-4.5M12 16.5l4.5-4.5" />
+                  </svg>
+                )}
+                <span className="hidden sm:inline">Exportar Excel</span>
+              </button>
+              <button
+                onClick={() => setImportOpen(true)}
+                className="flex items-center gap-2 bg-[var(--color-primary)] hover:opacity-90 text-white text-sm font-medium px-4 py-2 rounded-lg transition-opacity shadow-sm"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                </svg>
+                <span className="hidden sm:inline">Importar CSV</span>
+                <span className="sm:hidden">Importar</span>
+              </button>
+            </div>
           </div>
 
           {/* Métricas rápidas — 3 cols móvil, 5 cols desktop */}
