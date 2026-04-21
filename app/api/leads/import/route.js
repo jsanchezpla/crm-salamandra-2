@@ -53,6 +53,9 @@ export async function POST(request) {
         if (row.empresa) payload.customFields.empresa = row.empresa.toString().trim();
         if (row.experience) payload.customFields.experience = row.experience.toString().trim();
         if (row.zone) payload.customFields.zone = row.zone.toString().trim();
+        if (row.cargo) payload.customFields.cargo = row.cargo.toString().trim();
+        if (row.empresa_actual) payload.customFields.empresa_actual = row.empresa_actual.toString().trim();
+        if (row.zona) payload.customFields.zona = row.zona.toString().trim();
 
         if (!payload.email && !payload.phone) {
           results.skipped++;
