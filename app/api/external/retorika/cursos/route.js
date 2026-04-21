@@ -36,7 +36,7 @@ export async function GET(request) {
         id: u.id,
         name: u.name,
         email: u.email,
-        enrolledAt: u.CourseEnrollment?.enrolledAt ?? null,
+        enrolledAt: u.enrollment?.enrolledAt ?? null,
       }));
       return {
         id: course.id,

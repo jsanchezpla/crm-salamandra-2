@@ -10,7 +10,7 @@ export async function GET(request, { params }) {
   }
 
   try {
-    const email = decodeURIComponent(params.email).toLowerCase();
+    const email = decodeURIComponent(params.email).toLowerCase().trim();
 
     const { models } = getTenantDb(SLUG);
     const { TrainingUser, Company, Course, CourseEnrollment } = models;
@@ -59,7 +59,7 @@ export async function GET(request, { params }) {
           courseName: c.name,
           wpCourseId: c.wpCourseId,
           wcProductId: c.wcProductId,
-          enrolledAt: c.CourseEnrollment?.enrolledAt ?? null,
+          enrolledAt: c.enrollment?.enrolledAt ?? null,
         })),
       },
     });

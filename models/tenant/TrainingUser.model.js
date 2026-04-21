@@ -59,6 +59,13 @@ export function defineTrainingUser(sequelize) {
     },
     {
       tableName: "training_users",
+      hooks: {
+        beforeSave(instance) {
+          if (instance.email) {
+            instance.email = instance.email.toLowerCase().trim();
+          }
+        },
+      },
     }
   );
 }

@@ -108,7 +108,7 @@ function formatAlumnos(rows) {
         courseName: c.name,
         wpCourseId: c.wpCourseId,
         wcProductId: c.wcProductId,
-        enrolledAt: c.CourseEnrollment?.enrolledAt ?? null,
+        enrolledAt: c.enrollment?.enrolledAt ?? null,
       })),
     };
   });
