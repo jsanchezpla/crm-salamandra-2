@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(PGPASSWORD=portero_1 /c/Program Files/PostgreSQL/17/bin/psql *)",
-      "Bash(xargs grep *)"
+      "Bash(xargs grep *)",
+      "Bash(dir C:\\\\Dev\\\\salamandra-solutions\\\\crm-salamandra-2\\\\app\\\\api *)"
     ]
   }
 }
