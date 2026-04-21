@@ -12,6 +12,7 @@ const PUBLIC_API_PATHS = [
   "/api/register",
   "/api/leads",
   "/api/usuarios/register/",
+  "/api/external/",
 ];
 const PUBLIC_PAGE_PATHS = ["/login"];
 
