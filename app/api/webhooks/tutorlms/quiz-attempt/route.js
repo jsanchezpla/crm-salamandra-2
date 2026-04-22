@@ -38,16 +38,7 @@ export async function POST(request) {
 
     const wpAttemptId = parseInt(payload.attempt_id, 10);
 
-    const answers = (payload.answers ?? []).map((q, idx) => ({
-      no: q.no ?? idx + 1,
-      questionId: q.question_id ?? q.questionId ?? null,
-      type: q.question_type ?? q.type ?? "unknown",
-      question: q.question_title ?? q.question ?? "",
-      givenAnswer: q.given_answer ?? q.givenAnswer ?? "",
-      correctAnswer: q.correct_answer ?? q.correctAnswer ?? "",
-      isCorrect: q.is_correct === true || q.is_correct === 1 || q.is_correct === "1" || q.isCorrect === true,
-      marks: parseFloat(q.question_mark ?? q.marks ?? 0),
-    }));
+    console.log("[RAW] payload.answers[0]:", JSON.stringify(payload.answers?.[0]));
 
     const data = {
       wpAttemptId,
@@ -69,7 +60,7 @@ export async function POST(request) {
       quizTime:        parseInt(payload.quiz_time ?? 0, 10),
       attemptTime:     parseInt(payload.attempt_time ?? 0, 10),
       result:          payload.result === "pass" ? "pass" : "fail",
-      answers,
+      answers:         payload.answers ?? [],
     };
 
     // Comprobar si existe el registro
@@ -79,7 +70,8 @@ export async function POST(request) {
     );
 
     console.log(`[QUIZ-ATTEMPT] schema=${schema} existing=${existing ? existing.id : "null"} totalQ=${data.totalQuestions} answers=${data.answers?.length}`);
-    console.log("[QUIZ-ATTEMPT] answers[0]:", JSON.stringify(data.answers?.[0]));
+    console.log("[PRE-UPDATE] data.answers[0]:", JSON.stringify(data.answers?.[0]));
+    console.log("[PRE-UPDATE] answers string:", JSON.stringify(data.answers).substring(0, 200));
 
     let attemptId;
     if (existing) {
