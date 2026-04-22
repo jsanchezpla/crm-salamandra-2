@@ -151,7 +151,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
         answers,
       };
 
-      await QuizAttempt.upsert(data, { conflictFields: ["wpAttemptId"] });
+      await QuizAttempt.upsert(data, { conflictFields: ["wp_attempt_id"] });
       synced++;
     } catch (err) {
       errors.push({ attemptId: raw.attempt_id ?? raw.id, error: err.message });

@@ -67,7 +67,7 @@ export async function POST(request) {
         result: payload.result === "pass" ? "pass" : "fail",
         answers,
       },
-      { conflictFields: ["wpAttemptId"] }
+      { conflictFields: ["wp_attempt_id"] }
     );
 
     return NextResponse.json({ ok: true, attemptId: record.id });
