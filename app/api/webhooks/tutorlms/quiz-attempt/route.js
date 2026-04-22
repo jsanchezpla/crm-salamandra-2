@@ -5,9 +5,6 @@ import { createHmac, timingSafeEqual } from "crypto";
 
 const WEBHOOK_SECRET = "CabalooGalopante726517893561378";
 
-// Nil UUID para registros creados desde webhooks externos (sin usuario master)
-const WEBHOOK_USER_ID = "00000000-0000-0000-0000-000000000000";
-
 function verifySignature(rawBody, signatureHeader) {
   if (!signatureHeader) return false;
   const signature = signatureHeader.startsWith("sha256=")
@@ -22,49 +19,43 @@ function verifySignature(rawBody, signatureHeader) {
 }
 
 // POST /api/webhooks/tutorlms/quiz-attempt
-// Endpoint crítico — lo llama TutorLMS (WordPress).
+// Recibe intentos de quiz en tiempo real desde TutorLMS (WordPress). Sin JWT.
 export async function POST(request) {
   try {
     const rawBody = await request.text();
-    const signature = request.headers.get("x-retorika-signature");
+    const signatureHeader = request.headers.get("x-retorika-signature");
 
-    if (!verifySignature(rawBody, signature)) {
+    if (!verifySignature(rawBody, signatureHeader)) {
       return NextResponse.json({ ok: false, error: "Firma inválida" }, { status: 401 });
     }
 
     const payload = JSON.parse(rawBody);
     const ctx = await getTenantContext(request);
-    const { Training, TrainingUser, Course } = ctx.tenantModels;
+    const { QuizAttempt } = ctx.tenantModels;
 
-    // Resolver curso y usuario del tenant a partir de los IDs de WordPress
-    const [course, trainingUser] = await Promise.all([
-      payload.course_id
-        ? Course.findOne({ where: { wpCourseId: payload.course_id } })
-        : null,
-      payload.student_email
-        ? TrainingUser.findOne({ where: { email: payload.student_email.toLowerCase() } })
-        : null,
-    ]);
+    const answers = (payload.answers ?? []).map((q, idx) => ({
+      no: idx + 1,
+      questionId: q.question_id ?? null,
+      type: q.question_type ?? "unknown",
+      question: q.question_title ?? q.question ?? "",
+      givenAnswer: q.given_answer ?? "",
+      correctAnswer: q.correct_answer ?? "",
+      isCorrect: q.is_correct === true || q.is_correct === 1 || q.is_correct === "1",
+      marks: parseFloat(q.question_mark ?? q.marks ?? 0),
+    }));
 
-    await Training.create({
-      userId: WEBHOOK_USER_ID,
-      title: payload.quiz_title ?? payload.course_title ?? "Quiz attempt",
-      type: "course",
-      status: payload.result === "pass" ? "completed" : "in_progress",
-      provider: "TutorLMS",
-      courseId: course?.id ?? null,
-      trainingUserId: trainingUser?.id ?? null,
-      customFields: {
-        source: "tutorlms_webhook",
-        wpQuizId: payload.quiz_id ?? null,
-        wpCourseId: payload.course_id ?? null,
-        wpUserId: payload.user_id ?? null,
-        wpAttemptId: payload.attempt_id ?? null,
-        studentEmail: payload.student_email ?? null,
+    const [record] = await QuizAttempt.upsert(
+      {
+        wpAttemptId: payload.attempt_id,
+        wpQuizId: payload.quiz_id ?? 0,
+        wpCourseId: payload.course_id ?? 0,
+        wpUserId: payload.user_id ?? 0,
         studentName: payload.student_name ?? null,
+        studentEmail: payload.student_email ?? null,
         quizTitle: payload.quiz_title ?? null,
         courseTitle: payload.course_title ?? null,
-        result: payload.result ?? null,
+        empresa: payload.empresa ?? null,
+        attemptDate: payload.attempt_date ? new Date(payload.attempt_date) : null,
         totalQuestions: payload.total_questions ?? null,
         totalPoints: payload.total_points ?? null,
         earnedPoints: payload.earned_points ?? null,
@@ -73,12 +64,13 @@ export async function POST(request) {
         incorrectAnswers: payload.incorrect_answers ?? null,
         quizTime: payload.quiz_time ?? null,
         attemptTime: payload.attempt_time ?? null,
-        attemptDate: payload.attempt_date ?? null,
-        answers: payload.answers ?? [],
+        result: payload.result === "pass" ? "pass" : "fail",
+        answers,
       },
-    });
+      { conflictFields: ["wpAttemptId"] }
+    );
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, attemptId: record.id });
   } catch (err) {
     return handleRouteError(err);
   }

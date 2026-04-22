@@ -377,7 +377,7 @@ function AttemptsList({ onSelect }) {
     if (result) params.set("result", result);
 
     try {
-      const res = await fetch(`/api/cuestionarios?${params.toString()}`);
+      const res = await fetch(`/api/training/quiz-attempts?${params.toString()}`);
       const data = await res.json();
       if (data.ok) {
         setAttempts(data.data.attempts);
@@ -637,7 +637,7 @@ export default function CuestionariosModule() {
     setSelectedId(id);
     setLoadingDetail(true);
     try {
-      const res = await fetch(`/api/cuestionarios/${id}`);
+      const res = await fetch(`/api/training/quiz-attempts/${id}`);
       const data = await res.json();
       if (data.ok) setAttempt(data.data);
     } finally {
