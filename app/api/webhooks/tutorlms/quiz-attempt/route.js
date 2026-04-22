@@ -78,7 +78,8 @@ export async function POST(request) {
       { replacements: { wpAttemptId }, type: SequelizeQueryTypes.SELECT }
     );
 
-    console.log(`[QUIZ-ATTEMPT] schema=${schema} existing=${existing ? existing.id : "null"} totalQ=${data.totalQuestions}`);
+    console.log(`[QUIZ-ATTEMPT] schema=${schema} existing=${existing ? existing.id : "null"} totalQ=${data.totalQuestions} answers=${data.answers?.length}`);
+    console.log("[QUIZ-ATTEMPT] answers[0]:", JSON.stringify(data.answers?.[0]));
 
     let attemptId;
     if (existing) {
