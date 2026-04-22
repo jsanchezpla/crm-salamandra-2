@@ -34,6 +34,7 @@ export async function POST(request) {
     const ctx = await getTenantContext(request);
     const { QuizAttempt } = ctx.tenantModels;
     const sequelize = QuizAttempt.sequelize;
+    const schema = `crm_${ctx.slug}`;
 
     const wpAttemptId = parseInt(payload.attempt_id, 10);
 
@@ -73,14 +74,14 @@ export async function POST(request) {
 
     // Comprobar si existe el registro
     const [existing] = await sequelize.query(
-      `SELECT id FROM quiz_attempts WHERE wp_attempt_id = :wpAttemptId LIMIT 1`,
+      `SELECT id FROM "${schema}".quiz_attempts WHERE wp_attempt_id = :wpAttemptId LIMIT 1`,
       { replacements: { wpAttemptId }, type: SequelizeQueryTypes.SELECT }
     );
 
     let attemptId;
     if (existing) {
       await sequelize.query(
-        `UPDATE quiz_attempts SET
+        `UPDATE "${schema}".quiz_attempts SET
           student_name      = :studentName,
           student_email     = :studentEmail,
           quiz_title        = :quizTitle,
