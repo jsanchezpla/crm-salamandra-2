@@ -2,6 +2,7 @@ import { getTenantContext } from "../../../../../lib/tenant/tenantResolver.js";
 import { handleRouteError } from "../../../../../lib/utils/errors.js";
 import { NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
+import { literal } from "sequelize";
 
 const WEBHOOK_SECRET = "CabalooGalopante726517893561378";
 
@@ -33,6 +34,9 @@ export async function POST(request) {
     const ctx = await getTenantContext(request);
     const { QuizAttempt } = ctx.tenantModels;
 
+    const wpAttemptId = parseInt(payload.attempt_id, 10);
+    console.log("[QUIZ-ATTEMPT] wpAttemptId:", wpAttemptId, typeof wpAttemptId);
+
     const answers = (payload.answers ?? []).map((q, idx) => ({
       no: idx + 1,
       questionId: q.question_id ?? null,
@@ -45,29 +49,35 @@ export async function POST(request) {
     }));
 
     const data = {
-      wpAttemptId: payload.attempt_id,
-      wpQuizId: payload.quiz_id ?? 0,
-      wpCourseId: payload.course_id ?? 0,
-      wpUserId: payload.user_id ?? 0,
+      wpAttemptId,
+      wpQuizId: parseInt(payload.quiz_id ?? 0, 10),
+      wpCourseId: parseInt(payload.course_id ?? 0, 10),
+      wpUserId: parseInt(payload.user_id ?? 0, 10),
       studentName: payload.student_name ?? null,
       studentEmail: payload.student_email ?? null,
       quizTitle: payload.quiz_title ?? null,
       courseTitle: payload.course_title ?? null,
       empresa: payload.empresa ?? null,
       attemptDate: payload.attempt_date ? new Date(payload.attempt_date) : null,
-      totalQuestions: payload.total_questions ?? null,
-      totalPoints: payload.total_points ?? null,
-      earnedPoints: payload.earned_points ?? null,
-      passingPoints: payload.passing_points ?? null,
-      correctAnswers: payload.correct_answers ?? null,
-      incorrectAnswers: payload.incorrect_answers ?? null,
-      quizTime: payload.quiz_time ?? null,
-      attemptTime: payload.attempt_time ?? null,
+      totalQuestions: parseInt(payload.total_questions ?? 0, 10),
+      totalPoints: parseFloat(payload.total_points ?? 0),
+      earnedPoints: parseFloat(payload.earned_points ?? 0),
+      passingPoints: parseFloat(payload.passing_points ?? 0),
+      correctAnswers: parseInt(payload.correct_answers ?? 0, 10),
+      incorrectAnswers: parseInt(payload.incorrect_answers ?? 0, 10),
+      quizTime: parseInt(payload.quiz_time ?? 0, 10),
+      attemptTime: parseInt(payload.attempt_time ?? 0, 10),
       result: payload.result === "pass" ? "pass" : "fail",
       answers,
     };
 
-    const existing = await QuizAttempt.findOne({ where: { wpAttemptId: data.wpAttemptId } });
+    // Usar literal SQL para evitar ambigüedad en el mapeo camelCase → snake_case
+    const existing = await QuizAttempt.findOne({
+      where: literal(`wp_attempt_id = ${wpAttemptId}`),
+    });
+
+    console.log("[QUIZ-ATTEMPT] existing:", existing ? `id=${existing.id}` : "null");
+
     let attemptId;
     if (existing) {
       await existing.update(data);
