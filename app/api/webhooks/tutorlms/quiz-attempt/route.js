@@ -8,8 +8,11 @@ const WEBHOOK_SECRET = "CabalooGalopante726517893561378";
 // Nil UUID para registros creados desde webhooks externos (sin usuario master)
 const WEBHOOK_USER_ID = "00000000-0000-0000-0000-000000000000";
 
-function verifySignature(rawBody, signature) {
-  if (!signature) return false;
+function verifySignature(rawBody, signatureHeader) {
+  if (!signatureHeader) return false;
+  const signature = signatureHeader.startsWith("sha256=")
+    ? signatureHeader.slice(7)
+    : signatureHeader;
   const expected = createHmac("sha256", WEBHOOK_SECRET).update(rawBody).digest("hex");
   try {
     return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
