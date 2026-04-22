@@ -86,8 +86,24 @@ export async function POST(request) {
 
     let attemptId;
     if (existing) {
-      const updated = await existing.update(data);
-      console.log("[QUIZ-ATTEMPT] update result totalQuestions:", updated.totalQuestions);
+      existing.studentName    = data.studentName;
+      existing.studentEmail   = data.studentEmail;
+      existing.quizTitle      = data.quizTitle;
+      existing.courseTitle    = data.courseTitle;
+      existing.empresa        = data.empresa;
+      existing.attemptDate    = data.attemptDate;
+      existing.totalQuestions = data.totalQuestions;
+      existing.totalPoints    = data.totalPoints;
+      existing.earnedPoints   = data.earnedPoints;
+      existing.passingPoints  = data.passingPoints;
+      existing.correctAnswers = data.correctAnswers;
+      existing.incorrectAnswers = data.incorrectAnswers;
+      existing.quizTime       = data.quizTime;
+      existing.attemptTime    = data.attemptTime;
+      existing.result         = data.result;
+      existing.answers        = data.answers;
+      await existing.save();
+      console.log("[QUIZ-ATTEMPT] saved totalQuestions:", existing.totalQuestions);
       attemptId = existing.id;
     } else {
       const record = await QuizAttempt.create(data);
