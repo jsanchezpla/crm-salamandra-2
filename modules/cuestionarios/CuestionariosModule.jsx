@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -421,7 +422,15 @@ function AttemptsList({ onSelect }) {
     <div className="space-y-5">
       {/* Cabecera */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h1 className="text-xl font-extrabold text-neutral-900">Cuestionarios</h1>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/formacion"
+            className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors"
+          >
+            ← Volver
+          </Link>
+          <h1 className="text-xl font-extrabold text-neutral-900">Cuestionarios</h1>
+        </div>
         <button
           onClick={handleSync}
           disabled={syncing}

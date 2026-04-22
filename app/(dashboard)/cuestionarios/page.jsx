@@ -1,9 +1,5 @@
-import CuestionariosModule from "../../../modules/cuestionarios/CuestionariosModule.jsx";
+import { redirect } from "next/navigation";
 
-export const metadata = {
-  title: "Cuestionarios",
-};
-
-export default function CuestionariosPage() {
-  return <CuestionariosModule />;
+export default function CuestionariosRedirect() {
+  redirect("/formacion/cuestionarios");
 }
