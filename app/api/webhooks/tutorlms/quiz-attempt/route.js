@@ -78,9 +78,16 @@ export async function POST(request) {
 
     console.log("[QUIZ-ATTEMPT] existing:", existing ? `id=${existing.id}` : "null");
 
+    console.log("[QUIZ-ATTEMPT] data a guardar:", JSON.stringify({
+      wpAttemptId: data.wpAttemptId,
+      totalQuestions: data.totalQuestions,
+      correctAnswers: data.correctAnswers,
+    }));
+
     let attemptId;
     if (existing) {
-      await existing.update(data);
+      const updated = await existing.update(data);
+      console.log("[QUIZ-ATTEMPT] update result totalQuestions:", updated.totalQuestions);
       attemptId = existing.id;
     } else {
       const record = await QuizAttempt.create(data);
