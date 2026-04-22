@@ -360,8 +360,6 @@ function AttemptsList({ onSelect }) {
   const [attempts, setAttempts] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [syncMsg, setSyncMsg] = useState(null);
   const [search, setSearch] = useState("");
   const [empresa, setEmpresa] = useState("");
   const [result, setResult] = useState("");
@@ -393,29 +391,6 @@ function AttemptsList({ onSelect }) {
     return () => clearTimeout(t);
   }, [load]);
 
-  async function handleSync() {
-    setSyncing(true);
-    setSyncMsg(null);
-    try {
-      const res = await fetch("/api/cuestionarios/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ perPage: 50, fetchDetails: true }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setSyncMsg(`Sincronizados ${data.data.synced} intentos.`);
-        load();
-      } else {
-        setSyncMsg(`Error: ${data.message ?? "desconocido"}`);
-      }
-    } catch (e) {
-      setSyncMsg(`Error de red: ${e.message}`);
-    } finally {
-      setSyncing(false);
-    }
-  }
-
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
@@ -431,34 +406,7 @@ function AttemptsList({ onSelect }) {
           </Link>
           <h1 className="text-xl font-extrabold text-neutral-900">Cuestionarios</h1>
         </div>
-        <button
-          onClick={handleSync}
-          disabled={syncing}
-          className="flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-50 self-start sm:self-auto"
-        >
-          {syncing ? (
-            <>
-              <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Sincronizando…
-            </>
-          ) : (
-            <>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Sincronizar TutorLMS
-            </>
-          )}
-        </button>
       </div>
-
-      {syncMsg && (
-        <div className="text-xs px-3 py-2 rounded-lg bg-neutral-50 border border-neutral-200 text-neutral-600">
-          {syncMsg}
-        </div>
-      )}
 
       {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-2">
