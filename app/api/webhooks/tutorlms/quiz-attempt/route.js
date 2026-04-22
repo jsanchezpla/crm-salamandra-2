@@ -2,7 +2,7 @@ import { getTenantContext } from "../../../../../lib/tenant/tenantResolver.js";
 import { handleRouteError } from "../../../../../lib/utils/errors.js";
 import { NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
-import { literal } from "sequelize";
+import { QueryTypes as SequelizeQueryTypes } from "sequelize";
 
 const WEBHOOK_SECRET = "CabalooGalopante726517893561378";
 
@@ -33,9 +33,9 @@ export async function POST(request) {
     const payload = JSON.parse(rawBody);
     const ctx = await getTenantContext(request);
     const { QuizAttempt } = ctx.tenantModels;
+    const sequelize = QuizAttempt.sequelize;
 
     const wpAttemptId = parseInt(payload.attempt_id, 10);
-    console.log("[QUIZ-ATTEMPT] wpAttemptId:", wpAttemptId, typeof wpAttemptId);
 
     const answers = (payload.answers ?? []).map((q, idx) => ({
       no: idx + 1,
@@ -50,60 +50,78 @@ export async function POST(request) {
 
     const data = {
       wpAttemptId,
-      wpQuizId: parseInt(payload.quiz_id ?? 0, 10),
-      wpCourseId: parseInt(payload.course_id ?? 0, 10),
-      wpUserId: parseInt(payload.user_id ?? 0, 10),
-      studentName: payload.student_name ?? null,
-      studentEmail: payload.student_email ?? null,
-      quizTitle: payload.quiz_title ?? null,
-      courseTitle: payload.course_title ?? null,
-      empresa: payload.empresa ?? null,
-      attemptDate: payload.attempt_date ? new Date(payload.attempt_date) : null,
-      totalQuestions: parseInt(payload.total_questions ?? 0, 10),
-      totalPoints: parseFloat(payload.total_points ?? 0),
-      earnedPoints: parseFloat(payload.earned_points ?? 0),
-      passingPoints: parseFloat(payload.passing_points ?? 0),
-      correctAnswers: parseInt(payload.correct_answers ?? 0, 10),
+      wpQuizId:        parseInt(payload.quiz_id ?? 0, 10),
+      wpCourseId:      parseInt(payload.course_id ?? 0, 10),
+      wpUserId:        parseInt(payload.user_id ?? 0, 10),
+      studentName:     payload.student_name ?? null,
+      studentEmail:    payload.student_email ?? null,
+      quizTitle:       payload.quiz_title ?? null,
+      courseTitle:     payload.course_title ?? null,
+      empresa:         payload.empresa ?? null,
+      attemptDate:     payload.attempt_date ? new Date(payload.attempt_date) : null,
+      totalQuestions:  parseInt(payload.total_questions ?? 0, 10),
+      totalPoints:     parseFloat(payload.total_points ?? 0),
+      earnedPoints:    parseFloat(payload.earned_points ?? 0),
+      passingPoints:   parseFloat(payload.passing_points ?? 0),
+      correctAnswers:  parseInt(payload.correct_answers ?? 0, 10),
       incorrectAnswers: parseInt(payload.incorrect_answers ?? 0, 10),
-      quizTime: parseInt(payload.quiz_time ?? 0, 10),
-      attemptTime: parseInt(payload.attempt_time ?? 0, 10),
-      result: payload.result === "pass" ? "pass" : "fail",
+      quizTime:        parseInt(payload.quiz_time ?? 0, 10),
+      attemptTime:     parseInt(payload.attempt_time ?? 0, 10),
+      result:          payload.result === "pass" ? "pass" : "fail",
       answers,
     };
 
-    // Usar literal SQL para evitar ambigüedad en el mapeo camelCase → snake_case
-    const existing = await QuizAttempt.findOne({
-      where: literal(`wp_attempt_id = ${wpAttemptId}`),
-    });
-
-    console.log("[QUIZ-ATTEMPT] existing:", existing ? `id=${existing.id}` : "null");
-
-    console.log("[QUIZ-ATTEMPT] data a guardar:", JSON.stringify({
-      wpAttemptId: data.wpAttemptId,
-      totalQuestions: data.totalQuestions,
-      correctAnswers: data.correctAnswers,
-    }));
+    // Comprobar si existe el registro
+    const [existing] = await sequelize.query(
+      `SELECT id FROM quiz_attempts WHERE wp_attempt_id = :wpAttemptId LIMIT 1`,
+      { replacements: { wpAttemptId }, type: SequelizeQueryTypes.SELECT }
+    );
 
     let attemptId;
     if (existing) {
-      existing.studentName    = data.studentName;
-      existing.studentEmail   = data.studentEmail;
-      existing.quizTitle      = data.quizTitle;
-      existing.courseTitle    = data.courseTitle;
-      existing.empresa        = data.empresa;
-      existing.attemptDate    = data.attemptDate;
-      existing.totalQuestions = data.totalQuestions;
-      existing.totalPoints    = data.totalPoints;
-      existing.earnedPoints   = data.earnedPoints;
-      existing.passingPoints  = data.passingPoints;
-      existing.correctAnswers = data.correctAnswers;
-      existing.incorrectAnswers = data.incorrectAnswers;
-      existing.quizTime       = data.quizTime;
-      existing.attemptTime    = data.attemptTime;
-      existing.result         = data.result;
-      existing.answers        = data.answers;
-      await existing.save();
-      console.log("[QUIZ-ATTEMPT] saved totalQuestions:", existing.totalQuestions);
+      await sequelize.query(
+        `UPDATE quiz_attempts SET
+          student_name      = :studentName,
+          student_email     = :studentEmail,
+          quiz_title        = :quizTitle,
+          course_title      = :courseTitle,
+          empresa           = :empresa,
+          attempt_date      = :attemptDate,
+          total_questions   = :totalQuestions,
+          total_points      = :totalPoints,
+          earned_points     = :earnedPoints,
+          passing_points    = :passingPoints,
+          correct_answers   = :correctAnswers,
+          incorrect_answers = :incorrectAnswers,
+          quiz_time         = :quizTime,
+          attempt_time      = :attemptTime,
+          result            = :result,
+          answers           = :answers::jsonb,
+          updated_at        = NOW()
+        WHERE wp_attempt_id = :wpAttemptId`,
+        {
+          replacements: {
+            studentName:      data.studentName,
+            studentEmail:     data.studentEmail,
+            quizTitle:        data.quizTitle,
+            courseTitle:      data.courseTitle,
+            empresa:          data.empresa,
+            attemptDate:      data.attemptDate,
+            totalQuestions:   data.totalQuestions,
+            totalPoints:      data.totalPoints,
+            earnedPoints:     data.earnedPoints,
+            passingPoints:    data.passingPoints,
+            correctAnswers:   data.correctAnswers,
+            incorrectAnswers: data.incorrectAnswers,
+            quizTime:         data.quizTime,
+            attemptTime:      data.attemptTime,
+            result:           data.result,
+            answers:          JSON.stringify(data.answers),
+            wpAttemptId,
+          },
+          type: SequelizeQueryTypes.UPDATE,
+        }
+      );
       attemptId = existing.id;
     } else {
       const record = await QuizAttempt.create(data);
