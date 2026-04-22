@@ -78,9 +78,11 @@ export async function POST(request) {
       { replacements: { wpAttemptId }, type: SequelizeQueryTypes.SELECT }
     );
 
+    console.log(`[QUIZ-ATTEMPT] schema=${schema} existing=${existing ? existing.id : "null"} totalQ=${data.totalQuestions}`);
+
     let attemptId;
     if (existing) {
-      await sequelize.query(
+      const [, affectedRows] = await sequelize.query(
         `UPDATE "${schema}".quiz_attempts SET
           student_name      = :studentName,
           student_email     = :studentEmail,
@@ -123,6 +125,13 @@ export async function POST(request) {
           type: SequelizeQueryTypes.UPDATE,
         }
       );
+
+      const [verify] = await sequelize.query(
+        `SELECT total_questions, correct_answers FROM "${schema}".quiz_attempts WHERE wp_attempt_id = :wpAttemptId`,
+        { replacements: { wpAttemptId }, type: SequelizeQueryTypes.SELECT }
+      );
+      console.log(`[QUIZ-ATTEMPT] affectedRows=${affectedRows} verify=`, JSON.stringify(verify));
+
       attemptId = existing.id;
     } else {
       const record = await QuizAttempt.create(data);
