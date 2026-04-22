@@ -39,13 +39,13 @@ export async function POST(request) {
     const wpAttemptId = parseInt(payload.attempt_id, 10);
 
     const answers = (payload.answers ?? []).map((q, idx) => ({
-      no: idx + 1,
-      questionId: q.question_id ?? null,
-      type: q.question_type ?? "unknown",
+      no: q.no ?? idx + 1,
+      questionId: q.question_id ?? q.questionId ?? null,
+      type: q.question_type ?? q.type ?? "unknown",
       question: q.question_title ?? q.question ?? "",
-      givenAnswer: q.given_answer ?? "",
-      correctAnswer: q.correct_answer ?? "",
-      isCorrect: q.is_correct === true || q.is_correct === 1 || q.is_correct === "1",
+      givenAnswer: q.given_answer ?? q.givenAnswer ?? "",
+      correctAnswer: q.correct_answer ?? q.correctAnswer ?? "",
+      isCorrect: q.is_correct === true || q.is_correct === 1 || q.is_correct === "1" || q.isCorrect === true,
       marks: parseFloat(q.question_mark ?? q.marks ?? 0),
     }));
 
