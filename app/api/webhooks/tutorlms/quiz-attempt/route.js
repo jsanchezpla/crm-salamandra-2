@@ -44,33 +44,40 @@ export async function POST(request) {
       marks: parseFloat(q.question_mark ?? q.marks ?? 0),
     }));
 
-    const [record] = await QuizAttempt.upsert(
-      {
-        wpAttemptId: payload.attempt_id,
-        wpQuizId: payload.quiz_id ?? 0,
-        wpCourseId: payload.course_id ?? 0,
-        wpUserId: payload.user_id ?? 0,
-        studentName: payload.student_name ?? null,
-        studentEmail: payload.student_email ?? null,
-        quizTitle: payload.quiz_title ?? null,
-        courseTitle: payload.course_title ?? null,
-        empresa: payload.empresa ?? null,
-        attemptDate: payload.attempt_date ? new Date(payload.attempt_date) : null,
-        totalQuestions: payload.total_questions ?? null,
-        totalPoints: payload.total_points ?? null,
-        earnedPoints: payload.earned_points ?? null,
-        passingPoints: payload.passing_points ?? null,
-        correctAnswers: payload.correct_answers ?? null,
-        incorrectAnswers: payload.incorrect_answers ?? null,
-        quizTime: payload.quiz_time ?? null,
-        attemptTime: payload.attempt_time ?? null,
-        result: payload.result === "pass" ? "pass" : "fail",
-        answers,
-      },
-      { conflictFields: ["wp_attempt_id"] }
-    );
+    const data = {
+      wpAttemptId: payload.attempt_id,
+      wpQuizId: payload.quiz_id ?? 0,
+      wpCourseId: payload.course_id ?? 0,
+      wpUserId: payload.user_id ?? 0,
+      studentName: payload.student_name ?? null,
+      studentEmail: payload.student_email ?? null,
+      quizTitle: payload.quiz_title ?? null,
+      courseTitle: payload.course_title ?? null,
+      empresa: payload.empresa ?? null,
+      attemptDate: payload.attempt_date ? new Date(payload.attempt_date) : null,
+      totalQuestions: payload.total_questions ?? null,
+      totalPoints: payload.total_points ?? null,
+      earnedPoints: payload.earned_points ?? null,
+      passingPoints: payload.passing_points ?? null,
+      correctAnswers: payload.correct_answers ?? null,
+      incorrectAnswers: payload.incorrect_answers ?? null,
+      quizTime: payload.quiz_time ?? null,
+      attemptTime: payload.attempt_time ?? null,
+      result: payload.result === "pass" ? "pass" : "fail",
+      answers,
+    };
 
-    return NextResponse.json({ ok: true, attemptId: record.id });
+    const existing = await QuizAttempt.findOne({ where: { wpAttemptId: data.wpAttemptId } });
+    let attemptId;
+    if (existing) {
+      await existing.update(data);
+      attemptId = existing.id;
+    } else {
+      const record = await QuizAttempt.create(data);
+      attemptId = record.id;
+    }
+
+    return NextResponse.json({ ok: true, attemptId });
   } catch (err) {
     return handleRouteError(err);
   }
