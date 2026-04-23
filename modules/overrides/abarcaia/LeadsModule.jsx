@@ -4,18 +4,6 @@ import { useEffect, useState, useCallback, useRef } from "react";
 
 // ─── Configuración QEC ────────────────────────────────────────────────────────
 
-const EMPRESAS = [
-  { key: "Quality Energy Consulting", label: "Quality Energy" },
-  { key: "Made of Energy", label: "Made of Energy" },
-  { key: "Iluminia Quantum", label: "Iluminia Quantum" },
-];
-
-const EMPRESA_STYLE = {
-  "Quality Energy Consulting": "bg-green-100 text-green-700",
-  "Made of Energy": "bg-amber-100 text-amber-700",
-  "Iluminia Quantum": "bg-purple-100 text-purple-700",
-};
-
 const STAGES = [
   { key: "new", label: "Nuevo lead" },
   { key: "contacted", label: "Contactado" },
@@ -58,8 +46,6 @@ const CSV_HEADER_MAP = {
   phone: "phone",
   movil: "phone",
   móvil: "phone",
-  empresa: "empresa",
-  company: "empresa",
   cargo: "cargo",
   "empresa actual": "empresa_actual",
   empresa_actual: "empresa_actual",
@@ -80,7 +66,28 @@ const CSV_HEADER_MAP = {
   linkedin: "linkedin",
   "linkedin url": "linkedin",
   "perfil linkedin": "linkedin",
+  instagram: "instagram_user",
+  usuario_instagram: "instagram_user",
+  respuesta: "respuesta",
+  "demo agendada": "demo_agendada",
+  demo_agendada: "demo_agendada",
+  "fecha demo": "fecha_demo",
+  fecha_demo: "fecha_demo",
 };
+
+function calculatePriority(demoDate) {
+  if (!demoDate) return null;
+  const demo = new Date(demoDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  demo.setHours(0, 0, 0, 0);
+  const diffMs = demo - today;
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return "alta";
+  if (diffDays <= 3) return "alta";
+  if (diffDays <= 6) return "media";
+  return "baja";
+}
 
 const STAGE_MAP = {
   nuevo: "new",
@@ -151,7 +158,6 @@ export default function QECLeadsModule() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activeStage, setActiveStage] = useState("all");
-  const [activeEmpresa, setActiveEmpresa] = useState("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -166,7 +172,6 @@ export default function QECLeadsModule() {
     setLoading(true);
     const params = new URLSearchParams({ limit: "200" });
     if (activeStage !== "all") params.set("stage", activeStage);
-    if (activeEmpresa !== "all") params.set("empresa", activeEmpresa);
     if (search.trim()) params.set("search", search.trim());
 
     fetch(`/api/leads?${params}`)
@@ -181,7 +186,7 @@ export default function QECLeadsModule() {
         }
       })
       .finally(() => setLoading(false));
-  }, [activeStage, activeEmpresa, search]);
+  }, [activeStage, search]);
 
   useEffect(() => {
     fetchLeads();
@@ -191,7 +196,7 @@ export default function QECLeadsModule() {
     setCheckedIds(new Set());
     setConfirmBulkDelete(false);
     setBulkStageOpen(false);
-  }, [activeStage, activeEmpresa, search]);
+  }, [activeStage, search]);
 
   const stageCounts = leads.reduce((acc, l) => {
     acc[l.stage] = (acc[l.stage] ?? 0) + 1;
@@ -261,7 +266,6 @@ export default function QECLeadsModule() {
     try {
       const params = new URLSearchParams();
       if (activeStage !== "all") params.set("stage", activeStage);
-      if (activeEmpresa !== "all") params.set("empresa", activeEmpresa);
       if (search.trim()) params.set("search", search.trim());
 
       const res = await fetch(`/api/leads/export?${params}`);
@@ -449,18 +453,6 @@ export default function QECLeadsModule() {
                 className="w-full bg-white border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[var(--color-primary)] transition-colors shadow-sm"
               />
             </div>
-            <select
-              value={activeEmpresa}
-              onChange={(e) => setActiveEmpresa(e.target.value)}
-              className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors shadow-sm shrink-0"
-            >
-              <option value="all">Todas las empresas</option>
-              {EMPRESAS.map((e) => (
-                <option key={e.key} value={e.key}>
-                  {e.label}
-                </option>
-              ))}
-            </select>
           </div>
 
           {/* Filtros fila 2: tabs de estado */}
@@ -626,10 +618,10 @@ export default function QECLeadsModule() {
                         "Nombre",
                         "Teléfono",
                         "Email",
-                        "Empresa",
                         "Cargo",
                         "Zona",
                         "Estado",
+                        "Prioridad",
                         "Recibido",
                       ].map((h) => (
                         <th
@@ -645,7 +637,6 @@ export default function QECLeadsModule() {
                     {leads.map((lead) => {
                       const cargo = lead.customFields?.cargo;
                       const zone = lead.customFields?.zona ?? lead.customFields?.zone;
-                      const empresa = lead.customFields?.empresa;
                       const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.new;
                       const isChecked = checkedIds.has(lead.id);
                       return (
@@ -682,17 +673,6 @@ export default function QECLeadsModule() {
                             <span className="text-gray-500">{lead.email || "—"}</span>
                           </td>
                           <td className="py-3 px-4">
-                            {empresa ? (
-                              <span
-                                className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EMPRESA_STYLE[empresa] ?? "bg-gray-100 text-gray-600"}`}
-                              >
-                                {empresa}
-                              </span>
-                            ) : (
-                              <span className="text-gray-300">—</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-4">
                             {cargo ? (
                               <span
                                 className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${CARGO_STYLE[cargo] ?? "bg-gray-100 text-gray-600"}`}
@@ -710,6 +690,21 @@ export default function QECLeadsModule() {
                             <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${style.bg}`}>
                               {STAGES.find((s) => s.key === lead.stage)?.label ?? lead.stage}
                             </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            {lead.customFields?.prioridad ? (
+                              <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                                lead.customFields.prioridad === "alta"
+                                  ? "bg-red-100 text-red-700"
+                                  : lead.customFields.prioridad === "media"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : "bg-green-100 text-green-700"
+                              }`}>
+                                {lead.customFields.prioridad.charAt(0).toUpperCase() + lead.customFields.prioridad.slice(1)}
+                              </span>
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
                           </td>
                           <td className="py-3 px-4 text-gray-400 text-xs">
                             {formatDate(lead.createdAt)}
@@ -787,6 +782,17 @@ export default function QECLeadsModule() {
                         {zone && (
                           <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">
                             {zone}
+                          </span>
+                        )}
+                        {lead.customFields?.prioridad && (
+                          <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                            lead.customFields.prioridad === "alta"
+                              ? "bg-red-100 text-red-700"
+                              : lead.customFields.prioridad === "media"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : "bg-green-100 text-green-700"
+                          }`}>
+                            {lead.customFields.prioridad.charAt(0).toUpperCase() + lead.customFields.prioridad.slice(1)}
                           </span>
                         )}
                       </div>
@@ -938,7 +944,7 @@ function ImportModal({ onClose, onImported }) {
     !parsed.error &&
     (parsed.isExcel || (parsed.rows?.length ?? 0) > 0);
 
-  const PREVIEW_COLS = ["name", "email", "phone", "empresa", "cargo", "zona", "linkedin", "stage"];
+  const PREVIEW_COLS = ["name", "email", "phone", "empresa", "cargo", "zona", "linkedin", "instagram_user", "respuesta", "demo_agendada", "fecha_demo", "stage"];
   const PREVIEW_LABELS = {
     name: "Nombre",
     email: "Email",
@@ -947,6 +953,10 @@ function ImportModal({ onClose, onImported }) {
     cargo: "Cargo",
     zona: "Zona",
     linkedin: "LinkedIn",
+    instagram_user: "Usuario Instagram",
+    respuesta: "Respuesta",
+    demo_agendada: "Demo Agendada",
+    fecha_demo: "Fecha Demo",
     stage: "Estado",
   };
   const previewCols = parsed?.headers
@@ -964,8 +974,7 @@ function ImportModal({ onClose, onImported }) {
           <div>
             <h2 className="text-gray-900 font-semibold text-base">Importar leads</h2>
             <p className="text-gray-400 text-xs mt-0.5">
-              Excel (.xlsx) o CSV · Campos: nombre, email, teléfono, empresa, cargo, zona, linkedin,
-              notas
+              Excel (.xlsx) o CSV · Campos: nombre, email, teléfono, empresa, cargo, zona, linkedin, usuario_instagram, respuesta, demo_agendada, fecha_demo, notas
             </p>
           </div>
           <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition-colors">
@@ -1298,11 +1307,16 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
       empresa_actual: lead.customFields?.empresa_actual || "",
       zona: lead.customFields?.zona ?? lead.customFields?.zone ?? "",
       linkedin: lead.customFields?.linkedin || "",
+      instagram_user: lead.customFields?.instagram_user || "",
+      respuesta: lead.customFields?.respuesta || "",
+      demo_agendada: lead.customFields?.demo_agendada || "",
+      fecha_demo: lead.customFields?.fecha_demo || "",
     });
     setEditMode(true);
   }
 
   async function saveEdit() {
+    const demoDate = editForm.fecha_demo ? editForm.fecha_demo.split("T")[0] : null;
     const updates = {
       name: editForm.name.trim() || null,
       phone: editForm.phone.trim() || null,
@@ -1316,6 +1330,11 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
             : null,
         zona: editForm.zona.trim() || null,
         linkedin: editForm.linkedin.trim() || null,
+        instagram_user: editForm.instagram_user.trim() || null,
+        respuesta: editForm.respuesta || null,
+        demo_agendada: editForm.demo_agendada || null,
+        fecha_demo: demoDate || null,
+        prioridad: calculatePriority(demoDate),
       },
     };
     const ok = await onSave(lead.id, updates);
@@ -1488,6 +1507,57 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
                 className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
               />
             </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                Usuario Instagram <span className="text-gray-300 font-normal normal-case">(opcional)</span>
+              </label>
+              <input
+                type="text"
+                value={editForm.instagram_user}
+                onChange={(e) => setEditForm((f) => ({ ...f, instagram_user: e.target.value }))}
+                placeholder="@usuario_instagram"
+                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                Respuesta <span className="text-gray-300 font-normal normal-case">(opcional)</span>
+              </label>
+              <input
+                type="text"
+                value={editForm.respuesta}
+                onChange={(e) => setEditForm((f) => ({ ...f, respuesta: e.target.value }))}
+                placeholder="Respuesta del lead"
+                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                Demo agendada <span className="text-gray-300 font-normal normal-case">(opcional)</span>
+              </label>
+              <select
+                value={editForm.demo_agendada}
+                onChange={(e) => setEditForm((f) => ({ ...f, demo_agendada: e.target.value }))}
+                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+              >
+                <option value="">Sin especificar</option>
+                <option value="si">Sí</option>
+                <option value="no">No</option>
+              </select>
+            </div>
+            {editForm.demo_agendada === "si" && (
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                  Fecha y hora de la demo
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editForm.fecha_demo}
+                  onChange={(e) => setEditForm((f) => ({ ...f, fecha_demo: e.target.value }))}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+                />
+              </div>
+            )}
           </div>
           <div className="flex gap-2 mt-6">
             <button
@@ -1607,6 +1677,85 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
               </div>
             </div>
           </div>
+
+          {/* Demo y Prioridad */}
+          {(lead.customFields?.demo_agendada || lead.customFields?.fecha_demo || lead.customFields?.prioridad) && (
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                Demo
+              </p>
+              <div className="space-y-2.5">
+                {lead.customFields?.demo_agendada && (
+                  <div className="flex items-start gap-3">
+                    <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Agendada</span>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                      lead.customFields.demo_agendada === "si"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-red-100 text-red-700"
+                    }`}>
+                      {lead.customFields.demo_agendada === "si" ? "Sí" : "No"}
+                    </span>
+                  </div>
+                )}
+                {lead.customFields?.fecha_demo && (
+                  <div className="flex items-start gap-3">
+                    <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Fecha</span>
+                    <span className="text-gray-700 text-xs">
+                      {new Date(lead.customFields.fecha_demo).toLocaleDateString("es-ES", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric"
+                      })}
+                    </span>
+                  </div>
+                )}
+                {lead.customFields?.prioridad && (
+                  <div className="flex items-start gap-3">
+                    <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Prioridad</span>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                      lead.customFields.prioridad === "alta"
+                        ? "bg-red-100 text-red-700"
+                        : lead.customFields.prioridad === "media"
+                        ? "bg-yellow-100 text-yellow-700"
+                        : "bg-green-100 text-green-700"
+                    }`}>
+                      {lead.customFields.prioridad.charAt(0).toUpperCase() + lead.customFields.prioridad.slice(1)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Redes y Respuesta */}
+          {(lead.customFields?.instagram_user || lead.customFields?.respuesta) && (
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                Contacto digital
+              </p>
+              <div className="space-y-2.5">
+                {lead.customFields?.instagram_user && (
+                  <div className="flex items-start gap-3">
+                    <span className="text-gray-400 shrink-0">
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
+                        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.07 1.645.07 4.849 0 3.205-.012 3.584-.07 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zM5.838 12a6.162 6.162 0 1 1 12.324 0 6.162 6.162 0 0 1-12.324 0zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm4.965-10.322a1.44 1.44 0 1 1 2.881.001 1.44 1.44 0 0 1-2.881-.001z"/>
+                      </svg>
+                    </span>
+                    <div>
+                      <span className="text-gray-400 text-xs block mb-0.5">Instagram</span>
+                      <span className="text-gray-700 text-xs">{lead.customFields.instagram_user}</span>
+                    </div>
+                  </div>
+                )}
+                {lead.customFields?.respuesta && (
+                  <div className="flex items-start gap-3">
+                    <span className="text-gray-400 shrink-0 text-xs mt-0.5">Respuesta</span>
+                    <span className="text-gray-700 text-xs">{lead.customFields.respuesta}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* UTMs */}
           {(utmSource || utmMedium || utmCampaign) && (

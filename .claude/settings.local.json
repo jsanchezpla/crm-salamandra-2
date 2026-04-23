@@ -5,7 +5,8 @@
       "Bash(xargs grep *)",
       "Bash(dir C:\\\\Dev\\\\salamandra-solutions\\\\crm-salamandra-2\\\\app\\\\api *)",
       "Skill(update-config)",
-      "PowerShell(Copy-Item *)"
+      "PowerShell(Copy-Item *)",
+      "Bash(git add *)"
     ]
   }
 }
