@@ -53,7 +53,7 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
     delete updates.stage;
   }
 
-  if (updates.email) updates.email = updates.email.trim().toLowerCase();
+  if ("email" in updates) updates.email = updates.email?.trim().toLowerCase() || null;
 
   // Merge customFields en lugar de sobreescribir
   if (updates.customFields) {

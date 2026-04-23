@@ -102,7 +102,7 @@ export async function POST(request) {
     const lead = await Lead.create({
       name: name?.trim() ?? null,
       phone: phone?.trim() ?? null,
-      email: email?.trim().toLowerCase() ?? null,
+      email: email?.trim().toLowerCase() || null,
       title: title?.trim() ?? name?.trim() ?? null,
       stage: stage ?? "new",
       probability: probability ?? null,

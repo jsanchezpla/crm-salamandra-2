@@ -34,11 +34,6 @@ export async function POST(request) {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
 
-      if (!row.email && !row.phone) {
-        results.skipped++;
-        continue;
-      }
-
       try {
         const payload = {
           name: row.name?.toString().trim() || null,
@@ -56,8 +51,9 @@ export async function POST(request) {
         if (row.cargo) payload.customFields.cargo = row.cargo.toString().trim();
         if (row.empresa_actual) payload.customFields.empresa_actual = row.empresa_actual.toString().trim();
         if (row.zona) payload.customFields.zona = row.zona.toString().trim();
+        if (row.linkedin) payload.customFields.linkedin = row.linkedin.toString().trim();
 
-        if (!payload.email && !payload.phone) {
+        if (!payload.name && !payload.email && !payload.phone) {
           results.skipped++;
           continue;
         }
