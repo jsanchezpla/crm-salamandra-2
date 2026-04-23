@@ -912,10 +912,36 @@ function ImportModal({ onClose, onImported }) {
         res = await fetch("/api/leads/import/excel", { method: "POST", body: formData });
       } else {
         if (!parsed.rows?.length) return;
+
+        // Formatear los datos para Sequelize
+        const formattedLeads = parsed.rows.map((row) => {
+          const demoDate = row.fecha_demo ? row.fecha_demo.split("T")[0] : null;
+          return {
+            name: row.name || null,
+            email: row.email || null,
+            phone: row.phone || null,
+            stage: row.stage || "new",
+            notes: row.notes || null,
+            source: row.source || "importacion_csv",
+            customFields: {
+              cargo: row.cargo || null,
+              empresa_actual: row.empresa_actual || null,
+              zona: row.zona || null,
+              linkedin: row.linkedin || null,
+              experiencia: row.experience || null,
+              instagram_user: row.instagram_user || null,
+              respuesta: row.respuesta || null,
+              demo_agendada: row.demo_agendada || null,
+              fecha_demo: demoDate || null,
+              prioridad: calculatePriority(demoDate),
+            },
+          };
+        });
+
         res = await fetch("/api/leads/import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ leads: parsed.rows }),
+          body: JSON.stringify({ leads: formattedLeads }),
         });
       }
       const data = await res.json();

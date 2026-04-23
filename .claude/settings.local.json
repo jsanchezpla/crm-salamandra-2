@@ -6,7 +6,8 @@
       "Bash(dir C:\\\\Dev\\\\salamandra-solutions\\\\crm-salamandra-2\\\\app\\\\api *)",
       "Skill(update-config)",
       "PowerShell(Copy-Item *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
