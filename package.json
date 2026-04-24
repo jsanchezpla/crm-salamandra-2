@@ -18,17 +18,24 @@
     "db:add-training-demo": "node --env-file=.env.local scripts/add-training-module-demo.js",
     "db:seed:master": "node --env-file=.env.local scripts/seed-master.js",
     "db:seed:retorika": "node --env-file=.env.local scripts/seed-retorika.js",
-    "db:seed:retorika:all": "npm run db:seed:master && npm run db:seed:retorika"
+    "db:seed:retorika:all": "npm run db:seed:master && npm run db:seed:retorika",
+    "db:add-calendar-demo": "node --env-file=.env.local scripts/add-calendar-module-demo.js"
   },
   "dependencies": {
+    "@fullcalendar/core": "^6.1.20",
+    "@fullcalendar/daygrid": "^6.1.20",
+    "@fullcalendar/interaction": "^6.1.20",
+    "@fullcalendar/list": "^6.1.20",
+    "@fullcalendar/react": "^6.1.20",
+    "@fullcalendar/timegrid": "^6.1.20",
     "bcrypt": "^6.0.0",
+    "exceljs": "^4.4.0",
     "jose": "^6.2.2",
     "next": "^16.2.1",
     "pg": "^8.20.0",
     "pg-hstore": "^2.3.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "exceljs": "^4.4.0",
     "sequelize": "^6.37.8"
   },
   "devDependencies": {

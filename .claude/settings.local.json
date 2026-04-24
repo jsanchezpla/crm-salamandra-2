@@ -7,7 +7,9 @@
       "Skill(update-config)",
       "PowerShell(Copy-Item *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(npm audit *)",
+      "Bash(node -e \"const d=JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\); Object.values\\(d.vulnerabilities\\).forEach\\(v=>console.log\\(v.severity.toUpperCase\\(\\).padEnd\\(8\\), v.name, '-', v.title ?? v.via[0]?.title ?? ''\\)\\)\")"
     ]
   }
 }
