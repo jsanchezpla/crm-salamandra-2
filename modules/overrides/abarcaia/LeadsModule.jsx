@@ -287,6 +287,17 @@ export default function QECLeadsModule() {
     }
   }
 
+  async function handleDownloadTemplate() {
+    const res = await fetch("/api/leads/import/template");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "plantilla_leads.xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function handleDelete(leadId) {
     await fetch(`/api/leads/${leadId}`, { method: "DELETE" });
     setLeads((prev) => prev.filter((l) => l.id !== leadId));
@@ -367,6 +378,26 @@ export default function QECLeadsModule() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={handleDownloadTemplate}
+                className="flex items-center gap-2 bg-white border border-gray-200 hover:border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm"
+                title="Descargar plantilla de importación"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  className="w-4 h-4"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+                  />
+                </svg>
+                <span className="hidden sm:inline">Plantilla</span>
+              </button>
               <button
                 onClick={handleExport}
                 disabled={exporting}
