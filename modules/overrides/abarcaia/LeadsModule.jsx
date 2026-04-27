@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 // ─── Configuración QEC ────────────────────────────────────────────────────────
 
 const STAGES = [
+  { key: "new", label: "Nuevo" },
   { key: "contacted", label: "Contactado" },
   { key: "in_progress", label: "En proceso" },
   { key: "demo_scheduled", label: "Demo agendada" },
@@ -14,6 +15,7 @@ const STAGES = [
 ];
 
 const STAGE_STYLE = {
+  new: { dot: "bg-gray-400", bg: "bg-gray-100 text-gray-600" },
   contacted: { dot: "bg-blue-400", bg: "bg-blue-100 text-blue-700" },
   in_progress: { dot: "bg-amber-400", bg: "bg-amber-100 text-amber-700" },
   demo_scheduled: { dot: "bg-purple-400", bg: "bg-purple-100 text-purple-700" },
@@ -91,6 +93,8 @@ function calculatePriority(demoDate) {
 }
 
 const STAGE_MAP = {
+  nuevo: "new",
+  new: "new",
   contactado: "contacted",
   contacted: "contacted",
   "en proceso": "in_progress",
@@ -1327,6 +1331,7 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
       zona: lead.customFields?.zona ?? lead.customFields?.zone ?? "",
       linkedin: lead.customFields?.linkedin || "",
       instagram_user: lead.customFields?.instagram_user || "",
+      prioridad: lead.customFields?.prioridad || "",
       respuesta: lead.customFields?.respuesta || "",
       demo_agendada: lead.customFields?.demo_agendada || "",
       fecha_demo_date: (lead.customFields?.fecha_demo || "").split("T")[0] || "",
@@ -1354,7 +1359,7 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
         respuesta: editForm.respuesta || null,
         demo_agendada: editForm.demo_agendada || null,
         fecha_demo: fechaDemo || null,
-        prioridad: calculatePriority(editForm.fecha_demo_date || null),
+        prioridad: editForm.prioridad || calculatePriority(editForm.fecha_demo_date || null) || null,
       },
     };
     const ok = await onSave(lead.id, updates);
@@ -1513,6 +1518,31 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
                 placeholder="@usuario_instagram"
                 className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
               />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                Prioridad
+              </label>
+              <div className="flex gap-2">
+                {[
+                  { key: "", label: "Sin prioridad", cls: "border-gray-200 text-gray-400 hover:border-gray-300" },
+                  { key: "baja", label: "Baja", activeCls: "bg-green-500 border-green-500 text-white", cls: "border-gray-200 text-gray-500 hover:border-gray-300" },
+                  { key: "media", label: "Media", activeCls: "bg-yellow-500 border-yellow-500 text-white", cls: "border-gray-200 text-gray-500 hover:border-gray-300" },
+                  { key: "alta", label: "Alta", activeCls: "bg-red-500 border-red-500 text-white", cls: "border-gray-200 text-gray-500 hover:border-gray-300" },
+                ].map(({ key, label, activeCls, cls }) => {
+                  const active = editForm.prioridad === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setEditForm((f) => ({ ...f, prioridad: key }))}
+                      className={`flex-1 py-1.5 text-xs font-medium rounded-lg border-2 transition-all ${active ? (activeCls ?? "bg-gray-200 border-gray-300 text-gray-700") : cls}`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
