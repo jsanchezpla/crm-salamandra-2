@@ -33,9 +33,20 @@ const HEADER_MAP = {
   experience: "experience",
   zona: "zona",
   zone: "zona",
+  "ubicación": "zona",
+  ubicacion: "zona",
   linkedin: "linkedin",
   "linkedin url": "linkedin",
   "perfil linkedin": "linkedin",
+  instagram: "instagram_user",
+  "usuario instagram": "instagram_user",
+  usuario_instagram: "instagram_user",
+  respuesta: "respuesta",
+  "demo agendada": "demo_agendada",
+  demo_agendada: "demo_agendada",
+  "fecha demo": "fecha_demo",
+  fecha_demo: "fecha_demo",
+  prioridad: "prioridad",
 };
 
 const STAGE_MAP = {
@@ -51,9 +62,23 @@ const STAGE_MAP = {
   won: "won",
   descartado: "lost",
   lost: "lost",
+  "en proceso": "in_progress",
+  in_progress: "in_progress",
+  "demo agendada": "demo_scheduled",
+  demo_scheduled: "demo_scheduled",
+  "demo realizada": "demo_done",
+  demo_done: "demo_done",
+  "cerrado - sí": "closed_yes",
+  "cerrado - si": "closed_yes",
+  closed_yes: "closed_yes",
+  "cerrado - no": "closed_no",
+  closed_no: "closed_no",
 };
 
-const VALID_STAGES = ["new", "contacted", "qualified", "proposal", "negotiation", "won", "lost"];
+const VALID_STAGES = [
+  "new", "contacted", "qualified", "proposal", "negotiation", "won", "lost",
+  "in_progress", "demo_scheduled", "demo_done", "closed_yes", "closed_no",
+];
 
 export async function POST(request) {
   try {
@@ -149,6 +174,11 @@ export async function POST(request) {
         if (row.zona) payload.customFields.zona = row.zona.trim();
         if (row.experience) payload.customFields.experience = row.experience.trim();
         if (row.linkedin) payload.customFields.linkedin = row.linkedin.trim();
+        if (row.instagram_user) payload.customFields.instagram_user = row.instagram_user.trim();
+        if (row.respuesta) payload.customFields.respuesta = row.respuesta.trim();
+        if (row.demo_agendada) payload.customFields.demo_agendada = row.demo_agendada.trim();
+        if (row.fecha_demo) payload.customFields.fecha_demo = row.fecha_demo.trim();
+        if (row.prioridad) payload.customFields.prioridad = row.prioridad.trim().toLowerCase();
 
         await Lead.create(payload);
         results.imported++;

@@ -55,6 +55,11 @@ export async function POST(request) {
         const empresa_actual = _v(row.empresa_actual, cf.empresa_actual);
         const zona = _v(row.zona, cf.zona);
         const linkedin = _v(row.linkedin, cf.linkedin);
+        const instagram_user = _v(row.instagram_user, cf.instagram_user);
+        const respuesta = _v(row.respuesta, cf.respuesta);
+        const demo_agendada = _v(row.demo_agendada, cf.demo_agendada);
+        const fecha_demo = _v(row.fecha_demo, cf.fecha_demo);
+        const prioridad = _v(row.prioridad, cf.prioridad);
 
         if (empresa) payload.customFields.empresa = empresa;
         if (experience) payload.customFields.experience = experience;
@@ -63,6 +68,11 @@ export async function POST(request) {
         if (empresa_actual) payload.customFields.empresa_actual = empresa_actual;
         if (zona) payload.customFields.zona = zona;
         if (linkedin) payload.customFields.linkedin = linkedin;
+        if (instagram_user) payload.customFields.instagram_user = instagram_user;
+        if (respuesta) payload.customFields.respuesta = respuesta;
+        if (demo_agendada) payload.customFields.demo_agendada = demo_agendada;
+        if (fecha_demo) payload.customFields.fecha_demo = fecha_demo;
+        if (prioridad) payload.customFields.prioridad = prioridad.toLowerCase();
 
         if (!payload.name && !payload.email && !payload.phone) {
           results.skipped++;
