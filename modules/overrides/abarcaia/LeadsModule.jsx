@@ -25,7 +25,6 @@ const CARGO_STYLE = {
   "Trabajador por cuenta ajena": "bg-blue-100 text-blue-700",
 };
 
-const CARGOS = ["Autónomo", "Trabajador por cuenta ajena"];
 
 function formatDate(iso) {
   if (!iso) return "—";
@@ -730,7 +729,6 @@ export default function QECLeadsModule() {
                 {leads.map((lead) => {
                   const cargo = lead.customFields?.cargo;
                   const zone = lead.customFields?.zona ?? lead.customFields?.zone;
-                  const empresa = lead.customFields?.empresa;
                   const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.new;
                   const isChecked = checkedIds.has(lead.id);
                   return (
@@ -765,13 +763,6 @@ export default function QECLeadsModule() {
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {empresa && (
-                          <span
-                            className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EMPRESA_STYLE[empresa] ?? "bg-gray-100 text-gray-600"}`}
-                          >
-                            {empresa}
-                          </span>
-                        )}
                         {cargo && (
                           <span
                             className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${CARGO_STYLE[cargo] ?? "bg-gray-100 text-gray-600"}`}
@@ -1328,7 +1319,6 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
       name: lead.name || "",
       phone: lead.phone || "",
       email: lead.email || "",
-      empresa: lead.customFields?.empresa || "",
       cargo: lead.customFields?.cargo || "",
       empresa_actual: lead.customFields?.empresa_actual || "",
       zona: lead.customFields?.zona ?? lead.customFields?.zone ?? "",
@@ -1348,7 +1338,6 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
       phone: editForm.phone.trim() || null,
       email: editForm.email.trim() || null,
       customFields: {
-        empresa: editForm.empresa || null,
         cargo: editForm.cargo || null,
         empresa_actual:
           editForm.cargo === "Trabajador por cuenta ajena"
@@ -1377,7 +1366,6 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
   const cargo = lead.customFields?.cargo;
   const empresaActual = lead.customFields?.empresa_actual;
   const zone = lead.customFields?.zona ?? lead.customFields?.zone;
-  const empresa = lead.customFields?.empresa;
   const linkedin = lead.customFields?.linkedin;
   const utmSource = lead.customFields?.utmSource;
   const utmMedium = lead.customFields?.utmMedium;
@@ -1463,37 +1451,15 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
-                Empresa QEC
-              </label>
-              <select
-                value={editForm.empresa}
-                onChange={(e) => setEditForm((f) => ({ ...f, empresa: e.target.value }))}
-                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-              >
-                <option value="">Sin asignar</option>
-                {EMPRESAS.map((e) => (
-                  <option key={e.key} value={e.key}>
-                    {e.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
                 Cargo
               </label>
-              <select
+              <input
+                type="text"
                 value={editForm.cargo}
                 onChange={(e) => setEditForm((f) => ({ ...f, cargo: e.target.value }))}
+                placeholder="Cargo del contacto"
                 className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-              >
-                <option value="">Sin especificar</option>
-                {CARGOS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
             {editForm.cargo === "Trabajador por cuenta ajena" && (
               <div>
@@ -1667,18 +1633,6 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
               Perfil comercial
             </p>
             <div className="space-y-2.5">
-              <div className="flex items-start gap-3">
-                <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Empresa</span>
-                {empresa ? (
-                  <span
-                    className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${EMPRESA_STYLE[empresa] ?? "bg-gray-100 text-gray-600"}`}
-                  >
-                    {empresa}
-                  </span>
-                ) : (
-                  <span className="text-gray-300 text-xs">No indicado</span>
-                )}
-              </div>
               <div className="flex items-start gap-3">
                 <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Cargo</span>
                 {cargo ? (
