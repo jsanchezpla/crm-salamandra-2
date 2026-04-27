@@ -83,4 +83,4 @@ export async function POST(request) {
   }
 }
 
-const VALID_STAGES = ["new", "contacted", "qualified", "proposal", "negotiation", "won", "lost"];
+const VALID_STAGES = ["new", "contacted", "qualified", "proposal", "negotiation", "won", "lost", "in_progress", "demo_scheduled", "demo_done", "closed_yes", "closed_no"];

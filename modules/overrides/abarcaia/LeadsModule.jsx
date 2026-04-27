@@ -5,19 +5,21 @@ import { useEffect, useState, useCallback, useRef } from "react";
 // ─── Configuración QEC ────────────────────────────────────────────────────────
 
 const STAGES = [
-  { key: "new", label: "Nuevo lead" },
   { key: "contacted", label: "Contactado" },
-  { key: "qualified", label: "En seguimiento" },
-  { key: "won", label: "Convertido" },
-  { key: "lost", label: "Descartado" },
+  { key: "in_progress", label: "En proceso" },
+  { key: "demo_scheduled", label: "Demo agendada" },
+  { key: "demo_done", label: "Demo realizada" },
+  { key: "closed_yes", label: "Cerrado - Sí" },
+  { key: "closed_no", label: "Cerrado - No" },
 ];
 
 const STAGE_STYLE = {
-  new: { dot: "bg-gray-400", bg: "bg-gray-100 text-gray-600" },
   contacted: { dot: "bg-blue-400", bg: "bg-blue-100 text-blue-700" },
-  qualified: { dot: "bg-[var(--color-primary)]", bg: "bg-green-100 text-green-700" },
-  won: { dot: "bg-emerald-400", bg: "bg-emerald-100 text-emerald-700" },
-  lost: { dot: "bg-red-400", bg: "bg-red-100 text-red-600" },
+  in_progress: { dot: "bg-amber-400", bg: "bg-amber-100 text-amber-700" },
+  demo_scheduled: { dot: "bg-purple-400", bg: "bg-purple-100 text-purple-700" },
+  demo_done: { dot: "bg-[var(--color-primary)]", bg: "bg-green-100 text-green-700" },
+  closed_yes: { dot: "bg-emerald-400", bg: "bg-emerald-100 text-emerald-700" },
+  closed_no: { dot: "bg-red-400", bg: "bg-red-100 text-red-600" },
 };
 
 const CARGO_STYLE = {
@@ -89,18 +91,19 @@ function calculatePriority(demoDate) {
 }
 
 const STAGE_MAP = {
-  nuevo: "new",
-  new: "new",
-  "nuevo lead": "new",
   contactado: "contacted",
   contacted: "contacted",
-  "en seguimiento": "qualified",
-  seguimiento: "qualified",
-  qualified: "qualified",
-  convertido: "won",
-  won: "won",
-  descartado: "lost",
-  lost: "lost",
+  "en proceso": "in_progress",
+  in_progress: "in_progress",
+  "demo agendada": "demo_scheduled",
+  demo_scheduled: "demo_scheduled",
+  "demo realizada": "demo_done",
+  demo_done: "demo_done",
+  "cerrado - sí": "closed_yes",
+  "cerrado - si": "closed_yes",
+  closed_yes: "closed_yes",
+  "cerrado - no": "closed_no",
+  closed_no: "closed_no",
 };
 
 function parseCSV(text) {
@@ -618,7 +621,7 @@ export default function QECLeadsModule() {
                         "Teléfono",
                         "Email",
                         "Cargo",
-                        "Zona",
+                        "Ubicación",
                         "Estado",
                         "Prioridad",
                         "Recibido",
@@ -1326,30 +1329,32 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
       instagram_user: lead.customFields?.instagram_user || "",
       respuesta: lead.customFields?.respuesta || "",
       demo_agendada: lead.customFields?.demo_agendada || "",
-      fecha_demo: lead.customFields?.fecha_demo || "",
+      fecha_demo_date: (lead.customFields?.fecha_demo || "").split("T")[0] || "",
+      fecha_demo_time: (lead.customFields?.fecha_demo || "").includes("T") ? (lead.customFields.fecha_demo.split("T")[1] ?? "").substring(0, 5) : "",
     });
     setEditMode(true);
   }
 
   async function saveEdit() {
-    const demoDate = editForm.fecha_demo ? editForm.fecha_demo.split("T")[0] : null;
+    const fechaDemo = editForm.fecha_demo_date
+      ? editForm.fecha_demo_time
+        ? `${editForm.fecha_demo_date}T${editForm.fecha_demo_time}`
+        : editForm.fecha_demo_date
+      : null;
     const updates = {
       name: editForm.name.trim() || null,
       phone: editForm.phone.trim() || null,
       email: editForm.email.trim() || null,
       customFields: {
         cargo: editForm.cargo || null,
-        empresa_actual:
-          editForm.cargo === "Trabajador por cuenta ajena"
-            ? editForm.empresa_actual.trim() || null
-            : null,
+        empresa_actual: editForm.empresa_actual.trim() || null,
         zona: editForm.zona.trim() || null,
         linkedin: editForm.linkedin.trim() || null,
         instagram_user: editForm.instagram_user.trim() || null,
         respuesta: editForm.respuesta || null,
         demo_agendada: editForm.demo_agendada || null,
-        fecha_demo: demoDate || null,
-        prioridad: calculatePriority(demoDate),
+        fecha_demo: fechaDemo || null,
+        prioridad: calculatePriority(editForm.fecha_demo_date || null),
       },
     };
     const ok = await onSave(lead.id, updates);
@@ -1461,23 +1466,21 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
                 className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
               />
             </div>
-            {editForm.cargo === "Trabajador por cuenta ajena" && (
-              <div>
-                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
-                  Empresa actual
-                </label>
-                <input
-                  type="text"
-                  value={editForm.empresa_actual}
-                  onChange={(e) => setEditForm((f) => ({ ...f, empresa_actual: e.target.value }))}
-                  placeholder="Empresa donde trabaja actualmente"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-                />
-              </div>
-            )}
             <div>
               <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
-                Zona
+                Empresa actual
+              </label>
+              <input
+                type="text"
+                value={editForm.empresa_actual}
+                onChange={(e) => setEditForm((f) => ({ ...f, empresa_actual: e.target.value }))}
+                placeholder="Empresa donde trabaja actualmente"
+                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                Ubicación
               </label>
               <input
                 type="text"
@@ -1535,21 +1538,29 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
                 <option value="">Sin especificar</option>
                 <option value="si">Sí</option>
                 <option value="no">No</option>
+                <option value="pendiente">Pendiente</option>
               </select>
             </div>
-            {editForm.demo_agendada === "si" && (
-              <div>
-                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
-                  Fecha y hora de la demo
-                </label>
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                Fecha Demo
+              </label>
+              <div className="grid grid-cols-2 gap-2">
                 <input
-                  type="datetime-local"
-                  value={editForm.fecha_demo}
-                  onChange={(e) => setEditForm((f) => ({ ...f, fecha_demo: e.target.value }))}
+                  type="date"
+                  value={editForm.fecha_demo_date}
+                  onChange={(e) => setEditForm((f) => ({ ...f, fecha_demo_date: e.target.value }))}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+                />
+                <input
+                  type="time"
+                  value={editForm.fecha_demo_time}
+                  onChange={(e) => setEditForm((f) => ({ ...f, fecha_demo_time: e.target.value }))}
+                  placeholder="Hora (opcional)"
                   className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
                 />
               </div>
-            )}
+            </div>
           </div>
           <div className="flex gap-2 mt-6">
             <button
@@ -1596,6 +1607,14 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
                 );
               })}
             </div>
+          </div>
+
+          {/* Respuesta */}
+          <div>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
+              Respuesta
+            </p>
+            <p className="text-sm text-gray-700">{lead.customFields?.respuesta || <span className="text-gray-300 text-xs">Sin respuesta</span>}</p>
           </div>
 
           {/* Contacto */}
@@ -1645,14 +1664,12 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
                   <span className="text-gray-300 text-xs">No indicado</span>
                 )}
               </div>
-              {cargo === "Trabajador por cuenta ajena" && (
-                <div className="flex items-start gap-3">
-                  <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Empresa actual</span>
-                  <span className="text-gray-700 text-xs">{empresaActual || "No indicado"}</span>
-                </div>
-              )}
               <div className="flex items-start gap-3">
-                <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Zona</span>
+                <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Empresa actual</span>
+                <span className="text-gray-700 text-xs">{empresaActual || "No indicado"}</span>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Ubicación</span>
                 <span className="text-gray-700 text-xs">{zone || "No indicado"}</span>
               </div>
             </div>
@@ -1671,21 +1688,26 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
                     <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
                       lead.customFields.demo_agendada === "si"
                         ? "bg-green-100 text-green-700"
+                        : lead.customFields.demo_agendada === "pendiente"
+                        ? "bg-amber-100 text-amber-700"
                         : "bg-red-100 text-red-700"
                     }`}>
-                      {lead.customFields.demo_agendada === "si" ? "Sí" : "No"}
+                      {lead.customFields.demo_agendada === "si" ? "Sí" : lead.customFields.demo_agendada === "pendiente" ? "Pendiente" : "No"}
                     </span>
                   </div>
                 )}
                 {lead.customFields?.fecha_demo && (
                   <div className="flex items-start gap-3">
-                    <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Fecha</span>
+                    <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Fecha demo</span>
                     <span className="text-gray-700 text-xs">
-                      {new Date(lead.customFields.fecha_demo).toLocaleDateString("es-ES", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric"
-                      })}
+                      {(() => {
+                        const fd = lead.customFields.fecha_demo;
+                        const [datePart, timePart] = fd.split("T");
+                        const [y, m, d] = datePart.split("-");
+                        const date = new Date(Number(y), Number(m) - 1, Number(d));
+                        const formatted = date.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
+                        return timePart ? `${formatted} · ${timePart.substring(0, 5)}` : formatted;
+                      })()}
                     </span>
                   </div>
                 )}
@@ -1707,8 +1729,8 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
             </div>
           )}
 
-          {/* Redes y Respuesta */}
-          {(lead.customFields?.instagram_user || lead.customFields?.respuesta) && (
+          {/* Redes */}
+          {lead.customFields?.instagram_user && (
             <div>
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-3">
                 Contacto digital
@@ -1725,12 +1747,6 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
                       <span className="text-gray-400 text-xs block mb-0.5">Instagram</span>
                       <span className="text-gray-700 text-xs">{lead.customFields.instagram_user}</span>
                     </div>
-                  </div>
-                )}
-                {lead.customFields?.respuesta && (
-                  <div className="flex items-start gap-3">
-                    <span className="text-gray-400 shrink-0 text-xs mt-0.5">Respuesta</span>
-                    <span className="text-gray-700 text-xs">{lead.customFields.respuesta}</span>
                   </div>
                 )}
               </div>
