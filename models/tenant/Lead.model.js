@@ -32,7 +32,7 @@ export function defineLead(sequelize) {
         allowNull: true,
       },
       stage: {
-        type: DataTypes.ENUM("new", "contacted", "qualified", "proposal", "negotiation", "won", "lost"),
+        type: DataTypes.STRING(50),
         allowNull: false,
         defaultValue: "new",
       },
