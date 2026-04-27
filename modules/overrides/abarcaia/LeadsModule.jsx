@@ -639,7 +639,7 @@ export default function QECLeadsModule() {
                     {leads.map((lead) => {
                       const cargo = lead.customFields?.cargo;
                       const zone = lead.customFields?.zona ?? lead.customFields?.zone;
-                      const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.new;
+                      const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.contacted;
                       const isChecked = checkedIds.has(lead.id);
                       return (
                         <tr
@@ -732,7 +732,7 @@ export default function QECLeadsModule() {
                 {leads.map((lead) => {
                   const cargo = lead.customFields?.cargo;
                   const zone = lead.customFields?.zona ?? lead.customFields?.zone;
-                  const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.new;
+                  const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.contacted;
                   const isChecked = checkedIds.has(lead.id);
                   return (
                     <div
@@ -1745,7 +1745,16 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
                     </span>
                     <div>
                       <span className="text-gray-400 text-xs block mb-0.5">Instagram</span>
-                      <span className="text-gray-700 text-xs">{lead.customFields.instagram_user}</span>
+                      <a
+                        href={`https://www.instagram.com/${lead.customFields.instagram_user.replace(/^@/, "")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[var(--color-primary)] hover:opacity-80 text-xs transition-opacity"
+                      >
+                        {lead.customFields.instagram_user.startsWith("@")
+                          ? lead.customFields.instagram_user
+                          : `@${lead.customFields.instagram_user}`}
+                      </a>
                     </div>
                   </div>
                 )}
