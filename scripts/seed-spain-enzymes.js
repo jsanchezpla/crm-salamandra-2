@@ -104,6 +104,38 @@ async function main() {
   });
   log(`${leadsCreated ? "✓ Creado" : "· Ya existía"} módulo "leads"`);
 
+  // ── 7. Módulo clients ───────────────────────────────────────────────────────
+  header('Registrando módulo "clients"...');
+  const [, clientsCreated] = await TenantModule.findOrCreate({
+    where: { tenantId: tenant.id, moduleKey: "clients" },
+    defaults: {
+      tenantId: tenant.id,
+      moduleKey: "clients",
+      enabled: true,
+      version: "1.0.0",
+      schemaExtensions: {},
+      logicOverrides: {},
+      featureFlags: {},
+    },
+  });
+  log(`${clientsCreated ? "✓ Creado" : "· Ya existía"} módulo "clients"`);
+
+  // ── 8. Módulo inventory ─────────────────────────────────────────────────────
+  header('Registrando módulo "inventory"...');
+  const [, inventoryCreated] = await TenantModule.findOrCreate({
+    where: { tenantId: tenant.id, moduleKey: "inventory" },
+    defaults: {
+      tenantId: tenant.id,
+      moduleKey: "inventory",
+      enabled: true,
+      version: "1.0.0",
+      schemaExtensions: {},
+      logicOverrides: {},
+      featureFlags: {},
+    },
+  });
+  log(`${inventoryCreated ? "✓ Creado" : "· Ya existía"} módulo "inventory"`);
+
   // ── 7. Resumen ──────────────────────────────────────────────────────────────
   process.stdout.write("\n════════════════════════════════════════════\n");
   process.stdout.write(" ¡Listo! Accede con estas credenciales:\n");
