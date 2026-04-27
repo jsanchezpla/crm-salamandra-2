@@ -7,6 +7,7 @@ import RetorikaLeadsModule from "../../../modules/overrides/retorika/LeadsModule
 import AumentaLeadsModule from "../../../modules/overrides/aumenta/LeadsModule.jsx";
 import AbarcaIALeadsModule from "../../../modules/overrides/abarcaia/LeadsModule.jsx";
 import DemoLeadsModule from "../../../modules/overrides/demo/LeadsModule.jsx";
+import SpainEnzymesLeadsModule from "../../../modules/overrides/spain-enzymes/LeadsModule.jsx";
 
 const UI_OVERRIDES = {
   quality_energy: QECLeadsModule,
@@ -14,6 +15,7 @@ const UI_OVERRIDES = {
   aumenta: AumentaLeadsModule,
   abarcaia: AbarcaIALeadsModule,
   demo: DemoLeadsModule,
+  spain_enzymes: SpainEnzymesLeadsModule,
 };
 
 export const metadata = { title: "Leads" };

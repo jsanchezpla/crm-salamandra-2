@@ -55,6 +55,9 @@ export async function POST(request) {
         const empresa_actual = _v(row.empresa_actual, cf.empresa_actual);
         const zona = _v(row.zona, cf.zona);
         const linkedin = _v(row.linkedin, cf.linkedin);
+        const pais = _v(row.pais, cf.pais);
+        const ciudad = _v(row.ciudad, cf.ciudad);
+        const asunto = _v(row.asunto, cf.asunto);
         const instagram_user = _v(row.instagram_user, cf.instagram_user);
         const respuesta = _v(row.respuesta, cf.respuesta);
         const demo_agendada = _v(row.demo_agendada, cf.demo_agendada);
@@ -68,6 +71,9 @@ export async function POST(request) {
         if (empresa_actual) payload.customFields.empresa_actual = empresa_actual;
         if (zona) payload.customFields.zona = zona;
         if (linkedin) payload.customFields.linkedin = linkedin;
+        if (pais) payload.customFields.pais = pais;
+        if (ciudad) payload.customFields.ciudad = ciudad;
+        if (asunto) payload.customFields.asunto = asunto;
         if (instagram_user) payload.customFields.instagram_user = instagram_user;
         if (respuesta) payload.customFields.respuesta = respuesta;
         if (demo_agendada) payload.customFields.demo_agendada = demo_agendada;

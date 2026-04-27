@@ -35,6 +35,15 @@ const HEADER_MAP = {
   zone: "zona",
   "ubicación": "zona",
   ubicacion: "zona",
+  "país": "pais",
+  pais: "pais",
+  country: "pais",
+  ciudad: "ciudad",
+  city: "ciudad",
+  asunto: "asunto",
+  subject: "asunto",
+  mensaje: "mensaje",
+  message: "mensaje",
   linkedin: "linkedin",
   "linkedin url": "linkedin",
   "perfil linkedin": "linkedin",
@@ -162,7 +171,7 @@ export async function POST(request) {
           name: row.name?.trim() || null,
           email: row.email?.trim().toLowerCase() || null,
           phone: row.phone?.trim() || null,
-          notes: row.notes?.trim() || null,
+          notes: (row.mensaje || row.notes)?.trim() || null,
           source: row.source?.trim() || "excel_import",
           stage: VALID_STAGES.includes(row.stage) ? row.stage : "new",
           customFields: {},
@@ -174,6 +183,9 @@ export async function POST(request) {
         if (row.zona) payload.customFields.zona = row.zona.trim();
         if (row.experience) payload.customFields.experience = row.experience.trim();
         if (row.linkedin) payload.customFields.linkedin = row.linkedin.trim();
+        if (row.pais) payload.customFields.pais = row.pais.trim();
+        if (row.ciudad) payload.customFields.ciudad = row.ciudad.trim();
+        if (row.asunto) payload.customFields.asunto = row.asunto.trim();
         if (row.instagram_user) payload.customFields.instagram_user = row.instagram_user.trim();
         if (row.respuesta) payload.customFields.respuesta = row.respuesta.trim();
         if (row.demo_agendada) payload.customFields.demo_agendada = row.demo_agendada.trim();
