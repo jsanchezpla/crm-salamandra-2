@@ -1307,10 +1307,7 @@ function LeadDetailPanel({
       email: editForm.email.trim() || null,
       customFields: {
         cargo: editForm.cargo || null,
-        empresa_actual:
-          editForm.cargo === "Trabajador por cuenta ajena"
-            ? editForm.empresa_actual.trim() || null
-            : null,
+        empresa_actual: editForm.empresa_actual.trim() || null,
         zona: editForm.zona.trim() || null,
         linkedin: editForm.linkedin.trim() || null,
       },
@@ -1438,20 +1435,18 @@ function LeadDetailPanel({
                 ))}
               </select>
             </div>
-            {editForm.cargo === "Trabajador por cuenta ajena" && (
-              <div>
-                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
-                  Empresa actual
-                </label>
-                <input
-                  type="text"
-                  value={editForm.empresa_actual}
-                  onChange={(e) => setEditForm((f) => ({ ...f, empresa_actual: e.target.value }))}
-                  placeholder="Empresa donde trabaja actualmente"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-                />
-              </div>
-            )}
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                Empresa actual
+              </label>
+              <input
+                type="text"
+                value={editForm.empresa_actual}
+                onChange={(e) => setEditForm((f) => ({ ...f, empresa_actual: e.target.value }))}
+                placeholder="Empresa donde trabaja actualmente"
+                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+              />
+            </div>
             <div>
               <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
                 Zona
@@ -1581,12 +1576,10 @@ function LeadDetailPanel({
                   <span className="text-gray-300 text-xs">No indicado</span>
                 )}
               </div>
-              {cargo === "Trabajador por cuenta ajena" && (
-                <div className="flex items-start gap-3">
-                  <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Empresa actual</span>
-                  <span className="text-gray-700 text-xs">{empresaActual || "No indicado"}</span>
-                </div>
-              )}
+              <div className="flex items-start gap-3">
+                <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Empresa actual</span>
+                <span className="text-gray-700 text-xs">{empresaActual || "No indicado"}</span>
+              </div>
               <div className="flex items-start gap-3">
                 <span className="text-gray-400 w-28 shrink-0 text-xs mt-0.5">Zona</span>
                 <span className="text-gray-700 text-xs">{zone || "No indicado"}</span>
