@@ -35,6 +35,8 @@ export async function POST(request) {
       const row = rows[i];
 
       try {
+        const cf = row.customFields || {};
+
         const payload = {
           name: row.name?.toString().trim() || null,
           email: row.email?.toString().trim().toLowerCase() || null,
@@ -45,13 +47,22 @@ export async function POST(request) {
           customFields: {},
         };
 
-        if (row.empresa) payload.customFields.empresa = row.empresa.toString().trim();
-        if (row.experience) payload.customFields.experience = row.experience.toString().trim();
-        if (row.zone) payload.customFields.zone = row.zone.toString().trim();
-        if (row.cargo) payload.customFields.cargo = row.cargo.toString().trim();
-        if (row.empresa_actual) payload.customFields.empresa_actual = row.empresa_actual.toString().trim();
-        if (row.zona) payload.customFields.zona = row.zona.toString().trim();
-        if (row.linkedin) payload.customFields.linkedin = row.linkedin.toString().trim();
+        const _v = (top, nested) => (top || nested || "").toString().trim() || null;
+        const empresa = _v(row.empresa, cf.empresa);
+        const experience = _v(row.experience, cf.experience || cf.experiencia);
+        const zone = _v(row.zone, cf.zone);
+        const cargo = _v(row.cargo, cf.cargo);
+        const empresa_actual = _v(row.empresa_actual, cf.empresa_actual);
+        const zona = _v(row.zona, cf.zona);
+        const linkedin = _v(row.linkedin, cf.linkedin);
+
+        if (empresa) payload.customFields.empresa = empresa;
+        if (experience) payload.customFields.experience = experience;
+        if (zone) payload.customFields.zone = zone;
+        if (cargo) payload.customFields.cargo = cargo;
+        if (empresa_actual) payload.customFields.empresa_actual = empresa_actual;
+        if (zona) payload.customFields.zona = zona;
+        if (linkedin) payload.customFields.linkedin = linkedin;
 
         if (!payload.name && !payload.email && !payload.phone) {
           results.skipped++;
