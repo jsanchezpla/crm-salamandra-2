@@ -251,10 +251,12 @@ export default function CalendarioPage() {
       `}</style>
 
       {/* Header */}
-      <div className="px-6 pt-6 pb-4 flex items-center justify-between shrink-0 border-b border-[#F0F0F0]">
+      <div className="px-6 lg:px-10 pt-8 pb-5 flex items-end justify-between shrink-0 border-b border-[var(--ink-200)] gap-6 flex-wrap">
         <div>
-          <h1 className="text-base font-semibold text-[#111827]">Calendario</h1>
-          <p className="text-xs text-[#9CA3AF] mt-0.5">Tareas y eventos del equipo</p>
+          <div className="eyebrow mb-1.5 lg:mb-2">Tiempo · Agenda</div>
+          <h1 className="font-display text-[24px] lg:text-[34px] leading-[1.05] text-[var(--ink-900)] tracking-tight">
+            Calendario <span className="font-display-italic text-[var(--ink-400)]">— equipo</span>
+          </h1>
         </div>
         <button
           onClick={() => openCreate()}

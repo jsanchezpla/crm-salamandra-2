@@ -1,12 +1,7 @@
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, created, forbidden, error } from "../../../lib/utils/apiResponse.js";
+import { computeStatus } from "../../../lib/inventory/compute.js";
 import { Op } from "sequelize";
-
-function computeStatus(kg, outputKg) {
-  if (!outputKg || parseFloat(outputKg) <= 0) return "stock";
-  if (parseFloat(outputKg) >= parseFloat(kg || 0)) return "sold";
-  return "partial";
-}
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("inventory")) return forbidden();

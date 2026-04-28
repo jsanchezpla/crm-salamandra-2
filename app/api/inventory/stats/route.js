@@ -7,13 +7,16 @@ export const GET = withTenant(async (_request, _ctx, { tenantModels, hasModule }
   const { InventoryProduct, Client } = tenantModels;
 
   const products = await InventoryProduct.findAll({
+    attributes: ["status", "kg", "outputKg", "purchasePrice", "salePrice", "outputName", "productName", "clientId"],
     include: [{ model: Client, as: "client", attributes: ["id", "name", "customFields"] }],
   });
 
   let totalKgStock = 0;
   let totalKgSold = 0;
+  let totalKgPurchased = 0;
   let totalRevenue = 0;
   let totalCost = 0;
+  let totalPurchaseValue = 0;
 
   const clientMap = {};
   const productMap = {};
@@ -23,6 +26,9 @@ export const GET = withTenant(async (_request, _ctx, { tenantModels, hasModule }
     const outputKg = parseFloat(p.outputKg || 0);
     const purchasePrice = parseFloat(p.purchasePrice || 0);
     const salePrice = parseFloat(p.salePrice || 0);
+
+    totalKgPurchased += kg;
+    totalPurchaseValue += kg * purchasePrice;
 
     if (p.status === "stock") totalKgStock += kg;
     if (p.status === "partial") totalKgStock += Math.max(0, kg - outputKg);
@@ -69,6 +75,8 @@ export const GET = withTenant(async (_request, _ctx, { tenantModels, hasModule }
     totalProducts: products.length,
     totalKgStock: +totalKgStock.toFixed(3),
     totalKgSold: +totalKgSold.toFixed(3),
+    totalKgPurchased: +totalKgPurchased.toFixed(3),
+    totalPurchaseValue: +totalPurchaseValue.toFixed(2),
     totalRevenue: +totalRevenue.toFixed(2),
     totalCost: +totalCost.toFixed(2),
     totalMargin: +totalMargin.toFixed(2),

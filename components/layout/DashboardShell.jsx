@@ -1,10 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Sidebar from "./Sidebar.jsx";
 
 export default function DashboardShell({ tenant, user, modules, primaryColor, secondaryColor, accentColor, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Aplica las vars de marca a <html> para que cascadeen a TODO,
+  // incluyendo elementos renderizados en portales fuera de este árbol.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--color-primary", primaryColor);
+    root.style.setProperty("--color-secondary", secondaryColor);
+    root.style.setProperty("--color-accent", accentColor);
+    return () => {
+      root.style.removeProperty("--color-primary");
+      root.style.removeProperty("--color-secondary");
+      root.style.removeProperty("--color-accent");
+    };
+  }, [primaryColor, secondaryColor, accentColor]);
 
   return (
     <div
@@ -28,10 +42,13 @@ export default function DashboardShell({ tenant, user, modules, primaryColor, se
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Mobile top bar */}
-        <header className="lg:hidden sticky top-0 z-30 h-14 bg-white border-b border-neutral-100 flex items-center px-4 gap-3 shrink-0">
+        <header
+          className="lg:hidden sticky top-0 z-30 h-14 flex items-center px-4 gap-3 shrink-0 backdrop-blur-md"
+          style={{ backgroundColor: `color-mix(in srgb, ${accentColor} 88%, transparent)`, borderBottom: "1px solid var(--ink-200)" }}
+        >
           <button
             onClick={() => setSidebarOpen(true)}
-            className="w-9 h-9 flex items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-100 transition-colors"
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-[var(--ink-500)] hover:bg-[var(--ink-100)] transition-colors"
             aria-label="Abrir menú"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
@@ -51,14 +68,14 @@ export default function DashboardShell({ tenant, user, modules, primaryColor, se
                   className="w-full h-full object-contain"
                 />
               ) : (
-                <span className="text-[#1B3A2D] font-black text-xs leading-none">S</span>
+                <span className="text-white font-display text-xs leading-none">S</span>
               )}
             </div>
-            <span className="text-sm font-semibold text-neutral-800 truncate">{tenant?.name ?? "CRM"}</span>
+            <span className="font-display text-[15px] text-[var(--ink-900)] truncate tracking-tight">{tenant?.name ?? "CRM"}</span>
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto min-w-0">{children}</main>
+        <main className="flex-1 overflow-auto min-w-0 fade-in">{children}</main>
       </div>
     </div>
   );

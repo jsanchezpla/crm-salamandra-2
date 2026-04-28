@@ -254,19 +254,16 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
       >
         {/* Logo + tenant + close button (móvil) */}
         <div className="px-5 pt-6 pb-5">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2.5">
-              <div
-                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 overflow-hidden"
-                style={{ backgroundColor: primaryColor }}
-              >
+          <div className="flex items-center justify-between mb-7">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-7 h-7 rounded-md bg-white/[0.10] border border-white/15 flex items-center justify-center shrink-0 overflow-hidden">
                 {logoUrl ? (
                   <img src={logoUrl} alt={tenant?.name ?? "Logo"} className="w-full h-full object-contain" />
                 ) : (
-                  <span className="text-[#EDE8DE] font-black text-sm leading-none">S</span>
+                  <span className="text-white font-display text-base leading-none">S</span>
                 )}
               </div>
-              <span className="text-white font-bold text-sm tracking-wide truncate">Salamandra</span>
+              <span className="font-display text-white text-[17px] tracking-tight truncate">Salamandra</span>
             </div>
 
             {/* Cerrar (solo móvil) */}
@@ -282,11 +279,14 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
           </div>
 
           {/* Tenant activo */}
-          <div className="bg-black/20 rounded-lg px-3 py-2.5 flex items-center gap-2.5">
-            <div className="w-2 h-2 rounded-full shrink-0 animate-pulse" style={{ backgroundColor: primaryColor }} />
-            <div className="min-w-0">
-              <div className="text-white text-xs font-medium truncate">{tenant?.name ?? "Sin tenant"}</div>
-              <div className="text-white/30 text-[10px] mt-0.5 capitalize">{tenant?.plan ?? "—"}</div>
+          <div className="bg-black/[0.18] rounded-lg px-3 py-2.5 flex items-center gap-2.5 border border-white/[0.04]">
+            <span className="relative flex shrink-0 w-2 h-2">
+              <span className="absolute inset-0 rounded-full bg-white/40 animate-ping" />
+              <span className="relative w-2 h-2 rounded-full bg-white/60" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-white text-[13px] font-medium truncate">{tenant?.name ?? "Sin tenant"}</div>
+              <div className="text-white/35 text-[10px] mt-0.5 uppercase tracking-wider font-mono">{tenant?.plan ?? "—"}</div>
             </div>
           </div>
         </div>
@@ -301,40 +301,39 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
 
             return (
               <div key={section.label}>
-                <div className="px-2 mb-1.5 text-[9px] font-semibold text-white/25 uppercase tracking-[0.12em]">
+                <div className="px-2.5 mb-2 text-[10px] font-semibold text-white/30 uppercase tracking-[0.16em]">
                   {section.label}
                 </div>
-                <div className="space-y-px">
+                <div className="space-y-0.5">
                   {visibleItems.map((item) => {
                     const isActive = pathname === item.href;
                     return (
                       <Link
                         key={item.key}
                         href={item.href}
-                        className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md transition-colors group ${
-                          isActive ? "bg-white/[0.10]" : "hover:bg-white/[0.06]"
+                        className={`relative flex items-center gap-2.5 pl-3 pr-2.5 py-2 rounded-md transition-all group ${
+                          isActive ? "bg-white/[0.08]" : "hover:bg-white/[0.04]"
                         }`}
                       >
+                        {isActive && (
+                          <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-white" />
+                        )}
                         <span
-                          className="shrink-0 transition-colors"
-                          style={{ color: isActive ? primaryColor : undefined }}
+                          className={`shrink-0 transition-colors ${
+                            isActive ? "text-white" : "text-white/35 group-hover:text-white/65"
+                          }`}
                         >
-                          <span className={!isActive ? "text-white/30 group-hover:text-white/60" : ""}>
-                            {item.icon}
-                          </span>
+                          {item.icon}
                         </span>
                         <span
-                          className={`text-xs transition-colors flex-1 truncate ${
-                            isActive ? "text-white font-medium" : "text-white/40 group-hover:text-white/70"
+                          className={`text-[13px] transition-colors flex-1 truncate ${
+                            isActive ? "text-white font-medium" : "text-white/50 group-hover:text-white/80"
                           }`}
                         >
                           {item.label}
                         </span>
                         {item.badge != null && (
-                          <span
-                            className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full"
-                            style={{ backgroundColor: `${primaryColor}22`, color: primaryColor }}
-                          >
+                          <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-white/10 text-white/70 tabular">
                             {item.badge}
                           </span>
                         )}
@@ -348,18 +347,18 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
         </nav>
 
         {/* Usuario + logout */}
-        <div className="px-3 py-4 border-t border-white/[0.08]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-full bg-white/[0.08] border border-white/10 flex items-center justify-center text-[10px] font-semibold text-white/50 shrink-0">
+        <div className="px-4 py-4 border-t border-white/[0.08]">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-white/[0.08] border border-white/15 flex items-center justify-center font-display text-[13px] text-white/70 shrink-0">
               {initials}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-white/50 text-[11px] truncate">{user?.email ?? "Usuario"}</div>
-              <div className="text-white/25 text-[10px] capitalize">{user?.role ?? "—"}</div>
+              <div className="text-white/65 text-[11px] font-mono truncate">{user?.email ?? "Usuario"}</div>
+              <div className="text-white/30 text-[10px] uppercase tracking-wider mt-0.5">{user?.role ?? "—"}</div>
             </div>
             <button
               onClick={handleLogout}
-              className="text-white/25 hover:text-white/60 transition-colors shrink-0 cursor-pointer"
+              className="text-white/30 hover:text-white/70 transition-colors shrink-0 cursor-pointer p-1 rounded hover:bg-white/[0.06]"
               title="Cerrar sesión"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">

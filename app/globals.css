@@ -1,32 +1,103 @@
 @import "tailwindcss";
 
+/* ── Tokens del sistema ──────────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Tinta cálida (reemplaza el gray-* frío) */
+  --ink-50:  #FAF8F5;
+  --ink-100: #F4F0EA;
+  --ink-150: #ECE7DE;
+  --ink-200: #E0DACE;
+  --ink-300: #C5BDAE;
+  --ink-400: #948C7E;
+  --ink-500: #6E665B;
+  --ink-600: #4F4942;
+  --ink-700: #3A3733;
+  --ink-800: #25231F;
+  --ink-900: #15140F;
+
+  /* Defaults; tenants los sobreescriben */
+  --color-primary:   #1B3A2D;
+  --color-secondary: #3E5C57;
+  --color-accent:    var(--ink-50);
+
+  /* Tipografía */
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  --font-sans:    var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+
+  /* Sombras suaves: 1dp + soft drop */
+  --shadow-soft: 0 1px 2px rgba(20, 18, 14, 0.04), 0 8px 24px -12px rgba(20, 18, 14, 0.08);
+  --shadow-card: 0 1px 0 rgba(20, 18, 14, 0.02), 0 1px 3px rgba(20, 18, 14, 0.05);
+  --shadow-pop:  0 12px 40px -16px rgba(20, 18, 14, 0.20), 0 1px 3px rgba(20, 18, 14, 0.06);
+
+  --radius-card: 14px;
+  --radius-control: 10px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-poppins), system-ui, sans-serif;
+  --color-background: var(--ink-50);
+  --color-foreground: var(--ink-900);
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+}
+
+/* ── Reset tipográfico ───────────────────────────────────────────────── */
+html {
+  font-feature-settings: "ss01", "cv11";
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-poppins), system-ui, sans-serif;
+  background: var(--ink-50);
+  color: var(--ink-900);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
+/* ── Utilidades tipográficas ─────────────────────────────────────────── */
+.font-display {
+  font-family: var(--font-display);
+  font-variation-settings: "opsz" 28, "SOFT" 50, "WONK" 0;
+  letter-spacing: -0.02em;
+}
+.font-display-lg {
+  font-family: var(--font-display);
+  font-variation-settings: "opsz" 144, "SOFT" 30, "WONK" 0;
+  letter-spacing: -0.035em;
+}
+.font-display-italic {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-variation-settings: "opsz" 28, "SOFT" 80;
+}
+.font-mono { font-family: var(--font-mono); }
+.tabular  { font-variant-numeric: tabular-nums; }
+
+.eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-400);
+}
+
+/* ── Selección y focos ───────────────────────────────────────────────── */
+::selection {
+  background: var(--color-primary);
+  color: white;
+}
+
+/* ── Scrollbars ──────────────────────────────────────────────────────── */
 .slim-scroll {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
-.slim-scroll::-webkit-scrollbar {
-  width: 4px;
-}
-.slim-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
+.slim-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+.slim-scroll::-webkit-scrollbar-track { background: transparent; }
 .slim-scroll::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.18);
   border-radius: 9999px;
@@ -34,3 +105,33 @@ body {
 .slim-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.35);
 }
+
+.ink-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-200) transparent;
+}
+.ink-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.ink-scroll::-webkit-scrollbar-thumb {
+  background: var(--ink-200);
+  border-radius: 9999px;
+}
+.ink-scroll::-webkit-scrollbar-thumb:hover { background: var(--ink-300); }
+
+/* ── Animaciones de entrada ──────────────────────────────────────────── */
+@keyframes ink-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: ink-fade-up 320ms cubic-bezier(0.21, 0.61, 0.35, 1) both; }
+
+@keyframes ink-slide-right {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+.slide-right { animation: ink-slide-right 280ms cubic-bezier(0.21, 0.61, 0.35, 1) both; }
+
+@keyframes ink-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.fade-in { animation: ink-fade 240ms ease-out both; }

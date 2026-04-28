@@ -156,17 +156,14 @@ export default function FacturacionOverview() {
   const pendingPct = income ? Math.round((income.pendingCollection / totalBilled) * 100) : 0;
 
   return (
-    <div className="min-h-screen lg:h-screen flex flex-col gap-4 p-4 lg:p-6 bg-[#EDE8DE] overflow-auto lg:overflow-hidden">
+    <div className="min-h-screen lg:h-screen flex flex-col gap-4 p-4 lg:p-8 bg-[var(--color-accent)] overflow-auto lg:overflow-hidden">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 shrink-0">
         <div>
-          <h1
-            className="text-xl font-extrabold text-neutral-900"
-            style={{ fontFamily: "'Syne', sans-serif" }}
-          >
-            Facturación
+          <div className="eyebrow mb-1.5 lg:mb-2">Finanzas · Resumen</div>
+          <h1 className="font-display text-[24px] lg:text-[34px] leading-[1.05] text-[var(--ink-900)] tracking-tight">
+            Facturación <span className="font-display-italic text-[var(--ink-400)]">— período</span>
           </h1>
-          <p className="text-xs text-neutral-400 mt-0.5">Resumen financiero del período</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <input

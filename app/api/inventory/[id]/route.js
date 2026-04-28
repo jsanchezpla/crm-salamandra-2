@@ -1,11 +1,20 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, noContent, forbidden, notFound } from "../../../../lib/utils/apiResponse.js";
+import { computeStatus } from "../../../../lib/inventory/compute.js";
 
-function computeStatus(kg, outputKg) {
-  if (!outputKg || parseFloat(outputKg) <= 0) return "stock";
-  if (parseFloat(outputKg) >= parseFloat(kg || 0)) return "sold";
-  return "partial";
-}
+export const GET = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
+  if (!hasModule("inventory")) return forbidden();
+
+  const { InventoryProduct, Client } = tenantModels;
+  const { id } = await params;
+
+  const product = await InventoryProduct.findByPk(id, {
+    include: [{ model: Client, as: "client", attributes: ["id", "name", "customFields"] }],
+  });
+  if (!product) return notFound("Producto no encontrado");
+
+  return ok(product);
+});
 
 export const PUT = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
   if (!hasModule("inventory")) return forbidden();

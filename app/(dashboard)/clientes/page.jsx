@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
+
+function useMounted() {
+  const [m, setM] = useState(false);
+  useEffect(() => setM(true), []);
+  return m;
+}
 
 const STATUSES = [
   { key: "new", label: "Nuevo" },
@@ -25,6 +32,7 @@ function formatDate(iso) {
 }
 
 export default function ClientesPage() {
+  const mounted = useMounted();
   const [clients, setClients] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -72,6 +80,13 @@ export default function ClientesPage() {
 
   function openPanel(client) { setSelected(client); setPanelOpen(true); setEditMode(false); }
   function closePanel() { setPanelOpen(false); setSelected(null); setEditMode(false); }
+
+  useEffect(() => {
+    if (!panelOpen) return;
+    function onKey(e) { if (e.key === "Escape") closePanel(); }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [panelOpen]);
 
   function openEdit(client) {
     setEditForm({
@@ -156,25 +171,27 @@ export default function ClientesPage() {
   }
 
   return (
-    <div className="flex h-full bg-gray-50">
+    <div className="flex h-full bg-[var(--color-accent)]">
       <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${panelOpen ? "lg:mr-[440px]" : ""}`}>
         {/* Header */}
-        <div className="px-4 lg:px-8 pt-6 lg:pt-8 pb-0">
-          <div className="flex items-center justify-between mb-5">
+        <div className="px-4 lg:px-10 pt-5 lg:pt-12 pb-0">
+          <div className="flex items-end justify-between mb-5 lg:mb-7 gap-4 flex-wrap">
             <div>
-              <h1 className="text-gray-900 text-xl font-semibold">Clientes</h1>
-              <p className="text-gray-500 text-sm mt-0.5">{total} cliente{total !== 1 ? "s" : ""} en total</p>
+              <div className="eyebrow mb-1.5 lg:mb-2">Cuentas · Clientes</div>
+              <h1 className="font-display text-[26px] lg:text-[40px] leading-[1.05] text-[var(--ink-900)] tracking-tight">
+                Clientes <span className="font-display-italic text-[var(--ink-400)]">— {total} {total === 1 ? "cuenta" : "cuentas"}</span>
+              </h1>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={handleExport}
                 disabled={exporting}
-                className="flex items-center gap-2 bg-white border border-gray-200 hover:border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm disabled:opacity-50"
+                className="flex items-center gap-2 bg-white border border-[var(--ink-200)] hover:border-[var(--ink-300)] text-[var(--ink-700)] text-[13px] font-medium px-4 py-2 rounded-[var(--radius-control)] transition-colors disabled:opacity-50"
               >
                 {exporting ? (
-                  <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-[var(--ink-400)] border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M12 3v13.5m0 0l-4.5-4.5M12 16.5l4.5-4.5" />
                   </svg>
                 )}
@@ -182,7 +199,7 @@ export default function ClientesPage() {
               </button>
               <button
                 onClick={() => setNewClientOpen(true)}
-                className="flex items-center gap-2 bg-[var(--color-primary)] hover:opacity-90 text-white text-sm font-medium px-4 py-2 rounded-lg transition-opacity shadow-sm"
+                className="flex items-center gap-2 bg-[var(--color-primary)] hover:opacity-90 text-white text-[13px] font-medium px-4 py-2 rounded-[var(--radius-control)] transition-opacity"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -322,19 +339,43 @@ export default function ClientesPage() {
       </div>
 
       {/* Side panel */}
-      {panelOpen && selected && (
-        <div className="fixed lg:absolute top-0 right-0 h-full w-full lg:w-[440px] bg-white border-l border-gray-200 shadow-2xl flex flex-col z-40 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${(STATUS_STYLE[selected.customFields?.seStatus] ?? STATUS_STYLE.new).bg}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${(STATUS_STYLE[selected.customFields?.seStatus] ?? STATUS_STYLE.new).dot}`} />
-              {STATUSES.find((s) => s.key === selected.customFields?.seStatus)?.label ?? "Nuevo"}
-            </span>
-            <button onClick={closePanel} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+      {panelOpen && selected && mounted && createPortal(
+        <>
+          <div
+            className="lg:hidden fixed inset-0 bg-black/50 z-[70] fade-in"
+            onClick={closePanel}
+            aria-hidden="true"
+          />
+          <div
+            className="fixed top-0 right-0 h-full w-full lg:w-[440px] bg-white border-l border-gray-200 shadow-2xl flex flex-col z-[80] overflow-hidden slide-right"
+            style={{ paddingTop: "env(safe-area-inset-top)" }}
+          >
+            {/* Barra "Atrás" — solo móvil */}
+            <button
+              onClick={closePanel}
+              className="lg:hidden flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors shrink-0 w-full text-left"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
               </svg>
+              <span className="text-sm font-medium">Volver al listado</span>
             </button>
-          </div>
+
+            <div className="flex items-center justify-between px-4 lg:px-6 py-3 lg:py-4 border-b border-gray-100 shrink-0 gap-3">
+              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${(STATUS_STYLE[selected.customFields?.seStatus] ?? STATUS_STYLE.new).bg}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${(STATUS_STYLE[selected.customFields?.seStatus] ?? STATUS_STYLE.new).dot}`} />
+                {STATUSES.find((s) => s.key === selected.customFields?.seStatus)?.label ?? "Nuevo"}
+              </span>
+              <button
+                onClick={closePanel}
+                className="hidden lg:flex w-10 h-10 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+                aria-label="Cerrar panel"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
 
           <div className="flex-1 overflow-y-auto">
             {editMode ? (
@@ -489,6 +530,8 @@ export default function ClientesPage() {
             )}
           </div>
         </div>
+        </>,
+        document.body
       )}
 
       {/* New client modal */}

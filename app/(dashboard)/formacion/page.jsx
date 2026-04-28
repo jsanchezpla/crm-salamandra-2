@@ -97,17 +97,15 @@ export default function FormacionPage() {
   }, []);
 
   return (
-    <div className="p-4 lg:p-8 max-w-5xl mx-auto">
+    <div className="p-4 lg:p-10 max-w-6xl mx-auto bg-[var(--color-accent)] min-h-full">
       {/* Header */}
-      <div className="mb-8">
-        <h1
-          className="text-2xl font-extrabold text-neutral-900"
-          style={{ fontFamily: "'Syne', sans-serif" }}
-        >
-          Formación
+      <div className="mb-7 lg:mb-10">
+        <div className="eyebrow mb-1.5 lg:mb-2">Conocimiento · Formación</div>
+        <h1 className="font-display text-[26px] lg:text-[40px] leading-[1.05] text-[var(--ink-900)] tracking-tight mb-3">
+          Formación <span className="font-display-italic text-[var(--ink-400)]">— empresas, cursos, alumnos</span>
         </h1>
-        <p className="text-sm text-neutral-400 mt-1">
-          Gestión centralizada de empresas, cursos y alumnos
+        <p className="text-[14px] lg:text-[15px] text-[var(--ink-500)] max-w-xl leading-relaxed">
+          Gestión centralizada de empresas cliente, catálogo de cursos y matrículas de alumnos.
         </p>
       </div>
 

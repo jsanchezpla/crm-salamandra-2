@@ -2,11 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-
-function fmt(n, decimals = 2) {
-  if (n === null || n === undefined) return "—";
-  return parseFloat(n).toLocaleString("es-ES", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-}
+import { fmt } from "../../../../lib/utils/format.js";
 
 function Bar({ value, max, color = "bg-[var(--color-primary)]" }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
@@ -49,35 +45,41 @@ export default function InventarioStatsPage() {
   const maxProductRevenue = Math.max(...(stats.topProducts.map((p) => p.revenue)), 1);
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
+    <div className="flex flex-col h-full bg-[var(--color-accent)]">
       {/* Header */}
-      <div className="px-4 lg:px-8 pt-6 pb-4 border-b border-gray-100 bg-white">
-        <div className="flex items-center gap-3">
-          <Link href="/inventario" className="text-gray-400 hover:text-gray-600 transition-colors">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-            </svg>
-          </Link>
-          <h1 className="text-gray-900 text-lg font-semibold">Estadísticas de inventario</h1>
-        </div>
+      <div className="px-4 lg:px-10 pt-5 lg:pt-12 pb-5 lg:pb-6 border-b border-[var(--ink-200)]">
+        <Link href="/inventario" className="inline-flex items-center gap-2 text-[var(--ink-400)] hover:text-[var(--ink-700)] transition-colors text-[12px] uppercase tracking-[0.16em] font-semibold mb-3 lg:mb-4">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+          </svg>
+          Volver
+        </Link>
+        <div className="eyebrow mb-1.5 lg:mb-2">Operaciones · Inventario · Análisis</div>
+        <h1 className="font-display text-[26px] lg:text-[40px] leading-[1.05] text-[var(--ink-900)] tracking-tight">
+          Estadísticas <span className="font-display-italic text-[var(--ink-400)]">de inventario</span>
+        </h1>
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-auto px-4 lg:px-8 py-6">
+      <div className="flex-1 overflow-auto px-4 lg:px-10 py-8 max-w-6xl">
         {/* KPI grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6 max-w-5xl">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--ink-200)] border border-[var(--ink-200)] rounded-[var(--radius-card)] overflow-hidden mb-8 shadow-[var(--shadow-card)]">
           {[
-            { label: "Total productos", value: stats.totalProducts.toString(), color: "text-gray-900" },
-            { label: "Stock disponible", value: `${fmt(stats.totalKgStock, 1)} kg`, color: "text-emerald-600" },
-            { label: "Total vendido", value: `${fmt(stats.totalKgSold, 1)} kg`, color: "text-blue-600" },
-            { label: "Ingresos", value: `${fmt(stats.totalRevenue)} €`, color: "text-gray-900" },
-            { label: "Coste total", value: `${fmt(stats.totalCost)} €`, color: "text-gray-700" },
-            { label: "Margen bruto", value: `${fmt(stats.totalMargin)} €`, color: stats.totalMargin >= 0 ? "text-emerald-600" : "text-red-600" },
-            { label: "Margen %", value: `${fmt(stats.marginPercent, 1)}%`, color: stats.marginPercent >= 0 ? "text-emerald-600" : "text-red-600" },
+            { label: "Total productos", value: stats.totalProducts.toString(), unit: null, tone: "text-[var(--ink-900)]" },
+            { label: "Stock disponible", value: fmt(stats.totalKgStock, 1), unit: "kg", tone: "text-emerald-700" },
+            { label: "Total comprado", value: fmt(stats.totalKgPurchased, 1), unit: "kg", tone: "text-[var(--ink-700)]" },
+            { label: "Total vendido", value: fmt(stats.totalKgSold, 1), unit: "kg", tone: "text-blue-700" },
+            { label: "Ingresos", value: fmt(stats.totalRevenue), unit: "€", tone: "text-[var(--ink-900)]" },
+            { label: "Coste total", value: fmt(stats.totalCost), unit: "€", tone: "text-[var(--ink-700)]" },
+            { label: "Margen bruto", value: fmt(stats.totalMargin), unit: "€", tone: stats.totalMargin >= 0 ? "text-emerald-700" : "text-red-700" },
+            { label: "Margen %", value: fmt(stats.marginPercent, 1), unit: "%", tone: stats.marginPercent >= 0 ? "text-emerald-700" : "text-red-700" },
           ].map((kpi) => (
-            <div key={kpi.label} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-              <div className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1">{kpi.label}</div>
-              <div className={`text-xl font-semibold ${kpi.color}`}>{kpi.value}</div>
+            <div key={kpi.label} className="bg-white px-5 py-5">
+              <div className="text-[10px] text-[var(--ink-400)] uppercase tracking-[0.14em] font-semibold mb-2">{kpi.label}</div>
+              <div className={`font-display tabular text-[28px] leading-none ${kpi.tone}`}>
+                {kpi.value}
+                {kpi.unit && <span className="text-[14px] text-[var(--ink-400)] ml-1.5 font-sans">{kpi.unit}</span>}
+              </div>
             </div>
           ))}
         </div>
