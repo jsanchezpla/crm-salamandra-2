@@ -19,7 +19,10 @@
       "Bash(npm run *)",
       "Bash(powershell *)",
       "Bash(node *)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :3000)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d,indent=2,ensure_ascii=False\\)\\)\")"
     ]
   }
 }

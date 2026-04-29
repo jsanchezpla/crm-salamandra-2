@@ -21,7 +21,10 @@
     "db:seed:retorika:all": "npm run db:seed:master && npm run db:seed:retorika",
     "db:add-calendar-demo": "node --env-file=.env.local scripts/add-calendar-module-demo.js",
     "db:migrate:rename-therapist": "node --env-file=.env.local scripts/migrate-rename-therapist-to-employee.js",
-    "db:migrate:rename-therapist:prod": "node --env-file=.env.production scripts/migrate-rename-therapist-to-employee.js"
+    "db:migrate:rename-therapist:prod": "node --env-file=.env.production scripts/migrate-rename-therapist-to-employee.js",
+    "db:migrate:team": "node --env-file=.env.local scripts/migrate-team-fields.js",
+    "db:migrate:team:prod": "node --env-file=.env.production scripts/migrate-team-fields.js",
+    "db:seed:team": "node --env-file=.env.local scripts/seed-team-demo.js"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",

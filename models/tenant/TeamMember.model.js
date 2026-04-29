@@ -9,14 +9,30 @@ export function defineTeamMember(sequelize) {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
+      // Vínculo opcional con User del schema master.
+      // PostgreSQL trata varios NULL como distintos en un UNIQUE estándar,
+      // por lo que pueden coexistir miembros sin User (externos / subcontratados).
       userId: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
         unique: true,
       },
       displayName: {
         type: DataTypes.STRING,
         allowNull: false,
+      },
+      email: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        unique: true,
+        validate: {
+          isEmailIfPresent(value) {
+            if (value == null || value === "") return;
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+              throw new Error("email no es válido");
+            }
+          },
+        },
       },
       position: {
         type: DataTypes.STRING,
@@ -34,6 +50,21 @@ export function defineTeamMember(sequelize) {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      hourlyCost: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        validate: { min: 0 },
+      },
+      hourlyRate: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        validate: { min: 0 },
+      },
+      currency: {
+        type: DataTypes.STRING(3),
+        allowNull: false,
+        defaultValue: "EUR",
+      },
       status: {
         type: DataTypes.ENUM("active", "inactive", "on_leave"),
         allowNull: false,
@@ -41,6 +72,10 @@ export function defineTeamMember(sequelize) {
       },
       hiredAt: {
         type: DataTypes.DATEONLY,
+        allowNull: true,
+      },
+      notes: {
+        type: DataTypes.TEXT,
         allowNull: true,
       },
       customFields: {
