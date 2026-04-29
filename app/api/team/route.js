@@ -167,8 +167,10 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
 
     const hourlyCost = normalizeAmount(body.hourlyCost);
     const hourlyRate = normalizeAmount(body.hourlyRate);
+    const monthlySalary = normalizeAmount(body.monthlySalary);
     if (hourlyCost === undefined) return error("hourlyCost inválido");
     if (hourlyRate === undefined) return error("hourlyRate inválido");
+    if (monthlySalary === undefined) return error("monthlySalary inválido");
 
     if (!VALID_STATUS.has(status)) return error("status inválido");
 
@@ -196,6 +198,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       avatarUrl,
       hourlyCost,
       hourlyRate,
+      monthlySalary,
       currency,
       status,
       hiredAt: startDate,

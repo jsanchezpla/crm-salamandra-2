@@ -1,5 +1,6 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, serverError } from "../../../../lib/utils/apiResponse.js";
+import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
 
 // GET /api/billing/recurring
 export const GET = withTenant(async (request, _ctx, { tenantModels }) => {
@@ -13,10 +14,23 @@ export const GET = withTenant(async (request, _ctx, { tenantModels }) => {
     }
     if (searchParams.get("clientId")) where.clientId = searchParams.get("clientId");
 
+    const allowedSort = {
+      nextRunAt: "nextRunAt",
+      frequency: "frequency",
+      active: "active",
+      "client.name": [{ model: Client, as: "client" }, "name"],
+    };
+    const order = parseSortOrder(
+      searchParams.get("sortBy"),
+      searchParams.get("sortDir"),
+      allowedSort,
+      [["nextRunAt", "ASC"]]
+    );
+
     const rows = await RecurringInvoice.findAll({
       where,
       include: [{ model: Client, as: "client", attributes: ["id", "name"] }],
-      order: [["nextRunAt", "ASC"]],
+      order,
     });
 
     return ok(rows);

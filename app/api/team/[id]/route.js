@@ -98,6 +98,7 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       department: member.department,
       hourlyCost: member.hourlyCost,
       hourlyRate: member.hourlyRate,
+      monthlySalary: member.monthlySalary,
       status: member.status,
       userId: member.userId,
     };
@@ -135,6 +136,11 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       if (v === undefined) return error("hourlyRate inválido");
       updates.hourlyRate = v;
     }
+    if ("monthlySalary" in body) {
+      const v = normalizeAmount(body.monthlySalary);
+      if (v === undefined) return error("monthlySalary inválido");
+      updates.monthlySalary = v;
+    }
     if ("status" in body) {
       if (!VALID_STATUS.has(body.status)) return error("status inválido");
       updates.status = body.status;
@@ -163,6 +169,7 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       department: member.department,
       hourlyCost: member.hourlyCost,
       hourlyRate: member.hourlyRate,
+      monthlySalary: member.monthlySalary,
       status: member.status,
       userId: member.userId,
     };
@@ -179,6 +186,9 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     }
     if (String(beforeSnapshot.hourlyRate) !== String(afterSnapshot.hourlyRate)) {
       await logAudit({ ...auditCommon, action: "team.rate_changed" });
+    }
+    if (String(beforeSnapshot.monthlySalary) !== String(afterSnapshot.monthlySalary)) {
+      await logAudit({ ...auditCommon, action: "team.salary_changed" });
     }
     if (beforeSnapshot.status !== afterSnapshot.status) {
       await logAudit({ ...auditCommon, action: "team.status_changed" });

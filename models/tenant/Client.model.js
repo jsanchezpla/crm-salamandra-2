@@ -22,6 +22,30 @@ export function defineClient(sequelize) {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      // ── Datos fiscales para facturación (relleno bajo demanda) ──────────
+      // No se migran automáticamente desde customFields/address; se piden
+      // al editar la ficha o al emitir la primera factura para el cliente.
+      fiscalName: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      fiscalAddress: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      fiscalCity: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      fiscalZip: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+      },
+      fiscalCountry: {
+        type: DataTypes.STRING(2),
+        allowNull: false,
+        defaultValue: "ES",
+      },
       email: {
         type: DataTypes.STRING,
         allowNull: true,

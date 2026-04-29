@@ -1,18 +1,23 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
-import { ok, noContent, error, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
+import { ok, noContent, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../../lib/billing/calculateInvoice.js";
 
+const ADMIN_ROLES = new Set(["admin", "superadmin"]);
+
 // GET /api/billing/invoices/[id]
-export const GET = withTenant(async (request, { params }, { tenantModels }) => {
+export const GET = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
   try {
+    if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const { Invoice, Payment, Client, TeamMember } = tenantModels;
     const { id } = await params;
 
     const invoice = await Invoice.findByPk(id, {
       include: [
         { model: Payment, as: "payments" },
-        { model: Client, as: "client", attributes: ["id", "name", "email"] },
+        { model: Client, as: "client" },
         { model: TeamMember, as: "employee", attributes: ["id", "displayName"] },
+        { model: Invoice, as: "rectifies", attributes: ["id", "number", "issueDate", "total"] },
+        { model: Invoice, as: "rectifiedBy", attributes: ["id", "number", "issueDate", "total"] },
       ],
     });
 
@@ -23,9 +28,13 @@ export const GET = withTenant(async (request, { params }, { tenantModels }) => {
   }
 });
 
-// PATCH /api/billing/invoices/[id]
-export const PATCH = withTenant(async (request, { params }, { tenantModels }) => {
+// PATCH /api/billing/invoices/[id] — solo en draft
+export const PATCH = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
   try {
+    if (!hasModule("billing")) return forbidden("Módulo billing no activo");
+    const role = request.headers.get("x-user-role");
+    if (!ADMIN_ROLES.has(role)) return forbidden("Solo admin");
+
     const { Invoice } = tenantModels;
     const { id } = await params;
     const body = await request.json();
@@ -33,30 +42,23 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels }) =>
     const invoice = await Invoice.findByPk(id);
     if (!invoice) return notFound("Factura no encontrada");
 
-    if (invoice.status === "cancelled") {
-      return error("No se puede modificar una factura cancelada");
+    if (invoice.status !== "draft") {
+      return error("Solo se pueden editar facturas en borrador. Para cambios usa rectificativa.", 409);
     }
 
-    const allowed = [
-      "familyId", "patientId", "employeeId", "serviceType", "invoiceType",
-      "dueDate", "lines", "vatRate", "discountType", "discountValue",
-      "recurringConfig", "notes", "status", "customFields",
-    ];
-
+    const allowed = ["clientId", "employeeId", "issueDate", "dueDate", "lines", "notes", "customFields", "series"];
     const updates = {};
-    for (const key of allowed) {
-      if (key in body) updates[key] = body[key];
+    for (const k of allowed) {
+      if (k in body) updates[k] = body[k];
     }
 
-    // Recalcular totales si cambian líneas o descuentos
-    if (updates.lines || updates.vatRate !== undefined || updates.discountType || updates.discountValue !== undefined) {
-      const { subtotal, discountAmount, vatAmount, total } = calculateInvoice({
-        lines: updates.lines ?? invoice.lines,
-        vatRate: updates.vatRate ?? invoice.vatRate,
-        discountType: updates.discountType ?? invoice.discountType,
-        discountValue: updates.discountValue ?? invoice.discountValue,
-      });
-      Object.assign(updates, { subtotal, vatAmount, total });
+    if (updates.lines) {
+      const calc = calculateInvoice({ lines: updates.lines });
+      updates.lines = calc.lines;
+      updates.taxBase = calc.taxBase;
+      updates.vatAmount = calc.vatAmount;
+      updates.total = calc.total;
+      updates.subtotal = calc.taxBase; // legacy campo, se mantiene cuadrado
     }
 
     await invoice.update(updates);
@@ -66,18 +68,21 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels }) =>
   }
 });
 
-// DELETE /api/billing/invoices/[id]  — solo borrables en estado draft
-export const DELETE = withTenant(async (request, { params }, { tenantModels }) => {
+// DELETE /api/billing/invoices/[id] — solo en draft
+export const DELETE = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
   try {
+    if (!hasModule("billing")) return forbidden("Módulo billing no activo");
+    const role = request.headers.get("x-user-role");
+    if (!ADMIN_ROLES.has(role)) return forbidden("Solo admin");
+
     const { Invoice } = tenantModels;
     const { id } = await params;
 
     const invoice = await Invoice.findByPk(id);
     if (!invoice) return notFound("Factura no encontrada");
     if (invoice.status !== "draft") {
-      return error("Solo se pueden eliminar facturas en estado borrador", 409);
+      return error("Solo se pueden eliminar facturas en borrador", 409);
     }
-
     await invoice.destroy();
     return noContent();
   } catch (err) {

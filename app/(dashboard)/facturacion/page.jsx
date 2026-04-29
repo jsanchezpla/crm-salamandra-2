@@ -1,433 +1,248 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import PeriodPicker, { computeRange } from "./_components/PeriodPicker.jsx";
+import Kpi, { fmtMoney, fmtPct } from "./_components/Kpi.jsx";
 
-const currentYear = new Date().getFullYear();
+const QUICK_LINKS = [
+  { href: "/facturacion/facturas", label: "Facturas", desc: "Listado, alta, rectificativas" },
+  { href: "/facturacion/cobros", label: "Cobros", desc: "Pagos recibidos, parciales" },
+  { href: "/facturacion/costes", label: "Costes", desc: "Gastos con IVA" },
+  { href: "/facturacion/recurrentes", label: "Recurrentes", desc: "Facturación periódica" },
+  { href: "/facturacion/analitica/iva", label: "Libro IVA", desc: "Modelo 303 + Excel" },
+  { href: "/facturacion/analitica/clientes", label: "Por cliente", desc: "Facturado y margen" },
+  { href: "/facturacion/analitica/empleados", label: "Por empleado", desc: "Rendimiento" },
+  { href: "/facturacion/configuracion", label: "Configuración", desc: "Datos fiscales y series" },
+];
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString("es-ES", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+const MONTH_NAMES_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+/**
+ * Recibe array [{ month: "YYYY-MM", ... }] y devuelve etiquetas en español.
+ * Si la serie cruza años, añade año corto solo a la primera barra del año nuevo.
+ */
+function formatMonthLabels(byMonth) {
+  if (!Array.isArray(byMonth)) return [];
+  const years = new Set(byMonth.map((m) => String(m.month || "").slice(0, 4)).filter(Boolean));
+  const allSameYear = years.size <= 1;
+  return byMonth.map((m, i) => {
+    const [y, mm] = String(m.month || "").split("-");
+    const idx = parseInt(mm, 10) - 1;
+    const name = MONTH_NAMES_ES[idx] ?? mm ?? "";
+    if (allSameYear) return name;
+    const prevYear = i > 0 ? String(byMonth[i - 1].month || "").slice(0, 4) : null;
+    if (i === 0 || (prevYear && y !== prevYear)) {
+      return `${name} ${String(y).slice(2)}`;
+    }
+    return name;
   });
-}
-
-function KpiCard({ label, value, sub, variant = "white" }) {
-  const styles = {
-    dark: {
-      wrap: "bg-[#152B22] border-[#152B22]",
-      label: "text-white/40",
-      value: "text-white",
-      sub: "text-white/40",
-    },
-    green: {
-      wrap: "border-transparent",
-      label: "text-white/50",
-      value: "text-white",
-      sub: "text-white/50",
-    },
-    amber: {
-      wrap: "bg-[#FFF8ED] border-[#FDDBA0]",
-      label: "text-amber-700",
-      value: "text-amber-900",
-      sub: "text-amber-600",
-    },
-    white: {
-      wrap: "bg-white border-neutral-100",
-      label: "text-neutral-400",
-      value: "text-neutral-900",
-      sub: "text-neutral-400",
-    },
-    emerald: {
-      wrap: "bg-[#3E5C57]/[0.08] border-[#3E5C57]/25",
-      label: "text-[#3E5C57]",
-      value: "text-[#152B22]",
-      sub: "text-[#3E5C57]/70",
-    },
-  };
-
-  const s = styles[variant];
-
-  return (
-    <div
-      className={`rounded-xl p-4 flex flex-col gap-1.5 border ${s.wrap}`}
-      style={
-        variant === "green"
-          ? {
-              background: "#3E5C57",
-              borderColor: "#3E5C57",
-            }
-          : {}
-      }
-    >
-      <span className={`text-[10px] font-medium uppercase tracking-widest ${s.label}`}>
-        {label}
-      </span>
-      <span
-        className={`text-2xl font-extrabold leading-none ${s.value}`}
-        style={{ fontFamily: "'Syne', sans-serif" }}
-      >
-        {fmt(value)}
-        <span className={`text-sm font-normal ml-1 ${s.sub}`}>€</span>
-      </span>
-      {sub && <span className={`text-[10px] ${s.sub}`}>{sub}</span>}
-    </div>
-  );
 }
 
 function MonthBar({ month, value, max }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
-  const display = value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value;
   return (
-    <div className="flex flex-col items-center gap-1 flex-1">
-      <div className="w-full bg-white/10 rounded-t-sm overflow-hidden" style={{ height: 72 }}>
+    <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
+      <div className="w-full bg-white/10 rounded-t-sm overflow-hidden" style={{ height: 80 }}>
         <div
-          className="w-full rounded-t-sm"
-          style={{
-            height: `${pct}%`,
-            marginTop: `${100 - pct}%`,
-            background: "#EDE8DE",
-          }}
+          className="w-full rounded-t-sm transition-all duration-300"
+          style={{ height: `${pct}%`, marginTop: `${100 - pct}%`, background: "var(--ink-100, #F4F0EA)" }}
         />
       </div>
-      <span className="text-[9px] text-white/30">{month}</span>
+      <span className="text-[9px] text-white/40 truncate">{month}</span>
     </div>
   );
 }
 
-function QuickLink({ href, label, desc, icon }) {
-  return (
-    <Link
-      href={href}
-      className="group bg-white border border-neutral-100 rounded-xl p-4 transition-all block"
-      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--color-primary, #152B22)")}
-      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "")}
-    >
-      <div className="w-8 h-8 bg-neutral-100 rounded-lg flex items-center justify-center mb-3 transition-colors">
-        <span className="text-neutral-500 transition-colors" style={{ lineHeight: 0 }}>
-          {icon}
-        </span>
-      </div>
-      <div
-        className="text-xs font-bold text-neutral-900 mb-0.5"
-        style={{ fontFamily: "'Syne', sans-serif" }}
-      >
-        {label}
-      </div>
-      <div className="text-[10px] text-neutral-400">{desc}</div>
-    </Link>
-  );
-}
-
-export default function FacturacionOverview() {
-  const [from, setFrom] = useState(`${currentYear}-01-01`);
-  const [to, setTo] = useState(`${currentYear}-12-31`);
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/billing/analytics?from=${from}&to=${to}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Error");
-      setData(json.data);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
+export default function FacturacionResumen() {
+  const sp = useSearchParams();
+  const period = sp.get("period") || "year";
+  let from = sp.get("from");
+  let to = sp.get("to");
+  if (!from || !to) {
+    const r = computeRange(period);
+    from = r.from; to = r.to;
   }
 
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
+
   useEffect(() => {
-    load();
+    if (!from || !to) return;
+    setLoading(true);
+    setErrorMsg(null);
+    fetch(`/api/billing/analytics?from=${from}&to=${to}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (!j.ok) throw new Error(j.error || "Error");
+        setData(j.data);
+      })
+      .catch((e) => setErrorMsg(e.message))
+      .finally(() => setLoading(false));
   }, [from, to]);
 
   const income = data?.income;
   const costs = data?.costs;
   const margins = data?.margins;
   const byMonth = income?.byMonth ?? [];
-  const maxMonth = Math.max(...byMonth.map((m) => m.totalBilled), 1);
-  const totalBilled = income?.totalBilled || 1;
-
-  const collectedPct = income ? Math.round((income.totalCollected / totalBilled) * 100) : 0;
-  const pendingPct = income ? Math.round((income.pendingCollection / totalBilled) * 100) : 0;
+  const maxMonth = Math.max(1, ...byMonth.map((m) => m.billedBase));
 
   return (
-    <div className="min-h-screen lg:h-screen flex flex-col gap-4 p-4 lg:p-8 bg-[var(--color-accent)] overflow-auto lg:overflow-hidden">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 shrink-0">
+    <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="eyebrow mb-1.5 lg:mb-2">Finanzas · Resumen</div>
-          <h1 className="font-display text-[24px] lg:text-[34px] leading-[1.05] text-[var(--ink-900)] tracking-tight">
-            Facturación <span className="font-display-italic text-[var(--ink-400)]">— período</span>
+          <div className="eyebrow">Finanzas · Resumen</div>
+          <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">
+            Facturación
           </h1>
+          <p className="text-xs text-neutral-400 mt-1">
+            {from && to ? `${from} → ${to}` : "Cargando periodo..."}
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="date"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            className="flex-1 min-w-0 rounded-lg px-2.5 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition"
-          />
-          <span className="text-neutral-300 text-xs shrink-0">—</span>
-          <input
-            type="date"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            className="flex-1 min-w-0 rounded-lg px-2.5 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition"
-          />
-          <button
-            onClick={load}
-            disabled={loading}
-            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-50 transition-opacity"
-            style={{
-              fontFamily: "'Syne', sans-serif",
-              background: "var(--color-primary, #152B22)",
-            }}
-          >
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-            </svg>
-            <span className="hidden sm:inline">{loading ? "Cargando..." : "Exportar"}</span>
-          </button>
-        </div>
+        <PeriodPicker />
       </div>
 
-      {error && (
-        <div className="shrink-0 px-4 py-2.5 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">
-          {error}
-        </div>
+      {errorMsg && (
+        <div className="px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{errorMsg}</div>
       )}
 
-      {!data && !error && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-neutral-100 border border-neutral-100 rounded-xl h-20 animate-pulse" />
-          ))}
-        </div>
-      )}
-
-      {data && (
-        <>
-          {/* KPIs */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
-            <KpiCard
+      {/* KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {!data && (
+          [...Array(4)].map((_, i) => (
+            <div key={i} className="bg-neutral-100 border border-neutral-100 rounded-xl h-24 animate-pulse" />
+          ))
+        )}
+        {data && (
+          <>
+            <Kpi
               label="Facturado"
-              value={income?.totalBilled}
-              sub="Período seleccionado"
+              value={fmtMoney(income.billedBase)}
+              sub="Base imponible · sin IVA"
               variant="dark"
             />
-            <KpiCard
+            <Kpi
               label="Cobrado"
-              value={income?.totalCollected}
-              sub={`${collectedPct}% del total`}
-              variant="green"
+              value={fmtMoney(income.collectedBase)}
+              sub={`${fmtPct(income.collectedPct)} del facturado · base`}
+              variant="primary"
             />
-            <KpiCard
+            <Kpi
               label="Pendiente"
-              value={income?.pendingCollection}
-              sub={`${pendingPct}% sin cobrar`}
-              variant={income?.pendingCollection > 0 ? "amber" : "white"}
+              value={fmtMoney(income.pendingCollection)}
+              sub={`${income.pendingInvoiceCount} factura${income.pendingInvoiceCount === 1 ? "" : "s"} pendiente${income.pendingInvoiceCount === 1 ? "" : "s"} · ${income.pendingClientCount} cliente${income.pendingClientCount === 1 ? "" : "s"}`}
+              variant={income.pendingCollection > 0 ? "amber" : "white"}
             />
-            <KpiCard
+            <Kpi
               label="Ticket medio"
-              value={income?.averageTicket}
-              sub={`${income?.invoiceCount ?? 0} facturas · ${income?.clientCount ?? 0} clientes`}
+              value={fmtMoney(income.averageTicket)}
+              sub="Base imponible / nº facturas"
               variant="white"
             />
-          </div>
+          </>
+        )}
+      </div>
 
-          {/* Main grid */}
-          <div className="flex flex-col lg:grid lg:grid-cols-[1.4fr_1fr] gap-3 lg:flex-1 lg:min-h-0">
-            {/* Columna izquierda — gráfico + servicios */}
-            <div className="flex flex-col gap-3 lg:min-h-0">
-              <div className="bg-[#152B22] rounded-xl p-4 h-52 lg:h-auto lg:flex-1 lg:min-h-0 flex flex-col">
-                <h2
-                  className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-3 shrink-0"
-                  style={{ fontFamily: "'Syne', sans-serif" }}
-                >
-                  Ingresos mensuales
-                </h2>
-                <div className="flex items-end gap-1.5 flex-1">
-                  {byMonth.map((m) => (
-                    <MonthBar
-                      key={m.month}
-                      month={m.month?.slice(5) ?? m.month}
-                      value={m.totalBilled}
-                      max={maxMonth}
-                    />
-                  ))}
-                </div>
+      {data && (
+        <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-3">
+          {/* Columna izquierda: gráfico mensual + KPI margen */}
+          <div className="flex flex-col gap-3">
+            <div
+              className="rounded-xl p-4 lg:p-5 flex flex-col gap-3 min-h-[220px]"
+              style={{ background: "var(--color-primary, #1B3A2D)" }}
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="eyebrow text-white/60">Ingresos mensuales</h2>
+                <span className="text-[10px] text-white/40">Base imponible</span>
               </div>
-
-              <div className="bg-[#152B22] rounded-xl p-4 shrink-0">
-                <h2
-                  className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-3"
-                  style={{ fontFamily: "'Syne', sans-serif" }}
-                >
-                  Por tipo de servicio
-                </h2>
-                <div className="space-y-2">
-                  {income?.byServiceType?.map((s) => {
-                    const pct = Math.round((s.totalBilled / totalBilled) * 100);
-                    return (
-                      <div key={s.serviceType}>
-                        <div className="flex justify-between mb-1">
-                          <span className="text-xs text-white/60 capitalize">{s.serviceType}</span>
-                          <span className="text-xs font-medium text-white">{fmt(s.totalBilled)} €</span>
-                        </div>
-                        <div className="h-1 bg-white/10 rounded-full overflow-hidden">
-                          <div className="h-1 rounded-full" style={{ width: `${pct}%`, background: "#EDE8DE" }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Columna derecha — costes + márgenes */}
-            <div className="flex flex-col gap-3 lg:min-h-0">
-              <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:flex-1 lg:min-h-0 flex flex-col">
-                <h2
-                  className="text-[10px] font-bold uppercase tracking-widest text-neutral-400 mb-3 shrink-0"
-                  style={{ fontFamily: "'Syne', sans-serif" }}
-                >
-                  Desglose de costes
-                </h2>
-                <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-                  <div className="flex-1 overflow-hidden">
-                    {[
-                      { label: "Salarios", value: costs?.salaries },
-                      { label: "Costes fijos", value: costs?.fixed },
-                      { label: "Variables", value: costs?.variable },
-                      { label: "CAPEX", value: costs?.capex },
-                      { label: "OPEX", value: costs?.opex },
-                    ].map(({ label, value }) => (
-                      <div
-                        key={label}
-                        className="flex items-center justify-between py-1.5 border-b border-neutral-50 last:border-0"
-                      >
-                        <span className="text-xs text-neutral-500">{label}</span>
-                        <span className="text-xs font-medium text-neutral-800">{fmt(value)} €</span>
-                      </div>
+              {byMonth.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center text-white/40 text-xs">Sin datos</div>
+              ) : (() => {
+                const labels = formatMonthLabels(byMonth);
+                return (
+                  <div className="flex items-end gap-1.5 flex-1">
+                    {byMonth.map((m, i) => (
+                      <MonthBar key={m.month} month={labels[i]} value={m.billedBase} max={maxMonth} />
                     ))}
                   </div>
-                  <div className="flex items-center justify-between pt-2 mt-2 border-t-2 border-neutral-900 shrink-0">
-                    <span className="text-xs font-extrabold text-neutral-900" style={{ fontFamily: "'Syne', sans-serif" }}>
-                      Total
-                    </span>
-                    <span className="text-xs font-extrabold text-neutral-900" style={{ fontFamily: "'Syne', sans-serif" }}>
-                      {fmt(costs?.total)} €
-                    </span>
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
+            </div>
 
-              {/* Márgenes */}
-              <div className="grid grid-cols-2 gap-3 shrink-0">
-                <div className="bg-white border border-[#3E5C57]/20 rounded-xl p-4">
-                  <div className="text-[10px] font-medium uppercase tracking-widest text-[#3E5C57] mb-2">Margen bruto</div>
-                  <div className="text-xl font-extrabold text-[#152B22] leading-none mb-1" style={{ fontFamily: "'Syne', sans-serif" }}>
-                    {fmt(margins?.grossMargin)}
-                    <span className="text-sm font-normal text-[#3E5C57]/70 ml-1">€</span>
-                  </div>
-                  <div className="text-[10px] text-[#3E5C57]/70">{margins?.grossMarginPct ?? 0}%</div>
-                </div>
-                <div className="bg-white border border-[#3E5C57]/20 rounded-xl p-4">
-                  <div className="text-[10px] font-medium uppercase tracking-widest text-[#3E5C57] mb-2">Margen neto</div>
-                  <div className="text-xl font-extrabold text-[#152B22] leading-none mb-1" style={{ fontFamily: "'Syne', sans-serif" }}>
-                    {fmt(margins?.netMargin)}
-                    <span className="text-sm font-normal text-[#3E5C57]/70 ml-1">€</span>
-                  </div>
-                  <div className="text-[10px] text-[#3E5C57]/70">{margins?.netMarginPct ?? 0}%</div>
-                </div>
-                <div className="col-span-2 bg-white border border-[#3E5C57]/20 rounded-xl p-4">
-                  <div className="text-[10px] font-medium uppercase tracking-widest text-[#3E5C57] mb-2">EBITDA</div>
-                  <div className="text-xl font-extrabold text-[#152B22] leading-none mb-1" style={{ fontFamily: "'Syne', sans-serif" }}>
-                    {fmt(margins?.ebitda)}
-                    <span className="text-sm font-normal text-[#3E5C57]/70 ml-1">€</span>
-                  </div>
-                  <div className="text-[10px] text-[#3E5C57]/70">
-                    {Math.round(((margins?.ebitda ?? 0) / totalBilled) * 100)}% margen
-                  </div>
-                </div>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Kpi label="Margen Bruto" value={fmtMoney(margins.grossMargin)} sub={fmtPct(margins.grossMarginPct)} variant="emerald" />
+              <Kpi label="Margen Neto" value={fmtMoney(margins.netMargin)} sub={fmtPct(margins.netMarginPct)} variant="white" />
+              <Kpi label="EBITDA" value={fmtMoney(margins.ebitda)} sub={fmtPct(margins.ebitdaPct)} variant="white" />
             </div>
           </div>
 
-          {/* Quick links */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
-            {[
-              {
-                href: "/facturacion/facturas",
-                label: "Facturas",
-                desc: "Gestión de facturas",
-                icon: (
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                  </svg>
-                ),
-              },
-              {
-                href: "/facturacion/cobros",
-                label: "Cobros",
-                desc: "Pagos y tesorería",
-                icon: (
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
-                  </svg>
-                ),
-              },
-              {
-                href: "/facturacion/costes",
-                label: "Costes",
-                desc: "Gastos operativos",
-                icon: (
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
-                  </svg>
-                ),
-              },
-              {
-                href: "/facturacion/analitica",
-                label: "Analítica",
-                desc: "Por empleado",
-                icon: (
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zm9.75-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.625c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.25zm-6.75 9.75c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-2.25A1.125 1.125 0 016 20.25v-2.25z" />
-                  </svg>
-                ),
-              },
-            ].map(({ href, label, desc, icon }) => (
-              <Link
-                key={href}
-                href={href}
-                className="group bg-white border border-neutral-100 rounded-xl p-3.5 transition-all block"
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "var(--color-primary, #152B22)";
-                  e.currentTarget.querySelector(".ql-icon").style.background = "var(--color-primary, #152B22)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "";
-                  e.currentTarget.querySelector(".ql-icon").style.background = "";
-                }}
-              >
-                <div className="ql-icon w-7 h-7 bg-neutral-100 rounded-lg flex items-center justify-center mb-2.5 transition-colors">
-                  <span className="text-neutral-500 transition-colors" style={{ lineHeight: 0 }}>{icon}</span>
-                </div>
-                <div className="text-xs font-bold text-neutral-900 mb-0.5" style={{ fontFamily: "'Syne', sans-serif" }}>
-                  {label}
-                </div>
-                <div className="text-[10px] text-neutral-400">{desc}</div>
-              </Link>
-            ))}
+          {/* Columna derecha: desglose costes */}
+          <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5 flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="eyebrow">Desglose de costes</h2>
+              <span className="text-[10px] text-neutral-400">Base imponible</span>
+            </div>
+            <div className="flex-1 space-y-2">
+              {[
+                { label: "Variables", value: costs.byCategory.variable, color: "bg-amber-400", refTotal: "operating" },
+                { label: "Fijos", value: costs.byCategory.fixed, color: "bg-neutral-400", refTotal: "operating" },
+                { label: "OPEX", value: costs.byCategory.opex, color: "bg-sky-400", refTotal: "operating" },
+              ].map((row) => {
+                const pct = costs.operating > 0 ? Math.round((row.value / costs.operating) * 100) : 0;
+                return (
+                  <div key={row.label}>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-neutral-500">{row.label}</span>
+                      <span className="text-neutral-800 font-medium tabular">{fmtMoney(row.value)}</span>
+                    </div>
+                    <div className="h-1 bg-neutral-100 rounded-full overflow-hidden mt-1">
+                      <div className={`h-1 rounded-full ${row.color}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="border-t border-neutral-200 mt-3 pt-3 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-neutral-700 font-semibold">Costes operativos</span>
+                <span className="text-xs text-neutral-900 font-semibold tabular">{fmtMoney(costs.operating)}</span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-neutral-400">
+                <span>Facturado − operativos = Margen Neto</span>
+              </div>
+            </div>
+            <div className="border-t border-neutral-100 mt-2 pt-2 space-y-1">
+              <div className="flex items-center justify-between text-xs text-neutral-500">
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-purple-400 inline-block" />
+                  CAPEX <span className="text-[10px] text-neutral-400">(no operativo)</span>
+                </span>
+                <span className="tabular">{fmtMoney(costs.byCategory.capex)}</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between border-t border-neutral-200 mt-2 pt-3">
+              <span className="font-display text-base text-neutral-900">Total general</span>
+              <span className="font-display text-base text-neutral-900 tabular">{fmtMoney(costs.total)}</span>
+            </div>
           </div>
-        </>
+        </div>
       )}
+
+      {/* Quick links */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {QUICK_LINKS.map((q) => (
+          <Link
+            key={q.href}
+            href={q.href}
+            className="bg-white border border-neutral-100 rounded-xl p-3.5 transition-colors hover:border-[var(--color-primary,#1B3A2D)] block"
+          >
+            <div className="font-display text-sm text-neutral-900">{q.label}</div>
+            <div className="text-[10px] text-neutral-400 mt-0.5">{q.desc}</div>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

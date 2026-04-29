@@ -1,78 +1,138 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
+import { useSortState, SortableTh } from "../_components/tableSort.jsx";
+
+const inputCls =
+  "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
 
 const TYPE_LABELS = {
   salary: "Salario", rent: "Alquiler", software: "Software",
   material: "Material", commission: "Comisión", other: "Otro",
 };
+const CATEGORY_LABELS = { fixed: "Fijo", variable: "Variable", capex: "CAPEX", opex: "OPEX" };
 
-const CATEGORY_LABELS = { fixed: "Fijo", variable: "Variable", capex: "CAPEX" };
-
-function fmt(n) {
-  return Number(n || 0).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function emptyForm(defaultVat = 21) {
+  return {
+    type: "other", category: "fixed", description: "",
+    taxBase: "", vatRate: defaultVat, vatDeductible: true,
+    incurredAt: new Date().toISOString().slice(0, 10),
+    employeeId: "", clientId: "",
+  };
 }
-
-const EMPTY_FORM = { month: "", type: "salary", category: "fixed", description: "", amount: "", employeeId: "" };
-
-const inputCls =
-  "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
 
 export default function CostesPage() {
   const [costs, setCosts] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [filterMonth, setFilterMonth] = useState("");
+  const [errorMsg, setErrorMsg] = useState(null);
+
   const [filterType, setFilterType] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const { sortKey, sortDir, toggle: toggleSort } = useSortState("incurredAt", "desc");
+
+  useEffect(() => {
+    const id = setTimeout(() => setSearch(searchInput.trim().toLowerCase()), 300);
+    return () => clearTimeout(id);
+  }, [searchInput]);
+
+  const [employees, setEmployees] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [settings, setSettings] = useState(null);
+  const [me, setMe] = useState(null);
+  const isAdmin = me?.role === "admin" || me?.role === "superadmin";
+
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(() => emptyForm(21));
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
   const [deleting, setDeleting] = useState(null);
 
+  useEffect(() => {
+    fetch("/api/auth/me", { cache: "no-store" }).then((r) => r.json()).then((j) => j.ok && setMe(j.data)).catch(() => {});
+    fetch("/api/team?status=all&limit=200", { cache: "no-store" }).then((r) => r.json()).then((j) => setEmployees(j.data?.members ?? [])).catch(() => {});
+    fetch("/api/clients?limit=200", { cache: "no-store" }).then((r) => r.json()).then((j) => setClients(j.data?.clients ?? [])).catch(() => {});
+    fetch("/api/billing/settings", { cache: "no-store" }).then((r) => r.json()).then((j) => setSettings(j.data)).catch(() => {});
+  }, []);
+
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setErrorMsg(null);
     try {
-      const params = new URLSearchParams();
-      if (filterMonth) params.set("month", filterMonth);
+      const params = new URLSearchParams({ sortBy: sortKey, sortDir });
       if (filterType) params.set("type", filterType);
-      const res = await fetch(`/api/billing/costs?${params}`);
+      if (filterCategory) params.set("category", filterCategory);
+      if (filterFrom) params.set("from", filterFrom);
+      if (filterTo) params.set("to", filterTo);
+      const res = await fetch(`/api/billing/costs?${params}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
       setCosts(Array.isArray(json.data) ? json.data : []);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [filterMonth, filterType]);
+    } catch (e) { setErrorMsg(e.message); } finally { setLoading(false); }
+  }, [filterType, filterCategory, filterFrom, filterTo, sortKey, sortDir]);
 
   useEffect(() => { load(); }, [load]);
 
-  const totalAmount = costs.reduce((s, c) => s + Number(c.amount || 0), 0);
+  // El sort y los filtros principales viajan al backend.
+  // La búsqueda libre se aplica en cliente sobre el array ya ordenado.
+  const filtered = useMemo(() => {
+    if (!search) return costs;
+    return costs.filter((c) => {
+      const hay = [
+        c.description, c.type, c.category,
+        c.employee?.displayName, c.client?.name,
+        c.taxBase?.toString(), c.total?.toString(),
+      ].filter(Boolean).join(" ").toLowerCase();
+      return hay.includes(search);
+    });
+  }, [costs, search]);
 
-  async function handleCreate(e) {
-    e.preventDefault();
-    setSaving(true);
+  const totalBase = filtered.reduce((s, c) => s + Number(c.taxBase || 0), 0);
+  const totalVat = filtered.reduce((s, c) => s + Number(c.taxAmount || 0), 0);
+  const totalAll = filtered.reduce((s, c) => s + Number(c.total || 0), 0);
+
+  function openCreate() {
+    setEditingId(null);
+    setForm(emptyForm(settings?.defaultVatRate ?? 21));
+    setShowForm(true);
     setFormError(null);
+  }
+  function openEdit(c) {
+    setEditingId(c.id);
+    setForm({
+      type: c.type, category: c.category, description: c.description ?? "",
+      taxBase: Number(c.taxBase ?? 0), vatRate: Number(c.vatRate ?? 0),
+      vatDeductible: !!c.vatDeductible, incurredAt: c.incurredAt?.slice(0, 10) ?? "",
+      employeeId: c.employeeId ?? "", clientId: c.clientId ?? "",
+    });
+    setShowForm(true);
+    setFormError(null);
+  }
+  function closeForm() { setShowForm(false); setEditingId(null); setFormError(null); }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSaving(true); setFormError(null);
     try {
-      const res = await fetch("/api/billing/costs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, amount: Number(form.amount), employeeId: form.employeeId || null }),
-      });
+      const payload = {
+        type: form.type, category: form.category, description: form.description,
+        taxBase: Number(form.taxBase), vatRate: Number(form.vatRate),
+        vatDeductible: !!form.vatDeductible, incurredAt: form.incurredAt,
+        employeeId: form.employeeId || null, clientId: form.clientId || null,
+      };
+      const url = editingId ? `/api/billing/costs/${editingId}` : "/api/billing/costs";
+      const method = editingId ? "PATCH" : "POST";
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
-      setForm(EMPTY_FORM);
-      setShowForm(false);
+      closeForm();
       load();
-    } catch (e) {
-      setFormError(e.message);
-    } finally {
-      setSaving(false);
-    }
+    } catch (e) { setFormError(e.message); } finally { setSaving(false); }
   }
 
   async function handleDelete(id) {
@@ -80,161 +140,222 @@ export default function CostesPage() {
     setDeleting(id);
     try {
       const res = await fetch(`/api/billing/costs/${id}`, { method: "DELETE" });
-      if (!res.ok) { const json = await res.json(); throw new Error(json.error || "Error"); }
+      if (res.status !== 204) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Error");
+      }
       load();
-    } catch (e) {
-      alert(e.message);
-    } finally {
-      setDeleting(null);
-    }
+    } catch (e) { alert(e.message); } finally { setDeleting(null); }
   }
 
+  // IVA preview
+  const previewBase = Number(form.taxBase) || 0;
+  const previewVat = Math.round(previewBase * Number(form.vatRate) / 100 * 100) / 100;
+  const previewTotal = Math.round((previewBase + previewVat) * 100) / 100;
+
   return (
-    <div className="p-4 lg:p-8 max-w-5xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+    <div className="p-4 lg:p-8 max-w-6xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-xl font-extrabold text-neutral-900">Costes operativos</h1>
-          <p className="text-xs text-neutral-400 mt-0.5">
-            Total filtrado: <span className="font-semibold text-neutral-700">{fmt(totalAmount)} €</span>
+          <div className="eyebrow">Finanzas · Operativa</div>
+          <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1">Costes</h1>
+          <p className="text-xs text-neutral-400 mt-1">
+            Total filtrado: <span className="font-semibold text-neutral-700 tabular">{fmtMoney(totalBase)}</span>
+            <span className="text-neutral-300"> · IVA {fmtMoney(totalVat)} · Total {fmtMoney(totalAll)}</span>
           </p>
         </div>
-        <div className="flex items-center gap-3 self-start sm:self-auto">
-          <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">
-            ← Volver
-          </Link>
-          <button onClick={() => setShowForm((v) => !v)}
-            className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white transition-opacity"
-            style={{ background: "var(--color-primary, #152B22)" }}>
-            + Nuevo coste
-          </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
+          {isAdmin && (
+            <button onClick={openCreate} className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white"
+              style={{ background: "var(--color-primary, #1B3A2D)" }}>+ Nuevo coste</button>
+          )}
         </div>
       </div>
 
-      {showForm && (
-        <form onSubmit={handleCreate} className="bg-white border border-neutral-100 rounded-xl p-5 mb-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="col-span-2">
-            <h2 className="text-xs font-semibold text-neutral-500 uppercase tracking-widest mb-1">Nuevo coste</h2>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-neutral-400 uppercase tracking-widest">Mes (YYYY-MM) *</label>
-            <input required pattern="\d{4}-(0[1-9]|1[0-2])" value={form.month}
-              onChange={(e) => setForm((f) => ({ ...f, month: e.target.value }))} placeholder="2026-04" className={inputCls} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-neutral-400 uppercase tracking-widest">Tipo *</label>
-            <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))} className={inputCls}>
-              {Object.entries(TYPE_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-neutral-400 uppercase tracking-widest">Categoría *</label>
-            <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} className={inputCls}>
-              {Object.entries(CATEGORY_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-neutral-400 uppercase tracking-widest">Importe (€) *</label>
-            <input required type="number" min="0.01" step="0.01" value={form.amount}
-              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="0.00" className={inputCls} />
-          </div>
-          <div className="col-span-2 flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-neutral-400 uppercase tracking-widest">Descripción *</label>
-            <input required value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              placeholder="Ej: Sueldo marzo — Ana García" className={inputCls} />
-          </div>
-          <div className="col-span-2 flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-neutral-400 uppercase tracking-widest">ID empleado (opcional)</label>
-            <input value={form.employeeId}
-              onChange={(e) => setForm((f) => ({ ...f, employeeId: e.target.value }))}
-              placeholder="UUID del miembro del equipo" className={inputCls} />
-          </div>
-          {formError && (
-            <div className="col-span-2 text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{formError}</div>
-          )}
-          <div className="col-span-2 flex gap-2 justify-end">
-            <button type="button" onClick={() => setShowForm(false)}
-              className="px-4 py-2 text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">
-              Cancelar
-            </button>
-            <button type="submit" disabled={saving}
-              className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-50 transition"
-              style={{ background: "var(--color-primary, #152B22)" }}>
-              {saving ? "Guardando..." : "Guardar"}
-            </button>
-          </div>
-        </form>
-      )}
-
-      <div className="flex flex-wrap gap-2 mb-4">
-        <input type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)}
-          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition" />
-        <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
-          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition">
+      {/* Filtros */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <input
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Buscar por descripción, empleado, cliente..."
+          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
+        />
+        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400">
           <option value="">Todos los tipos</option>
           {Object.entries(TYPE_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
         </select>
-        {(filterMonth || filterType) && (
-          <button onClick={() => { setFilterMonth(""); setFilterType(""); }}
-            className="text-xs text-neutral-400 hover:text-neutral-600 px-2 py-1.5 transition-colors">
-            Limpiar
-          </button>
+        <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400">
+          <option value="">Todas las categorías</option>
+          {Object.entries(CATEGORY_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
+        </select>
+        <input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" />
+        <input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" />
+        {(filterType || filterCategory || filterFrom || filterTo || searchInput) && (
+          <button onClick={() => { setFilterType(""); setFilterCategory(""); setFilterFrom(""); setFilterTo(""); setSearchInput(""); }}
+            className="text-xs text-neutral-400 hover:text-neutral-600 px-2 py-1.5 transition-colors">Limpiar</button>
         )}
       </div>
 
-      {error && (
-        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{error}</div>
+      {errorMsg && (
+        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{errorMsg}</div>
       )}
 
+      {/* Tabla */}
       <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[680px]">
-          <thead>
-            <tr className="border-b border-neutral-100">
-              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Mes</th>
-              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Tipo</th>
-              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Categoría</th>
-              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Descripción</th>
-              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Empleado</th>
-              <th className="text-right px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Importe</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && costs.length === 0 && (
-              <tr><td colSpan={7} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
-            )}
-            {!loading && costs.length === 0 && (
-              <tr><td colSpan={7} className="text-center py-12 text-xs text-neutral-400">Sin costes registrados</td></tr>
-            )}
-            {costs.map((c) => (
-              <tr key={c.id} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">
-                <td className="px-4 py-3 font-mono text-xs text-neutral-500">{c.month}</td>
-                <td className="px-4 py-3 text-xs text-neutral-600">{TYPE_LABELS[c.type] ?? c.type}</td>
-                <td className="px-4 py-3">
-                  <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                    c.category === "fixed" ? "bg-neutral-100 text-neutral-600" :
-                    c.category === "capex" ? "bg-blue-50 text-blue-600" :
-                    "bg-amber-50 text-amber-600"
-                  }`}>
-                    {CATEGORY_LABELS[c.category] ?? c.category}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-neutral-700 max-w-[200px] truncate">{c.description}</td>
-                <td className="px-4 py-3 text-xs text-neutral-500">{c.employee?.displayName ?? "—"}</td>
-                <td className="px-4 py-3 text-right font-semibold text-neutral-900">{fmt(c.amount)} €</td>
-                <td className="px-4 py-3 text-right">
-                  <button onClick={() => handleDelete(c.id)} disabled={deleting === c.id}
-                    className="text-neutral-300 hover:text-red-500 transition-colors disabled:opacity-40 text-xs">
-                    {deleting === c.id ? "..." : "Eliminar"}
-                  </button>
-                </td>
+          <table className="w-full text-sm min-w-[820px]">
+            <thead>
+              <tr className="border-b border-neutral-100">
+                <SortableTh k="incurredAt" label="Fecha" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+                <SortableTh k="type" label="Tipo" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+                <SortableTh k="category" label="Categoría" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+                <SortableTh k="description" label="Descripción" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+                <SortableTh k="employee.displayName" label="Empleado" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+                <SortableTh k="taxBase" label="Base" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
+                <SortableTh k="taxAmount" label="IVA" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
+                <SortableTh k="total" label="Total" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
+                {isAdmin && <th className="px-4 py-3"></th>}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {loading && filtered.length === 0 && (
+                <tr><td colSpan={isAdmin ? 9 : 8} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
+              )}
+              {!loading && filtered.length === 0 && (
+                <tr><td colSpan={isAdmin ? 9 : 8} className="text-center py-12 text-xs text-neutral-400">{search || filterType || filterCategory ? "Sin costes que coincidan con los filtros" : "Sin costes registrados"}</td></tr>
+              )}
+              {filtered.map((c) => (
+                <tr key={c.id} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">
+                  <td className="px-4 py-3 font-mono text-xs text-neutral-500">{fmtDate(c.incurredAt)}</td>
+                  <td className="px-4 py-3 text-xs text-neutral-600">{TYPE_LABELS[c.type] ?? c.type}</td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium bg-neutral-100 text-neutral-600 border border-neutral-200">
+                      {CATEGORY_LABELS[c.category] ?? c.category}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-neutral-700 max-w-[260px] truncate">{c.description}</td>
+                  <td className="px-4 py-3 text-xs text-neutral-500">{c.employee?.displayName ?? "—"}</td>
+                  <td className="px-4 py-3 text-right text-neutral-700 tabular">{fmtMoney(c.taxBase)}</td>
+                  <td className="px-4 py-3 text-right text-neutral-500 tabular text-xs">
+                    {fmtMoney(c.taxAmount)} <span className="text-neutral-300">({Number(c.vatRate)}%)</span>
+                  </td>
+                  <td className="px-4 py-3 text-right font-semibold text-neutral-900 tabular">{fmtMoney(c.total)}</td>
+                  {isAdmin && (
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <button onClick={() => openEdit(c)} className="text-neutral-400 hover:text-neutral-700 transition-colors text-xs mr-2">Editar</button>
+                      <button onClick={() => handleDelete(c.id)} disabled={deleting === c.id} className="text-neutral-300 hover:text-red-500 transition-colors text-xs disabled:opacity-40">
+                        {deleting === c.id ? "..." : "Eliminar"}
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
+
+      {/* DRAWER */}
+      {showForm && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={closeForm} />
+          <aside className="fixed top-14 lg:top-0 right-0 bottom-0 w-full sm:w-[480px] bg-white z-50 shadow-pop overflow-y-auto ink-scroll slide-right">
+            <div className="px-6 pt-6 pb-4 border-b border-neutral-100 flex items-start justify-between gap-3">
+              <div>
+                <div className="eyebrow">{editingId ? "Editar" : "Nuevo"}</div>
+                <h2 className="font-display text-xl text-neutral-900 mt-1">{editingId ? "Editar coste" : "Nuevo coste"}</h2>
+              </div>
+              <button onClick={closeForm} className="text-neutral-300 hover:text-neutral-700 transition-colors p-1">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="px-6 py-5 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <FormRow label="Tipo *">
+                  <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))} className={inputCls}>
+                    {Object.entries(TYPE_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
+                  </select>
+                </FormRow>
+                <FormRow label="Categoría *">
+                  <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} className={inputCls}>
+                    {Object.entries(CATEGORY_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
+                  </select>
+                </FormRow>
+              </div>
+              <FormRow label="Descripción *">
+                <input required value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className={inputCls} placeholder="Ej: Sueldo abril — Ana García" />
+              </FormRow>
+              <FormRow label="Fecha *">
+                <input required type="date" value={form.incurredAt} onChange={(e) => setForm((f) => ({ ...f, incurredAt: e.target.value }))} className={inputCls} />
+              </FormRow>
+              <div className="grid grid-cols-2 gap-3">
+                <FormRow label="Base imponible (€) *">
+                  <input required type="number" min="0.01" step="0.01" value={form.taxBase} onChange={(e) => setForm((f) => ({ ...f, taxBase: e.target.value }))} className={inputCls} />
+                </FormRow>
+                <FormRow label="IVA *">
+                  <select value={form.vatRate} onChange={(e) => setForm((f) => ({ ...f, vatRate: e.target.value }))} className={inputCls}>
+                    {(settings?.availableVatRates ?? [21, 10, 4, 0]).map((v) => (
+                      <option key={v} value={v}>{v}%</option>
+                    ))}
+                  </select>
+                </FormRow>
+              </div>
+              <FormRow label="">
+                <label className="flex items-center gap-2 text-xs text-neutral-600">
+                  <input type="checkbox" checked={form.vatDeductible} onChange={(e) => setForm((f) => ({ ...f, vatDeductible: e.target.checked }))} />
+                  IVA deducible (computa para Modelo 303)
+                </label>
+              </FormRow>
+              <div className="grid grid-cols-2 gap-3">
+                <FormRow label="Empleado">
+                  <select value={form.employeeId} onChange={(e) => setForm((f) => ({ ...f, employeeId: e.target.value }))} className={inputCls}>
+                    <option value="">Quien lo registra</option>
+                    {employees.map((m) => (<option key={m.id} value={m.id}>{m.displayName}</option>))}
+                  </select>
+                </FormRow>
+                <FormRow label="Cliente (opcional)">
+                  <select value={form.clientId} onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))} className={inputCls}>
+                    <option value="">—</option>
+                    {clients.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                  </select>
+                </FormRow>
+              </div>
+
+              {/* Preview totales */}
+              <div className="bg-neutral-50 border border-neutral-100 rounded-lg p-3 text-xs space-y-1">
+                <div className="flex justify-between text-neutral-500"><span>Base imponible</span><span className="tabular">{fmtMoney(previewBase)}</span></div>
+                <div className="flex justify-between text-neutral-500"><span>IVA {form.vatRate}%</span><span className="tabular">{fmtMoney(previewVat)}</span></div>
+                <div className="flex justify-between font-semibold text-neutral-900 pt-1 border-t border-neutral-200"><span>Total</span><span className="tabular">{fmtMoney(previewTotal)}</span></div>
+              </div>
+
+              {formError && (
+                <div className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{formError}</div>
+              )}
+
+              <div className="flex gap-2 justify-end pt-3 border-t border-neutral-100">
+                <button type="button" onClick={closeForm}
+                  className="px-4 py-2 text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">Cancelar</button>
+                <button type="submit" disabled={saving}
+                  className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-50 transition"
+                  style={{ background: "var(--color-primary, #1B3A2D)" }}>{saving ? "Guardando..." : (editingId ? "Guardar cambios" : "Crear coste")}</button>
+              </div>
+            </form>
+          </aside>
+        </>
+      )}
+    </div>
+  );
+}
+
+function FormRow({ label, children }) {
+  return (
+    <div className="flex flex-col gap-1">
+      {label && <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">{label}</label>}
+      {children}
     </div>
   );
 }

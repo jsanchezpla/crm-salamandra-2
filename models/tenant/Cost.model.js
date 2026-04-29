@@ -9,31 +9,74 @@ export function defineCost(sequelize) {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
-      // Mes al que pertenece el coste — formato YYYY-MM para agrupar fácilmente
-      month: {
-        type: DataTypes.STRING(7),
-        allowNull: false,
-        validate: { is: /^\d{4}-(0[1-9]|1[0-2])$/ },
-      },
+      // Tipo de gasto y categoría contable
       type: {
         type: DataTypes.ENUM("salary", "rent", "software", "material", "commission", "other"),
         allowNull: false,
       },
+      // 'opex' añadido al enum en la migración (rework billing)
       category: {
-        type: DataTypes.ENUM("fixed", "variable", "capex"),
+        type: DataTypes.ENUM("fixed", "variable", "capex", "opex"),
         allowNull: false,
       },
       description: {
         type: DataTypes.STRING,
         allowNull: false,
       },
-      amount: {
+      // ── Importes con IVA por coste ──────────────────────────────────────
+      taxBase: {
         type: DataTypes.DECIMAL(12, 2),
         allowNull: false,
+        defaultValue: 0,
       },
-      // Para costes salariales asociados a un empleado específico
+      vatRate: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: false,
+        defaultValue: 21,
+      },
+      taxAmount: {
+        type: DataTypes.DECIMAL(12, 2),
+        allowNull: false,
+        defaultValue: 0,
+      },
+      total: {
+        type: DataTypes.DECIMAL(12, 2),
+        allowNull: false,
+        defaultValue: 0,
+      },
+      vatDeductible: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+      },
+      // ── Compatibilidad: campo legacy `amount` mantenido en BD ───────────
+      // Sequelize NO lo expone aquí para evitar uso accidental en código nuevo.
+      // Migración futura: eliminar la columna definitivamente.
+      // ── Fechas ──────────────────────────────────────────────────────────
+      // `incurredAt` es la fecha real del gasto.
+      // `month` (YYYY-MM) sigue existiendo en BD por compatibilidad pero ya no
+      // se expone en el modelo Sequelize. Eliminarla en sprint futuro.
+      incurredAt: {
+        type: DataTypes.DATEONLY,
+        allowNull: false,
+      },
+      // ── Relaciones ──────────────────────────────────────────────────────
       employeeId: {
         type: DataTypes.UUID,
+        allowNull: true,
+      },
+      clientId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      // FK durmiente a InventoryProduct para futura integración inventario.
+      // Sin endpoints ni UI en este sprint; columna preparada.
+      inventoryProductId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      attachmentUrl: {
+        type: DataTypes.STRING,
         allowNull: true,
       },
     },

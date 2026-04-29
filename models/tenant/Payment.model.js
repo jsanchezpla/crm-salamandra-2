@@ -25,10 +25,11 @@ export function definePayment(sequelize) {
         type: DataTypes.ENUM("card", "transfer", "cash", "direct_debit"),
         allowNull: false,
       },
+      // 'refunded' añadido al enum en la migración (rework billing)
       status: {
-        type: DataTypes.ENUM("pending", "completed", "failed"),
+        type: DataTypes.ENUM("pending", "completed", "failed", "refunded"),
         allowNull: false,
-        defaultValue: "pending",
+        defaultValue: "completed",
       },
       notes: {
         type: DataTypes.TEXT,

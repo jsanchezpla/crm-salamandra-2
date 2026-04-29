@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import ClientBillingSection from "../../../../components/billing/ClientBillingSection.jsx";
 
 const STATUSES = [
   { key: "new", label: "Nuevo" },
@@ -387,6 +388,8 @@ export default function ClienteDetailPage() {
             </div>
           </div>
         </div>
+
+        <ClientBillingSection clientId={id} />
       </div>
     </div>
   );

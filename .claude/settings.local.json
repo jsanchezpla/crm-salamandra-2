@@ -22,7 +22,9 @@
       "Bash(curl *)",
       "Bash(netstat -ano)",
       "Bash(findstr :3000)",
-      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d,indent=2,ensure_ascii=False\\)\\)\")"
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d,indent=2,ensure_ascii=False\\)\\)\")",
+      "Bash(echo \"  admin: $\\(curl -s -b /tmp/c.txt \"http://localhost:3000/api/team?status=all\")",
+      "Bash(echo \"  admin: $\\(curl -s -b /tmp/c.txt \"http://localhost:3000/api/billing/analytics/employees?from=2026-01-01&to=2026-04-30\")"
     ]
   }
 }

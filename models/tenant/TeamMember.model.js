@@ -60,6 +60,14 @@ export function defineTeamMember(sequelize) {
         allowNull: true,
         validate: { min: 0 },
       },
+      // Salario mensual estimado. Solo informativo. NUNCA se usa en KPIs
+      // financieros directos — eso lo hace la tabla Costes con type='salary'.
+      // Solo admin/superadmin puede ver/editar. Filtrado en backend.
+      monthlySalary: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        validate: { min: 0 },
+      },
       currency: {
         type: DataTypes.STRING(3),
         allowNull: false,

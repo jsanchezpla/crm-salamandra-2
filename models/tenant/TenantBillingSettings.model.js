@@ -1,0 +1,76 @@
+import { DataTypes } from "sequelize";
+
+/**
+ * Configuración de facturación a nivel tenant.
+ *
+ * Una sola fila por tenant (creada al activar el módulo billing).
+ * Contiene datos fiscales del emisor, tipos de IVA disponibles,
+ * términos de pago por defecto, etc.
+ */
+export function defineTenantBillingSettings(sequelize) {
+  return sequelize.define(
+    "TenantBillingSettings",
+    {
+      id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
+      },
+      // ── Datos fiscales del emisor ───────────────────────────────────────
+      fiscalName: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      taxId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      fiscalAddress: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      fiscalCity: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      fiscalZip: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+      },
+      fiscalCountry: {
+        type: DataTypes.STRING(2),
+        allowNull: false,
+        defaultValue: "ES",
+      },
+      // ── Configuración fiscal ────────────────────────────────────────────
+      defaultVatRate: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: false,
+        defaultValue: 21,
+      },
+      // Lista personalizable de tipos de IVA disponibles. JSON array de DECIMAL.
+      availableVatRates: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [21, 10, 4, 0],
+      },
+      defaultPaymentTermsDays: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 30,
+      },
+      // ── Branding documento ──────────────────────────────────────────────
+      invoiceFooterText: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      logoUrl: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+    },
+    {
+      tableName: "tenant_billing_settings",
+    }
+  );
+}

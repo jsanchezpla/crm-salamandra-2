@@ -1,12 +1,13 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
-import { ok, created, error, serverError } from "../../../../lib/utils/apiResponse.js";
+import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../lib/billing/calculateInvoice.js";
-import { generateInvoiceNumber } from "../../../../lib/billing/generateInvoiceNumber.js";
+import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
 
-// GET /api/billing/invoices
-export const GET = withTenant(async (request, _ctx, { tenantModels }) => {
+// GET /api/billing/invoices — listado paginado con filtros
+export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
+    if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const { Invoice, Client, TeamMember } = tenantModels;
     const { searchParams } = new URL(request.url);
 
@@ -16,23 +17,48 @@ export const GET = withTenant(async (request, _ctx, { tenantModels }) => {
 
     const where = {};
     if (searchParams.get("status")) where.status = searchParams.get("status");
-    if (searchParams.get("invoiceType")) where.invoiceType = searchParams.get("invoiceType");
     if (searchParams.get("clientId")) where.clientId = searchParams.get("clientId");
-    if (searchParams.get("familyId")) where.familyId = searchParams.get("familyId");
     if (searchParams.get("employeeId")) where.employeeId = searchParams.get("employeeId");
+    if (searchParams.get("series")) where.series = searchParams.get("series");
     if (searchParams.get("from") || searchParams.get("to")) {
       where.issueDate = {};
       if (searchParams.get("from")) where.issueDate[Op.gte] = searchParams.get("from");
       if (searchParams.get("to")) where.issueDate[Op.lte] = searchParams.get("to");
     }
+    const q = (searchParams.get("q") || "").trim();
+    if (q) {
+      where[Op.and] = [{
+        [Op.or]: [
+          { number: { [Op.iLike]: `%${q}%` } },
+          { "$client.name$": { [Op.iLike]: `%${q}%` } },
+        ],
+      }];
+    }
+
+    const allowedSort = {
+      number: "number",
+      issueDate: "issueDate",
+      status: "status",
+      taxBase: "taxBase",
+      total: "total",
+      paidAmount: "paidAmount",
+      "client.name": [{ model: Client, as: "client" }, "name"],
+      "employee.displayName": [{ model: TeamMember, as: "employee" }, "displayName"],
+    };
+    const order = parseSortOrder(
+      searchParams.get("sortBy"),
+      searchParams.get("sortDir"),
+      allowedSort,
+      [["issueDate", "DESC"], ["number", "DESC"]]
+    );
 
     const { count, rows } = await Invoice.findAndCountAll({
       where,
       include: [
-        { model: Client, as: "client", attributes: ["id", "name"] },
+        { model: Client, as: "client", attributes: ["id", "name", "fiscalName", "taxId"] },
         { model: TeamMember, as: "employee", attributes: ["id", "displayName"] },
       ],
-      order: [["issueDate", "DESC"]],
+      order,
       limit,
       offset,
     });
@@ -43,66 +69,59 @@ export const GET = withTenant(async (request, _ctx, { tenantModels }) => {
   }
 });
 
-// POST /api/billing/invoices
-export const POST = withTenant(async (request, _ctx, { tenantModels }) => {
+// POST /api/billing/invoices — crear borrador (sin asignar número)
+export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
-    const { Invoice } = tenantModels;
+    if (!hasModule("billing")) return forbidden("Módulo billing no activo");
+    const { Invoice, TenantBillingSettings } = tenantModels;
     const body = await request.json();
 
     const {
       clientId,
-      familyId,
-      patientId,
       employeeId,
-      serviceType,
-      invoiceType,
       issueDate,
       dueDate,
-      lines,
-      vatRate = 0,
-      discountType,
-      discountValue,
-      recurringConfig,
+      lines = [],
+      series = "F",
       notes,
       customFields,
     } = body;
 
     if (!clientId) return error("clientId es obligatorio");
     if (!issueDate) return error("issueDate es obligatorio");
-    if (!lines || !Array.isArray(lines) || lines.length === 0) {
+    if (!Array.isArray(lines) || lines.length === 0) {
       return error("Se requiere al menos una línea");
     }
 
-    const { subtotal, discountAmount, vatAmount, total } = calculateInvoice({
-      lines,
-      vatRate,
-      discountType,
-      discountValue,
-    });
+    // Aplicar defaults del tenant si la línea no trae vatRate
+    const settings = await TenantBillingSettings.findOne();
+    const defaultVat = settings ? Number(settings.defaultVatRate) : 21;
+    const linesWithVat = lines.map((l) => ({
+      ...l,
+      vatRate: l.vatRate != null ? Number(l.vatRate) : defaultVat,
+    }));
 
-    const number = await generateInvoiceNumber(Invoice);
+    const calc = calculateInvoice({ lines: linesWithVat });
 
+    // Borrador: sin número, sin serie congelada
     const invoice = await Invoice.create({
-      number,
       clientId,
-      familyId: familyId || null,
-      patientId: patientId || null,
       employeeId: employeeId || null,
-      serviceType: serviceType || null,
-      invoiceType: invoiceType || null,
       issueDate,
       dueDate: dueDate || null,
-      lines,
-      subtotal,
-      vatRate,
-      vatAmount,
-      total,
-      discountType: discountType || null,
-      discountValue: discountValue || null,
-      recurringConfig: recurringConfig || {},
+      lines: calc.lines,
+      taxBase: calc.taxBase,
+      vatAmount: calc.vatAmount,
+      total: calc.total,
+      paidAmount: 0,
+      series,
+      number: `DRAFT-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      status: "draft",
       notes: notes || null,
       customFields: customFields || {},
-      status: "draft",
+      // legacy campos quedan a 0/null
+      subtotal: calc.taxBase,
+      vatRate: 0,
     });
 
     return created(invoice);

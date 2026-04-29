@@ -13,16 +13,14 @@ export function defineInvoice(sequelize) {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      // ── Campos de módulo de facturación ──────────────────────────────────
+      // ── Campos legacy del dominio terapéutico (NO usar en código nuevo) ──
+      // No se borran porque el modelo billing antiguo aún los referencia.
+      // Sprint futuro: limpieza de familyId/patientId/serviceType/invoiceType.
       familyId: {
         type: DataTypes.UUID,
         allowNull: true,
       },
       patientId: {
-        type: DataTypes.UUID,
-        allowNull: true,
-      },
-      employeeId: {
         type: DataTypes.UUID,
         allowNull: true,
       },
@@ -34,26 +32,33 @@ export function defineInvoice(sequelize) {
         type: DataTypes.ENUM("session", "pack", "subscription"),
         allowNull: true,
       },
-      recurringConfig: {
-        type: DataTypes.JSONB,
-        defaultValue: {},
-      },
-      discountType: {
-        type: DataTypes.ENUM("percent", "fixed"),
+      // ── Identificación ──────────────────────────────────────────────────
+      employeeId: {
+        type: DataTypes.UUID,
         allowNull: true,
       },
-      discountValue: {
-        type: DataTypes.DECIMAL(12, 2),
-        allowNull: true,
+      series: {
+        type: DataTypes.STRING(8),
+        allowNull: false,
+        defaultValue: "F",
       },
-      // ── Campos base ───────────────────────────────────────────────────────
       number: {
         type: DataTypes.STRING,
         allowNull: false,
         unique: true,
       },
+      // ── Estado y fechas ─────────────────────────────────────────────────
       status: {
-        type: DataTypes.ENUM("draft", "sent", "paid", "partial", "overdue", "cancelled"),
+        type: DataTypes.ENUM(
+          "draft",
+          "issued",
+          "sent",
+          "paid",
+          "partially_paid",
+          "overdue",
+          "cancelled",
+          "rectified"
+        ),
         allowNull: false,
         defaultValue: "draft",
       },
@@ -69,17 +74,16 @@ export function defineInvoice(sequelize) {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      // ── Líneas (estructura nueva con IVA por línea) ─────────────────────
+      // Cada línea: { description, quantity, unitPrice, discountPct, vatRate,
+      //               lineBase, lineVat, lineTotal }
       lines: {
         type: DataTypes.JSONB,
         defaultValue: [],
       },
-      subtotal: {
+      // ── Totales calculados ──────────────────────────────────────────────
+      taxBase: {
         type: DataTypes.DECIMAL(12, 2),
-        allowNull: false,
-        defaultValue: 0,
-      },
-      vatRate: {
-        type: DataTypes.DECIMAL(5, 2),
         allowNull: false,
         defaultValue: 0,
       },
@@ -93,6 +97,43 @@ export function defineInvoice(sequelize) {
         allowNull: false,
         defaultValue: 0,
       },
+      // Cache de la suma de cobros completed asociados
+      paidAmount: {
+        type: DataTypes.DECIMAL(12, 2),
+        allowNull: false,
+        defaultValue: 0,
+      },
+      // ── Compatibilidad con cálculo antiguo (no se usa en código nuevo) ──
+      // subtotal y vatRate quedaban como una sola tasa por factura.
+      // Mantenidos para no romper datos antiguos durante un tiempo.
+      subtotal: {
+        type: DataTypes.DECIMAL(12, 2),
+        allowNull: false,
+        defaultValue: 0,
+      },
+      vatRate: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: false,
+        defaultValue: 0,
+      },
+      discountType: {
+        type: DataTypes.ENUM("percent", "fixed"),
+        allowNull: true,
+      },
+      discountValue: {
+        type: DataTypes.DECIMAL(12, 2),
+        allowNull: true,
+      },
+      // ── Rectificativas ──────────────────────────────────────────────────
+      rectifiesInvoiceId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      rectifiedByInvoiceId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      // ── Otros ───────────────────────────────────────────────────────────
       notes: {
         type: DataTypes.TEXT,
         allowNull: true,
@@ -101,7 +142,11 @@ export function defineInvoice(sequelize) {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      // ── Verifactu / Facturantia ───────────────────────────────────────────
+      recurringConfig: {
+        type: DataTypes.JSONB,
+        defaultValue: {},
+      },
+      // ── Verifactu / Facturantia (no se toca en este sprint) ─────────────
       facturantiaId: {
         type: DataTypes.STRING,
         allowNull: true,

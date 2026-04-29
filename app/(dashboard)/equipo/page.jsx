@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import EmployeeBillingSection from "../../../components/billing/EmployeeBillingSection.jsx";
 
 const STATUS_LABELS = { active: "Activo", inactive: "Inactivo", on_leave: "De baja" };
 const STATUS_FILTER_OPTIONS = [
@@ -351,6 +352,8 @@ export default function EquipoPage() {
                       <p className="text-sm text-neutral-700 whitespace-pre-wrap">{openMember.notes}</p>
                     </div>
                   )}
+
+                  <EmployeeBillingSection employeeId={openMember.id} isAdmin={viewerIsAdmin} />
 
                   {viewerIsAdmin && (
                     <div className="flex flex-wrap gap-2 pt-4 border-t border-neutral-100">
