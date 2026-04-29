@@ -9,12 +9,12 @@ export const GET = withTenant(async (request, _ctx, { tenantModels }) => {
 
     const where = {};
     if (searchParams.get("serviceType")) where.serviceType = searchParams.get("serviceType");
-    if (searchParams.get("therapistId")) where.therapistId = searchParams.get("therapistId");
+    if (searchParams.get("employeeId")) where.employeeId = searchParams.get("employeeId");
     if (searchParams.get("activeOnly") === "true") where.validTo = null;
 
     const rates = await Rate.findAll({
       where,
-      include: [{ model: TeamMember, as: "therapist", attributes: ["id", "displayName"] }],
+      include: [{ model: TeamMember, as: "employee", attributes: ["id", "displayName"] }],
       order: [["validFrom", "DESC"]],
     });
 
@@ -30,14 +30,14 @@ export const POST = withTenant(async (request, _ctx, { tenantModels }) => {
     const { Rate } = tenantModels;
     const body = await request.json();
 
-    const { therapistId, serviceType, pricePerSession, packConfig, validFrom, validTo } = body;
+    const { employeeId, serviceType, pricePerSession, packConfig, validFrom, validTo } = body;
 
     if (!serviceType) return error("serviceType es obligatorio");
     if (!pricePerSession || Number(pricePerSession) <= 0) return error("pricePerSession debe ser mayor que 0");
     if (!validFrom) return error("validFrom es obligatorio");
 
     const rate = await Rate.create({
-      therapistId: therapistId || null,
+      employeeId: employeeId || null,
       serviceType,
       pricePerSession: Number(pricePerSession),
       packConfig: packConfig || {},

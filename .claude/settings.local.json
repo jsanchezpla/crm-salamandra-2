@@ -15,7 +15,11 @@
       "Bash(node --check 'app/api/inventory/stats/route.js')",
       "Bash(node -e \"import\\('./app/\\(dashboard\\)/inventario/page.jsx'\\).catch\\(e => console.log\\('expected JSX parse, file readable:', !!e\\)\\)\")",
       "Read(//c/Users/jsanc/.claude/**)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(npm run *)",
+      "Bash(powershell *)",
+      "Bash(node *)",
+      "Bash(curl *)"
     ]
   }
 }

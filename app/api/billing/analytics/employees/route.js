@@ -3,9 +3,9 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, serverError } from "../../../../../lib/utils/apiResponse.js";
 
 /**
- * GET /api/billing/analytics/therapists?from=2026-01-01&to=2026-12-31
+ * GET /api/billing/analytics/employees?from=2026-01-01&to=2026-12-31
  *
- * Ficha por terapeuta:
+ * Ficha por empleado:
  * - Ingresos generados
  * - Coste salarial
  * - Margen generado y %
@@ -24,78 +24,78 @@ export const GET = withTenant(async (request, _ctx, { tenantModels }) => {
     const fromMonth = from.slice(0, 7);
     const toMonth = to.slice(0, 7);
 
-    // ── Ingresos por terapeuta ───────────────────────────────────────────────
+    // ── Ingresos por empleado ────────────────────────────────────────────────
     const invoiceRows = await Invoice.findAll({
       where: {
-        therapistId: { [Op.ne]: null },
+        employeeId: { [Op.ne]: null },
         issueDate: { [Op.between]: [from, to] },
         status: { [Op.notIn]: ["draft"] },
       },
       attributes: [
-        "therapistId",
+        "employeeId",
         [fn("SUM", col("total")), "totalBilled"],
         [fn("COUNT", col("id")), "invoiceCount"],
         [fn("COUNT", fn("DISTINCT", col("client_id"))), "clientCount"],
       ],
-      group: ["therapistId"],
+      group: ["employeeId"],
       raw: true,
     });
 
-    // ── Facturas canceladas por terapeuta (tasa de cancelación) ─────────────
+    // ── Facturas canceladas por empleado (tasa de cancelación) ──────────────
     const cancelledRows = await Invoice.findAll({
       where: {
-        therapistId: { [Op.ne]: null },
+        employeeId: { [Op.ne]: null },
         issueDate: { [Op.between]: [from, to] },
         status: "cancelled",
       },
       attributes: [
-        "therapistId",
+        "employeeId",
         [fn("COUNT", col("id")), "cancelledCount"],
       ],
-      group: ["therapistId"],
+      group: ["employeeId"],
       raw: true,
     });
 
     const cancelledMap = new Map(
-      cancelledRows.map((r) => [r.therapistId, Number(r.cancelledCount || 0)])
+      cancelledRows.map((r) => [r.employeeId, Number(r.cancelledCount || 0)])
     );
 
-    // ── Costes salariales por terapeuta ─────────────────────────────────────
+    // ── Costes salariales por empleado ──────────────────────────────────────
     const costRows = await Cost.findAll({
       where: {
         type: "salary",
-        therapistId: { [Op.ne]: null },
+        employeeId: { [Op.ne]: null },
         month: { [Op.between]: [fromMonth, toMonth] },
       },
       attributes: [
-        "therapistId",
+        "employeeId",
         [fn("SUM", col("amount")), "salaryCost"],
       ],
-      group: ["therapistId"],
+      group: ["employeeId"],
       raw: true,
     });
 
     const costMap = new Map(
-      costRows.map((r) => [r.therapistId, round2(Number(r.salaryCost || 0))])
+      costRows.map((r) => [r.employeeId, round2(Number(r.salaryCost || 0))])
     );
 
-    // ── Datos de los terapeutas ──────────────────────────────────────────────
-    const therapistIds = [...new Set(invoiceRows.map((r) => r.therapistId))];
-    const therapists = await TeamMember.findAll({
-      where: { id: therapistIds },
+    // ── Datos de los empleados ──────────────────────────────────────────────
+    const employeeIds = [...new Set(invoiceRows.map((r) => r.employeeId))];
+    const employees = await TeamMember.findAll({
+      where: { id: employeeIds },
       attributes: ["id", "displayName", "position"],
     });
 
-    const therapistMap = new Map(therapists.map((t) => [t.id, t]));
+    const employeeMap = new Map(employees.map((t) => [t.id, t]));
 
     // ── Combinar ─────────────────────────────────────────────────────────────
     const result = invoiceRows.map((row) => {
-      const therapist = therapistMap.get(row.therapistId);
+      const employee = employeeMap.get(row.employeeId);
       const income = round2(Number(row.totalBilled || 0));
       const invoiceCount = Number(row.invoiceCount || 0);
       const clientCount = Number(row.clientCount || 0);
-      const cancelledCount = cancelledMap.get(row.therapistId) || 0;
-      const salaryCost = costMap.get(row.therapistId) || 0;
+      const cancelledCount = cancelledMap.get(row.employeeId) || 0;
+      const salaryCost = costMap.get(row.employeeId) || 0;
       const margin = round2(income - salaryCost);
       const marginPct = income > 0 ? round2((margin / income) * 100) : 0;
       const cancellationRate =
@@ -104,9 +104,9 @@ export const GET = withTenant(async (request, _ctx, { tenantModels }) => {
           : 0;
 
       return {
-        therapistId: row.therapistId,
-        therapistName: therapist?.displayName ?? "Desconocido",
-        position: therapist?.position ?? null,
+        employeeId: row.employeeId,
+        employeeName: employee?.displayName ?? "Desconocido",
+        position: employee?.position ?? null,
         income,
         invoiceCount,
         clientCount,

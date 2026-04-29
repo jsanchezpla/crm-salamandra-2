@@ -104,7 +104,7 @@ export default function FacturasPage() {
             <tr className="border-b border-neutral-100">
               <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Número</th>
               <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Cliente</th>
-              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Terapeuta</th>
+              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Empleado</th>
               <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Fecha</th>
               <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Estado</th>
               <th className="text-right px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Total</th>
@@ -121,7 +121,7 @@ export default function FacturasPage() {
               <tr key={inv.id} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">
                 <td className="px-4 py-3 font-mono text-xs text-neutral-500">{inv.number ?? "—"}</td>
                 <td className="px-4 py-3 text-neutral-800">{inv.client?.name ?? inv.clientId ?? "—"}</td>
-                <td className="px-4 py-3 text-neutral-500 text-xs">{inv.therapist?.displayName ?? "—"}</td>
+                <td className="px-4 py-3 text-neutral-500 text-xs">{inv.employee?.displayName ?? "—"}</td>
                 <td className="px-4 py-3 text-neutral-500 text-xs">{inv.issueDate?.slice(0, 10) ?? "—"}</td>
                 <td className="px-4 py-3"><StatusBadge status={inv.status} /></td>
                 <td className="px-4 py-3 text-right font-semibold text-neutral-900">{fmt(inv.total)} €</td>

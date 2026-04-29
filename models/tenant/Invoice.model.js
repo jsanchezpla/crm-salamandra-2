@@ -22,7 +22,7 @@ export function defineInvoice(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
-      therapistId: {
+      employeeId: {
         type: DataTypes.UUID,
         allowNull: true,
       },

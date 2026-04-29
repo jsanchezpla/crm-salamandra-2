@@ -8,7 +8,7 @@ export const GET = withTenant(async (request, { params }, { tenantModels }) => {
     const { id } = await params;
 
     const rate = await Rate.findByPk(id, {
-      include: [{ model: TeamMember, as: "therapist", attributes: ["id", "displayName"] }],
+      include: [{ model: TeamMember, as: "employee", attributes: ["id", "displayName"] }],
     });
 
     if (!rate) return notFound("Tarifa no encontrada");

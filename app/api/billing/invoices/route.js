@@ -19,7 +19,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels }) => {
     if (searchParams.get("invoiceType")) where.invoiceType = searchParams.get("invoiceType");
     if (searchParams.get("clientId")) where.clientId = searchParams.get("clientId");
     if (searchParams.get("familyId")) where.familyId = searchParams.get("familyId");
-    if (searchParams.get("therapistId")) where.therapistId = searchParams.get("therapistId");
+    if (searchParams.get("employeeId")) where.employeeId = searchParams.get("employeeId");
     if (searchParams.get("from") || searchParams.get("to")) {
       where.issueDate = {};
       if (searchParams.get("from")) where.issueDate[Op.gte] = searchParams.get("from");
@@ -30,7 +30,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels }) => {
       where,
       include: [
         { model: Client, as: "client", attributes: ["id", "name"] },
-        { model: TeamMember, as: "therapist", attributes: ["id", "displayName"] },
+        { model: TeamMember, as: "employee", attributes: ["id", "displayName"] },
       ],
       order: [["issueDate", "DESC"]],
       limit,
@@ -53,7 +53,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels }) => {
       clientId,
       familyId,
       patientId,
-      therapistId,
+      employeeId,
       serviceType,
       invoiceType,
       issueDate,
@@ -87,7 +87,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels }) => {
       clientId,
       familyId: familyId || null,
       patientId: patientId || null,
-      therapistId: therapistId || null,
+      employeeId: employeeId || null,
       serviceType: serviceType || null,
       invoiceType: invoiceType || null,
       issueDate,

@@ -1,4 +1,4 @@
-import { Fraunces, Geist, Geist_Mono } from "next/font/google";
+import { Fraunces, Poppins, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -8,9 +8,10 @@ const fraunces = Fraunces({
   display: "swap",
 });
 
-const geistSans = Geist({
+const poppins = Poppins({
   subsets: ["latin"],
-  variable: "--font-geist-sans",
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-poppins",
   display: "swap",
 });
 
@@ -29,7 +30,7 @@ export default function RootLayout({ children }) {
   return (
     <html
       lang="es"
-      className={`${fraunces.variable} ${geistSans.variable} ${geistMono.variable}`}
+      className={`${fraunces.variable} ${poppins.variable} ${geistMono.variable}`}
     >
       <body suppressHydrationWarning>{children}</body>
     </html>

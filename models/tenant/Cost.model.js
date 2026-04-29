@@ -31,8 +31,8 @@ export function defineCost(sequelize) {
         type: DataTypes.DECIMAL(12, 2),
         allowNull: false,
       },
-      // Para costes salariales asociados a un terapeuta específico
-      therapistId: {
+      // Para costes salariales asociados a un empleado específico
+      employeeId: {
         type: DataTypes.UUID,
         allowNull: true,
       },

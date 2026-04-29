@@ -11,11 +11,11 @@ export const GET = withTenant(async (request, _ctx, { tenantModels }) => {
     if (searchParams.get("month")) where.month = searchParams.get("month");
     if (searchParams.get("type")) where.type = searchParams.get("type");
     if (searchParams.get("category")) where.category = searchParams.get("category");
-    if (searchParams.get("therapistId")) where.therapistId = searchParams.get("therapistId");
+    if (searchParams.get("employeeId")) where.employeeId = searchParams.get("employeeId");
 
     const costs = await Cost.findAll({
       where,
-      include: [{ model: TeamMember, as: "therapist", attributes: ["id", "displayName"] }],
+      include: [{ model: TeamMember, as: "employee", attributes: ["id", "displayName"] }],
       order: [["month", "DESC"], ["type", "ASC"]],
     });
 
@@ -31,7 +31,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels }) => {
     const { Cost } = tenantModels;
     const body = await request.json();
 
-    const { month, type, category, description, amount, therapistId } = body;
+    const { month, type, category, description, amount, employeeId } = body;
 
     if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return error("month inválido (formato YYYY-MM)");
     if (!type) return error("type es obligatorio");
@@ -45,7 +45,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels }) => {
       category,
       description,
       amount: Number(amount),
-      therapistId: therapistId || null,
+      employeeId: employeeId || null,
     });
 
     return created(cost);

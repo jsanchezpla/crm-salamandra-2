@@ -14,7 +14,7 @@ function fmt(n) {
   return Number(n || 0).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-const EMPTY_FORM = { month: "", type: "salary", category: "fixed", description: "", amount: "", therapistId: "" };
+const EMPTY_FORM = { month: "", type: "salary", category: "fixed", description: "", amount: "", employeeId: "" };
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -61,7 +61,7 @@ export default function CostesPage() {
       const res = await fetch("/api/billing/costs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, amount: Number(form.amount), therapistId: form.therapistId || null }),
+        body: JSON.stringify({ ...form, amount: Number(form.amount), employeeId: form.employeeId || null }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
@@ -144,9 +144,9 @@ export default function CostesPage() {
               placeholder="Ej: Sueldo marzo — Ana García" className={inputCls} />
           </div>
           <div className="col-span-2 flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-neutral-400 uppercase tracking-widest">ID terapeuta (opcional)</label>
-            <input value={form.therapistId}
-              onChange={(e) => setForm((f) => ({ ...f, therapistId: e.target.value }))}
+            <label className="text-xs font-semibold text-neutral-400 uppercase tracking-widest">ID empleado (opcional)</label>
+            <input value={form.employeeId}
+              onChange={(e) => setForm((f) => ({ ...f, employeeId: e.target.value }))}
               placeholder="UUID del miembro del equipo" className={inputCls} />
           </div>
           {formError && (
@@ -195,7 +195,7 @@ export default function CostesPage() {
               <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Tipo</th>
               <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Categoría</th>
               <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Descripción</th>
-              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Terapeuta</th>
+              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Empleado</th>
               <th className="text-right px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Importe</th>
               <th className="px-4 py-3"></th>
             </tr>
@@ -221,7 +221,7 @@ export default function CostesPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-neutral-700 max-w-[200px] truncate">{c.description}</td>
-                <td className="px-4 py-3 text-xs text-neutral-500">{c.therapist?.displayName ?? "—"}</td>
+                <td className="px-4 py-3 text-xs text-neutral-500">{c.employee?.displayName ?? "—"}</td>
                 <td className="px-4 py-3 text-right font-semibold text-neutral-900">{fmt(c.amount)} €</td>
                 <td className="px-4 py-3 text-right">
                   <button onClick={() => handleDelete(c.id)} disabled={deleting === c.id}

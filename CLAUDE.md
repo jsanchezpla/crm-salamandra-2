@@ -57,6 +57,11 @@ El proyecto tiene DOS entornos completamente separados con bases de datos indepe
 **Los schemas (estructura de tablas) son los mismos porque vienen del código.
 Los datos de cada entorno son completamente independientes — no hay sincronización de datos entre local y producción.**
 
+> **Nota sobre tenants:** la lista de tenants en local y en producción NO es necesariamente la misma.
+> Algunos tenants viven solo en producción (`retorika`, `abarcaia`) y otros solo en local
+> (`spain-enzymes` por ahora). Cualquier script de migración debe leer la lista de schemas a
+> procesar desde `master.tenants` en tiempo de ejecución, nunca hardcodearla.
+
 ### Flujo de deploy (`deploy.sh`)
 
 El despliegue se ejecuta en el VPS. El script se corre manualmente allí:
@@ -99,12 +104,13 @@ Configuración de VS Code, ESLint y Prettier en sus respectivos ficheros
 
 ```
 PostgreSQL DB: salamandra
-├── schema: master            ← tenants, users, tenant_modules, audit_log
-├── schema: crm_demo          ← tenant de desarrollo
-├── schema: crm_retorika      ← Retorika (formación)
-├── schema: crm_quality_energy ← Quality Energy (leads + referidos)
-├── schema: crm_aumenta       ← Aumenta (leads)
-└── schema: crm_abarcaia      ← Abarcaia (leads)
+├── schema: master              ← tenants, users, tenant_modules, audit_log
+├── schema: crm_demo            ← tenant de desarrollo (local + producción)
+├── schema: crm_retorika        ← Retorika (formación) — solo producción
+├── schema: crm_quality_energy  ← Quality Energy (leads + referidos)
+├── schema: crm_aumenta         ← Aumenta (leads + facturación parcial)
+├── schema: crm_abarcaia        ← Abarcaia (leads) — solo producción
+└── schema: crm_spain_enzymes   ← Spain Enzymes (leads, clientes, inventario) — solo local por ahora
 ```
 
 ### Motor de personalización por tenant
@@ -126,7 +132,7 @@ El login de Salamandra usa paleta fija (`#FAFAF8` + `#1B3A2D`).
 
 ---
 
-## Estructura de carpetas (REAL — actualizada 2026-04-24)
+## Estructura de carpetas (REAL — actualizada 2026-04-29)
 
 ```
 crm-salamandra-2/
@@ -166,7 +172,7 @@ crm-salamandra-2/
 │       │   └── refresh/route.js
 │       ├── billing/
 │       │   ├── analytics/route.js
-│       │   ├── analytics/therapists/route.js
+│       │   ├── analytics/employees/route.js
 │       │   ├── costs/route.js  +  [id]/route.js
 │       │   ├── invoices/route.js  +  [id]/route.js
 │       │   ├── payments/route.js  +  [id]/route.js
@@ -291,6 +297,7 @@ crm-salamandra-2/
 │   ├── clear-aumenta-leads.js
 │   ├── clear-quality-leads.js
 │   ├── migrate-quality-leads.js
+│   ├── migrate-rename-therapist-to-employee.js ← rename FK billing therapistId→employeeId
 │   └── remove-abarcaia-from-quality.js
 │
 ├── Dockerfile                                  ← imagen de producción
@@ -364,12 +371,12 @@ Utilidades del módulo de facturación: cálculo de facturas, numeración, tarif
 - `Project` — proyectos con columnas Kanban
 - `Task` — tarjetas Kanban (columnId, order, checklist)
 - `Ticket` — incidencias con mensajes tipo chat
-- `Invoice` — facturas con líneas, IVA, PDF, facturantiaId, qrUrl, verifactuStatus
+- `Invoice` — facturas con líneas, IVA, PDF, facturantiaId, qrUrl, verifactuStatus, `employeeId` (FK a TeamMember)
 - `RecurringInvoice` — facturas recurrentes programadas
 - `Payment` — cobros asociados a facturas
-- `Cost` — costes y gastos
-- `Rate` — tarifas configurables
-- `TeamMember` — perfil extendido del user en el tenant
+- `Cost` — costes y gastos, `employeeId` (FK a TeamMember)
+- `Rate` — tarifas configurables, `employeeId` (FK a TeamMember)
+- `TeamMember` — perfil extendido del user en el tenant; tabla compartida que representa "personas que trabajan en el tenant" (empleados, externos, subcontratados). Usada también como FK desde Rate/Invoice/Cost.
 - `Asset` — inventario (equipos, licencias, materiales)
 - `Training` — formación y certificados por usuario
 - `Company` — empresas cliente del módulo formación (no confundir con `Client`)
@@ -385,39 +392,40 @@ Utilidades del módulo de facturación: cálculo de facturas, numeración, tarif
 
 ## Tenants activos
 
-| Slug             | Módulos activos                          | Notas                                   |
-| ---------------- | ---------------------------------------- | --------------------------------------- |
-| `demo`           | leads, training, cuestionarios           | Tenant de desarrollo y pruebas          |
-| `retorika`       | training, cuestionarios, leads           | Academia online (WordPress + TutorLMS)  |
-| `quality-energy` | leads, referidos                         | Empresa energética                      |
-| `aumenta`        | leads                                    | -                                       |
-| `abarcaia`       | leads                                    | -                                       |
+| Slug             | Entorno         | Módulos activos                          | Notas                                        |
+| ---------------- | --------------- | ---------------------------------------- | -------------------------------------------- |
+| `demo`           | local + prod    | leads, training, cuestionarios, billing  | Tenant de desarrollo y pruebas               |
+| `retorika`       | solo producción | training, cuestionarios, leads           | Academia online (WordPress + TutorLMS)       |
+| `quality-energy` | local + prod    | leads, referidos                         | Empresa energética                           |
+| `aumenta`        | local + prod    | leads, billing                           | -                                            |
+| `abarcaia`       | solo producción | leads                                    | -                                            |
+| `spain-enzymes`  | solo local      | leads, clients, inventory                | Tenant de pruebas creado por Jorge           |
 
-Cada tenant tiene override de UI en `modules/overrides/{slug}/` y seed en `scripts/seed-{slug}.js`.
+Cada tenant puede tener override de UI en `modules/overrides/{slug}/` y seed propio en `scripts/seed-{slug}.js` cuando aplique.
 
 ---
 
 ## Módulos del CRM — 17 planificados
 
-| moduleKey      | Módulo                        | Estado                          |
-| -------------- | ----------------------------- | ------------------------------- |
-| clients        | #1 Clientes & Cuentas         | Pendiente                       |
-| sales          | #2 Comercial & Ventas (Leads) | Implementado (5 tenants)        |
-| projects       | #3 Proyectos (Kanban)         | Pendiente                       |
-| support        | #4 Soporte & Calidad          | Pendiente                       |
-| billing        | #5 Facturación                | Implementado parcial            |
-| team           | #6 Equipo & RRHH              | Pendiente                       |
-| planning       | #7 Planificación & Recursos   | Pendiente                       |
-| documents      | #8 Documentación & Contratos  | Pendiente                       |
-| —              | #9 Filtro global por cliente  | Pendiente                       |
-| inventory      | #10 Inventario & Activos      | Pendiente                       |
-| training       | #11 Formación & Conocimiento  | Implementado (Retorika)         |
-| automations    | #12 Automatizaciones & Flujos | Pendiente                       |
-| ai             | #13 IA & Asistente            | Pendiente                       |
-| integrations   | #14 Integraciones & API       | Pendiente                       |
-| analytics      | #15 Analítica & BI            | Pendiente                       |
-| communications | #16 Comunicaciones            | Pendiente                       |
-| client_portal  | #17 Portal del Cliente        | Pendiente                       |
+| moduleKey      | Módulo                        | Estado                                          |
+| -------------- | ----------------------------- | ----------------------------------------------- |
+| clients        | #1 Clientes & Cuentas         | Implementado parcial (spain-enzymes)            |
+| sales          | #2 Comercial & Ventas (Leads) | Implementado (5 tenants)                        |
+| projects       | #3 Proyectos (Kanban)         | Pendiente                                       |
+| support        | #4 Soporte & Calidad          | Pendiente                                       |
+| billing        | #5 Facturación                | Implementado parcial (demo, aumenta)            |
+| team           | #6 Equipo & RRHH              | Pendiente                                       |
+| planning       | #7 Planificación & Recursos   | Pendiente                                       |
+| documents      | #8 Documentación & Contratos  | Pendiente                                       |
+| —              | #9 Filtro global por cliente  | Pendiente                                       |
+| inventory      | #10 Inventario & Activos      | Implementado parcial (spain-enzymes)            |
+| training       | #11 Formación & Conocimiento  | Implementado (Retorika)                         |
+| automations    | #12 Automatizaciones & Flujos | Pendiente                                       |
+| ai             | #13 IA & Asistente            | Pendiente                                       |
+| integrations   | #14 Integraciones & API       | Pendiente                                       |
+| analytics      | #15 Analítica & BI            | Pendiente                                       |
+| communications | #16 Comunicaciones            | Pendiente                                       |
+| client_portal  | #17 Portal del Cliente        | Pendiente                                       |
 
 ---
 
@@ -428,6 +436,13 @@ Cada tenant tiene override de UI en `modules/overrides/{slug}/` y seed en `scrip
 - API de Facturantia (10€/mes, incluye Verifactu)
 - CRM crea factura → Facturantia API → qrUrl + número → PDF con QR
 - Campos extra en Invoice: `facturantiaId`, `qrUrl`, `verifactuStatus`, `verifactuSentAt`
+
+### Facturación — nomenclatura
+
+- Las FK que apuntan a `TeamMember` desde Rate/Invoice/Cost se llaman `employeeId`
+  (anteriormente `therapistId`, renombrado en abril 2026 porque el CRM es genérico).
+- En la API, el alias del include es `employee` y el endpoint analítico es
+  `/api/billing/analytics/employees`.
 
 ### Automatizaciones
 
@@ -461,6 +476,8 @@ Implementado para `retorika` (WordPress + TutorLMS + WooCommerce). Reutilizable.
 10. No usar `src/` — `app/` en la raíz del proyecto
 11. **NUNCA ejecutar `git add` ni `git commit`** — Jorge hace los commits manualmente.
     Cuando haya cambios listos, ofrecer un mensaje de commit sugerido para que Jorge lo copie y ejecute él mismo.
+12. Scripts de migración deben leer la lista de schemas desde `master.tenants`,
+    nunca hardcodear slugs (la lista difiere entre local y producción).
 
 ---
 

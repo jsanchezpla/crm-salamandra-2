@@ -2,7 +2,7 @@
  * db-seed.js — Migra columnas nuevas y siembra datos de prueba
  *
  * 1. Altera el schema tenant con las columnas nuevas (billing)
- * 2. Crea terapeutas, clientes, tarifas, facturas, cobros y costes realistas
+ * 2. Crea empleados, clientes, tarifas, facturas, cobros y costes realistas
  *
  * Uso: npm run db:seed
  */
@@ -57,23 +57,23 @@ async function main() {
   const { models } = getTenantDb(DEMO_SLUG);
   const { Client, TeamMember, Invoice, Payment, Rate, Cost } = models;
 
-  // ── 3. Terapeutas ───────────────────────────────────────────────────────────
-  header("Creando terapeutas...");
+  // ── 3. Empleados ────────────────────────────────────────────────────────────
+  header("Creando empleados...");
 
-  const therapistsData = [
-    { displayName: "Ana García", position: "Terapeuta Infantil", department: "Infantil" },
-    { displayName: "Carlos López", position: "Psicólogo Adultos", department: "Adultos" },
-    { displayName: "Laura Martínez", position: "Neuropsicóloga", department: "Neuropsicología" },
-    { displayName: "Miguel Sánchez", position: "Terapeuta Familiar", department: "Familia" },
+  const employeesData = [
+    { displayName: "Ana García", position: "Empleado Senior", department: "Infantil" },
+    { displayName: "Carlos López", position: "Empleado Senior", department: "Adultos" },
+    { displayName: "Laura Martínez", position: "Empleado Senior", department: "Neuropsicología" },
+    { displayName: "Miguel Sánchez", position: "Empleado Junior", department: "Familia" },
   ];
 
-  const therapists = [];
-  for (const t of therapistsData) {
+  const employees = [];
+  for (const t of employeesData) {
     const [member, created] = await TeamMember.findOrCreate({
       where: { displayName: t.displayName },
       defaults: { ...t, userId: randomUUID(), status: "active", customFields: {} },
     });
-    therapists.push(member);
+    employees.push(member);
     log(`${created ? "✓" : "·"} ${t.displayName}`);
   }
 
@@ -83,20 +83,20 @@ async function main() {
   // Tarifa general del centro
   const ratesData = [
     // Tarifa general
-    { therapistId: null, serviceType: "sesion_individual", pricePerSession: 75.00, validFrom: isoDate(2026, 1, 1) },
-    { therapistId: null, serviceType: "sesion_pareja", pricePerSession: 90.00, validFrom: isoDate(2026, 1, 1) },
-    { therapistId: null, serviceType: "sesion_familiar", pricePerSession: 100.00, validFrom: isoDate(2026, 1, 1) },
-    { therapistId: null, serviceType: "evaluacion", pricePerSession: 150.00, validFrom: isoDate(2026, 1, 1) },
+    { employeeId: null, serviceType: "sesion_individual", pricePerSession: 75.00, validFrom: isoDate(2026, 1, 1) },
+    { employeeId: null, serviceType: "sesion_pareja", pricePerSession: 90.00, validFrom: isoDate(2026, 1, 1) },
+    { employeeId: null, serviceType: "sesion_familiar", pricePerSession: 100.00, validFrom: isoDate(2026, 1, 1) },
+    { employeeId: null, serviceType: "evaluacion", pricePerSession: 150.00, validFrom: isoDate(2026, 1, 1) },
     // Tarifa específica Ana (especialista infantil, precio distinto)
-    { therapistId: therapists[0].id, serviceType: "sesion_infantil", pricePerSession: 80.00, validFrom: isoDate(2026, 1, 1) },
+    { employeeId: employees[0].id, serviceType: "sesion_infantil", pricePerSession: 80.00, validFrom: isoDate(2026, 1, 1) },
     // Tarifa específica Laura (neuropsicología)
-    { therapistId: therapists[2].id, serviceType: "evaluacion", pricePerSession: 200.00, validFrom: isoDate(2026, 1, 1) },
+    { employeeId: employees[2].id, serviceType: "evaluacion", pricePerSession: 200.00, validFrom: isoDate(2026, 1, 1) },
   ];
 
   for (const r of ratesData) {
     await Rate.findOrCreate({
       where: {
-        therapistId: r.therapistId ?? null,
+        employeeId: r.employeeId ?? null,
         serviceType: r.serviceType,
         validFrom: r.validFrom,
       },
@@ -140,7 +140,7 @@ async function main() {
 
   // Enero a Marzo: facturas pagadas
   for (let month = 1; month <= 3; month++) {
-    for (const therapist of therapists) {
+    for (const employee of employees) {
       const clientsForMonth = clients.slice(0, randomBetween(3, 6));
 
       for (const client of clientsForMonth) {
@@ -153,13 +153,13 @@ async function main() {
         const [inv, created] = await Invoice.findOrCreate({
           where: {
             clientId: client.id,
-            therapistId: therapist.id,
+            employeeId: employee.id,
             issueDate: isoDate(2026, month, dayOfMonth),
           },
           defaults: {
             number: `F-2026-${String(++invoiceCount).padStart(4, "0")}`,
             clientId: client.id,
-            therapistId: therapist.id,
+            employeeId: employee.id,
             serviceType: svcType,
             invoiceType: pick(invoiceTypes),
             issueDate: isoDate(2026, month, dayOfMonth),
@@ -182,7 +182,7 @@ async function main() {
   }
 
   // Abril (mes actual): mix de estados
-  for (const therapist of therapists) {
+  for (const employee of employees) {
     const clientsForMonth = clients.slice(0, randomBetween(4, 7));
     for (const client of clientsForMonth) {
       const svcType = pick(serviceTypes);
@@ -195,13 +195,13 @@ async function main() {
       const [inv, created] = await Invoice.findOrCreate({
         where: {
           clientId: client.id,
-          therapistId: therapist.id,
+          employeeId: employee.id,
           issueDate: isoDate(2026, 4, dayOfMonth),
         },
         defaults: {
           number: `F-2026-${String(++invoiceCount).padStart(4, "0")}`,
           clientId: client.id,
-          therapistId: therapist.id,
+          employeeId: employee.id,
           serviceType: svcType,
           invoiceType: "session",
           issueDate: isoDate(2026, 4, dayOfMonth),
@@ -269,18 +269,18 @@ async function main() {
   const costsData = [
     // Ene-Abr: salarios fijos
     ...["2026-01", "2026-02", "2026-03", "2026-04"].flatMap((month) => [
-      { month, type: "salary", category: "fixed", description: "Sueldo — Ana García", amount: 1800, therapistId: therapists[0].id },
-      { month, type: "salary", category: "fixed", description: "Sueldo — Carlos López", amount: 2000, therapistId: therapists[1].id },
-      { month, type: "salary", category: "fixed", description: "Sueldo — Laura Martínez", amount: 2200, therapistId: therapists[2].id },
-      { month, type: "salary", category: "fixed", description: "Sueldo — Miguel Sánchez", amount: 1900, therapistId: therapists[3].id },
-      { month, type: "rent", category: "fixed", description: "Alquiler consultas", amount: 1500, therapistId: null },
-      { month, type: "software", category: "fixed", description: "Software CRM + herramientas", amount: 120, therapistId: null },
+      { month, type: "salary", category: "fixed", description: "Sueldo — Ana García", amount: 1800, employeeId: employees[0].id },
+      { month, type: "salary", category: "fixed", description: "Sueldo — Carlos López", amount: 2000, employeeId: employees[1].id },
+      { month, type: "salary", category: "fixed", description: "Sueldo — Laura Martínez", amount: 2200, employeeId: employees[2].id },
+      { month, type: "salary", category: "fixed", description: "Sueldo — Miguel Sánchez", amount: 1900, employeeId: employees[3].id },
+      { month, type: "rent", category: "fixed", description: "Alquiler consultas", amount: 1500, employeeId: null },
+      { month, type: "software", category: "fixed", description: "Software CRM + herramientas", amount: 120, employeeId: null },
     ]),
     // Material trimestral
-    { month: "2026-01", type: "material", category: "variable", description: "Material de oficina Q1", amount: 180, therapistId: null },
-    { month: "2026-03", type: "material", category: "variable", description: "Tests psicológicos", amount: 340, therapistId: null },
+    { month: "2026-01", type: "material", category: "variable", description: "Material de oficina Q1", amount: 180, employeeId: null },
+    { month: "2026-03", type: "material", category: "variable", description: "Tests psicológicos", amount: 340, employeeId: null },
     // CAPEX
-    { month: "2026-02", type: "material", category: "capex", description: "Equipamiento sala espera", amount: 850, therapistId: null },
+    { month: "2026-02", type: "material", category: "capex", description: "Equipamiento sala espera", amount: 850, employeeId: null },
   ];
 
   let costCount = 0;
@@ -297,7 +297,7 @@ async function main() {
   process.stdout.write("\n════════════════════════════════════════\n");
   process.stdout.write(" ¡Seed completado!\n");
   process.stdout.write("════════════════════════════════════════\n");
-  process.stdout.write(`  Terapeutas: ${therapists.length}\n`);
+  process.stdout.write(`  Empleados:  ${employees.length}\n`);
   process.stdout.write(`  Clientes:   ${clients.length}\n`);
   process.stdout.write(`  Facturas:   ${invoiceCount}\n`);
   process.stdout.write(`  Cobros:     ${paymentCount}\n`);

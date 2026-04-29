@@ -9,9 +9,9 @@ export function defineRate(sequelize) {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
-      therapistId: {
+      employeeId: {
         type: DataTypes.UUID,
-        allowNull: true, // null = tarifa general del centro
+        allowNull: true, // null = tarifa general
       },
       serviceType: {
         type: DataTypes.STRING,

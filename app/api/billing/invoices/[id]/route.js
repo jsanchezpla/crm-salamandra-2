@@ -12,7 +12,7 @@ export const GET = withTenant(async (request, { params }, { tenantModels }) => {
       include: [
         { model: Payment, as: "payments" },
         { model: Client, as: "client", attributes: ["id", "name", "email"] },
-        { model: TeamMember, as: "therapist", attributes: ["id", "displayName"] },
+        { model: TeamMember, as: "employee", attributes: ["id", "displayName"] },
       ],
     });
 
@@ -38,7 +38,7 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels }) =>
     }
 
     const allowed = [
-      "familyId", "patientId", "therapistId", "serviceType", "invoiceType",
+      "familyId", "patientId", "employeeId", "serviceType", "invoiceType",
       "dueDate", "lines", "vatRate", "discountType", "discountValue",
       "recurringConfig", "notes", "status", "customFields",
     ];

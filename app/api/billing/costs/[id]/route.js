@@ -6,7 +6,7 @@ export const GET = withTenant(async (request, { params }, { tenantModels }) => {
     const { Cost, TeamMember } = tenantModels;
     const { id } = await params;
     const cost = await Cost.findByPk(id, {
-      include: [{ model: TeamMember, as: "therapist", attributes: ["id", "displayName"] }],
+      include: [{ model: TeamMember, as: "employee", attributes: ["id", "displayName"] }],
     });
     if (!cost) return notFound("Coste no encontrado");
     return ok(cost);
@@ -22,7 +22,7 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels }) =>
     const body = await request.json();
     const cost = await Cost.findByPk(id);
     if (!cost) return notFound("Coste no encontrado");
-    const allowed = ["month", "type", "category", "description", "amount", "therapistId"];
+    const allowed = ["month", "type", "category", "description", "amount", "employeeId"];
     const updates = {};
     for (const key of allowed) {
       if (key in body) updates[key] = body[key];

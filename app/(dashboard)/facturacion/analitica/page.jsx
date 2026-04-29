@@ -30,7 +30,7 @@ function MarginCell({ value, pctValue }) {
 export default function AnaliticaPage() {
   const [from, setFrom] = useState(`${currentYear}-01-01`);
   const [to, setTo] = useState(`${currentYear}-12-31`);
-  const [therapists, setTherapists] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -38,10 +38,10 @@ export default function AnaliticaPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/billing/analytics/therapists?from=${from}&to=${to}`);
+      const res = await fetch(`/api/billing/analytics/employees?from=${from}&to=${to}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
-      setTherapists(json.data ?? []);
+      setEmployees(json.data ?? []);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -51,7 +51,7 @@ export default function AnaliticaPage() {
 
   useEffect(() => { load(); }, [from, to]);
 
-  const totals = therapists.reduce(
+  const totals = employees.reduce(
     (acc, t) => ({
       income: acc.income + t.income,
       invoiceCount: acc.invoiceCount + t.invoiceCount,
@@ -69,7 +69,7 @@ export default function AnaliticaPage() {
     <div className="p-4 lg:p-8 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-xl font-extrabold text-neutral-900">Analítica por terapeuta</h1>
+          <h1 className="text-xl font-extrabold text-neutral-900">Analítica por empleado</h1>
           <p className="text-xs text-neutral-400 mt-0.5">Rendimiento económico individual</p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 self-start sm:self-auto">
@@ -86,7 +86,7 @@ export default function AnaliticaPage() {
         </div>
       </div>
 
-      {therapists.length > 0 && (
+      {employees.length > 0 && (
         <div className="grid grid-cols-2 gap-3 mb-6 sm:grid-cols-4">
           {[
             { label: "Ingresos totales", value: fmt(totals.income) + " €" },
@@ -111,7 +111,7 @@ export default function AnaliticaPage() {
         <table className="w-full text-sm min-w-[800px]">
           <thead>
             <tr className="border-b border-neutral-100">
-              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Terapeuta</th>
+              <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Empleado</th>
               <th className="text-left px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Cargo</th>
               <th className="text-right px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Ingresos</th>
               <th className="text-right px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Facturas</th>
@@ -123,15 +123,15 @@ export default function AnaliticaPage() {
             </tr>
           </thead>
           <tbody>
-            {loading && therapists.length === 0 && (
+            {loading && employees.length === 0 && (
               <tr><td colSpan={9} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
             )}
-            {!loading && therapists.length === 0 && (
+            {!loading && employees.length === 0 && (
               <tr><td colSpan={9} className="text-center py-12 text-xs text-neutral-400">Sin datos para el período seleccionado</td></tr>
             )}
-            {therapists.map((t) => (
-              <tr key={t.therapistId} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">
-                <td className="px-4 py-3"><div className="font-medium text-neutral-800 text-sm">{t.therapistName}</div></td>
+            {employees.map((t) => (
+              <tr key={t.employeeId} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">
+                <td className="px-4 py-3"><div className="font-medium text-neutral-800 text-sm">{t.employeeName}</div></td>
                 <td className="px-4 py-3 text-xs text-neutral-500 capitalize">{t.position ?? "—"}</td>
                 <td className="px-4 py-3 text-right font-semibold text-neutral-900">{fmt(t.income)} €</td>
                 <td className="px-4 py-3 text-right text-neutral-600">{t.invoiceCount}</td>
@@ -150,11 +150,11 @@ export default function AnaliticaPage() {
             ))}
           </tbody>
 
-          {therapists.length > 1 && (
+          {employees.length > 1 && (
             <tfoot>
               <tr className="border-t border-neutral-200 bg-neutral-50">
                 <td colSpan={2} className="px-4 py-3 text-[10px] font-semibold text-neutral-500 uppercase tracking-widest">
-                  Total ({therapists.length} terapeutas)
+                  Total ({employees.length} empleados)
                 </td>
                 <td className="px-4 py-3 text-right font-bold text-neutral-900">{fmt(totals.income)} €</td>
                 <td className="px-4 py-3 text-right font-semibold text-neutral-700">{totals.invoiceCount}</td>
