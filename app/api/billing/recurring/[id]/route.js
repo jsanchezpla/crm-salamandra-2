@@ -1,7 +1,6 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, noContent, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../../lib/billing/calculateInvoice.js";
-import { generateInvoiceNumber } from "../../../../../lib/billing/generateInvoiceNumber.js";
 
 // GET /api/billing/recurring/[id]
 export const GET = withTenant(async (request, { params }, { tenantModels }) => {
@@ -43,7 +42,10 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels }) =>
   }
 });
 
-// POST implícito: ejecutar manualmente — genera la factura y avanza nextRunAt
+// POST /api/billing/recurring/[id]
+//   Genera una factura DRAFT a partir del template y avanza nextRunAt.
+//   El draft no consume número de serie; el usuario lo emite después
+//   desde /facturacion/facturas con el botón "Emitir".
 export const POST = withTenant(async (request, { params }, { tenantModels }) => {
   try {
     const { RecurringInvoice, Invoice } = tenantModels;
@@ -54,37 +56,41 @@ export const POST = withTenant(async (request, { params }, { tenantModels }) => 
     if (!recurring.active) return notFound("La factura recurrente está inactiva");
 
     const tmpl = recurring.templateConfig || {};
-    const lines = tmpl.lines || [];
-    const { subtotal, vatAmount, total } = calculateInvoice({
-      lines,
-      vatRate: tmpl.vatRate || 0,
-      discountType: tmpl.discountType || null,
-      discountValue: tmpl.discountValue || null,
-    });
+    // Línea única derivada del template (los seeds antiguos guardaban
+    // description/taxBase/vatRate planos en templateConfig).
+    const lines = Array.isArray(tmpl.lines) && tmpl.lines.length > 0
+      ? tmpl.lines
+      : [{
+          description: tmpl.description || "Factura recurrente",
+          quantity: 1,
+          unitPrice: Number(tmpl.taxBase ?? 0),
+          discountPct: 0,
+          vatRate: Number(tmpl.vatRate ?? 21),
+        }];
 
-    const number = await generateInvoiceNumber(Invoice);
+    const calc = calculateInvoice({ lines });
     const issueDate = new Date().toISOString().slice(0, 10);
 
     const invoice = await Invoice.create({
-      number,
       clientId: recurring.clientId,
-      familyId: recurring.familyId || null,
-      invoiceType: "subscription",
       issueDate,
-      lines,
-      subtotal,
-      vatRate: tmpl.vatRate || 0,
-      vatAmount,
-      total,
-      discountType: tmpl.discountType || null,
-      discountValue: tmpl.discountValue || null,
-      recurringConfig: { recurringInvoiceId: recurring.id },
-      notes: tmpl.notes || null,
-      customFields: {},
+      lines: calc.lines,
+      taxBase: calc.taxBase,
+      vatAmount: calc.vatAmount,
+      total: calc.total,
+      paidAmount: 0,
+      series: "F",
+      number: `DRAFT-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       status: "draft",
+      notes: tmpl.notes || `Generada desde recurrente ${recurring.id}`,
+      customFields: {},
+      recurringConfig: { recurringInvoiceId: recurring.id },
+      // legacy
+      subtotal: calc.taxBase,
+      vatRate: 0,
     });
 
-    // Calcular próxima ejecución
+    // Avanzar próxima ejecución
     const next = new Date(recurring.nextRunAt);
     if (recurring.frequency === "weekly") next.setDate(next.getDate() + 7);
     else if (recurring.frequency === "biweekly") next.setDate(next.getDate() + 14);
