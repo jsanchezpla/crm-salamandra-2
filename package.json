@@ -27,7 +27,8 @@
     "db:seed:team": "node --env-file=.env.local scripts/seed-team-demo.js",
     "db:migrate:billing-rework": "node --env-file=.env.local scripts/migrate-billing-rework.js",
     "db:migrate:billing-rework:prod": "node --env-file=.env.production scripts/migrate-billing-rework.js",
-    "db:seed:billing-demo": "node --env-file=.env.local scripts/seed-billing-demo.js"
+    "db:seed:billing-demo": "node --env-file=.env.local scripts/seed-billing-demo.js",
+    "db:seed:billing:spain": "node --env-file=.env.local scripts/seed-billing-spain-enzymes.js"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",
