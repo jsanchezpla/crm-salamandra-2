@@ -478,6 +478,11 @@ Implementado para `retorika` (WordPress + TutorLMS + WooCommerce). Reutilizable.
     Cuando haya cambios listos, ofrecer un mensaje de commit sugerido para que Jorge lo copie y ejecute él mismo.
 12. Scripts de migración deben leer la lista de schemas desde `master.tenants`,
     nunca hardcodear slugs (la lista difiere entre local y producción).
+13. En diseño responsivo, todo modal o panel lateral (drawer) debe respetar la
+    barra superior móvil del dashboard (`h-14`, ~56px, `lg:hidden`) que contiene
+    el botón del menú hamburguesa. Patrón: `top-14 lg:top-0 ... bottom-0`
+    (en lugar de `top-0 h-full`). Aplica al módulo Equipo, Leads y cualquier
+    otro nuevo o existente que abra paneles encima de la página.
 
 ---
 

@@ -431,7 +431,7 @@ function DemoLeadPanel({ lead, open, saving, onClose, onStageChange, onNotesChan
 
   return (
     <div
-      className={`fixed top-0 right-0 h-full w-full lg:w-[460px] bg-white border-l border-gray-200 shadow-2xl flex flex-col z-40 transition-transform duration-300 ${
+      className={`fixed top-14 lg:top-0 right-0 bottom-0 w-full lg:w-[460px] bg-white border-l border-gray-200 shadow-2xl flex flex-col z-40 transition-transform duration-300 ${
         open ? "translate-x-0" : "translate-x-full"
       }`}
     >

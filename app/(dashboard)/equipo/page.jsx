@@ -313,7 +313,7 @@ export default function EquipoPage() {
       {(openMember || showCreate) && (
         <>
           <div className="fixed inset-0 bg-black/40 z-40" onClick={closePanel} />
-          <aside className="fixed top-0 right-0 h-full w-full sm:w-[480px] bg-white z-50 shadow-pop overflow-y-auto ink-scroll slide-right">
+          <aside className="fixed top-14 lg:top-0 right-0 bottom-0 w-full sm:w-[480px] bg-white z-50 shadow-pop overflow-y-auto ink-scroll slide-right">
             <div className="px-6 pt-6 pb-4 border-b border-neutral-100 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="eyebrow">{showCreate ? "Nuevo" : "Detalle"}</div>
