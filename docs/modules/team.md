@@ -1,0 +1,318 @@
+# Módulo de Equipo & RRHH (`team`)
+
+> Documentación de detalle. Referencia rápida en `CLAUDE.md` (sección
+> "Módulos del CRM"). Si encuentras una discrepancia con el código,
+> prevalece el código: actualiza este fichero.
+
+## Visión general
+
+CRUD mínimo de miembros del equipo del tenant. MVP cuyo propósito real es
+servir de base a módulos posteriores (Proyectos, Soporte, Planificación,
+Comunicaciones) y a Facturación, no implementar RRHH completo. Cubre lo
+imprescindible: identificar a la persona, asignarle un rol, calcular
+rentabilidad (coste/tarifa por hora) y poder vincularla a un User para
+permisos. Una sola página, un solo modelo, un único serializer.
+
+## Lo que NO hace (por ahora)
+
+- Vacaciones / ausencias.
+- Contratos / nóminas.
+- Permisos granulares por módulo (eso vive en `User.moduleAccess` en master).
+- Capacity planning / carga de trabajo.
+- Organigrama visual.
+- Página detalle como ruta propia (`/equipo/[id]`). El detalle vive en el
+  drawer del listado, no hay permalink compartible.
+
+## Modelos
+
+### TeamMember
+
+Fichero: `models/tenant/TeamMember.model.js`. Tabla: `team_members`.
+
+| Campo (BD) | Tipo | Notas |
+| --- | --- | --- |
+| `userId` | UUID nullable, **UNIQUE** | Vínculo opcional al `User` del schema `master`. PostgreSQL trata varios `NULL` como distintos en un UNIQUE estándar, así que pueden coexistir miembros sin User (externos, subcontratados). |
+| `displayName` | STRING NOT NULL | Nombre visible. Único campo realmente obligatorio. |
+| `email` | STRING nullable, UNIQUE | Validación regex propia (no el `isEmail` de Sequelize). El endpoint normaliza `""` y whitespace a `NULL` antes de guardar para que el UNIQUE no choque entre vacíos. |
+| `position` | STRING nullable | Rol funcional ("Empleado Senior", "Comercial"). En la API se expone como `role`; ver "Renombrados". |
+| `department` | STRING nullable | Texto libre. |
+| `phone` | STRING nullable | |
+| `avatarUrl` | STRING nullable | URL del avatar. Si está vacío la UI pinta iniciales. |
+| `hourlyCost` | DECIMAL(10,2) nullable, ≥ 0 | Coste interno. **Solo admin/superadmin** lo ve y edita. |
+| `hourlyRate` | DECIMAL(10,2) nullable, ≥ 0 | Precio facturable al cliente. Visible para todo autenticado del tenant. |
+| `monthlySalary` | DECIMAL(10,2) nullable, ≥ 0 | Salario mensual estimado. **Solo admin/superadmin**. Informativo: NO se cuenta como coste real (eso lo hace `Cost.type = 'salary'` en billing). Se añadió en la migración del rework de Facturación, no en la del MVP. |
+| `currency` | VARCHAR(3) NOT NULL | Default `EUR`. Se almacena siempre en mayúsculas, máximo 3 caracteres. |
+| `status` | ENUM | `active`, `inactive`, `on_leave`. `on_leave` está **dormido** en el MVP: no se ofrece como opción nueva en el formulario, pero si llega de BD se respeta y se renderiza. |
+| `hiredAt` | DATEONLY nullable | Fecha de incorporación. En la API se expone como `startDate`; ver "Renombrados". |
+| `notes` | TEXT nullable | Texto libre. |
+| `customFields` | JSONB | Default `{}`. Extensión libre por tenant. |
+
+#### Renombrados BD ↔ API
+
+Para evitar que `position` colisione con `User.role` (que vale
+`admin`/`user`/`superadmin`) y para mantener nomenclatura limpia hacia el
+cliente, dos columnas se exponen con otro nombre. El renombre **no** se
+hizo en BD; se hace en serialización.
+
+| Columna en BD | Campo en API |
+| --- | --- |
+| `position` | `role` |
+| `hiredAt` | `startDate` |
+
+### `lib/team/serializeTeamMember.js`
+
+Único punto de mapeo BD → API. Recibe la instancia de Sequelize (o un
+objeto plano) y `{ isAdmin }`. Aplica el renombre, añade `hourlyCost` y
+`monthlySalary` solo si `isAdmin = true`, y deja el resto siempre
+visible. Usar **siempre** este serializer en respuestas del módulo:
+listado, detalle, post-create y post-update lo invocan.
+
+## Filtrado de campos sensibles
+
+Decisión de seguridad central del módulo. El filtrado se hace **siempre
+en el backend antes de serializar el JSON**, nunca solo en el frontend.
+
+- `hourlyCost`: solo admin/superadmin.
+- `monthlySalary`: solo admin/superadmin (añadido en sprint billing).
+- `hourlyRate`, `email`, `phone`, `notes`, etc.: visibles para cualquier
+  autenticado del tenant.
+
+Endpoints donde aplica:
+
+- `GET /api/team` → cada miembro pasa por `serializeTeamMember`.
+- `GET /api/team/[id]` → idem.
+- `GET /api/team/[id]/billing-summary` → adicionalmente filtra
+  `data.employee.monthlySalary` y `data.projectedSalaryCost` cuando el
+  viewer no es admin.
+- `GET /api/billing/analytics/employees` → mismo criterio:
+  `monthlySalary` y `projectedSalaryCost` solo se serializan para admin,
+  y la whitelist de `sortBy` también los excluye para no-admins.
+
+## Eventos de auditoría
+
+Todos se registran en `master.AuditLog` con `entity: "TeamMember"`,
+`entityId`, IP, y un par `before`/`after` con los campos relevantes:
+
+- `team.created` — al crear un miembro (POST).
+- `team.role_changed` — cuando cambia `position` (PATCH).
+- `team.cost_changed` — cuando cambia `hourlyCost` (PATCH).
+- `team.rate_changed` — cuando cambia `hourlyRate` (PATCH).
+- `team.salary_changed` — cuando cambia `monthlySalary` (PATCH, añadido
+  en sprint billing).
+- `team.status_changed` — cuando cambia `status` (PATCH).
+- `team.deactivated` — al hacer DELETE (soft delete).
+
+El registro de auditoría se hace dentro de un `try/catch` aislado: un
+fallo de auditoría no rompe la respuesta principal del endpoint.
+
+## Endpoints
+
+Todos validan `hasModule("team")` antes de operar.
+
+| Método y ruta | Propósito | Restricciones |
+| --- | --- | --- |
+| `GET /api/team` | Listado con filtros (`status`, `role`, `q`) y paginación (`limit`, `offset`). Devuelve además `availableRoles` (valores únicos de `position` presentes) y `viewerIsAdmin` (booleano derivado del rol). | Cualquier autenticado del tenant. |
+| `POST /api/team` | Crea miembro nuevo. | Solo admin/superadmin. |
+| `GET /api/team/[id]` | Detalle. | Cualquier autenticado del tenant. |
+| `PATCH /api/team/[id]` | Edita; auditoría granular por campo (ver eventos). | Solo admin/superadmin. |
+| `DELETE /api/team/[id]` | **Soft delete**: cambia `status` a `inactive`. NUNCA borrado físico. Idempotente (si ya está inactivo devuelve `204` sin tocar nada). | Solo admin/superadmin. |
+| `GET /api/team/[id]/billing-summary` | Resumen de facturación del empleado (ver módulo Billing). | Cualquier autenticado del tenant; `monthlySalary` y `projectedSalaryCost` solo a admin. |
+
+Reglas adicionales:
+
+- Filtros de `?status=`: `default` (activos + de baja, comportamiento por
+  defecto), `active`, `inactive`, `on_leave`, `all` (sin filtro).
+- `?role=` filtra por `position` exacto (no parcial).
+- `?q=` busca con `iLike` sobre `displayName` y `email`.
+- Orden fijo por `displayName ASC`. No se expone ordenación whitelisted
+  todavía.
+- Borrado físico **prohibido** para preservar histórico (timetracking,
+  asignaciones futuras, auditoría).
+
+### `/api/auth/me`
+
+Aunque pertenece al sub-sistema de autenticación, el endpoint nació en
+este sprint y lo usa el frontend de Equipo, Facturación y otros módulos
+para gating de admin. Vive en `app/api/auth/me/route.js`.
+
+- Lee `x-user-id` y `x-tenant` de los headers que inyecta el middleware.
+- Devuelve `{ id, email, role, tenantId, tenantSlug, tenantName, enabledModules }`.
+- `enabledModules` es la intersección entre los módulos activos del
+  tenant (`TenantModule.enabled = true`) y `User.moduleAccess`. Si
+  `moduleAccess` está vacío o el rol es `superadmin`, devuelve todos los
+  activos del tenant.
+- Nunca expone `passwordHash` ni `moduleAccess` raw.
+- `Cache-Control: no-store` para que el cliente no cachee roles obsoletos.
+
+## Validaciones
+
+- `displayName` obligatorio en POST y no puede ser vacío en PATCH (se
+  rechaza si tras `trim()` queda en blanco).
+- `email`: regex propia (`/^[^\s@]+@[^\s@]+\.[^\s@]+$/`) si no es null.
+  Strings vacíos o solo whitespace se normalizan a `NULL` antes de
+  guardar (varios `NULL` conviven en el UNIQUE; varios `""` lo romperían).
+- `email` único en el tenant cuando no es null. La validación se hace a
+  mano antes del INSERT/UPDATE para devolver `409` con mensaje claro
+  ("Ya existe un miembro con ese email") en vez de propagar el error de
+  Sequelize.
+- `userId`: si se proporciona, debe corresponder a un `User` que
+  pertenezca al tenant actual y que **no** esté ya vinculado a otro
+  `TeamMember`. Lo segundo se comprueba con `id != excludeId` en PATCH
+  para permitir guardar sin cambios.
+- `hourlyCost`, `hourlyRate`, `monthlySalary`: numéricos finitos ≥ 0,
+  redondeados a 2 decimales. Se distinguen tres casos: `null` (campo
+  borrado), valor válido, o sentinela `undefined` para "valor inválido"
+  → respuesta `400`.
+- `status`: solo `active`, `inactive`, `on_leave` aceptados.
+- DELETE no elimina, sólo cambia `status` a `inactive`.
+
+## Frontend
+
+Una sola página: `app/(dashboard)/equipo/page.jsx`. Listado en tabla
+con drawer lateral para detalle / alta / edición.
+
+Columnas visibles del listado:
+
+- Empleado (avatar + `displayName` + teléfono pequeño).
+- `role`.
+- `department`.
+- `email`.
+- `status` (badge con colores: verde activo / ámbar de baja / gris inactivo).
+- `hourlyRate` (siempre).
+- `hourlyCost` (solo admin).
+- `monthlySalary` (solo admin).
+
+El drawer de detalle muestra `hourlyRate` siempre, y `hourlyCost` y
+`monthlySalary` adicionalmente para admin. La sección embebida de
+Facturación (`EmployeeBillingSection`) sigue mostrando estos datos
+agregados sobre el periodo seleccionado.
+
+Búsqueda por nombre/email con debounce de ~300ms. Filtros: `status` con
+las 5 opciones (Activos+de baja por defecto, Activos, Inactivos, De
+baja, Todos) y `role` con selector dinámico (los valores únicos
+presentes vienen de `availableRoles` en la respuesta del listado, no
+hardcodeados).
+
+Acciones:
+
+- Botón **"+ Añadir empleado"** solo visible si `viewerIsAdmin`.
+- Click en fila → drawer detalle.
+- Botón **"Editar"** dentro del drawer solo admin.
+- Botón **"Desactivar"** (admin) con confirmación textual; oculto si el
+  empleado ya está `inactive`. Llama al DELETE soft.
+
+El formulario de alta/edición incluye, además de los campos comunes,
+los inputs de **`hourlyCost`** y **`monthlySalary`** condicionales a
+`viewerIsAdmin`. `monthlySalary` lleva un helper text recordando que
+solo lo ven los administradores y que alimenta la analítica de
+empleados. `hourlyRate` es visible para cualquier admin (igual que el
+resto del form, ya gated por el botón "Editar"). Si el envío llegara
+desde un viewer no-admin, los campos sensibles se eliminan del payload
+antes del fetch (defensivo: el backend ya restringe POST/PATCH a
+admin/superadmin).
+
+`on_leave` en el formulario:
+
+- No es opción nueva del desplegable de status (solo aparecen `active` e
+  `inactive`).
+- Si el empleado abierto ya tiene `status = "on_leave"`, la opción se
+  añade dinámicamente para que se pueda mantener o cambiar a otro estado.
+  No es posible poner `on_leave` a alguien que esté activo desde la UI.
+
+El detalle del empleado embebe `components/billing/EmployeeBillingSection.jsx`
+(selector trimestre/año), que llama a `/api/team/[id]/billing-summary`.
+Si el módulo billing no está activo, la sección se oculta silenciosamente
+(la respuesta `403` se interpreta como "no aplicable").
+
+Mobile-first con Tailwind 4. El drawer respeta la regla 13 de CLAUDE.md
+(`top-14 lg:top-0 ... bottom-0` para no taparse con la barra del menú
+hamburguesa).
+
+## Integraciones con otros módulos
+
+- **Facturación (#5)**: `monthlySalary` alimenta `projectedSalaryCost`
+  en `/api/billing/analytics/employees` y
+  `/api/team/[id]/billing-summary`. `Invoice.employeeId` y
+  `Cost.employeeId` apuntan a `TeamMember`. El drawer de Equipo embebe
+  el resumen de facturación del empleado.
+- **Auth (User en master)**: vínculo opcional vía `userId`. Un `User`
+  puede tener un `TeamMember` asociado, pero un `TeamMember` puede
+  existir sin User (externos, subcontratados). Desvincular un
+  `TeamMember` del User no afecta al login del User.
+- **Audit (master.AuditLog)**: cambios sensibles registrados (ver
+  "Eventos de auditoría").
+- **Próximos**: Proyectos (#3) usará `TeamMember` como responsables y
+  miembros del proyecto. Soporte (#4) para asignar tickets.
+  Planificación (#7) y Comunicaciones (#16) también lo necesitarán.
+
+## Migración y backfill
+
+Fichero: `scripts/migrate-team-fields.js`. Idempotente. Lee la lista de
+schemas activos desde `master.tenants` (regla 12 de CLAUDE.md).
+
+Una sola transacción global para todos los tenants. Para cada schema
+`crm_{slug}`:
+
+- Añade columnas que falten en `team_members`: `email`, `hourly_cost`,
+  `hourly_rate`, `currency` (NOT NULL DEFAULT `'EUR'`), `notes`.
+- Baja `user_id` a `NULL` permitido para soportar empleados sin User.
+- Crea índice único `team_members_email_unique` sobre `email`. PG trata
+  los `NULL` como distintos por defecto (`NULLS DISTINCT`), así que
+  varios miembros sin email coexisten.
+
+`monthlySalary` se añadió **después**, en
+`scripts/migrate-billing-rework.js` como parte del rework de Facturación.
+Si un tenant nace tras esa migración, ambas se aplican secuencialmente.
+
+Comandos:
+
+```
+npm run db:migrate:team        # local
+npm run db:migrate:team:prod   # producción
+```
+
+## Seed
+
+Fichero: `scripts/seed-team-demo.js`. Comando: `npm run db:seed:team`.
+Solo opera sobre el tenant `demo`. Idempotente: hace UPSERT por
+`displayName` (si existe lo actualiza, si no lo crea).
+
+Crea/actualiza 5 miembros:
+
+| Nombre | Rol | Departamento | Estado |
+| --- | --- | --- | --- |
+| Ana García | Empleado Senior | Infantil | active |
+| Carlos López | Empleado Senior | Adultos | active |
+| Laura Martínez | Empleado Senior | Neuropsicología | active |
+| Miguel Sánchez | Empleado Junior | Familia | active |
+| Sara Romero | Empleado Junior | Administración | inactive |
+
+Vincula a Ana García al `User` admin del demo (`admin@demo.salamandra`).
+Si otro miembro tiene ese `userId`, lo desvincula primero para mantener
+la unicidad. Si Ana ya está vinculada, no-op.
+
+`monthlySalary` **no** se asigna en este seed. Se rellena en
+`scripts/seed-billing-demo.js` como parte del seed de Facturación
+(salarios mensuales de 1.900 € a 2.900 € según el miembro). Ejecutar el
+seed de equipo solo deja los empleados con `monthlySalary` en `NULL`.
+
+## Backlog
+
+- Vacaciones / ausencias (uso real del estado `on_leave` con fechas y
+  motivos).
+- Contratos / nóminas.
+- Capacity planning / carga de trabajo.
+- Organigrama visual.
+- Página detalle como ruta propia `/equipo/[id]` para permalinks
+  compartibles (hoy solo drawer).
+- Sweep en `scripts/db-sync.js` para que la UPSERT de `tenant_modules`
+  active automáticamente módulos nuevos en tenants existentes (hoy hay
+  que hacer un UPDATE manual cuando se añade un módulo al catálogo).
+
+## Incoherencias resueltas
+
+- **`monthlySalary` ahora editable desde el formulario** (resuelto en el
+  mini-fix posterior a esta documentación). El form de alta/edición
+  incluye un input numérico gated a admin/superadmin con helper text;
+  la columna y el `DetailRow` correspondientes también se mostraron
+  para admin. La API ya lo aceptaba; lo único que faltaba era la UI.

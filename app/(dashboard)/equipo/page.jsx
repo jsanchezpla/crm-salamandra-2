@@ -26,8 +26,8 @@ function initials(name) {
 
 const EMPTY_FORM = {
   displayName: "", email: "", role: "", department: "",
-  phone: "", hourlyRate: "", hourlyCost: "", currency: "EUR",
-  startDate: "", notes: "", status: "active",
+  phone: "", hourlyRate: "", hourlyCost: "", monthlySalary: "",
+  currency: "EUR", startDate: "", notes: "", status: "active",
 };
 
 function StatusBadge({ value }) {
@@ -135,6 +135,7 @@ export default function EquipoPage() {
       phone: openMember.phone ?? "",
       hourlyRate: openMember.hourlyRate ?? "",
       hourlyCost: openMember.hourlyCost ?? "",
+      monthlySalary: openMember.monthlySalary ?? "",
       currency: openMember.currency ?? "EUR",
       startDate: openMember.startDate ?? "",
       notes: openMember.notes ?? "",
@@ -152,7 +153,14 @@ export default function EquipoPage() {
         ...form,
         hourlyRate: form.hourlyRate === "" ? null : Number(form.hourlyRate),
         hourlyCost: form.hourlyCost === "" ? null : Number(form.hourlyCost),
+        monthlySalary: form.monthlySalary === "" ? null : Number(form.monthlySalary),
       };
+      // Solo admin puede tocar campos sensibles. Si por algún motivo el form
+      // se enviara desde un viewer no-admin, omitimos los campos del payload.
+      if (!viewerIsAdmin) {
+        delete payload.hourlyCost;
+        delete payload.monthlySalary;
+      }
       const url = openMember ? `/api/team/${openMember.id}` : "/api/team";
       const method = openMember ? "PATCH" : "POST";
       const res = await fetch(url, {
@@ -269,14 +277,17 @@ export default function EquipoPage() {
                 {viewerIsAdmin && (
                   <th className="text-right px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Coste/h</th>
                 )}
+                {viewerIsAdmin && (
+                  <th className="text-right px-4 py-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Salario/mes</th>
+                )}
               </tr>
             </thead>
             <tbody>
               {loading && members.length === 0 && (
-                <tr><td colSpan={viewerIsAdmin ? 7 : 6} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
+                <tr><td colSpan={viewerIsAdmin ? 8 : 6} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
               )}
               {!loading && members.length === 0 && (
-                <tr><td colSpan={viewerIsAdmin ? 7 : 6} className="text-center py-12 text-xs text-neutral-400">Sin resultados</td></tr>
+                <tr><td colSpan={viewerIsAdmin ? 8 : 6} className="text-center py-12 text-xs text-neutral-400">Sin resultados</td></tr>
               )}
               {members.map((m) => (
                 <tr
@@ -302,6 +313,9 @@ export default function EquipoPage() {
                   <td className="px-4 py-3 text-right text-neutral-700 tabular">{fmtMoney(m.hourlyRate, m.currency)}</td>
                   {viewerIsAdmin && (
                     <td className="px-4 py-3 text-right text-neutral-500 tabular">{fmtMoney(m.hourlyCost, m.currency)}</td>
+                  )}
+                  {viewerIsAdmin && (
+                    <td className="px-4 py-3 text-right text-neutral-500 tabular">{fmtMoney(m.monthlySalary, m.currency)}</td>
                   )}
                 </tr>
               ))}
@@ -345,6 +359,9 @@ export default function EquipoPage() {
                   <DetailRow label="Tarifa por hora" value={fmtMoney(openMember.hourlyRate, openMember.currency)} />
                   {viewerIsAdmin && (
                     <DetailRow label="Coste por hora" value={fmtMoney(openMember.hourlyCost, openMember.currency)} />
+                  )}
+                  {viewerIsAdmin && (
+                    <DetailRow label="Salario mensual" value={fmtMoney(openMember.monthlySalary, openMember.currency)} />
                   )}
                   {openMember.notes && (
                     <div>
@@ -415,17 +432,29 @@ export default function EquipoPage() {
                         onChange={(e) => setForm((f) => ({ ...f, hourlyRate: e.target.value }))}
                         className={inputCls} placeholder="0.00" />
                     </FormRow>
-                    <FormRow label="Coste/h">
-                      <input type="number" min="0" step="0.01" value={form.hourlyCost}
-                        onChange={(e) => setForm((f) => ({ ...f, hourlyCost: e.target.value }))}
-                        className={inputCls} placeholder="0.00" />
-                    </FormRow>
+                    {viewerIsAdmin && (
+                      <FormRow label="Coste/h">
+                        <input type="number" min="0" step="0.01" value={form.hourlyCost}
+                          onChange={(e) => setForm((f) => ({ ...f, hourlyCost: e.target.value }))}
+                          className={inputCls} placeholder="0.00" />
+                      </FormRow>
+                    )}
                     <FormRow label="Moneda">
                       <input maxLength={3} value={form.currency}
                         onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value.toUpperCase() }))}
                         className={inputCls} />
                     </FormRow>
                   </div>
+                  {viewerIsAdmin && (
+                    <FormRow label="Salario mensual">
+                      <input type="number" min="0" step="0.01" value={form.monthlySalary}
+                        onChange={(e) => setForm((f) => ({ ...f, monthlySalary: e.target.value }))}
+                        className={inputCls} placeholder={`0.00 ${form.currency || "EUR"}`} />
+                      <p className="text-[10px] text-neutral-400 mt-1">
+                        Solo visible para administradores. Alimenta la analítica de empleados.
+                      </p>
+                    </FormRow>
+                  )}
                   <FormRow label="Estado">
                     <select value={form.status}
                       onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
