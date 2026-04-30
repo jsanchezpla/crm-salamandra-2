@@ -28,8 +28,9 @@ Es un módulo opcional por tenant. Todos los endpoints validan
 - **Verifactu / Facturantia**: los campos `facturantiaId`, `qrUrl`,
   `verifactuStatus`, `verifactuSentAt` existen en `Invoice` pero no se rellenan.
 - **Motor de ejecución automática de RecurringInvoice**: hoy son plantillas
-  con `nextRunAt` orientativa. La emisión real es manual (vía POST al endpoint
-  o creando una factura nueva). Pendiente integrar con n8n.
+  con `nextRunAt` orientativa. La emisión real es manual (vía POST al
+  endpoint, restringido a admin, o creando una factura nueva). Pendiente
+  integrar con n8n.
 - **Integración Inventario ↔ Costes**: `Cost.inventoryProductId` está en BD y
   asociado en Sequelize, pero no hay endpoints ni UI que lo usen. FK durmiente.
 
@@ -49,7 +50,7 @@ Fichero: `models/tenant/Invoice.model.js`. Tabla: `invoices`.
 | `number` | STRING UNIQUE | `DRAFT-…` mientras es borrador; `F-YYYY-NNNN` al emitir. |
 | `status` | ENUM | `draft`, `issued`, `sent`, `paid`, `partially_paid`, `overdue`, `cancelled`, `rectified`. |
 | `issueDate` | DATEONLY NOT NULL | Fecha de emisión (define el periodo fiscal). |
-| `dueDate` | DATEONLY nullable | No se rellena automáticamente desde settings. |
+| `dueDate` | DATEONLY nullable | Se prerellena con `issueDate + TenantBillingSettings.defaultPaymentTermsDays` al crear el borrador y al emitir, si no llega explícito. |
 | `lines` | JSONB | Estructura nueva con IVA por línea. Ver sección dedicada. |
 | `taxBase` | DECIMAL(12,2) | Suma de `lineBase`. **Es la magnitud financiera real**. |
 | `vatAmount` | DECIMAL(12,2) | Suma de `lineVat`. |
@@ -174,7 +175,7 @@ Fichero: `models/tenant/TenantBillingSettings.model.js`. Tabla:
 | `fiscalCountry` | VARCHAR(2) | Default `ES`. |
 | `defaultVatRate` | DECIMAL(5,2) | Default `21`. Aplicado a las nuevas líneas que no traigan `vatRate`. |
 | `availableVatRates` | JSONB | Array de números 0-100. Default `[21, 10, 4, 0]`. La UI usa esta lista en los desplegables. |
-| `defaultPaymentTermsDays` | INTEGER | Default `30`. **No se aplica automáticamente** al `dueDate` en el formulario actual. |
+| `defaultPaymentTermsDays` | INTEGER | Default `30`. Se aplica automáticamente como `dueDate = issueDate + N días` cuando POST `/invoices` no incluye `dueDate`, y al emitir un borrador que aún no lo tenga. La UI también lo prerellena. |
 | `invoiceFooterText`, `logoUrl` | nullable | Branding del documento. |
 
 ### Modelos relacionados
@@ -226,9 +227,8 @@ el desglose en el drawer de la factura.
               POST /invoices                  POST /invoices/:id/issue
    (nada) ──────────────────► draft ──────────────────────────► issued
                               │  │                                │
-                              │  │ DELETE /invoices/:id           │
-                              │  └──► (borrada)                   │
-                              │                                   ▼
+                              │  │ DELETE /invoices/:id           │ POST /invoices/:id/send
+                              │  └──► (borrada)                   ▼
                               │                                  sent
                               │                                   │
               POST /invoices/:id/cancel                           │
@@ -246,16 +246,25 @@ Quién dispara cada transición:
   número correlativo en transacción con `FOR UPDATE`. Rechaza con `422` si
   el cliente no tiene `fiscalName`/`name` o `taxId`. Rechaza con `400` si
   no hay líneas o `total <= 0`. Solo admin/superadmin.
-- **`issued` → `sent`**: actualmente **no existe un endpoint dedicado**. La
-  transición está prevista en `updateInvoiceStatus.js` (revierte de
-  `paid`/`partially_paid` a `sent` si desaparecen los cobros). En la UI no
-  hay botón "Marcar como enviada".
+- **`issued` → `sent`**: `POST /api/billing/invoices/[id]/send`. Solo
+  permitido si el estado actual es `issued`; rechaza con `422` en cualquier
+  otro caso. Solo admin/superadmin. Acepta `?via=email|whatsapp|other` como
+  anotación informativa (se persiste en `customFields.sentVia`/`sentAt`).
+  La distinción `issued` vs `sent` es informativa: **no afecta a ningún
+  cálculo de KPI**. También se usa como destino de revertido desde
+  `paid`/`partially_paid` cuando desaparecen los cobros (ver
+  `updateInvoiceStatus.js`).
 - **`issued`/`sent` → `paid` / `partially_paid`**: indirecto. Al crear o
   actualizar `Payment`, `updateInvoiceStatus` recalcula `paidAmount` y
   ajusta el estado.
-- **`overdue`**: hoy solo se asigna manualmente (por ejemplo en el seed). No
-  hay job que recorra facturas vencidas. Cualquier factura `issued`/`sent`
-  con `dueDate < hoy` y `paidAmount < total` no pasa sola a `overdue`.
+- **`overdue`**: se calcula **dinámicamente en lectura** (no se persiste).
+  El helper `lib/billing/invoiceStatus.js` (`effectiveStatus`) reescribe
+  el `status` que se serializa hacia el cliente: si la factura está en
+  `issued`/`sent`/`partially_paid` y `dueDate < hoy` y `paidAmount < total`,
+  el campo `status` devuelto es `overdue`. La fila en BD no se modifica.
+  Si un admin setea `overdue` manualmente vía PATCH (caso típico:
+  reclamación abierta), prevalece sobre el cálculo. Esto evita la
+  necesidad de un cron y elimina riesgos de desincronización.
 - **`draft`/`issued`/`sent` → `cancelled`**: `POST /invoices/[id]/cancel`.
   `409` si `paidAmount > 0` (refunde primero o emite rectificativa). Solo
   admin/superadmin.
@@ -538,12 +547,18 @@ pasan por `withTenant` y validan `hasModule("billing")`.
 | `GET /invoices/[id]` | Detalle con `payments`, `client`, `employee`, `rectifies`, `rectifiedBy`. | — |
 | `PATCH /invoices/[id]` | Edita un borrador. Recalcula totales si cambian las líneas. | Solo admin/superadmin. |
 | `DELETE /invoices/[id]` | Borra borrador (`409` si no es draft). | Solo admin/superadmin. |
-| `POST /invoices/[id]/issue` | draft → issued con número correlativo en transacción. | Solo admin/superadmin. |
+| `POST /invoices/[id]/issue` | draft → issued con número correlativo en transacción. Aplica `dueDate` por defecto si el borrador no lo tenía. | Solo admin/superadmin. |
+| `POST /invoices/[id]/send` | issued → sent (informativo). `?via=email\|whatsapp\|other` como anotación opcional. `422` si el estado no es `issued`. | Solo admin/superadmin. |
 | `POST /invoices/[id]/cancel` | issued/sent → cancelled (`409` si tiene cobros). | Solo admin/superadmin. |
 | `POST /invoices/[id]/rectify` | Crea factura R-, marca la original como `rectified`. | Solo admin/superadmin. |
 
-Las acciones `issue`, `cancel`, `rectify` registran en `master.AuditLog`
-con la acción correspondiente.
+Las acciones `issue`, `send`, `cancel`, `rectify` registran en
+`master.AuditLog` con la acción correspondiente.
+
+Las respuestas de estos endpoints (incluido el GET) reescriben el `status`
+con `effectiveStatus` (ver "Estados y transiciones": cálculo dinámico de
+`overdue`). El campo persistido en BD no cambia salvo en transiciones
+explícitas.
 
 ### Costs
 
@@ -583,17 +598,17 @@ con la acción correspondiente.
 
 ### Recurring
 
+Todos los endpoints validan `hasModule("billing")`. Las mutaciones requieren
+admin/superadmin.
+
 | Método y ruta | Propósito | Restricciones |
 | --- | --- | --- |
 | `GET /recurring` | Lista con filtros `active`, `clientId` y orden whitelisted. | — |
-| `POST /recurring` | Crea recurrencia. Sin check de rol explícito. | — |
+| `POST /recurring` | Crea recurrencia. | Solo admin/superadmin. |
 | `GET /recurring/[id]` | Detalle. | — |
-| `PATCH /recurring/[id]` | Activa/desactiva, cambia frecuencia/`nextRunAt`/template. Sin check de rol explícito. | — |
-| `POST /recurring/[id]` | Genera **un borrador** desde el template y avanza `nextRunAt`. Sin check de rol explícito. | — |
-| `DELETE /recurring/[id]` | Borra recurrencia. Sin check de rol explícito. | — |
-
-(Ver "Incoherencias detectadas" sobre la falta de validación de rol en este
-sub-recurso.)
+| `PATCH /recurring/[id]` | Activa/desactiva, cambia frecuencia/`nextRunAt`/template. | Solo admin/superadmin. |
+| `POST /recurring/[id]` | Genera **un borrador** desde el template y avanza `nextRunAt`. | Solo admin/superadmin. |
+| `DELETE /recurring/[id]` | Borra recurrencia. | Solo admin/superadmin. |
 
 ### Analytics
 
@@ -617,7 +632,9 @@ sub-recurso.)
 `GET /POST /PATCH /DELETE /api/billing/rates[/...]` y `lib/billing/getApplicableRate.js`
 quedan como sub-módulo legacy de tarifas por empleado del flujo terapéutico
 antiguo. El rework billing usa precio explícito en cada línea de factura.
-**No es un punto de extensión recomendado**.
+**No es un punto de extensión recomendado**. Aún así, todos los endpoints
+validan `hasModule("billing")` y las mutaciones requieren admin/superadmin
+(igualados con el resto del módulo).
 
 ## Páginas frontend
 
@@ -747,57 +764,48 @@ Pendiente de sprints futuros, en orden vagamente sugerido:
 - **Presupuestos** convertibles a factura.
 - **Página detalle de empleado** como ruta propia (`/equipo/[id]`) en lugar
   de drawer.
-- **Endpoint para marcar `sent`** y job que pase facturas vencidas a
-  `overdue` automáticamente.
-- **Validar rol admin** en `POST/PATCH/DELETE /api/billing/recurring` (ver
-  incoherencias).
+- **Filtro por estado efectivo** en `GET /api/billing/invoices?status=overdue`
+  (hoy filtra por status persistido — ver "Limitaciones conocidas").
 
-## Incoherencias detectadas durante la documentación
+## Incoherencias resueltas
 
-Las dejo aquí en lugar de inventar una versión "correcta":
+Todas las incoherencias identificadas en la documentación inicial se
+arreglaron en el sprint inmediatamente posterior. Quedan aquí registradas
+solo como historial de decisiones:
 
-1. **Dos `monthsBetween` distintas**.
-   - `lib/billing/billingSummary.js:313` — fórmula `días/30.4375`. Un año
-     natural devuelve ≈ 12.0 meses.
-   - `app/api/billing/analytics/employees/route.js:158-160` — fórmula
-     inclusiva `(y2-y1)*12 + (m2-m1) + 1`. Un año natural devuelve 12 (igual
-     en este caso, pero diverge en periodos más cortos: febrero entero
-     devuelve 1 mes en la primera, 1 mes en la segunda; un día único
-     devuelve 0 vs. 1).
-   - Resultado: el `projectedSalaryCost` en
-     `/api/billing/analytics/employees` no usa la misma fórmula que el de
-     `/api/team/[id]/billing-summary`, aunque ambos lo etiquetan igual.
-     Recomendación: importar `monthsBetween` desde `billingSummary.js` y
-     borrar la duplicada del route.
+1. **`monthsBetween` unificado**. Hoy hay una única implementación, exportada
+   desde `lib/billing/billingSummary.js`. El endpoint
+   `/api/billing/analytics/employees` la importa, no la duplica.
+2. **`/api/billing/recurring*` con guard de admin** y validación de
+   `hasModule("billing")` en todos los métodos. GET sigue accesible para
+   cualquier autenticado del tenant. La auditoría aplicó el mismo arreglo
+   a `/api/billing/rates*`, que también estaba sin guard.
+3. **`PeriodPicker` deriva el preset activo del rango actual** (no del query
+   param). Cambiar manualmente `from` o `to` resalta automáticamente
+   "Personalizado". Llegar por URL compartida con un rango exacto a un
+   preset lo resalta automáticamente.
+4. **`dueDate` por defecto desde `TenantBillingSettings.defaultPaymentTermsDays`**.
+   `POST /invoices` lo aplica si no llega; `POST /invoices/[id]/issue` lo
+   completa al emitir si el borrador aún no lo tenía. La UI lo prerellena
+   en el formulario de alta.
+5. **`overdue` dinámico en lectura**. Helper `lib/billing/invoiceStatus.js`.
+   No requiere cron ni migración. El admin sigue pudiendo setearlo
+   manualmente vía PATCH (prevalece sobre el cálculo).
+6. **Endpoint `POST /invoices/[id]/send`** y botón "Marcar como enviada" en
+   el drawer de detalle cuando `status === "issued"`. Acepta `?via=` opcional.
 
-2. **Falta validación de rol admin en `/api/billing/recurring*`**. El resto
-   de subrecursos (invoices, costs, payments, series, settings) restringe
-   POST/PATCH/DELETE a admin/superadmin con `request.headers.get("x-user-role")`.
-   En `recurring` no hay este check en ninguno de los métodos. Esto contrasta
-   con la regla general del módulo de mutaciones bajo admin. Documentado
-   también en el backlog.
+### Limitaciones conocidas (no resueltas en este sprint)
 
-3. **`PeriodPicker.jsx` ignora días intra-período**. Cuando se elige
-   "Personalizado" pero solo se cambia `from` o `to`, el otro extremo se
-   queda al valor anterior. Si el usuario alterna entre presets y custom
-   varias veces, el rango puede quedar invertido. No es un bug funcional
-   crítico — los endpoints validan ambos parámetros — pero es un detalle
-   conocido.
-
-4. **`dueDate` no se calcula desde `defaultPaymentTermsDays`**. El formulario
-   de creación de factura deja `dueDate` vacío por defecto, ignorando la
-   configuración `TenantBillingSettings.defaultPaymentTermsDays`. El campo
-   existe y se persiste pero no se aplica como default.
-
-5. **No existe transición automática a `overdue`**. El estado `overdue` solo
-   aparece si se setea explícitamente (lo hace el seed para una factura). En
-   la lógica de `updateInvoiceStatus` no hay rama "vencida": una factura
-   pendiente con `dueDate < hoy` se queda en `issued` o `sent`. La UI muestra
-   `overdue` correctamente cuando existe, pero nada lo dispara.
-
-6. **No hay endpoint para marcar `sent`**. La transición `issued → sent`
-   está en `updateInvoiceStatus.js` (como retorno desde paid si los cobros
-   desaparecen) pero no hay un POST `/invoices/[id]/send`. La UI tampoco
-   tiene botón. Los seeds y la realidad operativa parecen no necesitarla
-   todavía, pero conceptualmente el modelo de estados promete una transición
-   que el código no expone.
+- `GET /api/billing/invoices?status=overdue` filtra por **status persistido**,
+  no por `effectiveStatus`. Una factura `issued` con `dueDate` ya pasado
+  no aparece en el filtro `?status=overdue`, aunque el GET devuelva
+  `status: "overdue"`. Mismo razonamiento para `sortBy=status`. Si en el
+  futuro hace falta filtrar por estado efectivo, hay que pasar la lógica
+  a SQL (CASE expression sobre `due_date`/`paid_amount`/`total`) o
+  post-procesar tras la query.
+- El include de `Invoice` en `GET /api/billing/payments` solo trae
+  `id`, `number`, `total`, `status`, `clientId`, `issueDate`. No se aplica
+  `effectiveStatus` allí porque la página de Cobros no muestra el estado
+  de la factura (solo el del cobro). Si más adelante se muestra,
+  ampliar el include con `dueDate`, `paidAmount` y mapear con
+  `withEffectiveStatus`.

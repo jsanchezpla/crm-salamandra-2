@@ -11,12 +11,20 @@ const inputCls =
 
 const EMPTY_LINE = { description: "", quantity: 1, unitPrice: 0, discountPct: 0, vatRate: 21 };
 
-function emptyForm(defaultVat = 21) {
+function addDaysIso(isoDate, days) {
+  if (!isoDate || !Number.isFinite(days) || days <= 0) return "";
+  const d = new Date(isoDate);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function emptyForm(defaultVat = 21, termsDays = 30) {
+  const issueDate = new Date().toISOString().slice(0, 10);
   return {
     clientId: "",
     employeeId: "",
-    issueDate: new Date().toISOString().slice(0, 10),
-    dueDate: "",
+    issueDate,
+    dueDate: addDaysIso(issueDate, termsDays),
     series: "F",
     notes: "",
     lines: [{ ...EMPTY_LINE, vatRate: defaultVat }],
@@ -59,7 +67,7 @@ export default function FacturasPage() {
   const [openInvoice, setOpenInvoice] = useState(null); // factura abierta
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState(() => emptyForm(21));
+  const [form, setForm] = useState(() => emptyForm(21, 30));
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
 
@@ -107,7 +115,10 @@ export default function FacturasPage() {
   }
   function openCreate() {
     setOpenInvoice(null);
-    setForm(emptyForm(settings?.defaultVatRate ?? 21));
+    setForm(emptyForm(
+      settings?.defaultVatRate ?? 21,
+      Number(settings?.defaultPaymentTermsDays ?? 30)
+    ));
     setShowCreate(true);
     setEditing(true);
     setFormError(null);
@@ -654,6 +665,10 @@ function DetailView({ invoice, isAdmin, onAction, onEdit, saving }) {
               <button onClick={() => onAction("delete")} disabled={saving}
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-40">Eliminar</button>
             </>
+          )}
+          {invoice.status === "issued" && (
+            <button onClick={() => onAction("send")} disabled={saving}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-blue-700 border border-blue-200 hover:bg-blue-50 disabled:opacity-40">Marcar como enviada</button>
           )}
           {(invoice.status === "issued" || invoice.status === "sent") && Number(invoice.paidAmount || 0) === 0 && (
             <button onClick={() => onAction("cancel")} disabled={saving}

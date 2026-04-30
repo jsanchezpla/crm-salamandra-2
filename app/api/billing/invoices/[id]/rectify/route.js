@@ -3,6 +3,7 @@ import { ok, error, forbidden, notFound, serverError } from "../../../../../../l
 import { calculateInvoice } from "../../../../../../lib/billing/calculateInvoice.js";
 import { assignInvoiceNumber } from "../../../../../../lib/billing/generateInvoiceNumber.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
+import { withEffectiveStatus } from "../../../../../../lib/billing/invoiceStatus.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -104,7 +105,7 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
     });
 
     await result.reload();
-    return ok(result);
+    return ok(withEffectiveStatus(result));
   } catch (err) {
     return serverError(err);
   }

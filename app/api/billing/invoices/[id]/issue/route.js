@@ -2,6 +2,7 @@ import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { assignInvoiceNumber } from "../../../../../../lib/billing/generateInvoiceNumber.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
+import { withEffectiveStatus } from "../../../../../../lib/billing/invoiceStatus.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -20,7 +21,7 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
     if (!ADMIN_ROLES.has(role)) return forbidden("Solo admin");
 
     const { id } = await params;
-    const { Invoice, Client } = tenantModels;
+    const { Invoice, Client, TenantBillingSettings } = tenantModels;
 
     const invoice = await Invoice.findByPk(id, {
       include: [{ model: Client, as: "client" }],
@@ -48,6 +49,20 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
       );
     }
 
+    // Si el borrador se emite sin dueDate, aplicar el plazo por defecto del
+    // tenant (defaultPaymentTermsDays). Permite que un draft creado con
+    // settings antiguos cuadre al emitir.
+    let dueDateAtIssue = invoice.dueDate;
+    if (!dueDateAtIssue) {
+      const settings = await TenantBillingSettings.findOne();
+      const termsDays = settings ? Number(settings.defaultPaymentTermsDays ?? 30) : 30;
+      if (Number.isFinite(termsDays) && termsDays > 0) {
+        const due = new Date(invoice.issueDate);
+        due.setDate(due.getDate() + termsDays);
+        dueDateAtIssue = due.toISOString().slice(0, 10);
+      }
+    }
+
     const sequelize = invoice.sequelize;
     const number = await sequelize.transaction(async (t) => {
       const num = await assignInvoiceNumber({
@@ -57,7 +72,9 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
         date: invoice.issueDate,
         t,
       });
-      await invoice.update({ number: num, status: "issued" }, { transaction: t });
+      const updates = { number: num, status: "issued" };
+      if (dueDateAtIssue && !invoice.dueDate) updates.dueDate = dueDateAtIssue;
+      await invoice.update(updates, { transaction: t });
       return num;
     });
 
@@ -72,7 +89,7 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
     });
 
     await invoice.reload();
-    return ok(invoice);
+    return ok(withEffectiveStatus(invoice));
   } catch (err) {
     return serverError(err);
   }

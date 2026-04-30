@@ -1,6 +1,7 @@
 import { fn, col, Op } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../../lib/utils/apiResponse.js";
+import { monthsBetween } from "../../../../../lib/billing/billingSummary.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -155,7 +156,3 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 });
 
 function round2(n) { return Math.round(Number(n) * 100) / 100; }
-function monthsBetween(from, to) {
-  const a = new Date(from), b = new Date(to);
-  return Math.max(0, (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()) + 1);
-}

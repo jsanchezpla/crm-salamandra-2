@@ -4,13 +4,17 @@ import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { withEffectiveStatus } from "../../../../../../lib/billing/invoiceStatus.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
+const VALID_VIA = new Set(["email", "whatsapp", "other"]);
 
 /**
- * POST /api/billing/invoices/[id]/cancel
+ * POST /api/billing/invoices/[id]/send
  *
- * Cancela una factura. Solo permitido en draft (anular borrador) o
- * en issued/sent SIN cobros. Si tiene cobros, hay que rectificar, no
- * cancelar.
+ * Marca una factura emitida como "enviada al cliente". Solo informativa
+ * para tracking comercial — no afecta a cálculos de KPI.
+ *
+ * Acepta query opcional ?via=email|whatsapp|other como anotación. Hoy se
+ * persiste en customFields.sentVia y se registra en el AuditLog. Sin
+ * integraciones reales todavía.
  */
 export const POST = withTenant(async (request, { params }, { tenantModels, hasModule, tenant }) => {
   try {
@@ -21,28 +25,34 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
 
     const { id } = await params;
     const { Invoice } = tenantModels;
+    const { searchParams } = new URL(request.url);
+    const viaParam = searchParams.get("via");
+    const via = viaParam && VALID_VIA.has(viaParam) ? viaParam : null;
 
     const invoice = await Invoice.findByPk(id);
     if (!invoice) return notFound("Factura no encontrada");
-
-    if (!["draft", "issued", "sent"].includes(invoice.status)) {
-      return error(`No se puede cancelar una factura en estado '${invoice.status}'. Usa rectificativa.`, 409);
-    }
-    if (Number(invoice.paidAmount) > 0) {
-      return error("La factura tiene cobros. Refunde los cobros antes de cancelar, o emite rectificativa.", 409);
+    if (invoice.status !== "issued") {
+      return error(`Solo se pueden marcar como enviadas las facturas en estado 'issued'. Estado actual: '${invoice.status}'.`, 422);
     }
 
-    const before = { status: invoice.status };
-    await invoice.update({ status: "cancelled" });
+    const updates = { status: "sent" };
+    if (via) {
+      updates.customFields = {
+        ...(invoice.customFields || {}),
+        sentVia: via,
+        sentAt: new Date().toISOString(),
+      };
+    }
+    await invoice.update(updates);
 
     await auditLog({
       tenantId: tenant.id,
       userId,
-      action: "invoice.cancelled",
+      action: "invoice.sent",
       entity: "Invoice",
       entityId: invoice.id,
-      before,
-      after: { status: "cancelled" },
+      before: { status: "issued" },
+      after: { status: "sent", via },
       ip: request.headers.get("x-forwarded-for"),
     });
 

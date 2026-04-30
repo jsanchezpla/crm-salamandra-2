@@ -1,6 +1,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, noContent, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../../lib/billing/calculateInvoice.js";
+import { withEffectiveStatus } from "../../../../../lib/billing/invoiceStatus.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -22,7 +23,7 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
     });
 
     if (!invoice) return notFound("Factura no encontrada");
-    return ok(invoice);
+    return ok(withEffectiveStatus(invoice));
   } catch (err) {
     return serverError(err);
   }

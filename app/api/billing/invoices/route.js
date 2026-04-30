@@ -3,6 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../lib/billing/calculateInvoice.js";
 import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
+import { withEffectiveStatusList } from "../../../../lib/billing/invoiceStatus.js";
 
 // GET /api/billing/invoices — listado paginado con filtros
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
@@ -63,7 +64,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       offset,
     });
 
-    return ok({ invoices: rows, total: count, page, limit });
+    return ok({ invoices: withEffectiveStatusList(rows), total: count, page, limit });
   } catch (err) {
     return serverError(err);
   }
@@ -93,13 +94,22 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
       return error("Se requiere al menos una línea");
     }
 
-    // Aplicar defaults del tenant si la línea no trae vatRate
+    // Aplicar defaults del tenant: vatRate por línea y dueDate desde
+    // defaultPaymentTermsDays si no llega explícito.
     const settings = await TenantBillingSettings.findOne();
     const defaultVat = settings ? Number(settings.defaultVatRate) : 21;
+    const termsDays = settings ? Number(settings.defaultPaymentTermsDays ?? 30) : 30;
     const linesWithVat = lines.map((l) => ({
       ...l,
       vatRate: l.vatRate != null ? Number(l.vatRate) : defaultVat,
     }));
+
+    let resolvedDueDate = dueDate || null;
+    if (!resolvedDueDate && Number.isFinite(termsDays) && termsDays > 0) {
+      const due = new Date(issueDate);
+      due.setDate(due.getDate() + termsDays);
+      resolvedDueDate = due.toISOString().slice(0, 10);
+    }
 
     const calc = calculateInvoice({ lines: linesWithVat });
 
@@ -108,7 +118,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
       clientId,
       employeeId: employeeId || null,
       issueDate,
-      dueDate: dueDate || null,
+      dueDate: resolvedDueDate,
       lines: calc.lines,
       taxBase: calc.taxBase,
       vatAmount: calc.vatAmount,
