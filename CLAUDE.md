@@ -8,6 +8,27 @@ arquitecto y senior developer de referencia.
 
 ---
 
+## Documentación detallada del proyecto
+
+Antes de implementar cambios en un módulo concreto, lee su doc:
+
+| Módulo        | Doc                        | Estado       |
+| ------------- | -------------------------- | ------------ |
+| Facturación   | `docs/modules/billing.md`  | Implementado |
+| Equipo & RRHH | `docs/modules/team.md`     | Implementado |
+| Leads         | `docs/modules/leads.md`    | Implementado |
+| Formación     | `docs/modules/training.md` | Implementado |
+| Otros módulos | Aún sin doc dedicado       | Pendiente    |
+
+Cualquier detalle no recogido en CLAUDE.md (endpoints específicos,
+fórmulas de cálculo, decisiones de implementación, validaciones,
+integraciones cross-module) vive en estos docs. Si encuentras una
+discrepancia entre código y doc, prevalece el código: actualiza el doc.
+
+Decisiones arquitectónicas históricas: `docs/decisions/` (cuando exista).
+
+---
+
 ## Stack técnico
 
 | Capa             | Tecnología                                     |
@@ -59,7 +80,7 @@ Los datos de cada entorno son completamente independientes — no hay sincroniza
 
 > **Nota sobre tenants:** la lista de tenants en local y en producción NO es necesariamente la misma.
 > Algunos tenants viven solo en producción (`retorika`, `abarcaia`) y otros solo en local
-> (`spain-enzymes` por ahora). Cualquier script de migración debe leer la lista de schemas a
+> (`spain_enzymes` por ahora). Cualquier script de migración debe leer la lista de schemas a
 > procesar desde `master.tenants` en tiempo de ejecución, nunca hardcodearla.
 
 ### Flujo de deploy (`deploy.sh`)
@@ -107,10 +128,10 @@ PostgreSQL DB: salamandra
 ├── schema: master              ← tenants, users, tenant_modules, audit_log
 ├── schema: crm_demo            ← tenant de desarrollo (local + producción)
 ├── schema: crm_retorika        ← Retorika (formación) — solo producción
-├── schema: crm_quality_energy  ← Quality Energy (leads + referidos)
-├── schema: crm_aumenta         ← Aumenta (leads + facturación parcial)
-├── schema: crm_abarcaia        ← Abarcaia (leads) — solo producción
-└── schema: crm_spain_enzymes   ← Spain Enzymes (leads, clientes, inventario) — solo local por ahora
+├── schema: crm_quality_energy  ← Quality Energy (leads)
+├── schema: crm_aumenta         ← Aumenta (leads)
+├── schema: crm_abarcaia        ← Abarcaia (leads + referidos) — solo producción
+└── schema: crm_spain_enzymes   ← Spain Enzymes (leads, clientes, inventario, billing) — solo local por ahora
 ```
 
 ### Motor de personalización por tenant
@@ -132,225 +153,40 @@ El login de Salamandra usa paleta fija (`#FAFAF8` + `#1B3A2D`).
 
 ---
 
-## Estructura de carpetas (REAL — actualizada 2026-04-29)
+## Estructura de carpetas
 
 ```
 crm-salamandra-2/
-│
-├── app/
-│   ├── layout.js                               ← root layout
-│   ├── globals.css
-│   ├── (auth)/
-│   │   ├── layout.jsx
-│   │   └── login/page.jsx
-│   ├── (dashboard)/
-│   │   ├── layout.jsx
-│   │   ├── page.jsx                            ← dashboard home
-│   │   ├── clientes/page.jsx
-│   │   ├── comercial/leads/page.jsx
-│   │   ├── cuestionarios/page.jsx
-│   │   ├── facturacion/
-│   │   │   ├── page.jsx                        ← overview facturación
-│   │   │   ├── analitica/page.jsx
-│   │   │   ├── cobros/page.jsx
-│   │   │   ├── costes/page.jsx
-│   │   │   └── facturas/page.jsx
-│   │   ├── formacion/
-│   │   │   ├── page.jsx                        ← overview formación
-│   │   │   ├── alumnos/page.jsx
-│   │   │   ├── cuestionarios/page.jsx
-│   │   │   ├── cursos/page.jsx
-│   │   │   ├── empresas/page.jsx
-│   │   │   ├── empresas/[id]/page.jsx
-│   │   │   └── usuarios/page.jsx
-│   │   ├── leads/page.jsx
-│   │   └── referidos/page.jsx
-│   └── api/
-│       ├── auth/
-│       │   ├── login/route.js
-│       │   ├── logout/route.js
-│       │   └── refresh/route.js
-│       ├── billing/
-│       │   ├── analytics/route.js
-│       │   ├── analytics/employees/route.js
-│       │   ├── costs/route.js  +  [id]/route.js
-│       │   ├── invoices/route.js  +  [id]/route.js
-│       │   ├── payments/route.js  +  [id]/route.js
-│       │   ├── rates/route.js  +  [id]/route.js
-│       │   └── recurring/route.js  +  [id]/route.js
-│       ├── cuestionarios/
-│       │   ├── route.js  +  [id]/route.js
-│       │   └── sync/route.js
-│       ├── cursos-empresas/codigos-cursos/[email]/route.js
-│       ├── external/retorika/
-│       │   ├── alumnos/route.js  +  [email]/route.js
-│       │   └── cursos/route.js
-│       ├── leads/
-│       │   ├── route.js  +  [id]/route.js
-│       │   ├── export/route.js
-│       │   └── import/route.js  +  excel/route.js
-│       ├── public/
-│       │   ├── leads/route.js                  ← sin auth (formularios públicos)
-│       │   └── referidos/route.js
-│       ├── referidos/route.js  +  [id]/route.js
-│       ├── register/route.js
-│       ├── training/
-│       │   ├── companies/route.js  +  [id]/route.js
-│       │   ├── companies/[id]/courses/route.js  +  [courseId]/route.js
-│       │   ├── courses/route.js  +  [id]/route.js
-│       │   ├── enrollments/route.js  +  export/route.js
-│       │   ├── quiz-attempts/route.js  +  [id]/route.js
-│       │   └── users/route.js  +  import/  +  export/
-│       ├── usuarios/register/empresa/route.js
-│       └── webhooks/tutorlms/
-│           ├── course/route.js
-│           ├── enrollment/route.js
-│           ├── quiz-attempt/route.js
-│           ├── sync/route.js
-│           └── sync-courses/route.js
-│
-├── components/
-│   ├── layout/
-│   │   ├── DashboardShell.jsx
-│   │   └── Sidebar.jsx
-│   └── training/
-│       ├── TrainingBadge.jsx
-│       └── TrainingTable.jsx
-│
-├── lib/
-│   ├── auth/
-│   │   └── jwt.js                              ← verificación y generación JWT
-│   ├── billing/
-│   │   ├── calculateInvoice.js
-│   │   ├── generateInvoiceNumber.js
-│   │   ├── getApplicableRate.js
-│   │   └── updateInvoiceStatus.js
-│   ├── db/
-│   │   ├── masterDb.js                         ← singleton schema master
-│   │   ├── sequalize.js                        ← factoría Sequelize (typo en nombre)
-│   │   └── tenantDb.js                         ← pool por tenant
-│   ├── tenant/
-│   │   ├── tenantCache.js                      ← caché en memoria TTL 60s
-│   │   ├── tenantResolver.js                   ← getTenantContext(request)
-│   │   └── withTenant.js                       ← wrapper para rutas API
-│   └── utils/
-│       ├── apiKeyAuth.js
-│       ├── apiResponse.js
-│       └── errors.js
-│
-├── models/
-│   ├── master/
-│   │   ├── AuditLog.model.js
-│   │   ├── Tenant.model.js
-│   │   ├── TenantModule.model.js
-│   │   └── User.model.js
-│   └── tenant/
-│       ├── Asset.model.js
-│       ├── Client.model.js
-│       ├── Company.model.js                    ← empresas (módulo formación)
-│       ├── CompanyCourse.model.js              ← pivot empresa↔curso
-│       ├── Contact.model.js
-│       ├── Cost.model.js                       ← costes (módulo facturación)
-│       ├── Course.model.js
-│       ├── CourseEnrollment.model.js
-│       ├── Invoice.model.js
-│       ├── Lead.model.js
-│       ├── Message.model.js
-│       ├── Notification.model.js
-│       ├── Payment.model.js                    ← cobros (módulo facturación)
-│       ├── Project.model.js
-│       ├── QuizAttempt.model.js                ← cuestionarios TutorLMS
-│       ├── Rate.model.js                       ← tarifas (módulo facturación)
-│       ├── RecurringInvoice.model.js           ← facturas recurrentes
-│       ├── Task.model.js
-│       ├── TeamMember.model.js
-│       ├── Ticket.model.js
-│       ├── Training.model.js
-│       └── TrainingUser.model.js
-│
-├── modules/
-│   ├── cuestionarios/CuestionariosModule.jsx
-│   ├── leads/LeadsModule.jsx                   ← módulo base de leads
-│   └── overrides/                              ← UI personalizada por tenant
-│       ├── abarcaia/LeadsModule.jsx
-│       ├── aumenta/LeadsModule.jsx
-│       ├── demo/LeadsModule.jsx
-│       ├── quality-energy/
-│       │   ├── LeadsModule.jsx
-│       │   └── ReferidosModule.jsx
-│       └── retorika/LeadsModule.jsx
-│
-├── scripts/                                    ← scripts de DB (seed, sync, migraciones)
-│   ├── db-seed.js
-│   ├── db-sync.js
-│   ├── seed-master.js
-│   ├── seed-abarcaia.js
-│   ├── seed-aumenta.js
-│   ├── seed-cuestionarios-demo.js
-│   ├── seed-quality-energy.js
-│   ├── seed-retorika.js
-│   ├── add-leads-module-demo.js
-│   ├── add-referidos-module-quality.js
-│   ├── add-training-module-demo.js
-│   ├── cleanup-bad-leads.js
-│   ├── clear-abarcaia-leads.js
-│   ├── clear-aumenta-leads.js
-│   ├── clear-quality-leads.js
-│   ├── migrate-quality-leads.js
-│   ├── migrate-rename-therapist-to-employee.js ← rename FK billing therapistId→employeeId
-│   └── remove-abarcaia-from-quality.js
-│
-├── Dockerfile                                  ← imagen de producción
-├── docker-compose.yml                          ← orquestación producción (app + db)
-├── deploy.sh                                   ← script de deploy en VPS
-├── middleware.js
-├── next.config.mjs
-├── package.json
-├── jsconfig.json
-├── eslint.config.mjs
-├── postcss.config.mjs
-├── .prettierrc
-├── .env.local                                  ← config local (gitignored)
-└── .env.production.example                     ← plantilla para producción
+├── app/                  ← rutas Next.js: /api (route handlers), (auth), (dashboard)
+├── components/           ← componentes React compartidos
+├── lib/                  ← infraestructura: db, auth, tenant, billing, team, leads, training, utils
+├── models/               ← modelos Sequelize: master/ (global) y tenant/ (por schema)
+├── modules/              ← módulos UI con overrides por tenant (modules/overrides/{slug}/)
+├── scripts/              ← scripts de DB: seeds, migraciones, mantenimiento
+├── docs/                 ← documentación detallada por módulo y decisiones
+├── Dockerfile, docker-compose.yml, deploy.sh
+├── middleware.js, next.config.mjs, package.json, eslint.config.mjs, .prettierrc
+└── .env.local (gitignored), .env.production.example
 ```
+
+El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 
 ---
 
-## Infraestructura de código — `/lib` (no tocar sin justificación)
+## Infraestructura de código — `/lib`
 
-### `lib/db/sequalize.js`
+| Carpeta         | Propósito                                                                 | Notas                                                                |
+| --------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `lib/db/`       | Conexiones Sequelize: `masterDb` (singleton), `tenantDb` (pool por tenant), `sequalize` (factoría base, typo en nombre) | Pool con purge idle automático cada 5 min                            |
+| `lib/tenant/`   | Resolver multi-tenant: `getTenantContext`, `invalidateTenantCache`, `withTenant` | Cachea config 60s. Devuelve `hasModule`, `getLogicOverride`, `hasFeatureFlag` |
+| `lib/auth/`     | JWT: generación y verificación                                            | —                                                                    |
+| `lib/billing/`  | Lógica de facturación (cálculo, numeración, tarifas, estado)              | Detalle en `docs/modules/billing.md`                                 |
+| `lib/team/`     | Serializer de `TeamMember`                                                | Detalle en `docs/modules/team.md`                                    |
+| `lib/leads/`    | Stages canónicos de leads                                                 | Detalle en `docs/modules/leads.md`                                   |
+| `lib/training/` | Helper de auth HMAC para webhooks de TutorLMS                             | Detalle en `docs/modules/training.md`                                |
+| `lib/utils/`    | Utilidades comunes: `apiResponse`, `errors`, `apiKeyAuth`                 | —                                                                    |
 
-Factoría base. Recibe un schema, devuelve instancia Sequelize configurada.
-No usar directamente — usar `masterDb.js` o `tenantDb.js`.
-
-### `lib/db/masterDb.js`
-
-Singleton schema `master`. Exports: `getMasterDb()`, `getMasterModels()` → { Tenant, User, TenantModule, AuditLog }
-
-### `lib/db/tenantDb.js`
-
-Pool de conexiones por tenant (una instancia por schema, cacheada en Map).
-Purge automático idle cada 5 min.
-Exports: `getTenantDb(slug)`, `closeAllConnections()`, `getPoolStats()`
-
-### `lib/tenant/tenantResolver.js`
-
-Resuelve tenant desde subdominio, header `x-tenant` o JWT. Cachea 60s.
-Exports: `getTenantContext(request)`, `invalidateTenantCache(slug)`
-
-Devuelve: `tenant`, `tenantModels`, `hasModule(key)`, `getLogicOverride(key, subkey)`, `hasFeatureFlag(key, flag)`
-
-### `lib/tenant/withTenant.js`
-
-Wrapper para rutas API que inyecta el contexto del tenant automáticamente.
-
-### `lib/auth/jwt.js`
-
-Generación y verificación de tokens JWT.
-
-### `lib/billing/`
-
-Utilidades del módulo de facturación: cálculo de facturas, numeración, tarifas aplicables, actualización de estado.
+**Regla**: no modificar nada de `/lib/` sin explicar el motivo (regla #2).
 
 ---
 
@@ -367,24 +203,18 @@ Utilidades del módulo de facturación: cálculo de facturas, numeración, tarif
 
 - `Client` — clientes individuales y empresas, incluye acceso portal
 - `Contact` — contactos por rol asociados a cliente
-- `Lead` — oportunidades con stages y probability
+- `Lead` — oportunidades comerciales (detalle en `docs/modules/leads.md`)
 - `Project` — proyectos con columnas Kanban
 - `Task` — tarjetas Kanban (columnId, order, checklist)
 - `Ticket` — incidencias con mensajes tipo chat
-- `Invoice` — facturas con líneas, IVA, PDF, facturantiaId, qrUrl, verifactuStatus, `employeeId` (FK a TeamMember)
-- `RecurringInvoice` — facturas recurrentes programadas
-- `Payment` — cobros asociados a facturas
-- `Cost` — costes y gastos, `employeeId` (FK a TeamMember)
-- `Rate` — tarifas configurables, `employeeId` (FK a TeamMember)
-- `TeamMember` — perfil extendido del user en el tenant; tabla compartida que representa "personas que trabajan en el tenant" (empleados, externos, subcontratados). Usada también como FK desde Rate/Invoice/Cost.
+- `Invoice` — facturas, incl. campos Verifactu y `employeeId` (detalle en `docs/modules/billing.md`)
+- `RecurringInvoice` — facturas recurrentes programadas (detalle en `docs/modules/billing.md`)
+- `Payment` — cobros asociados a facturas (detalle en `docs/modules/billing.md`)
+- `Cost` — costes y gastos, `employeeId` (detalle en `docs/modules/billing.md`)
+- `Rate` — tarifas configurables, `employeeId` (detalle en `docs/modules/billing.md`)
+- `TeamMember` — perfil extendido del usuario en el tenant; FK desde Rate/Invoice/Cost (detalle en `docs/modules/team.md`)
 - `Asset` — inventario (equipos, licencias, materiales)
-- `Training` — formación y certificados por usuario
-- `Company` — empresas cliente del módulo formación (no confundir con `Client`)
-- `Course` — cursos con `wpCourseId` (TutorLMS) y `wcProductId` (WooCommerce)
-- `CompanyCourse` — pivot empresa↔curso
-- `TrainingUser` — alumnos (tipo `private` o `company`)
-- `CourseEnrollment` — matrículas con `enrolledAt` y metadata JSONB
-- `QuizAttempt` — intentos de cuestionarios TutorLMS
+- `Course`, `CompanyCourse`, `TrainingUser`, `CourseEnrollment`, `QuizAttempt`, `Company`, `Training` — módulo Formación (detalle en `docs/modules/training.md`)
 - `Notification` — notificaciones por canal
 - `Message` — chat interno por canal
 
@@ -401,14 +231,14 @@ Utilidades del módulo de facturación: cálculo de facturas, numeración, tarif
 > en esta tabla y en el resto de documentación nueva se listan los
 > slugs **tal cual están en BD** (con underscore).
 
-| Slug             | Entorno         | Módulos activos                                         | Notas                                        |
-| ---------------- | --------------- | ------------------------------------------------------- | -------------------------------------------- |
+| Slug             | Entorno         | Módulos activos                                              | Notas                                        |
+| ---------------- | --------------- | ------------------------------------------------------------ | -------------------------------------------- |
 | `demo`           | local + prod    | clients, leads, calendar, inventory, billing, team, training | Tenant de desarrollo y pruebas; show-room    |
-| `retorika`       | solo producción | training, clients                                       | Academia online (WordPress + TutorLMS)       |
-| `quality_energy` | local + prod    | leads                                                   | Empresa energética. Tuvo `referidos` en su día (limpiado por `remove-abarcaia-from-quality.js`) |
-| `aumenta`        | local + prod    | leads                                                   | Centro de psicología y formación             |
-| `abarcaia`       | solo producción | leads, referidos                                        | Programa de referidos vía formulario público |
-| `spain_enzymes`  | solo local      | leads, clients, inventory, billing                      | Tenant de pruebas creado por Jorge           |
+| `retorika`       | solo producción | training, clients                                            | Academia online (WordPress + TutorLMS)       |
+| `quality_energy` | local + prod    | leads                                                        | Empresa energética. Tuvo `referidos` en su día (limpiado por `remove-abarcaia-from-quality.js`) |
+| `aumenta`        | local + prod    | leads                                                        | Centro de psicología y formación             |
+| `abarcaia`       | solo producción | leads, referidos                                             | Programa de referidos vía formulario público |
+| `spain_enzymes`  | solo local      | leads, clients, inventory, billing                           | Tenant de pruebas creado por Jorge           |
 
 Datos verificados contra `master.tenants` y `master.tenant_modules` el
 2026-04-30 (entorno local). Los tenants `retorika` y `abarcaia` solo
@@ -423,25 +253,25 @@ aplique.
 
 ## Módulos del CRM — 17 planificados
 
-| moduleKey      | Módulo                        | Estado                                          |
-| -------------- | ----------------------------- | ----------------------------------------------- |
-| clients        | #1 Clientes & Cuentas         | Implementado parcial (spain-enzymes)            |
-| sales          | #2 Comercial & Ventas (Leads) | Implementado (5 tenants)                        |
-| projects       | #3 Proyectos (Kanban)         | Pendiente                                       |
-| support        | #4 Soporte & Calidad          | Pendiente                                       |
-| billing        | #5 Facturación                | Implementado parcial (demo, aumenta)            |
-| team           | #6 Equipo & RRHH              | Pendiente                                       |
-| planning       | #7 Planificación & Recursos   | Pendiente                                       |
-| documents      | #8 Documentación & Contratos  | Pendiente                                       |
-| —              | #9 Filtro global por cliente  | Pendiente                                       |
-| inventory      | #10 Inventario & Activos      | Implementado parcial (spain-enzymes)            |
-| training       | #11 Formación & Conocimiento  | Implementado (Retorika)                         |
-| automations    | #12 Automatizaciones & Flujos | Pendiente                                       |
-| ai             | #13 IA & Asistente            | Pendiente                                       |
-| integrations   | #14 Integraciones & API       | Pendiente                                       |
-| analytics      | #15 Analítica & BI            | Pendiente                                       |
-| communications | #16 Comunicaciones            | Pendiente                                       |
-| client_portal  | #17 Portal del Cliente        | Pendiente                                       |
+| moduleKey      | Módulo                        | Estado                                | Doc detallado                |
+| -------------- | ----------------------------- | ------------------------------------- | ---------------------------- |
+| clients        | #1 Clientes & Cuentas         | Implementado parcial (spain_enzymes)  | —                            |
+| sales          | #2 Comercial & Ventas (Leads) | Implementado (5 tenants)              | `docs/modules/leads.md`      |
+| projects       | #3 Proyectos (Kanban)         | Pendiente                             | —                            |
+| support        | #4 Soporte & Calidad          | Pendiente                             | —                            |
+| billing        | #5 Facturación                | Implementado parcial (demo, aumenta)  | `docs/modules/billing.md`    |
+| team           | #6 Equipo & RRHH              | Implementado                          | `docs/modules/team.md`       |
+| planning       | #7 Planificación & Recursos   | Pendiente                             | —                            |
+| documents      | #8 Documentación & Contratos  | Pendiente                             | —                            |
+| —              | #9 Filtro global por cliente  | Pendiente                             | —                            |
+| inventory      | #10 Inventario & Activos      | Implementado parcial (spain_enzymes)  | —                            |
+| training       | #11 Formación & Conocimiento  | Implementado (Retorika)               | `docs/modules/training.md`   |
+| automations    | #12 Automatizaciones & Flujos | Pendiente                             | —                            |
+| ai             | #13 IA & Asistente            | Pendiente                             | —                            |
+| integrations   | #14 Integraciones & API       | Pendiente                             | —                            |
+| analytics      | #15 Analítica & BI            | Pendiente                             | —                            |
+| communications | #16 Comunicaciones            | Pendiente                             | —                            |
+| client_portal  | #17 Portal del Cliente        | Pendiente                             | —                            |
 
 ---
 
@@ -449,16 +279,18 @@ aplique.
 
 ### Facturación — Verifactu
 
-- API de Facturantia (10€/mes, incluye Verifactu)
-- CRM crea factura → Facturantia API → qrUrl + número → PDF con QR
-- Campos extra en Invoice: `facturantiaId`, `qrUrl`, `verifactuStatus`, `verifactuSentAt`
+- API de Facturantia (10€/mes, incluye Verifactu).
+- CRM crea factura → Facturantia API → qrUrl + número → PDF con QR.
+- Campos extra en Invoice: `facturantiaId`, `qrUrl`, `verifactuStatus`, `verifactuSentAt`.
+- Detalle del flujo, errores y endpoints en `docs/modules/billing.md`.
 
-### Facturación — nomenclatura
+### Facturación — nomenclatura `employeeId`
 
 - Las FK que apuntan a `TeamMember` desde Rate/Invoice/Cost se llaman `employeeId`
   (anteriormente `therapistId`, renombrado en abril 2026 porque el CRM es genérico).
 - En la API, el alias del include es `employee` y el endpoint analítico es
   `/api/billing/analytics/employees`.
+- Migración del rename: `scripts/migrate-rename-therapist-to-employee.js`.
 
 ### Automatizaciones
 
@@ -468,28 +300,20 @@ aplique.
 
 - API OpenAI. Patrón: datos tenant → JSON → prompt → parsear respuesta → pintar.
 
-### Módulo de Formación — Retorika
-
-Implementado para `retorika` (WordPress + TutorLMS + WooCommerce). Reutilizable.
-
-**Endpoints WordPress** (SIN JWT, URL invariable):
-- `GET /api/cursos-empresas/codigos-cursos/:email` — array de `wpCourseId`
-- `POST /api/webhooks/tutorlms/quiz-attempt` — HMAC SHA256 con `X-Retorika-Signature`
-
 ---
 
 ## Reglas de trabajo
 
-1. Verificar si un fichero ya existe antes de crearlo
-2. No modificar ficheros de `/lib/` sin explicar el motivo
-3. Schemas base de tenant → `models/tenant/`
-4. Overrides de UI por cliente → `modules/overrides/{slug}/`
-5. Cambios que afecten a la arquitectura multi-tenant → consultar antes
-6. Cada módulo nuevo: modelo → endpoints → frontend
-7. Siempre usar `getTenantContext` en las rutas — nunca conectar directo a PostgreSQL
-8. Terminal: PowerShell (Windows), no bash
-9. No usar TypeScript — JavaScript puro
-10. No usar `src/` — `app/` en la raíz del proyecto
+1. Verificar si un fichero ya existe antes de crearlo.
+2. No modificar ficheros de `/lib/` sin explicar el motivo.
+3. Schemas base de tenant → `models/tenant/`.
+4. Overrides de UI por cliente → `modules/overrides/{slug}/`.
+5. Cambios que afecten a la arquitectura multi-tenant → consultar antes.
+6. Cada módulo nuevo: modelo → endpoints → frontend.
+7. Siempre usar `getTenantContext` en las rutas — nunca conectar directo a PostgreSQL.
+8. Terminal: PowerShell (Windows), no bash.
+9. No usar TypeScript — JavaScript puro.
+10. No usar `src/` — `app/` en la raíz del proyecto.
 11. **NUNCA ejecutar `git add` ni `git commit`** — Jorge hace los commits manualmente.
     Cuando haya cambios listos, ofrecer un mensaje de commit sugerido para que Jorge lo copie y ejecute él mismo.
 12. Scripts de migración deben leer la lista de schemas desde `master.tenants`,
@@ -499,6 +323,17 @@ Implementado para `retorika` (WordPress + TutorLMS + WooCommerce). Reutilizable.
     el botón del menú hamburguesa. Patrón: `top-14 lg:top-0 ... bottom-0`
     (en lugar de `top-0 h-full`). Aplica al módulo Equipo, Leads y cualquier
     otro nuevo o existente que abra paneles encima de la página.
+14. **Secrets de producción NUNCA pasan por chats con LLMs ni por canales no seguros**.
+    Cuando se rote un secret (HMAC, API key, password), generarlo localmente,
+    configurarlo directamente en `.env.production` del VPS por SSH, y comunicarlo
+    a terceros (clientes, integraciones) por canal cifrado. Si un secret se ha
+    visto en un chat, considerarlo comprometido y rotarlo inmediatamente.
+
+**PowerShell vs bash en ejemplos**: el entorno local de Jorge es PowerShell
+(Windows). Cuando se necesite curl, usar `curl.exe` para invocar el binario
+nativo de Windows (el alias `curl` de PowerShell apunta a `Invoke-WebRequest`
+con sintaxis distinta). En el VPS de producción es bash y `curl` funciona
+como en Linux.
 
 ---
 
@@ -520,39 +355,39 @@ Usar automáticamente cuando corresponda:
 
 ### Autenticación y autorización
 
-- Validar JWT antes de resolver tenant — nunca fiar slug de URL sin verificar
-- JWT en httpOnly cookies — nunca localStorage
-- Refresh token con rotación
-- Rate limiting en endpoints de auth
+- Validar JWT antes de resolver tenant — nunca fiar slug de URL sin verificar.
+- JWT en httpOnly cookies — nunca localStorage.
+- Refresh token con rotación.
+- Rate limiting en endpoints de auth.
 
 ### Aislamiento entre tenants
 
-- Nunca queries sin `getTenantContext` — directo a PostgreSQL prohibido
-- Verificar que el recurso pertenece al tenant activo
-- Schemas de PostgreSQL son la primera barrera
-- Validar acceso al módulo con `hasModule()` en cada endpoint
+- Nunca queries sin `getTenantContext` — directo a PostgreSQL prohibido.
+- Verificar que el recurso pertenece al tenant activo.
+- Schemas de PostgreSQL son la primera barrera.
+- Validar acceso al módulo con `hasModule()` en cada endpoint.
 
 ### Datos sensibles
 
-- Passwords: bcrypt mínimo 12 rounds — nunca texto plano
-- Nunca devolver `passwordHash` en API
-- Credenciales en `.env.local` / `.env.production` — nunca hardcodeadas
-- `.env*` en `.gitignore`
+- Passwords: bcrypt mínimo 12 rounds — nunca texto plano.
+- Nunca devolver `passwordHash` en API.
+- Credenciales en `.env.local` / `.env.production` — nunca hardcodeadas.
+- `.env*` en `.gitignore`.
 
 ### Inputs y queries
 
-- Sanitizar y validar todos los inputs antes de Sequelize
-- Siempre métodos de Sequelize (nunca SQL raw con inputs del usuario)
-- Si SQL raw necesario → `sequelize.escape()` obligatorio
+- Sanitizar y validar todos los inputs antes de Sequelize.
+- Siempre métodos de Sequelize (nunca SQL raw con inputs del usuario).
+- Si SQL raw necesario → `sequelize.escape()` obligatorio.
 
 ### API y respuestas
 
-- Portal cliente (`/app/portal/`) aislado del dashboard interno
-- Sin stack traces en producción — errores genéricos al cliente, detalle en logs
-- CORS explícito — nunca `origin: *` en producción
-- HTTPS obligatorio en producción
+- Portal cliente (`/app/portal/`) aislado del dashboard interno.
+- Sin stack traces en producción — errores genéricos al cliente, detalle en logs.
+- CORS explícito — nunca `origin: *` en producción.
+- HTTPS obligatorio en producción.
 
 ### Auditoría
 
-- Registrar en `AuditLog` cambios de configuración de tenant y accesos fallidos
-- Logs de auditoría nunca se borran ni modifican
+- Registrar en `AuditLog` cambios de configuración de tenant y accesos fallidos.
+- Logs de auditoría nunca se borran ni modifican.
