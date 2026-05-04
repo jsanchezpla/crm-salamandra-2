@@ -3,6 +3,9 @@ import { jwtVerify } from "jose";
 
 const ACCESS_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
+// Rutas que NO requieren JWT en cookie. Cuidado al añadir entradas: el matcher
+// usa `pathname.startsWith(p)`, así que `/api/leads` cubriría toda la API
+// privada del módulo. La forma pública correcta vive bajo `/api/public/`.
 const PUBLIC_API_PATHS = [
   "/api/auth/login",
   "/api/auth/refresh",
@@ -10,7 +13,6 @@ const PUBLIC_API_PATHS = [
   "/api/cursos-empresas/",
   "/api/webhooks/",
   "/api/register",
-  "/api/leads",
   "/api/usuarios/register/",
   "/api/external/",
 ];

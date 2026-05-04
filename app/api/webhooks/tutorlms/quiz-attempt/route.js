@@ -1,44 +1,34 @@
 import { getTenantContext } from "../../../../../lib/tenant/tenantResolver.js";
 import { handleRouteError } from "../../../../../lib/utils/errors.js";
+import { verifyHmacSignature } from "../../../../../lib/training/webhookAuth.js";
 import { NextResponse } from "next/server";
-import { createHmac, timingSafeEqual } from "crypto";
 import { QueryTypes as SequelizeQueryTypes } from "sequelize";
 
-const WEBHOOK_SECRET = "CabalooGalopante726517893561378";
-
-function verifySignature(rawBody, signatureHeader) {
-  if (!signatureHeader) return false;
-  const signature = signatureHeader.startsWith("sha256=")
-    ? signatureHeader.slice(7)
-    : signatureHeader;
-  const expected = createHmac("sha256", WEBHOOK_SECRET).update(rawBody).digest("hex");
-  try {
-    return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
-  } catch {
-    return false;
-  }
-}
-
 // POST /api/webhooks/tutorlms/quiz-attempt
-// Recibe intentos de quiz en tiempo real desde TutorLMS (WordPress). Sin JWT.
+// Recibe intentos de quiz en tiempo real desde TutorLMS (WordPress).
+// Sin JWT (HMAC + hasModule).
 export async function POST(request) {
   try {
     const rawBody = await request.text();
     const signatureHeader = request.headers.get("x-retorika-signature");
 
-    if (!verifySignature(rawBody, signatureHeader)) {
+    if (!verifyHmacSignature(rawBody, signatureHeader)) {
       return NextResponse.json({ ok: false, error: "Firma inválida" }, { status: 401 });
     }
 
     const payload = JSON.parse(rawBody);
     const ctx = await getTenantContext(request);
+    if (!ctx.hasModule("training")) {
+      return NextResponse.json(
+        { ok: false, error: "Módulo training no activo en este tenant" },
+        { status: 403 }
+      );
+    }
     const { QuizAttempt } = ctx.tenantModels;
     const sequelize = QuizAttempt.sequelize;
     const schema = `crm_${ctx.slug}`;
 
     const wpAttemptId = parseInt(payload.attempt_id, 10);
-
-    console.log("[RAW] payload.answers[0]:", JSON.stringify(payload.answers?.[0]));
 
     const data = {
       wpAttemptId,
@@ -69,13 +59,9 @@ export async function POST(request) {
       { replacements: { wpAttemptId }, type: SequelizeQueryTypes.SELECT }
     );
 
-    console.log(`[QUIZ-ATTEMPT] schema=${schema} existing=${existing ? existing.id : "null"} totalQ=${data.totalQuestions} answers=${data.answers?.length}`);
-    console.log("[PRE-UPDATE] data.answers[0]:", JSON.stringify(data.answers?.[0]));
-    console.log("[PRE-UPDATE] answers string:", JSON.stringify(data.answers).substring(0, 200));
-
     let attemptId;
     if (existing) {
-      const [, affectedRows] = await sequelize.query(
+      await sequelize.query(
         `UPDATE "${schema}".quiz_attempts SET
           student_name      = :studentName,
           student_email     = :studentEmail,
@@ -118,12 +104,6 @@ export async function POST(request) {
           type: SequelizeQueryTypes.UPDATE,
         }
       );
-
-      const [verify] = await sequelize.query(
-        `SELECT total_questions, correct_answers FROM "${schema}".quiz_attempts WHERE wp_attempt_id = :wpAttemptId`,
-        { replacements: { wpAttemptId }, type: SequelizeQueryTypes.SELECT }
-      );
-      console.log(`[QUIZ-ATTEMPT] affectedRows=${affectedRows} verify=`, JSON.stringify(verify));
 
       attemptId = existing.id;
     } else {

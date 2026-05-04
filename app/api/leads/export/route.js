@@ -2,21 +2,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ForbiddenError } from "../../../../lib/utils/errors.js";
 import { Op } from "sequelize";
 import ExcelJS from "exceljs";
-
-const STAGE_LABELS = {
-  new: "Nuevo",
-  contacted: "Contactado",
-  qualified: "En seguimiento",
-  proposal: "Propuesta",
-  negotiation: "Negociación",
-  won: "Convertido",
-  lost: "Descartado",
-  in_progress: "En proceso",
-  demo_scheduled: "Demo agendada",
-  demo_done: "Demo realizada",
-  closed_yes: "Cerrado - Sí",
-  closed_no: "Cerrado - No",
-};
+import { STAGE_LABELS } from "../../../../lib/leads/stages.js";
 
 const TENANT_COLUMNS = {
   spain_enzymes: {

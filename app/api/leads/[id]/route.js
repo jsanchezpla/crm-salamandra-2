@@ -1,8 +1,10 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, noContent, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { NotFoundError, ForbiddenError } from "../../../../lib/utils/errors.js";
+import { ALLOWED_STAGES } from "../../../../lib/leads/stages.js";
 
-const ALLOWED_STAGES = ["new", "contacted", "qualified", "proposal", "negotiation", "won", "lost"];
+const ADMIN_ROLES = new Set(["admin", "superadmin"]);
+const ADMIN_DENY = "Solo administradores pueden modificar leads";
 
 async function resolveLead(tenantModels, id) {
   const { Lead } = tenantModels;
@@ -20,6 +22,8 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
 
 export const PATCH = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
   if (!hasModule("leads") && !hasModule("sales")) throw new ForbiddenError();
+  const role = request.headers.get("x-user-role");
+  if (!ADMIN_ROLES.has(role)) return forbidden(ADMIN_DENY);
   const { id } = await params;
   const lead = await resolveLead(tenantModels, id);
   const body = await request.json();
@@ -66,6 +70,8 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
 
 export const DELETE = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
   if (!hasModule("leads") && !hasModule("sales")) throw new ForbiddenError();
+  const role = request.headers.get("x-user-role");
+  if (!ADMIN_ROLES.has(role)) return forbidden(ADMIN_DENY);
   const { id } = await params;
   const lead = await resolveLead(tenantModels, id);
   await lead.destroy();

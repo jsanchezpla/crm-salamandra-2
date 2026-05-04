@@ -1,11 +1,22 @@
 import { NextResponse } from "next/server";
 import { getTenantContext } from "../../../../lib/tenant/tenantResolver.js";
+import { ALLOWED_STAGES as VALID_STAGES } from "../../../../lib/leads/stages.js";
+
+const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 export async function POST(request) {
   try {
     const context = await getTenantContext(request);
     if (!context) {
       return NextResponse.json({ ok: false, error: "Tenant no encontrado" }, { status: 401 });
+    }
+
+    const role = request.headers.get("x-user-role");
+    if (!ADMIN_ROLES.has(role)) {
+      return NextResponse.json(
+        { ok: false, error: "Solo administradores pueden importar leads" },
+        { status: 403 }
+      );
     }
 
     const { tenantModels, hasModule } = context;
@@ -98,5 +109,3 @@ export async function POST(request) {
     return NextResponse.json({ ok: false, error: "Error interno del servidor" }, { status: 500 });
   }
 }
-
-const VALID_STAGES = ["new", "contacted", "qualified", "proposal", "negotiation", "won", "lost", "in_progress", "demo_scheduled", "demo_done", "closed_yes", "closed_no"];

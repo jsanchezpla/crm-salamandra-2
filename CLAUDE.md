@@ -392,16 +392,32 @@ Utilidades del módulo de facturación: cálculo de facturas, numeración, tarif
 
 ## Tenants activos
 
-| Slug             | Entorno         | Módulos activos                          | Notas                                        |
-| ---------------- | --------------- | ---------------------------------------- | -------------------------------------------- |
-| `demo`           | local + prod    | leads, training, cuestionarios, billing  | Tenant de desarrollo y pruebas               |
-| `retorika`       | solo producción | training, cuestionarios, leads           | Academia online (WordPress + TutorLMS)       |
-| `quality-energy` | local + prod    | leads, referidos                         | Empresa energética                           |
-| `aumenta`        | local + prod    | leads, billing                           | -                                            |
-| `abarcaia`       | solo producción | leads                                    | -                                            |
-| `spain-enzymes`  | solo local      | leads, clients, inventory                | Tenant de pruebas creado por Jorge           |
+> **Convención de slug**: el slug en `master.tenants.slug` y los nombres
+> de schema PostgreSQL usan **underscore** (`quality_energy`,
+> `spain_enzymes`). El regex de validación en `lib/db/tenantDb.js`
+> solo acepta `[a-z0-9_]`. Las carpetas de overrides en
+> `modules/overrides/` usan **guión** por convención cosmética
+> (`quality-energy/`, `spain-enzymes/`). Para evitar confusiones,
+> en esta tabla y en el resto de documentación nueva se listan los
+> slugs **tal cual están en BD** (con underscore).
 
-Cada tenant puede tener override de UI en `modules/overrides/{slug}/` y seed propio en `scripts/seed-{slug}.js` cuando aplique.
+| Slug             | Entorno         | Módulos activos                                         | Notas                                        |
+| ---------------- | --------------- | ------------------------------------------------------- | -------------------------------------------- |
+| `demo`           | local + prod    | clients, leads, calendar, inventory, billing, team, training | Tenant de desarrollo y pruebas; show-room    |
+| `retorika`       | solo producción | training, clients                                       | Academia online (WordPress + TutorLMS)       |
+| `quality_energy` | local + prod    | leads                                                   | Empresa energética. Tuvo `referidos` en su día (limpiado por `remove-abarcaia-from-quality.js`) |
+| `aumenta`        | local + prod    | leads                                                   | Centro de psicología y formación             |
+| `abarcaia`       | solo producción | leads, referidos                                        | Programa de referidos vía formulario público |
+| `spain_enzymes`  | solo local      | leads, clients, inventory, billing                      | Tenant de pruebas creado por Jorge           |
+
+Datos verificados contra `master.tenants` y `master.tenant_modules` el
+2026-04-30 (entorno local). Los tenants `retorika` y `abarcaia` solo
+existen en producción; sus módulos provienen de los seeds
+correspondientes.
+
+Cada tenant puede tener override de UI en `modules/overrides/{slug}/`
+(carpeta con guión) y seed propio en `scripts/seed-{slug}.js` cuando
+aplique.
 
 ---
 

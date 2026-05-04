@@ -6,6 +6,9 @@ import { handleRouteError } from "../../../lib/utils/errors.js";
 import { getTenantContext } from "../../../lib/tenant/tenantResolver.js";
 import { Op } from "sequelize";
 
+const ADMIN_ROLES = new Set(["admin", "superadmin"]);
+const ADMIN_DENY = "Solo administradores pueden modificar leads";
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -58,6 +61,13 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 export async function POST(request) {
   try {
     const ctx = await getTenantContext(request);
+    const role = request.headers.get("x-user-role");
+    if (!ADMIN_ROLES.has(role)) {
+      return NextResponse.json(
+        { ok: false, error: ADMIN_DENY },
+        { status: 403, headers: CORS_HEADERS }
+      );
+    }
     const { Lead } = ctx.tenantModels;
 
     const body = await request.json();

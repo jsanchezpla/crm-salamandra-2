@@ -1,31 +1,16 @@
 import { getTenantContext } from "../../../../../lib/tenant/tenantResolver.js";
 import { handleRouteError } from "../../../../../lib/utils/errors.js";
+import { verifyHmacSignature } from "../../../../../lib/training/webhookAuth.js";
 import { NextResponse } from "next/server";
-import { createHmac, timingSafeEqual } from "crypto";
-
-const WEBHOOK_SECRET = "CabalooGalopante726517893561378";
-
-function verifySignature(rawBody, signatureHeader) {
-  if (!signatureHeader) return false;
-  const signature = signatureHeader.startsWith("sha256=")
-    ? signatureHeader.slice(7)
-    : signatureHeader;
-  const expected = createHmac("sha256", WEBHOOK_SECRET).update(rawBody).digest("hex");
-  try {
-    return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
-  } catch {
-    return false;
-  }
-}
 
 // POST /api/webhooks/tutorlms/course
-// Sincronización de cursos TutorLMS → CRM. Sin JWT, sin hasModule.
+// Sincronización de cursos TutorLMS → CRM. Sin JWT (HMAC + hasModule).
 export async function POST(request) {
   try {
     const rawBody = await request.text();
     const signatureHeader = request.headers.get("x-retorika-signature");
 
-    if (!verifySignature(rawBody, signatureHeader)) {
+    if (!verifyHmacSignature(rawBody, signatureHeader)) {
       return NextResponse.json({ ok: false, error: "Firma inválida" }, { status: 401 });
     }
 
@@ -33,6 +18,12 @@ export async function POST(request) {
     const { action, course_id, course_title, wc_product_id } = payload;
 
     const ctx = await getTenantContext(request);
+    if (!ctx.hasModule("training")) {
+      return NextResponse.json(
+        { ok: false, error: "Módulo training no activo en este tenant" },
+        { status: 403 }
+      );
+    }
     const { Course } = ctx.tenantModels;
 
     if (action === "delete") {
