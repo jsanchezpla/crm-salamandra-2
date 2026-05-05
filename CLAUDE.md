@@ -31,17 +31,17 @@ Decisiones arquitectónicas históricas: `docs/decisions/` (cuando exista).
 
 ## Stack técnico
 
-| Capa             | Tecnología                                     |
-| ---------------- | ---------------------------------------------- |
-| Frontend+Backend | Next.js 16 (App Router + Route Handlers)       |
-| Base de datos    | PostgreSQL                                     |
-| ORM              | Sequelize                                      |
-| Multi-tenant     | Schema por tenant (`crm_{slug}`)               |
-| Estilos          | Tailwind CSS 4                                 |
-| Despliegue       | VPS propio (Docker)                            |
-| Automatizaciones | n8n (instancia propia)                         |
-| IA               | API OpenAI                                     |
-| Lenguaje         | JavaScript puro (SIN TypeScript)               |
+| Capa             | Tecnología                               |
+| ---------------- | ---------------------------------------- |
+| Frontend+Backend | Next.js 16 (App Router + Route Handlers) |
+| Base de datos    | PostgreSQL                               |
+| ORM              | Sequelize                                |
+| Multi-tenant     | Schema por tenant (`crm_{slug}`)         |
+| Estilos          | Tailwind CSS 4                           |
+| Despliegue       | VPS propio (Docker)                      |
+| Automatizaciones | n8n (instancia propia)                   |
+| IA               | API OpenAI                               |
+| Lenguaje         | JavaScript puro (SIN TypeScript)         |
 
 > El proyecto anterior usaba MongoDB + Mongoose + Express. Descartado.
 
@@ -68,12 +68,12 @@ El proyecto tiene DOS entornos completamente separados con bases de datos indepe
 
 **Contenedores Docker en producción:**
 
-| Container                | Imagen               | Puerto                 | Descripción                   |
-| ------------------------ | -------------------- | ---------------------- | ----------------------------- |
-| `crm-salamandra-app-1`   | `crm-salamandra-app` | `127.0.0.1:3000->3000` | App Next.js (producción)      |
-| `crm-salamandra-db-1`    | `postgres:16-alpine` | 5432 (interno Docker)  | PostgreSQL del CRM            |
-| `n8n`                    | `n8nio/n8n:latest`   | `127.0.0.1:5678->5678` | Motor de automatizaciones     |
-| `n8n-postgres`           | `postgres:15-alpine` | 5432 (interno Docker)  | PostgreSQL de n8n (separada)  |
+| Container              | Imagen               | Puerto                 | Descripción                  |
+| ---------------------- | -------------------- | ---------------------- | ---------------------------- |
+| `crm-salamandra-app-1` | `crm-salamandra-app` | `127.0.0.1:3000->3000` | App Next.js (producción)     |
+| `crm-salamandra-db-1`  | `postgres:16-alpine` | 5432 (interno Docker)  | PostgreSQL del CRM           |
+| `n8n`                  | `n8nio/n8n:latest`   | `127.0.0.1:5678->5678` | Motor de automatizaciones    |
+| `n8n-postgres`         | `postgres:15-alpine` | 5432 (interno Docker)  | PostgreSQL de n8n (separada) |
 
 **Los schemas (estructura de tablas) son los mismos porque vienen del código.
 Los datos de cada entorno son completamente independientes — no hay sincronización de datos entre local y producción.**
@@ -175,16 +175,16 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 
 ## Infraestructura de código — `/lib`
 
-| Carpeta         | Propósito                                                                 | Notas                                                                |
-| --------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `lib/db/`       | Conexiones Sequelize: `masterDb` (singleton), `tenantDb` (pool por tenant), `sequalize` (factoría base, typo en nombre) | Pool con purge idle automático cada 5 min                            |
-| `lib/tenant/`   | Resolver multi-tenant: `getTenantContext`, `invalidateTenantCache`, `withTenant` | Cachea config 60s. Devuelve `hasModule`, `getLogicOverride`, `hasFeatureFlag` |
-| `lib/auth/`     | JWT: generación y verificación                                            | —                                                                    |
-| `lib/billing/`  | Lógica de facturación (cálculo, numeración, tarifas, estado)              | Detalle en `docs/modules/billing.md`                                 |
-| `lib/team/`     | Serializer de `TeamMember`                                                | Detalle en `docs/modules/team.md`                                    |
-| `lib/leads/`    | Stages canónicos de leads                                                 | Detalle en `docs/modules/leads.md`                                   |
-| `lib/training/` | Helper de auth HMAC para webhooks de TutorLMS                             | Detalle en `docs/modules/training.md`                                |
-| `lib/utils/`    | Utilidades comunes: `apiResponse`, `errors`, `apiKeyAuth`                 | —                                                                    |
+| Carpeta         | Propósito                                                                                                               | Notas                                                                         |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `lib/db/`       | Conexiones Sequelize: `masterDb` (singleton), `tenantDb` (pool por tenant), `sequalize` (factoría base, typo en nombre) | Pool con purge idle automático cada 5 min                                     |
+| `lib/tenant/`   | Resolver multi-tenant: `getTenantContext`, `invalidateTenantCache`, `withTenant`                                        | Cachea config 60s. Devuelve `hasModule`, `getLogicOverride`, `hasFeatureFlag` |
+| `lib/auth/`     | JWT: generación y verificación                                                                                          | —                                                                             |
+| `lib/billing/`  | Lógica de facturación (cálculo, numeración, tarifas, estado)                                                            | Detalle en `docs/modules/billing.md`                                          |
+| `lib/team/`     | Serializer de `TeamMember`                                                                                              | Detalle en `docs/modules/team.md`                                             |
+| `lib/leads/`    | Stages canónicos de leads                                                                                               | Detalle en `docs/modules/leads.md`                                            |
+| `lib/training/` | Helper de auth HMAC para webhooks de TutorLMS                                                                           | Detalle en `docs/modules/training.md`                                         |
+| `lib/utils/`    | Utilidades comunes: `apiResponse`, `errors`, `apiKeyAuth`                                                               | —                                                                             |
 
 **Regla**: no modificar nada de `/lib/` sin explicar el motivo (regla #2).
 
@@ -231,14 +231,14 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 > en esta tabla y en el resto de documentación nueva se listan los
 > slugs **tal cual están en BD** (con underscore).
 
-| Slug             | Entorno         | Módulos activos                                              | Notas                                        |
-| ---------------- | --------------- | ------------------------------------------------------------ | -------------------------------------------- |
-| `demo`           | local + prod    | clients, leads, calendar, inventory, billing, team, training | Tenant de desarrollo y pruebas; show-room    |
-| `retorika`       | solo producción | training, clients                                            | Academia online (WordPress + TutorLMS)       |
+| Slug             | Entorno         | Módulos activos                                              | Notas                                                                                           |
+| ---------------- | --------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `demo`           | local + prod    | clients, leads, calendar, inventory, billing, team, training | Tenant de desarrollo y pruebas; show-room                                                       |
+| `retorika`       | solo producción | training, clients                                            | Academia online (WordPress + TutorLMS)                                                          |
 | `quality_energy` | local + prod    | leads                                                        | Empresa energética. Tuvo `referidos` en su día (limpiado por `remove-abarcaia-from-quality.js`) |
-| `aumenta`        | local + prod    | leads                                                        | Centro de psicología y formación             |
-| `abarcaia`       | solo producción | leads, referidos                                             | Programa de referidos vía formulario público |
-| `spain_enzymes`  | solo local      | leads, clients, inventory, billing                           | Tenant de pruebas creado por Jorge           |
+| `aumenta`        | local + prod    | leads                                                        | Centro de psicología y formación                                                                |
+| `abarcaia`       | solo producción | leads, referidos                                             | Programa de referidos vía formulario público                                                    |
+| `spain_enzymes`  | solo local      | leads, clients, inventory, billing                           | Tenant de pruebas creado por Jorge                                                              |
 
 Datos verificados contra `master.tenants` y `master.tenant_modules` el
 2026-04-30 (entorno local). Los tenants `retorika` y `abarcaia` solo
@@ -253,25 +253,24 @@ aplique.
 
 ## Módulos del CRM — 17 planificados
 
-| moduleKey      | Módulo                        | Estado                                | Doc detallado                |
-| -------------- | ----------------------------- | ------------------------------------- | ---------------------------- |
-| clients        | #1 Clientes & Cuentas         | Implementado parcial (spain_enzymes)  | —                            |
-| sales          | #2 Comercial & Ventas (Leads) | Implementado (5 tenants)              | `docs/modules/leads.md`      |
-| projects       | #3 Proyectos (Kanban)         | Pendiente                             | —                            |
-| support        | #4 Soporte & Calidad          | Pendiente                             | —                            |
-| billing        | #5 Facturación                | Implementado parcial (demo, aumenta)  | `docs/modules/billing.md`    |
-| team           | #6 Equipo & RRHH              | Implementado                          | `docs/modules/team.md`       |
-| planning       | #7 Planificación & Recursos   | Pendiente                             | —                            |
-| documents      | #8 Documentación & Contratos  | Pendiente                             | —                            |
-| —              | #9 Filtro global por cliente  | Pendiente                             | —                            |
-| inventory      | #10 Inventario & Activos      | Implementado parcial (spain_enzymes)  | —                            |
-| training       | #11 Formación & Conocimiento  | Implementado (Retorika)               | `docs/modules/training.md`   |
-| automations    | #12 Automatizaciones & Flujos | Pendiente                             | —                            |
-| ai             | #13 IA & Asistente            | Pendiente                             | —                            |
-| integrations   | #14 Integraciones & API       | Pendiente                             | —                            |
-| analytics      | #15 Analítica & BI            | Pendiente                             | —                            |
-| communications | #16 Comunicaciones            | Pendiente                             | —                            |
-| client_portal  | #17 Portal del Cliente        | Pendiente                             | —                            |
+| moduleKey      | Módulo                        | Estado                               | Doc detallado              |
+| -------------- | ----------------------------- | ------------------------------------ | -------------------------- |
+| clients        | #1 Clientes & Cuentas         | Implementado parcial (spain_enzymes) | —                          |
+| sales          | #2 Comercial & Ventas (Leads) | Implementado (5 tenants)             | `docs/modules/leads.md`    |
+| projects       | #3 Proyectos (Kanban)         | Pendiente                            | —                          |
+| support        | #4 Soporte & Calidad          | Pendiente                            | —                          |
+| billing        | #5 Facturación                | Implementado parcial (demo, aumenta) | `docs/modules/billing.md`  |
+| team           | #6 Equipo & RRHH              | Implementado                         | `docs/modules/team.md`     |
+| planning       | #7 Planificación & Recursos   | Pendiente                            | —                          |
+| documents      | #8 Documentación & Contratos  | Pendiente                            | —                          |
+| —              | #9 Filtro global por cliente  | Pendiente                            | —                          |
+| inventory      | #10 Inventario & Activos      | Implementado parcial (spain_enzymes) | —                          |
+| training       | #11 Formación & Conocimiento  | Implementado (Retorika)              | `docs/modules/training.md` |
+| automations    | #12 Automatizaciones & Flujos | Pendiente                            | —                          |
+| ai             | #13 IA & Asistente            | Pendiente                            | —                          |
+| integrations   | #14 Integraciones & API       | Pendiente                            | —                          |
+| analytics      | #15 Analítica & BI            | Pendiente                            | —                          |
+| communications | #16 Comunicaciones            | Pendiente                            | —                          |
 
 ---
 
@@ -343,7 +342,7 @@ Usar automáticamente cuando corresponda:
 
 - **frontend-design** — componentes React, páginas, layouts, UI
   - Mobile-first con Tailwind (diseñar móvil → escalar con sm:, md:, lg:)
-  - CRM en desktop es prioritario; portal cliente (#17) debe funcionar en móvil
+  - CRM en desktop es prioritario;
 - **xlsx** — exportaciones de datos, informes en Excel
 - **docx** — generación de documentos Word
 - **pdf** — generación de facturas o documentos PDF

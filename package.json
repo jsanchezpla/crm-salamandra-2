@@ -27,10 +27,17 @@
     "db:seed:team": "node --env-file=.env.local scripts/seed-team-demo.js",
     "db:migrate:billing-rework": "node --env-file=.env.local scripts/migrate-billing-rework.js",
     "db:migrate:billing-rework:prod": "node --env-file=.env.production scripts/migrate-billing-rework.js",
+    "db:migrate:billing-fix-kind-enum": "node --env-file=.env.local scripts/migrate-billing-fix-kind-enum.js",
+    "db:migrate:billing-fix-kind-enum:prod": "node --env-file=.env.production scripts/migrate-billing-fix-kind-enum.js",
     "db:migrate:training": "node --env-file=.env.local scripts/migrate-training-fields.js",
     "db:migrate:training:prod": "node --env-file=.env.production scripts/migrate-training-fields.js",
+    "db:migrate:projects-1": "node --env-file=.env.local scripts/migrate-projects-sprint-1.js",
+    "db:migrate:projects-1:prod": "node --env-file=.env.production scripts/migrate-projects-sprint-1.js",
     "db:seed:billing-demo": "node --env-file=.env.local scripts/seed-billing-demo.js",
-    "db:seed:billing:spain": "node --env-file=.env.local scripts/seed-billing-spain-enzymes.js"
+    "db:seed:billing:spain": "node --env-file=.env.local scripts/seed-billing-spain-enzymes.js",
+    "db:seed:projects-demo": "node --env-file=.env.local scripts/seed-projects-demo.js",
+    "db:reset:demo:dry-run": "node --env-file=.env.local scripts/reset-demo-tenant.js",
+    "db:reset:demo": "node --env-file=.env.local scripts/reset-demo-tenant.js --confirm"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",

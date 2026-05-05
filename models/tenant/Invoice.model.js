@@ -37,6 +37,13 @@ export function defineInvoice(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // FK durmiente a Project (Sprint 1 Proyectos). Sin uso desde la UI ni
+      // desde la lógica de cálculo de rentabilidad; se activa en Sprint 4
+      // del ciclo Proyectos.
+      projectId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       series: {
         type: DataTypes.STRING(8),
         allowNull: false,

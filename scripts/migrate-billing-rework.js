@@ -106,6 +106,21 @@ async function alterEnums(s, schema) {
       log(`· ${schema} enum payments.status: 'refunded' ya existe`);
     }
   }
+
+  // InvoiceSeries.kind: crear ENUM si no existe. La tabla invoice_series se
+  // crea más abajo en fase B (CREATE TABLE) usando este tipo. Mantenemos la
+  // creación aquí porque CREATE TYPE no es transaccional cuando se combina
+  // con ADD VALUE en la misma sesión, y porque otros tenants pueden tener
+  // ya la tabla con la columna como VARCHAR (caso del bug histórico que
+  // arregla scripts/migrate-billing-fix-kind-enum.js).
+  if (!(await enumTypeExists(s, "enum_invoice_series_kind", schema))) {
+    await s.query(
+      `CREATE TYPE "${schema}"."enum_invoice_series_kind" AS ENUM ('normal', 'rectificative')`,
+    );
+    log(`✓ ${schema} enum invoice_series.kind: tipo creado`);
+  } else {
+    log(`· ${schema} enum invoice_series.kind: ya existe`);
+  }
 }
 
 // ─── Fase B: ADD COLUMN, CREATE TABLE, backfill (todo en transacción) ──────
@@ -153,6 +168,10 @@ async function processSchemaInTx(s, t, schema) {
   await addColumnIfNotExists(s, t, schema, "team_members", "monthly_salary", `NUMERIC(10,2)`);
 
   // ── invoice_series ─────────────────────────────────────────────────────
+  // El ENUM enum_invoice_series_kind se crea en fase A (autocommit) antes
+  // de que entremos aquí. Usamos ese tipo directamente en lugar de VARCHAR(20)
+  // para mantener BD y modelo Sequelize alineados (evita que un sync({alter:true})
+  // intente convertir tipos y reviente).
   if (!(await tableExists(s, t, schema, "invoice_series"))) {
     await s.query(`
       CREATE TABLE "${schema}"."invoice_series" (
@@ -163,7 +182,7 @@ async function processSchemaInTx(s, t, schema) {
         year INTEGER NOT NULL,
         next_number INTEGER NOT NULL DEFAULT 1,
         is_default BOOLEAN NOT NULL DEFAULT FALSE,
-        kind VARCHAR(20) NOT NULL DEFAULT 'normal',
+        kind "${schema}"."enum_invoice_series_kind" NOT NULL DEFAULT 'normal',
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
       )

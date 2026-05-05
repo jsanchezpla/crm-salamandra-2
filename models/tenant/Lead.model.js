@@ -95,6 +95,17 @@ export function defineLead(sequelize) {
         type: DataTypes.JSONB,
         defaultValue: {},
       },
+      // FK a Project. Si un lead se convierte en proyecto, queda apuntado
+      // aquí para que el frontend pueda mostrar "Ver proyecto vinculado"
+      // en lugar del botón de conversión.
+      convertedProjectId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      convertedToProjectAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       tableName: "leads",

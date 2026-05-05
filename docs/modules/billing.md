@@ -706,6 +706,70 @@ En producción la `DATABASE_URL` apunta al hostname interno del Docker; el
 script se copia al contenedor con `docker cp` y se ejecuta con `docker exec`
 (patrón habitual del repo).
 
+### Sub-migración correctiva: `invoice_series.kind` ENUM (2026-05)
+
+**Bug histórico**: la primera versión de `migrate-billing-rework.js` creaba
+la columna `invoice_series.kind` como `VARCHAR(20) NOT NULL DEFAULT 'normal'`,
+pero el modelo Sequelize la define como `ENUM('normal', 'rectificative')`.
+Cualquier `sync({ alter: true })` posterior falla al intentar convertir el
+default `'normal'` (varchar) al ENUM:
+
+> el valor por omisión para la columna «kind» no puede ser convertido
+> automáticamente al tipo `enum_invoice_series_kind`
+
+Detectado durante el sprint de QA inicial al ejecutar
+`scripts/reset-demo-tenant.js`. La cadena de seeds incluye un
+`sync({ alter: true })` indirecto y reventaba.
+
+**Fix permanente** (en `migrate-billing-rework.js`):
+
+- En la fase A (autocommit) se crea el TYPE `enum_invoice_series_kind` si
+  no existe, usando el helper `enumTypeExists`.
+- En la fase B el `CREATE TABLE invoice_series` declara
+  `kind "${schema}"."enum_invoice_series_kind" NOT NULL DEFAULT 'normal'`
+  en lugar de `VARCHAR(20)`. Tenants creados a partir de ahora salen ya
+  con el tipo correcto.
+
+**Sub-migración correctiva** (`scripts/migrate-billing-fix-kind-enum.js`):
+
+Para tenants donde la migración antigua ya dejó la columna como VARCHAR.
+Idempotente, lee slugs desde `master.tenants`. Para cada schema:
+
+1. Salta si la tabla `invoice_series` no existe (módulo billing inactivo).
+2. Si el ENUM `enum_invoice_series_kind` no existe, lo crea.
+3. Si la columna `kind` ya es `USER-DEFINED` con
+   `udt_name=enum_invoice_series_kind`, reporta "already-migrated".
+4. Si es `character varying`, ejecuta:
+   - `ALTER TABLE … ALTER COLUMN kind DROP DEFAULT`
+   - `ALTER TABLE … ALTER COLUMN kind TYPE enum_invoice_series_kind USING kind::enum_invoice_series_kind`
+   - `ALTER TABLE … ALTER COLUMN kind SET DEFAULT 'normal'`
+
+Antes de la conversión hace un sanity check (`SELECT DISTINCT kind ...`) y
+aborta si encuentra valores no convertibles.
+
+Comandos:
+
+```
+npm run db:migrate:billing-fix-kind-enum         # local
+npm run db:migrate:billing-fix-kind-enum:prod    # producción
+```
+
+**Estado en local (2026-05)**: ejecutada con éxito. 3 tenants migrados
+(`crm_aumenta`, `crm_quality_energy`, `crm_spain_enzymes`), 1 ya migrado
+(`crm_demo`, alineado previamente por el reset). Re-ejecución idempotente:
+4/4 "already-migrated".
+
+**Pendiente en producción**: ejecutar
+`npm run db:migrate:billing-fix-kind-enum:prod` la próxima vez que se haga
+deploy del módulo billing en el VPS. Mientras tanto el sistema funciona
+porque ningún flujo de runtime escribe en `kind` (solo el seed/migración),
+pero un `sync({ alter: true })` accidental rompería los tenants no
+migrados.
+
+`scripts/reset-demo-tenant.js` mantiene su `alignSchemaQuirks()` como
+defensa en profundidad. Tras la migración correctiva debería ser un no-op
+en cualquier tenant local.
+
 ## Seed
 
 Fichero: `scripts/seed-billing-demo.js`. Comando:
