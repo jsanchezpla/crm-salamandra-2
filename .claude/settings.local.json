@@ -25,7 +25,22 @@
       "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d,indent=2,ensure_ascii=False\\)\\)\")",
       "Bash(echo \"  admin: $\\(curl -s -b /tmp/c.txt \"http://localhost:3000/api/team?status=all\")",
       "Bash(echo \"  admin: $\\(curl -s -b /tmp/c.txt \"http://localhost:3000/api/billing/analytics/employees?from=2026-01-01&to=2026-04-30\")",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(curl.exe -s -b /tmp/cookies.txt \"http://localhost:3000/api/projects\")",
+      "Bash(python -c \"import sys, json; d = json.load\\(sys.stdin\\); print\\('total:', d['data']['total']\\); [print\\(f\\\\\"  {p['code']} {p['name']} status={p['status']} budget={p.get\\('budgetAmount'\\)}\\\\\"\\) for p in d['data']['projects']]\")",
+      "Bash(curl.exe -s -c /tmp/cookies-user.txt -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"tester@demo.salamandra\",\"password\":\"Tester1234!\",\"tenantSlug\":\"demo\"}' -o /dev/null -w 'login HTTP: %{http_code}\\\\n')",
+      "Bash(curl.exe -s -b /tmp/cookies-user.txt \"http://localhost:3000/api/projects\")",
+      "Bash(curl.exe -s -b /tmp/cookies.txt -X POST http://localhost:3000/api/leads/befe808a-84d0-44e5-ab3e-cff9225bae22/convert-to-project -H 'Content-Type: application/json' -d '{\"name\":\"x\"}' -w 'HTTP %{http_code}\\\\n')",
+      "Bash(curl.exe -s -b /tmp/cookies.txt \"http://localhost:3000/api/projects?search=PRY-2026-0001\")",
+      "Bash(curl.exe -s -b /tmp/cookies.txt \"http://localhost:3000/api/project-templates\")",
+      "Bash(curl.exe -s -b /tmp/cookies.txt \"http://localhost:3000/api/clients?limit=200\")",
+      "Bash(curl.exe -s -b /tmp/cookies.txt \"http://localhost:3000/api/team?limit=10\")",
+      "Bash(curl.exe -s -b /tmp/cookies.txt -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"http://localhost:3000/proyectos\")",
+      "Bash(curl.exe -s -b /tmp/cookies.txt -o /dev/null -w 'HTTP %{http_code}\\\\n' http://localhost:3000/proyectos/__TRACKED_VAR__)",
+      "Bash(curl.exe -s -b /tmp/cookies.txt 'http://localhost:3000/api/projects?search=PRY-2026-0006')",
+      "Bash(curl.exe -s -b /tmp/cookies.txt -X DELETE \"http://localhost:3000/api/projects/$\\(curl.exe -s -b /tmp/cookies.txt 'http://localhost:3000/api/projects?search=PRY-2026-0006')",
+      "Read(//c/Program Files/PostgreSQL//**)",
+      "Read(//c/Program Files \\(x86\\)/PostgreSQL//**)"
     ]
   }
 }

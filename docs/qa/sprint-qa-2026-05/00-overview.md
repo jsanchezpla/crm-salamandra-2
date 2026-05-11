@@ -21,12 +21,12 @@ una vez en stdout y NO se persisten en ningún fichero del repo.
 
 ## Cuentas de prueba
 
-| Email                       | Rol           | Módulos visibles                                                  | Password (rellenar a mano) |
-| --------------------------- | ------------- | ----------------------------------------------------------------- | -------------------------- |
-| `admin@demo.salamandra`     | admin         | TODOS                                                             | `__________________`       |
-| `lead@demo.salamandra`      | user (no admin) | leads, team, projects, billing, training, cuestionarios          | `__________________`       |
-| `observer@demo.salamandra`  | user (no admin) | leads, team                                                       | `__________________`       |
-| `portal@demo.salamandra`    | user (placeholder) | ninguno (#17 Portal Cliente sin implementar)                  | `__________________`       |
+| Email                      | Rol                | Módulos visibles                                        | Password (rellenar a mano) |
+| -------------------------- | ------------------ | ------------------------------------------------------- | -------------------------- |
+| `admin@demo.salamandra`    | admin              | TODOS                                                   | `L51z99tgb9TE`             |
+| `lead@demo.salamandra`     | user (no admin)    | leads, team, projects, billing, training, cuestionarios | `VebJyn1tQVA`              |
+| `observer@demo.salamandra` | user (no admin)    | leads, team                                             | `xWjRV5nSmgAN`             |
+| `portal@demo.salamandra`   | user (placeholder) | ninguno (#17 Portal Cliente sin implementar)            | `OU2KbUJoIG4o`             |
 
 > Nota sobre `portal@demo.salamandra`: el ENUM `users.role` en master no
 > tiene un valor `client`. El portal cliente (módulo #17) aún no está
@@ -59,16 +59,16 @@ una vez en stdout y NO se persisten en ningún fichero del repo.
 
 ## Distribución de TCs por fichero
 
-| Fichero          | Módulo                   | TCs       |
-| ---------------- | ------------------------ | --------- |
-| 01-team.md       | Equipo & RRHH            | TC-001 a TC-013 |
-| 02-billing.md    | Facturación              | TC-014 a TC-040 |
-| 03-leads.md      | Leads / Comercial        | TC-041 a TC-052 |
-| 04-training.md   | Formación                | TC-053 a TC-066 |
-| 05-projects.md   | Proyectos (Sprint 1)     | TC-067 a TC-085 |
-| 06-cross-module.md | Cross-module           | TC-086 a TC-095 |
-| 07-security.md   | Seguridad y aislamiento  | TC-096 a TC-107 |
-| **Total**        |                          | **107 TCs** |
+| Fichero            | Módulo                  | TCs             |
+| ------------------ | ----------------------- | --------------- |
+| 01-team.md         | Equipo & RRHH           | TC-001 a TC-013 |
+| 02-billing.md      | Facturación             | TC-014 a TC-040 |
+| 03-leads.md        | Leads / Comercial       | TC-041 a TC-052 |
+| 04-training.md     | Formación               | TC-053 a TC-066 |
+| 05-projects.md     | Proyectos (Sprint 1)    | TC-067 a TC-085 |
+| 06-cross-module.md | Cross-module            | TC-086 a TC-095 |
+| 07-security.md     | Seguridad y aislamiento | TC-096 a TC-107 |
+| **Total**          |                         | **107 TCs**     |
 
 ## Índice de ficheros
 
@@ -90,15 +90,18 @@ una vez en stdout y NO se persisten en ningún fichero del repo.
 **Rol necesario**: admin | lead | observer | portal | público
 
 **Precondiciones**:
+
 - Listar qué debe estar dado de alta antes.
 - Si depende de un test anterior, indicar TC-XXX precondición.
 
 **Pasos**:
+
 1. Acción 1.
 2. Acción 2.
 3. Verificación.
 
 **Resultado esperado**:
+
 - Qué debe ocurrir exactamente.
 
 **Resultado real**: ⏳

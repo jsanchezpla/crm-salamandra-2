@@ -12,9 +12,11 @@
 **Rol necesario**: admin
 
 **Precondiciones**:
+
 - Reset ejecutado.
 
 **Pasos**:
+
 1. Login como `admin@demo.salamandra`.
 2. Ir a `/equipo`.
 3. Verificar que aparecen 4 empleados activos (Ana García, Carlos
@@ -23,12 +25,13 @@
 4. Cambiar filtro a "Todos" y verificar que Sara Romero aparece.
 
 **Resultado esperado**:
+
 - Filtro por defecto: 4 activos.
 - Filtro "Todos": 5 (incluye Sara Romero `inactive`).
 - Columnas Coste/h, Tarifa/h y Salario mensual visibles para admin.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK
+**Bug detectado**: Ninguno
 
 ---
 
@@ -41,6 +44,7 @@
 **Precondiciones**: TC-001.
 
 **Pasos**:
+
 1. Botón "+ Añadir empleado".
 2. Caso A: rellenar solo `displayName = "QA Empleado vacío"` y guardar.
 3. Caso B: nuevo alta con todos los campos rellenos
@@ -49,11 +53,12 @@
 4. Verificar que ambos aparecen en el listado.
 
 **Resultado esperado**:
+
 - A: 201, miembro creado solo con displayName, resto null.
 - B: 201, miembro completo, todos los campos persistidos.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK, pero la tabla de equipo no se ve bien en móvil porque hay que hacer scroll horizonatl en móvil y es más incómodo
+**Bug detectado**: Ninguno
 
 ---
 
@@ -66,18 +71,20 @@
 **Precondiciones**: TC-001.
 
 **Pasos**:
+
 1. Click en Ana García → drawer.
 2. Editar → cambiar `hourlyCost` de 22.5 a 30 y `monthlySalary` de
    2400 a 3000. Guardar.
 3. Recargar y reabrir el drawer.
 
 **Resultado esperado**:
+
 - Cambios persistidos.
 - En `master.AuditLog` aparecen `team.cost_changed` y
   `team.salary_changed` con before/after correctos.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK
+**Bug detectado**: NO
 
 ---
 
@@ -90,18 +97,20 @@
 **Precondiciones**: TC-001.
 
 **Pasos**:
+
 1. Logout. Login como `lead@demo.salamandra`.
 2. Ir a `/equipo`.
 3. Intentar `PATCH /api/team/<id>` con curl o devtools, payload
    `{ "hourlyCost": 999 }`.
 
 **Resultado esperado**:
+
 - UI: el botón "Editar" no aparece (sin admin).
 - API: HTTP 403 "Solo administradores pueden modificar este recurso".
 - En BD el valor sigue siendo el anterior.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK
+**Bug detectado**: NO
 
 ---
 
@@ -114,6 +123,7 @@
 **Precondiciones**: TC-001.
 
 **Pasos**:
+
 1. Login como `observer@demo.salamandra`.
 2. Ir a `/equipo`.
 3. Verificar columnas visibles del listado.
@@ -122,13 +132,14 @@
    `/api/team/[id]`.
 
 **Resultado esperado**:
+
 - UI: NO se ve columna Coste/h ni Salario mensual.
 - JSON: los campos `hourlyCost` y `monthlySalary` están AUSENTES (no
   null, ausentes — el serializer los borra).
 - `hourlyRate` SÍ se ve.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK, igual que el usuario lead@demo.salamandra
+**Bug detectado**: NO
 
 ---
 
@@ -141,6 +152,7 @@
 **Precondiciones**: TC-002 (caso A "QA Empleado vacío" creado).
 
 **Pasos**:
+
 1. Login admin. Drawer del empleado "QA Empleado vacío".
 2. Botón "Desactivar" → confirmar.
 3. Verificar UI: desaparece del filtro por defecto, aparece en "Todos"
@@ -149,12 +161,13 @@
    tocar nada).
 
 **Resultado esperado**:
+
 - 1ª llamada: status pasa a `inactive`.
 - 2ª llamada: 204 idempotente.
 - En `master.AuditLog`: `team.deactivated`.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK
+**Bug detectado**: NO
 
 ---
 
@@ -167,16 +180,18 @@
 **Precondiciones**: TC-001.
 
 **Pasos**:
+
 1. Ana García ya está vinculada al User admin.
 2. Editar Carlos López. Asignarle el mismo `userId` (el del admin).
 
 **Resultado esperado**:
+
 - HTTP 409 con mensaje "El user ya está vinculado a otro miembro".
 - O: HTTP 400 / 422 explicando el conflicto.
 - Ana García sigue vinculada.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK
+**Bug detectado**: NO
 
 ---
 
@@ -189,14 +204,16 @@
 **Precondiciones**: TC-001.
 
 **Pasos**:
+
 1. Crear empleado con `email = "ana.garcia@demo.local"` (mismo que Ana).
 2. Capturar respuesta.
 
 **Resultado esperado**:
+
 - HTTP 409 "Ya existe un miembro con ese email".
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK
+**Bug detectado**: NO
 
 ---
 
@@ -209,16 +226,18 @@
 **Precondiciones**: TC-001.
 
 **Pasos**:
+
 1. Crear empleado A con `email = ""` (string vacío).
 2. Crear empleado B con `email = "   "` (espacios).
 3. Crear empleado C sin enviar `email` en el body.
 
 **Resultado esperado**:
+
 - Los 3 se crean con éxito (varios NULL coexisten en el UNIQUE).
 - En BD: `email` es `NULL` en los 3 (no string vacío).
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK
+**Bug detectado**: NO
 
 ---
 
@@ -231,22 +250,24 @@
 **Precondiciones**: TC-001.
 
 **Pasos**:
+
 1. Abrir form de "Nuevo empleado".
 2. Verificar que el desplegable "Estado" ofrece solo `active` e
    `inactive`.
 3. Vía SQL directo: `UPDATE crm_demo.team_members SET status='on_leave'
-   WHERE display_name='Miguel Sánchez'`.
+WHERE display_name='Miguel Sánchez'`.
 4. Recargar `/equipo`. Abrir el drawer de Miguel.
 5. En el form de edición, el desplegable debe incluir `on_leave` solo
    por estar el empleado actualmente en ese estado.
 
 **Resultado esperado**:
+
 - Listado: badge "De baja" (ámbar) en Miguel.
 - Form: opción `on_leave` visible y seleccionable.
 - Crear empleado nuevo desde cero: sigue sin ofrecer `on_leave`.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK
+**Bug detectado**: NO
 
 ---
 
@@ -259,16 +280,18 @@
 **Precondiciones**: TC-001.
 
 **Pasos**:
+
 1. Escribir rápidamente "Lau" en el cuadro de búsqueda.
 2. Observar Network: solo se debe disparar 1 request a `/api/team?q=Lau`,
    no 3.
 
 **Resultado esperado**:
+
 - Solo 1 request tras un breve delay.
 - Tras teclear, los resultados se filtran a Laura Martínez.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK
+**Bug detectado**: NO
 
 ---
 
@@ -281,17 +304,19 @@
 **Precondiciones**: TC-001.
 
 **Pasos**:
+
 1. Verificar que el filtro de "Rol" muestra exactamente los valores
    presentes ("Empleado Senior", "Empleado Junior").
 2. Crear un empleado con role "Comercial".
 3. Verificar que el desplegable se actualiza para incluir "Comercial".
 
 **Resultado esperado**:
+
 - `availableRoles` se actualiza dinámicamente desde la respuesta del
   listado.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK
+**Bug detectado**: NO
 
 ---
 
@@ -304,15 +329,17 @@
 **Precondiciones**: TC-001.
 
 **Pasos**:
+
 1. Editar Carlos López → cambiar `role` a "Empleado Junior". Guardar.
 2. Editar Carlos López → cambiar `status` a `inactive`. Guardar.
 3. SQL: `SELECT action, before, after FROM master.audit_log
-   WHERE entity='TeamMember' ORDER BY created_at DESC LIMIT 5`.
+WHERE entity='TeamMember' ORDER BY created_at DESC LIMIT 5`.
 
 **Resultado esperado**:
+
 - 2 entradas: `team.role_changed` y `team.status_changed` (más
   posiblemente `team.deactivated` por el DELETE soft).
 - before/after con los valores cambiados.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK
+**Bug detectado**: NO
