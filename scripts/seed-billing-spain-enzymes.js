@@ -47,6 +47,32 @@ async function main() {
   const { sequelize, models } = getTenantDb(SLUG);
   const { Client, Invoice, Payment, Cost, TeamMember, InvoiceSeries, TenantBillingSettings } = models;
 
+  // Rellenar fiscales en hasta 6 clientes que aún no los tengan (si la
+  // empresa nunca usó billing antes, ningún cliente tendrá fiscalName).
+  const allClients = await Client.findAll({
+    where: { status: { [Op.ne]: "inactive" } },
+    limit: 20,
+  });
+  if (allClients.length === 0) {
+    process.stderr.write("\n✗ No hay clientes en spain_enzymes.\n");
+    process.exit(1);
+  }
+  let fiscalUpdated = 0;
+  for (const c of allClients.slice(0, 6)) {
+    if (!c.fiscalName || !c.taxId) {
+      await c.update({
+        fiscalName: c.fiscalName || c.name,
+        taxId: c.taxId || `B${rnd(10000000, 99999999)}`,
+        fiscalAddress: c.fiscalAddress || `Calle ${c.name.split(" ")[0]} ${rnd(1, 99)}`,
+        fiscalCity: c.fiscalCity || pick(["Madrid", "Barcelona", "Valencia", "Sevilla"]),
+        fiscalZip: c.fiscalZip || String(rnd(28000, 28999)),
+        fiscalCountry: "ES",
+      });
+      fiscalUpdated++;
+    }
+  }
+  if (fiscalUpdated > 0) log(`· ${fiscalUpdated} clientes rellenados con fiscalName/taxId`);
+
   const clients = await Client.findAll({
     where: { fiscalName: { [Op.ne]: null }, taxId: { [Op.ne]: null } },
     limit: 20,
