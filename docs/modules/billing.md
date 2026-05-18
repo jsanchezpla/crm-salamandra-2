@@ -391,6 +391,18 @@ corregidos. Si vuelves a tocar `billingSummary.js`, no rompas estos invariantes:
    mantiene como dato informativo.
 5. **`projectedSalaryCost` inflado ~8 %** — la fórmula inclusiva
    `(y2-y1)*12 + (m2-m1) + 1` daba 13 meses para un año. Solución: días/30.4375.
+6. **Cobrado/Facturado > 100 % al rectificar facturas cobradas** — el filtro
+   `status NOT IN (..., 'rectified')` excluía la original (perdiendo su
+   `paid_amount` del `collectedBase`) mientras la R con base negativa restaba
+   del `billedBase` sin compensar el cobrado (R recién creada con
+   `paid_amount=0`). Resultado: ratio > 100 %. **Solución** (2026-05): en
+   `POST /api/billing/invoices/[id]/rectify` la R hereda
+   `paidAmount = -original.paidAmount` al crearse. Así el cobrado virtual de
+   la R compensa exactamente el cobrado perdido al excluir la original. Para
+   tenants con R existentes anteriores al fix, ejecutar el backfill SQL:
+   `UPDATE crm_${slug}.invoices r SET paid_amount = -f.paid_amount FROM
+   crm_${slug}.invoices f WHERE r.rectifies_invoice_id = f.id AND
+   r.paid_amount = 0`.
 
 ## Numeración correlativa
 

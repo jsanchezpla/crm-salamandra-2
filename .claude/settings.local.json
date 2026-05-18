@@ -40,7 +40,24 @@
       "Bash(curl.exe -s -b /tmp/cookies.txt 'http://localhost:3000/api/projects?search=PRY-2026-0006')",
       "Bash(curl.exe -s -b /tmp/cookies.txt -X DELETE \"http://localhost:3000/api/projects/$\\(curl.exe -s -b /tmp/cookies.txt 'http://localhost:3000/api/projects?search=PRY-2026-0006')",
       "Read(//c/Program Files/PostgreSQL//**)",
-      "Read(//c/Program Files \\(x86\\)/PostgreSQL//**)"
+      "Read(//c/Program Files \\(x86\\)/PostgreSQL//**)",
+      "PowerShell(psql *)",
+      "PowerShell(Get-Command *)",
+      "PowerShell(node scripts/tmp-tc017-inspect.js)",
+      "PowerShell($resp = try { Invoke-WebRequest -Uri \"http://localhost:3000/api/auth/me\" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop } catch { $_.Exception.Message }; $resp)",
+      "PowerShell(curl.exe -s -c c:/Dev/salamandra-solutions/crm-salamandra-2/cookie-tc017.txt -H \"Content-Type: application/json\" -d '{\\\\\"email\\\\\":\\\\\"admin@demo.salamandra\\\\\",\\\\\"password\\\\\":\\\\\"L51z99tgb9TE\\\\\"}' -X POST http://localhost:3000/api/auth/login)",
+      "PowerShell(curl.exe -s -b c:/Dev/salamandra-solutions/crm-salamandra-2/cookie-tc017.txt http://localhost:3000/api/billing/series)",
+      "PowerShell(node scripts/tmp-tc017-getid.js)",
+      "PowerShell(curl.exe -s -b c:/Dev/salamandra-solutions/crm-salamandra-2/cookie-tc017.txt -H \"Content-Type: application/json\" -X POST -d '{}' http://localhost:3000/api/billing/invoices/0d911a03-0420-4370-b41f-5bf43617f2a8/rectify)",
+      "PowerShell(node scripts/tmp-tc018-clients.js)",
+      "PowerShell(curl.exe -s -c c:/Dev/salamandra-solutions/crm-salamandra-2/cookie-tc019.txt -H \"Content-Type: application/json\" -d '{\\\\\"email\\\\\":\\\\\"admin@demo.salamandra\\\\\",\\\\\"password\\\\\":\\\\\"L51z99tgb9TE\\\\\"}' -X POST http://localhost:3000/api/auth/login)",
+      "PowerShell(node scripts/tmp-tc019-getid.js)",
+      "PowerShell(curl.exe -s -w \"`nHTTP_CODE:%{http_code}`n\" -b c:/Dev/salamandra-solutions/crm-salamandra-2/cookie-tc019.txt -H \"Content-Type: application/json\" -X POST -d '{\\\\\"invoiceId\\\\\":\\\\\"f5ce103d-44d2-4d37-b9e0-261112343e48\\\\\",\\\\\"amount\\\\\":100,\\\\\"method\\\\\":\\\\\"transfer\\\\\",\\\\\"status\\\\\":\\\\\"completed\\\\\"}' http://localhost:3000/api/billing/payments)",
+      "PowerShell(curl.exe -s -w \"`nHTTP_CODE:%{http_code}`n\" -b c:/Dev/salamandra-solutions/crm-salamandra-2/cookie-tc019.txt -H \"Content-Type: application/json\" -X POST -d '{\\\\\"invoiceId\\\\\":\\\\\"f5ce103d-44d2-4d37-b9e0-261112343e48\\\\\",\\\\\"amount\\\\\":100,\\\\\"method\\\\\":\\\\\"transfer\\\\\",\\\\\"status\\\\\":\\\\\"completed\\\\\",\\\\\"paidAt\\\\\":\\\\\"2026-05-18\\\\\"}' http://localhost:3000/api/billing/payments)",
+      "PowerShell(node scripts/tmp-tc020-check.js)",
+      "PowerShell(Remove-Item *)",
+      "PowerShell(node scripts/tmp-kpi-debug.js)",
+      "PowerShell(node scripts/tmp-backfill-r-paidamount.js)"
     ]
   }
 }

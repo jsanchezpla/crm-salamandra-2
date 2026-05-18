@@ -65,6 +65,12 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
         t,
       });
 
+      // La rectificativa hereda en negativo el paidAmount real de la original.
+      // Garantiza que el KPI "Cobrado" en billingSummary compense exactamente lo
+      // que el filtro `status NOT IN (..., rectified)` excluye de la original.
+      // Sin esto, una F paid rectificada produce ratio Cobrado/Facturado > 100%.
+      const inheritedPaidAmount = -Number(original.paidAmount ?? 0);
+
       const rect = await Invoice.create({
         clientId: original.clientId,
         employeeId: original.employeeId,
@@ -74,7 +80,7 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
         taxBase: calc.taxBase,
         vatAmount: calc.vatAmount,
         total: calc.total,
-        paidAmount: 0,
+        paidAmount: inheritedPaidAmount,
         series: seriesCode,
         number,
         status: "issued",
