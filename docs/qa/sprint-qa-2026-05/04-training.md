@@ -33,8 +33,8 @@ de referencia: `docs/modules/training.md`.
 - HTTP 200.
 - En BD: `crm_demo.courses` tiene un nuevo registro con `wpCourseId=9999`.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK — ejecutado vía `node --env-file=.env.local scripts/test-tutorlms-webhook.js` (CASO C). Payload: `{action:"publish", course_id:99999, course_title:"Test webhook firma", wp_course_id:99999}`. Respuesta **HTTP 200** `{"ok":true,"action":"publish","courseId":"1e6cdf4d-0924-45c8-a617-5f6936f3780d"}`. BD: `crm_demo.courses` pasa de 8→9 registros; el nuevo tiene `wp_course_id=99999`, `name="Test webhook firma"`, `active=true`. El id devuelto coincide con el persistido.
+**Bug detectado**: ℹ️ informativo — el TC en el doc QA muestra payload con shape `{action, data:{id, title, wc_product_id}}`, pero el endpoint real consume el shape plano `{action, course_id, course_title, wp_course_id}` (el que usa el script de test). Es discrepancia del doc QA, no del código. Actualizar el ejemplo del TC para evitar confusión.
 
 ---
 
@@ -52,8 +52,12 @@ de referencia: `docs/modules/training.md`.
 - Ambos: HTTP 401 "Firma inválida".
 - BD sin cambios.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK — `scripts/test-tutorlms-webhook.js`:
+- CASO A `/course` sin header `X-Retorika-Signature` → **HTTP 401** `"Firma inválida"`.
+- CASO B `/course` con `sha256=deadbeef` → **HTTP 401** `"Firma inválida"`.
+- Smoke en los 4 endpoints restantes sin firma → todos **401** (`/enrollment`, `/quiz-attempt`, `/sync`, `/sync-courses`).
+- BD: no se creó ningún curso/inscripción/intento adicional por los casos 401 (el contador solo subió por CASO C de TC-053).
+**Bug detectado**: ninguno.
 
 ---
 
@@ -73,8 +77,13 @@ de referencia: `docs/modules/training.md`.
 - 403 antes de cualquier escritura.
 - Una vez restaurado, los webhooks vuelven a funcionar (200).
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK.
+- UPDATE `master.tenant_modules SET enabled=false WHERE module_key='training' AND tenant_id=(SELECT id FROM master.tenants WHERE slug='demo')`.
+- Espera 65 s para que caduque el cache de `getTenantContext` (TTL 60 s).
+- POST `/api/webhooks/tutorlms/course` con firma válida y `x-tenant: demo` → **HTTP 403** `"Módulo training no activo en este tenant"`. No se persistió nada (el guard `hasModule("training")` rechaza antes del `processCourse`).
+- UPDATE `enabled=true`. Espera 65 s.
+- POST mismo webhook → **HTTP 200** `courseId=49be7152-a571-41ac-ae88-9c9278b40660`. Restaurado.
+**Bug detectado**: ℹ️ operativo — no hay endpoint admin para invalidar el cache de tenant en runtime; cualquier cambio de `tenant_modules.enabled` tarda hasta 60 s en propagarse. En producción significa: tras tocar módulos, esperar ~1 min o reiniciar el proceso. Decisión: dejarlo así (no es un fallo, es un detalle de operación) o exponer endpoint admin con `invalidateTenantCache(slug)`.
 
 ---
 
@@ -94,8 +103,8 @@ de referencia: `docs/modules/training.md`.
 - (Verificación documentada: en sprint anterior se eliminaron 5
   console.log con PII).
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK por inspección de código (no por inspección de stdout en runtime, ya que el dev server lo controla Jorge). `Grep` en `app/api/webhooks/tutorlms/` no devuelve **ningún** `console.log/info/debug/warn`. En `lib/training/` solo aparece un `console.error` en `webhookAuth.js` línea 24, que loguea exclusivamente "RETORIKA_WEBHOOK_SECRET no configurado" — sin PII. La limpieza del sprint anterior se sostiene.
+**Bug detectado**: ninguno.
 
 ---
 
@@ -134,8 +143,8 @@ de referencia: `docs/modules/training.md`.
 **Resultado esperado**:
 - 201, curso creado, aparece en `/formacion/cursos`.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK — login admin via API, `POST /api/training/courses {name:"Curso QA admin TC-058"}` → **HTTP 201**, `data.id=76589e3c-cb79-414c-9629-c8a20bd074b2`. Pendiente confirmación visual en `/formacion/cursos` (Jorge).
+**Bug detectado**: ninguno.
 
 ---
 
@@ -173,8 +182,8 @@ de referencia: `docs/modules/training.md`.
 - En la respuesta: `errors[]` con la fila que falló.
 - Resto de filas válidas se importan.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK funcionalmente, pero comportamiento distinto al esperado. Excel preparado con 3 filas (1 email existente `ana.serrano@tsi.es` + 2 emails nuevos). POST `/api/training/users/import` → HTTP 200 `{"imported":2,"skipped":1,"errors":[]}`. Total en BD: 47 → 49 (delta +2). Fila duplicada no sobreescribe la original. El endpoint usa `findOrCreate`: los duplicados se cuentan en `skipped`, no en `errors[]`. Es **idempotencia silenciosa**, comportamiento mejor que el descrito en el TC.
+**Bug detectado**: 🟡 menor (doc QA) — el TC describe "falla por UNIQUE → aparece en errors[]". El código real usa `findOrCreate` y trata duplicados como `skipped`. Actualizar el TC para reflejar el comportamiento real (que es además preferible: no rompe el import cuando hay duplicados).
 
 ---
 
@@ -197,8 +206,8 @@ es N/A — los endpoints están hardcodeados a `SLUG = "retorika"`.
 **Resultado esperado**:
 - 200 vs 401 según la key.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: **N/A en local**. Schema `crm_retorika` no existe en la BD local (solo en producción). Los endpoints `/api/external/retorika/*` están hardcodeados a `SLUG="retorika"`. Validación pendiente para próximo deploy contra producción.
+**Bug detectado**: ninguno aplicable en local.
 
 ---
 
@@ -220,8 +229,8 @@ es N/A — los endpoints están hardcodeados a `SLUG = "retorika"`.
 - Sin auth, solo header `x-tenant`.
 - (Documentado en backlog: vector de enumeración).
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. `GET /api/cursos-empresas/codigos-cursos/ana.serrano@tsi.es` (header `x-tenant: demo`, sin auth) → **HTTP 200** `[2001,2002]`. `GET /…/noexiste-qa@nada.test` → **HTTP 200** `[]`. Discriminación clara entre existe / no existe — confirma el vector de enumeración ya documentado en backlog.
+**Bug detectado**: ℹ️ recordatorio — el endpoint confirma vector de enumeración (respuestas distintas para email existente vs inexistente, sin auth). Mitigaciones planteadas (auth opcional, rate-limit, respuesta uniforme) pendientes según el backlog del módulo training.
 
 ---
 
@@ -245,8 +254,12 @@ es N/A — los endpoints están hardcodeados a `SLUG = "retorika"`.
 - (3): 403 `{ exists: false }`.
 - (4): 403 (no es de empresa).
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. POST `/api/usuarios/register/empresa` (header `x-tenant: demo`, sin auth):
+- (1) email de alumno company `active=true` → **HTTP 200** `already_active=true`.
+- (2) email tras `UPDATE active=false` → **HTTP 200** `product_ids=[2001,2005,2003]`; BD: `active=true` tras la llamada (re-activado).
+- (3) email inexistente → **HTTP 403** `exists=false`.
+- (4) email de alumno `type='private'` → **HTTP 403** `exists=false`.
+**Bug detectado**: ninguno.
 
 ---
 
@@ -266,8 +279,8 @@ es N/A — los endpoints están hardcodeados a `SLUG = "retorika"`.
 - 2 webhooks → 1 sola fila en `course_enrollments`.
 - Ambas respuestas: 200 (idempotencia).
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. 2 × POST `/api/webhooks/tutorlms/enrollment` con `user_id=88888, course_id=88880, user_email=idempot-tc064@qa.test` → ambas **HTTP 200**. BD: 1 fila en `course_enrollments` para ese `training_user_id` × `course_id`. `findOrCreate` actúa de barrera idempotente.
+**Bug detectado**: ninguno.
 
 ---
 
@@ -285,8 +298,8 @@ es N/A — los endpoints están hardcodeados a `SLUG = "retorika"`.
 - 2 webhooks → 1 sola fila en `quiz_attempts`. La segunda actualiza
   (si los datos cambiaron) o no-op.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. 2 × POST `/api/webhooks/tutorlms/quiz-attempt` con `attempt_id=77777` (mismos datos) → ambas **HTTP 200**. BD: 1 sola fila en `quiz_attempts WHERE wp_attempt_id=77777`. El endpoint hace `SELECT … FOR UPDATE` (en la práctica, sin transacción explícita pero con UNIQUE en `wp_attempt_id`): la segunda llamada ejecuta `UPDATE` en lugar de `INSERT`.
+**Bug detectado**: ninguno.
 
 ---
 

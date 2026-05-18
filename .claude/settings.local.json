@@ -57,7 +57,22 @@
       "PowerShell(node scripts/tmp-tc020-check.js)",
       "PowerShell(Remove-Item *)",
       "PowerShell(node scripts/tmp-kpi-debug.js)",
-      "PowerShell(node scripts/tmp-backfill-r-paidamount.js)"
+      "PowerShell(node scripts/tmp-backfill-r-paidamount.js)",
+      "PowerShell(node scripts/tmp-tc021-state.js)",
+      "PowerShell(curl.exe -s -c c:/Dev/salamandra-solutions/crm-salamandra-2/cookie-tc021.txt -H \"Content-Type: application/json\" -d '{\\\\\"email\\\\\":\\\\\"admin@demo.salamandra\\\\\",\\\\\"password\\\\\":\\\\\"L51z99tgb9TE\\\\\"}' -X POST http://localhost:3000/api/auth/login)",
+      "PowerShell(curl.exe -s -b c:/Dev/salamandra-solutions/crm-salamandra-2/cookie-tc021.txt -H \"Content-Type: application/json\" -X POST -d '{\\\\\"clientId\\\\\":\\\\\"164b7c97-1c93-4111-a8cf-e629a7e1e45b\\\\\",\\\\\"issueDate\\\\\":\\\\\"2026-05-18\\\\\",\\\\\"lines\\\\\":[{\\\\\"description\\\\\":\\\\\"QA cancel draft\\\\\",\\\\\"quantity\\\\\":1,\\\\\"unitPrice\\\\\":10,\\\\\"vatRate\\\\\":0}]}' http://localhost:3000/api/billing/invoices)",
+      "PowerShell(curl.exe -s -b c:/Dev/salamandra-solutions/crm-salamandra-2/cookie-tc021.txt -H \"Content-Type: application/json\" -X POST --data-binary \"@c:/Dev/salamandra-solutions/crm-salamandra-2/scripts/tmp-tc021-payload.json\" http://localhost:3000/api/billing/invoices)",
+      "PowerShell(curl.exe -s -w \"`nHTTP_CODE:%{http_code}`n\" -b c:/Dev/salamandra-solutions/crm-salamandra-2/cookie-tc021.txt -H \"Content-Type: application/json\" -X POST http://localhost:3000/api/billing/invoices/9b7149b4-984e-4c37-914f-77a332c707fc/cancel)",
+      "PowerShell(curl.exe -s -w \"`nHTTP_CODE:%{http_code}`n\" -b c:/Dev/salamandra-solutions/crm-salamandra-2/cookie-tc021.txt -H \"Content-Type: application/json\" -X POST http://localhost:3000/api/billing/invoices/7467ee19-973f-4eed-8aa4-d752626b81e1/cancel)",
+      "PowerShell(curl.exe -s -c c:/Dev/salamandra-solutions/crm-salamandra-2/cookie-tc041.txt -H \"Content-Type: application/json\" -d '{\\\\\"email\\\\\":\\\\\"admin@demo.salamandra\\\\\",\\\\\"password\\\\\":\\\\\"L51z99tgb9TE\\\\\"}' -X POST http://localhost:3000/api/auth/login; curl.exe -s -w \"`nHTTP_CODE:%{http_code}`n\" -b c:/Dev/salamandra-solutions/crm-salamandra-2/cookie-tc041.txt -H \"Content-Type: application/json\" -X POST --data-binary \"@c:/Dev/salamandra-solutions/crm-salamandra-2/scripts/tmp-tc041-payload.json\" http://localhost:3000/api/leads)",
+      "PowerShell(node scripts/tmp-tc041-check.js)",
+      "PowerShell(node scripts/tmp-courses-snapshot.js)",
+      "PowerShell(node --env-file=.env.local scripts/test-tutorlms-webhook.js)",
+      "PowerShell(node --env-file=.env.local scripts/tmp-training-batch.js)",
+      "PowerShell(curl.exe -s -w \"`nHTTP:%{http_code}`n\" -H \"Content-Type: application/json\" -d '{\\\\\"email\\\\\":\\\\\"lead@demo.salamandra\\\\\",\\\\\"password\\\\\":\\\\\"Z3XWQKHEvTnY\\\\\"}' -X POST http://localhost:3000/api/auth/login)",
+      "PowerShell(node scripts/tmp-check-lead.js)",
+      "PowerShell(node scripts/tmp-tc060.js)",
+      "PowerShell(node --env-file=.env.local scripts/tmp-tc055.js)"
     ]
   }
 }

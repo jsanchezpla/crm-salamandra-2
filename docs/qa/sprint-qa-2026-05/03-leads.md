@@ -22,8 +22,10 @@ referencia: `docs/modules/leads.md`.
 - Listado: 35 leads sembrados visibles.
 - Alta manual: 201, lead añadido.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK.
+- Listado en `/leads` (demo override): 35 leads del seed visibles, confirmado en BD `SELECT COUNT(*) = 35` antes del alta.
+- Alta manual: el override de demo (`modules/overrides/demo/LeadsModule.jsx`) NO expone form de "+ Lead" por diseño — es un dashboard de gestión, no de captación; los leads entran por webhook público (TC-042). Probado endpoint genérico `POST /api/leads` (admin auth) via curl con body `{name, email, motivo, mensaje, source:"manual"}` → **HTTP 201**, lead creado con `stage="new"` default, `title` auto-rellenado desde `name`, `source="manual"`. Total post: 36 leads en BD.
+**Bug detectado**: ninguno funcional. ℹ️ informativo: la diferencia UI vs API es deliberada (override demo). Para tenants que sí necesiten alta manual desde UI, hay que añadir el form al override correspondiente o exponer el botón en el componente base de leads.
 
 ---
 

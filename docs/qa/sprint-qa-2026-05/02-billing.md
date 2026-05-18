@@ -220,8 +220,13 @@ datos fiscales del cliente).
 - Caso 3 (issued con cobros): HTTP 409 "No se puede cancelar con
   cobros".
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK.
+- Caso 1 (draft → POST cancel via curl, la UI no expone "Cancelar" en draft, ofrece "Eliminar"): HTTP 200, status `draft` → `cancelled`, number sigue `DRAFT-...` (no consume correlativo F).
+- Caso 2 (F-2026-0015, 10 €, IVA 0%, emitida vía UI sin cobros, cancelada vía UI): status `cancelled` correctamente.
+- Caso 3 (F-2026-0016, 30 €, IVA 0%, emitida + cobro 1 €, status `partially_paid`. UI no muestra "Cancelar" en facturas con cobros, sólo "Rectificar". POST cancel via curl): HTTP 409 `"No se puede cancelar una factura en estado 'partially_paid'. Usa rectificativa."`. La factura no se altera.
+**Bug detectado**:
+- 🟡 menor — el segundo guard del endpoint `/cancel` (`paidAmount > 0`) es **inalcanzable**: cualquier factura con cobros ya tiene su status fuera del whitelist `["draft","issued","sent"]` (lo reescribe `updateInvoiceStatus` a `partially_paid` o `paid`). El mensaje "La factura tiene cobros..." nunca se devuelve. Es código defensivo redundante, no bug funcional. Decisión: dejarlo como red de seguridad o limpiarlo.
+- ℹ️ UX correcto: la UI sustituye "Cancelar" por "Eliminar" en drafts y por "Rectificar" en facturas con cobros. Buen comportamiento — esconde opciones que el backend rechazaría.
 
 ---
 
