@@ -57,13 +57,6 @@ async function main() {
   }
   log(`✓ ${clients.length} clientes con datos fiscales`);
 
-  const employees = await TeamMember.findAll({ where: { status: "active" } });
-  if (employees.length < 1) {
-    process.stderr.write("\n✗ No hay TeamMembers activos. Crea al menos uno.\n");
-    process.exit(1);
-  }
-  log(`✓ ${employees.length} empleados activos`);
-
   const fSeries = await InvoiceSeries.findOne({ where: { code: "F" } });
   const rSeries = await InvoiceSeries.findOne({ where: { code: "R" } });
   if (!fSeries || !rSeries) {
@@ -79,6 +72,8 @@ async function main() {
   log(`✓ Settings: ${settings.fiscalName}`);
 
   // ── 2. Limpiar seed anterior con marcador ─────────────────────────────
+  // Se hace ANTES de crear empleados para que una segunda pasada deje
+  // un estado limpio y reproducible.
   header("Limpiando seed anterior...");
   const oldInv = await Invoice.findAll({ where: { notes: { [Op.like]: `%${SEED_MARKER}%` } } });
   if (oldInv.length > 0) {
@@ -92,8 +87,36 @@ async function main() {
     await Cost.destroy({ where: { id: { [Op.in]: oldCosts.map((c) => c.id) } } });
     log(`· Eliminados ${oldCosts.length} costes anteriores`);
   }
+  // Empleados creados por seed previo (notes contiene el marcador)
+  const oldEmployees = await TeamMember.findAll({ where: { notes: { [Op.like]: `%${SEED_MARKER}%` } } });
+  if (oldEmployees.length > 0) {
+    await TeamMember.destroy({ where: { id: { [Op.in]: oldEmployees.map((e) => e.id) } } });
+    log(`· Eliminados ${oldEmployees.length} empleados anteriores`);
+  }
 
-  // ── 3. Costes (12 meses, perfil empresa B2B con stock) ────────────────
+  // ── 2b. Empleados: validar o crear los 3 ficticios ─────────────────────
+  let employees = await TeamMember.findAll({ where: { status: "active" } });
+  if (employees.length < 1) {
+    const TO_CREATE = [
+      { displayName: "Marta Ruiz",   email: "marta.ruiz@spain-enzymes.test",   position: "Directora",      department: "Dirección",   monthlySalary: 3200, hourlyCost: 30, hourlyRate: 90 },
+      { displayName: "David Torres", email: "david.torres@spain-enzymes.test", position: "Comercial",      department: "Ventas",      monthlySalary: 2400, hourlyCost: 22, hourlyRate: 65 },
+      { displayName: "Lucía Vega",   email: "lucia.vega@spain-enzymes.test",   position: "Administración", department: "Operaciones", monthlySalary: 2100, hourlyCost: 20, hourlyRate: 50 },
+    ];
+    for (const cfg of TO_CREATE) {
+      const emp = await TeamMember.create({
+        ...cfg,
+        status: "active",
+        hiredAt: isoDate(addMonths(new Date(), -12)),
+        notes: SEED_MARKER,
+        customFields: {},
+      });
+      log(`· empleado creado: ${emp.displayName} (${emp.position})`);
+    }
+    employees = await TeamMember.findAll({ where: { status: "active" } });
+  }
+  log(`✓ ${employees.length} empleados activos`);
+
+  // ── 3. Costes (3 meses, perfil empresa B2B con stock) ────────────────
   header("Generando costes...");
   const today = new Date();
   let costCount = 0;
@@ -108,7 +131,7 @@ async function main() {
     total: round2(Number(overrides.taxBase) * (1 + Number(overrides.vatRate ?? 21) / 100)),
   });
 
-  for (let m = 11; m >= 0; m--) {
+  for (let m = 2; m >= 0; m--) {
     const ref = addMonths(today, -m);
     const ymd = (d) => isoDate(new Date(ref.getFullYear(), ref.getMonth(), d));
 
@@ -223,31 +246,22 @@ async function main() {
   ];
 
   const SCENARIOS = [
-    // pago total 30d
-    { lines: [{ qty: 8, prod: 0 }, { qty: 4, prod: 1 }], payRatio: 1.0, daysToPay: 28 },
-    { lines: [{ qty: 3, prod: 2 }], payRatio: 1.0, daysToPay: 35 },
-    { lines: [{ qty: 5, prod: 4 }, { qty: 2, prod: 3 }], payRatio: 1.0, daysToPay: 22 },
-    { lines: [{ qty: 12, prod: 0 }], payRatio: 1.0, daysToPay: 18 },
+    // pago total 30d (IVA 21%)
+    { lines: [{ qty: 8, prod: 0 }, { qty: 4, prod: 1 }], payRatio: 1.0, daysToPay: 22 },
     // pago parcial 50%
     { lines: [{ qty: 1, prod: 5 }, { qty: 6, prod: 0 }], payRatio: 0.5, daysToPay: 15 },
-    // sin cobrar (issued)
-    { lines: [{ qty: 4, prod: 1 }, { qty: 8, prod: 6 }], payRatio: 0, daysToPay: null },
-    // overdue
-    { lines: [{ qty: 2, prod: 3 }], payRatio: 0, daysToPay: null, overdue: true },
-    // multi-tipo IVA
+    // multi-tipo IVA (21 / 4 / 21)
     { lines: [{ qty: 6, prod: 2 }, { qty: 4, prod: 5 }, { qty: 2, prod: 6 }], payRatio: 1.0, daysToPay: 12 },
-    // gran factura
-    { lines: [{ qty: 30, prod: 4 }, { qty: 10, prod: 0 }], payRatio: 1.0, daysToPay: 30 },
-    // pequeña con servicio
-    { lines: [{ qty: 16, prod: 6 }], payRatio: 1.0, daysToPay: 7 },
-    // a rectificar después
+    // sin cobrar (issued, próxima a vencer)
+    { lines: [{ qty: 4, prod: 1 }, { qty: 8, prod: 6 }], payRatio: 0, daysToPay: null },
+    // a rectificar después (sin cobrar)
     { lines: [{ qty: 5, prod: 0 }], payRatio: 0, rectifyAfter: true },
   ];
 
   const created = [];
   for (let i = 0; i < SCENARIOS.length; i++) {
     const sc = SCENARIOS[i];
-    const monthsAgo = Math.floor(i * (10 / SCENARIOS.length));
+    const monthsAgo = Math.floor(i * (2 / SCENARIOS.length));
     const issueDate = isoDate(addMonths(today, -monthsAgo));
     const client = pick(clients);
     const employee = pick(employees);
@@ -329,6 +343,11 @@ async function main() {
     }));
     const rcalc = calculateInvoice({ lines: inverted });
 
+    // Bug #6: la rectificativa hereda paid_amount negativo de la original
+    // para que el KPI Cobrado/Facturado no exceda 100% al excluir la
+    // original por status='rectified'. Ver docs/modules/billing.md.
+    const rectPaidAmount = -Number(toRectify.paidAmount ?? 0);
+
     await sequelize.transaction(async (t) => {
       const number = await assignInvoiceNumber({ sequelize, models, seriesCode: "R", date: isoDate(today), t });
       const rect = await Invoice.create({
@@ -338,7 +357,7 @@ async function main() {
         dueDate: null,
         lines: rcalc.lines,
         taxBase: rcalc.taxBase, vatAmount: rcalc.vatAmount, total: rcalc.total,
-        paidAmount: 0,
+        paidAmount: rectPaidAmount,
         series: "R", number, status: "issued",
         notes: `Rectificativa de ${toRectify.number} ${SEED_MARKER}`,
         customFields: {},
