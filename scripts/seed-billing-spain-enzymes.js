@@ -90,11 +90,20 @@ async function main() {
     process.exit(1);
   }
 
-  const settings = await TenantBillingSettings.findOne();
-  if (!settings || !settings.fiscalName) {
-    process.stderr.write("\n✗ Datos fiscales del emisor no rellenados. Edita /facturacion/configuracion antes.\n");
-    process.exit(1);
-  }
+  // Settings fiscales del emisor: si no están rellenos, los inicializa
+  // con los datos típicos de Spain Enzymes (la nave queda en Cataluña por
+  // coherencia con el resto del seed: "Alquiler nave Castellbisbal").
+  let settings = await TenantBillingSettings.findOne();
+  if (!settings) settings = await TenantBillingSettings.create({});
+  await settings.update({
+    fiscalName: settings.fiscalName || "Spain Enzymes S.L.",
+    taxId: settings.taxId || "B66778899",
+    fiscalAddress: settings.fiscalAddress || "Polígono Industrial Can Pelegrí, nave 7",
+    fiscalCity: settings.fiscalCity || "Castellbisbal",
+    fiscalZip: settings.fiscalZip || "08755",
+    fiscalCountry: settings.fiscalCountry || "ES",
+    defaultPaymentTermsDays: settings.defaultPaymentTermsDays ?? 30,
+  });
   log(`✓ Settings: ${settings.fiscalName}`);
 
   // ── 2. Limpiar seed anterior con marcador ─────────────────────────────
