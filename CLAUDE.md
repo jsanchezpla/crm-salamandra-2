@@ -12,13 +12,14 @@ arquitecto y senior developer de referencia.
 
 Antes de implementar cambios en un módulo concreto, lee su doc:
 
-| Módulo        | Doc                        | Estado       |
-| ------------- | -------------------------- | ------------ |
-| Facturación   | `docs/modules/billing.md`  | Implementado |
-| Equipo & RRHH | `docs/modules/team.md`     | Implementado |
-| Leads         | `docs/modules/leads.md`    | Implementado |
-| Formación     | `docs/modules/training.md` | Implementado |
-| Otros módulos | Aún sin doc dedicado       | Pendiente    |
+| Módulo        | Doc                         | Estado       |
+| ------------- | --------------------------- | ------------ |
+| Facturación   | `docs/modules/billing.md`   | Implementado |
+| Equipo & RRHH | `docs/modules/team.md`      | Implementado |
+| Leads         | `docs/modules/leads.md`     | Implementado |
+| Formación     | `docs/modules/training.md`  | Implementado |
+| Inventario    | `docs/modules/inventory.md` | Implementado |
+| Otros módulos | Aún sin doc dedicado        | Pendiente    |
 
 Cualquier detalle no recogido en CLAUDE.md (endpoints específicos,
 fórmulas de cálculo, decisiones de implementación, validaciones,
@@ -213,7 +214,8 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 - `Cost` — costes y gastos, `employeeId` (detalle en `docs/modules/billing.md`)
 - `Rate` — tarifas configurables, `employeeId` (detalle en `docs/modules/billing.md`)
 - `TeamMember` — perfil extendido del usuario en el tenant; FK desde Rate/Invoice/Cost (detalle en `docs/modules/team.md`)
-- `Asset` — inventario (equipos, licencias, materiales)
+- `Asset` — equipos/licencias/materiales internos (NO el inventario comercial)
+- `InboundProduct`, `InboundBatch`, `OutboundProduct`, `Formula`, `ClientOutboundAlias`, `StockMovement` — módulo Inventario (detalle en `docs/modules/inventory.md`). Reemplazan al viejo `InventoryProduct` (que se conserva en BD como respaldo).
 - `Course`, `CompanyCourse`, `TrainingUser`, `CourseEnrollment`, `QuizAttempt`, `Company`, `Training` — módulo Formación (detalle en `docs/modules/training.md`)
 - `Notification` — notificaciones por canal
 - `Message` — chat interno por canal
@@ -264,7 +266,7 @@ aplique.
 | planning       | #7 Planificación & Recursos   | Pendiente                            | —                          |
 | documents      | #8 Documentación & Contratos  | Pendiente                            | —                          |
 | —              | #9 Filtro global por cliente  | Pendiente                            | —                          |
-| inventory      | #10 Inventario & Activos      | Implementado parcial (spain_enzymes) | —                          |
+| inventory      | #10 Inventario & Activos      | Implementado (spain_enzymes, demo)   | `docs/modules/inventory.md` |
 | training       | #11 Formación & Conocimiento  | Implementado (Retorika)              | `docs/modules/training.md` |
 | automations    | #12 Automatizaciones & Flujos | Pendiente                            | —                          |
 | ai             | #13 IA & Asistente            | Pendiente                            | —                          |

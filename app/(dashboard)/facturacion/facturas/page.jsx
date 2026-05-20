@@ -9,7 +9,7 @@ import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
 
-const EMPTY_LINE = { description: "", quantity: 1, unitPrice: 0, discountPct: 0, vatRate: 21 };
+const EMPTY_LINE = { description: "", quantity: 1, unitPrice: 0, discountPct: 0, vatRate: 21, outboundProductId: "", kind: "" };
 
 function addDaysIso(isoDate, days) {
   if (!isoDate || !Number.isFinite(days) || days <= 0) return "";
@@ -60,6 +60,7 @@ export default function FacturasPage() {
   const [employees, setEmployees] = useState([]);
   const [series, setSeries] = useState([]);
   const [settings, setSettings] = useState(null);
+  const [outboundCatalog, setOutboundCatalog] = useState([]);
   const [me, setMe] = useState(null);
   const isAdmin = me?.role === "admin" || me?.role === "superadmin";
 
@@ -84,6 +85,12 @@ export default function FacturasPage() {
     fetch("/api/team?status=all&limit=200", { cache: "no-store" }).then((r) => r.json()).then((j) => setEmployees(j.data?.members ?? [])).catch(() => {});
     fetch("/api/billing/series", { cache: "no-store" }).then((r) => r.json()).then((j) => setSeries(j.data ?? [])).catch(() => {});
     fetch("/api/billing/settings", { cache: "no-store" }).then((r) => r.json()).then((j) => setSettings(j.data)).catch(() => {});
+    // Catálogo de productos salientes para vincular líneas de factura al inventario.
+    // Si el tenant no tiene el módulo activo, el endpoint responde 403 y dejamos vacío.
+    fetch("/api/inventory/outbound?limit=500", { cache: "no-store" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (j?.ok) setOutboundCatalog(j.data?.products ?? []); })
+      .catch(() => {});
   }, []);
 
   const load = useCallback(async () => {
@@ -143,6 +150,8 @@ export default function FacturasPage() {
         unitPrice: l.unitPrice ?? 0,
         discountPct: l.discountPct ?? 0,
         vatRate: l.vatRate ?? settings?.defaultVatRate ?? 21,
+        outboundProductId: l.outboundProductId ?? "",
+        kind: l.kind ?? "",
       })),
     });
     setEditing(true);
@@ -199,6 +208,8 @@ export default function FacturasPage() {
           unitPrice: Number(l.unitPrice),
           discountPct: Number(l.discountPct),
           vatRate: Number(l.vatRate),
+          outboundProductId: l.outboundProductId || null,
+          kind: l.kind || null,
         })),
       };
 
@@ -468,6 +479,53 @@ export default function FacturasPage() {
                                 </button>
                               )}
                             </div>
+                            {outboundCatalog.length > 0 && (
+                              <div className="flex items-center gap-2">
+                                <select
+                                  value={l.kind === "shipping" ? "" : (l.outboundProductId || "")}
+                                  disabled={l.kind === "shipping"}
+                                  onChange={(e) => {
+                                    const productId = e.target.value;
+                                    const product = outboundCatalog.find((p) => p.id === productId);
+                                    setForm((f) => {
+                                      const lines = [...f.lines];
+                                      const next = { ...lines[idx], outboundProductId: productId };
+                                      if (product) {
+                                        if (!lines[idx].description?.trim()) next.description = product.name;
+                                        if (product.defaultSalePrice && (!lines[idx].unitPrice || Number(lines[idx].unitPrice) === 0)) {
+                                          next.unitPrice = product.defaultSalePrice;
+                                        }
+                                      }
+                                      lines[idx] = next;
+                                      return { ...f, lines };
+                                    });
+                                  }}
+                                  className={inputCls + " text-xs flex-1"}
+                                >
+                                  <option value="">— Línea sin producto del inventario —</option>
+                                  {outboundCatalog.map((p) => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                  ))}
+                                </select>
+                                <label className="flex items-center gap-1 text-[11px] text-neutral-500 shrink-0 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={l.kind === "shipping"}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setForm((f) => {
+                                        const lines = [...f.lines];
+                                        lines[idx] = checked
+                                          ? { ...lines[idx], kind: "shipping", outboundProductId: "" }
+                                          : { ...lines[idx], kind: "" };
+                                        return { ...f, lines };
+                                      });
+                                    }}
+                                  />
+                                  Transporte
+                                </label>
+                              </div>
+                            )}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                               <FormRow label="Cantidad">
                                 <input type="number" min="0" step="0.01" value={l.quantity} onChange={(e) => setLine(idx, "quantity", e.target.value)} className={inputCls} />

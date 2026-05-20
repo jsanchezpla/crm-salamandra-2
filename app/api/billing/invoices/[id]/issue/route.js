@@ -3,6 +3,7 @@ import { ok, error, forbidden, notFound, serverError } from "../../../../../../l
 import { assignInvoiceNumber } from "../../../../../../lib/billing/generateInvoiceNumber.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { withEffectiveStatus } from "../../../../../../lib/billing/invoiceStatus.js";
+import { applyStockMovementsForInvoice } from "../../../../../../lib/inventory/applyStockMovementsForInvoice.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -14,6 +15,9 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * unicidad y correlatividad sin huecos.
  */
 export const POST = withTenant(async (request, { params }, { tenantModels, hasModule, tenant }) => {
+  // Captura warnings del hook de inventario para devolverlos al cliente sin
+  // bloquear la emisión (stock insuficiente, receta sin definir, etc.).
+  const inventoryWarnings = [];
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const role = request.headers.get("x-user-role");
@@ -75,6 +79,17 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
       const updates = { number: num, status: "issued" };
       if (dueDateAtIssue && !invoice.dueDate) updates.dueDate = dueDateAtIssue;
       await invoice.update(updates, { transaction: t });
+
+      // Descuenta stock automáticamente para las líneas con outboundProductId.
+      // Si el módulo inventory no está activo en el tenant, no se hace nada.
+      if (hasModule("inventory")) {
+        const warns = await applyStockMovementsForInvoice({
+          invoice,
+          models: tenantModels,
+          transaction: t,
+        });
+        inventoryWarnings.push(...warns);
+      }
       return num;
     });
 
@@ -89,7 +104,11 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
     });
 
     await invoice.reload();
-    return ok(withEffectiveStatus(invoice));
+    const payload = withEffectiveStatus(invoice);
+    if (inventoryWarnings.length > 0) {
+      return ok({ ...payload.toJSON?.() ?? payload, inventoryWarnings });
+    }
+    return ok(payload);
   } catch (err) {
     return serverError(err);
   }

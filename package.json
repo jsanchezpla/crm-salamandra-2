@@ -33,6 +33,8 @@
     "db:migrate:training:prod": "node --env-file=.env.production scripts/migrate-training-fields.js",
     "db:migrate:projects-1": "node --env-file=.env.local scripts/migrate-projects-sprint-1.js",
     "db:migrate:projects-1:prod": "node --env-file=.env.production scripts/migrate-projects-sprint-1.js",
+    "db:migrate:inventory-rework": "node --env-file=.env.local scripts/migrate-inventory-rework.js",
+    "db:migrate:inventory-rework:prod": "node --env-file=.env.production scripts/migrate-inventory-rework.js",
     "db:seed:billing-demo": "node --env-file=.env.local scripts/seed-billing-demo.js",
     "db:seed:billing:spain": "node --env-file=.env.local scripts/seed-billing-spain-enzymes.js",
     "db:seed:projects-demo": "node --env-file=.env.local scripts/seed-projects-demo.js",
