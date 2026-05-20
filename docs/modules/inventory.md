@@ -134,9 +134,11 @@ Todos viven bajo `/api/inventory/` y requieren `hasModule("inventory")`.
 | POST   | `/stock-movements`                                    | Movimiento manual atómico (actualiza kgRemaining)    |
 | GET    | `/stats-v2`                                           | KPIs sobre los modelos nuevos                        |
 
-Los endpoints legacy `/api/inventory` (lista, [id], stats, export) siguen
-operativos hasta que se desactive el modelo `InventoryProduct`. Apuntan a
-la tabla `inventory_products` original.
+Los endpoints legacy `/api/inventory` (lista, `[id]`, `stats`, `export`)
+y el modelo Sequelize `InventoryProduct` se eliminaron en esta misma
+iteración. La tabla `inventory_products` permanece en BD como respaldo
+hasta que se valide la migración en producción; al no haber asociación
+Sequelize ya no se accede a ella desde el código.
 
 ## Flujo de descuento al emitir factura
 

@@ -215,7 +215,7 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 - `Rate` — tarifas configurables, `employeeId` (detalle en `docs/modules/billing.md`)
 - `TeamMember` — perfil extendido del usuario en el tenant; FK desde Rate/Invoice/Cost (detalle en `docs/modules/team.md`)
 - `Asset` — equipos/licencias/materiales internos (NO el inventario comercial)
-- `InboundProduct`, `InboundBatch`, `OutboundProduct`, `Formula`, `ClientOutboundAlias`, `StockMovement` — módulo Inventario (detalle en `docs/modules/inventory.md`). Reemplazan al viejo `InventoryProduct` (que se conserva en BD como respaldo).
+- `InboundProduct`, `InboundBatch`, `OutboundProduct`, `Formula`, `ClientOutboundAlias`, `StockMovement` — módulo Inventario (detalle en `docs/modules/inventory.md`). Reemplazan al viejo `InventoryProduct`: el modelo Sequelize y los endpoints legacy ya no existen; la tabla `inventory_products` se conserva en BD como respaldo hasta que se decida la migración definitiva.
 - `Course`, `CompanyCourse`, `TrainingUser`, `CourseEnrollment`, `QuizAttempt`, `Company`, `Training` — módulo Formación (detalle en `docs/modules/training.md`)
 - `Notification` — notificaciones por canal
 - `Message` — chat interno por canal

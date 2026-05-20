@@ -106,7 +106,10 @@ Asociaciones:
 
 - `Cost.belongsTo(TeamMember, as: "employee")`.
 - `Cost.belongsTo(Client, as: "client")`.
-- `Cost.belongsTo(InventoryProduct, as: "inventoryProduct")` — durmiente.
+- Columna `Cost.inventoryProductId` sigue en BD pero **sin asociación
+  Sequelize**: el modelo `InventoryProduct` se retiró con el rework de
+  Inventario. Pendiente decidir si se elimina o se re-apunta a
+  `OutboundProduct`.
 
 ### Payment
 
@@ -541,9 +544,14 @@ nunca confiando en que el frontend respete el rol.
 
 ### Inventario (#10)
 
-- `Cost.inventoryProductId` existe y está asociado en Sequelize
-  (`InventoryProduct.hasMany(Cost)`).
-- **Sin endpoints, sin UI**. Aplazado al sprint de rework de Inventario.
+- Conexión Invoice ↔ Inventario implementada: al emitir factura, las líneas
+  con `outboundProductId` disparan el descuento FIFO sobre `InboundBatch`
+  vía `lib/inventory/applyStockMovementsForInvoice.js`. Líneas con
+  `kind = "shipping"` (transporte) no consumen stock. Detalle en
+  `docs/modules/inventory.md`.
+- `Cost.inventoryProductId` queda como columna histórica sin asociación
+  Sequelize. Pendiente decidir si se elimina o se re-apunta al nuevo
+  modelo.
 
 ## Endpoints
 

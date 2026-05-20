@@ -69,8 +69,9 @@ export function defineCost(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
-      // FK durmiente a InventoryProduct para futura integración inventario.
-      // Sin endpoints ni UI en este sprint; columna preparada.
+      // Columna histórica. Apuntaba al viejo modelo InventoryProduct (retirado
+      // con el rework de Inventario). Sin asociación Sequelize: se decidirá si
+      // eliminar o re-apuntar a OutboundProduct en un sprint posterior.
       inventoryProductId: {
         type: DataTypes.UUID,
         allowNull: true,

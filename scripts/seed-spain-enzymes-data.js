@@ -53,21 +53,6 @@ const CIUDADES = {
   "Bélgica": ["Bruselas", "Amberes"],
 };
 
-const PRODUCTOS_ENZIMAS = [
-  "Proteasa alcalina", "Lipasa fúngica", "Amilasa bacteriana",
-  "Celulasa termófila", "Fitasa granulada", "Lactasa líquida",
-  "Glucoamilasa estándar", "Pectinasa concentrada", "Xilanasa purificada",
-  "Catalasa industrial", "Peroxidasa técnica", "Invertasa alimentaria",
-  "Pullulanasa de almidón", "β-glucanasa cervecera", "Naringinasa cítrica",
-];
-
-const PROVEEDORES = [
-  "BioSupply AG", "EnzymeTech Import", "BioSource China",
-  "Nordic Raw Materials", "SynBio Providers",
-];
-
-const EMBALAJES = ["Bolsa 25kg", "Bidón 50L", "Saco 20kg", "Caja 10kg", "Tambor 200L"];
-
 const ASUNTOS = [
   "Consulta sobre enzimas para procesado de cereales",
   "Solicitud de muestras de lipasa",
@@ -112,7 +97,7 @@ async function main() {
   process.stdout.write("════════════════════════════════════════════════\n");
 
   const { models } = getTenantDb(SLUG);
-  const { Lead, Client, Interaction, InventoryProduct } = models;
+  const { Lead, Client, Interaction } = models;
 
   // ── 1. Leads ──────────────────────────────────────────────────────────────
   header("Creando leads...");
@@ -215,101 +200,6 @@ async function main() {
   }
   log(`✓ ${clientesCreados.length} clientes creados con interacciones`);
 
-  // ── 3. Inventario ─────────────────────────────────────────────────────────
-  header("Creando productos de inventario...");
-
-  const LOTES_PREFIX = ["L", "BT", "SE", "FE", "AG"];
-
-  let productosCreados = 0;
-
-  // 12 productos en stock o parcial
-  for (let i = 0; i < 12; i++) {
-    const productName = PRODUCTOS_ENZIMAS[i % PRODUCTOS_ENZIMAS.length];
-    const kg = rand(50, 500, 1);
-    const purchasePrice = rand(8, 45, 2);
-    const hasOutput = i < 6; // primeros 6 tienen venta parcial
-    const clientForSale = hasOutput ? clientesCreados[i % clientesCreados.length] : null;
-    const outputKg = hasOutput ? rand(10, Math.floor(kg * 0.7), 1) : null;
-    const salePrice = hasOutput ? +(purchasePrice * rand(12, 22, 1) / 10).toFixed(2) : null;
-
-    let status = "stock";
-    if (hasOutput && outputKg) {
-      status = outputKg >= kg ? "sold" : "partial";
-    }
-
-    await InventoryProduct.create({
-      supplier: pick(PROVEEDORES),
-      entryDate: daysAgo(rand(10, 180)),
-      productName,
-      units: rand(1, 20),
-      kg,
-      packaging: pick(EMBALAJES),
-      lot: `${pick(LOTES_PREFIX)}${rand(1000, 9999)}`,
-      purchasePrice,
-      outputName: hasOutput ? (i % 3 === 0 ? `${productName} Premium` : productName) : null,
-      clientId: clientForSale?.id ?? null,
-      exitDate: hasOutput ? daysAgo(rand(1, 60)) : null,
-      outputKg,
-      salePrice,
-      status,
-      notes: i % 4 === 0 ? "Lote con certificado de análisis completo." : null,
-    });
-    productosCreados++;
-  }
-
-  // 10 productos completamente vendidos
-  for (let i = 0; i < 10; i++) {
-    const productName = PRODUCTOS_ENZIMAS[(i + 5) % PRODUCTOS_ENZIMAS.length];
-    const kg = rand(20, 300, 1);
-    const purchasePrice = rand(10, 50, 2);
-    const salePrice = +(purchasePrice * rand(13, 25, 1) / 10).toFixed(2);
-    const client = clientesCreados[(i + 3) % clientesCreados.length];
-
-    await InventoryProduct.create({
-      supplier: pick(PROVEEDORES),
-      entryDate: daysAgo(rand(60, 365)),
-      productName,
-      units: rand(1, 10),
-      kg,
-      packaging: pick(EMBALAJES),
-      lot: `${pick(LOTES_PREFIX)}${rand(1000, 9999)}`,
-      purchasePrice,
-      outputName: productName,
-      clientId: client.id,
-      exitDate: daysAgo(rand(5, 90)),
-      outputKg: kg,
-      salePrice,
-      status: "sold",
-      notes: null,
-    });
-    productosCreados++;
-  }
-
-  // 8 productos en stock puro (sin venta)
-  for (let i = 0; i < 8; i++) {
-    const productName = PRODUCTOS_ENZIMAS[(i + 7) % PRODUCTOS_ENZIMAS.length];
-    await InventoryProduct.create({
-      supplier: pick(PROVEEDORES),
-      entryDate: daysAgo(rand(1, 30)),
-      productName,
-      units: rand(1, 15),
-      kg: rand(25, 400, 1),
-      packaging: pick(EMBALAJES),
-      lot: `${pick(LOTES_PREFIX)}${rand(1000, 9999)}`,
-      purchasePrice: rand(12, 60, 2),
-      outputName: null,
-      clientId: null,
-      exitDate: null,
-      outputKg: null,
-      salePrice: null,
-      status: "stock",
-      notes: null,
-    });
-    productosCreados++;
-  }
-
-  log(`✓ ${productosCreados} productos de inventario creados`);
-
   // ── Resumen ──────────────────────────────────────────────────────────────
   process.stdout.write("\n════════════════════════════════════════════════\n");
   process.stdout.write(" ¡Datos de prueba cargados correctamente!\n");
@@ -317,7 +207,6 @@ async function main() {
   process.stdout.write(`  Tenant:     ${SLUG}\n`);
   process.stdout.write(`  Leads:      ${leadsCreados.length}\n`);
   process.stdout.write(`  Clientes:   ${clientesCreados.length} (con interacciones)\n`);
-  process.stdout.write(`  Inventario: ${productosCreados} productos\n`);
   process.stdout.write("════════════════════════════════════════════════\n\n");
 
   await closeAllConnections();

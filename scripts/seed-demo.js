@@ -114,7 +114,6 @@ async function resetTenantData(models) {
   await models.Payment?.destroy({ where: {}, truncate: false });
   await models.Invoice?.destroy({ where: {}, truncate: false });
   await models.Cost?.destroy({ where: {}, truncate: false });
-  await models.InventoryProduct?.destroy({ where: {}, truncate: false });
   await models.Interaction?.destroy({ where: {}, truncate: false });
   await models.Lead?.destroy({ where: {}, truncate: false });
   await models.Client?.destroy({ where: {}, truncate: false });
@@ -212,7 +211,7 @@ async function main() {
   // ─── 6. Reset (opcional) ─────────────────────────────────────────────────
   if (RESET) await resetTenantData(models);
 
-  const { Lead, Client, Interaction, InventoryProduct, Invoice, Payment, Cost,
+  const { Lead, Client, Interaction, Invoice, Payment, Cost,
           Company, Course, TrainingUser, CourseEnrollment, QuizAttempt } = models;
 
   // ─── 7. Clientes (40) ────────────────────────────────────────────────────
@@ -329,79 +328,6 @@ async function main() {
     leads.push(l);
   }
   log(`✓ ${leads.length} leads (35 nuevos, 30 contactados, 15 perdidos)`);
-
-  // ─── 9. Inventario (30) ──────────────────────────────────────────────────
-  header("Creando productos de inventario...");
-  const PRODUCTOS = [
-    "Material formativo Pack Pro", "Kit Diagnóstico Empresarial",
-    "Caja libros Liderazgo", "Set tarjetas Coaching",
-    "Pack ejercicios Comunicación", "Material taller Equipos",
-    "Manual Programa Ejecutivo", "Cuaderno trabajo Mentoría",
-    "Suite digital Liderazgo", "Plataforma evaluación 360",
-    "Pack starter consultoría", "Caja casos de estudio",
-  ];
-  const PROVEEDORES = ["Editorial Profesional", "Imprenta Vértice", "Distribuciones Norte", "BookSupply Iberia"];
-  const EMBALAJES = ["Caja 10 unidades", "Pack 25", "Pallet 100", "Unidad", "Pack 50"];
-
-  let invCount = 0;
-  for (let i = 0; i < 12; i++) {
-    const productName = pick(PRODUCTOS);
-    const kg = rand(20, 250, 1);
-    const purchasePrice = rand(15, 80, 2);
-    const hasOutput = i < 5;
-    const cliente = hasOutput ? clientes[i % clientes.length] : null;
-    const outputKg = hasOutput ? rand(5, Math.floor(kg * 0.6), 1) : null;
-    const salePrice = hasOutput ? +(purchasePrice * rand(13, 22, 1) / 10).toFixed(2) : null;
-    const status = !hasOutput ? "stock" : (outputKg >= kg ? "sold" : "partial");
-
-    await InventoryProduct.create({
-      supplier: pick(PROVEEDORES),
-      entryDate: daysAgo(rand(15, 180)),
-      productName, units: rand(5, 30), kg, packaging: pick(EMBALAJES),
-      lot: `D${rand(1000, 9999)}`,
-      purchasePrice,
-      outputName: hasOutput ? productName : null,
-      clientId: cliente?.id ?? null,
-      exitDate: hasOutput ? daysAgo(rand(1, 60)) : null,
-      outputKg, salePrice, status,
-    });
-    invCount++;
-  }
-  for (let i = 0; i < 10; i++) {
-    const productName = pick(PRODUCTOS);
-    const kg = rand(15, 200, 1);
-    const purchasePrice = rand(18, 90, 2);
-    const salePrice = +(purchasePrice * rand(14, 23, 1) / 10).toFixed(2);
-    await InventoryProduct.create({
-      supplier: pick(PROVEEDORES),
-      entryDate: daysAgo(rand(60, 300)),
-      productName, units: rand(3, 15), kg, packaging: pick(EMBALAJES),
-      lot: `D${rand(1000, 9999)}`,
-      purchasePrice,
-      outputName: productName,
-      clientId: clientes[(i + 3) % clientes.length].id,
-      exitDate: daysAgo(rand(5, 90)),
-      outputKg: kg, salePrice,
-      status: "sold",
-    });
-    invCount++;
-  }
-  for (let i = 0; i < 8; i++) {
-    await InventoryProduct.create({
-      supplier: pick(PROVEEDORES),
-      entryDate: daysAgo(rand(1, 30)),
-      productName: pick(PRODUCTOS),
-      units: rand(3, 25), kg: rand(20, 300, 1),
-      packaging: pick(EMBALAJES),
-      lot: `D${rand(1000, 9999)}`,
-      purchasePrice: rand(20, 100, 2),
-      outputName: null, clientId: null, exitDate: null,
-      outputKg: null, salePrice: null,
-      status: "stock",
-    });
-    invCount++;
-  }
-  log(`✓ ${invCount} productos de inventario`);
 
   // ─── 10. Facturación (50 facturas, 60 pagos, 30 costes) ──────────────────
   header("Creando facturación (facturas, cobros, costes)...");
