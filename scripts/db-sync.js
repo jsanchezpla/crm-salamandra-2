@@ -33,6 +33,7 @@ const ALL_MODULES = [
   "analytics",
   "communications",
   "client_portal",
+  "citas",
 ];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

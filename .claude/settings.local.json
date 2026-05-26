@@ -73,7 +73,9 @@
       "PowerShell(node scripts/tmp-check-lead.js)",
       "PowerShell(node scripts/tmp-tc060.js)",
       "PowerShell(node --env-file=.env.local scripts/tmp-tc055.js)",
-      "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\(\"c:\\\\Dev\\\\salamandra-solutions\\\\crm-salamandra-2\\\\scripts\\\\tmp-prod-inspect.sql\"\\); [Convert]::ToBase64String\\($bytes\\))"
+      "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\(\"c:\\\\Dev\\\\salamandra-solutions\\\\crm-salamandra-2\\\\scripts\\\\tmp-prod-inspect.sql\"\\); [Convert]::ToBase64String\\($bytes\\))",
+      "Bash(findstr /i \"inventor\")",
+      "Bash(dir scripts *)"
     ]
   }
 }
