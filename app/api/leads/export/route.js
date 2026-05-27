@@ -33,6 +33,30 @@ const TENANT_COLUMNS = {
       createdAt: lead.createdAt ? new Date(lead.createdAt).toLocaleDateString("es-ES") : "",
     }),
   },
+  nutri_laura: {
+    columns: [
+      { header: "Nombre", key: "name", width: 25 },
+      { header: "Email", key: "email", width: 30 },
+      { header: "Teléfono", key: "phone", width: 15 },
+      { header: "Edad", key: "edad", width: 10 },
+      { header: "Motivo", key: "motivo", width: 50 },
+      { header: "Info adicional", key: "info_adicional", width: 50 },
+      { header: "Estado", key: "stage", width: 22 },
+      { header: "Notas", key: "notes", width: 40 },
+      { header: "Recibido", key: "createdAt", width: 14 },
+    ],
+    row: (lead) => ({
+      name: lead.name || lead.title || "",
+      email: lead.email || "",
+      phone: lead.phone || "",
+      edad: lead.customFields?.edad || "",
+      motivo: lead.customFields?.motivo || "",
+      info_adicional: lead.customFields?.info_adicional || "",
+      stage: STAGE_LABELS[lead.stage] ?? lead.stage,
+      notes: lead.notes || "",
+      createdAt: lead.createdAt ? new Date(lead.createdAt).toLocaleDateString("es-ES") : "",
+    }),
+  },
   abarcaia: {
     columns: [
       { header: "Nombre", key: "name", width: 25 },

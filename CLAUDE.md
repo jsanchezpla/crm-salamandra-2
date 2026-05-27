@@ -241,6 +241,7 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 | `aumenta`        | local + prod    | leads                                                        | Centro de psicología y formación                                                                |
 | `abarcaia`       | solo producción | leads, referidos                                             | Programa de referidos vía formulario público                                                    |
 | `spain_enzymes`  | solo local      | leads, clients, inventory, billing                           | Tenant de pruebas creado por Jorge                                                              |
+| `nutri_laura`    | solo local      | citas, leads                                                 | Nutricionista (Laura). Consulta privada. Override de leads con embudo nutricional               |
 
 Datos verificados contra `master.tenants` y `master.tenant_modules` el
 2026-04-30 (entorno local). Los tenants `retorika` y `abarcaia` solo

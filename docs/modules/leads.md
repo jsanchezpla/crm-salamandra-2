@@ -10,7 +10,7 @@ Un lead es una oportunidad comercial. El módulo cubre: alta manual desde
 el dashboard, alta pública desde formularios web (sin autenticación),
 import desde Excel/CSV, export a Excel, gestión de stages y notas. Es el
 módulo más maduro del CRM y el que tiene **más overrides por tenant**:
-seis al cierre de este documento, todos consumiendo el mismo modelo
+siete al cierre de este documento, todos consumiendo el mismo modelo
 `Lead` y los mismos endpoints, pero pintando UI radicalmente distinta.
 
 Adicionalmente, el tenant `abarcaia` tiene activado un sub-módulo
@@ -86,13 +86,15 @@ y `STAGE_LABELS`) y se consume desde todos los endpoints que la
 necesitan: `PATCH /api/leads/[id]`, `POST /api/leads/import`,
 `POST /api/leads/import/excel` y `GET /api/leads/export`.
 
-Los 12 stages aceptados:
+Los 15 stages aceptados:
 
 - **Estándar**: `new`, `contacted`, `qualified`, `proposal`,
   `negotiation`, `won`, `lost`.
 - **Extendidos** (overrides quality-energy y abarcaia):
   `in_progress`, `demo_scheduled`, `demo_done`, `closed_yes`,
   `closed_no`.
+- **Extendidos nutrición** (override nutri_laura):
+  `consulta_agendada`, `consulta_realizada`, `paciente`.
 
 Antes del fix, `PATCH` solo permitía los 7 estándar y descartaba
 silenciosamente los 5 extendidos, lo que rompía el cambio de stage
@@ -116,6 +118,7 @@ const UI_OVERRIDES = {
   abarcaia: AbarcaIALeadsModule,
   demo: DemoLeadsModule,
   spain_enzymes: SpainEnzymesLeadsModule,
+  nutri_laura: NutriLauraLeadsModule,
 };
 ```
 
@@ -147,6 +150,7 @@ que cambia es:
 | `retorika` | 568 | `new`, `contacted`, `qualified`, `won`, `lost` | `mensaje` (con fallback al campo del modelo) | Sin import inline ni bulk. |
 | `spain-enzymes` | 1025 | `new`, `contacted`, `qualified`, `won`, `lost` | `empresa`, `pais`, `ciudad`, `asunto`, `prioridad` | CSV import inline, bulk ops, conversión a Cliente parcial (`company`, `country`, `city`, `topic`). Drawer en portal. |
 | `quality-energy` | 1744 | `new`, `contacted`, **`in_progress`**, **`demo_scheduled`**, **`demo_done`**, **`closed_yes`**, **`closed_no`** | `cargo`, `empresa_actual`, `zona`/`zone`, `linkedin`, `utmSource`, `utmMedium`, `utmCampaign` | Excluye en cliente los leads `referido_abarcaia`. Cargos `Autónomo`/`Trabajador por cuenta ajena`. CSV import. Bulk ops. **PATCH de stage falla silencioso** (ver bug). |
+| `nutri-laura` | ~1230 | `new`, `contacted`, **`consulta_agendada`**, **`consulta_realizada`**, **`paciente`**, `lost` | `edad`, `motivo`, `info_adicional`, `utmSource`, `utmMedium`, `utmCampaign` | Embudo nutricional. Stages pintan transición de "lead" a "paciente activo". `motivo` e `info_adicional` son texto libre (no usan el ENUM legacy `motivo` del modelo, ver `/api/public/leads`). CSV import + bulk ops. |
 | `abarcaia` | 1965 | mismos 7 que QE | `cargo`, `empresa_actual`, `zona`/`zone`, `linkedin`, `instagram_user`, `prioridad`, `respuesta`, `demo_agendada`, `fecha_demo`, `utmSource`, `utmMedium`, `utmCampaign` | Excluye en cliente los leads `referido_abarcaia`. `fecha_demo` con fecha+hora separadas. Cálculo automático de prioridad por proximidad de la demo. Link a Instagram. CSV import. Bulk ops. **Mismo bug de PATCH**. |
 
 ### Módulo base — `modules/leads/LeadsModule.jsx`
@@ -234,6 +238,49 @@ stage que QE.
 
 También excluye los leads `referido_abarcaia` del listado principal
 (esos los gestiona el sub-módulo Referidos, ver siguiente sección).
+
+### Override `nutri-laura` — `modules/overrides/nutri-laura/LeadsModule.jsx`
+
+Sector: nutrición y dietética (consulta privada).
+
+Pipeline de 6 stages adaptado al embudo nutricional:
+`new` → `contacted` → `consulta_agendada` → `consulta_realizada`
+→ `paciente` (`lost` como salida lateral). Los tres stages
+intermedios son **extendidos** y se añadieron a `lib/leads/stages.js`
+para este tenant.
+
+`customFields` específicos: `edad` (texto libre — admite valores
+como "34", "menor de edad"), `motivo` (texto libre, no usa el
+ENUM legacy `motivo` del modelo Lead), `info_adicional` (texto libre).
+También soporta UTMs (`utmSource`, `utmMedium`, `utmCampaign`)
+para tracking de origen.
+
+CSV import inline (mapeo de cabeceras incluye "qué te gustaría
+trabajar" → `motivo`, "algo más que deba saber" → `info_adicional`),
+bulk ops (cambio de stage / borrado), panel lateral con preguntas
+del cuestionario tal cual aparecen en el formulario web.
+
+**Endpoint público**: `/api/public/leads` ya admite nutri_laura
+sin cambios. Para evitar colisión con el ENUM `motivo` del modelo
+(valores legacy `diagnostico`/`servicios`/`cursos`/`talleres`),
+el endpoint detecta cuando `motivo` no es uno de los valores ENUM
+y lo mueve automáticamente a `customFields.motivo`. El formulario
+de Laura puede enviar:
+
+```json
+{
+  "name": "Marta Gómez",
+  "email": "marta@example.com",
+  "telefono": "611234567",
+  "customFields": {
+    "edad": "34",
+    "motivo": "Quiero perder unos kilos antes del verano",
+    "info_adicional": "Intolerancia a la lactosa"
+  }
+}
+```
+
+con header `x-tenant: nutri_laura`.
 
 ### Sub-módulo Referidos (solo `abarcaia`)
 

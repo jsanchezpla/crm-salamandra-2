@@ -39,6 +39,8 @@
     "db:migrate:citas:prod": "node --env-file=.env.production scripts/migrate-citas-sprint-1.js",
     "db:seed:nutri-laura": "node --env-file=.env.local scripts/seed-nutri-laura.js",
     "db:seed:nutri-laura:prod": "node --env-file=.env.production scripts/seed-nutri-laura.js",
+    "db:add-leads-nutri-laura": "node --env-file=.env.local scripts/add-leads-module-nutri-laura.js",
+    "db:add-leads-nutri-laura:prod": "node --env-file=.env.production scripts/add-leads-module-nutri-laura.js",
     "db:seed:billing-demo": "node --env-file=.env.local scripts/seed-billing-demo.js",
     "db:seed:billing:spain": "node --env-file=.env.local scripts/seed-billing-spain-enzymes.js",
     "db:seed:projects-demo": "node --env-file=.env.local scripts/seed-projects-demo.js",

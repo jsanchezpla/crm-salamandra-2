@@ -41,6 +41,38 @@ const TENANT_TEMPLATES = {
       prioridad: "alta | media | baja",
     },
   },
+  nutri_laura: {
+    columns: [
+      { header: "Nombre", key: "name", width: 25 },
+      { header: "Email", key: "email", width: 30 },
+      { header: "Teléfono", key: "phone", width: 15 },
+      { header: "Edad", key: "edad", width: 10 },
+      { header: "Motivo", key: "motivo", width: 50 },
+      { header: "Info adicional", key: "info_adicional", width: 50 },
+      { header: "Estado", key: "stage", width: 22 },
+      { header: "Notas", key: "notes", width: 40 },
+    ],
+    example: {
+      name: "Marta Gómez",
+      email: "marta.gomez@example.com",
+      phone: "611234567",
+      edad: "34",
+      motivo: "Quiero perder unos kilos antes del verano y mantener hábitos saludables",
+      info_adicional: "Intolerancia leve a la lactosa. Sin alergias conocidas.",
+      stage: "Nuevo lead",
+      notes: "",
+    },
+    help: {
+      name: "* Requerido si no hay email",
+      email: "* Requerido si no hay nombre",
+      phone: "Opcional",
+      edad: "Texto libre (ej: 34, 'menor de edad')",
+      motivo: "Texto libre — ¿qué te gustaría trabajar?",
+      info_adicional: "Texto libre — ¿algo más que deba saber?",
+      stage: "Nuevo lead | Contactado | Consulta agendada | Consulta realizada | Paciente activo | Descartado",
+      notes: "Texto libre (notas internas)",
+    },
+  },
   abarcaia: {
     columns: [
       { header: "Nombre", key: "name", width: 25 },

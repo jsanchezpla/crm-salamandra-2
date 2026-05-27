@@ -51,10 +51,17 @@ export async function POST(request) {
       return Response.json({ ok: false, error: "Se requiere nombre o email" }, { status: 400, headers: CORS_HEADERS });
     }
 
-    // Merge customFields from body and empresa field
+    // `motivo` en el modelo es ENUM (diagnostico/servicios/cursos/talleres
+    // — legacy de aumenta/retorika). Si llega un valor que no es ENUM
+    // válido (caso nutri_laura, donde "motivo" es texto libre del
+    // formulario), lo movemos a customFields.motivo en lugar de fallar.
+    const ENUM_MOTIVOS = ["diagnostico", "servicios", "cursos", "talleres"];
+    const motivoIsEnum = motivo && ENUM_MOTIVOS.includes(motivo);
+
     const customFields = {
       ...(customFieldsBody && typeof customFieldsBody === "object" ? customFieldsBody : {}),
       ...(empresa ? { empresa: String(empresa).trim() } : {}),
+      ...(motivo && !motivoIsEnum ? { motivo: String(motivo).trim() } : {}),
     };
 
     const lead = await Lead.create({
@@ -64,7 +71,7 @@ export async function POST(request) {
       title: fullName,
       stage: "new",
       tipo_usuario: tipo_usuario ?? "ciudadano",
-      motivo: motivo ?? null,
+      motivo: motivoIsEnum ? motivo : null,
       servicio: servicio?.trim() ?? null,
       curso: curso?.trim() ?? null,
       taller: taller?.trim() ?? null,

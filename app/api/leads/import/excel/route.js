@@ -59,6 +59,13 @@ const HEADER_MAP = {
   "fecha demo": "fecha_demo",
   fecha_demo: "fecha_demo",
   prioridad: "prioridad",
+  edad: "edad",
+  age: "edad",
+  motivo: "motivo_nutri",
+  objetivo: "motivo_nutri",
+  "info adicional": "info_adicional",
+  "información adicional": "info_adicional",
+  "informacion adicional": "info_adicional",
 };
 
 const STAGE_MAP = {
@@ -197,6 +204,9 @@ export async function POST(request) {
         if (row.demo_agendada) payload.customFields.demo_agendada = row.demo_agendada.trim();
         if (row.fecha_demo) payload.customFields.fecha_demo = row.fecha_demo.trim();
         if (row.prioridad) payload.customFields.prioridad = row.prioridad.trim().toLowerCase();
+        if (row.edad) payload.customFields.edad = row.edad.trim();
+        if (row.motivo_nutri) payload.customFields.motivo = row.motivo_nutri.trim();
+        if (row.info_adicional) payload.customFields.info_adicional = row.info_adicional.trim();
 
         await Lead.create(payload);
         results.imported++;
