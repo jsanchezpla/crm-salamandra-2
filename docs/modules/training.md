@@ -406,6 +406,15 @@ Resumen rápido (detalle en "Integraciones externas"):
 Páginas bajo `app/(dashboard)/formacion/`. Componentes compartidos en
 `components/training/` (`TrainingTable`, `TypeBadge`, `ActiveBadge`).
 
+El overview (`/formacion`) usa el mismo patrón de override por tenant
+que el módulo de leads: `app/(dashboard)/formacion/page.jsx` selecciona
+entre `modules/training/FormacionOverview.jsx` (default, copy orientado
+a Retorika con WP + TutorLMS) y los overrides de `modules/overrides/{slug}/FormacionOverview.jsx`.
+Hoy solo `nutri_laura` tiene override propio (copy nutricional, sin
+secciones "Empresas" ni "Cuestionarios" mientras Laura no active B2B
+ni conecte TutorLMS). Las páginas internas (`/formacion/cursos`,
+`/formacion/usuarios`, etc.) son comunes a todos los tenants.
+
 | Ruta | Función |
 | --- | --- |
 | `/formacion` | Overview con métricas (empresas, cursos, usuarios, matrículas) y accesos rápidos a las 5 sub-secciones. |
@@ -442,6 +451,7 @@ viene del propio TutorLMS.
 | `scripts/seed-retorika.js` | Crea schema `crm_retorika` y siembra el primer curso ("IA y comunicación política", `wpCourseId: 6434`). Idempotente. **Solo añade el curso semilla**; el resto de cursos llegan vía webhook desde WP. |
 | `scripts/add-training-module-demo.js` | Activa el módulo `training` en el tenant `demo` y siembra 4 empresas, 8 cursos, ~36 alumnos de empresa + 10 privados, ~55 matrículas. Para demos a clientes potenciales. Idempotente. |
 | `scripts/seed-cuestionarios-demo.js` | Activa el módulo `cuestionarios` en demo y siembra intentos de quiz realistas (datos pedagógicos sobre comunicación, módulos de Retorika). Útil para mostrar la pestaña Cuestionarios sin necesitar webhooks. |
+| `scripts/add-training-module-nutri-laura.js` | Activa el módulo `training` en `nutri_laura`. Crea las 6 tablas con SQL crudo (sin la legacy `trainings`), registra el módulo con `uiOverride: nutri-laura/FormacionOverview` y siembra 3 cursos de nutrición. Patrón idéntico al `add-leads-module-nutri-laura.js` por la filosofía de tenant minimal. |
 
 `seed-master.js` (que crea el tenant retorika) registra el módulo
 `training` con `moduleAccess` admin. La activación inicial del
@@ -501,6 +511,14 @@ Detectado durante la documentación, en orden vagamente sugerido:
 - **Rate limiting** en webhooks y endpoints externos.
 - **Captcha o token compartido** en `/api/usuarios/register/empresa` y
   `/api/cursos-empresas/codigos-cursos/:email` (ver #6 y #7).
+- **HMAC secret por-tenant**. `lib/training/webhookAuth.js` lee un
+  único `RETORIKA_WEBHOOK_SECRET`. Funcional mientras solo Retorika
+  reciba webhooks de TutorLMS. Cuando un segundo tenant (nutri_laura
+  está perfilado) conecte su propio WP + TutorLMS, hay que pasar el
+  slug del tenant al helper y leer `TUTORLMS_WEBHOOK_SECRET_{SLUG}`
+  (o un valor desde `tenant.settings`) para que cada cliente firme
+  con su propio secret. Compartir secret entre tenants es un riesgo:
+  un WP comprometido escribiría sobre los demás.
 
 ## Incoherencias resueltas en este sprint
 
