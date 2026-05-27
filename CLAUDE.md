@@ -240,7 +240,7 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 | `quality_energy` | local + prod    | leads                                                        | Empresa energética. Tuvo `referidos` en su día (limpiado por `remove-abarcaia-from-quality.js`) |
 | `aumenta`        | local + prod    | leads                                                        | Centro de psicología y formación                                                                |
 | `abarcaia`       | solo producción | leads, referidos                                             | Programa de referidos vía formulario público                                                    |
-| `spain_enzymes`  | solo local      | leads, clients, inventory, billing                           | Tenant de pruebas creado por Jorge                                                              |
+| `spain_enzymes`  | solo local      | leads, clients, inventory, billing, orders                   | Tenant de pruebas creado por Jorge. Módulo orders (Pedidos) específico de Spain Enzymes         |
 | `nutri_laura`    | solo local      | citas, leads, training                                       | Nutricionista (Laura). Override leads (embudo nutricional) + override overview formación (B2C, sin TutorLMS aún) |
 
 Datos verificados contra `master.tenants` y `master.tenant_modules` el
@@ -274,6 +274,7 @@ aplique.
 | integrations   | #14 Integraciones & API       | Pendiente                            | —                          |
 | analytics      | #15 Analítica & BI            | Pendiente                            | —                          |
 | communications | #16 Comunicaciones            | Pendiente                            | —                          |
+| orders         | Pedidos (no del plan 1-16)    | Implementado (spain_enzymes)         | —                          |
 
 ---
 
