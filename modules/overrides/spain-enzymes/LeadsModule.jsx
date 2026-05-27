@@ -27,6 +27,15 @@ const STAGE_STYLE = {
   lost: { dot: "bg-red-400", bg: "bg-red-100 text-red-600" },
 };
 
+// Flujo principal de leads: new → contacted → qualified → won.
+// 'lost' es terminal aparte; click en su badge no avanza.
+const STAGE_FLOW = ["new", "contacted", "qualified", "won"];
+function nextStage(current) {
+  const idx = STAGE_FLOW.indexOf(current);
+  if (idx < 0 || idx >= STAGE_FLOW.length - 1) return null;
+  return STAGE_FLOW[idx + 1];
+}
+
 const PRIORITY_LABELS = { alta: "Alta", media: "Media", baja: "Baja" };
 const PRIORITY_STYLE = {
   alta: "bg-red-100 text-red-700",
@@ -233,6 +242,24 @@ export default function SpainEnzymesLeadsModule() {
       }
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function advanceLeadStage(lead) {
+    const next = nextStage(lead.stage);
+    if (!next) return;
+    try {
+      const res = await fetch(`/api/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok) return;
+      setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, stage: next } : l)));
+      if (selected?.id === lead.id) setSelected((prev) => (prev ? { ...prev, stage: next } : prev));
+    } catch {
+      // silencioso a propósito
     }
   }
 
@@ -630,11 +657,27 @@ export default function SpainEnzymesLeadsModule() {
                         <td className="px-4 py-3 hidden xl:table-cell">
                           <span className="text-gray-600 truncate max-w-[160px] block">{lead.customFields?.asunto || "—"}</span>
                         </td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${st.bg}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
-                            {STAGES.find((s) => s.key === lead.stage)?.label ?? lead.stage}
-                          </span>
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                          {(() => {
+                            const canAdvance = nextStage(lead.stage) !== null;
+                            const nextLabel = canAdvance
+                              ? STAGES.find((s) => s.key === nextStage(lead.stage))?.label
+                              : null;
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => canAdvance && advanceLeadStage(lead)}
+                                disabled={!canAdvance}
+                                title={canAdvance ? `Pasar a "${nextLabel}"` : "Estado final"}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition ${st.bg} ${
+                                  canAdvance ? "hover:ring-2 hover:ring-offset-1 hover:ring-[var(--color-primary)]/40 cursor-pointer" : "cursor-default"
+                                }`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+                                {STAGES.find((s) => s.key === lead.stage)?.label ?? lead.stage}
+                              </button>
+                            );
+                          })()}
                         </td>
                         <td className="px-4 py-3 hidden sm:table-cell">
                           {lead.customFields?.prioridad ? (

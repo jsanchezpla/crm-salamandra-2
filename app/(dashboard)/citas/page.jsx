@@ -1,202 +1,279 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import FullCalendar from "@fullcalendar/react";
+import dayGridPlugin from "@fullcalendar/daygrid";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import listPlugin from "@fullcalendar/list";
+import interactionPlugin from "@fullcalendar/interaction";
 
+const STATUS_LABELS = {
+  confirmed: "Confirmada",
+  completed: "Completada",
+  cancelled: "Cancelada",
+  no_show: "No asistió",
+};
+const STATUS_COLORS = {
+  confirmed: "bg-emerald-50 text-emerald-700 border-emerald-100",
+  completed: "bg-slate-100 text-slate-700 border-slate-200",
+  cancelled: "bg-neutral-100 text-neutral-500 border-neutral-200",
+  no_show: "bg-violet-50 text-violet-700 border-violet-100",
+};
 const MODALITY_LABELS = { presencial: "Presencial", phone: "Teléfono", online: "Online" };
-const ALL_MODALITIES = ["presencial", "phone", "online"];
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
 
-const EMPTY_FORM = {
-  name: "",
-  slug: "",
-  description: "",
-  duration: 60,
-  bufferBefore: 0,
-  bufferAfter: 0,
-  color: "#3F6E5B",
-  modalities: ["online"],
-  location: "",
-  phoneNumber: "",
-  meetUrl: "",
-  additionalDataLabel: "",
-  additionalDataRequired: false,
-  minNoticeHours: 24,
-  maxAdvanceDays: 60,
-  active: true,
-  order: 0,
-};
-
-function slugify(name) {
-  return String(name)
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
+function fmtDateTime(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  return d.toLocaleString("es-ES", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
+function StatusChip({ value }) {
+  const cls = STATUS_COLORS[value] ?? "bg-neutral-100 text-neutral-500 border-neutral-200";
+  return (
+    <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border ${cls}`}>
+      {STATUS_LABELS[value] ?? value}
+    </span>
+  );
+}
+
+function ModalityChip({ value }) {
+  return (
+    <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border bg-white border-neutral-200 text-neutral-600">
+      {MODALITY_LABELS[value] ?? value}
+    </span>
+  );
+}
+
+const EMPTY_BOOKING_FORM = {
+  eventTypeId: "",
+  date: "",
+  time: "",
+  clientName: "",
+  clientEmail: "",
+  clientPhone: "",
+  modality: "",
+  additionalData: "",
+  notes: "",
+};
+
 export default function CitasPage() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [openId, setOpenId] = useState(null); // id de edición, "new" para alta
-  const [form, setForm] = useState(EMPTY_FORM);
+  const calendarRef = useRef(null);
+  const [eventTypes, setEventTypes] = useState([]);
+  const [visibleEtIds, setVisibleEtIds] = useState(null); // null = todos
+  const [openBooking, setOpenBooking] = useState(null); // booking abierto en modal detalle
+  const [openCreate, setOpenCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(EMPTY_BOOKING_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [detailNotes, setDetailNotes] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/citas/event-types", { cache: "no-store" });
-      const j = await res.json();
-      if (j.ok) {
-        setItems(j.data);
-      }
-    } finally { setLoading(false); }
+  const loadEventTypes = useCallback(async () => {
+    const res = await fetch("/api/citas/event-types?active=true", { cache: "no-store" });
+    const j = await res.json();
+    if (j.ok) setEventTypes(j.data);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadEventTypes(); }, [loadEventTypes]);
 
-  function openCreate() {
-    setForm(EMPTY_FORM);
-    setOpenId("new");
-    setFormError(null);
-    setAdvancedOpen(false);
-  }
-
-  async function openEdit(item) {
-    setOpenId(item.id);
-    setFormError(null);
-    setAdvancedOpen(false);
+  const fetchEvents = useCallback(async (info, success, failure) => {
     try {
-      const res = await fetch(`/api/citas/event-types/${item.id}`, { cache: "no-store" });
-      const j = await res.json();
-      const data = j.ok ? j.data : item;
-      setForm({
-        name: data.name ?? "",
-        slug: data.slug ?? "",
-        description: data.description ?? "",
-        duration: data.duration ?? 60,
-        bufferBefore: data.bufferBefore ?? 0,
-        bufferAfter: data.bufferAfter ?? 0,
-        color: data.color ?? "#3F6E5B",
-        modalities: data.modalities ?? ["online"],
-        location: data.location ?? "",
-        phoneNumber: data.phoneNumber ?? "",
-        meetUrl: data.meetUrl ?? "",
-        additionalDataLabel: data.additionalDataLabel ?? "",
-        additionalDataRequired: !!data.additionalDataRequired,
-        minNoticeHours: data.minNoticeHours ?? 24,
-        maxAdvanceDays: data.maxAdvanceDays ?? 60,
-        active: !!data.active,
-        order: data.order ?? 0,
-        _bookingCount: data.bookingCount ?? 0,
+      const params = new URLSearchParams({
+        start: info.startStr,
+        end: info.endStr,
       });
-    } catch {
-      setForm({ ...EMPTY_FORM, ...item });
+      if (visibleEtIds && visibleEtIds.length > 0) {
+        params.set("eventTypeIds", visibleEtIds.join(","));
+      } else if (visibleEtIds && visibleEtIds.length === 0) {
+        success([]);
+        return;
+      }
+      const res = await fetch(`/api/citas/bookings/calendar?${params}`, { cache: "no-store" });
+      const j = await res.json();
+      if (!j.ok) throw new Error(j.error || "Error cargando citas");
+      success(j.data ?? []);
+    } catch (err) {
+      failure(err);
     }
-  }
+  }, [visibleEtIds]);
 
-  function updateForm(field, value) { setForm((p) => ({ ...p, [field]: value })); }
+  useEffect(() => {
+    calendarRef.current?.getApi().refetchEvents();
+  }, [visibleEtIds]);
 
-  function toggleModality(m) {
-    setForm((p) => {
-      const has = p.modalities.includes(m);
-      const next = has ? p.modalities.filter((x) => x !== m) : [...p.modalities, m];
-      return { ...p, modalities: next };
+  function toggleEventType(id) {
+    setVisibleEtIds((prev) => {
+      const current = prev ?? eventTypes.map((e) => e.id);
+      if (current.includes(id)) return current.filter((x) => x !== id);
+      return [...current, id];
     });
   }
 
-  async function submitForm() {
-    setFormError(null);
-    if (!form.name.trim()) { setFormError("Nombre obligatorio"); return; }
-    if (!form.modalities || form.modalities.length === 0) {
-      setFormError("Selecciona al menos una modalidad"); return;
-    }
-    if (form.modalities.includes("presencial") && !form.location.trim()) {
-      setFormError("Dirección obligatoria si aceptas presencial"); return;
-    }
-    if (form.modalities.includes("phone") && !form.phoneNumber.trim()) {
-      setFormError("Teléfono obligatorio si aceptas modalidad telefónica"); return;
-    }
-    if (form.modalities.includes("online") && !form.meetUrl.trim()) {
-      setFormError("URL de reunión obligatoria si aceptas modalidad online"); return;
-    }
+  function showAllEventTypes() { setVisibleEtIds(null); }
 
-    const payload = {
-      name: form.name.trim(),
-      slug: form.slug.trim() || slugify(form.name),
-      description: form.description.trim() || null,
-      duration: Number(form.duration),
-      bufferBefore: Number(form.bufferBefore),
-      bufferAfter: Number(form.bufferAfter),
-      color: form.color || null,
-      modalities: form.modalities,
-      location: form.location.trim() || null,
-      phoneNumber: form.phoneNumber.trim() || null,
-      meetUrl: form.meetUrl.trim() || null,
-      additionalDataLabel: form.additionalDataLabel.trim() || null,
-      additionalDataRequired: !!form.additionalDataRequired,
-      minNoticeHours: Number(form.minNoticeHours),
-      maxAdvanceDays: Number(form.maxAdvanceDays),
-      active: !!form.active,
-      order: Number(form.order),
-    };
+  async function handleEventClick(info) {
+    const id = info.event.id;
+    const res = await fetch(`/api/citas/bookings/${id}`, { cache: "no-store" });
+    const j = await res.json();
+    if (j.ok) {
+      setOpenBooking(j.data);
+      setDetailNotes(j.data.notes ?? "");
+    }
+  }
 
+  async function patchBooking(payload) {
     setSaving(true);
+    setFormError(null);
     try {
-      const isCreate = openId === "new";
-      const url = isCreate ? "/api/citas/event-types" : `/api/citas/event-types/${openId}`;
-      const method = isCreate ? "POST" : "PATCH";
-      const res = await fetch(url, {
-        method,
+      const res = await fetch(`/api/citas/bookings/${openBooking.id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const j = await res.json();
       if (!j.ok) throw new Error(j.error || "Error guardando");
-      await load();
-      setOpenId(null);
+      setOpenBooking(j.data);
+      calendarRef.current?.getApi().refetchEvents();
+      return true;
     } catch (err) {
       setFormError(err.message);
-    } finally { setSaving(false); }
+      return false;
+    } finally {
+      setSaving(false);
+    }
   }
 
-  async function handleDelete() {
-    if (!window.confirm("¿Eliminar este tipo de cita? Si tiene reservas, se desactivará en su lugar.")) return;
+  async function markCompleted() { await patchBooking({ status: "completed" }); }
+  async function markNoShow() { await patchBooking({ status: "no_show" }); }
+  async function cancelBooking() {
+    const reason = window.prompt("Motivo de cancelación (opcional)") ?? "";
+    await patchBooking({ status: "cancelled", cancellationReason: reason.trim() || null });
+  }
+  async function saveNotes() { await patchBooking({ notes: detailNotes.trim() || null }); }
+  async function deleteBooking() {
+    if (!window.confirm("¿Eliminar esta cita? Quedará marcada como cancelada.")) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/citas/event-types/${openId}`, { method: "DELETE" });
-      if (!res.ok && res.status !== 204) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || "Error eliminando");
-      }
-      await load();
-      setOpenId(null);
+      const res = await fetch(`/api/citas/bookings/${openBooking.id}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) throw new Error("Error eliminando");
+      setOpenBooking(null);
+      calendarRef.current?.getApi().refetchEvents();
     } catch (err) {
       setFormError(err.message);
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const selectedEventType = useMemo(() => {
+    return eventTypes.find((e) => e.id === createForm.eventTypeId) ?? null;
+  }, [eventTypes, createForm.eventTypeId]);
+
+  function updateCreateForm(field, value) {
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function submitCreate() {
+    setFormError(null);
+    if (!createForm.eventTypeId) { setFormError("Selecciona tipo de cita"); return; }
+    if (!createForm.date || !createForm.time) { setFormError("Fecha y hora son obligatorias"); return; }
+    if (!createForm.clientName.trim()) { setFormError("Nombre del cliente obligatorio"); return; }
+    if (!createForm.clientEmail.trim()) { setFormError("Email del cliente obligatorio"); return; }
+    if (!createForm.clientPhone.trim()) { setFormError("Teléfono del cliente obligatorio"); return; }
+    if (!createForm.modality) { setFormError("Selecciona modalidad"); return; }
+
+    setSaving(true);
+    try {
+      const scheduledAt = new Date(`${createForm.date}T${createForm.time}`).toISOString();
+      const res = await fetch("/api/citas/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventTypeId: createForm.eventTypeId,
+          scheduledAt,
+          clientName: createForm.clientName.trim(),
+          clientEmail: createForm.clientEmail.trim(),
+          clientPhone: createForm.clientPhone.trim(),
+          modality: createForm.modality,
+          additionalData: createForm.additionalData.trim() || null,
+          notes: createForm.notes.trim() || null,
+        }),
+      });
+      const j = await res.json();
+      if (!j.ok) throw new Error(j.error || "Error creando cita");
+      calendarRef.current?.getApi().refetchEvents();
+      setOpenCreate(false);
+      setCreateForm(EMPTY_BOOKING_FORM);
+    } catch (err) {
+      setFormError(err.message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
     <div className="flex flex-col h-full min-h-0">
+      <style>{`
+        .fc { font-family: inherit; }
+        .fc .fc-button {
+          background: #0F0F0F; border-color: #0F0F0F; color: #FAFAF8;
+          font-size: 0.72rem; font-weight: 500; padding: 0.3rem 0.65rem;
+          border-radius: 0.375rem; text-transform: none; letter-spacing: 0;
+          box-shadow: none !important;
+        }
+        .fc .fc-button:hover:not(:disabled) { background: #222; border-color: #222; }
+        .fc .fc-button-active,
+        .fc .fc-button-primary:not(:disabled).fc-button-active {
+          background: var(--color-primary, #1B3A2D) !important;
+          border-color: var(--color-primary, #1B3A2D) !important;
+        }
+        .fc .fc-button:focus { outline: none; box-shadow: none !important; }
+        .fc .fc-toolbar-title { font-size: 0.95rem; font-weight: 600; color: #111827; }
+        .fc .fc-col-header-cell-cushion {
+          font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+          letter-spacing: 0.08em; color: #9CA3AF; padding: 6px 4px;
+        }
+        .fc .fc-daygrid-day-number { font-size: 0.72rem; color: #6B7280; padding: 4px 6px; }
+        .fc .fc-day-today .fc-daygrid-day-number { color: var(--color-primary, #1B3A2D); font-weight: 700; }
+        .fc .fc-day-today { background: rgba(27,58,45,0.04) !important; }
+        .fc-theme-standard td, .fc-theme-standard th { border-color: #F0F0F0; }
+        .fc-theme-standard .fc-scrollgrid { border-color: #E8E8E8; }
+        .fc .fc-event {
+          border-radius: 4px; font-size: 0.71rem; font-weight: 500;
+          border: none; padding: 1px 5px; cursor: pointer;
+        }
+        .fc .fc-event:hover { opacity: 0.82; }
+        .fc .fc-more-link { font-size: 0.68rem; color: #9CA3AF; font-weight: 500; }
+        .fc .fc-list-event-title a { font-size: 0.8rem; color: #111827; }
+        .fc .fc-list-day-cushion { background: #F9FAFB; }
+        .fc .fc-timegrid-slot-label-cushion { font-size: 0.67rem; color: #9CA3AF; }
+        .fc .fc-highlight { background: rgba(27,58,45,0.07); }
+        .fc .fc-toolbar.fc-header-toolbar { margin-bottom: 1rem; }
+      `}</style>
+
+      {/* Header */}
       <div className="px-6 lg:px-10 pt-8 pb-5 flex items-end justify-between shrink-0 border-b border-[var(--ink-200)] gap-6 flex-wrap">
         <div>
-          <div className="eyebrow mb-1.5 lg:mb-2">Tiempo · Configuración</div>
+          <div className="eyebrow mb-1.5 lg:mb-2">Tiempo · Agenda de citas</div>
           <h1 className="font-display text-[24px] lg:text-[34px] leading-[1.05] text-[var(--ink-900)] tracking-tight">
-            Citas <span className="font-display-italic text-[var(--ink-400)]">— tipos de cita</span>
+            Calendario <span className="font-display-italic text-[var(--ink-400)]">— citas agendadas</span>
           </h1>
         </div>
         <div className="flex gap-2 items-center flex-wrap">
           <Link
-            href="/citas/calendario"
+            href="/citas/tipos"
             className="px-3 py-1.5 text-xs font-medium rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition"
           >
-            Calendario
+            Tipos de cita
           </Link>
           <Link
             href="/citas/disponibilidad"
@@ -205,105 +282,250 @@ export default function CitasPage() {
             Disponibilidad
           </Link>
           <button
-            onClick={openCreate}
+            onClick={() => { setOpenCreate(true); setFormError(null); }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0F0F0F] text-white text-xs font-medium rounded-md hover:bg-[#222] transition-colors"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-            Nuevo tipo de cita
+            Nueva cita manual
           </button>
         </div>
       </div>
 
-      {/* Tabla */}
-      <div className="flex-1 overflow-auto px-6 lg:px-10 py-6">
-        {loading ? (
-          <div className="text-sm text-neutral-400">Cargando...</div>
-        ) : items.length === 0 ? (
-          <div className="text-sm text-neutral-400">
-            No hay tipos de cita aún. Crea el primero para empezar.
-          </div>
-        ) : (
-          <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="bg-neutral-50 border-b border-neutral-200">
-                  <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Nombre</th>
-                  <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Duración</th>
-                  <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Modalidades</th>
-                  <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Color</th>
-                  <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Estado</th>
-                  <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Orden</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((it) => (
-                  <tr
-                    key={it.id}
-                    onClick={() => openEdit(it)}
-                    className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50 cursor-pointer"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-neutral-800">{it.name}</div>
-                      <div className="text-[11px] text-neutral-400">{it.slug}</div>
-                    </td>
-                    <td className="px-4 py-3 text-neutral-700">{it.duration} min</td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {it.modalities?.map((m) => (
-                          <span
-                            key={m}
-                            className="text-[11px] px-1.5 py-0.5 rounded border bg-white text-neutral-600 border-neutral-200"
-                          >
-                            {MODALITY_LABELS[m] ?? m}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span
-                          className="inline-block w-4 h-4 rounded border border-neutral-200"
-                          style={{ background: it.color ?? "#3F6E5B" }}
-                        />
-                        <span className="text-[11px] text-neutral-400">{it.color ?? "—"}</span>
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {it.active ? (
-                        <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border bg-emerald-50 text-emerald-700 border-emerald-100">
-                          Activo
-                        </span>
-                      ) : (
-                        <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border bg-neutral-100 text-neutral-500 border-neutral-200">
-                          Inactivo
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-neutral-400">{it.order ?? 0}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      {/* Filtro de tipos */}
+      {eventTypes.length > 0 && (
+        <div className="px-6 lg:px-10 py-3 flex items-center gap-2 flex-wrap shrink-0 border-b border-neutral-100">
+          <span className="text-[11px] uppercase tracking-wider text-neutral-400 mr-1">Filtrar:</span>
+          <button
+            onClick={showAllEventTypes}
+            className={`text-[11px] px-2 py-1 rounded-md border ${
+              visibleEtIds == null
+                ? "bg-neutral-900 text-white border-neutral-900"
+                : "bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50"
+            }`}
+          >
+            Todos
+          </button>
+          {eventTypes.map((et) => {
+            const active = visibleEtIds == null || visibleEtIds.includes(et.id);
+            return (
+              <button
+                key={et.id}
+                onClick={() => toggleEventType(et.id)}
+                className={`text-[11px] px-2 py-1 rounded-md border flex items-center gap-1.5 transition ${
+                  active
+                    ? "bg-white text-neutral-700 border-neutral-300"
+                    : "bg-neutral-50 text-neutral-400 border-neutral-200 line-through"
+                }`}
+              >
+                <span
+                  className="inline-block w-2 h-2 rounded-full"
+                  style={{ background: et.color ?? "#3F6E5B" }}
+                />
+                {et.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Calendario */}
+      <div className="flex-1 p-6 min-h-0">
+        <FullCalendar
+          ref={calendarRef}
+          plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
+          initialView="timeGridWeek"
+          headerToolbar={{
+            left: "prev,next today",
+            center: "title",
+            right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek",
+          }}
+          locale="es"
+          firstDay={1}
+          slotMinTime="07:00:00"
+          slotMaxTime="22:00:00"
+          allDaySlot={false}
+          events={fetchEvents}
+          eventClick={handleEventClick}
+          height="calc(100vh - 240px)"
+          buttonText={{ today: "Hoy", month: "Mes", week: "Semana", day: "Día", list: "Lista" }}
+        />
       </div>
 
-      {/* Drawer */}
-      {openId && (
+      {/* ─── Modal de detalle de booking ─── */}
+      {openBooking && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setOpenBooking(null); }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col">
+            <div className="px-5 py-4 border-b border-neutral-100 flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="text-base font-semibold text-neutral-900 truncate">
+                  {openBooking.clientName}
+                </div>
+                <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                  <StatusChip value={openBooking.status} />
+                  <ModalityChip value={openBooking.modality} />
+                  {openBooking.eventType && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-neutral-500">
+                      <span className="w-2 h-2 rounded-full" style={{ background: openBooking.eventType.color ?? "#3F6E5B" }} />
+                      {openBooking.eventType.name}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setOpenBooking(null)}
+                className="text-neutral-400 hover:text-neutral-700 p-0.5"
+                aria-label="Cerrar"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1">
+              {formError && (
+                <div className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">
+                  {formError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-2 text-[13px]">
+                <div className="flex">
+                  <span className="w-24 text-neutral-400">Email</span>
+                  <a className="text-neutral-800 hover:underline" href={`mailto:${openBooking.clientEmail}`}>
+                    {openBooking.clientEmail}
+                  </a>
+                </div>
+                <div className="flex">
+                  <span className="w-24 text-neutral-400">Teléfono</span>
+                  <a className="text-neutral-800 hover:underline" href={`tel:${openBooking.clientPhone}`}>
+                    {openBooking.clientPhone}
+                  </a>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 text-[13px] pt-3 border-t border-neutral-100">
+                <div className="flex">
+                  <span className="w-24 text-neutral-400">Fecha</span>
+                  <span className="text-neutral-800">{fmtDateTime(openBooking.scheduledAt)}</span>
+                </div>
+                <div className="flex">
+                  <span className="w-24 text-neutral-400">Duración</span>
+                  <span className="text-neutral-800">{openBooking.duration} min</span>
+                </div>
+                {openBooking.modality === "presencial" && openBooking.eventType?.location && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400">Dirección</span>
+                    <span className="text-neutral-800">{openBooking.eventType.location}</span>
+                  </div>
+                )}
+                {openBooking.modality === "phone" && openBooking.eventType?.phoneNumber && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400">Teléfono</span>
+                    <span className="text-neutral-800">{openBooking.eventType.phoneNumber}</span>
+                  </div>
+                )}
+                {openBooking.modality === "online" && openBooking.meetUrl && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400">Meet</span>
+                    <a className="text-neutral-800 hover:underline truncate" href={openBooking.meetUrl} target="_blank" rel="noreferrer">
+                      {openBooking.meetUrl}
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {openBooking.additionalData && (
+                <div className="pt-3 border-t border-neutral-100">
+                  <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-1">
+                    {openBooking.eventType?.additionalDataLabel || "Información adicional"}
+                  </div>
+                  <div className="bg-amber-50 border border-amber-100 rounded-md px-3 py-2 text-[13px] text-neutral-700 whitespace-pre-wrap">
+                    {openBooking.additionalData}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-neutral-100">
+                <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-1">Notas internas</div>
+                <textarea
+                  value={detailNotes}
+                  onChange={(e) => setDetailNotes(e.target.value)}
+                  placeholder="Notas internas (no visibles para el cliente)"
+                  className={`${inputCls} min-h-[70px]`}
+                />
+                <div className="flex justify-end mt-1.5">
+                  <button
+                    onClick={saveNotes}
+                    disabled={saving || detailNotes === (openBooking.notes ?? "")}
+                    className="text-[11px] px-2.5 py-1 rounded border border-neutral-300 text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+                  >
+                    Guardar notas
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-neutral-100 flex flex-wrap gap-2 justify-between">
+              <div className="flex flex-wrap gap-2">
+                {openBooking.status !== "completed" && (
+                  <button
+                    onClick={markCompleted}
+                    disabled={saving}
+                    className="text-[12px] px-3 py-1.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    Marcar completada
+                  </button>
+                )}
+                {openBooking.status !== "no_show" && (
+                  <button
+                    onClick={markNoShow}
+                    disabled={saving}
+                    className="text-[12px] px-3 py-1.5 rounded-md bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
+                  >
+                    No asistió
+                  </button>
+                )}
+                {openBooking.status !== "cancelled" && (
+                  <button
+                    onClick={cancelBooking}
+                    disabled={saving}
+                    className="text-[12px] px-3 py-1.5 rounded-md bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+                  >
+                    Cancelar cita
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={deleteBooking}
+                disabled={saving}
+                className="text-[12px] px-3 py-1.5 rounded-md bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-50"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Drawer "Nueva cita manual" ─── */}
+      {openCreate && (
         <div
           className="fixed inset-0 z-50"
-          onClick={(e) => { if (e.target === e.currentTarget) setOpenId(null); }}
+          onClick={(e) => { if (e.target === e.currentTarget) setOpenCreate(false); }}
         >
           <div className="absolute inset-0 bg-black/40" />
           <aside className="absolute right-0 top-14 lg:top-0 bottom-0 w-full max-w-md bg-white shadow-2xl flex flex-col">
             <div className="px-5 py-4 border-b border-neutral-100 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-neutral-900">
-                {openId === "new" ? "Nuevo tipo de cita" : "Editar tipo de cita"}
-              </h2>
+              <h2 className="text-sm font-semibold text-neutral-900">Nueva cita manual</h2>
               <button
-                onClick={() => setOpenId(null)}
+                onClick={() => setOpenCreate(false)}
                 className="text-neutral-400 hover:text-neutral-700 p-0.5"
                 aria-label="Cerrar"
               >
@@ -321,249 +543,129 @@ export default function CitasPage() {
               )}
 
               <div>
-                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Nombre</label>
+                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Tipo de cita</label>
+                <select
+                  value={createForm.eventTypeId}
+                  onChange={(e) => updateCreateForm("eventTypeId", e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="">— Selecciona —</option>
+                  {eventTypes.map((e) => (
+                    <option key={e.id} value={e.id}>{e.name} ({e.duration} min)</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Fecha</label>
+                  <input
+                    type="date"
+                    value={createForm.date}
+                    onChange={(e) => updateCreateForm("date", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Hora</label>
+                  <input
+                    type="time"
+                    value={createForm.time}
+                    onChange={(e) => updateCreateForm("time", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Nombre del cliente</label>
                 <input
                   type="text"
-                  value={form.name}
-                  onChange={(e) => {
-                    updateForm("name", e.target.value);
-                    if (openId === "new" && !form.slug) updateForm("slug", slugify(e.target.value));
-                  }}
-                  className={inputCls}
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Slug</label>
-                <input
-                  type="text"
-                  value={form.slug}
-                  onChange={(e) => updateForm("slug", e.target.value)}
-                  className={inputCls}
-                  placeholder="primera-consulta"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Descripción</label>
-                <textarea
-                  value={form.description}
-                  onChange={(e) => updateForm("description", e.target.value)}
-                  rows={2}
-                  className={`${inputCls} min-h-[60px]`}
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Duración (min)</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={480}
-                  value={form.duration}
-                  onChange={(e) => updateForm("duration", e.target.value)}
+                  value={createForm.clientName}
+                  onChange={(e) => updateCreateForm("clientName", e.target.value)}
                   className={inputCls}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Tiempo de margen antes (min)</label>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Email</label>
                   <input
-                    type="number"
-                    min={0}
-                    value={form.bufferBefore}
-                    onChange={(e) => updateForm("bufferBefore", e.target.value)}
+                    type="email"
+                    value={createForm.clientEmail}
+                    onChange={(e) => updateCreateForm("clientEmail", e.target.value)}
                     className={inputCls}
                   />
                 </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Tiempo de margen después (min)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={form.bufferAfter}
-                    onChange={(e) => updateForm("bufferAfter", e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-              <p className="text-[11px] text-neutral-400 -mt-1">
-                Minutos que bloqueamos en la agenda para preparación o descanso entre citas.
-              </p>
-
-              <div>
-                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Color</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={form.color || "#3F6E5B"}
-                    onChange={(e) => updateForm("color", e.target.value)}
-                    className="w-10 h-9 border border-neutral-200 rounded cursor-pointer"
-                  />
-                  <input
-                    type="text"
-                    value={form.color || ""}
-                    onChange={(e) => updateForm("color", e.target.value)}
-                    placeholder="#3F6E5B"
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-medium text-neutral-500 mb-1.5">Modalidades</label>
-                <div className="flex gap-2 flex-wrap">
-                  {ALL_MODALITIES.map((m) => (
-                    <label key={m} className="flex items-center gap-1.5 text-[13px] cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={form.modalities.includes(m)}
-                        onChange={() => toggleModality(m)}
-                      />
-                      {MODALITY_LABELS[m]}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {form.modalities.includes("presencial") && (
-                <div>
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Dirección</label>
-                  <input
-                    type="text"
-                    value={form.location}
-                    onChange={(e) => updateForm("location", e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-              )}
-              {form.modalities.includes("phone") && (
                 <div>
                   <label className="block text-[11px] font-medium text-neutral-500 mb-1">Teléfono</label>
                   <input
                     type="tel"
-                    value={form.phoneNumber}
-                    onChange={(e) => updateForm("phoneNumber", e.target.value)}
+                    value={createForm.clientPhone}
+                    onChange={(e) => updateCreateForm("clientPhone", e.target.value)}
                     className={inputCls}
                   />
                 </div>
-              )}
-              {form.modalities.includes("online") && (
+              </div>
+
+              {selectedEventType && (
                 <div>
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">URL de reunión</label>
-                  <input
-                    type="url"
-                    value={form.meetUrl}
-                    onChange={(e) => updateForm("meetUrl", e.target.value)}
-                    placeholder="https://meet.google.com/..."
-                    className={inputCls}
-                  />
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Modalidad</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {selectedEventType.modalities.map((m) => (
+                      <label key={m} className="flex items-center gap-1.5 text-[13px] cursor-pointer">
+                        <input
+                          type="radio"
+                          name="modality"
+                          value={m}
+                          checked={createForm.modality === m}
+                          onChange={(e) => updateCreateForm("modality", e.target.value)}
+                        />
+                        {MODALITY_LABELS[m] ?? m}
+                      </label>
+                    ))}
+                  </div>
                 </div>
               )}
 
               <div>
-                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Etiqueta del campo libre</label>
-                <input
-                  type="text"
-                  value={form.additionalDataLabel}
-                  onChange={(e) => updateForm("additionalDataLabel", e.target.value)}
-                  placeholder="¿Qué quieres comentar antes de la cita?"
-                  className={inputCls}
-                />
-                <label className="flex items-center gap-1.5 text-[12px] text-neutral-500 mt-1 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={form.additionalDataRequired}
-                    onChange={(e) => updateForm("additionalDataRequired", e.target.checked)}
-                  />
-                  Obligatorio
+                <label className="block text-[11px] font-medium text-neutral-500 mb-1">
+                  {selectedEventType?.additionalDataLabel || "Información adicional"}
                 </label>
+                <textarea
+                  value={createForm.additionalData}
+                  onChange={(e) => updateCreateForm("additionalData", e.target.value)}
+                  rows={3}
+                  className={`${inputCls} min-h-[70px]`}
+                />
               </div>
 
-              <div className="pt-2 border-t border-neutral-100">
-                <button
-                  type="button"
-                  onClick={() => setAdvancedOpen((v) => !v)}
-                  className="text-[12px] text-neutral-500 hover:text-neutral-700"
-                >
-                  {advancedOpen ? "− Ocultar configuración avanzada" : "+ Configuración avanzada"}
-                </button>
+              <div>
+                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Notas internas</label>
+                <textarea
+                  value={createForm.notes}
+                  onChange={(e) => updateCreateForm("notes", e.target.value)}
+                  rows={2}
+                  className={`${inputCls} min-h-[60px]`}
+                />
               </div>
-
-              {advancedOpen && (
-                <div className="space-y-3 pt-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-medium text-neutral-500 mb-1">Antelación mínima (h)</label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={form.minNoticeHours}
-                        onChange={(e) => updateForm("minNoticeHours", e.target.value)}
-                        className={inputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-medium text-neutral-500 mb-1">Reserva máx. (días)</label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={form.maxAdvanceDays}
-                        onChange={(e) => updateForm("maxAdvanceDays", e.target.value)}
-                        className={inputCls}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-medium text-neutral-500 mb-1">Orden</label>
-                    <input
-                      type="number"
-                      value={form.order}
-                      onChange={(e) => updateForm("order", e.target.value)}
-                      className={inputCls}
-                    />
-                  </div>
-
-                  <label className="flex items-center gap-1.5 text-[13px] cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.active}
-                      onChange={(e) => updateForm("active", e.target.checked)}
-                    />
-                    Activo (visible para reservar)
-                  </label>
-                </div>
-              )}
             </div>
 
-            <div className="px-5 py-3 border-t border-neutral-100 flex justify-between gap-2 shrink-0">
-              {openId !== "new" ? (
-                <button
-                  onClick={handleDelete}
-                  disabled={saving}
-                  className="text-xs px-3 py-1.5 rounded-md bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-50"
-                >
-                  Eliminar
-                </button>
-              ) : <span />}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setOpenId(null)}
-                  disabled={saving}
-                  className="text-xs px-3 py-1.5 rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={submitForm}
-                  disabled={saving}
-                  className="text-xs px-3 py-1.5 rounded-md bg-[#0F0F0F] text-white hover:bg-[#222] disabled:opacity-50"
-                >
-                  {saving ? "Guardando..." : (openId === "new" ? "Crear" : "Guardar")}
-                </button>
-              </div>
+            <div className="px-5 py-3 border-t border-neutral-100 flex justify-end gap-2 shrink-0">
+              <button
+                onClick={() => setOpenCreate(false)}
+                disabled={saving}
+                className="text-xs px-3 py-1.5 rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={submitCreate}
+                disabled={saving}
+                className="text-xs px-3 py-1.5 rounded-md bg-[#0F0F0F] text-white hover:bg-[#222] disabled:opacity-50"
+              >
+                {saving ? "Guardando..." : "Crear cita"}
+              </button>
             </div>
           </aside>
         </div>

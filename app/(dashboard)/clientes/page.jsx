@@ -18,6 +18,15 @@ const STATUSES = [
   { key: "discarded", label: "Descartado" },
 ];
 
+// Flujo principal: new → contacted → following → converted.
+// 'discarded' es estado terminal aparte; un click en su badge no avanza.
+const STATUS_FLOW = ["new", "contacted", "following", "converted"];
+function nextStatus(current) {
+  const idx = STATUS_FLOW.indexOf(current);
+  if (idx < 0 || idx >= STATUS_FLOW.length - 1) return null;
+  return STATUS_FLOW[idx + 1];
+}
+
 const STATUS_STYLE = {
   new: { dot: "bg-gray-400", bg: "bg-gray-100 text-gray-600" },
   contacted: { dot: "bg-blue-400", bg: "bg-blue-100 text-blue-700" },
@@ -40,8 +49,8 @@ export default function ClientesPage() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
-  const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState({});
+  const [editError, setEditError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [newClientOpen, setNewClientOpen] = useState(false);
@@ -50,6 +59,7 @@ export default function ClientesPage() {
     country: "", city: "", topic: "", interestedProduct: "",
   });
   const [creatingClient, setCreatingClient] = useState(false);
+  const [newClientError, setNewClientError] = useState(null);
 
   const fetchClients = useCallback(() => {
     setLoading(true);
@@ -78,17 +88,7 @@ export default function ClientesPage() {
     return acc;
   }, {});
 
-  function openPanel(client) { setSelected(client); setPanelOpen(true); setEditMode(false); }
-  function closePanel() { setPanelOpen(false); setSelected(null); setEditMode(false); }
-
-  useEffect(() => {
-    if (!panelOpen) return;
-    function onKey(e) { if (e.key === "Escape") closePanel(); }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [panelOpen]);
-
-  function openEdit(client) {
+  function fillEditForm(client) {
     setEditForm({
       name: client.name || "",
       email: client.email || "",
@@ -101,10 +101,47 @@ export default function ClientesPage() {
       topic: client.customFields?.topic || "",
       interestedProduct: client.customFields?.interestedProduct || "",
     });
-    setEditMode(true);
+  }
+
+  function openPanel(client) {
+    setSelected(client);
+    fillEditForm(client);
+    setEditError(null);
+    setPanelOpen(true);
+  }
+  function closePanel() {
+    setPanelOpen(false);
+    setSelected(null);
+    setEditError(null);
+  }
+
+  useEffect(() => {
+    if (!panelOpen) return;
+    function onKey(e) { if (e.key === "Escape") closePanel(); }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [panelOpen]);
+
+  function validateEditForm(form) {
+    if (!form.name?.trim()) return "El nombre es obligatorio";
+    const email = (form.email || "").trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return "El email no tiene un formato válido (ej. nombre@empresa.com)";
+    }
+    const phone = (form.phone || "").trim();
+    if (phone && !/^[+\d][\d\s\-().]{6,}$/.test(phone)) {
+      return "El teléfono no tiene un formato válido (ej. +34 612 345 678)";
+    }
+    return null;
   }
 
   async function saveEdit(clientId) {
+    const validationError = validateEditForm(editForm);
+    if (validationError) {
+      setEditError(validationError);
+      return;
+    }
+    setEditError(null);
     setSaving(true);
     try {
       const res = await fetch(`/api/clients/${clientId}`, {
@@ -112,14 +149,39 @@ export default function ClientesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editForm),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (data.ok) {
         setSelected(data.data);
         setClients((prev) => prev.map((c) => (c.id === clientId ? data.data : c)));
-        setEditMode(false);
+      } else {
+        setEditError(data.error || `Error al guardar (HTTP ${res.status})`);
       }
+    } catch (err) {
+      setEditError(err?.message || "Error de red");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function advanceClientStatus(client) {
+    const current = client.customFields?.seStatus || "new";
+    const next = nextStatus(current);
+    if (!next) return;
+    try {
+      const res = await fetch(`/api/clients/${client.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok) return;
+      setClients((prev) => prev.map((c) => (c.id === client.id ? data.data : c)));
+      if (selected?.id === client.id) {
+        setSelected(data.data);
+        setEditForm((f) => ({ ...f, status: next }));
+      }
+    } catch {
+      // silencioso a propósito; el resto de la UI sigue funcionando
     }
   }
 
@@ -150,8 +212,27 @@ export default function ClientesPage() {
     }
   }
 
+  function validateNewClient(form) {
+    if (!form.name.trim()) return "El nombre es obligatorio";
+    const email = form.email.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return "El email no tiene un formato válido (ej. nombre@empresa.com)";
+    }
+    const phone = form.phone.trim();
+    // Acepta +34 600 123 456, 600123456, 0034-600-123-456, etc. Mínimo 7 dígitos.
+    if (phone && !/^[+\d][\d\s\-().]{6,}$/.test(phone)) {
+      return "El teléfono no tiene un formato válido (ej. +34 612 345 678)";
+    }
+    return null;
+  }
+
   async function handleCreateClient() {
-    if (!newClientForm.name.trim()) return;
+    const validationError = validateNewClient(newClientForm);
+    if (validationError) {
+      setNewClientError(validationError);
+      return;
+    }
+    setNewClientError(null);
     setCreatingClient(true);
     try {
       const res = await fetch("/api/clients", {
@@ -159,12 +240,16 @@ export default function ClientesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newClientForm),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (data.ok) {
         fetchClients();
         setNewClientOpen(false);
         setNewClientForm({ name: "", email: "", phone: "", company: "", country: "", city: "", topic: "", interestedProduct: "" });
+      } else {
+        setNewClientError(data.error || `Error al crear cliente (HTTP ${res.status})`);
       }
+    } catch (err) {
+      setNewClientError(err?.message || "Error de red");
     } finally {
       setCreatingClient(false);
     }
@@ -314,11 +399,28 @@ export default function ClientesPage() {
                         <td className="px-4 py-3 hidden lg:table-cell">
                           <span className="text-gray-600">{client.phone || "—"}</span>
                         </td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${st.bg}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
-                            {statusLabel}
-                          </span>
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                          {(() => {
+                            const current = client.customFields?.seStatus || "new";
+                            const canAdvance = nextStatus(current) !== null;
+                            const nextLabel = canAdvance
+                              ? STATUSES.find((s) => s.key === nextStatus(current))?.label
+                              : null;
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => canAdvance && advanceClientStatus(client)}
+                                disabled={!canAdvance}
+                                title={canAdvance ? `Pasar a "${nextLabel}"` : "Estado final"}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition ${st.bg} ${
+                                  canAdvance ? "hover:ring-2 hover:ring-offset-1 hover:ring-[var(--color-primary)]/40 cursor-pointer" : "cursor-default"
+                                }`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+                                {statusLabel}
+                              </button>
+                            );
+                          })()}
                         </td>
                         <td className="px-4 py-3 hidden sm:table-cell">
                           <span className="text-gray-500 text-xs">{formatDate(client.createdAt)}</span>
@@ -378,156 +480,95 @@ export default function ClientesPage() {
             </div>
 
           <div className="flex-1 overflow-y-auto">
-            {editMode ? (
-              <div className="p-6 space-y-4">
-                {[
-                  { label: "Nombre", key: "name", type: "text" },
-                  { label: "Empresa", key: "company", type: "text" },
-                  { label: "Email", key: "email", type: "email" },
-                  { label: "Teléfono", key: "phone", type: "tel" },
-                  { label: "País", key: "country", type: "text" },
-                  { label: "Ciudad", key: "city", type: "text" },
-                  { label: "Tema de interés", key: "topic", type: "text" },
-                  { label: "Producto de interés", key: "interestedProduct", type: "text" },
-                ].map(({ label, key, type }) => (
-                  <div key={key}>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
-                    <input
-                      type={type}
-                      value={editForm[key] || ""}
-                      onChange={(e) => setEditForm((f) => ({ ...f, [key]: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]"
-                    />
-                  </div>
-                ))}
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Notas</label>
-                  <textarea
-                    rows={3}
-                    value={editForm.notes || ""}
-                    onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] resize-none"
+            <div className="p-6 space-y-4">
+              {editError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
+                  {editError}
+                </div>
+              )}
+              {[
+                { label: "Nombre", key: "name", type: "text", placeholder: "María García" },
+                { label: "Empresa", key: "company", type: "text", placeholder: "Acme Foods S.L." },
+                { label: "Email", key: "email", type: "email", placeholder: "maria@acme.com" },
+                { label: "Teléfono", key: "phone", type: "tel", placeholder: "+34 612 345 678" },
+                { label: "País", key: "country", type: "text", placeholder: "España" },
+                { label: "Ciudad", key: "city", type: "text", placeholder: "Madrid" },
+                { label: "Tema de interés", key: "topic", type: "text", placeholder: "Enzimas industriales para panadería" },
+                { label: "Producto de interés", key: "interestedProduct", type: "text", placeholder: "Amilasa SE-200" },
+              ].map(({ label, key, type, placeholder }) => (
+                <div key={key}>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+                  <input
+                    type={type}
+                    value={editForm[key] || ""}
+                    onChange={(e) => {
+                      setEditForm((f) => ({ ...f, [key]: e.target.value }));
+                      if (editError) setEditError(null);
+                    }}
+                    placeholder={placeholder}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] placeholder:text-gray-300"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-2">Estado</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {STATUSES.map((s) => (
-                      <button
-                        key={s.key}
-                        onClick={() => setEditForm((f) => ({ ...f, status: s.key }))}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                          editForm.status === s.key ? `${STATUS_STYLE[s.key].bg} border-transparent` : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
-                        }`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${STATUS_STYLE[s.key].dot}`} />
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
+              ))}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Notas</label>
+                <textarea
+                  rows={3}
+                  value={editForm.notes || ""}
+                  onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+                  placeholder="Comentarios internos, contactos previos, etc."
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] resize-none placeholder:text-gray-300"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-2">Estado</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {STATUSES.map((s) => (
+                    <button
+                      key={s.key}
+                      onClick={() => setEditForm((f) => ({ ...f, status: s.key }))}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                        editForm.status === s.key ? `${STATUS_STYLE[s.key].bg} border-transparent` : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${STATUS_STYLE[s.key].dot}`} />
+                      {s.label}
+                    </button>
+                  ))}
                 </div>
               </div>
-            ) : (
-              <div className="p-6 space-y-6">
-                <div>
-                  <div className="text-lg font-semibold text-gray-900">{selected.name || "Sin nombre"}</div>
-                  {selected.customFields?.company && (
-                    <div className="text-sm text-gray-500 mt-0.5">{selected.customFields.company}</div>
-                  )}
-                </div>
-
-                <div>
-                  <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Contacto</div>
-                  <div className="space-y-1.5">
-                    {selected.email && (
-                      <div className="flex items-center gap-2 text-sm text-gray-700">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4 text-gray-400 shrink-0">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                        </svg>
-                        <a href={`mailto:${selected.email}`} className="hover:text-[var(--color-primary)]">{selected.email}</a>
-                      </div>
-                    )}
-                    {selected.phone && (
-                      <div className="flex items-center gap-2 text-sm text-gray-700">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4 text-gray-400 shrink-0">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
-                        </svg>
-                        {selected.phone}
-                      </div>
-                    )}
-                    {!selected.email && !selected.phone && (
-                      <span className="text-sm text-gray-400">Sin datos de contacto</span>
-                    )}
-                  </div>
-                </div>
-
-                {(selected.customFields?.country || selected.customFields?.city) && (
-                  <div>
-                    <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Ubicación</div>
-                    <div className="text-sm text-gray-700">
-                      {[selected.customFields.country, selected.customFields.city].filter(Boolean).join(" — ")}
-                    </div>
-                  </div>
-                )}
-
-                {(selected.customFields?.topic || selected.customFields?.interestedProduct) && (
-                  <div>
-                    <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Interés</div>
-                    {selected.customFields?.topic && <div className="text-sm text-gray-700">{selected.customFields.topic}</div>}
-                    {selected.customFields?.interestedProduct && (
-                      <div className="text-xs text-gray-500 mt-0.5">Producto: {selected.customFields.interestedProduct}</div>
-                    )}
-                  </div>
-                )}
-
-                {selected.notes && (
-                  <div>
-                    <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Notas</div>
-                    <div className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">{selected.notes}</div>
-                  </div>
-                )}
-
-                <div>
-                  <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Alta</div>
-                  <div className="text-sm text-gray-600">{formatDate(selected.createdAt)}</div>
-                </div>
+              <div className="text-xs text-gray-400 pt-2 border-t border-gray-100">
+                Alta: {formatDate(selected.createdAt)}
               </div>
-            )}
+            </div>
           </div>
 
           <div className="px-6 py-4 border-t border-gray-100 flex items-center gap-2">
-            {editMode ? (
-              <>
-                <button onClick={() => saveEdit(selected.id)} disabled={saving}
-                  className="flex-1 bg-[var(--color-primary)] hover:opacity-90 text-white text-sm font-medium py-2 rounded-lg transition-opacity disabled:opacity-50">
-                  {saving ? "Guardando…" : "Guardar"}
-                </button>
-                <button onClick={() => setEditMode(false)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg">
-                  Cancelar
-                </button>
-              </>
-            ) : (
-              <>
-                <Link
-                  href={`/clientes/${selected.id}`}
-                  className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--color-primary)] hover:opacity-90 text-white text-sm font-medium py-2 rounded-lg transition-opacity"
-                >
-                  Ver ficha completa →
-                </Link>
-                <button onClick={() => openEdit(selected)}
-                  className="px-4 py-2 flex items-center gap-1.5 border border-gray-200 hover:border-gray-300 text-gray-700 text-sm font-medium rounded-lg transition-colors">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
-                  </svg>
-                </button>
-                <button onClick={() => handleDelete(selected.id)}
-                  className="px-3 py-2 text-red-500 hover:text-red-700 border border-red-100 hover:border-red-200 rounded-lg transition-colors">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                  </svg>
-                </button>
-              </>
-            )}
+            <button
+              onClick={() => saveEdit(selected.id)}
+              disabled={saving}
+              className="flex-1 bg-[var(--color-primary)] hover:opacity-90 text-white text-sm font-medium py-2 rounded-lg transition-opacity disabled:opacity-50"
+            >
+              {saving ? "Guardando…" : "Guardar"}
+            </button>
+            <Link
+              href={`/clientes/${selected.id}`}
+              className="px-3 py-2 flex items-center justify-center border border-gray-200 hover:border-gray-300 text-gray-700 text-sm font-medium rounded-lg transition-colors"
+              title="Ver ficha completa"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+            </Link>
+            <button
+              onClick={() => handleDelete(selected.id)}
+              className="px-3 py-2 text-red-500 hover:text-red-700 border border-red-100 hover:border-red-200 rounded-lg transition-colors"
+              title="Eliminar"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+            </button>
           </div>
         </div>
         </>,
@@ -540,30 +581,42 @@ export default function ClientesPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="font-semibold text-gray-900">Nuevo cliente</h2>
-              <button onClick={() => setNewClientOpen(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+              <button
+                onClick={() => { setNewClientOpen(false); setNewClientError(null); }}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {newClientError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
+                  {newClientError}
+                </div>
+              )}
               {[
-                { label: "Nombre *", key: "name", type: "text" },
-                { label: "Empresa", key: "company", type: "text" },
-                { label: "Email", key: "email", type: "email" },
-                { label: "Teléfono", key: "phone", type: "tel" },
-                { label: "País", key: "country", type: "text" },
-                { label: "Ciudad", key: "city", type: "text" },
-                { label: "Tema de interés", key: "topic", type: "text" },
-                { label: "Producto de interés", key: "interestedProduct", type: "text" },
-              ].map(({ label, key, type }) => (
+                { label: "Nombre *", key: "name", type: "text", placeholder: "María García" },
+                { label: "Empresa", key: "company", type: "text", placeholder: "Acme Foods S.L." },
+                { label: "Email", key: "email", type: "email", placeholder: "maria@acme.com" },
+                { label: "Teléfono", key: "phone", type: "tel", placeholder: "+34 612 345 678" },
+                { label: "País", key: "country", type: "text", placeholder: "España" },
+                { label: "Ciudad", key: "city", type: "text", placeholder: "Madrid" },
+                { label: "Tema de interés", key: "topic", type: "text", placeholder: "Enzimas industriales para panadería" },
+                { label: "Producto de interés", key: "interestedProduct", type: "text", placeholder: "Amilasa SE-200" },
+              ].map(({ label, key, type, placeholder }) => (
                 <div key={key}>
                   <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
                   <input
                     type={type}
                     value={newClientForm[key] || ""}
-                    onChange={(e) => setNewClientForm((f) => ({ ...f, [key]: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]"
+                    onChange={(e) => {
+                      setNewClientForm((f) => ({ ...f, [key]: e.target.value }));
+                      if (newClientError) setNewClientError(null);
+                    }}
+                    placeholder={placeholder}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] placeholder:text-gray-300"
                   />
                 </div>
               ))}
@@ -576,7 +629,10 @@ export default function ClientesPage() {
               >
                 {creatingClient ? "Creando…" : "Crear cliente"}
               </button>
-              <button onClick={() => setNewClientOpen(false)} className="px-4 py-2 text-sm text-gray-500 border border-gray-200 rounded-lg">
+              <button
+                onClick={() => { setNewClientOpen(false); setNewClientError(null); }}
+                className="px-4 py-2 text-sm text-gray-500 border border-gray-200 rounded-lg"
+              >
                 Cancelar
               </button>
             </div>

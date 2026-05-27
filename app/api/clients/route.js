@@ -59,13 +59,20 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
     seStatus: body.status || "new",
   };
 
-  const client = await Client.create({
-    name: name.trim(),
-    email: email?.trim().toLowerCase() || null,
-    phone: phone?.trim() || null,
-    notes: notes?.trim() || null,
-    customFields,
-  });
-
-  return created(client);
+  try {
+    const client = await Client.create({
+      name: name.trim(),
+      email: email?.trim().toLowerCase() || null,
+      phone: phone?.trim() || null,
+      notes: notes?.trim() || null,
+      customFields,
+    });
+    return created(client);
+  } catch (err) {
+    if (err?.name === "SequelizeValidationError" || err?.name === "SequelizeUniqueConstraintError") {
+      const msg = err.errors?.[0]?.message || err.message;
+      return error(`Datos inválidos: ${msg}`, 422);
+    }
+    throw err;
+  }
 });
