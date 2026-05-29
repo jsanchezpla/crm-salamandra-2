@@ -35,12 +35,33 @@ function isApiPath(pathname) {
   return pathname.startsWith("/api/");
 }
 
+// Rutas de la landing pública embebibles vía iframe. Necesitan
+// `frame-ancestors *` para que cualquier dominio pueda incrustarlas. En
+// Sprint 2 (cuando el dominio de Laura esté confirmado) se restringirá a
+// `frame-ancestors https://tunutrilaura.com https://www.tunutrilaura.com`.
+function isEmbeddableWidgetPath(pathname) {
+  return pathname.startsWith("/widget/c/");
+}
+
+function applyWidgetCspHeaders(response) {
+  response.headers.set("Content-Security-Policy", "frame-ancestors *");
+  // X-Frame-Options legacy: eliminar para no bloquear el iframe. NextResponse
+  // no lo añade por defecto, pero lo borramos por si algún proxy lo inyecta.
+  response.headers.delete("X-Frame-Options");
+  return response;
+}
+
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
 
   // Dejar pasar todos los preflights CORS — los Route Handlers añaden sus propios headers
   if (request.method === "OPTIONS") {
     return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+  }
+
+  // Landing pública del módulo Citas — pública + embebible
+  if (isEmbeddableWidgetPath(pathname)) {
+    return applyWidgetCspHeaders(NextResponse.next());
   }
 
   // Dejar pasar rutas públicas sin token

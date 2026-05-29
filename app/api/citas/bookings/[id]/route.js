@@ -7,7 +7,7 @@ import {
   VALID_MODALITIES,
 } from "../../../../../lib/citas/validation.js";
 import { logCitasAudit } from "../../../../../lib/citas/audit.js";
-import { findBookingOverlap } from "../route.js";
+import { findBookingOverlap } from "../../../../../lib/citas/booking.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["confirmed", "completed", "cancelled", "no_show"]);
