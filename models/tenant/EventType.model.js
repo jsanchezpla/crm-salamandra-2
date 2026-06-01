@@ -86,7 +86,7 @@ export function defineEventType(sequelize) {
       minNoticeHours: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        defaultValue: 24,
+        defaultValue: 3,
         validate: { min: 0 },
       },
       maxAdvanceDays: {
