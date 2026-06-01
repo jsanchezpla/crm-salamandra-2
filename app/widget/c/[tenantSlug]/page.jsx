@@ -158,7 +158,7 @@ export default function WidgetSelectionPage() {
     router.push(`/widget/c/${tenantSlug}/book?${params.toString()}`);
   }, [router, tenantSlug, selectedEventTypeId, selectedDatetime]);
 
-  // CSS vars del brand
+  // CSS vars del brand (sobreescribe el botón si el tenant tiene primaryColor)
   const brandStyle = useMemo(() => {
     if (!info?.brand) return {};
     const out = {};
@@ -171,7 +171,7 @@ export default function WidgetSelectionPage() {
   // ── Render ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-sm text-neutral-500">
+      <div className="min-h-screen flex items-center justify-center text-sm text-[var(--widget-text-muted)]">
         Cargando…
       </div>
     );
@@ -180,8 +180,13 @@ export default function WidgetSelectionPage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="max-w-md text-center">
-          <h1 className="text-lg font-medium text-neutral-900 mb-2">No se puede cargar la reserva</h1>
-          <p className="text-sm text-neutral-600">{loadError}</p>
+          <h1
+            className="text-2xl mb-2 text-[var(--widget-text)] tracking-tight"
+            style={{ fontFamily: "var(--widget-font-display)" }}
+          >
+            No se puede cargar la reserva
+          </h1>
+          <p className="text-sm text-[var(--widget-text-muted)]">{loadError}</p>
         </div>
       </div>
     );
@@ -190,21 +195,28 @@ export default function WidgetSelectionPage() {
   return (
     <div className="min-h-screen" style={brandStyle}>
       {/* Header */}
-      <header className="px-6 lg:px-10 py-6 border-b border-neutral-200 bg-white">
+      <header className="px-6 lg:px-10 py-6 border-b border-[var(--widget-border)] bg-[var(--widget-card)]">
         <div className="max-w-6xl mx-auto flex items-center gap-4">
           {info?.brand?.logoUrl ? (
             <img src={info.brand.logoUrl} alt="" className="h-10 w-auto" />
           ) : (
             <div
               className="h-10 w-10 rounded-full flex items-center justify-center text-white text-sm font-semibold"
-              style={{ backgroundColor: "var(--brand-primary, #3F6E5B)" }}
+              style={{ backgroundColor: "var(--brand-primary, var(--widget-button))" }}
             >
               {info?.name?.[0]?.toUpperCase() ?? "·"}
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <div className="text-[11px] uppercase tracking-wider text-neutral-400">Reserva tu cita</div>
-            <h1 className="text-base lg:text-lg font-semibold text-neutral-900 truncate">{info?.name}</h1>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)]">
+              Reserva tu cita
+            </div>
+            <h1
+              className="text-[22px] lg:text-[26px] leading-tight text-[var(--widget-text)] truncate tracking-tight"
+              style={{ fontFamily: "var(--widget-font-display)", fontWeight: 500 }}
+            >
+              {info?.name}
+            </h1>
           </div>
         </div>
       </header>
@@ -213,9 +225,11 @@ export default function WidgetSelectionPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Col 1 — cards de EventType */}
           <section>
-            <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-3">Tipo de cita</div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-3">
+              Tipo de cita
+            </div>
             {eventTypes.length === 0 ? (
-              <div className="text-sm text-neutral-500 bg-white rounded-lg border border-neutral-200 p-4">
+              <div className="text-sm text-[var(--widget-text-muted)] bg-[var(--widget-card)] rounded-lg border border-[var(--widget-border)] p-4">
                 No hay tipos de cita disponibles online en este momento.
               </div>
             ) : (
@@ -226,23 +240,25 @@ export default function WidgetSelectionPage() {
                     <button
                       key={et.id}
                       onClick={() => handleSelectEventType(et.id)}
-                      className={`text-left bg-white rounded-lg border p-4 transition ${
+                      className={`text-left bg-[var(--widget-card)] rounded-lg border p-4 transition focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)] focus:ring-offset-1 focus:ring-offset-[var(--widget-bg)] ${
                         active
-                          ? "border-[var(--brand-primary,#3F6E5B)] ring-2 ring-[var(--brand-primary,#3F6E5B)]/15"
-                          : "border-neutral-200 hover:border-neutral-300"
+                          ? "border-[var(--brand-primary,var(--widget-button))] ring-2 ring-[var(--widget-focus)]"
+                          : "border-[var(--widget-border)] hover:border-[var(--widget-button)]"
                       }`}
                     >
                       <div className="flex items-start gap-3">
                         <span
                           className="inline-block w-2.5 h-2.5 rounded-full mt-1.5 shrink-0"
-                          style={{ background: et.color || "var(--brand-primary, #3F6E5B)" }}
+                          style={{ background: et.color || "var(--brand-primary, var(--widget-button))" }}
                         />
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-neutral-900">{et.name}</div>
+                          <div className="text-sm font-medium text-[var(--widget-text)]">{et.name}</div>
                           {et.description && (
-                            <div className="text-[12px] text-neutral-500 mt-0.5 line-clamp-2">{et.description}</div>
+                            <div className="text-[12px] text-[var(--widget-text-muted)] mt-0.5 line-clamp-2">
+                              {et.description}
+                            </div>
                           )}
-                          <div className="text-[11px] text-neutral-400 mt-1.5">
+                          <div className="text-[11px] text-[var(--widget-text-faint)] mt-1.5">
                             {et.duration} min · Online
                           </div>
                         </div>
@@ -256,10 +272,12 @@ export default function WidgetSelectionPage() {
 
           {/* Col 2 — calendario */}
           <section>
-            <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-3">Selecciona día</div>
-            <div className={`bg-white rounded-lg border border-neutral-200 p-4 ${!selectedEventTypeId ? "opacity-60" : ""}`}>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-3">
+              Selecciona día
+            </div>
+            <div className={`bg-[var(--widget-card)] rounded-lg border border-[var(--widget-border)] p-4 ${!selectedEventTypeId ? "opacity-60" : ""}`}>
               {!selectedEventTypeId && (
-                <div className="text-[12px] text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-2.5 py-1.5 mb-3">
+                <div className="text-[12px] text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2.5 py-1.5 mb-3">
                   Selecciona primero un tipo de cita
                 </div>
               )}
@@ -267,20 +285,23 @@ export default function WidgetSelectionPage() {
                 <button
                   onClick={goPrevMonth}
                   disabled={!canGoPrev}
-                  className="p-1.5 rounded-md text-neutral-500 hover:bg-neutral-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="p-1.5 rounded-md text-[var(--widget-text-muted)] hover:bg-[var(--widget-bg)] disabled:opacity-30 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
                   aria-label="Mes anterior"
                 >
                   <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                     <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 010 1.06L9.06 10l3.73 3.71a.75.75 0 11-1.06 1.06l-4.25-4.24a.75.75 0 010-1.06l4.25-4.24a.75.75 0 011.06 0z" clipRule="evenodd" />
                   </svg>
                 </button>
-                <div className="text-sm font-medium text-neutral-800">
+                <div
+                  className="text-[18px] text-[var(--widget-text)] tracking-tight"
+                  style={{ fontFamily: "var(--widget-font-display)", fontWeight: 500 }}
+                >
                   {MONTH_NAMES_ES[calendarMonth - 1]} {calendarYear}
                 </div>
                 <button
                   onClick={goNextMonth}
                   disabled={!canGoNext}
-                  className="p-1.5 rounded-md text-neutral-500 hover:bg-neutral-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="p-1.5 rounded-md text-[var(--widget-text-muted)] hover:bg-[var(--widget-bg)] disabled:opacity-30 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
                   aria-label="Mes siguiente"
                 >
                   <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -298,13 +319,13 @@ export default function WidgetSelectionPage() {
                 onSelectDate={handleSelectDate}
                 loading={loadingMonth}
               />
-              <div className="mt-3 flex items-center gap-3 text-[11px] text-neutral-400">
+              <div className="mt-3 flex items-center gap-3 text-[11px] text-[var(--widget-text-faint)]">
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: "var(--brand-primary, #3F6E5B)" }} />
+                  <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: "var(--brand-primary, var(--widget-button))" }} />
                   Disponible
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-neutral-200" />
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-[var(--widget-border)]" />
                   Sin huecos
                 </span>
               </div>
@@ -313,24 +334,26 @@ export default function WidgetSelectionPage() {
 
           {/* Col 3 — slots horarios */}
           <section>
-            <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-3">Horario</div>
-            <div className="bg-white rounded-lg border border-neutral-200 p-4 min-h-[160px]">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-3">
+              Horario
+            </div>
+            <div className="bg-[var(--widget-card)] rounded-lg border border-[var(--widget-border)] p-4 min-h-[160px]">
               {!selectedDate && (
-                <div className="text-[13px] text-neutral-400 h-full flex items-center justify-center text-center">
+                <div className="text-[13px] text-[var(--widget-text-faint)] h-full flex items-center justify-center text-center">
                   Selecciona un día para ver las horas disponibles.
                 </div>
               )}
               {selectedDate && loadingSlots && (
-                <div className="text-[13px] text-neutral-400 text-center py-6">Cargando…</div>
+                <div className="text-[13px] text-[var(--widget-text-faint)] text-center py-6">Cargando…</div>
               )}
               {selectedDate && !loadingSlots && slots.length === 0 && (
-                <div className="text-[13px] text-neutral-500 text-center py-6">
+                <div className="text-[13px] text-[var(--widget-text-muted)] text-center py-6">
                   Sin horas disponibles ese día.
                 </div>
               )}
               {selectedDate && !loadingSlots && slots.length > 0 && (
                 <>
-                  <div className="text-[12px] text-neutral-500 mb-2">
+                  <div className="text-[12px] text-[var(--widget-text-muted)] mb-2">
                     Hora de Madrid · {selectedEventType?.duration} min
                   </div>
                   <div className="grid grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2">
@@ -340,11 +363,12 @@ export default function WidgetSelectionPage() {
                         <button
                           key={s.datetime}
                           onClick={() => setSelectedDatetime(s.datetime)}
-                          className={`px-2 py-2 text-[13px] rounded-md border transition ${
+                          className={`px-2 py-2 text-[13px] rounded-md border transition focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)] ${
                             active
-                              ? "bg-[var(--brand-primary,#3F6E5B)] text-white border-[var(--brand-primary,#3F6E5B)]"
-                              : "bg-white text-neutral-700 border-neutral-200 hover:border-[var(--brand-primary,#3F6E5B)]/40 hover:bg-neutral-50"
+                              ? "text-white border-transparent"
+                              : "bg-[var(--widget-card)] text-[var(--widget-text)] border-[var(--widget-border)] hover:border-[var(--widget-button)] hover:bg-[var(--widget-bg)]"
                           }`}
+                          style={active ? { backgroundColor: "var(--brand-primary, var(--widget-button))" } : undefined}
                         >
                           {s.time}
                         </button>
@@ -359,8 +383,7 @@ export default function WidgetSelectionPage() {
               <div className="mt-4">
                 <button
                   onClick={goContinue}
-                  className="w-full px-4 py-2.5 text-sm font-medium rounded-md text-white transition hover:opacity-90"
-                  style={{ backgroundColor: "var(--brand-primary, #3F6E5B)" }}
+                  className="w-full px-4 py-2.5 text-sm font-medium rounded-md text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)] focus:ring-offset-2 focus:ring-offset-[var(--widget-bg)]"
                 >
                   Continuar →
                 </button>
@@ -393,7 +416,9 @@ function CalendarGrid({ year, month, today, availableDays, selectedDate, onSelec
     <div>
       <div className="grid grid-cols-7 gap-1 mb-1.5">
         {DAY_HEADERS_ES.map((h) => (
-          <div key={h} className="text-center text-[10px] uppercase tracking-wider text-neutral-400">{h}</div>
+          <div key={h} className="text-center text-[10px] uppercase tracking-[0.16em] text-[var(--widget-text-faint)]">
+            {h}
+          </div>
         ))}
       </div>
       <div className={`grid grid-cols-7 gap-1 ${loading ? "opacity-50" : ""}`}>
@@ -406,15 +431,15 @@ function CalendarGrid({ year, month, today, availableDays, selectedDate, onSelec
           const isSelected = selectedDate === iso;
           const today_ = isToday(d);
 
-          let cls = "h-9 flex items-center justify-center text-[13px] rounded-md transition";
+          let cls = "h-9 flex items-center justify-center text-[13px] rounded-md transition focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]";
           if (isSelected) {
             cls += " text-white";
           } else if (available) {
-            cls += " text-neutral-800 bg-[var(--brand-primary,#3F6E5B)]/8 hover:bg-[var(--brand-primary,#3F6E5B)]/15 cursor-pointer";
+            cls += " text-[var(--widget-text)] bg-[var(--widget-focus)]/30 hover:bg-[var(--widget-focus)]/55 cursor-pointer";
           } else {
-            cls += " text-neutral-300 cursor-not-allowed";
+            cls += " text-[var(--widget-text-faint)]/60 cursor-not-allowed";
           }
-          if (today_ && !isSelected) cls += " ring-1 ring-[var(--brand-primary,#3F6E5B)]/30";
+          if (today_ && !isSelected) cls += " ring-1 ring-[var(--widget-focus)]";
 
           return (
             <button
@@ -422,7 +447,7 @@ function CalendarGrid({ year, month, today, availableDays, selectedDate, onSelec
               disabled={!available}
               onClick={() => available && onSelectDate(iso)}
               className={cls}
-              style={isSelected ? { backgroundColor: "var(--brand-primary, #3F6E5B)" } : undefined}
+              style={isSelected ? { backgroundColor: "var(--brand-primary, var(--widget-button))" } : undefined}
             >
               {d}
             </button>

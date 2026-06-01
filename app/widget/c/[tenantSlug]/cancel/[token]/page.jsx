@@ -98,37 +98,46 @@ export default function WidgetCancelPage() {
     return out;
   }, [info]);
 
+  const headingStyle = { fontFamily: "var(--widget-font-display)", fontWeight: 500 };
+
   return (
     <div className="min-h-screen" style={brandStyle}>
-      <header className="px-6 lg:px-10 py-6 border-b border-neutral-200 bg-white">
+      <header className="px-6 lg:px-10 py-6 border-b border-[var(--widget-border)] bg-[var(--widget-card)]">
         <div className="max-w-2xl mx-auto flex items-center gap-4">
           {info?.brand?.logoUrl ? (
             <img src={info.brand.logoUrl} alt="" className="h-10 w-auto" />
           ) : (
             <div
               className="h-10 w-10 rounded-full flex items-center justify-center text-white text-sm font-semibold"
-              style={{ backgroundColor: "var(--brand-primary, #3F6E5B)" }}
+              style={{ backgroundColor: "var(--brand-primary, var(--widget-button))" }}
             >
               {info?.name?.[0]?.toUpperCase() ?? "·"}
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <div className="text-[11px] uppercase tracking-wider text-neutral-400">Cancelar cita</div>
-            <h1 className="text-base lg:text-lg font-semibold text-neutral-900 truncate">{info?.name}</h1>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)]">Cancelar cita</div>
+            <h1
+              className="text-[22px] lg:text-[26px] leading-tight text-[var(--widget-text)] truncate tracking-tight"
+              style={headingStyle}
+            >
+              {info?.name}
+            </h1>
           </div>
         </div>
       </header>
 
       <div className="max-w-2xl mx-auto px-4 lg:px-10 py-10">
-        <div className="bg-white rounded-xl border border-neutral-200 p-6 lg:p-8">
+        <div className="bg-[var(--widget-card)] rounded-xl border border-[var(--widget-border)] p-6 lg:p-8">
           {state === "loading" && (
-            <div className="text-sm text-neutral-500">Cargando reserva…</div>
+            <div className="text-sm text-[var(--widget-text-muted)]">Cargando reserva…</div>
           )}
 
           {state === "notfound" && (
             <div>
-              <h2 className="text-lg font-semibold text-neutral-900 mb-2">No encontramos esa reserva</h2>
-              <p className="text-sm text-neutral-600">
+              <h2 className="text-2xl mb-2 text-[var(--widget-text)] tracking-tight" style={headingStyle}>
+                No encontramos esa reserva
+              </h2>
+              <p className="text-sm text-[var(--widget-text-muted)]">
                 Es posible que el enlace esté caducado o sea incorrecto.
               </p>
             </div>
@@ -136,48 +145,54 @@ export default function WidgetCancelPage() {
 
           {state === "gone" && (
             <div>
-              <h2 className="text-lg font-semibold text-neutral-900 mb-2">Esta cita ya no se puede cancelar</h2>
-              <p className="text-sm text-neutral-600">{errorMsg ?? "Ya fue cancelada o ya ha pasado."}</p>
+              <h2 className="text-2xl mb-2 text-[var(--widget-text)] tracking-tight" style={headingStyle}>
+                Esta cita ya no se puede cancelar
+              </h2>
+              <p className="text-sm text-[var(--widget-text-muted)]">{errorMsg ?? "Ya fue cancelada o ya ha pasado."}</p>
             </div>
           )}
 
           {state === "error" && (
             <div>
-              <h2 className="text-lg font-semibold text-neutral-900 mb-2">Algo ha fallado</h2>
-              <p className="text-sm text-neutral-600">{errorMsg}</p>
+              <h2 className="text-2xl mb-2 text-[var(--widget-text)] tracking-tight" style={headingStyle}>
+                Algo ha fallado
+              </h2>
+              <p className="text-sm text-[var(--widget-text-muted)]">{errorMsg}</p>
             </div>
           )}
 
           {state === "ready" && booking && (
             <>
-              <h2 className="text-lg font-semibold text-neutral-900 mb-2">¿Quieres cancelar esta cita?</h2>
-              <p className="text-sm text-neutral-600 mb-5">
+              <h2 className="text-2xl mb-2 text-[var(--widget-text)] tracking-tight" style={headingStyle}>
+                ¿Quieres cancelar esta cita?
+              </h2>
+              <p className="text-sm text-[var(--widget-text-muted)] mb-5">
                 Si confirmas, liberaremos el hueco para que otra persona pueda reservarlo.
               </p>
 
-              <div className="bg-neutral-50 rounded-lg border border-neutral-200 p-4 text-[14px] mb-5 space-y-2">
+              <div className="bg-[var(--widget-bg)] rounded-lg border border-[var(--widget-border)] p-4 text-[14px] mb-5 space-y-2">
                 <div className="flex items-center gap-2">
                   <span
                     className="inline-block w-2.5 h-2.5 rounded-full"
-                    style={{ background: booking.eventTypeColor || "var(--brand-primary, #3F6E5B)" }}
+                    style={{ background: booking.eventTypeColor || "var(--brand-primary, var(--widget-button))" }}
                   />
-                  <span className="font-medium text-neutral-900">{booking.eventTypeName}</span>
+                  <span className="font-medium text-[var(--widget-text)]">{booking.eventTypeName}</span>
                 </div>
-                <div className="text-neutral-700">{fmtLong(booking.scheduledAt)}</div>
-                <div className="text-[12px] text-neutral-500">
+                <div className="text-[var(--widget-text)]">{fmtLong(booking.scheduledAt)}</div>
+                <div className="text-[12px] text-[var(--widget-text-muted)]">
                   {booking.duration} min · A nombre de {booking.clientName}
                 </div>
               </div>
 
               <div className="mb-5">
-                <label className="block text-[11px] font-medium text-neutral-500 mb-1">
+                <label className="block text-[11px] font-medium text-[var(--widget-text-muted)] mb-1">
                   Motivo (opcional)
                 </label>
                 <textarea
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   rows={3}
-                  className="w-full rounded-lg px-3 py-2 text-sm text-neutral-800 bg-white border border-neutral-200 focus:outline-none focus:border-[var(--brand-primary,#3F6E5B)] min-h-[80px]"
+                  className="w-full rounded-lg px-3 py-2 text-sm text-[var(--widget-text)] bg-[var(--widget-card)] border border-[var(--widget-border)] focus:outline-none focus:border-[var(--brand-primary,var(--widget-button))] focus:ring-2 focus:ring-[var(--widget-focus)] min-h-[80px] placeholder:text-[var(--widget-text-faint)]/80"
                   placeholder="Si nos cuentas el motivo, nos ayudas a mejorar."
                 />
               </div>
@@ -191,7 +206,7 @@ export default function WidgetCancelPage() {
               <button
                 onClick={submitCancel}
                 disabled={submitting}
-                className="w-full px-4 py-2.5 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
+                className="w-full px-4 py-2.5 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-2 focus:ring-offset-[var(--widget-bg)]"
               >
                 {submitting ? "Cancelando…" : "Sí, cancelar la cita"}
               </button>
@@ -206,9 +221,11 @@ export default function WidgetCancelPage() {
                     <path fillRule="evenodd" d="M16.704 5.296a1 1 0 010 1.414l-7.5 7.5a1 1 0 01-1.414 0l-3.5-3.5a1 1 0 011.414-1.414L8.5 12.086l6.793-6.79a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
                 </div>
-                <h2 className="text-lg font-semibold text-neutral-900">Cita cancelada correctamente</h2>
+                <h2 className="text-2xl text-[var(--widget-text)] tracking-tight" style={headingStyle}>
+                  Cita cancelada correctamente
+                </h2>
               </div>
-              <p className="text-sm text-neutral-600">
+              <p className="text-sm text-[var(--widget-text-muted)]">
                 Hemos liberado el hueco. Si más adelante quieres reservar de nuevo, puedes hacerlo desde la web.
               </p>
             </div>

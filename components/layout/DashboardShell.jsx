@@ -3,7 +3,17 @@
 import { useEffect, useState } from "react";
 import Sidebar from "./Sidebar.jsx";
 
-export default function DashboardShell({ tenant, user, modules, primaryColor, secondaryColor, accentColor, children }) {
+export default function DashboardShell({
+  tenant,
+  user,
+  modules,
+  primaryColor,
+  secondaryColor,
+  accentColor,
+  inkColor,
+  cardColor,
+  children,
+}) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Aplica las vars de marca a <html> para que cascadeen a TODO,
@@ -13,25 +23,47 @@ export default function DashboardShell({ tenant, user, modules, primaryColor, se
     root.style.setProperty("--color-primary", primaryColor);
     root.style.setProperty("--color-secondary", secondaryColor);
     root.style.setProperty("--color-accent", accentColor);
+    if (inkColor) {
+      root.style.setProperty("--color-ink", inkColor);
+      // El sistema de tinta cálida se basa en ink-900 (texto principal).
+      // Si el tenant pasa inkColor, lo redirigimos ahí para que afecte
+      // a todos los `text-[var(--ink-900)]` repartidos por el dashboard.
+      root.style.setProperty("--ink-900", inkColor);
+    } else {
+      root.style.removeProperty("--color-ink");
+      root.style.removeProperty("--ink-900");
+    }
+    if (cardColor) root.style.setProperty("--color-card", cardColor);
+    else root.style.removeProperty("--color-card");
     return () => {
       root.style.removeProperty("--color-primary");
       root.style.removeProperty("--color-secondary");
       root.style.removeProperty("--color-accent");
+      root.style.removeProperty("--color-ink");
+      root.style.removeProperty("--ink-900");
+      root.style.removeProperty("--color-card");
     };
-  }, [primaryColor, secondaryColor, accentColor]);
+  }, [primaryColor, secondaryColor, accentColor, inkColor, cardColor]);
+
+  const shellStyle = {
+    "--color-primary": primaryColor,
+    "--color-secondary": secondaryColor,
+    "--color-accent": accentColor,
+    "--color-black": "#000000",
+    "--color-white": "#ffffff",
+    backgroundColor: accentColor,
+  };
+  if (inkColor) {
+    shellStyle["--color-ink"] = inkColor;
+    shellStyle["--ink-900"] = inkColor;
+    shellStyle.color = inkColor;
+  }
+  if (cardColor) {
+    shellStyle["--color-card"] = cardColor;
+  }
 
   return (
-    <div
-      className="flex h-screen"
-      style={{
-        "--color-primary": primaryColor,
-        "--color-secondary": secondaryColor,
-        "--color-accent": accentColor,
-        "--color-black": "#000000",
-        "--color-white": "#ffffff",
-        backgroundColor: accentColor,
-      }}
-    >
+    <div className="dashboard-shell flex h-screen" style={shellStyle}>
       <Sidebar
         tenant={tenant}
         user={user}

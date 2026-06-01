@@ -53,16 +53,14 @@ export default function WidgetBookPage() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
-  const [success, setSuccess] = useState(null); // { id, scheduledAt, duration, eventTypeName, meetUrl, cancellationToken, clientEmail }
+  const [success, setSuccess] = useState(null);
 
-  // Redirigir si faltan params críticos
   useEffect(() => {
     if (!eventTypeId || !datetime) {
       router.replace(`/widget/c/${tenantSlug}`);
     }
   }, [router, tenantSlug, eventTypeId, datetime]);
 
-  // Cargar info + event-types para encontrar el EventType y su label
   useEffect(() => {
     if (!eventTypeId) return;
     let cancelled = false;
@@ -151,12 +149,12 @@ export default function WidgetBookPage() {
   }, [info]);
 
   const inputCls =
-    "w-full rounded-lg px-3 py-2 text-sm text-neutral-800 bg-white border border-neutral-200 focus:outline-none focus:border-[var(--brand-primary,#3F6E5B)] transition placeholder-neutral-300";
+    "w-full rounded-lg px-3 py-2 text-sm text-[var(--widget-text)] bg-[var(--widget-card)] border border-[var(--widget-border)] focus:outline-none focus:border-[var(--brand-primary,var(--widget-button))] focus:ring-2 focus:ring-[var(--widget-focus)] transition placeholder:text-[var(--widget-text-faint)]/80";
 
   if (!eventTypeId || !datetime) return null;
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-sm text-neutral-500">
+      <div className="min-h-screen flex items-center justify-center text-sm text-[var(--widget-text-muted)]">
         Cargando…
       </div>
     );
@@ -165,11 +163,16 @@ export default function WidgetBookPage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="max-w-md text-center">
-          <h1 className="text-lg font-medium text-neutral-900 mb-2">No se puede completar la reserva</h1>
-          <p className="text-sm text-neutral-600 mb-4">{loadError}</p>
+          <h1
+            className="text-2xl mb-2 text-[var(--widget-text)] tracking-tight"
+            style={{ fontFamily: "var(--widget-font-display)" }}
+          >
+            No se puede completar la reserva
+          </h1>
+          <p className="text-sm text-[var(--widget-text-muted)] mb-4">{loadError}</p>
           <button
             onClick={() => router.push(`/widget/c/${tenantSlug}`)}
-            className="text-sm text-neutral-600 underline"
+            className="text-sm text-[var(--widget-text-muted)] underline hover:text-[var(--widget-text)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)] rounded-sm"
           >
             Volver al inicio
           </button>
@@ -191,43 +194,53 @@ export default function WidgetBookPage() {
     });
     return (
       <div className="min-h-screen" style={brandStyle}>
-        <header className="px-6 lg:px-10 py-6 border-b border-neutral-200 bg-white">
+        <header className="px-6 lg:px-10 py-6 border-b border-[var(--widget-border)] bg-[var(--widget-card)]">
           <div className="max-w-3xl mx-auto flex items-center gap-4">
             {info?.brand?.logoUrl ? (
               <img src={info.brand.logoUrl} alt="" className="h-10 w-auto" />
             ) : (
               <div
                 className="h-10 w-10 rounded-full flex items-center justify-center text-white text-sm font-semibold"
-                style={{ backgroundColor: "var(--brand-primary, #3F6E5B)" }}
+                style={{ backgroundColor: "var(--brand-primary, var(--widget-button))" }}
               >
                 {info?.name?.[0]?.toUpperCase() ?? "·"}
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <div className="text-[11px] uppercase tracking-wider text-neutral-400">Cita confirmada</div>
-              <h1 className="text-base lg:text-lg font-semibold text-neutral-900 truncate">{info?.name}</h1>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)]">Cita confirmada</div>
+              <h1
+                className="text-[22px] lg:text-[26px] leading-tight text-[var(--widget-text)] truncate tracking-tight"
+                style={{ fontFamily: "var(--widget-font-display)", fontWeight: 500 }}
+              >
+                {info?.name}
+              </h1>
             </div>
           </div>
         </header>
 
         <div className="max-w-2xl mx-auto px-4 lg:px-10 py-10">
-          <div className="bg-white rounded-xl border border-neutral-200 p-6 lg:p-8">
+          <div className="bg-[var(--widget-card)] rounded-xl border border-[var(--widget-border)] p-6 lg:p-8">
             <div className="flex items-center gap-3 mb-5">
               <div
                 className="w-9 h-9 rounded-full flex items-center justify-center text-white"
-                style={{ backgroundColor: "var(--brand-primary, #3F6E5B)" }}
+                style={{ backgroundColor: "var(--brand-primary, var(--widget-button))" }}
               >
                 <svg viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
                   <path fillRule="evenodd" d="M16.704 5.296a1 1 0 010 1.414l-7.5 7.5a1 1 0 01-1.414 0l-3.5-3.5a1 1 0 011.414-1.414L8.5 12.086l6.793-6.79a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-neutral-900">Cita confirmada</h2>
-                <div className="text-[13px] text-neutral-500">Hemos guardado tu reserva.</div>
+                <h2
+                  className="text-[26px] leading-tight text-[var(--widget-text)] tracking-tight"
+                  style={{ fontFamily: "var(--widget-font-display)", fontWeight: 500 }}
+                >
+                  Cita confirmada
+                </h2>
+                <div className="text-[13px] text-[var(--widget-text-muted)]">Hemos guardado tu reserva.</div>
               </div>
             </div>
 
-            <div className="space-y-2.5 text-[14px] border-t border-neutral-100 pt-5">
+            <div className="space-y-2.5 text-[14px] border-t border-[var(--widget-border)]/60 pt-5">
               <Row label="Servicio" value={success.eventTypeName} />
               <Row label="Cuándo" value={fmtLong(success.scheduledAt)} extra="(hora de Madrid)" />
               <Row label="Duración" value={`${success.duration} min`} />
@@ -239,8 +252,7 @@ export default function WidgetBookPage() {
                 href={success.meetUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-5 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md text-white hover:opacity-90"
-                style={{ backgroundColor: "var(--brand-primary, #3F6E5B)" }}
+                className="mt-5 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md text-white bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)] focus:ring-offset-2 focus:ring-offset-[var(--widget-bg)]"
               >
                 Unirse a Google Meet
                 <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
@@ -249,27 +261,27 @@ export default function WidgetBookPage() {
               </a>
             )}
 
-            <div className="mt-5 pt-5 border-t border-neutral-100 space-y-3 text-[13px]">
-              <div className="text-neutral-600">
-                Hemos enviado los detalles de tu reserva a <b>{success.clientEmail}</b>.
+            <div className="mt-5 pt-5 border-t border-[var(--widget-border)]/60 space-y-3 text-[13px]">
+              <div className="text-[var(--widget-text-muted)]">
+                Hemos enviado los detalles de tu reserva a <b className="text-[var(--widget-text)]">{success.clientEmail}</b>.
               </div>
               <a
                 href={gcalUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-neutral-600 hover:text-neutral-900 underline"
+                className="inline-flex items-center gap-1.5 text-[var(--widget-text-muted)] hover:text-[var(--widget-text)] underline focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)] rounded-sm"
               >
                 Añadir a Google Calendar
               </a>
             </div>
 
-            <details className="mt-6 pt-5 border-t border-neutral-100 text-[13px]">
-              <summary className="cursor-pointer text-neutral-500 hover:text-neutral-700">
+            <details className="mt-6 pt-5 border-t border-[var(--widget-border)]/60 text-[13px]">
+              <summary className="cursor-pointer text-[var(--widget-text-muted)] hover:text-[var(--widget-text)]">
                 ¿Necesitas cancelar?
               </summary>
-              <div className="mt-2 text-neutral-600 space-y-2">
+              <div className="mt-2 text-[var(--widget-text-muted)] space-y-2">
                 <div>Guarda este enlace para cancelar la cita si lo necesitas:</div>
-                <code className="block bg-neutral-50 border border-neutral-200 rounded-md px-2.5 py-1.5 text-[12px] break-all">
+                <code className="block bg-[var(--widget-bg)] border border-[var(--widget-border)] rounded-md px-2.5 py-1.5 text-[12px] break-all text-[var(--widget-text)]">
                   {cancelUrl}
                 </code>
               </div>
@@ -283,11 +295,11 @@ export default function WidgetBookPage() {
   // ── Estado FORM ───────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen" style={brandStyle}>
-      <header className="px-6 lg:px-10 py-6 border-b border-neutral-200 bg-white">
+      <header className="px-6 lg:px-10 py-6 border-b border-[var(--widget-border)] bg-[var(--widget-card)]">
         <div className="max-w-3xl mx-auto flex items-center gap-4">
           <button
             onClick={() => router.push(`/widget/c/${tenantSlug}`)}
-            className="text-neutral-500 hover:text-neutral-800 p-1.5 rounded-md hover:bg-neutral-50"
+            className="text-[var(--widget-text-muted)] hover:text-[var(--widget-text)] p-1.5 rounded-md hover:bg-[var(--widget-bg)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
             aria-label="Volver"
           >
             <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -299,14 +311,19 @@ export default function WidgetBookPage() {
           ) : (
             <div
               className="h-9 w-9 rounded-full flex items-center justify-center text-white text-sm font-semibold"
-              style={{ backgroundColor: "var(--brand-primary, #3F6E5B)" }}
+              style={{ backgroundColor: "var(--brand-primary, var(--widget-button))" }}
             >
               {info?.name?.[0]?.toUpperCase() ?? "·"}
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <div className="text-[11px] uppercase tracking-wider text-neutral-400">Tus datos</div>
-            <h1 className="text-base lg:text-lg font-semibold text-neutral-900 truncate">{info?.name}</h1>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)]">Tus datos</div>
+            <h1
+              className="text-[22px] lg:text-[26px] leading-tight text-[var(--widget-text)] truncate tracking-tight"
+              style={{ fontFamily: "var(--widget-font-display)", fontWeight: 500 }}
+            >
+              {info?.name}
+            </h1>
           </div>
         </div>
       </header>
@@ -315,27 +332,29 @@ export default function WidgetBookPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Resumen */}
           <aside className="lg:col-span-1">
-            <div className="bg-white rounded-lg border border-neutral-200 p-4 text-[13px]">
-              <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-2">Estás reservando</div>
+            <div className="bg-[var(--widget-card)] rounded-lg border border-[var(--widget-border)] p-4 text-[13px]">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-2">
+                Estás reservando
+              </div>
               <div className="flex items-center gap-2 mb-3">
                 <span
                   className="inline-block w-2.5 h-2.5 rounded-full"
-                  style={{ background: eventType?.color || "var(--brand-primary, #3F6E5B)" }}
+                  style={{ background: eventType?.color || "var(--brand-primary, var(--widget-button))" }}
                 />
-                <span className="font-medium text-neutral-900">{eventType?.name}</span>
+                <span className="font-medium text-[var(--widget-text)]">{eventType?.name}</span>
               </div>
-              <div className="text-neutral-700">{fmtLong(datetime)}</div>
-              <div className="text-[12px] text-neutral-400 mt-1">
+              <div className="text-[var(--widget-text)]">{fmtLong(datetime)}</div>
+              <div className="text-[12px] text-[var(--widget-text-faint)] mt-1">
                 {eventType?.duration} min · Hora de Madrid
               </div>
-              <div className="text-[12px] text-neutral-500 mt-3 pt-3 border-t border-neutral-100">
+              <div className="text-[12px] text-[var(--widget-text-muted)] mt-3 pt-3 border-t border-[var(--widget-border)]/60">
                 Reunión online · enviaremos el enlace al confirmar.
               </div>
             </div>
           </aside>
 
           {/* Form */}
-          <form onSubmit={submit} className="lg:col-span-2 bg-white rounded-lg border border-neutral-200 p-5 space-y-4">
+          <form onSubmit={submit} className="lg:col-span-2 bg-[var(--widget-card)] rounded-lg border border-[var(--widget-border)] p-5 space-y-4">
             {submitError && (
               <div className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
                 {submitError}
@@ -393,8 +412,7 @@ export default function WidgetBookPage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full px-4 py-2.5 text-sm font-medium rounded-md text-white transition hover:opacity-90 disabled:opacity-60"
-                style={{ backgroundColor: "var(--brand-primary, #3F6E5B)" }}
+                className="w-full px-4 py-2.5 text-sm font-medium rounded-md text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)] focus:ring-offset-2 focus:ring-offset-[var(--widget-bg)]"
               >
                 {submitting ? "Confirmando…" : "Confirmar reserva"}
               </button>
@@ -409,7 +427,7 @@ export default function WidgetBookPage() {
 function Field({ label, required, children }) {
   return (
     <label className="block">
-      <div className="text-[11px] font-medium text-neutral-500 mb-1">
+      <div className="text-[11px] font-medium text-[var(--widget-text-muted)] mb-1">
         {label}
         {required && <span className="text-red-500 ml-0.5">*</span>}
       </div>
@@ -421,9 +439,9 @@ function Field({ label, required, children }) {
 function Row({ label, value, extra }) {
   return (
     <div className="flex">
-      <div className="w-28 text-neutral-400">{label}</div>
-      <div className="flex-1 text-neutral-800">
-        {value} {extra && <span className="text-neutral-400 text-[12px]">{extra}</span>}
+      <div className="w-28 text-[var(--widget-text-faint)]">{label}</div>
+      <div className="flex-1 text-[var(--widget-text)]">
+        {value} {extra && <span className="text-[var(--widget-text-faint)] text-[12px]">{extra}</span>}
       </div>
     </div>
   );

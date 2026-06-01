@@ -5,6 +5,7 @@ const QUICK_LINKS = [
   { moduleKey: "clients",   href: "/clientes",    eyebrow: "Cuentas",      title: "Clientes",    hint: "Gestionar tu cartera" },
   { moduleKey: "leads",     href: "/leads",       eyebrow: "Comercial",    title: "Leads",       hint: "Oportunidades activas" },
   { moduleKey: "sales",     href: "/comercial",   eyebrow: "Comercial",    title: "Comercial",   hint: "Pipeline y conversión" },
+  { moduleKey: "citas",     href: "/citas",       eyebrow: "Agenda",       title: "Citas",       hint: "Reservas y consultas" },
   { moduleKey: "inventory", href: "/inventario",  eyebrow: "Operaciones",  title: "Inventario",  hint: "Materia prima y producto" },
   { moduleKey: "billing",   href: "/facturacion", eyebrow: "Finanzas",     title: "Facturación", hint: "Cobros y costes" },
   { moduleKey: "training",  href: "/formacion",   eyebrow: "Conocimiento", title: "Formación",   hint: "Cursos y alumnos" },
@@ -55,7 +56,7 @@ export default async function HomePage() {
           className="font-display-lg text-[clamp(30px,7vw,72px)] leading-[1.02] text-[var(--ink-900)] mb-4 lg:mb-6 fade-up"
           style={{ animationDelay: "120ms" }}
         >
-          {greeting()}<span className="font-display-italic text-[var(--ink-500)]">.</span>
+          {greeting()}
         </h1>
         <p
           className="text-[15px] lg:text-[17px] text-[var(--ink-500)] max-w-xl leading-relaxed fade-up"

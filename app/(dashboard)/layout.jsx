@@ -6,6 +6,8 @@ const DEFAULT_BRAND = {
   primaryColor: "#152B22",
   secondaryColor: "#3E5C57",
   accentColor: "#EDE8DE",
+  inkColor: null,
+  cardColor: null,
   logoUrl: null,
 };
 
@@ -34,6 +36,8 @@ export default async function DashboardLayout({ children }) {
       primaryColor={brand.primaryColor}
       secondaryColor={brand.secondaryColor}
       accentColor={brand.accentColor}
+      inkColor={brand.inkColor}
+      cardColor={brand.cardColor}
     >
       {children}
     </DashboardShell>

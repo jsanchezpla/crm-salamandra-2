@@ -85,6 +85,13 @@ body {
   color: var(--ink-400);
 }
 
+/* ── Override de card por tenant ─────────────────────────────────────── */
+/* Cuando un tenant define --color-card en settings.brand, las cards (bg-white)
+   del dashboard heredan ese fondo. Fallback a blanco para el resto. */
+.dashboard-shell .bg-white {
+  background-color: var(--color-card, #ffffff);
+}
+
 /* ── Selección y focos ───────────────────────────────────────────────── */
 ::selection {
   background: var(--color-primary);
