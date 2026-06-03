@@ -621,7 +621,7 @@ export default function SpainEnzymesLeadsModule() {
                     <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Nombre / Empresa</th>
                     <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider hidden md:table-cell">Email</th>
                     <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider hidden lg:table-cell">País / Ciudad</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider hidden xl:table-cell">Asunto</th>
+                    <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider hidden xl:table-cell">Mensaje</th>
                     <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Estado</th>
                     <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider hidden sm:table-cell">Prioridad</th>
                     <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider hidden sm:table-cell">Recibido</th>
@@ -782,12 +782,12 @@ export default function SpainEnzymesLeadsModule() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Asunto</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Mensaje</label>
                   <input type="text" value={editForm.asunto} onChange={(e) => setEditForm((f) => ({ ...f, asunto: e.target.value }))}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Mensaje</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Notas internas</label>
                   <textarea rows={4} value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] resize-none" />
                 </div>
