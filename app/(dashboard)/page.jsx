@@ -72,7 +72,15 @@ export default async function HomePage() {
         <section className="px-6 lg:px-12 pb-20 max-w-6xl">
           <div className="border-t border-[var(--ink-200)] pt-10">
             <div className="eyebrow mb-6">Acceso rápido</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-[var(--ink-200)] border border-[var(--ink-200)] rounded-[var(--radius-card)] overflow-hidden">
+            <div
+              className={`grid border border-[var(--ink-200)] rounded-[var(--radius-card)] overflow-hidden ${
+                visibleLinks.length === 1
+                  ? "grid-cols-1"
+                  : visibleLinks.length === 2
+                  ? "grid-cols-1 sm:grid-cols-2"
+                  : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+              }`}
+            >
               {visibleLinks.map((l) => (
                 <QuickLink key={l.moduleKey} {...l} />
               ))}
@@ -88,7 +96,7 @@ function QuickLink({ href, eyebrow, title, hint }) {
   return (
     <a
       href={href}
-      className="group relative bg-white p-7 hover:bg-[var(--ink-50)] transition-colors block"
+      className="group relative bg-white p-7 hover:bg-[var(--ink-50)] transition-colors block border-l border-t border-[var(--ink-200)] -ml-px -mt-px"
     >
       <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--ink-400)] mb-3">
         {eyebrow}
