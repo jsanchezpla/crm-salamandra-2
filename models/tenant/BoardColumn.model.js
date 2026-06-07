@@ -52,7 +52,7 @@ export function defineBoardColumn(sequelize) {
     {
       tableName: "board_columns",
       indexes: [
-        { fields: ["projectId", "order"], unique: true, name: "board_columns_project_order_unique" },
+        { fields: ["project_id", "order"], unique: true, name: "board_columns_project_order_unique" },
       ],
     }
   );

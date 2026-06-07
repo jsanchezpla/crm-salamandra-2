@@ -52,7 +52,7 @@ export function definePhase(sequelize) {
     {
       tableName: "phases",
       indexes: [
-        { fields: ["projectId", "order"], unique: true, name: "phases_project_order_unique" },
+        { fields: ["project_id", "order"], unique: true, name: "phases_project_order_unique" },
       ],
     }
   );

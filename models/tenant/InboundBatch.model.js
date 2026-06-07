@@ -28,9 +28,9 @@ export function defineInboundBatch(sequelize) {
     {
       tableName: "inbound_batches",
       indexes: [
-        { fields: ["inboundProductId"] },
-        { fields: ["entryDate"] },
-        { fields: ["legacyInventoryProductId"] },
+        { fields: ["inbound_product_id"] },
+        { fields: ["entry_date"] },
+        { fields: ["legacy_inventory_product_id"] },
       ],
     }
   );

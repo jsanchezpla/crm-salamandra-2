@@ -19,11 +19,11 @@ export function defineClientOutboundAlias(sequelize) {
     {
       tableName: "client_outbound_aliases",
       indexes: [
-        { fields: ["outboundProductId"] },
-        { fields: ["clientId"] },
+        { fields: ["outbound_product_id"] },
+        { fields: ["client_id"] },
         {
           unique: true,
-          fields: ["outboundProductId", "clientId"],
+          fields: ["outbound_product_id", "client_id"],
           name: "client_outbound_aliases_product_client_unique",
         },
       ],

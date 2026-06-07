@@ -26,9 +26,9 @@ export function defineFormula(sequelize) {
     {
       tableName: "formulas",
       indexes: [
-        { fields: ["outboundProductId"] },
-        { fields: ["inboundProductId"] },
-        { fields: ["clientId"] },
+        { fields: ["outbound_product_id"] },
+        { fields: ["inbound_product_id"] },
+        { fields: ["client_id"] },
         // El UNIQUE (outboundProductId, inboundProductId, clientId) vive en la
         // migración SQL con COALESCE sobre clientId, porque PG por defecto
         // permite múltiples NULL en columnas UNIQUE y queremos exactamente

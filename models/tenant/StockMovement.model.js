@@ -31,11 +31,11 @@ export function defineStockMovement(sequelize) {
     {
       tableName: "stock_movements",
       indexes: [
-        { fields: ["inboundBatchId"] },
-        { fields: ["invoiceId"] },
-        { fields: ["outboundProductId"] },
-        { fields: ["clientId"] },
-        { fields: ["movedAt"] },
+        { fields: ["inbound_batch_id"] },
+        { fields: ["invoice_id"] },
+        { fields: ["outbound_product_id"] },
+        { fields: ["client_id"] },
+        { fields: ["moved_at"] },
       ],
     }
   );

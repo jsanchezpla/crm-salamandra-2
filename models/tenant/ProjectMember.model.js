@@ -45,7 +45,7 @@ export function defineProjectMember(sequelize) {
       tableName: "project_members",
       indexes: [
         {
-          fields: ["projectId", "teamMemberId"],
+          fields: ["project_id", "team_member_id"],
           unique: true,
           name: "project_members_project_team_unique",
         },

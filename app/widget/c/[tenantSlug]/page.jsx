@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { AuthGateScreen, useWidgetAuth } from "./_components/AuthGate.jsx";
 
 const MONTH_NAMES_ES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -149,14 +150,19 @@ export default function WidgetSelectionPage() {
     else { setCalendarMonth((m) => m + 1); }
   }
 
+  const auth = useWidgetAuth(info?.auth);
+
   const goContinue = useCallback(() => {
     if (!selectedEventTypeId || !selectedDatetime) return;
     const params = new URLSearchParams({
       eventTypeId: selectedEventTypeId,
       datetime: selectedDatetime,
     });
+    // Si el padre WP nos dio ?wpa=1, propágalo a /book para que el gate
+    // siga aceptando aunque sessionStorage no esté disponible.
+    if (info?.auth?.required && auth.allowed) params.set("wpa", "1");
     router.push(`/widget/c/${tenantSlug}/book?${params.toString()}`);
-  }, [router, tenantSlug, selectedEventTypeId, selectedDatetime]);
+  }, [router, tenantSlug, selectedEventTypeId, selectedDatetime, info, auth.allowed]);
 
   // CSS vars del brand (sobreescribe el botón si el tenant tiene primaryColor)
   const brandStyle = useMemo(() => {
@@ -190,6 +196,17 @@ export default function WidgetSelectionPage() {
         </div>
       </div>
     );
+  }
+
+  if (info?.auth?.required) {
+    if (!auth.ready) {
+      return (
+        <div className="min-h-screen flex items-center justify-center text-sm text-[var(--widget-text-muted)]">
+          Cargando…
+        </div>
+      );
+    }
+    if (!auth.allowed) return <AuthGateScreen info={info} />;
   }
 
   return (

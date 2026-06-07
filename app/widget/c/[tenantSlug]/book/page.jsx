@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { AuthGateScreen, useWidgetAuth } from "../_components/AuthGate.jsx";
 
 function fmtLong(iso) {
   if (!iso) return "—";
@@ -139,6 +140,8 @@ export default function WidgetBookPage() {
     }
   }
 
+  const auth = useWidgetAuth(info?.auth);
+
   const brandStyle = useMemo(() => {
     if (!info?.brand) return {};
     const out = {};
@@ -179,6 +182,17 @@ export default function WidgetBookPage() {
         </div>
       </div>
     );
+  }
+
+  if (info?.auth?.required) {
+    if (!auth.ready) {
+      return (
+        <div className="min-h-screen flex items-center justify-center text-sm text-[var(--widget-text-muted)]">
+          Cargando…
+        </div>
+      );
+    }
+    if (!auth.allowed) return <AuthGateScreen info={info} />;
   }
 
   // ── Estado SUCCESS ────────────────────────────────────────────────────────
