@@ -166,13 +166,12 @@ async function main() {
   }
 
   // ─── 4. Sync de tablas del tenant ────────────────────────────────────────
-  // OJO: usamos sync() sin {alter:true} porque InboundBatch tiene un índice
-  // con nombre camelCase ("inboundProductId") que rompe alter en schemas
-  // nuevos (bug conocido — ver project_boardcolumn_index_bug.md). El sync
-  // simple sólo crea tablas que no existan, suficiente para activar módulos.
+  // Usamos {alter:true} para añadir columnas/índices que falten en tablas
+  // ya existentes (caso de schemas tenant viejos como crm_aumenta en prod,
+  // donde Project no tenía aún la columna `code`).
   header(`Sincronizando tablas en ${SCHEMA}...`);
   const { sequelize: tenantSeq, models } = getTenantDb(SLUG);
-  await tenantSeq.sync();
+  await tenantSeq.sync({ alter: true });
   log("✓ Tablas sincronizadas");
 
   invalidateTenantCache(SLUG);
