@@ -45,6 +45,8 @@
     "db:add-leads-nutri-laura:prod": "node --env-file=.env.production scripts/add-leads-module-nutri-laura.js",
     "db:add-training-nutri-laura": "node --env-file=.env.local scripts/add-training-module-nutri-laura.js",
     "db:add-training-nutri-laura:prod": "node --env-file=.env.production scripts/add-training-module-nutri-laura.js",
+    "db:add-training-aumenta": "node --env-file=.env.local scripts/add-training-module-aumenta.js",
+    "db:add-training-aumenta:prod": "node --env-file=.env.production scripts/add-training-module-aumenta.js",
     "db:clear:spain-enzymes": "node --env-file=.env.local scripts/clear-spain-enzymes-data.js",
     "db:clear:spain-enzymes:prod": "node --env-file=.env.production scripts/clear-spain-enzymes-data.js",
     "db:add-orders-spain-enzymes": "node --env-file=.env.local scripts/add-orders-module-spain-enzymes.js",

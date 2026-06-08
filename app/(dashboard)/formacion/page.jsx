@@ -2,9 +2,11 @@ import { headers } from "next/headers";
 
 import DefaultFormacionOverview from "../../../modules/training/FormacionOverview.jsx";
 import NutriLauraFormacionOverview from "../../../modules/overrides/nutri-laura/FormacionOverview.jsx";
+import AumentaFormacionOverview from "../../../modules/overrides/aumenta/FormacionOverview.jsx";
 
 const UI_OVERRIDES = {
   nutri_laura: NutriLauraFormacionOverview,
+  aumenta: AumentaFormacionOverview,
 };
 
 export const metadata = { title: "Formación" };
