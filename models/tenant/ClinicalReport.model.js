@@ -20,7 +20,7 @@ export function defineClinicalReport(sequelize) {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
-      clientId: {
+      patientId: {
         type: DataTypes.UUID,
         allowNull: false,
       },
@@ -68,7 +68,7 @@ export function defineClinicalReport(sequelize) {
     {
       tableName: "clinical_reports",
       indexes: [
-        { fields: ["client_id", "report_date"], name: "clinical_reports_client_date_idx" },
+        { fields: ["patient_id", "report_date"], name: "clinical_reports_patient_date_idx" },
         { fields: ["therapist_id", "report_date"], name: "clinical_reports_therapist_date_idx" },
         { fields: ["status", "due_date"], name: "clinical_reports_status_due_idx" },
       ],

@@ -137,7 +137,7 @@ export default function AumentaLeadsModule() {
         <div className="px-6 lg:px-8 pt-8 pb-0">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
-              <h1 className="text-gray-900 text-2xl font-bold">Leads</h1>
+              <h1 className="text-gray-900 text-2xl font-bold">Interesados</h1>
               <p className="text-gray-500 text-sm mt-0.5">
                 Usuarios que han pedido información desde la web.{" "}
                 <span className="font-semibold" style={{ color: PRIMARY }}>
@@ -288,7 +288,7 @@ export default function AumentaLeadsModule() {
                         <td colSpan={7} className="py-16 text-center text-gray-400 text-sm">
                           {search || filtroMotivo || activeStage !== "all"
                             ? "Sin resultados para ese filtro."
-                            : "Todavía no hay leads."}
+                            : "Todavía no hay interesados."}
                         </td>
                       </tr>
                     )}
@@ -403,7 +403,7 @@ function AtenderButton({ onClick }) {
         color: hover ? "white" : PRIMARY,
       }}
     >
-      Atender Lead
+      Atender
     </button>
   );
 }
@@ -526,7 +526,7 @@ function AumentaLeadPanel({ lead, open, saving, onClose, onStageChange, onNotesC
               setNotes(e.target.value);
               setNotesDirty(true);
             }}
-            placeholder="Añade notas sobre este lead…"
+            placeholder="Añade notas sobre este interesado…"
             rows={4}
             className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none resize-none transition-colors"
             style={{ borderColor: notesDirty ? PRIMARY : undefined }}

@@ -18,7 +18,7 @@ export function defineClinicSession(sequelize) {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
-      clientId: {
+      patientId: {
         type: DataTypes.UUID,
         allowNull: false,
       },
@@ -70,7 +70,7 @@ export function defineClinicSession(sequelize) {
     {
       tableName: "clinic_sessions",
       indexes: [
-        { fields: ["client_id", "session_date"], name: "clinic_sessions_client_date_idx" },
+        { fields: ["patient_id", "session_date"], name: "clinic_sessions_patient_date_idx" },
         { fields: ["therapist_id", "session_date"], name: "clinic_sessions_therapist_date_idx" },
       ],
     }

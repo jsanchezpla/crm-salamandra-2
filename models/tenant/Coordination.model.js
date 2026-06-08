@@ -54,7 +54,7 @@ export function defineCoordination(sequelize) {
         allowNull: false,
         defaultValue: [],
       },
-      relatedClientId: {
+      relatedPatientId: {
         type: DataTypes.UUID,
         allowNull: true,
       },
@@ -75,7 +75,7 @@ export function defineCoordination(sequelize) {
       tableName: "coordinations",
       indexes: [
         { fields: ["coordination_date"], name: "coordinations_date_idx" },
-        { fields: ["related_client_id"], name: "coordinations_client_idx" },
+        { fields: ["related_patient_id"], name: "coordinations_patient_idx" },
         { fields: ["created_by_id"], name: "coordinations_creator_idx" },
       ],
     }

@@ -152,6 +152,16 @@ const navigation = [
     label: "Empresa",
     items: [
       {
+        key: "pacientes",
+        label: "Pacientes",
+        href: "/pacientes",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+        ),
+      },
+      {
         key: "clinica",
         label: "Clínica",
         href: "/clinica",
@@ -240,9 +250,16 @@ const navigation = [
   },
 ];
 
+// Overrides de label de sidebar por tenant. Solo cambia el texto visible;
+// el moduleKey en BD/backend no se toca.
+const TENANT_LABEL_OVERRIDES = {
+  aumenta: { leads: "Interesados" },
+};
+
 export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClose }) {
   const pathname = usePathname();
   const router = useRouter();
+  const labelOverrides = TENANT_LABEL_OVERRIDES[tenant?.slug] ?? {};
 
   // Cierra el menú al navegar en móvil
   useEffect(() => {
@@ -360,7 +377,7 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
                             isActive ? "text-white font-medium" : "text-white/50 group-hover:text-white/80"
                           }`}
                         >
-                          {item.label}
+                          {labelOverrides[item.key] ?? item.label}
                         </span>
                         {item.badge != null && (
                           <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-white/10 text-white/70 tabular">

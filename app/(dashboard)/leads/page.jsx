@@ -20,7 +20,15 @@ const UI_OVERRIDES = {
   nutri_laura: NutriLauraLeadsModule,
 };
 
-export const metadata = { title: "Leads" };
+const TENANT_TITLE_OVERRIDES = {
+  aumenta: "Interesados",
+};
+
+export async function generateMetadata() {
+  const headersList = await headers();
+  const slug = headersList.get("x-tenant");
+  return { title: TENANT_TITLE_OVERRIDES[slug] ?? "Leads" };
+}
 
 export default async function LeadsPage() {
   const headersList = await headers();
