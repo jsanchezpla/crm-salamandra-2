@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import PreviewBanner from "../_components/PreviewBanner.jsx";
 import {
   REPORTS,
@@ -179,6 +180,16 @@ export default function InformesPage() {
 
   return (
     <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-5">
+      <Link
+        href="/clinica"
+        className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+        Volver a Clínica
+      </Link>
+
       <PreviewBanner />
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">

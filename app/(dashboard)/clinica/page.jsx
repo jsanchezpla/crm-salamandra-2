@@ -56,7 +56,7 @@ export default function ClinicaLanding() {
       <div className="flex flex-col gap-2">
         <div className="eyebrow">Clínica · Resumen</div>
         <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight">
-          Hola, Beatriz
+          Área clínica
         </h1>
         <p className="text-xs text-neutral-400">
           Equipo activo · 6 terapeutas · Periodo de mayo cerrado el 31. Junio en curso.
