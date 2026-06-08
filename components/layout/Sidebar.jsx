@@ -152,6 +152,16 @@ const navigation = [
     label: "Empresa",
     items: [
       {
+        key: "clinica",
+        label: "Clínica",
+        href: "/clinica",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 12h3.75l1.5-4.5 3 9 1.5-4.5h8.25" />
+          </svg>
+        ),
+      },
+      {
         key: "team",
         label: "Equipo",
         href: "/equipo",
