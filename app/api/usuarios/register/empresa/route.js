@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTenantContext } from "../../../../../lib/tenant/tenantResolver.js";
 import { handleRouteError } from "../../../../../lib/utils/errors.js";
+import { enforceRateLimit } from "../../../../../lib/utils/rateLimit.js";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +18,19 @@ export async function OPTIONS() {
 // Sin JWT — el tenant se identifica por header x-tenant.
 export async function POST(request) {
   try {
+    const limited = enforceRateLimit(request, {
+      key: "usuarios-register-empresa",
+      limit: 30,
+      windowMs: 60_000,
+    });
+    if (limited) {
+      // CORS abierto en este endpoint (lo invoca el WP de Retorika); las
+      // respuestas 4xx también deben llevarlo para que el navegador del
+      // alumno no se quede sin ver el mensaje "demasiadas solicitudes".
+      for (const [h, v] of Object.entries(CORS_HEADERS)) limited.headers.set(h, v);
+      return limited;
+    }
+
     const ctx = await getTenantContext(request);
     const { TrainingUser, Company, Course, CompanyCourse } = ctx.tenantModels;
 

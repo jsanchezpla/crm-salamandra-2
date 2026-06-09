@@ -1,11 +1,19 @@
 import { getTenantContext } from "../../../../../lib/tenant/tenantResolver.js";
 import { handleRouteError } from "../../../../../lib/utils/errors.js";
+import { enforceRateLimit } from "../../../../../lib/utils/rateLimit.js";
 import { NextResponse } from "next/server";
 
 // GET /api/cursos-empresas/codigos-cursos/:email
 // Endpoint crítico — lo llama WordPress. Respuesta: array plano de wcProductId.
 export async function GET(request, { params }) {
   try {
+    const limited = enforceRateLimit(request, {
+      key: "cursos-empresas-codigos",
+      limit: 30,
+      windowMs: 60_000,
+    });
+    if (limited) return limited;
+
     const ctx = await getTenantContext(request);
     const { TrainingUser, CourseEnrollment, Course } = ctx.tenantModels;
 

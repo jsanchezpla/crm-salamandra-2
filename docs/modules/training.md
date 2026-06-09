@@ -222,18 +222,28 @@ pre-aprobado pero no activo) es deliberada: hasta que no entra,
 Cuatro rutas que no pasan por el middleware (porque están listadas
 como public en `middleware.js` o no requieren cookie):
 
-| Ruta | Auth alternativa | Riesgo |
-| --- | --- | --- |
-| `GET /api/external/retorika/alumnos` | API key `x-api-key` | Bajo (key en env). Devuelve **todos los alumnos** del tenant retorika. |
-| `GET /api/external/retorika/alumnos/:email` | API key | Bajo. |
-| `GET /api/external/retorika/cursos` | API key | Bajo. |
-| `GET /api/cursos-empresas/codigos-cursos/:email` | Solo header `x-tenant` | **Medio**. Permite enumerar emails y mapear `wcProductId` por alumno. Sin auth. |
-| `POST /api/usuarios/register/empresa` | Solo header `x-tenant` | **Medio**. Permite enumerar emails de tipo `company` (distingue 403 vs 200) y activar el flag `active` sin más validación que el email. CORS abierto. |
+| Ruta | Auth alternativa | Rate limit | Riesgo |
+| --- | --- | --- | --- |
+| `GET /api/external/retorika/alumnos` | API key `x-api-key` | No | Bajo (key en env). Devuelve **todos los alumnos** del tenant retorika. |
+| `GET /api/external/retorika/alumnos/:email` | API key | No | Bajo. |
+| `GET /api/external/retorika/cursos` | API key | No | Bajo. |
+| `GET /api/cursos-empresas/codigos-cursos/:email` | Solo header `x-tenant` | 30/min por IP (key `cursos-empresas-codigos`) | **Medio**. Permite enumerar emails y mapear `wcProductId` por alumno. Sin auth. |
+| `POST /api/usuarios/register/empresa` | Solo header `x-tenant` | 30/min por IP (key `usuarios-register-empresa`) | **Medio**. Permite enumerar emails de tipo `company` (distingue 403 vs 200) y activar el flag `active` sin más validación que el email. CORS abierto. |
 
 Los tres primeros tienen `const SLUG = "retorika"` hardcodeado:
 ignoran cualquier `x-tenant` que llegue y consultan siempre la BD del
 tenant `retorika`. Aceptable como MVP cliente único; no escala si en
 el futuro otro tenant quiere API externa con el mismo formato.
+
+**Rate limiting**: los dos endpoints sin auth (`codigos-cursos` y
+`register/empresa`) llevan el helper `lib/utils/rateLimit.js` con
+límite 30 req/min por IP (X-Forwarded-For + fallback). Compartido con
+el resto de `/api/public/*`. Cuando una IP supera el umbral devuelve
+HTTP 429 con `Retry-After` y se loguea `[rate-limit] BLOQUEADO ip=...
+key=... retry_after=...s` para detectar abusos. Los endpoints
+`/api/external/retorika/*` quedan fuera porque están protegidos por
+API key y los consume el panel propio de Retorika con cron — añadir
+rate limit ahí podría romper sus batches legítimos.
 
 ## Modelos
 
