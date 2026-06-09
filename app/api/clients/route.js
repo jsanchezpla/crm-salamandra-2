@@ -45,7 +45,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
   const { Client } = tenantModels;
   const body = await request.json();
 
-  const { name, email, phone, notes } = body;
+  const { name, email, phone, notes, type } = body;
   if (!name?.trim()) return error("El nombre es obligatorio", 422);
 
   const customFields = {
@@ -62,9 +62,19 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
   try {
     const client = await Client.create({
       name: name.trim(),
+      type: type === "individual" ? "individual" : "company",
       email: email?.trim().toLowerCase() || null,
       phone: phone?.trim() || null,
       notes: notes?.trim() || null,
+      // Datos fiscales opcionales — necesarios para emitir facturas a este
+      // cliente, pero permitidos como null en el alta para no bloquear la
+      // captura inicial. Se completan después vía PUT.
+      taxId: body.taxId?.trim() || null,
+      fiscalName: body.fiscalName?.trim() || null,
+      fiscalAddress: body.fiscalAddress?.trim() || null,
+      fiscalCity: body.fiscalCity?.trim() || null,
+      fiscalZip: body.fiscalZip?.trim() || null,
+      fiscalCountry: body.fiscalCountry?.trim()?.toUpperCase() || "ES",
       customFields,
     });
     return created(client);

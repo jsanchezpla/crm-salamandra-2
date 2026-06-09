@@ -47,11 +47,12 @@ export async function GET(request) {
   const tenantEnabled = new Set(tenantModules.map((m) => m.moduleKey));
   const userAccess = Array.isArray(user.moduleAccess) ? user.moduleAccess : [];
 
-  // Si moduleAccess está vacío o el usuario es superadmin, le damos todos los activos del tenant
-  const enabledModules =
-    user.role === "superadmin" || userAccess.length === 0
-      ? Array.from(tenantEnabled).sort()
-      : userAccess.filter((k) => tenantEnabled.has(k)).sort();
+  // Wildcard explícito: superadmin O moduleAccess incluye "all". Un array vacío
+  // significa LITERALMENTE "sin acceso" (caso del usuario portal).
+  const isWildcard = user.role === "superadmin" || userAccess.includes("all");
+  const enabledModules = isWildcard
+    ? Array.from(tenantEnabled).sort()
+    : userAccess.filter((k) => tenantEnabled.has(k)).sort();
 
   return NextResponse.json(
     {

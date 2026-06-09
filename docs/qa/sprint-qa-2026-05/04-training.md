@@ -123,8 +123,8 @@ de referencia: `docs/modules/training.md`.
 **Resultado esperado**:
 - HTTP 403.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. `curl.exe -b /tmp/lead.txt -X POST /api/training/courses -d '{"name":"Curso QA lead"}'` → **HTTP 403** `"Solo administradores pueden modificar este recurso"`. No se crea curso.
+**Bug detectado**: ninguno.
 
 ---
 
@@ -161,8 +161,8 @@ de referencia: `docs/modules/training.md`.
 **Resultado esperado**:
 - HTTP 403 "Solo administradores pueden modificar este recurso".
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. `curl.exe -b /tmp/lead.txt -X POST /api/cuestionarios/sync -d '{}'` → **HTTP 403** `"Solo administradores pueden modificar este recurso"`. No se dispara sync.
+**Bug detectado**: ninguno.
 
 ---
 
@@ -326,5 +326,5 @@ es N/A — los endpoints están hardcodeados a `SLUG = "retorika"`.
 - Datos cuadran con el seed (4 empresas, 8 cursos, 46 alumnos, 77
   matrículas, 55 intentos quiz).
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: Pendiente UI — recorrido por las 7 páginas de `/formacion/*`. La API base (`/api/training/courses`, `/api/training/users/import`, webhooks, `/api/cuestionarios/sync`) está cubierta por los TCs anteriores (053-065). Render visual, modales y redirect `/cuestionarios` → `/formacion/cuestionarios` quedan para Jorge en navegador. Conteos actuales en BD: `crm_demo.courses` 9 (8 del seed + el creado en TC-053), `crm_demo.training_users` 50+ (tras imports de TC-060 y TC-064), `crm_demo.course_enrollments` ≥77.
+**Bug detectado**: Pendiente.

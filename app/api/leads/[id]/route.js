@@ -40,6 +40,7 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
     "assignedTo",
     "notes",
     "customFields",
+    "clientId",
     "tipo_usuario",
     "motivo",
     "servicio",
@@ -58,6 +59,17 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
   }
 
   if ("email" in updates) updates.email = updates.email?.trim().toLowerCase() || null;
+
+  // Validar clientId: null para desvincular, o UUID que exista en el tenant.
+  if ("clientId" in updates) {
+    if (updates.clientId === null || updates.clientId === "") {
+      updates.clientId = null;
+    } else {
+      const { Client } = tenantModels;
+      const exists = await Client.findByPk(updates.clientId, { attributes: ["id"] });
+      if (!exists) delete updates.clientId;
+    }
+  }
 
   // Merge customFields en lugar de sobreescribir
   if (updates.customFields) {

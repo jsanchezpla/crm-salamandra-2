@@ -29,8 +29,8 @@ basan en el código real (`app/api/projects/`, `models/tenant/Project*.js`,
   priority, dueDate, lead, members count).
 - Filtros y búsqueda funcionales.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: Pendiente UI — lista y filtros en `/proyectos`. Verificable solo en navegador por Jorge. Por API: `GET /api/projects` devuelve los 4 del seed + los creados por conversiones de lead en TC-049/092 + el creado en TC-069 (total ~9 ahora). Los códigos `PRY-2026-NNNN` se autogeneran correctamente.
+**Bug detectado**: Pendiente.
 
 ---
 
@@ -55,8 +55,11 @@ basan en el código real (`app/api/projects/`, `models/tenant/Project*.js`,
   `leadProjectIds`). En el resto, AUSENTE.
 - observer: budgetAmount AUSENTE en todos.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK.
+- admin: `GET /api/projects` muestra `budgetAmount` en todos los proyectos (valor numérico cuando el seed lo tiene, `null` cuando no).
+- lead@demo (sin TeamMember vinculado en BD: `team_members.user_id` para `lead@demo.salamandra` es `NULL`): NO ve `budgetAmount` en NINGÚN proyecto (clave ausente del JSON, no `null`). Esto es coherente porque `leadProjectIds` queda vacío y el endpoint omite la clave.
+- observer: NO ve `budgetAmount` en ningún proyecto ✓.
+**Bug detectado**: ninguno. ℹ️ Para probar el caso "lead@demo vinculado a un TeamMember que sea lead de un proyecto" hay que correr el setup SQL de TC-074 (no ejecutado aquí porque deja estado divergente respecto al reset).
 
 ---
 
@@ -75,8 +78,8 @@ basan en el código real (`app/api/projects/`, `models/tenant/Project*.js`,
 - BoardColumns por defecto creadas (4).
 - Proyecto aparece en el listado.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. `POST /api/projects -d '{"name":"QA Project TC-069"}'` → **HTTP 201**, `code="PRY-2026-0008"` (correlativo siguiente al tras los 7 ya creados por seed + conversiones), status `draft` (sin cliente vinculado). `GET /api/projects/<id>/columns` → 4 columnas auto-creadas: "Por hacer" (order=0, color #94A3B8), "En curso" (order=1, color #3B82F6), "En revisión" (order=2), "Hecho" (order=3, isDoneColumn=true). El proyecto aparece en `GET /api/projects`.
+**Bug detectado**: ninguno.
 
 ---
 
@@ -93,8 +96,10 @@ basan en el código real (`app/api/projects/`, `models/tenant/Project*.js`,
 **Resultado esperado**:
 - HTTP 400 / 422 "El campo 'name' es obligatorio".
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK.
+- `POST /api/projects -d '{}'` → **HTTP 422** `"El campo 'name' es obligatorio"`.
+- `POST /api/projects -d '{"name":"   "}'` → **HTTP 422** mismo mensaje (trim aplicado).
+**Bug detectado**: ninguno.
 
 ---
 
@@ -110,8 +115,8 @@ basan en el código real (`app/api/projects/`, `models/tenant/Project*.js`,
 **Resultado esperado**:
 - HTTP 400 / 422 "dueDate debe ser >= startDate".
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. `POST /api/projects -d '{"name":"QA TC-071","startDate":"2026-06-01","dueDate":"2026-05-01"}'` → **HTTP 422** `"dueDate debe ser >= startDate"`.
+**Bug detectado**: ninguno.
 
 ---
 
@@ -137,8 +142,8 @@ basan en el código real (`app/api/projects/`, `models/tenant/Project*.js`,
 - Tablero: placeholder "Sprint 2 pendiente" o similar.
 - Configuración: form de edición para admin/lead.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: Pendiente UI — pestañas, renderizado y placeholder Sprint 2. Verificable solo en navegador por Jorge.
+**Bug detectado**: Pendiente.
 
 ---
 
@@ -155,8 +160,8 @@ basan en el código real (`app/api/projects/`, `models/tenant/Project*.js`,
 - 200, descripción persistida.
 - AuditLog: `project.updated` con before/after.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. `PATCH /api/projects/<PRY-2026-0008> -d '{"description":"editado por admin"}'` (admin) → **HTTP 200**. La descripción se persiste. AuditLog no inspeccionado en esta pasada (revisable con `SELECT action, before, after FROM master.audit_log WHERE entity='Project' ORDER BY created_at DESC LIMIT 5`).
+**Bug detectado**: ninguno.
 
 ---
 
@@ -177,8 +182,8 @@ ser lead del proyecto. Esto requiere setup manual:
 **Resultado esperado**:
 - 200.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: Pendiente — requiere setup SQL destructivo del seed (linkar `lead@demo.salamandra` a Carlos López como `user_id`). No ejecutado para mantener el estado del reset estable durante la batería QA. Reproducible manualmente con: `UPDATE crm_demo.team_members SET user_id=(SELECT id FROM master.users WHERE email='lead@demo.salamandra') WHERE display_name='Carlos López';` y después el PATCH.
+**Bug detectado**: Pendiente.
 
 ---
 
@@ -198,8 +203,8 @@ PRY-2026-0002, NO de 0001).
 **Resultado esperado**:
 - HTTP 403 "Solo administradores o el lead del proyecto pueden modificarlo".
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. Sin necesitar el setup de TC-074 (lead@demo no tiene TeamMember vinculado), `curl.exe -b /tmp/lead.txt -X PATCH /api/projects/<PRY-2026-0008> -d '{"description":"editado por lead no autorizado"}'` → **HTTP 403** `"Solo administradores o el lead del proyecto pueden modificarlo"`. La descripción no se modifica.
+**Bug detectado**: ninguno.
 
 ---
 
@@ -220,8 +225,8 @@ sin vincularlo a ningún TeamMember en demo).
 **Resultado esperado**:
 - 200, edita sin importar que no tenga perfil de equipo.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: Pendiente — requiere crear un user admin nuevo en `master.users` sin TeamMember, lo que altera el seed permanente. No ejecutado en esta pasada. Verificación cubierta indirectamente por TC-073 (admin con TeamMember edita OK; el guard mira `role==='admin'` antes de comprobar `leadProjectIds`, así que un admin sin TeamMember pasaría el mismo path).
+**Bug detectado**: Pendiente.
 
 ---
 
@@ -242,8 +247,11 @@ sin vincularlo a ningún TeamMember en demo).
 - (3): SÍ aparece.
 - AuditLog: `project.archived`.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. Probado sobre PRY-2026-0008:
+- `DELETE /api/projects/<PRY-2026-0008>` → **HTTP 204**. BD: `archived_at IS NOT NULL`.
+- `GET /api/projects` (sin params) → NO contiene el id ✓.
+- `GET /api/projects?includeArchived=true` → SÍ contiene el id ✓.
+**Bug detectado**: ninguno.
 
 ---
 
@@ -262,8 +270,8 @@ sin vincularlo a ningún TeamMember en demo).
 - `completedAt` automáticamente seteado a NOW (hook beforeUpdate).
 - Si se manda completedAt explícito, prevalece.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. `PATCH /api/projects/<active_id> -d '{"status":"completed"}'` (sin enviar `completedAt`) → respuesta contiene `"status":"completed"` y `"completedAt":"2026-06-09T09:03:00.942Z"` (auto-seteado por el hook). El caso "completedAt explícito prevalece" no se forzó en esta pasada (lógica de `beforeUpdate` confirma que solo setea si está vacío).
+**Bug detectado**: ninguno.
 
 ---
 
@@ -284,8 +292,12 @@ sin vincularlo a ningún TeamMember en demo).
 - (4): 400/422 si tiene tasks: "La columna tiene N tarea(s). Muévelas
   antes de borrar".
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK parcial.
+- `GET /api/projects/<PRY-2026-0007>/columns` → 4 columnas iniciales.
+- `DELETE` de 3 columnas seguidas → **HTTP 204** las 3.
+- `DELETE` de la 4ª (última) → **HTTP 422** `"No se puede borrar la última columna del tablero"` ✓.
+- El test "columna con tasks" no se forzó en esta pasada porque el sprint 2 (tasks/kanban) está aún sin implementar; no hay endpoint para crear tareas. Verificable cuando exista.
+**Bug detectado**: ninguno funcional.
 
 ---
 
@@ -305,8 +317,11 @@ sin vincularlo a ningún TeamMember en demo).
 - Tras (2): solo columna B tiene `isDoneColumn=true`. La A pasó a
   false automáticamente.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. Probado sobre PRY-2026-0006 (`Roberto Fuentes Méndez`):
+- PATCH col A (`isDoneColumn:true`) → HTTP 200, A queda en true.
+- PATCH col B (`isDoneColumn:true`) → HTTP 200, B queda en true.
+- `GET /api/projects/<id>/columns` final → exactamente 1 columna con `isDoneColumn:true` (B); A volvió a false automáticamente. El resto (4 columnas en total) tienen `isDoneColumn:false`.
+**Bug detectado**: ninguno. La unicidad de `isDoneColumn` por proyecto está garantizada por la lógica del PATCH (no por constraint en BD).
 
 ---
 
@@ -328,8 +343,8 @@ sin vincularlo a ningún TeamMember en demo).
 - Lead actualizado con `convertedProjectId` y stage = `won` (si no
   era terminal positivo).
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK por API (cubierto exhaustivamente en TC-049). Pendiente verificar el flujo desde el botón del drawer en UI — Jorge.
+**Bug detectado**: ninguno por API.
 
 ---
 
@@ -348,8 +363,8 @@ sin vincularlo a ningún TeamMember en demo).
 - Probablemente permitido (no documentado bloqueo). Documentar.
 - Si la UI filtra inactivos en el selector, anotar.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK — comportamiento documentado. `POST /api/projects/<PRY-2026-0006>/members -d '{"teamMemberId":"<sara_romero_inactive>","role":"member"}'` (admin) → **HTTP 201**. El backend NO bloquea añadir empleados inactivos. La UI puede (debería) filtrarlos en el selector — no verificado en esta pasada porque requiere abrir el drawer; pendiente Jorge.
+**Bug detectado**: ninguno funcional. ℹ️ Decisión pendiente: ¿bloquear en backend o solo en frontend?
 
 ---
 
@@ -370,8 +385,14 @@ sin vincularlo a ningún TeamMember en demo).
 - admin: CRUD completo.
 - lead: 403 en mutaciones, 200 en GET.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK.
+- admin GET `/api/project-templates` → 200, 2 plantillas del seed.
+- admin POST → **HTTP 201**, plantilla creada. ⚠️ El body acepta `boardColumns`/`phases`/`defaultMilestones`/`defaultTags`; las pruebas con `columns` no rellenan (campo no reconocido), recomendable normalizar el nombre.
+- admin PATCH → **HTTP 200**, `name` actualizado.
+- admin DELETE → **HTTP 204**.
+- lead GET → **HTTP 200** (lectura permitida).
+- lead POST/PATCH → **HTTP 403** `"Solo administradores pueden gestionar plantillas de proyecto"`.
+**Bug detectado**: 🟡 menor — el TC dice payload con `columns`, el endpoint espera `boardColumns`. Actualizar el TC y/o normalizar el nombre de campo.
 
 ---
 
@@ -391,8 +412,8 @@ sin vincularlo a ningún TeamMember en demo).
 - Lista los proyectos del cliente.
 - GET `/api/clients/<id>/projects` devuelve los proyectos correctos.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: Pendiente UI — sección embebida en `/clientes/[id]`. Solo verificable en navegador. La API está implementada (`/api/clients/[id]/projects`), pero el render dentro de la ficha de cliente queda para Jorge.
+**Bug detectado**: Pendiente.
 
 ---
 
@@ -413,5 +434,9 @@ sin vincularlo a ningún TeamMember en demo).
 - 403 "Forbidden" mientras el módulo está desactivado.
 - 200 tras restaurar.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK.
+- SQL `UPDATE master.tenant_modules SET enabled=false WHERE module_key='projects' AND tenant_id=(SELECT id FROM master.tenants WHERE slug='demo')`.
+- Inmediato: `GET /api/projects` → HTTP 200 (cache del tenant context aún caliente; TTL 60s).
+- Tras esperar ≥60s: `GET /api/projects` → **HTTP 403** `"Forbidden"` (o equivalente del endpoint).
+- SQL restore `enabled=true`. Tras esperar ≥60s: `GET /api/projects` → **HTTP 200** ✓.
+**Bug detectado**: ninguno funcional. ℹ️ Operativo: cambios en `tenant_modules` no se propagan en runtime; toca esperar ~1 min o exponer endpoint admin que llame a `invalidateTenantCache(slug)`. Mismo hallazgo que TC-055.

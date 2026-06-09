@@ -452,6 +452,7 @@ viene del propio TutorLMS.
 | `scripts/add-training-module-demo.js` | Activa el módulo `training` en el tenant `demo` y siembra 4 empresas, 8 cursos, ~36 alumnos de empresa + 10 privados, ~55 matrículas. Para demos a clientes potenciales. Idempotente. |
 | `scripts/seed-cuestionarios-demo.js` | Activa el módulo `cuestionarios` en demo y siembra intentos de quiz realistas (datos pedagógicos sobre comunicación, módulos de Retorika). Útil para mostrar la pestaña Cuestionarios sin necesitar webhooks. |
 | `scripts/add-training-module-nutri-laura.js` | Activa el módulo `training` en `nutri_laura`. Crea las 6 tablas con SQL crudo (sin la legacy `trainings`), registra el módulo con `uiOverride: nutri-laura/FormacionOverview` y siembra 3 cursos de nutrición. Patrón idéntico al `add-leads-module-nutri-laura.js` por la filosofía de tenant minimal. |
+| `scripts/add-training-module-aumenta.js` | Activa el módulo `training` en `aumenta`. Las 6 tablas ya existen desde el sync inicial — el script solo registra el módulo con `uiOverride: aumenta/FormacionOverview` y siembra 6 cursos reales de la web de Aumenta + 15 alumnos B2C + 22 matrículas. Sin cuestionarios (la tabla `quiz_attempts` queda vacía). Ver "Activación en Aumenta" más abajo. |
 
 `seed-master.js` (que crea el tenant retorika) registra el módulo
 `training` con `moduleAccess` admin. La activación inicial del
@@ -475,6 +476,64 @@ Comandos: `npm run db:migrate:training` (local) y
 Resultado en local (2026-05-04): migrados `crm_demo`,
 `crm_spain_enzymes`; saltados `crm_aumenta` y `crm_quality_energy`
 (no tienen tabla `training_users`).
+
+## Activación en Aumenta (B2C, sin cuestionarios)
+
+Aumenta es centro de psicopedagogía infantil. Su formación es 100%
+B2C: las familias y profesionales sueltos se inscriben individualmente
+en cursos abiertos. No hay empresas intermediarias ni TutorLMS
+conectado.
+
+### Datos sembrados (8 jun 2026)
+
+- **6 cursos reales** copiados de su web pública:
+  - Entender el espectro autista
+  - Regulación emocional en la infancia
+  - Cuidar a quien cuida
+  - Integración sensorial en el aula
+  - Primeras palabras y comunicación
+  - Entendiendo el TDAH en casa
+- **15 alumnos B2C** ficticios (mezcla de familias y profesionales).
+- **22 matrículas** distribuidas.
+- **0 empresas** (`companies` vacío).
+- **0 cuestionarios** (`quiz_attempts` vacío).
+
+### Override de UI: `aumenta/FormacionOverview`
+
+`modules/overrides/aumenta/FormacionOverview.jsx`. Diferencias frente
+a la landing `default`:
+
+- **3 KPIs en vez de 4**: Cursos activos, Alumnos, Matrículas (sin
+  "Empresas").
+- **3 secciones en vez de 5**: Cursos, Alumnos, Matrículas por curso
+  (sin "Empresas" ni "Cuestionarios").
+- **Copy editorial adaptado**: título "Formación — cursos para
+  familias y profesionales".
+- **Sin endpoint a `/api/training/companies`** (la card de empresas
+  no existe).
+
+Registrado en `app/(dashboard)/formacion/page.jsx` en el map
+`UI_OVERRIDES`. Tenant decide por `x-tenant` header.
+
+### `logicOverrides` en `master.tenant_modules`
+
+```json
+{ "b2bEnabled": false, "quizzesEnabled": false, "tutorlmsConnected": false }
+```
+
+Estos flags hoy son **indicativos** (los lee solo el override de UI).
+No hay validación de backend que los consulte.
+
+### Cuestionarios para Aumenta
+
+Decisión cerrada: **Aumenta no usa cuestionarios** en su flujo
+formativo. La tabla `quiz_attempts` existe en `crm_aumenta` desde el
+sync inicial pero queda vacía. El override de UI no muestra la
+sección. Si en el futuro Aumenta los quisiera, basta con:
+
+1. Cambiar `logicOverrides.quizzesEnabled = true`.
+2. Añadir la sección "Cuestionarios" al override
+   `aumenta/FormacionOverview.jsx`.
 
 ## Integraciones con otros módulos del CRM
 

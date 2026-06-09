@@ -1,0 +1,262 @@
+# Módulo Pacientes (`pacientes`)
+
+> Documentación de detalle. Referencia rápida en `CLAUDE.md`. Si
+> encuentras una discrepancia con el código, **prevalece el código**:
+> actualiza este fichero.
+
+## Visión general
+
+Módulo de gestión de pacientes pediátricos para un centro de
+psicopedagogía. Maneja la ficha clínica (centro escolar, curso
+académico, motivo de derivación, terapeuta principal, frecuencia,
+estado del tratamiento) y el timeline de sesiones / informes /
+coordinaciones de cada paciente.
+
+Implementado como **sprint visual** complementario al módulo
+[Clínica](clinica.md) para la demo del **9 de junio de 2026** con el
+equipo de Aumenta.
+
+Activado **solo en aumenta** vía `master.tenant_modules`
+(`moduleKey='pacientes'`).
+
+## Decisión arquitectónica: `patients` ≠ `clients`
+
+Aumenta tiene activos los módulos `clients` y `pacientes`
+simultáneamente. **Son tablas separadas e independientes**:
+
+- `clients` (tabla `clients`, modelo `Client`): cliente comercial
+  estándar del CRM. No se usa en el flujo clínico de Aumenta.
+- `patients` (tabla `patients`, modelo `Patient`): paciente clínico
+  con campos pediátricos (centro escolar, motivo derivación,
+  terapeuta principal, frecuencia de asistencia, estado del
+  tratamiento).
+
+**Las FKs del módulo Clínica apuntan a `patients`**:
+
+- `clinic_sessions.patient_id` → `patients.id` (NOT NULL, RESTRICT).
+- `coordinations.related_patient_id` → `patients.id` (nullable, SET NULL).
+- `clinical_reports.patient_id` → `patients.id` (NOT NULL, RESTRICT).
+
+El script `migrate-pacientes-sprint-1.js` realiza esta migración
+correctiva tras el sprint Clínica: dropea las columnas `client_id`
+originales y añade las `patient_id` correctas.
+
+### Por qué dos tablas y no una
+
+Decisión tomada con Jorge el **8 de junio de 2026**: mantener
+separados los conceptos comercial (cliente) y clínico (paciente)
+hasta que un sprint futuro evalúe si conviene fusionarlos. En el
+contexto de Aumenta el solapamiento conceptual sería bajo: muy
+pocos pacientes son a la vez "clientes comerciales" del CRM. Por
+ahora, separados.
+
+## Estado: maqueta visual
+
+La página `/pacientes` y la ficha `/pacientes/[id]` muestran datos
+hardcoded en
+`app/(dashboard)/pacientes/_components/dummyData.js`. No hay
+endpoints CRUD, persistencia ni validaciones. La tabla `patients`
+existe en `crm_aumenta` pero **vacía**.
+
+## Lo que NO hace (Sprint 1)
+
+- No hay endpoints CRUD (`/api/pacientes/*` no existe).
+- No persiste sesiones, informes ni coordinaciones (todo dummy).
+- No graba audio. La grabación se hace **fuera del CRM** (móvil de
+  la terapeuta) y se sube como archivo — ver "Flujo de subida de
+  audio".
+- No transcribe ni estructura con IA real.
+- No envía notificaciones a familias ni al colegio.
+- No filtra pacientes por terapeuta logueado (todos los admin ven
+  todos).
+- No tiene búsqueda avanzada (solo búsqueda por nombre y filtros
+  básicos de terapeuta / estado).
+
+## Modelo
+
+### Patient
+
+Fichero: `models/tenant/Patient.model.js`. Tabla: `patients`.
+
+| Campo | Tipo | Notas |
+| --- | --- | --- |
+| `firstName` | VARCHAR(120) NOT NULL | Nombre del paciente. |
+| `lastName` | VARCHAR(120) NOT NULL | Apellidos. |
+| `birthDate` | DATEONLY nullable | Fecha de nacimiento. |
+| `age` | INTEGER nullable | Edad (0-120). Guardada para demo; en flujo real debería calcularse. |
+| `educationCenter` | VARCHAR(200) nullable | Centro escolar (ej. "CEIP Las Acacias"). |
+| `educationLevel` | VARCHAR(80) nullable | Curso académico (ej. "3º Primaria"). |
+| `referralReason` | TEXT nullable | Motivo de derivación. |
+| `referredBy` | VARCHAR(120) nullable | Quién derivó al paciente (orientador, pediatra, familia, etc.). |
+| `mainTherapistId` | UUID nullable | FK a `team_members` (ON DELETE SET NULL). |
+| `enrollmentDate` | DATEONLY nullable | Fecha de alta en el centro. |
+| `attendanceFrequency` | VARCHAR(50) nullable | Frecuencia ("Semanal", "Quincenal"). |
+| `status` | ENUM NOT NULL | `active`, `paused`, `discharged`. Default `active`. |
+| `dischargeDate` | DATEONLY nullable | Fecha de alta médica (cuando aplica). |
+| `dischargeReason` | TEXT nullable | Motivo del alta. |
+| `notes` | TEXT nullable | Notas internas. |
+
+Índices: `(last_name, first_name)`, `(main_therapist_id)`, `(status)`.
+
+Enum: `enum_patients_status` con valores `active`, `paused`,
+`discharged`.
+
+## Frontend
+
+Tres páginas en `app/(dashboard)/pacientes/`.
+
+| Ruta | Propósito |
+| --- | --- |
+| `/pacientes` | Listado. 4 KPIs **calculados desde el array dummy** (no inventados). Filtros: búsqueda por nombre, terapeuta, estado. Tabla de 6 filas con avatar + nombre + centro + motivo + terapeuta + última sesión + estado + acción "Ver ficha". |
+| `/pacientes/[id]` | Ficha. Cabecera con avatar grande, datos clave, 3 botones (CTA "Subir audio", "Nuevo informe", "Editar ficha"). 4 tabs: Resumen, Sesiones, Informes, Coordinaciones. |
+| `/pacientes/[id]/sesiones/nueva` | Flujo de subida de audio con 4 estados. La pantalla "estrella" de la demo. |
+
+### Particularidades del listado
+
+KPIs derivados del array `PATIENTS` (no hardcoded inventados):
+- "Pacientes activos" = `filter(status === 'active').length`.
+- "En pausa" = `filter(status === 'paused').length`.
+- "Altas" = `filter(status === 'discharged').length`.
+- "Sesiones registradas" = `DIEGO_SESSIONS.length`.
+
+Si se cambian los pacientes en `dummyData.js`, los KPIs se actualizan
+solos.
+
+### Ficha del paciente
+
+Cabecera fija con avatar circular (color por paciente), nombre + chip
+de estado, datos clave (centro, terapeuta, fecha alta, frecuencia), 3
+botones laterales.
+
+Tabs:
+
+1. **Resumen**: Cards de motivo, objetivos terapéuticos, próximas
+   citas, documentos adjuntos.
+2. **Sesiones**: timeline vertical. Click en una sesión abre un
+   drawer con detalle completo (audio fake + transcripción +
+   apartados estructurados). Respeta la regla #13 (`top-14 lg:top-0`).
+3. **Informes**: listado de informes evolutivos / admisión / alta.
+4. **Coordinaciones**: actas con familia, colegio, externos.
+
+**Solo Diego Martín (`id="p-1"`) tiene datos completos**. Los otros 5
+pacientes son placeholders: la ficha existe y se navega, pero los
+tabs muestran empty states ("Sin sesiones registradas en esta demo").
+
+### Flujo de subida de audio
+
+La pantalla `/pacientes/[id]/sesiones/nueva` es el "wow moment" de la
+demo. Cuatro estados manejados con `useState`:
+
+1. **`IDLE`**: zona drag-and-drop con icono cloud-upload. Texto:
+   "Sube el audio grabado con tu móvil. La IA lo transcribirá y
+   estructurará en apartados." Formatos admitidos m4a/mp3/wav/ogg.
+   Click o drop → estado `UPLOADED`.
+2. **`UPLOADED`**: muestra el archivo fake (`sesion-diego-5jun.m4a · 0:47 · 1.2 MB`)
+   con player + botones "Cambiar archivo" / "Procesar con IA". Click
+   en "Procesar" → estado `PROCESSING`.
+3. **`PROCESSING`**: spinner + lista animada de 5 pasos
+   (~3 segundos de auto-avance):
+   - Subiendo audio…
+   - Transcribiendo con Whisper…
+   - Identificando objetivos trabajados…
+   - Estructurando observaciones…
+   - Listo.
+   Auto-transición a `STRUCTURED`.
+4. **`STRUCTURED`**: 2 columnas. Izquierda: audio + transcripción
+   literal del documento original de Aumenta ("Hoy hemos trabajado
+   atención con un memory…"). Derecha: bloque estructurado con
+   objetivos chips + actividades + desempeño + observaciones
+   sub-divididas (familia / próxima / casa / incidencias). Footer
+   con botones Cancelar / Regenerar / **Guardar sesión**.
+
+**El CRM no graba sesiones**. La grabación se hace en el móvil de la
+terapeuta con cualquier app de notas de voz. El CRM solo recibe el
+archivo y lo procesa. Esto fue una decisión explícita: simplificar
+el ámbito del producto y delegar la grabación al dispositivo.
+
+## Migración
+
+`scripts/migrate-pacientes-sprint-1.js`. Solo schema `crm_aumenta`
+(hardcoded). Idempotente.
+
+Cuatro fases:
+
+1. **Fase A** (autocommit): `CREATE TYPE enum_patients_status`.
+2. **Fase B** (transacción): `CREATE TABLE patients` + 3 índices + FK a `team_members`.
+3. **Fase C** (transacción): para cada tabla del módulo Clínica
+   (`clinic_sessions`, `coordinations`, `clinical_reports`):
+   - Verifica que la tabla está vacía (assert; aborta si no).
+   - Drop FK + drop column `client_id` / `related_client_id`.
+   - Drop índice de la versión anterior.
+   - Add column `patient_id` / `related_patient_id` con FK a
+     `patients` y el `ON DELETE` correcto (RESTRICT si NOT NULL,
+     SET NULL si nullable).
+   - Add índice nuevo.
+4. **Fase D** (transacción): activar `pacientes` en
+   `master.tenant_modules` para aumenta.
+
+```bash
+npm run db:migrate:pacientes         # local
+npm run db:migrate:pacientes:prod    # VPS
+```
+
+**Orden importa**: ejecutar **después** de
+`migrate-clinica-sprint-1.js`. Si las tablas de Clínica no existen,
+la fase C las salta con mensaje informativo.
+
+## Tenants
+
+| Tenant | Módulo `pacientes` | Notas |
+| --- | --- | --- |
+| `aumenta` | activo | Único tenant con el módulo. |
+| Resto | inactivo | Mantienen su `clients` estándar sin interferencia. |
+
+`'pacientes'` **no** está en `ALL_MODULES` (`scripts/db-sync.js`);
+se gestiona manualmente vía `tenant_modules`.
+
+## Coherencia con sprint Clínica
+
+Los datos dummy de Pacientes están **alineados con los de Clínica**:
+
+- Diego Martín (`p-1`, 8 años, CEIP Las Acacias, 3º Primaria) es el
+  paciente del informe extenso de `/clinica/informes`.
+- Su terapeuta principal **Lorena Vázquez** (`t-1`) es la
+  protagonista del dashboard `/clinica/mi-desempeno` con 87/100.
+- El array de terapeutas (`THERAPISTS`) se **importa desde
+  `clinica/_components/dummyData.js`** vía re-export en
+  `pacientes/_components/dummyData.js`. Cambiar terapeutas: editar
+  un único fichero.
+
+## Backlog (Sprint 2+)
+
+- Endpoints CRUD para `Patient` (POST/PATCH/DELETE + listado
+  paginado con búsqueda real en BD).
+- Persistencia real del flujo de subida de audio:
+  - Upload del archivo a almacenamiento (S3-compatible / disco).
+  - Pipeline asíncrono: Whisper → OpenAI estructuración → insert en
+    `clinic_sessions`.
+  - WebSocket o polling para refrescar el estado del procesamiento.
+- Adjuntos en informes (`ClinicalReport.attachments`) con subida real
+  de PDFs / imágenes.
+- Filtros avanzados en el listado: por edad, centro escolar,
+  frecuencia, rango de fechas.
+- Vinculación opcional `Patient` ↔ `Client` por si un paciente
+  pediátrico también es cliente facturable del centro (decisión
+  pendiente).
+- Roles: terapeuta ve solo sus pacientes; dirección ve todos.
+- Validaciones del formulario "Editar ficha" (hoy decorativo).
+- Auditoría: registrar en `master.AuditLog` cambios de estado
+  (alta médica, pausa, reanudación).
+
+## Decisiones cerradas
+
+- **Tabla independiente de `clients`** (8 jun 2026).
+- **Las FKs de Clínica se mueven de `clients` a `patients`** en la
+  migración correctiva. Las tablas estaban vacías → sin pérdida de
+  datos.
+- **El CRM no graba audio**, solo lo recibe.
+- **Un único paciente con datos completos** en la maqueta (Diego
+  Martín). Los otros 5 son placeholders honestos (la ficha existe
+  pero los tabs muestran empty state explícito).
+- **KPIs derivados** del array `PATIENTS`, no inventados, para
+  evitar incoherencias visuales del tipo "42 activos · 6 visibles".

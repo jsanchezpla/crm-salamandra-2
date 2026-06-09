@@ -14,7 +14,7 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * dentro de una transacción explícita con FOR UPDATE para garantizar
  * unicidad y correlatividad sin huecos.
  */
-export const POST = withTenant(async (request, { params }, { tenantModels, hasModule, tenant }) => {
+export const POST = withTenant(async (request, { params }, { tenantModels, hasModule, tenantHasModule, tenant }) => {
   // Captura warnings del hook de inventario para devolverlos al cliente sin
   // bloquear la emisión (stock insuficiente, receta sin definir, etc.).
   const inventoryWarnings = [];
@@ -82,7 +82,9 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
 
       // Descuenta stock automáticamente para las líneas con outboundProductId.
       // Si el módulo inventory no está activo en el tenant, no se hace nada.
-      if (hasModule("inventory")) {
+      // Usamos tenantHasModule (no hasModule) porque es un gate sobre el tenant,
+      // no sobre el moduleAccess del usuario que emite la factura.
+      if (tenantHasModule("inventory")) {
         const warns = await applyStockMovementsForInvoice({
           invoice,
           models: tenantModels,

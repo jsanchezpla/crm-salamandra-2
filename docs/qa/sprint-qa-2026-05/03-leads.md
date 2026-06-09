@@ -52,8 +52,8 @@ referencia: `docs/modules/leads.md`.
 - Aparece con `source: null` o tal cual.
 - CORS permite peticiones desde cualquier origen.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. `curl.exe -X POST http://localhost:3000/api/public/leads -H "x-tenant: demo" -H "Content-Type: application/json" -d '{"name":"Lead público QA","email":"qa@public.test","mensaje":"prueba"}'` (sin cookie/JWT) → **HTTP 201** `{ok:true,id:"0b37371d-..."}`. Lead persistido en `crm_demo.leads`. CORS no validado explícitamente (cambia per-deploy, defensa por backend igual cubre el caso). Comportamiento conforme al patrón "endpoint público de captación de leads".
+**Bug detectado**: ninguno.
 
 ---
 
@@ -75,8 +75,8 @@ referencia: `docs/modules/leads.md`.
 - Documentado en docs/modules/leads.md: no hay validación de unicidad
   de email en leads.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. Segundo POST con el mismo `email=qa@public.test` y `name="Lead público QA dup"` → **HTTP 201** `{ok:true,id:"087708c4-..."}`. SQL: `SELECT email, COUNT(*) FROM crm_demo.leads WHERE email='qa@public.test' GROUP BY email` → 2. Comportamiento conforme al patrón documentado: no hay UNIQUE en `email` para que un mismo prospecto pueda re-contactar y dejar varias entradas (la deduplicación es lógica de negocio, no de BD).
+**Bug detectado**: ninguno.
 
 ---
 
@@ -99,8 +99,11 @@ referencia: `docs/modules/leads.md`.
 - Si se intenta un stage fuera de la lista (ej. `random_stage`), se
   ignora silenciosamente (PATCH solo reemplaza si la clave es válida).
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK.
+- `PATCH /api/leads/<id>` (admin) con `stage:"demo_scheduled"` → HTTP 200, BD: `stage="demo_scheduled"` ✓.
+- Mismo PATCH con `stage:"random_stage"` → HTTP 200 pero el stage en BD NO cambia (permanece `demo_scheduled`). La lógica en `app/api/leads/[id]/route.js` filtra contra `ALLOWED_STAGES` y descarta el valor si no es válido (sin error visible).
+- Probados los stages terminales y de progreso por inspección de la lista canónica en `lib/leads/stages.js`.
+**Bug detectado**: ninguno funcional. ℹ️ Comportamiento "ignorar silenciosamente" puede ocultar errores de cliente; opcional: devolver 422 cuando el stage es inválido en lugar de aceptar el resto.
 
 ---
 
@@ -123,8 +126,8 @@ referencia: `docs/modules/leads.md`.
 **Resultado esperado**:
 - HTTP 403 "Solo administradores pueden modificar/importar leads".
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. `curl.exe -b /tmp/lead.txt -X PATCH /api/leads/<id> -d '{"stage":"contacted"}'` → **HTTP 403** `"Solo administradores pueden modificar leads"`. El stage en BD no cambia.
+**Bug detectado**: ninguno.
 
 ---
 
@@ -150,8 +153,10 @@ referencia: `docs/modules/leads.md`.
 - Filas con stage legible ("Demo agendada") se mapean al canónico
   (`demo_scheduled`).
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK.
+- `GET /api/leads/import/template` → HTTP 200, xlsx con 1 hoja "Plantilla Leads", cabeceras `Nombre, Email, Teléfono, Empresa, Estado, Notas`, fila de ejemplo "Juan García" y línea de helpers (Requerido / Texto libre / `new | contacted | qualified | won | lost`).
+- Construí xlsx de prueba (con exceljs) con 3 filas válidas + 1 fila completamente vacía + cabeceras. `POST /api/leads/import/excel` (admin, multipart) → **HTTP 201** `{imported:3, skipped:1, errors:[]}`. BD: las 3 filas se persisten con stages mapeados al canónico: "Demo agendada" → `demo_scheduled`, "Contactado" → `contacted`, "Nuevo" → `new`. La fila vacía no se crea.
+**Bug detectado**: ninguno.
 
 ---
 
@@ -174,8 +179,8 @@ referencia: `docs/modules/leads.md`.
 - Stages traducidos al castellano (STAGE_LABELS).
 - Nombre de fichero: `leads_AAAA-MM-DD.xlsx`.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. `GET /api/leads/export` (admin) → HTTP 200, `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, ~9.7KB, header `Content-Disposition: attachment; filename="leads_2026-06-09.xlsx"`. Descomprimido: 1 hoja `Leads`, cabeceras `Nombre / Email / Teléfono / Empresa / Estado / Notas / Fecha`. SharedStrings muestra stages traducidos ("Nuevo", "Demo agendada", "Convertido", etc.). Fechas en formato `D/M/AAAA`. Cabeceras en verde y filas alternas son estilos persistidos en el xlsx — pendiente verificación visual en Excel/Calc por Jorge (la construcción del estilo no se inspeccionó cell-por-cell).
+**Bug detectado**: ninguno por API/estructura.
 
 ---
 
@@ -197,8 +202,8 @@ referencia: `docs/modules/leads.md`.
 **Resultado esperado**:
 - En demo: probablemente N/A. Documentar.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: **N/A en override demo**. No existe endpoint `/api/leads/[id]/convert-to-client` ni botón equivalente en el override demo. La vinculación lead→cliente solo se puede hacer hoy seteando `clientId` directamente en el lead. Y eso a su vez está bloqueado por el bug detectado en TC-092: el PATCH `/api/leads/[id]` NO acepta `clientId` en su whitelist `allowed` (`app/api/leads/[id]/route.js`). Esto significa que en el estado actual del código tampoco se puede vincular vía API sin tocar SQL.
+**Bug detectado**: 🟠 cruzado con TC-092 — añadir `clientId` al whitelist `allowed` del PATCH de leads para habilitar la vinculación lead↔cliente.
 
 ---
 
@@ -222,8 +227,15 @@ referencia: `docs/modules/leads.md`.
 - Los 3 leads tienen `convertedProjectId` y `convertedToProjectAt`.
 - Los 3 proyectos creados con clientId del lead, status `active`.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK funcional + 🟠 ya documentado en TC-092.
+- Seteé 3 leads vía SQL: L1=`qualified`, L2=`won`, L3=`closed_yes`.
+- `POST /api/leads/<L1>/convert-to-project` → HTTP 201, proyecto `PRY-2026-0005` activo. BD: lead L1 ahora `stage='won'` (auto-cambio) ✓.
+- `POST /api/leads/<L2>/convert-to-project` → HTTP 201, proyecto `PRY-2026-0006`. BD: lead L2 sigue en `won` ✓.
+- `POST /api/leads/<L3>/convert-to-project` → HTTP 201, proyecto `PRY-2026-0007`. BD: lead L3 sigue en `closed_yes` ✓.
+- Los 3 leads tienen `convertedProjectId` y `convertedToProjectAt` poblados ✓.
+- Los 3 proyectos: `status='active'` ✓.
+- `customFields.convertedFromLeadId` apunta al lead original ✓.
+**Bug detectado**: 🟠 (cruzado con TC-092) los 3 proyectos creados tienen `clientId: null` aunque hubiera tenido sentido propagar el cliente del lead. Caso A/B/C en este TC NO tenían cliente vinculado, así que aquí no rompe nada. Pero el endpoint `convert-to-project` (línea 61 `clientId: lead.clientId ?? null`) ya hace lo correcto; el bug está aguas arriba: el PATCH `/api/leads/[id]` no permite asignar `clientId`. Ver TC-092.
 
 ---
 
@@ -242,8 +254,8 @@ referencia: `docs/modules/leads.md`.
 **Resultado esperado**:
 - HTTP 422 (ValidationError) "Este lead ya está convertido en proyecto".
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. `POST /api/leads/<L1>/convert-to-project` (lead ya con `convertedProjectId`) → **HTTP 422** `"Este lead ya está convertido en proyecto"`. No se crea proyecto duplicado.
+**Bug detectado**: ninguno.
 
 ---
 
@@ -264,8 +276,8 @@ referencia: `docs/modules/leads.md`.
 - En lugar de botón "Convertir a proyecto" aparece enlace "Ver proyecto"
   → navega a `/proyectos/[id]`.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: Pendiente — UI del drawer override demo. Verificable solo en navegador. El campo `convertedProjectId` está en la respuesta de `GET /api/leads/<id>` (probado en TC-049), así que la UI tiene la información para decidir qué botón renderizar.
+**Bug detectado**: Pendiente.
 
 ---
 
@@ -289,5 +301,11 @@ referencia: `docs/modules/leads.md`.
 - Búsqueda con `iLike` sobre `name`, `email`, `phone`, `title`.
 - Solo 1 request tras debounce.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK con corrección. Conteos por API (post-TCs anteriores, no idénticos al seed virgen):
+- `GET /api/leads?stage=new&limit=200` → 15 leads.
+- `GET /api/leads?stage=contacted&limit=200` → 15.
+- `GET /api/leads?stage=lost&limit=200` → 5.
+- `GET /api/leads?motivo=diagnostico&limit=200` → 9.
+- Búsqueda: el parámetro real del endpoint es **`search=`**, NO `q=`. `GET /api/leads?search=pablo` → devuelve "Pablo Mora Aguilar" (filtrado por `iLike` en `name`/`email`/`phone`/`title`).
+- Debounce ~300ms es lógica de UI; verificable solo en DevTools por Jorge.
+**Bug detectado**: 🟡 menor (doc QA) — el TC indica filtro `?q=`, pero el código (`app/api/leads/route.js:30`) lee `searchParams.get("search")`. Actualizar el TC. Conteos también difieren del seed virgen porque los TCs previos añadieron/convirtieron leads; al re-ejecutar el sprint sobre `db:reset:demo` cuadrará con los 16/14/5.

@@ -1,5 +1,6 @@
 import { getTenantContext } from "../../../../lib/tenant/tenantResolver.js";
 import { ValidationError } from "../../../../lib/utils/errors.js";
+import { enforceRateLimit } from "../../../../lib/utils/rateLimit.js";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -13,6 +14,12 @@ export async function OPTIONS() {
 
 export async function POST(request) {
   try {
+    const limited = enforceRateLimit(request, { key: "public-referidos", limit: 30, windowMs: 60_000 });
+    if (limited) {
+      for (const [h, v] of Object.entries(CORS_HEADERS)) limited.headers.set(h, v);
+      return limited;
+    }
+
     const { tenantModels, hasModule } = await getTenantContext(request);
 
     if (!hasModule("leads") && !hasModule("sales")) {

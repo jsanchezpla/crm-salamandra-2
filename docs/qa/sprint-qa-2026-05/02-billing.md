@@ -254,8 +254,8 @@ datos fiscales del cliente).
   - 10%: { base: 200, vat: 20 }
   - 4%: { base: 100, vat: 4 }
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK — `POST /api/billing/invoices` (admin, demo, cliente Quality Energy Consulting) con 3 líneas (100×1×21%, 200×1×10%, 50×2×4%) → HTTP 201, `taxBase=400.00`, `vatAmount=45.00`, `total=445.00`. Cada línea persiste con sus `lineVat` correctos (21/20/4). El GET de la factura devuelve las 3 líneas con `vatRate` 21/10/4 y bases 100/200/100. `vatBreakdown` se calcula en `lib/billing/calculateInvoice.js` para uso de la UI (no se persiste; no aparece en la respuesta del GET, pero los datos para construirlo cuadran).
+**Bug detectado**: ninguno.
 
 ---
 
@@ -279,8 +279,10 @@ datos fiscales del cliente).
 - Coste A: `taxAmount = 21`, `total = 121`. Aparece en IVA Soportado.
 - Coste B: `taxAmount = 0`, `total = 2000`. NO aparece en IVA Soportado.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. Llamando a `POST /api/billing/costs` (admin, demo) con los campos obligatorios `type`, `category`, `description`, `incurredAt`, `taxBase`, `vatRate`, `vatDeductible`:
+- Coste A (software, opex, 100€, 21%, deductible=true) → HTTP 201, `taxAmount=21.00`, `total=121.00`. En `GET /api/billing/analytics/iva?from=2026-06-01&to=2026-06-30` aparece como fila de `input.byRate` (vatRate=21, base=100, vat=21) y suma a `deductibleInputVat=21`.
+- Coste B (salary, fixed, 2000€, 0%, deductible=false) → HTTP 201, `taxAmount=0.00`, `total=2000.00`. Aparece en `input.costs` con `vatDeductible=false` pero NO contribuye a `input.byRate` ni a `deductibleInputVat` (sigue en 21). Comportamiento correcto.
+**Bug detectado**: 🟡 menor (doc QA) — el TC dice `date` pero la API espera `incurredAt` (DATEONLY YYYY-MM-DD). También requiere `category` (ENUM `fixed|variable|capex|opex`) y `description`, no documentados en el TC. Actualizar el ejemplo del TC.
 
 ---
 
@@ -303,8 +305,11 @@ datos fiscales del cliente).
 - `monthlySalary` solo se usa para `projectedSalaryCost` (proyección),
   NO se cuenta como coste real.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK.
+- SQL `SELECT type, COUNT(*), SUM(tax_base) FROM crm_demo.costs WHERE type='salary' GROUP BY type` → 49 filas, 120.800,00 €.
+- SQL `SELECT display_name, monthly_salary FROM crm_demo.team_members WHERE status='active' AND monthly_salary IS NOT NULL` → 4 activos (Laura 2900, Ana 3000, Miguel 1900, QA Empleado lleno 1200); proyección anual = (2900+3000+1900+1200)×12 = 108.000,00 €.
+- 120.800 (real) ≠ 108.000 (proyección). Distintos. Confirmado: `monthlySalary` no duplica.
+**Bug detectado**: ninguno.
 
 ---
 
@@ -333,8 +338,13 @@ datos fiscales del cliente).
 - Pendiente ≥ 0.
 - Cobrado/Facturado ≤ 100% (bug histórico no debe reaparecer).
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. `GET /api/billing/analytics?from=2026-01-01&to=2026-12-31` → `billedBase=7250`, `collectedBase=5561`, `pendingCollection=1689`, `collectedPct=76.7`, `invoiceCount=15`, `averageTicket=483.33`. SQL de cuadre:
+- `SELECT SUM(tax_base) FROM crm_demo.invoices WHERE status NOT IN ('draft','cancelled','rectified') AND issue_date BETWEEN '2026-01-01' AND '2026-12-31'` → 7250.00 ✓
+- `SELECT SUM(paid_amount * tax_base / NULLIF(total,0)) ...` → 5561.00 ✓
+- `SELECT SUM(paid_amount) ...` (raw) → 6769.10 (≠ 5561, confirma que el KPI usa la fórmula proporcional, no la cruda)
+- Pendiente = 7250 − 5561 = 1689 ≥ 0 ✓
+- Ratio Cobrado/Facturado = 76,7% ≤ 100% ✓ (la regresión documentada en TC-020 ya quedó arreglada).
+**Bug detectado**: ninguno.
 
 ---
 
@@ -359,8 +369,12 @@ datos fiscales del cliente).
   ese rango).
 - Preset detectado del rango (no del query string).
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK por API. `GET /api/billing/analytics` con rangos distintos devuelve KPIs distintos:
+- Mes (2026-06-01..2026-06-30): billedBase=50, collectedBase=0, invoiceCount=1.
+- Trimestre T2 (2026-04-01..2026-06-30): billedBase=2000, collectedBase=1591, invoiceCount=10.
+- Año (2026-01-01..2026-12-31): billedBase=7250, collectedBase=5561, invoiceCount=15.
+Los 3 rangos devuelven números distintos. **Detección del preset activo** desde el PeriodPicker es lógica de cliente (UI) — verificable visualmente, no por API. Pendiente confirmación visual por Jorge.
+**Bug detectado**: ninguno detectado por API.
 
 ---
 
@@ -383,8 +397,8 @@ acotado (o usar rango sin pendientes).
 - Texto explícito "0 facturas pendientes" (no se cae a "X clientes").
 - Valor 0,00 €.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK parcial (verificable solo en API). `GET /api/billing/analytics?from=2025-01-01&to=2025-01-31` (rango sin datos) → `pendingCollection=0`, `pendingInvoiceCount=0`, `pendingClientCount=0`. La UI debería mapear `pendingInvoiceCount=0` al texto "0 facturas pendientes". Pendiente confirmación visual por Jorge — no se puede testear el render del KPI sin abrir la página.
+**Bug detectado**: ninguno por API.
 
 ---
 
@@ -407,8 +421,8 @@ acotado (o usar rango sin pendientes).
 - KPI "Cobrado" coincide con la fórmula proporcional (2), no con la
   suma cruda (1).
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. SQL (1) crudo: `SUM(paid_amount) = 6769.10`. SQL (2) proporcional: `SUM(paid_amount * tax_base / NULLIF(total,0)) = 5561.00`. KPI Cobrado del endpoint = `5561.00` ≡ (2), ≠ (1). Fórmula correcta (base imponible, no total con IVA).
+**Bug detectado**: ninguno.
 
 ---
 
@@ -432,8 +446,8 @@ acotado (o usar rango sin pendientes).
 - Sumas de las tablas en pantalla coinciden con las del Excel.
 - Banda ámbar visible: "El Modelo 303 es estimativo / orientativo".
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK por API + descarga. `GET /api/billing/analytics/iva/export?from=2026-06-01&to=2026-06-30` → HTTP 200, `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, ~8.4KB. Descomprimido el `.xlsx`: `workbook.xml` contiene exactamente 3 hojas con nombres `IVA Repercutido`, `IVA Soportado`, `Modelo 303` (los 3 esperados, en ese orden). Estructura del fichero válida. La banda ámbar de "Modelo 303 estimativo" es UI, pendiente confirmación visual por Jorge.
+**Bug detectado**: ninguno detectado por API/contenido del xlsx.
 
 ---
 
@@ -458,8 +472,8 @@ acotado (o usar rango sin pendientes).
 - Aritmética correcta.
 - Etiqueta semántica correcta según el signo.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK aritmética. `GET /api/billing/analytics/iva?from=2026-06-01&to=2026-06-30` → `model303: { outputVat: 0, deductibleInputVat: 21, difference: -21 }`. 0 − 21 = −21 ✓. Como `difference < 0`, etiqueta semántica esperada "a devolver / compensar" (renderizado UI; pendiente confirmación visual por Jorge).
+**Bug detectado**: ninguno por API.
 
 ---
 
@@ -481,8 +495,11 @@ acotado (o usar rango sin pendientes).
 
 - Las 3 analíticas respetan el `?from=&to=` del PeriodPicker.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. Comparando rango Mes (2026-06-01..06-30) vs Año (2026-01-01..12-31):
+- `/api/billing/analytics/iva`: Mes → input.byRate con 1 fila (vatRate=21, base=100, vat=21); Año → diferentes valores.
+- `/api/billing/analytics/clients`: Mes → `clients: []` (sin actividad); Año → 4+ clientes con `billedBase`/`collectedBase` desglosados.
+- `/api/billing/analytics/employees`: cambia con el rango (los `monthsBetween` afectan a `projectedSalaryCost`; ver TC-094).
+**Bug detectado**: ninguno.
 
 ---
 
@@ -503,8 +520,8 @@ acotado (o usar rango sin pendientes).
 
 - HTTP 409 con mensaje: "Cliente con facturas, márcalo como inactivo".
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. `DELETE /api/clients/d354a43c-55eb-42ba-ac72-7f58ec5cbad1` (Quality Energy Consulting, 4 facturas) → **HTTP 409** `"No se puede borrar: el cliente tiene 4 factura(s). Márcalo como inactivo en su lugar."`. Mensaje informativo. Cliente intacto en BD.
+**Bug detectado**: ninguno.
 
 ---
 
@@ -527,8 +544,8 @@ acotado (o usar rango sin pendientes).
 - HTTP 409 "Solo se pueden eliminar borradores".
 - Para anular: usar Cancel (sin cobros) o Rectificar.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. `DELETE /api/billing/invoices/b9eb44b4-9a3b-4c84-be7d-62830e1f61f0` (F-2026-0017, `issued`) → **HTTP 409** `"Solo se pueden eliminar facturas en borrador"`. La factura sigue intacta.
+**Bug detectado**: ninguno.
 
 ---
 
@@ -550,8 +567,8 @@ acotado (o usar rango sin pendientes).
 - Etiquetas tipo "Ene", "Feb", "Mar"... (no "1", "2", "3").
 - En cambio de año: año corto añadido (ej. "Dic '25").
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: Pendiente — necesita Jorge en UI. El API devuelve `byMonth: [{month:"2026-01", ...}, {month:"2026-02", ...}, ...]` (formato ISO `YYYY-MM`); la renderización del eje X en español es lógica de cliente.
+**Bug detectado**: Pendiente.
 
 ---
 
@@ -576,8 +593,8 @@ acotado (o usar rango sin pendientes).
 - Generar manual crea un borrador en `/facturacion/facturas`.
 - `nextRunAt` avanza según la frecuencia.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: Pendiente — flujo principal de UI (banda ámbar, botón "Generar borrador"). Solo Jorge en navegador. El endpoint `POST /api/billing/recurring` y `POST /api/billing/recurring/[id]/generate` no se probaron desde curl para mantener el estado del seed estable.
+**Bug detectado**: Pendiente.
 
 ---
 
@@ -599,8 +616,8 @@ acotado (o usar rango sin pendientes).
 - Sin avisos.
 - 200 / 201, status `issued`, número correlativo asignado.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. `POST /api/billing/invoices` con Innovatech Solutions (`taxId=B22222222`, `fiscalName="Innovatech Solutions S.L."`, dirección completa) → HTTP 201, factura en borrador. `POST /api/billing/invoices/[id]/issue` → **HTTP 200**, número correlativo `F-2026-0017`, status `issued`, sin avisos en payload.
+**Bug detectado**: ninguno.
 
 ---
 
@@ -625,8 +642,8 @@ WHERE status='issued' AND paid_amount=0 LIMIT 1 RETURNING id`.
 - API: `status: "overdue"`.
 - BD: status persistido sigue `issued` (no se modifica).
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. SQL: `UPDATE crm_demo.invoices SET due_date=CURRENT_DATE-30 WHERE id='ce0338f7-64da-4e40-b523-0f82abd6e634'` (F-2026-0003, `issued`, `paid_amount=0`, `total=544.50`). `GET /api/billing/invoices/ce0338f7-...` → `"status":"overdue"`. SQL de cuadre: `SELECT status, due_date FROM ...` → `issued | 2026-05-10`. Persistencia intacta, transformación solo en lectura por `withEffectiveStatus`. Probado además que rectificativas (total negativo) NO se marcan `overdue` aunque tengan `due_date < hoy` (la regla `paidAmount >= total - 0.0049` las excluye, comportamiento correcto).
+**Bug detectado**: ninguno.
 
 ---
 
@@ -650,8 +667,8 @@ WHERE status='issued' AND paid_amount=0 LIMIT 1 RETURNING id`.
 - `customFields.sentVia` y `sentAt` registrados (si se especifica `?via=`).
 - 422 si la factura no estaba en `issued`.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: OK. El endpoint real es `POST /api/billing/invoices/[id]/send?via=email`, NO `/mark-sent`. `POST /api/billing/invoices/b9eb44b4-.../send?via=email` (sobre F-2026-0017, `issued`) → **HTTP 200**, status persistido a `sent`, `customFields = { sentVia:"email", sentAt:"2026-06-09T08:57:10.169Z" }`. La validación 422 cuando el estado no es `issued` está implementada explícitamente en `app/api/billing/invoices/[id]/send/route.js` (`Solo se pueden marcar como enviadas las facturas en estado 'issued'`).
+**Bug detectado**: 🟡 menor (doc QA) — el TC nombra el endpoint como `mark-sent`; el real es `send`. Actualizar el ejemplo del TC.
 
 ---
 
@@ -679,8 +696,11 @@ WHERE status='issued' AND paid_amount=0 LIMIT 1 RETURNING id`.
   `projectedSalaryCost`. La whitelist de `sortBy` también los excluye.
 - observer: 403 (no tiene módulo billing).
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: PASS parcial + 🔴 BUG observer.
+- admin: `GET /api/billing/analytics/employees?from=2026-01-01&to=2026-12-31` → HTTP 200, ve `monthlySalary` y `projectedSalaryCost` en todos los empleados.
+- lead: HTTP 200. JSON NO incluye `monthlySalary` ni `projectedSalaryCost` (filtrado correctamente por `ADMIN_ROLES` en el endpoint).
+- observer: HTTP **200** (no 403 esperado). El endpoint solo verifica `hasModule("billing")` — que comprueba si el TENANT tiene billing habilitado, no si el USER lo tiene en su `moduleAccess`. Probado además `/api/billing/invoices`, `/api/billing/costs`, `/api/billing/analytics/iva` desde observer: todos devuelven HTTP 200. El observer ve los datos sin `monthlySalary` (filtrado por rol no-admin), pero accede a TODO el resto del módulo billing pese a no tenerlo en `moduleAccess`.
+**Bug detectado**: 🔴 crítico — la restricción `User.moduleAccess` NO se aplica a nivel API; solo controla qué se ve en el sidebar. Cualquier usuario autenticado del tenant accede a todos los módulos activos del tenant vía API directa. Fix: añadir guard `userHasModule(moduleKey)` en `withTenant` (o en cada endpoint) que cruce `enabledModules` calculados en `/api/auth/me` con la ruta solicitada. Ver también [[TC-040]] (admin con `moduleAccess=["all"]` recibe lista vacía; portal con `[]` recibe TODO).
 
 ---
 
@@ -708,5 +728,15 @@ WHERE status='issued' AND paid_amount=0 LIMIT 1 RETURNING id`.
 - Ningún rol expone `passwordHash` ni `moduleAccess` raw.
 - Header `Cache-Control: no-store`.
 
-**Resultado real**: ⏳
-**Bug detectado**: ⏳
+**Resultado real**: PASS parcial + 🔴 2 BUGS críticos.
+- admin (`module_access = ["all"]`): `enabledModules: []` (VACÍO). El código en `app/api/auth/me/route.js:51-54` solo trata como wildcard si `moduleAccess.length === 0` o `role === "superadmin"`. El literal `"all"` no se interpreta como wildcard; se intenta intersectar contra `tenantEnabled` y como `"all"` no está en esa lista, queda `[]`. Resultado: el sidebar del admin debería ir vacío. **Bug crítico**.
+- lead (`module_access = ["leads","team","projects","billing","training","cuestionarios"]`): `enabledModules: ["billing","cuestionarios","leads","projects","team","training"]` (6) ✓.
+- observer (`module_access = ["leads","team"]`): `enabledModules: ["leads","team"]` (2) ✓.
+- portal (`module_access = []`): `enabledModules: ["billing","calendar","clients","cuestionarios","inventory","leads","projects","team","training"]` (9). La misma rama del bug anterior: como `moduleAccess.length === 0`, el código asume "darle todos los del tenant", pero `portal@demo` es exactamente el caso opuesto: debería tener acceso a NADA. **Bug crítico**: el flag explícito `moduleAccess=[]` no significa "sin acceso", significa "wildcard". Fix: añadir un valor especial (`null` para wildcard, `[]` literal para "ninguno") o un campo separado `isSuperUser`. Mientras esto no se corrija, no hay manera de crear un usuario "sin módulos" salvo borrarlo.
+- `passwordHash` y `moduleAccess` raw: NO se devuelven en ninguno de los 4 roles (el endpoint solo expone `id, email, role, tenantId, tenantSlug, tenantName, enabledModules`) ✓.
+- `Cache-Control: no-store`: presente en la respuesta ✓.
+
+**Sin cookie**: `GET /api/auth/me` → HTTP 401 `"No autorizado"` ✓.
+**Bug detectado**:
+- 🔴 admin con `moduleAccess=["all"]` → enabledModules vacío. Fix: tratar `"all"` como wildcard explícito antes de intersectar.
+- 🔴 portal con `moduleAccess=[]` → recibe TODOS los módulos del tenant. Fix: rediseñar el flag o introducir un valor "ninguno" distinto a `[]`. Hasta entonces, la cuenta `portal@demo.salamandra` NO valida lo que pretende (ver TC-098).
