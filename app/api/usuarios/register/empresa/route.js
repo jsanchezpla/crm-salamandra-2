@@ -58,9 +58,42 @@ export async function POST(request) {
       );
     }
 
-    await user.update({ active: true });
+    const { CourseEnrollment } = ctx.tenantModels;
+    const sequelize = TrainingUser.sequelize;
 
+    // Activación + sincronización de matrículas en una única transacción.
+    // Si una de las dos falla, ambos cambios se revierten — el flag `active`
+    // y la fila en `course_enrollments` quedan siempre coherentes.
     const courses = user.company?.courses ?? [];
+    let newEnrollments = 0;
+    let existingEnrollments = 0;
+
+    await sequelize.transaction(async (t) => {
+      await user.update({ active: true }, { transaction: t });
+
+      for (const course of courses) {
+        const [, created] = await CourseEnrollment.findOrCreate({
+          where: { trainingUserId: user.id, courseId: course.id },
+          defaults: {
+            trainingUserId: user.id,
+            courseId: course.id,
+            companyId: user.companyId,
+            metadata: {
+              source: "register_empresa",
+              activatedAt: new Date().toISOString(),
+            },
+          },
+          transaction: t,
+        });
+        if (created) newEnrollments++;
+        else existingEnrollments++;
+      }
+    });
+
+    console.log(
+      `[training] activated email=${user.email} companyId=${user.companyId} newEnrollments=${newEnrollments} existingEnrollments=${existingEnrollments}`
+    );
+
     const productIds = courses.filter((c) => c.wcProductId != null).map((c) => c.wcProductId);
 
     return NextResponse.json(

@@ -131,6 +131,92 @@ al producto WooCommerce que vende ese curso. Se usa principalmente para:
 No hay sync directa CRM ↔ WooCommerce. WooCommerce comparte el plugin
 con TutorLMS y el `wc_product_id` viene en los webhooks de cursos.
 
+## Flujo end-to-end de pre-aprobación de usuarios empresa
+
+El flujo B2B de Retorika tiene 5 actores: admin del CRM, importador
+Excel, alumno empresa, WordPress (formulario público) y CRM. La
+secuencia canónica (desde el sprint Fase 1 de junio 2026) es:
+
+1. **Admin crea empresa.** `POST /api/training/companies` con
+   `{ name, externalId? }`. Inserta en `companies`.
+2. **Admin asigna cursos a la empresa.** `POST /api/training/companies/[id]/courses`
+   con `{ courseId }`. Inserta en `company_courses` (pivot
+   empresa↔curso). Idempotente por `UNIQUE (company_id, course_id)`.
+   - Variante con propagación a empleados ya activos:
+     `?propagateToActive=true` añade además una fila en
+     `course_enrollments` por cada `TrainingUser` con
+     `companyId = id`, `type = "company"`, `active = true`. Útil cuando
+     una empresa contrata un curso nuevo y se quiere que sus empleados
+     existentes lo vean en el siguiente login.
+3. **Admin importa Excel de empleados.** `POST /api/training/users/import`.
+   Cada fila con `Empresa` reconocida se crea como
+   `TrainingUser { type: "company", active: false, companyId }`. Las
+   filas sin empresa siguen siendo `type: "private", active: true` (no
+   pasan por este flujo). El default `active=false` es lo que marca
+   "pre-aprobado pero pendiente del primer login en WP".
+4. **Empleado entra al formulario público de WP** y envía su email.
+   El plugin de Retorika llama a `POST /api/usuarios/register/empresa`
+   con `x-tenant: retorika`.
+5. **CRM activa al empleado y materializa las matrículas.** En una
+   transacción única:
+   - `UPDATE training_users SET active = true WHERE id = X`.
+   - `findOrCreate` por cada `(trainingUserId = X, courseId)` en
+     `company_courses` de su empresa → inserta filas en
+     `course_enrollments` con `metadata.source = "register_empresa"` y
+     `metadata.activatedAt`. Si la transacción falla en cualquier
+     paso, ambos cambios se revierten — el flag `active` y las
+     matrículas quedan siempre coherentes.
+   - Devuelve `{ exists: true, name, normalized, product_ids }` con
+     los `wcProductId` de los cursos contratados.
+6. **WP crea el WP_User y la orden WooCommerce** con esos
+   `product_ids`. WooCommerce dispara el webhook
+   `POST /api/webhooks/tutorlms/enrollment` por cada producto. El
+   webhook hace `findOrCreate` sobre la misma constraint
+   `(trainingUserId, courseId)`, así que **no duplica** las filas
+   creadas en el paso 5 — solo enriquece la metadata si ya existían.
+
+### Sincronización `company_courses` ↔ `course_enrollments`
+
+Las dos tablas tienen significados distintos y la confusión histórica
+era pensar que una sustituía a la otra:
+
+- **`company_courses`**: el **contrato comercial** empresa↔CRM. "La
+  empresa A ha pagado por los cursos X, Y, Z." Un INSERT aquí no le da
+  acceso a nadie por sí solo; es el "scope" de qué tiene derecho a
+  recibir cualquier empleado de esa empresa.
+- **`course_enrollments`**: la **fuente de verdad** de qué cursos
+  tiene matriculados un alumno concreto. Un INSERT aquí es lo que
+  realmente abre el contenido en WP. Lo que mira
+  `GET /api/cursos-empresas/codigos-cursos/:email` para autorizar.
+
+La materialización `company_courses → course_enrollments` ocurre en
+dos puntos:
+
+- **Push del lado WP** cuando llega un webhook de enrollment de
+  TutorLMS (sucede cuando WooCommerce procesa la orden creada en el
+  paso 6 del flujo).
+- **Pull del lado CRM** cuando `register/empresa` activa al usuario
+  (paso 5 — añadido en Fase 1). Esto cubre el caso de empleados con
+  matrículas pendientes antes incluso de que llegue el webhook de WP.
+
+Para los empleados ya activos cuando se asigna un curso nuevo a la
+empresa, usar `POST /api/training/companies/[id]/courses?propagateToActive=true`.
+
+`GET /api/cursos-empresas/codigos-cursos/:email` y
+`POST /api/usuarios/register/empresa` devuelven, ambos, conjuntos
+basados en `wcProductId`, pero no necesariamente coincidentes:
+
+- `register/empresa` mira `company.courses` (contrato): devuelve los
+  cursos que se le van a crear al alumno.
+- `codigos-cursos/:email` mira `course_enrollments` del alumno
+  (matrícula real): devuelve los cursos a los que tiene acceso ahora
+  mismo.
+
+Tras el flujo Fase 1, ambos vuelven el mismo conjunto **tras el paso
+5** (activación). La divergencia previa al paso 5 (alumno
+pre-aprobado pero no activo) es deliberada: hasta que no entra,
+`course_enrollments` está vacío y la API pública devuelve `[]`.
+
 ### Endpoints externos públicos (sin JWT)
 
 Cuatro rutas que no pasan por el middleware (porque están listadas
@@ -322,13 +408,16 @@ se puede editar ni borrar desde la API. Hay que tocar BD a mano.
 | Método y ruta | Propósito | Restricciones |
 | --- | --- | --- |
 | `GET /api/training/users` | Lista paginada con filtros `type`, `companyId`, `search`. | `hasModule(...)` |
-| `POST /api/training/users/import` | Carga masiva desde Excel. Resuelve empresa por nombre o `externalId`. Auto-detecta `type` (con companyId → `company`, sin → `private`). | Solo admin/superadmin. |
+| `POST /api/training/users/import` | Carga masiva desde Excel. Resuelve empresa por nombre o `externalId`. Auto-detecta `type` (con companyId → `company`, sin → `private`). Default `active`: `false` para `type=company` (pre-aprobado, pendiente de activación vía `register/empresa`); `true` para `type=private`. | Solo admin/superadmin. |
 | `GET /api/training/users/export` | Excel con todos los usuarios filtrados. | `hasModule(...)` |
 
 **No hay POST individual, ni GET[id], ni PATCH, ni DELETE** de
 `TrainingUser`. Toda gestión individual pasa por import + edición
-manual de BD. Para activar/desactivar un usuario el flujo es:
-`POST /api/usuarios/register/empresa` (que solo activa) o tocar BD.
+manual de BD. Para activar a un empleado de empresa el flujo es
+`POST /api/usuarios/register/empresa` (activa + materializa
+matrículas a partir de `company_courses`, ver "Flujo end-to-end de
+pre-aprobación de usuarios empresa" más arriba). Para desactivar hay
+que tocar BD a mano.
 
 ### Enrollments
 
@@ -394,8 +483,9 @@ Resumen rápido (detalle en "Integraciones externas"):
   `(trainingUserId, courseId)` + `findOrCreate` evita duplicar
   matrículas.
 - **CompanyCourse idempotente**: UNIQUE `(companyId, courseId)` + `findOrCreate`.
-- **`/api/usuarios/register/empresa`**: solo activa al usuario si ya
-  existe con `type = "company"` (creado previamente vía import).
+- **`/api/usuarios/register/empresa`**: activa al usuario (y crea sus
+  matrículas en `course_enrollments`, en transacción) si ya existe
+  con `type = "company"` (creado previamente vía import).
   Distingue 403 ("no autorizado") de 200 ("ya activo") — eso permite
   enumeración.
 - **Validación de email en modelo `TrainingUser`**: `isEmail`

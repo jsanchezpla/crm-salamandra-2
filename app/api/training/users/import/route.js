@@ -73,6 +73,15 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
         if (company) companyId = company.id;
       }
 
+      // Default semántico: los usuarios de empresa se importan como
+      // pre-aprobados pero NO activos. `/api/usuarios/register/empresa` los
+      // activa al primer registro en WP (UPDATE active=true) y, en la misma
+      // transacción, crea sus matrículas a partir de `company_courses`.
+      // Los usuarios privados no pasan por ese flujo, así que se importan ya
+      // activos (no cambia su comportamiento previo).
+      const type = companyId ? "company" : "private";
+      const active = type === "private";
+
       const [, wasCreated] = await TrainingUser.findOrCreate({
         where: { email },
         defaults: {
@@ -84,13 +93,16 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
           country,
           birthDate: birthDate && !isNaN(birthDate) ? birthDate : null,
           companyId,
-          type: companyId ? "company" : "private",
-          active: true,
+          type,
+          active,
         },
       });
 
       if (wasCreated) {
         imported++;
+        console.log(
+          `[training] import row email=${email} type=${type} companyId=${companyId ?? "none"} active=${active}`
+        );
       } else {
         skipped++;
       }
