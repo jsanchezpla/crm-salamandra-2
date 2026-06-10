@@ -38,11 +38,26 @@ export function TrainingTable({ headers, children, loading, empty }) {
 }
 
 export function Tr({ children, onClick }) {
+  const interactive = typeof onClick === "function";
   return (
     <tr
       onClick={onClick}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick(e);
+              }
+            }
+          : undefined
+      }
       className={`border-b border-neutral-50 last:border-0 transition-colors ${
-        onClick ? "cursor-pointer hover:bg-neutral-50/80" : ""
+        interactive
+          ? "cursor-pointer hover:bg-neutral-50/80 focus:outline-none focus-visible:bg-neutral-50/80 focus-visible:ring-1 focus-visible:ring-neutral-300"
+          : ""
       }`}
     >
       {children}

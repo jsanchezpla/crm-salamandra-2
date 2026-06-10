@@ -17,7 +17,10 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   // Contar cursos y usuarios por empresa en paralelo
   const ids = companies.map((c) => c.id);
 
-  const [courseCounts, userCounts] = await Promise.all([
+  // 3 conteos en paralelo: cursos contratados (CompanyCourse), empleados
+  // ACTIVOS (con acceso a su cuenta WP) y empleados PRE-APROBADOS
+  // (importados pero pendientes de activación vía /register/empresa).
+  const [courseCounts, activeUserCounts, pendingUserCounts] = await Promise.all([
     CompanyCourse.findAll({
       attributes: [
         "companyId",
@@ -32,20 +35,39 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
         "companyId",
         [TrainingUser.sequelize.fn("COUNT", TrainingUser.sequelize.col("id")), "count"],
       ],
-      where: { companyId: ids, active: true },
+      where: { companyId: ids, type: "company", active: true },
+      group: ["companyId"],
+      raw: true,
+    }),
+    TrainingUser.findAll({
+      attributes: [
+        "companyId",
+        [TrainingUser.sequelize.fn("COUNT", TrainingUser.sequelize.col("id")), "count"],
+      ],
+      where: { companyId: ids, type: "company", active: false },
       group: ["companyId"],
       raw: true,
     }),
   ]);
 
   const courseCountMap = Object.fromEntries(courseCounts.map((r) => [r.companyId, parseInt(r.count)]));
-  const userCountMap = Object.fromEntries(userCounts.map((r) => [r.companyId, parseInt(r.count)]));
+  const activeCountMap = Object.fromEntries(activeUserCounts.map((r) => [r.companyId, parseInt(r.count)]));
+  const pendingCountMap = Object.fromEntries(pendingUserCounts.map((r) => [r.companyId, parseInt(r.count)]));
 
-  const data = companies.map((c) => ({
-    ...c.toJSON(),
-    courseCount: courseCountMap[c.id] ?? 0,
-    userCount: userCountMap[c.id] ?? 0,
-  }));
+  const data = companies.map((c) => {
+    const activeCount = activeCountMap[c.id] ?? 0;
+    const pendingCount = pendingCountMap[c.id] ?? 0;
+    return {
+      ...c.toJSON(),
+      courseCount: courseCountMap[c.id] ?? 0,
+      activeCount,
+      pendingCount,
+      // Mantenemos `userCount` por compatibilidad con consumidores antiguos
+      // (incluido el listado actual y módulos que aún no se han migrado).
+      // Equivalente al valor que devolvía antes (solo activos).
+      userCount: activeCount,
+    };
+  });
 
   return ok(data);
 });

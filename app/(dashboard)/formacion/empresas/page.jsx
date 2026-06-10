@@ -103,7 +103,7 @@ export default function EmpresasPage() {
       )}
 
       <TrainingTable
-        headers={["Nombre", "Cursos", "Usuarios", "Estado", ""]}
+        headers={["Nombre", "Cursos", "Empleados", "Estado", ""]}
         loading={loading}
         empty="No hay empresas registradas"
       >
@@ -116,7 +116,9 @@ export default function EmpresasPage() {
               )}
             </Td>
             <Td>{c.courseCount}</Td>
-            <Td>{c.userCount}</Td>
+            <Td>
+              <EmpleadosCell activeCount={c.activeCount ?? c.userCount ?? 0} pendingCount={c.pendingCount ?? 0} />
+            </Td>
             <Td><ActiveBadge active={c.active} /></Td>
             <Td className="text-right">
               <span className="text-neutral-300 text-xs">→</span>
@@ -124,6 +126,16 @@ export default function EmpresasPage() {
           </Tr>
         ))}
       </TrainingTable>
+
+      {/* Leyenda de contadores */}
+      {!loading && filtered.length > 0 && (
+        <p className="mt-3 text-[10px] text-neutral-400">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 align-middle mr-1" />
+          activos · acceso al campus
+          <span className="ml-3 inline-block w-1.5 h-1.5 rounded-full bg-amber-400 align-middle mr-1" />
+          pendientes · importados, esperan a registrarse
+        </p>
+      )}
 
       {/* Modal nueva empresa */}
       {modalOpen && (
@@ -167,5 +179,25 @@ export default function EmpresasPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function EmpleadosCell({ activeCount, pendingCount }) {
+  if (!activeCount && !pendingCount) {
+    return <span className="text-neutral-300">—</span>;
+  }
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-50 text-emerald-700">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        {activeCount} activos
+      </span>
+      {pendingCount > 0 && (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 text-amber-700">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+          {pendingCount} pendientes
+        </span>
+      )}
+    </span>
   );
 }
