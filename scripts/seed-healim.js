@@ -35,8 +35,10 @@ const BRAND = {
   logoUrl: null,
 };
 
+// Widget público sin gate (cualquiera puede reservar). Las URLs se conservan
+// como documentación por si se quisiera reactivar el gate más adelante.
 const WIDGET_AUTH = {
-  required: true,
+  required: false,
   loginUrl: "https://healimpsicologia.com/loginhealimback",
   registerUrl: null,
 };
@@ -416,7 +418,7 @@ async function main() {
   }
   process.stdout.write("════════════════════════════════════════════\n");
   process.stdout.write(` Widget público: /widget/c/${SLUG}\n`);
-  process.stdout.write(` Gate WP activado (login obligatorio).\n`);
+  process.stdout.write(` Gate WP: ${WIDGET_AUTH.required ? "activado (login obligatorio)" : "desactivado (acceso libre)"}.\n`);
   process.stdout.write("════════════════════════════════════════════\n\n");
 
   await closeAllConnections();
