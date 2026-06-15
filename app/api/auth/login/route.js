@@ -11,17 +11,20 @@ export async function POST(request) {
     return NextResponse.json({ ok: false, error: "Body inválido" }, { status: 400 });
   }
 
-  const { email, password } = body;
+  const { email: rawEmail, password } = body;
 
-  if (!email || !password || typeof email !== "string" || typeof password !== "string") {
+  if (!rawEmail || !password || typeof rawEmail !== "string" || typeof password !== "string") {
     return NextResponse.json({ ok: false, error: "Email y contraseña requeridos" }, { status: 400 });
   }
 
+  // Normaliza el email (defensivo: autofill móvil puede meter espacios).
+  // El password NO se trimea: puede contener espacios intencionales.
+  const email = rawEmail.trim().toLowerCase();
+
   const { User, Tenant } = getMasterModels();
 
-  // Buscar usuario por email con passwordHash
   const user = await User.scope("withPassword").findOne({
-    where: { email: email.toLowerCase() },
+    where: { email },
   });
 
   // Siempre ejecutar bcrypt para evitar timing attacks

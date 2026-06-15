@@ -21,10 +21,12 @@ function LoginForm() {
     setLoading(true);
 
     try {
+      // Trim del email (autofill móvil suele meter espacios). El password NO
+      // se trimea: puede tener espacios intencionales y romper logins legítimos.
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim(), password }),
       });
 
       const data = await res.json();
@@ -60,7 +62,11 @@ function LoginForm() {
         <input
           id="email"
           type="email"
+          inputMode="email"
           autoComplete="email"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -81,6 +87,9 @@ function LoginForm() {
             id="password"
             type={showPassword ? "text" : "password"}
             autoComplete="current-password"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
