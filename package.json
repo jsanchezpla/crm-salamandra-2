@@ -45,6 +45,8 @@
     "db:migrate:pacientes:prod": "node --env-file=.env.production scripts/migrate-pacientes-sprint-1.js",
     "db:seed:nutri-laura": "node --env-file=.env.local scripts/seed-nutri-laura.js",
     "db:seed:nutri-laura:prod": "node --env-file=.env.production scripts/seed-nutri-laura.js",
+    "db:seed:healim": "node --env-file=.env.local scripts/seed-healim.js",
+    "db:seed:healim:prod": "node --env-file=.env.production scripts/seed-healim.js",
     "db:add-leads-nutri-laura": "node --env-file=.env.local scripts/add-leads-module-nutri-laura.js",
     "db:add-leads-nutri-laura:prod": "node --env-file=.env.production scripts/add-leads-module-nutri-laura.js",
     "db:add-training-nutri-laura": "node --env-file=.env.local scripts/add-training-module-nutri-laura.js",
