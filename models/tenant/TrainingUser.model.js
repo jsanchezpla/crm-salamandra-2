@@ -57,6 +57,10 @@ export function defineTrainingUser(sequelize) {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
       },
+      archivedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       tableName: "training_users",

@@ -420,9 +420,18 @@ function EmpleadosTab({ companyId, onOpenImport }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const [filter, setFilter] = useState("all"); // all | active | pending
+  // 4 filtros: todos (no archivados), activos, pendientes (no archivados),
+  // archivados. Cuando el filtro es "archived" la query envía
+  // ?archivedOnly=true; el resto envían el listado por defecto
+  // (archivedAt IS NULL).
+  const [filter, setFilter] = useState("all"); // all | active | pending | archived
   const [search, setSearch] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [flash, setFlash] = useState(null);
+
+  // Confirm dialog "archivar"
+  const [archiveTarget, setArchiveTarget] = useState(null);
+  const [archiving, setArchiving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -434,6 +443,7 @@ function EmpleadosTab({ companyId, onOpenImport }) {
         limit: "200",
       });
       if (search.trim()) params.set("search", search.trim());
+      if (filter === "archived") params.set("archivedOnly", "true");
       const res = await fetch(`/api/training/users?${params}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error al cargar empleados");
@@ -444,7 +454,7 @@ function EmpleadosTab({ companyId, onOpenImport }) {
     } finally {
       setLoading(false);
     }
-  }, [companyId, search]);
+  }, [companyId, search, filter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -456,6 +466,27 @@ function EmpleadosTab({ companyId, onOpenImport }) {
 
   const activeCountLocal = users.filter((u) => u.active).length;
   const pendingCountLocal = users.filter((u) => !u.active).length;
+
+  async function performArchive() {
+    if (!archiveTarget) return;
+    setArchiving(true);
+    try {
+      const res = await fetch(`/api/training/users/${archiveTarget.id}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "Error al archivar");
+      }
+      const name = [archiveTarget.name, archiveTarget.lastName].filter(Boolean).join(" ") || archiveTarget.email;
+      setFlash(`${name} archivado`);
+      setTimeout(() => setFlash(null), 2200);
+      setArchiveTarget(null);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setArchiving(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -488,12 +519,17 @@ function EmpleadosTab({ companyId, onOpenImport }) {
       {error && (
         <div className="px-4 py-2.5 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{error}</div>
       )}
+      {flash && (
+        <div className="px-4 py-2.5 bg-emerald-50 border border-emerald-100 rounded-lg text-xs text-emerald-700">{flash}</div>
+      )}
 
       <TrainingTable
-        headers={["Nombre", "Email", "Estado", "F. Nacimiento"]}
+        headers={["Nombre", "Email", "Estado", "F. Nacimiento", ""]}
         loading={loading}
         empty={
-          users.length === 0
+          filter === "archived"
+            ? "No hay empleados archivados."
+            : users.length === 0
             ? "Esta empresa aún no tiene empleados. Usa «Importar empleados» para subir un Excel."
             : "No hay empleados con los filtros actuales"
         }
@@ -506,11 +542,26 @@ function EmpleadosTab({ companyId, onOpenImport }) {
               </span>
             </Td>
             <Td>{u.email}</Td>
-            <Td><ActiveBadge active={u.active} /></Td>
+            <Td>
+              {u.archivedAt
+                ? <span className="text-[11px] font-medium text-neutral-400">Archivado</span>
+                : <ActiveBadge active={u.active} />}
+            </Td>
             <Td>
               {u.birthDate
                 ? new Date(u.birthDate).toLocaleDateString("es-ES")
                 : <span className="text-neutral-300">—</span>}
+            </Td>
+            <Td className="text-right">
+              {!u.archivedAt && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setArchiveTarget(u); }}
+                  className="text-[11px] font-medium text-neutral-400 hover:text-red-500 transition-colors px-2 py-1 rounded-md hover:bg-red-50"
+                  title="Archivar empleado"
+                >
+                  Archivar
+                </button>
+              )}
             </Td>
           </Tr>
         ))}
@@ -521,17 +572,70 @@ function EmpleadosTab({ companyId, onOpenImport }) {
           companyId={companyId}
           employee={selectedEmployee}
           onClose={() => setSelectedEmployee(null)}
+          onChanged={async () => { await load(); }}
+        />
+      )}
+
+      {archiveTarget && (
+        <ArchiveConfirmDialog
+          employee={archiveTarget}
+          loading={archiving}
+          onCancel={() => setArchiveTarget(null)}
+          onConfirm={performArchive}
         />
       )}
     </div>
   );
 }
 
+function ArchiveConfirmDialog({ employee, loading, onCancel, onConfirm }) {
+  const fullName = [employee.name, employee.lastName].filter(Boolean).join(" ") || employee.email;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+        <h2 className="text-base font-bold text-neutral-900 mb-2" style={{ fontFamily: "'Syne', sans-serif" }}>
+          Archivar empleado
+        </h2>
+        <div className="text-xs text-neutral-600 leading-relaxed space-y-2">
+          <p>¿Archivar a <strong>{fullName}</strong>?</p>
+          <p>
+            Sus matrículas y datos se conservan. Si vuelves a importar un Excel
+            con su email, se reactivará automáticamente.
+          </p>
+        </div>
+        <div className="flex justify-end gap-2 pt-5">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="px-4 py-2 rounded-lg text-xs font-medium text-neutral-600 bg-neutral-100 hover:bg-neutral-200 transition disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="px-4 py-2 rounded-lg text-xs font-bold text-white transition-opacity disabled:opacity-50"
+            style={{ background: "#DC2626" }}
+          >
+            {loading ? "…" : "Archivar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FilterChips({ filter, onChange, activeCount, pendingCount, totalCount }) {
+  // El filtro "archived" cambia la query del backend (archivedOnly=true) en
+  // lugar de filtrar client-side. El count para "archived" no se conoce hasta
+  // que se selecciona; lo dejamos sin badge numérico.
   const items = [
     { id: "all", label: "Todos", count: totalCount },
     { id: "active", label: "Activos", count: activeCount },
     { id: "pending", label: "Pendientes", count: pendingCount },
+    { id: "archived", label: "Archivados", count: null },
   ];
   return (
     <div className="inline-flex rounded-lg bg-neutral-100 p-0.5">
@@ -548,9 +652,11 @@ function FilterChips({ filter, onChange, activeCount, pendingCount, totalCount }
             }`}
           >
             {it.label}
-            <span className={`ml-1.5 text-[10px] ${active ? "text-neutral-400" : "text-neutral-400"}`}>
-              {it.count}
-            </span>
+            {it.count !== null && (
+              <span className={`ml-1.5 text-[10px] ${active ? "text-neutral-400" : "text-neutral-400"}`}>
+                {it.count}
+              </span>
+            )}
           </button>
         );
       })}
@@ -560,10 +666,28 @@ function FilterChips({ filter, onChange, activeCount, pendingCount, totalCount }
 
 // ───────────────────── Drawer Detalle Empleado ─────────────────────────────
 
-function EmployeeDetailDrawer({ companyId, employee, onClose }) {
+function EmployeeDetailDrawer({ companyId, employee, onClose, onChanged }) {
   const [enrollments, setEnrollments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreError, setRestoreError] = useState(null);
+
+  async function handleRestore() {
+    setRestoring(true);
+    setRestoreError(null);
+    try {
+      const res = await fetch(`/api/training/users/${employee.id}/restore`, { method: "POST" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Error al restaurar");
+      if (typeof onChanged === "function") await onChanged();
+      onClose();
+    } catch (e) {
+      setRestoreError(e.message);
+    } finally {
+      setRestoring(false);
+    }
+  }
 
   // ESC cierra el drawer
   useEffect(() => {
@@ -646,6 +770,28 @@ function EmployeeDetailDrawer({ companyId, employee, onClose }) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {employee.archivedAt && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+              <p className="text-[11px] font-semibold text-amber-800 leading-snug">
+                Empleado archivado el {new Date(employee.archivedAt).toLocaleDateString("es-ES")}
+              </p>
+              <p className="text-[10px] text-amber-700 mt-0.5 leading-snug">
+                No podrá completar el registro en el campus mientras esté archivado.
+              </p>
+              {restoreError && (
+                <p className="text-[10px] text-red-600 mt-1.5">{restoreError}</p>
+              )}
+              <button
+                type="button"
+                onClick={handleRestore}
+                disabled={restoring}
+                className="mt-2 px-3 py-1.5 rounded-md text-[11px] font-bold text-white bg-amber-600 hover:bg-amber-700 transition-colors disabled:opacity-50"
+              >
+                {restoring ? "Restaurando…" : "Restaurar empleado"}
+              </button>
+            </div>
+          )}
+
           {/* Datos básicos */}
           <section>
             <h3 className="text-[11px] font-bold text-neutral-500 uppercase tracking-wide mb-2">

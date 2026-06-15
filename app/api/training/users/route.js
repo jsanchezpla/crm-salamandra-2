@@ -12,6 +12,11 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   const type = searchParams.get("type");
   const companyId = searchParams.get("companyId");
   const search = searchParams.get("search");
+  // Soft delete: por defecto NO incluye archivados. Pasar ?includeArchived=true
+  // para ver TODOS (activos + archivados), o ?archivedOnly=true para solo
+  // archivados.
+  const includeArchived = searchParams.get("includeArchived") === "true";
+  const archivedOnly = searchParams.get("archivedOnly") === "true";
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "50"), 200);
   const offset = (page - 1) * limit;
@@ -19,6 +24,11 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   const where = {};
   if (type) where.type = type;
   if (companyId) where.companyId = companyId;
+  if (archivedOnly) {
+    where.archivedAt = { [Op.ne]: null };
+  } else if (!includeArchived) {
+    where.archivedAt = null;
+  }
   if (search) {
     const q = `%${search}%`;
     where[Op.or] = [

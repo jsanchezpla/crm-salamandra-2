@@ -28,7 +28,7 @@ export async function POST(request) {
         { status: 403 }
       );
     }
-    const { Course } = ctx.tenantModels;
+    const { Course, TrainingSyncLog } = ctx.tenantModels;
 
     // Upsert de cada curso recibido
     for (const item of courses) {
@@ -64,6 +64,31 @@ export async function POST(request) {
       await Course.update(
         { active: false },
         { where: { id: toDeactivate.map((c) => c.id) } }
+      );
+    }
+
+    // Side effect: registrar la sync en el log para que la UI pueda mostrar
+    // "última sincronización: hace X días". Si el INSERT falla, NO romper la
+    // respuesta — el sync funcional ya está hecho y persistido.
+    try {
+      await TrainingSyncLog.create({
+        source: "wp_tutor_courses",
+        syncedAt: new Date(),
+        itemsSynced: courses.length,
+        itemsDeactivated: toDeactivate.length,
+        itemsFailed: 0,
+        payload: {
+          synced: courses.length,
+          deactivated: toDeactivate.length,
+          deactivated_courses: toDeactivate.map((c) => c.name),
+        },
+      });
+      console.log(
+        `[training:sync-log] registrado sync source=wp_tutor_courses synced=${courses.length} deactivated=${toDeactivate.length}`
+      );
+    } catch (logErr) {
+      console.error(
+        `[training:sync-log] fallo registrando sync (no bloqueante): ${logErr.message}`
       );
     }
 

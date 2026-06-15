@@ -394,10 +394,74 @@ autenticado del tenant.
 | `GET /api/training/courses` | Lista con filtro `?active=true|false`. Orden por nombre. | `hasModule(...)` |
 | `POST /api/training/courses` | Crea curso (`name` obligatorio). | Solo admin/superadmin. |
 | `PUT /api/training/courses/[id]` | Actualiza campos whitelisted (`name`, `wpCourseId`, `wcProductId`, `active`). | Solo admin/superadmin. |
+| `PATCH /api/training/courses/[id]` | Alias de PUT (la UI nueva del sprint F3 usa PATCH; misma whitelist y validaciones). | Solo admin/superadmin. |
 | `DELETE /api/training/courses/[id]` | **Hard delete**. | Solo admin/superadmin. |
+| `GET /api/training/sync-status` | Última fila del log `training_sync_log` para este tenant + metadatos de UX (`syncEnabled`, `syncUrl`). Ver "Sincronización con TutorLMS" más abajo. | `hasModule(...)` |
 
 No hay `GET /api/training/courses/[id]` individual; el detalle se
 obtiene del listado.
+
+### Sincronización con TutorLMS (sprint F3)
+
+El flujo de sync de cursos completo (bulk) lo dispara manualmente
+Belén desde el wp-admin de Retorika:
+
+1. Belén visita una URL pública del WP de Retorika
+   (`?retorika_sync_courses=1`).
+2. Un script PHP del plugin lee el post type `courses` (con su meta
+   `_tutor_course_product_id` que vincula curso ↔ producto Woo) y
+   hace `POST` al webhook
+   `/api/webhooks/tutorlms/sync-courses` firmando con HMAC.
+3. El CRM hace UPSERT de los cursos recibidos y desactiva
+   (`active=false`) los cursos del tenant que no aparezcan en el
+   array.
+4. **Side effect (F3)**: tras el sync exitoso, el handler inserta
+   una fila en `training_sync_log` con
+   `source='wp_tutor_courses'`, `syncedAt=NOW()`,
+   `itemsSynced`, `itemsDeactivated` y el resumen en `payload`. Si
+   el INSERT falla, NO rompe la respuesta — el sync funcional ya
+   está hecho.
+
+El secret HMAC compartido vive en `RETORIKA_WEBHOOK_SECRET`
+(ver "Decisión / Secret HMAC fuera del repo"). El meta del curso
+de TutorLMS que vincula con WooCommerce es
+`_tutor_course_product_id`.
+
+**Tabla `training_sync_log`** (sprint F3, multi-tenant):
+
+| Campo | Tipo | Notas |
+| --- | --- | --- |
+| `id` | UUID PK | |
+| `source` | ENUM (`wp_tutor_courses`) | Espacio para futuras fuentes. |
+| `syncedAt` | TIMESTAMPTZ NOT NULL | Default `NOW()`. Índice DESC. |
+| `itemsSynced`, `itemsDeactivated`, `itemsFailed` | INTEGER | |
+| `payload` | JSONB nullable | Resumen para auditoría. |
+
+**Gating de UX**: `/api/training/sync-status` consulta una variable
+de entorno con la convención `{TENANT_SLUG_UPPER}_TUTOR_SYNC_URL`
+(p.ej. `RETORIKA_TUTOR_SYNC_URL=https://asesoriaretorika.com/?retorika_sync_courses=1`).
+La respuesta incluye:
+
+```
+{
+  tenantSlug: "retorika",
+  syncEnabled: true,                  // true SOLO si la env existe
+  syncUrl: "https://asesoriaretorika.com/?retorika_sync_courses=1",
+  lastSync: { lastSyncAt, itemsSynced, itemsDeactivated, source } | null
+}
+```
+
+La UI (`/formacion/cursos`) muestra el banner solo si
+`syncEnabled === true`. Patrón extensible: cualquier otro tenant que
+en el futuro contrate flujo TutorLMS solo necesita su propia
+variable `{SLUG}_TUTOR_SYNC_URL` y el banner aparece
+automáticamente.
+
+Migración: la tabla `training_sync_log` y el enum
+`enum_training_sync_log_source` los crea
+`scripts/migrate-training-archive.js`
+(`npm run db:migrate:training-archive`), junto con la columna
+`archived_at` en `training_users`.
 
 ### Companies
 
@@ -417,17 +481,51 @@ se puede editar ni borrar desde la API. Hay que tocar BD a mano.
 
 | Método y ruta | Propósito | Restricciones |
 | --- | --- | --- |
-| `GET /api/training/users` | Lista paginada con filtros `type`, `companyId`, `search`. | `hasModule(...)` |
-| `POST /api/training/users/import` | Carga masiva desde Excel. Resuelve empresa por nombre o `externalId`. Auto-detecta `type` (con companyId → `company`, sin → `private`). Default `active`: `false` para `type=company` (pre-aprobado, pendiente de activación vía `register/empresa`); `true` para `type=private`. | Solo admin/superadmin. |
+| `GET /api/training/users` | Lista paginada con filtros `type`, `companyId`, `search`. Por defecto filtra `archivedAt IS NULL`; soporta `?includeArchived=true` (todos) y `?archivedOnly=true` (solo archivados). | `hasModule(...)` |
+| `GET /api/training/users/[id]` | Detalle individual del empleado, incluyendo `archivedAt`. NO filtra por archivado: útil para que el drawer muestre el detalle de un archivado. | `hasModule(...)` |
+| `POST /api/training/users/import` | Carga masiva desde Excel. Resuelve empresa por nombre o `externalId`. Auto-detecta `type` (con companyId → `company`, sin → `private`). Default `active`: `false` para `type=company` (pre-aprobado, pendiente de activación vía `register/empresa`); `true` para `type=private`. **Reactiva archivados**: si encuentra un email con `archivedAt != null`, lo restaura (`archivedAt = null`) y cuenta como `updated`. | Solo admin/superadmin. |
+| `DELETE /api/training/users/[id]` | **Soft delete**: marca `archivedAt = NOW()`. Conserva la fila, matrículas y cuestionarios. Idempotente (si ya estaba archivado devuelve 200 con `noop:true`). | Solo admin/superadmin. |
+| `POST /api/training/users/[id]/restore` | Restaura un empleado archivado (`archivedAt = NULL`). No toca `active` ni `type`. Idempotente. | Solo admin/superadmin. |
 | `GET /api/training/users/export` | Excel con todos los usuarios filtrados. | `hasModule(...)` |
 
-**No hay POST individual, ni GET[id], ni PATCH, ni DELETE** de
-`TrainingUser`. Toda gestión individual pasa por import + edición
-manual de BD. Para activar a un empleado de empresa el flujo es
+Para activar a un empleado de empresa el flujo es
 `POST /api/usuarios/register/empresa` (activa + materializa
 matrículas a partir de `company_courses`, ver "Flujo end-to-end de
-pre-aprobación de usuarios empresa" más arriba). Para desactivar hay
-que tocar BD a mano.
+pre-aprobación de usuarios empresa" más arriba). Para archivar
+(retirar acceso conservando historial) hay dos vías: la UI del CRM
+(`/formacion/empresas/[id]` tab Empleados, botón "Archivar") o
+llamando directo a `DELETE /api/training/users/[id]`.
+
+### Empleados archivados (`archivedAt`)
+
+Soft delete: el campo `training_users.archived_at` (TIMESTAMPTZ
+nullable) marca la fecha en la que se archivó. Mientras `archivedAt`
+sea `NULL`, el empleado se trata como "vivo" en todas las consultas.
+
+- **Archivar**: `DELETE /api/training/users/[id]` → set `archivedAt =
+  NOW()`. La UI lo dispara desde el botón "Archivar" en el tab
+  Empleados de la ficha de empresa.
+- **Restaurar**: dos vías equivalentes — `POST /api/training/users/[id]/restore`
+  (set `archivedAt = NULL`) o re-importar un Excel que contenga el
+  email; `POST /api/training/users/import` detecta el archivado y lo
+  reactiva como parte del MERGE (lo cuenta en `updated`).
+- **Comportamiento de `/register/empresa`**: la query
+  `WHERE email, type='company', archivedAt IS NULL` excluye
+  archivados. Si el empleado está archivado, la respuesta es la
+  misma que si no existiera (`{exists: false}` con 403); en logs
+  se registra `[training] register/empresa intentado con usuario
+  archivado email=...` para detectar intentos.
+- **Filtros del listado**: por defecto los endpoints `GET` filtran
+  archivados. `?includeArchived=true` los incluye junto con los
+  activos; `?archivedOnly=true` muestra solo los archivados. La UI
+  expone esto como un chip "Archivados" en el tab Empleados.
+
+Migración: `scripts/migrate-training-archive.js` (idempotente,
+multi-tenant) añade la columna `archived_at` en cada tenant que tenga
+la tabla `training_users`. Los tenants sin el módulo training (sin la
+tabla) se saltan sin error. Comandos:
+`npm run db:migrate:training-archive` (local) y
+`npm run db:migrate:training-archive:prod` (producción).
 
 ### Enrollments
 

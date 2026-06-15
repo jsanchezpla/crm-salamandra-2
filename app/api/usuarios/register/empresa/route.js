@@ -48,7 +48,7 @@ export async function POST(request) {
     const email = String(rawEmail).trim().toLowerCase();
 
     const user = await TrainingUser.findOne({
-      where: { email, type: "company" },
+      where: { email, type: "company", archivedAt: null },
       include: [
         {
           model: Company,
@@ -59,6 +59,16 @@ export async function POST(request) {
     });
 
     if (!user) {
+      // Distinguir entre "no existe" y "está archivado" solo en logs (la
+      // respuesta es idéntica para no filtrar más información de la
+      // estrictamente necesaria al cliente).
+      const archived = await TrainingUser.findOne({
+        where: { email, type: "company" },
+        attributes: ["id", "archivedAt"],
+      });
+      if (archived && archived.archivedAt) {
+        console.log(`[training] register/empresa intentado con usuario archivado email=${email}`);
+      }
       return NextResponse.json(
         { exists: false, message: "No autorizado para registrarte." },
         { status: 403, headers: CORS_HEADERS }

@@ -180,6 +180,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
       if (existing) {
         // MERGE: pisar solo campos no vacíos del Excel. No tocar `active`
         // ni `type` (gobernados por register/empresa / decisiones manuales).
+        // Si el empleado estaba archivado → reactivar (archivedAt = NULL).
         const updates = {};
         if (name !== null) updates.name = name;
         if (lastName !== null) updates.lastName = lastName;
@@ -188,10 +189,15 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
         if (country !== null) updates.country = country;
         if (birthDate !== null) updates.birthDate = birthDate;
         if (companyId) updates.companyId = companyId;
+        const wasArchived = !!existing.archivedAt;
+        if (wasArchived) updates.archivedAt = null;
         await existing.update(updates);
         updated++;
+        if (wasArchived) {
+          console.log(`[training] reactivated archived user email=${email}`);
+        }
         console.log(
-          `[training] import row email=${email} action=update companyId=${companyId ?? "unchanged"}`
+          `[training] import row email=${email} action=update companyId=${companyId ?? "unchanged"} reactivated=${wasArchived}`
         );
       } else {
         const active = type === "private";

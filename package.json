@@ -31,6 +31,8 @@
     "db:migrate:billing-fix-kind-enum:prod": "node --env-file=.env.production scripts/migrate-billing-fix-kind-enum.js",
     "db:migrate:training": "node --env-file=.env.local scripts/migrate-training-fields.js",
     "db:migrate:training:prod": "node --env-file=.env.production scripts/migrate-training-fields.js",
+    "db:migrate:training-archive": "node --env-file=.env.local scripts/migrate-training-archive.js",
+    "db:migrate:training-archive:prod": "node --env-file=.env.production scripts/migrate-training-archive.js",
     "db:migrate:projects-1": "node --env-file=.env.local scripts/migrate-projects-sprint-1.js",
     "db:migrate:projects-1:prod": "node --env-file=.env.production scripts/migrate-projects-sprint-1.js",
     "db:migrate:inventory-rework": "node --env-file=.env.local scripts/migrate-inventory-rework.js",
