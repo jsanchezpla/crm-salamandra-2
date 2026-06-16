@@ -64,9 +64,19 @@ export async function middleware(request) {
     return applyWidgetCspHeaders(NextResponse.next());
   }
 
-  // Dejar pasar rutas públicas sin token
+  // Dejar pasar rutas públicas sin token, con CORS headers en la respuesta.
+  // El OPTIONS preflight de más arriba ya devuelve CORS_HEADERS, pero la
+  // respuesta del método real (POST/GET) también necesita
+  // Access-Control-Allow-Origin para que el browser permita al JS leer
+  // body. Sin esto, un fetch cross-origin desde asesoriaretorika.com
+  // al endpoint /registro-curso fallaba con "Failed to fetch" aunque
+  // el servidor sí procesara la request.
   if (isPublicPath(pathname)) {
-    return NextResponse.next();
+    const res = NextResponse.next();
+    for (const [k, v] of Object.entries(CORS_HEADERS)) {
+      res.headers.set(k, v);
+    }
+    return res;
   }
 
   const token = request.cookies.get("access_token")?.value;
