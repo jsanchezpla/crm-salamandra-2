@@ -49,6 +49,8 @@
     "db:seed:healim:prod": "node --env-file=.env.production scripts/seed-healim.js",
     "db:add-leads-nutri-laura": "node --env-file=.env.local scripts/add-leads-module-nutri-laura.js",
     "db:add-leads-nutri-laura:prod": "node --env-file=.env.production scripts/add-leads-module-nutri-laura.js",
+    "db:add-clients-nutri-laura": "node --env-file=.env.local scripts/add-clients-module-nutri-laura.js",
+    "db:add-clients-nutri-laura:prod": "node --env-file=.env.production scripts/add-clients-module-nutri-laura.js",
     "db:add-training-nutri-laura": "node --env-file=.env.local scripts/add-training-module-nutri-laura.js",
     "db:add-training-nutri-laura:prod": "node --env-file=.env.production scripts/add-training-module-nutri-laura.js",
     "db:add-training-aumenta": "node --env-file=.env.local scripts/add-training-module-aumenta.js",

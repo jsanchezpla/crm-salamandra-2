@@ -48,7 +48,13 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
   const { name, email, phone, notes, type } = body;
   if (!name?.trim()) return error("El nombre es obligatorio", 422);
 
+  // Merge: campos explícitos (spain-enzymes-style) + customFields libres
+  // que la ruta acepta tal cual (p.ej. nutri-laura usa edad/motivo/info_adicional).
+  // El spread va primero para que los campos explícitos siempre ganen al merge.
+  const extraCustom =
+    body.customFields && typeof body.customFields === "object" ? body.customFields : {};
   const customFields = {
+    ...extraCustom,
     company: body.company?.trim() || null,
     country: body.country?.trim() || null,
     city: body.city?.trim() || null,

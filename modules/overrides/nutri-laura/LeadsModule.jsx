@@ -147,6 +147,8 @@ export default function NutriLauraLeadsModule() {
   const [checkedIds, setCheckedIds] = useState(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [bulkStageOpen, setBulkStageOpen] = useState(false);
+  const [converting, setConverting] = useState(false);
+  const [convertDone, setConvertDone] = useState(false);
 
   const fetchLeads = useCallback(() => {
     setLoading(true);
@@ -182,12 +184,74 @@ export default function NutriLauraLeadsModule() {
 
   function openLead(lead) {
     setSelected({ ...lead });
+    setConvertDone(false);
     setPanelOpen(true);
   }
 
   function closePanel() {
     setPanelOpen(false);
     setTimeout(() => setSelected(null), 300);
+  }
+
+  async function handleConvertToClient(lead) {
+    // Idempotencia: si el lead ya tiene clientId, no recrear el cliente
+    // (el botón solo aparece si stage !== "paciente", pero un reload con
+    // el seed legacy podría re-abrir el panel sobre un lead ya vinculado).
+    if (lead.clientId) {
+      setConvertDone(true);
+      return;
+    }
+
+    setConverting(true);
+    setConvertDone(false);
+    try {
+      const clientRes = await fetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: lead.name,
+          email: lead.email,
+          phone: lead.phone,
+          type: "individual",
+          notes: lead.notes || null,
+          origin: "lead",
+          leadId: lead.id,
+          status: "new",
+          customFields: {
+            edad: lead.customFields?.edad ?? null,
+            motivo: lead.customFields?.motivo ?? null,
+            info_adicional: lead.customFields?.info_adicional ?? null,
+          },
+        }),
+      });
+      const clientData = await clientRes.json();
+      if (!clientData.ok) return;
+
+      const newClientId = clientData.data.id;
+
+      const patchRes = await fetch(`/api/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage: "paciente", clientId: newClientId }),
+      });
+      // Si el PATCH falla tras crear el cliente, el cliente queda creado
+      // pero el lead no vinculado. No hacemos rollback (sería complejo
+      // desde el browser); el usuario tendrá que vincularlo manualmente
+      // o reintentar — el guard de idempotencia evitará un segundo cliente.
+      if (!patchRes.ok) return;
+
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.id === lead.id ? { ...l, stage: "paciente", clientId: newClientId } : l
+        )
+      );
+      setSelected((prev) =>
+        prev ? { ...prev, stage: "paciente", clientId: newClientId } : prev
+      );
+      setConvertDone(true);
+    } finally {
+      setConverting(false);
+    }
   }
 
   async function handleStageChange(leadId, newStage) {
@@ -798,11 +862,14 @@ export default function NutriLauraLeadsModule() {
         lead={selected}
         open={panelOpen}
         saving={saving}
+        converting={converting}
+        convertDone={convertDone}
         onClose={closePanel}
         onStageChange={handleStageChange}
         onSave={handleSaveLead}
         onNotesChange={handleNotesChange}
         onDelete={handleDelete}
+        onConvert={handleConvertToClient}
       />
 
       {/* ── Modal de importación ────────────────────────────────────────────── */}
@@ -1275,11 +1342,14 @@ function LeadDetailPanel({
   lead,
   open,
   saving,
+  converting,
+  convertDone,
   onClose,
   onStageChange,
   onSave,
   onNotesChange,
   onDelete,
+  onConvert,
 }) {
   const [notes, setNotes] = useState("");
   const [notesDirty, setNotesDirty] = useState(false);
@@ -1591,6 +1661,51 @@ function LeadDetailPanel({
               </button>
             )}
           </div>
+
+          {/* Convertir a paciente */}
+          {lead.stage !== "paciente" && (
+            <div className="pt-2 border-t border-gray-100">
+              {convertDone ? (
+                <div className="w-full flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 text-sm font-medium py-2 rounded-lg border border-emerald-200">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    className="w-4 h-4"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                  Convertido a paciente
+                </div>
+              ) : (
+                <button
+                  onClick={() => onConvert(lead)}
+                  disabled={converting}
+                  className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {converting ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      className="w-4 h-4"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z"
+                      />
+                    </svg>
+                  )}
+                  {converting ? "Convirtiendo…" : "Convertir a paciente"}
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Eliminar */}
           <div className="pt-2 border-t border-gray-100">

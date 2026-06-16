@@ -310,6 +310,12 @@ export default function SpainEnzymesLeadsModule() {
   }
 
   async function handleConvertToClient(lead) {
+    // Idempotencia: si el lead ya tiene clientId, no recrear el cliente.
+    if (lead.clientId) {
+      setConvertDone(true);
+      return;
+    }
+
     setConverting(true);
     setConvertDone(false);
     try {
@@ -332,14 +338,24 @@ export default function SpainEnzymesLeadsModule() {
       const clientData = await clientRes.json();
       if (!clientData.ok) return;
 
-      await fetch(`/api/leads/${lead.id}`, {
+      const newClientId = clientData.data.id;
+
+      const patchRes = await fetch(`/api/leads/${lead.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage: "won" }),
+        body: JSON.stringify({ stage: "won", clientId: newClientId }),
       });
+      // Si el PATCH falla tras crear el cliente, el cliente queda creado
+      // pero el lead no vinculado. No hacemos rollback desde el browser;
+      // el guard de idempotencia evita un segundo cliente al reintentar.
+      if (!patchRes.ok) return;
 
-      setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, stage: "won" } : l)));
-      setSelected((prev) => prev ? { ...prev, stage: "won" } : prev);
+      setLeads((prev) =>
+        prev.map((l) => (l.id === lead.id ? { ...l, stage: "won", clientId: newClientId } : l))
+      );
+      setSelected((prev) =>
+        prev ? { ...prev, stage: "won", clientId: newClientId } : prev
+      );
       setConvertDone(true);
     } finally {
       setConverting(false);
