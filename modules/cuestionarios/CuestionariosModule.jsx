@@ -364,8 +364,27 @@ function AttemptsList({ onSelect }) {
   const [empresa, setEmpresa] = useState("");
   const [result, setResult] = useState("");
   const [page, setPage] = useState(0);
+  const [quizzesSyncUrl, setQuizzesSyncUrl] = useState(null);
+  const [syncInstructionsOpen, setSyncInstructionsOpen] = useState(false);
 
   const LIMIT = 50;
+
+  // Banner de sync de cuestionarios — solo aparece si el tenant tiene
+  // configurada la env var {SLUG_UPPER}_TUTOR_QUIZZES_SYNC_URL. Hoy aplica
+  // a Retorika; cuando otros tenants conecten su TutorLMS y exporten
+  // intentos, basta con configurar su variable.
+  useEffect(() => {
+    fetch("/api/training/sync-status")
+      .then((r) => r.json())
+      .then((j) => {
+        if (j?.ok && j.data?.quizzesSyncEnabled) {
+          setQuizzesSyncUrl(j.data.quizzesSyncUrl);
+        }
+      })
+      .catch(() => {
+        /* silencioso: si falla, simplemente no mostramos banner */
+      });
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -407,6 +426,14 @@ function AttemptsList({ onSelect }) {
           <h1 className="text-xl font-extrabold text-neutral-900">Cuestionarios</h1>
         </div>
       </div>
+
+      {/* Aviso de sincronización (solo si el tenant lo tiene configurado) */}
+      {quizzesSyncUrl && (
+        <QuizzesSyncNotice
+          syncUrl={quizzesSyncUrl}
+          onOpenInstructions={() => setSyncInstructionsOpen(true)}
+        />
+      )}
 
       {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-2">
@@ -570,6 +597,101 @@ function AttemptsList({ onSelect }) {
           )}
         </>
       )}
+
+      {syncInstructionsOpen && quizzesSyncUrl && (
+        <QuizzesSyncInstructionsModal
+          syncUrl={quizzesSyncUrl}
+          onClose={() => setSyncInstructionsOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Banner + modal de sync de cuestionarios ───────────────────────────────────
+
+function QuizzesSyncNotice({ syncUrl, onOpenInstructions }) {
+  return (
+    <div className="px-4 py-3 rounded-lg border border-neutral-200 bg-neutral-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+      <p className="text-xs text-neutral-600 leading-snug">
+        Para sincronizar los cuestionarios de TutorLMS, abre{" "}
+        <a
+          href={syncUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-mono text-[11px] text-neutral-800 underline decoration-dotted break-all hover:text-neutral-900"
+        >
+          {syncUrl}
+        </a>{" "}
+        estando logueado como administrador en WordPress.
+      </p>
+      <button
+        onClick={onOpenInstructions}
+        className="shrink-0 text-[11px] font-semibold text-neutral-700 underline decoration-dotted hover:text-neutral-900 transition-colors whitespace-nowrap"
+      >
+        ¿Cómo sincronizar?
+      </button>
+    </div>
+  );
+}
+
+function QuizzesSyncInstructionsModal({ syncUrl, onClose }) {
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-base font-bold text-neutral-900 mb-3">
+          Sincronizar cuestionarios desde TutorLMS
+        </h2>
+        <div className="text-xs text-neutral-600 leading-relaxed space-y-2">
+          <p>Para sincronizar los cuestionarios publicados en TutorLMS con el CRM:</p>
+          <ol className="list-decimal pl-5 space-y-1.5">
+            <li>
+              Accede como administrador a tu WordPress (
+              <code className="bg-neutral-100 px-1 rounded">/wp-admin</code>).
+            </li>
+            <li>
+              Abre la siguiente URL en una pestaña nueva del mismo navegador:
+              <div className="mt-1 bg-neutral-50 border border-neutral-200 rounded-md px-2 py-1.5 text-[11px] font-mono text-neutral-700 break-all">
+                {syncUrl}
+              </div>
+            </li>
+            <li>Verás el resumen de la sincronización en pantalla.</li>
+            <li>Vuelve aquí y recarga la página para ver los cuestionarios actualizados.</li>
+          </ol>
+        </div>
+        <div className="flex justify-end gap-2 pt-5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-xs font-medium text-neutral-600 bg-neutral-100 hover:bg-neutral-200 transition"
+          >
+            Cerrar
+          </button>
+          <a
+            href={syncUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2 rounded-lg text-xs font-bold text-white transition-opacity hover:opacity-80"
+            style={{ background: "var(--color-primary)" }}
+          >
+            Abrir URL de sincronización
+          </a>
+        </div>
+      </div>
     </div>
   );
 }

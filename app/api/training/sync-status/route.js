@@ -15,18 +15,16 @@ import { ForbiddenError } from "../../../../lib/utils/errors.js";
  *
  * Para retorika:
  *   RETORIKA_TUTOR_SYNC_URL=https://asesoriaretorika.com/?retorika_sync_courses=1
+ *   RETORIKA_TUTOR_QUIZZES_SYNC_URL=https://asesoriaretorika.com/?retorika_sync_quizzes=1
  *
  * Respuesta:
  *   {
  *     tenantSlug: "retorika",
- *     syncEnabled: true,
- *     syncUrl: "https://asesoriaretorika.com/?retorika_sync_courses=1",
- *     lastSync: {
- *       lastSyncAt: "2026-06-10T12:34:56.000Z",
- *       itemsSynced: 8,
- *       itemsDeactivated: 0,
- *       source: "wp_tutor_courses"
- *     } | null
+ *     syncEnabled: true,                       // cursos
+ *     syncUrl: "https://.../?retorika_sync_courses=1",
+ *     quizzesSyncEnabled: true,                // cuestionarios
+ *     quizzesSyncUrl: "https://.../?retorika_sync_quizzes=1",
+ *     lastSync: { ... } | null
  *   }
  */
 export const GET = withTenant(async (_request, _ctx, { tenantModels, hasModule, slug }) => {
@@ -34,9 +32,9 @@ export const GET = withTenant(async (_request, _ctx, { tenantModels, hasModule, 
 
   const { TrainingSyncLog } = tenantModels;
 
-  const envKey = `${slug.toUpperCase()}_TUTOR_SYNC_URL`;
-  const syncUrl = process.env[envKey] || null;
-  const syncEnabled = !!syncUrl;
+  const upper = slug.toUpperCase();
+  const syncUrl = process.env[`${upper}_TUTOR_SYNC_URL`] || null;
+  const quizzesSyncUrl = process.env[`${upper}_TUTOR_QUIZZES_SYNC_URL`] || null;
 
   const last = await TrainingSyncLog.findOne({
     order: [["syncedAt", "DESC"]],
@@ -44,8 +42,10 @@ export const GET = withTenant(async (_request, _ctx, { tenantModels, hasModule, 
 
   return ok({
     tenantSlug: slug,
-    syncEnabled,
+    syncEnabled: !!syncUrl,
     syncUrl,
+    quizzesSyncEnabled: !!quizzesSyncUrl,
+    quizzesSyncUrl,
     lastSync: last
       ? {
           lastSyncAt: last.syncedAt,
