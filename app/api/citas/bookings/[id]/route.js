@@ -10,7 +10,7 @@ import { logCitasAudit } from "../../../../../lib/citas/audit.js";
 import { findBookingOverlap } from "../../../../../lib/citas/booking.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
-const VALID_STATUS = new Set(["confirmed", "completed", "cancelled", "no_show"]);
+const VALID_STATUS = new Set(["pending", "confirmed", "completed", "cancelled", "no_show"]);
 
 // ───────────────────────────────────────────────────────────────────────────
 // GET /api/citas/bookings/[id]
@@ -102,6 +102,17 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     if ("status" in body) {
       const v = body.status;
       if (!VALID_STATUS.has(v)) return error("status inválido");
+      // Bloqueo de regresión a 'pending': una cita confirmada/cancelada/
+      // completada/no_show NUNCA puede volver a la lista de espera —
+      // confundiría al paciente y dispararía emails contradictorios. La
+      // creación con status='pending' va por el endpoint público /book
+      // según el feature flag; el admin no debería forzar regresiones
+      // desde aquí.
+      if (v === "pending" && row.status !== "pending") {
+        return forbidden(
+          "Una cita no puede volver al estado pendiente una vez confirmada o procesada."
+        );
+      }
       if (v !== row.status) statusChanged = true;
       updates.status = v;
       if (v === "cancelled") {

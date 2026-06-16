@@ -85,6 +85,11 @@ export async function middleware(request) {
     headers.set("x-user-id", payload.payload.userId);
     headers.set("x-user-role", payload.payload.role);
     headers.set("x-tenant", payload.payload.tenantSlug);
+    // x-user-email: usado por endpoints que registran autoría (notes,
+    // attachments, etc.). El JWT lo lleva en payload.email desde el login.
+    if (payload.payload.email) {
+      headers.set("x-user-email", payload.payload.email);
+    }
 
     return NextResponse.next({ request: { headers } });
   } catch {

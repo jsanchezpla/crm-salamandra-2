@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# uploads (archivos subidos por usuarios — volumen Docker en prod, dir local en dev)
+/uploads
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

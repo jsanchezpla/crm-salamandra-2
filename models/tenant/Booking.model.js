@@ -64,8 +64,13 @@ export function defineBooking(sequelize) {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      // 'pending' (Sprint Fase 1 nutri_laura) → bookings que esperan
+      // confirmación manual del admin (lista de espera). Se ajusta el
+      // default vía endpoint/tenant flag, no aquí: el modelo conserva
+      // 'confirmed' como default para que la creación manual del admin
+      // siga llegando ya confirmada.
       status: {
-        type: DataTypes.ENUM("confirmed", "completed", "cancelled", "no_show"),
+        type: DataTypes.ENUM("pending", "confirmed", "completed", "cancelled", "no_show"),
         allowNull: false,
         defaultValue: "confirmed",
       },

@@ -11,7 +11,7 @@ import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { findBookingOverlap } from "../../../../lib/citas/booking.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
-const VALID_STATUS = new Set(["confirmed", "completed", "cancelled", "no_show"]);
+const VALID_STATUS = new Set(["pending", "confirmed", "completed", "cancelled", "no_show"]);
 
 // ───────────────────────────────────────────────────────────────────────────
 // GET /api/citas/bookings — listado paginado
@@ -33,12 +33,22 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       if (searchParams.get("from")) where.scheduledAt[Op.gte] = new Date(searchParams.get("from"));
       if (searchParams.get("to")) where.scheduledAt[Op.lte] = new Date(searchParams.get("to"));
     }
+    // ?future=true filtra a partir de ahora (útil para "próximas citas" en la ficha cliente).
+    // Convive con ?from si se combinan; el más restrictivo gana.
+    if (searchParams.get("future") === "true") {
+      where.scheduledAt = { ...(where.scheduledAt || {}), [Op.gte]: new Date() };
+    }
     if (searchParams.get("status")) {
       const s = searchParams.get("status");
       if (!VALID_STATUS.has(s)) return error("status inválido");
       where.status = s;
     }
     if (searchParams.get("eventTypeId")) where.eventTypeId = searchParams.get("eventTypeId");
+    // ?clientEmail=foo@bar.com — match exacto case-insensitive (Booking no tiene
+    // FK a Client; el cruce con la ficha del cliente es por email).
+    if (searchParams.get("clientEmail")) {
+      where.clientEmail = { [Op.iLike]: searchParams.get("clientEmail").trim() };
+    }
     const q = (searchParams.get("search") || "").trim();
     if (q) {
       where[Op.or] = [

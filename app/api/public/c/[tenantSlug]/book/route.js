@@ -1,5 +1,9 @@
 import { withPublicTenant } from "../../../../../../lib/tenant/publicTenantContext.js";
+import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { created, error, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
+import { sendEmail } from "../../../../../../lib/email/resendClient.js";
+import { bookingReceivedTemplate } from "../../../../../../lib/email/templates/citas/bookingReceived.js";
+import { bookingConfirmedTemplate } from "../../../../../../lib/email/templates/citas/bookingConfirmed.js";
 import {
   normalizeString,
   normalizeEmail,
@@ -112,6 +116,29 @@ export const POST = withPublicTenant(async (request, _ctx, { tenant, tenantModel
       return error("Esa hora ya no está disponible, por favor elige otra", 409);
     }
 
+    // Determina si el booking nace 'confirmed' (default histórico) o
+    // 'pending' (lista de espera). El flag vive en master.tenant_modules
+    // del módulo citas del tenant. Default: true (auto-confirm) — solo
+    // tenants que opten explícitamente por confirmación manual cambian
+    // a false. `hasFeatureFlag` devuelve false si el flag está ausente,
+    // pero aquí necesitamos distinguir "ausente (=true por defecto)" de
+    // "puesto a false", así que leemos la fila directamente.
+    let autoConfirm = true;
+    try {
+      const { TenantModule } = getMasterModels();
+      const mod = await TenantModule.findOne({
+        where: { tenantId: tenant.id, moduleKey: "citas" },
+        attributes: ["featureFlags"],
+      });
+      if (mod?.featureFlags?.autoConfirmPublicBookings === false) {
+        autoConfirm = false;
+      }
+    } catch {
+      // Si la lectura falla, conservamos el comportamiento histórico
+      // (auto-confirm). No queremos romper el flujo de reserva por un
+      // problema de lectura del flag.
+    }
+
     const row = await Booking.create({
       eventTypeId: eventType.id,
       clientName,
@@ -122,7 +149,7 @@ export const POST = withPublicTenant(async (request, _ctx, { tenant, tenantModel
       duration: eventType.duration,
       modality: "online",
       meetUrl: eventType.meetUrl,
-      status: "confirmed",
+      status: autoConfirm ? "confirmed" : "pending",
     });
 
     await logCitasAudit({
@@ -135,6 +162,42 @@ export const POST = withPublicTenant(async (request, _ctx, { tenant, tenantModel
       after: { ...row.toJSON(), source: "landing" },
       ip,
     });
+
+    // Email best-effort según modo del tenant:
+    //   - autoConfirm=true  → booking nace confirmed → bookingConfirmed inmediato
+    //   - autoConfirm=false → booking nace pending   → bookingReceived (Laura
+    //     confirma luego desde /confirm que dispara bookingConfirmed)
+    try {
+      let tpl;
+      if (autoConfirm) {
+        const cancelUrl = row.cancellationToken
+          ? `/widget/c/${tenant.slug}/cancel/${row.cancellationToken}`
+          : null;
+        tpl = bookingConfirmedTemplate({
+          tenantName: tenant.name,
+          brand: tenant.settings?.brand,
+          clientName: row.clientName,
+          eventTypeName: eventType.name,
+          scheduledAt: row.scheduledAt,
+          duration: row.duration,
+          modality: row.modality,
+          meetUrl: row.meetUrl,
+          cancelUrl,
+          location: eventType.location ?? null,
+        });
+      } else {
+        tpl = bookingReceivedTemplate({
+          tenantName: tenant.name,
+          brand: tenant.settings?.brand,
+          clientName: row.clientName,
+          eventTypeName: eventType.name,
+          scheduledAt: row.scheduledAt,
+        });
+      }
+      await sendEmail({ to: row.clientEmail, subject: tpl.subject, html: tpl.html, text: tpl.text });
+    } catch (mailErr) {
+      process.stderr.write(`[citas:book] email fail (autoConfirm=${autoConfirm}): ${mailErr.message}\n`);
+    }
 
     return created({
       booking: {

@@ -17,6 +17,14 @@ export function defineCompany(sequelize) {
         type: DataTypes.INTEGER,
         allowNull: true,
       },
+      // NIF del centro/empresa. Usado para auto-vincular CourseRegistration
+      // por NIF al recibir un POST del form de Retorika. Alineado con
+      // TrainingUser.nif (mismo módulo training). Nullable porque hay
+      // empresas históricas sin NIF cargado.
+      nif: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       active: {
         type: DataTypes.BOOLEAN,
         defaultValue: true,

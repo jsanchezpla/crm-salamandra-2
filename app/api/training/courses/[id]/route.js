@@ -63,6 +63,15 @@ async function updateCourse(request, { params }, { tenantModels, hasModule }) {
   return ok(course);
 }
 
+export const GET = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
+  if (!hasModule("training")) throw new ForbiddenError();
+  const { Course } = tenantModels;
+  const { id } = await params;
+  const course = await Course.findByPk(id);
+  if (!course) throw new NotFoundError("Curso no encontrado");
+  return ok(course);
+});
+
 export const PUT = withTenant(updateCourse);
 export const PATCH = withTenant(updateCourse);
 

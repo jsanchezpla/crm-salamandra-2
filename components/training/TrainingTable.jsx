@@ -17,11 +17,16 @@ export function TrainingTable({ headers, children, loading, empty }) {
           </thead>
           <tbody>
             {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i} className="border-b border-neutral-50">
-                  {headers.map((h) => (
+              Array.from({ length: 5 }).map((_, rowIndex) => (
+                <tr key={rowIndex} className="border-b border-neutral-50">
+                  {headers.map((h, headerIndex) => (
                     <td key={h} className="py-3 px-4">
-                      <div className="h-4 bg-neutral-100 rounded animate-pulse" style={{ width: `${50 + Math.random() * 40}%` }} />
+                      {/* Width determinista para evitar hydration mismatch
+                          entre SSR y cliente. Antes usaba Math.random(). */}
+                      <div
+                        className="h-4 bg-neutral-100 rounded animate-pulse"
+                        style={{ width: `${50 + ((headerIndex * 17 + rowIndex * 13) % 40)}%` }}
+                      />
                     </td>
                   ))}
                 </tr>

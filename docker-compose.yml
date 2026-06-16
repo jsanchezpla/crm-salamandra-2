@@ -24,6 +24,12 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:3000:3000"   # solo accesible desde el propio VPS (nginx nativo hace de proxy)
+    volumes:
+      # Almacenamiento persistente de archivos subidos por usuarios
+      # (PDFs adjuntos a clientes, etc.). Path host puede personalizarse
+      # con UPLOADS_HOST_DIR en .env.production; default ./uploads relativo
+      # a docker-compose.yml.
+      - ${UPLOADS_HOST_DIR:-./uploads}:/app/uploads
     networks:
       - crm-net
 

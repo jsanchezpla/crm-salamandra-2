@@ -1,5 +1,7 @@
+import { promises as fs } from "node:fs";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, noContent, forbidden, notFound, error } from "../../../../lib/utils/apiResponse.js";
+import { getClientDir } from "../../../../lib/clients/attachmentStorage.js";
 
 export const GET = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
@@ -58,7 +60,7 @@ export const PUT = withTenant(async (request, { params }, { tenantModels, hasMod
   return ok(client);
 });
 
-export const DELETE = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
+export const DELETE = withTenant(async (_request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
 
   const { Client, Invoice } = tenantModels;
@@ -76,5 +78,18 @@ export const DELETE = withTenant(async (_request, { params }, { tenantModels, ha
   }
 
   await client.destroy();
+
+  // GC del directorio físico de adjuntos. El CASCADE ya borró client_attachments
+  // en BD pero los archivos en disco quedarían huérfanos. Best-effort: si la
+  // limpieza falla, el cliente queda borrado igual y el GC periódico (apuntado
+  // al backlog) se encargará de los huérfanos.
+  try {
+    const dir = getClientDir(tenant.slug, id);
+    await fs.rm(dir, { recursive: true, force: true });
+    process.stdout.write(`[clients:attachment] cleanup dir tenant=${tenant.slug} client=${id}\n`);
+  } catch (err) {
+    process.stderr.write(`[clients:attachment] cleanup dir failed: ${err.message}\n`);
+  }
+
   return noContent();
 });

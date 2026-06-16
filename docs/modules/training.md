@@ -908,3 +908,171 @@ master existe como alias. Decisión a tomar: unificar bajo
 `/api/training/quiz-attempts` (más coherente con la ruta del módulo)
 o bajo `/api/cuestionarios` (más legible para el alias). Hoy
 funcionan en paralelo, lo cual añade superficie de bug.
+
+## Registros previos al curso (sprint Retorika · junio 2026)
+
+### Visión general del flujo
+
+Antes de acceder al curso "Liderazgo Educativo" (course_id=5383 en TutorLMS,
+product_id=5487 en WooCommerce), el alumno debe rellenar un formulario
+inicial: datos del centro, perfil docente y un diagnóstico de motivación/
+estrés. Es obligatorio para la bonificación FUNDAE.
+
+```
+Alumno logueado en WP de Retorika
+      │
+      ▼ entra a /courses/liderazgo-educativo/
+┌────────────────────────────────────────────┐
+│  WP snippet PHP template_redirect          │
+│  GET CRM /webhooks/.../registro-curso/check│  HMAC sha256(queryString URL-encoded)
+└────────────────────────────────────────────┘
+      │
+      ├─ has=true  → permitir acceso al curso
+      └─ has=false → wp_safe_redirect a /registro-liderazgo-educativo/
+                              │
+                              ▼ shortcode [retorika_registro_form]
+                ┌──────────────────────────────────┐
+                │  Form HTML en WP                 │
+                │  POST CRM /registro-curso        │  Modo browser
+                │  (sin HMAC; valida Origin)       │  (Origin asesoriaretorika.com)
+                └──────────────────────────────────┘
+                              │
+                              ▼
+                       CRM crea:
+                       · CourseRegistration (centerData, teacherData, diagnosisData, rawPayload)
+                       · TrainingUser (find-or-create por email)
+                       · Vínculo auto a Company por NIF (si existe)
+                       · Audit log training.course_registration.created
+                              │
+                              ▼
+                       Redirige al curso → ahora has=true → entra
+```
+
+### Setup en el CRM
+
+**Variables env requeridas** (`.env.production`):
+```
+RETORIKA_WEBHOOK_SECRET=<32+ bytes random, mismo en WP de Retorika>
+```
+
+Sin esta variable, las firmas HMAC se rechazan automáticamente y todo el
+flujo cae a fail-open en el WP (degradación elegante; el alumno entra al
+curso sin gatekeeper).
+
+**Modelos involucrados**:
+
+| Modelo | Rol |
+|---|---|
+| `CourseRegistration` | Nuevo en este sprint. Una fila por `(email, wpProductId)` con todos los datos del formulario (`centerData`/`teacherData`/`diagnosisData` JSONB + `rawPayload` snapshot). |
+| `Course` | Lookup por `wpCourseId`; debe existir antes del POST. La crea Belén desde `/formacion/cursos` (manual o sync TutorLMS). |
+| `Company` | Lookup por `nif`. Nuevo campo `nif` añadido a `companies` en este sprint. Si existe → el registro queda vinculado; si no, `companyId=null` y Belén lo asocia luego. |
+| `TrainingUser` | Find-or-create por email (hook `beforeSave` lowercasea). Si `companyId == null` y hay Company → auto-vincula. NO sobreescribe vinculaciones manuales existentes. |
+
+**Endpoints expuestos**:
+
+| Método + ruta | Auth | Rate limit | Uso |
+|---|---|---|---|
+| `POST /api/webhooks/retorika/registro-curso` | **Modo 1**: header `x-tenant=retorika` + Origin/Referer en `{asesoriaretorika.com, www.asesoriaretorika.com}`. **Modo 2**: header `X-Retorika-Signature: sha256=<hmac rawBody>`. Si no cumple ninguno → 401 | 10/min browser · 60/min HMAC | Submit del form (browser) o reenvío server-to-server. Idempotente por `(email, wpProductId)` — segunda llamada devuelve `alreadyExists: true` con el mismo `registrationId`. |
+| `GET /api/webhooks/retorika/registro-curso/check?email=&productId=` | `X-Retorika-Signature: sha256=<hmac queryString URL-encoded>` | 60/min | Lo llama el snippet PHP del WP. Devuelve `{ has: true|false }`. |
+| `GET /api/training/course-registrations?courseId=...` | JWT + `hasModule(training)` | — | Listado paginado con filtros `search`/`companyId`/`from`/`to`. |
+| `GET /api/training/course-registrations/[id]` | JWT | — | Detalle completo con relaciones. |
+| `GET /api/training/course-registrations/stats?courseId=&search=&companyId=&from=&to=` | JWT | — | Total / motivación media / estrés medio / top empresa / distribuciones 1-5 / top 10 empresas / registros por mes. Acepta los mismos filtros que `/list`. |
+| `GET /api/training/course-registrations/export?courseId=&search=&companyId=&from=&to=` | JWT | — | CSV UTF-8 con BOM. Arrays resueltos a labels comma-separated (vía `lib/training/registrationLabels.js`). |
+
+**Auto-vinculación TrainingUser → Company**:
+
+Al recibir un POST exitoso, si el endpoint resuelve un `Company` por NIF y el `TrainingUser` recién creado/encontrado tiene `companyId == null`, se ejecuta `await user.update({ companyId: company.id })`. Si el `TrainingUser` ya tenía una `companyId` distinta, **NO se sobreescribe** — Belén puede haber hecho una vinculación manual deliberada. Para vincular retroactivamente TrainingUsers anteriores al sprint, hay que un script ad-hoc.
+
+**Audit log**:
+
+Cada POST exitoso escribe en `master.audit_logs`:
+```
+action      = "training.course_registration.created"
+entity      = "CourseRegistration"
+entity_id   = <uuid>
+after       = {                                  ← metadata
+  authMode:        "browser" | "hmac",
+  origin:          "asesoriaretorika.com" | null,
+  email:           "sm***@trinitycollege.es",    ← enmascarado
+  productId:       5487,
+  courseId:        "<uuid>",
+  companyId:       "<uuid>" | null,
+  trainingUserId:  "<uuid>"
+}
+ip          = "..."
+```
+
+### Setup en el WP del cliente (caso Retorika)
+
+1. **Página WP `/registro-liderazgo-educativo/`** con shortcode
+   `[retorika_registro_form]` (el shortcode entrega el HTML del form que
+   hace POST al CRM desde el browser).
+
+2. **Snippet PHP `template_redirect`** copiado de
+   `docs/integrations/retorika-wp-snippet.php` al plugin de fragmentos de
+   código. Lee `RETORIKA_WEBHOOK_SECRET` de `wp-config.php`.
+
+3. **`wp-config.php`**:
+   ```php
+   define('RETORIKA_WEBHOOK_SECRET', 'EL_MISMO_SECRET_QUE_EL_CRM');
+   ```
+
+4. **Verificación**: usuario test sin registro → entra a curso → debe ser
+   redirigido al form. Tras enviar form, vuelve al curso y entra normal.
+
+### PRECISIÓN HMAC URL-encoding
+
+**La firma del GET `/check` se calcula sobre el queryString CON URL-encoding
+ya aplicado.** El `@` del email se codifica como `%40` antes de firmar.
+
+| Lenguaje | Cómo |
+|---|---|
+| PHP (WP snippet) | `urlencode($email)` antes de concatenar → el `@` se convierte en `%40`. Luego `hash_hmac('sha256', $query, $secret)`. |
+| JavaScript (cliente) | `new URLSearchParams({email, productId}).toString()` produce la versión codificada (`%40`). Luego `crypto.createHmac('sha256', secret).update(query).digest('hex')`. |
+| Server (CRM) | `new URL(request.url).searchParams.toString()` — el mismo encoding que produce `URLSearchParams.toString()`. Se compara con `timingSafeEqual`. |
+
+Cualquier desviación (firmar sobre el string con `@` literal, p. ej.) produce 401 "Firma inválida". Esto se descubrió en el smoke parcial del Checkpoint 1 — está aquí documentado para integradores futuros.
+
+Ejemplo válido:
+```
+query firmada:    email=marta%40trinitycollege.es&productId=5487
+firma esperada:   hex(HMAC-SHA256(query, secret))
+header enviado:   X-Retorika-Signature: sha256=<firma>
+URL del GET:      .../check?email=marta%40trinitycollege.es&productId=5487
+```
+
+### Uso para Belén (UI)
+
+1. **Página de detalle del curso**:
+   - Sidebar → Formación → Cursos → click en el icono "ojo" en la fila "Liderazgo Educativo".
+   - URL directa: `/formacion/cursos/<id>`.
+
+2. **Tab "Registros previos"**:
+   - 4 cards arriba: Total, Motivación media (barra), Estrés medio (barra, paleta inversa), Top empresa.
+   - "Ver más estadísticas" → distribuciones 1-5, top 10 empresas, registros por mes.
+
+3. **Filtros**:
+   - Búsqueda libre (email, nombre del centro, NIF) con debounce 300ms.
+   - Empresa (dropdown desde `/api/training/companies`).
+   - Atajos de fecha: 7d / 30d / 90d / Todo + pickers custom.
+   - Los filtros aplican **tanto a la lista como a las estadísticas** — los 4 cards arriba reflejan exactamente lo que se ve abajo.
+
+4. **Drawer detalle** (click en una fila):
+   - Tabs internas: Centro / Docente / Diagnóstico.
+   - Diagnóstico: barras 1-5 animadas con paleta semántica (motivación: alto = verde; estrés: alto = rojo).
+   - Footer: "Ver empresa →" si está vinculada.
+
+5. **Export CSV** (botón arriba derecha de la lista):
+   - Respeta filtros activos.
+   - UTF-8 con BOM (Excel lo detecta sin configuración).
+   - Arrays de slugs resueltos a labels en castellano (positions, subjects, etc.).
+
+### Troubleshooting
+
+| Síntoma | Diagnóstico |
+|---|---|
+| El form en WP no envía / browser muestra CORS error | Verificar Origin: el form HTML debe servirse desde `asesoriaretorika.com` o `www.asesoriaretorika.com`. Cualquier otro dominio → 401 "Origen no autorizado" desde el CRM. |
+| GET `/check` siempre devuelve 401 "Firma inválida" | (1) Comprobar que `RETORIKA_WEBHOOK_SECRET` en `wp-config.php` y en `.env.production` del CRM son **idénticos** byte a byte. (2) Comprobar URL-encoding del email (`@` → `%40` antes de firmar; ver sección "PRECISIÓN HMAC"). |
+| GET `/check` devuelve `has=false` para un usuario que sí completó el form | Comprobar en BD: `SELECT * FROM crm_retorika.course_registrations WHERE LOWER(email)='...' AND wp_product_id=5487`. Si la fila existe pero el `/check` dice false, el problema está en el matching del email (mayúsculas, espacios) — los emails se lowercase en `beforeSave`. |
+| Belén no ve la tab "Registros previos" en `/formacion/cursos/[id]` | Verificar `master.users.module_access` del admin de Retorika: debe incluir `"training"` o el wildcard `["all"]`. |
+| El form HTML pinta pero al hacer click "Enviar" no pasa nada visible | Abrir DevTools → Network → mirar el POST. (1) Si status 401 → ver header `x-tenant: retorika` está en la request. (2) Si status 422 → ver `body.error` y los `details[]` con el campo faltante. (3) Si status 200 con `alreadyExists: true` → el usuario ya estaba registrado; redirigir al curso. |

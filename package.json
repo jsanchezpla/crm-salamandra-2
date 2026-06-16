@@ -19,6 +19,7 @@
     "db:seed:master": "node --env-file=.env.local scripts/seed-master.js",
     "db:seed:retorika": "node --env-file=.env.local scripts/seed-retorika.js",
     "db:seed:retorika:all": "npm run db:seed:master && npm run db:seed:retorika",
+    "setup:retorika-local": "node --env-file=.env.local scripts/setup-retorika-tenant-local.js",
     "db:add-calendar-demo": "node --env-file=.env.local scripts/add-calendar-module-demo.js",
     "db:migrate:rename-therapist": "node --env-file=.env.local scripts/migrate-rename-therapist-to-employee.js",
     "db:migrate:rename-therapist:prod": "node --env-file=.env.production scripts/migrate-rename-therapist-to-employee.js",
@@ -33,6 +34,12 @@
     "db:migrate:training:prod": "node --env-file=.env.production scripts/migrate-training-fields.js",
     "db:migrate:training-archive": "node --env-file=.env.local scripts/migrate-training-archive.js",
     "db:migrate:training-archive:prod": "node --env-file=.env.production scripts/migrate-training-archive.js",
+    "db:migrate:course-registrations": "node --env-file=.env.local scripts/migrate-course-registrations.js",
+    "db:migrate:course-registrations:prod": "node --env-file=.env.production scripts/migrate-course-registrations.js",
+    "db:migrate:client-attachments": "node --env-file=.env.local scripts/migrate-client-attachments-and-notes.js",
+    "db:migrate:client-attachments:prod": "node --env-file=.env.production scripts/migrate-client-attachments-and-notes.js",
+    "db:migrate:booking-pending": "node --env-file=.env.local scripts/migrate-booking-pending.js",
+    "db:migrate:booking-pending:prod": "node --env-file=.env.production scripts/migrate-booking-pending.js",
     "db:migrate:projects-1": "node --env-file=.env.local scripts/migrate-projects-sprint-1.js",
     "db:migrate:projects-1:prod": "node --env-file=.env.production scripts/migrate-projects-sprint-1.js",
     "db:migrate:inventory-rework": "node --env-file=.env.local scripts/migrate-inventory-rework.js",
@@ -80,6 +87,7 @@
     "pg-hstore": "^2.3.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "resend": "^4.0.0",
     "sequelize": "^6.37.8"
   },
   "devDependencies": {
