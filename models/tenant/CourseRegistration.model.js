@@ -11,6 +11,9 @@ import { DataTypes } from "sequelize";
  *   - trainingUserId: find-or-create TrainingUser por email (case-insensitive).
  *   - courseId: lookup Course por wpCourseId.
  *   - companyId: lookup Company por nif (matching exacto del NIF del centro).
+ *     Fallback: si el NIF no resuelve, se hereda de TrainingUser.companyId
+ *     (vinculación manual previa), de modo que alumnos ya conocidos del CRM
+ *     no aparezcan como "sin empresa" si el form viene con NIF vacío o typo.
  *
  * Idempotencia: el endpoint que crea registros considera duplicado el par
  * (email, wpProductId) — si ya existe, devuelve alreadyExists=true sin

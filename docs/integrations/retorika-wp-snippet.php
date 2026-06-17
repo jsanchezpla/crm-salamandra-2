@@ -73,60 +73,62 @@
 // ║         (copia desde aquí hasta el final del archivo al fragmento)      ║
 // ╚═════════════════════════════════════════════════════════════════════════╝
 
+// Versión alineada con el snippet antiguo que funcionaba en producción
+// (admin.retorika.es), con los cambios mínimos necesarios para apuntar al
+// nuevo CRM (crm.salamandrasolutions.com): firma HMAC sha256 sobre la
+// queryString URL-encoded + header x-tenant + nueva forma de respuesta
+// { ok, has }.
+//
+// IMPORTANTE: si tienes activo el snippet antiguo (gatekeeper apuntando a
+// admin.retorika.es), DESACTÍVALO antes de activar este. Si los dos están
+// activos a la vez, ambos hooks template_redirect se ejecutan y pueden
+// llevarse por delante uno al otro.
 add_action('template_redirect', function () {
-    // ── 1. Aplica solo en single de TutorLMS courses ──────────────────────
-    if (!is_singular('courses')) return;
-    if (!is_user_logged_in()) return;
-    if (!function_exists('tutor_utils')) return;
+
+    if (!is_singular('courses') || !is_user_logged_in() || !function_exists('tutor_utils')) {
+        return;
+    }
 
     $course_id = get_queried_object_id();
     $user_id   = get_current_user_id();
     $user      = wp_get_current_user();
 
-    // El gatekeeper solo aplica a alumnos matriculados. No reservamos la
-    // página: si no está matriculado, TutorLMS ya hará lo suyo.
-    if (!tutor_utils()->is_enrolled($course_id, $user_id)) return;
-
-    // Admins, editores e instructores SIEMPRE entran sin gatekeeper.
-    // Eso permite a Belén entrar a previsualizar sin rellenar el form.
-    if (current_user_can('manage_options'))   return;
-    if (current_user_can('tutor_instructor')) return;
-    if (current_user_can('editor'))           return;
-
-    // ── 2. Map curso → URL del form de registro ────────────────────────────
-    // Para añadir nuevos cursos, copiar la entrada y cambiar course_id + URL.
-    $map = array(
-        5383 => 'https://asesoriaretorika.com/registro-liderazgo-educativo/',
-    );
-    if (!isset($map[$course_id])) return; // curso no protegido por este flujo
-
-    // ── 3. wpProductId asociado al curso (TutorLMS↔WooCommerce link) ──────
-    $product_id = tutor_utils()->get_course_product_id($course_id);
-    if (!$product_id) {
-        error_log('[retorika] sin product_id para course_id=' . $course_id);
+    // Solo alumnos matriculados
+    if (!tutor_utils()->is_enrolled($course_id, $user_id)) {
         return;
     }
 
-    // ── 4. Verificación HMAC del secret ───────────────────────────────────
+    // ===== Mapa: ID de curso => URL del formulario de registro =====
+    $map = array(
+        5383 => 'https://asesoriaretorika.com/registro-liderazgo-educativo/',
+    );
+    if (!isset($map[$course_id])) {
+        return;
+    }
+
+    // ID de producto Woo vinculado al curso TutorLMS
+    $product_id = tutor_utils()->get_course_product_id($course_id);
+    if (!$product_id) {
+        return;
+    }
+
+    // Secret HMAC (debe coincidir byte a byte con el del CRM)
     $secret = defined('RETORIKA_WEBHOOK_SECRET') ? RETORIKA_WEBHOOK_SECRET : '';
     if (!$secret) {
         error_log('[retorika] RETORIKA_WEBHOOK_SECRET no definido en wp-config.php');
-        return; // no bloqueamos: fail-open
+        return; // fail-open
     }
 
-    // ── 5. Construir queryString URL-ENCODED y firmar sobre la misma ─────
-    // IMPORTANTE: la firma se calcula sobre el query string CON URL-encoding
-    // aplicado (urlencode → "@" se convierte en "%40", etc). El endpoint en
-    // el CRM reconstruye con url.searchParams.toString() que produce el
-    // mismo encoding. Cualquier desviación (firmar sobre el string sin
-    // codificar) devolverá 401.
-    $email      = strtolower($user->user_email);
-    $query      = 'email=' . urlencode($email) . '&productId=' . intval($product_id);
-    $signature  = hash_hmac('sha256', $query, $secret);
+    // Construir queryString URL-encoded y firmar sobre la misma cadena.
+    // El endpoint del CRM reconstruye la query con searchParams.toString()
+    // (urlencodea "@" como "%40"); aquí usamos urlencode() que produce
+    // exactamente el mismo encoding. Cualquier desviación devolvería 401.
+    $email     = strtolower($user->user_email);
+    $query     = 'email=' . urlencode($email) . '&productId=' . intval($product_id);
+    $signature = hash_hmac('sha256', $query, $secret);
 
     $endpoint = 'https://crm.salamandrasolutions.com/api/webhooks/retorika/registro-curso/check?' . $query;
 
-    // ── 6. Llamada al CRM ─────────────────────────────────────────────────
     $response = wp_remote_get($endpoint, array(
         'timeout' => 5,
         'headers' => array(
@@ -141,29 +143,21 @@ add_action('template_redirect', function () {
     }
 
     $status = wp_remote_retrieve_response_code($response);
-    if ($status >= 500) {
-        error_log('[retorika] CRM 5xx — fail-open (status=' . $status . ')');
-        return; // CRM caído → permitimos acceso
-    }
-    if ($status === 401) {
-        // Configuración rota (secret diferente al del CRM, o WP fuera del
-        // allowlist). NO bloqueamos al alumno y lo dejamos pasar; mejor que
-        // bloquear acceso a clases que ya pagaron.
-        error_log('[retorika] CRM 401 — revisa RETORIKA_WEBHOOK_SECRET y x-tenant');
+    if ($status >= 500 || $status === 401) {
+        error_log('[retorika] CRM status=' . $status . ' — fail-open');
         return;
     }
 
     $body = json_decode(wp_remote_retrieve_body($response), true);
     if (!is_array($body) || !isset($body['has'])) {
-        error_log('[retorika] CRM respuesta inesperada: ' . substr(wp_remote_retrieve_body($response), 0, 200));
-        return; // fail-open
+        return;
     }
 
-    // ── 7. Si el alumno NO tiene registro previo → al form ───────────────
+    // Si el alumno NO tiene registro previo => al formulario
     if ($body['has'] === false) {
         wp_safe_redirect($map[$course_id]);
         exit;
     }
 
-    // Si has === true, deja pasar (acceso normal al curso).
+    // Si has === true => deja pasar al curso normalmente
 });

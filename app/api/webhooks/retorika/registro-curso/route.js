@@ -225,11 +225,18 @@ export async function POST(request) {
       );
     }
 
+    // Fallback: si el NIF del form no resolvió ninguna Company (campo vacío,
+    // typo, formato distinto) pero el TrainingUser ya está vinculado
+    // manualmente a una empresa, usamos esa en el registro. Sin esto, un
+    // alumno ya conocido del CRM podía generar registros con companyId=null
+    // y aparecer "sin empresa" en /formacion/cursos/:id.
+    const resolvedCompanyId = company?.id ?? user.companyId ?? null;
+
     // ── Crear CourseRegistration ───────────────────────────────────────
     const row = await CourseRegistration.create({
       trainingUserId: user.id,
       courseId: course?.id ?? null,
-      companyId: company?.id ?? null,
+      companyId: resolvedCompanyId,
       email,
       wpUserId: Number.isInteger(payload.userWpId) ? payload.userWpId : null,
       wpProductId: payload.productWpId,
@@ -244,7 +251,7 @@ export async function POST(request) {
     });
 
     process.stdout.write(
-      `[retorika:registration:created] id=${row.id} email=${email.replace(/(.{2}).*(@.*)/, "$1***$2")} productId=${payload.productWpId} courseId=${course?.id ?? "null"} companyId=${company?.id ?? "null"} authMode=${authMode}\n`
+      `[retorika:registration:created] id=${row.id} email=${email.replace(/(.{2}).*(@.*)/, "$1***$2")} productId=${payload.productWpId} courseId=${course?.id ?? "null"} companyId=${resolvedCompanyId ?? "null"} authMode=${authMode}\n`
     );
 
     // ── Audit log (best-effort) ────────────────────────────────────────
@@ -260,7 +267,7 @@ export async function POST(request) {
         email: email.replace(/(.{2}).*(@.*)/, "$1***$2"),
         productId: payload.productWpId,
         courseId: course?.id ?? null,
-        companyId: company?.id ?? null,
+        companyId: resolvedCompanyId,
         trainingUserId: user.id,
       },
       ip,

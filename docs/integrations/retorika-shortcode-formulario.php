@@ -22,7 +22,10 @@ if (!defined('ABSPATH')) exit;
 add_shortcode('retorika_registro_form', function ($atts) {
   $atts = shortcode_atts([
     'course_id'    => '5383',
-    'course_url'   => '/curso-liderazgo-educativo/',
+    // URL real del curso en WP de Retorika (validada en producción
+    // 2026-06-16). El CPT de TutorLMS está expuesto con rewrite custom
+    // /curso/<slug>/, no la URL canónica /courses/<slug>/.
+    'course_url'   => '/curso/liderazgodocente/',
     'endpoint'     => 'https://crm.salamandrasolutions.com/api/webhooks/retorika/registro-curso',
     'tenant_slug'  => 'retorika',
   ], $atts);
