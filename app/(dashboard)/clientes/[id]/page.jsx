@@ -1,10 +1,10 @@
 import { headers } from "next/headers";
 
 import DefaultClientDetailModule from "../../../../modules/default/ClientDetailModule.jsx";
-import NutriLauraClientsModule from "../../../../modules/overrides/nutri-laura/ClientsModule.jsx";
+import NutriLauraClientDetailModule from "../../../../modules/overrides/nutri-laura/ClientDetailModule.jsx";
 
 const UI_OVERRIDES = {
-  nutri_laura: NutriLauraClientsModule,
+  nutri_laura: NutriLauraClientDetailModule,
 };
 
 const TENANT_TITLE_OVERRIDES = {

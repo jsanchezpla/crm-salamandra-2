@@ -179,7 +179,7 @@ historial de interacciones, sección de facturación.
 
 ### Override nutri_laura
 
-`modules/overrides/nutri-laura/ClientsModule.jsx` — ficha de paciente
+`modules/overrides/nutri-laura/ClientDetailModule.jsx` — ficha de paciente
 reordenada:
 
 1. Header con back link, nombre, status chip, edad + email + teléfono inline.
