@@ -171,6 +171,19 @@ usan `pending` hoy).
 
 Badge contador de pendientes en el tab.
 
+### Citas desde la ficha del paciente
+
+Como complemento al módulo `/citas`, la **tab Citas del detalle de cliente**
+(`/clientes/:id` → tab "Citas" en el override nutri_laura) lista los
+bookings de ese paciente concreto y permite confirmar/rechazar
+inline cualquier `pending`. Cruce por `clientEmail` (Booking no tiene FK
+a Client).
+
+Componente: `modules/overrides/nutri-laura/ClientBookingsPanel.jsx`.
+Endpoints usados: idénticos a esta página (`GET /api/citas/bookings?clientEmail=`,
+`PATCH .../confirm`, `PATCH .../reject`). Detalle del flujo y permisos en
+[`docs/modules/clients.md`](./clients.md#override-nutri_laura).
+
 ## Integración Google Calendar / Meet — **Fase 2 (no implementado)**
 
 El campo `Booking.meetUrl` es un snapshot del `EventType.meetUrl`

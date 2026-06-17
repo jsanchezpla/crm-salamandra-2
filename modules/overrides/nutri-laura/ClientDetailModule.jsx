@@ -14,9 +14,11 @@
  *     Cambiar de tab desmonta InfoTab pero el state sobrevive aquí, así que
  *     al volver a Información los inputs reaparecen con lo que el usuario
  *     tenía escrito (regla #1 del Checkpoint 3: no romper edición inline).
- *   - InteractionsLegacySection se queda en la tab Información (al final) para
- *     no perder acceso al historial antiguo si existe — algunos pacientes
- *     traen interactions del módulo legacy.
+ *   - InteractionsLegacySection archivado a `_InteractionsLegacySection.jsx`:
+ *     la tabla `interactions` no existe en crm_nutri_laura, así que la sección
+ *     se quitó del render. El backend tolera la tabla missing (try/catch en
+ *     GET /api/clients/:id) y otros tenants siguen recibiendo el array para
+ *     su default module.
  *   - Permisos: gate por `me.role ∈ {admin, superadmin, employee}` antes
  *     de pintar el detalle. Sin rol válido → mensaje "Sin acceso".
  *
@@ -363,55 +365,49 @@ function InfoTab({
   onDelete,
 }) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-6xl">
-      <div className="lg:col-span-1 space-y-6">
-        <PatientCard
-          client={client}
-          editMode={editMode}
-          editForm={editForm}
-          setEditForm={setEditForm}
-          onEdit={onEdit}
-          onSave={onSave}
-          onCancel={onCancel}
-          saving={saving}
-          editError={editError}
-          motivo={motivo}
-          infoAdicional={infoAdicional}
-        />
+    <div className="max-w-lg space-y-6">
+      <PatientCard
+        client={client}
+        editMode={editMode}
+        editForm={editForm}
+        setEditForm={setEditForm}
+        onEdit={onEdit}
+        onSave={onSave}
+        onCancel={onCancel}
+        saving={saving}
+        editError={editError}
+        motivo={motivo}
+        infoAdicional={infoAdicional}
+      />
 
-        {!confirmDelete ? (
-          <button
-            onClick={() => setConfirmDelete(true)}
-            className="w-full text-xs text-red-400 hover:text-red-600 transition-colors py-1.5"
-          >
-            Eliminar paciente
-          </button>
-        ) : (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
-            <p className="text-xs text-red-700 font-medium">
-              ¿Eliminar a {client.name}? Esto borra también sus archivos y notas.
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setConfirmDelete(false)}
-                className="flex-1 bg-white text-gray-700 border border-gray-200 text-xs font-medium py-1.5 rounded-md hover:bg-gray-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={onDelete}
-                className="flex-1 bg-red-600 text-white text-xs font-semibold py-1.5 rounded-md hover:bg-red-700"
-              >
-                Sí, eliminar
-              </button>
-            </div>
+      {!confirmDelete ? (
+        <button
+          onClick={() => setConfirmDelete(true)}
+          className="w-full text-xs text-red-400 hover:text-red-600 transition-colors py-1.5"
+        >
+          Eliminar paciente
+        </button>
+      ) : (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
+          <p className="text-xs text-red-700 font-medium">
+            ¿Eliminar a {client.name}? Esto borra también sus archivos y notas.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setConfirmDelete(false)}
+              className="flex-1 bg-white text-gray-700 border border-gray-200 text-xs font-medium py-1.5 rounded-md hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={onDelete}
+              className="flex-1 bg-red-600 text-white text-xs font-semibold py-1.5 rounded-md hover:bg-red-700"
+            >
+              Sí, eliminar
+            </button>
           </div>
-        )}
-      </div>
-
-      <div className="lg:col-span-2 space-y-6">
-        <InteractionsLegacySection interactions={client.interactions ?? []} />
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -565,48 +561,3 @@ function PatientCard({
   );
 }
 
-// ── InteractionsLegacySection (collapsible) ──────────────────────────────────
-
-function InteractionsLegacySection({ interactions }) {
-  const [open, setOpen] = useState(false);
-  if (!interactions || interactions.length === 0) {
-    return (
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-4 text-xs text-gray-400">
-        Sin historial de interacciones legacy.
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
-        <div>
-          <div className="text-sm font-semibold text-gray-700">Historial de interacciones</div>
-          <div className="text-[11px] text-gray-400 mt-0.5">
-            {interactions.length} registro{interactions.length === 1 ? "" : "s"} (legacy)
-          </div>
-        </div>
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="text-[11px] font-semibold text-gray-500 hover:text-gray-800"
-        >
-          {open ? "Ocultar" : "Mostrar"}
-        </button>
-      </div>
-      {open && (
-        <ul className="divide-y divide-gray-50">
-          {interactions.map((i) => (
-            <li key={i.id} className="px-5 py-3">
-              <div className="flex items-center gap-2 text-xs text-gray-400 mb-1">
-                <span className="font-medium text-gray-600">{i.type}</span>
-                <span>{fmtDate(i.date)}</span>
-                {i.createdBy && <span>· {i.createdBy}</span>}
-              </div>
-              <div className="text-sm text-gray-700 whitespace-pre-wrap">{i.content}</div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}

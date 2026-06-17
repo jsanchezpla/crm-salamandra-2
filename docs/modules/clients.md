@@ -180,15 +180,50 @@ historial de interacciones, sección de facturación.
 ### Override nutri_laura
 
 `modules/overrides/nutri-laura/ClientDetailModule.jsx` — ficha de paciente
-reordenada:
+con **4 tabs** (rediseño Checkpoint 3, junio 2026):
 
-1. Header con back link, nombre, status chip, edad + email + teléfono inline.
-2. Columna izquierda: datos del paciente (motivo de consulta + info adicional
-   resaltados; status con etiqueta "Paciente activo"); botón eliminar discreto.
-3. Columna derecha: Próximas citas (fetch `/api/citas/bookings?clientEmail=&future=true`),
-   Documentos PDF (drop zone + lista), Notas internas timeline, Interacciones
-   legacy collapsible al final si existen.
+| Tab | Componente | Endpoints leídos | Notas |
+|---|---|---|---|
+| Información | `PatientCard` + delete inline | `GET/PUT/DELETE /api/clients/:id` | Edición inline; `editMode`/`editForm` viven en el padre para sobrevivir cambios de tab |
+| Notas | `ClientNotesPanel.jsx` | `GET/POST /api/clients/:id/notes`, `DELETE /api/clients/:id/notes/:noteId` | Paginación incremental "Cargar más" (limit 50). Sin restricción de borrado por autor (Laura es única usuaria) |
+| Adjuntos | `ClientAttachmentsPanel.jsx` | `GET/POST /api/clients/:id/attachments`, `DELETE`, `GET .../download` | Drop zone + validación frontend (PDF, ≤10MB, ≤50 archivos) |
+| Citas | `ClientBookingsPanel.jsx` | `GET /api/citas/bookings?clientEmail=`, `PATCH .../confirm`, `PATCH .../reject` | Cruce por email (Booking no tiene FK a Client). Confirm/Reject inline para `pending` con mini-modal opcional para motivo |
+
+**Permisos**: el detalle hace gate por `me.role ∈ {admin, superadmin, employee}`
+fetcheando `/api/auth/me` al montar. Sin rol válido → "Sin acceso".
+
+**Header**: back link a `/clientes`, nombre, status chip (Paciente activo, En
+seguimiento…), edad/email/teléfono inline, link "↳ Lead origen" si
+`client.leadId` (o `customFields.leadId` por compat).
+
+**`InteractionsLegacySection`**: archivado en
+`modules/overrides/nutri-laura/_InteractionsLegacySection.jsx` (con prefijo
+`_` para indicar no-importado). La tabla `interactions` no existe en
+`crm_nutri_laura`, así que la sección desapareció del tab Información. Si
+en el futuro se decide crearla, restaurar el import. El backend
+`GET /api/clients/:id` tolera la tabla missing con try/catch del 42P01 —
+otros tenants donde la tabla SÍ existe siguen recibiendo el array poblado
+para el default module.
+
+**Componente reusable**: `components/ui/TimestampRelative.jsx` — render
+"hace 5 min" con tooltip absoluto en zona Madrid; usado por los paneles
+Notas y Adjuntos.
 
 El wrapper `app/(dashboard)/clientes/[id]/page.jsx` selecciona override
 por `x-tenant` del header (puesto por middleware desde el JWT). Tenants
 sin entrada en `UI_OVERRIDES` ven el módulo default.
+
+### Backlog UI (post-Checkpoint 3)
+
+- PATCH endpoint `/api/clients/:id/notes/:noteId` para edición inline de
+  notas (hoy solo crear/borrar).
+- Enforce ownership backend en `DELETE` de notes y attachments cuando
+  entre una segunda usuaria al tenant.
+- Drawer detalle de Booking en la tab Citas (click en fila).
+- Botón "Marcar completada" para bookings `confirmed`.
+- FK física `Booking.clientId → clients.id` opcional, evitando que un
+  cambio de email del cliente deje bookings huérfanos en su ficha.
+- Distinguir "Rechazada" vs "Cancelada" desde un campo real (hoy se
+  heurística por presencia de `cancellationReason`).
+- Override del listado `/clientes` para nutri_laura (icono ojo en lugar
+  de texto "Ver ficha →").

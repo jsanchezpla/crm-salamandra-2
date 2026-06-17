@@ -3,15 +3,42 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, noContent, forbidden, notFound, error } from "../../../../lib/utils/apiResponse.js";
 import { getClientDir } from "../../../../lib/clients/attachmentStorage.js";
 
-export const GET = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (_request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
 
   const { Client, Interaction } = tenantModels;
   const { id } = await params;
 
-  const client = await Client.findByPk(id, {
-    include: [{ model: Interaction, as: "interactions", order: [["date", "DESC"]] }],
-  });
+  // Intento principal: cliente + interactions (timeline legacy usado por el
+  // ClientDetailModule default). Si la tabla `interactions` no existe en el
+  // schema del tenant (sucede p. ej. en crm_nutri_laura, donde el módulo
+  // legacy nunca se sembró) → Postgres devuelve 42P01 "undefined_table" y
+  // Sequelize lo envuelve en SequelizeDatabaseError. En ese caso degradamos
+  // a un fetch sin include y devolvemos interactions:[] para no romper la
+  // ficha completa por una sección opcional.
+  let client;
+  try {
+    client = await Client.findByPk(id, {
+      include: [{ model: Interaction, as: "interactions", order: [["date", "DESC"]] }],
+    });
+  } catch (err) {
+    const isMissingTable =
+      err?.parent?.code === "42P01" ||
+      err?.original?.code === "42P01";
+    if (!isMissingTable) throw err;
+    process.stderr.write(
+      `[clients:detail] interactions table missing for tenant ${tenant.slug} — degrading to no-include\n`
+    );
+    client = await Client.findByPk(id);
+    if (client) {
+      // Sequelize no añade el alias 'interactions' si no hay include; lo
+      // emulamos en el JSON serializado para que el cliente reciba siempre
+      // la misma forma (default module lee data.data.interactions).
+      const json = client.toJSON();
+      json.interactions = [];
+      return ok(json);
+    }
+  }
 
   if (!client) return notFound("Cliente no encontrado");
   return ok(client);
@@ -69,11 +96,26 @@ export const DELETE = withTenant(async (_request, { params }, { tenant, tenantMo
   const client = await Client.findByPk(id);
   if (!client) return notFound("Cliente no encontrado");
 
-  // No permitir borrar si tiene facturas (preservar histórico fiscal)
+  // No permitir borrar si tiene facturas (preservar histórico fiscal).
+  // Si la tabla `invoices` no existe en este tenant (caso nutri_laura, donde
+  // el módulo billing no se sembró) → Postgres devuelve 42P01. Degradamos
+  // a "no hay bloqueo por facturas" y seguimos con el borrado: el cliente
+  // claramente no puede tener facturas si la tabla no existe. Mismo patrón
+  // defensivo que el GET con `interactions`.
   if (Invoice) {
-    const invoiceCount = await Invoice.count({ where: { clientId: id } });
-    if (invoiceCount > 0) {
-      return error(`No se puede borrar: el cliente tiene ${invoiceCount} factura(s). Márcalo como inactivo en su lugar.`, 409);
+    try {
+      const invoiceCount = await Invoice.count({ where: { clientId: id } });
+      if (invoiceCount > 0) {
+        return error(`No se puede borrar: el cliente tiene ${invoiceCount} factura(s). Márcalo como inactivo en su lugar.`, 409);
+      }
+    } catch (err) {
+      const isMissingTable =
+        err?.parent?.code === "42P01" ||
+        err?.original?.code === "42P01";
+      if (!isMissingTable) throw err;
+      process.stderr.write(
+        `[clients:delete] invoices table missing for tenant ${tenant.slug} — skipping invoice guard\n`
+      );
     }
   }
 
