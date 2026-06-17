@@ -14,8 +14,9 @@
  *    Según docs/modules/training.md está marcado para borrado y ningún
  *    flujo lo usa.
  *
- * 2. Registra el módulo `training` en `master.tenant_modules` con
- *    `uiOverride: nutri-laura/FormacionOverview`.
+ * 2. Registra el módulo `training` en `master.tenant_modules` sin
+ *    `uiOverride` — Laura usa el overview default (igual que retorika).
+ *    El override antiguo B2C se eliminó por petición de Laura.
  * 3. Añade "training" al `moduleAccess` del admin (admin@nutri-laura.es).
  * 4. Siembra 3 cursos de nutrición de ejemplo. Aún sin alumnos ni
  *    matrículas — esos vendrán cuando Laura conecte su WordPress +
@@ -255,7 +256,7 @@ async function main() {
       moduleKey: "training",
       enabled: true,
       version: "1.0.0",
-      uiOverride: "nutri-laura/FormacionOverview",
+      uiOverride: null,
       schemaExtensions: {},
       logicOverrides: {
         // Indicadores leídos por el override de UI. No tienen efecto en el
@@ -268,7 +269,7 @@ async function main() {
   });
 
   if (!modCreated) {
-    await moduleRow.update({ enabled: true, uiOverride: "nutri-laura/FormacionOverview" });
+    await moduleRow.update({ enabled: true, uiOverride: null });
     log("· Módulo ya existía — actualizado");
   } else {
     log("✓ Módulo training creado con uiOverride: nutri-laura/FormacionOverview");

@@ -608,9 +608,10 @@ El overview (`/formacion`) usa el mismo patrón de override por tenant
 que el módulo de leads: `app/(dashboard)/formacion/page.jsx` selecciona
 entre `modules/training/FormacionOverview.jsx` (default, copy orientado
 a Retorika con WP + TutorLMS) y los overrides de `modules/overrides/{slug}/FormacionOverview.jsx`.
-Hoy solo `nutri_laura` tiene override propio (copy nutricional, sin
-secciones "Empresas" ni "Cuestionarios" mientras Laura no active B2B
-ni conecte TutorLMS). Las páginas internas (`/formacion/cursos`,
+Hoy solo `aumenta` tiene override propio. `nutri_laura` y `retorika` usan
+el default (las 5 secciones). El override antiguo de `nutri_laura` (copy
+nutricional B2C sin "Empresas" ni "Cuestionarios") se eliminó cuando Laura
+decidió usar la UI completa. Las páginas internas (`/formacion/cursos`,
 `/formacion/usuarios`, etc.) son comunes a todos los tenants.
 
 | Ruta | Función |
@@ -649,7 +650,7 @@ viene del propio TutorLMS.
 | `scripts/seed-retorika.js` | Crea schema `crm_retorika` y siembra el primer curso ("IA y comunicación política", `wpCourseId: 6434`). Idempotente. **Solo añade el curso semilla**; el resto de cursos llegan vía webhook desde WP. |
 | `scripts/add-training-module-demo.js` | Activa el módulo `training` en el tenant `demo` y siembra 4 empresas, 8 cursos, ~36 alumnos de empresa + 10 privados, ~55 matrículas. Para demos a clientes potenciales. Idempotente. |
 | `scripts/seed-cuestionarios-demo.js` | Activa el módulo `cuestionarios` en demo y siembra intentos de quiz realistas (datos pedagógicos sobre comunicación, módulos de Retorika). Útil para mostrar la pestaña Cuestionarios sin necesitar webhooks. |
-| `scripts/add-training-module-nutri-laura.js` | Activa el módulo `training` en `nutri_laura`. Crea las 6 tablas con SQL crudo (sin la legacy `trainings`), registra el módulo con `uiOverride: nutri-laura/FormacionOverview` y siembra 3 cursos de nutrición. Patrón idéntico al `add-leads-module-nutri-laura.js` por la filosofía de tenant minimal. |
+| `scripts/add-training-module-nutri-laura.js` | Activa el módulo `training` en `nutri_laura`. Crea las 6 tablas con SQL crudo (sin la legacy `trainings`), registra el módulo sin `uiOverride` (usa el default igual que retorika) y siembra 3 cursos de nutrición. Patrón idéntico al `add-leads-module-nutri-laura.js` por la filosofía de tenant minimal. |
 | `scripts/add-training-module-aumenta.js` | Activa el módulo `training` en `aumenta`. Las 6 tablas ya existen desde el sync inicial — el script solo registra el módulo con `uiOverride: aumenta/FormacionOverview` y siembra 6 cursos reales de la web de Aumenta + 15 alumnos B2C + 22 matrículas. Sin cuestionarios (la tabla `quiz_attempts` queda vacía). Ver "Activación en Aumenta" más abajo. |
 
 `seed-master.js` (que crea el tenant retorika) registra el módulo

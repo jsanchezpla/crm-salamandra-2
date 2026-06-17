@@ -1,11 +1,12 @@
 import { headers } from "next/headers";
 
 import DefaultFormacionOverview from "../../../modules/training/FormacionOverview.jsx";
-import NutriLauraFormacionOverview from "../../../modules/overrides/nutri-laura/FormacionOverview.jsx";
 import AumentaFormacionOverview from "../../../modules/overrides/aumenta/FormacionOverview.jsx";
 
+// nutri_laura usa el overview default (5 secciones) — mismo flujo que retorika.
+// Su override anterior (B2C reducido, sin Empresas ni Cuestionarios) se
+// eliminó porque Laura quiere ver la UI completa de formación.
 const UI_OVERRIDES = {
-  nutri_laura: NutriLauraFormacionOverview,
   aumenta: AumentaFormacionOverview,
 };
 

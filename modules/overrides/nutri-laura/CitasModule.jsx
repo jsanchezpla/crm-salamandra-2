@@ -55,6 +55,8 @@ export default function NutriLauraCitasModule() {
   const [tab, setTab] = useState("waitlist");
   const [pendingCount, setPendingCount] = useState(0);
   const [waitlistRefreshKey, setWaitlistRefreshKey] = useState(0);
+  const [calendarRefreshKey, setCalendarRefreshKey] = useState(0);
+  const [newOpen, setNewOpen] = useState(false);
 
   // Si no hay pendings al cargar, mostrar calendario por defecto.
   // Si hay, mantenerse en waitlist.
@@ -71,6 +73,21 @@ export default function NutriLauraCitasModule() {
 
   function bumpWaitlist() {
     setWaitlistRefreshKey((k) => k + 1);
+  }
+  function bumpCalendar() {
+    setCalendarRefreshKey((k) => k + 1);
+  }
+
+  function handleBookingCreated(booking) {
+    setNewOpen(false);
+    // Refrescamos ambas vistas: la cita nueva nace 'confirmed', así que
+    // aparece en el calendario; la lista de espera también se refresca
+    // por si la sesión tenía una stale.
+    bumpCalendar();
+    bumpWaitlist();
+    // Si Laura está en waitlist y la cita ya viene confirmada, saltamos
+    // al calendario para que vea el resultado.
+    if (booking?.status === "confirmed") setTab("calendar");
   }
 
   return (
@@ -91,6 +108,15 @@ export default function NutriLauraCitasModule() {
             <Link href="/citas/disponibilidad" className="px-3 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 transition">
               Disponibilidad
             </Link>
+            <button
+              onClick={() => setNewOpen(true)}
+              className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--color-primary)] text-white hover:opacity-90 transition flex items-center gap-1"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} className="w-3.5 h-3.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              Nueva cita
+            </button>
           </div>
         </div>
 
@@ -119,9 +145,16 @@ export default function NutriLauraCitasModule() {
             onActioned={bumpWaitlist}
           />
         ) : (
-          <CalendarPanel />
+          <CalendarPanel refreshKey={calendarRefreshKey} />
         )}
       </div>
+
+      {newOpen && (
+        <NewBookingModal
+          onClose={() => setNewOpen(false)}
+          onCreated={handleBookingCreated}
+        />
+      )}
     </div>
   );
 }
@@ -331,7 +364,7 @@ function Detail({ label, value }) {
 // (sin modal de creación manual ni detalle complejo — Laura crea citas
 // principalmente desde el formulario público + lista de espera).
 
-function CalendarPanel() {
+function CalendarPanel({ refreshKey = 0 }) {
   const calendarRef = useRef(null);
   const [eventTypes, setEventTypes] = useState([]);
   const [openBooking, setOpenBooking] = useState(null);
@@ -343,6 +376,14 @@ function CalendarPanel() {
   }, []);
 
   useEffect(() => { loadEventTypes(); }, [loadEventTypes]);
+
+  // El padre incrementa refreshKey cuando alguien crea/cancela una cita
+  // desde fuera del calendario (modal "Nueva cita", confirm/reject inline).
+  // Aquí pedimos a FullCalendar refetchEvents para repintar la vista actual.
+  useEffect(() => {
+    if (refreshKey === 0) return;
+    calendarRef.current?.getApi?.()?.refetchEvents?.();
+  }, [refreshKey]);
 
   const fetchEvents = useCallback(async (info, success, failure) => {
     try {
@@ -435,6 +476,305 @@ function Row({ label, value }) {
     <div className="flex items-start gap-3">
       <dt className="w-24 shrink-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wider pt-0.5">{label}</dt>
       <dd className="flex-1 text-sm text-gray-700 break-words">{value}</dd>
+    </div>
+  );
+}
+
+// ── NewBookingModal ─────────────────────────────────────────────────────────
+// Crea una cita manual desde admin con status='confirmed' (default del
+// endpoint POST /api/citas/bookings). Valida modality contra las del
+// EventType seleccionado. NO valida disponibilidad ni minNoticeHours —
+// admin puede crear fuera de slot si lo necesita; el backend solo
+// chequea solapamiento con otras citas activas (409 si hay).
+
+function NewBookingModal({ onClose, onCreated }) {
+  const [eventTypes, setEventTypes] = useState([]);
+  const [loadingTypes, setLoadingTypes] = useState(true);
+  const [form, setForm] = useState({
+    eventTypeId: "",
+    date: "",
+    time: "",
+    modality: "",
+    clientName: "",
+    clientEmail: "",
+    clientPhone: "",
+    additionalData: "",
+    notes: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetch("/api/citas/event-types?active=true", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.ok && Array.isArray(j.data)) setEventTypes(j.data);
+      })
+      .finally(() => setLoadingTypes(false));
+  }, []);
+
+  const selectedType = eventTypes.find((e) => e.id === form.eventTypeId);
+  const availableModalities = selectedType?.modalities ?? [];
+
+  // Si la modalidad actual no es válida para el tipo seleccionado, la
+  // limpiamos para forzar a Laura a elegir una nueva.
+  useEffect(() => {
+    if (form.modality && selectedType && !availableModalities.includes(form.modality)) {
+      setForm((f) => ({ ...f, modality: "" }));
+    }
+  }, [selectedType, form.modality, availableModalities]);
+
+  function update(field, value) {
+    setForm((f) => ({ ...f, [field]: value }));
+    if (error) setError(null);
+  }
+
+  function combinedISO() {
+    if (!form.date || !form.time) return null;
+    const local = new Date(`${form.date}T${form.time}:00`);
+    if (Number.isNaN(local.getTime())) return null;
+    return local.toISOString();
+  }
+
+  function validate() {
+    if (!form.eventTypeId) return "Selecciona un tipo de cita";
+    if (!form.date || !form.time) return "Fecha y hora son obligatorias";
+    if (!form.modality) return "Selecciona una modalidad";
+    if (!form.clientName.trim()) return "Nombre del paciente obligatorio";
+    if (!form.clientEmail.trim()) return "Email del paciente obligatorio";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.clientEmail.trim())) return "Email no tiene formato válido";
+    if (!form.clientPhone.trim()) return "Teléfono del paciente obligatorio";
+    if (selectedType?.additionalDataRequired && !form.additionalData.trim()) {
+      return `${selectedType.additionalDataLabel || "Respuesta al formulario"} obligatoria para este tipo`;
+    }
+    return null;
+  }
+
+  async function submit() {
+    const v = validate();
+    if (v) { setError(v); return; }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/citas/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventTypeId: form.eventTypeId,
+          clientName: form.clientName.trim(),
+          clientEmail: form.clientEmail.trim(),
+          clientPhone: form.clientPhone.trim(),
+          additionalData: form.additionalData.trim() || null,
+          scheduledAt: combinedISO(),
+          modality: form.modality,
+          notes: form.notes.trim() || null,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!j.ok) {
+        if (r.status === 403) {
+          setError("Solo administradores pueden crear citas manualmente.");
+        } else if (r.status === 409) {
+          setError(j.error || "Esa hora ya está ocupada por otra cita activa.");
+        } else if (r.status === 404) {
+          setError(j.error || "Tipo de cita no encontrado.");
+        } else {
+          setError(j.error || `Error al crear cita (HTTP ${r.status})`);
+        }
+        return;
+      }
+      onCreated?.(j.data);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-900">Nueva cita manual</h2>
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+            aria-label="Cerrar"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-3">
+          {error && (
+            <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-md text-xs text-red-700">
+              {error}
+            </div>
+          )}
+
+          {/* Tipo de cita */}
+          <div>
+            <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+              Tipo de cita *
+            </label>
+            <select
+              value={form.eventTypeId}
+              onChange={(e) => update("eventTypeId", e.target.value)}
+              disabled={loadingTypes}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] disabled:opacity-50"
+            >
+              <option value="">{loadingTypes ? "Cargando…" : "Selecciona un tipo"}</option>
+              {eventTypes.map((et) => (
+                <option key={et.id} value={et.id}>
+                  {et.name} · {et.duration} min
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Fecha + hora */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                Fecha *
+              </label>
+              <input
+                type="date"
+                value={form.date}
+                onChange={(e) => update("date", e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                Hora *
+              </label>
+              <input
+                type="time"
+                value={form.time}
+                onChange={(e) => update("time", e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]"
+              />
+            </div>
+          </div>
+
+          {/* Modalidad */}
+          <div>
+            <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+              Modalidad *
+            </label>
+            <select
+              value={form.modality}
+              onChange={(e) => update("modality", e.target.value)}
+              disabled={!selectedType}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] disabled:opacity-50"
+            >
+              <option value="">{selectedType ? "Selecciona" : "Elige primero el tipo de cita"}</option>
+              {availableModalities.map((m) => (
+                <option key={m} value={m}>{MODALITY_LABELS[m] ?? m}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Cliente */}
+          <div className="pt-3 border-t border-gray-100">
+            <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              Datos del paciente
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                  Nombre *
+                </label>
+                <input
+                  type="text"
+                  value={form.clientName}
+                  onChange={(e) => update("clientName", e.target.value)}
+                  placeholder="María García"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                    Email *
+                  </label>
+                  <input
+                    type="email"
+                    value={form.clientEmail}
+                    onChange={(e) => update("clientEmail", e.target.value)}
+                    placeholder="maria@ejemplo.com"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                    Teléfono *
+                  </label>
+                  <input
+                    type="tel"
+                    value={form.clientPhone}
+                    onChange={(e) => update("clientPhone", e.target.value)}
+                    placeholder="+34 612 345 678"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Respuesta al formulario si el tipo lo requiere */}
+          {selectedType?.additionalDataRequired && (
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                {selectedType.additionalDataLabel || "Respuesta al formulario"} *
+              </label>
+              <textarea
+                rows={3}
+                value={form.additionalData}
+                onChange={(e) => update("additionalData", e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] resize-none"
+              />
+            </div>
+          )}
+
+          {/* Notas internas */}
+          <div>
+            <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+              Notas internas (opcional)
+            </label>
+            <textarea
+              rows={2}
+              value={form.notes}
+              onChange={(e) => update("notes", e.target.value)}
+              placeholder="Recordatorios, observaciones del equipo…"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-100 flex gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="flex-1 text-xs font-medium text-gray-700 border border-gray-200 px-3 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={submitting}
+            className="flex-1 text-xs font-semibold text-white bg-[var(--color-primary)] hover:opacity-90 px-3 py-2 rounded-lg disabled:opacity-50"
+          >
+            {submitting ? "Creando…" : "Crear cita"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
