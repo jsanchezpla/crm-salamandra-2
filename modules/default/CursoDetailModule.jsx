@@ -4,7 +4,7 @@
  * CursoDetailModule — página de detalle de un Course con dos tabs:
  *   - Información: ficha read-only del curso + botón "Editar" que abre
  *     el EditCourseDrawer compartido.
- *   - Registros previos: Stats + Lista + Detail drawer. Visible solo si
+ *   - Registros del curso: Stats + Lista + Detail drawer. Visible solo si
  *     el usuario tiene 'training' en su moduleAccess.
  *
  * Permisos: fetch /api/auth/me al montar. Si el usuario no tiene
@@ -142,7 +142,7 @@ export default function CursoDetailModule({ courseId }) {
             Información
           </TabButton>
           <TabButton active={tab === "registrations"} onClick={() => setTab("registrations")}>
-            Registros previos
+            Registros del curso
           </TabButton>
         </div>
       </div>

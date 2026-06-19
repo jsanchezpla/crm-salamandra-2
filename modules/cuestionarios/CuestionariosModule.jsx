@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -118,8 +119,14 @@ function AttemptDetail({ attempt, onBack }) {
         <p className="text-xs text-neutral-400 mb-0.5">
           Curso: <span className="text-neutral-600">{attempt.courseTitle ?? "—"}</span>
         </p>
-        <h2 className="text-base sm:text-lg font-bold text-neutral-900">
-          Cuestionario: {attempt.quizTitle ?? "—"}
+        <h2 className="text-base sm:text-lg font-bold text-neutral-900 flex items-center gap-2">
+          <span>Cuestionario: {attempt.quizTitle ?? "—"}</span>
+          <HelpTooltip title="Detalle del intento">
+            Aquí ves toda la información de un examen concreto: quién lo hizo, cuándo, cuánto tardó,
+            qué nota mínima hacía falta para aprobar y, debajo, todas las preguntas con la respuesta
+            que dio el alumno y la respuesta correcta. Útil para repasar resultados con un alumno
+            o para ver qué preguntas falla más gente.
+          </HelpTooltip>
         </h2>
       </div>
 
@@ -233,8 +240,13 @@ function AttemptDetail({ attempt, onBack }) {
       {/* ── Preguntas ── */}
       {Array.isArray(attempt.answers) && attempt.answers.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-neutral-700 mb-3">
+          <h3 className="text-sm font-semibold text-neutral-700 mb-3 flex items-center gap-2">
             Resumen del cuestionario
+            <HelpTooltip title="Resumen pregunta a pregunta">
+              Cada fila es una pregunta del cuestionario. Verás qué contestó el alumno y, si falló,
+              cuál era la respuesta correcta. Los iconos de la izquierda indican el tipo de pregunta
+              (selección, verdadero/falso, etc.).
+            </HelpTooltip>
           </h3>
 
           {/* Móvil: cards */}
@@ -423,7 +435,15 @@ function AttemptsList({ onSelect }) {
           >
             ← Volver
           </Link>
-          <h1 className="text-xl font-extrabold text-neutral-900">Cuestionarios</h1>
+          <h1 className="text-xl font-extrabold text-neutral-900 flex items-center gap-2">
+            Cuestionarios
+            <HelpTooltip title="Cuestionarios">
+              Aquí ves los exámenes que han hecho tus alumnos en cada curso. Cada línea es un intento:
+              quién lo hizo, en qué cuestionario, cuánto tardó, cuántas preguntas acertó y si aprobó
+              o suspendió. Pulsa una línea para abrir el detalle y ver pregunta por pregunta qué
+              contestó cada alumno.
+            </HelpTooltip>
+          </h1>
         </div>
       </div>
 
@@ -436,7 +456,11 @@ function AttemptsList({ onSelect }) {
       )}
 
       {/* Filtros */}
-      <div className="flex flex-col sm:flex-row gap-2">
+      <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+        <HelpTooltip title="Filtros" className="hidden sm:inline-flex">
+          Acota la lista por alumno, empresa o resultado. Por ejemplo: empresa «Acme» + resultado
+          «Suspenso» = solo intentos suspendidos de empleados de Acme, para hacer seguimiento.
+        </HelpTooltip>
         <input
           type="text"
           placeholder="Buscar estudiante, quiz, curso…"

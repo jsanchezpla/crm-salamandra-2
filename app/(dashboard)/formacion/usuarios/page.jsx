@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { TrainingTable, Tr, Td } from "../../../../components/training/TrainingTable.jsx";
 import { TypeBadge, ActiveBadge } from "../../../../components/training/TrainingBadge.jsx";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 
 const LIMIT = 50;
 
@@ -18,10 +19,6 @@ export default function UsuariosPage() {
   const [companyId, setCompanyId] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-
-  const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState(null);
-  const fileRef = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,26 +60,6 @@ export default function UsuariosPage() {
     window.location.href = `/api/training/users/export?${params}`;
   }
 
-  async function handleImport(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImporting(true);
-    setImportResult(null);
-    const formData = new FormData();
-    formData.append("file", file);
-    try {
-      const res = await fetch("/api/training/users/import", { method: "POST", body: formData });
-      const json = await res.json();
-      setImportResult(json.data ?? json);
-      load();
-    } catch (err) {
-      setImportResult({ error: err.message });
-    } finally {
-      setImporting(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  }
-
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
@@ -90,8 +67,15 @@ export default function UsuariosPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-xl font-extrabold text-neutral-900" style={{ fontFamily: "'Syne', sans-serif" }}>
+          <h1 className="text-xl font-extrabold text-neutral-900 flex items-center gap-2" style={{ fontFamily: "'Syne', sans-serif" }}>
             Usuarios
+            <HelpTooltip title="Usuarios">
+              Todas las personas registradas en tu plataforma de formación. Aquí hay dos tipos:
+              alumnos particulares (han comprado un curso por su cuenta) y empleados de empresa
+              (vienen de una empresa cliente). Puedes filtrar, buscar y exportar la lista a Excel.
+              {" "}<strong className="text-white">Importante:</strong> los alumnos de empresa se
+              importan desde Formación → Empresas → ficha de la empresa → «Importar empleados».
+            </HelpTooltip>
           </h1>
           <p className="text-xs text-neutral-400 mt-0.5">{total} usuarios</p>
         </div>
@@ -99,21 +83,27 @@ export default function UsuariosPage() {
           <Link href="/formacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">
             ← Volver
           </Link>
-          <button
-            onClick={handleExport}
-            className="px-3 py-2 rounded-lg text-xs font-semibold text-neutral-700 bg-white border border-neutral-200 hover:bg-neutral-50 transition"
-          >
-            Exportar Excel
-          </button>
-          <label className={`px-3 py-2 rounded-lg text-xs font-semibold text-white cursor-pointer transition-opacity hover:opacity-80 ${importing ? "opacity-50 pointer-events-none" : ""}`} style={{ background: "var(--color-primary)" }}>
-            {importing ? "Importando…" : "Importar empresa"}
-            <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} />
-          </label>
+          <span className="inline-flex items-center gap-1">
+            <button
+              onClick={handleExport}
+              className="px-3 py-2 rounded-lg text-xs font-semibold text-neutral-700 bg-white border border-neutral-200 hover:bg-neutral-50 transition"
+            >
+              Exportar Excel
+            </button>
+            <HelpTooltip title="Exportar a Excel">
+              Descarga un archivo Excel con todos los usuarios que cumplen los filtros que tienes ahora mismo
+              activos. Útil para enviar la lista a alguien o para guardarte una copia.
+            </HelpTooltip>
+          </span>
         </div>
       </div>
 
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
+        <HelpTooltip title="Filtros" className="mr-1">
+          Combínalos para acotar la lista. Por ejemplo: tipo «Empresa» + una empresa concreta = solo
+          los empleados de esa empresa. El buscador acepta nombre, apellido o email.
+        </HelpTooltip>
         <select
           value={type}
           onChange={handleFilterChange(setType)}
@@ -142,20 +132,43 @@ export default function UsuariosPage() {
         />
       </div>
 
-      {importResult && (
-        <div className={`mb-4 px-4 py-2.5 rounded-lg text-xs border ${importResult.error ? "bg-red-50 border-red-100 text-red-600" : "bg-emerald-50 border-emerald-100 text-emerald-700"}`}>
-          {importResult.error
-            ? `Error: ${importResult.error}`
-            : `Importados: ${importResult.imported} · Omitidos: ${importResult.skipped}${importResult.errors?.length ? ` · Errores: ${importResult.errors.length}` : ""}`}
-        </div>
-      )}
-
       {error && (
         <div className="mb-4 px-4 py-2.5 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{error}</div>
       )}
 
       <TrainingTable
-        headers={["Nombre", "Email", "Username", "Tipo", "Empresa", "Estado", "F. Nacimiento"]}
+        headers={[
+          "Nombre",
+          "Email",
+          (
+            <span key="user-h" className="inline-flex items-center gap-1">
+              Username
+              <HelpTooltip title="Nombre de usuario">
+                El nombre que el alumno usa para entrar en el campus. Suele ser su email o un alias.
+              </HelpTooltip>
+            </span>
+          ),
+          (
+            <span key="tipo-h" className="inline-flex items-center gap-1">
+              Tipo
+              <HelpTooltip title="Tipo de alumno">
+                Privado = ha comprado el curso por su cuenta. Empresa = ha sido dado de alta a través
+                de una empresa cliente (no paga él directamente).
+              </HelpTooltip>
+            </span>
+          ),
+          "Empresa",
+          (
+            <span key="est-h" className="inline-flex items-center gap-1">
+              Estado
+              <HelpTooltip title="Estado del alumno">
+                Activo = tiene acceso al campus y puede entrar a sus cursos. Inactivo = el acceso está
+                pausado; no puede entrar hasta que se reactive.
+              </HelpTooltip>
+            </span>
+          ),
+          "F. Nacimiento",
+        ]}
         loading={loading}
         empty="No hay usuarios con los filtros actuales"
       >

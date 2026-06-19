@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { TrainingTable, Tr, Td } from "../../../../components/training/TrainingTable.jsx";
 import { ActiveBadge } from "../../../../components/training/TrainingBadge.jsx";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 
 export default function EmpresasPage() {
   const router = useRouter();
@@ -68,8 +69,16 @@ export default function EmpresasPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-xl font-extrabold text-neutral-900" style={{ fontFamily: "'Syne', sans-serif" }}>
+          <h1 className="text-xl font-extrabold text-neutral-900 flex items-center gap-2" style={{ fontFamily: "'Syne', sans-serif" }}>
             Empresas
+            <HelpTooltip title="Empresas">
+              Listado de todas las empresas que tienen alumnos en tu academia. Desde aquí puedes crear una empresa
+              nueva, abrir su ficha para ver y editar sus datos, asignarle cursos y consultar qué empleados
+              están activos en la plataforma o aún pendientes de registro.
+              {" "}<strong className="text-white">Importante:</strong> los alumnos de empresa se dan de alta
+              entrando en la ficha de la empresa y usando allí «Importar empleados» (acepta un Excel
+              con la lista completa).
+            </HelpTooltip>
           </h1>
           <p className="text-xs text-neutral-400 mt-0.5">{companies.length} empresas registradas</p>
         </div>
@@ -103,7 +112,47 @@ export default function EmpresasPage() {
       )}
 
       <TrainingTable
-        headers={["Nombre", "Cursos", "Empleados", "Estado", ""]}
+        headers={[
+          "Nombre",
+          (
+            <span key="cursos-h" className="inline-flex items-center gap-1">
+              Cursos
+              <HelpTooltip title="Cursos asignados">
+                Cuántos cursos tiene contratados esta empresa. Sus empleados solo pueden ver y hacer
+                estos cursos.
+              </HelpTooltip>
+            </span>
+          ),
+          (
+            <span key="emp-h" className="inline-flex items-center gap-1">
+              Empleados
+              <HelpTooltip title="Empleados">
+                Activos = empleados ya registrados con acceso al campus.
+                Pendientes = empleados que has añadido a la empresa pero que todavía no se han registrado.
+              </HelpTooltip>
+            </span>
+          ),
+          (
+            <span key="est-h" className="inline-flex items-center gap-1">
+              Estado
+              <HelpTooltip title="Estado de la empresa">
+                Activa = la empresa puede operar normalmente. Inactiva = la empresa está pausada
+                y sus empleados pierden temporalmente el acceso a los cursos.
+              </HelpTooltip>
+            </span>
+          ),
+          (
+            <span key="abrir-h" className="inline-flex items-center gap-1">
+              Abrir ficha
+              <HelpTooltip title="Ficha de la empresa">
+                Pulsa cualquier fila para abrir la ficha completa de la empresa.
+                Desde ahí puedes <strong className="text-white">importar empleados</strong> con
+                un Excel, <strong className="text-white">asignarle cursos</strong>, editar
+                sus datos y ver toda la información detallada.
+              </HelpTooltip>
+            </span>
+          ),
+        ]}
         loading={loading}
         empty="No hay empresas registradas"
       >

@@ -5,9 +5,9 @@ export function TrainingTable({ headers, children, loading, empty }) {
         <table className="w-full text-sm">
           <thead>
             <tr style={{ backgroundColor: "var(--color-primary, #1B3A2D)" }}>
-              {headers.map((h) => (
+              {headers.map((h, i) => (
                 <th
-                  key={h}
+                  key={typeof h === "string" ? h : i}
                   className="text-left py-3 px-4 text-[11px] font-semibold text-white/70 uppercase tracking-wide whitespace-nowrap"
                 >
                   {h}
@@ -20,7 +20,7 @@ export function TrainingTable({ headers, children, loading, empty }) {
               Array.from({ length: 5 }).map((_, rowIndex) => (
                 <tr key={rowIndex} className="border-b border-neutral-50">
                   {headers.map((h, headerIndex) => (
-                    <td key={h} className="py-3 px-4">
+                    <td key={typeof h === "string" ? h : headerIndex} className="py-3 px-4">
                       {/* Width determinista para evitar hydration mismatch
                           entre SSR y cliente. Antes usaba Math.random(). */}
                       <div

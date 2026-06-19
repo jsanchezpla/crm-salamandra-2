@@ -2,12 +2,15 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { TrainingTable, Tr, Td } from "../../../../components/training/TrainingTable.jsx";
 import { EditCourseDrawer } from "../../../../components/training/EditCourseDrawer.jsx";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 export default function CursosPage() {
+  const router = useRouter();
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -56,8 +59,16 @@ export default function CursosPage() {
     <div className="p-4 lg:p-8 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-xl font-extrabold text-neutral-900" style={{ fontFamily: "'Syne', sans-serif" }}>
+          <h1 className="text-xl font-extrabold text-neutral-900 flex items-center gap-2" style={{ fontFamily: "'Syne', sans-serif" }}>
             Cursos
+            <HelpTooltip title="Cursos">
+              Catálogo completo de cursos de tu academia. Los cursos se importan automáticamente desde tu
+              página web (WordPress) cuando los publicas allí. {" "}
+              <strong className="text-white">Importante:</strong> pulsa cualquier fila para abrir la
+              ficha del curso. Ahí ves toda su información y los <strong className="text-white">registros
+              del curso</strong> (los alumnos apuntados con sus datos). El botón «Editar» abre directamente
+              el panel de edición sin tener que entrar.
+            </HelpTooltip>
           </h1>
           <p className="text-xs text-neutral-400 mt-0.5">{courses.length} cursos</p>
         </div>
@@ -78,12 +89,52 @@ export default function CursosPage() {
       )}
 
       <TrainingTable
-        headers={["Nombre", "ID WooCommerce", "Estado", "Fecha", ""]}
+        headers={[
+          "Nombre",
+          (
+            <span key="wc-h" className="inline-flex items-center gap-1">
+              ID WooCommerce
+              <HelpTooltip title="ID WooCommerce">
+                Es el número que identifica al curso en tu tienda online. Sirve para que el CRM y tu web
+                hablen del mismo producto. Si está en blanco, el curso aún no está conectado con la tienda.
+              </HelpTooltip>
+            </span>
+          ),
+          (
+            <span key="est-h" className="inline-flex items-center gap-1">
+              Estado
+              <HelpTooltip title="Estado del curso">
+                Activo = los alumnos lo ven en el campus y pueden matricularse.
+                Inactivo = sigue en tu catálogo pero está oculto para los alumnos.
+              </HelpTooltip>
+            </span>
+          ),
+          (
+            <span key="fecha-h" className="inline-flex items-center gap-1">
+              Fecha
+              <HelpTooltip title="Fecha de alta">
+                Día en que el curso se dio de alta en el CRM por primera vez.
+              </HelpTooltip>
+            </span>
+          ),
+          (
+            <span key="abrir-h" className="inline-flex items-center gap-1">
+              Abrir ficha
+              <HelpTooltip title="Ficha del curso">
+                Pulsa cualquier fila para abrir la ficha completa del curso.
+                Desde ahí puedes ver <strong className="text-white">toda la información del curso</strong>,
+                consultar los <strong className="text-white">registros del curso</strong> (los alumnos
+                que se han apuntado con sus datos) y editar el curso. El botón
+                «Editar» de aquí abre directamente el panel sin entrar.
+              </HelpTooltip>
+            </span>
+          ),
+        ]}
         loading={loading}
         empty="No hay cursos registrados"
       >
         {courses.map((c) => (
-          <Tr key={c.id}>
+          <Tr key={c.id} onClick={() => router.push(`/formacion/cursos/${c.id}`)}>
             <Td><span className="font-semibold text-neutral-900">{c.name}</span></Td>
             <Td>{c.wcProductId ?? <span className="text-neutral-300">—</span>}</Td>
             <Td>
@@ -97,28 +148,19 @@ export default function CursosPage() {
               </span>
             </Td>
             <Td className="text-right">
-              <div className="inline-flex items-center gap-1">
-                <Link
-                  href={`/formacion/cursos/${c.id}`}
-                  title="Ver detalle"
-                  aria-label={`Ver detalle del curso ${c.name}`}
-                  className="text-neutral-400 hover:text-neutral-900 transition-colors p-1.5 rounded-md hover:bg-neutral-100"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </Link>
+              <div className="inline-flex items-center gap-1.5">
                 <button
-                  onClick={() => setEditingCourse(c)}
-                  title="Editar"
+                  onClick={(e) => { e.stopPropagation(); setEditingCourse(c); }}
+                  title="Editar nombre, estado…"
                   aria-label={`Editar curso ${c.name}`}
-                  className="text-neutral-400 hover:text-neutral-900 transition-colors p-1.5 rounded-md hover:bg-neutral-100"
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-600 hover:text-neutral-900 transition-colors px-2 py-1 rounded-md hover:bg-neutral-100"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
                   </svg>
+                  Editar
                 </button>
+                <span className="text-neutral-300 text-xs pl-1">→</span>
               </div>
             </Td>
           </Tr>

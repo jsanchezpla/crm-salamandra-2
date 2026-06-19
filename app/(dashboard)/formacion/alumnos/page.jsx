@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { TrainingTable, Tr, Td } from "../../../../components/training/TrainingTable.jsx";
 import { TypeBadge } from "../../../../components/training/TrainingBadge.jsx";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 
 const LIMIT = 50;
 
@@ -71,8 +72,13 @@ export default function AlumnosPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-xl font-extrabold text-neutral-900" style={{ fontFamily: "'Syne', sans-serif" }}>
+          <h1 className="text-xl font-extrabold text-neutral-900 flex items-center gap-2" style={{ fontFamily: "'Syne', sans-serif" }}>
             Alumnos por curso
+            <HelpTooltip title="Alumnos por curso">
+              Cada línea es una matrícula: un alumno apuntado a un curso. Si una misma persona está
+              en tres cursos, aparece tres veces. Es la forma rápida de responder a preguntas como
+              «¿qué alumnos tengo en este curso?» o «¿qué cursos está haciendo esta persona?».
+            </HelpTooltip>
           </h1>
           <p className="text-xs text-neutral-400 mt-0.5">{total} matrículas</p>
         </div>
@@ -80,18 +86,29 @@ export default function AlumnosPage() {
           <Link href="/formacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">
             ← Volver
           </Link>
-          <button
-            onClick={handleExport}
-            className="px-3 py-2 rounded-lg text-xs font-semibold text-white transition-opacity hover:opacity-80"
-            style={{ background: "var(--color-primary)" }}
-          >
-            Exportar Excel
-          </button>
+          <span className="inline-flex items-center gap-1">
+            <button
+              onClick={handleExport}
+              className="px-3 py-2 rounded-lg text-xs font-semibold text-white transition-opacity hover:opacity-80"
+              style={{ background: "var(--color-primary)" }}
+            >
+              Exportar Excel
+            </button>
+            <HelpTooltip title="Exportar a Excel">
+              Descarga un Excel con todas las matrículas que coinciden con los filtros activos.
+              Muy útil para mandarle a una empresa el listado de empleados que están haciendo sus cursos.
+            </HelpTooltip>
+          </span>
         </div>
       </div>
 
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
+        <HelpTooltip title="Filtros" className="mr-1">
+          Combina los filtros para ver justo lo que buscas. Por ejemplo: curso «Habilidades comunicativas»
+          + empresa «Acme» = empleados de Acme apuntados a ese curso. El buscador acepta nombre,
+          apellido o email del alumno.
+        </HelpTooltip>
         <select
           value={courseId}
           onChange={handleFilterChange(setCourseId)}
@@ -126,7 +143,22 @@ export default function AlumnosPage() {
       )}
 
       <TrainingTable
-        headers={["Nombre", "Email", "Username", "Empresa", "Curso", "Matrícula", "NIF"]}
+        headers={[
+          "Nombre",
+          "Email",
+          "Username",
+          "Empresa",
+          "Curso",
+          (
+            <span key="mat-h" className="inline-flex items-center gap-1">
+              Matrícula
+              <HelpTooltip title="Fecha de matrícula">
+                Día en que el alumno se apuntó al curso.
+              </HelpTooltip>
+            </span>
+          ),
+          "NIF",
+        ]}
         loading={loading}
         empty="No hay matrículas con los filtros actuales"
       >

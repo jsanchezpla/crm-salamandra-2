@@ -143,4 +143,4 @@ de correo no acepta HTML, usa la versión texto plano de arriba.
 - **Personaliza el `[Nombre]`** por cada destinatario antes de enviar (o usa la función "mail merge" de Gmail/Outlook si tienes el listado en hoja de cálculo).
 - **Timing recomendado**: envíalo al menos 24-48h antes de la próxima sesión sincronizada del curso. Así el alumno tiene margen para rellenar el form en un momento tranquilo, no en la entrada.
 - **Si alguien responde con dudas**: dirígele al email `info@asesoriaretorika.com` o gestiónaselo tú directamente desde aquí.
-- **Tras enviarlo**: ten abierta la tab "Registros previos" en `/formacion/cursos/<id>` durante las siguientes horas para ver llegar los formularios en tiempo real. Cuando los 5 estén dentro, el badge del total subirá a 5 (o más si hay nuevas inscripciones).
+- **Tras enviarlo**: ten abierta la tab "Registros del curso" en `/formacion/cursos/<id>` durante las siguientes horas para ver llegar los formularios en tiempo real. Cuando los 5 estén dentro, el badge del total subirá a 5 (o más si hay nuevas inscripciones).

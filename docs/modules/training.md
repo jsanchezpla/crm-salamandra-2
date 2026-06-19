@@ -912,6 +912,10 @@ funcionan en paralelo, lo cual añade superficie de bug.
 
 ## Registros previos al curso (sprint Retorika · junio 2026)
 
+> En la UI, la tab se renombró a **"Registros del curso"** (texto más
+> claro para el cliente). El nombre del sprint se mantiene como nombre
+> histórico de la feature.
+
 ### Visión general del flujo
 
 Antes de acceder al curso "Liderazgo Educativo" (course_id=5383 en TutorLMS,
@@ -1045,10 +1049,10 @@ URL del GET:      .../check?email=marta%40trinitycollege.es&productId=5487
 ### Uso para Belén (UI)
 
 1. **Página de detalle del curso**:
-   - Sidebar → Formación → Cursos → click en el icono "ojo" en la fila "Liderazgo Educativo".
+   - Sidebar → Formación → Cursos → click en la fila "Liderazgo Educativo" (toda la fila es clickable).
    - URL directa: `/formacion/cursos/<id>`.
 
-2. **Tab "Registros previos"**:
+2. **Tab "Registros del curso"** (antes "Registros previos"):
    - 4 cards arriba: Total, Motivación media (barra), Estrés medio (barra, paleta inversa), Top empresa.
    - "Ver más estadísticas" → distribuciones 1-5, top 10 empresas, registros por mes.
 
@@ -1075,5 +1079,5 @@ URL del GET:      .../check?email=marta%40trinitycollege.es&productId=5487
 | El form en WP no envía / browser muestra CORS error | Verificar Origin: el form HTML debe servirse desde `asesoriaretorika.com` o `www.asesoriaretorika.com`. Cualquier otro dominio → 401 "Origen no autorizado" desde el CRM. |
 | GET `/check` siempre devuelve 401 "Firma inválida" | (1) Comprobar que `RETORIKA_WEBHOOK_SECRET` en `wp-config.php` y en `.env.production` del CRM son **idénticos** byte a byte. (2) Comprobar URL-encoding del email (`@` → `%40` antes de firmar; ver sección "PRECISIÓN HMAC"). |
 | GET `/check` devuelve `has=false` para un usuario que sí completó el form | Comprobar en BD: `SELECT * FROM crm_retorika.course_registrations WHERE LOWER(email)='...' AND wp_product_id=5487`. Si la fila existe pero el `/check` dice false, el problema está en el matching del email (mayúsculas, espacios) — los emails se lowercase en `beforeSave`. |
-| Belén no ve la tab "Registros previos" en `/formacion/cursos/[id]` | Verificar `master.users.module_access` del admin de Retorika: debe incluir `"training"` o el wildcard `["all"]`. |
+| Belén no ve la tab "Registros del curso" en `/formacion/cursos/[id]` | Verificar `master.users.module_access` del admin de Retorika: debe incluir `"training"` o el wildcard `["all"]`. |
 | El form HTML pinta pero al hacer click "Enviar" no pasa nada visible | Abrir DevTools → Network → mirar el POST. (1) Si status 401 → ver header `x-tenant: retorika` está en la request. (2) Si status 422 → ver `body.error` y los `details[]` con el campo faltante. (3) Si status 200 con `alreadyExists: true` → el usuario ya estaba registrado; redirigir al curso. |

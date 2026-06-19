@@ -2,7 +2,7 @@
 
 /**
  * CourseRegistrationStats — cards de stats + sección colapsable con
- * gráficos CSS para el módulo de Registros previos al curso.
+ * gráficos CSS para el módulo de Registros del curso (antes "previos").
  *
  * No introduce librerías de gráficos. Todas las visualizaciones son barras
  * horizontales (`<div style={{ width }}>`) o columnas verticales (12 meses)
