@@ -28,24 +28,55 @@ export const GET = withTenant(async (_request, { params }, { tenantModels, hasMo
 /**
  * DELETE /api/training/users/[id]
  *
- * Soft delete: marca `archivedAt = NOW()`. Conserva la fila, matrículas y
- * cuestionarios para preservar el historial. Si el empleado ya estaba
- * archivado, devuelve 200 con `noop:true` (idempotente).
+ * Por defecto: soft delete (marca `archivedAt = NOW()`). Conserva la fila,
+ * matrículas y cuestionarios para preservar el historial. Si el empleado ya
+ * estaba archivado, devuelve 200 con `noop:true` (idempotente).
  *
- * Para reactivar usar POST /api/training/users/[id]/restore o re-importar
- * el Excel con su email — `/users/import` reactiva automáticamente los
- * archivados.
+ * Con `?hard=true`: borrado físico. En una transacción:
+ *   1. Borra CourseEnrollment con `trainingUserId = id`
+ *   2. Borra CourseRegistration con `trainingUserId = id`
+ *   3. Borra la fila de TrainingUser
+ * QuizAttempt NO se toca porque no tiene FK a TrainingUser (se asocia por
+ * email/wpUserId — son snapshots de TutorLMS). Irreversible.
+ *
+ * Para reactivar (tras soft) usar POST /api/training/users/[id]/restore o
+ * re-importar el Excel con su email — `/users/import` reactiva automáticamente
+ * los archivados.
  */
 export const DELETE = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
   if (!hasModule("training")) throw new ForbiddenError();
   const role = request.headers.get("x-user-role");
   if (!ADMIN_ROLES.has(role)) return forbidden(ADMIN_DENY);
 
-  const { TrainingUser } = tenantModels;
+  const { TrainingUser, CourseEnrollment, CourseRegistration } = tenantModels;
   const { id } = await params;
+  const { searchParams } = new URL(request.url);
+  const hard = searchParams.get("hard") === "true";
 
   const user = await TrainingUser.findByPk(id);
   if (!user) return notFound("Empleado no encontrado");
+
+  if (hard) {
+    const sequelize = TrainingUser.sequelize;
+    let enrollmentsDeleted = 0;
+    let registrationsDeleted = 0;
+    await sequelize.transaction(async (tx) => {
+      enrollmentsDeleted = await CourseEnrollment.destroy({
+        where: { trainingUserId: id },
+        transaction: tx,
+      });
+      registrationsDeleted = await CourseRegistration.destroy({
+        where: { trainingUserId: id },
+        transaction: tx,
+      });
+      await user.destroy({ transaction: tx });
+    });
+    console.log(
+      `[training:delete] hard email=${user.email} id=${user.id} ` +
+      `enrollments=${enrollmentsDeleted} registrations=${registrationsDeleted}`
+    );
+    return ok({ hard: true, enrollmentsDeleted, registrationsDeleted });
+  }
 
   if (user.archivedAt) {
     console.log(`[training:archive] noop email=${user.email} (ya archivado el ${user.archivedAt.toISOString?.() ?? user.archivedAt})`);

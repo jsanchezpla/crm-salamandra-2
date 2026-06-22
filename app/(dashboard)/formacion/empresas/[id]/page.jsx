@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TrainingTable, Tr, Td } from "../../../../../components/training/TrainingTable.jsx";
 import { ActiveBadge } from "../../../../../components/training/TrainingBadge.jsx";
+import CreateEmployeeDrawer from "../../../../../components/training/CreateEmployeeDrawer.jsx";
+import ArchiveUserDialog from "../../../../../components/training/ArchiveUserDialog.jsx";
+import HardDeleteUserDialog from "../../../../../components/training/HardDeleteUserDialog.jsx";
 
 const TABS = [
   { id: "info", label: "Información" },
@@ -23,6 +26,8 @@ export default function EmpresaDetailPage({ params }) {
   const [error, setError] = useState(null);
 
   const [importOpen, setImportOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [empleadosReloadKey, setEmpleadosReloadKey] = useState(0);
 
   const loadCompany = useCallback(async () => {
     setLoading(true);
@@ -135,6 +140,8 @@ export default function EmpresaDetailPage({ params }) {
         <EmpleadosTab
           companyId={id}
           onOpenImport={() => setImportOpen(true)}
+          onOpenCreate={() => setCreateOpen(true)}
+          reloadKey={empleadosReloadKey}
         />
       )}
 
@@ -153,6 +160,19 @@ export default function EmpresaDetailPage({ params }) {
           companyName={company.name}
           onClose={() => setImportOpen(false)}
           onCompleted={() => { setImportOpen(false); loadCompany(); }}
+        />
+      )}
+
+      {createOpen && (
+        <CreateEmployeeDrawer
+          companyId={id}
+          companyName={company.name}
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => {
+            setCreateOpen(false);
+            setEmpleadosReloadKey((k) => k + 1);
+            loadCompany();
+          }}
         />
       )}
     </div>
@@ -414,7 +434,7 @@ function ConfirmDialog({ kind, activeCount, pendingCount, loading, onCancel, onC
 
 // ───────────────────── Tab Empleados ───────────────────────────────────────
 
-function EmpleadosTab({ companyId, onOpenImport }) {
+function EmpleadosTab({ companyId, onOpenImport, onOpenCreate, reloadKey = 0 }) {
   const [users, setUsers] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -429,9 +449,9 @@ function EmpleadosTab({ companyId, onOpenImport }) {
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [flash, setFlash] = useState(null);
 
-  // Confirm dialog "archivar"
+  // Dialogs de borrado
   const [archiveTarget, setArchiveTarget] = useState(null);
-  const [archiving, setArchiving] = useState(false);
+  const [hardDeleteTarget, setHardDeleteTarget] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -456,7 +476,7 @@ function EmpleadosTab({ companyId, onOpenImport }) {
     }
   }, [companyId, search, filter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, reloadKey]);
 
   const filteredByStatus = useMemo(() => {
     if (filter === "active") return users.filter((u) => u.active);
@@ -467,25 +487,20 @@ function EmpleadosTab({ companyId, onOpenImport }) {
   const activeCountLocal = users.filter((u) => u.active).length;
   const pendingCountLocal = users.filter((u) => !u.active).length;
 
-  async function performArchive() {
-    if (!archiveTarget) return;
-    setArchiving(true);
-    try {
-      const res = await fetch(`/api/training/users/${archiveTarget.id}`, { method: "DELETE" });
-      if (!res.ok && res.status !== 204) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json.error || "Error al archivar");
-      }
-      const name = [archiveTarget.name, archiveTarget.lastName].filter(Boolean).join(" ") || archiveTarget.email;
-      setFlash(`${name} archivado`);
-      setTimeout(() => setFlash(null), 2200);
-      setArchiveTarget(null);
-      await load();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setArchiving(false);
-    }
+  async function handleArchived(u) {
+    const name = [u.name, u.lastName].filter(Boolean).join(" ") || u.email;
+    setFlash(`${name} archivado`);
+    setTimeout(() => setFlash(null), 2200);
+    setArchiveTarget(null);
+    await load();
+  }
+
+  async function handleHardDeleted(u) {
+    const name = [u.name, u.lastName].filter(Boolean).join(" ") || u.email;
+    setFlash(`${name} eliminado definitivamente`);
+    setTimeout(() => setFlash(null), 2200);
+    setHardDeleteTarget(null);
+    await load();
   }
 
   return (
@@ -506,6 +521,12 @@ function EmpleadosTab({ companyId, onOpenImport }) {
             onChange={(e) => setSearch(e.target.value)}
             className="rounded-lg px-3 py-2 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-56"
           />
+          <button
+            onClick={onOpenCreate}
+            className="shrink-0 px-3 py-2 rounded-lg text-xs font-semibold text-neutral-700 bg-white border border-neutral-200 hover:bg-neutral-50 transition whitespace-nowrap"
+          >
+            + Crear empleado
+          </button>
           <button
             onClick={onOpenImport}
             className="shrink-0 px-3 py-2 rounded-lg text-xs font-bold text-white transition-opacity hover:opacity-80 whitespace-nowrap"
@@ -554,13 +575,22 @@ function EmpleadosTab({ companyId, onOpenImport }) {
             </Td>
             <Td className="text-right">
               {!u.archivedAt && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setArchiveTarget(u); }}
-                  className="text-[11px] font-medium text-neutral-400 hover:text-red-500 transition-colors px-2 py-1 rounded-md hover:bg-red-50"
-                  title="Archivar empleado"
-                >
-                  Archivar
-                </button>
+                <div className="inline-flex items-center gap-1">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setArchiveTarget(u); }}
+                    className="text-[11px] font-medium text-neutral-400 hover:text-amber-600 transition-colors px-2 py-1 rounded-md hover:bg-amber-50"
+                    title="Archivar empleado (conserva historial)"
+                  >
+                    Archivar
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setHardDeleteTarget(u); }}
+                    className="text-[11px] font-medium text-neutral-300 hover:text-red-600 transition-colors px-2 py-1 rounded-md hover:bg-red-50"
+                    title="Eliminar definitivamente (borra matrículas e historial)"
+                  >
+                    Eliminar
+                  </button>
+                </div>
               )}
             </Td>
           </Tr>
@@ -577,52 +607,20 @@ function EmpleadosTab({ companyId, onOpenImport }) {
       )}
 
       {archiveTarget && (
-        <ArchiveConfirmDialog
-          employee={archiveTarget}
-          loading={archiving}
+        <ArchiveUserDialog
+          user={archiveTarget}
           onCancel={() => setArchiveTarget(null)}
-          onConfirm={performArchive}
+          onArchived={handleArchived}
         />
       )}
-    </div>
-  );
-}
 
-function ArchiveConfirmDialog({ employee, loading, onCancel, onConfirm }) {
-  const fullName = [employee.name, employee.lastName].filter(Boolean).join(" ") || employee.email;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-        <h2 className="text-base font-bold text-neutral-900 mb-2" style={{ fontFamily: "'Syne', sans-serif" }}>
-          Archivar empleado
-        </h2>
-        <div className="text-xs text-neutral-600 leading-relaxed space-y-2">
-          <p>¿Archivar a <strong>{fullName}</strong>?</p>
-          <p>
-            Sus matrículas y datos se conservan. Si vuelves a importar un Excel
-            con su email, se reactivará automáticamente.
-          </p>
-        </div>
-        <div className="flex justify-end gap-2 pt-5">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={loading}
-            className="px-4 py-2 rounded-lg text-xs font-medium text-neutral-600 bg-neutral-100 hover:bg-neutral-200 transition disabled:opacity-50"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={loading}
-            className="px-4 py-2 rounded-lg text-xs font-bold text-white transition-opacity disabled:opacity-50"
-            style={{ background: "#DC2626" }}
-          >
-            {loading ? "…" : "Archivar"}
-          </button>
-        </div>
-      </div>
+      {hardDeleteTarget && (
+        <HardDeleteUserDialog
+          user={hardDeleteTarget}
+          onCancel={() => setHardDeleteTarget(null)}
+          onDeleted={handleHardDeleted}
+        />
+      )}
     </div>
   );
 }

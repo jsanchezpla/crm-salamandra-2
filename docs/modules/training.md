@@ -484,8 +484,9 @@ se puede editar ni borrar desde la API. Hay que tocar BD a mano.
 | --- | --- | --- |
 | `GET /api/training/users` | Lista paginada con filtros `type`, `companyId`, `search`. Por defecto filtra `archivedAt IS NULL`; soporta `?includeArchived=true` (todos) y `?archivedOnly=true` (solo archivados). | `hasModule(...)` |
 | `GET /api/training/users/[id]` | Detalle individual del empleado, incluyendo `archivedAt`. NO filtra por archivado: útil para que el drawer muestre el detalle de un archivado. | `hasModule(...)` |
+| `POST /api/training/users` | **Crear empleado individual** desde UI (formulario en la ficha de empresa). Body: `{ companyId, email, name?, lastName?, birthDate?, nif? }`. Se crea con `type='company'` y `active=false` (pre-aprobado, mismo flujo que el import). Email único: si ya existe y está archivado → reactiva y reasigna a la empresa; si existe activo → 409. | Solo admin/superadmin. |
 | `POST /api/training/users/import` | Carga masiva desde Excel. Resuelve empresa por nombre o `externalId`. Auto-detecta `type` (con companyId → `company`, sin → `private`). Default `active`: `false` para `type=company` (pre-aprobado, pendiente de activación vía `register/empresa`); `true` para `type=private`. **Reactiva archivados**: si encuentra un email con `archivedAt != null`, lo restaura (`archivedAt = null`) y cuenta como `updated`. | Solo admin/superadmin. |
-| `DELETE /api/training/users/[id]` | **Soft delete**: marca `archivedAt = NOW()`. Conserva la fila, matrículas y cuestionarios. Idempotente (si ya estaba archivado devuelve 200 con `noop:true`). | Solo admin/superadmin. |
+| `DELETE /api/training/users/[id]` | **Soft delete** por defecto: marca `archivedAt = NOW()`. Conserva la fila, matrículas y cuestionarios. Idempotente (si ya estaba archivado devuelve 200 con `noop:true`). Con `?hard=true`: **borrado físico** en transacción — borra `CourseEnrollment` + `CourseRegistration` con `trainingUserId = id` y luego la fila de `training_users`. `QuizAttempt` se conserva (no tiene FK; se asocia por email/wpUserId). Irreversible. | Solo admin/superadmin. |
 | `POST /api/training/users/[id]/restore` | Restaura un empleado archivado (`archivedAt = NULL`). No toca `active` ni `type`. Idempotente. | Solo admin/superadmin. |
 | `GET /api/training/users/export` | Excel con todos los usuarios filtrados. | `hasModule(...)` |
 
@@ -494,8 +495,50 @@ Para activar a un empleado de empresa el flujo es
 matrículas a partir de `company_courses`, ver "Flujo end-to-end de
 pre-aprobación de usuarios empresa" más arriba). Para archivar
 (retirar acceso conservando historial) hay dos vías: la UI del CRM
-(`/formacion/empresas/[id]` tab Empleados, botón "Archivar") o
-llamando directo a `DELETE /api/training/users/[id]`.
+(`/formacion/empresas/[id]` tab Empleados, botón "Archivar" — o
+`/formacion/usuarios` desde la columna acciones) o llamando directo
+a `DELETE /api/training/users/[id]`.
+
+### Eliminar definitivamente (hard delete)
+
+Para casos puntuales (limpieza de pruebas, GDPR, errores) se puede
+borrar la fila de forma irreversible llamando a
+`DELETE /api/training/users/[id]?hard=true`. La UI lo dispara desde
+el botón "Eliminar" tanto en la ficha de empresa (tab Empleados)
+como en `/formacion/usuarios`. El dialog exige al admin **escribir
+el email exacto del usuario** para confirmar (anti pulsación
+accidental).
+
+Lo que se borra en la transacción:
+
+| Tabla | FK | Acción |
+| --- | --- | --- |
+| `course_enrollments` | `trainingUserId` | DELETE en cascada (Sequelize, no DB) |
+| `course_registrations` | `trainingUserId` | DELETE en cascada (Sequelize, no DB) |
+| `training_users` | — | DELETE de la fila |
+| `quiz_attempts` | — | **No se toca** (asocia por `studentEmail` / `wpUserId`, sin FK) |
+
+Si la transacción falla en cualquier paso, no se commitea nada.
+Soft delete (`archivedAt`) sigue siendo la opción primaria recomendada:
+es reversible y conserva el historial.
+
+### Crear empleado individual desde UI
+
+`POST /api/training/users` — alternativa al import de Excel cuando
+solo hay que dar de alta a 1 persona. Se invoca desde la ficha de
+empresa → tab Empleados → botón **"+ Crear empleado"**. Drawer con
+campos: email (obligatorio), nombre, apellidos, fecha de nacimiento,
+NIF. El usuario se crea con `type='company'` y `active=false`
+(pre-aprobado); se activará automáticamente cuando complete el
+registro en el campus, igual que un empleado importado por Excel.
+
+Reglas de email único:
+
+- Si el email no existe → crea fila nueva.
+- Si el email existe **archivado** → reactiva (`archivedAt = null`),
+  reasigna a la `companyId` indicada y actualiza name/lastName/nif/birthDate
+  si vienen en el body (mismo criterio que el import).
+- Si el email existe **activo** → devuelve 409.
 
 ### Empleados archivados (`archivedAt`)
 

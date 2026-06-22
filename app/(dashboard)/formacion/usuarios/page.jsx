@@ -5,6 +5,8 @@ import Link from "next/link";
 import { TrainingTable, Tr, Td } from "../../../../components/training/TrainingTable.jsx";
 import { TypeBadge, ActiveBadge } from "../../../../components/training/TrainingBadge.jsx";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
+import ArchiveUserDialog from "../../../../components/training/ArchiveUserDialog.jsx";
+import HardDeleteUserDialog from "../../../../components/training/HardDeleteUserDialog.jsx";
 
 const LIMIT = 50;
 
@@ -19,6 +21,10 @@ export default function UsuariosPage() {
   const [companyId, setCompanyId] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+
+  const [archiveTarget, setArchiveTarget] = useState(null);
+  const [hardDeleteTarget, setHardDeleteTarget] = useState(null);
+  const [flash, setFlash] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -50,6 +56,22 @@ export default function UsuariosPage() {
 
   function handleFilterChange(setter) {
     return (e) => { setter(e.target.value); setPage(1); };
+  }
+
+  async function handleArchived(u) {
+    const name = [u.name, u.lastName].filter(Boolean).join(" ") || u.email;
+    setFlash(`${name} archivado`);
+    setTimeout(() => setFlash(null), 2200);
+    setArchiveTarget(null);
+    await load();
+  }
+
+  async function handleHardDeleted(u) {
+    const name = [u.name, u.lastName].filter(Boolean).join(" ") || u.email;
+    setFlash(`${name} eliminado definitivamente`);
+    setTimeout(() => setFlash(null), 2200);
+    setHardDeleteTarget(null);
+    await load();
   }
 
   function handleExport() {
@@ -135,6 +157,9 @@ export default function UsuariosPage() {
       {error && (
         <div className="mb-4 px-4 py-2.5 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{error}</div>
       )}
+      {flash && (
+        <div className="mb-4 px-4 py-2.5 bg-emerald-50 border border-emerald-100 rounded-lg text-xs text-emerald-700">{flash}</div>
+      )}
 
       <TrainingTable
         headers={[
@@ -168,6 +193,7 @@ export default function UsuariosPage() {
             </span>
           ),
           "F. Nacimiento",
+          "",
         ]}
         loading={loading}
         empty="No hay usuarios con los filtros actuales"
@@ -189,9 +215,45 @@ export default function UsuariosPage() {
                 ? new Date(u.birthDate).toLocaleDateString("es-ES")
                 : <span className="text-neutral-300">—</span>}
             </Td>
+            <Td className="text-right">
+              {!u.archivedAt && (
+                <div className="inline-flex items-center gap-1">
+                  <button
+                    onClick={() => setArchiveTarget(u)}
+                    className="text-[11px] font-medium text-neutral-400 hover:text-amber-600 transition-colors px-2 py-1 rounded-md hover:bg-amber-50"
+                    title="Archivar usuario (conserva historial)"
+                  >
+                    Archivar
+                  </button>
+                  <button
+                    onClick={() => setHardDeleteTarget(u)}
+                    className="text-[11px] font-medium text-neutral-300 hover:text-red-600 transition-colors px-2 py-1 rounded-md hover:bg-red-50"
+                    title="Eliminar definitivamente (borra matrículas e historial)"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              )}
+            </Td>
           </Tr>
         ))}
       </TrainingTable>
+
+      {archiveTarget && (
+        <ArchiveUserDialog
+          user={archiveTarget}
+          onCancel={() => setArchiveTarget(null)}
+          onArchived={handleArchived}
+        />
+      )}
+
+      {hardDeleteTarget && (
+        <HardDeleteUserDialog
+          user={hardDeleteTarget}
+          onCancel={() => setHardDeleteTarget(null)}
+          onDeleted={handleHardDeleted}
+        />
+      )}
 
       {/* Paginación */}
       {totalPages > 1 && (
