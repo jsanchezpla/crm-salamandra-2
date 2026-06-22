@@ -229,6 +229,7 @@ como public en `middleware.js` o no requieren cookie):
 | `GET /api/external/retorika/cursos` | API key | No | Bajo. |
 | `GET /api/cursos-empresas/codigos-cursos/:email` | Solo header `x-tenant` | 30/min por IP (key `cursos-empresas-codigos`) | **Medio**. Permite enumerar emails y mapear `wcProductId` por alumno. Sin auth. |
 | `POST /api/usuarios/register/empresa` | Solo header `x-tenant` | 30/min por IP (key `usuarios-register-empresa`) | **Medio**. Permite enumerar emails de tipo `company` (distingue 403 vs 200) y activar el flag `active` sin más validación que el email. CORS abierto. |
+| `POST /api/webhooks/retorika/check-empresa-user` | `x-tenant: retorika` + Origin/Referer en `{asesoriaretorika.com, www.asesoriaretorika.com}` | 30/min por IP (key `retorika-check-empresa-user`) | **Bajo**. Devuelve un único booleano (`isEmpresaInactive`), sin nombre, empresa ni IDs. La superficie de enumeración es igual a la de intentar el registro privado a saco. Sin HMAC porque el snippet WP vive en `code-snippets` público; el secret no puede llegar al browser. |
 
 Los tres primeros tienen `const SLUG = "retorika"` hardcodeado:
 ignoran cualquier `x-tenant` que llegue y consultan siempre la BD del
@@ -1081,3 +1082,101 @@ URL del GET:      .../check?email=marta%40trinitycollege.es&productId=5487
 | GET `/check` devuelve `has=false` para un usuario que sí completó el form | Comprobar en BD: `SELECT * FROM crm_retorika.course_registrations WHERE LOWER(email)='...' AND wp_product_id=5487`. Si la fila existe pero el `/check` dice false, el problema está en el matching del email (mayúsculas, espacios) — los emails se lowercase en `beforeSave`. |
 | Belén no ve la tab "Registros del curso" en `/formacion/cursos/[id]` | Verificar `master.users.module_access` del admin de Retorika: debe incluir `"training"` o el wildcard `["all"]`. |
 | El form HTML pinta pero al hacer click "Enviar" no pasa nada visible | Abrir DevTools → Network → mirar el POST. (1) Si status 401 → ver header `x-tenant: retorika` está en la request. (2) Si status 422 → ver `body.error` y los `details[]` con el campo faltante. (3) Si status 200 con `alreadyExists: true` → el usuario ya estaba registrado; redirigir al curso. |
+
+## Fix detección usuario empresa inactivo en registro privado (caso Alba · Trinity)
+
+### Bug observado
+
+Una alumna importada al CRM como `TrainingUser type=company, active=false`
+(Trinity College) NO recibió las instrucciones de acceso por la vía
+oficial y fue al form de registro privado del WP de Retorika. El check
+del shortcode `[retorika_registro]` solo miraba metas de WordPress
+(`tipo = Empresa` + `activo` falso vía `get_user_meta`), pero esta
+alumna **aún no existía como usuario WP** — solo estaba importada al CRM.
+Resultado: WP la creó como usuario privado, sin cursos de empresa
+asignados, sin acceso al curso comprado por Trinity.
+
+### Solución
+
+El shortcode WP debe preguntar al CRM **antes** de crear el usuario.
+Para eso se añade un endpoint específico que devuelve un booleano:
+
+```
+POST https://crm.salamandrasolutions.com/api/webhooks/retorika/check-empresa-user
+Headers:
+  Content-Type: application/json
+  x-tenant: retorika
+  Origin:    https://asesoriaretorika.com
+Body:
+  { "email": "alumno@trinitycollege.es" }
+
+Response 200:
+  { "ok": true, "isEmpresaInactive": true | false }
+```
+
+Lógica: existe `TrainingUser` en `crm_retorika.training_users` con
+`type='company'` AND `active=false` → `true`. Cualquier otro caso → `false`.
+
+Si la respuesta es `true`, el WP responde al frontend con
+`inactive_empresa: true` y el JS auto-redirige al usuario a la tab
+"Registro empresa" del mismo shortcode, pre-rellenando el email.
+
+El check original de `get_user_meta` se mantiene como **segunda
+defensa** dentro de `re_register_privado_rest()`, por si el usuario
+existe también en WP de un import anterior.
+
+### Auth y rate limit
+
+Modo browser (sin HMAC):
+- header `x-tenant: retorika`
+- `Origin` o `Referer` con hostname en
+  `{asesoriaretorika.com, www.asesoriaretorika.com}`
+- rate limit **30 req/min por IP**, key `retorika-check-empresa-user`
+
+Sin HMAC: el shortcode vive en el plugin `code-snippets` público y
+no puede llevar el secret. La privacidad se garantiza limitando la
+respuesta a un único booleano: ningún dato del `TrainingUser`
+(nombre, empresa, NIF…) llega al cliente. La superficie de
+enumeración es idéntica a la que un atacante obtendría intentando
+el registro privado en masa contra `re_register_privado_rest`.
+
+### Logging
+
+`[retorika:check-empresa-user] email_masked=alb***@trin***.es result=true|false`
+
+Email enmascarado para no introducir PII en stdout (mismo patrón
+que el resto de endpoints públicos del módulo).
+
+### Modo browser comparado con `/registro-curso`
+
+| Endpoint | Auth | Rate limit | Razón |
+|---|---|---|---|
+| `POST /api/webhooks/retorika/registro-curso` (browser) | `x-tenant` + Origin allowlist | 10/min | El POST crea un `CourseRegistration` con payload PII; bucket bajo para frenar bots. |
+| `GET /api/webhooks/retorika/registro-curso/check` | **HMAC** sobre query string | 60/min | Lo invoca un snippet PHP en el servidor de WP; el secret vive en `wp-config.php`, nunca en JS público. |
+| `POST /api/webhooks/retorika/check-empresa-user` (browser) | `x-tenant` + Origin allowlist | 30/min | Form HTML público; respuesta booleana sin PII. |
+
+### Entregable WP
+
+El snippet PHP completo con el fix integrado está en
+`docs/integrations/retorika-shortcode-registro-FIX-alba.php`.
+Jorge copia y pega manualmente este archivo en el plugin Code Snippets
+del WP de Retorika cuando deploye. **No requiere migración BD ni cambios
+adicionales en el VPS más allá del endpoint backend.**
+
+### Smoke
+
+```
+node --env-file=.env.local scripts/smoke-retorika-check-empresa.mjs
+```
+
+5 casos: empresa inactiva, empresa activa, privado, inexistente,
+origin no autorizado. Idempotente (cleanup al final).
+
+### Troubleshooting
+
+| Síntoma | Diagnóstico |
+|---|---|
+| `isEmpresaInactive=false` para una alumna que sí está como empresa inactiva | (1) Comparar email en bruto vs BD: el hook `beforeSave` del modelo `TrainingUser` lowercasea y trimea; el endpoint hace lo mismo antes de la query. Si en BD hay espacios o mayúsculas previos al hook, el WHERE no matchea — corregir con UPDATE manual o re-import. (2) Verificar `archivedAt IS NULL` — si la alumna fue archivada, sigue siendo `company/false` pero el flujo de re-activación NO debería pasar por el form. |
+| Endpoint devuelve 401 desde el shortcode WP | (1) Headers que envía el browser: `x-tenant: retorika` debe ir en minúsculas; `Origin` lo añade automáticamente el browser. (2) Si la página WP se sirve desde un dominio que no está en la allowlist (p. ej. staging), añadirlo al `Set` `ALLOWED_HOSTS` del endpoint. |
+| Endpoint devuelve 429 | El rate limit es 30/min por IP, key `retorika-check-empresa-user`. En producción es por IP del nginx; en local todas las llamadas comparten la IP `unknown`. Suele indicar un script de prueba en bucle. |
+
