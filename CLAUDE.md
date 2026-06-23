@@ -19,6 +19,7 @@ Antes de implementar cambios en un módulo concreto, lee su doc:
 | Leads         | `docs/modules/leads.md`     | Implementado |
 | Formación     | `docs/modules/training.md`  | Implementado |
 | Inventario    | `docs/modules/inventory.md` | Implementado |
+| Nutrición     | `docs/modules/nutricion.md` | C1 implementado (nutri_laura) |
 | Otros módulos | Aún sin doc dedicado        | Pendiente    |
 
 Cualquier detalle no recogido en CLAUDE.md (endpoints específicos,
