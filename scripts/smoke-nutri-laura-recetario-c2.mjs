@@ -52,6 +52,10 @@ function assertOk(cond, label, detail) {
   if (cond) { pass(label); counts.pass++; }
   else { fail(label, detail); counts.fail++; throw new Error(`assertion failed: ${label}${detail ? ` — ${detail}` : ""}`); }
 }
+function softAssert(cond, label, detail) {
+  if (cond) { pass(label); counts.pass++; return true; }
+  fail(label, detail); counts.fail++; return false;
+}
 
 async function httpJson(method, urlPath, body, extraHeaders) {
   const headers = { "Content-Type": "application/json", ...(extraHeaders || {}) };
@@ -397,6 +401,83 @@ async function step18Auth() {
   assertOk(r.status === 401, "Sin cookie 401", `status=${r.status}`);
 }
 
+// ── 18b. POST /meals/reorder — añadido en C5 ───────────────────────────────
+
+async function step18bReorder() {
+  header("18b) POST /meals/reorder (C5) — plan fresco standalone");
+  // Plan dedicado para no depender del state de los pasos anteriores (que
+  // archivan el template y la asignación en 16/17). Self-contained: lo
+  // creamos, le añadimos 3 comidas, probamos los 4 casos y el cleanup global
+  // por prefijo lo elimina al final.
+  const tpl = await httpJson("POST", "/api/nutricion/plans", {
+    name: `${PREFIX}-reorder`,
+  });
+  assertOk(tpl.ok && tpl.json?.data?.id, "POST plantilla reorder");
+  const reorderPlanId = tpl.json.data.id;
+  state.reorderPlanId = reorderPlanId;
+
+  for (const name of ["Desayuno", "Comida", "Cena"]) {
+    const m = await httpJson("POST", `/api/nutricion/plans/${reorderPlanId}/meals`, { name });
+    assertOk(m.ok, `POST meal ${name}`);
+  }
+
+  const treePre = await httpJson("GET", `/api/nutricion/plans/${reorderPlanId}`);
+  const mealsPre = (treePre.json.data.meals || []).slice().sort((a, b) => a.order - b.order);
+  assertOk(mealsPre.length === 3, `Plan tiene 3 comidas (got ${mealsPre.length})`);
+
+  // ── Caso A: reorder OK invirtiendo el orden ─────────────────────────────
+  const inverted = mealsPre.slice().reverse().map((m, i) => ({ id: m.id, order: i }));
+  const rOk = await httpJson("POST",
+    `/api/nutricion/plans/${reorderPlanId}/meals/reorder`,
+    { order: inverted });
+  assertOk(rOk.ok && rOk.json?.ok, "POST /reorder happy path 200",
+    `status=${rOk.status} body=${JSON.stringify(rOk.json)}`);
+  softAssert((rOk.json.items || []).length === 3, "Response items.length === 3");
+  const { models: m1 } = await getModels(TENANT_SLUG);
+  const fresh = await m1.PlanMeal.findAll({
+    where: { planId: reorderPlanId },
+    attributes: ["id", "order"],
+    order: [["order", "ASC"]],
+  });
+  const freshIds = fresh.map((r) => r.id);
+  const expectedIds = inverted.slice().sort((a, b) => a.order - b.order).map((r) => r.id);
+  softAssert(JSON.stringify(freshIds) === JSON.stringify(expectedIds),
+    "BD refleja el nuevo orden tras /reorder",
+    `bd=${JSON.stringify(freshIds)} expected=${JSON.stringify(expectedIds)}`);
+
+  // ── Caso B: ID inválido (no pertenece al plan) → 400 ────────────────────
+  const fakeId = "00000000-0000-0000-0000-000000000000";
+  const badIds = [
+    { id: fakeId, order: 0 },
+    { id: mealsPre[1].id, order: 1 },
+    { id: mealsPre[2].id, order: 2 },
+  ];
+  const rBadId = await httpJson("POST",
+    `/api/nutricion/plans/${reorderPlanId}/meals/reorder`,
+    { order: badIds });
+  softAssert(rBadId.status === 400, `Reorder con id ajeno → 400 (got ${rBadId.status})`,
+    JSON.stringify(rBadId.json));
+
+  // ── Caso C: lista incompleta (omitiendo una comida) → 400 ───────────────
+  const missingOne = [
+    { id: mealsPre[0].id, order: 0 },
+    { id: mealsPre[1].id, order: 1 },
+  ];
+  const rIncomplete = await httpJson("POST",
+    `/api/nutricion/plans/${reorderPlanId}/meals/reorder`,
+    { order: missingOne });
+  softAssert(rIncomplete.status === 400, `Reorder con lista incompleta → 400 (got ${rIncomplete.status})`,
+    JSON.stringify(rIncomplete.json));
+
+  // ── Caso D: order con hueco (no consecutivo) → 400 ──────────────────────
+  const withGap = mealsPre.map((m, i) => ({ id: m.id, order: i === 1 ? 5 : i }));
+  const rGap = await httpJson("POST",
+    `/api/nutricion/plans/${reorderPlanId}/meals/reorder`,
+    { order: withGap });
+  softAssert(rGap.status === 400, `Reorder con hueco en orders → 400 (got ${rGap.status})`,
+    JSON.stringify(rGap.json));
+}
+
 // ── 19. Cleanup ────────────────────────────────────────────────────────────
 
 async function step19Cleanup() {
@@ -457,6 +538,7 @@ async function main() {
     await step16DeleteAssigned();
     await step17DeleteTemplateIndependence();
     await step18Auth();
+    await step18bReorder();
     await step19Cleanup();
   } catch (err) {
     process.stderr.write(`\n✗ Smoke abortado: ${err.message}\n`);
