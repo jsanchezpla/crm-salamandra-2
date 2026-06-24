@@ -19,7 +19,7 @@ Antes de implementar cambios en un módulo concreto, lee su doc:
 | Leads         | `docs/modules/leads.md`     | Implementado |
 | Formación     | `docs/modules/training.md`  | Implementado |
 | Inventario    | `docs/modules/inventory.md` | Implementado |
-| Nutrición     | `docs/modules/nutricion.md` | C1 implementado (nutri_laura) |
+| Nutrición     | `docs/modules/nutricion.md` | C1+C2 en prod, C3 (UI) en local |
 | Otros módulos | Aún sin doc dedicado        | Pendiente    |
 
 Cualquier detalle no recogido en CLAUDE.md (endpoints específicos,
@@ -276,7 +276,7 @@ aplique.
 | analytics      | #15 Analítica & BI            | Pendiente                            | —                          |
 | communications | #16 Comunicaciones            | Pendiente                            | —                          |
 | orders         | Pedidos (no del plan 1-16)    | Implementado (spain_enzymes)         | —                          |
-| nutricion      | Recetario (no del plan 1-16)  | C1 implementado (nutri_laura, prod) — sprint Recetario en curso | `docs/modules/nutricion.md` |
+| nutricion      | Recetario (no del plan 1-16)  | C1+C2 implementados (C2 solo local), C3 (UI constructor) en local pendiente deploy | `docs/modules/nutricion.md` |
 
 ---
 

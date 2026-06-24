@@ -1,6 +1,6 @@
 # Módulo Nutrición — Recetario para nutri-laura
 
-Estado: **C1 implementado en local + prod (2026-06-23). C2 implementado en local. Pendiente C3-C5.**
+Estado: **C1 implementado en local + prod (2026-06-23). C2 implementado en local. C3 implementado en local (UI), pendiente despliegue. C4-C5 pendientes.**
 
 Tenant activo: `nutri_laura` (solo). El módulo `nutricion` se materializa
 en `master.tenant_modules` y todo el código está pensado para escalar a
@@ -21,7 +21,7 @@ Sprint dividido en 5 checkpoints, ~10-11 días:
 | ---------- | ------------------------------------------------------------------------------------------------ | --------- |
 | **C1**     | Catálogo de alimentos local + búsqueda online (OFF) + import a catálogo                          | **HECHO + prod** |
 | **C2**     | Backend planes: tablas plans/meals/options/foods + endpoints CRUD + duplicate + assign + helper macros | **HECHO** |
-| C3         | UI constructor de planes (modal Harbiz-like) + listados de plantillas y asignados                | Pendiente |
+| **C3**     | UI constructor de planes (modal Harbiz-like) + listados de plantillas y asignados + accent-insensitive search | **HECHO (local, pendiente prod)** |
 | C4         | Vista paciente (PDF/share link) + ajuste manual por paciente                                     | Pendiente |
 | C5         | Reporting de adherencia + integración con el módulo Citas (refrescar plan al seguimiento)         | Pendiente |
 
@@ -711,3 +711,289 @@ Auth: mismo patrón que C1 (SMOKE_PASSWORD o firma JWT directa).
   devuelve 422. Mejor: aceptar ese cambio en transacción si el food
   destino existe (cambio de alimento manteniendo amount/unit). C3 puede
   implementarlo cuando el modal Harbiz lo necesite.
+
+---
+
+## C3 — UI Constructor de planes (modal + listados)
+
+Estado: **HECHO en local** (2026-06-24). Pendiente de despliegue a prod.
+
+### 18. Rutas frontend (3 sub-secciones)
+
+| Ruta                          | Componente                                                  | Propósito                                                  |
+| ----------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------- |
+| `/nutricion/alimentos`        | `NutricionFoodsModule.jsx` (sin cambios C3)                 | Catálogo (C1)                                              |
+| `/nutricion/plantillas`       | `NutricionPlantillasModule.jsx`                             | Grid de cards de plantillas; CRUD + duplicar + abrir modal |
+| `/nutricion/asignados`        | `NutricionAsignadosModule.jsx`                              | Tabla (lg+) / cards (<lg) de planes asignados              |
+| Modal (no ruta)               | `PlanEditorModal.jsx`                                       | Editor grande tipo Harbiz reutilizable en ambas vistas     |
+
+Las 3 sub-rutas se enlazan en `components/layout/Sidebar.jsx` como
+sub-entradas plegables debajo de "Nutrición" — solo visibles cuando el
+usuario navega a `/nutricion/*`.
+
+### 19. Mejora retroactiva — búsqueda case+accent insensitive (C1)
+
+`GET /api/nutricion/foods?q=…` ahora usa
+`unaccent(LOWER(name)) LIKE unaccent(LOWER('%q%'))` en Postgres cuando
+la extensión `unaccent` está disponible en la BD. Detectamos su
+presencia una vez por instancia Sequelize (`hasUnaccentSupport` en
+`lib/nutricion/foods.js`) y cacheamos el resultado.
+
+Instalación de la extensión (idempotente):
+
+```powershell
+# Local (requiere superuser o rol con permiso CREATE EXTENSION)
+npm run db:install-unaccent
+
+# Producción
+docker exec -it crm-salamandra-app-1 node scripts/install-unaccent-extension.js
+```
+
+Si la extensión NO se ha instalado, el endpoint hace fallback a
+`ILIKE` plano (case-insensitive solamente, sin tildes). Las filas
+recuperadas se post-filtran en JS contra `normalizeForSearch(q)` para
+recortar resultados espurios — pero la paginación puede quedar
+sub-óptima (count no se recalcula). Backlog: cargar todo el catálogo y
+paginar en JS cuando el fallback esté activo.
+
+La búsqueda externa (OpenFoodFacts) ya era case-insensitive por
+defecto. No tocamos ese endpoint.
+
+El autocomplete de alimentos del modal C3 usa el mismo endpoint, por lo
+que hereda la insensibilidad accent+case.
+
+### 20. Endpoint `GET /api/nutricion/plans?withSummary=true`
+
+Nuevo query param sobre el endpoint del C2. Cuando se activa:
+
+- Para cualquier `type`: añade `mealsSummary: [{ id, name, optionCount }]`
+  y `mealCount` a cada plan del listado, en una sola query (include +
+  agregado en JS).
+- Para `type=template`: añade `activeAssignmentsCount` (cuenta
+  agrupada de planes `type='assigned'` activos cuyo `templateId` es
+  ese — se hace en una segunda query agregada, NO N+1).
+- Para `type=assigned`: añade `clientName` (de `Client`) y
+  `templateName` (de `Plan` self-FK) eager-loaded.
+
+Las tarjetas de plantillas y la tabla de asignados consumen este
+formato. Sin el flag, el endpoint sigue devolviendo lo mismo que en C2.
+
+### 21. Bugfix retroactivo — `computeFoodMacros` con `unit='household'`
+
+En C2 el helper ignoraba `amount` cuando la unit era `household`,
+devolviendo siempre los macros de UNA medida. Eso solo era visible si
+el frontend permitía `amount > 1` — cosa que llega en C3. Corregido:
+
+```js
+// antes (C2)
+grams = num(line.householdGrams);
+// ahora (C3)
+grams = num(line.amount) * num(line.householdGrams);
+```
+
+`amount=2, householdGrams=15` ahora → 30g totales, que es lo que se
+muestra en pantalla y lo que la usuaria entiende cuando teclea "2
+cucharadas". El smoke C3 PARTE A cubre este caso (caso #6 y caso #2).
+
+### 22. Modal `PlanEditorModal` — wireframe ASCII
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ PLANTILLA / PLAN ASIGNADO                                         × │
+│ [Nombre del plan_______________________]   [Plantillas ▾] [☑ Visible]│
+├─────────────────────────────────────────────────────┬───────────────┤
+│ Comentarios                                         │  PACIENTE      │
+│ ┌─────────────────────────────────────────────────┐ │ ────────────── │
+│ │ Notas generales del plan…                       │ │ Belén Iglesias │
+│ └─────────────────────────────────────────────────┘ │ Edad:  32 años │
+│                                                     │ Sexo:  —       │
+│ Planificación de comidas      [+ Añadir comida]     │ Altura:  —     │
+│ ╔══ ▾ Desayuno (3 op.)  ……………………………………… [≡] ══╗   │ Peso:  —       │
+│ ║ Descripción: DESAYUNO + BEBIDA + FRUTA          ║   │ Motivo: pérdida│
+│ ║ [Opción 1 ⭐]  [Opción 2]  [Opción 3]  [+ op]   ║   │                │
+│ ║ ┌────┬──────────┬──────────┬────┬────┬────┬───┐ ║   │  TOTAL DEL PLAN│
+│ ║ │Cnt │ Unidad   │ Alimento │P   │ C  │ G  │ F │ ║   │ ────────────── │
+│ ║ │ 80 │ gramos   │ Avena    │ 13 │ 47 │  5 │11 │ ║   │ Prot 124 (25%) │
+│ ║ │  1 │ medida ▾ │ Aceite   │  0 │  0 │ 15 │ 0 │ ║   │ Carb 200 (41%) │
+│ ║ │  — │ libre    │ Café     │  — │  — │  — │ — │ ║   │ Gras  76 (35%) │
+│ ║ │+   Añadir alimento: [buscar…]      [🔍 OFF]   │ ║   │ Fibra 20       │
+│ ║ │ Total opción: P 13 · C 47 · G 20 · F 11      │ ║   │                │
+│ ╚══════════════════════════════════════════════════╝   │                │
+│ ╠══ ▸ Comida (2 op.) ……………………………………… [≡] ══╣   │                │
+│ ╠══ ▸ Cena (1 op.) ………………………………………… [≡] ══╣   │                │
+│                                                     │                │
+│                            [Cancelar] [Guardar plan]│                │
+└─────────────────────────────────────────────────────┴───────────────┘
+```
+
+- Header sticky con nombre + dropdown plantillas + toggle visibilidad.
+- Acordeón de comidas (primera expandida por defecto). Click chevron
+  para expandir/colapsar; menú [≡] con Renombrar / Subir / Bajar /
+  Eliminar.
+- Pills horizontales de opciones (estrella ⭐ marca la default). Click
+  para activar; chevron ▾ abre menú Renombrar / Marcar por defecto /
+  Eliminar.
+- Tabla de la opción activa. Cantidad/Unidad/Alimento editables inline
+  (commit on blur). Para `unit='household'`, un segundo select muestra
+  las medidas caseras del catálogo + "+ Añadir medida nueva…" que
+  persiste vía `PATCH /api/nutricion/foods/[id]`.
+- Fila final con autocomplete: tipea, dropdown de coincidencias del
+  catálogo + opción "+ Buscar en línea" que abre `FoodSearchExternalModal`.
+- Panel lateral derecho: paciente (si type='assigned') o info plantilla;
+  abajo, resumen de macros con barras de % sobre P+C+G.
+
+### 23. Persistencia: estructural vs. metadata
+
+- **Estructural** (añadir / quitar comida, opción, alimento; cambiar
+  unit, amount, isDefault…): se persisten **inmediatamente** con
+  llamadas individuales a las rutas `/api/nutricion/plans/*` del C2.
+  En blur o Enter para inputs de texto/número; en click para botones
+  y selectores.
+- **Metadata** (name, description, visibleToClient): el botón
+  **"Guardar plan"** del footer hace UN solo `PATCH /plans/[id]` y
+  cierra el modal. Si la plantilla tiene asignaciones activas, muestra
+  el modal de aviso con `hadAssignments` antes de cerrar.
+
+Esta separación es un compromiso pragmático sobre la decisión "no
+auto-save" del C0:
+
+- No queremos perder los datos de la usuaria si cierra el modal por
+  error → estructura persiste sola.
+- Los cambios de texto cortos (nombre del plan, comentarios) sí van al
+  botón final, que es lo que el modal Harbiz hace para esos campos.
+
+Si en el futuro queremos un "guardado 100% manual con diff", entra como
+sprint propio: hay que rastrear un árbol "borrador" + uno "limpio" en
+React state, y traducir las diferencias a operaciones REST en el
+submit. No es necesario para el flujo actual de Laura.
+
+### 24. Cargar plantilla en plan ya existente
+
+Botón "Plantillas ▾" en el header → dropdown con todas las plantillas
++ confirm "¿Cargar plantilla? Esto reemplazará TODO el contenido
+actual." → al aceptar:
+
+1. `DELETE` de todas las `plan_meals` del plan destino (CASCADE
+   limpia options y foods).
+2. `POST /meals` por cada comida del origen, seguido de `POST /options`
+   por cada opción y `POST /foods` por cada food line.
+3. `loadPlanTree` para refrescar la UI con los IDs nuevos.
+
+No se usa el endpoint `/duplicate` porque ese crea un PLAN nuevo. Aquí
+sobrescribimos el contenido del plan abierto manteniendo su id, type,
+client_id…
+
+### 25. Smoke C3
+
+Script: `scripts/smoke-nutri-laura-recetario-c3.mjs`. **Dos partes**:
+
+**PARTE A** (sin red, sin servidor): unit tests del helper
+`lib/nutricion/macros.js`. 14 asserts cubriendo:
+
+- `unit='g'` con factor de proporción (2×100g).
+- `unit='household'` con amount > 1 (verifica el bugfix C3).
+- `unit='free'` → todos null.
+- Falta de `line.food` → null.
+- `amount=0` / `amount<0` → null.
+- Opción mixta (g + household + free), un macro `null` se ignora.
+- Opción vacía → todos null.
+- Meal usa `isDefault`; sin default usa menor `order`.
+- Plan suma defaults.
+
+Ejecutar:
+
+```powershell
+node scripts/smoke-nutri-laura-recetario-c3.mjs --only-unit
+```
+
+**PARTE B** (requiere dev server + .env.local): integración HTTP/BD.
+
+- Setup: crea un food con tilde (`smoke-c3-Cebáda Integral`) y un
+  cliente smoke.
+- B.1 — Búsqueda accent-insensitive: `GET /foods?q=cebada`,
+  `?q=CEBÁDA`, `?q=Integ` deben devolver la misma fila.
+- B.2 — `GET /plans?type=template&withSummary=true` devuelve
+  `mealsSummary[].optionCount` y `activeAssignmentsCount=0` antes de
+  asignar.
+- B.3 — Tras `/assign`, la plantilla muestra
+  `activeAssignmentsCount=1`; el listado `type=assigned&withSummary`
+  trae `clientName` y `templateName` populados.
+- B.4 — Tras `PATCH amount=200` sobre un food line, el árbol refleja el
+  cambio y `computeOptionMacros` recalcula proporcional (200g de
+  Cebáda Integral → 20p, 130c).
+
+Ejecutar:
+
+```powershell
+# Dev server en otra terminal
+npm run dev
+
+# Sin login HTTP (firma JWT con JWT_SECRET)
+node --env-file=.env.local scripts/smoke-nutri-laura-recetario-c3.mjs
+
+# Con login HTTP completo
+$env:SMOKE_PASSWORD = "<password admin nutri_laura>"
+node --env-file=.env.local scripts/smoke-nutri-laura-recetario-c3.mjs
+```
+
+### 26. Decisiones tomadas durante C3
+
+1. **`withSummary=true` en el listado de planes** (no un endpoint
+   nuevo): para no romper la API actual de C2 y mantener un único
+   listado paginado. Es opt-in y solo se calcula cuando se pide.
+2. **Persistencia mixta** (estructural inmediato + metadata diferido):
+   pragmático sobre la decisión "no auto-save" del C0. Documentado en
+   §23. Un futuro sprint puede mover todo a "diff + apply" si la
+   experiencia lo necesita.
+3. **Buscador accent+case insensitive con extensión `unaccent`**:
+   estándar Postgres, instalable con un script idempotente. Fallback
+   JS lossy si la extensión falta. Backlog: implementar fallback 100%
+   JS (carga toda la tabla y pagina en JS).
+4. **Bugfix C2 en helper macros para `unit='household'`**: el
+   helper ahora multiplica `amount × householdGrams`. Documentado en
+   §21 + cubierto por el smoke C3 caso #2/#6.
+5. **Cargar plantilla en plan existente reusa endpoints CRUD**
+   (no endpoint nuevo). Tiene el coste de N+1 requests pero la
+   alternativa sería un endpoint `/import-from-template` que ahora no
+   se justifica.
+6. **Panel paciente muestra campos limitados** (edad / motivo del
+   `customFields`). Peso, altura, sexo y alergias quedan como
+   "—" hasta C4, cuando habrá perfil nutricional en la ficha cliente.
+7. **El catálogo de medidas caseras se edita inline** desde la fila
+   de alimento del modal (no solo desde el catálogo). Cuando el
+   usuario elige "+ Añadir medida nueva…", hacemos `PATCH /foods/[id]`
+   con `householdMeasures` actualizado y refrescamos la línea actual.
+8. **Sidebar plegable con sub-entradas**: el item "Nutrición" ahora
+   tiene `children` con las 3 sub-rutas. La carpeta de sub-entradas se
+   auto-expande cuando `pathname.startsWith("/nutricion/")`.
+9. **Tarjeta de plantilla muestra sólo nombre + meals resumen +
+   asignaciones**. No incluye los foods. La preview completa solo se
+   ve al abrir el modal — diseño consciente para que el grid no se
+   sature.
+10. **No drag&drop** (decisión C0). Reordenar comidas/opciones se hace
+    desde el menú [≡] con "Subir" / "Bajar". Para 5-10 comidas por
+    plan, suficiente. Si la usabilidad pide más en el futuro, entra
+    como sprint propio.
+
+### 27. Backlog detectado en C3
+
+- Endpoint dedicado `POST /api/nutricion/plans/[id]/replace-with-template`
+  que haga la sobrescritura del contenido en una sola transacción
+  (hoy hacemos N+1 desde el frontend en §24).
+- Endpoint `POST /api/nutricion/plans/[id]/meals/reorder` con
+  array `[{ id, order }]` para reordenar en una transacción (hoy hacemos
+  swap con 2 PATCH consecutivos).
+- Cuando la extensión `unaccent` no esté disponible, fallback JS
+  completo (cargar todo el catálogo, normalizar, paginar in-memory).
+- Diff-and-apply real para "Guardar plan": permitiría modo borrador
+  100% antes de persistir, alineado con la palabra "manual" del C0.
+- Capacidad de cambiar el food de una línea sin borrar+recrear
+  (eligiendo del autocomplete con la fila ya existente abierta).
+- Drag&drop para reordenar comidas y opciones — UX nice-to-have.
+- Perfil nutricional del paciente (peso, altura, sexo, alergias,
+  objetivo) → C4.
+- "Re-aplicar plantilla origen" desde la ficha paciente → C4.
+- Tarjeta de plantilla con preview de macros del plan completo
+  (calculado en el endpoint con `?withSummary=true&withMacros=true`).
+- Búsqueda por tag en `/nutricion/alimentos` (ya soportada en backend,
+  falta UI).

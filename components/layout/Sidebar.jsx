@@ -75,6 +75,13 @@ const navigation = [
         key: "nutricion",
         label: "Nutrición",
         href: "/nutricion/alimentos",
+        // Sub-entradas plegables debajo de Nutrición. Se muestran auto-
+        // expandidas cuando la ruta empieza por /nutricion/.
+        children: [
+          { key: "nutricion-alimentos", label: "Alimentos", href: "/nutricion/alimentos" },
+          { key: "nutricion-plantillas", label: "Plantillas", href: "/nutricion/plantillas" },
+          { key: "nutricion-asignados", label: "Asignados", href: "/nutricion/asignados" },
+        ],
         icon: (
           // lucide-react Salad — combina con el tono terracota de nutri-laura
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -368,37 +375,73 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
                 <div className="space-y-0.5">
                   {visibleItems.map((item) => {
                     const isActive = pathname === item.href;
+                    // Para items con children, "activo" también cubre cualquier
+                    // ruta hija (p.ej. /nutricion/* mientras estás en plantillas).
+                    const hasChildren = Array.isArray(item.children) && item.children.length > 0;
+                    const branchActive =
+                      hasChildren &&
+                      (isActive ||
+                        item.children.some(
+                          (c) => pathname === c.href || pathname?.startsWith(c.href + "/")
+                        ));
+                    const showChildren = hasChildren && branchActive;
+                    const parentVisuallyActive = hasChildren ? branchActive : isActive;
                     return (
-                      <Link
-                        key={item.key}
-                        href={item.href}
-                        className={`relative flex items-center gap-2.5 pl-3 pr-2.5 py-2 rounded-md transition-all group ${
-                          isActive ? "bg-white/[0.08]" : "hover:bg-white/[0.04]"
-                        }`}
-                      >
-                        {isActive && (
-                          <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-white" />
-                        )}
-                        <span
-                          className={`shrink-0 transition-colors ${
-                            isActive ? "text-white" : "text-white/35 group-hover:text-white/65"
+                      <div key={item.key}>
+                        <Link
+                          href={item.href}
+                          className={`relative flex items-center gap-2.5 pl-3 pr-2.5 py-2 rounded-md transition-all group ${
+                            parentVisuallyActive ? "bg-white/[0.08]" : "hover:bg-white/[0.04]"
                           }`}
                         >
-                          {item.icon}
-                        </span>
-                        <span
-                          className={`text-[13px] transition-colors flex-1 truncate ${
-                            isActive ? "text-white font-medium" : "text-white/50 group-hover:text-white/80"
-                          }`}
-                        >
-                          {labelOverrides[item.key] ?? item.label}
-                        </span>
-                        {item.badge != null && (
-                          <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-white/10 text-white/70 tabular">
-                            {item.badge}
+                          {parentVisuallyActive && (
+                            <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-white" />
+                          )}
+                          <span
+                            className={`shrink-0 transition-colors ${
+                              parentVisuallyActive
+                                ? "text-white"
+                                : "text-white/35 group-hover:text-white/65"
+                            }`}
+                          >
+                            {item.icon}
                           </span>
+                          <span
+                            className={`text-[13px] transition-colors flex-1 truncate ${
+                              parentVisuallyActive
+                                ? "text-white font-medium"
+                                : "text-white/50 group-hover:text-white/80"
+                            }`}
+                          >
+                            {labelOverrides[item.key] ?? item.label}
+                          </span>
+                          {item.badge != null && (
+                            <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-white/10 text-white/70 tabular">
+                              {item.badge}
+                            </span>
+                          )}
+                        </Link>
+                        {showChildren && (
+                          <div className="ml-7 mt-0.5 mb-1 space-y-0.5 border-l border-white/[0.08] pl-2.5">
+                            {item.children.map((child) => {
+                              const childActive = pathname === child.href;
+                              return (
+                                <Link
+                                  key={child.key}
+                                  href={child.href}
+                                  className={`block px-2 py-1.5 rounded text-[12px] transition-colors ${
+                                    childActive
+                                      ? "text-white bg-white/[0.05] font-medium"
+                                      : "text-white/45 hover:text-white/80 hover:bg-white/[0.03]"
+                                  }`}
+                                >
+                                  {labelOverrides[child.key] ?? child.label}
+                                </Link>
+                              );
+                            })}
+                          </div>
                         )}
-                      </Link>
+                      </div>
                     );
                   })}
                 </div>

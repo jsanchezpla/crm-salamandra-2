@@ -1,4 +1,4 @@
-import { Op } from "sequelize";
+import { Op, fn, col, where as seqWhere } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import {
   ok,
@@ -15,6 +15,8 @@ import {
   parseNullableDecimal,
   sanitizeMeasures,
   sanitizeTags,
+  hasUnaccentSupport,
+  normalizeForSearch,
 } from "../../../../lib/nutricion/foods.js";
 import { NextResponse } from "next/server";
 
@@ -41,7 +43,7 @@ async function logAudit({ tenantId, userId, action, entityId, before, after, ip 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/nutricion/foods — listar alimentos del catálogo local
 // ─────────────────────────────────────────────────────────────────────────────
-export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, _ctx, { tenantModels, tenantSequelize, hasModule }) => {
   try {
     if (!hasModule("nutricion")) return forbidden("Módulo nutricion no activo");
     const { Food } = tenantModels;
@@ -57,17 +59,63 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     if (!Number.isInteger(page) || page <= 0) page = 1;
     const offset = (page - 1) * limit;
 
-    const where = { archivedAt: null };
-    if (q) where.name = { [Op.iLike]: `%${q}%` };
-    if (tag) where.tags = { [Op.contains]: [tag] };
-    if (source === "openfoodfacts" || source === "custom") where.source = source;
+    // ── Filtros base (sin nombre) ─────────────────────────────────────────────
+    const baseWhere = { archivedAt: null };
+    if (tag) baseWhere.tags = { [Op.contains]: [tag] };
+    if (source === "openfoodfacts" || source === "custom") baseWhere.source = source;
 
-    const { rows, count } = await Food.findAndCountAll({
-      where,
+    let queryWhere = baseWhere;
+    let useJsFallback = false;
+
+    // ── Filtro por nombre con accent+case insensitive ─────────────────────────
+    // Vía `unaccent(LOWER(name)) LIKE unaccent(LOWER('%q%'))` cuando la
+    // extensión está disponible en la BD. Si no, fallback a iLike plano (se
+    // pierde la insensibilidad a tildes) + post-filtrado JS para resultados
+    // pequeños. El fallback completo (paginación JS) queda como backlog.
+    if (q) {
+      const useUnaccent = await hasUnaccentSupport(tenantSequelize);
+      if (useUnaccent) {
+        const qLower = q.toLowerCase();
+        queryWhere = {
+          [Op.and]: [
+            baseWhere,
+            seqWhere(
+              fn("unaccent", fn("lower", col("Food.name"))),
+              { [Op.like]: fn("unaccent", `%${qLower}%`) }
+            ),
+          ],
+        };
+      } else {
+        // Sin unaccent: ILIKE plain (case-insensitive pero NO accent-insensitive).
+        // Marcamos para hacer un post-filtrado JS extra que recupere accent.
+        queryWhere = { ...baseWhere, name: { [Op.iLike]: `%${q}%` } };
+        useJsFallback = true;
+      }
+    }
+
+    let { rows, count } = await Food.findAndCountAll({
+      where: queryWhere,
       limit,
       offset,
       order: [["name", "ASC"]],
     });
+
+    // Refuerzo JS para fallback: si la extensión unaccent no está, los
+    // resultados de ILIKE son case-insensitive pero ignoran tildes asimétricas
+    // (p.ej. "cebada" sí matchea "Cebada" pero NO "Cebáda"). Hacemos un post-
+    // filtrado normalizado sobre la página devuelta para que al menos los
+    // hits que vienen sean correctos. Las filas que matchearían SOLO via
+    // unaccent NO se recuperan en esta versión — backlog: cargar todo el
+    // catálogo y paginar en JS cuando el fallback esté activo.
+    if (useJsFallback && q) {
+      const qNorm = normalizeForSearch(q);
+      const filtered = rows.filter((r) =>
+        normalizeForSearch(r.name).includes(qNorm)
+      );
+      rows = filtered;
+      // count queda como referencia aproximada (puede sobreestimar). En el
+      // backlog mejoraremos: count y paginación 100% JS si unaccent ausente.
+    }
 
     return NextResponse.json({
       ok: true,

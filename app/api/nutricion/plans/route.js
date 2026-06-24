@@ -57,16 +57,105 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     if (q) where.name = { [Op.iLike]: `%${q}%` };
     if (type === "assigned" && clientId) where.clientId = clientId;
 
+    const withSummary = searchParams.get("withSummary") === "true";
+
+    const { Client, PlanMeal, PlanMealOption } = tenantModels;
+
+    const include = [];
+    if (withSummary) {
+      // Para la tarjeta de plantilla / fila de asignado necesitamos
+      // contar meals y options, y mostrar el nombre del cliente o de la
+      // plantilla origen. Lo hacemos en este mismo endpoint para no
+      // forzar N+1 desde el frontend.
+      include.push({
+        model: PlanMeal,
+        as: "meals",
+        required: false,
+        attributes: ["id", "name", "order"],
+        separate: false,
+        include: [
+          {
+            model: PlanMealOption,
+            as: "options",
+            required: false,
+            attributes: ["id"],
+            separate: false,
+          },
+        ],
+      });
+      if (type === "assigned") {
+        include.push({
+          model: Client,
+          as: "client",
+          required: false,
+          attributes: ["id", "name"],
+        });
+        include.push({
+          model: Plan,
+          as: "template",
+          required: false,
+          attributes: ["id", "name"],
+        });
+      }
+    }
+
     const { rows, count } = await Plan.findAndCountAll({
       where,
       limit,
       offset,
       order: [["updatedAt", "DESC"]],
+      include,
+      distinct: true,
     });
+
+    let items = rows.map((r) => r.toJSON());
+
+    if (withSummary) {
+      // Para plantillas, calcular cuántas asignaciones activas tiene cada una
+      // en una sola query agrupada (en vez de N+1).
+      let assignmentsByTemplate = new Map();
+      if (type === "template" && items.length > 0) {
+        const ids = items.map((p) => p.id);
+        const assignedRows = await Plan.findAll({
+          where: {
+            type: "assigned",
+            templateId: ids,
+            archivedAt: null,
+          },
+          attributes: ["templateId"],
+        });
+        for (const r of assignedRows) {
+          const k = r.templateId;
+          assignmentsByTemplate.set(k, (assignmentsByTemplate.get(k) ?? 0) + 1);
+        }
+      }
+
+      items = items.map((p) => {
+        const meals = (p.meals || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        const mealsSummary = meals.map((m) => ({
+          id: m.id,
+          name: m.name,
+          optionCount: (m.options || []).length,
+        }));
+        const out = {
+          ...p,
+          mealsSummary,
+          mealCount: meals.length,
+        };
+        delete out.meals;
+        if (type === "template") {
+          out.activeAssignmentsCount = assignmentsByTemplate.get(p.id) ?? 0;
+        } else if (type === "assigned") {
+          out.clientName = p.client?.name ?? null;
+          out.templateName = p.template?.name ?? null;
+        }
+        return out;
+      });
+    }
 
     return NextResponse.json({
       ok: true,
-      items: rows.map((r) => r.toJSON()),
+      items,
       total: count,
       page,
       limit,
