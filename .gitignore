@@ -46,3 +46,6 @@ next-env.d.ts
 !.env.production.example
 qa-credentials.txt
 .claude/settings.local.json
+
+# Git Bash crash dumps en Windows
+bash.exe.stackdump

@@ -1,6 +1,6 @@
 # Módulo Nutrición — Recetario para nutri-laura
 
-Estado: **C1 implementado en local — pendiente C2-C5.**
+Estado: **C1 implementado en local + prod (2026-06-23). C2 implementado en local. Pendiente C3-C5.**
 
 Tenant activo: `nutri_laura` (solo). El módulo `nutricion` se materializa
 en `master.tenant_modules` y todo el código está pensado para escalar a
@@ -19,9 +19,9 @@ Sprint dividido en 5 checkpoints, ~10-11 días:
 
 | Checkpoint | Alcance                                                                                          | Estado    |
 | ---------- | ------------------------------------------------------------------------------------------------ | --------- |
-| **C1**     | Catálogo de alimentos local + búsqueda online (OFF) + import a catálogo                          | **HECHO** |
-| C2         | Plantillas de plan: estructura (días, comidas, opciones de comida, foods por opción) + builder UI | Pendiente |
-| C3         | Asignación de plantillas a pacientes + cálculo de macros agregados por día                       | Pendiente |
+| **C1**     | Catálogo de alimentos local + búsqueda online (OFF) + import a catálogo                          | **HECHO + prod** |
+| **C2**     | Backend planes: tablas plans/meals/options/foods + endpoints CRUD + duplicate + assign + helper macros | **HECHO** |
+| C3         | UI constructor de planes (modal Harbiz-like) + listados de plantillas y asignados                | Pendiente |
 | C4         | Vista paciente (PDF/share link) + ajuste manual por paciente                                     | Pendiente |
 | C5         | Reporting de adherencia + integración con el módulo Citas (refrescar plan al seguimiento)         | Pendiente |
 
@@ -417,3 +417,297 @@ node --env-file=.env.local scripts/smoke-nutri-laura-recetario-c1.mjs
   imagen del producto) cuando los necesitemos en C3.
 - Tests de regresión automatizados (más allá del smoke) para los
   validators de macros y `sanitizeMeasures`/`sanitizeTags`.
+
+---
+
+## C2 — Planes (plantillas + asignados)
+
+Estado: **HECHO en local** (2026-06-23). Aún sin UI; la UI es C3.
+
+### 10. Modelo de datos C2
+
+Schema `crm_nutri_laura`, 4 tablas nuevas:
+
+#### `plans` — plantilla o plan asignado
+
+| Columna             | Tipo                          | Notas                                                       |
+| ------------------- | ----------------------------- | ----------------------------------------------------------- |
+| `id`                | UUID PK                       |                                                             |
+| `name`              | VARCHAR(255) NOT NULL         |                                                             |
+| `description`       | TEXT                          | "Comentarios" estilo Harbiz                                 |
+| `type`              | ENUM `template\|assigned`      | NOT NULL                                                    |
+| `template_id`       | UUID → `plans.id` ON DELETE SET NULL | NULL para plantillas; FK al template origen si asignado |
+| `client_id`         | UUID                          | NULL para plantillas; sin FK física (igual que Booking)     |
+| `visible_to_client` | BOOLEAN NOT NULL DEFAULT FALSE| "Visible para el paciente" (uso en C4 portal)               |
+| `assigned_at`       | TIMESTAMPTZ                   | Cuándo se asignó (NULL si template)                         |
+| `archived_at`       | TIMESTAMPTZ                   | Soft delete                                                 |
+| `created_at`        | TIMESTAMPTZ NOT NULL          |                                                             |
+| `updated_at`        | TIMESTAMPTZ NOT NULL          |                                                             |
+
+**CHECK `plans_type_client_chk`:**
+
+```sql
+(type = 'template' AND client_id IS NULL  AND assigned_at IS NULL)
+OR
+(type = 'assigned' AND client_id IS NOT NULL AND assigned_at IS NOT NULL)
+```
+
+Índices: `plans_type_idx` (type), `plans_client_id_idx` (parcial), `plans_template_id_idx` (parcial), `plans_archived_at_idx` (parcial).
+
+#### `plan_meals` — comidas dentro del plan
+
+| Columna       | Tipo                                                    | Notas                                  |
+| ------------- | ------------------------------------------------------- | -------------------------------------- |
+| `id`          | UUID PK                                                 |                                        |
+| `plan_id`     | UUID NOT NULL → `plans.id` ON DELETE CASCADE            |                                        |
+| `name`        | VARCHAR(255) NOT NULL                                   | Texto libre ("Desayuno", "Snack"…)     |
+| `description` | TEXT                                                    | "DESAYUNO + BEBIDA + FRUTA"            |
+| `order`       | INTEGER NOT NULL                                        |                                        |
+| timestamps    |                                                         |                                        |
+
+Índice: `plan_meals_plan_id_idx`.
+
+#### `plan_meal_options` — opciones de una comida (alternativas)
+
+| Columna     | Tipo                                                    | Notas                                  |
+| ----------- | ------------------------------------------------------- | -------------------------------------- |
+| `id`        | UUID PK                                                 |                                        |
+| `meal_id`   | UUID NOT NULL → `plan_meals.id` ON DELETE CASCADE       |                                        |
+| `name`      | VARCHAR(255) NOT NULL DEFAULT 'Opción 1'                |                                        |
+| `order`     | INTEGER NOT NULL                                        |                                        |
+| `is_default`| BOOLEAN NOT NULL DEFAULT FALSE                          | Solo una true por meal (validado en API)|
+
+Índice: `plan_meal_options_meal_id_idx`.
+
+#### `plan_meal_option_foods` — alimento concreto dentro de una opción
+
+| Columna           | Tipo                                                       | Notas                                                                 |
+| ----------------- | ---------------------------------------------------------- | --------------------------------------------------------------------- |
+| `id`              | UUID PK                                                    |                                                                       |
+| `option_id`       | UUID NOT NULL → `plan_meal_options.id` ON DELETE CASCADE   |                                                                       |
+| `food_id`         | UUID NOT NULL → `foods.id` **ON DELETE RESTRICT**          | No se puede archivar un food si está en uso aquí (RESTRICT)           |
+| `amount`          | NUMERIC(10,2) NULL                                         | gramos directos (`g`) o número de medidas caseras (`household`)       |
+| `unit`            | ENUM `g\|household\|free` NOT NULL                          |                                                                       |
+| `household_label` | VARCHAR(255) NULL                                          | "1 cucharada", "1 lata"… SOLO si unit='household'                     |
+| `household_grams` | NUMERIC(10,2) NULL                                         | gramos asociados al label, copiados del catálogo al insertar          |
+| `notes`           | TEXT                                                       |                                                                       |
+| `order`           | INTEGER NOT NULL                                           |                                                                       |
+| timestamps        |                                                            |                                                                       |
+
+**CHECK `plan_meal_option_foods_unit_chk`:**
+
+```sql
+(unit = 'g'         AND amount IS NOT NULL AND household_label IS NULL     AND household_grams IS NULL)
+OR
+(unit = 'household' AND amount IS NOT NULL AND household_label IS NOT NULL AND household_grams IS NOT NULL)
+OR
+(unit = 'free'      AND amount IS NULL     AND household_label IS NULL     AND household_grams IS NULL)
+```
+
+Índices: `plan_meal_option_foods_option_id_idx`, `plan_meal_option_foods_food_id_idx`.
+
+### 11. Decisión arquitectónica: plantillas mutables, asignados independientes
+
+Validada por Jorge en C0:
+
+- **Plantillas son editables** después de tener asignaciones. El backend no
+  bloquea PATCH si el template tiene asignaciones vivas.
+- **Asignados son deep-copy** del template en el momento del `POST /assign`.
+  Después viven completamente independientes: editar la plantilla NO toca
+  al paciente.
+- **No hay propagación automática**: cuando Laura quiera "re-aplicar" los
+  cambios de la plantilla a un paciente, lo hará manualmente. El botón
+  "Re-aplicar plantilla origen" se añadirá en C4 sobre la ficha paciente.
+- **Aviso en frontend**: el `PATCH /plans/[id]` devuelve
+  `{ ok: true, hadAssignments: <count>, plan }`. El frontend, en C3,
+  muestra modal de advertencia tipo:
+
+  > Esta plantilla está asignada a {hadAssignments} pacientes. Tus cambios
+  > NO se aplicarán automáticamente a sus planes existentes. ¿Continuar?
+
+Razones para esta política:
+- Evita sobreescrituras silenciosas que cambien la dieta de un paciente sin
+  el consentimiento de Laura.
+- Mantiene la auditoría limpia: cada cambio en un asignado tiene su propio
+  AuditLog, no se confunde con un cambio del template.
+
+### 12. Decisión arquitectónica: tabla `plans` única (no dos tablas)
+
+Confirmado el diseño recomendado por el spec:
+
+- Una sola tabla `plans` con `type='template' | 'assigned'` y `template_id`
+  self-FK.
+- Estructura idéntica para meals/options/foods en ambos modos.
+- Deep-copy = INSERT del plan row + INSERT en cascada de meals/options/foods
+  cambiando solo el `plan_id`.
+
+Ventajas frente a 2 tablas:
+- Mismas FKs (`PlanMeal.planId` referencia a una sola tabla).
+- Queries comunes: `WHERE type='assigned' AND client_id=X`,
+  `WHERE type='template'`.
+- Helper `deepCopyPlanTree` se reutiliza para `/duplicate` (template→template)
+  y para `/assign` (template→assigned).
+
+Pequeño coste: índice `plans_type_idx` evidencia la cardinalidad esperada.
+
+### 13. Endpoints REST C2
+
+Base: `/api/nutricion/plans`. Mismo `withTenant` + `hasModule('nutricion')`
+de C1. Sin auth → **401**. Con auth pero sin módulo → **403**.
+
+#### Listado y detalle
+
+| Método | Path                            | Notas |
+| ------ | ------------------------------- | ----- |
+| GET    | `/api/nutricion/plans`          | Query: `type` (req: `template\|assigned`), `q`, `clientId`, `includeArchived`, `page`, `limit`. Solo metadata (sin árbol). Response: `{ ok, items, total, page, limit }`. |
+| GET    | `/api/nutricion/plans/[id]`     | Detalle con árbol completo meals→options→foods. Cada `food` anidado lleva el snapshot del catálogo (`food.food.name`, macros…). Orden por `order` ASC en los 3 niveles. |
+
+#### Plantillas
+
+| Método | Path                                  | Notas |
+| ------ | ------------------------------------- | ----- |
+| POST   | `/api/nutricion/plans`                | Crea plantilla vacía. Body: `{ name, description? }`. `type` forzado a `template`. Audit: `nutricion.plan.created`. |
+| PATCH  | `/api/nutricion/plans/[id]`           | Edita `name`, `description`, `visibleToClient`. Bloquea cambio de `type`, `templateId`, `clientId`. Response: `{ ok, hadAssignments, plan }`. Audit: `nutricion.plan.updated`. |
+| DELETE | `/api/nutricion/plans/[id]`           | Soft delete (`archivedAt = now()`). Devuelve 204. Audit: `nutricion.plan.archived`. |
+| POST   | `/api/nutricion/plans/[id]/duplicate` | Solo plantillas. Body opcional `{ name }` (default `"{name} - Copia"`). Deep-copy en transacción. Audit: `nutricion.plan.duplicated`. |
+| POST   | `/api/nutricion/plans/[id]/assign`    | Solo plantillas. Body: `{ clientId, nameOverride? }`. Valida `Client.findByPk`; 409 si ya hay asignación activa de esa plantilla a ese cliente. Audit: `nutricion.plan.assigned`. |
+
+#### Comidas (meals)
+
+| Método | Path                                                | Notas |
+| ------ | --------------------------------------------------- | ----- |
+| POST   | `/api/nutricion/plans/[id]/meals`               | Body: `{ name, description?, order? }`. Si `order` ausente, max+1. |
+| PATCH  | `/api/nutricion/plans/[id]/meals/[mealId]`      | Parcial. Verifica que `mealId` pertenece a `planId`. |
+| DELETE | `/api/nutricion/plans/[id]/meals/[mealId]`      | Hard delete (CASCADE elimina options + foods). |
+
+#### Opciones de comida
+
+| Método | Path                                                                       | Notas |
+| ------ | -------------------------------------------------------------------------- | ----- |
+| POST   | `/api/nutricion/plans/[id]/meals/[mealId]/options`                     | Body: `{ name?, order?, isDefault? }`. Default name=`"Opción N+1"`. Si `isDefault=true`, transacción que pone `false` en las demás opciones de la misma comida. |
+| PATCH  | `/api/nutricion/plans/[id]/meals/[mealId]/options/[optionId]`          | Parcial. `isDefault=true` aplica la misma regla de unicidad en transacción. |
+| DELETE | `/api/nutricion/plans/[id]/meals/[mealId]/options/[optionId]`          | Hard delete (CASCADE foods). |
+
+#### Alimentos dentro de una opción
+
+| Método | Path                                                                                       | Notas |
+| ------ | ------------------------------------------------------------------------------------------ | ----- |
+| POST   | `…/options/[optionId]/foods`                                                               | Body: `{ foodId, unit, amount?, householdLabel?, householdGrams?, notes?, order? }`. Reglas CHECK validadas en API; si fuese eludido el CHECK de BD reciclamos 400 con mensaje. |
+| PATCH  | `…/options/[optionId]/foods/[foodId]`                                                      | Parcial. `foodId` del path es el id de la fila, NO del food del catálogo. No se permite cambiar `food_id` (borrar + crear). |
+| DELETE | `…/options/[optionId]/foods/[foodId]`                                                      | Hard delete. |
+
+Valides en cascada (`assertMealBelongsToPlan` → `assertOptionBelongsToMeal` →
+`assertFoodLineBelongsToOption`) en cada endpoint anidado para que un
+admin no pueda tocar entidades de OTRO plan vía path manipulado.
+
+### 14. Helper de macros — `lib/nutricion/macros.js`
+
+Sin kcal nunca. Operación sobre la representación serializada del plan
+(plain objects, las que devuelve `loadPlanTree`).
+
+| Helper                       | Devuelve                                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------- |
+| `computeFoodMacros(line)`    | `{ protein, carbs, fat, fiber }` (g absolutos) de una línea PlanMealOptionFood.                  |
+| `computeOptionMacros(opt)`   | Suma de macros de los foods de la opción. null si TODAS las líneas reportan null para ese macro.  |
+| `computeMealMacros(meal)`    | Macros de la opción `is_default=true` (o, en su defecto, la de menor `order`).                    |
+| `computePlanMacros(plan)`    | Suma de las comidas (sus defaults).                                                               |
+
+Conversión por modo:
+
+- `unit='g'`         → `amount × macro/100`.
+- `unit='household'` → `householdGrams × macro/100`.
+- `unit='free'`      → `{ null, null, null, null }` (texto libre, no calculable).
+
+Resultados redondeados a 2 decimales en cada nivel; el frontend hace el
+redondeo final de visualización.
+
+### 15. Smoke C2
+
+Script: `scripts/smoke-nutri-laura-recetario-c2.mjs`. 19 casos / ~40 asserts.
+
+Casos:
+1. Health + tablas + food del catálogo.
+2. Pre-cleanup.
+3. POST plantilla vacía.
+4. PATCH metadata → `hadAssignments=0`.
+5. POST meal "Desayuno".
+6. POST option `is_default=true`.
+7. POST food `unit='g'` amount=80.
+8. POST food `unit='household'` con label/grams.
+9. POST food `unit='free'` (amount=null).
+10. POST food `unit='g'` + amount=null → 400 (CHECK).
+11. GET árbol completo (3 foods anidados con `food` del catálogo).
+12. POST `/duplicate` → árbol clonado + IDs distintos.
+13. POST `/assign` con clientId → plan asignado + árbol completo.
+14. POST `/assign` mismo clientId → 409 (antiduplicado).
+15. PATCH plantilla con 1 asignación → `hadAssignments=1`.
+16. DELETE plan asignado → `archived_at` set; plantilla intacta.
+17. DELETE plantilla con asignaciones → `archived_at` set en plantilla;
+    asignaciones VIVAS siguen activas con sus foods.
+18. Permisos: GET sin cookie → 401.
+19. Cleanup post-run.
+
+Auth: mismo patrón que C1 (SMOKE_PASSWORD o firma JWT directa).
+
+### 16. Decisiones tomadas durante C2
+
+1. **`clientId` sin FK física a `clients`** (igual que `Booking.client_id`
+   en nutri_laura). La integridad la valida el endpoint `/assign` con
+   `Client.findByPk` antes de crear el plan. Razón: ya existe el precedente
+   y mantiene consistencia con el resto del schema.
+2. **`PlanMealOptionFood.food_id` SÍ tiene FK física con ON DELETE RESTRICT.**
+   Esto bloquea el `archivedAt` lógico del food a nivel de aplicación si la
+   nutricionista intenta archivar un alimento en uso. En C2 el endpoint
+   DELETE de food (de C1) NO comprueba referencias (sigue siendo soft delete
+   sin chequeo); en C3 se añadirá la validación previa para mostrar mensaje
+   amigable.
+3. **`isDefault` unicidad NO se enforce a nivel BD** (no hay UNIQUE INDEX
+   parcial). Se enforce en la API dentro de transacciones (POST/PATCH option).
+   Razón: simplicidad de migración, y si en futuro queremos permitir 0 o
+   varios defaults para experimentar, no hay que migrar.
+4. **PATCH plantilla NO bloquea aunque haya asignaciones.** Devuelve
+   `hadAssignments` para que el frontend pueda mostrar advertencia. Si
+   queremos política más estricta, lo cambiamos en C3 sin migración.
+5. **`/duplicate` siempre crea otra `template`**, nunca un asignado. Para
+   crear un asignado se usa `/assign` con `clientId`.
+6. **Borrar food del catálogo cuando está en uso → restringido a nivel BD**.
+   El endpoint DELETE de C1 (soft delete) sigue funcionando porque el food
+   no se elimina físicamente; solo se setea `archivedAt`. Como la FK es
+   `food_id` y la fila sigue existiendo, no rompe nada. En C3 se mostrará
+   un aviso "este food está en uso en N planes" si Laura intenta archivarlo.
+7. **Soft delete en cascada NO**: archivar una plantilla NO archiva las
+   asignaciones (la independencia es el punto clave). El smoke 17 lo
+   verifica explícitamente.
+8. **El `Food` de `PlanMealOptionFood.food` viene eager-loaded con sus
+   macros**. Eso permite calcular macros en el frontend sin queries extra.
+   Si el food fue archivado, viene igualmente (la FK no filtra por
+   `archivedAt`); el frontend puede mostrar "alimento archivado" en C3.
+9. **`/api/nutricion/plans/[id]/meals/[mealId]/options/[optionId]/foods/[foodId]`**
+   es un path largo pero refleja la jerarquía real. Cuando llegue C3 con
+   drag&drop entre opciones, posiblemente añadiremos un endpoint
+   `POST /reorder` aparte. Por ahora, mantener este patrón.
+10. **Sin `kcal`**: helper macros no expone kcal en ningún nivel. Si
+    alguna vez Laura quiere mostrar kcal, calcularlo en el frontend con la
+    fórmula estándar (4p + 4c + 9f) — no añadirlo en BD.
+
+### 17. Backlog detectado en C2
+
+- Endpoint `POST /api/nutricion/plans/[id]/meals/reorder` con array
+  de `{ id, order }` para mover comidas en una transacción (preferible a
+  N PATCH).
+- Igual para options dentro de una comida y foods dentro de una opción.
+- Endpoint `GET /api/nutricion/plans/[id]?includeMacros=true` que devuelva
+  el árbol + macros calculados por nivel, usando `lib/nutricion/macros.js`.
+- Validación al archivar un food (C1 DELETE) consultando
+  `PlanMealOptionFood.count({ where: { foodId } })` y devolviendo 409
+  con el número de planes que lo usan.
+- Cuando llegue C3 + C4: portal del paciente (`visibleToClient=true`) con
+  ruta `/portal/nutricion/mi-plan` para que el paciente vea su plan
+  activo.
+- Test unit del helper macros con casos de borde (null en una macro pero
+  no en otras, mix de free + g, etc.). En C2 está cubierto solo
+  indirectamente vía smoke (el endpoint de detalle hidrata las macros).
+- En `PATCH .../foods/[foodId]`, si `body.foodId !== line.foodId`, hoy
+  devuelve 422. Mejor: aceptar ese cambio en transacción si el food
+  destino existe (cambio de alimento manteniendo amount/unit). C3 puede
+  implementarlo cuando el modal Harbiz lo necesite.

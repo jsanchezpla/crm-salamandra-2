@@ -125,8 +125,8 @@ export default function NutricionFoodsModule() {
   return (
     <div className="flex flex-col h-full min-h-0 bg-[var(--color-accent,#F7F1EB)]/30">
       {/* Header */}
-      <div className="px-6 lg:px-10 pt-8 pb-5 shrink-0 border-b border-gray-100 bg-white">
-        <div className="flex items-end justify-between gap-6 flex-wrap mb-4">
+      <div className="px-4 sm:px-6 lg:px-10 pt-6 lg:pt-8 pb-4 lg:pb-5 shrink-0 border-b border-gray-100 bg-white">
+        <div className="flex items-start lg:items-end justify-between gap-4 lg:gap-6 flex-wrap mb-4">
           <div>
             <div className="text-[11px] uppercase tracking-[0.18em] text-gray-400 mb-1">
               Nutrición · Recetario
@@ -201,7 +201,7 @@ export default function NutricionFoodsModule() {
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-auto px-4 lg:px-10 py-6">
+      <div className="flex-1 overflow-auto px-3 sm:px-4 lg:px-10 py-4 lg:py-6">
         <div className="max-w-6xl mx-auto">
           {loading ? (
             <div className="py-16 text-center text-sm text-gray-400">
@@ -210,39 +210,62 @@ export default function NutricionFoodsModule() {
           ) : items.length === 0 ? (
             <EmptyState onAdd={() => setEditing("new")} onSearch={() => setExternalOpen(true)} />
           ) : (
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 text-left text-[11px] uppercase tracking-wider text-gray-500">
-                    <th className="px-4 py-2.5 font-semibold">Nombre</th>
-                    <th className="px-3 py-2.5 font-semibold text-center">Unidad</th>
-                    <th className="px-3 py-2.5 font-semibold text-right">Proteínas</th>
-                    <th className="px-3 py-2.5 font-semibold text-right">Carbs</th>
-                    <th className="px-3 py-2.5 font-semibold text-right">Grasas</th>
-                    <th className="px-3 py-2.5 font-semibold text-right">Fibra</th>
-                    <th className="px-3 py-2.5 font-semibold text-center">Origen</th>
-                    <th className="px-3 py-2.5 font-semibold text-right">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {items.map((food) => (
-                    <FoodRow
-                      key={food.id}
-                      food={food}
-                      onEdit={() => setEditing(food)}
-                      onArchive={() => archiveFood(food.id)}
-                      onPatchMacro={(field, value) =>
-                        patchFood(food.id, { [field]: value })
-                      }
-                    />
-                  ))}
-                </tbody>
-              </table>
+            <>
+              {/* Cards en móvil (<lg) */}
+              <div className="lg:hidden space-y-2.5">
+                {items.map((food) => (
+                  <FoodCard
+                    key={food.id}
+                    food={food}
+                    onEdit={() => setEditing(food)}
+                    onArchive={() => archiveFood(food.id)}
+                    onPatchMacro={(field, value) =>
+                      patchFood(food.id, { [field]: value })
+                    }
+                  />
+                ))}
+                {totalPages > 1 && (
+                  <div className="bg-white border border-gray-200 rounded-xl">
+                    <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+                  </div>
+                )}
+              </div>
 
-              {totalPages > 1 && (
-                <Pagination page={page} totalPages={totalPages} onChange={setPage} />
-              )}
-            </div>
+              {/* Tabla en desktop (≥lg) */}
+              <div className="hidden lg:block bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-left text-[11px] uppercase tracking-wider text-gray-500">
+                      <th className="px-4 py-2.5 font-semibold">Nombre</th>
+                      <th className="px-3 py-2.5 font-semibold text-center">Unidad</th>
+                      <th className="px-3 py-2.5 font-semibold text-right">Proteínas</th>
+                      <th className="px-3 py-2.5 font-semibold text-right">Carbs</th>
+                      <th className="px-3 py-2.5 font-semibold text-right">Grasas</th>
+                      <th className="px-3 py-2.5 font-semibold text-right">Fibra</th>
+                      <th className="px-3 py-2.5 font-semibold text-center">Origen</th>
+                      <th className="px-3 py-2.5 font-semibold text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {items.map((food) => (
+                      <FoodRow
+                        key={food.id}
+                        food={food}
+                        onEdit={() => setEditing(food)}
+                        onArchive={() => archiveFood(food.id)}
+                        onPatchMacro={(field, value) =>
+                          patchFood(food.id, { [field]: value })
+                        }
+                      />
+                    ))}
+                  </tbody>
+                </table>
+
+                {totalPages > 1 && (
+                  <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -338,6 +361,123 @@ function FoodRow({ food, onEdit, onArchive, onPatchMacro }) {
         </button>
       </td>
     </tr>
+  );
+}
+
+// ── Card móvil (<lg) ────────────────────────────────────────────────────────
+
+function FoodCard({ food, onEdit, onArchive, onPatchMacro }) {
+  return (
+    <article className="bg-white border border-gray-200 rounded-xl shadow-sm p-3.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            {food.source === "openfoodfacts" ? (
+              <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--color-primary)]/10 text-[var(--color-primary)] border border-[var(--color-primary)]/20">
+                OpenFoodFacts
+              </span>
+            ) : (
+              <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                Local
+              </span>
+            )}
+            <span className="text-[10px] text-gray-400 uppercase tracking-wider">
+              por 100 {UNIT_LABEL[food.defaultUnit] ?? food.defaultUnit}
+            </span>
+          </div>
+          <h3 className="text-sm font-semibold text-gray-900 break-words">{food.name}</h3>
+          {Array.isArray(food.tags) && food.tags.length > 0 && (
+            <div className="mt-1 flex gap-1 flex-wrap">
+              {food.tags.slice(0, 4).map((t) => (
+                <span
+                  key={t}
+                  className="inline-flex px-1.5 py-0.5 text-[10px] rounded bg-gray-100 text-gray-600"
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex gap-0.5 shrink-0">
+          <button
+            onClick={onEdit}
+            className="text-gray-400 hover:text-[var(--color-primary)] transition p-1.5 -m-1.5"
+            aria-label="Editar"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+            </svg>
+          </button>
+          <button
+            onClick={onArchive}
+            className="text-gray-400 hover:text-red-600 transition p-1.5 -m-1.5"
+            aria-label="Archivar"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-4 gap-2">
+        <MacroChip label="Prot." value={food.proteinPer100} onSave={(v) => onPatchMacro("proteinPer100", v)} />
+        <MacroChip label="Carbs" value={food.carbsPer100} onSave={(v) => onPatchMacro("carbsPer100", v)} />
+        <MacroChip label="Grasas" value={food.fatPer100} onSave={(v) => onPatchMacro("fatPer100", v)} />
+        <MacroChip label="Fibra" value={food.fiberPer100} onSave={(v) => onPatchMacro("fiberPer100", v)} />
+      </div>
+    </article>
+  );
+}
+
+function MacroChip({ label, value, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+
+  useEffect(() => { setDraft(value ?? ""); }, [value]);
+
+  async function commit() {
+    const trimmed = String(draft).trim();
+    const next = trimmed === "" ? null : Number(trimmed);
+    const current = value === null || value === undefined ? null : Number(value);
+    if (next === current || (next === null && current === null)) { setEditing(false); return; }
+    if (next !== null && !Number.isFinite(next)) {
+      setEditing(false); setDraft(value ?? ""); return;
+    }
+    const okSaved = await onSave(next);
+    if (okSaved) setEditing(false);
+    else setDraft(value ?? "");
+  }
+
+  return (
+    <div
+      className="rounded-md border border-gray-100 bg-gray-50/60 px-2 py-1.5 cursor-pointer hover:bg-gray-100/80 transition"
+      onClick={() => !editing && setEditing(true)}
+    >
+      <div className="text-[10px] uppercase text-gray-400 tracking-wider mb-0.5">{label}</div>
+      {editing ? (
+        <input
+          autoFocus
+          type="number"
+          step="0.1"
+          min="0"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") { setDraft(value ?? ""); setEditing(false); }
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="w-full px-1 py-0.5 text-sm rounded border border-[var(--color-primary)]/40 bg-white focus:outline-none"
+        />
+      ) : (
+        <div className="text-sm font-medium text-gray-800 tabular-nums">
+          {value === null || value === undefined || value === "" ? "—" : Number(value).toFixed(1).replace(/\.0$/, "")}
+        </div>
+      )}
+    </div>
   );
 }
 

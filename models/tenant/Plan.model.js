@@ -1,0 +1,74 @@
+import { DataTypes } from "sequelize";
+
+/**
+ * Plan — plantilla nutricional o plan asignado a un paciente.
+ *
+ * Sprint nutri-laura Recetario C2.
+ *
+ *   type='template' → plantilla reutilizable (client_id NULL, assigned_at NULL).
+ *   type='assigned' → plan asignado a un paciente concreto. Es una copia
+ *                     deep del template (estructuras meals/options/foods
+ *                     se duplican; el plan asignado vive independiente
+ *                     y editar la plantilla origen NO le afecta).
+ *
+ * Self-FK `template_id` apunta al template origen cuando es asignado.
+ * Soft delete vía `archived_at`. La integridad type / client_id /
+ * assigned_at está reforzada por CHECK constraint
+ * (plans_type_client_chk) en BD — la API también valida en entrada.
+ */
+export function definePlan(sequelize) {
+  return sequelize.define(
+    "Plan",
+    {
+      id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
+      },
+      name: {
+        type: DataTypes.STRING,
+        allowNull: false,
+      },
+      description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      type: {
+        type: DataTypes.ENUM("template", "assigned"),
+        allowNull: false,
+      },
+      templateId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "template_id",
+      },
+      clientId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "client_id",
+      },
+      visibleToClient: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: "visible_to_client",
+      },
+      assignedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "assigned_at",
+      },
+      archivedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "archived_at",
+      },
+    },
+    {
+      tableName: "plans",
+      indexes: [
+        { fields: ["type"], name: "plans_type_idx" },
+      ],
+    }
+  );
+}
