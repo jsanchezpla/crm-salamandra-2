@@ -39,12 +39,15 @@ import Link from "next/link";
 import ClientNotesPanel from "./ClientNotesPanel.jsx";
 import ClientAttachmentsPanel from "./ClientAttachmentsPanel.jsx";
 import ClientBookingsPanel from "./ClientBookingsPanel.jsx";
+import ClientPlansPanel from "./ClientPlansPanel.jsx";
 
 const TABS = [
   { key: "info", label: "Información" },
   { key: "notes", label: "Notas" },
   { key: "attachments", label: "Adjuntos" },
   { key: "bookings", label: "Citas" },
+  // Tab "Plan" añadida en Sprint Recetario C4. Solo visible en nutri_laura.
+  { key: "plan", label: "Plan" },
 ];
 
 const ROLES_WITH_ACCESS = new Set(["admin", "superadmin", "employee"]);
@@ -323,6 +326,8 @@ export default function NutriLauraClientDetailModule() {
             userRole={me.role}
           />
         )}
+
+        {tab === "plan" && <ClientPlansPanel clientId={id} />}
       </div>
     </div>
   );

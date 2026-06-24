@@ -1,6 +1,6 @@
 # Módulo Nutrición — Recetario para nutri-laura
 
-Estado: **C1 implementado en local + prod (2026-06-23). C2 implementado en local. C3 implementado en local (UI), pendiente despliegue. C4-C5 pendientes.**
+Estado: **C1+C2+C3 en producción (C3 deployed 2026-06-24). C4 implementado en local, pendiente despliegue. C5 pendiente.**
 
 Tenant activo: `nutri_laura` (solo). El módulo `nutricion` se materializa
 en `master.tenant_modules` y todo el código está pensado para escalar a
@@ -21,9 +21,9 @@ Sprint dividido en 5 checkpoints, ~10-11 días:
 | ---------- | ------------------------------------------------------------------------------------------------ | --------- |
 | **C1**     | Catálogo de alimentos local + búsqueda online (OFF) + import a catálogo                          | **HECHO + prod** |
 | **C2**     | Backend planes: tablas plans/meals/options/foods + endpoints CRUD + duplicate + assign + helper macros | **HECHO** |
-| **C3**     | UI constructor de planes (modal Harbiz-like) + listados de plantillas y asignados + accent-insensitive search | **HECHO (local, pendiente prod)** |
-| C4         | Vista paciente (PDF/share link) + ajuste manual por paciente                                     | Pendiente |
-| C5         | Reporting de adherencia + integración con el módulo Citas (refrescar plan al seguimiento)         | Pendiente |
+| **C3**     | UI constructor de planes (modal Harbiz-like) + listados de plantillas y asignados + accent-insensitive search | **HECHO + prod** |
+| **C4**     | UX asignación (modal 2 pasos desde /asignados) + tab Plan en ficha paciente + re-aplicar plantilla origen | **HECHO (local, pendiente prod)** |
+| C5         | Smoke completo + revisión cross-checkpoint + cierre del sprint                                   | Pendiente |
 
 **Sin kcal**: se trabaja solo con proteínas / carbohidratos / grasas /
 fibra (g por 100 g del alimento). Las kcal se calcularían sumando
@@ -997,3 +997,281 @@ node --env-file=.env.local scripts/smoke-nutri-laura-recetario-c3.mjs
   (calculado en el endpoint con `?withSummary=true&withMacros=true`).
 - Búsqueda por tag en `/nutricion/alimentos` (ya soportada en backend,
   falta UI).
+
+---
+
+## C4 — UX asignación + tab Plan en ficha paciente
+
+Estado: **HECHO en local** (2026-06-24). Pendiente de despliegue a prod.
+
+### 28. Alcance C4
+
+Decisiones cerradas con Jorge antes de implementar:
+
+1. La asignación de plantilla a paciente se inicia **SOLO desde
+   `/nutricion/asignados`** (botón "+ Nueva asignación"). NO desde la
+   ficha de paciente — la ficha solo muestra el plan ya asignado.
+2. El wizard de asignación es **modal de 2 pasos secuenciales**:
+   paciente → plantilla → confirmar.
+3. La ficha de paciente tiene una **nueva tab "Plan"** (solo override
+   nutri_laura): plan activo destacado + histórico colapsable. Acciones:
+   "Editar plan" (abre PlanEditorModal de C3) y "Re-aplicar plantilla
+   origen".
+4. "Re-aplicar plantilla origen" archiva el plan asignado actual y
+   crea uno nuevo deep-copy de la plantilla origen (en transacción).
+5. Empty state sin plan activo: mensaje "Sin plan asignado. Asigna
+   desde Nutrición > Asignados > + Nueva asignación." Sin botón.
+
+### 29. Endpoint `POST /api/nutricion/plans/[id]/reapply-template`
+
+Re-aplica la plantilla origen sobre un plan asignado en una sola
+transacción atómica:
+
+1. **Validaciones** (todos los rechazos con código HTTP claro):
+   - Plan del path no existe / archivado → **404**.
+   - Plan.type !== 'assigned' → **400** "Solo se puede re-aplicar
+     sobre planes asignados".
+   - Plan.templateId NULL → **400** "Este plan asignado no tiene
+     plantilla origen registrada" (caso defensivo para datos legacy).
+   - Plantilla origen no existe o `archivedAt !== null` → **409** "La
+     plantilla origen está archivada o no existe". Elegimos 409 (no
+     404) porque el conflicto es de **estado** del recurso, no de
+     ausencia.
+   - Plantilla origen tiene type distinto a 'template' → **409**
+     (defensivo).
+2. **Transacción**:
+   - `UPDATE plans SET archived_at = now() WHERE id = oldPlan.id`.
+   - `INSERT INTO plans` con `type='assigned'`, mismo `client_id`,
+     mismo `template_id`, nuevo `assigned_at = now()`, name
+     compuesto del template + sufijo del nombre viejo (heurística para
+     conservar el "— {paciente}").
+   - `deepCopyPlanTree` desde la plantilla origen al nuevo plan.
+3. Audit log: `action='nutricion.plan.reapplied'` con
+   `{ oldPlanId, newPlanId, templateId, clientId }`.
+4. Response **201** con el árbol completo del nuevo plan (mismo shape
+   que `POST /assign`).
+
+Anti-duplicado: **NO** se aplica aquí porque el plan viejo se archiva
+en la misma transacción **antes** de insertar el nuevo, así que no hay
+colisión con el `WHERE archivedAt IS NULL` del check de `/assign`.
+
+### 30. Endpoint `GET /api/clients/[id]/plans`
+
+Devuelve TODOS los planes (activos + archivados) del cliente,
+ordenados por `createdAt DESC`. Cada item:
+
+```json
+{
+  "id": "uuid",
+  "name": "Mediterráneo 1500 — Belén",
+  "description": "...",
+  "visibleToClient": false,
+  "assignedAt": "2026-06-24T...",
+  "archivedAt": null,
+  "createdAt": "...",
+  "updatedAt": "...",
+  "status": "active" | "archived",
+  "mealCount": 4,
+  "templateId": "uuid",
+  "templateName": "Mediterráneo 1500",
+  "templateArchived": false
+}
+```
+
+Auth: `hasModule('nutricion')` + JWT válido. El endpoint vive en
+`/api/clients/[id]/plans` (no en `/api/nutricion/...`) porque
+conceptualmente pertenece a la ficha cliente y se consume desde el
+panel `ClientPlansPanel`.
+
+Cliente inexistente → **404** "Cliente no encontrado".
+Sin auth → **401** (middleware).
+
+### 31. Modal `AssignPlanModal` — wizard 2 pasos
+
+Componente: `modules/overrides/nutri-laura/AssignPlanModal.jsx`. Se
+abre desde el botón "+ Nueva asignación" en
+`/nutricion/asignados`.
+
+**Paso 1 — Selección de paciente**:
+- Buscador con autocomplete contra `GET /api/clients?search=…`.
+- Sin query escrita: muestra los últimos 20 pacientes activos
+  (`GET /api/clients?limit=20`).
+- Click en un paciente → estado interno `client = c` + avanza al paso 2.
+
+**Paso 2 — Selección de plantilla**:
+- Lista de plantillas (`GET /api/nutricion/plans?type=template&limit=200`).
+- En paralelo cargamos `GET /api/clients/[clientId]/plans` y
+  **filtramos** las plantillas que ya tienen una asignación activa al
+  paciente seleccionado. Así evitamos el 409 antes de hacer el POST.
+- Click en plantilla → `POST /api/nutricion/plans/[templateId]/assign`
+  con `{ clientId }`.
+- Si la API igualmente devuelve **409** (race condition entre dos
+  pestañas, por ejemplo), mostramos el error en el modal sin cerrarlo
+  para permitir cambiar de plantilla.
+- Si OK, el callback `onAssigned(newPlan)` cierra el modal y abre
+  inmediatamente el `PlanEditorModal` con el plan recién asignado
+  (UX one-shot: asigna y entra a editar gramos).
+
+### 32. Tab "Plan" en ficha paciente — wireframe
+
+Override `modules/overrides/nutri-laura/ClientDetailModule.jsx`:
+añadida tab `{ key: 'plan', label: 'Plan' }` después de "Citas". El
+contenido lo renderiza `ClientPlansPanel`.
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  ← Belén Iglesias                                       [paciente]   │
+│  Edad: 32 · belen@example.com · +34 600 000 000                      │
+├──────────────────────────────────────────────────────────────────────┤
+│ [Información] [Notas] [Adjuntos] [Citas] [Plan]                      │
+├──────────────────────────────────────────────────────────────────────┤
+│ ┌─ Plan activo ────────────────────────────────────────────────────┐ │
+│ │ PLAN ACTIVO                                                       │ │
+│ │ Mediterráneo 1500 — Belén Iglesias                                │ │
+│ │                                                                   │ │
+│ │ Plantilla origen: Mediterráneo 1500 (link a /plantillas)          │ │
+│ │ Asignado el:     24 jun 2026                                      │ │
+│ │ Última edición:  24 jun 2026                                      │ │
+│ │ Comidas:         4 comidas                                        │ │
+│ │                                                                   │ │
+│ │              [Re-aplicar plantilla origen]  [Editar plan]        │ │
+│ └───────────────────────────────────────────────────────────────────┘ │
+│                                                                      │
+│ ▾ Histórico  (2 planes archivados)                                  │
+│   • Pauta inicial — Belén · Asignado 1 may · Archivado 24 jun [Ver]│
+│   • Pauta verano — Belén · Asignado 1 jun · Archivado 24 jun [Ver] │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+Empty state (sin plan activo NI histórico): mensaje "Sin plan
+asignado. Asigna desde Nutrición > Asignados > + Nueva asignación."
+con link a la ruta.
+
+Si hay histórico pero NO activo: una banda gris en lugar de la card
+del plan activo ("Este paciente no tiene plan activo. Histórico
+abajo.") + el acordeón de histórico se expande por defecto.
+
+### 33. Re-aplicar plantilla origen (UX)
+
+Flujo desde la card "Plan activo":
+
+1. Click "Re-aplicar plantilla origen".
+2. `window.confirm`: "Esto archivará el plan actual y creará uno nuevo
+   desde la plantilla origen. ¿Continuar?".
+3. `POST /reapply-template`.
+4. Si OK → toast "Plantilla re-aplicada" + recarga del listado + abre
+   el `PlanEditorModal` del nuevo plan para que Laura confirme/ajuste.
+5. Si error (p. ej. plantilla origen archivada) → toast con el
+   mensaje del backend; la card no se modifica.
+
+El botón se deshabilita (gris) cuando:
+- `plan.templateId` es null (plan asignado huérfano, no debería pasar
+  en C4 pero es defensivo).
+- `plan.templateArchived === true` (la plantilla origen fue archivada
+  desde C3).
+
+### 34. Smoke C4
+
+Script: `scripts/smoke-nutri-laura-recetario-c4.mjs`. 43 asserts:
+
+1-2. Health + cleanup pre-run.
+3. POST /assign con árbol mínimo (1 comida × 1 opción × 1 food).
+4. GET /clients/[id]/plans devuelve el plan asignado + templateName.
+5. POST /reapply-template happy path (archive viejo + crea nuevo +
+   deep-copy del árbol).
+6. GET /clients/[id]/plans tras reapply: 2 planes ordenados DESC
+   (activo primero, archivado segundo).
+7. POST /reapply-template sobre plantilla (type='template') → 400.
+8. POST /reapply-template con plantilla origen archivada → 409.
+9. POST /reapply-template con planId UUID inexistente → 404.
+10. Regresión C2: POST /assign mismo (template, client) activos → 409.
+11. Permisos: GET /clients/[id]/plans sin cookie → 401.
+12. Cleanup.
+
+Ejecutar:
+
+```powershell
+npm run dev  # otra terminal
+
+# Sin login HTTP (firma JWT)
+node --env-file=.env.local scripts/smoke-nutri-laura-recetario-c4.mjs
+
+# Con login HTTP completo
+$env:SMOKE_PASSWORD = "<password admin nutri_laura>"
+node --env-file=.env.local scripts/smoke-nutri-laura-recetario-c4.mjs
+```
+
+### 35. Decisiones tomadas durante C4
+
+1. **Endpoint `/reapply-template` en `/api/nutricion/plans/[id]/`**, no
+   en una ruta del cliente. Razón: la operación es sobre el plan, no
+   sobre el cliente. El cliente se infiere del plan.
+2. **Lista de planes del cliente en `/api/clients/[id]/plans`** (no en
+   `/api/nutricion/plans?clientId=…`). Razón: la consume la ficha
+   cliente; semánticamente es un sub-recurso del cliente. Filtrar por
+   `clientId` en el endpoint genérico de planes también funciona pero
+   no incluye automáticamente `templateName` y `mealCount`.
+3. **Wizard 2 pasos (paciente → plantilla)**, no un solo selector con
+   ambos campos. Razón: la lista de plantillas filtrable depende del
+   paciente elegido (ocultamos las ya asignadas activas). Hacerlo en
+   un solo paso requeriría re-fetch de la lista al cambiar paciente.
+4. **Anti-duplicado del wizard en cliente Y servidor**: filtramos en
+   UI las plantillas ya asignadas activas (UX), pero el backend sigue
+   devolviendo 409 si por race condition se intenta duplicar. El modal
+   lo maneja sin cerrarse.
+5. **Apertura automática del `PlanEditorModal` tras asignar**: una vez
+   asignada la plantilla, abrimos el editor del nuevo plan asignado.
+   Laura lo más probable es que quiera ajustar gramos/opciones
+   específicas del paciente; ahorra un click.
+6. **No hay botón "Asignar nueva plantilla" en la tab Plan** (regla
+   innegociable de Jorge). La ficha paciente es solo lectura/edición
+   del plan ya asignado; la asignación inicial es siempre desde
+   `/asignados`.
+7. **Histórico editable como el activo**: el botón [Ver] de la fila
+   de histórico abre el mismo `PlanEditorModal`, no una vista
+   read-only. Razón pragmática: Laura puede querer consultar valores
+   antiguos o copiar un plan archivado de vuelta a activo (si decide
+   restaurar, lo haría manual borrando el activo + cambiando
+   `archivedAt = null` en BD — fuera de C4).
+8. **Status de la card "Plan activo" usa branding terracota**
+   (`bg-[var(--color-primary)]/[0.05]` + borde `/25`). Para que destaque
+   del histórico (que vive en card blanca normal).
+9. **Banner "histórico" colapsable con auto-expand**: si NO hay activo
+   pero SÍ hay histórico, expande automáticamente. Caso típico: Laura
+   archivó el plan reciente y aún no asignó otro; el histórico es
+   inmediatamente relevante.
+10. **`templateArchived` viaja en la respuesta del listado** para que
+    el botón "Re-aplicar" se pueda deshabilitar en frontend sin un
+    segundo fetch. Si Laura archiva la plantilla origen desde C3, el
+    botón de la ficha paciente se deshabilita correctamente.
+
+### 36. Backlog detectado en C4
+
+- **Resumen de macros en la card "Plan activo"**: hoy solo mostramos
+  conteo de comidas. Útil añadir P/C/G/F del plan activo (requiere
+  bien un nuevo flag `?withMacros=true` en `GET /clients/[id]/plans`,
+  bien un fetch extra del árbol).
+- **Notificación al paciente** cuando Laura re-aplica una plantilla:
+  email/SMS opcional (C5+ o futura integración con n8n).
+- **"Restaurar" un plan archivado** desde el histórico: hoy hay que
+  hacerlo manualmente en BD. Sería un endpoint
+  `POST /plans/[id]/restore` que verifica que no hay activo de la
+  misma plantilla y vuelve a poner `archivedAt = null`.
+- **Comparar dos planes** (activo vs anterior archivado): diff side
+  by side de comidas/opciones/cantidades. Útil para que Laura vea qué
+  cambió entre revisiones.
+- **Bulk-reapply**: re-aplicar la plantilla origen a TODOS los
+  pacientes que la tengan asignada cuando Laura edita una plantilla.
+  Hoy es 1 a 1 desde la ficha paciente. Solo si Laura lo pide.
+- **Modo read-only en el `PlanEditorModal`** para histórico: hoy
+  permite edición. Si Laura confunde "ver" con "editar" un plan
+  archivado, añadir un toggle del editor o un wrapper read-only.
+- **Filtro de pacientes en `/asignados`** ya cubierto por C3 (buscador
+  por nombre + filtro plantilla origen). Mantiene su forma — el botón
+  "+ Nueva asignación" se integra sin cambiar el resto del header.
+- **Validación de cliente "soft-deleted"** en /assign: hoy un cliente
+  archivado (si existiera la convención) se aceptaría. Modelo `Client`
+  no tiene `archivedAt`, así que no aplica por ahora.
+- **Pre-fill del paciente en el wizard** cuando se llega desde un
+  contexto específico (futuro: abrir desde una notificación o un link
+  externo).

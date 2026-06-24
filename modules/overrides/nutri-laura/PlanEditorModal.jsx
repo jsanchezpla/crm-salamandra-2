@@ -8,7 +8,9 @@
  *
  * Estructura:
  *   - Header: nombre del plan + dropdown "Plantillas ▾" para cargar otra
- *     plantilla + toggle "Visible al cliente" (solo si type='assigned').
+ *     plantilla. (El toggle "Visible al cliente" se retiró en C4 — Laura
+ *     no usa portal cliente; entrega vía PDF/WhatsApp. La columna BD
+ *     `plans.visible_to_client` se conserva por compatibilidad.)
  *   - Cuerpo a 2 columnas (lg+): izquierda = comidas/opciones/foods,
  *     derecha = panel paciente + resumen de macros.
  *   - Footer NO fijo: botones [Cancelar] [Guardar plan] al final del
@@ -264,10 +266,9 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
     );
   }
 
-  async function toggleVisibleToClient(checked) {
-    if (!plan) return;
-    await patchPlanMetadata({ visibleToClient: checked });
-  }
+  // toggleVisibleToClient: retirado en C4 junto con el toggle del header.
+  // patchPlanMetadata sigue aceptando { visibleToClient } por si algún día
+  // se reactiva el portal cliente — basta con volver a montar la UI.
 
   // ── Mutaciones: comidas ───────────────────────────────────────────────────
   async function addMeal() {
@@ -617,16 +618,6 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
             onSelect={(t) => loadFromTemplate(t.id)}
             excludeId={plan.type === "template" ? plan.id : null}
           />
-          {plan.type === "assigned" && (
-            <label className="flex items-center gap-2 text-xs text-gray-700 px-2 py-1 rounded border border-gray-200 bg-white cursor-pointer">
-              <input
-                type="checkbox"
-                checked={!!plan.visibleToClient}
-                onChange={(e) => toggleVisibleToClient(e.target.checked)}
-              />
-              <span>Visible al cliente</span>
-            </label>
-          )}
           <button
             onClick={handleClose}
             className="text-gray-400 hover:text-gray-700 transition p-1"

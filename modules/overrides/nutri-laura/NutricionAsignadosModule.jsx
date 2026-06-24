@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import PlanEditorModal from "./PlanEditorModal.jsx";
+import AssignPlanModal from "./AssignPlanModal.jsx";
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -37,6 +38,7 @@ export default function NutricionAsignadosModule() {
   const [templateFilter, setTemplateFilter] = useState("");
   const [templates, setTemplates] = useState([]);
   const [editingId, setEditingId] = useState(null);
+  const [assignOpen, setAssignOpen] = useState(false);
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
@@ -108,6 +110,15 @@ export default function NutricionAsignadosModule() {
               {total} {total === 1 ? "plan" : "planes"} asignados a pacientes.
             </p>
           </div>
+          <button
+            onClick={() => setAssignOpen(true)}
+            className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--color-primary)] text-white hover:opacity-90 transition flex items-center gap-1"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} className="w-3.5 h-3.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Nueva asignación
+          </button>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -206,6 +217,20 @@ export default function NutricionAsignadosModule() {
           planId={editingId}
           onClose={() => { setEditingId(null); load(); }}
           onSaved={() => { /* el reload lo hace onClose */ }}
+        />
+      )}
+
+      {assignOpen && (
+        <AssignPlanModal
+          onClose={() => setAssignOpen(false)}
+          onAssigned={(newPlan) => {
+            setAssignOpen(false);
+            setToast({ kind: "ok", text: "Plan asignado correctamente" });
+            // Abrir el editor del plan recién asignado para que Laura ajuste
+            // gramos / opciones específicas para el paciente.
+            if (newPlan?.id) setEditingId(newPlan.id);
+            load();
+          }}
         />
       )}
 
