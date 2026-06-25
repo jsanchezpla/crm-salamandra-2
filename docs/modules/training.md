@@ -1025,8 +1025,8 @@ curso sin gatekeeper).
 | `GET /api/webhooks/retorika/registro-curso/check?email=&productId=` | `X-Retorika-Signature: sha256=<hmac queryString URL-encoded>` | 60/min | Lo llama el snippet PHP del WP. Devuelve `{ has: true|false }`. |
 | `GET /api/training/course-registrations?courseId=...` | JWT + `hasModule(training)` | — | Listado paginado con filtros `search`/`companyId`/`from`/`to`. |
 | `GET /api/training/course-registrations/[id]` | JWT | — | Detalle completo con relaciones. |
-| `GET /api/training/course-registrations/stats?courseId=&search=&companyId=&from=&to=` | JWT | — | Total / motivación media / estrés medio / top empresa / distribuciones 1-5 / top 10 empresas / registros por mes. Acepta los mismos filtros que `/list`. |
-| `GET /api/training/course-registrations/export?courseId=&search=&companyId=&from=&to=` | JWT | — | CSV UTF-8 con BOM. Arrays resueltos a labels comma-separated (vía `lib/training/registrationLabels.js`). |
+| `GET /api/training/course-registrations/stats?courseId=&search=&companyId=&from=&to=` | JWT | — | Respuesta `{ totalRegistrations, scales }` con 6 escalas Likert (`motivationCurrent`, `motivationVsStart`, `centerEnvironment`, `stressLevel`, `hasResources`, `socialRecognition`) — cada una con `{ type:"likert", distribution:{1..5:n}, average, total }` — y 2 escalas categóricas (`workloadFrequency`, `weeklyExtraHours`) con `{ type:"categorical", distribution:{<slug>:n}, total }`. `motivationVsStart` añade `breakdown3cat: { less, equal, more, lessPct, equalPct, morePct }` (1+2 → menos motivados / 3 → igual / 4+5 → más motivados). Mismos filtros que `/list` y `/export` (coherencia 3-vías via `buildRawFilters("cr")`). Diccionarios: `DIAGNOSIS_FULL_QUESTIONS`, `WORKLOAD_FREQUENCY` (+ `_ORDER`), `WEEKLY_EXTRA_HOURS` (+ `_ORDER`) en `lib/training/registrationLabels.js`. |
+| `GET /api/training/course-registrations/export?courseId=&search=&companyId=&from=&to=` | JWT | — | XLSX nativo (ExcelJS) con 2 hojas: **"Registros"** (30 columnas con cabeceras humanas cortas, fecha nativa Excel para filtrado, panel congelado, autofilter en `A1:AD1`) y **"Diccionario de preguntas"** (10 filas — columna / pregunta completa / tipo escala). El texto largo de cada pregunta se importa desde `DIAGNOSIS_FULL_QUESTIONS` como fuente única; el endpoint solo aporta el mapping `columna`/`tipo`. Arrays (`positions`, `subjects`, `coursesTeaching`, `topicsOfInterest`) resueltos a labels en castellano vía diccionarios de `lib/training/registrationLabels.js`. Mismos filtros que `/list` y `/stats`. |
 
 **Auto-vinculación TrainingUser → Company**:
 
@@ -1097,8 +1097,10 @@ URL del GET:      .../check?email=marta%40trinitycollege.es&productId=5487
    - URL directa: `/formacion/cursos/<id>`.
 
 2. **Tab "Registros del curso"** (antes "Registros previos"):
-   - 4 cards arriba: Total, Motivación media (barra), Estrés medio (barra, paleta inversa), Top empresa.
-   - "Ver más estadísticas" → distribuciones 1-5, top 10 empresas, registros por mes.
+   - Panel formato Retorika (rediseñado en sprint Retorika · jun 2026): grid responsivo (1 col mobile / 2 cols ≥md) con un bloque por escala — 6 bloques Likert (gráfico de barras verticales 1-5 con count encima, estrellas SVG con render continuo, media destacada `X.XX / 5`, total de encuestados al pie) + 2 bloques categóricos (`workloadFrequency`, `weeklyExtraHours`: barras horizontales por slug con label humano + count + porcentaje, sin estrellas ni media).
+   - El bloque `motivationVsStart` añade sub-bloque 3-categorías (↓ Menos motivados / → Igual / ↑ Más motivados) con porcentaje a 2 decimales.
+   - Empty state per-escala: si una escala concreta no tiene respuestas válidas en el filtro actual, su bloque muestra "Sin datos en el filtro actual" pero el resto se renderiza.
+   - Reemplaza el panel anterior (4 cards arriba: Total / Motivación media / Estrés medio / Top empresa + toggle "Ver más estadísticas" → distribuciones 1-5 + top 10 empresas + registros por mes). Los datos "top empresa" y "registros por mes" ya no se muestran en el panel — siguen disponibles en BD y se pueden reintroducir si Belén los pide.
 
 3. **Filtros**:
    - Búsqueda libre (email, nombre del centro, NIF) con debounce 300ms.
@@ -1111,10 +1113,12 @@ URL del GET:      .../check?email=marta%40trinitycollege.es&productId=5487
    - Diagnóstico: barras 1-5 animadas con paleta semántica (motivación: alto = verde; estrés: alto = rojo).
    - Footer: "Ver empresa →" si está vinculada.
 
-5. **Export CSV** (botón arriba derecha de la lista):
-   - Respeta filtros activos.
-   - UTF-8 con BOM (Excel lo detecta sin configuración).
-   - Arrays de slugs resueltos a labels en castellano (positions, subjects, etc.).
+5. **Export Excel** (botón arriba derecha de la lista, antes "Exportar CSV"):
+   - Respeta filtros activos (`courseId`, `search`, `companyId`, `from`, `to`).
+   - XLSX nativo generado con ExcelJS. Dos hojas: "Registros" (30 columnas con cabeceras humanas cortas — eliminadas las técnicas `id`, `email` duplicado, `wpUserId`, `wpProductId`, `wpCourseId`) y "Diccionario de preguntas" (texto largo de cada pregunta del diagnóstico inicial + tipo escala).
+   - Fecha nativa Excel en columna `Fecha inscripción` (`numFmt: dd/mm/yyyy hh:mm`) — Bea puede filtrar/ordenar como fecha real.
+   - Arrays de slugs (`positions`, `subjects`, `coursesTeaching`, `topicsOfInterest`) resueltos a labels en castellano vía diccionarios de `lib/training/registrationLabels.js`. Panel congelado en cabecera, autofilter activo.
+   - Filename: `registros-curso-{slug-curso}-{YYYY-MM-DD}.xlsx`.
 
 ### Troubleshooting
 
