@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
+import { CuestionariosDashboard } from "./CuestionariosDashboard.jsx";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -368,18 +369,61 @@ function AttemptDetail({ attempt, onBack }) {
 
 // ── Vista lista ───────────────────────────────────────────────────────────────
 
-function AttemptsList({ onSelect }) {
+function AttemptsList({ filters, onFiltersChange, onSelect }) {
+  const { search, companyName, courseId, quizId } = filters;
+
   const [attempts, setAttempts] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [empresa, setEmpresa] = useState("");
-  const [result, setResult] = useState("");
   const [page, setPage] = useState(0);
   const [quizzesSyncUrl, setQuizzesSyncUrl] = useState(null);
   const [syncInstructionsOpen, setSyncInstructionsOpen] = useState(false);
 
+  // Listas para los dropdowns (poblados desde endpoints auxiliares).
+  const [coursesList, setCoursesList] = useState([]);
+  const [quizzesList, setQuizzesList] = useState([]);
+  const [companiesList, setCompaniesList] = useState([]);
+
   const LIMIT = 50;
+
+  function setFilter(key, value) {
+    onFiltersChange({ ...filters, [key]: value });
+    setPage(0);
+  }
+
+  // Cambiar curso resetea cuestionario (otro curso → otros quizzes).
+  function setCourse(value) {
+    onFiltersChange({ ...filters, courseId: value, quizId: "" });
+    setPage(0);
+  }
+
+  function clearQuiz() {
+    onFiltersChange({ ...filters, quizId: "" });
+    setPage(0);
+  }
+
+  // Cursos y empresas: sin dependencias (1 fetch al montar).
+  useEffect(() => {
+    fetch("/api/training/quiz-attempts/courses-list")
+      .then((r) => r.json())
+      .then((j) => { if (j?.ok) setCoursesList(j.data.items || []); })
+      .catch(() => { /* silencioso: dropdown queda vacío */ });
+    fetch("/api/training/quiz-attempts/companies-list")
+      .then((r) => r.json())
+      .then((j) => { if (j?.ok) setCompaniesList(j.data.items || []); })
+      .catch(() => { /* silencioso */ });
+  }, []);
+
+  // Quizzes: refetch al cambiar curso o empresa.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (courseId) params.set("courseId", String(courseId));
+    if (companyName) params.set("companyName", companyName);
+    fetch(`/api/training/quiz-attempts/quizzes-list?${params.toString()}`)
+      .then((r) => r.json())
+      .then((j) => { if (j?.ok) setQuizzesList(j.data.items || []); })
+      .catch(() => { /* silencioso */ });
+  }, [courseId, companyName]);
 
   // Banner de sync de cuestionarios — solo aparece si el tenant tiene
   // configurada la env var {SLUG_UPPER}_TUTOR_QUIZZES_SYNC_URL. Hoy aplica
@@ -402,8 +446,9 @@ function AttemptsList({ onSelect }) {
     setLoading(true);
     const params = new URLSearchParams({ limit: LIMIT, offset: page * LIMIT });
     if (search) params.set("search", search);
-    if (empresa) params.set("empresa", empresa);
-    if (result) params.set("result", result);
+    if (companyName) params.set("companyName", companyName);
+    if (courseId) params.set("courseId", String(courseId));
+    if (quizId) params.set("quizId", String(quizId));
 
     try {
       const res = await fetch(`/api/training/quiz-attempts?${params.toString()}`);
@@ -415,7 +460,7 @@ function AttemptsList({ onSelect }) {
     } finally {
       setLoading(false);
     }
-  }, [search, empresa, result, page]);
+  }, [search, companyName, courseId, quizId, page]);
 
   useEffect(() => {
     const t = setTimeout(load, 300);
@@ -456,34 +501,72 @@ function AttemptsList({ onSelect }) {
       )}
 
       {/* Filtros */}
-      <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
-        <HelpTooltip title="Filtros" className="hidden sm:inline-flex">
-          Acota la lista por alumno, empresa o resultado. Por ejemplo: empresa «Acme» + resultado
-          «Suspenso» = solo intentos suspendidos de empleados de Acme, para hacer seguimiento.
-        </HelpTooltip>
-        <input
-          type="text"
-          placeholder="Buscar estudiante, quiz, curso…"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-          className="flex-1 text-xs px-3 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)]"
-        />
-        <input
-          type="text"
-          placeholder="Filtrar por empresa"
-          value={empresa}
-          onChange={(e) => { setEmpresa(e.target.value); setPage(0); }}
-          className="w-full sm:w-44 text-xs px-3 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)]"
-        />
-        <select
-          value={result}
-          onChange={(e) => { setResult(e.target.value); setPage(0); }}
-          className="w-full sm:w-36 text-xs px-3 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-white"
-        >
-          <option value="">Todos los resultados</option>
-          <option value="pass">Aprobado</option>
-          <option value="fail">Suspenso</option>
-        </select>
+      <div className="flex flex-col gap-2">
+        {/* Fila 1: search + empresa */}
+        <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+          <HelpTooltip title="Filtros" className="hidden sm:inline-flex">
+            Acota lista y dashboard a la vez. Curso + Cuestionario son los más útiles para analizar
+            preguntas concretas. Empresa filtra por el campo libre que TutorLMS adjunta al intento.
+          </HelpTooltip>
+          <input
+            type="text"
+            placeholder="Buscar estudiante, quiz, curso…"
+            value={search}
+            onChange={(e) => setFilter("search", e.target.value)}
+            className="flex-1 text-xs px-3 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)]"
+          />
+          <select
+            value={companyName}
+            onChange={(e) => setFilter("companyName", e.target.value)}
+            className="w-full sm:w-52 text-xs px-3 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-white"
+          >
+            <option value="">Todas las empresas</option>
+            {companiesList.map((c) => (
+              <option key={c.name} value={c.name}>
+                {c.name} ({c.count})
+              </option>
+            ))}
+          </select>
+        </div>
+        {/* Fila 2: curso + cuestionario */}
+        <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+          <select
+            value={courseId}
+            onChange={(e) => setCourse(e.target.value)}
+            className="w-full sm:flex-1 text-xs px-3 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-white"
+          >
+            <option value="">Todos los cursos</option>
+            {coursesList.map((c) => (
+              <option key={c.wpCourseId} value={c.wpCourseId}>
+                {c.courseTitle ?? `Curso ${c.wpCourseId}`} ({c.count})
+              </option>
+            ))}
+          </select>
+          <div className="w-full sm:flex-1 flex gap-1">
+            <select
+              value={quizId}
+              onChange={(e) => setFilter("quizId", e.target.value)}
+              className="flex-1 min-w-0 text-xs px-3 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-white"
+            >
+              <option value="">Todos los cuestionarios</option>
+              {quizzesList.map((q) => (
+                <option key={q.wpQuizId} value={q.wpQuizId}>
+                  {q.quizTitle ?? `Quiz ${q.wpQuizId}`} ({q.count})
+                </option>
+              ))}
+            </select>
+            {quizId && (
+              <button
+                type="button"
+                onClick={clearQuiz}
+                title="Quitar filtro de cuestionario"
+                className="text-xs px-2.5 py-2 border border-neutral-200 rounded-lg text-neutral-500 hover:bg-neutral-50 hover:text-neutral-800 transition-colors shrink-0 whitespace-nowrap"
+              >
+                ✕ Quitar
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Tabla */}
@@ -727,6 +810,15 @@ export default function CuestionariosModule() {
   const [attempt, setAttempt] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
+  // Filtros lift-up: compartidos por Dashboard y AttemptsList. Nombres
+  // canónicos del sprint Bloque 3 (companyName en vez de empresa).
+  const [filters, setFilters] = useState({
+    search: "",
+    companyName: "",
+    courseId: "",
+    quizId: "",
+  });
+
   async function handleSelect(id) {
     setSelectedId(id);
     setLoadingDetail(true);
@@ -764,8 +856,13 @@ export default function CuestionariosModule() {
   }
 
   return (
-    <div className="p-4 sm:p-8">
-      <AttemptsList onSelect={handleSelect} />
+    <div className="p-4 sm:p-8 space-y-5">
+      <CuestionariosDashboard filters={filters} />
+      <AttemptsList
+        filters={filters}
+        onFiltersChange={setFilters}
+        onSelect={handleSelect}
+      />
     </div>
   );
 }

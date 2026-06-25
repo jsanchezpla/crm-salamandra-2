@@ -585,8 +585,12 @@ webhooks o sync. No se pueden editar manualmente desde el CRM.
 
 | Método y ruta | Propósito | Restricciones |
 | --- | --- | --- |
-| `GET /api/training/quiz-attempts` | Listado paginado. Filtros `search`, `empresa`, `result`, `courseId`. Excluye `answers` para aligerar. | `hasModule(...)` |
+| `GET /api/training/quiz-attempts` | Listado paginado. Filtros `search`, `companyName` (alias legacy: `empresa`), `result`, `courseId`, `quizId` (sprint Bloque 3). Excluye `answers` para aligerar. | `hasModule(...)` |
 | `GET /api/training/quiz-attempts/[id]` | Detalle con `answers` JSONB completo. | `hasModule(...)` |
+| `GET /api/training/quiz-attempts/stats?search=&companyName=&courseId=&quizId=` | **Sprint Retorika Bloque 3.** Estadísticas agregadas. Dos modos: **A (sin `quizId`)** devuelve `{ total, passCount, failCount, passRate, avgScorePct, topQuizzesByAttempts: [...×5], topQuizzesByFailRate: [...×5] }` con rankings globales. Mode B (con `quizId`) devuelve `{ total, passCount, failCount, passRate, avgScorePct, questionStats: [{ no, questionId, question, type, totalResponses, correctCount, correctRate }] }` agregando `answers[]` JSONB por `(questionId, no)`. Umbral `HAVING COUNT(*) >= 3` en `topQuizzesByFailRate` para evitar ruido. Coherencia 3-vías con `/list` y los lists auxiliares (mismo WHERE). Log `[retorika:quiz-stats]`. | `hasModule("training" o "cuestionarios")` |
+| `GET /api/training/quiz-attempts/quizzes-list?courseId=&companyName=` | **Sprint Bloque 3.** Lista DISTINCT de cuestionarios con count, derivada por `GROUP BY wp_quiz_id, quiz_title, wp_course_id, course_title` sobre `quiz_attempts`. Ordenada por count DESC. Pobla el dropdown "Cuestionario" en /formacion/cuestionarios. Cuestionarios sin ningún intento NO aparecen (no hay tabla `quizzes` separada — backlog). | `hasModule("training" o "cuestionarios")` |
+| `GET /api/training/quiz-attempts/courses-list` | **Sprint Bloque 3.** Lista DISTINCT de cursos con intentos, derivada por `GROUP BY wp_course_id, course_title`. Sin filtros. Pobla el dropdown "Curso". | `hasModule("training" o "cuestionarios")` |
+| `GET /api/training/quiz-attempts/companies-list` | **Sprint Bloque 3.** Lista DISTINCT del campo libre `empresa` con count, ordenada DESC. `LIMIT 100`. Pobla el dropdown "Empresa" (reemplaza al input texto libre anterior). | `hasModule("training" o "cuestionarios")` |
 
 Sin PATCH ni DELETE: igual que enrollments, los intentos llegan solo
 por webhook o sync.
@@ -666,7 +670,7 @@ decidió usar la UI completa. Las páginas internas (`/formacion/cursos`,
 | `/formacion/cursos` | Listado simple de cursos. Sin alta desde la UI (los cursos se sincronizan desde WP). |
 | `/formacion/usuarios` | Listado de `TrainingUser` con filtros y carga Excel. |
 | `/formacion/alumnos` | Listado de matrículas (`CourseEnrollment`). |
-| `/formacion/cuestionarios` | Listado de intentos. Renderiza `modules/cuestionarios/CuestionariosModule.jsx`. |
+| `/formacion/cuestionarios` | Dashboard de estadísticas + listado de intentos + drawer de detalle. Sprint Retorika Bloque 3 (jun 2026) añade el dashboard `modules/cuestionarios/CuestionariosDashboard.jsx` arriba con dos modos: A (vista global con 4 cards + top 5 cuestionarios por intentos y top 5 por menor acierto) y B (vista por cuestionario con 3 cards + `% acierto por pregunta`). Filtros lift-up: `search`, `companyName` (dropdown poblado por `companies-list`, antes input texto libre), `courseId` (dropdown poblado por `courses-list`), `quizId` (dropdown poblado por `quizzes-list`, filtrado por curso seleccionado, con botón `✕ Quitar`). Filtro `result` (pass/fail) eliminado de la UI (sigue aceptado por el endpoint para compat). |
 | `/cuestionarios` | Redirige a `/formacion/cuestionarios` (mantiene URL antigua). |
 
 ## Filtrado de campos sensibles
@@ -794,6 +798,44 @@ sección. Si en el futuro Aumenta los quisiera, basta con:
 ## Backlog
 
 Detectado durante la documentación, en orden vagamente sugerido:
+
+### Sprint Retorika · Bloque 3 (Cuestionarios) — apuntes diferidos
+
+- **Refactor del monolito `modules/cuestionarios/CuestionariosModule.jsx`**
+  (~810 líneas tras Bloque 3). Partir en `AttemptsList.jsx`,
+  `AttemptDetail.jsx`, `QuizzesSyncNotice.jsx`, `helpers.js` para mantenibilidad.
+- **Normalizar `quiz_attempts.empresa` a FK `companyId`**: hoy es string
+  libre y el filtro empresa usa ILIKE substring. Implicación: dos variantes
+  de nombre ("Trinity College" / "Trinity College Boadilla") cuentan como
+  empresas distintas. Migración: lookup por nombre normalizado contra
+  `companies.name` en webhook/sync.
+- **Modelo `Quiz` separado** (catálogo de cuestionarios sin depender de que
+  existan intentos). Hoy `quizzes-list` deriva por DISTINCT, así que
+  cuestionarios sin intentos son invisibles. Si Belén quiere preparar stats
+  antes del primer intento o ver "cuestionarios creados pero sin uso", hace
+  falta tabla con FK a Course.
+- **Export XLSX de intentos** (similar al de Registros del curso del Bloque
+  1). Endpoint `/api/training/quiz-attempts/export` con los mismos filtros
+  + hoja "Detalle por pregunta" desplegando `answers[]` JSONB.
+- **Filtros por fecha en /formacion/cuestionarios** (`from`/`to`). Hoy el
+  endpoint no los acepta. Útil para Belén cuando quiera "intentos del último
+  mes" sin filtrar todo el histórico.
+- **Coherencia del alias `/api/cuestionarios/*`**: la nueva quizId filter
+  del Bloque 3 SOLO se añadió al endpoint canónico
+  `/api/training/quiz-attempts/route.js`. El alias `/api/cuestionarios/route.js`
+  no la acepta. Hoy no rompe nada (el frontend usa el canónico) pero divergencia
+  apuntada.
+- **Question-text drift**: el endpoint `/stats` Modo B usa el texto y `type`
+  de la PRIMERA pregunta encontrada por `(questionId, no)`. Si TutorLMS
+  reformula la pregunta, intentos antiguos guardan el texto antiguo. Stats
+  agregadas siguen siendo correctas (por count) pero el rótulo puede
+  desactualizarse. Versionado de pregunta = backlog largo plazo.
+- **Estado huérfano del filtro `quizId`** al cambiar `companyName`: si el
+  quiz seleccionado desaparece de la nueva quizzes-list filtrada por
+  empresa, el filtro queda pero el dashboard mostrará 0 datos. Belén tiene
+  el botón `✕ Quitar` para resolverlo. Auto-clear opcional.
+
+### Backlog general
 
 - **PATCH y DELETE de Company** (hoy no se pueden editar ni borrar
   desde API).
