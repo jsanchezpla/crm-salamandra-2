@@ -22,7 +22,13 @@
  *     (PG <12 no permite usar ADD VALUE en la misma transacción).
  *   - Fase B en transacción global: CREATE TYPE para nuevos enums, ALTER TABLE,
  *     CREATE TABLE.
- *   - Idempotente. Lee slugs activos desde master.tenants.
+ *   - Idempotente. Lee slugs de tenants activos CON el módulo `projects`
+ *     habilitado (JOIN master.tenants ⋈ master.tenant_modules). Filtrar por
+ *     módulo evita fallos en tenants como `nutri_laura`/`healim` que no tienen
+ *     tabla `projects` y romperían los CREATE TABLE con FK a `projects.id`.
+ *   - Backlog: la Fase B usa una transacción GLOBAL para todos los tenants. Si
+ *     algún tenant falla, todo el progreso se revierte. Migrar a transacción
+ *     por tenant en el próximo cleanup para ganar resiliencia.
  *
  * Uso:
  *   npm run db:migrate:projects-1         (local)
@@ -347,8 +353,18 @@ async function processSchemaInTx(s, t, schema) {
 // ─── Main ─────────────────────────────────────────────────────────────────
 
 async function fetchActiveSlugs(s) {
+  // Filtrar por tenants con el módulo `projects` activo. Sin este JOIN, la
+  // migración corre en tenants como `nutri_laura`/`healim` que nunca tuvieron
+  // el módulo y no tienen tabla `projects` → los CREATE TABLE con FK a
+  // `projects.id` fallan y provocan ROLLBACK global (Fase B).
   const [rows] = await s.query(
-    `SELECT slug FROM master.tenants WHERE status = 'active' ORDER BY slug`
+    `SELECT t.slug
+     FROM master.tenants t
+     JOIN master.tenant_modules tm ON tm.tenant_id = t.id
+     WHERE t.status = 'active'
+       AND tm.module_key = 'projects'
+       AND tm.enabled = true
+     ORDER BY t.slug`
   );
   return rows.map((r) => r.slug);
 }
