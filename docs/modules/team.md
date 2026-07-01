@@ -38,6 +38,7 @@ Fichero: `models/tenant/TeamMember.model.js`. Tabla: `team_members`.
 | `department` | STRING nullable | Texto libre. |
 | `phone` | STRING nullable | |
 | `avatarUrl` | STRING nullable | URL del avatar. Si está vacío la UI pinta iniciales. |
+| `avatarColor` | VARCHAR(7) nullable, `field: avatar_color` | Hex `#rrggbb` usado como fondo del avatar circular cuando no hay `avatarUrl`. Backfill determinista por `id` (MD5), así que el mismo miembro mantiene el mismo color en cualquier entorno y tras un reseteo. Lo consume Sprint 2 Proyectos (`TaskCard`, `TaskDrawer`) y queda disponible para futuros módulos. Migración: `scripts/migrate-team-members-avatar-color.js`. |
 | `hourlyCost` | DECIMAL(10,2) nullable, ≥ 0 | Coste interno. **Solo admin/superadmin** lo ve y edita. |
 | `hourlyRate` | DECIMAL(10,2) nullable, ≥ 0 | Precio facturable al cliente. Visible para todo autenticado del tenant. |
 | `monthlySalary` | DECIMAL(10,2) nullable, ≥ 0 | Salario mensual estimado. **Solo admin/superadmin**. Informativo: NO se cuenta como coste real (eso lo hace `Cost.type = 'salary'` en billing). Se añadió en la migración del rework de Facturación, no en la del MVP. |
@@ -264,11 +265,22 @@ Una sola transacción global para todos los tenants. Para cada schema
 `scripts/migrate-billing-rework.js` como parte del rework de Facturación.
 Si un tenant nace tras esa migración, ambas se aplican secuencialmente.
 
+`avatarColor` se añadió en una migración independiente
+(`scripts/migrate-team-members-avatar-color.js`) tras detectar que Sprint
+2 Proyectos lo asumía. A diferencia de `migrate-team-fields.js`, esta
+itera sobre **todos los schemas `crm_%`** de `information_schema`, no
+sobre `master.tenants`: la columna es transversal y no debe quedar fuera
+de ningún schema con tabla `team_members`. El backfill usa
+`'#' || SUBSTR(MD5(id::text), 1, 6)` para que el color sea estable por
+miembro entre entornos.
+
 Comandos:
 
 ```
-npm run db:migrate:team        # local
-npm run db:migrate:team:prod   # producción
+npm run db:migrate:team             # local
+npm run db:migrate:team:prod        # producción
+npm run db:migrate:avatar-color     # local (idempotente)
+npm run db:migrate:avatar-color:prod # producción (idempotente)
 ```
 
 ## Seed

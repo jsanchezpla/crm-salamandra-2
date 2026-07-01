@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import StatusBadge, { STATUS_OPTIONS } from "../../../components/projects/StatusBadge.jsx";
 import PriorityBadge, { PRIORITY_OPTIONS } from "../../../components/projects/PriorityBadge.jsx";
 
@@ -34,6 +35,7 @@ const EMPTY_FORM = {
 };
 
 export default function ProyectosPage() {
+  const router = useRouter();
   const [me, setMe] = useState(null);
   const [projects, setProjects] = useState([]);
   const [clients, setClients] = useState([]);
@@ -225,7 +227,17 @@ export default function ProyectosPage() {
                 <tr><td colSpan={8} className="px-4 py-10 text-center text-neutral-400">Sin proyectos.</td></tr>
               )}
               {!loading && projects.map((p) => (
-                <tr key={p.id} className="border-b border-neutral-100 hover:bg-neutral-50 transition">
+                <tr
+                  key={p.id}
+                  role="link"
+                  tabIndex={-1}
+                  onClick={(e) => {
+                    // No navegar si el click viene de un elemento interactivo interno.
+                    if (e.target.closest("a, button, input, select, textarea, label")) return;
+                    router.push(`/proyectos/${p.id}`);
+                  }}
+                  className="border-b border-neutral-100 hover:bg-neutral-50 transition cursor-pointer"
+                >
                   <td className="px-4 py-3 font-mono text-xs text-neutral-500">{p.code ?? "—"}</td>
                   <td className="px-4 py-3">
                     <Link href={`/proyectos/${p.id}`} className="font-medium text-neutral-800 hover:text-neutral-600">

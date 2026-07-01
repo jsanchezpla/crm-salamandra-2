@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import StatusBadge, { STATUS_OPTIONS } from "../../../../components/projects/StatusBadge.jsx";
 import PriorityBadge, { PRIORITY_OPTIONS } from "../../../../components/projects/PriorityBadge.jsx";
@@ -48,9 +48,13 @@ const MILESTONE_STATUS = {
 export default function ProyectoDetallePage() {
   const { id } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [me, setMe] = useState(null);
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState(() => {
+    const t = searchParams?.get("tab");
+    return TABS.some((x) => x.key === t) ? t : "overview";
+  });
   const [project, setProject] = useState(null);
   const [members, setMembers] = useState([]);
   const [phases, setPhases] = useState([]);
@@ -110,10 +114,15 @@ export default function ProyectoDetallePage() {
     <div className="p-4 lg:p-8 max-w-[1400px] mx-auto">
       {/* Header */}
       <header className="mb-6">
-        <div className="text-xs text-neutral-400 mb-1">
-          <Link href="/proyectos" className="hover:text-neutral-600">Proyectos</Link>
-          {project.client?.name && <> / <span>{project.client.name}</span></>}
-        </div>
+        <Link
+          href="/proyectos"
+          className="inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-800 mb-2"
+        >
+          <span aria-hidden="true">←</span> Proyectos
+        </Link>
+        {project.client?.name && (
+          <div className="text-xs text-neutral-400 mb-1">{project.client.name}</div>
+        )}
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
           <div>
             <h1 className="font-[Fraunces] text-3xl lg:text-4xl text-neutral-800">{project.name}</h1>
@@ -171,7 +180,7 @@ export default function ProyectoDetallePage() {
       {tab === "milestones" && (
         <MilestonesTab projectId={project.id} milestones={milestones} phases={phases} onChange={fetchAll} />
       )}
-      {tab === "board" && <BoardPlaceholder />}
+      {tab === "board" && <BoardSummary projectId={project.id} columns={columns} />}
       {tab === "settings" && (
         <SettingsTab
           project={project}
@@ -541,16 +550,80 @@ function MilestonesTab({ projectId, milestones, phases, onChange }) {
   );
 }
 
-// ─── Pestaña: Tablero (placeholder) ──────────────────────────────────────
+// ─── Pestaña: Tablero (resumen + entrada al Kanban completo) ────────────
 
-function BoardPlaceholder() {
+function BoardSummary({ projectId, columns }) {
+  const [counts, setCounts] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch(`/api/projects/${projectId}/board`).then((r) => r.json());
+        if (r?.ok) {
+          const map = {};
+          let total = 0;
+          for (const col of r.data.columns) {
+            map[col.id] = col.tasks.length;
+            total += col.tasks.length;
+          }
+          setCounts({ map, total });
+        }
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [projectId]);
+
+  const total = counts?.total ?? 0;
+
   return (
-    <div className="bg-white rounded-xl border border-neutral-200 p-12 text-center">
-      <div className="font-[Fraunces] text-2xl text-neutral-700 mb-2">Tablero Kanban</div>
-      <p className="text-sm text-neutral-500 max-w-md mx-auto">
-        Disponible en la próxima iteración. Por ahora puedes definir las columnas
-        del tablero en la pestaña <strong>Configuración</strong>.
-      </p>
+    <div className="bg-white rounded-xl border border-neutral-200 p-6 lg:p-8">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-5">
+        <div>
+          <h2 className="font-[Fraunces] text-2xl text-neutral-800 mb-1">Tablero Kanban</h2>
+          <p className="text-sm text-neutral-500">
+            {loading
+              ? "Cargando…"
+              : `${columns.length} columna${columns.length !== 1 ? "s" : ""} · ${total} tarea${total !== 1 ? "s" : ""} en total`}
+          </p>
+        </div>
+        <Link
+          href={`/proyectos/${projectId}/board`}
+          className="px-4 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-700 inline-flex items-center gap-2"
+        >
+          Abrir tablero
+          <span aria-hidden="true">→</span>
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {columns.map((c) => (
+          <div key={c.id} className="bg-neutral-50 rounded-lg border border-neutral-100 p-3 flex items-center gap-2">
+            <span
+              className="w-2 h-2 rounded-full flex-shrink-0"
+              style={{ background: c.color || "#94A3B8" }}
+            />
+            <div className="flex-1 min-w-0">
+              <div className="text-xs text-neutral-600 truncate">{c.name}</div>
+              <div className="font-[Fraunces] text-xl text-neutral-800">
+                {counts?.map?.[c.id] ?? "—"}
+              </div>
+            </div>
+            {c.isDoneColumn && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100">
+                Hecho
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {columns.length === 0 && (
+        <p className="text-sm text-neutral-400 mt-4">
+          Sin columnas configuradas. Crea columnas en la pestaña <strong>Configuración</strong>.
+        </p>
+      )}
     </div>
   );
 }
@@ -681,14 +754,6 @@ function ColumnsManager({ projectId, columns, onChange }) {
     onChange();
   };
 
-  const rename = async (id, newName) => {
-    await fetch(`/api/projects/${projectId}/columns/${id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName }),
-    });
-    onChange();
-  };
-
   const setDone = async (id) => {
     await fetch(`/api/projects/${projectId}/columns/${id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -716,23 +781,108 @@ function ColumnsManager({ projectId, columns, onChange }) {
       </form>
       <ul className="space-y-2">
         {columns.map((c) => (
-          <li key={c.id} className="flex items-center gap-2 p-2 rounded-lg border border-neutral-200 bg-white">
-            <span className="w-3 h-3 rounded-full" style={{ background: c.color || "#94A3B8" }} />
-            <input
-              className="flex-1 text-sm text-neutral-700 bg-transparent outline-none"
-              defaultValue={c.name}
-              onBlur={(e) => e.target.value !== c.name && rename(c.id, e.target.value)}
-            />
-            {c.isDoneColumn ? (
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">Hecho</span>
-            ) : (
-              <button onClick={() => setDone(c.id)} className="text-[11px] text-neutral-500 hover:text-neutral-700">marcar hecho</button>
-            )}
-            <button onClick={() => remove(c.id)} className="text-xs text-rose-600 hover:text-rose-700">×</button>
-          </li>
+          <ColumnRow
+            key={c.id}
+            projectId={projectId}
+            column={c}
+            onChange={onChange}
+            onSetDone={() => setDone(c.id)}
+            onRemove={() => remove(c.id)}
+          />
         ))}
       </ul>
     </Card>
+  );
+}
+
+function ColumnRow({ projectId, column, onChange, onSetDone, onRemove }) {
+  const [name, setName] = useState(column.name);
+  const [color, setColor] = useState(column.color || "#94A3B8");
+  const [saving, setSaving] = useState(false);
+  // Track valores pendientes de guardar (para persistir al desmontar).
+  const pendingRef = useRef({ name: null, color: null });
+
+  // Re-sync cuando el server actualiza el column (tras un PATCH o cambio externo).
+  useEffect(() => { setName(column.name); }, [column.name]);
+  useEffect(() => { setColor(column.color || "#94A3B8"); }, [column.color]);
+
+  const patch = useCallback(async (body) => {
+    setSaving(true);
+    try {
+      await fetch(`/api/projects/${projectId}/columns/${column.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      onChange();
+    } finally {
+      setSaving(false);
+    }
+  }, [projectId, column.id, onChange]);
+
+  const commitName = () => {
+    if (name === column.name) return;
+    pendingRef.current.name = null;
+    patch({ name });
+  };
+
+  const onColorChange = (value) => {
+    setColor(value);
+    pendingRef.current.color = null;
+    // Color inmediato — no requiere blur (el picker cierra al elegir).
+    if (value !== column.color) patch({ color: value });
+  };
+
+  // Persistir cambios pendientes al desmontar (p.ej. cambio de tab sin blur).
+  useEffect(() => {
+    return () => {
+      const pending = pendingRef.current;
+      if (!pending.name && !pending.color) return;
+      const body = {};
+      if (pending.name != null) body.name = pending.name;
+      if (pending.color != null) body.color = pending.color;
+      // keepalive: la petición sobrevive al unmount / cambio de página.
+      fetch(`/api/projects/${projectId}/columns/${column.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        keepalive: true,
+      }).catch(() => {});
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <li className="flex items-center gap-2 p-2 rounded-lg border border-neutral-200 bg-white">
+      <input
+        type="color"
+        className="w-6 h-6 rounded-full border border-neutral-200 cursor-pointer flex-shrink-0"
+        value={color}
+        onChange={(e) => onColorChange(e.target.value)}
+        title="Cambiar color"
+      />
+      <input
+        className="flex-1 text-sm text-neutral-700 bg-transparent outline-none"
+        value={name}
+        onChange={(e) => {
+          setName(e.target.value);
+          pendingRef.current.name = e.target.value;
+        }}
+        onBlur={commitName}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); }
+        }}
+      />
+      {saving && (
+        <span className="text-[11px] text-neutral-400 italic">Guardando…</span>
+      )}
+      {column.isDoneColumn ? (
+        <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">Hecho</span>
+      ) : (
+        <button onClick={onSetDone} className="text-[11px] text-neutral-500 hover:text-neutral-700">marcar hecho</button>
+      )}
+      <button onClick={onRemove} className="text-xs text-rose-600 hover:text-rose-700">×</button>
+    </li>
   );
 }
 

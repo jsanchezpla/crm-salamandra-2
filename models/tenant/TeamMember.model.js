@@ -50,6 +50,15 @@ export function defineTeamMember(sequelize) {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      // Color hex (`#rrggbb`) usado como fondo del avatar circular cuando
+      // no hay `avatarUrl`. Backfill determinista en migrate-team-members-
+      // avatar-color.js (`'#' || SUBSTR(MD5(id::text), 1, 6)`), así que el
+      // mismo id siempre tiene el mismo color en cualquier entorno.
+      avatarColor: {
+        type: DataTypes.STRING(7),
+        field: "avatar_color",
+        allowNull: true,
+      },
       hourlyCost: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: true,

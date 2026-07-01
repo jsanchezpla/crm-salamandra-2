@@ -10,11 +10,16 @@ export function defineProject(sequelize) {
         primaryKey: true,
       },
       // Código corto del proyecto. Generado automático tipo "PRY-2026-0001"
-      // o editable. Único por tenant.
+      // o editable. La unicidad real vive en BD como índice UNIQUE PARCIAL
+      // (`projects_code_unique` WHERE code IS NOT NULL — ver migrate-projects-
+      // sprint-1.js). Aquí dejamos `unique: false` para que `sync({alter:true})`
+      // no intente recrearlo como UNIQUE total (rompería con múltiples
+      // proyectos `code=NULL`). Backlog: reflejar el índice parcial con
+      // `indexes:[{ unique: true, fields: ['code'], where: { code: { [Op.ne]: null } } }]`.
       code: {
         type: DataTypes.STRING(32),
         allowNull: true,
-        unique: true,
+        unique: false,
       },
       clientId: {
         type: DataTypes.UUID,

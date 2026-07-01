@@ -21,6 +21,7 @@ import { getTenantDb } from "../lib/db/tenantDb.js";
 
 const SLUG = "demo";
 const SEED_MARKER = "projects-demo-v1";
+const TASKS_SEED_MARKER = "projects-demo-tasks-v1";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -299,6 +300,154 @@ async function ensureProjects(models) {
   }
 }
 
+// ─── Sprint 2: tasks por proyecto + asignaciones N-a-N ───────────────────
+
+const TASK_SPECS = [
+  // Tareas reutilizables por columna. Se distribuyen pseudo-aleatoriamente
+  // entre proyectos. `assigneesIdx` apunta a posiciones del arreglo
+  // `teamMembers` (0 = primer member del proyecto, etc.).
+  { title: "Reunión inicial con cliente", col: 0, tags: ["reunión"], assignees: [0], hours: 1, dueOffset: -10 },
+  { title: "Documentar requisitos", col: 0, tags: ["docs"], assignees: [0, 1], hours: 6 },
+  { title: "Configurar entorno de trabajo", col: 0, tags: ["setup"], assignees: [1] },
+  { title: "Definir KPIs del proyecto", col: 0, tags: ["planificación"], hours: 4, dueOffset: -2 },
+  { title: "Investigar competencia", col: 1, tags: ["research"], hours: 4 },
+  { title: "Esbozar arquitectura", col: 1, tags: ["arquitectura"], assignees: [0], hours: 8 },
+  { title: "Implementar módulo principal", col: 1, tags: ["dev"], assignees: [0, 1], hours: 16, dueOffset: 10 },
+  { title: "Sincronizar con stakeholders", col: 2, tags: ["comunicación"], assignees: [0] },
+  { title: "Revisión interna de entregables", col: 2, tags: ["qa"] },
+  { title: "Aprobación cliente", col: 3, tags: ["entrega"], assignees: [0] },
+  { title: "Lanzamiento", col: 3, tags: ["entrega"] },
+  { title: "Cierre y facturación", col: 3, tags: ["admin"], hours: 2 },
+];
+
+function tasksForProject(spec, projectMemberTMs, projectStart) {
+  // Distribuye TASK_SPECS sobre el proyecto. Cada proyecto recibe 8-12 tasks
+  // aleatorias del catálogo. La aleatoriedad es determinista por código de
+  // proyecto para que la seed sea reproducible.
+  const hash = spec.code.split("").reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) & 0xffff, 0);
+  const count = 8 + (hash % 5); // 8..12
+  const picks = [];
+  for (let i = 0; i < count; i++) {
+    const idx = (hash + i * 7) % TASK_SPECS.length;
+    picks.push(TASK_SPECS[idx]);
+  }
+  const start = projectStart ? new Date(projectStart) : new Date();
+  return picks.map((p, i) => {
+    // Dedupe: si el proyecto tiene pocos miembros, el módulo `aIdx % N`
+    // colapsa varios índices del catálogo al mismo team_member_id, lo que
+    // violaría task_assignees_unique. Set elimina los repetidos.
+    const assignees = [
+      ...new Set(
+        (p.assignees ?? [])
+          .map((aIdx) => projectMemberTMs[aIdx % Math.max(projectMemberTMs.length, 1)])
+          .filter(Boolean)
+      ),
+    ];
+    let dueDate = null;
+    if (p.dueOffset != null) {
+      const d = new Date(start);
+      d.setDate(d.getDate() + p.dueOffset);
+      dueDate = d.toISOString().slice(0, 10);
+    }
+    return {
+      titleSuffix: i > 0 && i % TASK_SPECS.length < picks.findIndex((pp) => pp.title === p.title) ? ` (${i})` : "",
+      title: p.title,
+      colIdx: p.col,
+      tags: p.tags ?? [],
+      assignees,
+      estimatedHours: p.hours ?? null,
+      dueDate,
+    };
+  });
+}
+
+async function ensureTasks(models) {
+  const { Project, BoardColumn, Task, TaskAssignee, ProjectMember, TeamMember } = models;
+  const sequelize = Project.sequelize;
+
+  const seededProjects = await Project.findAll({
+    where: { customFields: { seed: SEED_MARKER } },
+    order: [["code", "ASC"]],
+  });
+
+  if (seededProjects.length === 0) {
+    log("· No hay proyectos sembrados (marcador v1). Salto generación de tasks.");
+    return;
+  }
+
+  for (const project of seededProjects) {
+    // Si ya tiene tasks marcadas (v1) saltamos
+    const existing = await Task.count({
+      where: { projectId: project.id, customFields: { seed: TASKS_SEED_MARKER } },
+    });
+    if (existing > 0) {
+      log(`· Proyecto ${project.code}: ya tiene ${existing} tasks sembradas`);
+      continue;
+    }
+
+    const columns = await BoardColumn.findAll({
+      where: { projectId: project.id },
+      order: [["order", "ASC"]],
+    });
+    if (columns.length === 0) {
+      log(`· Proyecto ${project.code}: sin columnas, salto`);
+      continue;
+    }
+
+    const members = await ProjectMember.findAll({
+      where: { projectId: project.id },
+      include: [{ model: TeamMember, as: "teamMember", attributes: ["id"] }],
+    });
+    const memberTMs = members
+      .map((m) => m.teamMember?.id)
+      .filter(Boolean);
+
+    const tasks = tasksForProject(
+      { code: project.code },
+      memberTMs,
+      project.startDate ?? new Date().toISOString().slice(0, 10)
+    );
+
+    await sequelize.transaction(async (t) => {
+      // Ordenar las tasks por columna y assignar `order` dentro de cada una
+      const counters = new Map();
+      for (const taskSpec of tasks) {
+        const targetColIdx = Math.min(taskSpec.colIdx, columns.length - 1);
+        const targetCol = columns[targetColIdx];
+        const cur = counters.get(targetCol.id) ?? 0;
+        counters.set(targetCol.id, cur + 1);
+
+        const created = await Task.create(
+          {
+            projectId: project.id,
+            boardColumnId: targetCol.id,
+            order: cur,
+            title: taskSpec.title + taskSpec.titleSuffix,
+            description: null,
+            estimatedHours: taskSpec.estimatedHours,
+            dueDate: taskSpec.dueDate,
+            checklist: [],
+            tags: taskSpec.tags,
+            customFields: { seed: TASKS_SEED_MARKER },
+          },
+          { transaction: t }
+        );
+
+        // Defensa en profundidad: dedupe también aquí por si futuras llamadas
+        // a este bloque construyen el array fuera de tasksForProject().
+        const uniqueAssignees = [...new Set(taskSpec.assignees)];
+        if (uniqueAssignees.length > 0) {
+          await TaskAssignee.bulkCreate(
+            uniqueAssignees.map((tmId) => ({ taskId: created.id, teamMemberId: tmId })),
+            { transaction: t }
+          );
+        }
+      }
+    });
+    log(`✓ Proyecto ${project.code}: ${tasks.length} tasks sembradas`);
+  }
+}
+
 async function main() {
   process.stdout.write("\n════════════════════════════════════════════════════\n");
   process.stdout.write(` Seed: Proyectos demo (tenant ${SLUG})                \n`);
@@ -321,6 +470,9 @@ async function main() {
 
   header("Asegurando proyectos demo...");
   await ensureProjects(models);
+
+  header("Sembrando tasks de Kanban (Sprint 2)...");
+  await ensureTasks(models);
 
   process.stdout.write("\n════════════════════════════════════════════════════\n");
   process.stdout.write(" ✓ Seed completado                                    \n");
