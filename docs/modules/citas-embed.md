@@ -78,6 +78,70 @@ Esto permite embeber la landing desde **cualquier dominio**. Es práctico en
 Sprint 1 mientras probamos con Laura, pero **inseguro como estado final**:
 cualquier web podría incrustar tu landing.
 
+## Portal "Mis citas" (SSO WordPress) — Sprint 2
+
+Segunda página embebible donde el cliente **logueado en la web de Laura** ve
+**sus** citas (próximas + historial) y cancela las futuras. A diferencia del
+widget de reserva (anónimo, gate `?wpa=1` sin firma), aquí hace falta **identidad**:
+qué citas mostrar depende de quién eres.
+
+### Ruta y flujo
+
+- Página: `/widget/c/{tenantSlug}/mis-citas` (hereda el `layout.jsx` del widget).
+- **SSO por doble token** (patrón OAuth "code → access token"), porque el iframe
+  es cross-origin y **no se pueden usar cookies** (Chrome/Safari bloquean cookies
+  de terceros):
+
+  | Token | Lo firma | Payload | TTL | Dónde viaja | Secreto |
+  | --- | --- | --- | --- | --- | --- |
+  | `wpsso` (handoff) | WordPress | `{ email, tenant, iat, exp }` | ~5 min | URL del iframe `?wpsso=…` | `WIDGET_SSO_SECRETS[slug]` (compartido con WP) |
+  | `sessionToken` (sesión CRM) | CRM | `{ email, tenant, scope:"citas-portal", iat, exp }` | ~60 min | header `Authorization: Bearer`, en `sessionStorage` | `CITAS_PORTAL_SESSION_SECRET` (propio del CRM) |
+
+  El frontend canjea el `wpsso` (una vez) por el `sessionToken` en `POST /session`,
+  guarda el `sessionToken` en `sessionStorage` y limpia el `wpsso` de la URL. Todos
+  los tokens son JWT **HS256** verificados con `algorithms:["HS256"]`.
+
+### Endpoints nuevos (bajo `/api/public/c/{slug}/citas-portal/`)
+
+Todos requieren módulo `citas` activo **y** `tenant.settings.widget.sso.enabled === true` (si no → 403).
+
+| Método | Ruta | Auth | Devuelve |
+| ------ | ---- | ---- | -------- |
+| POST | `/citas-portal/session` | body `{ wpsso }` | `{ sessionToken, expiresInSeconds }`. 401 wpsso inválido · 403 SSO off/secreto ausente · 429 (10/min por IP) |
+| GET | `/citas-portal/bookings` | `Authorization: Bearer` | `{ upcoming:[…], history:[…] }` (citas del email de la sesión) |
+| POST | `/citas-portal/cancel/{id}` | `Authorization: Bearer` | `{ ok:true }`. **Ownership**: si el id no existe o es de otro email → **404** (no 403). 410 si ya cancelada/pasada |
+
+La cancelación reutiliza `lib/citas/cancelBooking.js` (compartido con `cancel/{token}`).
+
+### Puesta en marcha (checklist)
+
+1. **Activar el flag** por tenant:
+   `docker compose exec app node scripts/configure-nutri-laura-citas-portal.js`
+2. **Secretos en `.env.production`** del VPS (regla #14, generar con `openssl rand -hex 32`):
+   `WIDGET_SSO_SECRETS='{"nutri_laura":"<hex>"}'` y `CITAS_PORTAL_SESSION_SECRET='<otro hex>'`.
+3. **WordPress**: pegar el snippet de `docs/modules/citas-portal-wordpress-snippet.php`
+   (mu-plugin o functions.php), definir `CRM_WIDGET_SSO_SECRET` en `wp-config.php`
+   con el **mismo** valor de `WIDGET_SSO_SECRETS[nutri_laura]`, y colocar el shortcode
+   `[crm_mis_citas]` en una página protegida para usuarios logueados.
+
+### Snippet HTML (si se embebe manualmente en vez del shortcode)
+
+El shortcode `[crm_mis_citas]` ya genera el `<iframe>` con el `wpsso`. Solo si se
+prefiere control manual, el iframe apunta a
+`https://crm.salamandrasolutions.com/widget/c/nutri_laura/mis-citas?wpsso=<token>`
+(el `<token>` lo debe generar WordPress server-side; **no** hardcodear).
+
+### Prueba en local (sin WordPress)
+
+```powershell
+# 1. Activar flag + poner ambos secretos en .env.local
+node --env-file=.env.local scripts/configure-nutri-laura-citas-portal.js
+
+# 2. Generar un wpsso de prueba (imprime la URL del iframe)
+node --env-file=.env.local scripts/dev-mint-wpsso.js nutri_laura test@x.com
+#    (--expired para probar la expiración)
+```
+
 ## TODO Sprint 2
 
 - [ ] Restringir `frame-ancestors` a `https://tunutrilaura.com

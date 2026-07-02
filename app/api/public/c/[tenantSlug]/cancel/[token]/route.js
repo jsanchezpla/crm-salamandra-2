@@ -1,6 +1,6 @@
 import { withPublicTenant } from "../../../../../../../lib/tenant/publicTenantContext.js";
 import { ok, error, notFound, serverError } from "../../../../../../../lib/utils/apiResponse.js";
-import { logCitasAudit } from "../../../../../../../lib/citas/audit.js";
+import { cancelBookingRow } from "../../../../../../../lib/citas/cancelBooking.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -11,6 +11,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  *
  * Cancela un Booking por su cancellationToken. Devuelve los mismos códigos
  * de estado que GET /booking/[token] cuando el booking ya no es cancelable.
+ *
+ * La lógica de cancelación (validar + update + audit) vive en
+ * `lib/citas/cancelBooking.js`, compartida con el portal SSO `citas-portal/cancel/[id]`.
  */
 export const POST = withPublicTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
@@ -22,38 +25,19 @@ export const POST = withPublicTenant(async (request, { params }, { tenant, tenan
 
     let body = {};
     try { body = (await request.json()) ?? {}; } catch { /* body opcional */ }
-
-    const reasonRaw = body?.reason;
-    const reason = reasonRaw != null ? String(reasonRaw).trim() : null;
+    const reason = body?.reason != null ? String(body.reason).trim() : null;
 
     const { Booking } = tenantModels;
     const row = await Booking.findOne({ where: { cancellationToken: token } });
     if (!row) return notFound("Reserva no encontrada");
 
-    if (row.status === "cancelled") {
-      return error("Esta cita ya fue cancelada", 410);
+    try {
+      await cancelBookingRow({ booking: row, tenantId: tenant.id, reason, source: "landing", ip });
+    } catch (err) {
+      if (err.code === "ALREADY_CANCELLED") return error("Esta cita ya fue cancelada", 410);
+      if (err.code === "ALREADY_PAST") return error("Esta cita ya ha pasado y no se puede cancelar", 410);
+      throw err;
     }
-    if (new Date(row.scheduledAt) <= new Date()) {
-      return error("Esta cita ya ha pasado y no se puede cancelar", 410);
-    }
-
-    const before = row.toJSON();
-    await row.update({
-      status: "cancelled",
-      cancelledAt: new Date(),
-      cancellationReason: reason || null,
-    });
-
-    await logCitasAudit({
-      tenantId: tenant.id,
-      userId: null,
-      action: "citas.booking_cancelled",
-      entity: "Booking",
-      entityId: row.id,
-      before,
-      after: { status: "cancelled", cancellationReason: reason || null, source: "landing" },
-      ip,
-    });
 
     return ok({ ok: true });
   } catch (err) {
