@@ -120,9 +120,27 @@ La cancelación reutiliza `lib/citas/cancelBooking.js` (compartido con `cancel/{
 2. **Secretos en `.env.production`** del VPS (regla #14, generar con `openssl rand -hex 32`):
    `WIDGET_SSO_SECRETS='{"nutri_laura":"<hex>"}'` y `CITAS_PORTAL_SESSION_SECRET='<otro hex>'`.
 3. **WordPress**: pegar el snippet de `docs/modules/citas-portal-wordpress-snippet.php`
-   (mu-plugin o functions.php), definir `CRM_WIDGET_SSO_SECRET` en `wp-config.php`
-   con el **mismo** valor de `WIDGET_SSO_SECRETS[nutri_laura]`, y colocar el shortcode
-   `[crm_mis_citas]` en una página protegida para usuarios logueados.
+   (Code Snippets tipo PHP o mu-plugin — se guarda en BD, sobrevive a cambios de tema),
+   definir `CRM_WIDGET_SSO_SECRET` (en `wp-config.php` o en el propio snippet) con el
+   **mismo** valor de `WIDGET_SSO_SECRETS[nutri_laura]`, y colocar los shortcodes:
+   - `[crm_reservar_cita]` en la página de reservas.
+   - `[crm_mis_citas]` en la página de "mis citas".
+
+   Ambos shortcodes **exigen login**: si el usuario no está logueado muestran un aviso
+   con botón a `CRM_LOGIN_URL` (`https://tunutrilaura.com/login/`); si lo está, cargan el
+   iframe pasando el email firmado en `?wpsso=`.
+
+### Reserva con login + email autorrellenado
+
+El shortcode `[crm_reservar_cita]` pasa `?wpa=1&wpsso=<token>` al widget de reserva. El
+widget canjea el `wpsso` por una sesión de portal (mismo mecanismo que "Mis citas") y con
+ella **pre-rellena y bloquea** el campo de email del formulario con el email de la cuenta
+de WordPress. Al confirmar, el frontend envía el `sessionToken` en `Authorization: Bearer`
+y el endpoint `POST /book` **fuerza** ese email verificado (ignora el del body). Así la cita
+queda ligada a la cuenta del cliente y aparece automáticamente en su "Mis citas".
+
+> El embed plano de la sección "Snippet para WordPress (Sprint 1)" queda **superado** por
+> `[crm_reservar_cita]` para tenants con SSO: no exige login ni autorrellena el email.
 
 ### Snippet HTML (si se embebe manualmente en vez del shortcode)
 

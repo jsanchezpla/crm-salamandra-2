@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AuthGateScreen, useWidgetAuth } from "../_components/AuthGate.jsx";
+import { useCitasPortalSession } from "../_components/useCitasPortalSession.js";
 
 function fmtLong(iso) {
   if (!iso) return "—";
@@ -111,9 +112,11 @@ export default function WidgetBookPage() {
 
     setSubmitting(true);
     try {
+      const headers = { "Content-Type": "application/json" };
+      if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
       const res = await fetch(`/api/public/c/${tenantSlug}/book`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           eventTypeId,
           scheduledAt: datetime,
@@ -141,6 +144,16 @@ export default function WidgetBookPage() {
   }
 
   const auth = useWidgetAuth(info?.auth);
+
+  // Sesión SSO: si el cliente está logueado en WordPress, su email va
+  // pre-rellenado y bloqueado, y se envía el sessionToken en /book para que el
+  // backend fuerce ese email (la cita queda ligada a su cuenta → "Mis citas").
+  const { email: sessionEmail, sessionToken } = useCitasPortalSession(tenantSlug);
+  const emailLocked = !!sessionEmail;
+
+  useEffect(() => {
+    if (sessionEmail) setForm((prev) => ({ ...prev, clientEmail: sessionEmail }));
+  }, [sessionEmail]);
 
   const brandStyle = useMemo(() => {
     if (!info?.brand) return {};
@@ -391,11 +404,15 @@ export default function WidgetBookPage() {
                 <input
                   type="email"
                   value={form.clientEmail}
-                  onChange={(e) => updateField("clientEmail", e.target.value)}
+                  onChange={(e) => { if (!emailLocked) updateField("clientEmail", e.target.value); }}
+                  readOnly={emailLocked}
                   autoComplete="email"
-                  className={inputCls}
+                  className={`${inputCls}${emailLocked ? " bg-[var(--widget-bg)] text-[var(--widget-text-muted)] cursor-not-allowed" : ""}`}
                   placeholder="tu@email.com"
                 />
+                {emailLocked && (
+                  <p className="text-[11px] text-[var(--widget-text-faint)] mt-1">Es el email de tu cuenta.</p>
+                )}
               </Field>
               <Field label="Teléfono" required>
                 <input

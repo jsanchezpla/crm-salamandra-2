@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { AuthGateScreen, useWidgetAuth } from "./_components/AuthGate.jsx";
+import { useCitasPortalSession } from "./_components/useCitasPortalSession.js";
 
 const MONTH_NAMES_ES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -151,6 +152,11 @@ export default function WidgetSelectionPage() {
   }
 
   const auth = useWidgetAuth(info?.auth);
+
+  // Canjea el token SSO de WordPress (si viene en ?wpsso=) por una sesión de
+  // portal, para que el formulario de /book pueda pre-rellenar y bloquear el
+  // email del cliente logueado. No afecta al gate de reserva (sigue con ?wpa=1).
+  useCitasPortalSession(tenantSlug);
 
   const goContinue = useCallback(() => {
     if (!selectedEventTypeId || !selectedDatetime) return;

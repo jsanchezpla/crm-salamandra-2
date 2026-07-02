@@ -11,6 +11,7 @@ import {
 } from "../../../../../../lib/citas/validation.js";
 import { findBookingOverlap } from "../../../../../../lib/citas/booking.js";
 import { logCitasAudit } from "../../../../../../lib/citas/audit.js";
+import { verifyPortalSession, readBearer } from "../../../../../../lib/citas/portalSession.js";
 import {
   getMadridDayOfWeek,
   getMadridParts,
@@ -26,7 +27,7 @@ import {
  *
  * Crea un Booking desde la landing pública. Solo modalidad 'online'.
  */
-export const POST = withPublicTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
+export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("citas")) return notFound("Módulo no disponible");
     const ip = request.headers.get("x-forwarded-for") ?? null;
@@ -48,7 +49,22 @@ export const POST = withPublicTenant(async (request, _ctx, { tenant, tenantModel
     const clientName = normalizeString(body.clientName);
     if (!clientName) return error("clientName es obligatorio", 422);
 
-    const clientEmail = normalizeEmail(body.clientEmail);
+    // Email del cliente. Si llega un sessionToken válido del portal SSO
+    // (Authorization: Bearer), se FUERZA el email al de la sesión verificada,
+    // ignorando el del body — así un cliente logueado no puede reservar con
+    // otro email y la cita aparece luego en su "Mis citas". Sin bearer válido →
+    // flujo público normal (email del body).
+    let clientEmail = normalizeEmail(body.clientEmail);
+    try {
+      const bearer = readBearer(request);
+      if (bearer) {
+        const session = await verifyPortalSession(bearer, slug);
+        if (session?.email) clientEmail = normalizeEmail(session.email);
+      }
+    } catch {
+      // bearer inválido/caducado → seguimos con el email del body (no rompemos
+      // la reserva pública); se valida justo debajo.
+    }
     if (!clientEmail || !isValidEmail(clientEmail)) return error("clientEmail inválido", 422);
 
     const clientPhone = normalizeString(body.clientPhone);

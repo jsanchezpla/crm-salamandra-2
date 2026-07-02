@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { useCitasPortalSession } from "./_components/useCitasPortalSession.js";
+import { useCitasPortalSession } from "../_components/useCitasPortalSession.js";
 
 function fmtLong(iso) {
   if (!iso) return "—";
