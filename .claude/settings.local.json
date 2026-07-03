@@ -75,7 +75,11 @@
       "PowerShell(node --env-file=.env.local scripts/tmp-tc055.js)",
       "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\(\"c:\\\\Dev\\\\salamandra-solutions\\\\crm-salamandra-2\\\\scripts\\\\tmp-prod-inspect.sql\"\\); [Convert]::ToBase64String\\($bytes\\))",
       "Bash(findstr /i \"inventor\")",
-      "Bash(dir scripts *)"
+      "Bash(dir scripts *)",
+      "Bash(grep -E \"\\\\.\\(js|json\\)$\")",
+      "Bash(xargs ls -la)",
+      "Bash(node --env-file=.env.local scripts/_test-job-lead.mjs)",
+      "Bash(rm -f scripts/_test-job-lead.mjs)"
     ]
   }
 }

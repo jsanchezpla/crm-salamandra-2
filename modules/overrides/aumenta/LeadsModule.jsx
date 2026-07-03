@@ -50,6 +50,28 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// Un lead de "oferta de empleo" se marca desde el formulario público con
+// customFields.tipo_lead = "oferta_empleo" (ver /api/public/leads, que pasa
+// customFields tal cual). Así se distingue de los interesados normales.
+function isJobLead(lead) {
+  return lead?.customFields?.tipo_lead === "oferta_empleo";
+}
+
+function JobBadge() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold text-white whitespace-nowrap"
+      style={{ background: PRIMARY }}
+    >
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+        <path d="M8 4a1 1 0 011-1h2a1 1 0 011 1v1h2.5A1.5 1.5 0 0117 6.5V8H3V6.5A1.5 1.5 0 014.5 5H7V4zm1 0v1h2V4H9z" />
+        <path d="M3 9.5V14a1.5 1.5 0 001.5 1.5h11A1.5 1.5 0 0017 14V9.5H3z" />
+      </svg>
+      Oferta de empleo
+    </span>
+  );
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function AumentaLeadsModule() {
@@ -62,6 +84,7 @@ export default function AumentaLeadsModule() {
   const [selected, setSelected] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [soloEmpleo, setSoloEmpleo] = useState(false);
 
   const fetchLeads = useCallback(() => {
     setLoading(true);
@@ -89,6 +112,9 @@ export default function AumentaLeadsModule() {
     acc[l.stage] = (acc[l.stage] ?? 0) + 1;
     return acc;
   }, {});
+
+  const jobCount = leads.filter(isJobLead).length;
+  const visibleLeads = soloEmpleo ? leads.filter(isJobLead) : leads;
 
   function openLead(lead) {
     setSelected({ ...lead });
@@ -184,6 +210,23 @@ export default function AumentaLeadsModule() {
               ))}
             </select>
 
+            <button
+              type="button"
+              onClick={() => setSoloEmpleo((v) => !v)}
+              className="px-4 py-2.5 rounded-xl border font-medium text-sm shadow-sm transition-colors inline-flex items-center justify-center gap-2"
+              style={
+                soloEmpleo
+                  ? { background: PRIMARY, color: "white", borderColor: PRIMARY }
+                  : { background: "white", color: "#374151", borderColor: "#e5e7eb" }
+              }
+            >
+              <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                <path d="M8 4a1 1 0 011-1h2a1 1 0 011 1v1h2.5A1.5 1.5 0 0117 6.5V8H3V6.5A1.5 1.5 0 014.5 5H7V4zm1 0v1h2V4H9z" />
+                <path d="M3 9.5V14a1.5 1.5 0 001.5 1.5h11A1.5 1.5 0 0017 14V9.5H3z" />
+              </svg>
+              Ofertas de empleo{jobCount ? ` (${jobCount})` : ""}
+            </button>
+
             <div className="relative flex-1">
               <svg
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
@@ -234,7 +277,7 @@ export default function AumentaLeadsModule() {
                     </tr>
                   </thead>
                   <tbody>
-                    {leads.map((lead) => {
+                    {visibleLeads.map((lead) => {
                       const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.new;
                       return (
                         <tr key={lead.id} className="border-b border-gray-100 hover:bg-pink-50/40 transition-colors">
@@ -243,7 +286,9 @@ export default function AumentaLeadsModule() {
                             <div className="text-xs text-gray-400">{lead.email || ""}</div>
                           </td>
                           <td className="py-3.5 px-4">
-                            {lead.motivo ? (
+                            {isJobLead(lead) ? (
+                              <JobBadge />
+                            ) : lead.motivo ? (
                               <span
                                 className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${MOTIVO_STYLE[lead.motivo] ?? "bg-gray-100 text-gray-600"}`}
                               >
@@ -283,10 +328,10 @@ export default function AumentaLeadsModule() {
                         </tr>
                       );
                     })}
-                    {leads.length === 0 && (
+                    {visibleLeads.length === 0 && (
                       <tr>
                         <td colSpan={7} className="py-16 text-center text-gray-400 text-sm">
-                          {search || filtroMotivo || activeStage !== "all"
+                          {search || filtroMotivo || activeStage !== "all" || soloEmpleo
                             ? "Sin resultados para ese filtro."
                             : "Todavía no hay interesados."}
                         </td>
@@ -298,7 +343,7 @@ export default function AumentaLeadsModule() {
 
               {/* Mobile: tarjetas */}
               <div className="lg:hidden space-y-3">
-                {leads.map((lead) => {
+                {visibleLeads.map((lead) => {
                   const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.new;
                   return (
                     <div key={lead.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
@@ -314,6 +359,7 @@ export default function AumentaLeadsModule() {
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-2 mb-3">
+                        {isJobLead(lead) && <JobBadge />}
                         {lead.motivo && (
                           <span
                             className={`px-2.5 py-1 rounded-full text-xs font-semibold ${MOTIVO_STYLE[lead.motivo] ?? "bg-gray-100 text-gray-600"}`}
@@ -343,9 +389,9 @@ export default function AumentaLeadsModule() {
                     </div>
                   );
                 })}
-                {leads.length === 0 && (
+                {visibleLeads.length === 0 && (
                   <div className="py-16 text-center text-gray-400 text-sm">
-                    {search || filtroMotivo || activeStage !== "all"
+                    {search || filtroMotivo || activeStage !== "all" || soloEmpleo
                       ? "Sin resultados para ese filtro."
                       : "Todavía no hay leads."}
                   </div>
@@ -507,6 +553,26 @@ function AumentaLeadPanel({ lead, open, saving, onClose, onStageChange, onNotesC
               {lead.servicio && <PanelRow label="Servicio" value={lead.servicio} />}
               {lead.curso && <PanelRow label="Curso" value={lead.curso} />}
               {lead.taller && <PanelRow label="Taller" value={lead.taller} />}
+              {lead.mensaje && (
+                <div>
+                  <span className="text-xs text-gray-400 block mb-1">Mensaje</span>
+                  <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">{lead.mensaje}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Candidatura (oferta de empleo) */}
+        {isJobLead(lead) && (
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Candidatura</p>
+            <div className="bg-gray-50 rounded-xl p-4 space-y-2.5">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-400 w-20 shrink-0">Tipo</span>
+                <JobBadge />
+              </div>
+              {lead.customFields?.puesto && <PanelRow label="Puesto" value={lead.customFields.puesto} />}
               {lead.mensaje && (
                 <div>
                   <span className="text-xs text-gray-400 block mb-1">Mensaje</span>
