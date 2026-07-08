@@ -637,6 +637,11 @@ function DetailView({ invoice, isAdmin, onAction, onEdit, saving }) {
           Rectificada por <span className="font-mono">{invoice.rectifiedBy.number}</span>
         </div>
       )}
+      {invoice.customFields?.sourceQuoteNumber && (
+        <div className="px-3 py-2 rounded-lg bg-teal-50 border border-teal-100 text-xs text-teal-700">
+          ↖ Origen: Presupuesto <span className="font-mono">{invoice.customFields.sourceQuoteNumber}</span>
+        </div>
+      )}
 
       <div>
         <h3 className="eyebrow mb-2">Líneas</h3>
