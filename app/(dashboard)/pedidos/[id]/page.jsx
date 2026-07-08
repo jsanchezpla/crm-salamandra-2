@@ -78,7 +78,7 @@ export default function PedidoDetallePage() {
       }
     });
     fetch("/api/inventory/outbound").then((r) => r.json()).then((j) => {
-      if (j.ok) setProducts(j.data ?? []);
+      if (j.ok) setProducts(j.data?.products ?? []);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);

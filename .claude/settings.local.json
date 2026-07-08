@@ -79,7 +79,17 @@
       "Bash(grep -E \"\\\\.\\(js|json\\)$\")",
       "Bash(xargs ls -la)",
       "Bash(node --env-file=.env.local scripts/_test-job-lead.mjs)",
-      "Bash(rm -f scripts/_test-job-lead.mjs)"
+      "Bash(rm -f scripts/_test-job-lead.mjs)",
+      "Bash(node --check scripts/inspect-tenant-modules.js)",
+      "Bash(python -c \"import reportlab, sys; print\\('reportlab', reportlab.Version, 'py', sys.version.split\\(\\)[0]\\)\")",
+      "Bash(py -c \"import reportlab, sys; print\\('reportlab', reportlab.Version\\)\")",
+      "Bash(python gen_modulos_pdf.py)",
+      "Bash(curl.exe -s -o /dev/null -w \"%{http_code}\" \"https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Regular.ttf\" --max-time 12)",
+      "Bash(python gen_aumenta_pdf.py)",
+      "Bash(python -c \"import pypdf;print\\('paginas:', len\\(pypdf.PdfReader\\('aumenta-modulos-crm.pdf'\\).pages\\)\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(cp C:/Users/jorge/AppData/Local/Temp/claude/C--dev-salamandra-crm-salamandra-2/172dfe3e-dfc3-4598-aa5b-eb425c093156/scratchpad/aumenta-modulos-crm.pdf C:/Users/jorge/Desktop/aumenta-modulos-crm.pdf)",
+      "Read(//c/Users/jorge/Desktop/**)"
     ]
   }
 }

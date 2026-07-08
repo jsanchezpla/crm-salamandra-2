@@ -12,15 +12,23 @@ arquitecto y senior developer de referencia.
 
 Antes de implementar cambios en un módulo concreto, lee su doc:
 
-| Módulo        | Doc                         | Estado       |
-| ------------- | --------------------------- | ------------ |
-| Facturación   | `docs/modules/billing.md`   | Implementado |
-| Equipo & RRHH | `docs/modules/team.md`      | Implementado |
-| Leads         | `docs/modules/leads.md`     | Implementado |
-| Formación     | `docs/modules/training.md`  | Implementado |
-| Inventario    | `docs/modules/inventory.md` | Implementado |
-| Nutrición     | `docs/modules/nutricion.md` | C1+C2+C3 en prod, C4+C5 en local |
-| Otros módulos | Aún sin doc dedicado        | Pendiente    |
+| Módulo            | Doc                          | Estado                           |
+| ----------------- | ---------------------------- | -------------------------------- |
+| Clientes          | `docs/modules/clients.md`    | Implementado                     |
+| Leads / Comercial | `docs/modules/leads.md`      | Implementado                     |
+| Proyectos         | `docs/modules/projects.md`   | Implementado (demo, aumenta)     |
+| Facturación       | `docs/modules/billing.md`    | Implementado                     |
+| Equipo & RRHH     | `docs/modules/team.md`       | Implementado                     |
+| Inventario        | `docs/modules/inventory.md`  | Implementado                     |
+| Formación         | `docs/modules/training.md`   | Implementado                     |
+| Citas             | `docs/modules/citas.md`      | Implementado                     |
+| Pacientes         | `docs/modules/pacientes.md`  | Implementado (aumenta)           |
+| Clínica           | `docs/modules/clinica.md`    | Implementado (aumenta)           |
+| Nutrición         | `docs/modules/nutricion.md`  | C1+C2+C3 en prod, C4+C5 en local |
+| Emails (infra)    | `docs/modules/emails.md`     | Infra transversal                |
+
+Módulos implementados **sin doc dedicado** (su detalle vive en la tabla de
+módulos más abajo): `calendar`, `orders`, `referidos`, `cuestionarios`.
 
 Cualquier detalle no recogido en CLAUDE.md (endpoints específicos,
 fórmulas de cálculo, decisiones de implementación, validaciones,
@@ -239,15 +247,18 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 | `demo`           | local + prod    | clients, leads, calendar, inventory, billing, team, training | Tenant de desarrollo y pruebas; show-room                                                       |
 | `retorika`       | solo producción | training, clients                                            | Academia online (WordPress + TutorLMS)                                                          |
 | `quality_energy` | local + prod    | leads                                                        | Empresa energética. Tuvo `referidos` en su día (limpiado por `remove-abarcaia-from-quality.js`) |
-| `aumenta`        | local + prod    | leads                                                        | Centro de psicología y formación                                                                |
+| `aumenta`        | local + prod    | leads\*, training\*, clients, calendar, citas, clinica, pacientes, projects, billing, inventory, orders, team (12) | Centro de psicología y formación. 12 módulos en prod (verif. 2026-07-07). \* = override UI: `aumenta/LeadsModule` y `aumenta/FormacionOverview` (este último con `logicOverrides` declarativos que hoy no lee ningún código). Label sidebar "Leads" → "Interesados". |
 | `abarcaia`       | solo producción | leads, referidos                                             | Programa de referidos vía formulario público                                                    |
 | `spain_enzymes`  | solo local      | leads, clients, inventory, billing, orders                   | Tenant de pruebas creado por Jorge. Módulo orders (Pedidos) específico de Spain Enzymes         |
 | `nutri_laura`    | local + prod    | citas, leads, clients, training, nutricion                   | Nutricionista (Laura). Override leads (embudo nutricional) + conversión lead→paciente + override overview formación (B2C, sin TutorLMS aún). Subido a prod 2026-06-23 con sprint Recetario C1. |
 
 Datos verificados contra `master.tenants` y `master.tenant_modules` el
-2026-04-30 (entorno local). Los tenants `retorika` y `abarcaia` solo
-existen en producción; sus módulos provienen de los seeds
-correspondientes.
+2026-04-30 (entorno local), salvo `aumenta`, re-verificado en
+**producción** el 2026-07-07 (12 módulos activos). Los tenants `retorika`
+y `abarcaia` solo existen en producción; sus módulos provienen de los
+seeds correspondientes. El resto de filas puede haber divergido respecto
+a producción — re-verificar con `scripts/inspect-tenant-modules.js <slug>`
+(solo lectura) antes de fiarse.
 
 Cada tenant puede tener override de UI en `modules/overrides/{slug}/`
 (carpeta con guión) y seed propio en `scripts/seed-{slug}.js` cuando
@@ -257,26 +268,59 @@ aplique.
 
 ## Módulos del CRM — 17 planificados
 
-| moduleKey      | Módulo                        | Estado                               | Doc detallado              |
-| -------------- | ----------------------------- | ------------------------------------ | -------------------------- |
-| clients        | #1 Clientes & Cuentas         | Implementado parcial (spain_enzymes) | —                          |
-| sales          | #2 Comercial & Ventas (Leads) | Implementado (5 tenants)             | `docs/modules/leads.md`    |
-| projects       | #3 Proyectos (Kanban)         | Pendiente                            | —                          |
-| support        | #4 Soporte & Calidad          | Pendiente                            | —                          |
-| billing        | #5 Facturación                | Implementado parcial (demo, aumenta) | `docs/modules/billing.md`  |
-| team           | #6 Equipo & RRHH              | Implementado                         | `docs/modules/team.md`     |
-| planning       | #7 Planificación & Recursos   | Pendiente                            | —                          |
-| documents      | #8 Documentación & Contratos  | Pendiente                            | —                          |
-| —              | #9 Filtro global por cliente  | Pendiente                            | —                          |
-| inventory      | #10 Inventario & Activos      | Implementado (spain_enzymes, demo)   | `docs/modules/inventory.md` |
-| training       | #11 Formación & Conocimiento  | Implementado (Retorika)              | `docs/modules/training.md` |
-| automations    | #12 Automatizaciones & Flujos | Pendiente                            | —                          |
-| ai             | #13 IA & Asistente            | Pendiente                            | —                          |
-| integrations   | #14 Integraciones & API       | Pendiente                            | —                          |
-| analytics      | #15 Analítica & BI            | Pendiente                            | —                          |
-| communications | #16 Comunicaciones            | Pendiente                            | —                          |
-| orders         | Pedidos (no del plan 1-16)    | Implementado (spain_enzymes)         | —                          |
-| nutricion      | Recetario (no del plan 1-16)  | Sprint cerrado: C1+C2+C3 en prod, C4 (UX + tab Plan) y C5 (smoke E2E + /meals/reorder + cierre) en local | `docs/modules/nutricion.md` |
+> **Leyenda de estado**: _Implementado_ = con endpoints + UI en
+> producción. _Pendiente_ = solo entrada **placeholder** en `Sidebar.jsx`
+> (aparece en el menú si el tenant activa el `moduleKey`, pero la página
+> aún no existe; hoy ningún tenant los activa). La fuente autoritativa de
+> qué módulos existen como concepto es `components/layout/Sidebar.jsx`.
+
+### Del plan 1-16
+
+| moduleKey       | Módulo                        | Estado                                       | Doc detallado               |
+| --------------- | ----------------------------- | -------------------------------------------- | --------------------------- |
+| clients         | #1 Clientes & Cuentas         | Implementado                                 | `docs/modules/clients.md`   |
+| sales / leads   | #2 Comercial & Ventas (Leads) | Implementado (varios tenants)                | `docs/modules/leads.md`     |
+| projects        | #3 Proyectos (Kanban)         | Implementado (demo, aumenta)                 | `docs/modules/projects.md`  |
+| support         | #4 Soporte & Calidad          | Pendiente (solo modelo `Ticket`, sin API/UI) | —                           |
+| billing         | #5 Facturación                | Implementado (demo, aumenta, spain_enzymes)  | `docs/modules/billing.md`   |
+| team            | #6 Equipo & RRHH              | Implementado                                 | `docs/modules/team.md`      |
+| planning        | #7 Planificación & Recursos   | Pendiente                                    | —                           |
+| documents       | #8 Documentación & Contratos  | Pendiente                                    | —                           |
+| —               | #9 Filtro global por cliente  | Pendiente (feature transversal, sin menú)    | —                           |
+| inventory       | #10 Inventario & Activos      | Implementado (spain_enzymes, demo, aumenta)  | `docs/modules/inventory.md` |
+| training        | #11 Formación & Conocimiento  | Implementado (retorika, aumenta)             | `docs/modules/training.md`  |
+| automations     | #12 Automatizaciones & Flujos | Pendiente (motor n8n externo, sin módulo UI) | —                           |
+| ai              | #13 IA & Asistente            | Pendiente                                    | —                           |
+| integrations    | #14 Integraciones & API       | Pendiente (infra parcial: webhooks/external) | —                           |
+| analytics       | #15 Analítica & BI            | Pendiente                                    | —                           |
+| communications  | #16 Comunicaciones            | Pendiente (modelos `Message`/`Notification`) | —                           |
+
+### Fuera del plan 1-16 (ya implementados)
+
+| moduleKey     | Módulo                         | Estado                              | Doc detallado               |
+| ------------- | ------------------------------ | ----------------------------------- | --------------------------- |
+| calendar      | Calendario                     | Implementado (demo, aumenta)        | —                           |
+| citas         | Citas (reservas + portal SSO)  | Implementado (nutri_laura, aumenta) | `docs/modules/citas.md`     |
+| orders        | Pedidos                        | Implementado (spain_enzymes, aumenta) | —                         |
+| referidos     | Referidos (formulario público) | Implementado (abarcaia)             | —                           |
+| cuestionarios | Cuestionarios (TutorLMS)       | Implementado (retorika)             | (dentro de `training.md`)   |
+| pacientes     | Pacientes                      | Implementado (aumenta)              | `docs/modules/pacientes.md` |
+| clinica       | Clínica                        | Implementado (aumenta)              | `docs/modules/clinica.md`   |
+| nutricion     | Recetario                      | C1+C2+C3 en prod, C4+C5 en local    | `docs/modules/nutricion.md` |
+
+> **`leads` vs `sales`**: hay dos `moduleKey` para el área comercial
+> (`leads` → `/leads`, `sales` → `/comercial`). En producción los tenants
+> activan `leads`. Inconsistencia de nomenclatura heredada, pendiente de
+> unificar.
+>
+> **`pacientes` / `clinica`**: comparten backend con `clients`/`nutricion`
+> (sin carpeta `app/api/` propia); son UI + modelos (`Patient`,
+> `ClinicSession`, `ClinicalReport`, `Coordination`, `PerformanceMetric`).
+> Solo activos en `aumenta` (demo visual del 9-jun-2026).
+>
+> **Placeholders sin construir** (entradas en `Sidebar.jsx` que hoy nadie
+> activa): `support`, `planning`, `documents`, `analytics`, `ai`,
+> `automations`, `integrations`.
 
 ---
 
