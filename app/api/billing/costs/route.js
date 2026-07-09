@@ -24,6 +24,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     if (searchParams.get("type")) where.type = searchParams.get("type");
     if (searchParams.get("category")) where.category = searchParams.get("category");
     if (searchParams.get("employeeId")) where.employeeId = searchParams.get("employeeId");
+    if (searchParams.get("partnerId")) where.partnerId = searchParams.get("partnerId");
     if (searchParams.get("clientId")) where.clientId = searchParams.get("clientId");
     if (searchParams.get("from") || searchParams.get("to")) {
       where.incurredAt = {};
@@ -74,7 +75,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
 
     const {
       type, category, description, taxBase, vatRate = 21, vatDeductible = true,
-      incurredAt, employeeId, clientId, inventoryProductId, attachmentUrl,
+      incurredAt, employeeId, partnerId, clientId, inventoryProductId, attachmentUrl,
     } = body;
 
     if (!type) return error("type es obligatorio");
@@ -101,6 +102,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
       vatDeductible: !!vatDeductible,
       incurredAt,
       employeeId: resolvedEmployeeId,
+      partnerId: partnerId || null,
       clientId: clientId || null,
       inventoryProductId: inventoryProductId || null,
       attachmentUrl: attachmentUrl || null,

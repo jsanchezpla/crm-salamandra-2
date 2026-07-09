@@ -65,6 +65,12 @@ export function defineCost(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // Socio que se desgrava este gasto (Jorge / Rodrigo). Mientras no seamos
+      // SL, cada socio deduce sus propios gastos. id de settings.partners.
+      partnerId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       clientId: {
         type: DataTypes.UUID,
         allowNull: true,

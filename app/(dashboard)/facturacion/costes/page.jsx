@@ -19,8 +19,17 @@ function emptyForm(defaultVat = 21) {
     type: "other", category: "fixed", description: "",
     taxBase: "", vatRate: defaultVat, vatDeductible: true,
     incurredAt: new Date().toISOString().slice(0, 10),
-    employeeId: "", clientId: "",
+    employeeId: "", partnerId: "", clientId: "",
   };
+}
+
+// IRPF: un gasto deducible ahorra IRPF, pero el ahorro no es fijo (tipo
+// marginal 19%–47%). Ver lib/billing/irpf.js.
+const IRPF_MIN = 19;
+const IRPF_MAX = 47;
+function irpfSaving(base) {
+  const b = Number(base) || 0;
+  return { min: Math.round(b * IRPF_MIN) / 100, max: Math.round(b * IRPF_MAX) / 100 };
 }
 
 export default function CostesPage() {
@@ -108,7 +117,7 @@ export default function CostesPage() {
       type: c.type, category: c.category, description: c.description ?? "",
       taxBase: Number(c.taxBase ?? 0), vatRate: Number(c.vatRate ?? 0),
       vatDeductible: !!c.vatDeductible, incurredAt: c.incurredAt?.slice(0, 10) ?? "",
-      employeeId: c.employeeId ?? "", clientId: c.clientId ?? "",
+      employeeId: c.employeeId ?? "", partnerId: c.partnerId ?? "", clientId: c.clientId ?? "",
     });
     setShowForm(true);
     setFormError(null);
@@ -123,7 +132,8 @@ export default function CostesPage() {
         type: form.type, category: form.category, description: form.description,
         taxBase: Number(form.taxBase), vatRate: Number(form.vatRate),
         vatDeductible: !!form.vatDeductible, incurredAt: form.incurredAt,
-        employeeId: form.employeeId || null, clientId: form.clientId || null,
+        employeeId: form.employeeId || null, partnerId: form.partnerId || null,
+        clientId: form.clientId || null,
       };
       const url = editingId ? `/api/billing/costs/${editingId}` : "/api/billing/costs";
       const method = editingId ? "PATCH" : "POST";
@@ -162,6 +172,9 @@ export default function CostesPage() {
           <p className="text-xs text-neutral-400 mt-1">
             Total filtrado: <span className="font-semibold text-neutral-700 tabular">{fmtMoney(totalBase)}</span>
             <span className="text-neutral-300"> · IVA {fmtMoney(totalVat)} · Total {fmtMoney(totalAll)}</span>
+          </p>
+          <p className="text-[11px] text-emerald-700 mt-0.5">
+            Ahorro IRPF de estos gastos ({IRPF_MIN}–{IRPF_MAX}%): {fmtMoney(irpfSaving(totalBase).min)} – {fmtMoney(irpfSaving(totalBase).max)}
           </p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -324,12 +337,24 @@ export default function CostesPage() {
                   </select>
                 </FormRow>
               </div>
+              <FormRow label="Socio (quién se lo desgrava)">
+                <select value={form.partnerId} onChange={(e) => setForm((f) => ({ ...f, partnerId: e.target.value }))} className={inputCls}>
+                  <option value="">Sin asignar</option>
+                  {(settings?.partners ?? []).map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                </select>
+              </FormRow>
 
               {/* Preview totales */}
               <div className="bg-neutral-50 border border-neutral-100 rounded-lg p-3 text-xs space-y-1">
                 <div className="flex justify-between text-neutral-500"><span>Base imponible</span><span className="tabular">{fmtMoney(previewBase)}</span></div>
                 <div className="flex justify-between text-neutral-500"><span>IVA {form.vatRate}%</span><span className="tabular">{fmtMoney(previewVat)}</span></div>
                 <div className="flex justify-between font-semibold text-neutral-900 pt-1 border-t border-neutral-200"><span>Total</span><span className="tabular">{fmtMoney(previewTotal)}</span></div>
+                {previewBase > 0 && (
+                  <div className="flex justify-between text-emerald-700 pt-1 border-t border-neutral-100">
+                    <span>Ahorro IRPF ({IRPF_MIN}–{IRPF_MAX}%)</span>
+                    <span className="tabular">{fmtMoney(irpfSaving(previewBase).min)} – {fmtMoney(irpfSaving(previewBase).max)}</span>
+                  </div>
+                )}
               </div>
 
               {formError && (

@@ -47,17 +47,24 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
       return error("Solo se pueden editar facturas en borrador. Para cambios usa rectificativa.", 409);
     }
 
-    const allowed = ["clientId", "employeeId", "issueDate", "dueDate", "lines", "notes", "customFields", "series"];
+    const allowed = ["clientId", "employeeId", "partnerId", "issueDate", "dueDate", "lines", "notes", "customFields", "series"];
     const updates = {};
     for (const k of allowed) {
       if (k in body) updates[k] = body[k];
     }
 
-    if (updates.lines) {
-      const calc = calculateInvoice({ lines: updates.lines });
+    // Recalcular totales si cambian las líneas o el tipo de IRPF. El IRPF se
+    // aplica sobre la base, así que un cambio de tipo recalcula el total.
+    const irpfChanged = "irpfRate" in body;
+    if (updates.lines || irpfChanged) {
+      const effectiveLines = updates.lines ?? invoice.lines ?? [];
+      const effectiveIrpf = irpfChanged ? Number(body.irpfRate) : Number(invoice.irpfRate);
+      const calc = calculateInvoice({ lines: effectiveLines, irpfRate: effectiveIrpf });
       updates.lines = calc.lines;
       updates.taxBase = calc.taxBase;
       updates.vatAmount = calc.vatAmount;
+      updates.irpfRate = calc.irpfRate;
+      updates.irpfAmount = calc.irpfAmount;
       updates.total = calc.total;
       updates.subtotal = calc.taxBase; // legacy campo, se mantiene cuadrado
     }

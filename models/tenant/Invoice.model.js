@@ -37,6 +37,12 @@ export function defineInvoice(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // Socio que "gana" esta factura. Mientras no seamos SL, cada socio
+      // (Jorge / Rodrigo) factura por separado. id de settings.partners.
+      partnerId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       // FK durmiente a Project (Sprint 1 Proyectos). Sin uso desde la UI ni
       // desde la lógica de cálculo de rentabilidad; se activa en Sprint 4
       // del ciclo Proyectos.
@@ -95,6 +101,19 @@ export function defineInvoice(sequelize) {
         defaultValue: 0,
       },
       vatAmount: {
+        type: DataTypes.DECIMAL(12, 2),
+        allowNull: false,
+        defaultValue: 0,
+      },
+      // ── Retención IRPF ──────────────────────────────────────────────────
+      // Se aplica sobre la BASE IMPONIBLE: total = base + IVA − IRPF.
+      // Típico para autónomos/profesionales: 15% (7% primeros años).
+      irpfRate: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: false,
+        defaultValue: 0,
+      },
+      irpfAmount: {
         type: DataTypes.DECIMAL(12, 2),
         allowNull: false,
         defaultValue: 0,

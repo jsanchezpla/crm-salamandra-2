@@ -31,12 +31,21 @@ export const PUT = withTenant(async (request, _ctx, { tenantModels, hasModule })
 
     const allowed = [
       "fiscalName", "taxId", "fiscalAddress", "fiscalCity", "fiscalZip",
-      "fiscalCountry", "defaultVatRate", "defaultPaymentTermsDays",
+      "fiscalCountry", "defaultVatRate", "defaultIrpfRate", "defaultPaymentTermsDays",
       "invoiceFooterText", "logoUrl",
     ];
     const updates = {};
     for (const k of allowed) {
       if (k in body) updates[k] = body[k];
+    }
+
+    // Socios del negocio: array de { id, name }
+    if ("partners" in body) {
+      const arr = body.partners;
+      if (!Array.isArray(arr) || arr.some((p) => !p || typeof p.id !== "string" || typeof p.name !== "string")) {
+        return error("partners debe ser un array de { id, name }");
+      }
+      updates.partners = arr;
     }
 
     if ("availableVatRates" in body) {

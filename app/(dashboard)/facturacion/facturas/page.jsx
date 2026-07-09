@@ -18,14 +18,16 @@ function addDaysIso(isoDate, days) {
   return d.toISOString().slice(0, 10);
 }
 
-function emptyForm(defaultVat = 21, termsDays = 30) {
+function emptyForm(defaultVat = 21, termsDays = 30, defaultIrpf = 15) {
   const issueDate = new Date().toISOString().slice(0, 10);
   return {
     clientId: "",
     employeeId: "",
+    partnerId: "",
     issueDate,
     dueDate: addDaysIso(issueDate, termsDays),
     series: "F",
+    irpfRate: defaultIrpf,
     notes: "",
     lines: [{ ...EMPTY_LINE, vatRate: defaultVat }],
   };
@@ -124,7 +126,8 @@ export default function FacturasPage() {
     setOpenInvoice(null);
     setForm(emptyForm(
       settings?.defaultVatRate ?? 21,
-      Number(settings?.defaultPaymentTermsDays ?? 30)
+      Number(settings?.defaultPaymentTermsDays ?? 30),
+      Number(settings?.defaultIrpfRate ?? 15)
     ));
     setShowCreate(true);
     setEditing(true);
@@ -140,6 +143,8 @@ export default function FacturasPage() {
     setForm({
       clientId: openInvoice.clientId ?? "",
       employeeId: openInvoice.employeeId ?? "",
+      partnerId: openInvoice.partnerId ?? "",
+      irpfRate: openInvoice.irpfRate ?? settings?.defaultIrpfRate ?? 15,
       issueDate: openInvoice.issueDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
       dueDate: openInvoice.dueDate?.slice(0, 10) ?? "",
       series: openInvoice.series ?? "F",
@@ -184,8 +189,9 @@ export default function FacturasPage() {
     }
     base = Math.round(base * 100) / 100;
     vat = Math.round(vat * 100) / 100;
-    return { base, vat, total: Math.round((base + vat) * 100) / 100, breakdown: [...breakdown.entries()].sort((a,b) => Number(b[0]) - Number(a[0])) };
-  }, [form.lines]);
+    const irpf = Math.round(base * (Number(form.irpfRate || 0) / 100) * 100) / 100;
+    return { base, vat, irpf, total: Math.round((base + vat - irpf) * 100) / 100, breakdown: [...breakdown.entries()].sort((a,b) => Number(b[0]) - Number(a[0])) };
+  }, [form.lines, form.irpfRate]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -198,9 +204,11 @@ export default function FacturasPage() {
       const payload = {
         clientId: form.clientId,
         employeeId: form.employeeId || null,
+        partnerId: form.partnerId || null,
         issueDate: form.issueDate,
         dueDate: form.dueDate || null,
         series: form.series,
+        irpfRate: Number(form.irpfRate || 0),
         notes: form.notes || null,
         lines: form.lines.map((l) => ({
           description: l.description,
@@ -443,6 +451,18 @@ export default function FacturasPage() {
                         ))}
                       </select>
                     </FormRow>
+                    <FormRow label="Socio (quién factura)">
+                      <select value={form.partnerId} onChange={(e) => setForm((f) => ({ ...f, partnerId: e.target.value }))} className={inputCls}>
+                        <option value="">Sin asignar</option>
+                        {(settings?.partners ?? []).map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </FormRow>
+                    <FormRow label="IRPF % (retención sobre base)">
+                      <input type="number" min="0" max="47" step="0.01" value={form.irpfRate}
+                        onChange={(e) => setForm((f) => ({ ...f, irpfRate: e.target.value }))} className={inputCls} />
+                    </FormRow>
                     <FormRow label="Fecha emisión *">
                       <input required type="date" value={form.issueDate} onChange={(e) => setForm((f) => ({ ...f, issueDate: e.target.value }))} className={inputCls} />
                     </FormRow>
@@ -564,6 +584,12 @@ export default function FacturasPage() {
                         <span className="tabular">{fmtMoney(agg.vat)}</span>
                       </div>
                     ))}
+                    {formTotals.irpf > 0 && (
+                      <div className="flex justify-between text-xs text-amber-300/80">
+                        <span>IRPF −{Number(form.irpfRate)}%</span>
+                        <span className="tabular">− {fmtMoney(formTotals.irpf)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between font-display text-base pt-2 border-t border-white/10 mt-2">
                       <span>Total</span><span className="tabular">{fmtMoney(formTotals.total)}</span>
                     </div>
@@ -621,6 +647,7 @@ function DetailView({ invoice, isAdmin, onAction, onEdit, saving }) {
       <div className="grid grid-cols-2 gap-3">
         <DetailRow label="Cliente" value={invoice.client?.fiscalName || invoice.client?.name} />
         <DetailRow label="Empleado" value={invoice.employee?.displayName} />
+        <DetailRow label="Socio" value={invoice.partnerId ? invoice.partnerId.charAt(0).toUpperCase() + invoice.partnerId.slice(1) : "—"} />
         <DetailRow label="Fecha emisión" value={fmtDate(invoice.issueDate)} />
         <DetailRow label="Vencimiento" value={fmtDate(invoice.dueDate)} />
         <DetailRow label="Serie" value={invoice.series} />
@@ -670,6 +697,12 @@ function DetailView({ invoice, isAdmin, onAction, onEdit, saving }) {
             <span className="tabular">{fmtMoney(agg.vat)}</span>
           </div>
         ))}
+        {Number(invoice.irpfAmount) > 0 && (
+          <div className="flex justify-between text-xs text-amber-300/80">
+            <span>IRPF −{Number(invoice.irpfRate)}%</span>
+            <span className="tabular">− {fmtMoney(invoice.irpfAmount)}</span>
+          </div>
+        )}
         <div className="flex justify-between font-display text-base pt-2 border-t border-white/10 mt-2">
           <span>Total</span><span className="tabular">{fmtMoney(invoice.total)}</span>
         </div>

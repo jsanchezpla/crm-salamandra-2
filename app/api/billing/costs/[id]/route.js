@@ -45,7 +45,7 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
     const body = await request.json();
     const allowed = [
       "type", "category", "description", "incurredAt",
-      "employeeId", "clientId", "inventoryProductId",
+      "employeeId", "partnerId", "clientId", "inventoryProductId",
       "attachmentUrl", "vatDeductible",
     ];
     const updates = {};

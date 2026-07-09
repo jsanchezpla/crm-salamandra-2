@@ -5,6 +5,13 @@ import { getKpisForPeriod } from "../../../../lib/billing/billingSummary.js";
 
 function round2(n) { return Math.round(Number(n) * 100) / 100; }
 
+// La tabla `quotes` puede no existir aún (migración billing-quotes no aplicada).
+// En ese caso el Panel operativo debe seguir funcionando con presupuestos = 0.
+function isMissingRelation(err) {
+  const code = err?.parent?.code || err?.original?.code;
+  return code === "42P01" || /relation .* does not exist/i.test(err?.message || "");
+}
+
 /**
  * GET /api/billing/operations?from&to — datos del Panel operativo.
  *
@@ -30,12 +37,18 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     in7.setDate(in7.getDate() + 7);
     const in7str = in7.toISOString().slice(0, 10);
 
-    // Pipeline de presupuestos (estado actual)
-    const quoteAgg = await Quote.findAll({
-      attributes: ["status", [fn("COUNT", col("id")), "n"], [fn("SUM", col("total")), "sum"]],
-      group: ["status"],
-      raw: true,
-    });
+    // Pipeline de presupuestos (estado actual). Tolerante a que la tabla
+    // `quotes` aún no exista (migración no aplicada): degrada a 0.
+    let quoteAgg = [];
+    try {
+      quoteAgg = await Quote.findAll({
+        attributes: ["status", [fn("COUNT", col("id")), "n"], [fn("SUM", col("total")), "sum"]],
+        group: ["status"],
+        raw: true,
+      });
+    } catch (e) {
+      if (!isMissingRelation(e)) throw e;
+    }
     let openCount = 0, openSum = 0, accCount = 0, accSum = 0;
     for (const r of quoteAgg) {
       const n = Number(r.n || 0), s = Number(r.sum || 0);
@@ -59,15 +72,20 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const overdueCount = Number(overdueRows[0]?.n || 0);
     const overdueSum = round2(Number(overdueRows[0]?.sum || 0));
 
-    // Presupuestos que caducan en 7 días
-    const expiringRows = await Quote.findAll({
-      where: {
-        status: { [Op.in]: ["draft", "sent", "viewed"] },
-        validUntil: { [Op.between]: [today, in7str] },
-      },
-      attributes: [[fn("COUNT", col("id")), "n"], [fn("SUM", col("total")), "sum"]],
-      raw: true,
-    });
+    // Presupuestos que caducan en 7 días (tolerante a tabla ausente)
+    let expiringRows = [];
+    try {
+      expiringRows = await Quote.findAll({
+        where: {
+          status: { [Op.in]: ["draft", "sent", "viewed"] },
+          validUntil: { [Op.between]: [today, in7str] },
+        },
+        attributes: [[fn("COUNT", col("id")), "n"], [fn("SUM", col("total")), "sum"]],
+        raw: true,
+      });
+    } catch (e) {
+      if (!isMissingRelation(e)) throw e;
+    }
     const expCount = Number(expiringRows[0]?.n || 0);
     const expSum = round2(Number(expiringRows[0]?.sum || 0));
 

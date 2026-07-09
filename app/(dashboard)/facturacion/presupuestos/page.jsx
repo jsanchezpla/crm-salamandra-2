@@ -43,6 +43,12 @@ export default function PresupuestosPage() {
   const [newClientId, setNewClientId] = useState("");
   const [creating, setCreating] = useState(false);
 
+  // Alta de cliente inline (drawer lateral)
+  const [showClientDrawer, setShowClientDrawer] = useState(false);
+  const [savingClient, setSavingClient] = useState(false);
+  const [clientErr, setClientErr] = useState(null);
+  const [clientForm, setClientForm] = useState({ type: "company", name: "", email: "", phone: "", taxId: "", fiscalName: "" });
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -88,6 +94,37 @@ export default function PresupuestosPage() {
     } catch (err) {
       setError(err.message);
       setCreating(false);
+    }
+  }
+
+  async function createClient() {
+    if (!clientForm.name.trim()) { setClientErr("El nombre es obligatorio"); return; }
+    setSavingClient(true);
+    setClientErr(null);
+    try {
+      const res = await fetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: clientForm.type,
+          name: clientForm.name.trim(),
+          email: clientForm.email.trim() || null,
+          phone: clientForm.phone.trim() || null,
+          taxId: clientForm.taxId.trim() || null,
+          fiscalName: clientForm.fiscalName.trim() || null,
+        }),
+      });
+      const j = await res.json();
+      if (!j.ok) throw new Error(j.error || "Error creando cliente");
+      const nuevo = j.data;
+      setClients((prev) => [nuevo, ...prev]);
+      setNewClientId(nuevo.id);
+      setShowClientDrawer(false);
+      setClientForm({ type: "company", name: "", email: "", phone: "", taxId: "", fiscalName: "" });
+    } catch (err) {
+      setClientErr(err.message);
+    } finally {
+      setSavingClient(false);
     }
   }
 
@@ -187,7 +224,16 @@ export default function PresupuestosPage() {
           <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <h2 className="font-display text-lg text-[var(--ink-900)] mb-1">Nuevo presupuesto</h2>
             <p className="text-xs text-neutral-400 mb-4">Elige el cliente. Las líneas se añaden en el detalle.</p>
-            <label className="block text-[11px] font-medium text-neutral-500 mb-1">Cliente</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[11px] font-medium text-neutral-500">Cliente</label>
+              <button
+                type="button"
+                onClick={() => { setClientErr(null); setShowClientDrawer(true); }}
+                className="text-[11px] font-medium text-[var(--color-primary,#1B3A2D)] hover:underline"
+              >
+                + Nuevo cliente
+              </button>
+            </div>
             <select
               value={newClientId}
               onChange={(e) => setNewClientId(e.target.value)}
@@ -212,6 +258,61 @@ export default function PresupuestosPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Drawer lateral: nuevo cliente */}
+      {showClientDrawer && (
+        <>
+          <div className="fixed inset-0 z-[60] bg-black/40" onClick={() => !savingClient && setShowClientDrawer(false)} />
+          <div className="fixed z-[61] right-0 top-14 lg:top-0 bottom-0 w-full max-w-md bg-white shadow-2xl flex flex-col">
+            <div className="px-5 py-4 border-b border-neutral-200 flex items-center justify-between shrink-0">
+              <div>
+                <div className="eyebrow">Presupuestos</div>
+                <h2 className="font-display text-lg text-[var(--ink-900)]">Nuevo cliente</h2>
+              </div>
+              <button onClick={() => setShowClientDrawer(false)} className="text-neutral-400 hover:text-neutral-700 p-1" aria-label="Cerrar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto px-5 py-5 space-y-4">
+              {clientErr && <div className="px-3 py-2 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{clientErr}</div>}
+              <div>
+                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Tipo</label>
+                <div className="inline-flex bg-neutral-100 rounded-lg p-1">
+                  {[{ k: "company", l: "Empresa" }, { k: "individual", l: "Particular" }].map((t) => (
+                    <button key={t.k} type="button" onClick={() => setClientForm((f) => ({ ...f, type: t.k }))}
+                      className={`text-xs px-3 py-1.5 rounded-md font-medium transition ${clientForm.type === t.k ? "bg-white shadow-sm text-neutral-900" : "text-neutral-500"}`}>
+                      {t.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {[
+                { k: "name", l: "Nombre *", ph: "Nombre del cliente" },
+                { k: "fiscalName", l: "Razón social", ph: "Nombre fiscal (si difiere)" },
+                { k: "taxId", l: "CIF / NIF", ph: "B12345678" },
+                { k: "email", l: "Email", ph: "cliente@empresa.com" },
+                { k: "phone", l: "Teléfono", ph: "+34 600 000 000" },
+              ].map((field) => (
+                <div key={field.k}>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">{field.l}</label>
+                  <input
+                    value={clientForm[field.k]}
+                    onChange={(e) => setClientForm((f) => ({ ...f, [field.k]: e.target.value }))}
+                    placeholder={field.ph}
+                    className="w-full rounded-md px-2.5 py-2 text-sm bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="px-5 py-4 border-t border-neutral-200 flex justify-end gap-2 shrink-0">
+              <button onClick={() => setShowClientDrawer(false)} disabled={savingClient} className="px-3 py-2 text-xs font-medium rounded-md border border-neutral-200 text-neutral-600 hover:bg-neutral-50">Cancelar</button>
+              <button onClick={createClient} disabled={savingClient || !clientForm.name.trim()} className="px-3 py-2 text-xs font-medium rounded-md bg-[var(--color-primary,#1B3A2D)] text-white hover:opacity-90 disabled:opacity-40">
+                {savingClient ? "Creando…" : "Crear y seleccionar"}
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

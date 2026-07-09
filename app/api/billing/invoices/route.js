@@ -80,10 +80,12 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
     const {
       clientId,
       employeeId,
+      partnerId,
       issueDate,
       dueDate,
       lines = [],
       series = "F",
+      irpfRate,
       notes,
       customFields,
     } = body;
@@ -94,15 +96,17 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
       return error("Se requiere al menos una línea");
     }
 
-    // Aplicar defaults del tenant: vatRate por línea y dueDate desde
-    // defaultPaymentTermsDays si no llega explícito.
+    // Aplicar defaults del tenant: vatRate por línea, IRPF y dueDate desde
+    // defaultPaymentTermsDays si no llegan explícitos.
     const settings = await TenantBillingSettings.findOne();
     const defaultVat = settings ? Number(settings.defaultVatRate) : 21;
+    const defaultIrpf = settings ? Number(settings.defaultIrpfRate ?? 15) : 15;
     const termsDays = settings ? Number(settings.defaultPaymentTermsDays ?? 30) : 30;
     const linesWithVat = lines.map((l) => ({
       ...l,
       vatRate: l.vatRate != null ? Number(l.vatRate) : defaultVat,
     }));
+    const resolvedIrpf = irpfRate != null ? Number(irpfRate) : defaultIrpf;
 
     let resolvedDueDate = dueDate || null;
     if (!resolvedDueDate && Number.isFinite(termsDays) && termsDays > 0) {
@@ -111,17 +115,20 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
       resolvedDueDate = due.toISOString().slice(0, 10);
     }
 
-    const calc = calculateInvoice({ lines: linesWithVat });
+    const calc = calculateInvoice({ lines: linesWithVat, irpfRate: resolvedIrpf });
 
     // Borrador: sin número, sin serie congelada
     const invoice = await Invoice.create({
       clientId,
       employeeId: employeeId || null,
+      partnerId: partnerId || null,
       issueDate,
       dueDate: resolvedDueDate,
       lines: calc.lines,
       taxBase: calc.taxBase,
       vatAmount: calc.vatAmount,
+      irpfRate: calc.irpfRate,
+      irpfAmount: calc.irpfAmount,
       total: calc.total,
       paidAmount: 0,
       series,

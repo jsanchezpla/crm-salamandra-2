@@ -29,6 +29,7 @@ export const POST = withTenant(async (request, { params }, { tenantModels, tenan
 
     const settings = await TenantBillingSettings.findOne();
     const termsDays = settings ? Number(settings.defaultPaymentTermsDays ?? 30) : 30;
+    const defaultIrpf = settings ? Number(settings.defaultIrpfRate ?? 15) : 15;
 
     const issueDate = new Date().toISOString().slice(0, 10);
     let dueDate = null;
@@ -38,8 +39,9 @@ export const POST = withTenant(async (request, { params }, { tenantModels, tenan
       dueDate = d.toISOString().slice(0, 10);
     }
 
-    // Recalcular por seguridad (las líneas del presupuesto ya traen vatRate)
-    const calc = calculateInvoice({ lines: Array.isArray(quote.lines) ? quote.lines : [] });
+    // Recalcular por seguridad (las líneas del presupuesto ya traen vatRate).
+    // La factura resultante aplica IRPF por defecto del tenant.
+    const calc = calculateInvoice({ lines: Array.isArray(quote.lines) ? quote.lines : [], irpfRate: defaultIrpf });
 
     const result = await tenantSequelize.transaction(async (t) => {
       const invoice = await Invoice.create(
@@ -52,6 +54,8 @@ export const POST = withTenant(async (request, { params }, { tenantModels, tenan
           lines: calc.lines,
           taxBase: calc.taxBase,
           vatAmount: calc.vatAmount,
+          irpfRate: calc.irpfRate,
+          irpfAmount: calc.irpfAmount,
           total: calc.total,
           paidAmount: 0,
           series: "F",

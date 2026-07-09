@@ -59,6 +59,22 @@ export function defineTenantBillingSettings(sequelize) {
         allowNull: false,
         defaultValue: 30,
       },
+      // Retención IRPF por defecto aplicada a nuevas facturas (sobre base).
+      defaultIrpfRate: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: false,
+        defaultValue: 15,
+      },
+      // Socios del negocio (mientras no seamos SL, cada uno factura/deduce
+      // por separado). Cada factura y cada gasto se atribuye a un socio.
+      partners: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [
+          { id: "jorge", name: "Jorge" },
+          { id: "rodrigo", name: "Rodrigo" },
+        ],
+      },
       // ── Branding documento ──────────────────────────────────────────────
       invoiceFooterText: {
         type: DataTypes.TEXT,
