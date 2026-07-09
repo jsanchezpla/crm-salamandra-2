@@ -34,6 +34,20 @@
   --radius-control: 10px;
 }
 
+/* ── Controles de formulario: resalte con el color del tenant ───────────
+   El azul por defecto de los <option> resaltados lo pinta el navegador.
+   Lo forzamos al color primario del tenant (var --color-primary, que el
+   dashboard fija por tenant). Aplica a todos los <select> del CRM. */
+select {
+  accent-color: var(--color-primary, #1B3A2D);
+}
+option:checked,
+option:hover {
+  background: var(--color-primary, #1B3A2D);
+  background-color: var(--color-primary, #1B3A2D);
+  color: #fff;
+}
+
 @theme inline {
   --color-background: var(--ink-50);
   --color-foreground: var(--ink-900);
