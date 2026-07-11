@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
+import Select from "@/components/ui/Select.jsx";
 
 function fmtKg(v) { return Number(v || 0).toLocaleString("es-ES", { maximumFractionDigits: 3 }); }
 function fmtEur(v) { return Number(v || 0).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €"; }
@@ -396,14 +397,15 @@ export default function InventarioPage() {
           className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]"
         />
         {availableTags.length > 0 && (
-          <select
+          <Select
             value={filterTag}
-            onChange={(e) => setFilterTag(e.target.value)}
+            onChange={(v) => setFilterTag(v)}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]"
-          >
-            <option value="">Todas las etiquetas</option>
-            {availableTags.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
+            options={[
+              { value: "", label: "Todas las etiquetas" },
+              ...availableTags.map((t) => ({ value: t, label: t })),
+            ]}
+          />
         )}
       </div>
 
@@ -983,21 +985,23 @@ function FormulaForm({ form, setForm, inboundCatalog, clients }) {
   return (
     <div className="p-6 space-y-3">
       <Field label="Producto entrante">
-        <select value={form.inboundProductId} onChange={(e) => setForm((f) => ({ ...f, inboundProductId: e.target.value }))}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]">
-          <option value="">— Elegir —</option>
-          {inboundCatalog.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        <Select value={form.inboundProductId} onChange={(v) => setForm((f) => ({ ...f, inboundProductId: v }))}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]"
+          options={[
+            { value: "", label: "— Elegir —" },
+            ...inboundCatalog.map((p) => ({ value: p.id, label: p.name })),
+          ]} />
       </Field>
       <Field label="Cantidad (kg entrada por kg salida)">
         <Input type="number" step="0.0001" value={form.qtyKgPerOutputKg} onChange={(e) => setForm((f) => ({ ...f, qtyKgPerOutputKg: e.target.value }))} />
       </Field>
       <Field label="Específica para cliente" optional>
-        <select value={form.clientId} onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]">
-          <option value="">— Receta global (todos los clientes) —</option>
-          {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <Select value={form.clientId} onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]"
+          options={[
+            { value: "", label: "— Receta global (todos los clientes) —" },
+            ...clients.map((c) => ({ value: c.id, label: c.name })),
+          ]} />
       </Field>
     </div>
   );
@@ -1007,11 +1011,12 @@ function AliasForm({ form, setForm, clients }) {
   return (
     <div className="p-6 space-y-3">
       <Field label="Cliente">
-        <select value={form.clientId} onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]">
-          <option value="">— Elegir —</option>
-          {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <Select value={form.clientId} onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]"
+          options={[
+            { value: "", label: "— Elegir —" },
+            ...clients.map((c) => ({ value: c.id, label: c.name })),
+          ]} />
       </Field>
       <Field label="Nombre del producto para este cliente">
         <Input type="text" value={form.aliasName} onChange={(e) => setForm((f) => ({ ...f, aliasName: e.target.value }))} placeholder="ej: Enzima Premium B" />

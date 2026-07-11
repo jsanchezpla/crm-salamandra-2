@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Select from "@/components/ui/Select.jsx";
 import { fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 
@@ -204,16 +205,21 @@ export default function RecurrentesPage() {
             </div>
             <form onSubmit={handleCreate} className="px-6 py-5 space-y-3">
               <FormRow label="Cliente *">
-                <select required value={form.clientId} onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))} className={inputCls}>
-                  <option value="">Selecciona...</option>
-                  {clients.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-                </select>
+                <Select
+                  value={form.clientId}
+                  onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
+                  options={[{ value: "", label: "Selecciona..." }, ...clients.map((c) => ({ value: c.id, label: c.name }))]}
+                  className={inputCls}
+                />
               </FormRow>
               <div className="grid grid-cols-2 gap-3">
                 <FormRow label="Frecuencia *">
-                  <select value={form.frequency} onChange={(e) => setForm((f) => ({ ...f, frequency: e.target.value }))} className={inputCls}>
-                    {Object.entries(FREQ_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-                  </select>
+                  <Select
+                    value={form.frequency}
+                    onChange={(v) => setForm((f) => ({ ...f, frequency: v }))}
+                    options={Object.entries(FREQ_LABELS).map(([k, v]) => ({ value: k, label: v }))}
+                    className={inputCls}
+                  />
                 </FormRow>
                 <FormRow label="Próxima emisión *">
                   <input required type="date" value={form.nextRunAt} onChange={(e) => setForm((f) => ({ ...f, nextRunAt: e.target.value }))} className={inputCls} />

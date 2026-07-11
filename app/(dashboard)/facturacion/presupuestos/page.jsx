@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Select from "../../../../components/ui/Select.jsx";
 
 const STATUS = {
   draft: { label: "Borrador", cls: "bg-neutral-100 text-neutral-600" },
@@ -234,16 +235,12 @@ export default function PresupuestosPage() {
                 + Nuevo cliente
               </button>
             </div>
-            <select
+            <Select
               value={newClientId}
-              onChange={(e) => setNewClientId(e.target.value)}
-              className="w-full rounded-md px-2.5 py-2 text-sm bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
-            >
-              <option value="">— Seleccionar cliente —</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+              onChange={(v) => setNewClientId(v)}
+              placeholder="— Seleccionar cliente —"
+              options={clients.map((c) => ({ value: c.id, label: c.name }))}
+            />
             <div className="flex justify-end gap-2 mt-5">
               <button onClick={() => setShowNew(false)} disabled={creating} className="px-3 py-1.5 text-xs font-medium rounded-md border border-neutral-200 text-neutral-600 hover:bg-neutral-50">
                 Cancelar

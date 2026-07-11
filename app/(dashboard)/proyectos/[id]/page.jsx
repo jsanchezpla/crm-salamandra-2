@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import StatusBadge, { STATUS_OPTIONS } from "../../../../components/projects/StatusBadge.jsx";
 import PriorityBadge, { PRIORITY_OPTIONS } from "../../../../components/projects/PriorityBadge.jsx";
+import Select from "@/components/ui/Select.jsx";
 
 const TABS = [
   { key: "overview",  label: "Resumen" },
@@ -348,17 +349,25 @@ function TeamTab({ projectId, members, teamMembers, onChange }) {
       {err && <div className="mb-3 text-sm text-rose-700">{err}</div>}
       {showAdd && (
         <form onSubmit={submit} className="mb-4 p-3 bg-neutral-50 rounded-lg flex flex-col sm:flex-row gap-2">
-          <select className={inputCls} value={tmId} onChange={(e) => setTmId(e.target.value)} required>
-            <option value="">— Selecciona empleado —</option>
-            {available.map((tm) => (
-              <option key={tm.id} value={tm.id}>{tm.displayName}</option>
-            ))}
-          </select>
-          <select className={inputCls + " sm:w-40"} value={role} onChange={(e) => setRole(e.target.value)}>
-            <option value="lead">Lead</option>
-            <option value="member">Miembro</option>
-            <option value="viewer">Observador</option>
-          </select>
+          <Select
+            className={inputCls}
+            value={tmId}
+            onChange={(v) => setTmId(v)}
+            options={[
+              { value: "", label: "— Selecciona empleado —" },
+              ...available.map((tm) => ({ value: tm.id, label: tm.displayName })),
+            ]}
+          />
+          <Select
+            className={inputCls + " sm:w-40"}
+            value={role}
+            onChange={(v) => setRole(v)}
+            options={[
+              { value: "lead", label: "Lead" },
+              { value: "member", label: "Miembro" },
+              { value: "viewer", label: "Observador" },
+            ]}
+          />
           <button disabled={submitting || !tmId} className="px-4 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium disabled:opacity-50">
             {submitting ? "Añadiendo..." : "Añadir"}
           </button>
@@ -377,15 +386,16 @@ function TeamTab({ projectId, members, teamMembers, onChange }) {
                 <div className="font-medium text-neutral-800">{m.teamMember?.displayName}</div>
                 <div className="text-xs text-neutral-500">{m.teamMember?.position ?? "—"}</div>
               </div>
-              <select
+              <Select
                 className="text-xs rounded-lg border border-neutral-200 px-2 py-1"
                 value={m.role}
-                onChange={(e) => changeRole(m.id, e.target.value)}
-              >
-                <option value="lead">Lead</option>
-                <option value="member">Miembro</option>
-                <option value="viewer">Observador</option>
-              </select>
+                onChange={(v) => changeRole(m.id, v)}
+                options={[
+                  { value: "lead", label: "Lead" },
+                  { value: "member", label: "Miembro" },
+                  { value: "viewer", label: "Observador" },
+                ]}
+              />
               <span className={`px-2 py-0.5 rounded-full text-[11px] border ${ROLE_CLASSES[m.role]}`}>
                 {ROLE_LABELS[m.role]}
               </span>
@@ -509,10 +519,15 @@ function MilestonesTab({ projectId, milestones, phases, onChange }) {
       <form onSubmit={submit} className="mb-4 grid grid-cols-1 sm:grid-cols-4 gap-2">
         <input className={inputCls + " sm:col-span-2"} placeholder="Nombre del hito" value={name} onChange={(e) => setName(e.target.value)} />
         <input type="date" className={inputCls} value={dueDate} onChange={(e) => setDue(e.target.value)} />
-        <select className={inputCls} value={phaseId} onChange={(e) => setPhaseId(e.target.value)}>
-          <option value="">— Sin fase —</option>
-          {phases.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        <Select
+          className={inputCls}
+          value={phaseId}
+          onChange={(v) => setPhaseId(v)}
+          options={[
+            { value: "", label: "— Sin fase —" },
+            ...phases.map((p) => ({ value: p.id, label: p.name })),
+          ]}
+        />
         <button disabled={submitting || !name.trim() || !dueDate} className="sm:col-span-4 px-4 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium disabled:opacity-50">
           {submitting ? "Añadiendo..." : "+ Añadir hito"}
         </button>
@@ -531,15 +546,16 @@ function MilestonesTab({ projectId, milestones, phases, onChange }) {
                   <div className="text-xs text-neutral-500">{fmtDate(m.dueDate)}</div>
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-[11px] border ${meta.cls}`}>{meta.label}</span>
-                <select
+                <Select
                   className="text-xs rounded-lg border border-neutral-200 px-2 py-1"
                   value={m.status}
-                  onChange={(e) => update(m.id, { status: e.target.value })}
-                >
-                  <option value="pending">Pendiente</option>
-                  <option value="completed">Completado</option>
-                  <option value="missed">Perdido</option>
-                </select>
+                  onChange={(v) => update(m.id, { status: v })}
+                  options={[
+                    { value: "pending", label: "Pendiente" },
+                    { value: "completed", label: "Completado" },
+                    { value: "missed", label: "Perdido" },
+                  ]}
+                />
                 <button onClick={() => remove(m.id)} className="text-xs text-rose-600 hover:text-rose-700">Borrar</button>
               </li>
             );
@@ -688,17 +704,28 @@ function SettingsTab({ project, columns, clients, isAdmin, onChange, onArchive }
             <textarea className={inputCls} rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <select className={inputCls} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-              {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            <select className={inputCls} value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-              {PRIORITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <Select
+              className={inputCls}
+              value={form.status}
+              onChange={(v) => setForm({ ...form, status: v })}
+              options={STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            />
+            <Select
+              className={inputCls}
+              value={form.priority}
+              onChange={(v) => setForm({ ...form, priority: v })}
+              options={PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            />
           </div>
-          <select className={inputCls} value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })}>
-            <option value="">— Sin cliente —</option>
-            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <Select
+            className={inputCls}
+            value={form.clientId}
+            onChange={(v) => setForm({ ...form, clientId: v })}
+            options={[
+              { value: "", label: "— Sin cliente —" },
+              ...clients.map((c) => ({ value: c.id, label: c.name })),
+            ]}
+          />
           <div className="grid grid-cols-2 gap-2">
             <input type="date" className={inputCls} value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
             <input type="date" className={inputCls} value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />

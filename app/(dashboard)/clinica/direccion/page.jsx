@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import Select from "@/components/ui/Select.jsx";
 import PreviewBanner from "../_components/PreviewBanner.jsx";
 import {
   TEAM_RANKING,
@@ -73,6 +75,8 @@ function SemaforoMini({ areas }) {
 
 export default function DireccionPage() {
   const totalProposed = TEAM_RANKING.reduce((s, r) => s + r.proposedIncentive, 0);
+  const [period, setPeriod] = useState("2026-05");
+  const [teamFilter, setTeamFilter] = useState("all");
 
   return (
     <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-5">
@@ -99,22 +103,26 @@ export default function DireccionPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <select
-            defaultValue="2026-05"
+          <Select
+            value={period}
+            onChange={setPeriod}
+            options={[
+              { value: "2026-05", label: "Mayo 2026" },
+              { value: "2026-04", label: "Abril 2026" },
+              { value: "2026-03", label: "Marzo 2026" },
+            ]}
             className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer"
-          >
-            <option value="2026-05">Mayo 2026</option>
-            <option value="2026-04">Abril 2026</option>
-            <option value="2026-03">Marzo 2026</option>
-          </select>
-          <select
-            defaultValue="all"
+          />
+          <Select
+            value={teamFilter}
+            onChange={setTeamFilter}
+            options={[
+              { value: "all", label: "Todo el equipo" },
+              { value: "t-1", label: "Lorena Vázquez" },
+              { value: "t-2", label: "Patricia Mendoza" },
+            ]}
             className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer"
-          >
-            <option value="all">Todo el equipo</option>
-            <option value="t-1">Lorena Vázquez</option>
-            <option value="t-2">Patricia Mendoza</option>
-          </select>
+          />
         </div>
       </div>
 

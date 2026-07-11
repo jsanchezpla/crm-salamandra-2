@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import Select from "@/components/ui/Select.jsx";
 
 // ─── Configuración QEC ────────────────────────────────────────────────────────
 
@@ -1591,16 +1592,17 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
               <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
                 Demo agendada <span className="text-gray-300 font-normal normal-case">(opcional)</span>
               </label>
-              <select
+              <Select
                 value={editForm.demo_agendada}
-                onChange={(e) => setEditForm((f) => ({ ...f, demo_agendada: e.target.value }))}
+                onChange={(v) => setEditForm((f) => ({ ...f, demo_agendada: v }))}
+                options={[
+                  { value: "", label: "Sin especificar" },
+                  { value: "si", label: "Sí" },
+                  { value: "no", label: "No" },
+                  { value: "pendiente", label: "Pendiente" },
+                ]}
                 className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-              >
-                <option value="">Sin especificar</option>
-                <option value="si">Sí</option>
-                <option value="no">No</option>
-                <option value="pendiente">Pendiente</option>
-              </select>
+              />
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">

@@ -5,6 +5,7 @@ import Link from "next/link";
 import StatusBadge, { INVOICE_STATUS_LABELS } from "../_components/StatusBadge.jsx";
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
+import Select from "@/components/ui/Select.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -304,13 +305,15 @@ export default function FacturasPage() {
           placeholder="Buscar por número o cliente..."
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
         />
-        <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
-          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition">
-          <option value="">Todos los estados</option>
-          {Object.entries(INVOICE_STATUS_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v.label}</option>
-          ))}
-        </select>
+        <Select
+          value={filterStatus}
+          onChange={(v) => { setFilterStatus(v); setPage(1); }}
+          options={[
+            { value: "", label: "Todos los estados" },
+            ...Object.entries(INVOICE_STATUS_LABELS).map(([k, val]) => ({ value: k, label: val.label })),
+          ]}
+          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition"
+        />
         {(filterStatus || searchInput) && (
           <button onClick={() => { setSearchInput(""); setFilterStatus(""); setPage(1); }}
             className="text-xs text-neutral-400 hover:text-neutral-600 px-2 py-1.5 transition-colors">Limpiar</button>
@@ -434,30 +437,37 @@ export default function FacturasPage() {
                   })()}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <FormRow label="Cliente *">
-                      <select required value={form.clientId} onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))} className={inputCls}>
-                        <option value="">Selecciona...</option>
-                        {clients.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.fiscalName || c.name}{!c.taxId ? "  ⚠" : ""}
-                          </option>
-                        ))}
-                      </select>
+                      <Select
+                        value={form.clientId}
+                        onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
+                        options={[
+                          { value: "", label: "Selecciona..." },
+                          ...clients.map((c) => ({ value: c.id, label: `${c.fiscalName || c.name}${!c.taxId ? "  ⚠" : ""}` })),
+                        ]}
+                        className={inputCls}
+                      />
                     </FormRow>
                     <FormRow label="Empleado">
-                      <select value={form.employeeId} onChange={(e) => setForm((f) => ({ ...f, employeeId: e.target.value }))} className={inputCls}>
-                        <option value="">Sin asignar</option>
-                        {employees.map((m) => (
-                          <option key={m.id} value={m.id}>{m.displayName}</option>
-                        ))}
-                      </select>
+                      <Select
+                        value={form.employeeId}
+                        onChange={(v) => setForm((f) => ({ ...f, employeeId: v }))}
+                        options={[
+                          { value: "", label: "Sin asignar" },
+                          ...employees.map((m) => ({ value: m.id, label: m.displayName })),
+                        ]}
+                        className={inputCls}
+                      />
                     </FormRow>
                     <FormRow label="Socio (quién factura)">
-                      <select value={form.partnerId} onChange={(e) => setForm((f) => ({ ...f, partnerId: e.target.value }))} className={inputCls}>
-                        <option value="">Sin asignar</option>
-                        {(settings?.partners ?? []).map((p) => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </select>
+                      <Select
+                        value={form.partnerId}
+                        onChange={(v) => setForm((f) => ({ ...f, partnerId: v }))}
+                        options={[
+                          { value: "", label: "Sin asignar" },
+                          ...(settings?.partners ?? []).map((p) => ({ value: p.id, label: p.name })),
+                        ]}
+                        className={inputCls}
+                      />
                     </FormRow>
                     <FormRow label="IRPF % (retención sobre base)">
                       <input type="number" min="0" max="47" step="0.01" value={form.irpfRate}
@@ -470,11 +480,12 @@ export default function FacturasPage() {
                       <input type="date" value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} className={inputCls} />
                     </FormRow>
                     <FormRow label="Serie">
-                      <select value={form.series} onChange={(e) => setForm((f) => ({ ...f, series: e.target.value }))} className={inputCls}>
-                        {series.filter((s) => s.kind !== "rectificative").map((s) => (
-                          <option key={s.id} value={s.code}>{s.code} — {s.name}</option>
-                        ))}
-                      </select>
+                      <Select
+                        value={form.series}
+                        onChange={(v) => setForm((f) => ({ ...f, series: v }))}
+                        options={series.filter((s) => s.kind !== "rectificative").map((s) => ({ value: s.code, label: `${s.code} — ${s.name}` }))}
+                        className={inputCls}
+                      />
                     </FormRow>
                   </div>
 
@@ -501,11 +512,11 @@ export default function FacturasPage() {
                             </div>
                             {outboundCatalog.length > 0 && (
                               <div className="flex items-center gap-2">
-                                <select
+                                <Select
                                   value={l.kind === "shipping" ? "" : (l.outboundProductId || "")}
                                   disabled={l.kind === "shipping"}
-                                  onChange={(e) => {
-                                    const productId = e.target.value;
+                                  onChange={(v) => {
+                                    const productId = v;
                                     const product = outboundCatalog.find((p) => p.id === productId);
                                     setForm((f) => {
                                       const lines = [...f.lines];
@@ -520,13 +531,12 @@ export default function FacturasPage() {
                                       return { ...f, lines };
                                     });
                                   }}
+                                  options={[
+                                    { value: "", label: "— Línea sin producto del inventario —" },
+                                    ...outboundCatalog.map((p) => ({ value: p.id, label: p.name })),
+                                  ]}
                                   className={inputCls + " text-xs flex-1"}
-                                >
-                                  <option value="">— Línea sin producto del inventario —</option>
-                                  {outboundCatalog.map((p) => (
-                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                  ))}
-                                </select>
+                                />
                                 <label className="flex items-center gap-1 text-[11px] text-neutral-500 shrink-0 cursor-pointer">
                                   <input
                                     type="checkbox"
@@ -557,11 +567,12 @@ export default function FacturasPage() {
                                 <input type="number" min="0" max="100" step="0.01" value={l.discountPct} onChange={(e) => setLine(idx, "discountPct", e.target.value)} className={inputCls} />
                               </FormRow>
                               <FormRow label="IVA %">
-                                <select value={l.vatRate} onChange={(e) => setLine(idx, "vatRate", e.target.value)} className={inputCls}>
-                                  {(settings?.availableVatRates ?? [21, 10, 4, 0]).map((v) => (
-                                    <option key={v} value={v}>{v}%</option>
-                                  ))}
-                                </select>
+                                <Select
+                                  value={l.vatRate}
+                                  onChange={(v) => setLine(idx, "vatRate", v)}
+                                  options={(settings?.availableVatRates ?? [21, 10, 4, 0]).map((rate) => ({ value: rate, label: `${rate}%` }))}
+                                  className={inputCls}
+                                />
                               </FormRow>
                             </div>
                             <div className="grid grid-cols-3 gap-2 text-xs text-neutral-500 tabular pt-1 border-t border-neutral-100">

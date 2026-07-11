@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Select from "@/components/ui/Select.jsx";
 import PreviewBanner from "../clinica/_components/PreviewBanner.jsx";
 import {
   PATIENTS,
@@ -92,28 +93,26 @@ export default function PacientesPage() {
             className="w-full pl-9 pr-3 py-2 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400"
           />
         </div>
-        <select
+        <Select
           value={therapistFilter}
-          onChange={(e) => setTherapistFilter(e.target.value)}
+          onChange={(v) => setTherapistFilter(v)}
+          options={[
+            { value: "all", label: "Todas las terapeutas" },
+            ...THERAPISTS.map((t) => ({ value: t.id, label: t.name })),
+          ]}
           className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer"
-        >
-          <option value="all">Todas las terapeutas</option>
-          {THERAPISTS.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-        <select
+        />
+        <Select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(v) => setStatusFilter(v)}
+          options={[
+            { value: "all", label: "Todos los estados" },
+            { value: "active", label: "Activo" },
+            { value: "paused", label: "En pausa" },
+            { value: "discharged", label: "Alta" },
+          ]}
           className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer"
-        >
-          <option value="all">Todos los estados</option>
-          <option value="active">Activo</option>
-          <option value="paused">En pausa</option>
-          <option value="discharged">Alta</option>
-        </select>
+        />
       </div>
 
       {/* Tabla */}

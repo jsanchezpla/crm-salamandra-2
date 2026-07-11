@@ -1,0 +1,82 @@
+[
+  {
+    "categoria": "Salud y bienestar",
+    "sectores": [
+      "Clínicas dentales",
+      "Clínicas de fisioterapia / rehabilitación",
+      "Clínicas estéticas y medicina estética",
+      "Centros de psicología / terapia",
+      "Ópticas",
+      "Podología",
+      "Nutrición y dietética",
+      "Veterinarias",
+      "Farmacias y parafarmacias",
+      "Gimnasios y centros deportivos",
+      "Centros de yoga / pilates"
+    ]
+  },
+  {
+    "categoria": "Hostelería y ocio",
+    "sectores": [
+      "Restaurantes",
+      "Bares y cafeterías",
+      "Hoteles y alojamientos rurales",
+      "Catering y eventos",
+      "Salas de eventos / espacios",
+      "Discotecas / ocio nocturno"
+    ]
+  },
+  {
+    "categoria": "Servicios profesionales",
+    "sectores": [
+      "Despachos de abogados",
+      "Asesorías / gestorías",
+      "Consultoras",
+      "Arquitectura e ingeniería",
+      "Agencias inmobiliarias",
+      "Correduría de seguros"
+    ]
+  },
+  {
+    "categoria": "Comercio y retail",
+    "sectores": [
+      "Tiendas de moda / complementos",
+      "Joyerías",
+      "Mueblerías y decoración",
+      "Tiendas especializadas (deporte, electrónica, etc.)",
+      "Concesionarios y venta de vehículos"
+    ]
+  },
+  {
+    "categoria": "Belleza y cuidado personal",
+    "sectores": ["Peluquerías", "Barberías", "Centros de estética / uñas", "Spas y balnearios"]
+  },
+  {
+    "categoria": "Industria y construcción",
+    "sectores": [
+      "Constructoras y reformas",
+      "Talleres mecánicos",
+      "Fontanería / electricidad / climatización",
+      "Carpintería y metalistería",
+      "Empresas de logística / transporte"
+    ]
+  },
+  {
+    "categoria": "Educación y formación",
+    "sectores": [
+      "Academias y centros de formación",
+      "Autoescuelas",
+      "Escuelas infantiles / guarderías",
+      "Centros de idiomas"
+    ]
+  },
+  {
+    "categoria": "Otros",
+    "sectores": [
+      "Startups / tecnología",
+      "ONGs y fundaciones",
+      "Empresas industriales / fabricantes",
+      "Agrícola / alimentación"
+    ]
+  }
+]

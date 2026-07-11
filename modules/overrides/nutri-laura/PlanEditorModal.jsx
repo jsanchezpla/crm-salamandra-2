@@ -32,6 +32,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import Select from "@/components/ui/Select.jsx";
 import FoodSearchExternalModal from "./FoodSearchExternalModal.jsx";
 import {
   computeFoodMacros,
@@ -1148,15 +1149,16 @@ function FoodRow({ line, onUpdate, onDelete }) {
       {/* Unidad + (si household) medida */}
       <td className="px-2.5 py-1.5">
         <div className="flex items-center gap-1 flex-wrap">
-          <select
+          <Select
             value={line.unit}
-            onChange={(e) => changeUnit(e.target.value)}
+            onChange={(v) => changeUnit(v)}
+            options={[
+              { value: "g", label: "gramos" },
+              { value: "household", label: "medida casera" },
+              { value: "free", label: "sin cantidad" },
+            ]}
             className="px-1.5 py-1 text-xs rounded border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 bg-white"
-          >
-            <option value="g">gramos</option>
-            <option value="household">medida casera</option>
-            <option value="free">sin cantidad</option>
-          </select>
+          />
           {line.unit === "household" && (
             <HouseholdMeasureSelect
               foodId={line.foodId}
@@ -1273,22 +1275,21 @@ function HouseholdMeasureSelect({ foodId, measures, currentLabel, onChange }) {
   }
 
   return (
-    <select
+    <Select
       value={currentLabel ?? ""}
-      onChange={(e) => {
-        if (e.target.value === "__new__") setEditingNew(true);
-        else onChange(e.target.value);
+      onChange={(v) => {
+        if (v === "__new__") setEditingNew(true);
+        else onChange(v);
       }}
+      options={[
+        ...measures.map((m) => ({ value: m.label, label: `${m.label} (${m.grams}g)` })),
+        ...(measures.length === 0
+          ? [{ value: "", label: "Sin medidas — añade una", disabled: true }]
+          : []),
+        { value: "__new__", label: "+ Añadir medida nueva…" },
+      ]}
       className="px-1.5 py-1 text-xs rounded border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 bg-white max-w-[150px]"
-    >
-      {measures.map((m) => (
-        <option key={m.label} value={m.label}>{m.label} ({m.grams}g)</option>
-      ))}
-      {measures.length === 0 && (
-        <option value="" disabled>Sin medidas — añade una</option>
-      )}
-      <option value="__new__">+ Añadir medida nueva…</option>
-    </select>
+    />
   );
 }
 

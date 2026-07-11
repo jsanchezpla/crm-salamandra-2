@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Select from "@/components/ui/Select.jsx";
 
 /**
  * Botón "Convertir a proyecto" para usar en el detalle de un lead.
@@ -88,12 +89,17 @@ export default function ConvertLeadToProjectButton({ lead, onAfterConvert }) {
       </div>
       <div className="grid grid-cols-2 gap-2">
         <input type="number" step="0.01" min="0" placeholder="Presupuesto" className={inputCls} value={form.budgetAmount} onChange={(e) => setForm({ ...form, budgetAmount: e.target.value })} />
-        <select className={inputCls} value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-          <option value="low">Prioridad baja</option>
-          <option value="medium">Prioridad media</option>
-          <option value="high">Prioridad alta</option>
-          <option value="urgent">Urgente</option>
-        </select>
+        <Select
+          className={inputCls}
+          value={form.priority}
+          onChange={(v) => setForm({ ...form, priority: v })}
+          options={[
+            { value: "low", label: "Prioridad baja" },
+            { value: "medium", label: "Prioridad media" },
+            { value: "high", label: "Prioridad alta" },
+            { value: "urgent", label: "Urgente" },
+          ]}
+        />
       </div>
       {error && <div className="text-xs text-rose-700">{error}</div>}
       <div className="flex gap-2">

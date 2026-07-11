@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import Select from "@/components/ui/Select.jsx";
 
 /**
  * TaskDrawer — drawer lateral derecho para ver/editar/crear una task.
@@ -318,20 +319,19 @@ export default function TaskDrawer({
           <div className="flex-1 overflow-y-auto p-5 space-y-5">
             {/* Columna */}
             <Section label="Columna">
-              <select
+              <Select
                 className={inputCls}
                 value={form.boardColumnId ?? ""}
-                onChange={(e) => {
-                  const v = e.target.value || null;
+                onChange={(val) => {
+                  const v = val || null;
                   setForm({ ...form, boardColumnId: v });
                   if (mode === "view") persistField({ boardColumnId: v });
                 }}
-              >
-                <option value="">— Sin columna —</option>
-                {columns.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+                options={[
+                  { value: "", label: "— Sin columna —" },
+                  ...columns.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+              />
             </Section>
 
             {/* Descripción */}
@@ -383,32 +383,34 @@ export default function TaskDrawer({
             {/* Fase + Hito */}
             <div className="grid grid-cols-2 gap-3">
               <Section label="Fase">
-                <select
+                <Select
                   className={inputCls}
                   value={form.phaseId ?? ""}
-                  onChange={(e) => {
-                    const v = e.target.value || null;
+                  onChange={(val) => {
+                    const v = val || null;
                     setForm({ ...form, phaseId: v });
                     if (mode === "view") persistField({ phaseId: v });
                   }}
-                >
-                  <option value="">— Sin fase —</option>
-                  {phases.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                  options={[
+                    { value: "", label: "— Sin fase —" },
+                    ...phases.map((p) => ({ value: p.id, label: p.name })),
+                  ]}
+                />
               </Section>
               <Section label="Hito">
-                <select
+                <Select
                   className={inputCls}
                   value={form.milestoneId ?? ""}
-                  onChange={(e) => {
-                    const v = e.target.value || null;
+                  onChange={(val) => {
+                    const v = val || null;
                     setForm({ ...form, milestoneId: v });
                     if (mode === "view") persistField({ milestoneId: v });
                   }}
-                >
-                  <option value="">— Sin hito —</option>
-                  {milestones.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
+                  options={[
+                    { value: "", label: "— Sin hito —" },
+                    ...milestones.map((m) => ({ value: m.id, label: m.name })),
+                  ]}
+                />
               </Section>
             </div>
 

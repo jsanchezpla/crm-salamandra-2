@@ -12,6 +12,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import Select from "@/components/ui/Select.jsx";
+
 const UNITS = [
   { value: "g", label: "Gramos (g)" },
   { value: "ml", label: "Mililitros (ml)" },
@@ -207,17 +209,12 @@ export default function FoodEditModal({ food, onClose, onSaved }) {
           </Field>
 
           <Field label="Unidad por defecto">
-            <select
+            <Select
               value={defaultUnit}
-              onChange={(e) => setDefaultUnit(e.target.value)}
+              onChange={(v) => setDefaultUnit(v)}
+              options={UNITS.map((u) => ({ value: u.value, label: u.label }))}
               className="w-full px-3 py-2 text-sm rounded-md border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
-            >
-              {UNITS.map((u) => (
-                <option key={u.value} value={u.value}>
-                  {u.label}
-                </option>
-              ))}
-            </select>
+            />
           </Field>
 
           <div>

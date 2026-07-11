@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 
+import Select from "@/components/ui/Select.jsx";
+
 // ─── Configuración QEC ────────────────────────────────────────────────────────
 
 const STAGES = [
@@ -1422,18 +1424,15 @@ function LeadDetailPanel({
               <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
                 Cargo
               </label>
-              <select
+              <Select
                 value={editForm.cargo}
-                onChange={(e) => setEditForm((f) => ({ ...f, cargo: e.target.value }))}
+                onChange={(v) => setEditForm((f) => ({ ...f, cargo: v }))}
+                options={[
+                  { value: "", label: "Sin especificar" },
+                  ...CARGOS.map((c) => ({ value: c, label: c })),
+                ]}
                 className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-              >
-                <option value="">Sin especificar</option>
-                {CARGOS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">

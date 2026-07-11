@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
+import Select from "@/components/ui/Select.jsx";
 import { CuestionariosDashboard } from "./CuestionariosDashboard.jsx";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -515,46 +516,46 @@ function AttemptsList({ filters, onFiltersChange, onSelect }) {
             onChange={(e) => setFilter("search", e.target.value)}
             className="flex-1 text-xs px-3 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)]"
           />
-          <select
+          <Select
             value={companyName}
-            onChange={(e) => setFilter("companyName", e.target.value)}
+            onChange={(v) => setFilter("companyName", v)}
+            options={[
+              { value: "", label: "Todas las empresas" },
+              ...companiesList.map((c) => ({
+                value: c.name,
+                label: `${c.name} (${c.count})`,
+              })),
+            ]}
             className="w-full sm:w-52 text-xs px-3 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-white"
-          >
-            <option value="">Todas las empresas</option>
-            {companiesList.map((c) => (
-              <option key={c.name} value={c.name}>
-                {c.name} ({c.count})
-              </option>
-            ))}
-          </select>
+          />
         </div>
         {/* Fila 2: curso + cuestionario */}
         <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
-          <select
+          <Select
             value={courseId}
-            onChange={(e) => setCourse(e.target.value)}
+            onChange={(v) => setCourse(v)}
+            options={[
+              { value: "", label: "Todos los cursos" },
+              ...coursesList.map((c) => ({
+                value: c.wpCourseId,
+                label: `${c.courseTitle ?? `Curso ${c.wpCourseId}`} (${c.count})`,
+              })),
+            ]}
             className="w-full sm:flex-1 text-xs px-3 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-white"
-          >
-            <option value="">Todos los cursos</option>
-            {coursesList.map((c) => (
-              <option key={c.wpCourseId} value={c.wpCourseId}>
-                {c.courseTitle ?? `Curso ${c.wpCourseId}`} ({c.count})
-              </option>
-            ))}
-          </select>
+          />
           <div className="w-full sm:flex-1 flex gap-1">
-            <select
+            <Select
               value={quizId}
-              onChange={(e) => setFilter("quizId", e.target.value)}
+              onChange={(v) => setFilter("quizId", v)}
+              options={[
+                { value: "", label: "Todos los cuestionarios" },
+                ...quizzesList.map((q) => ({
+                  value: q.wpQuizId,
+                  label: `${q.quizTitle ?? `Quiz ${q.wpQuizId}`} (${q.count})`,
+                })),
+              ]}
               className="flex-1 min-w-0 text-xs px-3 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-white"
-            >
-              <option value="">Todos los cuestionarios</option>
-              {quizzesList.map((q) => (
-                <option key={q.wpQuizId} value={q.wpQuizId}>
-                  {q.quizTitle ?? `Quiz ${q.wpQuizId}`} ({q.count})
-                </option>
-              ))}
-            </select>
+            />
             {quizId && (
               <button
                 type="button"

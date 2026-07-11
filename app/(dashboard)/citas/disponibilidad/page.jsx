@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Select from "@/components/ui/Select.jsx";
 
 // Días en orden de UI (lunes primero) pero conservando valores JS getDay()
 const DAYS_UI = [
@@ -161,16 +162,15 @@ export default function CitasDisponibilidadPage() {
 
       <div className="px-6 lg:px-10 py-3 flex items-center gap-3 shrink-0 border-b border-neutral-100">
         <label className="text-[12px] text-neutral-500">Disponibilidad para:</label>
-        <select
+        <Select
           value={selectedEt}
-          onChange={(e) => setSelectedEt(e.target.value)}
+          onChange={(v) => setSelectedEt(v)}
+          options={[
+            { value: "", label: "Todos los tipos de cita (global)" },
+            ...eventTypes.map((e) => ({ value: e.id, label: e.name })),
+          ]}
           className="text-sm rounded-md px-2 py-1.5 border border-neutral-200 bg-white"
-        >
-          <option value="">Todos los tipos de cita (global)</option>
-          {eventTypes.map((e) => (
-            <option key={e.id} value={e.id}>{e.name}</option>
-          ))}
-        </select>
+        />
       </div>
 
       {error && (

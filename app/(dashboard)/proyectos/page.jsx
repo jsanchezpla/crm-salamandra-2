@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import StatusBadge, { STATUS_OPTIONS } from "../../../components/projects/StatusBadge.jsx";
 import PriorityBadge, { PRIORITY_OPTIONS } from "../../../components/projects/PriorityBadge.jsx";
+import Select from "../../../components/ui/Select.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -167,26 +168,24 @@ export default function ProyectosPage() {
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
         />
-        <select
+        <Select
           className={inputCls}
           value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-        >
-          <option value="">Todos los estados</option>
-          {STATUS_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-        <select
+          onChange={(v) => setFilterStatus(v)}
+          options={[
+            { value: "", label: "Todos los estados" },
+            ...STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+          ]}
+        />
+        <Select
           className={inputCls}
           value={filterClient}
-          onChange={(e) => setFilterClient(e.target.value)}
-        >
-          <option value="">Todos los clientes</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
+          onChange={(v) => setFilterClient(v)}
+          options={[
+            { value: "", label: "Todos los clientes" },
+            ...clients.map((c) => ({ value: c.id, label: c.name })),
+          ]}
+        />
         <label className="flex items-center gap-2 text-sm text-neutral-600 px-2">
           <input
             type="checkbox"
@@ -312,41 +311,35 @@ export default function ProyectosPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-neutral-600 mb-1">Cliente</label>
-                <select
+                <Select
                   className={inputCls}
                   value={form.clientId}
-                  onChange={(e) => setForm({ ...form, clientId: e.target.value })}
-                >
-                  <option value="">— Sin cliente (proyecto interno) —</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setForm({ ...form, clientId: v })}
+                  placeholder="— Sin cliente (proyecto interno) —"
+                  options={[
+                    { value: "", label: "— Sin cliente (proyecto interno) —" },
+                    ...clients.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-neutral-600 mb-1">Estado</label>
-                  <select
+                  <Select
                     className={inputCls}
                     value={form.status}
-                    onChange={(e) => setForm({ ...form, status: e.target.value })}
-                  >
-                    {STATUS_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => setForm({ ...form, status: v })}
+                    options={STATUS_OPTIONS}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-neutral-600 mb-1">Prioridad</label>
-                  <select
+                  <Select
                     className={inputCls}
                     value={form.priority}
-                    onChange={(e) => setForm({ ...form, priority: e.target.value })}
-                  >
-                    {PRIORITY_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => setForm({ ...form, priority: v })}
+                    options={PRIORITY_OPTIONS}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">

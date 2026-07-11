@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Select from "@/components/ui/Select.jsx";
 
 const PROMO_LABELS = {
   "pack-ia": "Pack IA + Herramientas",
@@ -111,15 +112,16 @@ export default function LeadsPage() {
           className="flex-1 border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 bg-white"
           style={{ "--tw-ring-color": "var(--color-primary)" }}
         />
-        <select
+        <Select
           value={promoFilter}
-          onChange={(e) => setPromoFilter(e.target.value)}
+          onChange={(v) => setPromoFilter(v)}
+          options={[
+            { value: "", label: "Todas las promociones" },
+            { value: "pack-ia", label: "Pack IA + Herramientas" },
+            { value: "formacion-presencial", label: "Formación Presencial" },
+          ]}
           className="border border-neutral-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
-        >
-          <option value="">Todas las promociones</option>
-          <option value="pack-ia">Pack IA + Herramientas</option>
-          <option value="formacion-presencial">Formación Presencial</option>
-        </select>
+        />
       </div>
 
       {/* Vista móvil: tarjetas */}

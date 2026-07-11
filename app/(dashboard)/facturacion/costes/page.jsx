@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Select from "@/components/ui/Select.jsx";
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 
@@ -194,14 +195,8 @@ export default function CostesPage() {
           placeholder="Buscar por descripción, empleado, cliente..."
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
         />
-        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400">
-          <option value="">Todos los tipos</option>
-          {Object.entries(TYPE_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-        </select>
-        <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400">
-          <option value="">Todas las categorías</option>
-          {Object.entries(CATEGORY_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-        </select>
+        <Select value={filterType} onChange={(v) => setFilterType(v)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" options={[{ value: "", label: "Todos los tipos" }, ...Object.entries(TYPE_LABELS).map(([k, label]) => ({ value: k, label }))]} />
+        <Select value={filterCategory} onChange={(v) => setFilterCategory(v)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" options={[{ value: "", label: "Todas las categorías" }, ...Object.entries(CATEGORY_LABELS).map(([k, label]) => ({ value: k, label }))]} />
         <input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" />
         <input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" />
         {(filterType || filterCategory || filterFrom || filterTo || searchInput) && (
@@ -289,14 +284,10 @@ export default function CostesPage() {
             <form onSubmit={handleSubmit} className="px-6 py-5 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <FormRow label="Tipo *">
-                  <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))} className={inputCls}>
-                    {Object.entries(TYPE_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-                  </select>
+                  <Select value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v }))} className={inputCls} options={Object.entries(TYPE_LABELS).map(([k, label]) => ({ value: k, label }))} />
                 </FormRow>
                 <FormRow label="Categoría *">
-                  <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} className={inputCls}>
-                    {Object.entries(CATEGORY_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-                  </select>
+                  <Select value={form.category} onChange={(v) => setForm((f) => ({ ...f, category: v }))} className={inputCls} options={Object.entries(CATEGORY_LABELS).map(([k, label]) => ({ value: k, label }))} />
                 </FormRow>
               </div>
               <FormRow label="Descripción *">
@@ -310,11 +301,7 @@ export default function CostesPage() {
                   <input required type="number" min="0.01" step="0.01" value={form.taxBase} onChange={(e) => setForm((f) => ({ ...f, taxBase: e.target.value }))} className={inputCls} />
                 </FormRow>
                 <FormRow label="IVA *">
-                  <select value={form.vatRate} onChange={(e) => setForm((f) => ({ ...f, vatRate: e.target.value }))} className={inputCls}>
-                    {(settings?.availableVatRates ?? [21, 10, 4, 0]).map((v) => (
-                      <option key={v} value={v}>{v}%</option>
-                    ))}
-                  </select>
+                  <Select value={form.vatRate} onChange={(v) => setForm((f) => ({ ...f, vatRate: v }))} className={inputCls} options={(settings?.availableVatRates ?? [21, 10, 4, 0]).map((rate) => ({ value: rate, label: `${rate}%` }))} />
                 </FormRow>
               </div>
               <FormRow label="">
@@ -325,23 +312,14 @@ export default function CostesPage() {
               </FormRow>
               <div className="grid grid-cols-2 gap-3">
                 <FormRow label="Empleado">
-                  <select value={form.employeeId} onChange={(e) => setForm((f) => ({ ...f, employeeId: e.target.value }))} className={inputCls}>
-                    <option value="">Quien lo registra</option>
-                    {employees.map((m) => (<option key={m.id} value={m.id}>{m.displayName}</option>))}
-                  </select>
+                  <Select value={form.employeeId} onChange={(v) => setForm((f) => ({ ...f, employeeId: v }))} className={inputCls} options={[{ value: "", label: "Quien lo registra" }, ...employees.map((m) => ({ value: m.id, label: m.displayName }))]} />
                 </FormRow>
                 <FormRow label="Cliente (opcional)">
-                  <select value={form.clientId} onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))} className={inputCls}>
-                    <option value="">—</option>
-                    {clients.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-                  </select>
+                  <Select value={form.clientId} onChange={(v) => setForm((f) => ({ ...f, clientId: v }))} className={inputCls} options={[{ value: "", label: "—" }, ...clients.map((c) => ({ value: c.id, label: c.name }))]} />
                 </FormRow>
               </div>
               <FormRow label="Socio (quién se lo desgrava)">
-                <select value={form.partnerId} onChange={(e) => setForm((f) => ({ ...f, partnerId: e.target.value }))} className={inputCls}>
-                  <option value="">Sin asignar</option>
-                  {(settings?.partners ?? []).map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
-                </select>
+                <Select value={form.partnerId} onChange={(v) => setForm((f) => ({ ...f, partnerId: v }))} className={inputCls} options={[{ value: "", label: "Sin asignar" }, ...(settings?.partners ?? []).map((p) => ({ value: p.id, label: p.name }))]} />
               </FormRow>
 
               {/* Preview totales */}

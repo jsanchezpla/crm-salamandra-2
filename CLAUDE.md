@@ -25,6 +25,7 @@ Antes de implementar cambios en un módulo concreto, lee su doc:
 | Pacientes         | `docs/modules/pacientes.md`  | Implementado (aumenta)           |
 | Clínica           | `docs/modules/clinica.md`    | Implementado (aumenta)           |
 | Nutrición         | `docs/modules/nutricion.md`  | C1+C2+C3 en prod, C4+C5 en local |
+| Outreach          | `docs/modules/outreach.md`   | Completo en local, sin desplegar  |
 | Emails (infra)    | `docs/modules/emails.md`     | Infra transversal                |
 
 Módulos implementados **sin doc dedicado** (su detalle vive en la tabla de
@@ -226,6 +227,7 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 - `Asset` — equipos/licencias/materiales internos (NO el inventario comercial)
 - `InboundProduct`, `InboundBatch`, `OutboundProduct`, `Formula`, `ClientOutboundAlias`, `StockMovement` — módulo Inventario (detalle en `docs/modules/inventory.md`). Reemplazan al viejo `InventoryProduct`: el modelo Sequelize y los endpoints legacy ya no existen; la tabla `inventory_products` se conserva en BD como respaldo hasta que se decida la migración definitiva.
 - `Course`, `CompanyCourse`, `TrainingUser`, `CourseEnrollment`, `QuizAttempt`, `Company`, `Training` — módulo Formación (detalle en `docs/modules/training.md`)
+- `OutreachLead`, `OutreachContact`, `OutreachAnalysis`, `OutreachBusinessLine`, `OutreachSettings` — módulo Captación (detalle en `docs/modules/outreach.md`). **No confundir `OutreachLead` con `Lead`**: el primero es una empresa captada y sin contactar, el segundo una oportunidad comercial. Son independientes, sin FK entre ellos; por eso las tablas van prefijadas `outreach_`.
 - `Notification` — notificaciones por canal
 - `Message` — chat interno por canal
 
@@ -307,6 +309,7 @@ aplique.
 | pacientes     | Pacientes                      | Implementado (aumenta)              | `docs/modules/pacientes.md` |
 | clinica       | Clínica                        | Implementado (aumenta)              | `docs/modules/clinica.md`   |
 | nutricion     | Recetario                      | C1+C2+C3 en prod, C4+C5 en local    | `docs/modules/nutricion.md` |
+| outreach      | Captación (leads + scoring IA) | Completo en local (sandbox); falta desplegar | `docs/modules/outreach.md` |
 
 > **`leads` vs `sales`**: hay dos `moduleKey` para el área comercial
 > (`leads` → `/leads`, `sales` → `/comercial`). En producción los tenants
@@ -347,7 +350,14 @@ aplique.
 
 ### IA
 
-- API OpenAI. Patrón: datos tenant → JSON → prompt → parsear respuesta → pintar.
+- **API de Claude (Anthropic)** — es el único proveedor con código real hoy,
+  usado por el módulo Outreach (`lib/outreach/analysis/`). Dependencia
+  `@anthropic-ai/sdk`, secret `ANTHROPIC_API_KEY`.
+- Patrón: datos tenant → prompt construido desde config del tenant → pedir solo
+  JSON → parsear con try/catch y normalizar → persistir para no repetir la
+  llamada. El análisis nunca se dispara solo: cuesta dinero.
+- `OPENAI_API_KEY` sigue declarada en `.env.production.example` pero **ningún
+  código la usa**. Si se retoma OpenAI, revisar antes esa suposición.
 
 ---
 

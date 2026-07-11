@@ -13,6 +13,7 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import listPlugin from "@fullcalendar/list";
 import interactionPlugin from "@fullcalendar/interaction";
+import Select from "@/components/ui/Select.jsx";
 
 const STATUS_LABELS = {
   confirmed: "Confirmada",
@@ -550,16 +551,15 @@ export default function CitasModule() {
 
               <div>
                 <label className="block text-[11px] font-medium text-neutral-500 mb-1">Tipo de cita</label>
-                <select
+                <Select
                   value={createForm.eventTypeId}
-                  onChange={(e) => updateCreateForm("eventTypeId", e.target.value)}
+                  onChange={(v) => updateCreateForm("eventTypeId", v)}
+                  options={[
+                    { value: "", label: "— Selecciona —" },
+                    ...eventTypes.map((e) => ({ value: e.id, label: `${e.name} (${e.duration} min)` })),
+                  ]}
                   className={inputCls}
-                >
-                  <option value="">— Selecciona —</option>
-                  {eventTypes.map((e) => (
-                    <option key={e.id} value={e.id}>{e.name} ({e.duration} min)</option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-2">

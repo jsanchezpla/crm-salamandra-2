@@ -16,6 +16,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import Select from "@/components/ui/Select.jsx";
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
@@ -240,16 +241,15 @@ export function CourseRegistrationsList({ courseId, onSelect, onCountChange, onF
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           <label className="flex items-center gap-2 min-w-0">
             <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold shrink-0">Empresa</span>
-            <select
+            <Select
               value={companyId}
-              onChange={(e) => setCompanyId(e.target.value)}
+              onChange={(v) => setCompanyId(v)}
+              options={[
+                { value: "", label: "Todas" },
+                ...companies.map((c) => ({ value: c.id, label: c.name })),
+              ]}
               className="text-xs rounded-lg px-2 py-1.5 border border-neutral-200 bg-white focus:outline-none focus:border-neutral-400 transition min-w-0 max-w-[200px]"
-            >
-              <option value="">Todas</option>
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            />
           </label>
 
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -379,13 +379,12 @@ export function CourseRegistrationsList({ courseId, onSelect, onCountChange, onF
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1 text-[11px] text-neutral-500">
               Por página
-              <select
+              <Select
                 value={limit}
-                onChange={(e) => { setLimit(parseInt(e.target.value, 10)); setPage(1); }}
+                onChange={(v) => { setLimit(parseInt(v, 10)); setPage(1); }}
+                options={PAGE_SIZE_OPTIONS.map((o) => ({ value: o, label: String(o) }))}
                 className="text-[11px] rounded-md px-1.5 py-0.5 border border-neutral-200 bg-white focus:outline-none focus:border-neutral-400"
-              >
-                {PAGE_SIZE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-              </select>
+              />
             </label>
             <div className="flex gap-1">
               <button

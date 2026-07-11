@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import PlanEditorModal from "./PlanEditorModal.jsx";
 import AssignPlanModal from "./AssignPlanModal.jsx";
+import Select from "@/components/ui/Select.jsx";
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -138,16 +139,15 @@ export default function NutricionAsignadosModule() {
               className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
             />
           </div>
-          <select
+          <Select
             value={templateFilter}
-            onChange={(e) => setTemplateFilter(e.target.value)}
+            onChange={(v) => setTemplateFilter(v)}
+            options={[
+              { value: "", label: "Todas las plantillas origen" },
+              ...templates.map((t) => ({ value: t.id, label: t.name })),
+            ]}
             className="px-3 py-2 text-sm rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
-          >
-            <option value="">Todas las plantillas origen</option>
-            {templates.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-          </select>
+          />
         </div>
       </div>
 

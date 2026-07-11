@@ -1,0 +1,771 @@
+[
+  {
+    "key": "clientes",
+    "name": "Clientes",
+    "claim": "El módulo Clientes reúne en una sola ficha todo lo que sabes de cada cuenta: datos de contacto, información fiscal para facturar, notas internas del equipo, documentos en PDF y el histórico de llamadas y reuniones. Cada cliente recorre un embudo de estados claro, desde que entra como nuevo hasta que se convierte, y las tarjetas por estado y el buscador te dejan localizar a cualquiera en segundos. Pensado para equipos que gestionan a la vez empresas y particulares sin perder el hilo de ninguna relación.",
+    "headline": "Cada cuenta, controlada de principio a fin",
+    "bullets": [
+      {
+        "bold": "Embudo por estados",
+        "rest": "Cada cuenta pasa por cinco estados —nuevo, contactado, en seguimiento, convertido y descartado— y avanzas al siguiente con un solo clic en su etiqueta."
+      },
+      {
+        "bold": "Todo a la vista",
+        "rest": "La portada muestra cuántas cuentas hay en cada estado y, al pulsar una tarjeta o escribir en el buscador, filtras el listado por nombre o email al instante."
+      },
+      {
+        "bold": "Alta en segundos",
+        "rest": "Das de alta un cliente desde un formulario con nombre, empresa, contacto, país, ciudad y su tema o producto de interés, sin salir del listado."
+      },
+      {
+        "bold": "Ficha completa",
+        "rest": "En cada ficha guardas notas internas, adjuntas informes en PDF, registras llamadas y reuniones y rellenas los datos fiscales que luego usa la facturación."
+      },
+      {
+        "bold": "Empresas y particulares",
+        "rest": "El mismo módulo sirve para cuentas de empresa y para personas, con campos a medida por cliente para lo que cada negocio necesite guardar."
+      },
+      {
+        "bold": "Exportar y convertir",
+        "rest": "Exportas el listado filtrado a Excel, conviertes un lead en cliente sin duplicarlo y el sistema impide borrar una cuenta que ya tiene facturas."
+      }
+    ],
+    "card": [
+      {
+        "type": "flow",
+        "label": "Estados de una cuenta",
+        "pills": [
+          "Nuevo",
+          "Contactado",
+          "En seguimiento",
+          "Convertido"
+        ]
+      },
+      {
+        "type": "text",
+        "label": "Conexión con Facturación",
+        "text": "Los datos fiscales de la ficha —**NIF**, razón social y dirección— alimentan las facturas, y una cuenta con facturas emitidas no se puede **borrar** por error."
+      },
+      {
+        "type": "text",
+        "label": "Documentos y notas",
+        "text": "Adjunta **informes en PDF** y deja **notas internas** con fecha en la propia ficha, separadas del histórico de llamadas y reuniones."
+      }
+    ],
+    "ai": [
+      {
+        "title": "Aviso de cuentas paradas",
+        "desc": "Repasa el estado (nuevo, contactado, en seguimiento), la fecha de alta y la de la última nota de cada cuenta, y propone una lista de las que llevan tiempo sin avanzar para que tú decidas a quién retomar. Se basa solo en las fechas reales del CRM, sin inventar datos."
+      },
+      {
+        "title": "Detección de cuentas duplicadas",
+        "desc": "Compara nombre, email, teléfono y NIF entre clientes y señala posibles fichas repetidas para fusionar; unir o no cada par siempre lo confirmas tú."
+      }
+    ]
+  },
+  {
+    "key": "leads",
+    "name": "Leads",
+    "claim": "El módulo de Leads reúne en un solo sitio todas las oportunidades comerciales de tu empresa, desde el primer contacto hasta el cierre. Recoge los contactos que llegan por tu web, los que das de alta a mano y los que subes desde una hoja de cálculo, y te deja seguir en qué punto está cada uno. Está pensado para equipos comerciales que hoy pierden el hilo entre correos, notas sueltas y hojas de Excel.",
+    "headline": "Cada oportunidad comercial, seguida hasta el cierre",
+    "bullets": [
+      {
+        "bold": "Varios orígenes",
+        "rest": "Junta en una misma lista los leads que entran por los formularios de tu web, los que das de alta manualmente y los que importas desde un Excel o CSV."
+      },
+      {
+        "bold": "Embudo por etapas",
+        "rest": "Cada lead avanza por fases claras —nuevo, contactado, en seguimiento, propuesta y negociación— hasta que se marca como convertido o descartado."
+      },
+      {
+        "bold": "Ficha completa",
+        "rest": "Guarda teléfono, email, valor estimado de la operación, probabilidad de cierre, fecha prevista y notas internas de cada oportunidad."
+      },
+      {
+        "bold": "Campos a medida",
+        "rest": "Cada empresa ve las columnas que le importan (empresa, zona, cargo, motivo de la consulta) según su sector, sin cargar con campos que no usa."
+      },
+      {
+        "bold": "Importar y exportar",
+        "rest": "Sube leads en bloque desde una plantilla de Excel y descarga el listado completo cuando lo necesites para trabajarlo fuera del CRM."
+      },
+      {
+        "bold": "Filtros y búsqueda",
+        "rest": "Localiza cualquier lead por nombre, email o teléfono y filtra la lista por etapa o por empresa para centrarte en lo que toca ahora."
+      }
+    ],
+    "card": [
+      {
+        "type": "flow",
+        "label": "El embudo, de principio a fin",
+        "pills": [
+          "Nuevo",
+          "Contactado",
+          "En seguimiento",
+          "Propuesta",
+          "Negociación",
+          "Convertido"
+        ]
+      },
+      {
+        "type": "text",
+        "label": "Adaptado a tu sector",
+        "text": "El mismo módulo dibuja un **embudo distinto para cada negocio**: una consulta de nutrición trabaja etapas como consulta agendada o paciente activo; un equipo de energía sigue demos y cierres."
+      },
+      {
+        "type": "text",
+        "label": "Permisos claros",
+        "text": "Cualquiera puede **consultar y exportar** los leads, pero solo un **administrador** puede crearlos, editarlos, importarlos o borrarlos."
+      }
+    ],
+    "ai": [
+      {
+        "title": "Aviso de leads parados",
+        "desc": "Revisa qué leads llevan más tiempo sin movimiento según las fechas ya registradas y propone una lista corta para retomar. El comercial decide a quién llama; la IA no inventa previsiones ni cierra nada por su cuenta."
+      },
+      {
+        "title": "Posibles duplicados",
+        "desc": "Compara nombre, email y teléfono entre los leads existentes y señala los que parecen la misma persona repetida. Una persona confirma si conviene unificarlos; la IA solo avisa."
+      }
+    ]
+  },
+  {
+    "key": "calendario",
+    "name": "Calendario",
+    "claim": "El Calendario reúne en un solo sitio las tareas y eventos del equipo, ordenados por fecha y con la prioridad a la vista. Una tarea se crea marcando su hueco en el propio calendario y se reprograma arrastrándola, sin formularios largos ni hojas de cálculo aparte. Está pensado para que cualquier persona del equipo vea de un vistazo qué toca hoy y qué queda pendiente.",
+    "headline": "La agenda del equipo, en una pantalla",
+    "bullets": [
+      {
+        "bold": "Cuatro vistas",
+        "rest": "El mismo calendario en mes, semana, día o lista, para pasar de la foto global a la agenda de un solo día sin cambiar de pantalla."
+      },
+      {
+        "bold": "Arrastrar y soltar",
+        "rest": "Mueves una tarea a otro día arrastrándola y estiras su borde para alargar o acortar la duración, sin abrir ningún formulario."
+      },
+      {
+        "bold": "Prioridad por color",
+        "rest": "Cada tarea se marca como alta, media o baja y se pinta en rojo, naranja o verde para leer de un vistazo qué es urgente."
+      },
+      {
+        "bold": "Estado de la tarea",
+        "rest": "Cada tarea vive como pendiente, completada o cancelada, así queda claro qué falta por hacer y qué ya está cerrado."
+      },
+      {
+        "bold": "Día completo u hora",
+        "rest": "Marcas la tarea como de todo el día o le fijas hora de inicio y de fin, con fecha de inicio y de fin cuando ocupa varias jornadas."
+      },
+      {
+        "bold": "Agenda de equipo",
+        "rest": "Un único calendario compartido por toda la empresa, con un campo de notas en cada tarea para dejar el contexto por escrito."
+      }
+    ],
+    "card": [
+      {
+        "type": "flow",
+        "label": "Ciclo de una tarea",
+        "pills": [
+          "Pendiente",
+          "Completada",
+          "Cancelada"
+        ]
+      },
+      {
+        "type": "text",
+        "label": "Reprogramar sin fricción",
+        "text": "Arrastras la tarjeta a otro día o **estiras su borde** para cambiar la duración; el calendario guarda el cambio en cuanto la sueltas."
+      },
+      {
+        "type": "text",
+        "label": "Prioridad de un vistazo",
+        "text": "Alta, media y baja se pintan en **rojo, naranja y verde**, de modo que lo urgente destaca sobre el resto de la agenda."
+      }
+    ],
+    "ai": [
+      {
+        "title": "Orden del día sugerido",
+        "desc": "Repasa las tareas en estado pendiente de una fecha y propone un orden de trabajo según su prioridad y su hora de inicio; la persona lo acepta o lo reordena a mano."
+      },
+      {
+        "title": "Aviso de días cargados",
+        "desc": "Detecta jornadas con varias tareas de prioridad alta a la vez y sugiere mover alguna a un hueco más libre, contando siempre sobre las tareas reales del calendario y nunca cifras inventadas; el cambio lo confirma una persona."
+      }
+    ]
+  },
+  {
+    "key": "citas",
+    "name": "Citas",
+    "claim": "Citas gestiona la reserva de servicios profesionales de principio a fin: desde que el paciente pide hora en tu web hasta que la cita queda cerrada en tu agenda. Defines tus tipos de servicio, tus horarios disponibles y decides si las solicitudes entran directas o pasan por una lista de espera que confirmas tú. Pensado para consultas, clínicas y profesionales que trabajan con cita previa y quieren dejar de coordinar por teléfono y mensajes sueltos.",
+    "headline": "Del formulario público a tu agenda",
+    "bullets": [
+      {
+        "bold": "Tipos de servicio",
+        "rest": "Defines cada servicio reservable con su duración, sus modalidades (presencial, teléfono u online) y los minutos de margen que quieres dejar antes y después de cada cita."
+      },
+      {
+        "bold": "Horarios por día",
+        "rest": "Configuras bloques de disponibilidad recurrentes por día de la semana, generales para toda la agenda o específicos de un servicio concreto."
+      },
+      {
+        "bold": "Reserva pública",
+        "rest": "Un formulario embebible en tu web deja que el paciente elija servicio, hueco libre y modalidad sin crear cuenta ni llamar por teléfono."
+      },
+      {
+        "bold": "Lista de espera",
+        "rest": "Puedes hacer que cada solicitud entre como pendiente y confirmarla o rechazarla tú desde el panel, dejando registrado el motivo cuando la rechazas."
+      },
+      {
+        "bold": "Reglas de antelación",
+        "rest": "Cada servicio marca con cuánta antelación mínima se puede reservar y hasta cuántos días vista se abre el calendario al paciente."
+      },
+      {
+        "bold": "Avisos automáticos",
+        "rest": "Al recibir, confirmar o rechazar una solicitud salen los correos correspondientes al paciente, con un enlace propio para que cancele él mismo sin pasar por ti."
+      }
+    ],
+    "card": [
+      {
+        "type": "flow",
+        "label": "Ciclo de una reserva",
+        "pills": [
+          "Pendiente",
+          "Confirmada",
+          "Completada",
+          "No asistió",
+          "Cancelada"
+        ]
+      },
+      {
+        "type": "text",
+        "label": "Reserva sin fricción",
+        "text": "El paciente reserva desde tu web **sin crear cuenta**, y cada cita nace con un **enlace propio** para que él mismo la cancele sin tener que llamar."
+      },
+      {
+        "type": "text",
+        "label": "Conectado con la ficha",
+        "text": "Cada reserva se cruza con la **ficha del paciente** por su correo, y desde la propia ficha confirmas o rechazas sus solicitudes pendientes."
+      }
+    ],
+    "ai": [
+      {
+        "title": "Triaje de lista de espera",
+        "desc": "Revisa las solicitudes pendientes (servicio pedido, fecha propuesta y lo que el paciente escribió en el campo del formulario) y propone un orden de atención y una recomendación de confirmar o rechazar cada una; la decisión final la tomas tú con un clic."
+      },
+      {
+        "title": "Alerta de ausencias",
+        "desc": "Cruza el historial de citas de cada paciente por su correo (completadas, no presentadas y canceladas) y señala qué citas confirmadas tienen más riesgo de ausencia para que pidas reconfirmación; los recuentos que muestra salen de las citas reales del CRM, nunca inventados, y contactar o no lo decides tú."
+      }
+    ]
+  },
+  {
+    "key": "proyectos",
+    "name": "Proyectos",
+    "claim": "El módulo Proyectos reúne en un solo sitio toda la cartera de trabajos de la empresa: cada proyecto con su código, su cliente, su estado, su prioridad, su fecha límite y su presupuesto, más un tablero Kanban donde el equipo va moviendo las tareas por fases. Está pensado para responsables y equipos que necesitan saber en qué punto está cada encargo sin perseguir hojas de cálculo ni cadenas de correos. Fases, hitos, reparto de tareas y control de quién puede ver el presupuesto, todo dentro del mismo CRM.",
+    "headline": "Cada proyecto, su tablero y su avance",
+    "bullets": [
+      {
+        "bold": "Vista en lista",
+        "rest": "Toda la cartera en una tabla con código, cliente, estado, prioridad y fecha límite, ordenada por fecha y prioridad para atender primero lo que más urge."
+      },
+      {
+        "bold": "Tablero Kanban",
+        "rest": "Además, el trabajo de cada proyecto se organiza en columnas por fase y las tarjetas se mueven arrastrándolas; la columna y el orden se guardan al soltar."
+      },
+      {
+        "bold": "Tareas con detalle",
+        "rest": "Cada tarea admite responsables, fecha límite, horas estimadas, una checklist con contador de avance y etiquetas para filtrar dentro del tablero."
+      },
+      {
+        "bold": "Fases e hitos",
+        "rest": "El proyecto se divide en fases ordenadas y marca hitos con su estado (pendiente, cumplido o incumplido) para seguir de cerca los compromisos de fecha."
+      },
+      {
+        "bold": "Equipo por proyecto",
+        "rest": "Asignas miembros con rol de responsable, colaborador o solo lectura, y repartes cada tarea entre varias personas a la vez."
+      },
+      {
+        "bold": "Presupuesto reservado",
+        "rest": "El importe cerrado del proyecto solo lo ven los responsables (administrador o lead del proyecto), nunca todo el equipo, para mantener la confidencialidad económica."
+      }
+    ],
+    "card": [
+      {
+        "type": "flow",
+        "label": "Estado del proyecto",
+        "pills": [
+          "Borrador",
+          "Activo",
+          "En pausa",
+          "Completado",
+          "Cancelado"
+        ]
+      },
+      {
+        "type": "text",
+        "label": "Dos vistas de la cartera",
+        "text": "**Lista** ordenada por fecha y prioridad para ver qué urge, y **Kanban** por fases para mover el trabajo. La misma cartera, como más convenga."
+      },
+      {
+        "type": "text",
+        "label": "Trazabilidad",
+        "text": "Cada movimiento de una tarea — crear, editar, **mover** o borrar — queda registrado en el **historial de auditoría**."
+      }
+    ],
+    "ai": [
+      {
+        "title": "Radar de proyectos en riesgo",
+        "desc": "Cruza las fechas límite de proyectos y tareas, los hitos marcados como incumplidos y las tareas atrasadas o sin asignar para proponer una lista priorizada de proyectos que necesitan atención; una persona la revisa antes de actuar. Los días de retraso y el número de tareas salen de las fechas reales del CRM, no de estimaciones inventadas."
+      },
+      {
+        "title": "Reparto de carga sugerido",
+        "desc": "A partir de las horas estimadas de cada tarea y de los responsables ya asignados, propone reequilibrar el trabajo entre los miembros del proyecto; el responsable confirma cada cambio. Las horas provienen del campo del CRM, la IA no las inventa."
+      }
+    ]
+  },
+  {
+    "key": "pedidos",
+    "name": "Pedidos",
+    "claim": "El módulo de Pedidos reúne en un solo sitio la venta de producto: creas el pedido a nombre de un cliente, añades las líneas desde tu catálogo de inventario, controlas en qué fase está cada uno y, al cerrarlo, la factura se genera sola. Pensado para negocios que venden producto y necesitan pasar del pedido a la factura sin duplicar trabajo ni saltar entre herramientas.",
+    "headline": "Del pedido a la factura sin saltos",
+    "bullets": [
+      {
+        "bold": "Estados claros",
+        "rest": "Cada pedido recorre borrador, confirmado, en preparación, enviado, completado o cancelado, con pestañas y un contador por estado para ver de un vistazo cuántos hay en cada fase."
+      },
+      {
+        "bold": "Líneas con catálogo",
+        "rest": "Añades productos desde el catálogo de inventario, que rellena solo el precio de venta por defecto, o escribes una línea de texto libre cuando el producto no está fichado."
+      },
+      {
+        "bold": "Nombre fijado",
+        "rest": "El nombre del producto queda guardado en la línea tal cual estaba al crearla, así el pedido sigue siendo legible aunque luego renombres o borres ese producto del catálogo."
+      },
+      {
+        "bold": "Transporte y total",
+        "rest": "Sumas el transporte, con un importe por defecto configurable, al subtotal de las líneas; el IVA se aplica al emitir la factura, no antes."
+      },
+      {
+        "bold": "Completar y facturar",
+        "rest": "Al marcar el pedido como completado se genera automáticamente una factura en borrador enlazada, con sus líneas y transporte, lista para revisar en Facturación."
+      },
+      {
+        "bold": "Fecha programada y notas",
+        "rest": "Fijas la fecha prevista de cada pedido y dejas notas internas para la preparación, visibles solo para tu equipo."
+      }
+    ],
+    "card": [
+      {
+        "type": "flow",
+        "label": "El ciclo de un pedido",
+        "pills": [
+          "Borrador",
+          "Confirmado",
+          "En preparación",
+          "Enviado",
+          "Completado"
+        ]
+      },
+      {
+        "type": "text",
+        "label": "Enlace con Facturación",
+        "text": "Al **completar** un pedido se crea sola una **factura en borrador** con sus líneas y su transporte, sin volver a teclear nada."
+      },
+      {
+        "type": "text",
+        "label": "Precio desde el catálogo",
+        "text": "Cada línea puede tirar del **catálogo de inventario**: eliges el producto y su precio de venta por defecto se rellena solo, editable si hace falta."
+      }
+    ],
+    "ai": [
+      {
+        "title": "Aviso de pedidos parados",
+        "desc": "Cruza el estado y la fecha programada de cada pedido para señalar los que llevan demasiado en preparación o enviado sin cerrarse. Propone una lista de revisión con las fechas reales del CRM; una persona decide qué hacer con cada uno."
+      },
+      {
+        "title": "Líneas habituales del cliente",
+        "desc": "Al crear un pedido nuevo, revisa el historial de líneas de ese cliente (producto y cantidad) y sugiere los artículos que suele pedir. Las cantidades salen de sus pedidos anteriores y el usuario confirma o ajusta antes de guardar."
+      }
+    ]
+  },
+  {
+    "key": "inventario",
+    "name": "Inventario",
+    "claim": "El módulo de Inventario controla el flujo completo de materiales, desde la compra de materias primas hasta el producto que facturas al cliente. Registra cada lote con su proveedor y sus kilos, define las recetas que transforman la entrada en salida y descuenta el stock de forma automática cuando emites una factura. Está pensado para empresas que fabrican o preparan producto a partir de materiales que compran a distintos proveedores y en distintos lotes.",
+    "headline": "Del lote de entrada a la factura",
+    "bullets": [
+      {
+        "bold": "Lotes con trazabilidad",
+        "rest": "Cada compra se registra con proveedor, fecha, número de lote y kilos recibidos, y el stock real de una materia prima es la suma de los kilos que quedan en todos sus lotes."
+      },
+      {
+        "bold": "Recetas de producción",
+        "rest": "Defines qué materias primas y en qué proporción forman cada producto que vendes, con recetas globales o específicas para un cliente concreto cuando necesita una fórmula distinta."
+      },
+      {
+        "bold": "Descuento al facturar",
+        "rest": "Al emitir una factura, el stock de cada material se descuenta solo siguiendo la receta y gastando primero los lotes más antiguos por fecha de entrada."
+      },
+      {
+        "bold": "Nombre y precio por cliente",
+        "rest": "Un mismo producto de salida puede venderse a un cliente con otro nombre comercial y su propio precio, sin duplicar el catálogo."
+      },
+      {
+        "bold": "Histórico auditable",
+        "rest": "Cada variación de stock queda registrada como movimiento con su motivo (venta, ajuste o entrada manual), quién lo hizo y cuándo, para poder reconstruir qué pasó con cada kilo."
+      },
+      {
+        "bold": "Aviso de stock corto",
+        "rest": "Si al facturar no quedan kilos suficientes para cubrir la receta, el sistema avisa de cuánto falta sin llegar a bloquear la emisión."
+      }
+    ],
+    "card": [
+      {
+        "type": "flow",
+        "label": "Del material a la venta",
+        "pills": [
+          "Producto entrante",
+          "Lote (kg + proveedor)",
+          "Receta",
+          "Producto saliente",
+          "La factura descuenta stock"
+        ]
+      },
+      {
+        "type": "text",
+        "label": "Se conecta con Facturación",
+        "text": "Cada línea de factura puede apuntar a un **producto saliente**; al emitir, el stock baja solo según su receta. Una línea de **transporte** no consume material."
+      },
+      {
+        "type": "text",
+        "label": "Recetas a medida",
+        "text": "Un producto puede tener una **receta global** y otra **específica por cliente**; al facturar prevalece la del cliente si existe."
+      }
+    ],
+    "ai": [
+      {
+        "title": "Reposición sugerida",
+        "desc": "Cruza los kilos que quedan en cada lote (kgRemaining) con el ritmo de salidas del histórico de movimientos para proponer qué materias primas conviene reponer y en qué orden. La persona revisa la lista y decide; los kilos salen de los lotes reales."
+      },
+      {
+        "title": "Coste real por producto",
+        "desc": "Combina las recetas (kg de entrada por kg de salida) con el precio de compra de los lotes para estimar el coste de fabricar cada producto saliente y compararlo con su precio de venta, señalando márgenes ajustados. La persona confirma; todas las cifras proceden de los precios ya registrados en el CRM."
+      }
+    ]
+  },
+  {
+    "key": "equipo",
+    "name": "Equipo",
+    "claim": "Una ficha por cada persona del equipo —empleados en plantilla, externos o subcontratados— con su rol, su coste por hora y su tarifa facturable. Es la base sobre la que Facturación atribuye ingresos y gastos a quien los genera y se calcula la rentabilidad de cada miembro. Los datos económicos sensibles quedan reservados al administrador.",
+    "headline": "El equipo como base de tu facturación",
+    "bullets": [
+      {
+        "bold": "Coste y tarifa por hora",
+        "rest": "Cada ficha guarda el coste interno por hora y el precio facturable al cliente, de modo que sabes qué margen deja el trabajo de cada persona."
+      },
+      {
+        "bold": "Datos sensibles blindados",
+        "rest": "El coste por hora y el salario mensual solo los ve el administrador, y el filtrado se aplica en el servidor antes de enviar los datos, no ocultándolos en pantalla."
+      },
+      {
+        "bold": "Atada a Facturación",
+        "rest": "Cada factura y cada coste se atribuyen al miembro que los genera, y su ficha muestra el resumen de lo facturado por trimestre sin salir del módulo."
+      },
+      {
+        "bold": "Sin borrados",
+        "rest": "Dar de baja a alguien cambia su estado a inactivo pero conserva su histórico completo para atribuciones, facturación pasada y auditoría."
+      },
+      {
+        "bold": "Rastro de cambios",
+        "rest": "Cada modificación de rol, coste, tarifa, salario o estado queda registrada con quién la hizo, cuándo y cuál era el valor anterior."
+      },
+      {
+        "bold": "Personas y accesos",
+        "rest": "El miembro puede vincularse a un usuario con acceso al CRM o existir sin él, lo que permite fichar a externos y subcontratados que no entran al sistema."
+      }
+    ],
+    "card": [
+      {
+        "type": "flow",
+        "label": "Estado del miembro",
+        "pills": [
+          "Activo",
+          "De baja",
+          "Inactivo"
+        ]
+      },
+      {
+        "type": "text",
+        "label": "Enlazado con Facturación",
+        "text": "Cada **factura** y cada **coste** se atribuyen a un miembro, y su ficha resume lo facturado en el periodo elegido."
+      },
+      {
+        "type": "text",
+        "label": "Visibilidad por rol",
+        "text": "El **coste por hora** y el **salario mensual** solo son visibles para el administrador; el resto del equipo ve la tarifa y los datos de contacto."
+      }
+    ],
+    "ai": [
+      {
+        "title": "Aviso de margen ajustado",
+        "desc": "Compara el coste por hora y la tarifa facturable de cada miembro con lo que realmente se le ha atribuido en facturas y costes, y propone al administrador revisar a quienes dejan menos margen. Trabaja siempre con las cifras reales del CRM; nunca las inventa."
+      },
+      {
+        "title": "Fichas incompletas para facturar",
+        "desc": "Revisa los miembros que ya aparecen atribuidos en facturas o costes pero tienen tarifa, coste o email sin rellenar, y ofrece una lista priorizada para completarlos. La persona decide qué corregir; la IA solo señala los huecos."
+      }
+    ]
+  },
+  {
+    "key": "formacion",
+    "name": "Formación",
+    "claim": "El módulo de Formación reúne en un solo panel el catálogo de cursos, las matrículas, los alumnos y los resultados de los cuestionarios de tu academia. Funciona como espejo analítico de tu campus en WordPress y TutorLMS: cada curso publicado, cada inscripción y cada intento de examen entra al CRM sin que tengas que duplicar el trabajo de tu plataforma. Está pensado para academias y centros de formación que venden cursos a particulares y a empresas y necesitan ver el rendimiento real sin pelearse con hojas de cálculo sueltas.",
+    "headline": "Tu campus formativo, medido y centralizado",
+    "bullets": [
+      {
+        "bold": "Catálogo de cursos",
+        "rest": "Cada curso publicado en tu campus se refleja en el CRM con su estado activo o inactivo, y una sincronización en bloque desactiva los que ya no aparecen en la web."
+      },
+      {
+        "bold": "Alumnos B2C y de empresa",
+        "rest": "Separa a los alumnos particulares de los empleados de empresas cliente, con sus datos personales (email, NIF, fecha de nacimiento) y carga masiva desde Excel."
+      },
+      {
+        "bold": "Matrículas reales",
+        "rest": "Registra en qué cursos está inscrito cada alumno, alimentado de forma automática desde las inscripciones del campus y las compras de WooCommerce."
+      },
+      {
+        "bold": "Resultados de cuestionarios",
+        "rest": "Guarda cada intento con su nota, su aprobado o suspenso y el detalle pregunta a pregunta tal como lo devuelve TutorLMS."
+      },
+      {
+        "bold": "Panel de estadísticas",
+        "rest": "Tasa de aprobados, nota media y ranking de los cuestionarios con más intentos y con menor acierto, más el porcentaje de acierto de cada pregunta."
+      },
+      {
+        "bold": "Empresas cliente",
+        "rest": "Controla qué cursos tiene contratados cada empresa y activa a sus empleados con un flujo de pre-aprobación que crea las matrículas en su primer acceso."
+      }
+    ],
+    "card": [
+      {
+        "type": "flow",
+        "label": "Alta de un empleado de empresa",
+        "pills": [
+          "Importado",
+          "Pre-aprobado",
+          "Registro en campus",
+          "Activado",
+          "Matriculado"
+        ]
+      },
+      {
+        "type": "text",
+        "label": "Espejo del campus",
+        "text": "El CRM no genera el contenido formativo: **refleja en tiempo real** tu WordPress y TutorLMS mediante webhooks firmados, sin duplicar el trabajo de la plataforma."
+      },
+      {
+        "type": "text",
+        "label": "Historial que no se pierde",
+        "text": "Archivar un alumno **retira su acceso** pero conserva sus matrículas y cuestionarios, y siempre se puede restaurar."
+      }
+    ],
+    "ai": [
+      {
+        "title": "Preguntas que más fallan",
+        "desc": "Analiza el detalle pregunta a pregunta guardado en cada intento y el porcentaje de acierto que ya calcula el panel, y propone qué cuestionarios o preguntas conviene revisar empezando por los de menor acierto. El formador confirma antes de actuar y los porcentajes salen siempre de los intentos reales, nunca de estimaciones."
+      },
+      {
+        "title": "Alumnos a seguir de cerca",
+        "desc": "Cruza las matrículas de cada alumno con sus intentos suspensos para señalar quién acumula suspensos o no ha hecho ningún intento en un curso en el que está matriculado, y propone una lista de seguimiento. La persona decide a quién contactar y todas las cifras proceden de los datos reales del CRM."
+      }
+    ]
+  },
+  {
+    "key": "nutricion",
+    "name": "Nutrición",
+    "claim": "El Recetario reúne en el CRM todo el trabajo de pauta nutricional: un catálogo de alimentos con sus macros, plantillas de plan reutilizables y su asignación a cada paciente. Construyes la pauta por comidas y opciones, ajustas las cantidades y el sistema calcula proteínas, hidratos, grasas y fibra por ti. Cada paciente conserva su propia copia del plan y su histórico, sin depender de hojas de cálculo sueltas ni de plantillas repartidas por el ordenador.",
+    "headline": "Del alimento al plan del paciente",
+    "bullets": [
+      {
+        "bold": "Catálogo propio",
+        "rest": "Das de alta alimentos con proteínas, hidratos, grasas y fibra por 100 g, o los importas desde OpenFoodFacts por código de barras sin teclear las macros a mano."
+      },
+      {
+        "bold": "Medidas caseras",
+        "rest": "Cada alimento guarda equivalencias como cucharada, puñado, vaso o unidad, para pautar en cantidades reales y no solo en gramos."
+      },
+      {
+        "bold": "Plantillas reutilizables",
+        "rest": "Montas un plan base con sus comidas y lo duplicas o asignas a quien haga falta, en lugar de empezar de cero con cada paciente."
+      },
+      {
+        "bold": "Opciones intercambiables",
+        "rest": "Cada comida admite varias opciones equivalentes, con una marcada por defecto, para que el paciente pueda elegir sin salirse de la pauta."
+      },
+      {
+        "bold": "Macros al vuelo",
+        "rest": "Al cambiar una cantidad se recalculan al momento los macros de esa opción, de la comida y del plan completo, con tres formas de indicar la cantidad: gramos, medida casera o texto libre."
+      },
+      {
+        "bold": "Plan del paciente",
+        "rest": "En su ficha ves el plan activo y el histórico de versiones anteriores, con la acción de re-aplicar la plantilla de origen cuando la has revisado."
+      }
+    ],
+    "card": [
+      {
+        "type": "flow",
+        "label": "De plantilla a plato del paciente",
+        "pills": [
+          "Plantilla",
+          "Asignar",
+          "Copia propia",
+          "Ajustar",
+          "Histórico"
+        ]
+      },
+      {
+        "type": "text",
+        "label": "Copia independiente",
+        "text": "Al asignar una plantilla, el paciente recibe una **copia propia**: retocar su plan no altera la plantilla, y editar la plantilla no pisa lo ya entregado. Propagas los cambios cuando quieres con **re-aplicar plantilla origen**."
+      },
+      {
+        "type": "text",
+        "label": "Catálogo conectado",
+        "text": "Creas alimentos a mano o los importas desde **OpenFoodFacts** por código de barras, con sus macros y medidas caseras listas para usar en cualquier plan."
+      }
+    ],
+    "ai": [
+      {
+        "title": "Aviso de descuadre entre opciones",
+        "desc": "Compara los macros ya calculados de las opciones intercambiables de una misma comida y avisa cuando una se desvía mucho de las demás, proponiendo el ajuste de cantidad; los números salen del cálculo del propio plan y la nutricionista confirma antes de aplicarlo."
+      },
+      {
+        "title": "Sugerir sustitutos del catálogo",
+        "desc": "Para un alimento de una opción, propone alimentos del catálogo con macros por 100 g parecidos para armar opciones equivalentes sin buscar a mano; solo sugiere entre alimentos que ya existen y es la nutricionista quien elige y confirma cuál añadir."
+      }
+    ]
+  },
+  {
+    "key": "clinica",
+    "name": "Clínica",
+    "claim": "El módulo Clínica reúne en un solo sitio el trabajo diario de un centro de psicopedagogía: el registro de cada sesión con el paciente, las actas de coordinación con familias y colegios, y los informes clínicos que hay que entregar dentro de plazo. Está pensado para que el equipo de terapeutas deje constancia de lo que hace sin cuadernos ni hojas sueltas, y para que dirección vea de un vistazo qué está al día y qué se atrasa. Sesiones, coordinaciones, informes y desempeño del equipo dejan de estar dispersos y pasan a colgar de la ficha de cada paciente.",
+    "headline": "El trabajo clínico del centro, ordenado",
+    "bullets": [
+      {
+        "bold": "Sesiones estructuradas",
+        "rest": "Cada sesión guarda los objetivos trabajados, las actividades, el desempeño del paciente y las observaciones (comentarios de la familia, tareas para casa e incidencias) en un mismo registro."
+      },
+      {
+        "bold": "Coordinaciones",
+        "rest": "Actas de reuniones con familia, colegio, psiquiatra, neuropediatra u orientador, con sus participantes, temas tratados, acuerdos alcanzados y próximas actuaciones asignadas."
+      },
+      {
+        "bold": "Informes clínicos",
+        "rest": "Informes de admisión, evolutivos y de alta, cada uno con su fecha límite de entrega y su estado, para que ningún informe se quede atascado en borrador."
+      },
+      {
+        "bold": "Mi desempeño",
+        "rest": "Cada terapeuta consulta su puntuación mensual por áreas y complementos (ocupación clínica, antigüedad y asistencia) junto al histórico de los últimos meses."
+      },
+      {
+        "bold": "Panel de dirección",
+        "rest": "Ranking del equipo, alertas, evolución mensual y propuesta de incentivos por terapeuta, con una aprobación explícita antes de fijar cualquier cifra."
+      },
+      {
+        "bold": "Todo por paciente",
+        "rest": "Sesiones, coordinaciones e informes cuelgan de la ficha del paciente, no de anotaciones sueltas que se pierden entre profesionales."
+      }
+    ],
+    "card": [
+      {
+        "type": "flow",
+        "label": "Ciclo de un informe",
+        "pills": [
+          "Borrador",
+          "Revisado",
+          "Entregado"
+        ]
+      },
+      {
+        "type": "text",
+        "label": "Coordinaciones",
+        "text": "Cada reunión con **familia, colegio o profesionales externos** queda como acta con acuerdos y próximas actuaciones, vinculada al paciente al que afecta."
+      },
+      {
+        "type": "text",
+        "label": "Desempeño e incentivos",
+        "text": "La puntuación mensual por áreas y complementos alimenta una propuesta de incentivo que **dirección revisa y aprueba** antes de darla por buena."
+      }
+    ],
+    "ai": [
+      {
+        "title": "Borrador de informe evolutivo",
+        "desc": "A partir de las sesiones registradas de un paciente (objetivos, actividades, desempeño y observaciones), la IA propone un borrador de informe estructurado en sus secciones (motivo, evolución, logros, dificultades y recomendaciones). El terapeuta lo revisa y confirma antes de pasarlo a entregado."
+      },
+      {
+        "title": "Propuesta de incentivo mensual",
+        "desc": "La IA propone el incentivo de cada terapeuta a partir de las puntuaciones reales por área y de los complementos (ocupación, antigüedad y asistencia) ya guardados en desempeño; nunca inventa importes. Dirección revisa la propuesta y fija el incentivo aprobado."
+      }
+    ]
+  },
+  {
+    "key": "pacientes",
+    "name": "Pacientes",
+    "claim": "El submódulo Pacientes reúne en una sola ficha toda la información clínica de cada caso: centro escolar, motivo de derivación, terapeuta principal, frecuencia de asistencia y estado del tratamiento. Esa ficha es la base sobre la que se apoyan las sesiones, los informes y las coordinaciones de la clínica.",
+    "headline": "La ficha clínica que ordena cada caso",
+    "bullets": [
+      {
+        "bold": "Ficha clínica",
+        "rest": "Recoge centro escolar, curso académico, motivo de derivación y quién derivó al paciente en un formulario único."
+      },
+      {
+        "bold": "Terapeuta principal",
+        "rest": "Cada paciente queda vinculado a su terapeuta del equipo y a su frecuencia de asistencia, semanal o quincenal."
+      },
+      {
+        "bold": "Estado del tratamiento",
+        "rest": "Marca a cada paciente como activo, en pausa o dado de alta, con la fecha y el motivo del alta cuando corresponde."
+      },
+      {
+        "bold": "Timeline por paciente",
+        "rest": "Reúne sus sesiones, informes y coordinaciones en pestañas dentro de la misma ficha."
+      },
+      {
+        "bold": "Sesiones desde audio",
+        "rest": "Subes el audio grabado con el móvil y se transcribe y estructura en apartados que revisas antes de guardar."
+      },
+      {
+        "bold": "Coordinaciones",
+        "rest": "Deja constancia de las actas con la familia, el colegio y profesionales externos asociadas a cada paciente."
+      }
+    ],
+    "card": [
+      {
+        "type": "flow",
+        "label": "De la grabación a la sesión",
+        "pills": [
+          "Grabas",
+          "Subes audio",
+          "Transcripción",
+          "Apartados",
+          "Revisas y guardas"
+        ]
+      },
+      {
+        "type": "text",
+        "label": "El estado a la vista",
+        "text": "Cada caso está **activo**, en pausa o dado de alta, con su fecha y motivo, para saber a quién se está atendiendo."
+      }
+    ],
+    "ai": [
+      {
+        "title": "Estructurar la sesión grabada",
+        "desc": "Sobre el audio subido de una sesión, transcribe y ordena el contenido en apartados —objetivos, actividades y observaciones— que el terapeuta revisa y confirma antes de guardar en la ficha."
+      },
+      {
+        "title": "Avisar de seguimientos pendientes",
+        "desc": "Cruza el estado 'activo' y la frecuencia de asistencia con la fecha de la última sesión para proponer pacientes que llevan tiempo sin cita; el equipo decide a quién retomar."
+      }
+    ]
+  }
+]

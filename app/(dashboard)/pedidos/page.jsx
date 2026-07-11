@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Select from "@/components/ui/Select.jsx";
 
 const STATUSES = [
   { key: "draft", label: "Borrador" },
@@ -240,20 +241,18 @@ function NuevoPedido({ clients, onCreate, creating }) {
             <label className="block text-[11px] font-medium text-neutral-500 mb-1.5">
               Cliente
             </label>
-            <select
+            <Select
               value={selected}
-              onChange={(e) => setSelected(e.target.value)}
+              onChange={(v) => setSelected(v)}
+              options={[
+                { value: "", label: "— Selecciona un cliente —" },
+                ...clients.map((c) => ({
+                  value: c.id,
+                  label: `${c.name}${c.customFields?.company ? ` (${c.customFields.company})` : ""}`,
+                })),
+              ]}
               className="w-full border border-neutral-200 rounded-md px-2 py-1.5 text-sm mb-2 focus:outline-none focus:border-[var(--color-primary)]"
-              autoFocus
-            >
-              <option value="">— Selecciona un cliente —</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.customFields?.company ? ` (${c.customFields.company})` : ""}
-                </option>
-              ))}
-            </select>
+            />
             <button
               onClick={() => selected && onCreate(selected)}
               disabled={!selected || creating}

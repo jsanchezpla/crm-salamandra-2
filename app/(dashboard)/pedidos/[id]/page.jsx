@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import Select from "@/components/ui/Select.jsx";
 
 const STATUSES = [
   { key: "draft", label: "Borrador" },
@@ -268,16 +269,13 @@ export default function PedidoDetallePage() {
         <div className="bg-white border border-neutral-200 rounded-xl p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-[11px] font-medium text-neutral-500 mb-1">Estado</label>
-            <select
+            <Select
               value={status}
-              onChange={(e) => setStatus(e.target.value)}
+              onChange={(v) => setStatus(v)}
+              options={STATUSES.map((s) => ({ value: s.key, label: s.label }))}
               disabled={readOnly}
               className={inputCls}
-            >
-              {STATUSES.map((s) => (
-                <option key={s.key} value={s.key}>{s.label}</option>
-              ))}
-            </select>
+            />
           </div>
           <div>
             <label className="block text-[11px] font-medium text-neutral-500 mb-1">Fecha programada</label>
@@ -334,17 +332,16 @@ export default function PedidoDetallePage() {
                   return (
                     <tr key={l.id || idx} className="border-b border-neutral-100 last:border-0 align-middle">
                       <td className="px-4 py-2">
-                        <select
+                        <Select
                           value={l.outboundProductId || ""}
-                          onChange={(e) => pickProduct(idx, e.target.value)}
+                          onChange={(v) => pickProduct(idx, v)}
+                          options={[
+                            { value: "", label: "— Texto libre (sin catálogo) —" },
+                            ...products.map((p) => ({ value: p.id, label: p.name })),
+                          ]}
                           disabled={readOnly}
                           className={`${inputCls} mb-1`}
-                        >
-                          <option value="">— Texto libre (sin catálogo) —</option>
-                          {products.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                        </select>
+                        />
                         <input
                           type="text"
                           value={l.productName || ""}

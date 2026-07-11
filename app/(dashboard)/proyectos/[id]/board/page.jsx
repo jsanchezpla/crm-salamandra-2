@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import KanbanBoard from "../../../../../components/projects/KanbanBoard.jsx";
+import Select from "@/components/ui/Select.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition";
@@ -96,26 +97,24 @@ export default function ProyectoBoardPage() {
           value={filters.search}
           onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
         />
-        <select
+        <Select
           className={inputCls + " w-44"}
           value={filters.assigneeId}
-          onChange={(e) => setFilters((f) => ({ ...f, assigneeId: e.target.value }))}
-        >
-          <option value="">Todos los asignados</option>
-          {teamMembers.map((tm) => (
-            <option key={tm.id} value={tm.id}>{tm.displayName}</option>
-          ))}
-        </select>
-        <select
+          onChange={(v) => setFilters((f) => ({ ...f, assigneeId: v }))}
+          options={[
+            { value: "", label: "Todos los asignados" },
+            ...teamMembers.map((tm) => ({ value: tm.id, label: tm.displayName })),
+          ]}
+        />
+        <Select
           className={inputCls + " w-40"}
           value={filters.tag}
-          onChange={(e) => setFilters((f) => ({ ...f, tag: e.target.value }))}
-        >
-          <option value="">Todas las etiquetas</option>
-          {allTags.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
+          onChange={(v) => setFilters((f) => ({ ...f, tag: v }))}
+          options={[
+            { value: "", label: "Todas las etiquetas" },
+            ...allTags.map((t) => ({ value: t, label: t })),
+          ]}
+        />
         {(filters.search || filters.assigneeId || filters.tag) && (
           <button
             onClick={() => setFilters({ search: "", assigneeId: "", tag: "" })}

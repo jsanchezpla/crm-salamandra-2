@@ -18,6 +18,7 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import listPlugin from "@fullcalendar/list";
 import interactionPlugin from "@fullcalendar/interaction";
+import Select from "@/components/ui/Select.jsx";
 
 const STATUS_LABELS = {
   pending: "Pendiente",
@@ -620,19 +621,16 @@ function NewBookingModal({ onClose, onCreated }) {
             <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
               Tipo de cita *
             </label>
-            <select
+            <Select
               value={form.eventTypeId}
-              onChange={(e) => update("eventTypeId", e.target.value)}
+              onChange={(v) => update("eventTypeId", v)}
               disabled={loadingTypes}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] disabled:opacity-50"
-            >
-              <option value="">{loadingTypes ? "Cargando…" : "Selecciona un tipo"}</option>
-              {eventTypes.map((et) => (
-                <option key={et.id} value={et.id}>
-                  {et.name} · {et.duration} min
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: loadingTypes ? "Cargando…" : "Selecciona un tipo" },
+                ...eventTypes.map((et) => ({ value: et.id, label: `${et.name} · ${et.duration} min` })),
+              ]}
+            />
           </div>
 
           {/* Fecha + hora */}
@@ -666,17 +664,16 @@ function NewBookingModal({ onClose, onCreated }) {
             <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
               Modalidad *
             </label>
-            <select
+            <Select
               value={form.modality}
-              onChange={(e) => update("modality", e.target.value)}
+              onChange={(v) => update("modality", v)}
               disabled={!selectedType}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] disabled:opacity-50"
-            >
-              <option value="">{selectedType ? "Selecciona" : "Elige primero el tipo de cita"}</option>
-              {availableModalities.map((m) => (
-                <option key={m} value={m}>{MODALITY_LABELS[m] ?? m}</option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: selectedType ? "Selecciona" : "Elige primero el tipo de cita" },
+                ...availableModalities.map((m) => ({ value: m, label: MODALITY_LABELS[m] ?? m })),
+              ]}
+            />
           </div>
 
           {/* Cliente */}

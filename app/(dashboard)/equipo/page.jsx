@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import EmployeeBillingSection from "../../../components/billing/EmployeeBillingSection.jsx";
+import Select from "@/components/ui/Select.jsx";
 
 const STATUS_LABELS = { active: "Activo", inactive: "Inactivo", on_leave: "De baja" };
 const STATUS_FILTER_OPTIONS = [
@@ -231,23 +232,18 @@ export default function EquipoPage() {
           placeholder="Buscar por nombre o email..."
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
         />
-        <select
+        <Select
           value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
+          onChange={(v) => setFilterStatus(v)}
+          options={STATUS_FILTER_OPTIONS}
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition"
-        >
-          {STATUS_FILTER_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-        <select
+        />
+        <Select
           value={filterRole}
-          onChange={(e) => setFilterRole(e.target.value)}
+          onChange={(v) => setFilterRole(v)}
+          options={[{ value: "", label: "Todos los roles" }, ...availableRoles.map((r) => ({ value: r, label: r }))]}
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition"
-        >
-          <option value="">Todos los roles</option>
-          {availableRoles.map((r) => (<option key={r} value={r}>{r}</option>))}
-        </select>
+        />
         {(search || filterRole || filterStatus !== "default") && (
           <button
             onClick={() => { setSearchInput(""); setFilterRole(""); setFilterStatus("default"); }}
@@ -456,16 +452,17 @@ export default function EquipoPage() {
                     </FormRow>
                   )}
                   <FormRow label="Estado">
-                    <select value={form.status}
-                      onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-                      className={inputCls}>
-                      <option value="active">Activo</option>
-                      <option value="inactive">Inactivo</option>
-                      {/* on_leave solo se muestra si ya viene de BD con ese estado */}
-                      {(form.status === "on_leave" || (openMember && openMember.status === "on_leave")) && (
-                        <option value="on_leave">De baja</option>
-                      )}
-                    </select>
+                    <Select value={form.status}
+                      onChange={(v) => setForm((f) => ({ ...f, status: v }))}
+                      options={[
+                        { value: "active", label: "Activo" },
+                        { value: "inactive", label: "Inactivo" },
+                        // on_leave solo se muestra si ya viene de BD con ese estado
+                        ...(form.status === "on_leave" || (openMember && openMember.status === "on_leave")
+                          ? [{ value: "on_leave", label: "De baja" }]
+                          : []),
+                      ]}
+                      className={inputCls} />
                   </FormRow>
                   <FormRow label="Notas">
                     <textarea rows={3} value={form.notes}

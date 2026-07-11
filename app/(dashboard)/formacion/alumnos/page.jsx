@@ -5,6 +5,7 @@ import Link from "next/link";
 import { TrainingTable, Tr, Td } from "../../../../components/training/TrainingTable.jsx";
 import { TypeBadge } from "../../../../components/training/TrainingBadge.jsx";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
+import Select from "@/components/ui/Select.jsx";
 
 const LIMIT = 50;
 
@@ -109,26 +110,18 @@ export default function AlumnosPage() {
           + empresa «Acme» = empleados de Acme apuntados a ese curso. El buscador acepta nombre,
           apellido o email del alumno.
         </HelpTooltip>
-        <select
+        <Select
           value={courseId}
-          onChange={handleFilterChange(setCourseId)}
+          onChange={(v) => { setCourseId(v); setPage(1); }}
+          options={[{ value: "", label: "Todos los cursos" }, ...courses.map((c) => ({ value: c.id, label: c.name }))]}
           className="rounded-lg px-3 py-2 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition"
-        >
-          <option value="">Todos los cursos</option>
-          {courses.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-        <select
+        />
+        <Select
           value={companyId}
-          onChange={handleFilterChange(setCompanyId)}
+          onChange={(v) => { setCompanyId(v); setPage(1); }}
+          options={[{ value: "", label: "Todas las empresas" }, ...companies.map((c) => ({ value: c.id, label: c.name }))]}
           className="rounded-lg px-3 py-2 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition"
-        >
-          <option value="">Todas las empresas</option>
-          {companies.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
+        />
         <input
           type="text"
           placeholder="Buscar nombre, email…"

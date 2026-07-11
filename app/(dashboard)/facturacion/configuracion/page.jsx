@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Select from "@/components/ui/Select.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -144,9 +145,7 @@ export default function ConfiguracionPage() {
         )}
         <div className="mt-3">
           <Field label="IVA por defecto">
-            <select disabled={!isAdmin} value={settings.defaultVatRate} onChange={(e) => setField("defaultVatRate", Number(e.target.value))} className={inputCls + " sm:w-48"}>
-              {(settings.availableVatRates ?? []).map((v) => (<option key={v} value={v}>{v}%</option>))}
-            </select>
+            <Select disabled={!isAdmin} value={settings.defaultVatRate} onChange={(v) => setField("defaultVatRate", Number(v))} options={(settings.availableVatRates ?? []).map((v) => ({ value: v, label: `${v}%` }))} className={inputCls + " sm:w-48"} />
           </Field>
         </div>
       </Section>

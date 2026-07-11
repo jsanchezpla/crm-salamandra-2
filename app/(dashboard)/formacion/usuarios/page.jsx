@@ -5,6 +5,7 @@ import Link from "next/link";
 import { TrainingTable, Tr, Td } from "../../../../components/training/TrainingTable.jsx";
 import { TypeBadge, ActiveBadge } from "../../../../components/training/TrainingBadge.jsx";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
+import Select from "@/components/ui/Select.jsx";
 import ArchiveUserDialog from "../../../../components/training/ArchiveUserDialog.jsx";
 import HardDeleteUserDialog from "../../../../components/training/HardDeleteUserDialog.jsx";
 
@@ -126,25 +127,25 @@ export default function UsuariosPage() {
           Combínalos para acotar la lista. Por ejemplo: tipo «Empresa» + una empresa concreta = solo
           los empleados de esa empresa. El buscador acepta nombre, apellido o email.
         </HelpTooltip>
-        <select
+        <Select
           value={type}
-          onChange={handleFilterChange(setType)}
+          onChange={(v) => { setType(v); setPage(1); }}
+          options={[
+            { value: "", label: "Todos los tipos" },
+            { value: "private", label: "Privado" },
+            { value: "company", label: "Empresa" },
+          ]}
           className="rounded-lg px-3 py-2 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition"
-        >
-          <option value="">Todos los tipos</option>
-          <option value="private">Privado</option>
-          <option value="company">Empresa</option>
-        </select>
-        <select
+        />
+        <Select
           value={companyId}
-          onChange={handleFilterChange(setCompanyId)}
+          onChange={(v) => { setCompanyId(v); setPage(1); }}
+          options={[
+            { value: "", label: "Todas las empresas" },
+            ...companies.map((c) => ({ value: c.id, label: c.name })),
+          ]}
           className="rounded-lg px-3 py-2 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition"
-        >
-          <option value="">Todas las empresas</option>
-          {companies.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
+        />
         <input
           type="text"
           placeholder="Buscar nombre, email…"

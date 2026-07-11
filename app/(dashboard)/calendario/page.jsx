@@ -6,6 +6,7 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import listPlugin from "@fullcalendar/list";
 import interactionPlugin from "@fullcalendar/interaction";
+import Select from "@/components/ui/Select.jsx";
 
 const PRIORITY_COLORS = { high: "#ef4444", medium: "#f97316", low: "#22c55e" };
 const PRIORITY_LABELS = { high: "Alta", medium: "Media", low: "Baja" };
@@ -448,15 +449,12 @@ export default function CalendarioPage() {
               {/* Estado */}
               <div>
                 <label className="block text-xs font-medium text-[#374151] mb-1">Estado</label>
-                <select
+                <Select
                   value={modal.form.status}
-                  onChange={(e) => updateForm("status", e.target.value)}
+                  onChange={(v) => updateForm("status", v)}
+                  options={STATUS_OPTIONS}
                   className="w-full text-sm px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F0F0F]/10 focus:border-[#0F0F0F] bg-white transition-colors"
-                >
-                  {STATUS_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                />
               </div>
 
               {/* Notas */}

@@ -9,11 +9,13 @@ import AbarcaIALeadsModule from "../../../modules/overrides/abarcaia/LeadsModule
 import DemoLeadsModule from "../../../modules/overrides/demo/LeadsModule.jsx";
 import SpainEnzymesLeadsModule from "../../../modules/overrides/spain-enzymes/LeadsModule.jsx";
 import NutriLauraLeadsModule from "../../../modules/overrides/nutri-laura/LeadsModule.jsx";
+import SandboxLeadsModule from "../../../modules/overrides/sandbox/LeadsModule.jsx";
 
 const UI_OVERRIDES = {
   quality_energy: QECLeadsModule,
   retorika: RetorikaLeadsModule,
   aumenta: AumentaLeadsModule,
+  sandbox: SandboxLeadsModule, // copia del override de aumenta recoloreada a #1B3A2D
   abarcaia: AbarcaIALeadsModule,
   demo: DemoLeadsModule,
   spain_enzymes: SpainEnzymesLeadsModule,

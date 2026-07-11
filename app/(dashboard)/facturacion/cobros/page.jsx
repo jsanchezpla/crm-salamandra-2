@@ -5,6 +5,7 @@ import Link from "next/link";
 import StatusBadge from "../_components/StatusBadge.jsx";
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
+import Select from "@/components/ui/Select.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -164,19 +165,23 @@ export default function CobrosPage() {
           placeholder="Buscar por nº factura, método, notas..."
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
         />
-        <select value={filterMethod} onChange={(e) => setFilterMethod(e.target.value)}
-          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400">
-          <option value="">Todos los métodos</option>
-          {Object.entries(METHOD_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-        </select>
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
-          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400">
-          <option value="">Todos los estados</option>
-          <option value="completed">Completado</option>
-          <option value="pending">Pendiente</option>
-          <option value="failed">Fallido</option>
-          <option value="refunded">Reembolsado</option>
-        </select>
+        <Select value={filterMethod} onChange={(v) => setFilterMethod(v)}
+          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
+          options={[
+            { value: "", label: "Todos los métodos" },
+            ...Object.entries(METHOD_LABELS).map(([k, v]) => ({ value: k, label: v })),
+          ]}
+        />
+        <Select value={filterStatus} onChange={(v) => setFilterStatus(v)}
+          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
+          options={[
+            { value: "", label: "Todos los estados" },
+            { value: "completed", label: "Completado" },
+            { value: "pending", label: "Pendiente" },
+            { value: "failed", label: "Fallido" },
+            { value: "refunded", label: "Reembolsado" },
+          ]}
+        />
         {(searchInput || filterMethod || filterStatus) && (
           <button onClick={() => { setSearchInput(""); setFilterMethod(""); setFilterStatus(""); }}
             className="text-xs text-neutral-400 hover:text-neutral-600 px-2 py-1.5 transition-colors">Limpiar</button>
@@ -239,26 +244,31 @@ export default function CobrosPage() {
 
             <form onSubmit={handleCreate} className="px-6 py-5 space-y-3">
               <FormRow label="Factura *">
-                <select required value={form.invoiceId} onChange={(e) => selectInvoice(e.target.value)} className={inputCls}>
-                  <option value="">Selecciona factura pendiente...</option>
-                  {unpaidInvoices.map((i) => {
-                    const remaining = Math.max(0, Number(i.total) - Number(i.paidAmount || 0));
-                    return (
-                      <option key={i.id} value={i.id}>
-                        {i.number} · {i.client?.name ?? "?"} · pendiente {fmtMoney(remaining)}
-                      </option>
-                    );
-                  })}
-                </select>
+                <Select
+                  value={form.invoiceId}
+                  onChange={(v) => selectInvoice(v)}
+                  className={inputCls}
+                  options={[
+                    { value: "", label: "Selecciona factura pendiente..." },
+                    ...unpaidInvoices.map((i) => {
+                      const remaining = Math.max(0, Number(i.total) - Number(i.paidAmount || 0));
+                      return {
+                        value: i.id,
+                        label: `${i.number} · ${i.client?.name ?? "?"} · pendiente ${fmtMoney(remaining)}`,
+                      };
+                    }),
+                  ]}
+                />
               </FormRow>
               <FormRow label="Importe (€) *">
                 <input required type="number" min="0.01" step="0.01" value={form.amount}
                   onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} className={inputCls} />
               </FormRow>
               <FormRow label="Método de pago">
-                <select value={form.method} onChange={(e) => setForm((f) => ({ ...f, method: e.target.value }))} className={inputCls}>
-                  {Object.entries(METHOD_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-                </select>
+                <Select value={form.method} onChange={(v) => setForm((f) => ({ ...f, method: v }))}
+                  className={inputCls}
+                  options={Object.entries(METHOD_LABELS).map(([k, v]) => ({ value: k, label: v }))}
+                />
               </FormRow>
               <FormRow label="Fecha *">
                 <input required type="date" value={form.paidAt} onChange={(e) => setForm((f) => ({ ...f, paidAt: e.target.value }))} className={inputCls} />

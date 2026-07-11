@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Select from "@/components/ui/Select.jsx";
 
 // ─── Aumenta brand ────────────────────────────────────────────────────────────
 
@@ -196,19 +197,15 @@ export default function AumentaLeadsModule() {
 
           {/* Filtros */}
           <div className="flex flex-col lg:flex-row gap-3 mb-4">
-            <select
+            <Select
               value={filtroMotivo}
-              onChange={(e) => setFiltroMotivo(e.target.value)}
-              className="lg:w-52 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 font-medium focus:outline-none text-sm shadow-sm transition-colors"
-              style={{ borderColor: filtroMotivo ? PRIMARY : undefined }}
-            >
-              <option value="">Todos los motivos</option>
-              {Object.entries(MOTIVO_LABEL).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setFiltroMotivo(v)}
+              options={[
+                { value: "", label: "Todos los motivos" },
+                ...Object.entries(MOTIVO_LABEL).map(([k, v]) => ({ value: k, label: v })),
+              ]}
+              className={`lg:w-52 px-4 py-2.5 rounded-xl border ${filtroMotivo ? "border-[#FF1F96]" : "border-gray-200"} bg-white text-gray-700 font-medium focus:outline-none text-sm shadow-sm transition-colors`}
+            />
 
             <button
               type="button"
