@@ -39,13 +39,39 @@ export const POST = withTenant(async (request, { params }, ctx) => {
   const lead = await OutreachLead.findByPk(id);
   if (!lead) throw new NotFoundError("Lead no encontrado");
 
+  // Subconjunto de líneas a analizar (opcional). La ficha del lead permite
+  // elegir qué líneas analizar para esa empresa. Distinguimos dos casos:
+  //   · sin `lineIds` en el cuerpo  → `null` → se analizan todas las activas.
+  //   · `lineIds` presente          → selección explícita: solo UUIDs válidos;
+  //     si queda vacía (array vacío o todo inválido) es un error del caller,
+  //     no un "analiza todo" — así no se dispara un re-análisis completo por
+  //     una selección mal formada (coste + sobrescribe todos los análisis).
+  let body = null;
+  try {
+    body = await request.json();
+  } catch {
+    body = null; // sin cuerpo o no-JSON
+  }
+  let lineIds = null;
+  if (body && Array.isArray(body.lineIds)) {
+    lineIds = body.lineIds.filter((v) => typeof v === "string" && UUID_RE.test(v));
+    if (lineIds.length === 0) {
+      throw new ValidationError("Selecciona al menos una línea de negocio válida para analizar.");
+    }
+  }
+
+  const where = { active: true };
+  if (lineIds) where.id = lineIds; // no-null ⇒ no-vacío (validado arriba)
+
   const businessLines = await OutreachBusinessLine.findAll({
-    where: { active: true },
+    where,
     order: [["sortOrder", "ASC"]],
   });
   if (businessLines.length === 0) {
     throw new ValidationError(
-      "No hay líneas de negocio activas. Defínelas en la configuración antes de analizar."
+      lineIds
+        ? "Ninguna de las líneas seleccionadas está activa."
+        : "No hay líneas de negocio activas. Defínelas en la configuración antes de analizar."
     );
   }
 

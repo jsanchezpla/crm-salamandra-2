@@ -6,77 +6,418 @@
       "Clínicas de fisioterapia / rehabilitación",
       "Clínicas estéticas y medicina estética",
       "Centros de psicología / terapia",
-      "Ópticas",
-      "Podología",
-      "Nutrición y dietética",
-      "Veterinarias",
+      "Clínicas de logopedia",
+      "Centros de podología",
+      "Ópticas y optometría",
+      "Clínicas de nutrición y dietética",
+      "Clínicas veterinarias",
       "Farmacias y parafarmacias",
-      "Gimnasios y centros deportivos",
-      "Centros de yoga / pilates"
+      "Herbolarios y dietética",
+      "Ortopedias",
+      "Audiología / centros auditivos",
+      "Clínicas de fertilidad",
+      "Clínicas del sueño",
+      "Centros de rehabilitación y adicciones",
+      "Balnearios y talasoterapia",
+      "Consultas médicas privadas",
+      "Laboratorios de análisis clínicos",
+      "Centros de día y residencias de mayores",
+      "Servicios de ayuda a domicilio"
     ]
   },
   {
-    "categoria": "Hostelería y ocio",
+    "categoria": "Belleza y cuidado personal",
+    "sectores": [
+      "Peluquerías",
+      "Barberías",
+      "Centros de estética",
+      "Salones de manicura y uñas",
+      "Centros de depilación láser",
+      "Spas y centros de bienestar",
+      "Centros de bronceado",
+      "Estudios de tatuaje y piercing",
+      "Micropigmentación y microblading",
+      "Centros de masaje",
+      "Perfumerías y cosmética"
+    ]
+  },
+  {
+    "categoria": "Hostelería y restauración",
     "sectores": [
       "Restaurantes",
       "Bares y cafeterías",
-      "Hoteles y alojamientos rurales",
-      "Catering y eventos",
-      "Salas de eventos / espacios",
-      "Discotecas / ocio nocturno"
+      "Cafeterías de especialidad",
+      "Pizzerías",
+      "Hamburgueserías",
+      "Restaurantes de comida asiática",
+      "Cocinas fantasma / dark kitchens",
+      "Servicios de catering",
+      "Food trucks",
+      "Pastelerías y obradores",
+      "Heladerías",
+      "Cervecerías y taprooms",
+      "Bares de tapas",
+      "Chiringuitos y terrazas"
+    ]
+  },
+  {
+    "categoria": "Turismo y ocio",
+    "sectores": [
+      "Hoteles",
+      "Hostales y pensiones",
+      "Casas rurales",
+      "Apartamentos turísticos",
+      "Campings y glampings",
+      "Agencias de viajes",
+      "Empresas de turismo activo / aventura",
+      "Guías turísticos y free tours",
+      "Escape rooms",
+      "Salas de eventos y espacios",
+      "Discotecas y ocio nocturno",
+      "Parques de ocio / atracciones",
+      "Bodegas y enoturismo"
+    ]
+  },
+  {
+    "categoria": "Deporte y fitness",
+    "sectores": [
+      "Gimnasios",
+      "Centros de crossfit / entrenamiento funcional",
+      "Estudios de yoga",
+      "Estudios de pilates",
+      "Centros de artes marciales",
+      "Escuelas de baile",
+      "Clubes deportivos",
+      "Entrenadores personales",
+      "Centros de padel",
+      "Escuelas de natación",
+      "Rocódromos y escalada",
+      "Tiendas de material deportivo"
     ]
   },
   {
     "categoria": "Servicios profesionales",
     "sectores": [
       "Despachos de abogados",
-      "Asesorías / gestorías",
-      "Consultoras",
-      "Arquitectura e ingeniería",
-      "Agencias inmobiliarias",
-      "Correduría de seguros"
+      "Asesorías y gestorías",
+      "Consultoras de negocio",
+      "Estudios de arquitectura",
+      "Ingenierías",
+      "Correduría de seguros",
+      "Notarías",
+      "Auditoras y firmas contables",
+      "Agencias de propiedad industrial / patentes",
+      "Consultoras de recursos humanos",
+      "Traducción e interpretación",
+      "Peritos y tasadores",
+      "Consultoras de subvenciones"
+    ]
+  },
+  {
+    "categoria": "Marketing, comunicación y creatividad",
+    "sectores": [
+      "Agencias de marketing digital",
+      "Agencias de publicidad",
+      "Estudios de diseño gráfico",
+      "Productoras audiovisuales",
+      "Estudios de fotografía",
+      "Agencias de comunicación y RRPP",
+      "Agencias SEO / SEM",
+      "Community managers y gestión de redes",
+      "Imprentas y artes gráficas",
+      "Rotulación y cartelería",
+      "Agencias de eventos"
+    ]
+  },
+  {
+    "categoria": "Tecnología y digital",
+    "sectores": [
+      "Desarrollo de software a medida",
+      "Startups tecnológicas",
+      "Agencias de desarrollo web",
+      "Desarrollo de apps móviles",
+      "Empresas SaaS",
+      "Consultoras IT",
+      "Ciberseguridad",
+      "Soporte y mantenimiento informático",
+      "Tiendas de informática y reparación",
+      "Comercio electrónico / e-commerce",
+      "Inteligencia artificial y datos",
+      "Domótica e integración"
     ]
   },
   {
     "categoria": "Comercio y retail",
     "sectores": [
-      "Tiendas de moda / complementos",
-      "Joyerías",
+      "Tiendas de moda y complementos",
+      "Zapaterías",
+      "Joyerías y relojerías",
+      "Ópticas (venta)",
       "Mueblerías y decoración",
-      "Tiendas especializadas (deporte, electrónica, etc.)",
-      "Concesionarios y venta de vehículos"
+      "Tiendas de electrónica",
+      "Tiendas de deporte",
+      "Librerías y papelerías",
+      "Jugueterías",
+      "Floristerías",
+      "Tiendas de regalos",
+      "Bazares y tiendas de variedades",
+      "Estancos",
+      "Tiendas de segunda mano"
     ]
   },
   {
-    "categoria": "Belleza y cuidado personal",
-    "sectores": ["Peluquerías", "Barberías", "Centros de estética / uñas", "Spas y balnearios"]
+    "categoria": "Alimentación",
+    "sectores": [
+      "Supermercados y ultramarinos",
+      "Fruterías y verdulerías",
+      "Carnicerías y charcuterías",
+      "Pescaderías",
+      "Panaderías",
+      "Bodegas y vinotecas",
+      "Tiendas gourmet y delicatessen",
+      "Herboristerías y productos ecológicos",
+      "Distribuidores de alimentación",
+      "Fabricantes de alimentación y bebidas"
+    ]
   },
   {
-    "categoria": "Industria y construcción",
+    "categoria": "Moda y textil",
     "sectores": [
-      "Constructoras y reformas",
+      "Diseñadores de moda",
+      "Talleres de confección",
+      "Fábricas textiles",
+      "Tiendas de moda nupcial",
+      "Mercería y tejidos",
+      "Marcas de ropa y accesorios",
+      "Arreglos y costura",
+      "Lavanderías y tintorerías"
+    ]
+  },
+  {
+    "categoria": "Construcción y reformas",
+    "sectores": [
+      "Constructoras",
+      "Empresas de reformas",
+      "Fontanería",
+      "Electricistas",
+      "Climatización y aire acondicionado",
+      "Carpintería de madera",
+      "Carpintería metálica y aluminio",
+      "Pintura y decoración",
+      "Albañilería",
+      "Cerrajería",
+      "Cristalería",
+      "Empresas de aislamiento y eficiencia",
+      "Piscinas y jardines",
+      "Materiales de construcción",
+      "Impermeabilización y cubiertas"
+    ]
+  },
+  {
+    "categoria": "Hogar y servicios domésticos",
+    "sectores": [
+      "Empresas de limpieza",
+      "Empresas de mudanzas",
+      "Control de plagas",
+      "Reparación de electrodomésticos",
+      "Tapicería y restauración de muebles",
+      "Instalación de alarmas y seguridad",
+      "Empresas de jardinería",
+      "Servicios de manitas / reparaciones",
+      "Vaciado de pisos"
+    ]
+  },
+  {
+    "categoria": "Automoción",
+    "sectores": [
       "Talleres mecánicos",
-      "Fontanería / electricidad / climatización",
-      "Carpintería y metalistería",
-      "Empresas de logística / transporte"
+      "Talleres de chapa y pintura",
+      "Concesionarios de vehículos",
+      "Compraventa de coches de ocasión",
+      "Neumáticos y ruedas",
+      "Estaciones ITV",
+      "Lavaderos de coches",
+      "Autoescuelas",
+      "Alquiler de vehículos",
+      "Recambios y accesorios",
+      "Talleres de motos",
+      "Rotulación y tuning"
+    ]
+  },
+  {
+    "categoria": "Industria y fabricación",
+    "sectores": [
+      "Fábricas y plantas de producción",
+      "Metalurgia y calderería",
+      "Plásticos e inyección",
+      "Fabricación de maquinaria",
+      "Mecanizados y CNC",
+      "Fabricación de mobiliario",
+      "Industria química",
+      "Packaging y envases",
+      "Fabricación de componentes electrónicos",
+      "Talleres de soldadura",
+      "Mantenimiento industrial"
+    ]
+  },
+  {
+    "categoria": "Logística y transporte",
+    "sectores": [
+      "Empresas de transporte de mercancías",
+      "Mensajería y paquetería",
+      "Almacenaje y distribución",
+      "Operadores logísticos",
+      "Transporte de pasajeros / autocares",
+      "Servicios de taxi y VTC",
+      "Empresas de última milla",
+      "Trasteros y guardamuebles"
+    ]
+  },
+  {
+    "categoria": "Inmobiliario",
+    "sectores": [
+      "Agencias inmobiliarias",
+      "Promotoras inmobiliarias",
+      "Administradores de fincas",
+      "Gestión de alquileres vacacionales",
+      "Tasación inmobiliaria",
+      "Home staging",
+      "Coworkings y oficinas flexibles"
+    ]
+  },
+  {
+    "categoria": "Finanzas y seguros",
+    "sectores": [
+      "Correduría de seguros",
+      "Asesores financieros",
+      "Agencias de valores",
+      "Gestión patrimonial",
+      "Financieras y créditos",
+      "Fintech",
+      "Casas de cambio",
+      "Empresas de recobro"
     ]
   },
   {
     "categoria": "Educación y formación",
     "sectores": [
-      "Academias y centros de formación",
+      "Academias de refuerzo",
+      "Centros de formación profesional",
+      "Escuelas de idiomas",
       "Autoescuelas",
-      "Escuelas infantiles / guarderías",
-      "Centros de idiomas"
+      "Escuelas infantiles y guarderías",
+      "Colegios y centros privados",
+      "Formación online / e-learning",
+      "Escuelas de música",
+      "Escuelas de arte y diseño",
+      "Centros de formación para empresas",
+      "Ludotecas y actividades extraescolares",
+      "Coaching y desarrollo personal"
+    ]
+  },
+  {
+    "categoria": "Arte, cultura y entretenimiento",
+    "sectores": [
+      "Galerías de arte",
+      "Salas de conciertos y música en vivo",
+      "Teatros",
+      "Cines",
+      "Museos y espacios culturales",
+      "Estudios de grabación",
+      "Productoras musicales",
+      "Editoriales",
+      "Estudios de animación y videojuegos",
+      "Artistas y artesanos"
+    ]
+  },
+  {
+    "categoria": "Eventos y celebraciones",
+    "sectores": [
+      "Organización de bodas / wedding planners",
+      "Empresas de catering para eventos",
+      "Alquiler de mobiliario y carpas",
+      "Decoración de eventos",
+      "Fotografía y vídeo de eventos",
+      "Animación infantil",
+      "DJs y grupos musicales",
+      "Fincas y espacios para eventos"
+    ]
+  },
+  {
+    "categoria": "Mascotas y animales",
+    "sectores": [
+      "Clínicas veterinarias",
+      "Peluquerías caninas",
+      "Tiendas de mascotas",
+      "Residencias y guarderías caninas",
+      "Adiestramiento canino",
+      "Paseadores de perros",
+      "Criadores"
+    ]
+  },
+  {
+    "categoria": "Agricultura, ganadería y medio ambiente",
+    "sectores": [
+      "Explotaciones agrícolas",
+      "Explotaciones ganaderas",
+      "Bodegas y viñedos",
+      "Almazaras y cooperativas",
+      "Viveros y centros de jardinería",
+      "Empresas de gestión de residuos",
+      "Energías renovables (instaladores)",
+      "Empresas de reciclaje",
+      "Servicios forestales",
+      "Distribución de productos agrícolas"
+    ]
+  },
+  {
+    "categoria": "Energía y suministros",
+    "sectores": [
+      "Comercializadoras de energía",
+      "Instaladores de placas solares",
+      "Instaladores de puntos de recarga",
+      "Empresas de gas",
+      "Servicios de eficiencia energética",
+      "Distribuidores de combustible",
+      "Gasolineras"
+    ]
+  },
+  {
+    "categoria": "Servicios a empresas",
+    "sectores": [
+      "Empresas de trabajo temporal (ETT)",
+      "Centros de negocio y coworking",
+      "Servicios de vigilancia y seguridad",
+      "Empresas de limpieza industrial",
+      "Call centers y atención al cliente",
+      "Consultoras de prevención de riesgos",
+      "Empresas de mantenimiento",
+      "Gestión documental y digitalización",
+      "Máquinas de vending",
+      "Uniformes y vestuario laboral"
+    ]
+  },
+  {
+    "categoria": "Sector público y tercer sector",
+    "sectores": [
+      "Ayuntamientos y administraciones",
+      "ONGs y asociaciones",
+      "Fundaciones",
+      "Cooperativas",
+      "Colegios profesionales",
+      "Sindicatos y patronales",
+      "Centros especiales de empleo"
     ]
   },
   {
     "categoria": "Otros",
     "sectores": [
-      "Startups / tecnología",
-      "ONGs y fundaciones",
-      "Empresas industriales / fabricantes",
-      "Agrícola / alimentación"
+      "Startups (genérico)",
+      "Franquicias",
+      "Empresas familiares",
+      "Autónomos y profesionales independientes",
+      "Comercios de barrio",
+      "Otros servicios"
     ]
   }
 ]

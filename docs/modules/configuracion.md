@@ -55,6 +55,38 @@ enmascarada (p.ej. `AIza…1234`), y permite reemplazar o eliminar la clave.
 > La sección "Datos del tenant" (nombre, colores, logo) existió y se retiró a
 > petición. El endpoint sigue soportando `name` y `brand` por si se reactiva.
 
+### 3. Descripción de empresa (alimenta Captación)
+
+Solo aparece si el tenant tiene el módulo **Outreach** (el GET de
+`/api/outreach/settings` responde 403 si no, y la sección se oculta —mismo patrón
+que Facturación). **Reutiliza los datos ya existentes de Outreach**, no crea un
+concepto nuevo:
+
+- **Descripción general de la empresa** → `OutreachSettings.companyContext`
+  (`PATCH /api/outreach/settings`). Encabeza el system prompt del análisis.
+- **Líneas de negocio** (título + descripción, plegables, añadir/editar/activar) →
+  modelo `OutreachBusinessLine` (`GET`/`POST /api/outreach/business-lines`,
+  `PATCH /api/outreach/business-lines/[id]`). Cada línea es un servicio contra el
+  que la IA puntúa a cada lead.
+
+Detalles de implementación:
+
+- Al **crear** una línea, la `key` (id estable e **inmutable**, porque los
+  `OutreachAnalysis` la referencian) se **autogenera** del título con un slugify
+  (`á→a`, no alfanumérico → `_`), resolviendo colisiones con sufijo `_2`, `_3`…
+  El usuario no la ve ni la escribe.
+- Al **editar**, el `PATCH` envía **solo** `name`/`description`/`active`: así el
+  servidor **conserva** `scoringUp`/`scoringDown` (señales de scoring), que se
+  siguen editando en el editor avanzado `/outreach/configuracion`.
+- "Config. avanzada →" enlaza a `/outreach/configuracion` (scoring, regla de
+  encadenamiento, modelo del análisis). Esta sección de Configuración es el
+  editor **simple**; el de Outreach es el **avanzado** (mismos datos).
+- Escritura solo admin (los endpoints de Outreach comprueban `x-user-role`).
+
+Consecuencia en Captación: ya **no** se piden las líneas al analizar. El análisis
+usa la descripción general + las líneas, y en la **ficha del lead** se puede
+elegir qué líneas analizar para esa empresa (ver `docs/modules/outreach.md`).
+
 ---
 
 ## Dónde se guardan las claves (y por qué son seguras)

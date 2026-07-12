@@ -12,10 +12,20 @@ import IntegrationGate from "./IntegrationGate.jsx";
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition";
 
-const SECTOR_OPTIONS = [
-  { value: "", label: "— Sin sector —" },
-  ...SECTORES.flatMap((c) => c.sectores.map((s) => ({ value: s, label: `${c.categoria} · ${s}` }))),
-];
+// Lista plana para el <Select> de edición del lead. Se deduplica por valor
+// (algún tipo aparece en dos sectores) para no repetir opción ni claves.
+const SECTOR_OPTIONS = (() => {
+  const seen = new Set();
+  const opts = [{ value: "", label: "— Sin sector —" }];
+  for (const c of SECTORES) {
+    for (const s of c.sectores) {
+      if (seen.has(s)) continue;
+      seen.add(s);
+      opts.push({ value: s, label: `${c.categoria} · ${s}` });
+    }
+  }
+  return opts;
+})();
 
 function ScorePill({ score }) {
   const { label, badge } = scoreBand(score);
@@ -255,6 +265,9 @@ export default function OutreachLeadDetail({ leadId }) {
   const [data, setData] = useState({ lead: null, lines: [], error: null, loadedFor: null });
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState(null);
+  // Subconjunto de líneas a analizar (null = todas). Permite elegir qué líneas
+  // analizar para esta empresa concreta sin desactivarlas globalmente.
+  const [selectedLineIds, setSelectedLineIds] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState(null);
@@ -335,7 +348,14 @@ export default function OutreachLeadDetail({ leadId }) {
     setAnalyzing(true);
     setAnalyzeError(null);
     try {
-      const r = await fetch(`/api/outreach/leads/${leadId}/analizar`, { method: "POST" });
+      // null = todas las líneas activas (el backend las resuelve). Un array
+      // envía solo ese subconjunto; los análisis de las demás se conservan.
+      const opts = { method: "POST" };
+      if (Array.isArray(selectedLineIds) && selectedLineIds.length > 0) {
+        opts.headers = { "Content-Type": "application/json" };
+        opts.body = JSON.stringify({ lineIds: selectedLineIds });
+      }
+      const r = await fetch(`/api/outreach/leads/${leadId}/analizar`, opts);
       const j = await r.json();
       if (!r.ok) throw new Error(j?.error || "El análisis ha fallado");
       refresh();
@@ -407,6 +427,15 @@ export default function OutreachLeadDetail({ leadId }) {
   }
 
   const gridCols = lines.length >= 3 ? "lg:grid-cols-3" : lines.length === 2 ? "lg:grid-cols-2" : "lg:grid-cols-1";
+
+  // Selección de líneas a analizar (null = todas).
+  const selectedSet = selectedLineIds === null ? lines.map((l) => l.id) : selectedLineIds;
+  const isLineOn = (id) => selectedSet.includes(id);
+  const toggleLine = (id) => {
+    const base = selectedLineIds === null ? lines.map((l) => l.id) : selectedLineIds;
+    setSelectedLineIds(base.includes(id) ? base.filter((x) => x !== id) : [...base, id]);
+  };
+  const noLinesSelected = selectedSet.length === 0;
 
   return (
     <div className="p-4 lg:p-8 max-w-[1400px] mx-auto">
@@ -548,12 +577,22 @@ export default function OutreachLeadDetail({ leadId }) {
               <button
                 type="button"
                 onClick={analyze}
-                disabled={analyzing || lines.length === 0 || !analyzeReady}
-                title={analyzeReady ? undefined : "Configura tu clave de Anthropic en Configuración → IA para analizar"}
+                disabled={analyzing || lines.length === 0 || !analyzeReady || noLinesSelected}
+                title={
+                  !analyzeReady
+                    ? "Configura tu clave de Anthropic en Configuración → IA para analizar"
+                    : noLinesSelected
+                    ? "Selecciona al menos una línea de negocio para analizar"
+                    : undefined
+                }
                 className="px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition"
                 style={{ backgroundColor: "var(--color-primary)" }}
               >
-                {analyzing ? "Analizando..." : lead.analyzed ? "Re-analizar" : "Analizar con IA"}
+                {analyzing
+                  ? "Analizando..."
+                  : `${lead.analyzed ? "Re-analizar" : "Analizar con IA"}${
+                      selectedLineIds !== null && selectedSet.length !== lines.length ? ` (${selectedSet.length})` : ""
+                    }`}
               </button>
             </div>
             <span className="text-xs text-neutral-400">
@@ -562,6 +601,35 @@ export default function OutreachLeadDetail({ leadId }) {
           </div>
         )}
       </header>
+
+      {/* Elegir qué líneas analizar para esta empresa (solo si hay varias). */}
+      {!editing && lines.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <span className="text-xs text-neutral-400 mr-1">Líneas a analizar:</span>
+          {lines.map((l) => {
+            const on = isLineOn(l.id);
+            return (
+              <button
+                key={l.id}
+                type="button"
+                onClick={() => toggleLine(l.id)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition ${
+                  on ? "border-transparent text-white" : "border-neutral-200 text-neutral-500 hover:bg-neutral-50"
+                }`}
+                style={on ? { backgroundColor: "var(--color-primary)" } : undefined}
+              >
+                {on && (
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                    <path fillRule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 011.4-1.4l3.3 3.3 6.8-6.8a1 1 0 011.4 0z" clipRule="evenodd" />
+                  </svg>
+                )}
+                {l.name}
+              </button>
+            );
+          })}
+          {noLinesSelected && <span className="text-xs text-amber-600">Selecciona al menos una</span>}
+        </div>
+      )}
 
       <IntegrationGate status={integrations} require={["anthropic", "resend"]} />
 

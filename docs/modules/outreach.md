@@ -235,7 +235,7 @@ Las mutaciones de líneas/ajustes y los borrados exigen rol `admin`.
 | `GET` | `/api/outreach/leads/:id` | Ficha: contactos + análisis + líneas activas |
 | `PATCH` | `/api/outreach/leads/:id` | Editar campos del lead |
 | `DELETE` | `/api/outreach/leads/:id` | Borrar (admin) |
-| `POST` | `/api/outreach/leads/:id/analizar` | Analiza con IA. Upsert de un análisis por línea |
+| `POST` | `/api/outreach/leads/:id/analizar` | Analiza con IA. Upsert de un análisis por línea. Body opcional `{ lineIds: [uuid…] }` para analizar solo un subconjunto (sin él → todas las activas) |
 | `POST` | `/api/outreach/leads/:id/enviar-correo` | Envía el correo modelo (Resend) y marca `sent_at` |
 | `POST` | `/api/outreach/leads/:id/convertir-cliente` | Crea `Client` y marca el lead convertido |
 | `GET` / `POST` | `/api/outreach/business-lines` | Listar / crear línea (POST admin) |
@@ -246,6 +246,28 @@ Las mutaciones de líneas/ajustes y los borrados exigen rol `admin`.
 (true/false), `hasEmail` (true/false), `minScore` + `line`, `sort`
 (`name|sector|location|source|analyzed|email|createdAt`) + `dir` (`asc|desc`),
 `limit`, `offset`.
+
+### Selección de líneas por lead (ficha)
+
+`analizar` acepta un `lineIds` opcional. La ficha (`OutreachLeadDetail.jsx`)
+muestra, cuando hay más de una línea, unos chips **"Líneas a analizar:"** (todas
+seleccionadas por defecto) para elegir qué líneas analizar en **esa** empresa; se
+pasan como `lineIds`. El backend filtra a `{ active: true, id: lineIds }` y hace
+**upsert solo de esas líneas** — los análisis de las líneas no seleccionadas se
+**conservan** intactos. Sin `lineIds` (o array vacío) → todas las líneas activas.
+
+### Selector de sector en "Buscar nuevos"
+
+El sector del drawer usa `modules/outreach/SectorPicker.jsx`: un **acordeón por
+categoría** (los "sectores"), con los **tipos de empresa** dentro en nombre plano
+(p. ej. "Clínica dental", no "Salud y bienestar · Clínica dental"). Todos los
+grupos empiezan **plegados**; un buscador filtra por **nombre de categoría O de
+tipo**. El valor elegido es el **string del tipo tal cual**, que
+`buscar-nuevos` usa como `textQuery` libre de Google (no se valida contra una
+lista). El catálogo vive en `modules/outreach/sectores.json` (27 categorías, ~286
+tipos; algún tipo aparece en dos categorías a propósito). Los `<Select>` planos
+del filtro superior y del alta manual siguen usando una lista aplanada y
+**deduplicada por valor**.
 
 **Degradación sin claves:** el análisis usa la clave Anthropic del tenant
 (Configuración → IA); **sin ella `/analizar` responde `503`** (no hay fallback de

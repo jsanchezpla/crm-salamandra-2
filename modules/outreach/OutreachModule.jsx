@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Select from "../../components/ui/Select.jsx";
 import SECTORES from "./sectores.json";
+import SectorPicker from "./SectorPicker.jsx";
 import { scoreBand, analysisFor, SOURCES, sourceLabel } from "./scores.js";
 import { useIntegrations } from "./useIntegrations.js";
 import IntegrationGate from "./IntegrationGate.jsx";
@@ -11,10 +12,22 @@ import IntegrationGate from "./IntegrationGate.jsx";
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
 
-const SECTOR_OPTIONS = [
-  { value: "", label: "Todos los sectores" },
-  ...SECTORES.flatMap((c) => c.sectores.map((s) => ({ value: s, label: `${c.categoria} · ${s}` }))),
-];
+// Lista plana para los <Select> de filtro y alta manual. Se deduplica por
+// valor porque algún tipo aparece en dos sectores (p. ej. "Clínicas
+// veterinarias" en Salud y en Mascotas); en el desplegable plano solo debe
+// salir una vez. El acordeón de "Buscar nuevos" sí lo muestra en ambos grupos.
+const SECTOR_OPTIONS = (() => {
+  const seen = new Set();
+  const opts = [{ value: "", label: "Todos los sectores" }];
+  for (const c of SECTORES) {
+    for (const s of c.sectores) {
+      if (seen.has(s)) continue;
+      seen.add(s);
+      opts.push({ value: s, label: `${c.categoria} · ${s}` });
+    }
+  }
+  return opts;
+})();
 
 const EMPTY_FORM = { name: "", sector: "", location: "", website: "", phone: "", email: "" };
 
@@ -542,11 +555,9 @@ export default function OutreachModule() {
               </p>
               <div>
                 <label className="block text-xs font-medium text-neutral-600 mb-1">Sector</label>
-                <Select
-                  className={inputCls}
+                <SectorPicker
                   value={searchForm.sector}
                   onChange={(v) => setSearchForm({ ...searchForm, sector: v })}
-                  options={SECTOR_OPTIONS}
                 />
               </div>
               <div>
