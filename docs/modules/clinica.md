@@ -19,12 +19,25 @@ datos dummy hardcoded.
 Activado **solo en aumenta** vía `master.tenant_modules`
 (`moduleKey='clinica'`).
 
-## Estado: maqueta visual
+## Estado: Fase 1 (backend real) — registros clínicos
 
-Las 4 páginas frontend usan datos hardcoded en
-`app/(dashboard)/clinica/_components/dummyData.js`. No hay endpoints
-CRUD, ni queries reales, ni IA conectada. Las tablas existen en
-`crm_aumenta` con su estructura pero **vacías**.
+Los **registros clínicos** (sesiones, informes, coordinaciones) y **Pacientes**
+tienen backend real: endpoints CRUD + persistencia + KPIs computados. Las páginas
+`/clinica` (landing), `/clinica/informes`, `/pacientes` y `/pacientes/[id]` leen y
+escriben datos reales (ya no `dummyData.js`).
+
+**Siguen como maqueta** (fases posteriores, aún con `dummyData.js`):
+`/clinica/mi-desempeno` y `/clinica/direccion` (Fase 2: desempeño/incentivos) y
+`/pacientes/[id]/sesiones/nueva` (Fase 3: subir audio → IA).
+
+- Endpoints: `/api/pacientes/*` y `/api/clinica/{sessions,reports,coordinations,overview}`.
+- Serializers: `lib/clinica/serialize.js` (fila Sequelize → forma de la UI).
+- Migración **generalizada** `scripts/migrate-clinica-module.js` (lee `master.tenants`,
+  ya no aumenta-only). Seed `scripts/seed-clinica-demo.js`.
+- IA / audio / PDF / export siguen pendientes (fases posteriores).
+
+> Las secciones "Lo que NO hace" y "Backlog" de abajo describen el Sprint 1 visual
+> original; parte ya está cubierta por Fase 1.
 
 ## Lo que NO hace (Sprint 1)
 

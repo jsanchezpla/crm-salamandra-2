@@ -50,13 +50,19 @@ contexto de Aumenta el solapamiento conceptual sería bajo: muy
 pocos pacientes son a la vez "clientes comerciales" del CRM. Por
 ahora, separados.
 
-## Estado: maqueta visual
+## Estado: Fase 1 (backend real)
 
-La página `/pacientes` y la ficha `/pacientes/[id]` muestran datos
-hardcoded en
-`app/(dashboard)/pacientes/_components/dummyData.js`. No hay
-endpoints CRUD, persistencia ni validaciones. La tabla `patients`
-existe en `crm_aumenta` pero **vacía**.
+`/pacientes` (listado) y `/pacientes/[id]` (ficha) leen y escriben datos reales vía
+`/api/pacientes/*` y `/api/clinica/*`: listar con filtros, ficha con tabs
+(sesiones/informes/coordinaciones), crear paciente, editar ficha, crear informe y
+marcar sesión publicada. La tabla `patients` ya **no** es aumenta-only: la migración
+`scripts/migrate-clinica-module.js` la crea en cualquier tenant con el módulo
+(lee `master.tenants`).
+
+**Sigue como maqueta:** `/pacientes/[id]/sesiones/nueva` (subir audio → IA, Fase 3).
+
+> El resto del documento (Sprint 1, dummy `p-1`, etc.) es histórico; la ficha ya no
+> depende de `isDiego` y todos los pacientes muestran sus datos reales.
 
 ## Lo que NO hace (Sprint 1)
 

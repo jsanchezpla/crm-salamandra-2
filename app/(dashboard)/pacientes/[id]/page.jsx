@@ -1,20 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import Select from "@/components/ui/Select.jsx";
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
-import {
-  findPatient,
-  findTherapist,
-  statusStyles,
-  sessionStatusStyles,
-  DIEGO_SESSIONS,
-  DIEGO_REPORTS,
-  DIEGO_COORDINATIONS,
-  DIEGO_UPCOMING,
-  DIEGO_DOCS,
-} from "../_components/dummyData.js";
 
 const TABS = [
   { key: "resumen", label: "Resumen" },
@@ -23,19 +13,35 @@ const TABS = [
   { key: "coordinaciones", label: "Coordinaciones" },
 ];
 
-function formatDateTime(iso) {
-  const d = new Date(iso);
-  return d.toLocaleString("es-ES", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+const PATIENT_STATUS = {
+  active: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
+  paused: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500" },
+  discharged: { bg: "bg-neutral-100", text: "text-neutral-500", dot: "bg-neutral-400" },
+};
+const SESSION_STATUS = {
+  draft: { bg: "bg-neutral-100", text: "text-neutral-600", dot: "bg-neutral-400" },
+  registered: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
+  ai_pending: { bg: "bg-sky-50", text: "text-sky-700", dot: "bg-sky-500" },
+  published: { bg: "bg-violet-50", text: "text-violet-700", dot: "bg-violet-500" },
+};
+const pStatus = (s) => PATIENT_STATUS[s] ?? PATIENT_STATUS.discharged;
+const sStatus = (s) => SESSION_STATUS[s] ?? SESSION_STATUS.registered;
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—");
+const fmtDateTime = (iso) => (iso ? new Date(iso).toLocaleString("es-ES", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
+const inputCls = "w-full px-3 py-2 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400";
+
+function Section({ title, children }) {
+  return (<div><div className="eyebrow mb-2">{title}</div><div className="text-xs text-neutral-700 leading-relaxed">{children}</div></div>);
+}
+function SubField({ label, value }) {
+  return (<div><div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-0.5">{label}</div><div className="text-xs text-neutral-700">{value || "—"}</div></div>);
+}
+function Field({ label, value }) {
+  return (<div><div className="text-[10px] uppercase tracking-wider text-neutral-400">{label}</div><div className="text-xs text-[var(--ink-900)] font-medium mt-0.5">{value || "—"}</div></div>);
 }
 
-function SessionDrawer({ session, patient, therapist, onClose }) {
-  const ss = sessionStatusStyles(session.status);
+function SessionDrawer({ session, patient, onClose, onPublish, busy }) {
+  const ss = sStatus(session.status);
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} aria-hidden="true" />
@@ -43,87 +49,38 @@ function SessionDrawer({ session, patient, therapist, onClose }) {
         <div className="sticky top-0 bg-white border-b border-neutral-100 px-5 lg:px-7 py-4 flex items-start justify-between gap-3 z-10">
           <div className="min-w-0">
             <div className="eyebrow">Sesión</div>
-            <h2 className="font-display text-xl text-[var(--ink-900)] mt-1 leading-tight">
-              {formatDateTime(session.sessionDate)}
-            </h2>
-            <p className="text-[11px] text-neutral-500 mt-1">
-              {patient.firstName} {patient.lastName} · {therapist.name} · {session.duration} min
-            </p>
+            <h2 className="font-display text-xl text-[var(--ink-900)] mt-1 leading-tight">{fmtDateTime(session.sessionDate)}</h2>
+            <p className="text-[11px] text-neutral-500 mt-1">{patient.firstName} {patient.lastName} · {session.therapist?.name ?? "—"} · {session.duration ?? "—"} min</p>
           </div>
-          <button
-            onClick={onClose}
-            className="shrink-0 text-neutral-400 hover:text-neutral-700 p-1 -m-1"
-            aria-label="Cerrar"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+          <button onClick={onClose} className="shrink-0 text-neutral-400 hover:text-neutral-700 p-1 -m-1" aria-label="Cerrar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
         <div className="px-5 lg:px-7 py-5 space-y-5">
-          {/* Estado + Audio simulado */}
           <div className="flex flex-wrap items-center gap-3">
             <span className={`inline-flex items-center gap-1.5 ${ss.bg} ${ss.text} text-[11px] font-medium px-2.5 py-1 rounded-full`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${ss.dot}`} />
-              {session.statusLabel}
+              <span className={`w-1.5 h-1.5 rounded-full ${ss.dot}`} />{session.statusLabel}
             </span>
-            <div className="flex-1 flex items-center gap-2.5 bg-neutral-50 border border-neutral-100 rounded-lg px-3 py-2 min-w-0">
-              <button className="shrink-0 w-7 h-7 rounded-full text-white flex items-center justify-center" style={{ background: "var(--color-primary, #1B3A2D)" }}>
-                <svg viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 ml-0.5">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              </button>
-              <div className="flex-1 flex items-center gap-0.5 min-w-0">
-                {Array.from({ length: 24 }).map((_, i) => {
-                  const h = 4 + Math.abs(Math.sin(i * 1.3)) * 16;
-                  return <span key={i} className="block w-0.5 bg-neutral-300" style={{ height: h }} />;
-                })}
-              </div>
-              <span className="shrink-0 text-[10px] tabular text-neutral-500">0:{String(session.audioDurationSec).padStart(2, "0")}</span>
-            </div>
+            {session.audioDurationSec != null && (
+              <span className="text-[10px] tabular text-neutral-500 bg-neutral-50 border border-neutral-100 rounded-lg px-2.5 py-1">
+                Audio · {Math.floor(session.audioDurationSec / 60)}:{String(session.audioDurationSec % 60).padStart(2, "0")}
+              </span>
+            )}
           </div>
 
-          {/* Banner IA */}
           {session.aiReviewedAt && (
             <div className="bg-sky-50 border border-sky-100 rounded-lg px-3 py-2.5 flex items-start gap-2.5">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4 text-sky-700 mt-0.5 shrink-0">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-              </svg>
-              <p className="text-[11px] text-sky-900 leading-relaxed flex-1">
-                <span className="font-semibold">Transcrito y estructurado automáticamente por IA.</span> Revisado el {new Date(session.aiReviewedAt).toLocaleDateString("es-ES")}.
-              </p>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4 text-sky-700 mt-0.5 shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
+              <p className="text-[11px] text-sky-900 leading-relaxed flex-1"><span className="font-semibold">Transcrito y estructurado por IA.</span> Revisado el {fmtDate(session.aiReviewedAt)}.</p>
             </div>
           )}
 
-          <button
-            className="w-full text-sm font-medium py-2.5 rounded-lg text-white hover:opacity-90 inline-flex items-center justify-center gap-2"
-            style={{ background: "var(--color-primary, #1B3A2D)" }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-            </svg>
-            Regenerar con IA
-          </button>
-
-          <Section title="Objetivos trabajados">
-            <div className="flex flex-wrap gap-1.5">
-              {session.objectives.map((o) => (
-                <span key={o} className="text-[11px] bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded-full">
-                  {o}
-                </span>
-              ))}
-            </div>
-          </Section>
-
-          <Section title="Actividades realizadas">
-            <p>{session.activities}</p>
-          </Section>
-
-          <Section title="Desempeño del paciente">
-            <p>{session.performance}</p>
-          </Section>
-
+          {session.objectives?.length > 0 && (
+            <Section title="Objetivos trabajados"><div className="flex flex-wrap gap-1.5">{session.objectives.map((o) => <span key={o} className="text-[11px] bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded-full">{o}</span>)}</div></Section>
+          )}
+          {session.activities && <Section title="Actividades realizadas"><p>{session.activities}</p></Section>}
+          {session.performance && <Section title="Desempeño del paciente"><p>{session.performance}</p></Section>}
           <Section title="Observaciones">
             <div className="space-y-3">
               <SubField label="Comentarios familiares" value={session.observations.familyComments} />
@@ -134,18 +91,11 @@ function SessionDrawer({ session, patient, therapist, onClose }) {
           </Section>
 
           <div className="border-t border-neutral-100 pt-4 flex flex-wrap gap-2">
-            <button className="text-xs px-3 py-2 rounded-lg border border-neutral-200 hover:border-neutral-400 text-neutral-700">
-              Editar
-            </button>
-            <button className="text-xs px-3 py-2 rounded-lg border border-neutral-200 hover:border-neutral-400 text-neutral-700">
-              Descargar PDF
-            </button>
-            <button
-              className="text-xs px-3 py-2 rounded-lg text-white hover:opacity-90 ml-auto"
-              style={{ background: "var(--color-primary, #1B3A2D)" }}
-            >
-              Marcar como publicada
-            </button>
+            {session.status !== "published" && (
+              <button onClick={() => onPublish(session.id)} disabled={busy} className="text-xs px-3 py-2 rounded-lg text-white hover:opacity-90 ml-auto disabled:opacity-50" style={{ background: "var(--color-primary, #1B3A2D)" }}>
+                {busy ? "Guardando…" : "Marcar como publicada"}
+              </button>
+            )}
           </div>
         </div>
       </aside>
@@ -153,235 +103,116 @@ function SessionDrawer({ session, patient, therapist, onClose }) {
   );
 }
 
-function Section({ title, children }) {
-  return (
-    <div>
-      <div className="eyebrow mb-2">{title}</div>
-      <div className="text-xs text-neutral-700 leading-relaxed">{children}</div>
-    </div>
-  );
-}
-
-function SubField({ label, value }) {
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-0.5">{label}</div>
-      <div className="text-xs text-neutral-700">{value}</div>
-    </div>
-  );
-}
-
-function ResumenTab({ patient, therapist, isDiego }) {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-      <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-        <div className="eyebrow mb-2">Motivo de derivación</div>
-        <p className="text-xs text-neutral-700 leading-relaxed">{patient.referralReason}</p>
-        <div className="text-[10px] text-neutral-400 mt-3">Derivado por: {patient.referredBy}</div>
-      </div>
-
-      <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-        <div className="eyebrow mb-2">Objetivos terapéuticos actuales</div>
-        <div className="flex flex-wrap gap-1.5">
-          {patient.objectives.map((o) => (
-            <span key={o} className="text-[11px] bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded-full">
-              {o}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-        <div className="eyebrow mb-3">Próximas citas</div>
-        {isDiego ? (
-          <ul className="space-y-2">
-            {DIEGO_UPCOMING.map((u, i) => (
-              <li key={i} className="flex items-center justify-between text-xs">
-                <div>
-                  <div className="text-[var(--ink-900)] font-medium tabular">
-                    {u.date} · {u.time}
-                  </div>
-                  <div className="text-[10px] text-neutral-400">{u.type}</div>
-                </div>
-                <span className="text-[11px] text-neutral-500">{findTherapist(u.therapistId).name}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-[11px] text-neutral-400">Sin citas programadas en esta demo.</p>
-        )}
-      </div>
-
-      <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-        <div className="eyebrow mb-3">Documentos adjuntos</div>
-        {isDiego ? (
-          <ul className="space-y-1.5">
-            {DIEGO_DOCS.map((d, i) => (
-              <li key={i} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 min-w-0">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5 text-neutral-400 shrink-0">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span className="text-neutral-700 truncate">{d.name}</span>
-                </div>
-                <span className="text-[10px] text-neutral-400 shrink-0 ml-2 tabular">{d.size}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-[11px] text-neutral-400">Sin documentos adjuntos en esta demo.</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SesionesTab({ patient, isDiego, onOpenSession }) {
-  if (!isDiego) {
-    return (
-      <div className="bg-white border border-dashed border-neutral-200 rounded-xl p-10 text-center">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-8 h-8 mx-auto text-neutral-300">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <p className="text-sm text-neutral-600 mt-2">Sin sesiones registradas en esta demo</p>
-        <p className="text-[11px] text-neutral-400 mt-1">
-          Solo el paciente {patient.firstName} {patient.lastName} usa esta ficha para mostrar el flujo completo de sesiones.
-        </p>
-      </div>
-    );
-  }
-  return (
-    <div className="bg-white border border-neutral-100 rounded-xl divide-y divide-neutral-100">
-      {DIEGO_SESSIONS.map((s) => {
-        const ss = sessionStatusStyles(s.status);
-        const therapist = findTherapist(s.therapistId);
-        return (
-          <button
-            key={s.id}
-            onClick={() => onOpenSession(s)}
-            className="w-full text-left p-4 lg:p-5 hover:bg-neutral-50/50 transition-colors"
-          >
-            <div className="flex items-start gap-3">
-              <div className="shrink-0 flex flex-col items-center pt-0.5">
-                <div className="text-[10px] uppercase tracking-wider text-neutral-400 tabular">
-                  {new Date(s.sessionDate).toLocaleDateString("es-ES", { day: "2-digit", month: "short" })}
-                </div>
-                <div className="text-[10px] text-neutral-400 tabular">
-                  {new Date(s.sessionDate).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
-                </div>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-display text-sm text-[var(--ink-900)]">
-                    {therapist.name}
-                  </span>
-                  <span className={`inline-flex items-center gap-1 ${ss.bg} ${ss.text} text-[9px] font-medium px-1.5 py-0.5 rounded-full`}>
-                    <span className={`w-1 h-1 rounded-full ${ss.dot}`} />
-                    {s.statusLabel}
-                  </span>
-                  <span className="text-[10px] text-neutral-400">{s.duration} min</span>
-                </div>
-                <p className="text-[11px] text-neutral-600 mt-1 line-clamp-2">{s.preview}</p>
-              </div>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3 text-neutral-300 shrink-0 mt-1">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </div>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function InformesTab({ isDiego }) {
-  if (!isDiego) {
-    return (
-      <div className="bg-white border border-dashed border-neutral-200 rounded-xl p-10 text-center">
-        <p className="text-sm text-neutral-600">Sin informes generados en esta demo</p>
-      </div>
-    );
-  }
-  return (
-    <div className="bg-white border border-neutral-100 rounded-xl divide-y divide-neutral-100">
-      {DIEGO_REPORTS.map((r) => (
-        <div key={r.id} className="p-4 flex items-center justify-between gap-3 hover:bg-neutral-50/50">
-          <div className="min-w-0">
-            <div className="font-medium text-[var(--ink-900)] text-sm">Informe {r.typeLabel.toLowerCase()}</div>
-            <div className="text-[10px] text-neutral-400 tabular">
-              {r.reportDate} · Entrega {r.dueDate}
-            </div>
-          </div>
-          <span className="text-[10px] font-medium text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-full">
-            {r.statusLabel}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function CoordinacionesTab({ isDiego }) {
-  if (!isDiego) {
-    return (
-      <div className="bg-white border border-dashed border-neutral-200 rounded-xl p-10 text-center">
-        <p className="text-sm text-neutral-600">Sin coordinaciones registradas en esta demo</p>
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-3">
-      {DIEGO_COORDINATIONS.map((c) => (
-        <div key={c.id} className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-          <div className="flex items-center justify-between mb-2 gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wider text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full">
-                {c.typeLabel}
-              </span>
-              <span className="text-[10px] text-neutral-400 tabular">{c.date}</span>
-            </div>
-          </div>
-          <div className="text-[11px] text-neutral-500 mb-1">Participantes: {c.participants}</div>
-          <p className="text-xs text-neutral-700 leading-relaxed">{c.topics}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default function PacienteFichaPage() {
   const params = useParams();
-  const patient = findPatient(params.id);
+  const id = params.id;
+  const [patient, setPatient] = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [reports, setReports] = useState([]);
+  const [coordinations, setCoordinations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState("resumen");
   const [openSession, setOpenSession] = useState(null);
+  const [busy, setBusy] = useState(false);
 
-  if (!patient) {
+  const [showEdit, setShowEdit] = useState(false);
+  const [editForm, setEditForm] = useState(null);
+  const [showReport, setShowReport] = useState(false);
+  const [reportForm, setReportForm] = useState({ reportType: "evolution", dueDate: "" });
+  const [modalBusy, setModalBusy] = useState(false);
+  const [modalError, setModalError] = useState(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      fetch(`/api/pacientes/${id}`, { cache: "no-store" }).then((r) => (r.status === 404 ? "404" : r.json())),
+      fetch(`/api/clinica/sessions?patientId=${id}`, { cache: "no-store" }).then((r) => r.json()),
+      fetch(`/api/clinica/reports?patientId=${id}`, { cache: "no-store" }).then((r) => r.json()),
+      fetch(`/api/clinica/coordinations?patientId=${id}`, { cache: "no-store" }).then((r) => r.json()),
+    ])
+      .then(([pj, sj, rj, cj]) => {
+        if (pj === "404" || !pj?.ok) { setNotFound(true); return; }
+        setPatient(pj.data);
+        setSessions(sj?.data?.sessions ?? []);
+        setReports(rj?.data?.reports ?? []);
+        setCoordinations(cj?.data?.coordinations ?? []);
+      })
+      .catch(() => setNotFound(true))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const publishSession = async (sid) => {
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/clinica/sessions/${sid}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "published" }) });
+      if (!r.ok) throw new Error();
+      setOpenSession(null);
+      load();
+    } catch { /* noop */ } finally { setBusy(false); }
+  };
+
+  const openEdit = () => {
+    setEditForm({
+      firstName: patient.firstName ?? "", lastName: patient.lastName ?? "", age: patient.age ?? "",
+      educationCenter: patient.educationCenter ?? "", educationLevel: patient.educationLevel ?? "",
+      attendanceFrequency: patient.attendanceFrequency ?? "", referralReason: patient.referralReason ?? "",
+      referredBy: patient.referredBy ?? "", objectives: (patient.objectives ?? []).join(", "), status: patient.status ?? "active",
+    });
+    setModalError(null);
+    setShowEdit(true);
+  };
+  const saveEdit = async (e) => {
+    e.preventDefault();
+    if (!editForm.firstName.trim() || !editForm.lastName.trim()) { setModalError("Nombre y apellidos obligatorios"); return; }
+    setModalBusy(true); setModalError(null);
+    try {
+      const payload = {
+        ...editForm,
+        age: editForm.age === "" ? null : Number(editForm.age),
+        objectives: editForm.objectives.split(",").map((s) => s.trim()).filter(Boolean),
+      };
+      const r = await fetch(`/api/pacientes/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo guardar");
+      setShowEdit(false); load();
+    } catch (e2) { setModalError(e2.message); } finally { setModalBusy(false); }
+  };
+
+  const createReport = async (e) => {
+    e.preventDefault();
+    if (!patient.mainTherapistId) { setModalError("El paciente no tiene terapeuta asignado"); return; }
+    setModalBusy(true); setModalError(null);
+    try {
+      const payload = { patientId: id, therapistId: patient.mainTherapistId, reportType: reportForm.reportType, dueDate: reportForm.dueDate || null };
+      const r = await fetch("/api/clinica/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo crear");
+      setShowReport(false); setReportForm({ reportType: "evolution", dueDate: "" }); setActiveTab("informes"); load();
+    } catch (e2) { setModalError(e2.message); } finally { setModalBusy(false); }
+  };
+
+  if (loading) return <div className="p-4 lg:p-8 text-neutral-400 text-sm">Cargando ficha…</div>;
+  if (notFound || !patient) {
     return (
       <div className="p-4 lg:p-8 max-w-7xl mx-auto">
         <PreviewBanner />
         <div className="bg-white border border-neutral-100 rounded-xl p-10 text-center mt-5">
           <p className="text-sm text-neutral-600">Paciente no encontrado.</p>
-          <Link href="/pacientes" className="text-xs text-[var(--color-primary,#1B3A2D)] hover:underline mt-2 inline-block">
-            ← Volver al listado
-          </Link>
+          <Link href="/pacientes" className="text-xs text-[var(--color-primary,#1B3A2D)] hover:underline mt-2 inline-block">← Volver al listado</Link>
         </div>
       </div>
     );
   }
 
-  const therapist = findTherapist(patient.mainTherapistId);
-  const s = statusStyles(patient.status);
-  const isDiego = patient.id === "p-1";
+  const s = pStatus(patient.status);
 
   return (
     <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-5">
-      <Link
-        href="/pacientes"
-        className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
+      <Link href="/pacientes" className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
         Pacientes
       </Link>
 
@@ -390,52 +221,30 @@ export default function PacienteFichaPage() {
       {/* Cabecera */}
       <div className="bg-white border border-neutral-100 rounded-xl p-5 lg:p-6">
         <div className="flex flex-col lg:flex-row lg:items-start gap-4">
-          <div
-            className="shrink-0 w-16 h-16 lg:w-20 lg:h-20 rounded-full flex items-center justify-center text-white font-display text-2xl"
-            style={{ backgroundColor: patient.color }}
-          >
-            {patient.initials}
-          </div>
+          <div className="shrink-0 w-16 h-16 lg:w-20 lg:h-20 rounded-full flex items-center justify-center text-white font-display text-2xl" style={{ backgroundColor: patient.color }}>{patient.initials}</div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] tracking-tight">
-                {patient.firstName} {patient.lastName}
-              </h1>
-              <span className={`inline-flex items-center gap-1.5 ${s.bg} ${s.text} text-[11px] font-medium px-2.5 py-0.5 rounded-full`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-                {patient.statusLabel}
-              </span>
+              <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] tracking-tight">{patient.firstName} {patient.lastName}</h1>
+              <span className={`inline-flex items-center gap-1.5 ${s.bg} ${s.text} text-[11px] font-medium px-2.5 py-0.5 rounded-full`}><span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />{patient.statusLabel}</span>
             </div>
-            <p className="text-xs text-neutral-500 mt-0.5">
-              {patient.age} años · {patient.educationLevel}
-            </p>
+            <p className="text-xs text-neutral-500 mt-0.5">{patient.age != null ? `${patient.age} años` : "—"} · {patient.educationLevel ?? "—"}</p>
             <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
               <Field label="Centro escolar" value={patient.educationCenter} />
-              <Field label="Terapeuta principal" value={therapist.name} />
-              <Field label="Fecha alta" value={patient.enrollmentDate} />
+              <Field label="Terapeuta principal" value={patient.therapist?.name} />
+              <Field label="Fecha alta" value={fmtDate(patient.enrollmentDate)} />
               <Field label="Frecuencia" value={patient.attendanceFrequency} />
             </div>
           </div>
           <div className="flex flex-col gap-2 shrink-0">
-            <Link
-              href={`/pacientes/${patient.id}/sesiones/nueva`}
-              className="text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 inline-flex items-center gap-2"
-              style={{ background: "var(--color-primary, #1B3A2D)" }}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 7.5m0 0L7.5 12m4.5-4.5v13.5" />
-              </svg>
+            <Link href={`/pacientes/${patient.id}/sesiones/nueva`} className="text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 inline-flex items-center gap-2" style={{ background: "var(--color-primary, #1B3A2D)" }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 7.5m0 0L7.5 12m4.5-4.5v13.5" /></svg>
               Subir audio
             </Link>
-            <button className="text-xs font-medium px-4 py-2 rounded-lg border border-neutral-200 hover:border-neutral-400 text-neutral-700 inline-flex items-center gap-2">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
+            <button onClick={() => { setModalError(null); setReportForm({ reportType: "evolution", dueDate: "" }); setShowReport(true); }} className="text-xs font-medium px-4 py-2 rounded-lg border border-neutral-200 hover:border-neutral-400 text-neutral-700 inline-flex items-center gap-2">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               Nuevo informe
             </button>
-            <button className="text-xs font-medium px-4 py-2 rounded-lg border border-neutral-200 hover:border-neutral-400 text-neutral-700">
-              Editar ficha
-            </button>
+            <button onClick={openEdit} className="text-xs font-medium px-4 py-2 rounded-lg border border-neutral-200 hover:border-neutral-400 text-neutral-700">Editar ficha</button>
           </div>
         </div>
       </div>
@@ -443,54 +252,170 @@ export default function PacienteFichaPage() {
       {/* Tabs */}
       <div className="border-b border-neutral-200">
         <div className="flex gap-1 overflow-x-auto">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setActiveTab(t.key)}
-              className={`text-xs font-medium px-4 py-2.5 border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === t.key
-                  ? "border-[var(--color-primary,#1B3A2D)] text-[var(--ink-900)]"
-                  : "border-transparent text-neutral-500 hover:text-neutral-700"
-              }`}
-            >
-              {t.label}
-              {t.key === "sesiones" && isDiego && (
-                <span className="ml-1.5 text-[10px] bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded-full tabular">
-                  {DIEGO_SESSIONS.length}
-                </span>
-              )}
-            </button>
-          ))}
+          {TABS.map((t) => {
+            const count = t.key === "sesiones" ? sessions.length : t.key === "informes" ? reports.length : t.key === "coordinaciones" ? coordinations.length : null;
+            return (
+              <button key={t.key} onClick={() => setActiveTab(t.key)} className={`text-xs font-medium px-4 py-2.5 border-b-2 transition-colors whitespace-nowrap ${activeTab === t.key ? "border-[var(--color-primary,#1B3A2D)] text-[var(--ink-900)]" : "border-transparent text-neutral-500 hover:text-neutral-700"}`}>
+                {t.label}
+                {count != null && count > 0 && <span className="ml-1.5 text-[10px] bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded-full tabular">{count}</span>}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Contenido tabs */}
+      {/* Contenido */}
       <div>
-        {activeTab === "resumen" && <ResumenTab patient={patient} therapist={therapist} isDiego={isDiego} />}
-        {activeTab === "sesiones" && (
-          <SesionesTab patient={patient} isDiego={isDiego} onOpenSession={setOpenSession} />
+        {activeTab === "resumen" && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
+              <div className="eyebrow mb-2">Motivo de derivación</div>
+              <p className="text-xs text-neutral-700 leading-relaxed">{patient.referralReason || "—"}</p>
+              <div className="text-[10px] text-neutral-400 mt-3">Derivado por: {patient.referredBy || "—"}</div>
+            </div>
+            <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
+              <div className="eyebrow mb-2">Objetivos terapéuticos actuales</div>
+              {patient.objectives?.length ? (
+                <div className="flex flex-wrap gap-1.5">{patient.objectives.map((o) => <span key={o} className="text-[11px] bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded-full">{o}</span>)}</div>
+              ) : <p className="text-[11px] text-neutral-400">Sin objetivos definidos.</p>}
+            </div>
+            <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
+              <div className="eyebrow mb-3">Próximas citas</div>
+              <p className="text-[11px] text-neutral-400">La integración con Citas llegará en una fase posterior.</p>
+            </div>
+            <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
+              <div className="eyebrow mb-3">Documentos adjuntos</div>
+              <p className="text-[11px] text-neutral-400">Sin documentos adjuntos.</p>
+            </div>
+          </div>
         )}
-        {activeTab === "informes" && <InformesTab isDiego={isDiego} />}
-        {activeTab === "coordinaciones" && <CoordinacionesTab isDiego={isDiego} />}
+
+        {activeTab === "sesiones" && (
+          sessions.length === 0 ? (
+            <div className="bg-white border border-dashed border-neutral-200 rounded-xl p-10 text-center">
+              <p className="text-sm text-neutral-600">Sin sesiones registradas.</p>
+              <p className="text-[11px] text-neutral-400 mt-1">Sube un audio o crea una sesión para empezar el historial.</p>
+            </div>
+          ) : (
+            <div className="bg-white border border-neutral-100 rounded-xl divide-y divide-neutral-100">
+              {sessions.map((se) => {
+                const ss = sStatus(se.status);
+                return (
+                  <button key={se.id} onClick={() => setOpenSession(se)} className="w-full text-left p-4 lg:p-5 hover:bg-neutral-50/50 transition-colors">
+                    <div className="flex items-start gap-3">
+                      <div className="shrink-0 flex flex-col items-center pt-0.5">
+                        <div className="text-[10px] uppercase tracking-wider text-neutral-400 tabular">{new Date(se.sessionDate).toLocaleDateString("es-ES", { day: "2-digit", month: "short" })}</div>
+                        <div className="text-[10px] text-neutral-400 tabular">{new Date(se.sessionDate).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-display text-sm text-[var(--ink-900)]">{se.therapist?.name ?? "—"}</span>
+                          <span className={`inline-flex items-center gap-1 ${ss.bg} ${ss.text} text-[9px] font-medium px-1.5 py-0.5 rounded-full`}><span className={`w-1 h-1 rounded-full ${ss.dot}`} />{se.statusLabel}</span>
+                          <span className="text-[10px] text-neutral-400">{se.duration ?? "—"} min</span>
+                        </div>
+                        <p className="text-[11px] text-neutral-600 mt-1 line-clamp-2">{se.preview}</p>
+                      </div>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3 text-neutral-300 shrink-0 mt-1"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )
+        )}
+
+        {activeTab === "informes" && (
+          reports.length === 0 ? (
+            <div className="bg-white border border-dashed border-neutral-200 rounded-xl p-10 text-center"><p className="text-sm text-neutral-600">Sin informes generados.</p></div>
+          ) : (
+            <div className="bg-white border border-neutral-100 rounded-xl divide-y divide-neutral-100">
+              {reports.map((r) => (
+                <Link key={r.id} href="/clinica/informes" className="p-4 flex items-center justify-between gap-3 hover:bg-neutral-50/50">
+                  <div className="min-w-0">
+                    <div className="font-medium text-[var(--ink-900)] text-sm">Informe {r.typeLabel.toLowerCase()}</div>
+                    <div className="text-[10px] text-neutral-400 tabular">{fmtDate(r.reportDate)} · Entrega {fmtDate(r.dueDate)}{r.overdue ? " · vencida" : ""}</div>
+                  </div>
+                  <span className="text-[10px] font-medium text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-full">{r.statusLabel}</span>
+                </Link>
+              ))}
+            </div>
+          )
+        )}
+
+        {activeTab === "coordinaciones" && (
+          coordinations.length === 0 ? (
+            <div className="bg-white border border-dashed border-neutral-200 rounded-xl p-10 text-center"><p className="text-sm text-neutral-600">Sin coordinaciones registradas.</p></div>
+          ) : (
+            <div className="space-y-3">
+              {coordinations.map((c) => (
+                <div key={c.id} className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[10px] uppercase tracking-wider text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full">{c.typeLabel}</span>
+                    <span className="text-[10px] text-neutral-400 tabular">{fmtDate(c.date)}</span>
+                  </div>
+                  <div className="text-[11px] text-neutral-500 mb-1">Participantes: {c.participants || "—"}</div>
+                  <p className="text-xs text-neutral-700 leading-relaxed">{c.topics || "—"}</p>
+                </div>
+              ))}
+            </div>
+          )
+        )}
       </div>
 
-      {openSession && (
-        <SessionDrawer
-          session={openSession}
-          patient={patient}
-          therapist={findTherapist(openSession.therapistId)}
-          onClose={() => setOpenSession(null)}
-        />
-      )}
-    </div>
-  );
-}
+      {openSession && <SessionDrawer session={openSession} patient={patient} onClose={() => setOpenSession(null)} onPublish={publishSession} busy={busy} />}
 
-function Field({ label, value }) {
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wider text-neutral-400">{label}</div>
-      <div className="text-xs text-[var(--ink-900)] font-medium mt-0.5">{value}</div>
+      {/* Modal editar ficha */}
+      {showEdit && editForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !modalBusy && setShowEdit(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display text-xl text-[var(--ink-900)] mb-3">Editar ficha</h3>
+            <form onSubmit={saveEdit} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <input className={inputCls} placeholder="Nombre *" value={editForm.firstName} onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })} />
+                <input className={inputCls} placeholder="Apellidos *" value={editForm.lastName} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <input className={inputCls} type="number" min={0} max={120} placeholder="Edad" value={editForm.age} onChange={(e) => setEditForm({ ...editForm, age: e.target.value })} />
+                <input className={inputCls} placeholder="Curso" value={editForm.educationLevel} onChange={(e) => setEditForm({ ...editForm, educationLevel: e.target.value })} />
+              </div>
+              <input className={inputCls} placeholder="Centro escolar" value={editForm.educationCenter} onChange={(e) => setEditForm({ ...editForm, educationCenter: e.target.value })} />
+              <div className="grid grid-cols-2 gap-3">
+                <input className={inputCls} placeholder="Frecuencia" value={editForm.attendanceFrequency} onChange={(e) => setEditForm({ ...editForm, attendanceFrequency: e.target.value })} />
+                <Select value={editForm.status} onChange={(v) => setEditForm({ ...editForm, status: v })} options={[{ value: "active", label: "Activo" }, { value: "paused", label: "En pausa" }, { value: "discharged", label: "Alta" }]} className={inputCls} />
+              </div>
+              <textarea className={inputCls} rows={3} placeholder="Motivo de derivación" value={editForm.referralReason} onChange={(e) => setEditForm({ ...editForm, referralReason: e.target.value })} />
+              <input className={inputCls} placeholder="Objetivos (separados por comas)" value={editForm.objectives} onChange={(e) => setEditForm({ ...editForm, objectives: e.target.value })} />
+              {modalError && <p className="text-xs text-rose-600">{modalError}</p>}
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setShowEdit(false)} disabled={modalBusy} className="px-4 py-2 rounded-lg border border-neutral-200 text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50">Cancelar</button>
+                <button type="submit" disabled={modalBusy} className="px-4 py-2 rounded-lg text-white text-xs font-medium disabled:opacity-50" style={{ background: "var(--color-primary, #1B3A2D)" }}>{modalBusy ? "Guardando…" : "Guardar"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal nuevo informe */}
+      {showReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !modalBusy && setShowReport(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display text-xl text-[var(--ink-900)] mb-1">Nuevo informe</h3>
+            <p className="text-[11px] text-neutral-400 mb-3">Para {patient.firstName} {patient.lastName}</p>
+            <form onSubmit={createReport} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Select value={reportForm.reportType} onChange={(v) => setReportForm({ ...reportForm, reportType: v })} options={[{ value: "evolution", label: "Evolutivo" }, { value: "admission", label: "Admisión" }, { value: "discharge", label: "Alta" }]} className={inputCls} />
+                <input type="date" className={inputCls} value={reportForm.dueDate} onChange={(e) => setReportForm({ ...reportForm, dueDate: e.target.value })} title="Fecha de entrega" />
+              </div>
+              <p className="text-[11px] text-neutral-400">Se crea como borrador.</p>
+              {modalError && <p className="text-xs text-rose-600">{modalError}</p>}
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setShowReport(false)} disabled={modalBusy} className="px-4 py-2 rounded-lg border border-neutral-200 text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50">Cancelar</button>
+                <button type="submit" disabled={modalBusy} className="px-4 py-2 rounded-lg text-white text-xs font-medium disabled:opacity-50" style={{ background: "var(--color-primary, #1B3A2D)" }}>{modalBusy ? "Creando…" : "Crear informe"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
