@@ -31,10 +31,15 @@ escriben datos reales (ya no `dummyData.js`).
 ranking, media de equipo, alertas computadas, aprobación de incentivos con
 auditoría). Áreas definidas en `lib/clinica/performanceAreas.js`.
 
-**Sigue como maqueta** (Fase 3, aún con `dummyData.js`):
-`/pacientes/[id]/sesiones/nueva` (subir audio → IA).
+**Fase 3 (audio → IA) real:** `/pacientes/[id]/sesiones/nueva` sube el audio →
+`POST /api/clinica/sessions/transcribe` (**Whisper de OpenAI** transcribe + **Claude**
+estructura) → la terapeuta revisa/edita → guarda la sesión. Modo demo *canned* en
+local sin claves (auto si faltan claves y `NODE_ENV≠production`, o `CLINICA_FAKE_AI=1`;
+bloqueado en producción). **Ya no queda ninguna pantalla en maqueta.**
 
-- Endpoints: `/api/pacientes/*` y `/api/clinica/{sessions,reports,coordinations,overview,performance}`.
+- Endpoints: `/api/pacientes/*` y `/api/clinica/{sessions, sessions/transcribe, reports, coordinations, overview, performance}`.
+- Transcripción: `lib/clinica/whisper.js` (API de OpenAI, clave del tenant). Estructura:
+  `lib/clinica/structureSession.js` (Claude, reutiliza el proveedor de Outreach).
 - Serializers: `lib/clinica/serialize.js` (fila Sequelize → forma de la UI).
 - Migración **generalizada** `scripts/migrate-clinica-module.js` (lee `master.tenants`,
   ya no aumenta-only). Seed `scripts/seed-clinica-demo.js`.

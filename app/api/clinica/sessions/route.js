@@ -51,6 +51,12 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       homeworkTasks: obs.homeworkTasks ?? "",
       incidents: obs.incidents ?? "",
     },
+    // Campos del flujo de audio→IA (opcionales): transcripción, estructura cruda,
+    // duración del audio y cuándo la IA terminó de procesar.
+    aiTranscription: typeof body.aiTranscription === "string" && body.aiTranscription.trim() ? body.aiTranscription.trim() : null,
+    aiStructured: body.aiStructured && typeof body.aiStructured === "object" ? body.aiStructured : null,
+    audioDurationSec: body.audioDurationSec != null && body.audioDurationSec !== "" ? Number(body.audioDurationSec) : null,
+    aiReviewedAt: body.aiReviewedAt ? new Date(body.aiReviewedAt) : null,
     status: STATUSES.includes(body.status) ? body.status : "registered",
   };
   const s = await ClinicSession.create(payload);

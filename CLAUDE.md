@@ -52,7 +52,7 @@ Decisiones arquitectónicas históricas: `docs/decisions/` (cuando exista).
 | Estilos          | Tailwind CSS 4                           |
 | Despliegue       | VPS propio (Docker)                      |
 | Automatizaciones | n8n (instancia propia)                   |
-| IA               | API OpenAI                               |
+| IA               | Claude (Anthropic) + Whisper (OpenAI) — clave por tenant |
 | Lenguaje         | JavaScript puro (SIN TypeScript)         |
 
 > El proyecto anterior usaba MongoDB + Mongoose + Express. Descartado.
@@ -318,10 +318,14 @@ aplique.
 > activan `leads`. Inconsistencia de nomenclatura heredada, pendiente de
 > unificar.
 >
-> **`pacientes` / `clinica`**: comparten backend con `clients`/`nutricion`
-> (sin carpeta `app/api/` propia); son UI + modelos (`Patient`,
-> `ClinicSession`, `ClinicalReport`, `Coordination`, `PerformanceMetric`).
-> Solo activos en `aumenta` (demo visual del 9-jun-2026).
+> **`pacientes` / `clinica`**: backend **REAL** (CRUD + IA), ya **no** son maqueta.
+> Tienen endpoints propios en `app/api/pacientes/*` y `app/api/clinica/*`
+> (`sessions`, `sessions/transcribe`, `reports`, `coordinations`, `overview`,
+> `performance`). Modelos `Patient`, `ClinicSession`, `ClinicalReport`,
+> `Coordination`, `PerformanceMetric`; serializers en `lib/clinica/`. Flujo de audio
+> (Fase 3): Whisper (OpenAI) transcribe + Claude estructura. Activos en `aumenta` y en
+> `demo` (escaparate, con datos de `scripts/seed-clinica-demo.js`). Detalle en
+> `docs/modules/{clinica,pacientes}.md`.
 >
 > **Placeholders sin construir** (entradas en `Sidebar.jsx` que hoy nadie
 > activa): `support`, `planning`, `documents`, `analytics`, `ai`,
@@ -352,17 +356,20 @@ aplique.
 
 ### IA
 
-- **API de Claude (Anthropic)** — es el único proveedor con código real hoy,
-  usado por el módulo Outreach (`lib/outreach/analysis/`). Dependencia
-  `@anthropic-ai/sdk`. **La clave es POR TENANT** (Configuración → IA →
+- **Claude (Anthropic)** — análisis de leads (Outreach, `lib/outreach/analysis/`) y
+  resumen/estructura de sesiones clínicas (`lib/clinica/structureSession.js`).
+  Dependencia `@anthropic-ai/sdk`. **Clave POR TENANT** (Configuración → IA →
   `settings.integrations.anthropicApiKey`), resuelta por `lib/ai/anthropicKey.js`.
-  **Ya NO se usa `ANTHROPIC_API_KEY` del entorno** (BYOK): un tenant sin su clave
-  recibe 503 al analizar.
-- Patrón: datos tenant → prompt construido desde config del tenant → pedir solo
-  JSON → parsear con try/catch y normalizar → persistir para no repetir la
-  llamada. El análisis nunca se dispara solo: cuesta dinero.
-- `OPENAI_API_KEY` sigue declarada en `.env.production.example` pero **ningún
-  código la usa**. Si se retoma OpenAI, revisar antes esa suposición.
+  **NO se usa `ANTHROPIC_API_KEY` del entorno** (BYOK): sin clave → 503.
+- **Modelo de Claude configurable por tenant** (`settings.integrations.anthropicModel`,
+  resuelto por `lib/ai/anthropicModel.js`). **Sonnet por defecto** (Opus consume muchos
+  más tokens); hay selector en Configuración → IA. El modelo se aplica a TODO el CRM.
+- **Whisper (OpenAI)** — SOLO para transcribir el audio de las sesiones clínicas
+  (voz → texto; `lib/clinica/whisper.js`, REST directa sin SDK). Clave POR TENANT
+  (`settings.integrations.openaiApiKey`, resuelta por `lib/ai/openaiKey.js`). Luego
+  Claude estructura el texto. **La `OPENAI_API_KEY` del entorno NO se usa** (BYOK).
+- Patrón: datos tenant → prompt desde config del tenant → pedir solo JSON → parsear
+  con try/catch y normalizar → persistir. Nada de IA se dispara solo: cuesta dinero.
 
 ---
 

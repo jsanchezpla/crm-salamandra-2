@@ -59,7 +59,9 @@ marcar sesión publicada. La tabla `patients` ya **no** es aumenta-only: la migr
 `scripts/migrate-clinica-module.js` la crea en cualquier tenant con el módulo
 (lee `master.tenants`).
 
-**Sigue como maqueta:** `/pacientes/[id]/sesiones/nueva` (subir audio → IA, Fase 3).
+**Fase 3 (real):** `/pacientes/[id]/sesiones/nueva` sube el audio → Whisper (OpenAI)
+transcribe → Claude estructura → la terapeuta revisa/edita → se guarda como
+`ClinicSession`. (Modo demo *canned* en local sin claves.)
 
 > El resto del documento (Sprint 1, dummy `p-1`, etc.) es histórico; la ficha ya no
 > depende de `isDiego` y todos los pacientes muestran sus datos reales.
