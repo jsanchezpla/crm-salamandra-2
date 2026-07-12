@@ -116,10 +116,23 @@ async function main() {
   // ── 3. LEADS + REFERIDOS ────────────────────────────────────────────────────
   await tryModule("Leads / Referidos", async () => {
     const { Lead } = models;
-    const stages = ["new", "contacted", "qualified", "proposal", "negotiation", "won", "lost"];
+    // Estados tal como los pinta la UI de leads (embudo new/contacted/lost).
+    const stages = ["new", "new", "new", "contacted", "contacted", "lost"];
+    const MOTIVOS = ["diagnostico", "servicios", "cursos", "talleres"];
+    const SERVICIOS_LEAD = ["Desarrollo web a medida", "Campaña de marketing 360", "Consultoría CRM", "Branding e identidad", "App móvil", "Automatización de procesos"];
+    const CURSOS = ["Marketing digital para pymes", "Introducción a la IA aplicada", "Ventas B2B", "Automatización con n8n"];
+    const TALLERES = ["Taller de redes sociales", "Taller de copywriting", "Taller de analítica web"];
+    const MENSAJES = [
+      "Quiero renovar mi web y no sé por dónde empezar.",
+      "Mi web no convierte, necesito captar más clientes.",
+      "Busco automatizar procesos que hoy hacemos a mano.",
+      "Me gustaría lanzar campañas en redes pero no tengo equipo.",
+      "Necesito un CRM para ordenar clientes, proyectos y facturas.",
+    ];
     let n = 0;
     for (let i = 0; i < 16; i++) {
       const esReferido = i >= 12;
+      const motivo = pick(MOTIVOS);
       await Lead.create({
         name: `${pick(NOMBRES)} ${pick(APELLIDOS)}`,
         email: `lead${i}@example.com`,
@@ -131,6 +144,13 @@ async function main() {
         expectedCloseDate: daysAgo(rand(-60, 30)),
         notes: "Contacto inicial vía formulario web.",
         source: esReferido ? "referido" : pick(["web", "linkedin", "recomendacion"]),
+        // Campos de consulta web: los que pinta la UI de leads del demo/sandbox.
+        tipo_usuario: pick(["ciudadano", "ciudadano", "profesional"]),
+        motivo,
+        servicio: motivo === "servicios" ? pick(SERVICIOS_LEAD) : null,
+        curso: motivo === "cursos" ? pick(CURSOS) : null,
+        taller: motivo === "talleres" ? pick(TALLERES) : null,
+        mensaje: motivo === "diagnostico" ? pick(MENSAJES) : null,
         customFields: esReferido ? { origin: "referido", referidoPor: pick(EMPRESAS) } : {},
       });
       n++;
@@ -247,7 +267,7 @@ async function main() {
     const { Order, OrderLine, OrderSettings } = models;
     await OrderSettings.findOrCreate({ where: {}, defaults: { transportPrice: 15 } }).catch(() => {});
     let n = 0;
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 22; i++) {
       const nLines = rand(1, 3); let subtotal = 0; const lines = [];
       for (let j = 0; j < nLines; j++) { const op = pick(outbound); if (!op) continue; const qty = rand(1, 5); const unit = Number(op.defaultSalePrice); const lt = +(unit * qty).toFixed(2); subtotal += lt; lines.push({ outboundProductId: op.id, productName: op.name, quantity: qty, unitPrice: unit, lineTotal: lt }); }
       const transport = rand(0, 30, 2);
@@ -284,7 +304,7 @@ async function main() {
     }
     for (const day of [1, 2, 3, 4, 5]) await Availability.findOrCreate({ where: { eventTypeId: null, dayOfWeek: day, startTime: "09:00:00", endTime: "14:00:00" }, defaults: { eventTypeId: null, dayOfWeek: day, startTime: "09:00:00", endTime: "14:00:00" } });
     let n = 0;
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 26; i++) {
       const et = pick(ets); const off = rand(-15, 20); const d = new Date(); d.setDate(d.getDate() + off); d.setHours(rand(9, 18), pick([0, 15, 30, 45]), 0, 0);
       await Booking.create({ eventTypeId: et.id, clientName: `${pick(NOMBRES)} ${pick(APELLIDOS)}`, clientEmail: `cita${i}@example.com`, clientPhone: `+34 ${rand(600, 699)} ${rand(100, 999)} ${rand(100, 999)}`, scheduledAt: d, duration: et.duration, modality: pick(et.modalities), status: off < 0 ? pick(["completed", "completed", "no_show", "cancelled"]) : "confirmed" });
       n++;
@@ -364,7 +384,7 @@ async function main() {
   await tryModule("Nutrición", async () => {
     const { Food, Plan, PlanMeal, PlanMealOption, PlanMealOptionFood } = models;
     const foods = [];
-    const foodDefs = [["Avena", "g"], ["Plátano", "unidad"], ["Leche desnatada", "ml"], ["Pechuga de pollo", "g"], ["Arroz integral", "g"], ["Huevo", "unidad"], ["Aceite de oliva", "ml"], ["Yogur natural", "g"]];
+    const foodDefs = [["Avena", "g"], ["Plátano", "unidad"], ["Leche desnatada", "ml"], ["Pechuga de pollo", "g"], ["Arroz integral", "g"], ["Huevo", "unidad"], ["Aceite de oliva", "ml"], ["Yogur natural", "g"], ["Salmón", "g"], ["Espinacas", "g"], ["Almendras", "g"], ["Pan integral", "g"], ["Manzana", "unidad"], ["Atún", "g"], ["Lentejas", "g"], ["Queso fresco", "g"], ["Tomate", "unidad"], ["Pavo", "g"]];
     for (const [nm, u] of foodDefs) foods.push(await Food.create({ name: nm, slug: slugify(nm), defaultUnit: u, source: "custom", tags: [] }));
     let nPlan = 0;
     const mk = async (plan) => {
@@ -376,7 +396,7 @@ async function main() {
     };
     const tpl = await Plan.create({ name: "Plantilla · Mantenimiento", description: "Plantilla base.", type: "template", visibleToClient: false });
     await mk(tpl); nPlan++;
-    for (let i = 0; i < 3; i++) { const p = await Plan.create({ name: `Plan de ${pick(NOMBRES)}`, description: "Plan asignado.", type: "assigned", templateId: tpl.id, clientId: pick(clientes)?.id ?? null, visibleToClient: true, assignedAt: dateAgo(rand(5, 60)) }); await mk(p); nPlan++; }
+    for (let i = 0; i < 8; i++) { const p = await Plan.create({ name: `Plan de ${pick(NOMBRES)}`, description: "Plan asignado.", type: "assigned", templateId: tpl.id, clientId: pick(clientes)?.id ?? null, visibleToClient: true, assignedAt: dateAgo(rand(5, 60)) }); await mk(p); nPlan++; }
     return `${foods.length} alimentos · ${nPlan} planes`;
   });
 

@@ -15,8 +15,12 @@
  *
  * Uso local:  node --env-file=.env.local scripts/rebuild-demo-showcase.js --confirm
  * Uso VPS:    docker exec crm-salamandra-app-1 node scripts/rebuild-demo-showcase.js --confirm
- *   (añade --leads-aumenta si quieres el override de leads de aumenta — ojo: es
- *    marca rosa + campos propios de aumenta, se verá raro en el demo)
+ *
+ * Nota leads: la UI de leads del demo la decide el SLUG en
+ * app/(dashboard)/leads/page.jsx (DemoLeadsModule, estilo aumenta pero verde),
+ * NO el campo tenant_modules.uiOverride. Por eso aquí no se toca override de
+ * leads; lo que hace que se vea completa es que el seed llena sus campos
+ * (motivo, servicio, curso, taller, mensaje, tipo_usuario).
  */
 
 import { spawnSync } from "node:child_process";
@@ -30,7 +34,6 @@ import { invalidateTenantCache } from "../lib/tenant/tenantResolver.js";
 const SLUG = "demo";
 const SCHEMA = `crm_${SLUG}`;
 const CONFIRM = process.argv.includes("--confirm");
-const LEADS_UI_OVERRIDE = process.argv.includes("--leads-aumenta") ? "aumenta/LeadsModule" : null;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Todos los módulos con página real, sin override (leads según flag). Se omiten
@@ -38,7 +41,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // analytics, ai, automations, integrations) y `sales` (duplica a leads).
 const MODULES = [
   "clients", "leads", "projects", "billing", "team", "inventory", "training",
-  "cuestionarios", "calendar", "citas", "orders", "referidos",
+  "cuestionarios", "calendar", "citas", "orders",
   "pacientes", "clinica", "nutricion", "outreach",
 ];
 
@@ -91,7 +94,6 @@ function printPlan() {
   process.stdout.write(" RECONSTRUIR demo (escaparate) — PLAN (DRY RUN)\n");
   process.stdout.write("══════════════════════════════════════════════════════════\n\n");
   process.stdout.write(`  1. Activar ${MODULES.length} módulos: ${MODULES.join(", ")}\n`);
-  process.stdout.write(`     · override de leads: ${LEADS_UI_OVERRIDE ?? "(ninguno — UI genérica)"}\n`);
   process.stdout.write(`     · se DESACTIVAN los módulos del demo que no estén en esa lista\n`);
   process.stdout.write(`  2. sync(): crear las tablas que falten en ${SCHEMA}\n`);
   process.stdout.write(`  3. TRUNCATE de TODAS las tablas de ${SCHEMA} (borra los datos actuales)\n`);
@@ -111,23 +113,22 @@ async function main() {
   process.stdout.write("══════════════════════════════════════════════════════════\n");
 
   getMasterDb();
-  const { Tenant, TenantModule } = getMasterModels();
+  const { Tenant, TenantModule, User } = getMasterModels();
   const tenant = await Tenant.findOne({ where: { slug: SLUG } });
   if (!tenant) throw new Error("Tenant 'demo' no encontrado en master.tenants");
 
   // 1) Módulos: activar el set (leads con su override), desactivar los que sobren.
   header("Configurando módulos...");
   for (const moduleKey of MODULES) {
-    const uiOverride = moduleKey === "leads" ? LEADS_UI_OVERRIDE : null;
     const [mod, created] = await TenantModule.findOrCreate({
       where: { tenantId: tenant.id, moduleKey },
       defaults: {
         tenantId: tenant.id, moduleKey, enabled: true, version: "1.0.0",
-        schemaExtensions: {}, logicOverrides: {}, uiOverride, featureFlags: {},
+        schemaExtensions: {}, logicOverrides: {}, uiOverride: null, featureFlags: {},
       },
     });
-    if (!created) await mod.update({ enabled: true, uiOverride, logicOverrides: {}, schemaExtensions: {}, featureFlags: {} });
-    log(`${created ? "✓" : "·"} ${moduleKey}${uiOverride ? `  (override: ${uiOverride})` : ""}`);
+    if (!created) await mod.update({ enabled: true, uiOverride: null, logicOverrides: {}, schemaExtensions: {}, featureFlags: {} });
+    log(`${created ? "✓" : "·"} ${moduleKey}`);
   }
   for (const m of await TenantModule.findAll({ where: { tenantId: tenant.id } })) {
     if (!MODULES.includes(m.moduleKey) && m.enabled) {
@@ -135,6 +136,13 @@ async function main() {
       log(`· ${m.moduleKey} → desactivado (no está en el escaparate)`);
     }
   }
+
+  // Acceso: el/los admin del demo ven TODOS los módulos (incluida Captación).
+  const [nAccess] = await User.update(
+    { moduleAccess: ["all"] },
+    { where: { tenantId: tenant.id, role: ["admin", "superadmin"] } }
+  );
+  log(`✓ acceso "todos los módulos" para ${nAccess} usuario(s) admin del demo`);
 
   // 2) Tablas: sync crea las que falten para los módulos recién activados.
   header(`Creando tablas que falten en ${SCHEMA} (sync)...`);
@@ -160,7 +168,7 @@ async function main() {
 
   process.stdout.write("\n══════════════════════════════════════════════════════════\n");
   process.stdout.write(" ✓ Demo reconstruido como escaparate.\n");
-  process.stdout.write(`   Módulos activos: ${MODULES.length}  ·  leads override: ${LEADS_UI_OVERRIDE ?? "ninguno"}\n`);
+  process.stdout.write(`   Módulos activos: ${MODULES.length}\n`);
   process.stdout.write("══════════════════════════════════════════════════════════\n\n");
   process.exit(0);
 }
