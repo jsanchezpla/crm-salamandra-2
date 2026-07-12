@@ -1,41 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import Select from "@/components/ui/Select.jsx";
 import PreviewBanner from "../_components/PreviewBanner.jsx";
-import {
-  TEAM_RANKING,
-  TEAM_ALERTS,
-  TEAM_HISTORY,
-  PERFORMANCE_AREAS,
-  findTherapist,
-  scoreToSemaforo,
-  semaforoClasses,
-} from "../_components/dummyData.js";
+import { PERFORMANCE_AREAS, scoreToSemaforo } from "@/lib/clinica/performanceAreas.js";
 
-const KPIS = [
-  { label: "Equipo activo", value: "6", sub: "Terapeutas" },
-  { label: "Puntuación media", value: "84", sub: "/100 · Equipo" },
-  { label: "Entregas en plazo", value: "92%", sub: "Informes último mes" },
-  { label: "Quejas registradas", value: "0", sub: "Periodo en curso" },
-];
+const SEMAFORO = {
+  green: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", ring: "ring-emerald-200" },
+  amber: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500", ring: "ring-amber-200" },
+  red: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-500", ring: "ring-red-200" },
+  gray: { bg: "bg-neutral-100", text: "text-neutral-500", dot: "bg-neutral-400", ring: "ring-neutral-200" },
+};
+const sc = (level) => SEMAFORO[level] ?? SEMAFORO.gray;
 
 function TeamLineChart({ data }) {
-  const W = 600;
-  const H = 120;
-  const P = 16;
+  if (!data?.length) return <p className="text-xs text-neutral-400">Sin histórico.</p>;
+  const W = 600, H = 120, P = 16;
   const min = Math.min(...data.map((d) => d.value)) - 5;
   const max = Math.max(...data.map((d) => d.value)) + 5;
-  const xStep = (W - P * 2) / (data.length - 1);
-  const points = data.map((d, i) => {
-    const x = P + i * xStep;
-    const y = H - P - ((d.value - min) / (max - min)) * (H - P * 2);
-    return { x, y, ...d };
-  });
+  const xStep = (W - P * 2) / Math.max(1, data.length - 1);
+  const points = data.map((d, i) => ({ x: P + i * xStep, y: H - P - ((d.value - min) / (max - min || 1)) * (H - P * 2), ...d }));
   const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
   const areaPath = `${linePath} L ${points[points.length - 1].x} ${H - P} L ${P} ${H - P} Z`;
-
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-32" preserveAspectRatio="none">
       <path d={areaPath} fill="var(--color-primary, #1B3A2D)" opacity="0.08" />
@@ -43,12 +29,8 @@ function TeamLineChart({ data }) {
       {points.map((p, i) => (
         <g key={i}>
           <circle cx={p.x} cy={p.y} r="3" fill="var(--color-primary, #1B3A2D)" />
-          <text x={p.x} y={H - 2} fontSize="9" textAnchor="middle" fill="#9CA3AF">
-            {p.month}
-          </text>
-          <text x={p.x} y={p.y - 7} fontSize="9" textAnchor="middle" fill="#1B3A2D" fontWeight="600">
-            {p.value}
-          </text>
+          <text x={p.x} y={H - 2} fontSize="9" textAnchor="middle" fill="#9CA3AF">{p.month}</text>
+          <text x={p.x} y={p.y - 7} fontSize="9" textAnchor="middle" fill="#1B3A2D" fontWeight="600">{p.value}</text>
         </g>
       ))}
     </svg>
@@ -59,76 +41,82 @@ function SemaforoMini({ areas }) {
   return (
     <div className="inline-flex items-center gap-0.5">
       {PERFORMANCE_AREAS.map((a) => {
-        const level = scoreToSemaforo(areas[a.key]);
-        const c = semaforoClasses(level);
-        return (
-          <span
-            key={a.key}
-            className={`w-2 h-2 rounded-full ${c.dot}`}
-            title={`Área ${a.n}: ${a.name} — ${areas[a.key]}/100`}
-          />
-        );
+        const c = sc(scoreToSemaforo(areas[a.key]));
+        return <span key={a.key} className={`w-2 h-2 rounded-full ${c.dot}`} title={`Área ${a.n}: ${a.name} — ${areas[a.key] ?? "—"}/100`} />;
       })}
     </div>
   );
 }
 
 export default function DireccionPage() {
-  const totalProposed = TEAM_RANKING.reduce((s, r) => s + r.proposedIncentive, 0);
-  const [period, setPeriod] = useState("2026-05");
-  const [teamFilter, setTeamFilter] = useState("all");
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [adjust, setAdjust] = useState(null); // { id, name, value }
+
+  const load = () => {
+    setLoading(true);
+    fetch("/api/clinica/performance/team", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (j.ok) setData(j.data); else setErrorMsg(j.error); })
+      .catch((e) => setErrorMsg(e.message))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  const patch = async (id, body) => {
+    setBusy(true); setErrorMsg(null);
+    try {
+      const r = await fetch(`/api/clinica/performance/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo actualizar");
+      setAdjust(null); load();
+    } catch (e) { setErrorMsg(e.message); } finally { setBusy(false); }
+  };
+  const approveAll = async () => {
+    setBusy(true); setErrorMsg(null);
+    try {
+      const r = await fetch("/api/clinica/performance/approve-all", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo aprobar");
+      load();
+    } catch (e) { setErrorMsg(e.message); } finally { setBusy(false); }
+  };
+
+  const ranking = data?.ranking ?? [];
+  const kpis = data?.kpis ?? {};
+  const alerts = data?.alerts ?? [];
+  const totalProposed = data?.totalProposed ?? 0;
+  const pendingCount = ranking.filter((r) => !r.approved).length;
+
+  const KPI_CARDS = [
+    { label: "Equipo activo", value: loading ? "—" : (kpis.teamActive ?? 0), sub: "Terapeutas" },
+    { label: "Puntuación media", value: loading ? "—" : (kpis.media ?? 0), sub: "/100 · Equipo" },
+    { label: "Entregas en plazo", value: loading ? "—" : (kpis.onTimePct != null ? `${kpis.onTimePct}%` : "—"), sub: "Informes entregados" },
+    { label: "Quejas registradas", value: loading ? "—" : (kpis.complaints ?? 0), sub: "Periodo en curso" },
+  ];
 
   return (
     <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-5">
-      <Link
-        href="/clinica"
-        className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
+      <Link href="/clinica" className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
         Volver a Clínica
       </Link>
 
       <PreviewBanner />
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="eyebrow">Clínica · Dirección</div>
-          <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">
-            Panel de dirección
-          </h1>
-          <p className="text-xs text-neutral-400 mt-1">
-            Visión global del equipo · Periodo de Mayo 2026
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Select
-            value={period}
-            onChange={setPeriod}
-            options={[
-              { value: "2026-05", label: "Mayo 2026" },
-              { value: "2026-04", label: "Abril 2026" },
-              { value: "2026-03", label: "Marzo 2026" },
-            ]}
-            className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer"
-          />
-          <Select
-            value={teamFilter}
-            onChange={setTeamFilter}
-            options={[
-              { value: "all", label: "Todo el equipo" },
-              { value: "t-1", label: "Lorena Vázquez" },
-              { value: "t-2", label: "Patricia Mendoza" },
-            ]}
-            className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer"
-          />
-        </div>
+      <div>
+        <div className="eyebrow">Clínica · Dirección</div>
+        <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">Panel de dirección</h1>
+        <p className="text-xs text-neutral-400 mt-1">Visión global del equipo · Periodo de {data?.period ? `${["","Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][data.period.month]} ${data.period.year}` : "—"}</p>
       </div>
+
+      {errorMsg && <div className="px-4 py-3 rounded-lg bg-rose-50 border border-rose-100 text-xs text-rose-700">{errorMsg}</div>}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {KPIS.map((k) => (
+        {KPI_CARDS.map((k) => (
           <div key={k.label} className="bg-white border border-neutral-100 rounded-xl p-4">
             <div className="text-[10px] uppercase tracking-wider text-neutral-400">{k.label}</div>
             <div className="font-display text-2xl text-[var(--ink-900)] mt-1 tabular">{k.value}</div>
@@ -137,11 +125,11 @@ export default function DireccionPage() {
         ))}
       </div>
 
-      {/* Ranking de terapeutas */}
+      {/* Ranking */}
       <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
         <div className="px-4 lg:px-5 py-3 flex items-center justify-between border-b border-neutral-100">
           <h2 className="eyebrow">Ranking del equipo</h2>
-          <span className="text-[10px] text-neutral-400">Mayo 2026 · Ordenado por puntuación</span>
+          <span className="text-[10px] text-neutral-400">Ordenado por puntuación</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
@@ -157,23 +145,16 @@ export default function DireccionPage() {
               </tr>
             </thead>
             <tbody>
-              {TEAM_RANKING.map((r, idx) => {
-                const t = findTherapist(r.therapistId);
-                const level = scoreToSemaforo(r.totalScore);
-                const c = semaforoClasses(level);
+              {loading && <tr><td colSpan={7} className="px-4 py-10 text-center text-neutral-400">Cargando…</td></tr>}
+              {!loading && ranking.map((r, idx) => {
+                const t = r.therapist ?? { name: "—", initials: "?", color: "#666", position: "" };
+                const c = sc(r.totalLevel);
                 return (
-                  <tr key={r.therapistId} className="border-t border-neutral-100 hover:bg-neutral-50/50">
-                    <td className="px-4 py-3 font-display text-base text-neutral-400 tabular w-8">
-                      {idx + 1}
-                    </td>
+                  <tr key={r.id} className="border-t border-neutral-100 hover:bg-neutral-50/50">
+                    <td className="px-4 py-3 font-display text-base text-neutral-400 tabular w-8">{idx + 1}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
-                        <div
-                          className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-display"
-                          style={{ backgroundColor: t.color ?? "#1B3A2D" }}
-                        >
-                          {t.initials}
-                        </div>
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-display" style={{ backgroundColor: t.color ?? "#1B3A2D" }}>{t.initials}</div>
                         <div>
                           <div className="text-[var(--ink-900)] font-medium leading-tight">{t.name}</div>
                           <div className="text-[10px] text-neutral-400">{t.position}</div>
@@ -182,21 +163,14 @@ export default function DireccionPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className={`inline-flex items-center gap-1.5 ${c.bg} ${c.text} text-[11px] font-medium px-2 py-0.5 rounded-full tabular`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
-                        {r.totalScore}
+                        <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />{r.totalScore}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <SemaforoMini areas={r.areas} />
-                    </td>
-                    <td className="px-4 py-3 text-[11px] text-neutral-600">{r.complements}</td>
-                    <td className="px-4 py-3 text-right tabular text-[var(--ink-900)] font-medium">
-                      {r.proposedIncentive} €
-                    </td>
+                    <td className="px-4 py-3"><SemaforoMini areas={r.areas} /></td>
+                    <td className="px-4 py-3 text-[11px] text-neutral-600">{r.complementsLabel}</td>
+                    <td className="px-4 py-3 text-right tabular text-[var(--ink-900)] font-medium">{r.proposedIncentive} €</td>
                     <td className="px-4 py-3 text-right">
-                      <button className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">
-                        Ver
-                      </button>
+                      <Link href={`/clinica/mi-desempeno?therapistId=${r.therapistId}`} className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">Ver</Link>
                     </td>
                   </tr>
                 );
@@ -204,13 +178,10 @@ export default function DireccionPage() {
             </tbody>
           </table>
         </div>
-        {/* Leyenda áreas */}
         <div className="px-4 lg:px-5 py-3 border-t border-neutral-100 bg-neutral-50/40 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-neutral-500">
           <span className="uppercase tracking-wider text-neutral-400">Leyenda áreas:</span>
           {PERFORMANCE_AREAS.map((a) => (
-            <span key={a.key} className="inline-flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-neutral-300" /> {a.n}. {a.name}
-            </span>
+            <span key={a.key} className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-neutral-300" /> {a.n}. {a.name}</span>
           ))}
         </div>
       </div>
@@ -220,32 +191,26 @@ export default function DireccionPage() {
         <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="eyebrow">Alertas</h2>
-            <span className="text-[10px] text-neutral-400">{TEAM_ALERTS.length} activas</span>
+            <span className="text-[10px] text-neutral-400">{alerts.length} activas</span>
           </div>
-          <div className="space-y-2">
-            {TEAM_ALERTS.map((a) => {
-              const t = findTherapist(a.therapistId);
-              const sev = a.severity === "high" ? "red" : a.severity === "medium" ? "amber" : "amber";
-              const c = semaforoClasses(sev);
-              return (
-                <div
-                  key={a.id}
-                  className={`flex items-start gap-3 rounded-lg border ${c.ring} ring-1 ${c.bg} p-3`}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className={`w-4 h-4 mt-0.5 shrink-0 ${c.text}`}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-                  </svg>
-                  <div className="flex-1 min-w-0">
-                    <div className={`text-xs font-medium ${c.text}`}>{t.name}</div>
-                    <div className="text-[11px] text-neutral-700 leading-snug mt-0.5">{a.text}</div>
+          {alerts.length === 0 ? (
+            <p className="text-[11px] text-neutral-400">Sin alertas en el periodo. 🎉</p>
+          ) : (
+            <div className="space-y-2">
+              {alerts.map((a) => {
+                const c = sc(a.severity === "high" ? "red" : "amber");
+                return (
+                  <div key={a.id} className={`flex items-start gap-3 rounded-lg ring-1 ${c.ring} ${c.bg} p-3`}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className={`w-4 h-4 mt-0.5 shrink-0 ${c.text}`}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-xs font-medium ${c.text}`}>{a.therapistName ?? "—"}</div>
+                      <div className="text-[11px] text-neutral-700 leading-snug mt-0.5">{a.text}</div>
+                    </div>
                   </div>
-                  <button className={`shrink-0 text-[11px] ${c.text} hover:underline font-medium`}>
-                    Revisar
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
@@ -253,11 +218,13 @@ export default function DireccionPage() {
             <h2 className="eyebrow">Evolución del equipo</h2>
             <span className="text-[10px] text-neutral-400">Últimos 6 meses</span>
           </div>
-          <TeamLineChart data={TEAM_HISTORY} />
-          <div className="mt-3 pt-3 border-t border-neutral-100 flex items-center justify-between text-[11px] text-neutral-500">
-            <span>Tendencia positiva sostenida</span>
-            <span className="text-emerald-600 font-medium">+6 pts vs Dic</span>
-          </div>
+          <TeamLineChart data={data?.history} />
+          {data?.trend != null && (
+            <div className="mt-3 pt-3 border-t border-neutral-100 flex items-center justify-between text-[11px] text-neutral-500">
+              <span>{data.trend >= 0 ? "Tendencia positiva" : "Tendencia a la baja"}</span>
+              <span className={`font-medium ${data.trend >= 0 ? "text-emerald-600" : "text-red-600"}`}>{data.trend >= 0 ? "+" : ""}{data.trend} pts (6m)</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -266,7 +233,7 @@ export default function DireccionPage() {
         <div className="px-4 lg:px-5 py-3 flex items-center justify-between border-b border-neutral-100">
           <div>
             <h2 className="eyebrow">Propuesta de incentivos</h2>
-            <p className="text-[11px] text-neutral-500 mt-0.5">Mayo 2026 · Generada por IA</p>
+            <p className="text-[11px] text-neutral-500 mt-0.5">{pendingCount} pendiente{pendingCount !== 1 ? "s" : ""} de aprobar</p>
           </div>
           <div className="text-right">
             <div className="text-[10px] uppercase tracking-wider text-neutral-400">Total propuesto</div>
@@ -278,37 +245,57 @@ export default function DireccionPage() {
             <tr className="text-left text-[10px] uppercase tracking-wider text-neutral-400">
               <th className="px-4 py-2 font-medium">Terapeuta</th>
               <th className="px-4 py-2 font-medium tabular text-right">Propuesto</th>
+              <th className="px-4 py-2 font-medium tabular text-right">Aprobado</th>
               <th className="px-4 py-2 font-medium text-right">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {TEAM_RANKING.map((r) => {
-              const t = findTherapist(r.therapistId);
-              return (
-                <tr key={r.therapistId} className="border-t border-neutral-100">
-                  <td className="px-4 py-3 text-[var(--ink-900)]">{t.name}</td>
-                  <td className="px-4 py-3 text-right tabular font-medium">{r.proposedIncentive} €</td>
-                  <td className="px-4 py-3 text-right space-x-2">
-                    <button className="text-[11px] text-emerald-700 hover:underline font-medium">Aprobar</button>
-                    <button className="text-[11px] text-neutral-500 hover:underline">Ajustar</button>
-                  </td>
-                </tr>
-              );
-            })}
+            {ranking.map((r) => (
+              <tr key={r.id} className="border-t border-neutral-100">
+                <td className="px-4 py-3 text-[var(--ink-900)]">{r.therapist?.name ?? "—"}</td>
+                <td className="px-4 py-3 text-right tabular font-medium">{r.proposedIncentive} €</td>
+                <td className="px-4 py-3 text-right tabular">
+                  {r.approved ? <span className="text-emerald-700 font-medium">{r.approvedIncentive} €</span> : <span className="text-neutral-300">—</span>}
+                </td>
+                <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
+                  {r.approved ? (
+                    <button disabled={busy} onClick={() => patch(r.id, { action: "unapprove" })} className="text-[11px] text-neutral-500 hover:underline disabled:opacity-50">Revertir</button>
+                  ) : (
+                    <>
+                      <button disabled={busy} onClick={() => patch(r.id, { action: "approve" })} className="text-[11px] text-emerald-700 hover:underline font-medium disabled:opacity-50">Aprobar</button>
+                      <button disabled={busy} onClick={() => setAdjust({ id: r.id, name: r.therapist?.name, value: String(r.proposedIncentive ?? 0) })} className="text-[11px] text-neutral-500 hover:underline disabled:opacity-50">Ajustar</button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
         <div className="px-4 lg:px-5 py-3 border-t border-neutral-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-neutral-50/40">
-          <span className="text-[11px] text-neutral-500">
-            Las propuestas se calcularán a partir de puntuación total, complementos y márgenes del centro.
-          </span>
-          <button
-            className="text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 transition-opacity"
-            style={{ background: "var(--color-primary, #1B3A2D)" }}
-          >
-            Aprobar todos ({totalProposed} €)
+          <span className="text-[11px] text-neutral-500">Las propuestas se basan en puntuación total y complementos del periodo.</span>
+          <button disabled={busy || pendingCount === 0} onClick={approveAll} className="text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 transition-opacity disabled:opacity-50" style={{ background: "var(--color-primary, #1B3A2D)" }}>
+            {busy ? "Procesando…" : pendingCount === 0 ? "Todo aprobado" : `Aprobar todos (${pendingCount})`}
           </button>
         </div>
       </div>
+
+      {/* Modal ajustar incentivo */}
+      {adjust && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !busy && setAdjust(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display text-lg text-[var(--ink-900)] mb-1">Ajustar incentivo</h3>
+            <p className="text-[11px] text-neutral-400 mb-3">{adjust.name}</p>
+            <div className="flex items-center gap-2">
+              <input type="number" min={0} step={10} value={adjust.value} onChange={(e) => setAdjust({ ...adjust, value: e.target.value })} className="flex-1 px-3 py-2 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400 tabular" autoFocus />
+              <span className="text-sm text-neutral-500">€</span>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setAdjust(null)} disabled={busy} className="px-4 py-2 rounded-lg border border-neutral-200 text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50">Cancelar</button>
+              <button onClick={() => patch(adjust.id, { approvedIncentive: Number(adjust.value) })} disabled={busy} className="px-4 py-2 rounded-lg text-white text-xs font-medium disabled:opacity-50" style={{ background: "var(--color-primary, #1B3A2D)" }}>{busy ? "Guardando…" : "Aprobar ajustado"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

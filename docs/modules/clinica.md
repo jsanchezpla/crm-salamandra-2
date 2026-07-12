@@ -26,11 +26,15 @@ tienen backend real: endpoints CRUD + persistencia + KPIs computados. Las págin
 `/clinica` (landing), `/clinica/informes`, `/pacientes` y `/pacientes/[id]` leen y
 escriben datos reales (ya no `dummyData.js`).
 
-**Siguen como maqueta** (fases posteriores, aún con `dummyData.js`):
-`/clinica/mi-desempeno` y `/clinica/direccion` (Fase 2: desempeño/incentivos) y
-`/pacientes/[id]/sesiones/nueva` (Fase 3: subir audio → IA).
+**Fase 2 (desempeño/incentivos) también real:** `/clinica/mi-desempeno` y
+`/clinica/direccion` leen de `/api/clinica/performance/*` (scoring por áreas,
+ranking, media de equipo, alertas computadas, aprobación de incentivos con
+auditoría). Áreas definidas en `lib/clinica/performanceAreas.js`.
 
-- Endpoints: `/api/pacientes/*` y `/api/clinica/{sessions,reports,coordinations,overview}`.
+**Sigue como maqueta** (Fase 3, aún con `dummyData.js`):
+`/pacientes/[id]/sesiones/nueva` (subir audio → IA).
+
+- Endpoints: `/api/pacientes/*` y `/api/clinica/{sessions,reports,coordinations,overview,performance}`.
 - Serializers: `lib/clinica/serialize.js` (fila Sequelize → forma de la UI).
 - Migración **generalizada** `scripts/migrate-clinica-module.js` (lee `master.tenants`,
   ya no aumenta-only). Seed `scripts/seed-clinica-demo.js`.

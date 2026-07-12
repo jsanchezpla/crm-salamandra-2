@@ -10,12 +10,14 @@
  */
 
 import { getTenantDb } from "../lib/db/tenantDb.js";
+import { AREA_KEYS } from "../lib/clinica/performanceAreas.js";
 
 const SLUG = process.argv[2] || "demo";
 
 function log(m) { process.stdout.write(`  ${m}\n`); }
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
 function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 function dateAgo(days, hour = 17) { const d = new Date(); d.setDate(d.getDate() - days); d.setHours(hour, 0, 0, 0); return d; }
 function ymdAgo(days) { const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().slice(0, 10); }
 function ymdIn(days) { const d = new Date(); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); }
@@ -154,13 +156,14 @@ async function main() {
     const p = patients[i];
     if (i >= 5) continue; // ~5 pacientes con informe
     const full = i < 2;
-    const status = pick(["draft", "reviewed", "delivered"]);
+    const forceOverdue = i < 2; // garantiza 2 informes vencidos (alertas de dirección)
+    const status = forceOverdue ? "reviewed" : pick(["draft", "reviewed", "delivered"]);
     await ClinicalReport.create({
       patientId: p.id,
       therapistId: p.mainTherapistId,
       reportType: pick(["evolution", "evolution", "admission"]),
       reportDate: ymdAgo(rand(3, 40)),
-      dueDate: i % 2 === 0 ? ymdAgo(rand(1, 6)) : ymdIn(rand(2, 12)), // algunos vencidos
+      dueDate: forceOverdue ? ymdAgo(rand(3, 12)) : i % 2 === 0 ? ymdAgo(rand(1, 6)) : ymdIn(rand(2, 12)),
       deliveredAt: status === "delivered" ? dateAgo(rand(1, 20)) : null,
       contentSections: full ? fullReportContent(p.firstName) : {},
       status,
@@ -189,7 +192,38 @@ async function main() {
   }
   log(`✓ ${nCoord} coordinaciones`);
 
-  process.stdout.write(`\n✓ Seed clínico completado en ${SLUG}: ${patients.length} pacientes · ${nSess} sesiones · ${nRep} informes · ${nCoord} coordinaciones\n\n`);
+  // ── Desempeño: 6 meses por terapeuta (tendencia ascendente hacia el mes actual) ──
+  const now = new Date();
+  let nPerf = 0;
+  for (let i = 0; i < team.length; i++) {
+    const t = team[i];
+    const base = Math.max(62, 90 - i * 5); // ranking amplio 90→65 (algún terapeuta en zona de alerta)
+    for (let back = 5; back >= 0; back--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - back, 1);
+      const total = clamp(base - back * rand(1, 2), 55, 99);
+      const areaScores = {};
+      for (const key of AREA_KEYS) areaScores[`${key}Score`] = clamp(total + rand(-8, 8), 45, 100);
+      const isLatest = back === 0;
+      const proposed = Math.max(0, Math.round((total - 44) * 10));
+      await PerformanceMetric.create({
+        therapistId: t.id,
+        periodMonth: d.getMonth() + 1,
+        periodYear: d.getFullYear(),
+        ...areaScores,
+        complementOccupation: rand(80, 100),
+        complementSeniority: rand(1, 8),
+        complementAttendance: Math.random() < 0.8,
+        totalScore: total,
+        proposedIncentive: proposed,
+        approvedIncentive: isLatest ? null : proposed, // el mes en curso queda pendiente de aprobar
+        approvedAt: isLatest ? null : dateAgo(back * 30, 12),
+      });
+      nPerf++;
+    }
+  }
+  log(`✓ ${nPerf} métricas de desempeño (${team.length} terapeutas × 6 meses)`);
+
+  process.stdout.write(`\n✓ Seed clínico completado en ${SLUG}: ${patients.length} pacientes · ${nSess} sesiones · ${nRep} informes · ${nCoord} coordinaciones · ${nPerf} métricas\n\n`);
   process.exit(0);
 }
 
