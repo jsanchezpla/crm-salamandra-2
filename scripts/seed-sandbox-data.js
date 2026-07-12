@@ -13,7 +13,9 @@
 import { getTenantDb, closeAllConnections } from "../lib/db/tenantDb.js";
 import { calculateInvoice } from "../lib/billing/calculateInvoice.js";
 
-const SLUG = "sandbox";
+// Tenant destino: por defecto "sandbox", pero acepta un slug como argumento
+// (p.ej. "demo") para reutilizar este seed en otros tenants de escaparate.
+const SLUG = process.argv[2] || "sandbox";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 function log(m) { process.stdout.write(`  ${m}\n`); }
@@ -99,7 +101,7 @@ async function main() {
       const nombre = pick(NOMBRES), apellido = pick(APELLIDOS);
       const m = await TeamMember.create({
         displayName: `${nombre} ${apellido}`,
-        email: `${slugify(nombre)}.${slugify(apellido)}${i}@sandbox.local`,
+        email: `${slugify(nombre)}.${slugify(apellido)}${i}@${SLUG}.local`,
         position: roles[i].position, department: roles[i].department,
         phone: `+34 ${rand(600, 699)} ${rand(100, 999)} ${rand(100, 999)}`,
         hourlyCost: rand(18, 40, 2), hourlyRate: rand(50, 95, 2), monthlySalary: rand(1900, 3400, 2),
