@@ -148,10 +148,19 @@ banner. La landing no lo lleva (es el destino).
 
 ### Sidebar
 
-Entrada "Clínica" en sección "Empresa" con icono heartbeat. Visible
-solo si `enabledModules.has('clinica')`. Posicionada justo debajo de
-"Pacientes" (Pacientes primero porque son el dato, Clínica son las
-acciones sobre los datos).
+"Clínica" es un **grupo plegable** en la sección "Empresa" (icono heartbeat),
+visible si `enabledModules.has('clinica')`. Cuelgan de él, como sub-ítems que se
+**auto-expanden** al estar en `/clinica/*` o `/pacientes/*`:
+
+- **Pacientes** (`/pacientes`) — primero, es el dato del área clínica.
+- **Informes** (`/clinica/informes`)
+- **Mi desempeño** (`/clinica/mi-desempeno`)
+- **Dirección** (`/clinica/direccion`)
+
+Ya **no** hay entrada "Pacientes" a nivel raíz: vive dentro de Clínica. Usa el
+mismo patrón de submenú que Nutrición (`components/layout/Sidebar.jsx`, campo
+`children` del item). El gating del grupo es el módulo `clinica`, que en la
+práctica siempre va activado junto a `pacientes` (ambos solo en aumenta).
 
 ## Migración
 

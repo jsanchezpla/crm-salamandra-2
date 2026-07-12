@@ -174,19 +174,21 @@ const navigation = [
     label: "Empresa",
     items: [
       {
-        key: "pacientes",
-        label: "Pacientes",
-        href: "/pacientes",
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
-        ),
-      },
-      {
+        // "Clínica" es el paraguas del área clínica. Pacientes (el dato) vive
+        // DENTRO como primer sub-ítem, junto a las vistas de acción (informes,
+        // desempeño, dirección). Los hijos se auto-expanden al estar en
+        // /clinica/* o /pacientes/*. Gating: el grupo depende del módulo
+        // `clinica`, que en la práctica siempre va activado junto a `pacientes`
+        // (ambos solo en aumenta; ver docs/modules/clinica.md y pacientes.md).
         key: "clinica",
         label: "Clínica",
         href: "/clinica",
+        children: [
+          { key: "pacientes", label: "Pacientes", href: "/pacientes" },
+          { key: "clinica-informes", label: "Informes", href: "/clinica/informes" },
+          { key: "clinica-desempeno", label: "Mi desempeño", href: "/clinica/mi-desempeno" },
+          { key: "clinica-direccion", label: "Dirección", href: "/clinica/direccion" },
+        ],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 12h3.75l1.5-4.5 3 9 1.5-4.5h8.25" />

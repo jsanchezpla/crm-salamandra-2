@@ -61,10 +61,23 @@ export function defineClinicSession(sequelize) {
         type: DataTypes.JSONB,
         allowNull: true,
       },
+      // Metadatos del audio original (flujo de IA, fase posterior): duración en
+      // segundos y marca de cuándo la IA terminó de procesar/estructurar.
+      audioDurationSec: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: { min: 0 },
+      },
+      aiReviewedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      // Estados: 'draft' (borrador) · 'ai_pending' (audio subido, esperando IA) ·
+      // 'registered' (sesión guardada, estado normal) · 'published' (publicada).
       status: {
-        type: DataTypes.ENUM("draft", "published"),
+        type: DataTypes.ENUM("draft", "ai_pending", "registered", "published"),
         allowNull: false,
-        defaultValue: "published",
+        defaultValue: "registered",
       },
     },
     {

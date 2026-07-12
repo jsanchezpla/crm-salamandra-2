@@ -54,6 +54,8 @@
     "db:migrate:clinica:prod": "node --env-file=.env.production scripts/migrate-clinica-sprint-1.js",
     "db:migrate:pacientes": "node --env-file=.env.local scripts/migrate-pacientes-sprint-1.js",
     "db:migrate:pacientes:prod": "node --env-file=.env.production scripts/migrate-pacientes-sprint-1.js",
+    "db:migrate:clinica:module": "node --env-file=.env.local scripts/migrate-clinica-module.js",
+    "db:migrate:clinica:module:prod": "node --env-file=.env.production scripts/migrate-clinica-module.js",
     "db:seed:nutri-laura": "node --env-file=.env.local scripts/seed-nutri-laura.js",
     "db:seed:nutri-laura:prod": "node --env-file=.env.production scripts/seed-nutri-laura.js",
     "db:seed:healim": "node --env-file=.env.local scripts/seed-healim.js",

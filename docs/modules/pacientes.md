@@ -103,6 +103,11 @@ Enum: `enum_patients_status` con valores `active`, `paused`,
 
 ## Frontend
 
+En el sidebar, **Pacientes no es una entrada raíz**: cuelga como primer
+sub-ítem del grupo **Clínica** (sección "Empresa"). Ver
+[`docs/modules/clinica.md`](clinica.md) → Sidebar. Las rutas siguen siendo
+`/pacientes*` (no cambian).
+
 Tres páginas en `app/(dashboard)/pacientes/`.
 
 | Ruta | Propósito |

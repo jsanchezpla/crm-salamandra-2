@@ -51,6 +51,13 @@ export function definePatient(sequelize) {
         type: DataTypes.STRING(120),
         allowNull: true,
       },
+      // Objetivos terapéuticos a nivel de paciente (tags cortos). Distinto de los
+      // objetivos por sesión (ClinicSession.objectives).
+      objectives: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
       mainTherapistId: {
         type: DataTypes.UUID,
         allowNull: true,
