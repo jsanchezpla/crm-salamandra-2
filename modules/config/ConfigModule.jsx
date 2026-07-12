@@ -43,6 +43,22 @@ const AI_PROVIDERS = {
     ],
     note: "Con el límite de cuota a 1.000 es imposible que Google te cobre: la API deja de responder al llegar al tope gratis.",
   },
+  resend: {
+    title: "Resend (correo de captación)",
+    subtitle: "Enviar el correo modelo en frío a los leads captados.",
+    field: "resendApiKey",
+    prefix: "re_",
+    platformUrl: "https://resend.com/api-keys",
+    platformLabel: "Abrir Resend",
+    steps: [
+      "Entra en resend.com y crea una cuenta (o inicia sesión).",
+      "En Domains, verifica tu dominio de envío (registros SPF + DKIM).",
+      'Ve a "API Keys" → "Create API Key" (permiso de envío).',
+      "Copia la clave (empieza por re_) y pégala abajo.",
+      "Rellena el remitente con un email de ESE dominio verificado.",
+    ],
+    note: "El remitente (from) debe ser de un dominio verificado en ESTA cuenta de Resend, o Resend rechaza el envío.",
+  },
 };
 
 export default function ConfigModule() {
@@ -69,6 +85,9 @@ export default function ConfigModule() {
 
   function setBillingField(k, v) {
     setBilling((b) => ({ ...b, [k]: v }));
+  }
+  function setResendField(k, v) {
+    setCfg((c) => ({ ...c, integrations: { ...c.integrations, resend: { ...c.integrations?.resend, [k]: v } } }));
   }
 
   async function patchTenant(payload, successMsg) {
@@ -198,6 +217,59 @@ export default function ConfigModule() {
             onSave={(value) => patchTenant({ googlePlacesApiKey: value }, "Clave de Google guardada")}
             onClear={() => patchTenant({ googlePlacesApiKey: null }, "Clave de Google eliminada")}
           />
+          <ApiKeyCard
+            provider={AI_PROVIDERS.resend}
+            status={cfg.integrations?.resend}
+            isAdmin={isAdmin}
+            onSave={(value) => patchTenant({ resendApiKey: value }, "Clave de Resend guardada")}
+            onClear={() => patchTenant({ resendApiKey: null }, "Clave de Resend eliminada")}
+          />
+
+          {/* Remitente + reply-to del correo de captación (no son secretos). */}
+          <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
+            <h3 className="font-display text-lg text-[var(--ink-900)]">Remitente del correo de captación</h3>
+            <p className="text-xs text-neutral-500 mt-1">
+              De qué dirección salen los correos en frío y a dónde llegan las respuestas. El remitente debe ser de un
+              dominio verificado en tu cuenta de Resend. Déjalo vacío para usar el valor por defecto del sistema.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+              <Field label="Remitente (from)">
+                <input
+                  disabled={!isAdmin}
+                  value={cfg.integrations?.resend?.fromEmail ?? ""}
+                  onChange={(e) => setResendField("fromEmail", e.target.value)}
+                  placeholder="hola@tudominio.com"
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Responder a (reply-to)">
+                <input
+                  disabled={!isAdmin}
+                  value={cfg.integrations?.resend?.replyTo ?? ""}
+                  onChange={(e) => setResendField("replyTo", e.target.value)}
+                  placeholder="info@tudominio.com"
+                  className={inputCls}
+                />
+              </Field>
+            </div>
+            {isAdmin && (
+              <div className="flex justify-end mt-3">
+                <PrimaryButton
+                  onClick={() =>
+                    patchTenant(
+                      {
+                        resendFromEmail: cfg.integrations?.resend?.fromEmail ?? "",
+                        resendReplyTo: cfg.integrations?.resend?.replyTo ?? "",
+                      },
+                      "Remitente guardado"
+                    )
+                  }
+                >
+                  Guardar remitente
+                </PrimaryButton>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

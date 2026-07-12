@@ -33,8 +33,11 @@ export function defineOutreachLead(sequelize) {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      // TEXT y no STRING(255): el `websiteUri` de Google (y algún "sitio web" de
+      // GMB que en realidad es una URL de reservas con parámetros) supera de
+      // largo los 255 y reventaba el INSERT ("value too long for varchar(255)").
       website: {
-        type: DataTypes.STRING,
+        type: DataTypes.TEXT,
         allowNull: true,
       },
       phone: {

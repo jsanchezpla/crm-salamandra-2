@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import Select from "../../components/ui/Select.jsx";
 import SECTORES from "./sectores.json";
 import { scoreBand, analysisFor, sourceLabel, formatDate } from "./scores.js";
+import { useIntegrations } from "./useIntegrations.js";
+import IntegrationGate from "./IntegrationGate.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition";
@@ -31,7 +33,7 @@ function ScorePill({ score }) {
  * Correo modelo: la IA lo propone, una persona lo revisa, lo edita y confirma
  * el envío. Nunca se manda solo.
  */
-function EmailDraft({ leadId, line, analysis, recipients, onSent }) {
+function EmailDraft({ leadId, line, analysis, recipients, onSent, emailReady }) {
   const draft = analysis.emailDraft;
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState(recipients[0]?.email ?? "");
@@ -122,10 +124,21 @@ function EmailDraft({ leadId, line, analysis, recipients, onSent }) {
             </p>
           )}
 
+          {!emailReady && (
+            <p className="text-xs text-amber-700">
+              Configura la clave de Resend en{" "}
+              <Link href="/configuracion" className="font-semibold underline">
+                Configuración → IA
+              </Link>{" "}
+              para poder enviar correos.
+            </p>
+          )}
+
           <button
             onClick={send}
-            disabled={sending || !to || !subject.trim() || !body.trim()}
-            className="px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50 hover:opacity-90 transition"
+            disabled={sending || !to || !subject.trim() || !body.trim() || !emailReady}
+            title={emailReady ? undefined : "Configura la clave de Resend en Configuración → IA para enviar correos"}
+            className="px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition"
             style={{ backgroundColor: "var(--color-primary)" }}
           >
             {sending ? "Enviando..." : alreadySent ? "Reenviar" : "Enviar correo"}
@@ -139,7 +152,7 @@ function EmailDraft({ leadId, line, analysis, recipients, onSent }) {
   );
 }
 
-function BusinessLinePanel({ leadId, line, analysis, recipients, onSent }) {
+function BusinessLinePanel({ leadId, line, analysis, recipients, onSent, emailReady }) {
   return (
     <section className="bg-white rounded-xl border border-neutral-200 p-5 flex flex-col">
       <header className="mb-4">
@@ -198,7 +211,7 @@ function BusinessLinePanel({ leadId, line, analysis, recipients, onSent }) {
             </div>
           )}
 
-          <EmailDraft leadId={leadId} line={line} analysis={analysis} recipients={recipients} onSent={onSent} />
+          <EmailDraft leadId={leadId} line={line} analysis={analysis} recipients={recipients} onSent={onSent} emailReady={emailReady} />
 
           <footer className="mt-auto pt-4 border-t border-neutral-100 flex items-center justify-between text-xs text-neutral-400">
             <span>Analizado {formatDate(analysis.analyzedAt)}</span>
@@ -252,6 +265,12 @@ export default function OutreachLeadDetail({ leadId }) {
   const [showConvert, setShowConvert] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState(null);
+
+  // Claves de IA por tenant (BYOK): analizar necesita Anthropic, enviar necesita
+  // Resend. Sin ellas se ve la ficha pero esas acciones quedan deshabilitadas.
+  const { status: integrations, has } = useIntegrations();
+  const analyzeReady = has("anthropic");
+  const emailReady = has("resend");
 
   useEffect(() => {
     let cancelled = false;
@@ -523,12 +542,15 @@ export default function OutreachLeadDetail({ leadId }) {
               >
                 Eliminar
               </button>
-              {/* Cada análisis cuesta una llamada de API: nunca se dispara solo. */}
+              {/* Cada análisis cuesta una llamada de API: nunca se dispara solo.
+                  Requiere la clave de Anthropic del tenant; sin ella se
+                  deshabilita y el aviso de arriba enlaza a Configuración. */}
               <button
                 type="button"
                 onClick={analyze}
-                disabled={analyzing || lines.length === 0}
-                className="px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50 hover:opacity-90 transition"
+                disabled={analyzing || lines.length === 0 || !analyzeReady}
+                title={analyzeReady ? undefined : "Configura tu clave de Anthropic en Configuración → IA para analizar"}
+                className="px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition"
                 style={{ backgroundColor: "var(--color-primary)" }}
               >
                 {analyzing ? "Analizando..." : lead.analyzed ? "Re-analizar" : "Analizar con IA"}
@@ -540,6 +562,8 @@ export default function OutreachLeadDetail({ leadId }) {
           </div>
         )}
       </header>
+
+      <IntegrationGate status={integrations} require={["anthropic", "resend"]} />
 
       {analyzeError && (
         <div className="mb-4 px-3 py-2 rounded-lg bg-rose-50 border border-rose-100 text-sm text-rose-700">
@@ -634,6 +658,7 @@ export default function OutreachLeadDetail({ leadId }) {
               analysis={analysisFor(lead, line.id)}
               recipients={recipients}
               onSent={refresh}
+              emailReady={emailReady}
             />
           ))}
         </div>

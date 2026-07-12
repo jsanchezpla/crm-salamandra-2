@@ -3,6 +3,7 @@ import { ok } from "../../../../../../lib/utils/apiResponse.js";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../../../../../../lib/utils/errors.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { sendEmail } from "../../../../../../lib/email/resendClient.js";
+import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -71,17 +72,25 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     );
   }
 
+  // Config de Resend del tenant (Configuración → IA/Correo). La key es
+  // obligatoria y por-tenant (cifrada); sin ella no se envía.
+  const resend = getTenantResendConfig(ctx);
+  if (!resend.apiKey) {
+    throw new AppError(
+      "Configura la clave de Resend en Configuración → Inteligencia Artificial antes de enviar correos.",
+      400
+    );
+  }
+
   const result = await sendEmail({
     to: to.trim(),
     subject: subject.trim(),
     text,
-    from: process.env.OUTREACH_FROM_EMAIL || undefined, // si no, el FROM por defecto del CRM
-    // Las respuestas del lead caen en un buzón que sí se lee (p.ej. info@),
-    // no en el remitente del outreach (que puede ser un subdominio de envío).
-    replyTo: process.env.OUTREACH_REPLY_TO || undefined,
-    // Credencial propia del módulo si existe; si no, la global del CRM. Así el
-    // correo en frío no comparte cuota ni reputación con el resto de emails.
-    apiKey: process.env.OUTREACH_RESEND_API_KEY || undefined,
+    from: resend.fromEmail || undefined,
+    // Las respuestas del lead caen en un buzón que sí se lee (reply-to),
+    // distinto del remitente del outreach (que puede ser un subdominio de envío).
+    replyTo: resend.replyTo || undefined,
+    apiKey: resend.apiKey, // clave del tenant, descifrada al vuelo
     tags: [{ name: "module", value: "outreach" }],
   });
 
@@ -94,7 +103,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     return ok({
       sent: false,
       dryRun: true,
-      message: "Envío simulado: falta RESEND_API_KEY. No se ha marcado como enviado.",
+      message: "Envío simulado (clave de Resend en modo dry-run). No se ha marcado como enviado.",
     });
   }
 

@@ -34,6 +34,7 @@ plataforma + campo para pegar la clave), estilo autoservicio con fricción:
 | ------- | ----- | ------ | ---------- |
 | **Anthropic (Claude)** | `anthropicApiKey` | Análisis IA de Outreach (`/analizar`) | console.anthropic.com |
 | **Google Cloud (Places)** | `googlePlacesApiKey` | `"Buscar nuevos"` de Google Maps | console.cloud.google.com |
+| **Resend (correo captación)** | `resendApiKey` (+ `resendFromEmail`, `resendReplyTo`) | Enviar el correo modelo en frío | resend.com |
 
 Cada tarjeta muestra estado **Conectada / Sin configurar** con una pista
 enmascarada (p.ej. `AIza…1234`), y permite reemplazar o eliminar la clave.
@@ -68,8 +69,8 @@ Son **secretos**, y se protegen así:
 Consumo desde Outreach:
 - `analizar` lee la clave del tenant vía `getTenantAnthropicKey(ctx)`
   (`lib/ai/anthropicKey.js`). **Sin fallback de entorno**: sin clave → `503`.
-- `buscar-nuevos` lee `ctx.tenant.settings?.integrations?.googlePlacesApiKey`
-  (sin fallback de entorno).
+- `buscar-nuevos` lee la clave de Google del tenant y la **descifra** con
+  `decryptSecret` (sin fallback de entorno).
 
 ---
 

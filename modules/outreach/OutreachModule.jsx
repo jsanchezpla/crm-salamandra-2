@@ -5,6 +5,8 @@ import Link from "next/link";
 import Select from "../../components/ui/Select.jsx";
 import SECTORES from "./sectores.json";
 import { scoreBand, analysisFor, SOURCES, sourceLabel } from "./scores.js";
+import { useIntegrations } from "./useIntegrations.js";
+import IntegrationGate from "./IntegrationGate.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -76,6 +78,11 @@ export default function OutreachModule() {
   const [selected, setSelected] = useState(() => new Set());
   const [confirmBulk, setConfirmBulk] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Claves de IA por tenant (BYOK): sin ellas se puede entrar pero no buscar/
+  // analizar/enviar. "Buscar nuevos" (Google Maps) necesita la clave de Google.
+  const { status: integrations, has } = useIntegrations();
+  const canSearch = has("googlePlaces");
 
   // Debounce del buscador: no queremos una request por tecla.
   useEffect(() => {
@@ -264,8 +271,10 @@ export default function OutreachModule() {
           >
             Configuración
           </Link>
-          {/* "Buscar nuevos" dispara el scraping en n8n. Nunca se llama solo:
-              cuesta tiempo, y por eso el modo por defecto solo lee de BD. */}
+          {/* "Buscar nuevos" busca en Google Maps y guarda leads sin analizar.
+              Nunca se llama solo (cuesta cuota) y requiere la clave de Google
+              Places del tenant: sin ella se deshabilita y el aviso de arriba
+              enlaza a Configuración. */}
           <button
             type="button"
             onClick={() => {
@@ -273,7 +282,9 @@ export default function OutreachModule() {
               setSearchResult(null);
               setSearchError(null);
             }}
-            className="px-4 py-2 rounded-lg border border-neutral-200 text-sm text-neutral-700 hover:bg-neutral-50 transition"
+            disabled={!canSearch}
+            title={canSearch ? undefined : "Configura tu clave de Google Places en Configuración → IA para buscar nuevos"}
+            className="px-4 py-2 rounded-lg border border-neutral-200 text-sm text-neutral-700 hover:bg-neutral-50 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
             Buscar nuevos
           </button>
@@ -289,6 +300,8 @@ export default function OutreachModule() {
           </button>
         </div>
       </header>
+
+      <IntegrationGate status={integrations} require={["googlePlaces", "anthropic", "resend"]} />
 
       {/* Filtros. "Ver ya buscados" es el modo por defecto: solo lee de BD. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
@@ -596,7 +609,7 @@ export default function OutreachModule() {
               <div className="pt-2 flex gap-2">
                 <button
                   type="submit"
-                  disabled={searching || searchForm.sources.length === 0 || (!searchForm.sector && !searchForm.location)}
+                  disabled={searching || !canSearch || searchForm.sources.length === 0 || (!searchForm.sector && !searchForm.location)}
                   className="flex-1 px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50 transition hover:opacity-90"
                   style={{ backgroundColor: "var(--color-primary)" }}
                 >

@@ -7,7 +7,8 @@
  *   2. migrate-outreach-sprint-1.js       crea las 5 tablas outreach_*
  *   3. migrate-outreach-google-usage.js   contador Google Places en outreach_settings
  *   4. migrate-outreach-convert.js        campos de conversión a cliente en outreach_leads
- *   5. seed-outreach.js <slug>            (solo con --seed) datos de muestra
+ *   5. migrate-outreach-website-text.js   website VARCHAR(255) → TEXT (URLs largas)
+ *   6. seed-outreach.js <slug>            (solo con --seed) datos de muestra
  *
  * Las 3 migraciones leen la lista de tenants con `outreach` activo desde
  * master.tenant_modules en runtime (regla #12): por eso basta con enable + migrar.
@@ -78,6 +79,7 @@ async function main() {
   await run("migrate-outreach-sprint-1.js");
   await run("migrate-outreach-google-usage.js");
   await run("migrate-outreach-convert.js");
+  await run("migrate-outreach-website-text.js");
 
   // 3) Datos de muestra (opcional, --seed)
   if (seed) {

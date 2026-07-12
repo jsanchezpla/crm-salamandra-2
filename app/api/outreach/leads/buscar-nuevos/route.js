@@ -8,6 +8,7 @@ import { upsertScrapedLeads } from "../../../../../lib/outreach/persistLeads.js"
 import { callScrapingWebhook } from "../../../../../lib/outreach/scraping.js";
 import { sendEmail } from "../../../../../lib/email/resendClient.js";
 import { decryptSecret } from "../../../../../lib/crypto/secretBox.js";
+import { getTenantResendConfig } from "../../../../../lib/outreach/resendConfig.js";
 
 const VALID_SOURCES = ["paginas_amarillas", "google_maps", "linkedin"];
 const ENRICH_CONCURRENCY = 5;
@@ -40,8 +41,8 @@ async function mapPool(items, concurrency, fn) {
  * Aviso por email cuando el tenant cruza el umbral mensual de Google. Best-effort:
  * nunca rompe la búsqueda. Usa la credencial propia del outreach si existe.
  */
-async function sendQuotaWarning({ to, tenantName, count, limit }) {
-  if (!to) return;
+async function sendQuotaWarning({ to, tenantName, count, limit, resend }) {
+  if (!to || !resend?.apiKey) return; // sin clave de Resend del tenant, no se avisa
   try {
     await sendEmail({
       to,
@@ -51,9 +52,9 @@ async function sendQuotaWarning({ to, tenantName, count, limit }) {
         (tenantName ? ` de ${tenantName}` : "") +
         `.\n\nAl llegar a ${limit}, el CRM deja de buscar en Google hasta el día 1 del mes siguiente, ` +
         `para no superar la cuota gratuita. El contador se reinicia solo cada mes.\n\n— CRM Salamandra`,
-      from: process.env.OUTREACH_FROM_EMAIL || undefined,
-      replyTo: process.env.OUTREACH_REPLY_TO || undefined,
-      apiKey: process.env.OUTREACH_RESEND_API_KEY || undefined,
+      from: resend.fromEmail || undefined,
+      replyTo: resend.replyTo || undefined,
+      apiKey: resend.apiKey,
       tags: [
         { name: "module", value: "outreach" },
         { name: "kind", value: "quota-warning" },
@@ -163,6 +164,7 @@ export const POST = withTenant(async (request, _routeContext, ctx) => {
         tenantName: ctx.tenant.name,
         count: settings.googlePlacesUsageCount,
         limit: GOOGLE_MONTHLY_LIMIT,
+        resend: getTenantResendConfig(ctx),
       });
     }
 

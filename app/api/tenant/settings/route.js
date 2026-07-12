@@ -47,6 +47,16 @@ function applyKey(target, field, value) {
   if (typeof value === "string" && value.trim()) target[field] = encryptSecret(value.trim());
 }
 
+// Igual que applyKey pero SIN cifrar: para valores no-secretos (from, reply-to).
+function applyPlain(target, field, value) {
+  if (value === undefined) return;
+  if (value === null || value === "") {
+    delete target[field];
+    return;
+  }
+  if (typeof value === "string" && value.trim()) target[field] = value.trim();
+}
+
 export const GET = withTenant(async (request, _routeContext, ctx) => {
   const t = ctx.tenant;
   const brand = t.settings?.brand ?? {};
@@ -64,6 +74,11 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     integrations: {
       anthropic: keyStatus(integ.anthropicApiKey),
       googlePlaces: keyStatus(integ.googlePlacesApiKey),
+      resend: {
+        ...keyStatus(integ.resendApiKey),
+        fromEmail: integ.resendFromEmail ?? null,
+        replyTo: integ.resendReplyTo ?? null,
+      },
     },
   });
 });
@@ -111,6 +126,9 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   // Claves de IA (secretos).
   applyKey(settings.integrations, "anthropicApiKey", body.anthropicApiKey);
   applyKey(settings.integrations, "googlePlacesApiKey", body.googlePlacesApiKey);
+  applyKey(settings.integrations, "resendApiKey", body.resendApiKey);
+  applyPlain(settings.integrations, "resendFromEmail", body.resendFromEmail);
+  applyPlain(settings.integrations, "resendReplyTo", body.resendReplyTo);
 
   updates.settings = settings;
   await tenant.update(updates);
@@ -127,6 +145,11 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     integrations: {
       anthropic: keyStatus(settings.integrations.anthropicApiKey),
       googlePlaces: keyStatus(settings.integrations.googlePlacesApiKey),
+      resend: {
+        ...keyStatus(settings.integrations.resendApiKey),
+        fromEmail: settings.integrations.resendFromEmail ?? null,
+        replyTo: settings.integrations.resendReplyTo ?? null,
+      },
     },
   });
 });

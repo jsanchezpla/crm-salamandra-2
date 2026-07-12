@@ -92,6 +92,8 @@
     "db:migrate:outreach:usage:prod": "node --env-file=.env.production scripts/migrate-outreach-google-usage.js",
     "db:migrate:outreach:convert": "node --env-file=.env.local scripts/migrate-outreach-convert.js",
     "db:migrate:outreach:convert:prod": "node --env-file=.env.production scripts/migrate-outreach-convert.js",
+    "db:migrate:outreach:website": "node --env-file=.env.local scripts/migrate-outreach-website-text.js",
+    "db:migrate:outreach:website:prod": "node --env-file=.env.production scripts/migrate-outreach-website-text.js",
     "db:enable:outreach": "node --env-file=.env.local scripts/enable-outreach.js",
     "db:seed:outreach": "node --env-file=.env.local scripts/seed-outreach.js",
     "db:setup:outreach": "node --env-file=.env.local scripts/setup-outreach.js",

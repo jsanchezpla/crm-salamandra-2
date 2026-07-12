@@ -254,6 +254,24 @@ entorno).
 que apunta a Configuración → IA. PA/LinkedIn sin `OUTREACH_SCRAPING_WEBHOOK_URL`
 responden `503`.
 
+**Bloqueo en la UI (además del backend):** el módulo se puede **abrir** sin
+claves, pero las acciones que cuestan API quedan **deshabilitadas** según qué
+clave falte, con un aviso ámbar y enlace a `/configuracion`:
+
+| Acción | Clave requerida | Dónde |
+| ------ | --------------- | ----- |
+| Buscar nuevos (Google Maps) | Google Places | botón cabecera + submit del drawer (`OutreachModule.jsx`) |
+| Analizar / Re-analizar | Anthropic | botón de la ficha (`OutreachLeadDetail.jsx`) |
+| Enviar correo | Resend | botón por línea de negocio (`EmailDraft`) |
+
+El estado se lee con el hook `modules/outreach/useIntegrations.js`
+(`GET /api/tenant/settings` → `integrations.{anthropic,googlePlaces,resend}.configured`,
+auth y **no** admin-only) y el aviso lo pinta `modules/outreach/IntegrationGate.jsx`.
+Es **optimista mientras carga** (no parpadea el caso configurado) y **fail-open**
+si el fetch de estado falla: el backend sigue siendo la barrera real (400/503).
+Las acciones que **no** consumen API (alta manual, editar, eliminar, convertir en
+cliente, filtros) nunca se bloquean.
+
 ### Contrato del webhook de scraping (solo PA / LinkedIn, vía n8n)
 
 `POST $OUTREACH_SCRAPING_WEBHOOK_URL` con
@@ -286,9 +304,11 @@ npm run db:enable:outreach -- <slug>
 # 2. Crear las tablas (idempotente, lee la lista de master.tenants)
 npm run db:migrate:outreach
 
-# 3. Migraciones incrementales (contador de Google + conversión a cliente)
+# 3. Migraciones incrementales (contador de Google + conversión a cliente +
+#    website a TEXT para URLs largas de Google)
 npm run db:migrate:outreach:usage
 npm run db:migrate:outreach:convert
+npm run db:migrate:outreach:website
 
 # 4. (Opcional) Datos de muestra
 npm run db:seed:outreach -- <slug>
@@ -314,9 +334,10 @@ Después: cada tenant pega su clave de **Anthropic** y de **Google Places** en
 | **Clave Google Places** | Por tenant (Configuración) | `"Buscar nuevos"` Google Maps. **Sin fallback de entorno** |
 | `OUTREACH_SCRAPING_WEBHOOK_URL` | Entorno | Webhook n8n para PA/LinkedIn |
 | `OUTREACH_WEBHOOK_SECRET` | Entorno | Firma HMAC del cuerpo enviado a n8n |
-| `OUTREACH_FROM_EMAIL` | Entorno | Remitente del correo modelo (si falta, `RESEND_FROM_EMAIL`) |
-| `OUTREACH_REPLY_TO` | Entorno | A dónde van las respuestas del lead (buzón que sí se lee) |
-| `OUTREACH_RESEND_API_KEY` | Entorno | Credencial Resend propia del outreach (si no, `RESEND_API_KEY`) |
+| **Clave Resend** | Por tenant (Configuración) | Enviar el correo modelo. **Cifrada, sin fallback** (`lib/outreach/resendConfig.js`) |
+| `OUTREACH_FROM_EMAIL` | Entorno (default) | Remitente por defecto; el tenant puede sobrescribirlo en Configuración |
+| `OUTREACH_REPLY_TO` | Entorno (default) | Reply-to por defecto; el tenant puede sobrescribirlo en Configuración |
+| `OUTREACH_RESEND_API_KEY` | — | **YA NO se usa**: la clave de Resend es por-tenant |
 | `OUTREACH_FAKE_AI` | Entorno | `=1` activa el analizador simulado (solo fuera de producción) |
 
 Los secrets de entorno se ponen en `.env.local` y en el `.env.production` del VPS
