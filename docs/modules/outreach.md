@@ -77,9 +77,9 @@ CRM, no hay que pasar secretos a n8n para Google, y el flujo es más simple.
 ### 6. Claves de IA por tenant (BYOK)
 
 Cada tenant trae su propia clave de Anthropic y de Google Places (self-service
-en Configuración). La de Anthropic cae a `ANTHROPIC_API_KEY` del entorno si el
-tenant no tiene la suya; la de Google **no** tiene fallback de entorno (es
-per-tenant obligatoria). Las claves viven en `master.tenants.settings.integrations`
+en Configuración). **Ninguna tiene fallback de entorno**: son per-tenant
+obligatorias. La de Anthropic **ya no lee `ANTHROPIC_API_KEY`** (se resuelve con
+`lib/ai/anthropicKey.js`); sin ella, el análisis responde `503`. Las claves viven en `master.tenants.settings.integrations`
 y **nunca** se serializan al cliente (el layout las elimina).
 
 ---
@@ -248,7 +248,8 @@ Las mutaciones de líneas/ajustes y los borrados exigen rol `admin`.
 `limit`, `offset`.
 
 **Degradación sin claves:** el análisis usa la clave Anthropic del tenant
-(fallback a `ANTHROPIC_API_KEY`); sin ninguna, `/analizar` responde `503`.
+(Configuración → IA); **sin ella `/analizar` responde `503`** (no hay fallback de
+entorno).
 `"Buscar nuevos"` con Google sin clave del tenant responde `400` con un mensaje
 que apunta a Configuración → IA. PA/LinkedIn sin `OUTREACH_SCRAPING_WEBHOOK_URL`
 responden `503`.
@@ -309,7 +310,7 @@ Después: cada tenant pega su clave de **Anthropic** y de **Google Places** en
 
 | Variable | Ámbito | Para qué |
 | -------- | ------ | -------- |
-| **Clave Anthropic** | Por tenant (Configuración) | Analizar con IA. Fallback a `ANTHROPIC_API_KEY` del entorno |
+| **Clave Anthropic** | Por tenant (Configuración) | Analizar con IA. **Sin fallback de entorno** (`lib/ai/anthropicKey.js`) |
 | **Clave Google Places** | Por tenant (Configuración) | `"Buscar nuevos"` Google Maps. **Sin fallback de entorno** |
 | `OUTREACH_SCRAPING_WEBHOOK_URL` | Entorno | Webhook n8n para PA/LinkedIn |
 | `OUTREACH_WEBHOOK_SECRET` | Entorno | Firma HMAC del cuerpo enviado a n8n |

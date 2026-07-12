@@ -53,6 +53,10 @@ Las claves viven en **`master.tenants.settings.integrations`** (JSONB):
 
 Son **secretos**, y se protegen así:
 
+1. **Cifradas en reposo** (AES-256-GCM, `lib/crypto/secretBox.js`) con
+   `SETTINGS_ENCRYPTION_KEY` del entorno. En la BD solo hay texto cifrado
+   (`enc:v1:…`): un dump o backup filtrado **no sirve** sin esa clave, que nunca
+   está en la base de datos. Se cifra al guardar y se descifra al usar.
 1. **La API nunca las devuelve en claro.** `GET /api/tenant/settings` devuelve
    solo `{ configured, hint }` por clave (estado + pista corta).
 2. **No llegan al cliente.** El layout del dashboard (`app/(dashboard)/layout.jsx`)
@@ -62,8 +66,8 @@ Son **secretos**, y se protegen así:
    para que Outreach vea la clave nueva de inmediato (la caché de tenant dura ~60s).
 
 Consumo desde Outreach:
-- `analizar` lee `ctx.tenant.settings?.integrations?.anthropicApiKey` (fallback a
-  `ANTHROPIC_API_KEY` del entorno).
+- `analizar` lee la clave del tenant vía `getTenantAnthropicKey(ctx)`
+  (`lib/ai/anthropicKey.js`). **Sin fallback de entorno**: sin clave → `503`.
 - `buscar-nuevos` lee `ctx.tenant.settings?.integrations?.googlePlacesApiKey`
   (sin fallback de entorno).
 
@@ -96,8 +100,14 @@ No hay migración: `settings` es JSONB, ya existe en `master.tenants`.
 
 ---
 
+## Cifrado en reposo (hecho)
+
+Las claves se guardan **cifradas** (AES-256-GCM) con `SETTINGS_ENCRYPTION_KEY`.
+Detalle en `lib/crypto/secretBox.js`. Migración para cifrar claves antiguas en
+claro: `scripts/encrypt-tenant-secrets.js` (idempotente). Sin la env var, se
+guardan en claro (aviso por stderr) — hay que configurarla en el `.env`.
+
 ## Pendiente / ideas
 
-- Cifrado en reposo de las claves (hoy en claro en el JSONB, pero nunca salen al
-  cliente ni por la API). Placeholder `GOOGLE_TOKEN_ENCRYPTION_KEY` disponible.
 - Reactivar "Datos del tenant" (marca/logo) si se necesita edición desde aquí.
+- Rotación/re-cifrado de secretos si algún día se rota `SETTINGS_ENCRYPTION_KEY`.

@@ -3,6 +3,7 @@ import { ok } from "../../../../../../lib/utils/apiResponse.js";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../../../../../../lib/utils/errors.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { analyzeLead } from "../../../../../../lib/outreach/analysis/index.js";
+import { getTenantAnthropicKey } from "../../../../../../lib/ai/anthropicKey.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -56,9 +57,9 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       businessLines: businessLines.map((b) => b.toJSON()),
       settings: settings.toJSON(),
       companyName: tenant.name,
-      // Key de IA por-tenant (configuración → IA). Si el tenant no tiene la
-      // suya, anthropic.js cae a ANTHROPIC_API_KEY del entorno.
-      apiKey: tenant.settings?.integrations?.anthropicApiKey || undefined,
+      // Clave de Anthropic del tenant (Configuración → IA). Fuente ÚNICA del CRM:
+      // NO hay fallback a ANTHROPIC_API_KEY del entorno.
+      apiKey: getTenantAnthropicKey(ctx) || undefined,
     });
   } catch (err) {
     // Los errores del proveedor no se propagan tal cual: pueden traer trozos

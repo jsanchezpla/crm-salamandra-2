@@ -354,7 +354,10 @@ aplique.
 
 - **API de Claude (Anthropic)** — es el único proveedor con código real hoy,
   usado por el módulo Outreach (`lib/outreach/analysis/`). Dependencia
-  `@anthropic-ai/sdk`, secret `ANTHROPIC_API_KEY`.
+  `@anthropic-ai/sdk`. **La clave es POR TENANT** (Configuración → IA →
+  `settings.integrations.anthropicApiKey`), resuelta por `lib/ai/anthropicKey.js`.
+  **Ya NO se usa `ANTHROPIC_API_KEY` del entorno** (BYOK): un tenant sin su clave
+  recibe 503 al analizar.
 - Patrón: datos tenant → prompt construido desde config del tenant → pedir solo
   JSON → parsear con try/catch y normalizar → persistir para no repetir la
   llamada. El análisis nunca se dispara solo: cuesta dinero.

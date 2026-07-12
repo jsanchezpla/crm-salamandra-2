@@ -3,6 +3,7 @@ import { ok } from "../../../../lib/utils/apiResponse.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../../../../lib/utils/errors.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { invalidateTenantCache } from "../../../../lib/tenant/tenantResolver.js";
+import { encryptSecret, decryptSecret } from "../../../../lib/crypto/secretBox.js";
 
 /**
  * /api/tenant/settings — configuración básica del tenant.
@@ -17,9 +18,17 @@ import { invalidateTenantCache } from "../../../../lib/tenant/tenantResolver.js"
  * que el análisis con IA vea la nueva key de inmediato (la caché dura ~60s).
  */
 
-// Nunca exponer la clave entera. Solo si está puesta + una pista corta.
-function keyStatus(key) {
-  if (!key || typeof key !== "string") return { configured: false, hint: null };
+// Nunca exponer la clave entera. Solo si está puesta + una pista corta. El valor
+// guardado va cifrado, así que se descifra para calcular la pista (y si no se
+// puede descifrar, se indica sin romper la respuesta).
+function keyStatus(stored) {
+  if (!stored || typeof stored !== "string") return { configured: false, hint: null };
+  let key;
+  try {
+    key = decryptSecret(stored);
+  } catch {
+    return { configured: true, hint: "•••• (cifrada)" };
+  }
   const hint = key.length > 12 ? `${key.slice(0, 6)}…${key.slice(-4)}` : "••••";
   return { configured: true, hint };
 }
@@ -34,7 +43,8 @@ function applyKey(target, field, value) {
     delete target[field];
     return;
   }
-  if (typeof value === "string" && value.trim()) target[field] = value.trim();
+  // Se guarda CIFRADA en reposo (lib/crypto/secretBox).
+  if (typeof value === "string" && value.trim()) target[field] = encryptSecret(value.trim());
 }
 
 export const GET = withTenant(async (request, _routeContext, ctx) => {

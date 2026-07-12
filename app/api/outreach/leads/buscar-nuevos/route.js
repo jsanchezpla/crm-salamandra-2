@@ -7,6 +7,7 @@ import { extractEmailFromWebsite } from "../../../../../lib/outreach/enrichWebsi
 import { upsertScrapedLeads } from "../../../../../lib/outreach/persistLeads.js";
 import { callScrapingWebhook } from "../../../../../lib/outreach/scraping.js";
 import { sendEmail } from "../../../../../lib/email/resendClient.js";
+import { decryptSecret } from "../../../../../lib/crypto/secretBox.js";
 
 const VALID_SOURCES = ["paginas_amarillas", "google_maps", "linkedin"];
 const ENRICH_CONCURRENCY = 5;
@@ -102,7 +103,15 @@ export const POST = withTenant(async (request, _routeContext, ctx) => {
 
   // ── Google Maps: nativo (Places API con la key del tenant + email de la web) ──
   if (sources.includes("google_maps")) {
-    const apiKey = ctx.tenant.settings?.integrations?.googlePlacesApiKey;
+    const storedKey = ctx.tenant.settings?.integrations?.googlePlacesApiKey;
+    let apiKey = null;
+    if (storedKey) {
+      try {
+        apiKey = decryptSecret(storedKey); // guardada cifrada en reposo
+      } catch {
+        apiKey = null;
+      }
+    }
     if (!apiKey) {
       throw new AppError(
         "Configura tu clave de Google Places en Configuración → Inteligencia Artificial antes de buscar en Google Maps.",
