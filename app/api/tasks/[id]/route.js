@@ -5,12 +5,14 @@ import { ForbiddenError, NotFoundError, ValidationError } from "../../../../lib/
 import { serializeTask } from "../../../../lib/projects/serializeTask.js";
 import { isAdminRole, isLeadOfProject } from "../../../../lib/projects/projectAuth.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
+import { isValidTaskPriority, TASK_PRIORITY_VALUES } from "../../../../lib/projects/taskPriority.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const EDITABLE_FIELDS = new Set([
   "title",
   "description",
+  "priority",
   "boardColumnId",
   "phaseId",
   "milestoneId",
@@ -129,6 +131,9 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
   }
   if (updates.description != null && typeof updates.description === "string") {
     updates.description = updates.description.trim();
+  }
+  if (updates.priority !== undefined && !isValidTaskPriority(updates.priority)) {
+    throw new ValidationError(`'priority' inválida. Opciones: ${TASK_PRIORITY_VALUES.join(", ")}`);
   }
 
   // Si cambia la columna, validar que sigue siendo del MISMO proyecto. NO

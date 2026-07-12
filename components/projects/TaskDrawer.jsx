@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Select from "@/components/ui/Select.jsx";
+import { TASK_PRIORITIES, DEFAULT_TASK_PRIORITY } from "@/lib/projects/taskPriority.js";
 
 /**
  * TaskDrawer — drawer lateral derecho para ver/editar/crear una task.
@@ -68,6 +69,7 @@ export default function TaskDrawer({
   const [form, setForm] = useState({
     title: "",
     description: "",
+    priority: DEFAULT_TASK_PRIORITY,
     boardColumnId: createInColumnId ?? null,
     phaseId: null,
     milestoneId: null,
@@ -126,6 +128,7 @@ export default function TaskDrawer({
         setForm({
           title: t.title ?? "",
           description: t.description ?? "",
+          priority: t.priority ?? DEFAULT_TASK_PRIORITY,
           boardColumnId: t.boardColumnId ?? null,
           phaseId: t.phaseId ?? null,
           milestoneId: t.milestoneId ?? null,
@@ -182,6 +185,7 @@ export default function TaskDrawer({
       const body = {
         title: form.title.trim(),
         description: form.description.trim() || undefined,
+        priority: form.priority,
         boardColumnId: form.boardColumnId ?? undefined,
         phaseId: form.phaseId ?? undefined,
         milestoneId: form.milestoneId ?? undefined,
@@ -317,22 +321,35 @@ export default function TaskDrawer({
           <div className="flex-1 p-6 text-sm text-neutral-400">Cargando...</div>
         ) : (
           <div className="flex-1 overflow-y-auto p-5 space-y-5">
-            {/* Columna */}
-            <Section label="Columna">
-              <Select
-                className={inputCls}
-                value={form.boardColumnId ?? ""}
-                onChange={(val) => {
-                  const v = val || null;
-                  setForm({ ...form, boardColumnId: v });
-                  if (mode === "view") persistField({ boardColumnId: v });
-                }}
-                options={[
-                  { value: "", label: "— Sin columna —" },
-                  ...columns.map((c) => ({ value: c.id, label: c.name })),
-                ]}
-              />
-            </Section>
+            {/* Columna + Prioridad */}
+            <div className="grid grid-cols-2 gap-3">
+              <Section label="Columna">
+                <Select
+                  className={inputCls}
+                  value={form.boardColumnId ?? ""}
+                  onChange={(val) => {
+                    const v = val || null;
+                    setForm({ ...form, boardColumnId: v });
+                    if (mode === "view") persistField({ boardColumnId: v });
+                  }}
+                  options={[
+                    { value: "", label: "— Sin columna —" },
+                    ...columns.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
+              </Section>
+              <Section label="Prioridad">
+                <Select
+                  className={inputCls}
+                  value={form.priority}
+                  onChange={(val) => {
+                    setForm({ ...form, priority: val });
+                    if (mode === "view") persistField({ priority: val });
+                  }}
+                  options={TASK_PRIORITIES.map((p) => ({ value: p.value, label: p.label }))}
+                />
+              </Section>
+            </div>
 
             {/* Descripción */}
             <Section label="Descripción">

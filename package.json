@@ -44,6 +44,8 @@
     "db:migrate:projects-1:prod": "node --env-file=.env.production scripts/migrate-projects-sprint-1.js",
     "db:migrate:projects-2": "node --env-file=.env.local scripts/migrate-projects-sprint-2.js",
     "db:migrate:projects-2:prod": "node --env-file=.env.production scripts/migrate-projects-sprint-2.js",
+    "db:migrate:projects-priority": "node --env-file=.env.local scripts/migrate-projects-task-priority.js",
+    "db:migrate:projects-priority:prod": "node --env-file=.env.production scripts/migrate-projects-task-priority.js",
     "db:migrate:avatar-color": "node --env-file=.env.local scripts/migrate-team-members-avatar-color.js",
     "db:migrate:avatar-color:prod": "node --env-file=.env.production scripts/migrate-team-members-avatar-color.js",
     "db:migrate:inventory-rework": "node --env-file=.env.local scripts/migrate-inventory-rework.js",

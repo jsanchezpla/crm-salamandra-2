@@ -166,7 +166,7 @@ function BusinessLinePanel({ leadId, line, analysis, recipients, onSent, emailRe
   return (
     <section className="bg-white rounded-xl border border-neutral-200 p-5 flex flex-col">
       <header className="mb-4">
-        <h3 className="font-[Fraunces] text-xl text-neutral-800">{line.name}</h3>
+        <h3 className="font-[Fraunces] text-xl text-neutral-800 break-words">{line.name}</h3>
         {line.description && (
           <p className="text-xs text-neutral-500 mt-1 leading-relaxed line-clamp-2">{line.description}</p>
         )}
@@ -221,7 +221,18 @@ function BusinessLinePanel({ leadId, line, analysis, recipients, onSent, emailRe
             </div>
           )}
 
-          <EmailDraft leadId={leadId} line={line} analysis={analysis} recipients={recipients} onSent={onSent} emailReady={emailReady} />
+          {/* key por analyzedAt: al re-analizar, el borrador cambia y el
+              componente debe remontarse para re-sembrar asunto/cuerpo/destinatario
+              desde el nuevo borrador (si no, mostraría/enviaría el correo viejo). */}
+          <EmailDraft
+            key={`draft-${analysis.analyzedAt ?? analysis.id}`}
+            leadId={leadId}
+            line={line}
+            analysis={analysis}
+            recipients={recipients}
+            onSent={onSent}
+            emailReady={emailReady}
+          />
 
           <footer className="mt-auto pt-4 border-t border-neutral-100 flex items-center justify-between text-xs text-neutral-400">
             <span>Analizado {formatDate(analysis.analyzedAt)}</span>
@@ -612,18 +623,19 @@ export default function OutreachLeadDetail({ leadId }) {
               <button
                 key={l.id}
                 type="button"
+                aria-pressed={on}
                 onClick={() => toggleLine(l.id)}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition ${
+                className={`inline-flex items-center gap-1 max-w-full min-w-0 px-2.5 py-1 rounded-full text-xs border transition ${
                   on ? "border-transparent text-white" : "border-neutral-200 text-neutral-500 hover:bg-neutral-50"
                 }`}
                 style={on ? { backgroundColor: "var(--color-primary)" } : undefined}
               >
                 {on && (
-                  <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                  <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" className="w-3 h-3 shrink-0">
                     <path fillRule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 011.4-1.4l3.3 3.3 6.8-6.8a1 1 0 011.4 0z" clipRule="evenodd" />
                   </svg>
                 )}
-                {l.name}
+                <span className="truncate">{l.name}</span>
               </button>
             );
           })}

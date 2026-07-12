@@ -28,8 +28,10 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
 
   const patch = {};
   if ("name" in body) {
-    if (!body.name?.trim()) throw new ValidationError("El nombre no puede quedar vacío");
-    patch.name = body.name.trim();
+    const name = body.name?.trim();
+    if (!name) throw new ValidationError("El nombre no puede quedar vacío");
+    if (name.length > 255) throw new ValidationError("El nombre no puede superar 255 caracteres");
+    patch.name = name;
   }
   if ("description" in body) patch.description = body.description ?? null;
   if ("scoringUp" in body) {

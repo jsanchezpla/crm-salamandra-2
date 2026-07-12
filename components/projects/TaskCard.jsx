@@ -2,6 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { priorityMeta } from "@/lib/projects/taskPriority.js";
 
 function initials(name) {
   if (!name) return "??";
@@ -107,6 +108,14 @@ function TaskCardBody({ task }) {
       )}
 
       <footer className="mt-3 flex items-center gap-2 text-[11px] text-neutral-500">
+        {task.priority && (
+          <span
+            className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-medium ${priorityMeta(task.priority).badgeClass}`}
+            title={`Prioridad: ${priorityMeta(task.priority).label}`}
+          >
+            {priorityMeta(task.priority).label}
+          </span>
+        )}
         {task.dueDate && (
           <span
             className={

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import KanbanBoard from "../../../../../components/projects/KanbanBoard.jsx";
+import ProjectListView from "../../../../../components/projects/ProjectListView.jsx";
 import Select from "@/components/ui/Select.jsx";
 
 const inputCls =
@@ -18,6 +19,7 @@ export default function ProyectoBoardPage() {
   const [allTags, setAllTags] = useState([]);
   const [filters, setFilters] = useState({ search: "", assigneeId: "", tag: "" });
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [view, setView] = useState("kanban"); // "kanban" | "list"
 
   // ── Cargar proyecto + team members + tags conocidos ───────────────────
   useEffect(() => {
@@ -80,12 +82,34 @@ export default function ProyectoBoardPage() {
           <h1 className="font-[Fraunces] text-xl lg:text-2xl text-neutral-800 truncate">
             {project?.name ?? "..."}
           </h1>
-          <button
-            onClick={() => router.push(`/proyectos/${id}`)}
-            className="px-3 py-1.5 rounded-lg text-xs text-neutral-600 hover:bg-neutral-100 border border-neutral-200"
-          >
-            ← Volver al proyecto
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Toggle Kanban | Lista — misma página, dos vistas de las mismas tareas. */}
+            <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5" role="tablist" aria-label="Vista del tablero">
+              {[
+                { key: "kanban", label: "Kanban" },
+                { key: "list", label: "Lista" },
+              ].map((v) => (
+                <button
+                  key={v.key}
+                  role="tab"
+                  aria-selected={view === v.key}
+                  onClick={() => setView(v.key)}
+                  className={
+                    "px-3 py-1.5 rounded-md text-xs font-medium transition-colors " +
+                    (view === v.key ? "bg-neutral-800 text-white" : "text-neutral-600 hover:bg-neutral-100")
+                  }
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => router.push(`/proyectos/${id}`)}
+              className="hidden sm:inline-flex px-3 py-1.5 rounded-lg text-xs text-neutral-600 hover:bg-neutral-100 border border-neutral-200"
+            >
+              ← Volver al proyecto
+            </button>
+          </div>
         </div>
       </header>
 
@@ -131,13 +155,13 @@ export default function ProyectoBoardPage() {
         </Link>
       </div>
 
-      {/* Kanban */}
+      {/* Vista activa: Kanban o Lista (mismas tareas, mismos filtros) */}
       <div className="flex-1 overflow-hidden px-4 lg:px-8 py-4">
-        <KanbanBoard
-          projectId={id}
-          filters={effective}
-          teamMembers={teamMembers}
-        />
+        {view === "kanban" ? (
+          <KanbanBoard projectId={id} filters={effective} teamMembers={teamMembers} />
+        ) : (
+          <ProjectListView projectId={id} filters={effective} teamMembers={teamMembers} />
+        )}
       </div>
     </div>
   );

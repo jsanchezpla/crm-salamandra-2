@@ -5,6 +5,7 @@ import { Op } from "sequelize";
 import { serializeTask } from "../../../../../lib/projects/serializeTask.js";
 import { isAdminRole, isLeadOfProject } from "../../../../../lib/projects/projectAuth.js";
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
+import { isValidTaskPriority, TASK_PRIORITY_VALUES, DEFAULT_TASK_PRIORITY } from "../../../../../lib/projects/taskPriority.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -163,6 +164,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     milestoneId,
     title,
     description,
+    priority,
     estimatedHours,
     dueDate,
     checklist,
@@ -175,6 +177,9 @@ export const POST = withTenant(async (request, { params }, ctx) => {
   }
   if (title.trim().length > 255) {
     throw new ValidationError("'title' supera 255 caracteres");
+  }
+  if (priority !== undefined && priority !== null && !isValidTaskPriority(priority)) {
+    throw new ValidationError(`'priority' inválida. Opciones: ${TASK_PRIORITY_VALUES.join(", ")}`);
   }
   if (boardColumnId && !UUID_RE.test(boardColumnId)) {
     throw new ValidationError("boardColumnId inválido");
@@ -241,6 +246,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         order: nextOrder,
         title: title.trim(),
         description: description?.trim() ?? null,
+        priority: priority ?? DEFAULT_TASK_PRIORITY,
         estimatedHours: estimatedHours ?? null,
         dueDate: dueDate ?? null,
         checklist: Array.isArray(checklist) ? checklist : [],

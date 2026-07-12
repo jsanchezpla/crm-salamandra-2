@@ -42,7 +42,9 @@ export const POST = withTenant(async (request, _routeContext, ctx) => {
   const key = body?.key?.trim().toLowerCase();
   const name = body?.name?.trim();
   if (!key || !/^[a-z0-9_]+$/.test(key)) throw new ValidationError("La clave debe ser minúsculas, números o guión bajo");
+  if (key.length > 64) throw new ValidationError("La clave no puede superar 64 caracteres");
   if (!name) throw new ValidationError("El nombre es obligatorio");
+  if (name.length > 255) throw new ValidationError("El nombre no puede superar 255 caracteres");
 
   if (await OutreachBusinessLine.findOne({ where: { key } })) {
     throw new ValidationError(`Ya existe una línea con la clave "${key}"`);

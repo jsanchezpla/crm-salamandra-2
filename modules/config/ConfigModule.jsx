@@ -87,6 +87,7 @@ export default function ConfigModule() {
   const [billing, setBilling] = useState(null); // /api/billing/settings (o null si no hay módulo)
   const [errorMsg, setErrorMsg] = useState(null);
   const [okMsg, setOkMsg] = useState(null);
+  const [loadError, setLoadError] = useState(null); // fallo al cargar los ajustes del tenant
 
   const flash = (msg) => {
     setOkMsg(msg);
@@ -95,7 +96,10 @@ export default function ConfigModule() {
 
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" }).then((r) => r.json()).then((j) => j.ok && setMe(j.data)).catch(() => {});
-    fetch("/api/tenant/settings", { cache: "no-store" }).then((r) => r.json()).then((j) => j.ok && setCfg(j.data)).catch((e) => setErrorMsg(e.message));
+    fetch("/api/tenant/settings", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => (j.ok ? setCfg(j.data) : setLoadError(j.error || "No se pudo cargar la configuración")))
+      .catch((e) => setLoadError(e.message));
     // Facturación es opcional: si el tenant no tiene el módulo, el GET responde
     // 403 y simplemente no mostramos esa sección.
     fetch("/api/billing/settings", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => j?.ok && setBilling(j.data)).catch(() => {});
@@ -155,7 +159,17 @@ export default function ConfigModule() {
   }
 
   if (!cfg) {
-    return <div className="p-4 lg:p-8 text-xs text-neutral-400">Cargando...</div>;
+    // Distinguir cargando de error: si el GET de ajustes falla (500/401/offline)
+    // hay que mostrar el error, no dejar el spinner colgado para siempre.
+    return (
+      <div className="p-4 lg:p-8 max-w-4xl mx-auto">
+        {loadError ? (
+          <div className="px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{loadError}</div>
+        ) : (
+          <div className="text-xs text-neutral-400">Cargando...</div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -424,6 +438,8 @@ function CompanyDescriptionSection({ isAdmin, flash, onError }) {
   const [companyContext, setCompanyContext] = useState("");
   const [ctxDirty, setCtxDirty] = useState(false);
   const [lines, setLines] = useState([]);
+  const [linesLoaded, setLinesLoaded] = useState(false); // ¿resolvió el GET de líneas?
+  const [linesError, setLinesError] = useState(null); // fallo al cargar las líneas
   const [showAdd, setShowAdd] = useState(false);
 
   useEffect(() => {
@@ -436,10 +452,18 @@ function CompanyDescriptionSection({ isAdmin, flash, onError }) {
         setAvailable(true);
       })
       .catch(() => alive && setAvailable(false));
+    // Si este GET falla no debe verse como "no hay líneas" (falso vacío): se
+    // distingue cargando / error / vacío real. Además, sin la lista real no se
+    // ofrece "Añadir" (el slug se deduplica contra la lista y podría colisionar).
     fetch("/api/outreach/business-lines?all=true", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => alive && j?.ok && setLines(j.data?.items ?? []))
-      .catch(() => {});
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("No se pudieron cargar las líneas de negocio"))))
+      .then((j) => {
+        if (!alive) return;
+        if (j?.ok) setLines(j.data?.items ?? []);
+        else throw new Error("No se pudieron cargar las líneas de negocio");
+      })
+      .catch((e) => alive && setLinesError(e.message))
+      .finally(() => alive && setLinesLoaded(true));
     return () => {
       alive = false;
     };
@@ -472,6 +496,9 @@ function CompanyDescriptionSection({ isAdmin, flash, onError }) {
       .replace(/^_+|_+$/g, "")
       .replace(/_+/g, "_");
     if (!base) base = "linea";
+    // `key` es STRING(64) con regex [a-z0-9_]. Recorta (y limpia el _ final) para
+    // que un título largo no desborde la columna; deja hueco al sufijo _NN.
+    base = base.slice(0, 56).replace(/_+$/, "") || "linea";
     const taken = new Set(lines.map((l) => l.key));
     let key = base;
     let n = 2;
@@ -564,7 +591,7 @@ function CompanyDescriptionSection({ isAdmin, flash, onError }) {
       <div className="mt-6">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-[11px] font-semibold text-neutral-400 uppercase tracking-widest">Líneas de negocio</h3>
-          {isAdmin && !showAdd && (
+          {isAdmin && !showAdd && !linesError && linesLoaded && (
             <button
               onClick={() => setShowAdd(true)}
               className="text-[11px] font-semibold text-neutral-500 hover:text-neutral-800 transition-colors"
@@ -574,9 +601,13 @@ function CompanyDescriptionSection({ isAdmin, flash, onError }) {
           )}
         </div>
 
-        {lines.length === 0 && !showAdd && (
+        {linesError ? (
+          <p className="text-xs text-rose-600 py-3">{linesError}</p>
+        ) : !linesLoaded ? (
+          <p className="text-xs text-neutral-400 py-3">Cargando líneas…</p>
+        ) : lines.length === 0 && !showAdd ? (
           <p className="text-xs text-neutral-400 py-3">Aún no hay líneas de negocio. Añade la primera.</p>
-        )}
+        ) : null}
 
         <div className="space-y-2">
           {lines.map((line) => (
@@ -604,7 +635,15 @@ function BusinessLineRow({ line, isAdmin, onSave }) {
   async function handleSave() {
     if (!name.trim()) return;
     setBusy(true);
-    await onSave(line.id, { name: name.trim(), description: description.trim() || null, active });
+    // Enviar y adoptar los valores normalizados (trim) que persiste el server,
+    // para que el botón Guardar no quede "sucio" tras un guardado correcto.
+    const nextName = name.trim();
+    const nextDescription = description.trim() || null;
+    const okDone = await onSave(line.id, { name: nextName, description: nextDescription, active });
+    if (okDone) {
+      setName(nextName);
+      setDescription(nextDescription ?? "");
+    }
     setBusy(false);
   }
 
@@ -625,7 +664,7 @@ function BusinessLineRow({ line, isAdmin, onSave }) {
       {open && (
         <div className="px-3 pb-3 pt-1 border-t border-neutral-100 space-y-3">
           <Field label="Título" full>
-            <input disabled={!isAdmin} value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
+            <input disabled={!isAdmin} maxLength={120} value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
           </Field>
           <Field label="Descripción (qué vende esta línea)" full>
             <textarea disabled={!isAdmin} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className={inputCls} placeholder="La IA lo lee literalmente para puntuar a cada lead." />
@@ -672,7 +711,7 @@ function AddBusinessLine({ onAdd, onCancel }) {
   return (
     <div className="mt-2 border border-dashed border-neutral-300 rounded-lg bg-neutral-50 p-3 space-y-3">
       <Field label="Título" full>
-        <input autoFocus value={name} onChange={(e) => setName(e.target.value)} className={inputCls} placeholder="Ej. Diseño web" />
+        <input autoFocus maxLength={120} value={name} onChange={(e) => setName(e.target.value)} className={inputCls} placeholder="Ej. Diseño web" />
       </Field>
       <Field label="Descripción (qué vende esta línea)" full>
         <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className={inputCls} placeholder="La IA lo lee literalmente para puntuar a cada lead." />

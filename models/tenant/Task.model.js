@@ -42,6 +42,13 @@ export function defineTask(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // Prioridad de la tarea. Mismo enum que Project.priority. La usa la Vista
+      // de Lista para ordenar (mayor→menor) y el Kanban para el badge.
+      priority: {
+        type: DataTypes.ENUM("low", "medium", "high", "urgent"),
+        allowNull: false,
+        defaultValue: "medium",
+      },
       // FK a TeamMember (antes era UUID libre `assignedTo`).
       assigneeId: {
         type: DataTypes.UUID,

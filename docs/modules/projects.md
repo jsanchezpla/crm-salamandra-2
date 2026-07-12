@@ -68,6 +68,8 @@ VALUES (gen_random_uuid(), '<tenant_id>', 'projects', true, ...);
 
 - `enum_projects_status` — `draft | active | paused | completed | cancelled`
 - `enum_projects_priority` — `low | medium | high | urgent`
+- `enum_tasks_priority` — `low | medium | high | urgent` (columna `tasks.priority`,
+  default `medium`; la añade `migrate-projects-task-priority.js` para la Vista de Lista)
 - `enum_milestones_status` — `pending | completed | missed`
 - `enum_project_members_role` — `lead | member | viewer`
 
@@ -125,10 +127,26 @@ limpieza manual antes de reintentar.
 
 - `KanbanBoard.jsx` — wrapper DndContext + filtros + fetch /board + drawer.
 - `BoardColumn.jsx` — columna Kanban con SortableContext vertical + WIP count.
-- `TaskCard.jsx` — card sortable con title, dueDate, hours, checklist count,
-  avatares de asignados (max 3 + "+N").
+- `TaskCard.jsx` — card sortable con title, badge de **prioridad**, dueDate, hours,
+  checklist count, avatares de asignados (max 3 + "+N").
 - `TaskDrawer.jsx` — drawer derecho ancho 480/600px. Modo view (auto-save por
   blur) y modo create (save explícito). Respeta regla #13 (`top-14 lg:top-0`).
+  Incluye selector de **Prioridad** (junto a Columna).
+- `ProjectListView.jsx` — **Vista de Lista** (alternativa al Kanban, no lo
+  sustituye). Tabla con Tarea / Fecha de entrega / Prioridad / Estado, orden
+  **multinivel**: fecha asc (nulls al final) → prioridad mayor→menor → estado
+  (orden de columna del Kanban). Lee `/api/projects/[id]/tasks` (todas las
+  tareas, incluidas las sin columna) + `/board` (columnas para el drawer).
+  Reutiliza `TaskDrawer` al pulsar una fila. Config de orden ajustable en
+  `SORT_LEVELS`. Ordenación/etiquetas de prioridad centralizadas en
+  `lib/projects/taskPriority.js`.
+
+### Toggle Kanban | Lista
+
+En `/proyectos/[id]/board` la cabecera tiene un toggle segmentado **Kanban |
+Lista** (`role="tablist"`). Ambas vistas comparten los filtros de la toolbar
+(search/asignado/etiqueta) y muestran las mismas tareas. El Kanban queda
+exactamente igual que antes.
 
 ### Componentes legacy Sprint 1 que siguen sin cablear
 
@@ -162,8 +180,9 @@ Detalle de la columna en `docs/modules/team.md`.
 
 ### 5.3 Body PATCH `/api/tasks/[id]`
 
-Campos editables: `title`, `description`, `boardColumnId`, `phaseId`,
-`milestoneId`, `estimatedHours`, `dueDate`, `checklist`, `tags`, `customFields`,
+Campos editables: `title`, `description`, `priority` (validado contra
+`enum_tasks_priority`), `boardColumnId`, `phaseId`, `milestoneId`,
+`estimatedHours`, `dueDate`, `checklist`, `tags`, `customFields`,
 `assigneeIds` (reemplaza la lista N-a-N).
 
 **`order` NO es editable aquí** — usar `/move` o `/reorder-tasks` para
@@ -280,6 +299,7 @@ en el campo.
 |-----------------------------------------|----------------------------------------------------------|
 | `scripts/migrate-projects-sprint-1.js`  | Crea estructura completa Sprint 1                        |
 | **`scripts/migrate-projects-sprint-2.js`** | **Crea `task_assignees`, 4 índices en `tasks`, FK board_column. Idempotente. Solo tenants con módulo activo.** |
+| **`scripts/migrate-projects-task-priority.js`** | **Añade `tasks.priority` (enum, default `medium`) para la Vista de Lista. Idempotente. Lee tenants de `master.tenants`. `npm run db:migrate:projects-priority[:prod]`** |
 | `scripts/seed-projects-demo.js`         | Sprint 1 + extensión Sprint 2 (8-12 tasks por proyecto, marker `projects-demo-tasks-v1`) |
 
 Comandos npm:
