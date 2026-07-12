@@ -4,6 +4,7 @@ import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../../
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { analyzeLead } from "../../../../../../lib/outreach/analysis/index.js";
 import { getTenantAnthropicKey } from "../../../../../../lib/ai/anthropicKey.js";
+import { getTenantAnthropicModel } from "../../../../../../lib/ai/anthropicModel.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -60,6 +61,8 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       // Clave de Anthropic del tenant (Configuración → IA). Fuente ÚNICA del CRM:
       // NO hay fallback a ANTHROPIC_API_KEY del entorno.
       apiKey: getTenantAnthropicKey(ctx) || undefined,
+      // Modelo elegido por el tenant en Configuración → IA (Sonnet por defecto).
+      model: getTenantAnthropicModel(ctx),
     });
   } catch (err) {
     // Los errores del proveedor no se propagan tal cual: pueden traer trozos

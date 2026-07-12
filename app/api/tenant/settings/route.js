@@ -4,6 +4,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from "../../../../lib/
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { invalidateTenantCache } from "../../../../lib/tenant/tenantResolver.js";
 import { encryptSecret, decryptSecret } from "../../../../lib/crypto/secretBox.js";
+import { isAllowedAnthropicModel, DEFAULT_ANTHROPIC_MODEL } from "../../../../lib/ai/anthropicModel.js";
 
 /**
  * /api/tenant/settings — configuración básica del tenant.
@@ -72,8 +73,12 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
       logoUrl: brand.logoUrl ?? null,
     },
     integrations: {
-      anthropic: keyStatus(integ.anthropicApiKey),
+      anthropic: {
+        ...keyStatus(integ.anthropicApiKey),
+        model: isAllowedAnthropicModel(integ.anthropicModel) ? integ.anthropicModel : DEFAULT_ANTHROPIC_MODEL,
+      },
       googlePlaces: keyStatus(integ.googlePlacesApiKey),
+      openai: keyStatus(integ.openaiApiKey),
       resend: {
         ...keyStatus(integ.resendApiKey),
         fromEmail: integ.resendFromEmail ?? null,
@@ -126,8 +131,14 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   // Claves de IA (secretos).
   applyKey(settings.integrations, "anthropicApiKey", body.anthropicApiKey);
   applyKey(settings.integrations, "googlePlacesApiKey", body.googlePlacesApiKey);
+  applyKey(settings.integrations, "openaiApiKey", body.openaiApiKey);
   applyKey(settings.integrations, "resendApiKey", body.resendApiKey);
   applyPlain(settings.integrations, "resendFromEmail", body.resendFromEmail);
+
+  // Modelo de Claude (no es un secreto). Solo se guarda si es un id válido.
+  if (typeof body.anthropicModel === "string" && isAllowedAnthropicModel(body.anthropicModel)) {
+    settings.integrations.anthropicModel = body.anthropicModel;
+  }
   applyPlain(settings.integrations, "resendReplyTo", body.resendReplyTo);
 
   updates.settings = settings;
@@ -143,8 +154,12 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
       logoUrl: settings.brand.logoUrl ?? null,
     },
     integrations: {
-      anthropic: keyStatus(settings.integrations.anthropicApiKey),
+      anthropic: {
+        ...keyStatus(settings.integrations.anthropicApiKey),
+        model: isAllowedAnthropicModel(settings.integrations.anthropicModel) ? settings.integrations.anthropicModel : DEFAULT_ANTHROPIC_MODEL,
+      },
       googlePlaces: keyStatus(settings.integrations.googlePlacesApiKey),
+      openai: keyStatus(settings.integrations.openaiApiKey),
       resend: {
         ...keyStatus(settings.integrations.resendApiKey),
         fromEmail: settings.integrations.resendFromEmail ?? null,

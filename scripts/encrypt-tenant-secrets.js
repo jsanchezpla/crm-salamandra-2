@@ -21,7 +21,7 @@ if (!process.env.SETTINGS_ENCRYPTION_KEY?.trim()) {
   process.exit(1);
 }
 
-const FIELDS = ["anthropicApiKey", "googlePlacesApiKey", "resendApiKey"];
+const FIELDS = ["anthropicApiKey", "googlePlacesApiKey", "openaiApiKey", "resendApiKey"];
 
 getMasterDb();
 const { Tenant } = getMasterModels();

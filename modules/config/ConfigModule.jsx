@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Select from "../../components/ui/Select.jsx";
+import { ANTHROPIC_MODELS } from "../../lib/ai/anthropicModel.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -12,7 +13,7 @@ const inputCls =
 const AI_PROVIDERS = {
   anthropic: {
     title: "Anthropic (Claude)",
-    subtitle: "Análisis de leads con IA — puntuación, necesidades y correo modelo.",
+    subtitle: "IA de todo el CRM: análisis de leads (Outreach) y resumen de sesiones clínicas. El modelo elegido se aplica en todo.",
     field: "anthropicApiKey",
     prefix: "sk-ant-",
     platformUrl: "https://console.anthropic.com/settings/keys",
@@ -25,6 +26,23 @@ const AI_PROVIDERS = {
       "Pégala abajo y pulsa Guardar.",
     ],
     note: "El análisis con IA es de pago por uso: añade saldo en Plans & Billing dentro de la consola.",
+  },
+  openai: {
+    title: "OpenAI (Whisper)",
+    subtitle: "Transcripción de audio de sesiones clínicas (voz → texto) con la API de Whisper. Luego Claude resume la sesión.",
+    field: "openaiApiKey",
+    prefix: "sk-",
+    platformUrl: "https://platform.openai.com/api-keys",
+    platformLabel: "Abrir OpenAI Platform",
+    steps: [
+      "Entra en platform.openai.com y crea una cuenta (o inicia sesión).",
+      'En "Settings → Billing" añade saldo (la transcripción es de pago por uso).',
+      'En "API keys" pulsa "Create new secret key".',
+      'Ponle un nombre (p. ej. "CRM Salamandra") y créala.',
+      "Copia la clave (empieza por sk-). Solo se muestra una vez.",
+      "Pégala abajo y pulsa Guardar.",
+    ],
+    note: "Solo se usa Whisper para transcribir; el coste es muy bajo (~0,006 $ por minuto de audio).",
   },
   googlePlaces: {
     title: "Google Cloud (Places)",
@@ -209,6 +227,16 @@ export default function ConfigModule() {
             isAdmin={isAdmin}
             onSave={(value) => patchTenant({ anthropicApiKey: value }, "Clave de Anthropic guardada")}
             onClear={() => patchTenant({ anthropicApiKey: null }, "Clave de Anthropic eliminada")}
+            models={ANTHROPIC_MODELS}
+            currentModel={cfg.integrations?.anthropic?.model}
+            onModelChange={(v) => patchTenant({ anthropicModel: v }, "Modelo de IA actualizado")}
+          />
+          <ApiKeyCard
+            provider={AI_PROVIDERS.openai}
+            status={cfg.integrations?.openai}
+            isAdmin={isAdmin}
+            onSave={(value) => patchTenant({ openaiApiKey: value }, "Clave de OpenAI guardada")}
+            onClear={() => patchTenant({ openaiApiKey: null }, "Clave de OpenAI eliminada")}
           />
           <ApiKeyCard
             provider={AI_PROVIDERS.googlePlaces}
@@ -277,7 +305,7 @@ export default function ConfigModule() {
 }
 
 // ── Tarjeta de credencial de IA con tutorial + botón + campo ─────────────────
-function ApiKeyCard({ provider, status, isAdmin, onSave, onClear }) {
+function ApiKeyCard({ provider, status, isAdmin, onSave, onClear, models, currentModel, onModelChange }) {
   const [showSteps, setShowSteps] = useState(false);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
@@ -359,6 +387,24 @@ function ApiKeyCard({ provider, status, isAdmin, onSave, onClear }) {
               Eliminar
             </button>
           )}
+        </div>
+      )}
+
+      {models && (
+        <div className="mt-4 pt-4 border-t border-neutral-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="min-w-0">
+            <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Modelo de IA</label>
+            <p className="text-[11px] text-neutral-400 mt-0.5">
+              {models.find((m) => m.id === currentModel)?.description ?? "Sonnet es el recomendado: más barato que Opus, calidad similar."}
+            </p>
+          </div>
+          <Select
+            disabled={!isAdmin}
+            value={currentModel ?? ""}
+            onChange={(v) => onModelChange?.(v)}
+            options={models.map((m) => ({ value: m.id, label: m.label }))}
+            className={inputCls + " sm:w-52 shrink-0"}
+          />
         </div>
       )}
     </div>

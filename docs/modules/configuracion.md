@@ -32,9 +32,22 @@ plataforma + campo para pegar la clave), estilo autoservicio con fricción:
 
 | Tarjeta | Clave | La usa | Plataforma |
 | ------- | ----- | ------ | ---------- |
-| **Anthropic (Claude)** | `anthropicApiKey` | Análisis IA de Outreach (`/analizar`) | console.anthropic.com |
+| **Anthropic (Claude)** | `anthropicApiKey` | Análisis IA de Outreach (`/analizar`) + resumen/estructura de sesiones clínicas | console.anthropic.com |
+| **OpenAI (Whisper)** | `openaiApiKey` | Transcripción de audio de sesiones clínicas (voz → texto) con la API de Whisper | platform.openai.com |
 | **Google Cloud (Places)** | `googlePlacesApiKey` | `"Buscar nuevos"` de Google Maps | console.cloud.google.com |
 | **Resend (correo captación)** | `resendApiKey` (+ `resendFromEmail`, `resendReplyTo`) | Enviar el correo modelo en frío | resend.com |
+
+> **Transcripción de audio (sesiones clínicas):** Claude NO transcribe audio, así que
+> el paso voz→texto lo hace la **API de Whisper de OpenAI** (clave `openaiApiKey`,
+> por-tenant, cifrada; resolver `lib/ai/openaiKey.js`). Luego Claude hace el
+> resumen/estructura (texto → sesión).
+
+> **Modelo de Claude (selector):** debajo de la clave de Anthropic hay un selector de
+> modelo — **Sonnet (por defecto)** · Opus · Haiku. Se guarda en
+> `settings.integrations.anthropicModel` (sin cifrar, no es secreto) y se aplica a
+> **TODO el CRM** vía `getTenantAnthropicModel(ctx)` (`lib/ai/anthropicModel.js`).
+> Sonnet por defecto porque Opus consume muchos más tokens. Lista de modelos
+> admitidos: `ANTHROPIC_MODELS` (misma fuente que valida el backend y pinta la UI).
 
 Cada tarjeta muestra estado **Conectada / Sin configurar** con una pista
 enmascarada (p.ej. `AIza…1234`), y permite reemplazar o eliminar la clave.
@@ -79,7 +92,7 @@ Consumo desde Outreach:
 | Método | Qué hace |
 | ------ | -------- |
 | `GET` | Devuelve `{ name, slug, plan, brand, integrations: { anthropic:{configured,hint}, googlePlaces:{configured,hint} } }`. Nunca la clave en claro |
-| `PATCH` | **Admin.** Acepta `name`, `brand`, `anthropicApiKey`, `googlePlacesApiKey`. Invalida la caché de tenant |
+| `PATCH` | **Admin.** Acepta `name`, `brand`, `anthropicApiKey`, `anthropicModel`, `openaiApiKey`, `googlePlacesApiKey`, `resendApiKey` (+ `resendFromEmail`/`resendReplyTo`). Invalida la caché de tenant |
 
 Semántica de las claves en `PATCH`:
 
