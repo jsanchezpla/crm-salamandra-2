@@ -26,6 +26,7 @@ Antes de implementar cambios en un módulo concreto, lee su doc:
 | Clínica           | `docs/modules/clinica.md`    | Implementado (aumenta)           |
 | Nutrición         | `docs/modules/nutricion.md`  | C1+C2+C3 en prod, C4+C5 en local |
 | Outreach          | `docs/modules/outreach.md`   | Completo en local, sin desplegar  |
+| Configuración     | `docs/modules/configuracion.md` | Implementado (claves IA por tenant) |
 | Emails (infra)    | `docs/modules/emails.md`     | Infra transversal                |
 
 Módulos implementados **sin doc dedicado** (su detalle vive en la tabla de
@@ -310,6 +311,7 @@ aplique.
 | clinica       | Clínica                        | Implementado (aumenta)              | `docs/modules/clinica.md`   |
 | nutricion     | Recetario                      | C1+C2+C3 en prod, C4+C5 en local    | `docs/modules/nutricion.md` |
 | outreach      | Captación (leads + scoring IA) | Completo en local (sandbox); falta desplegar | `docs/modules/outreach.md` |
+| —             | Configuración (ajustes + claves IA por tenant) | Implementado (siempre visible, sin `moduleKey`) | `docs/modules/configuracion.md` |
 
 > **`leads` vs `sales`**: hay dos `moduleKey` para el área comercial
 > (`leads` → `/leads`, `sales` → `/comercial`). En producción los tenants

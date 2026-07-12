@@ -4,91 +4,173 @@
 
 Captación de leads en frío: empresas rastreadas de fuentes públicas, guardadas,
 y puntuadas por IA según lo bien que encajan como cliente de cada **línea de
-negocio** del tenant.
+negocio** del tenant. Del lead se puede sacar el correo modelo (IA), enviarlo
+con Resend y, si prospera, convertirlo en cliente del módulo Clientes.
 
-Origen: proyecto standalone `Salamandra Outreach`, integrado en el CRM.
+Origen: proyecto standalone `Salamandra Outreach`, integrado y muy ampliado en
+el CRM.
 
 ---
 
 ## Estado
 
-| Fase | Alcance | Estado |
-| ---- | ------- | ------ |
-| 1 | Modelo de datos, API, UI (lista, ficha, configuración) | **Hecho** |
-| 2 | Análisis con IA (Claude): scoring + correo modelo | **Hecho** |
-| 3 | Scraping vía n8n + envío del correo con Resend | **Hecho** |
+| Área | Estado |
+| ---- | ------ |
+| Modelo de datos, API, UI (lista, ficha, configuración) | **Hecho** |
+| Análisis con IA (Claude): scoring + correo modelo | **Hecho** |
+| Envío del correo modelo con Resend | **Hecho** |
+| "Buscar nuevos" con **Google Maps NATIVO** (Places API + email de la web) | **Hecho** |
+| Tope mensual de Google + aviso + contador (gestionado por el CRM) | **Hecho** |
+| Convertir lead en cliente + borrado individual y en bulk | **Hecho** |
+| Orden por columnas y filtros (ubicación, email, analizado, score) | **Hecho** |
+| "Buscar nuevos" con Páginas Amarillas / LinkedIn (vía n8n) | **Pendiente** (flujo n8n sin montar) |
 
 Todo verificado en local contra el tenant `sandbox`. **Falta desplegar en
-producción** y provisionar los secrets (ver "Puesta en marcha").
+producción** (correr las migraciones) y que cada tenant pegue sus claves.
 
-En la Fase 1 los botones **"Buscar nuevos"** y **"Re-analizar"** se muestran
-deshabilitados: existen para que el flujo se entienda, pero no hacen nada
-todavía. La única vía de entrada de leads es el alta manual.
+> Las claves de IA (**Anthropic** y **Google Places**) ya **no** son secrets
+> globales del `.env`: se configuran **por tenant** en el módulo
+> **Configuración** (`/configuracion` → Inteligencia Artificial). Ver
+> `docs/modules/configuracion.md`.
 
 ---
 
 ## Decisiones de arquitectura
 
-Tres decisiones tomadas con Jorge antes de escribir código:
-
 ### 1. Es un producto multi-tenant, no una herramienta interna
 
-El Outreach original puntuaba cada empresa contra dos compañías fijas
-(`empresa ∈ {'solutions','agencia'}`), cableadas en el código y en el prompt.
-En el CRM eso pasa a ser la tabla **`outreach_business_lines`**: cada tenant
-define sus propias líneas, con su descripción y sus criterios de scoring.
-
-De ahí se construye el system prompt del análisis. **Los criterios son datos,
-no código.** Se editan desde `/outreach/configuracion`.
+El Outreach original puntuaba cada empresa contra dos compañías fijas, cableadas
+en código y prompt. En el CRM eso es la tabla **`outreach_business_lines`**:
+cada tenant define sus líneas, con descripción y criterios de scoring. De ahí se
+construye el system prompt del análisis. **Los criterios son datos, no código.**
+Se editan en `/outreach/configuracion`.
 
 Consecuencia en la UI: la ficha de un lead no tiene dos mitades fijas, sino
 **una columna por línea de negocio activa**.
 
 ### 2. Independiente del módulo Leads del CRM
 
-El CRM ya tiene un `Lead` (oportunidad comercial con etapas, valor y conversión
-a proyecto). El lead de Outreach es otra cosa: **una empresa captada que aún no
-ha sido contactada**.
-
-Son entidades separadas, **sin puente de conversión** y sin FK cruzadas. De ahí
-el prefijo `outreach_` en todas las tablas: sin él, `outreach_leads` chocaría
-con la tabla `leads` que ya existe en cada schema de tenant.
+El `Lead` comercial del CRM (oportunidad con etapas, valor y conversión a
+proyecto) es otra cosa. El lead de Outreach es **una empresa captada aún sin
+contactar**. Entidades separadas, **sin FK cruzadas**; de ahí el prefijo
+`outreach_` en las tablas (si no, `outreach_leads` chocaría con `leads`).
 
 ### 3. Solo Claude como proveedor de IA
 
-El Outreach original era agnóstico de proveedor (Claude + OpenAI). En el CRM se
-usa **solo la API de Claude**. El selector de modelo se mantiene, pero entre
-modelos de Claude, para poder abaratar el coste por análisis sin tocar código.
-
-> El `CLAUDE.md` del CRM decía "IA: API OpenAI", pero **no había ninguna llamada
-> a un LLM en el código**. Outreach es la primera integración de IA real.
+Se usa **solo la API de Claude**. El selector de modelo se mantiene entre
+modelos de Claude (Opus/Sonnet/Haiku) para abaratar el coste por análisis sin
+tocar código.
 
 ### 4. El correo se envía con Resend, no con n8n
 
-En el Outreach original el envío del correo pasaba por un webhook de n8n, que a
-su vez llamaba a Resend. En el CRM se envía **directamente** con
-`lib/email/resendClient.js`, que ya existe y trae dry-run y reintentos.
+Se envía **directamente** con `lib/email/resendClient.js` (dry-run + reintentos),
+para no duplicar las credenciales de Resend en n8n.
 
-Motivo: evitar dos fuentes de verdad para las credenciales de Resend (una en el
-`.env` del CRM y otra dentro de n8n) y un punto de fallo operativo de más. n8n
-se queda para el scraping, que sí necesita un motor externo.
+### 5. Google Maps es NATIVO en el CRM; n8n queda para las demás fuentes
+
+`"Buscar nuevos"` con **Google Maps** no pasa por n8n: el CRM llama a la
+**Google Places API (Text Search)** con la clave del tenant y, por cada negocio,
+visita su web para sacar el email. **Páginas Amarillas** y **LinkedIn** siguen
+delegándose a n8n (aún sin montar). Motivo: con las claves ya por-tenant en el
+CRM, no hay que pasar secretos a n8n para Google, y el flujo es más simple.
+
+### 6. Claves de IA por tenant (BYOK)
+
+Cada tenant trae su propia clave de Anthropic y de Google Places (self-service
+en Configuración). La de Anthropic cae a `ANTHROPIC_API_KEY` del entorno si el
+tenant no tiene la suya; la de Google **no** tiene fallback de entorno (es
+per-tenant obligatoria). Las claves viven en `master.tenants.settings.integrations`
+y **nunca** se serializan al cliente (el layout las elimina).
 
 ---
 
-## Modo simulado (desarrollo)
+## Fuente de datos: Google Maps nativo + email de la web
 
-`OUTREACH_FAKE_AI=1` sustituye la llamada a Claude por un analizador determinista
-que devuelve contenido marcado `[SIMULADO]`. Sirve para recorrer todo el flujo
-(análisis → correo → envío) sin gastar API ni tener la clave.
+El flujo de `"Buscar nuevos"` con Google Maps es:
 
-- Los análisis que produce se guardan con `model = "fake"`, para que nadie los
-  confunda con un análisis real.
-- Está **ignorado cuando `NODE_ENV=production`**: la IA real no se puede
-  desactivar en el VPS con una env var.
+```
+Google Places (índice)  →  visitar la web de cada negocio  →  extraer email  →  guardar
+```
 
-Igualmente, sin `RESEND_API_KEY` el envío entra en dry-run: devuelve
-`dryRun: true` y **no** marca `sent_at`. Marcar un correo como enviado sin
-haberlo enviado sería mentirle al comercial.
+### Paso 1 — índice (`lib/outreach/googlePlaces.js`)
+
+`Text Search` de la Places API (New) con la clave del tenant. `FieldMask`:
+`displayName, formattedAddress, nationalPhoneNumber, websiteUri, googleMapsUri,
+primaryTypeDisplayName`. `regionCode: ES`, `pageSize: 20` (hasta 20 negocios por
+petición). Traduce los errores de Google a códigos: `QUOTA` (429, cuota
+agotada), `BAD_KEY` (400/403, clave inválida o Places API sin activar),
+`UNREACHABLE` (timeout/red). Google **nunca** devuelve email.
+
+### Paso 2 — email de la web (`lib/outreach/enrichWebsite.js`)
+
+Visita la home del negocio (y, si no hay email, una vez `/contacto`) y extrae el
+correo. Qué se tiene en cuenta:
+
+1. Descarga el HTML (sigue redirecciones, timeout 7s, User-Agent de navegador).
+2. Busca emails: primero `mailto:` (más fiable), luego barrido de texto.
+3. Filtra basura (imágenes, trackers `sentry`/`wixpress`, placeholders).
+4. **Filtra por dominio** (clave): solo acepta emails **del propio dominio del
+   negocio** o de un **proveedor gratuito** (Gmail, Hotmail, Outlook…). Cualquier
+   otro dominio ajeno (temas/plugins/trackers, p.ej. `quadlayers.com`) **se
+   descarta** — antes se colaban como plan B.
+5. Preferencia: genérico del dominio (`info@`, `contacto@`…) → cualquiera del
+   dominio → genérico gratuito → cualquiera gratuito → **`null`**.
+
+Cobertura realista ~40–70%; si no hay email válido se guarda **sin email** (mejor
+eso que un correo erróneo). Tecnología: `fetch` nativo + `AbortController` +
+regex + API `URL`; sin navegador headless, sin proxy, sin librería. En
+`buscar-nuevos` las webs se visitan con un **pool de concurrencia** de 5.
+
+### Tope mensual de Google (gestionado por el CRM, no por Google)
+
+Contador por tenant en `outreach_settings` (`google_places_usage_month`,
+`google_places_usage_count`, `google_places_warned_month`):
+
+- Cada búsqueda con Google = **1 petición** = +1 (una búsqueda trae hasta ~20
+  negocios; se cuentan **búsquedas**, como factura Google, no negocios).
+- **Corta a 999/mes** (uno por debajo del cupo gratuito de 1.000 de Google): al
+  llegar, `buscar-nuevos` responde `429` sin llamar a Google.
+- **Aviso por email** una vez al mes al cruzar el umbral (best-effort vía Resend,
+  al `x-user-email` del que busca).
+- **Se reinicia solo** al cambiar de mes (sin cron: si el contador es de un mes
+  anterior, cuenta como 0).
+- `GET /api/outreach/google-usage` devuelve `{ month, count, limit, remaining }`
+  para pintar "te quedan N búsquedas" en el drawer.
+
+> Con este tope propio, **no hace falta** tocar la cuota diaria de Google. El
+> límite real lo pone el CRM.
+
+---
+
+## Dedupe de "Buscar nuevos" (`lib/outreach/persistLeads.js`)
+
+Por cada empresa, dedupe por `(name, location, source)`:
+
+| Situación | Qué pasa |
+| --------- | -------- |
+| Ya es **cliente** (convertido) | Intacto — no se re-capta (`keptClient`) |
+| Ya existe y **está analizado** | Intacto — no se repite ni se pisa su análisis (`keptAnalyzed`) |
+| Ya existe y **NO** analizado | Se **borra el viejo y se re-inserta fresco** → datos al día y sube arriba (`refreshed`) |
+| No existe | Se inserta (`inserted`) |
+
+La lista ordena por `created_at DESC`, por eso el refrescado sube arriba. La
+función está extraída del route para poder testearla aislada.
+
+---
+
+## Conversión a cliente
+
+`POST /api/outreach/leads/:id/convertir-cliente` crea un `Client` (módulo
+Clientes) a partir del lead y **marca el lead como convertido** (no lo borra):
+
+- El `Client` se crea con `type: company`, `email` (solo si es válido), `phone`,
+  y `customFields` con `origin: "outreach"`, `website`, `sector`, `city`,
+  `sourceUrl`, `outreachLeadId`.
+- El lead se marca `converted = true`, `converted_at`, `client_id`.
+- Efecto: **desaparece de la lista de captados** (la lista filtra
+  `converted = false`) y **`"Buscar nuevos"` no lo vuelve a insertar** (el dedupe
+  lo salta como `keptClient`).
+- Requiere que el tenant tenga el módulo `clients` activo (`tenantHasModule`).
 
 ---
 
@@ -102,20 +184,23 @@ Cinco tablas en el schema del tenant (`crm_{slug}`), todas con PK `UUID`:
 | `outreach_leads` | Empresas captadas, aún sin contactar |
 | `outreach_contacts` | Personas dentro de cada empresa (`is_decision_maker`) |
 | `outreach_analyses` | Análisis IA: uno por lead × línea de negocio |
-| `outreach_settings` | Fila única: modelo de IA, contexto de empresa, regla de encadenamiento |
+| `outreach_settings` | Fila única: modelo IA, contexto, regla, y contador mensual de Google |
+
+**Columnas añadidas después del sprint 1:**
+
+- `outreach_settings`: `google_places_usage_month` (VARCHAR 7 "YYYY-MM"),
+  `google_places_usage_count` (INT), `google_places_warned_month` (VARCHAR 7).
+- `outreach_leads`: `converted` (BOOL), `converted_at` (TIMESTAMPTZ),
+  `client_id` (UUID, referencia blanda al `Client`, sin FK).
 
 **Claves e integridad:**
 
-- `outreach_leads` tiene un índice único `(name, location, source)`. Es lo que
-  impide que "Buscar nuevos" duplique empresas al re-scrapear la misma zona.
-- `outreach_analyses` tiene único `(outreach_lead_id, business_line_id)`: un
-  análisis por lead y línea. Se persiste para **no reanalizar** salvo petición
-  explícita.
-- Borrar un lead arrastra sus contactos y análisis (`ON DELETE CASCADE`).
-- `score` lleva un `CHECK (score BETWEEN 0 AND 100)` en BD, no solo validación
-  de Sequelize.
-- `outreach_business_lines.key` es **inmutable**: los análisis guardados se
-  identifican por ella.
+- `outreach_leads` único `(name, location, source)` → base del dedupe.
+- `outreach_analyses` único `(outreach_lead_id, business_line_id)` → un análisis
+  por lead y línea; se persiste para no reanalizar salvo petición.
+- Borrar un lead arrastra contactos y análisis (`ON DELETE CASCADE`).
+- `score` con `CHECK (score BETWEEN 0 AND 100)` en BD.
+- `outreach_business_lines.key` es **inmutable**.
 
 Modelos: `models/tenant/Outreach*.model.js`, registrados en `lib/db/tenantDb.js`.
 
@@ -131,113 +216,127 @@ Modelos: `models/tenant/Outreach*.model.js`, registrados en `lib/db/tenantDb.js`
 | 0–39 | Encaje bajo — descartar de momento | gris |
 | `null` | Sin analizar | blanco con borde |
 
-El dorado de marca **nunca** se usa en los badges de score: está reservado a CTA
-y acentos. Son colores semánticos, así que no dependen del tenant.
+El dorado de marca **nunca** se usa en badges de score (reservado a CTA/acentos).
 
 ---
 
 ## API
 
-Todos los endpoints van envueltos en `withTenant` y comprueban
-`hasModule("outreach")`. Las mutaciones de líneas y ajustes exigen rol `admin`.
+Todos los endpoints van en `withTenant` y comprueban `hasModule("outreach")`.
+Las mutaciones de líneas/ajustes y los borrados exigen rol `admin`.
 
 | Método | Ruta | Qué hace |
 | ------ | ---- | -------- |
-| `GET` | `/api/outreach/leads` | Lista ("Ver ya buscados"). **Solo lee de BD.** |
+| `GET` | `/api/outreach/leads` | Lista. **Solo lee de BD.** Excluye convertidos |
 | `POST` | `/api/outreach/leads` | Alta manual de un lead |
+| `POST` | `/api/outreach/leads/buscar-nuevos` | Google Maps **nativo** (Places + email de la web); PA/LinkedIn vía n8n |
+| `POST` | `/api/outreach/leads/bulk-delete` | Borrar varios leads (admin) — body `{ ids: [...] }` |
+| `GET` | `/api/outreach/google-usage` | Uso de Google del mes `{ month, count, limit, remaining }` |
 | `GET` | `/api/outreach/leads/:id` | Ficha: contactos + análisis + líneas activas |
 | `PATCH` | `/api/outreach/leads/:id` | Editar campos del lead |
 | `DELETE` | `/api/outreach/leads/:id` | Borrar (admin) |
-| `GET` | `/api/outreach/business-lines` | Líneas activas (`?all=true` incluye inactivas) |
-| `POST` | `/api/outreach/business-lines` | Crear línea (admin) |
-| `PATCH` | `/api/outreach/business-lines/:id` | Editar línea (admin) |
-| `DELETE` | `/api/outreach/business-lines/:id` | Borrar línea (admin) |
 | `POST` | `/api/outreach/leads/:id/analizar` | Analiza con IA. Upsert de un análisis por línea |
 | `POST` | `/api/outreach/leads/:id/enviar-correo` | Envía el correo modelo (Resend) y marca `sent_at` |
-| `POST` | `/api/outreach/leads/buscar-nuevos` | Dispara el scraping en n8n e inserta los leads |
-| `GET` | `/api/outreach/settings` | Ajustes + modelos admitidos |
-| `PATCH` | `/api/outreach/settings` | Cambiar modelo / contexto / regla (admin) |
+| `POST` | `/api/outreach/leads/:id/convertir-cliente` | Crea `Client` y marca el lead convertido |
+| `GET` / `POST` | `/api/outreach/business-lines` | Listar / crear línea (POST admin) |
+| `PATCH` / `DELETE` | `/api/outreach/business-lines/:id` | Editar / borrar línea (admin) |
+| `GET` / `PATCH` | `/api/outreach/settings` | Ajustes IA (modelo/contexto/regla) — PATCH admin |
 
-**Degradación sin secrets:** si falta `ANTHROPIC_API_KEY`, `/analizar` responde
-`503` con un mensaje claro; si falta `OUTREACH_SCRAPING_WEBHOOK_URL`,
-`/buscar-nuevos` responde `503`. El resto del módulo sigue funcionando.
+**Filtros de `GET /leads`:** `q`, `sector`, `location`, `source`, `analyzed`
+(true/false), `hasEmail` (true/false), `minScore` + `line`, `sort`
+(`name|sector|location|source|analyzed|email|createdAt`) + `dir` (`asc|desc`),
+`limit`, `offset`.
 
-### Contrato del webhook de scraping
+**Degradación sin claves:** el análisis usa la clave Anthropic del tenant
+(fallback a `ANTHROPIC_API_KEY`); sin ninguna, `/analizar` responde `503`.
+`"Buscar nuevos"` con Google sin clave del tenant responde `400` con un mensaje
+que apunta a Configuración → IA. PA/LinkedIn sin `OUTREACH_SCRAPING_WEBHOOK_URL`
+responden `503`.
 
-El CRM hace `POST $OUTREACH_SCRAPING_WEBHOOK_URL` con:
+### Contrato del webhook de scraping (solo PA / LinkedIn, vía n8n)
 
-```json
-{ "sector": "Ópticas", "location": "Salamanca", "sources": ["paginas_amarillas"] }
-```
-
-y la cabecera `x-outreach-signature: <hmac-sha256-hex del cuerpo crudo>`, firmada
-con `OUTREACH_WEBHOOK_SECRET`. **El flujo de n8n debe verificarla y rechazar lo
-que no cuadre** (el webhook del proyecto original iba sin autenticar).
-
-n8n responde con un array de empresas, o un objeto que lo envuelva
-(`empresas` / `companies` / `results`). Cada empresa admite alias en español o
-inglés (`nombre`/`name`, `direccion`/`location`, `web`/`website`…); lo que no se
-mapea se conserva en `raw_data`, que es la materia prima del análisis.
-
-**Filtros de `GET /leads`:** `q`, `sector`, `location`, `source`, `analyzed`,
-`minScore` + `line` (score mínimo en una línea concreta), `limit`, `offset`.
+`POST $OUTREACH_SCRAPING_WEBHOOK_URL` con
+`{ "sector", "location", "sources": ["paginas_amarillas"|"linkedin"] }` y
+cabecera `x-outreach-signature: <hmac-sha256-hex del cuerpo>` firmada con
+`OUTREACH_WEBHOOK_SECRET`. n8n responde con un array de empresas (o un objeto que
+lo envuelva: `empresas`/`companies`/`results`); alias ES/EN por campo; lo no
+mapeado va a `raw_data`. **Google Maps ya no pasa por aquí.**
 
 ---
 
 ## Reglas de negocio que no se rompen
 
-1. **Nunca scrapear ni reanalizar por defecto.** Leer de BD es el modo por
-   defecto. El scraping y el análisis cuestan tiempo y dinero, y solo ocurren
-   cuando el usuario lo pide explícitamente.
-2. **La IA propone, una persona confirma.** El correo modelo nunca se envía
-   solo; `sent_at` solo se rellena tras confirmación explícita.
+1. **Nunca scrapear ni reanalizar por defecto.** Leer de BD es lo normal; scrape
+   y análisis cuestan y solo ocurren si el usuario lo pide.
+2. **La IA propone, una persona confirma.** El correo modelo nunca se envía solo;
+   `sent_at` solo tras confirmación explícita.
 3. **El análisis se persiste** para no reanalizar.
+4. **Mejor sin email que con un email erróneo** (filtro de dominio).
+5. **Convertir/analizado no se re-capta**; el no-analizado se refresca.
 
 ---
 
 ## Puesta en marcha en un tenant
 
 ```powershell
-# 1. Activar el módulo (crea la fila en master.tenant_modules)
+# 1. Activar el módulo
 npm run db:enable:outreach -- <slug>
 
-# 2. Crear las tablas en su schema (idempotente, lee la lista de master.tenants)
+# 2. Crear las tablas (idempotente, lee la lista de master.tenants)
 npm run db:migrate:outreach
 
-# 3. (Opcional) Datos de muestra
+# 3. Migraciones incrementales (contador de Google + conversión a cliente)
+npm run db:migrate:outreach:usage
+npm run db:migrate:outreach:convert
+
+# 4. (Opcional) Datos de muestra
 npm run db:seed:outreach -- <slug>
 ```
 
-En producción: `npm run db:migrate:outreach:prod`, o
-`docker exec crm-salamandra-app-1 node scripts/migrate-outreach-sprint-1.js`.
+En producción, la variante `:prod` de cada una, o
+`docker exec crm-salamandra-app-1 node scripts/migrate-outreach-*.js`.
 
-> **Postgres 12:** la migración usa `gen_random_uuid()`, nativa desde PG13. En
-> el Postgres local (12.4, el que trae Odoo) la aporta `pgcrypto`; el script la
-> crea si hace falta, y si no puede, omite el `DEFAULT` (Sequelize genera el
-> UUID en JS). Producción es PG16 y no necesita nada.
+Después: cada tenant pega su clave de **Anthropic** y de **Google Places** en
+`/configuracion` → Inteligencia Artificial.
+
+> **Postgres 12 (local):** la migración base usa `gen_random_uuid()` (nativa
+> desde PG13); en local la aporta `pgcrypto`, y si no, omite el `DEFAULT`
+> (Sequelize genera el UUID en JS). Producción es PG16.
 
 ---
 
 ## Variables de entorno
 
-| Variable | Obligatoria | Para qué |
-| -------- | ----------- | -------- |
-| `ANTHROPIC_API_KEY` | Para analizar | API de Claude |
-| `OUTREACH_SCRAPING_WEBHOOK_URL` | Para "Buscar nuevos" | Webhook de scraping en n8n |
-| `OUTREACH_WEBHOOK_SECRET` | Recomendada | Firma HMAC del cuerpo enviado a n8n |
-| `OUTREACH_FROM_EMAIL` | No | Remitente; si falta, usa `RESEND_FROM_EMAIL` |
-| `RESEND_API_KEY` | Para enviar de verdad | Sin ella, el envío es dry-run |
-| `OUTREACH_FAKE_AI` | No | `=1` activa el analizador simulado (solo fuera de producción) |
+| Variable | Ámbito | Para qué |
+| -------- | ------ | -------- |
+| **Clave Anthropic** | Por tenant (Configuración) | Analizar con IA. Fallback a `ANTHROPIC_API_KEY` del entorno |
+| **Clave Google Places** | Por tenant (Configuración) | `"Buscar nuevos"` Google Maps. **Sin fallback de entorno** |
+| `OUTREACH_SCRAPING_WEBHOOK_URL` | Entorno | Webhook n8n para PA/LinkedIn |
+| `OUTREACH_WEBHOOK_SECRET` | Entorno | Firma HMAC del cuerpo enviado a n8n |
+| `OUTREACH_FROM_EMAIL` | Entorno | Remitente del correo modelo (si falta, `RESEND_FROM_EMAIL`) |
+| `OUTREACH_REPLY_TO` | Entorno | A dónde van las respuestas del lead (buzón que sí se lee) |
+| `OUTREACH_RESEND_API_KEY` | Entorno | Credencial Resend propia del outreach (si no, `RESEND_API_KEY`) |
+| `OUTREACH_FAKE_AI` | Entorno | `=1` activa el analizador simulado (solo fuera de producción) |
 
-Los secrets se configuran en `.env.local` y en el `.env.production` del VPS por
-SSH. **Nunca por chat** (regla #14).
+Los secrets de entorno se ponen en `.env.local` y en el `.env.production` del VPS
+por SSH. **Nunca por chat** (regla #14). Las claves de IA por-tenant las pega el
+propio cliente en la UI (BYOK) y se guardan en BD (enmascaradas en la API, nunca
+al cliente).
+
+---
+
+## Modo simulado (desarrollo)
+
+`OUTREACH_FAKE_AI=1` sustituye Claude por un analizador determinista con contenido
+`[SIMULADO]`; los análisis se guardan con `model = "fake"`. Ignorado en
+`NODE_ENV=production`. Sin `RESEND_API_KEY` el envío es dry-run (`dryRun: true`,
+no marca `sent_at`).
 
 ---
 
 ## Pendiente
 
-- **El flujo de n8n de scraping no existe todavía.** Hay que crearlo, hacer que
-  verifique la cabecera `x-outreach-signature` y devolver el array de empresas.
-  Hasta entonces, "Buscar nuevos" responde 503 y el alta manual funciona.
+- **Flujo de n8n para Páginas Amarillas / LinkedIn** (Google ya es nativo).
 - Verificar el dominio del remitente en Resend antes de enviar correo real.
-- Programar el análisis en lote (hoy es lead a lead, desde la ficha).
+- Análisis en lote (hoy es lead a lead desde la ficha).
+- (Opcional) contador de Google también visible fuera del drawer.
