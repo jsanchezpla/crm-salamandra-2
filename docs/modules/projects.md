@@ -299,7 +299,7 @@ en el campo.
 |-----------------------------------------|----------------------------------------------------------|
 | `scripts/migrate-projects-sprint-1.js`  | Crea estructura completa Sprint 1                        |
 | **`scripts/migrate-projects-sprint-2.js`** | **Crea `task_assignees`, 4 índices en `tasks`, FK board_column. Idempotente. Solo tenants con módulo activo.** |
-| **`scripts/migrate-projects-task-priority.js`** | **Añade `tasks.priority` (enum, default `medium`) para la Vista de Lista. Idempotente. Lee tenants de `master.tenants`. `npm run db:migrate:projects-priority[:prod]`** |
+| **`scripts/migrate-projects-task-priority.js`** | **Añade `tasks.priority` (enum, default `medium`) para la Vista de Lista. Idempotente. Lee tenants de `master.tenants`. Local: `npm run db:migrate:projects-priority`. VPS: `docker exec -it crm-salamandra-app-1 node scripts/migrate-projects-task-priority.js` (NO el script `:prod` — el contenedor no lleva `.env.production`; ya tiene `DATABASE_URL` por `env_file` y `db` solo resuelve dentro de la red Docker).** |
 | `scripts/seed-projects-demo.js`         | Sprint 1 + extensión Sprint 2 (8-12 tasks por proyecto, marker `projects-demo-tasks-v1`) |
 
 Comandos npm:

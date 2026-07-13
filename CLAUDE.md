@@ -288,7 +288,7 @@ aplique.
 | billing         | #5 Facturación                | Implementado (demo, aumenta, spain_enzymes)  | `docs/modules/billing.md`   |
 | team            | #6 Equipo & RRHH              | Implementado                                 | `docs/modules/team.md`      |
 | planning        | #7 Planificación & Recursos   | Pendiente                                    | —                           |
-| documents       | #8 Documentación & Contratos  | Pendiente                                    | —                           |
+| documents       | #8 Documentación & Contratos  | Sprint 1+2 (backend+UI) en local, sin desplegar | `docs/modules/documents.md` |
 | —               | #9 Filtro global por cliente  | Pendiente (feature transversal, sin menú)    | —                           |
 | inventory       | #10 Inventario & Activos      | Implementado (spain_enzymes, demo, aumenta)  | `docs/modules/inventory.md` |
 | training        | #11 Formación & Conocimiento  | Implementado (retorika, aumenta)             | `docs/modules/training.md`  |
