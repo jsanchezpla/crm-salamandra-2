@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Select from "../../../../components/ui/Select.jsx";
+import ExportButtons from "@/components/billing/ExportButtons.jsx";
 
 const STATUS = {
   draft: { label: "Borrador", cls: "bg-neutral-100 text-neutral-600" },
@@ -133,6 +134,11 @@ export default function PresupuestosPage() {
     .filter((x) => x.status === "accepted")
     .reduce((a, x) => a + Number(x.total || 0), 0);
 
+  const exportParams = new URLSearchParams();
+  if (status) exportParams.set("status", status);
+  if (q.trim()) exportParams.set("q", q.trim());
+  const exportUrl = `/api/billing/exports/quotes${exportParams.toString() ? `?${exportParams}` : ""}`;
+
   return (
     <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -143,12 +149,15 @@ export default function PresupuestosPage() {
           </h1>
           <p className="text-xs text-neutral-400 mt-1">Pipeline comercial: oferta → aceptación → factura.</p>
         </div>
-        <button
-          onClick={() => setShowNew(true)}
-          className="px-3.5 py-2 bg-[var(--color-primary,#1B3A2D)] text-white text-xs font-medium rounded-md hover:opacity-90 transition self-start"
-        >
-          + Nuevo presupuesto
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start">
+          <ExportButtons xlsxUrl={exportUrl} />
+          <button
+            onClick={() => setShowNew(true)}
+            className="px-3.5 py-2 bg-[var(--color-primary,#1B3A2D)] text-white text-xs font-medium rounded-md hover:opacity-90 transition"
+          >
+            + Nuevo presupuesto
+          </button>
+        </div>
       </div>
 
       {/* Filtros + búsqueda */}

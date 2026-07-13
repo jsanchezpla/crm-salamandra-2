@@ -746,6 +746,20 @@ function DetailView({ invoice, isAdmin, onAction, onEdit, saving }) {
         </div>
       )}
 
+      {invoice.status !== "draft" && (
+        <div className="pt-1">
+          <a
+            href={`/api/billing/invoices/${invoice.id}/pdf`}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide border border-neutral-300 text-neutral-700 hover:bg-neutral-50 transition"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            Descargar PDF
+          </a>
+        </div>
+      )}
+
       {/* Acciones */}
       {isAdmin && (() => {
         const fiscalMissing = [];
