@@ -11,17 +11,65 @@ Esta guía es el flujo de trabajo con git para colaborar sin romper producción.
 
 ## 1. Puesta a punto (una sola vez)
 
+### 1.1 Código y dependencias
+
 ```bash
 git clone https://github.com/jsanchezpla/crm-salamandra-2.git
 cd crm-salamandra-2
 npm install
 ```
 
-- **`.env.local`**: no está en el repo (está en `.gitignore`). Pídeselo a Jorge
-  **por canal cifrado** — nunca por chat, email en claro ni el repo.
-- **PostgreSQL local**: necesitas una instancia local. Los schemas se crean con
-  los scripts de `scripts/` (migraciones + seeds). Pregunta por el arranque de BD.
-- Levantar en local: `npm run dev` → http://localhost:3000
+### 1.2 PostgreSQL local
+
+Necesitas un PostgreSQL corriendo en tu máquina (v15/16). Crea **solo la base de
+datos vacía** y un usuario (con `psql` o pgAdmin):
+
+```sql
+CREATE USER crm_user WITH PASSWORD 'pon_aqui_tu_password_local';
+CREATE DATABASE salamandra OWNER crm_user;
+```
+
+> Los **schemas** (`master`, `crm_demo`, …) NO se crean a mano: los genera el
+> script `db:sync` del paso 1.4. Tú solo dejas creada la base `salamandra` vacía.
+
+### 1.3 Variables de entorno (`.env.local`)
+
+Para **local generas tus PROPIOS secretos** — no necesitas los de nadie. Copia la
+plantilla y rellénala:
+
+```bash
+cp .env.local.example .env.local
+```
+
+- `DATABASE_URL` → apunta a tu Postgres local (usuario/contraseña del paso 1.2, `@localhost`).
+- `JWT_SECRET` y `SETTINGS_ENCRYPTION_KEY` → genera valores aleatorios:
+  ```bash
+  node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"    # -> JWT_SECRET
+  node -e "console.log(require('crypto').randomBytes(32).toString('base64'))" # -> SETTINGS_ENCRYPTION_KEY
+  ```
+
+`.env.local` está en `.gitignore`: nunca se sube. Solo pide un secreto a Jorge
+**por canal cifrado** si vas a probar una integración con clave compartida (las
+claves de IA de Claude/Whisper son por-tenant y se pegan dentro de la app, no aquí).
+
+### 1.4 Crear schemas + datos de demo
+
+```bash
+npm run db:sync     # crea schemas master + crm_demo, tablas, tenant "demo" y su admin
+npm run db:seed     # (opcional) datos realistas: clientes, facturas, empleados, costes…
+```
+
+`db:sync` es idempotente (puedes repetirlo sin romper nada) y al terminar imprime
+las credenciales. Hay más seeds opcionales en `package.json` (`db:seed:projects-demo`,
+`db:seed:billing-demo`, etc.) si quieres poblar módulos concretos.
+
+### 1.5 Arrancar
+
+```bash
+npm run dev         # http://localhost:3000
+```
+
+Login del tenant demo: **admin@demo.salamandra** / **Admin1234!**
 
 ---
 

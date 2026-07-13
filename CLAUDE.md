@@ -385,8 +385,18 @@ aplique.
 8. Terminal: PowerShell (Windows), no bash.
 9. No usar TypeScript — JavaScript puro.
 10. No usar `src/` — `app/` en la raíz del proyecto.
-11. **NUNCA ejecutar `git add` ni `git commit`** — Jorge hace los commits manualmente.
-    Cuando haya cambios listos, ofrecer un mensaje de commit sugerido para que Jorge lo copie y ejecute él mismo.
+11. **Commits: los puede hacer Claude, pero SOLO cuando se lo piden explícitamente**
+    (antes los hacía Jorge a mano; cambiado 2026-07-13). Reglas:
+    - **No commitear de forma proactiva.** Dejar los cambios sin commitear hasta que
+      Jorge (o el dev que corresponda, p.ej. el socio) lo pida ("commitea esto").
+    - Cuando lo pida, llegar hasta el PR: crear/usar una rama `feat|fix|chore|docs/...`
+      (NUNCA commitear en master), `git add` revisando que NO entren `.env*` ni
+      secretos, `git commit` con Conventional Commits + trailer `Co-Authored-By`,
+      `git push -u` de la rama y abrir el PR (o, si `gh` no está disponible, dejar
+      el enlace "Compare & pull request" listo). Enseñar siempre qué se commiteó.
+    - **NUNCA `git push` directo a master ni mergear un PR a master**: el merge a
+      producción es SIEMPRE humano y lo aprueba Jorge. master está protegido por el
+      ruleset de GitHub igualmente (ver `CONTRIBUTING.md`).
 12. Scripts de migración deben leer la lista de schemas desde `master.tenants`,
     nunca hardcodear slugs (la lista difiere entre local y producción).
 13. En diseño responsivo, todo modal o panel lateral (drawer) debe respetar la
