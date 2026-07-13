@@ -397,6 +397,11 @@ aplique.
     - **NUNCA `git push` directo a master ni mergear un PR a master**: el merge a
       producción es SIEMPRE humano y lo aprueba Jorge. master está protegido por el
       ruleset de GitHub igualmente (ver `CONTRIBUTING.md`).
+    - **Sincronización local (housekeeping) SÍ la puede hacer Claude** cuando se lo
+      pidan: `git fetch`, `git checkout/switch master`, `git pull` (fast-forward de
+      master) y `git branch -d` de ramas YA fusionadas. Nada destructivo sin permiso
+      explícito (`git reset --hard`, `git branch -D` de ramas sin fusionar,
+      `push --force`).
 12. Scripts de migración deben leer la lista de schemas desde `master.tenants`,
     nunca hardcodear slugs (la lista difiere entre local y producción).
 13. En diseño responsivo, todo modal o panel lateral (drawer) debe respetar la
