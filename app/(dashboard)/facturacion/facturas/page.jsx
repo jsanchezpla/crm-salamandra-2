@@ -74,6 +74,7 @@ export default function FacturasPage() {
   const [form, setForm] = useState(() => emptyForm(21, 30));
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
+  const [rectifyOpen, setRectifyOpen] = useState(false); // modal de rectificación
 
   // Debounce búsqueda
   useEffect(() => {
@@ -246,9 +247,10 @@ export default function FacturasPage() {
 
   async function performAction(action) {
     if (!openInvoice) return;
+    // Rectificar abre un modal con edición de importe (no es un POST directo).
+    if (action === "rectify") { setRectifyOpen(true); return; }
     if (action === "delete" && !confirm("¿Eliminar este borrador?")) return;
     if (action === "cancel" && !confirm("¿Cancelar la factura? Solo permitido sin cobros.")) return;
-    if (action === "rectify" && !confirm("¿Emitir rectificativa? La factura original quedará marcada como rectificada.")) return;
     setSaving(true);
     try {
       let res;
@@ -263,16 +265,42 @@ export default function FacturasPage() {
         res = await fetch(`/api/billing/invoices/${openInvoice.id}/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
         const j = await res.json();
         if (!res.ok) throw new Error(j.error || "Error");
-        if (action === "rectify") {
-          // La rectificativa pasa a ser la "abierta" para que el usuario la vea
-          setOpenInvoice(j.data);
-        } else {
-          setOpenInvoice(j.data);
-        }
+        setOpenInvoice(j.data);
       }
       await load();
     } catch (err) {
       alert(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Abre una factura por id (re-fetch con includes: rectifies/rectifiedBy).
+  async function openDetailById(id) {
+    try {
+      const res = await fetch(`/api/billing/invoices/${id}`, { cache: "no-store" });
+      const j = await res.json();
+      if (j.ok) { setShowCreate(false); setEditing(false); setOpenInvoice(j.data); }
+    } catch {
+      /* noop */
+    }
+  }
+
+  // Envía la rectificativa. Lanza en error para que el modal lo muestre.
+  async function submitRectify({ correctBase, reason, notes }) {
+    if (!openInvoice) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/billing/invoices/${openInvoice.id}/rectify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ correctBase, reason, notes }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "Error");
+      setRectifyOpen(false);
+      await load();
+      await openDetailById(j.data.id); // muestra la rectificativa recién creada
     } finally {
       setSaving(false);
     }
@@ -403,7 +431,7 @@ export default function FacturasPage() {
             <div className="px-6 py-5">
               {/* MODO DETALLE (no edición) */}
               {!editing && openInvoice && (
-                <DetailView invoice={openInvoice} isAdmin={isAdmin} onAction={performAction} onEdit={startEdit} saving={saving} />
+                <DetailView invoice={openInvoice} isAdmin={isAdmin} onAction={performAction} onEdit={startEdit} onOpenLinked={openDetailById} saving={saving} />
               )}
 
               {/* MODO EDICIÓN o CREAR */}
@@ -629,6 +657,16 @@ export default function FacturasPage() {
           </aside>
         </>
       )}
+
+      {/* MODAL RECTIFICATIVA */}
+      {rectifyOpen && openInvoice && (
+        <RectifyModal
+          invoice={openInvoice}
+          saving={saving}
+          onClose={() => setRectifyOpen(false)}
+          onSubmit={submitRectify}
+        />
+      )}
     </div>
   );
 }
@@ -642,7 +680,7 @@ function FormRow({ label, children }) {
   );
 }
 
-function DetailView({ invoice, isAdmin, onAction, onEdit, saving }) {
+function DetailView({ invoice, isAdmin, onAction, onEdit, onOpenLinked, saving }) {
   const totalPaid = Number(invoice.paidAmount || 0);
   const remaining = Math.max(0, Number(invoice.total) - totalPaid);
   const lineBreakdown = (invoice.lines ?? []).reduce((map, l) => {
@@ -666,14 +704,16 @@ function DetailView({ invoice, isAdmin, onAction, onEdit, saving }) {
       </div>
 
       {invoice.rectifies && (
-        <div className="px-3 py-2 rounded-lg bg-purple-50 border border-purple-100 text-xs text-purple-700">
-          Rectificativa de <span className="font-mono">{invoice.rectifies.number}</span>
-        </div>
+        <button type="button" onClick={() => onOpenLinked?.(invoice.rectifies.id)}
+          className="w-full text-left px-3 py-2 rounded-lg bg-purple-50 border border-purple-100 text-xs text-purple-700 hover:bg-purple-100 transition">
+          Rectificativa de <span className="font-mono underline">{invoice.rectifies.number}</span> →
+        </button>
       )}
       {invoice.rectifiedBy && (
-        <div className="px-3 py-2 rounded-lg bg-purple-50 border border-purple-100 text-xs text-purple-700">
-          Rectificada por <span className="font-mono">{invoice.rectifiedBy.number}</span>
-        </div>
+        <button type="button" onClick={() => onOpenLinked?.(invoice.rectifiedBy.id)}
+          className="w-full text-left px-3 py-2 rounded-lg bg-purple-50 border border-purple-100 text-xs text-purple-700 hover:bg-purple-100 transition">
+          Rectificada por <span className="font-mono underline">{invoice.rectifiedBy.number}</span> →
+        </button>
       )}
       {invoice.customFields?.sourceQuoteNumber && (
         <div className="px-3 py-2 rounded-lg bg-teal-50 border border-teal-100 text-xs text-teal-700">
@@ -708,10 +748,12 @@ function DetailView({ invoice, isAdmin, onAction, onEdit, saving }) {
             <span className="tabular">{fmtMoney(agg.vat)}</span>
           </div>
         ))}
-        {Number(invoice.irpfAmount) > 0 && (
+        {Number(invoice.irpfAmount) !== 0 && (
           <div className="flex justify-between text-xs text-amber-300/80">
             <span>IRPF −{Number(invoice.irpfRate)}%</span>
-            <span className="tabular">− {fmtMoney(invoice.irpfAmount)}</span>
+            {/* Se resta del total: total = base + IVA − IRPF. En una rectificativa
+                el irpfAmount es negativo, así que −(negativo) suma y el desglose cuadra. */}
+            <span className="tabular">{fmtMoney(-Number(invoice.irpfAmount))}</span>
           </div>
         )}
         <div className="flex justify-between font-display text-base pt-2 border-t border-white/10 mt-2">
@@ -781,7 +823,7 @@ function DetailView({ invoice, isAdmin, onAction, onEdit, saving }) {
             <button onClick={() => onAction("cancel")} disabled={saving}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-40">Cancelar</button>
           )}
-          {["issued", "sent", "paid", "partially_paid", "overdue"].includes(invoice.status) && !invoice.rectifiedByInvoiceId && (
+          {["issued", "sent", "paid", "partially_paid", "overdue"].includes(invoice.status) && !invoice.rectifiedByInvoiceId && !invoice.rectifiesInvoiceId && (
             <button onClick={() => onAction("rectify")} disabled={saving}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-purple-700 border border-purple-200 hover:bg-purple-50 disabled:opacity-40">Rectificar</button>
           )}
@@ -799,5 +841,178 @@ function DetailRow({ label, value }) {
       <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-0.5">{label}</div>
       <div className="text-sm text-neutral-700">{value || "—"}</div>
     </div>
+  );
+}
+
+// ── Rectificativa con edición ──────────────────────────────────────────────
+const CORRECTION_REASONS = [
+  { value: "", label: "Sin especificar" },
+  { value: "error_importe", label: "Error en el importe" },
+  { value: "error_iva", label: "Error en el IVA" },
+  { value: "error_datos", label: "Error en los datos" },
+  { value: "descuento", label: "Descuento / rappel posterior" },
+  { value: "devolucion", label: "Devolución de producto/servicio" },
+  { value: "otros", label: "Otros" },
+];
+
+function r2(n) {
+  return Math.round(Number(n) * 100) / 100;
+}
+
+/**
+ * Espejo cliente del cálculo de rectify/route.js: factor k = correctBase /
+ * baseOriginal; cada línea aporta base_línea × (k − 1) conservando su tipo de
+ * IVA; el IRPF se recalcula proporcional. Solo para previsualización en vivo.
+ */
+function computeRectify(invoice, correctBaseInput) {
+  const baseOriginal = r2(invoice.taxBase ?? 0);
+  const raw = String(correctBaseInput).trim();
+  if (raw === "") return { state: "empty", baseOriginal };
+  const correctBase = Number(raw);
+  if (!Number.isFinite(correctBase) || correctBase < 0) return { state: "invalid", baseOriginal };
+  if (baseOriginal === 0) return { state: "no-base", baseOriginal };
+  if (r2(correctBase) === baseOriginal) return { state: "no-change", baseOriginal };
+
+  const factor = correctBase / baseOriginal;
+  const isAnnul = r2(correctBase) === 0;
+  const byRate = new Map();
+  let deltaBase = 0;
+  let deltaVat = 0;
+  for (const l of invoice.lines ?? []) {
+    const lb = Number(l.lineBase ?? 0);
+    const db = r2(lb * (factor - 1));
+    const rate = Number(l.vatRate ?? 0);
+    const dv = r2(db * (rate / 100));
+    deltaBase = r2(deltaBase + db);
+    deltaVat = r2(deltaVat + dv);
+    const acc = byRate.get(String(rate)) ?? { base: 0, vat: 0 };
+    acc.base = r2(acc.base + db);
+    acc.vat = r2(acc.vat + dv);
+    byRate.set(String(rate), acc);
+  }
+  const irpfRate = Number(invoice.irpfRate ?? 0);
+  const deltaIrpf = r2(deltaBase * (irpfRate / 100));
+  const deltaTotal = r2(deltaBase + deltaVat - deltaIrpf);
+  return {
+    state: "ok",
+    baseOriginal,
+    correctBase: r2(correctBase),
+    factor,
+    isAnnul,
+    irpfRate,
+    deltaBase,
+    deltaVat,
+    deltaIrpf,
+    deltaTotal,
+    byRate: [...byRate.entries()].sort((a, b) => Number(b[0]) - Number(a[0])),
+    resultingBase: r2(baseOriginal + deltaBase),
+    resultingTotal: r2(Number(invoice.total ?? 0) + deltaTotal),
+  };
+}
+
+function RectifyModal({ invoice, onClose, onSubmit, saving }) {
+  const [correctBase, setCorrectBase] = useState("");
+  const [reason, setReason] = useState("");
+  const [notes, setNotes] = useState("");
+  const [error, setError] = useState(null);
+
+  const p = useMemo(() => computeRectify(invoice, correctBase), [invoice, correctBase]);
+  const sign = (n) => (n > 0 ? "+" : n < 0 ? "" : "") + fmtMoney(n);
+
+  async function submit() {
+    setError(null);
+    if (p.state === "empty" || p.state === "invalid") return setError("Introduce una base correcta válida.");
+    if (p.state === "no-change") return setError("El importe correcto coincide con la base actual.");
+    if (p.state === "no-base") return setError("La factura original no tiene base imponible.");
+    try {
+      await onSubmit({ correctBase: p.correctBase, reason: reason || null, notes: notes || null });
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 z-[60]" onClick={saving ? undefined : onClose} />
+      <div className="fixed inset-0 z-[60] flex items-start sm:items-center justify-center p-4 overflow-y-auto pointer-events-none">
+        <div className="pointer-events-auto w-full max-w-md bg-white rounded-2xl shadow-pop my-8">
+          <div className="px-6 pt-5 pb-4 border-b border-neutral-100 flex items-center justify-between">
+            <div>
+              <div className="eyebrow">Rectificar factura</div>
+              <h3 className="font-display text-lg text-neutral-900 mt-0.5">{invoice.number}</h3>
+            </div>
+            <button onClick={onClose} disabled={saving} className="text-neutral-300 hover:text-neutral-700 p-1 disabled:opacity-40">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+
+          <div className="px-6 py-5 space-y-4">
+            <div className="rounded-lg bg-neutral-50 border border-neutral-100 p-3 text-xs space-y-1">
+              <div className="flex justify-between text-neutral-500"><span>Base actual</span><span className="tabular text-neutral-800 font-medium">{fmtMoney(p.baseOriginal)}</span></div>
+              <div className="flex justify-between text-neutral-500"><span>Total actual</span><span className="tabular text-neutral-800 font-medium">{fmtMoney(invoice.total)}</span></div>
+              {Number(invoice.irpfRate) > 0 && (
+                <div className="flex justify-between text-neutral-400"><span>IRPF</span><span className="tabular">{Number(invoice.irpfRate)}%</span></div>
+              )}
+            </div>
+
+            <div>
+              <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-1 block">Base imponible correcta (sin IVA)</label>
+              <input type="number" step="0.01" min="0" value={correctBase} autoFocus
+                placeholder={`Actual: ${r2(invoice.taxBase ?? 0)}`}
+                onChange={(e) => setCorrectBase(e.target.value)} className={inputCls} />
+              <p className="text-[11px] text-neutral-400 mt-1">Escribe <b>0</b> para anular la factura por completo.</p>
+            </div>
+
+            {p.state === "ok" && (
+              <div className={`rounded-lg p-3 space-y-1 text-xs border ${p.isAnnul ? "bg-red-50 border-red-100" : "bg-purple-50 border-purple-100"}`}>
+                <div className="flex justify-between font-semibold text-neutral-700">
+                  <span>{p.isAnnul ? "Anulación total" : "Rectificativa (diferencia)"}</span>
+                  <span className="tabular">{sign(p.deltaBase)} base</span>
+                </div>
+                {p.byRate.map(([rate, agg]) => (
+                  <div key={rate} className="flex justify-between text-neutral-500"><span>IVA {rate}%</span><span className="tabular">{sign(agg.vat)}</span></div>
+                ))}
+                {p.deltaIrpf !== 0 && (
+                  <div className="flex justify-between text-amber-700"><span>IRPF {p.irpfRate}%</span><span className="tabular">{sign(-p.deltaIrpf)}</span></div>
+                )}
+                <div className="flex justify-between font-bold text-neutral-900 pt-1 border-t border-black/5 mt-1"><span>Total rectificativa</span><span className="tabular">{sign(p.deltaTotal)}</span></div>
+                {!p.isAnnul && (
+                  <div className="flex justify-between text-emerald-700 pt-1"><span>Neto tras rectificar (base)</span><span className="tabular">{fmtMoney(p.resultingBase)}</span></div>
+                )}
+              </div>
+            )}
+            {p.state === "no-change" && <div className="text-xs text-amber-600">El importe correcto coincide con la base actual: no hay nada que rectificar.</div>}
+            {p.state === "invalid" && <div className="text-xs text-red-500">Introduce un número válido.</div>}
+
+            <div>
+              <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-1 block">Motivo</label>
+              <Select value={reason} onChange={setReason} options={CORRECTION_REASONS} className={inputCls} />
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-1 block">Notas (opcional)</label>
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className={inputCls} placeholder="Detalle interno de la rectificación..." />
+            </div>
+
+            {error && <div className="px-3 py-2 rounded-lg bg-red-50 border border-red-100 text-xs text-red-600">{error}</div>}
+
+            {p.state === "ok" && p.isAnnul && (
+              <div className="px-3 py-2 rounded-lg bg-red-50 border border-red-100 text-[11px] text-red-700">
+                La factura original quedará marcada como <b>rectificada</b> (anulada por completo).
+              </div>
+            )}
+          </div>
+
+          <div className="px-6 py-4 border-t border-neutral-100 flex justify-end gap-2">
+            <button onClick={onClose} disabled={saving}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-neutral-500 border border-neutral-200 hover:bg-neutral-50 disabled:opacity-40">Cancelar</button>
+            <button onClick={submit} disabled={saving || p.state !== "ok"}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-white disabled:opacity-40"
+              style={{ background: p.state === "ok" && p.isAnnul ? "#dc2626" : "var(--color-primary, #1B3A2D)" }}>
+              {saving ? "Generando..." : p.state === "ok" && p.isAnnul ? "Anular factura" : "Generar rectificativa"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }

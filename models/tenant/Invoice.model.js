@@ -159,6 +159,13 @@ export function defineInvoice(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // Motivo de la rectificación (dropdown en la UI: error de importe,
+      // error de IVA, error de datos, otros). Solo lo llevan las facturas
+      // de serie R (rectificativas). Nullable para el resto.
+      correctionReason: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       // ── Otros ───────────────────────────────────────────────────────────
       notes: {
         type: DataTypes.TEXT,
