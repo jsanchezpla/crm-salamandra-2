@@ -1,0 +1,48 @@
+name: CI
+
+# Se ejecuta en cada Pull Request hacia master. Con la protección de rama
+# activada (Settings → Branches), si este workflow falla no se puede mergear.
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  build-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # historia completa para poder diffear contra master
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # igual que el Dockerfile de producción (node:22-alpine)
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # Lint SOLO de los ficheros JS/JSX cambiados en el PR. No bloquea por la
+      # deuda de lint preexistente del repo; exige que el código NUEVO esté limpio.
+      - name: Lint (ficheros cambiados)
+        run: |
+          BASE="origin/${{ github.base_ref }}"
+          FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- '*.js' '*.jsx' '*.mjs' | tr '\n' ' ')
+          if [ -n "$FILES" ]; then
+            echo "Lintando: $FILES"
+            npx eslint $FILES
+          else
+            echo "Sin ficheros JS/JSX que lintar."
+          fi
+
+      # El deploy del VPS hace 'npm run build' en el host: si aquí falla, allí
+      # también → este es el gate que protege producción.
+      - name: Build
+        run: npm run build
+        env:
+          # Valores DUMMY: el build compila (no ejecuta rutas ni conecta a BD),
+          # pero algún módulo podría leer estas vars al importar. NO son secretos.
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+          JWT_SECRET: ci-dummy-jwt-secret-no-usado-en-runtime
+          JWT_REFRESH_SECRET: ci-dummy-refresh-secret
+          SETTINGS_ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
