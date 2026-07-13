@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 function useMounted() {
   const [m, setM] = useState(false);
@@ -41,6 +42,7 @@ function formatDate(iso) {
 }
 
 export default function ClientesPage() {
+  const router = useRouter();
   const mounted = useMounted();
   const [clients, setClients] = useState([]);
   const [total, setTotal] = useState(0);
@@ -384,7 +386,13 @@ export default function ClientesPage() {
                     return (
                       <tr
                         key={client.id}
-                        onClick={() => openPanel(client)}
+                        role="link"
+                        tabIndex={-1}
+                        onClick={(e) => {
+                          // No navegar si el click viene de un elemento interactivo interno.
+                          if (e.target.closest("a, button, input, select, textarea, label")) return;
+                          router.push(`/clientes/${client.id}`);
+                        }}
                         className={`border-b border-gray-50 cursor-pointer transition-colors ${
                           isSelected ? "bg-blue-50" : i % 2 === 0 ? "hover:bg-gray-50" : "bg-gray-50/50 hover:bg-gray-100/50"
                         }`}
@@ -399,7 +407,7 @@ export default function ClientesPage() {
                         <td className="px-4 py-3 hidden lg:table-cell">
                           <span className="text-gray-600">{client.phone || "—"}</span>
                         </td>
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <td className="px-4 py-3">
                           {(() => {
                             const current = client.customFields?.seStatus || "new";
                             const canAdvance = nextStatus(current) !== null;
@@ -425,10 +433,14 @@ export default function ClientesPage() {
                         <td className="px-4 py-3 hidden sm:table-cell">
                           <span className="text-gray-500 text-xs">{formatDate(client.createdAt)}</span>
                         </td>
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                          <Link href={`/clientes/${client.id}`} className="text-xs text-[var(--color-primary)] hover:underline whitespace-nowrap">
-                            Ver ficha →
-                          </Link>
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() => openPanel(client)}
+                            className="text-xs text-[var(--color-primary)] hover:underline whitespace-nowrap"
+                          >
+                            Editar ficha
+                          </button>
                         </td>
                       </tr>
                     );

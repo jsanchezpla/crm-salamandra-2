@@ -1677,7 +1677,7 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onSave, o
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
               Respuesta
             </p>
-            <p className="text-sm text-gray-700">{lead.customFields?.respuesta || <span className="text-gray-300 text-xs">Sin respuesta</span>}</p>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap max-h-[240px] overflow-y-auto">{lead.customFields?.respuesta || <span className="text-gray-300 text-xs">Sin respuesta</span>}</p>
           </div>
 
           {/* Contacto */}
