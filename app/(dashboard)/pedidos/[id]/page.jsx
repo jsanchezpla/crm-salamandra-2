@@ -42,6 +42,10 @@ export default function PedidoDetallePage() {
   const [completing, setCompleting] = useState(false);
   const [settings, setSettings] = useState(null);
   const [products, setProducts] = useState([]);
+  const [addProductFor, setAddProductFor] = useState(null); // idx de la línea que abrió "+ Añadir nuevo", o null
+  const [newProduct, setNewProduct] = useState({ name: "", defaultSalePrice: "" });
+  const [creatingProduct, setCreatingProduct] = useState(false);
+  const [productError, setProductError] = useState(null);
 
   const [lines, setLines] = useState([]);
   const [transportAmount, setTransportAmount] = useState(0);
@@ -112,17 +116,52 @@ export default function PedidoDetallePage() {
     setLines((prev) => prev.filter((_, i) => i !== idx));
   }
 
+  function fillLineWithProduct(idx, p) {
+    updateLine(idx, {
+      outboundProductId: p.id,
+      productName: p.name,
+      unitPrice: p.defaultSalePrice != null ? Number(p.defaultSalePrice) : 0,
+    });
+  }
+
   function pickProduct(idx, productId) {
     const p = products.find((x) => x.id === productId);
     if (!p) {
       updateLine(idx, { outboundProductId: null });
       return;
     }
-    updateLine(idx, {
-      outboundProductId: p.id,
-      productName: p.name,
-      unitPrice: p.defaultSalePrice != null ? Number(p.defaultSalePrice) : 0,
-    });
+    fillLineWithProduct(idx, p);
+  }
+
+  async function createProduct() {
+    if (!newProduct.name.trim()) {
+      setProductError("El nombre es obligatorio");
+      return;
+    }
+    setCreatingProduct(true);
+    setProductError(null);
+    try {
+      const res = await fetch("/api/inventory/outbound", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newProduct.name.trim(),
+          defaultSalePrice: newProduct.defaultSalePrice !== "" ? newProduct.defaultSalePrice : null,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "Error creando el producto");
+      const p = j.data;
+      // Añadir al catálogo local (ordenado por nombre) y seleccionarlo en la línea que abrió el modal.
+      setProducts((prev) => [...prev, p].sort((a, b) => String(a.name).localeCompare(String(b.name))));
+      if (addProductFor != null) fillLineWithProduct(addProductFor, p);
+      setAddProductFor(null);
+      setNewProduct({ name: "", defaultSalePrice: "" });
+    } catch (err) {
+      setProductError(err.message);
+    } finally {
+      setCreatingProduct(false);
+    }
   }
 
   async function save() {
@@ -334,10 +373,20 @@ export default function PedidoDetallePage() {
                       <td className="px-4 py-2">
                         <Select
                           value={l.outboundProductId || ""}
-                          onChange={(v) => pickProduct(idx, v)}
+                          searchable
+                          onChange={(v) => {
+                            if (v === "__add_new__") {
+                              setNewProduct({ name: l.productName?.trim() || "", defaultSalePrice: "" });
+                              setProductError(null);
+                              setAddProductFor(idx);
+                              return;
+                            }
+                            pickProduct(idx, v);
+                          }}
                           options={[
-                            { value: "", label: "— Texto libre (sin catálogo) —" },
+                            { value: "", label: "— Texto libre (sin catálogo) —", pinned: true },
                             ...products.map((p) => ({ value: p.id, label: p.name })),
+                            { value: "__add_new__", label: "+ Añadir nuevo al catálogo", pinned: true },
                           ]}
                           disabled={readOnly}
                           className={`${inputCls} mb-1`}
@@ -456,6 +505,75 @@ export default function PedidoDetallePage() {
           </div>
         )}
       </div>
+
+      {/* Modal: crear producto de catálogo (se guarda en Inventario / productos salientes) */}
+      {addProductFor != null && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={() => !creatingProduct && setAddProductFor(null)}
+        >
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-neutral-100 flex items-center justify-between">
+              <h3 className="font-semibold text-neutral-800 text-sm">Nuevo producto de catálogo</h3>
+              <button
+                onClick={() => setAddProductFor(null)}
+                className="text-neutral-400 hover:text-neutral-700 transition"
+                aria-label="Cerrar"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Nombre *</label>
+                <input
+                  autoFocus
+                  type="text"
+                  value={newProduct.name}
+                  onChange={(e) => setNewProduct((p) => ({ ...p, name: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createProduct(); } }}
+                  placeholder="Nombre del producto"
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Precio de venta (€)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newProduct.defaultSalePrice}
+                  onChange={(e) => setNewProduct((p) => ({ ...p, defaultSalePrice: e.target.value }))}
+                  placeholder="0.00"
+                  className={inputCls}
+                />
+              </div>
+              <p className="text-[11px] text-neutral-400">
+                Se guarda en el catálogo de Inventario (productos salientes) del tenant.
+              </p>
+              {productError && <p className="text-xs text-red-600">{productError}</p>}
+            </div>
+            <div className="px-5 py-4 border-t border-neutral-100 flex justify-end gap-2">
+              <button
+                onClick={() => setAddProductFor(null)}
+                disabled={creatingProduct}
+                className="px-3 py-1.5 text-xs font-medium rounded-md border border-neutral-200 text-neutral-600 hover:bg-neutral-50 transition disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={createProduct}
+                disabled={creatingProduct || !newProduct.name.trim()}
+                className="px-3 py-1.5 text-xs font-medium rounded-md bg-[#0F0F0F] text-white hover:bg-[#222] transition disabled:opacity-50"
+              >
+                {creatingProduct ? "Creando…" : "Crear y seleccionar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
