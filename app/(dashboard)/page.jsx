@@ -1,5 +1,7 @@
 import { headers } from "next/headers";
-import { getMasterModels } from "../../lib/db/masterDb.js";
+import { getTenantContext } from "../../lib/tenant/tenantResolver.js";
+import { buildHomeSummary } from "../../lib/home/summary.js";
+import HomeSummary from "../../components/home/HomeSummary.jsx";
 
 const QUICK_LINKS = [
   { moduleKey: "clients",   href: "/clientes",    eyebrow: "Cuentas",      title: "Clientes",    hint: "Gestionar tu cartera" },
@@ -21,17 +23,31 @@ function greeting() {
   return "Buenas noches";
 }
 
-async function getEnabledModules() {
-  const headersList = await headers();
-  const tenantSlug = headersList.get("x-tenant");
-  if (!tenantSlug) return new Set();
-
-  const { Tenant, TenantModule } = getMasterModels();
-  const tenant = await Tenant.findOne({ where: { slug: tenantSlug } });
-  if (!tenant) return new Set();
-
-  const modules = await TenantModule.findAll({ where: { tenantId: tenant.id } });
-  return new Set(modules.filter((m) => m.enabled).map((m) => m.moduleKey));
+// Resuelve el contexto de tenant desde el RSC (el middleware ya inyectó
+// x-tenant / x-user-id en los headers; getTenantContext solo necesita un objeto
+// con .headers.get() y .cookies.get()) y construye el resumen "Tu día".
+async function loadHome() {
+  const h = await headers();
+  const shim = {
+    headers: { get: (k) => h.get(k) },
+    cookies: { get: () => undefined }, // el slug se resuelve por header x-tenant
+    url: "http://internal/",
+  };
+  try {
+    const ctx = await getTenantContext(shim);
+    const { blocks, admin } = await buildHomeSummary(ctx);
+    // Accesos rápidos gateados por hasModule (módulo del tenant ∩ acceso del
+    // usuario), igual que los widgets. `admin` viene del agregador (fuente única).
+    const enabled = new Set(QUICK_LINKS.filter((l) => ctx.hasModule(l.moduleKey)).map((l) => l.moduleKey));
+    return { blocks, enabled, admin };
+  } catch (err) {
+    // Fallo catastrófico (p.ej. master DB caída): degradar a solo el hero. NO se
+    // reintenta contra la misma DB dentro del catch (volvería a fallar y tumbaría
+    // la home con un 500). enabled vacío = sin accesos rápidos ni widgets, pero
+    // la home NUNCA da 500.
+    console.error("[home] resumen no disponible:", err?.message || err);
+    return { blocks: {}, enabled: new Set(), admin: false };
+  }
 }
 
 export default async function HomePage() {
@@ -42,7 +58,7 @@ export default async function HomePage() {
     year: "numeric",
   });
 
-  const enabled = await getEnabledModules();
+  const { blocks, enabled, admin } = await loadHome();
   const visibleLinks = QUICK_LINKS.filter((l) => enabled.has(l.moduleKey));
 
   return (
@@ -66,6 +82,9 @@ export default async function HomePage() {
           clientes, ventas, facturación y todo lo que tienes activo.
         </p>
       </section>
+
+      {/* Resumen "Tu día" — widgets de datos por módulo activo */}
+      <HomeSummary blocks={blocks} admin={admin} />
 
       {/* Bloque de accesos rápidos */}
       {visibleLinks.length > 0 && (
