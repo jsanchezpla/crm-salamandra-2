@@ -6,6 +6,7 @@ import { serializeTask } from "../../../../../lib/projects/serializeTask.js";
 import { isAdminRole, isLeadOfProject } from "../../../../../lib/projects/projectAuth.js";
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
 import { isValidTaskPriority, TASK_PRIORITY_VALUES, DEFAULT_TASK_PRIORITY } from "../../../../../lib/projects/taskPriority.js";
+import { normalizeChecklistItems } from "../../../../../lib/projects/checklist.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -249,7 +250,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         priority: priority ?? DEFAULT_TASK_PRIORITY,
         estimatedHours: estimatedHours ?? null,
         dueDate: dueDate ?? null,
-        checklist: Array.isArray(checklist) ? checklist : [],
+        checklist: normalizeChecklistItems(checklist),
         tags: Array.isArray(tags) ? tags : [],
       },
       { transaction: t }
