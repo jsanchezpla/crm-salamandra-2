@@ -40,6 +40,7 @@ import ClientNotesPanel from "./ClientNotesPanel.jsx";
 import ClientAttachmentsPanel from "./ClientAttachmentsPanel.jsx";
 import ClientBookingsPanel from "./ClientBookingsPanel.jsx";
 import ClientPlansPanel from "./ClientPlansPanel.jsx";
+import ClientModulesSection from "../../../components/clients/ClientModulesSection.jsx";
 
 const TABS = [
   { key: "info", label: "Información" },
@@ -384,6 +385,8 @@ function InfoTab({
         motivo={motivo}
         infoAdicional={infoAdicional}
       />
+
+      <ClientModulesSection clientId={client.id} />
 
       {!confirmDelete ? (
         <button
