@@ -55,10 +55,24 @@ export function defineCalendarTask(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // FKs opcionales (nullable, aditivas): asociar la tarea a un cliente y/o
+      // a un miembro del equipo. underscored → columnas client_id / team_member_id.
+      clientId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      teamMemberId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
     },
     {
       tableName: "calendar_tasks",
       underscored: true,
+      indexes: [
+        { fields: ["client_id"], name: "calendar_tasks_client_id_idx" },
+        { fields: ["team_member_id"], name: "calendar_tasks_team_member_id_idx" },
+      ],
     }
   );
 }
