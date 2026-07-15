@@ -7,6 +7,12 @@ Tenant activo: `nutri_laura` únicamente. El backend está pensado para
 escalar a otros tenants sin reescribir nada: el módulo `nutricion` se
 "registra" insertando una fila en `master.tenant_modules`.
 
+> **Refactor Sprint 8 (en planificación):** reestructura del módulo
+> (Alimentos→Recetas, Plantillas→Menús con comidas×recetas×opciones,
+> Asignados→Pacientes Nutrición, PDF+email del menú). Plan detallado, riesgos
+> y decisiones abiertas en
+> [`docs/decisions/2026-07-nutricion-refactor-sprint-8.md`](../decisions/2026-07-nutricion-refactor-sprint-8.md).
+
 ---
 
 ## 1. Resumen ejecutivo

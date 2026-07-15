@@ -13,6 +13,7 @@ import {
   loadPlanTree,
   deepCopyPlanTree,
   sortPlanTree,
+  attachRecipesToTree,
 } from "../../../../../../lib/nutricion/plans.js";
 
 async function logAudit({ tenantId, userId, action, entityId, before, after, ip }) {
@@ -47,7 +48,7 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
     const { id } = await ctx.params;
     if (!UUID_RE.test(id)) return error("id inválido");
 
-    const { Plan, PlanMeal, PlanMealOption, PlanMealOptionFood } = tenantModels;
+    const { Plan } = tenantModels;
     const userId = request.headers.get("x-user-id");
     const ip = request.headers.get("x-forwarded-for") ?? null;
 
@@ -99,10 +100,9 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
       );
 
       const sortedSrc = sortPlanTree(template.toJSON());
+      await attachRecipesToTree(tenantModels, sortedSrc);
       await deepCopyPlanTree({
-        PlanMeal,
-        PlanMealOption,
-        PlanMealOptionFood,
+        models: tenantModels,
         srcMeals: sortedSrc.meals,
         destPlanId: newPlan.id,
         transaction: t,

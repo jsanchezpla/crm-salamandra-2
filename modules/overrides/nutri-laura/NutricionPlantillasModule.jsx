@@ -66,7 +66,7 @@ export default function NutricionPlantillasModule() {
   useEffect(() => { load(); }, [load]);
 
   async function handleCreate() {
-    const name = window.prompt("Nombre de la nueva plantilla", "Plantilla 1");
+    const name = window.prompt("Nombre del nuevo menú", "Menú 1");
     if (!name || !name.trim()) return;
     setCreating(true);
     try {
@@ -77,7 +77,7 @@ export default function NutricionPlantillasModule() {
       });
       const j = await r.json();
       if (j.ok) {
-        setToast({ kind: "ok", text: "Plantilla creada" });
+        setToast({ kind: "ok", text: "Menú creado" });
         await load();
         setEditingId(j.data?.id ?? null);
       } else {
@@ -92,7 +92,7 @@ export default function NutricionPlantillasModule() {
     const r = await fetch(`/api/nutricion/plans/${plan.id}/duplicate`, { method: "POST" });
     const j = await r.json();
     if (j.ok) {
-      setToast({ kind: "ok", text: "Plantilla duplicada" });
+      setToast({ kind: "ok", text: "Menú duplicado" });
       await load();
       setEditingId(j.data?.id ?? null);
     } else {
@@ -103,17 +103,17 @@ export default function NutricionPlantillasModule() {
   async function handleArchive(plan) {
     if (plan.activeAssignmentsCount > 0) {
       const cont = window.confirm(
-        `Esta plantilla tiene ${plan.activeAssignmentsCount} asignaciones activas. ` +
+        `Este menú tiene ${plan.activeAssignmentsCount} asignaciones activas. ` +
         `Archivarla NO afecta a los planes ya asignados (siguen vivos), pero la ` +
         `plantilla dejará de aparecer en el listado. ¿Continuar?`
       );
       if (!cont) return;
-    } else if (!window.confirm(`¿Archivar "${plan.name}"?`)) {
+    } else if (!window.confirm(`¿Archivar el menú "${plan.name}"?`)) {
       return;
     }
     const r = await fetch(`/api/nutricion/plans/${plan.id}`, { method: "DELETE" });
     if (r.status === 204) {
-      setToast({ kind: "ok", text: "Plantilla archivada" });
+      setToast({ kind: "ok", text: "Menú archivado" });
       load();
     } else {
       const j = await r.json().catch(() => ({}));
@@ -131,10 +131,10 @@ export default function NutricionPlantillasModule() {
               Nutrición · Recetario
             </div>
             <h1 className="text-2xl lg:text-3xl font-semibold text-gray-900 leading-tight">
-              Plantillas de planes
+              Menús
             </h1>
             <p className="text-xs text-gray-500 mt-1">
-              {total} {total === 1 ? "plantilla" : "plantillas"} guardadas.
+              {total} {total === 1 ? "menú" : "menús"} guardados.
             </p>
           </div>
           <button
@@ -145,7 +145,7 @@ export default function NutricionPlantillasModule() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} className="w-3.5 h-3.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-            Nueva plantilla
+            Nuevo menú
           </button>
         </div>
 
@@ -162,7 +162,7 @@ export default function NutricionPlantillasModule() {
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar plantillas por nombre…"
+              placeholder="Buscar menús por nombre…"
               className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
             />
           </div>
@@ -173,7 +173,7 @@ export default function NutricionPlantillasModule() {
       <div className="flex-1 overflow-auto px-3 sm:px-4 lg:px-10 py-4 lg:py-6">
         <div className="max-w-7xl mx-auto">
           {loading ? (
-            <div className="py-16 text-center text-sm text-gray-400">Cargando plantillas…</div>
+            <div className="py-16 text-center text-sm text-gray-400">Cargando menús…</div>
           ) : items.length === 0 ? (
             <EmptyState onCreate={handleCreate} />
           ) : (
@@ -301,7 +301,7 @@ function PlantillaCard({ plan, onEdit, onDuplicate, onArchive }) {
 function EmptyState({ onCreate }) {
   return (
     <div className="py-16 text-center bg-white border border-gray-200 rounded-xl max-w-xl mx-auto">
-      <div className="text-base text-gray-700 font-medium">Aún no hay plantillas</div>
+      <div className="text-base text-gray-700 font-medium">Aún no hay menús</div>
       <p className="text-xs text-gray-400 mt-1">
         Crea una plantilla reutilizable y úsala como base para tus pacientes.
       </p>

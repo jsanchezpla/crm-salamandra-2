@@ -105,7 +105,7 @@ export default function NutricionAsignadosModule() {
               Nutrición · Recetario
             </div>
             <h1 className="text-2xl lg:text-3xl font-semibold text-gray-900 leading-tight">
-              Planes asignados
+              Pacientes
             </h1>
             <p className="text-xs text-gray-500 mt-1">
               {total} {total === 1 ? "plan" : "planes"} asignados a pacientes.
@@ -174,7 +174,7 @@ export default function NutricionAsignadosModule() {
                     <tr className="bg-gray-50 text-left text-[11px] uppercase tracking-wider text-gray-500">
                       <th className="px-4 py-2.5 font-semibold">Paciente</th>
                       <th className="px-4 py-2.5 font-semibold">Plan</th>
-                      <th className="px-4 py-2.5 font-semibold">Plantilla origen</th>
+                      <th className="px-4 py-2.5 font-semibold">Menú origen</th>
                       <th className="px-4 py-2.5 font-semibold">Asignado</th>
                       <th className="px-4 py-2.5 font-semibold text-right">Acciones</th>
                     </tr>
@@ -279,7 +279,7 @@ function EmptyState({ hasAny }) {
         </>
       ) : (
         <>
-          <div className="text-base text-gray-700 font-medium">Aún no has asignado ningún plan</div>
+          <div className="text-base text-gray-700 font-medium">Aún no hay pacientes con menú asignado</div>
           <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
             Ve a la ficha del paciente y selecciona una plantilla para asignar.
             La asignación crea una copia independiente que podrás editar sin
