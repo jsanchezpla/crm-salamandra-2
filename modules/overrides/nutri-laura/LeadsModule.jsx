@@ -1610,13 +1610,13 @@ function LeadDetailPanel({
                 <p className="text-[11px] text-gray-400 mb-1">
                   ¿Qué te gustaría trabajar en el proceso conmigo?
                 </p>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                <p className="text-sm text-gray-700 whitespace-pre-wrap max-h-[240px] overflow-y-auto">
                   {motivo || <span className="text-gray-300">Sin respuesta</span>}
                 </p>
               </div>
               <div>
                 <p className="text-[11px] text-gray-400 mb-1">¿Algo más que deba saber?</p>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                <p className="text-sm text-gray-700 whitespace-pre-wrap max-h-[240px] overflow-y-auto">
                   {infoAdicional || <span className="text-gray-300">Sin respuesta</span>}
                 </p>
               </div>

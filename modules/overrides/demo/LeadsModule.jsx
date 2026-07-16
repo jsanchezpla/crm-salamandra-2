@@ -225,7 +225,17 @@ export default function DemoLeadsModule() {
                     {leads.map((lead) => {
                       const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.new;
                       return (
-                        <tr key={lead.id} className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
+                        <tr
+                          key={lead.id}
+                          role="link"
+                          tabIndex={-1}
+                          onClick={(e) => {
+                            // No navegar si el click viene de un elemento interactivo interno.
+                            if (e.target.closest("a, button, input, select, textarea, label")) return;
+                            openLead(lead);
+                          }}
+                          className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors cursor-pointer"
+                        >
                           <td className="py-3.5 px-4">
                             <div className="font-semibold text-gray-900">{lead.name || "—"}</div>
                             <div className="text-xs text-gray-400">{lead.email || ""}</div>
@@ -520,7 +530,7 @@ function DemoLeadPanel({ lead, open, saving, onClose, onStageChange, onNotesChan
               {lead.mensaje && (
                 <div>
                   <span className="text-xs text-gray-400 block mb-1">Mensaje</span>
-                  <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">{lead.mensaje}</p>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed max-h-[240px] overflow-y-auto">{lead.mensaje}</p>
                 </div>
               )}
             </div>

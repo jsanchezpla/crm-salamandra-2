@@ -11,8 +11,6 @@ const TABS = [
   { key: "overview",  label: "Resumen" },
   { key: "team",      label: "Equipo" },
   { key: "phases",    label: "Fases" },
-  { key: "milestones", label: "Hitos" },
-  { key: "board",     label: "Tablero" },
   { key: "settings",  label: "Configuración" },
 ];
 
@@ -38,12 +36,6 @@ const ROLE_CLASSES = {
   lead: "bg-emerald-50 text-emerald-700 border-emerald-100",
   member: "bg-sky-50 text-sky-700 border-sky-100",
   viewer: "bg-neutral-100 text-neutral-600 border-neutral-200",
-};
-
-const MILESTONE_STATUS = {
-  pending: { label: "Pendiente", cls: "bg-amber-50 text-amber-700 border-amber-100" },
-  completed: { label: "Completado", cls: "bg-emerald-50 text-emerald-700 border-emerald-100" },
-  missed: { label: "Perdido", cls: "bg-rose-50 text-rose-700 border-rose-100" },
 };
 
 export default function ProyectoDetallePage() {
@@ -136,6 +128,13 @@ export default function ProyectoDetallePage() {
               )}
             </div>
           </div>
+          <Link
+            href={`/proyectos/${project.id}/board`}
+            className="self-start lg:self-auto shrink-0 px-4 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-700 inline-flex items-center gap-2"
+          >
+            Abrir tablero
+            <span aria-hidden="true">→</span>
+          </Link>
         </div>
       </header>
 
@@ -178,10 +177,6 @@ export default function ProyectoDetallePage() {
       {tab === "phases" && (
         <PhasesTab projectId={project.id} phases={phases} onChange={fetchAll} />
       )}
-      {tab === "milestones" && (
-        <MilestonesTab projectId={project.id} milestones={milestones} phases={phases} onChange={fetchAll} />
-      )}
-      {tab === "board" && <BoardSummary projectId={project.id} columns={columns} />}
       {tab === "settings" && (
         <SettingsTab
           project={project}
@@ -471,176 +466,6 @@ function PhasesTab({ projectId, phases, onChange }) {
         </ul>
       )}
     </Card>
-  );
-}
-
-// ─── Pestaña: Hitos ───────────────────────────────────────────────────────
-
-function MilestonesTab({ projectId, milestones, phases, onChange }) {
-  const [name, setName] = useState("");
-  const [dueDate, setDue] = useState("");
-  const [phaseId, setPhaseId] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!name.trim() || !dueDate) return;
-    setSubmitting(true);
-    try {
-      await fetch(`/api/projects/${projectId}/milestones`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, dueDate, phaseId: phaseId || null }),
-      });
-      setName(""); setDue(""); setPhaseId("");
-      onChange();
-    } finally { setSubmitting(false); }
-  };
-
-  const update = async (mid, body) => {
-    await fetch(`/api/projects/${projectId}/milestones/${mid}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    onChange();
-  };
-
-  const remove = async (mid) => {
-    if (!confirm("¿Borrar el hito?")) return;
-    await fetch(`/api/projects/${projectId}/milestones/${mid}`, { method: "DELETE" });
-    onChange();
-  };
-
-  const sorted = milestones.slice().sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
-
-  return (
-    <Card title="Hitos del proyecto">
-      <form onSubmit={submit} className="mb-4 grid grid-cols-1 sm:grid-cols-4 gap-2">
-        <input className={inputCls + " sm:col-span-2"} placeholder="Nombre del hito" value={name} onChange={(e) => setName(e.target.value)} />
-        <input type="date" className={inputCls} value={dueDate} onChange={(e) => setDue(e.target.value)} />
-        <Select
-          className={inputCls}
-          value={phaseId}
-          onChange={(v) => setPhaseId(v)}
-          options={[
-            { value: "", label: "— Sin fase —" },
-            ...phases.map((p) => ({ value: p.id, label: p.name })),
-          ]}
-        />
-        <button disabled={submitting || !name.trim() || !dueDate} className="sm:col-span-4 px-4 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium disabled:opacity-50">
-          {submitting ? "Añadiendo..." : "+ Añadir hito"}
-        </button>
-      </form>
-
-      {sorted.length === 0 ? (
-        <p className="text-sm text-neutral-400">Sin hitos.</p>
-      ) : (
-        <ul className="space-y-2">
-          {sorted.map((m) => {
-            const meta = MILESTONE_STATUS[m.status] ?? MILESTONE_STATUS.pending;
-            return (
-              <li key={m.id} className="flex items-center gap-3 p-3 rounded-lg border border-neutral-200 bg-white">
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-neutral-800">{m.name}</div>
-                  <div className="text-xs text-neutral-500">{fmtDate(m.dueDate)}</div>
-                </div>
-                <span className={`px-2 py-0.5 rounded-full text-[11px] border ${meta.cls}`}>{meta.label}</span>
-                <Select
-                  className="text-xs rounded-lg border border-neutral-200 px-2 py-1"
-                  value={m.status}
-                  onChange={(v) => update(m.id, { status: v })}
-                  options={[
-                    { value: "pending", label: "Pendiente" },
-                    { value: "completed", label: "Completado" },
-                    { value: "missed", label: "Perdido" },
-                  ]}
-                />
-                <button onClick={() => remove(m.id)} className="text-xs text-rose-600 hover:text-rose-700">Borrar</button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </Card>
-  );
-}
-
-// ─── Pestaña: Tablero (resumen + entrada al Kanban completo) ────────────
-
-function BoardSummary({ projectId, columns }) {
-  const [counts, setCounts] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch(`/api/projects/${projectId}/board`).then((r) => r.json());
-        if (r?.ok) {
-          const map = {};
-          let total = 0;
-          for (const col of r.data.columns) {
-            map[col.id] = col.tasks.length;
-            total += col.tasks.length;
-          }
-          setCounts({ map, total });
-        }
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [projectId]);
-
-  const total = counts?.total ?? 0;
-
-  return (
-    <div className="bg-white rounded-xl border border-neutral-200 p-6 lg:p-8">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-5">
-        <div>
-          <h2 className="font-[Fraunces] text-2xl text-neutral-800 mb-1">Tablero Kanban</h2>
-          <p className="text-sm text-neutral-500">
-            {loading
-              ? "Cargando…"
-              : `${columns.length} columna${columns.length !== 1 ? "s" : ""} · ${total} tarea${total !== 1 ? "s" : ""} en total`}
-          </p>
-        </div>
-        <Link
-          href={`/proyectos/${projectId}/board`}
-          className="px-4 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-700 inline-flex items-center gap-2"
-        >
-          Abrir tablero
-          <span aria-hidden="true">→</span>
-        </Link>
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {columns.map((c) => (
-          <div key={c.id} className="bg-neutral-50 rounded-lg border border-neutral-100 p-3 flex items-center gap-2">
-            <span
-              className="w-2 h-2 rounded-full flex-shrink-0"
-              style={{ background: c.color || "#94A3B8" }}
-            />
-            <div className="flex-1 min-w-0">
-              <div className="text-xs text-neutral-600 truncate">{c.name}</div>
-              <div className="font-[Fraunces] text-xl text-neutral-800">
-                {counts?.map?.[c.id] ?? "—"}
-              </div>
-            </div>
-            {c.isDoneColumn && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100">
-                Hecho
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {columns.length === 0 && (
-        <p className="text-sm text-neutral-400 mt-4">
-          Sin columnas configuradas. Crea columnas en la pestaña <strong>Configuración</strong>.
-        </p>
-      )}
-    </div>
   );
 }
 
