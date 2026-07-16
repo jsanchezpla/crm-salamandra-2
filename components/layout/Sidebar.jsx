@@ -90,8 +90,9 @@ const navigation = [
         // expandidas cuando la ruta empieza por /nutricion/.
         children: [
           { key: "nutricion-alimentos", label: "Alimentos", href: "/nutricion/alimentos" },
-          { key: "nutricion-plantillas", label: "Plantillas", href: "/nutricion/plantillas" },
-          { key: "nutricion-asignados", label: "Asignados", href: "/nutricion/asignados" },
+          { key: "nutricion-recetas", label: "Recetas", href: "/nutricion/recetas" },
+          { key: "nutricion-plantillas", label: "Menús", href: "/nutricion/plantillas" },
+          { key: "nutricion-asignados", label: "Pacientes", href: "/nutricion/asignados" },
         ],
         icon: (
           // lucide-react Salad — combina con el tono terracota de nutri-laura

@@ -39,6 +39,8 @@ import {
   computeOptionMacros,
   computeMealMacros,
   computePlanMacros,
+  computeRecipeMacros,
+  scaleMacros,
 } from "../../../lib/nutricion/macros.js";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -504,6 +506,85 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
     }));
   }
 
+  // ── Mutaciones: recetas dentro de una opción (Sprint 8.2) ─────────────────
+  // Al añadir una receta se congela (snapshot) en el backend. loadPlan() tras
+  // cada cambio: el árbol ya incluye option.recipes con ingredientes + macros.
+  async function addRecipeToOption(meal, option, recipeId, servings) {
+    if (!option) return false;
+    const { ok, json } = await apiPost(
+      `/api/nutricion/plans/${plan.id}/meals/${meal.id}/options/${option.id}/recipes`,
+      { recipeId, servings }
+    );
+    if (!ok) {
+      setToast({ kind: "err", text: json.error || "No se pudo añadir la receta" });
+      return false;
+    }
+    await loadPlan();
+    return true;
+  }
+
+  async function updateOptionRecipe(meal, option, pmor, updates) {
+    if (!option) return false;
+    const { ok, json } = await apiPatch(
+      `/api/nutricion/plans/${plan.id}/meals/${meal.id}/options/${option.id}/recipes/${pmor.id}`,
+      updates
+    );
+    if (!ok) {
+      setToast({ kind: "err", text: json.error || "Error al guardar la receta" });
+      return false;
+    }
+    // Actualización IN PLACE (como updateFoodLine): NO loadPlan, que resetearía
+    // la comida expandida y la opción activa. Conserva los ingredientes.
+    setPlan((p) => ({
+      ...p,
+      meals: p.meals.map((m) =>
+        m.id === meal.id
+          ? {
+              ...m,
+              options: m.options.map((o) =>
+                o.id === option.id
+                  ? {
+                      ...o,
+                      recipes: (o.recipes || []).map((r) =>
+                        r.id === pmor.id ? { ...r, ...json.data } : r
+                      ),
+                    }
+                  : o
+              ),
+            }
+          : m
+      ),
+    }));
+    return true;
+  }
+
+  async function deleteOptionRecipe(meal, option, pmor) {
+    if (!option) return;
+    if (!window.confirm(`¿Quitar "${pmor.nameSnapshot}" de la opción?`)) return;
+    const { ok } = await apiDelete(
+      `/api/nutricion/plans/${plan.id}/meals/${meal.id}/options/${option.id}/recipes/${pmor.id}`
+    );
+    if (!ok) {
+      setToast({ kind: "err", text: "No se pudo quitar la receta" });
+      return;
+    }
+    setPlan((p) => ({
+      ...p,
+      meals: p.meals.map((m) =>
+        m.id === meal.id
+          ? {
+              ...m,
+              options: m.options.map((o) =>
+                o.id === option.id
+                  ? { ...o, recipes: (o.recipes || []).filter((r) => r.id !== pmor.id) }
+                  : o
+              ),
+            }
+          : m
+      ),
+    }));
+  }
+
   // ── Cargar plantilla (reemplaza contenido) ────────────────────────────────
   async function loadFromTemplate(templateId) {
     if (templateId === plan.id) return;
@@ -711,6 +792,9 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
                       updateFoodLine(meal, currentOption(meal), line, updates)
                     }
                     onDeleteFood={(line) => deleteFoodLine(meal, currentOption(meal), line)}
+                    onAddRecipe={(recipeId, servings) => addRecipeToOption(meal, currentOption(meal), recipeId, servings)}
+                    onUpdateRecipe={(pmor, updates) => updateOptionRecipe(meal, currentOption(meal), pmor, updates)}
+                    onDeleteRecipe={(pmor) => deleteOptionRecipe(meal, currentOption(meal), pmor)}
                     onOpenExternal={() => setExternalSearchFor({ mealId: meal.id, optionId: currentOption(meal)?.id })}
                   />
                 ))}
@@ -821,6 +905,7 @@ function MealAccordion({
   onRename, onUpdateDescription, onDelete, onMoveUp, onMoveDown,
   onAddOption, onRenameOption, onSetDefaultOption, onDeleteOption,
   onAddFood, onUpdateFood, onDeleteFood, onOpenExternal,
+  onAddRecipe, onUpdateRecipe, onDeleteRecipe,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [descDraft, setDescDraft] = useState(meal.description || "");
@@ -918,15 +1003,23 @@ function MealAccordion({
             onDelete={onDeleteOption}
           />
 
-          {/* Tabla de alimentos de la opción activa */}
+          {/* Opción activa: recetas (Sprint 8.2) + tabla de alimentos sueltos */}
           {activeOption ? (
-            <OptionTable
-              option={activeOption}
-              onAdd={onAddFood}
-              onUpdate={onUpdateFood}
-              onDelete={onDeleteFood}
-              onOpenExternal={onOpenExternal}
-            />
+            <div className="space-y-3">
+              <OptionRecipes
+                option={activeOption}
+                onAddRecipe={onAddRecipe}
+                onUpdateRecipe={onUpdateRecipe}
+                onDeleteRecipe={onDeleteRecipe}
+              />
+              <OptionTable
+                option={activeOption}
+                onAdd={onAddFood}
+                onUpdate={onUpdateFood}
+                onDelete={onDeleteFood}
+                onOpenExternal={onOpenExternal}
+              />
+            </div>
           ) : (
             <div className="text-center text-xs text-gray-400 py-4">
               Esta comida no tiene opciones. Añade una para empezar.
@@ -1042,6 +1135,124 @@ function OptionTable({ option, onAdd, onUpdate, onDelete, onOpenExternal }) {
           </tfoot>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// OptionRecipes — recetas (congeladas) dentro de una opción + añadir (Sprint 8.2)
+// ────────────────────────────────────────────────────────────────────────────
+
+function OptionRecipes({ option, onAddRecipe, onUpdateRecipe, onDeleteRecipe }) {
+  const recipes = (option.recipes || []).slice().sort((a, b) => (a.ordering ?? 0) - (b.ordering ?? 0));
+  return (
+    <div className="rounded-md border border-[var(--color-primary)]/25 bg-[var(--color-primary)]/[0.03] p-2.5 space-y-2">
+      <div className="text-[10px] uppercase tracking-wider text-[var(--color-primary)] font-semibold px-0.5">
+        Recetas de la opción
+      </div>
+      {recipes.length === 0 && (
+        <div className="text-[11px] text-gray-400 px-0.5">Sin recetas. Añade una del recetario.</div>
+      )}
+      {recipes.map((r) => (
+        <RecipeInOptionRow
+          // servings en la key: al cambiar (loadPlan) remonta con el draft
+          // inicializado, evitando un setState-en-efecto para sincronizar.
+          key={`${r.id}:${r.servings}`}
+          pmor={r}
+          onUpdate={(updates) => onUpdateRecipe(r, updates)}
+          onDelete={() => onDeleteRecipe(r)}
+        />
+      ))}
+      <AddRecipeRow onAdd={onAddRecipe} />
+    </div>
+  );
+}
+
+function RecipeInOptionRow({ pmor, onUpdate, onDelete }) {
+  // servingsDraft se inicializa del prop; el remonte por `key` (ver OptionRecipes)
+  // lo re-sincroniza tras cada cambio, sin setState-en-efecto.
+  const [servingsDraft, setServingsDraft] = useState(String(pmor.servings ?? 1));
+
+  const base = computeRecipeMacros({ ingredients: pmor.ingredients || [] });
+  const macros = scaleMacros(base, Number(servingsDraft) || pmor.servings || 1);
+  const nIng = (pmor.ingredients || []).length;
+
+  function commitServings() {
+    const n = Number(servingsDraft);
+    if (!Number.isFinite(n) || n <= 0) { setServingsDraft(String(pmor.servings ?? 1)); return; }
+    if (n === Number(pmor.servings)) return;
+    onUpdate({ servings: Math.round(n * 100) / 100 });
+  }
+
+  return (
+    <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-md px-2.5 py-1.5">
+      <span className="flex-1 min-w-0 text-sm text-gray-800 truncate" title={pmor.nameSnapshot}>{pmor.nameSnapshot}</span>
+      <span className="text-[10px] text-gray-400 hidden sm:inline">{nIng} ing.</span>
+      <label className="flex items-center gap-1 text-[11px] text-gray-500">
+        <input
+          type="number" step="0.5" min="0.5"
+          value={servingsDraft}
+          onChange={(e) => setServingsDraft(e.target.value)}
+          onBlur={commitServings}
+          onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
+          className="w-14 px-1.5 py-1 text-right rounded border border-gray-200 text-xs"
+        />
+        <span>rac.</span>
+      </label>
+      <span className="text-[11px] text-gray-500 tabular-nums w-24 text-right hidden sm:inline">
+        P{fmtGNumber(macros.protein)} C{fmtGNumber(macros.carbs)} G{fmtGNumber(macros.fat)}
+      </span>
+      <button type="button" onClick={onDelete} className="text-gray-300 hover:text-red-500" aria-label="Quitar receta">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} className="w-4 h-4"><path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
+    </div>
+  );
+}
+
+function AddRecipeRow({ onAdd }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState([]);
+  const [open, setOpen] = useState(false);
+  const timer = useRef(null);
+
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(async () => {
+      const query = q.trim();
+      if (query.length < 1) { setResults([]); setOpen(false); return; }
+      try {
+        const r = await fetch(`/api/nutricion/recipes?q=${encodeURIComponent(query)}&limit=8`);
+        const j = await r.json();
+        setResults(j.items ?? []);
+        setOpen(true);
+      } catch { /* noop */ }
+    }, 300);
+    return () => timer.current && clearTimeout(timer.current);
+  }, [q]);
+
+  return (
+    <div className="relative">
+      <input
+        type="text" value={q} onChange={(e) => setQ(e.target.value)}
+        onFocus={() => results.length && setOpen(true)}
+        placeholder="+ Añadir receta del recetario…"
+        className="w-full px-2.5 py-1.5 text-xs rounded-md border border-dashed border-[var(--color-primary)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+      />
+      {open && <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />}
+      {open && results.length > 0 && (
+        <div className="absolute z-30 mt-1 w-full max-h-52 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg">
+          {results.map((r) => (
+            <button
+              key={r.id} type="button"
+              onClick={() => { onAdd(r.id, 1); setQ(""); setResults([]); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex justify-between gap-2"
+            >
+              <span className="truncate">{r.name}</span>
+              <span className="text-[10px] text-gray-400 shrink-0">{r.ingredientCount} ing.</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
