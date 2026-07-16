@@ -41,6 +41,7 @@ export default function NutricionAsignadosModule() {
   const [editingId, setEditingId] = useState(null);
   const [assignOpen, setAssignOpen] = useState(false);
   const [toast, setToast] = useState(null);
+  const [sendingId, setSendingId] = useState(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 350);
@@ -81,6 +82,31 @@ export default function NutricionAsignadosModule() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Envía el menú (PDF adjunto) al email del paciente. El backend valida que
+  // el plan sea asignado y que el paciente tenga email; aquí solo confirmamos
+  // y mostramos el resultado.
+  const sendMenu = useCallback(async (plan) => {
+    if (!confirm(`¿Enviar el menú por email a ${plan.clientName || "el paciente"}?`)) return;
+    setSendingId(plan.id);
+    try {
+      const r = await fetch(`/api/nutricion/plans/${plan.id}/send-email`, { method: "POST" });
+      const j = await r.json();
+      if (r.ok && j.ok && j.data?.dryRun) {
+        // Solo ocurre en desarrollo (en prod el backend devuelve error si no hay
+        // RESEND_API_KEY). No es un envío real → no lo pintamos como éxito.
+        setToast({ kind: "err", text: "Simulado (sin RESEND_API_KEY): el email NO se ha enviado de verdad." });
+      } else if (r.ok && j.ok) {
+        setToast({ kind: "ok", text: `Menú enviado a ${j.data?.sentTo || "el paciente"}` });
+      } else {
+        setToast({ kind: "err", text: j.error || "No se pudo enviar el menú" });
+      }
+    } catch {
+      setToast({ kind: "err", text: "No se pudo enviar el menú" });
+    } finally {
+      setSendingId(null);
+    }
+  }, []);
 
   const filtered = useMemo(() => {
     let out = items;
@@ -163,7 +189,13 @@ export default function NutricionAsignadosModule() {
               {/* Cards en móvil (<lg) */}
               <div className="lg:hidden space-y-2.5">
                 {filtered.map((p) => (
-                  <AssignedCard key={p.id} plan={p} onEdit={() => setEditingId(p.id)} />
+                  <AssignedCard
+                    key={p.id}
+                    plan={p}
+                    onEdit={() => setEditingId(p.id)}
+                    onSend={() => sendMenu(p)}
+                    sending={sendingId === p.id}
+                  />
                 ))}
               </div>
 
@@ -195,12 +227,30 @@ export default function NutricionAsignadosModule() {
                         </td>
                         <td className="px-4 py-2.5 text-gray-500 text-xs">{fmtDate(p.assignedAt)}</td>
                         <td className="px-4 py-2.5 text-right">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setEditingId(p.id); }}
-                            className="text-xs text-[var(--color-primary)] hover:underline"
+                          <div
+                            className="flex items-center justify-end gap-3"
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            Editar
-                          </button>
+                            <a
+                              href={`/api/nutricion/plans/${p.id}/pdf`}
+                              className="text-xs text-gray-600 hover:text-[var(--color-primary)] hover:underline"
+                            >
+                              PDF
+                            </a>
+                            <button
+                              onClick={() => sendMenu(p)}
+                              disabled={sendingId === p.id}
+                              className="text-xs text-gray-600 hover:text-[var(--color-primary)] hover:underline disabled:opacity-50"
+                            >
+                              {sendingId === p.id ? "Enviando…" : "Enviar"}
+                            </button>
+                            <button
+                              onClick={() => setEditingId(p.id)}
+                              className="text-xs text-[var(--color-primary)] hover:underline"
+                            >
+                              Editar
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -247,7 +297,7 @@ export default function NutricionAsignadosModule() {
   );
 }
 
-function AssignedCard({ plan, onEdit }) {
+function AssignedCard({ plan, onEdit, onSend, sending }) {
   return (
     <article
       onClick={onEdit}
@@ -264,6 +314,27 @@ function AssignedCard({ plan, onEdit }) {
           </p>
         </div>
         <span className="text-[11px] text-gray-400 shrink-0">{fmtDate(plan.assignedAt)}</span>
+      </div>
+      <div
+        className="flex items-center gap-4 mt-2.5 pt-2.5 border-t border-gray-100"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <a
+          href={`/api/nutricion/plans/${plan.id}/pdf`}
+          className="text-xs text-gray-600 hover:text-[var(--color-primary)] hover:underline"
+        >
+          PDF
+        </a>
+        <button
+          onClick={onSend}
+          disabled={sending}
+          className="text-xs text-gray-600 hover:text-[var(--color-primary)] hover:underline disabled:opacity-50"
+        >
+          {sending ? "Enviando…" : "Enviar por email"}
+        </button>
+        <button onClick={onEdit} className="ml-auto text-xs font-medium text-[var(--color-primary)]">
+          Editar
+        </button>
       </div>
     </article>
   );
