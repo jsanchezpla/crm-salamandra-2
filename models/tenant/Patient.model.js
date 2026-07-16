@@ -18,6 +18,14 @@ export function definePatient(sequelize) {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
+      // Enlace opcional al Client de origen. Se rellena cuando el paciente se
+      // materializa al marcar un Client como "Paciente Clínica" (sprint
+      // Clientes↔módulos). Nullable: los pacientes creados directamente en el
+      // módulo Clínica (flujo histórico de aumenta) no tienen Client asociado.
+      clientId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       firstName: {
         type: DataTypes.STRING(120),
         allowNull: false,
