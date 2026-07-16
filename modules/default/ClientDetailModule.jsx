@@ -160,13 +160,13 @@ export default function ClientDetailModule() {
     <div className="flex flex-col h-full bg-gray-50">
       {/* Header */}
       <div className="px-4 lg:px-8 pt-6 pb-4 border-b border-gray-100 bg-white">
-        <div className="flex items-center gap-3 mb-1">
-          <Link href="/clientes" className="text-gray-400 hover:text-gray-600 transition-colors">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-1">
+          <Link href="/clientes" className="text-gray-400 hover:text-gray-600 transition-colors shrink-0">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
             </svg>
           </Link>
-          <h1 className="text-gray-900 text-lg font-semibold">{client.name}</h1>
+          <h1 className="text-gray-900 text-lg font-semibold min-w-0 [overflow-wrap:anywhere]">{client.name}</h1>
           <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${st.bg}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
             {STATUSES.find((s) => s.key === status)?.label ?? status}
@@ -331,7 +331,7 @@ export default function ClientDetailModule() {
           {/* Historial de interacciones */}
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col" style={{ minHeight: "400px" }}>
             <div className="px-5 py-4 border-b border-gray-100 shrink-0">
-              <span className="text-sm font-semibold text-gray-700">
+              <span className="text-[13px] font-semibold text-gray-700">
                 Historial de interacciones
                 {interactions.length > 0 && (
                   <span className="ml-2 text-xs font-normal text-gray-400">({interactions.length})</span>
@@ -341,7 +341,9 @@ export default function ClientDetailModule() {
 
             {/* Añadir interacción */}
             <div className="p-4 border-b border-gray-100 bg-gray-50/50 shrink-0">
-              <div className="flex gap-1.5 mb-2">
+              {/* flex-wrap: sin él, los 4 tipos desbordaban en móvil y metían
+                  scroll horizontal en toda la página. */}
+              <div className="flex flex-wrap gap-1.5 mb-2">
                 {INTERACTION_TYPES.map((t) => (
                   <button
                     key={t.key}
@@ -385,7 +387,7 @@ export default function ClientDetailModule() {
               ) : (
                 interactions.map((interaction) => (
                   <div key={interaction.id} className="px-5 py-3.5">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
                           TYPE_STYLE[interaction.type] ?? "bg-gray-100 text-gray-600"
@@ -395,10 +397,10 @@ export default function ClientDetailModule() {
                       </span>
                       <span className="text-xs text-gray-400">{formatDate(interaction.date)}</span>
                       {interaction.createdBy && (
-                        <span className="text-xs text-gray-400">· {interaction.createdBy}</span>
+                        <span className="text-xs text-gray-400 [overflow-wrap:anywhere]">· {interaction.createdBy}</span>
                       )}
                     </div>
-                    <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                    <div className="text-[13px] text-gray-700 whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere]">
                       {interaction.content}
                     </div>
                   </div>
