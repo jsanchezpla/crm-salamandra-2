@@ -27,9 +27,19 @@ function initials(name) {
 
 const EMPTY_FORM = {
   displayName: "", email: "", role: "", department: "",
-  phone: "", hourlyRate: "", hourlyCost: "", monthlySalary: "",
+  phone: "", hourlyRate: "", hourlyCost: "",
+  annualGross: "", paymentPeriods: 12,
   currency: "EUR", startDate: "", notes: "", status: "active",
 };
+
+// Mensual = bruto anual / pagas (mismo cálculo que el backend).
+function computeMonthly(annualGross, paymentPeriods) {
+  const ag = Number(annualGross);
+  const pp = Number(paymentPeriods) || 12;
+  if (!annualGross && annualGross !== 0) return null;
+  if (!Number.isFinite(ag) || ag < 0) return null;
+  return Math.round((ag / pp) * 100) / 100;
+}
 
 function StatusBadge({ value }) {
   const cls =
@@ -136,7 +146,8 @@ export default function EquipoPage() {
       phone: openMember.phone ?? "",
       hourlyRate: openMember.hourlyRate ?? "",
       hourlyCost: openMember.hourlyCost ?? "",
-      monthlySalary: openMember.monthlySalary ?? "",
+      annualGross: openMember.annualGross ?? "",
+      paymentPeriods: openMember.paymentPeriods ?? 12,
       currency: openMember.currency ?? "EUR",
       startDate: openMember.startDate ?? "",
       notes: openMember.notes ?? "",
@@ -154,13 +165,16 @@ export default function EquipoPage() {
         ...form,
         hourlyRate: form.hourlyRate === "" ? null : Number(form.hourlyRate),
         hourlyCost: form.hourlyCost === "" ? null : Number(form.hourlyCost),
-        monthlySalary: form.monthlySalary === "" ? null : Number(form.monthlySalary),
+        // monthlySalary lo calcula el backend a partir de estos dos.
+        annualGross: form.annualGross === "" ? null : Number(form.annualGross),
+        paymentPeriods: Number(form.paymentPeriods) || 12,
       };
       // Solo admin puede tocar campos sensibles. Si por algún motivo el form
       // se enviara desde un viewer no-admin, omitimos los campos del payload.
       if (!viewerIsAdmin) {
         delete payload.hourlyCost;
-        delete payload.monthlySalary;
+        delete payload.annualGross;
+        delete payload.paymentPeriods;
       }
       const url = openMember ? `/api/team/${openMember.id}` : "/api/team";
       const method = openMember ? "PATCH" : "POST";
@@ -357,7 +371,11 @@ export default function EquipoPage() {
                     <DetailRow label="Coste por hora" value={fmtMoney(openMember.hourlyCost, openMember.currency)} />
                   )}
                   {viewerIsAdmin && (
-                    <DetailRow label="Salario mensual" value={fmtMoney(openMember.monthlySalary, openMember.currency)} />
+                    <div className="grid grid-cols-3 gap-3">
+                      <DetailRow label="Bruto anual" value={fmtMoney(openMember.annualGross, openMember.currency)} />
+                      <DetailRow label="Pagas" value={openMember.paymentPeriods ?? 12} />
+                      <DetailRow label="Salario mensual" value={fmtMoney(openMember.monthlySalary, openMember.currency)} />
+                    </div>
                   )}
                   {openMember.notes && (
                     <div>
@@ -367,6 +385,8 @@ export default function EquipoPage() {
                   )}
 
                   <EmployeeBillingSection employeeId={openMember.id} isAdmin={viewerIsAdmin} />
+
+                  {viewerIsAdmin && <ModulesSection memberId={openMember.id} />}
 
                   {viewerIsAdmin && (
                     <div className="flex flex-wrap gap-2 pt-4 border-t border-neutral-100">
@@ -442,14 +462,41 @@ export default function EquipoPage() {
                     </FormRow>
                   </div>
                   {viewerIsAdmin && (
-                    <FormRow label="Salario mensual">
-                      <input type="number" min="0" step="0.01" value={form.monthlySalary}
-                        onChange={(e) => setForm((f) => ({ ...f, monthlySalary: e.target.value }))}
-                        className={inputCls} placeholder={`0.00 ${form.currency || "EUR"}`} />
-                      <p className="text-[10px] text-neutral-400 mt-1">
-                        Solo visible para administradores. Alimenta la analítica de empleados.
+                    <div className="rounded-lg border border-neutral-100 bg-neutral-50/60 p-3 space-y-3">
+                      <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Retribución</div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <FormRow label="Bruto anual">
+                          <input type="number" min="0" step="0.01" value={form.annualGross}
+                            onChange={(e) => setForm((f) => ({ ...f, annualGross: e.target.value }))}
+                            className={inputCls} placeholder={`0.00 ${form.currency || "EUR"}`} />
+                        </FormRow>
+                        <FormRow label="Pagas / año">
+                          <div className="flex gap-2">
+                            {[12, 14].map((p) => (
+                              <button key={p} type="button"
+                                onClick={() => setForm((f) => ({ ...f, paymentPeriods: p }))}
+                                className={`flex-1 py-2 text-xs font-semibold rounded-lg border-2 transition ${
+                                  Number(form.paymentPeriods) === p
+                                    ? "text-white border-transparent"
+                                    : "bg-white border-neutral-200 text-neutral-600 hover:border-neutral-300"
+                                }`}
+                                style={Number(form.paymentPeriods) === p ? { background: "var(--color-primary, #1B3A2D)", borderColor: "var(--color-primary, #1B3A2D)" } : {}}>
+                                {p}
+                              </button>
+                            ))}
+                          </div>
+                        </FormRow>
+                      </div>
+                      <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-white border border-neutral-200">
+                        <span className="text-[11px] text-neutral-500">Salario mensual (calculado)</span>
+                        <span className="text-sm font-semibold text-neutral-900 tabular-nums">
+                          {fmtMoney(computeMonthly(form.annualGross, form.paymentPeriods), form.currency || "EUR")}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-neutral-400">
+                        Solo visible para administradores. El mensual se calcula (bruto ÷ pagas) y alimenta la analítica de empleados.
                       </p>
-                    </FormRow>
+                    </div>
                   )}
                   <FormRow label="Estado">
                     <Select value={form.status}
@@ -517,6 +564,89 @@ function FormRow({ label, children }) {
     <div className="flex flex-col gap-1.5">
       <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">{label}</label>
       {children}
+    </div>
+  );
+}
+
+const MODULE_LABELS = {
+  clients: "Clientes", leads: "Leads", outreach: "Captación", referidos: "Referidos",
+  calendar: "Calendario", citas: "Citas", nutricion: "Nutrición", projects: "Proyectos",
+  orders: "Pedidos", billing: "Facturación", documents: "Documentos", clinica: "Clínica",
+  pacientes: "Pacientes", team: "Equipo", inventory: "Inventario", training: "Formación",
+  cuestionarios: "Cuestionarios", support: "Soporte", planning: "Planificación",
+  analytics: "Analítica", ai: "IA", automations: "Automatizaciones",
+  integrations: "Integraciones", configuracion: "Configuración",
+};
+const moduleLabel = (key) => MODULE_LABELS[key] || key;
+
+// Sección "Módulos con acceso" — asignación de módulos por miembro. Config
+// informativa (SIN gate real este sprint). Autónoma: carga y guarda por su cuenta.
+function ModulesSection({ memberId }) {
+  const [modules, setModules] = useState(null); // [{ moduleKey, enabled }]
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    setModules(null); setDirty(false); setErr(null);
+    fetch(`/api/team/${memberId}/modules`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (j.ok) setModules(j.data.modules); else setErr(j.error || "Error"); })
+      .catch(() => setErr("No se pudieron cargar los módulos"));
+  }, [memberId]);
+
+  function toggle(key) {
+    setModules((prev) => prev.map((m) => (m.moduleKey === key ? { ...m, enabled: !m.enabled } : m)));
+    setDirty(true);
+  }
+
+  async function save() {
+    setSaving(true); setErr(null);
+    try {
+      const res = await fetch(`/api/team/${memberId}/modules`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modules }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "Error");
+      setModules(j.data.modules); setDirty(false);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="pt-4 border-t border-neutral-100">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Módulos con acceso</div>
+        {dirty && (
+          <button onClick={save} disabled={saving}
+            className="text-[11px] px-2.5 py-1 rounded border border-neutral-300 text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">
+            {saving ? "Guardando..." : "Guardar módulos"}
+          </button>
+        )}
+      </div>
+      {err && <div className="text-xs text-red-600 mb-2">{err}</div>}
+      {modules == null ? (
+        <div className="text-xs text-neutral-400">Cargando módulos...</div>
+      ) : modules.length === 0 ? (
+        <div className="text-xs text-neutral-400">El tenant no tiene módulos activos.</div>
+      ) : (
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+          {modules.map((m) => (
+            <label key={m.moduleKey} className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer py-0.5">
+              <input type="checkbox" checked={m.enabled} onChange={() => toggle(m.moduleKey)}
+                className="rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)]" />
+              {moduleLabel(m.moduleKey)}
+            </label>
+          ))}
+        </div>
+      )}
+      <p className="text-[10px] text-neutral-400 mt-2">
+        Config informativa por ahora: no bloquea el acceso al CRM (eso lo controla el usuario de login).
+      </p>
     </div>
   );
 }
