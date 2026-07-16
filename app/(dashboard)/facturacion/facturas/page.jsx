@@ -831,15 +831,17 @@ function DetailView({ invoice, isAdmin, onAction, onEdit, onOpenLinked, saving }
           )}
           {invoice.status === "issued" && (
             <button onClick={() => onAction("send")} disabled={saving}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-blue-700 border border-blue-200 hover:bg-blue-50 disabled:opacity-40">Marcar como enviada</button>
-          )}
-          {(invoice.status === "issued" || invoice.status === "sent") && Number(invoice.paidAmount || 0) === 0 && (
-            <button onClick={() => onAction("cancel")} disabled={saving}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-40">Cancelar</button>
+              title="Marcar la factura como enviada (el envío por email real llegará en un próximo sprint)"
+              aria-label="Marcar factura como enviada"
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-blue-700 border border-blue-200 hover:bg-blue-50 disabled:opacity-40">Enviar</button>
           )}
           {["issued", "sent", "paid", "partially_paid", "overdue"].includes(invoice.status) && !invoice.rectifiedByInvoiceId && !invoice.rectifiesInvoiceId && (
             <button onClick={() => onAction("rectify")} disabled={saving}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-purple-700 border border-purple-200 hover:bg-purple-50 disabled:opacity-40">Rectificar</button>
+          )}
+          {(invoice.status === "issued" || invoice.status === "sent") && Number(invoice.paidAmount || 0) === 0 && (
+            <button onClick={() => onAction("cancel")} disabled={saving}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-40">Cancelar</button>
           )}
           </div>
         </div>
