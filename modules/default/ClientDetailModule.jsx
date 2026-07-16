@@ -183,9 +183,11 @@ export default function ClientDetailModule() {
 
           {/* Datos del cliente */}
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <span className="text-sm font-semibold text-gray-700">Datos del cliente</span>
-              <div className="flex items-center gap-2">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <span className="text-[13px] font-semibold text-gray-700">Datos del cliente</span>
+              {/* Botones en su propia fila, debajo del título (evita que el
+                  título se parta en móvil al competir por el ancho). */}
+              <div className="flex items-center gap-2 mt-2.5">
                 {editMode ? (
                   <>
                     <button
@@ -302,12 +304,12 @@ export default function ClientDetailModule() {
                         {href ? (
                           <a
                             href={href}
-                            className="text-sm text-[var(--color-primary)] hover:underline mt-0.5 block [overflow-wrap:anywhere]"
+                            className="text-[13px] text-[var(--color-primary)] hover:underline mt-0.5 block [overflow-wrap:anywhere]"
                           >
                             {value}
                           </a>
                         ) : (
-                          <div className="text-sm text-gray-700 mt-0.5 [overflow-wrap:anywhere]">{value}</div>
+                          <div className="text-[13px] text-gray-700 mt-0.5 [overflow-wrap:anywhere]">{value}</div>
                         )}
                       </div>
                     ))}
@@ -315,12 +317,12 @@ export default function ClientDetailModule() {
                 {client.notes && (
                   <div>
                     <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Notas</div>
-                    <div className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">{client.notes}</div>
+                    <div className="text-[13px] text-gray-600 whitespace-pre-wrap leading-relaxed">{client.notes}</div>
                   </div>
                 )}
                 <div className="pt-2 border-t border-gray-50">
                   <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Alta</div>
-                  <div className="text-sm text-gray-600 mt-0.5">{formatDate(client.createdAt)}</div>
+                  <div className="text-[13px] text-gray-600 mt-0.5">{formatDate(client.createdAt)}</div>
                 </div>
               </div>
             )}
