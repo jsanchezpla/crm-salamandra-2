@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
+import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 
@@ -164,6 +165,13 @@ export default function CostesPage() {
   const previewVat = Math.round(previewBase * Number(form.vatRate) / 100 * 100) / 100;
   const previewTotal = Math.round((previewBase + previewVat) * 100) / 100;
 
+  const exportParams = new URLSearchParams();
+  if (filterType) exportParams.set("type", filterType);
+  if (filterCategory) exportParams.set("category", filterCategory);
+  if (filterFrom) exportParams.set("from", filterFrom);
+  if (filterTo) exportParams.set("to", filterTo);
+  const exportUrl = `/api/billing/exports/expenses${exportParams.toString() ? `?${exportParams}` : ""}`;
+
   return (
     <div className="p-4 lg:p-8 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
@@ -178,8 +186,9 @@ export default function CostesPage() {
             Ahorro IRPF de estos gastos ({IRPF_MIN}–{IRPF_MAX}%): {fmtMoney(irpfSaving(totalBase).min)} – {fmtMoney(irpfSaving(totalBase).max)}
           </p>
         </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
+          <ExportButtons xlsxUrl={exportUrl} />
           {isAdmin && (
             <button onClick={openCreate} className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white"
               style={{ background: "var(--color-primary, #1B3A2D)" }}>+ Nuevo coste</button>

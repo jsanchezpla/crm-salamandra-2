@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import PeriodPicker, { computeRange } from "../../_components/PeriodPicker.jsx";
 import { fmtMoney } from "../../_components/Kpi.jsx";
+import ExportButtons from "@/components/billing/ExportButtons.jsx";
 
 export default function PorSocioPage() {
   const sp = useSearchParams();
@@ -65,7 +66,10 @@ export default function PorSocioPage() {
             Lo que ha ganado cada socio y el conjunto. {from} → {to}
           </p>
         </div>
-        <PeriodPicker />
+        <div className="flex flex-wrap items-center gap-2">
+          <ExportButtons xlsxUrl={`/api/billing/exports/by-partner?from=${from}&to=${to}`} />
+          <PeriodPicker />
+        </div>
       </div>
 
       {errorMsg && <div className="px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{errorMsg}</div>}
