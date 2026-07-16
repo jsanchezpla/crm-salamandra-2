@@ -290,14 +290,18 @@ export default function ClientDetailModule() {
                   ]
                     .filter(({ value }) => !!value)
                     .map(({ label, value, href }) => (
-                      <div key={label}>
+                      // min-w-0: sin esto la celda del grid no puede encoger por
+                      // debajo del ancho de su contenido y un email largo (sin
+                      // espacios) invade la columna vecina en móvil. break-words
+                      // parte el valor dentro de su columna.
+                      <div key={label} className="min-w-0">
                         <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{label}</div>
                         {href ? (
-                          <a href={href} className="text-sm text-[var(--color-primary)] hover:underline mt-0.5 block">
+                          <a href={href} className="text-sm text-[var(--color-primary)] hover:underline mt-0.5 block break-words">
                             {value}
                           </a>
                         ) : (
-                          <div className="text-sm text-gray-700 mt-0.5">{value}</div>
+                          <div className="text-sm text-gray-700 mt-0.5 break-words">{value}</div>
                         )}
                       </div>
                     ))}
