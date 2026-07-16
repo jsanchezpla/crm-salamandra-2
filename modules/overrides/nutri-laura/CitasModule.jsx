@@ -369,6 +369,10 @@ function CalendarPanel({ refreshKey = 0 }) {
   const calendarRef = useRef(null);
   const [eventTypes, setEventTypes] = useState([]);
   const [openBooking, setOpenBooking] = useState(null);
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [detailMeet, setDetailMeet] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [detailError, setDetailError] = useState(null);
 
   const loadEventTypes = useCallback(async () => {
     const res = await fetch("/api/citas/event-types?active=true", { cache: "no-store" });
@@ -377,6 +381,35 @@ function CalendarPanel({ refreshKey = 0 }) {
   }, []);
 
   useEffect(() => { loadEventTypes(); }, [loadEventTypes]);
+
+  // Equipo para asignar profesional a la cita (opcional).
+  useEffect(() => {
+    fetch("/api/team?status=all&limit=500", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setTeamMembers(j.data?.members ?? []))
+      .catch(() => {});
+  }, []);
+
+  async function patchBooking(payload) {
+    if (!openBooking) return;
+    setSaving(true);
+    setDetailError(null);
+    try {
+      const res = await fetch(`/api/citas/bookings/${openBooking.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const j = await res.json();
+      if (!j.ok) throw new Error(j.error || "Error guardando");
+      setOpenBooking(j.data);
+      calendarRef.current?.getApi?.()?.refetchEvents?.();
+    } catch (err) {
+      setDetailError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   // El padre incrementa refreshKey cuando alguien crea/cancela una cita
   // desde fuera del calendario (modal "Nueva cita", confirm/reject inline).
@@ -402,7 +435,7 @@ function CalendarPanel({ refreshKey = 0 }) {
     const id = info.event.id;
     const res = await fetch(`/api/citas/bookings/${id}`, { cache: "no-store" });
     const j = await res.json();
-    if (j.ok) setOpenBooking(j.data);
+    if (j.ok) { setOpenBooking(j.data); setDetailMeet(j.data.meetUrl ?? ""); setDetailError(null); }
   }
 
   const legend = useMemo(() => eventTypes.filter((e) => e.active), [eventTypes]);
@@ -454,7 +487,6 @@ function CalendarPanel({ refreshKey = 0 }) {
               <Row label="Estado" value={STATUS_LABELS[openBooking.status] ?? openBooking.status} />
               {openBooking.clientEmail && <Row label="Email" value={openBooking.clientEmail} />}
               {openBooking.clientPhone && <Row label="Teléfono" value={openBooking.clientPhone} />}
-              {openBooking.meetUrl && <Row label="Meet" value={openBooking.meetUrl} />}
               {openBooking.additionalData && (
                 <div>
                   <dt className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Respuesta al formulario</dt>
@@ -462,6 +494,54 @@ function CalendarPanel({ refreshKey = 0 }) {
                 </div>
               )}
             </dl>
+
+            {/* Profesional asignado (editable) — solo si hay equipo cargado
+                (tenants sin módulo team no tienen a quién asignar). */}
+            {teamMembers.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Profesional</label>
+                <select
+                  value={openBooking.teamMemberId ?? ""}
+                  onChange={(e) => patchBooking({ teamMemberId: e.target.value || null })}
+                  disabled={saving}
+                  className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-800 disabled:opacity-50"
+                >
+                  <option value="">Sin asignar</option>
+                  {teamMembers.map((m) => (
+                    <option key={m.id} value={m.id}>{m.displayName}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Enlace Meet editable — solo citas online */}
+            {openBooking.modality === "online" && (
+              <div className="mt-3">
+                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Enlace de videollamada (Meet)</label>
+                <input
+                  type="url"
+                  value={detailMeet}
+                  onChange={(e) => setDetailMeet(e.target.value)}
+                  placeholder="Pega aquí el link de Google Meet cuando lo tengas"
+                  className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-800"
+                />
+                <div className="flex items-center justify-between mt-1.5">
+                  <span className="text-[11px] text-gray-400">Al guardarlo por primera vez se avisa al cliente por email.</span>
+                  <button
+                    onClick={() => patchBooking({ meetUrl: detailMeet.trim() || null })}
+                    disabled={saving || detailMeet.trim() === (openBooking.meetUrl ?? "")}
+                    className="text-[11px] px-2.5 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Guardar enlace
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {detailError && (
+              <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">{detailError}</div>
+            )}
+
             <div className="flex justify-end mt-5">
               <button onClick={() => setOpenBooking(null)} className="px-4 py-2 rounded-lg text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200">Cerrar</button>
             </div>

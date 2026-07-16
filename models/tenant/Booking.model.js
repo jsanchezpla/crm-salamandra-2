@@ -88,6 +88,13 @@ export function defineBooking(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // Miembro del equipo (profesional) asignado a la cita. Nullable/aditivo:
+      // las citas existentes (incl. nutri_laura en prod) quedan sin asignar.
+      // underscored global → columna team_member_id.
+      teamMemberId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       // Notas internas (no visibles al cliente)
       notes: {
         type: DataTypes.TEXT,
@@ -99,6 +106,7 @@ export function defineBooking(sequelize) {
       indexes: [
         { fields: ["scheduled_at", "status"], name: "bookings_scheduled_status_idx" },
         { fields: ["client_email"], name: "bookings_client_email_idx" },
+        { fields: ["team_member_id"], name: "bookings_team_member_idx" },
       ],
     }
   );

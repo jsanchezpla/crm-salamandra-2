@@ -227,3 +227,58 @@ sin entrada en `UI_OVERRIDES` ven el módulo default.
   heurística por presencia de `cancellationReason`).
 - Override del listado `/clientes` para nutri_laura (icono ojo en lugar
   de texto "Ver ficha →").
+
+---
+
+## Asignación de clientes a módulos (Nutrición / Clínica)
+
+Sprint "Clientes ↔ módulos" (2026-07-15). Desde la ficha del cliente se puede
+marcar como **Paciente Nutrición** y/o **Paciente Clínica** (sección "Módulos
+asignados", componente `components/clients/ClientModulesSection.jsx`, incluido
+en la ficha default y en el override de nutri-laura).
+
+**Modelo de datos** (Opción B — tabla, no booleans): `client_module_assignments`
+(`ClientModuleAssignment.model.js`) — `client_id` (FK→clients CASCADE),
+`module_key`, `enabled`, `assigned_at`, `assigned_by_user_id`, `metadata` JSONB,
+`UNIQUE(client_id, module_key)`. Extensible a N módulos + metadata por asignación
+(p.ej. nutricionista). Se eligió tabla sobre booleans por extensibilidad,
+histórico y metadata.
+
+**Endpoints**:
+- `GET /api/clients/:id/module-assignments` → `{ available, assignments }`
+  (`available` = módulos asignables que el tenant tiene activos).
+- `PATCH /api/clients/:id/module-assignments` — body `{ assignments: [{ module_key, enabled }] }`.
+  Upsert transaccional por `(client_id, module_key)` + AuditLog.
+- `GET /api/clients?assignedTo=nutricion` — filtra por asignación activa
+  (include `required` + `distinct`, guard 42P01 → lista vacía en schema parcial).
+
+**Asimetría Nutrición vs Clínica** (clave):
+- **Nutrición** es client-céntrica: `plans.client_id` ya enlaza planes a clientes.
+  La asignación es *pertenencia/intención*; la vista `/nutricion/asignados`
+  sigue siendo **plan-céntrica** (lista planes asignados), sin refactor — eso es
+  un sprint posterior. Marcar "Paciente Nutrición" NO lo hace aparecer aún en
+  `/asignados` (solo lo hace tener un plan asignado); el flag deja el dato listo.
+- **Clínica** lee la tabla `patients`, independiente de `clients`. Al marcar
+  "Paciente Clínica" se **materializa** un `Patient` enlazado por el nuevo
+  `patients.client_id` (nullable, FK SET NULL) copiando el nombre; al desmarcar
+  se **borra** ese Patient **solo si no tiene** sesiones/informes (FK RESTRICT),
+  si los tiene se conserva. Lógica en `lib/clients/moduleAssignments.js`
+  (`syncClinicPatient`). Índice único parcial `patients_client_unique` = un
+  Client materializa como mucho un Patient.
+
+**Backfill** (`scripts/migrate-client-module-assignments.js`, solo `nutri_laura`):
+marca `nutricion` a los clients con plan asignado activo **o** `origin='lead'`.
+Idempotente; no toca los dados de alta a mano.
+
+**⚠️ Orden de deploy**: el nuevo atributo `Patient.clientId` hace que toda lectura
+de Patient seleccione `patients.client_id`; correr la migración **ANTES** de
+desplegar (es forward-compatible: solo añade tabla/columna que el código viejo
+ignora). En el VPS: `git pull` → `docker exec ... node scripts/migrate-client-module-assignments.js` → `./deploy.sh`.
+
+### Backlog (sprint siguiente)
+- Refactor de `/nutricion/asignados` a paciente-céntrico (leer también clientes
+  con asignación `nutricion` sin plan aún) — es el motivo por el que este sprint
+  prepara el terreno.
+- UI de metadata por asignación (p.ej. nutricionista asignado en `metadata`).
+- Checkbox de módulos también en el panel de edición rápida del listado `/clientes`.
+- Reconciliación de la doble fuente de verdad Nutrición (flag vs `plans.client_id`).

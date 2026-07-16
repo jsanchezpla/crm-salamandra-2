@@ -6,6 +6,7 @@ import { serializeTeamMember } from "../../../../lib/team/serializeTeamMember.js
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["active", "inactive", "on_leave"]);
+const VALID_PERIODS = new Set([12, 14]);
 
 function normalizeEmail(value) {
   if (value == null) return null;
@@ -98,6 +99,8 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       department: member.department,
       hourlyCost: member.hourlyCost,
       hourlyRate: member.hourlyRate,
+      annualGross: member.annualGross,
+      paymentPeriods: member.paymentPeriods,
       monthlySalary: member.monthlySalary,
       status: member.status,
       userId: member.userId,
@@ -136,10 +139,32 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       if (v === undefined) return error("hourlyRate inválido");
       updates.hourlyRate = v;
     }
-    if ("monthlySalary" in body) {
-      const v = normalizeAmount(body.monthlySalary);
-      if (v === undefined) return error("monthlySalary inválido");
-      updates.monthlySalary = v;
+    // Retribución: annualGross + paymentPeriods → monthlySalary CALCULADO en
+    // backend (single source of truth). monthlySalary NO se acepta directo.
+    const retribTouched = "annualGross" in body || "paymentPeriods" in body;
+    if ("paymentPeriods" in body) {
+      const p = Number(body.paymentPeriods);
+      if (!VALID_PERIODS.has(p)) return error("paymentPeriods debe ser 12 o 14");
+      updates.paymentPeriods = p;
+    }
+    if ("annualGross" in body) {
+      const v = normalizeAmount(body.annualGross);
+      if (v === undefined) return error("annualGross inválido");
+      updates.annualGross = v;
+    }
+    if (retribTouched) {
+      const ag = "annualGross" in updates ? updates.annualGross : member.annualGross;
+      const pp = "paymentPeriods" in updates ? updates.paymentPeriods : (member.paymentPeriods || 12);
+      if (ag != null) {
+        updates.monthlySalary = Math.round((Number(ag) / pp) * 100) / 100;
+      } else if (member.annualGross != null) {
+        // Se ha borrado un bruto anual que SÍ existía → el mensual derivado
+        // pierde su origen y se anula.
+        updates.monthlySalary = null;
+      }
+      // Si el miembro nunca tuvo annualGross (legacy solo-mensual de seeds/antes
+      // del backfill), NO se toca monthlySalary: preservamos el salario que ya
+      // alimenta la analítica (la UI manda annualGross:null en cada edición).
     }
     if ("status" in body) {
       if (!VALID_STATUS.has(body.status)) return error("status inválido");
@@ -169,6 +194,8 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       department: member.department,
       hourlyCost: member.hourlyCost,
       hourlyRate: member.hourlyRate,
+      annualGross: member.annualGross,
+      paymentPeriods: member.paymentPeriods,
       monthlySalary: member.monthlySalary,
       status: member.status,
       userId: member.userId,
@@ -187,7 +214,11 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     if (String(beforeSnapshot.hourlyRate) !== String(afterSnapshot.hourlyRate)) {
       await logAudit({ ...auditCommon, action: "team.rate_changed" });
     }
-    if (String(beforeSnapshot.monthlySalary) !== String(afterSnapshot.monthlySalary)) {
+    if (
+      String(beforeSnapshot.monthlySalary) !== String(afterSnapshot.monthlySalary) ||
+      String(beforeSnapshot.annualGross) !== String(afterSnapshot.annualGross) ||
+      String(beforeSnapshot.paymentPeriods) !== String(afterSnapshot.paymentPeriods)
+    ) {
       await logAudit({ ...auditCommon, action: "team.salary_changed" });
     }
     if (beforeSnapshot.status !== afterSnapshot.status) {

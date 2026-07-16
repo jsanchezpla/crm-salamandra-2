@@ -6,6 +6,7 @@ import StatusBadge from "../_components/StatusBadge.jsx";
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 import Select from "@/components/ui/Select.jsx";
+import ExportButtons from "@/components/billing/ExportButtons.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -135,6 +136,11 @@ export default function CobrosPage() {
     setForm((f) => ({ ...f, invoiceId: invId, amount: remaining.toFixed(2) }));
   }
 
+  const exportParams = new URLSearchParams();
+  if (filterMethod) exportParams.set("method", filterMethod);
+  if (filterStatus) exportParams.set("status", filterStatus);
+  const exportUrl = `/api/billing/exports/payments${exportParams.toString() ? `?${exportParams}` : ""}`;
+
   return (
     <div className="p-4 lg:p-8 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
@@ -145,8 +151,9 @@ export default function CobrosPage() {
             Total cobrado: <span className="font-semibold text-emerald-700 tabular">{fmtMoney(totalCollected)}</span>
           </p>
         </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
+          <ExportButtons xlsxUrl={exportUrl} />
           {isAdmin && (
             <button
               onClick={() => setShowForm(true)}

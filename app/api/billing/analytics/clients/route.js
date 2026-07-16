@@ -1,6 +1,7 @@
 import { fn, col, literal, Op } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../../lib/utils/apiResponse.js";
+import { activeInvoiceScope } from "../../../../../lib/billing/invoiceScope.js";
 
 /**
  * GET /api/billing/analytics/clients?from=&to=
@@ -26,7 +27,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const invRows = await Invoice.findAll({
       where: {
         issueDate: { [Op.between]: [from, to] },
-        status: { [Op.notIn]: ["draft", "cancelled", "rectified"] },
+        ...activeInvoiceScope(Invoice),
       },
       attributes: [
         "clientId",

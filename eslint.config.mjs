@@ -13,11 +13,10 @@ const eslintConfig = defineConfig([
   ]),
   {
     // `set-state-in-effect` (regla del React Compiler) marca un patrón
-    // intencional y extendido en el CRM: resetear el estado local de un
-    // panel/formulario al cambiar la entidad seleccionada
-    // (useEffect(() => { if (sel) setX(sel.y) }, [sel?.id])). No es un bug.
-    // Lo dejamos como warning (sigue visible) para no bloquear PRs por esta
-    // deuda preexistente, dado que el CI lintea el fichero cambiado entero.
+    // intencional y extendido en el CRM: fijar loading/estado local dentro de
+    // un useEffect de carga de datos. No es un bug. Lo dejamos como warning
+    // (sigue visible) para no bloquear PRs por esta deuda preexistente, dado
+    // que el CI lintea el fichero cambiado entero.
     rules: {
       "react-hooks/set-state-in-effect": "warn",
     },

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Select from "@/components/ui/Select.jsx";
 import { TASK_PRIORITIES, DEFAULT_TASK_PRIORITY } from "@/lib/projects/taskPriority.js";
+import { normalizeChecklistItems } from "@/lib/projects/checklist.js";
 
 /**
  * TaskDrawer — drawer lateral derecho para ver/editar/crear una task.
@@ -104,6 +105,7 @@ export default function TaskDrawer({
       setForm({
         title: "",
         description: "",
+        priority: DEFAULT_TASK_PRIORITY,
         boardColumnId: createInColumnId ?? null,
         phaseId: null,
         milestoneId: null,
@@ -135,7 +137,9 @@ export default function TaskDrawer({
           dueDate: t.dueDate ?? "",
           estimatedHours: t.estimatedHours != null ? String(t.estimatedHours) : "",
           assigneeIds: (t.assignees ?? []).map((a) => a.id ?? a.teamMemberId).filter(Boolean),
-          checklist: Array.isArray(t.checklist) ? t.checklist : [],
+          // Normaliza ids: datos antiguos/seed sin id hacían que marcar un item
+          // marcara todos (undefined === undefined). Cada item queda con id único.
+          checklist: normalizeChecklistItems(t.checklist),
           tags: Array.isArray(t.tags) ? t.tags : [],
         });
       } catch (e) {

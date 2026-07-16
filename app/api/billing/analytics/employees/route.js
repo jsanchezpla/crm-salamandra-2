@@ -2,6 +2,7 @@ import { fn, col, Op } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { monthsBetween } from "../../../../../lib/billing/billingSummary.js";
+import { activeInvoiceScope } from "../../../../../lib/billing/invoiceScope.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -36,7 +37,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       where: {
         employeeId: { [Op.ne]: null },
         issueDate: { [Op.between]: [from, to] },
-        status: { [Op.notIn]: ["draft", "cancelled", "rectified"] },
+        ...activeInvoiceScope(Invoice),
       },
       attributes: [
         "employeeId",

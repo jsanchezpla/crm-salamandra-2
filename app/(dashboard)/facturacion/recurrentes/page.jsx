@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
+import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import { fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 
@@ -104,8 +105,9 @@ export default function RecurrentesPage() {
           <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1">Facturación recurrente</h1>
           <p className="text-xs text-neutral-400 mt-1">{items.length} {items.length === 1 ? "recurrencia" : "recurrencias"}</p>
         </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
+          <ExportButtons xlsxUrl="/api/billing/exports/recurring" />
           {isAdmin && (
             <button onClick={() => setShowForm(true)} className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white"
               style={{ background: "var(--color-primary, #1B3A2D)" }}>+ Nueva recurrencia</button>
@@ -121,7 +123,7 @@ export default function RecurrentesPage() {
           <div className="font-bold text-sm mb-1">⚠ Las facturas recurrentes NO se emiten automáticamente</div>
           <div className="text-amber-800 leading-relaxed">
             Aquí defines plantillas de recurrencia (cliente, frecuencia, próxima fecha), pero el motor de
-            emisión automática <strong>aún no está implementado</strong>. La fecha de "próxima emisión" es
+            emisión automática <strong>aún no está implementado</strong>. La fecha de «próxima emisión» es
             <strong> orientativa</strong>: tendrás que ir a <a href="/facturacion/facturas" className="underline font-semibold">Facturas</a> y
             crear cada factura manualmente cuando llegue su fecha. La emisión vía n8n se hará en una iteración futura.
           </div>

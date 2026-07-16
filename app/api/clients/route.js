@@ -11,6 +11,9 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   const search = searchParams.get("search");
   const status = searchParams.get("status");
   const country = searchParams.get("country");
+  // Filtro por módulo asignado (sprint Clientes↔módulos): clientes con una
+  // asignación activa a ese módulo (p.ej. assignedTo=nutricion).
+  const assignedTo = searchParams.get("assignedTo");
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "50"), 200);
   const offset = (page - 1) * limit;
@@ -29,13 +32,35 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     ];
   }
 
-  const { rows, count } = await Client.findAndCountAll({
-    where,
-    limit,
-    offset,
-    order: [["createdAt", "DESC"]],
-  });
+  const queryOpts = { where, limit, offset, order: [["createdAt", "DESC"]] };
+  if (assignedTo) {
+    const { ClientModuleAssignment } = tenantModels;
+    queryOpts.include = [
+      {
+        model: ClientModuleAssignment,
+        as: "moduleAssignments",
+        attributes: [],
+        where: { moduleKey: assignedTo, enabled: true },
+        required: true,
+      },
+    ];
+    queryOpts.distinct = true; // cuenta clientes distintos, no filas del JOIN
+  }
 
+  let result;
+  try {
+    result = await Client.findAndCountAll(queryOpts);
+  } catch (err) {
+    // Tenant con schema parcial sin la tabla client_module_assignments (42P01):
+    // el filtro no puede cumplirse → lista vacía en vez de 500.
+    const isMissingTable = err?.parent?.code === "42P01" || err?.original?.code === "42P01";
+    if (assignedTo && isMissingTable) {
+      return ok({ clients: [], total: 0, page, pages: 0 });
+    }
+    throw err;
+  }
+
+  const { rows, count } = result;
   return ok({ clients: rows, total: count, page, pages: Math.ceil(count / limit) });
 });
 

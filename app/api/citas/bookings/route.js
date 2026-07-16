@@ -20,7 +20,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   try {
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
 
-    const { Booking, EventType } = tenantModels;
+    const { Booking, EventType, TeamMember } = tenantModels;
     const { searchParams } = new URL(request.url);
 
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
@@ -44,6 +44,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       where.status = s;
     }
     if (searchParams.get("eventTypeId")) where.eventTypeId = searchParams.get("eventTypeId");
+    if (searchParams.get("teamMemberId")) where.teamMemberId = searchParams.get("teamMemberId");
     // ?clientEmail=foo@bar.com — match exacto case-insensitive (Booking no tiene
     // FK a Client; el cruce con la ficha del cliente es por email).
     if (searchParams.get("clientEmail")) {
@@ -58,9 +59,16 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       ];
     }
 
+    // teamMember solo si el tenant tiene módulo team (si no, la tabla
+    // team_members no existe y el JOIN daría 500 — p.ej. nutri_laura).
+    const include = [{ model: EventType, as: "eventType", attributes: ["id", "name", "slug", "color"] }];
+    if (hasModule("team")) {
+      include.push({ model: TeamMember, as: "teamMember", attributes: ["id", "displayName"] });
+    }
+
     const { count, rows } = await Booking.findAndCountAll({
       where,
-      include: [{ model: EventType, as: "eventType", attributes: ["id", "name", "slug", "color"] }],
+      include,
       order: [["scheduledAt", "DESC"]],
       limit,
       offset,
@@ -92,7 +100,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const ip = request.headers.get("x-forwarded-for") ?? null;
     if (!ADMIN_ROLES.has(userRole)) return forbidden("Solo admin puede crear citas manuales");
 
-    const { Booking, EventType } = tenantModels;
+    const { Booking, EventType, TeamMember } = tenantModels;
 
     let body;
     try { body = await request.json(); } catch { return error("Body inválido"); }
@@ -138,6 +146,19 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
 
     const notes = body.notes != null ? String(body.notes) : null;
 
+    // teamMemberId solo si el tenant tiene módulo team; valida existencia.
+    let teamMemberId = null;
+    if (hasModule("team")) {
+      const tmId = typeof body.teamMemberId === "string" && body.teamMemberId.trim()
+        ? body.teamMemberId.trim()
+        : null;
+      if (tmId) {
+        const tm = await TeamMember.findByPk(tmId, { attributes: ["id"] });
+        if (!tm) return error("teamMemberId no existe");
+      }
+      teamMemberId = tmId;
+    }
+
     const row = await Booking.create({
       eventTypeId,
       clientName,
@@ -150,6 +171,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       meetUrl,
       status: "confirmed",
       notes,
+      teamMemberId,
     });
 
     await logCitasAudit({

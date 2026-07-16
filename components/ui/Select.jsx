@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /**
  * Select — desplegable propio con control total del estilo.
@@ -14,9 +14,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
  *   <Select
  *     value={string}
  *     onChange={(value) => ...}
- *     options={[{ value, label, disabled? }]}
+ *     options={[{ value, label, disabled?, pinned? }]}  // pinned: no se filtra al buscar
  *     placeholder="— Seleccionar —"
  *     disabled
+ *     searchable            // opt-in: añade un buscador que filtra por label
  *     className="..."   // clases extra para el botón trigger
  *   />
  */
@@ -29,16 +30,32 @@ export default function Select({
   className = "",
   id,
   "aria-label": ariaLabel,
+  searchable = false,
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
+  const [query, setQuery] = useState("");
   const rootRef = useRef(null);
   const listRef = useRef(null);
+  const searchRef = useRef(null);
 
-  const selectedIndex = options.findIndex((o) => String(o.value) === String(value));
-  const selected = selectedIndex >= 0 ? options[selectedIndex] : null;
+  // Opciones visibles: si es searchable y hay texto, se filtran por label.
+  // Sin searchable (o sin texto) => todas las opciones, comportamiento idéntico al previo.
+  const filtered = useMemo(() => {
+    if (!searchable || !query.trim()) return options;
+    const q = query.trim().toLowerCase();
+    // Las opciones `pinned` (p.ej. acciones "+ Añadir nuevo" o "Texto libre") no se
+    // filtran nunca: deben seguir visibles justo cuando la búsqueda no encuentra nada.
+    return options.filter((o) => o.pinned || String(o.label).toLowerCase().includes(q));
+  }, [options, query, searchable]);
 
-  const close = useCallback(() => setOpen(false), []);
+  // La seleccionada se calcula sobre TODAS las opciones (para el texto del trigger).
+  const selected = options.find((o) => String(o.value) === String(value)) ?? null;
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setQuery("");
+  }, []);
 
   // Cerrar al hacer clic fuera
   useEffect(() => {
@@ -50,13 +67,21 @@ export default function Select({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open, close]);
 
-  // Al abrir, resaltar la seleccionada y hacerla visible
+  // Al abrir, resaltar la seleccionada (o la primera) y enfocar el buscador
   useEffect(() => {
     if (open) {
-      setActive(selectedIndex >= 0 ? selectedIndex : 0);
+      const idx = filtered.findIndex((o) => String(o.value) === String(value));
+      setActive(idx >= 0 ? idx : 0);
+      if (searchable && searchRef.current) searchRef.current.focus();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Al teclear en el buscador, reposicionar el resalte al principio de la lista filtrada
+  useEffect(() => {
+    if (open && searchable) setActive(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
   useEffect(() => {
     if (open && listRef.current) {
@@ -66,18 +91,18 @@ export default function Select({
   }, [active, open]);
 
   function pick(idx) {
-    const opt = options[idx];
+    const opt = filtered[idx];
     if (!opt || opt.disabled) return;
     onChange?.(opt.value);
     close();
   }
 
   function moveActive(dir) {
-    if (!options.length) return;
+    if (!filtered.length) return;
     let i = active;
-    for (let n = 0; n < options.length; n++) {
-      i = (i + dir + options.length) % options.length;
-      if (!options[i]?.disabled) break;
+    for (let n = 0; n < filtered.length; n++) {
+      i = (i + dir + filtered.length) % filtered.length;
+      if (!filtered[i]?.disabled) break;
     }
     setActive(i);
   }
@@ -94,9 +119,14 @@ export default function Select({
     switch (e.key) {
       case "ArrowDown": e.preventDefault(); moveActive(1); break;
       case "ArrowUp": e.preventDefault(); moveActive(-1); break;
-      case "Home": e.preventDefault(); setActive(0); break;
-      case "End": e.preventDefault(); setActive(options.length - 1); break;
-      case "Enter": case " ": e.preventDefault(); pick(active); break;
+      // En modo searchable, Home/End mueven el cursor dentro del texto (nativo del input).
+      case "Home": if (searchable) break; e.preventDefault(); setActive(0); break;
+      case "End": if (searchable) break; e.preventDefault(); setActive(filtered.length - 1); break;
+      case "Enter": e.preventDefault(); pick(active); break;
+      case " ":
+        // En el buscador, Espacio escribe un espacio; sin buscador, selecciona.
+        if (searchable) break;
+        e.preventDefault(); pick(active); break;
       case "Escape": e.preventDefault(); close(); break;
       case "Tab": close(); break;
       default: break;
@@ -130,44 +160,59 @@ export default function Select({
       </button>
 
       {open && (
-        <ul
-          ref={listRef}
-          role="listbox"
-          tabIndex={-1}
-          className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-auto rounded-md border border-neutral-200 bg-white shadow-lg py-1"
-        >
-          {options.length === 0 && (
-            <li className="px-3 py-2 text-sm text-neutral-400">Sin opciones</li>
+        <div className="absolute z-50 left-0 right-0 mt-1 rounded-md border border-neutral-200 bg-white shadow-lg overflow-hidden">
+          {searchable && (
+            <div className="p-1.5 border-b border-neutral-100">
+              <input
+                ref={searchRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder="Buscar…"
+                className="w-full rounded px-2 py-1.5 text-sm text-neutral-800 border border-neutral-200 focus:outline-none focus:border-neutral-400"
+              />
+            </div>
           )}
-          {options.map((opt, idx) => {
-            const isSelected = String(opt.value) === String(value);
-            const isActive = idx === active;
-            const highlight = isActive; // hover/teclado
-            return (
-              <li
-                key={opt.value ?? idx}
-                data-idx={idx}
-                role="option"
-                aria-selected={isSelected}
-                onMouseEnter={() => !opt.disabled && setActive(idx)}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pick(idx)}
-                className={`px-3 py-1.5 text-sm truncate ${opt.disabled ? "text-neutral-300 cursor-not-allowed" : "cursor-pointer"} ${
-                  !highlight && isSelected ? "font-medium" : ""
-                }`}
-                style={
-                  highlight
-                    ? { background: "var(--color-primary, #1B3A2D)", color: "#fff" }
-                    : isSelected
-                      ? { background: "color-mix(in srgb, var(--color-primary, #1B3A2D) 10%, white)" }
-                      : undefined
-                }
-              >
-                {opt.label}
-              </li>
-            );
-          })}
-        </ul>
+          <ul
+            ref={listRef}
+            role="listbox"
+            tabIndex={-1}
+            className="max-h-60 overflow-auto py-1"
+          >
+            {filtered.length === 0 && (
+              <li className="px-3 py-2 text-sm text-neutral-400">Sin opciones</li>
+            )}
+            {filtered.map((opt, idx) => {
+              const isSelected = String(opt.value) === String(value);
+              const isActive = idx === active;
+              const highlight = isActive; // hover/teclado
+              return (
+                <li
+                  key={opt.value ?? idx}
+                  data-idx={idx}
+                  role="option"
+                  aria-selected={isSelected}
+                  onMouseEnter={() => !opt.disabled && setActive(idx)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pick(idx)}
+                  className={`px-3 py-1.5 text-sm truncate ${opt.disabled ? "text-neutral-300 cursor-not-allowed" : "cursor-pointer"} ${
+                    !highlight && isSelected ? "font-medium" : ""
+                  }`}
+                  style={
+                    highlight
+                      ? { background: "var(--color-primary, #1B3A2D)", color: "#fff" }
+                      : isSelected
+                        ? { background: "color-mix(in srgb, var(--color-primary, #1B3A2D) 10%, white)" }
+                        : undefined
+                  }
+                >
+                  {opt.label}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </div>
   );
