@@ -6,6 +6,7 @@ import { serializeTeamMember } from "../../../lib/team/serializeTeamMember.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["active", "inactive", "on_leave"]);
+const VALID_PERIODS = new Set([12, 14]);
 
 function normalizeEmail(value) {
   if (value == null) return null;
@@ -167,10 +168,18 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
 
     const hourlyCost = normalizeAmount(body.hourlyCost);
     const hourlyRate = normalizeAmount(body.hourlyRate);
-    const monthlySalary = normalizeAmount(body.monthlySalary);
     if (hourlyCost === undefined) return error("hourlyCost inválido");
     if (hourlyRate === undefined) return error("hourlyRate inválido");
-    if (monthlySalary === undefined) return error("monthlySalary inválido");
+
+    // Retribución: bruto anual + pagas → mensual CALCULADO (single source).
+    const annualGross = normalizeAmount(body.annualGross);
+    if (annualGross === undefined) return error("annualGross inválido");
+    let paymentPeriods = 12;
+    if (body.paymentPeriods != null && body.paymentPeriods !== "") {
+      paymentPeriods = Number(body.paymentPeriods);
+      if (!VALID_PERIODS.has(paymentPeriods)) return error("paymentPeriods debe ser 12 o 14");
+    }
+    const monthlySalary = annualGross != null ? Math.round((annualGross / paymentPeriods) * 100) / 100 : null;
 
     if (!VALID_STATUS.has(status)) return error("status inválido");
 
@@ -198,6 +207,8 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       avatarUrl,
       hourlyCost,
       hourlyRate,
+      annualGross,
+      paymentPeriods,
       monthlySalary,
       currency,
       status,

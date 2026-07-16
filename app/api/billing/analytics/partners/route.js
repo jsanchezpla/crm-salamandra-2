@@ -2,9 +2,9 @@ import { Op, fn, col } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { irpfDeductionRange, IRPF_MARGINAL_MIN, IRPF_MARGINAL_MAX } from "../../../../../lib/billing/irpf.js";
+import { activeInvoiceScope } from "../../../../../lib/billing/invoiceScope.js";
 
 function round2(n) { return Math.round(Number(n) * 100) / 100; }
-const ACTIVE = { [Op.notIn]: ["draft", "cancelled", "rectified"] };
 
 /**
  * GET /api/billing/analytics/partners?from&to
@@ -29,7 +29,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const partners = Array.isArray(settings?.partners) ? settings.partners : [];
 
     const invRows = await Invoice.findAll({
-      where: { issueDate: { [Op.between]: [from, to] }, status: ACTIVE },
+      where: { issueDate: { [Op.between]: [from, to] }, ...activeInvoiceScope(Invoice) },
       attributes: [
         "partnerId",
         [fn("SUM", col("tax_base")), "billedBase"],

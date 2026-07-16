@@ -83,6 +83,8 @@ export default function CitasModule() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
   const [detailNotes, setDetailNotes] = useState("");
+  const [detailMeet, setDetailMeet] = useState("");
+  const [teamMembers, setTeamMembers] = useState([]);
 
   const loadEventTypes = useCallback(async () => {
     const res = await fetch("/api/citas/event-types?active=true", { cache: "no-store" });
@@ -91,6 +93,14 @@ export default function CitasModule() {
   }, []);
 
   useEffect(() => { loadEventTypes(); }, [loadEventTypes]);
+
+  // Equipo para asignar profesional a la cita (opcional).
+  useEffect(() => {
+    fetch("/api/team?status=all&limit=500", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setTeamMembers(j.data?.members ?? []))
+      .catch(() => {});
+  }, []);
 
   const fetchEvents = useCallback(async (info, success, failure) => {
     try {
@@ -134,6 +144,8 @@ export default function CitasModule() {
     if (j.ok) {
       setOpenBooking(j.data);
       setDetailNotes(j.data.notes ?? "");
+      setDetailMeet(j.data.meetUrl ?? "");
+      setFormError(null); // no arrastrar un error del drawer de creación / PATCH previo
     }
   }
 
@@ -166,6 +178,8 @@ export default function CitasModule() {
     await patchBooking({ status: "cancelled", cancellationReason: reason.trim() || null });
   }
   async function saveNotes() { await patchBooking({ notes: detailNotes.trim() || null }); }
+  async function saveMeet() { await patchBooking({ meetUrl: detailMeet.trim() || null }); }
+  async function assignTeamMember(v) { await patchBooking({ teamMemberId: v || null }); }
   async function deleteBooking() {
     if (!window.confirm("¿Eliminar esta cita? Quedará marcada como cancelada.")) return;
     setSaving(true);
@@ -438,15 +452,49 @@ export default function CitasModule() {
                     <span className="text-neutral-800">{openBooking.eventType.phoneNumber}</span>
                   </div>
                 )}
-                {openBooking.modality === "online" && openBooking.meetUrl && (
-                  <div className="flex">
-                    <span className="w-24 text-neutral-400">Meet</span>
-                    <a className="text-neutral-800 hover:underline truncate" href={openBooking.meetUrl} target="_blank" rel="noreferrer">
-                      {openBooking.meetUrl}
-                    </a>
+                {teamMembers.length > 0 && (
+                  <div className="flex items-center">
+                    <span className="w-24 text-neutral-400">Profesional</span>
+                    <select
+                      value={openBooking.teamMemberId ?? ""}
+                      onChange={(e) => assignTeamMember(e.target.value)}
+                      disabled={saving}
+                      className="flex-1 text-[13px] px-2 py-1 border border-neutral-200 rounded-md bg-white text-neutral-800 disabled:opacity-50"
+                    >
+                      <option value="">Sin asignar</option>
+                      {teamMembers.map((m) => (
+                        <option key={m.id} value={m.id}>{m.displayName}</option>
+                      ))}
+                    </select>
                   </div>
                 )}
               </div>
+
+              {/* Enlace Meet editable — solo citas online */}
+              {openBooking.modality === "online" && (
+                <div className="pt-3 border-t border-neutral-100">
+                  <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-1">Enlace de videollamada (Meet)</div>
+                  <input
+                    type="url"
+                    value={detailMeet}
+                    onChange={(e) => setDetailMeet(e.target.value)}
+                    placeholder="Pega aquí el link de Google Meet cuando lo tengas"
+                    className={inputCls}
+                  />
+                  <div className="flex items-center justify-between mt-1.5">
+                    <span className="text-[11px] text-neutral-400">
+                      Al guardar por primera vez se avisa al cliente por email.
+                    </span>
+                    <button
+                      onClick={saveMeet}
+                      disabled={saving || detailMeet.trim() === (openBooking.meetUrl ?? "")}
+                      className="text-[11px] px-2.5 py-1 rounded border border-neutral-300 text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+                    >
+                      Guardar enlace
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {openBooking.additionalData && (
                 <div className="pt-3 border-t border-neutral-100">
@@ -470,7 +518,7 @@ export default function CitasModule() {
                 <div className="flex justify-end mt-1.5">
                   <button
                     onClick={saveNotes}
-                    disabled={saving || detailNotes === (openBooking.notes ?? "")}
+                    disabled={saving || detailNotes.trim() === (openBooking.notes ?? "")}
                     className="text-[11px] px-2.5 py-1 rounded border border-neutral-300 text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
                   >
                     Guardar notas

@@ -69,9 +69,24 @@ export function defineTeamMember(sequelize) {
         allowNull: true,
         validate: { min: 0 },
       },
-      // Salario mensual estimado. Solo informativo. NUNCA se usa en KPIs
-      // financieros directos — eso lo hace la tabla Costes con type='salary'.
-      // Solo admin/superadmin puede ver/editar. Filtrado en backend.
+      // Bruto anual. Fuente de verdad de la retribución: monthlySalary se
+      // CALCULA en backend = annualGross / paymentPeriods (no se edita directo).
+      // Solo admin/superadmin. Ver serializeTeamMember + PATCH /api/team/[id].
+      annualGross: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        validate: { min: 0 },
+      },
+      // Nº de pagas al año (12 normal, 14 frecuente en España). Default 12.
+      paymentPeriods: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 12,
+        validate: { isIn: [[12, 14]] },
+      },
+      // Salario mensual. Ahora DERIVADO (= annualGross / paymentPeriods),
+      // calculado y persistido en backend. Solo informativo (no se usa en KPIs
+      // directos — eso lo hace Costes type='salary'). Solo admin ve/lo recibe.
       monthlySalary: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: true,

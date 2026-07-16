@@ -1,44 +1,8 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, noContent, forbidden } from "../../../../../lib/utils/apiResponse.js";
-import { NotFoundError, ForbiddenError } from "../../../../../lib/utils/errors.js";
-
-const PRIORITY_COLORS = {
-  high: "#ef4444",
-  medium: "#f97316",
-  low: "#22c55e",
-};
-
-function toFCEvent(task) {
-  const color = task.color ?? PRIORITY_COLORS[task.priority] ?? PRIORITY_COLORS.medium;
-
-  let start, end;
-  if (task.allDay) {
-    start = task.startDate;
-    end = task.endDate ?? undefined;
-  } else {
-    start = task.startTime ? `${task.startDate}T${task.startTime}` : task.startDate;
-    end = task.endDate
-      ? task.endTime
-        ? `${task.endDate}T${task.endTime}`
-        : task.endDate
-      : undefined;
-  }
-
-  return {
-    id: task.id,
-    title: task.title,
-    start,
-    end,
-    allDay: task.allDay,
-    backgroundColor: color,
-    borderColor: color,
-    extendedProps: {
-      notes: task.notes,
-      priority: task.priority,
-      status: task.status,
-    },
-  };
-}
+import { NotFoundError } from "../../../../../lib/utils/errors.js";
+import { toFCEvent, calendarIncludes, resolveCalendarFks } from "../../../../../lib/calendar/calendarEvent.js";
+import { error as errorResponse } from "../../../../../lib/utils/apiResponse.js";
 
 async function resolveTask(tenantModels, id) {
   const { CalendarTask } = tenantModels;
@@ -64,6 +28,11 @@ export const PUT = withTenant(async (request, { params }, { tenantModels, hasMod
     if (key in body) updates[key] = body[key];
   }
 
+  // FKs opcionales validadas (400 si el id no existe; null explícito desasigna).
+  const fk = await resolveCalendarFks(body, tenantModels, hasModule);
+  if (fk.error) return errorResponse(fk.error);
+  Object.assign(updates, fk.updates);
+
   if (updates.title !== undefined) updates.title = updates.title?.trim() || task.title;
   if (updates.priority && !VALID_PRIORITY.includes(updates.priority)) delete updates.priority;
   if (updates.status && !VALID_STATUS.includes(updates.status)) delete updates.status;
@@ -76,6 +45,7 @@ export const PUT = withTenant(async (request, { params }, { tenantModels, hasMod
   }
 
   await task.update(updates);
+  await task.reload({ include: calendarIncludes(tenantModels, hasModule) });
   return ok(toFCEvent(task));
 });
 

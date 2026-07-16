@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import TaskDrawer from "./TaskDrawer.jsx";
 import { priorityMeta, priorityRank } from "@/lib/projects/taskPriority.js";
 
@@ -23,7 +23,7 @@ import { priorityMeta, priorityRank } from "@/lib/projects/taskPriority.js";
 const SORT_LEVELS = [
   { key: "dueDate", dir: "asc", nullsLast: true },
   { key: "priority", dir: "asc" }, // asc sobre el rango (0=urgent) = mayor→menor
-  { key: "status", dir: "asc" }, // asc sobre board_column.order = orden del Kanban
+  { key: "status", dir: "asc", nullsLast: true }, // asc sobre board_column.order; sin columna → al final
 ];
 
 function fmtDate(d) {
@@ -78,6 +78,17 @@ export default function ProjectListView({ projectId, filters = {}, teamMembers =
   const [error, setError] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [actionError, setActionError] = useState(null);
+  // Ids de tareas con un /move en vuelo → evita doble disparo por doble-click.
+  const inFlight = useRef(new Set());
+
+  // Auto-oculta el aviso de error de acción tras unos segundos.
+  useEffect(() => {
+    if (!actionError) return undefined;
+    const t = setTimeout(() => setActionError(null), 4000);
+    return () => clearTimeout(t);
+  }, [actionError]);
 
   useEffect(() => {
     // setState solo en callbacks async (no en el cuerpo del efecto). En un
@@ -105,6 +116,60 @@ export default function ProjectListView({ projectId, filters = {}, teamMembers =
 
   const refresh = useCallback(() => setReloadKey((k) => k + 1), []);
 
+  // Columnas ordenadas + resolución de "Hecho" / primera "no-hecha".
+  const sortedColumns = useMemo(
+    () => [...columns].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [columns]
+  );
+  const doneColumn = useMemo(() => sortedColumns.find((c) => c.isDoneColumn) ?? null, [sortedColumns]);
+  const firstOpenColumn = useMemo(() => sortedColumns.find((c) => !c.isDoneColumn) ?? null, [sortedColumns]);
+
+  // Checkbox HECHA: mueve la tarea a la columna done / a la primera no-done.
+  // Reutiliza el MISMO endpoint /move que el drag&drop del Kanban (targetOrder:0
+  // = al principio de la columna destino, siempre en rango). Optimista + refresh.
+  const toggleDone = useCallback(
+    async (task) => {
+      // Guard de reentrada: ignora clics extra mientras el /move de ESTA tarea
+      // sigue en vuelo (doble-click → un solo movimiento, sin parpadeo).
+      if (inFlight.current.has(task.id)) return;
+      const isDone = !!task.boardColumn?.isDoneColumn;
+      const target = isDone ? firstOpenColumn : doneColumn;
+      if (!target) return;
+      inFlight.current.add(task.id);
+      setActionError(null);
+      setTasks((prev) =>
+        (prev ?? []).map((t) =>
+          t.id === task.id
+            ? {
+                ...t,
+                boardColumnId: target.id,
+                boardColumn: { id: target.id, name: target.name, order: target.order, color: target.color, isDoneColumn: target.isDoneColumn },
+              }
+            : t
+        )
+      );
+      try {
+        const r = await fetch(`/api/tasks/${task.id}/move`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ targetBoardColumnId: target.id, targetOrder: 0 }),
+        });
+        if (!r.ok) {
+          const j = await r.json().catch(() => null);
+          throw new Error(j?.error || "No se pudo mover la tarea");
+        }
+      } catch (e) {
+        // Feedback: el /move requiere admin o lead del proyecto; sin esto la
+        // marca optimista revertía en silencio al recargar.
+        setActionError(e.message || "No se pudo mover la tarea");
+      } finally {
+        inFlight.current.delete(task.id);
+        refresh();
+      }
+    },
+    [firstOpenColumn, doneColumn, refresh]
+  );
+
   // Filtro (cliente, mismo criterio que el Kanban) + orden multinivel.
   const rows = useMemo(() => {
     if (!tasks) return [];
@@ -126,10 +191,34 @@ export default function ProjectListView({ projectId, filters = {}, teamMembers =
 
   return (
     <>
+      {actionError && (
+        <div
+          role="alert"
+          className="fixed bottom-4 right-4 z-50 max-w-xs rounded-lg bg-rose-600 px-4 py-2.5 text-xs font-medium text-white shadow-lg"
+        >
+          {actionError}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs text-neutral-400">{rows.length} tarea{rows.length === 1 ? "" : "s"}</span>
+        <button
+          onClick={() => setCreating(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white"
+          style={{ background: "var(--color-primary, #1B3A2D)" }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          Añadir tarea
+        </button>
+      </div>
+
       <div className="h-full overflow-auto rounded-xl border border-neutral-200 bg-white">
-        <table className="w-full text-sm border-collapse min-w-[640px]">
+        <table className="w-full text-sm border-collapse min-w-[680px]">
           <thead className="sticky top-0 z-10 bg-neutral-50 text-xs text-neutral-500">
             <tr className="border-b border-neutral-200">
+              <th className="w-10 px-3 py-2.5" aria-label="Hecha" />
               <th className="text-left font-medium px-4 py-2.5">Tarea</th>
               <th className="text-left font-medium px-4 py-2.5 w-44">Fecha de entrega</th>
               <th className="text-left font-medium px-4 py-2.5 w-28">Prioridad</th>
@@ -147,9 +236,19 @@ export default function ProjectListView({ projectId, filters = {}, teamMembers =
                   onClick={() => setSelectedTaskId(t.id)}
                   className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50 cursor-pointer"
                 >
+                  <td className="w-10 px-3 py-2.5 align-middle" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={!!t.boardColumn?.isDoneColumn}
+                      onChange={() => toggleDone(t)}
+                      disabled={t.boardColumn?.isDoneColumn ? !firstOpenColumn : !doneColumn}
+                      title={t.boardColumn?.isDoneColumn ? "Marcar como no hecha" : "Marcar como hecha"}
+                      className="w-4 h-4 rounded border-neutral-300 accent-emerald-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  </td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-medium text-neutral-800 truncate">{t.title}</span>
+                      <span className={`font-medium truncate ${t.boardColumn?.isDoneColumn ? "line-through text-neutral-400" : "text-neutral-800"}`}>{t.title}</span>
                       {(t.tags ?? []).slice(0, 2).map((tag) => (
                         <span key={tag} className="hidden sm:inline px-1.5 py-0.5 rounded-full text-[10px] bg-neutral-50 text-neutral-500 border border-neutral-100 shrink-0">
                           {tag}
@@ -221,6 +320,21 @@ export default function ProjectListView({ projectId, filters = {}, teamMembers =
           onSaved={refresh}
           onDeleted={() => {
             setSelectedTaskId(null);
+            refresh();
+          }}
+        />
+      )}
+
+      {creating && (
+        <TaskDrawer
+          projectId={projectId}
+          mode="create"
+          createInColumnId={firstOpenColumn?.id ?? sortedColumns[0]?.id}
+          columns={columns}
+          teamMembers={teamMembers}
+          onClose={() => setCreating(false)}
+          onCreated={() => {
+            setCreating(false);
             refresh();
           }}
         />

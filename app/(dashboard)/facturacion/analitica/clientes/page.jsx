@@ -6,6 +6,7 @@ import Link from "next/link";
 import PeriodPicker, { computeRange } from "../../_components/PeriodPicker.jsx";
 import { fmtMoney, fmtPct } from "../../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../../_components/tableSort.jsx";
+import ExportButtons from "@/components/billing/ExportButtons.jsx";
 
 export default function AnaliticaClientesPage() {
   const sp = useSearchParams();
@@ -60,8 +61,9 @@ export default function AnaliticaClientesPage() {
           <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1">Por cliente</h1>
           <p className="text-xs text-neutral-400 mt-1">{from} → {to} · {rows.length} clientes</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
+          <ExportButtons xlsxUrl={`/api/billing/exports/by-client?from=${from}&to=${to}`} />
         </div>
       </div>
 

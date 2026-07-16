@@ -463,7 +463,7 @@ function LeadDetailPanel({ lead, open, saving, onClose, onStageChange, onNotesCh
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
               Mensaje
             </p>
-            <p className="text-gray-700 text-sm leading-relaxed bg-gray-50 rounded-lg px-3 py-2.5">
+            <p className="text-gray-700 text-sm leading-relaxed bg-gray-50 rounded-lg px-3 py-2.5 whitespace-pre-wrap max-h-[240px] overflow-y-auto">
               {mensaje}
             </p>
           </div>

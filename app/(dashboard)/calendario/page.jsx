@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -26,6 +26,8 @@ const EMPTY_FORM = {
   endDate: "",
   endTime: "",
   allDay: false,
+  clientId: "",
+  teamMemberId: "",
 };
 
 function parseISOToFields(isoString) {
@@ -46,6 +48,29 @@ export default function CalendarioPage() {
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
+  const [clients, setClients] = useState([]);
+  const [teamMembers, setTeamMembers] = useState([]);
+
+  // Datos para los desplegables de cliente / responsable (opcionales).
+  useEffect(() => {
+    fetch("/api/clients?limit=500", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setClients(j.data?.clients ?? []))
+      .catch(() => {});
+    fetch("/api/team?status=all&limit=500", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setTeamMembers(j.data?.members ?? []))
+      .catch(() => {});
+  }, []);
+
+  const clientOptions = [
+    { value: "", label: "Sin cliente" },
+    ...clients.map((c) => ({ value: c.id, label: c.name })),
+  ];
+  const teamOptions = [
+    { value: "", label: "Sin asignar" },
+    ...teamMembers.map((m) => ({ value: m.id, label: m.displayName })),
+  ];
 
   const fetchEvents = useCallback(async (fetchInfo, successCallback, failureCallback) => {
     try {
@@ -101,6 +126,8 @@ export default function CalendarioPage() {
         endDate: end.date,
         endTime: end.time,
         allDay: event.allDay,
+        clientId: ep.clientId ?? "",
+        teamMemberId: ep.teamMemberId ?? "",
       },
     });
   }
@@ -181,6 +208,8 @@ export default function CalendarioPage() {
             endDate: modal.form.endDate || null,
             endTime: modal.form.allDay ? null : modal.form.endTime || null,
             allDay: modal.form.allDay,
+            clientId: modal.form.clientId || null,
+            teamMemberId: modal.form.teamMemberId || null,
           }),
         }
       );
@@ -455,6 +484,28 @@ export default function CalendarioPage() {
                   options={STATUS_OPTIONS}
                   className="w-full text-sm px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F0F0F]/10 focus:border-[#0F0F0F] bg-white transition-colors"
                 />
+              </div>
+
+              {/* Cliente + Responsable (opcionales) */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-[#374151] mb-1">Cliente</label>
+                  <Select
+                    value={modal.form.clientId}
+                    onChange={(v) => updateForm("clientId", v)}
+                    options={clientOptions}
+                    className="w-full text-sm px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F0F0F]/10 focus:border-[#0F0F0F] bg-white transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#374151] mb-1">Responsable</label>
+                  <Select
+                    value={modal.form.teamMemberId}
+                    onChange={(v) => updateForm("teamMemberId", v)}
+                    options={teamOptions}
+                    className="w-full text-sm px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F0F0F]/10 focus:border-[#0F0F0F] bg-white transition-colors"
+                  />
+                </div>
               </div>
 
               {/* Notas */}

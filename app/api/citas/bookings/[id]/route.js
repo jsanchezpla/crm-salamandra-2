@@ -8,9 +8,23 @@ import {
 } from "../../../../../lib/citas/validation.js";
 import { logCitasAudit } from "../../../../../lib/citas/audit.js";
 import { findBookingOverlap } from "../../../../../lib/citas/booking.js";
+import { sendEmail } from "../../../../../lib/email/resendClient.js";
+import { bookingMeetLinkTemplate } from "../../../../../lib/email/templates/citas/bookingMeetLink.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["pending", "confirmed", "completed", "cancelled", "no_show"]);
+
+const normId = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
+const isHttpUrl = (u) => /^https?:\/\/.+/i.test(String(u).trim());
+
+// Includes del booking. `teamMember` SOLO si el tenant tiene el módulo team:
+// en tenants de schema parcial (p.ej. nutri_laura) la tabla team_members no
+// existe, e incluirla haría un JOIN a una relación inexistente → 500.
+function bookingIncludes({ EventType, TeamMember }, hasModule) {
+  const inc = [{ model: EventType, as: "eventType" }];
+  if (hasModule("team")) inc.push({ model: TeamMember, as: "teamMember", attributes: ["id", "displayName"] });
+  return inc;
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 // GET /api/citas/bookings/[id]
@@ -19,9 +33,9 @@ export const GET = withTenant(async (_request, { params }, { tenantModels, hasMo
   try {
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
     const { id } = await params;
-    const { Booking, EventType } = tenantModels;
+    const { Booking } = tenantModels;
     const row = await Booking.findByPk(id, {
-      include: [{ model: EventType, as: "eventType" }],
+      include: bookingIncludes(tenantModels, hasModule),
     });
     if (!row) return notFound("Cita no encontrada");
     return ok(row.toJSON());
@@ -42,7 +56,7 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     if (!ADMIN_ROLES.has(userRole)) return forbidden("Solo admin puede editar citas");
 
     const { id } = await params;
-    const { Booking, EventType } = tenantModels;
+    const { Booking, EventType, TeamMember } = tenantModels;
     const row = await Booking.findByPk(id);
     if (!row) return notFound("Cita no encontrada");
 
@@ -74,6 +88,32 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       updates.notes = body.notes != null ? String(body.notes) : null;
     }
 
+    // Profesional (team member) asignado — SOLO si el tenant tiene módulo team
+    // (sin él no existe team_members y no se puede asignar). Valida existencia
+    // para devolver 400 en vez de un 500 por violación de FK / uuid inválido.
+    if (hasModule("team") && "teamMemberId" in body) {
+      const tmId = normId(body.teamMemberId);
+      if (tmId) {
+        const tm = await TeamMember.findByPk(tmId, { attributes: ["id"] });
+        if (!tm) return error("teamMemberId no existe");
+      }
+      updates.teamMemberId = tmId;
+    }
+
+    // meetUrl EDITABLE a mano. "" o null → null; si viene valor, valida http(s).
+    // Un valor manual SIEMPRE gana sobre el auto-snapshot del EventType.
+    const meetUrlInBody = "meetUrl" in body;
+    if (meetUrlInBody) {
+      const raw = body.meetUrl;
+      if (raw == null || String(raw).trim() === "") {
+        updates.meetUrl = null;
+      } else if (!isHttpUrl(raw)) {
+        return error("meetUrl debe ser una URL http(s) válida");
+      } else {
+        updates.meetUrl = String(raw).trim();
+      }
+    }
+
     let modalityFinal = row.modality;
     if ("modality" in body) {
       const v = String(body.modality || "").toLowerCase();
@@ -84,9 +124,14 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       }
       updates.modality = v;
       modalityFinal = v;
-      // Re-snapshot meetUrl
-      if (eventType) {
-        updates.meetUrl = v === "online" ? eventType.meetUrl : null;
+      // Derivar meetUrl SOLO si el usuario no lo envió manualmente en esta
+      // petición (no pisar un enlace puesto a mano):
+      //   - no-online → se limpia (un enlace Meet no aplica).
+      //   - online sin enlace previo → snapshot del EventType.
+      //   - online con enlace ya existente → se conserva.
+      if (!meetUrlInBody) {
+        if (v !== "online") updates.meetUrl = null;
+        else if (!row.meetUrl && eventType) updates.meetUrl = eventType.meetUrl;
       }
     }
 
@@ -172,6 +217,49 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       });
     }
 
+    // Transición meetUrl null→valor en cita CONFIRMADA + ONLINE: AuditLog +
+    // email al cliente. Se exige 'confirmed' + 'online' para casar con el gate
+    // del portal (clientBookingSerializer sólo revela el enlace en ese caso) y
+    // no avisar de un enlace en una cita pendiente/cancelada. Para citas que
+    // aún esperan confirmación, el enlace se entrega al confirmar (el email de
+    // /confirm ya incluye meetUrl).
+    const meetLinkFilled =
+      (before.meetUrl == null || before.meetUrl === "") &&
+      row.meetUrl != null && row.meetUrl !== "" &&
+      row.modality === "online" &&
+      row.status === "confirmed";
+    if (meetLinkFilled) {
+      await logCitasAudit({
+        tenantId: tenant.id,
+        userId,
+        action: "appointment.meet_link_set",
+        entity: "Booking",
+        entityId: row.id,
+        before: { meetUrl: before.meetUrl ?? null },
+        after: { meetUrl: row.meetUrl },
+        ip,
+      });
+      // Best-effort: un fallo de email NO rompe el guardado.
+      try {
+        const et = await EventType.findByPk(row.eventTypeId, { attributes: ["name"] });
+        const tpl = bookingMeetLinkTemplate({
+          tenantName: tenant.name,
+          brand: tenant.settings?.brand,
+          clientName: row.clientName,
+          eventTypeName: et?.name ?? "tu cita",
+          scheduledAt: row.scheduledAt,
+          duration: row.duration,
+          meetUrl: row.meetUrl,
+        });
+        await sendEmail({ to: row.clientEmail, subject: tpl.subject, html: tpl.html, text: tpl.text });
+      } catch (mailErr) {
+        process.stderr.write(`[citas:meet-link] email fail: ${mailErr.message}\n`);
+      }
+    }
+
+    // Respuesta con eventType (para que el modal no pierda 'Servicio'/dirección)
+    // y el profesional asignado (si el tenant tiene módulo team).
+    await row.reload({ include: bookingIncludes(tenantModels, hasModule) });
     return ok(row.toJSON());
   } catch (err) {
     return serverError(err);

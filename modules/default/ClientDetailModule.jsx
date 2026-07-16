@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import ClientBillingSection from "../../components/billing/ClientBillingSection.jsx";
+import ClientModulesSection from "../../components/clients/ClientModulesSection.jsx";
 
 const STATUSES = [
   { key: "new", label: "Nuevo" },
@@ -395,6 +396,8 @@ export default function ClientDetailModule() {
             </div>
           </div>
         </div>
+
+        <ClientModulesSection clientId={id} />
 
         <ClientBillingSection clientId={id} />
       </div>

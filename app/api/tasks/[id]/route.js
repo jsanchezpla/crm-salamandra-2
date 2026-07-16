@@ -6,6 +6,7 @@ import { serializeTask } from "../../../../lib/projects/serializeTask.js";
 import { isAdminRole, isLeadOfProject } from "../../../../lib/projects/projectAuth.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { isValidTaskPriority, TASK_PRIORITY_VALUES } from "../../../../lib/projects/taskPriority.js";
+import { normalizeChecklistItems } from "../../../../lib/projects/checklist.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -134,6 +135,12 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
   }
   if (updates.priority !== undefined && !isValidTaskPriority(updates.priority)) {
     throw new ValidationError(`'priority' inválida. Opciones: ${TASK_PRIORITY_VALUES.join(", ")}`);
+  }
+
+  // Checklist: normaliza ids (evita el bug de "marcar uno marca todos" y
+  // persiste un shape limpio { id, text, done }).
+  if (updates.checklist !== undefined) {
+    updates.checklist = normalizeChecklistItems(updates.checklist);
   }
 
   // Si cambia la columna, validar que sigue siendo del MISMO proyecto. NO

@@ -1,47 +1,10 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
-import { ok, created, forbidden } from "../../../../lib/utils/apiResponse.js";
+import { ok, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { ForbiddenError, handleRouteError } from "../../../../lib/utils/errors.js";
 import { getTenantContext } from "../../../../lib/tenant/tenantResolver.js";
 import { Op } from "sequelize";
 import { NextResponse } from "next/server";
-
-const PRIORITY_COLORS = {
-  high: "#ef4444",
-  medium: "#f97316",
-  low: "#22c55e",
-};
-
-function toFCEvent(task) {
-  const color = task.color ?? PRIORITY_COLORS[task.priority] ?? PRIORITY_COLORS.medium;
-
-  let start, end;
-  if (task.allDay) {
-    start = task.startDate;
-    end = task.endDate ?? undefined;
-  } else {
-    start = task.startTime ? `${task.startDate}T${task.startTime}` : task.startDate;
-    end = task.endDate
-      ? task.endTime
-        ? `${task.endDate}T${task.endTime}`
-        : task.endDate
-      : undefined;
-  }
-
-  return {
-    id: task.id,
-    title: task.title,
-    start,
-    end,
-    allDay: task.allDay,
-    backgroundColor: color,
-    borderColor: color,
-    extendedProps: {
-      notes: task.notes,
-      priority: task.priority,
-      status: task.status,
-    },
-  };
-}
+import { toFCEvent, calendarIncludes, resolveCalendarFks } from "../../../../lib/calendar/calendarEvent.js";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("calendar")) return forbidden();
@@ -59,8 +22,15 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     where.startDate = { [Op.gte]: start };
   }
 
+  // Filtros opcionales por cliente / team member.
+  const clientId = searchParams.get("clientId");
+  const teamMemberId = searchParams.get("teamMemberId");
+  if (clientId) where.clientId = clientId;
+  if (teamMemberId) where.teamMemberId = teamMemberId;
+
   const tasks = await CalendarTask.findAll({
     where,
+    include: calendarIncludes(tenantModels, hasModule),
     order: [["startDate", "ASC"], ["startTime", "ASC"]],
   });
 
@@ -87,6 +57,10 @@ export async function POST(request) {
     const VALID_PRIORITY = ["high", "medium", "low"];
     const VALID_STATUS = ["pending", "done", "cancelled"];
 
+    // FKs opcionales validadas (400 si el id no existe).
+    const fk = await resolveCalendarFks(body, ctx.tenantModels, ctx.hasModule);
+    if (fk.error) return NextResponse.json({ ok: false, error: fk.error }, { status: 400 });
+
     const task = await CalendarTask.create({
       title: title.trim(),
       notes: notes?.trim() ?? null,
@@ -97,8 +71,12 @@ export async function POST(request) {
       endDate: endDate || null,
       endTime: allDay ? null : (endTime || null),
       allDay: Boolean(allDay),
+      clientId: fk.updates.clientId ?? null,
+      teamMemberId: fk.updates.teamMemberId ?? null,
     });
 
+    // Recarga con asociaciones para devolver los nombres al frontend.
+    await task.reload({ include: calendarIncludes(ctx.tenantModels, ctx.hasModule) });
     return NextResponse.json({ ok: true, data: toFCEvent(task) }, { status: 201 });
   } catch (err) {
     return handleRouteError(err);
