@@ -277,7 +277,14 @@ export default function ClientDetailModule() {
               </div>
             ) : (
               <div className="p-5 space-y-4">
-                <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                {/* Móvil (<sm): una sola columna → email y teléfono en filas
+                    separadas, imposible que se solapen. sm+: dos columnas.
+                    min-w-0 permite que la celda del grid encoja por debajo del
+                    ancho de su contenido; overflow-wrap:anywhere fuerza el corte
+                    de un email/valor largo sin espacios DENTRO de su columna (y,
+                    a diferencia de break-words, reduce el min-content del grid,
+                    que era la causa real del desbordamiento). */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
                   {[
                     { label: "Email", value: client.email, href: `mailto:${client.email}` },
                     { label: "Teléfono", value: client.phone, href: `tel:${client.phone}` },
@@ -290,18 +297,17 @@ export default function ClientDetailModule() {
                   ]
                     .filter(({ value }) => !!value)
                     .map(({ label, value, href }) => (
-                      // min-w-0: sin esto la celda del grid no puede encoger por
-                      // debajo del ancho de su contenido y un email largo (sin
-                      // espacios) invade la columna vecina en móvil. break-words
-                      // parte el valor dentro de su columna.
                       <div key={label} className="min-w-0">
                         <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{label}</div>
                         {href ? (
-                          <a href={href} className="text-sm text-[var(--color-primary)] hover:underline mt-0.5 block break-words">
+                          <a
+                            href={href}
+                            className="text-sm text-[var(--color-primary)] hover:underline mt-0.5 block [overflow-wrap:anywhere]"
+                          >
                             {value}
                           </a>
                         ) : (
-                          <div className="text-sm text-gray-700 mt-0.5 break-words">{value}</div>
+                          <div className="text-sm text-gray-700 mt-0.5 [overflow-wrap:anywhere]">{value}</div>
                         )}
                       </div>
                     ))}
