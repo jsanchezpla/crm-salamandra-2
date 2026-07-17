@@ -2,6 +2,12 @@ import { promises as fs } from "node:fs";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, noContent, forbidden, notFound, error } from "../../../../lib/utils/apiResponse.js";
 import { getClientDir } from "../../../../lib/clients/attachmentStorage.js";
+import {
+  normalizeContactValue,
+  validateContactValue,
+  setPrimaryContactValue,
+  isMissingTable,
+} from "../../../../lib/clients/contactMethods.js";
 
 export const GET = withTenant(async (_request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
@@ -44,10 +50,10 @@ export const GET = withTenant(async (_request, { params }, { tenant, tenantModel
   return ok(client);
 });
 
-export const PUT = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const PUT = withTenant(async (request, { params }, { tenantModels, tenantSequelize, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
 
-  const { Client } = tenantModels;
+  const { Client, ClientContactMethod } = tenantModels;
   const { id } = await params;
   const body = await request.json();
 
@@ -75,15 +81,44 @@ export const PUT = withTenant(async (request, { params }, { tenantModels, hasMod
     }
   }
 
-  await client.update({
+  // El campo email/teléfono único de la ficha edita el CONTACTO PRINCIPAL: sólo
+  // se toca si viene un valor no vacío (compat con el "|| client.email" legacy).
+  const emailN = normalizeContactValue("email", body.email);
+  const phoneN = normalizeContactValue("phone", body.phone);
+  if (emailN) {
+    const invalid = validateContactValue("email", emailN);
+    if (invalid) return error(invalid, 422);
+  }
+
+  const baseUpdate = {
     name: body.name?.trim() || client.name,
-    email: body.email?.trim().toLowerCase() || client.email,
-    phone: body.phone?.trim() || client.phone,
     notes: "notes" in body ? (body.notes?.trim() || null) : client.notes,
     customFields,
     ...fiscalUpdates,
-  });
+  };
+  // Flag "padres separados" (tutor). Sólo se toca si viene explícito en el body
+  // (permite un PUT parcial { separated } sin arrastrar el resto de campos).
+  if ("separated" in body) baseUpdate.separated = body.separated == null ? null : !!body.separated;
 
+  // Transacción: datos base + upsert del principal (email/phone) → espejo en
+  // Client.email/phone. Si el tenant aún no tiene client_contact_methods (42P01),
+  // la tx hace rollback y degradamos a un update directo (comportamiento legacy).
+  try {
+    await tenantSequelize.transaction(async (t) => {
+      await client.update(baseUpdate, { transaction: t });
+      if (emailN) await setPrimaryContactValue({ client, ClientContactMethod, kind: "email", value: emailN, transaction: t });
+      if (phoneN) await setPrimaryContactValue({ client, ClientContactMethod, kind: "phone", value: phoneN, transaction: t });
+    });
+  } catch (err) {
+    if (!isMissingTable(err)) throw err;
+    await client.update({
+      ...baseUpdate,
+      email: emailN ?? client.email,
+      phone: phoneN ?? client.phone,
+    });
+  }
+
+  await client.reload();
   return ok(client);
 });
 

@@ -1,6 +1,11 @@
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, created, forbidden, error } from "../../../lib/utils/apiResponse.js";
 import { Op } from "sequelize";
+import {
+  normalizeContactValue,
+  setPrimaryContactValue,
+  isMissingTable,
+} from "../../../lib/clients/contactMethods.js";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
@@ -64,10 +69,10 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   return ok({ clients: rows, total: count, page, pages: Math.ceil(count / limit) });
 });
 
-export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+export const POST = withTenant(async (request, _ctx, { tenantModels, tenantSequelize, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
 
-  const { Client } = tenantModels;
+  const { Client, ClientContactMethod } = tenantModels;
   const body = await request.json();
 
   const { name, email, phone, notes, type } = body;
@@ -90,29 +95,47 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
     seStatus: body.status || "new",
   };
 
+  const emailN = normalizeContactValue("email", email);
+  const phoneN = normalizeContactValue("phone", phone);
+  const clientPayload = {
+    name: name.trim(),
+    type: type === "individual" ? "individual" : "company",
+    email: emailN,
+    phone: phoneN,
+    notes: notes?.trim() || null,
+    // Datos fiscales opcionales — necesarios para emitir facturas a este
+    // cliente, pero permitidos como null en el alta para no bloquear la
+    // captura inicial. Se completan después vía PUT.
+    taxId: body.taxId?.trim() || null,
+    fiscalName: body.fiscalName?.trim() || null,
+    fiscalAddress: body.fiscalAddress?.trim() || null,
+    fiscalCity: body.fiscalCity?.trim() || null,
+    fiscalZip: body.fiscalZip?.trim() || null,
+    fiscalCountry: body.fiscalCountry?.trim()?.toUpperCase() || "ES",
+    customFields,
+  };
+
   try {
-    const client = await Client.create({
-      name: name.trim(),
-      type: type === "individual" ? "individual" : "company",
-      email: email?.trim().toLowerCase() || null,
-      phone: phone?.trim() || null,
-      notes: notes?.trim() || null,
-      // Datos fiscales opcionales — necesarios para emitir facturas a este
-      // cliente, pero permitidos como null en el alta para no bloquear la
-      // captura inicial. Se completan después vía PUT.
-      taxId: body.taxId?.trim() || null,
-      fiscalName: body.fiscalName?.trim() || null,
-      fiscalAddress: body.fiscalAddress?.trim() || null,
-      fiscalCity: body.fiscalCity?.trim() || null,
-      fiscalZip: body.fiscalZip?.trim() || null,
-      fiscalCountry: body.fiscalCountry?.trim()?.toUpperCase() || "ES",
-      customFields,
+    // Transacción: crea el cliente y materializa el email/teléfono como métodos
+    // de contacto PRINCIPALES (así la ficha muestra desde el inicio los mismos
+    // datos que el resto del CRM lee de Client.email/phone).
+    const client = await tenantSequelize.transaction(async (t) => {
+      const c = await Client.create(clientPayload, { transaction: t });
+      if (emailN) await setPrimaryContactValue({ client: c, ClientContactMethod, kind: "email", value: emailN, transaction: t });
+      if (phoneN) await setPrimaryContactValue({ client: c, ClientContactMethod, kind: "phone", value: phoneN, transaction: t });
+      return c;
     });
     return created(client);
   } catch (err) {
     if (err?.name === "SequelizeValidationError" || err?.name === "SequelizeUniqueConstraintError") {
       const msg = err.errors?.[0]?.message || err.message;
       return error(`Datos inválidos: ${msg}`, 422);
+    }
+    // Tenant sin la tabla client_contact_methods todavía (pre-migración): la tx
+    // hizo rollback → creamos el cliente sin métodos (comportamiento legacy).
+    if (isMissingTable(err)) {
+      const c = await Client.create(clientPayload);
+      return created(c);
     }
     throw err;
   }

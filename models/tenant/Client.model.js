@@ -76,6 +76,14 @@ export function defineClient(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // Tutores separados (Aumenta): relevante para el caso de varios pagadores
+      // por paciente (padres separados). Nullable: no aplica a la mayoría de
+      // clientes (empresas, cliente individual sin pacientes…).
+      separated: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: null,
+      },
       customFields: {
         type: DataTypes.JSONB,
         defaultValue: {},

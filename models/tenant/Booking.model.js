@@ -95,6 +95,14 @@ export function defineBooking(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // Paciente al que corresponde la cita (Aumenta: el que paga puede tener
+      // varios pacientes/hijos; la cita se agenda para uno concreto). Nullable/
+      // aditivo: las citas existentes quedan sin paciente. FK → patients SET NULL
+      // solo en tenants con tabla patients (la migración lo aplica condicional).
+      patientId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       // Notas internas (no visibles al cliente)
       notes: {
         type: DataTypes.TEXT,
@@ -107,6 +115,7 @@ export function defineBooking(sequelize) {
         { fields: ["scheduled_at", "status"], name: "bookings_scheduled_status_idx" },
         { fields: ["client_email"], name: "bookings_client_email_idx" },
         { fields: ["team_member_id"], name: "bookings_team_member_idx" },
+        { fields: ["patient_id"], name: "bookings_patient_idx" },
       ],
     }
   );

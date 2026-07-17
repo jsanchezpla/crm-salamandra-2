@@ -13,16 +13,21 @@ import { bookingMeetLinkTemplate } from "../../../../../lib/email/templates/cita
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["pending", "confirmed", "completed", "cancelled", "no_show"]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const normId = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
 const isHttpUrl = (u) => /^https?:\/\/.+/i.test(String(u).trim());
 
 // Includes del booking. `teamMember` SOLO si el tenant tiene el módulo team:
 // en tenants de schema parcial (p.ej. nutri_laura) la tabla team_members no
-// existe, e incluirla haría un JOIN a una relación inexistente → 500.
-function bookingIncludes({ EventType, TeamMember }, hasModule) {
+// existe, e incluirla haría un JOIN a una relación inexistente → 500. Ídem
+// `patient`: sólo con módulo Clínica/Pacientes (nutri_laura no tiene patients).
+function bookingIncludes({ EventType, TeamMember, Patient }, hasModule) {
   const inc = [{ model: EventType, as: "eventType" }];
   if (hasModule("team")) inc.push({ model: TeamMember, as: "teamMember", attributes: ["id", "displayName"] });
+  if ((hasModule("clinica") || hasModule("pacientes")) && Patient) {
+    inc.push({ model: Patient, as: "patient", attributes: ["id", "firstName", "lastName"] });
+  }
   return inc;
 }
 
@@ -98,6 +103,20 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
         if (!tm) return error("teamMemberId no existe");
       }
       updates.teamMemberId = tmId;
+    }
+
+    // Paciente asignado — SOLO con módulo Clínica/Pacientes. null desasigna.
+    if ((hasModule("clinica") || hasModule("pacientes")) && "patientId" in body) {
+      const pid = normId(body.patientId);
+      if (pid) {
+        if (!UUID_RE.test(pid)) return error("patientId inválido");
+        const { Patient } = tenantModels;
+        if (Patient) {
+          const p = await Patient.findByPk(pid, { attributes: ["id"] });
+          if (!p) return error("patientId no existe");
+        }
+      }
+      updates.patientId = pid;
     }
 
     // meetUrl EDITABLE a mano. "" o null → null; si viene valor, valida http(s).

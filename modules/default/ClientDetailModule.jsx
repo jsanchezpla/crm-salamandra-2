@@ -12,6 +12,8 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import ClientBillingSection from "../../components/billing/ClientBillingSection.jsx";
 import ClientModulesSection from "../../components/clients/ClientModulesSection.jsx";
+import ClientContactMethodsSection from "../../components/clients/ClientContactMethodsSection.jsx";
+import ClientPatientsSection from "../../components/clients/ClientPatientsSection.jsx";
 
 const STATUSES = [
   { key: "new", label: "Nuevo" },
@@ -77,10 +79,11 @@ export default function ClientDetailModule() {
   }, [id]);
 
   function openEdit() {
+    // email/phone NO se editan aquí: los gestiona la sección "Contactos"
+    // (client_contact_methods). Incluirlos aquí reenviaría un valor obsoleto en
+    // el PUT y pisaría el contacto principal.
     setEditForm({
       name: client.name || "",
-      email: client.email || "",
-      phone: client.phone || "",
       notes: client.notes || "",
       status: client.customFields?.seStatus || "new",
       company: client.customFields?.company || "",
@@ -232,8 +235,6 @@ export default function ClientDetailModule() {
                 {[
                   { label: "Nombre *", key: "name", type: "text" },
                   { label: "Empresa", key: "company", type: "text" },
-                  { label: "Email", key: "email", type: "email" },
-                  { label: "Teléfono", key: "phone", type: "tel" },
                   { label: "País", key: "country", type: "text" },
                   { label: "Ciudad", key: "city", type: "text" },
                   { label: "Tema de interés", key: "topic", type: "text" },
@@ -288,9 +289,9 @@ export default function ClientDetailModule() {
                     a diferencia de break-words, reduce el min-content del grid,
                     que era la causa real del desbordamiento). */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                  {/* Email/Teléfono ya no se muestran aquí: los presenta la
+                      sección "Contactos" (múltiples, con principal). */}
                   {[
-                    { label: "Email", value: client.email, href: `mailto:${client.email}` },
-                    { label: "Teléfono", value: client.phone, href: `tel:${client.phone}` },
                     { label: "País", value: client.customFields?.country },
                     { label: "Ciudad", value: client.customFields?.city },
                     { label: "Empresa", value: client.customFields?.company },
@@ -411,7 +412,11 @@ export default function ClientDetailModule() {
           </div>
         </div>
 
+        <ClientContactMethodsSection clientId={id} />
+
         <ClientModulesSection clientId={id} />
+
+        <ClientPatientsSection clientId={id} />
 
         <ClientBillingSection clientId={id} />
       </div>
