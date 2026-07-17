@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { getMasterModels } from "../../lib/db/masterDb.js";
 import DashboardShell from "../../components/layout/DashboardShell.jsx";
+import SessionKeeper from "../../components/auth/SessionKeeper.jsx";
 
 const DEFAULT_BRAND = {
   primaryColor: "#152B22",
@@ -43,6 +44,9 @@ export default async function DashboardLayout({ children }) {
       inkColor={brand.inkColor}
       cardColor={brand.cardColor}
     >
+      {/* Refresca el access token (15 min) antes de que caduque para no echar
+          al usuario a /login cada 15 min. Persiste entre navegaciones SPA. */}
+      <SessionKeeper />
       {children}
     </DashboardShell>
   );

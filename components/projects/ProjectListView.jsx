@@ -190,7 +190,12 @@ export default function ProjectListView({ projectId, filters = {}, teamMembers =
   if (error) return <div className="p-6 text-sm text-rose-700">{error}</div>;
 
   return (
-    <>
+    // Columna flex que rellena el contenedor del tablero: la barra superior es
+    // fija (shrink-0) y la tabla ocupa el resto y scrollea internamente
+    // (flex-1 + min-h-0). Antes la tabla usaba h-full y, sumada a la barra,
+    // sobresalía ~40px que el overflow-hidden del padre recortaba: con muchas
+    // tareas las últimas filas quedaban inaccesibles.
+    <div className="flex flex-col h-full min-h-0">
       {actionError && (
         <div
           role="alert"
@@ -200,7 +205,7 @@ export default function ProjectListView({ projectId, filters = {}, teamMembers =
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-3 shrink-0">
         <span className="text-xs text-neutral-400">{rows.length} tarea{rows.length === 1 ? "" : "s"}</span>
         <button
           onClick={() => setCreating(true)}
@@ -214,7 +219,7 @@ export default function ProjectListView({ projectId, filters = {}, teamMembers =
         </button>
       </div>
 
-      <div className="h-full overflow-auto rounded-xl border border-neutral-200 bg-white">
+      <div className="flex-1 min-h-0 overflow-auto rounded-xl border border-neutral-200 bg-white">
         <table className="w-full text-sm border-collapse min-w-[680px]">
           <thead className="sticky top-0 z-10 bg-neutral-50 text-xs text-neutral-500">
             <tr className="border-b border-neutral-200">
@@ -339,6 +344,6 @@ export default function ProjectListView({ projectId, filters = {}, teamMembers =
           }}
         />
       )}
-    </>
+    </div>
   );
 }
