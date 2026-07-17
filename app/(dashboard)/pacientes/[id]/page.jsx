@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import Select from "@/components/ui/Select.jsx";
+import PatientBillingSection from "@/components/billing/PatientBillingSection.jsx";
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
 
 const TABS = [
@@ -384,6 +385,7 @@ export default function PacienteFichaPage() {
                 )}
               </div>
             </div>
+            <PatientBillingSection patientId={patient.id} clientId={patient.clientId} />
           </div>
         )}
 

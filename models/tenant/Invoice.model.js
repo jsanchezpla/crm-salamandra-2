@@ -15,11 +15,16 @@ export function defineInvoice(sequelize) {
       },
       // ── Campos legacy del dominio terapéutico (NO usar en código nuevo) ──
       // No se borran porque el modelo billing antiguo aún los referencia.
-      // Sprint futuro: limpieza de familyId/patientId/serviceType/invoiceType.
+      // Sprint futuro: limpieza de familyId/serviceType/invoiceType.
       familyId: {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // Paciente al que corresponde la factura (Fase 2a facturación de pacientes).
+      // El pagador es Invoice.clientId; patientId es solo la trazabilidad interna
+      // "esta factura es de este paciente" (una fundación/tía/abuelo puede pagar
+      // por él). Columna reutilizada (antes durmiente); el enlace va en columna, NO
+      // en customFields, porque la rectificativa reinicia customFields a {}.
       patientId: {
         type: DataTypes.UUID,
         allowNull: true,

@@ -464,7 +464,7 @@ export default function FacturasPage() {
                     );
                   })()}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <FormRow label="Cliente *">
+                    <FormRow label="Cliente (pagador) *">
                       <Select
                         value={form.clientId}
                         onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
@@ -475,6 +475,14 @@ export default function FacturasPage() {
                         className={inputCls}
                       />
                     </FormRow>
+                    {openInvoice?.patient && (
+                      <FormRow label="Paciente">
+                        <div className="text-sm text-neutral-700 px-1 py-1.5">
+                          {openInvoice.patient.firstName} {openInvoice.patient.lastName}
+                          <span className="block text-[10px] text-neutral-400">La factura es de este paciente; el pagador es el cliente de arriba (editable).</span>
+                        </div>
+                      </FormRow>
+                    )}
                     <FormRow label="Empleado">
                       <Select
                         value={form.employeeId}
@@ -694,7 +702,10 @@ function DetailView({ invoice, isAdmin, onAction, onEdit, onOpenLinked, saving }
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
-        <DetailRow label="Cliente" value={invoice.client?.fiscalName || invoice.client?.name} />
+        <DetailRow label="Cliente (pagador)" value={invoice.client?.fiscalName || invoice.client?.name} />
+        {invoice.patient && (
+          <DetailRow label="Paciente" value={`${invoice.patient.firstName} ${invoice.patient.lastName}`} />
+        )}
         <DetailRow label="Empleado" value={invoice.employee?.displayName} />
         <DetailRow label="Socio" value={invoice.partnerId ? invoice.partnerId.charAt(0).toUpperCase() + invoice.partnerId.slice(1) : "—"} />
         <DetailRow label="Fecha emisión" value={fmtDate(invoice.issueDate)} />

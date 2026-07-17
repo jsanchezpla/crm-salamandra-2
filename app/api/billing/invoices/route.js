@@ -4,6 +4,7 @@ import { ok, created, error, forbidden, serverError } from "../../../../lib/util
 import { calculateInvoice } from "../../../../lib/billing/calculateInvoice.js";
 import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
 import { withEffectiveStatusList } from "../../../../lib/billing/invoiceStatus.js";
+import { resolveInvoicePatientId, invoicePatientInclude } from "../../../../lib/billing/patientLink.js";
 
 // GET /api/billing/invoices — listado paginado con filtros
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
@@ -19,6 +20,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const where = {};
     if (searchParams.get("status")) where.status = searchParams.get("status");
     if (searchParams.get("clientId")) where.clientId = searchParams.get("clientId");
+    if (searchParams.get("patientId")) where.patientId = searchParams.get("patientId");
     if (searchParams.get("employeeId")) where.employeeId = searchParams.get("employeeId");
     if (searchParams.get("series")) where.series = searchParams.get("series");
     if (searchParams.get("from") || searchParams.get("to")) {
@@ -58,6 +60,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       include: [
         { model: Client, as: "client", attributes: ["id", "name", "fiscalName", "taxId"] },
         { model: TeamMember, as: "employee", attributes: ["id", "displayName"] },
+        ...invoicePatientInclude(tenantModels, hasModule),
       ],
       order,
       limit,
@@ -79,6 +82,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
 
     const {
       clientId,
+      patientId,
       employeeId,
       partnerId,
       issueDate,
@@ -95,6 +99,10 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
     if (!Array.isArray(lines) || lines.length === 0) {
       return error("Se requiere al menos una línea");
     }
+
+    // Enlace opcional factura↔paciente (el pagador sigue siendo clientId).
+    const patRes = await resolveInvoicePatientId(patientId, tenantModels, hasModule);
+    if (patRes.err) return error(patRes.err);
 
     // Aplicar defaults del tenant: vatRate por línea, IRPF y dueDate desde
     // defaultPaymentTermsDays si no llegan explícitos.
@@ -120,6 +128,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
     // Borrador: sin número, sin serie congelada
     const invoice = await Invoice.create({
       clientId,
+      patientId: patRes.patientId,
       employeeId: employeeId || null,
       partnerId: partnerId || null,
       issueDate,

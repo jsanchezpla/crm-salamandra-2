@@ -167,6 +167,7 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
       const rect = await Invoice.create(
         {
           clientId: locked.clientId,
+          patientId: locked.patientId, // conserva el enlace factura↔paciente
           employeeId: locked.employeeId,
           partnerId: locked.partnerId, // conserva atribución por socio en KPIs
           projectId: locked.projectId,

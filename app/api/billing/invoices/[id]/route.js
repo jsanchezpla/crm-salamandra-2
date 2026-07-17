@@ -2,6 +2,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, noContent, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../../lib/billing/calculateInvoice.js";
 import { withEffectiveStatus } from "../../../../../lib/billing/invoiceStatus.js";
+import { resolveInvoicePatientId, invoicePatientInclude } from "../../../../../lib/billing/patientLink.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -19,6 +20,7 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
         { model: TeamMember, as: "employee", attributes: ["id", "displayName"] },
         { model: Invoice, as: "rectifies", attributes: ["id", "number", "issueDate", "total"] },
         { model: Invoice, as: "rectifiedBy", attributes: ["id", "number", "issueDate", "total"] },
+        ...invoicePatientInclude(tenantModels, hasModule),
       ],
     });
 
@@ -51,6 +53,13 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
     const updates = {};
     for (const k of allowed) {
       if (k in body) updates[k] = body[k];
+    }
+
+    // patientId (enlace factura↔paciente): validado aparte; null desenlaza.
+    if ("patientId" in body) {
+      const patRes = await resolveInvoicePatientId(body.patientId, tenantModels, hasModule);
+      if (patRes.err) return error(patRes.err);
+      updates.patientId = patRes.patientId;
     }
 
     // Recalcular totales si cambian las líneas o el tipo de IRPF. El IRPF se
