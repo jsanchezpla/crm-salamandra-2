@@ -71,6 +71,7 @@ const EMPTY_BOOKING_FORM = {
   modality: "",
   additionalData: "",
   notes: "",
+  patientId: "",
 };
 
 export default function CitasModule() {
@@ -85,6 +86,7 @@ export default function CitasModule() {
   const [detailNotes, setDetailNotes] = useState("");
   const [detailMeet, setDetailMeet] = useState("");
   const [teamMembers, setTeamMembers] = useState([]);
+  const [patients, setPatients] = useState([]); // vacío si el tenant no tiene Clínica/Pacientes
 
   const loadEventTypes = useCallback(async () => {
     const res = await fetch("/api/citas/event-types?active=true", { cache: "no-store" });
@@ -101,6 +103,23 @@ export default function CitasModule() {
       .then((j) => setTeamMembers(j.data?.members ?? []))
       .catch(() => {});
   }, []);
+
+  // Pacientes para asignar la cita (sólo tenants con módulo Clínica/Pacientes:
+  // si el endpoint responde 403, `patients` queda vacío y el selector se oculta).
+  useEffect(() => {
+    fetch("/api/pacientes", { cache: "no-store" })
+      .then(async (r) => (r.ok ? r.json() : null))
+      .then((j) => setPatients(j?.data?.patients ?? []))
+      .catch(() => {});
+  }, []);
+
+  const patientOptions = useMemo(
+    () => [
+      { value: "", label: "Sin paciente asignado" }, // permite volver a "ninguno"
+      ...patients.map((p) => ({ value: p.id, label: p.name || `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() })),
+    ],
+    [patients]
+  );
 
   const fetchEvents = useCallback(async (info, success, failure) => {
     try {
@@ -180,6 +199,7 @@ export default function CitasModule() {
   async function saveNotes() { await patchBooking({ notes: detailNotes.trim() || null }); }
   async function saveMeet() { await patchBooking({ meetUrl: detailMeet.trim() || null }); }
   async function assignTeamMember(v) { await patchBooking({ teamMemberId: v || null }); }
+  async function assignPatient(v) { await patchBooking({ patientId: v || null }); }
   async function deleteBooking() {
     if (!window.confirm("¿Eliminar esta cita? Quedará marcada como cancelada.")) return;
     setSaving(true);
@@ -227,6 +247,7 @@ export default function CitasModule() {
           modality: createForm.modality,
           additionalData: createForm.additionalData.trim() || null,
           notes: createForm.notes.trim() || null,
+          patientId: createForm.patientId || null,
         }),
       });
       const j = await res.json();
@@ -468,6 +489,22 @@ export default function CitasModule() {
                     </select>
                   </div>
                 )}
+                {patients.length > 0 && (
+                  <div className="flex items-center">
+                    <span className="w-24 text-neutral-400">Paciente</span>
+                    <select
+                      value={openBooking.patientId ?? ""}
+                      onChange={(e) => assignPatient(e.target.value)}
+                      disabled={saving}
+                      className="flex-1 text-[13px] px-2 py-1 border border-neutral-200 rounded-md bg-white text-neutral-800 disabled:opacity-50"
+                    >
+                      <option value="">Sin asignar</option>
+                      {patients.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name || `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim()}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               {/* Enlace Meet editable — solo citas online */}
@@ -661,6 +698,19 @@ export default function CitasModule() {
                   />
                 </div>
               </div>
+
+              {patients.length > 0 && (
+                <div>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Paciente (opcional)</label>
+                  <Select
+                    value={createForm.patientId}
+                    onChange={(v) => updateCreateForm("patientId", v)}
+                    options={patientOptions}
+                    placeholder="Sin paciente asignado"
+                    searchable
+                  />
+                </div>
+              )}
 
               {selectedEventType && (
                 <div>

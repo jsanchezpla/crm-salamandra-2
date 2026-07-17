@@ -16,7 +16,9 @@ import { useCallback, useEffect, useState } from "react";
 
 const MODULE_META = {
   nutricion: { label: "Paciente Nutrición", desc: "Pertenece al módulo de Nutrición." },
-  clinica: { label: "Paciente Clínica", desc: "Crea/enlaza su ficha de paciente en Clínica." },
+  // Ya NO crea la ficha de paciente: los pacientes se dan de alta explícitamente
+  // en la sección «Pacientes» de la ficha (un cliente puede tener varios).
+  clinica: { label: "Paciente Clínica", desc: "Marca que pertenece a Clínica. Los pacientes se crean en «Pacientes»." },
 };
 
 export default function ClientModulesSection({ clientId }) {
@@ -24,7 +26,6 @@ export default function ClientModulesSection({ clientId }) {
   const [enabledMap, setEnabledMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState(null);
-  const [note, setNote] = useState(null);
   const [error, setError] = useState(null);
 
   const load = useCallback(() => {
@@ -57,7 +58,6 @@ export default function ClientModulesSection({ clientId }) {
     const next = !enabledMap[moduleKey];
     setSavingKey(moduleKey);
     setError(null);
-    setNote(null);
     setEnabledMap((m) => ({ ...m, [moduleKey]: next })); // optimista
     try {
       const r = await fetch(`/api/clients/${clientId}/module-assignments`, {
@@ -72,8 +72,6 @@ export default function ClientModulesSection({ clientId }) {
         m[a.moduleKey] = a.enabled;
       });
       setEnabledMap(m);
-      const kept = (d.data.clinic || []).find((c) => c.action === "kept_has_data");
-      if (kept) setNote("El paciente clínico tiene datos (sesiones/informes) y se conserva en Clínica.");
     } catch (e) {
       setEnabledMap((m) => ({ ...m, [moduleKey]: !next })); // revert
       setError(e.message);
@@ -109,7 +107,6 @@ export default function ClientModulesSection({ clientId }) {
             </label>
           );
         })}
-        {note && <div className="text-xs text-amber-600 pt-1">{note}</div>}
         {error && <div className="text-xs text-rose-600 pt-1">{error}</div>}
       </div>
     </div>

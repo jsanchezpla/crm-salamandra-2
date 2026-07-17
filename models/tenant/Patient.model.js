@@ -95,6 +95,42 @@ export function definePatient(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // ── Datos personales (Aumenta) ──────────────────────────────────────
+      dni: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+      },
+      address: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      // Parentesco/relación con el cliente que paga (el tutor). Lista sugerida
+      // en la UI (hijo/a · tutor legal · cónyuge · el propio cliente · hermano/a)
+      // pero texto libre para "otro".
+      relationship: {
+        type: DataTypes.STRING(60),
+        allowNull: true,
+      },
+      // Consentimientos RGPD con traza legal: por cada uno { granted: bool,
+      // at: ISO, by: userId }. Claves: images | marketing | whatsapp.
+      consents: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: {},
+      },
+      // Contrato en papel firmado y escaneado. `contractSigned` = check rápido
+      // (subido/no); `contractFile` = metadata del PDF (el binario vive en el
+      // volumen de uploads vía attachmentStorage).
+      contractSigned: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      contractFile: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: null,
+      },
     },
     {
       tableName: "patients",

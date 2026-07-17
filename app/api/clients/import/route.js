@@ -1,12 +1,22 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, error } from "../../../../lib/utils/apiResponse.js";
+import {
+  normalizeContactValue,
+  setPrimaryContactValue,
+  isMissingTable,
+} from "../../../../lib/clients/contactMethods.js";
 
 const VALID_STATUSES = ["new", "contacted", "following", "converted", "discarded"];
 
-export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+export const POST = withTenant(async (request, _ctx, { tenantModels, tenantSequelize, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
 
-  const { Client } = tenantModels;
+  const { Client, ClientContactMethod } = tenantModels;
+  // El email/teléfono importado también materializa el método de contacto
+  // PRINCIPAL (si no, la ficha nueva mostraría "Sin contactos" pese a tener
+  // client.email). Si el tenant aún no tiene la tabla (42P01), se desactiva el
+  // espejo para el resto del lote y se cae a Client.create en plano.
+  let mirrorAvailable = !!ClientContactMethod;
   const body = await request.json();
   const rows = body.clients;
 
@@ -47,8 +57,31 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
 
       const notes = (row.notas || row.notes)?.toString().trim() || null;
 
-      await Client.create({ name, email, phone: phone || null, notes, customFields });
-      results.imported++;
+      const emailN = normalizeContactValue("email", email);
+      const phoneN = normalizeContactValue("phone", phone);
+      const payload = { name, email: emailN, phone: phoneN, notes, customFields };
+
+      try {
+        if (mirrorAvailable) {
+          await tenantSequelize.transaction(async (t) => {
+            const c = await Client.create(payload, { transaction: t });
+            if (emailN) await setPrimaryContactValue({ client: c, ClientContactMethod, kind: "email", value: emailN, transaction: t });
+            if (phoneN) await setPrimaryContactValue({ client: c, ClientContactMethod, kind: "phone", value: phoneN, transaction: t });
+          });
+        } else {
+          await Client.create(payload);
+        }
+        results.imported++;
+      } catch (err) {
+        // Tenant sin la tabla de contactos: desactiva el espejo y reintenta en plano.
+        if (mirrorAvailable && isMissingTable(err)) {
+          mirrorAvailable = false;
+          await Client.create(payload);
+          results.imported++;
+        } else {
+          throw err;
+        }
+      }
     } catch {
       results.errors.push({ row: i + 2, message: "Error al crear el cliente" });
     }

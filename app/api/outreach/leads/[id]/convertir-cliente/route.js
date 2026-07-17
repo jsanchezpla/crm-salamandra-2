@@ -2,6 +2,11 @@ import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok } from "../../../../../../lib/utils/apiResponse.js";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../../../../../../lib/utils/errors.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
+import {
+  normalizeContactValue,
+  setPrimaryContactValue,
+  isMissingTable,
+} from "../../../../../../lib/clients/contactMethods.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -34,7 +39,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
   const { id } = await params;
   if (!UUID_RE.test(id)) throw new ValidationError("Identificador inválido");
 
-  const { OutreachLead, Client } = ctx.tenantModels;
+  const { OutreachLead, Client, ClientContactMethod } = ctx.tenantModels;
   const lead = await OutreachLead.findByPk(id);
   if (!lead) throw new NotFoundError("Lead no encontrado");
   if (lead.converted) {
@@ -44,12 +49,13 @@ export const POST = withTenant(async (request, { params }, ctx) => {
   // Solo pasamos email si es válido: el modelo Client valida isEmail y un correo
   // scrapeado raro haría fallar el alta.
   const email = lead.email && EMAIL_RE.test(lead.email) ? lead.email.toLowerCase() : null;
-
-  const client = await Client.create({
+  const emailN = normalizeContactValue("email", email);
+  const phoneN = normalizeContactValue("phone", lead.phone ?? null);
+  const clientPayload = {
     name: lead.name,
     type: "company",
-    email,
-    phone: lead.phone ?? null,
+    email: emailN,
+    phone: phoneN,
     notes: lead.notes ?? null,
     customFields: {
       origin: "outreach",
@@ -59,7 +65,23 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       sourceUrl: lead.sourceUrl ?? null,
       outreachLeadId: lead.id,
     },
-  });
+  };
+
+  // Materializa email/teléfono como método de contacto PRINCIPAL (igual que el
+  // alta normal de cliente). Degrada a Client.create en plano si el tenant no
+  // tiene la tabla client_contact_methods (42P01).
+  let client;
+  try {
+    client = await ctx.tenantSequelize.transaction(async (t) => {
+      const c = await Client.create(clientPayload, { transaction: t });
+      if (ClientContactMethod && emailN) await setPrimaryContactValue({ client: c, ClientContactMethod, kind: "email", value: emailN, transaction: t });
+      if (ClientContactMethod && phoneN) await setPrimaryContactValue({ client: c, ClientContactMethod, kind: "phone", value: phoneN, transaction: t });
+      return c;
+    });
+  } catch (err) {
+    if (isMissingTable(err)) client = await Client.create(clientPayload);
+    else throw err;
+  }
 
   await lead.update({ converted: true, convertedAt: new Date(), clientId: client.id });
 

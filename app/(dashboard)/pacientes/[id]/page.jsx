@@ -154,6 +154,29 @@ export default function PacienteFichaPage() {
     } catch { /* noop */ } finally { setBusy(false); }
   };
 
+  // Contrato (PDF): subir/reemplazar/eliminar desde la ficha. Así, si la subida
+  // falló al crear el paciente desde la ficha del cliente, se puede reintentar aquí.
+  const uploadContract = async (file) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await fetch(`/api/pacientes/${id}/contract`, { method: "POST", body: fd });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "No se pudo subir el contrato"); }
+      load();
+    } catch (e) { window.alert(e.message); } finally { setBusy(false); }
+  };
+  const deleteContract = async () => {
+    if (!window.confirm("¿Eliminar el PDF del contrato?")) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/pacientes/${id}/contract`, { method: "DELETE" });
+      if (!r.ok && r.status !== 204) throw new Error("No se pudo eliminar");
+      load();
+    } catch (e) { window.alert(e.message); } finally { setBusy(false); }
+  };
+
   const openEdit = () => {
     setEditForm({
       firstName: patient.firstName ?? "", lastName: patient.lastName ?? "", age: patient.age ?? "",
@@ -284,8 +307,82 @@ export default function PacienteFichaPage() {
               <p className="text-[11px] text-neutral-400">La integración con Citas llegará en una fase posterior.</p>
             </div>
             <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-              <div className="eyebrow mb-3">Documentos adjuntos</div>
-              <p className="text-[11px] text-neutral-400">Sin documentos adjuntos.</p>
+              <div className="eyebrow mb-3">Contacto (pagador)</div>
+              {patient.client ? (
+                <div className="space-y-2">
+                  <div className="text-xs">
+                    <a href={`/clientes/${patient.client.id}`} className="font-medium text-neutral-800 hover:underline">
+                      {patient.client.name}
+                    </a>
+                    {patient.client.separated && (
+                      <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
+                        padres separados
+                      </span>
+                    )}
+                  </div>
+                  {patient.payerContacts?.length ? (
+                    <ul className="space-y-1">
+                      {patient.payerContacts.map((c) => (
+                        <li key={c.id} className="text-[11px] text-neutral-600 flex items-center gap-2 flex-wrap">
+                          <span className="text-neutral-400">{c.kind === "email" ? "✉" : "☎"}</span>
+                          <span className="break-all">{c.value}</span>
+                          {c.label && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-100 text-neutral-500">{c.label}</span>}
+                          {c.isPrimary && <span className="text-[10px] text-emerald-600">principal</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-[11px] text-neutral-400">Sin contactos registrados en el cliente.</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-[11px] text-neutral-400">Este paciente no tiene un cliente pagador enlazado.</p>
+              )}
+            </div>
+            <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
+              <div className="eyebrow mb-3">Datos y consentimientos</div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] mb-3">
+                <div><span className="text-neutral-400">DNI</span><div className="text-neutral-700">{patient.dni || "—"}</div></div>
+                <div><span className="text-neutral-400">Parentesco</span><div className="text-neutral-700">{patient.relationship || "—"}</div></div>
+                <div className="col-span-2"><span className="text-neutral-400">Domicilio</span><div className="text-neutral-700">{patient.address || "—"}</div></div>
+              </div>
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {[["images", "Imágenes"], ["marketing", "Publicidad"], ["whatsapp", "WhatsApp"]].map(([k, lbl]) => {
+                  const g = patient.consents?.[k]?.granted;
+                  return (
+                    <span
+                      key={k}
+                      className={`text-[10px] px-2 py-0.5 rounded-full border ${g ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-neutral-50 text-neutral-400 border-neutral-200"}`}
+                    >
+                      {lbl} {g ? "✓" : "✗"}
+                    </span>
+                  );
+                })}
+              </div>
+              <div className="text-[11px] flex items-center gap-2 flex-wrap">
+                <span className="text-neutral-400">Contrato:</span>
+                {patient.contractSigned ? <span className="text-emerald-600">firmado</span> : <span className="text-neutral-400">pendiente</span>}
+                {patient.contractFile && (
+                  <a href={`/api/pacientes/${patient.id}/contract`} className="text-[var(--color-primary,#1B3A2D)] hover:underline">
+                    descargar PDF
+                  </a>
+                )}
+                <label className={`text-[var(--color-primary,#1B3A2D)] hover:underline cursor-pointer ${busy ? "opacity-40 pointer-events-none" : ""}`}>
+                  {patient.contractFile ? "reemplazar" : "subir PDF"}
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="hidden"
+                    disabled={busy}
+                    onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; uploadContract(f); }}
+                  />
+                </label>
+                {patient.contractFile && (
+                  <button onClick={deleteContract} disabled={busy} className="text-rose-500 hover:text-rose-700 disabled:opacity-40">
+                    eliminar
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}

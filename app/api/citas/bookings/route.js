@@ -12,6 +12,21 @@ import { findBookingOverlap } from "../../../../lib/citas/booking.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["pending", "confirmed", "completed", "cancelled", "no_show"]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// El paciente sólo aplica en tenants con módulo Clínica/Pacientes (nutri_laura
+// tiene citas pero NO tabla patients). Devuelve { patientId } o un error string.
+async function resolvePatientId(body, tenantModels, hasModule) {
+  if (!(hasModule("clinica") || hasModule("pacientes"))) return { patientId: null };
+  const pid = typeof body.patientId === "string" && body.patientId.trim() ? body.patientId.trim() : null;
+  if (!pid) return { patientId: null };
+  if (!UUID_RE.test(pid)) return { err: "patientId inválido" };
+  const { Patient } = tenantModels;
+  if (!Patient) return { patientId: null };
+  const p = await Patient.findByPk(pid, { attributes: ["id"] });
+  if (!p) return { err: "patientId no existe" };
+  return { patientId: pid };
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 // GET /api/citas/bookings — listado paginado
@@ -20,7 +35,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   try {
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
 
-    const { Booking, EventType, TeamMember } = tenantModels;
+    const { Booking, EventType, TeamMember, Patient } = tenantModels;
     const { searchParams } = new URL(request.url);
 
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
@@ -64,6 +79,9 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const include = [{ model: EventType, as: "eventType", attributes: ["id", "name", "slug", "color"] }];
     if (hasModule("team")) {
       include.push({ model: TeamMember, as: "teamMember", attributes: ["id", "displayName"] });
+    }
+    if ((hasModule("clinica") || hasModule("pacientes")) && Patient) {
+      include.push({ model: Patient, as: "patient", attributes: ["id", "firstName", "lastName"] });
     }
 
     const { count, rows } = await Booking.findAndCountAll({
@@ -159,6 +177,10 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       teamMemberId = tmId;
     }
 
+    // Paciente asignado (Clínica/Pacientes). Opcional.
+    const patRes = await resolvePatientId(body, tenantModels, hasModule);
+    if (patRes.err) return error(patRes.err);
+
     const row = await Booking.create({
       eventTypeId,
       clientName,
@@ -172,6 +194,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       status: "confirmed",
       notes,
       teamMemberId,
+      patientId: patRes.patientId,
     });
 
     await logCitasAudit({
