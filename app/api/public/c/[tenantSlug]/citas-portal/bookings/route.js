@@ -3,6 +3,7 @@ import { withPublicTenant } from "../../../../../../../lib/tenant/publicTenantCo
 import { ok, unauthorized, forbidden, notFound, serverError } from "../../../../../../../lib/utils/apiResponse.js";
 import { verifyPortalSession, readBearer } from "../../../../../../../lib/citas/portalSession.js";
 import { splitBookings } from "../../../../../../../lib/citas/clientBookingSerializer.js";
+import { normalizeEmail } from "../../../../../../../lib/citas/validation.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/citas-portal/bookings
@@ -25,9 +26,17 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
       return unauthorized("Sesión no válida o caducada");
     }
 
+    // El email de la sesión viene del token SSO de WordPress SIN normalizar,
+    // pero las reservas guardan clientEmail normalizado (trim + lowercase). Sin
+    // normalizar aquí, un email de sesión con espacios (u otras diferencias que
+    // ILIKE no cubre) no casaba y las citas confirmadas NO aparecían en "Mis
+    // citas". Normalizamos igual que al reservar antes de comparar.
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail) return unauthorized("Sesión no válida o caducada");
+
     const { Booking, EventType } = tenantModels;
     const rows = await Booking.findAll({
-      where: { clientEmail: { [Op.iLike]: email } }, // usa bookings_client_email_idx
+      where: { clientEmail: { [Op.iLike]: normalizedEmail } }, // usa bookings_client_email_idx
       include: [{ model: EventType, as: "eventType", attributes: ["id", "name", "color"] }],
       order: [["scheduledAt", "ASC"]],
     });

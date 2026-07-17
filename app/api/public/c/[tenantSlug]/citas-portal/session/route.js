@@ -2,6 +2,7 @@ import { withPublicTenant } from "../../../../../../../lib/tenant/publicTenantCo
 import { ok, error, unauthorized, forbidden, notFound, serverError } from "../../../../../../../lib/utils/apiResponse.js";
 import { verifyWpSsoToken } from "../../../../../../../lib/citas/ssoToken.js";
 import { signPortalSession, SESSION_TTL_SECONDS } from "../../../../../../../lib/citas/portalSession.js";
+import { normalizeEmail } from "../../../../../../../lib/citas/validation.js";
 
 /**
  * POST /api/public/c/[tenantSlug]/citas-portal/session
@@ -38,6 +39,13 @@ export const POST = withPublicTenant(
         if (err.code === "SSO_SECRET_MISSING") return forbidden("Portal de citas no habilitado");
         return unauthorized("Enlace de acceso inválido o caducado");
       }
+
+      // Normalizar (trim + lowercase) el email antes de firmar la sesión: las
+      // reservas guardan clientEmail normalizado, así que el token debe llevar la
+      // misma forma para que "Mis citas" y "cancelar" casen. WordPress puede
+      // enviarlo con espacios o mayúsculas.
+      email = normalizeEmail(email);
+      if (!email) return unauthorized("Enlace de acceso inválido o caducado");
 
       const sessionToken = await signPortalSession({ email, tenant: slug });
       return ok({ sessionToken, expiresInSeconds: SESSION_TTL_SECONDS });
