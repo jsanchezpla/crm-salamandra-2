@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import PatientReparto from "./PatientReparto.jsx";
 
 const STATUS_LABEL = {
   draft: "Borrador", issued: "Emitida", sent: "Enviada", paid: "Pagada",
@@ -36,6 +37,7 @@ export default function PatientBillingSection({ patientId, clientId }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [showReparto, setShowReparto] = useState(false);
 
   const load = useCallback(() => {
     let alive = true;
@@ -90,15 +92,32 @@ export default function PatientBillingSection({ patientId, clientId }) {
     <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5 lg:col-span-2">
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="eyebrow">Facturación</div>
-        <button
-          onClick={nuevaFactura}
-          disabled={busy || !clientId}
-          title={!clientId ? "Enlaza un cliente pagador al paciente primero" : ""}
-          className="text-[11px] font-medium px-2.5 py-1 rounded-md bg-[var(--color-primary,#1B3A2D)] text-white disabled:opacity-40"
-        >
-          {busy ? "Creando…" : "Nueva factura"}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setShowReparto(true)}
+            className="text-[11px] font-medium px-2.5 py-1 rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50"
+          >
+            Reparto
+          </button>
+          <button
+            onClick={nuevaFactura}
+            disabled={busy || !clientId}
+            title={!clientId ? "Enlaza un cliente pagador al paciente primero" : ""}
+            className="text-[11px] font-medium px-2.5 py-1 rounded-md bg-[var(--color-primary,#1B3A2D)] text-white disabled:opacity-40"
+          >
+            {busy ? "Creando…" : "Nueva factura"}
+          </button>
+        </div>
       </div>
+
+      {showReparto && (
+        <PatientReparto
+          patientId={patientId}
+          defaultPayerClientId={clientId}
+          onClose={() => setShowReparto(false)}
+          onCreated={() => { setShowReparto(false); load(); }}
+        />
+      )}
 
       {!clientId && (
         <p className="text-[11px] text-amber-600 mb-2">
@@ -113,6 +132,9 @@ export default function PatientBillingSection({ patientId, clientId }) {
           {invoices.map((inv) => (
             <li key={inv.id} className="py-2 flex items-center gap-3 text-xs">
               <span className="font-medium text-neutral-800 shrink-0">{inv.number?.startsWith("DRAFT-") ? "(borrador)" : inv.number}</span>
+              {inv.customFields?.splitGroupId && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 shrink-0" title="Parte de un reparto de cuota">reparto</span>
+              )}
               <span className="text-neutral-400 shrink-0">{fmt(inv.issueDate)}</span>
               <span className="text-neutral-500 truncate flex-1 min-w-0">{inv.client?.name || "—"}</span>
               <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${STATUS_CLS[inv.status] || "bg-neutral-100 text-neutral-500"}`}>
