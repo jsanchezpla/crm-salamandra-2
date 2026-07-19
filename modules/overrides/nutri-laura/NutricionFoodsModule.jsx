@@ -3,17 +3,19 @@
 /**
  * NutricionFoodsModule — Catálogo de alimentos (Sprint C1 nutri-laura).
  *
- * Listado paginado (20 por página) con buscador, botón "Añadir alimento"
- * (modal FoodEditModal) y botón "Buscar online" (modal
- * FoodSearchExternalModal). Permite editar inline las 4 macros y archivar
+ * Listado paginado (20 por página) con buscador y botón "Añadir alimento"
+ * (modal FoodEditModal). Permite editar inline las 4 macros y archivar
  * con la papelera. Cambiar nombre / unidad / tags se hace desde el modal
  * de edición completo.
+ *
+ * La búsqueda externa (OpenFoodFacts) se retiró en el sprint Nutrinotas: el
+ * catálogo base viene sembrado (scripts/seed-foods-base-catalog.js) y todo lo
+ * que falte se añade a mano — sin dependencias de terceros ni lag.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import FoodEditModal from "./FoodEditModal.jsx";
-import FoodSearchExternalModal from "./FoodSearchExternalModal.jsx";
 
 const PAGE_SIZE = 20;
 
@@ -34,7 +36,6 @@ export default function NutricionFoodsModule() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null); // food | "new"
-  const [externalOpen, setExternalOpen] = useState(false);
   const [toast, setToast] = useState(null);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
@@ -116,12 +117,6 @@ export default function NutricionFoodsModule() {
     load();
   }
 
-  function handleImported() {
-    setExternalOpen(false);
-    setToast({ kind: "ok", text: "Alimento añadido al catálogo" });
-    load();
-  }
-
   return (
     <div className="flex flex-col h-full min-h-0 bg-[var(--color-accent,#F7F1EB)]/30">
       {/* Header */}
@@ -139,22 +134,6 @@ export default function NutricionFoodsModule() {
             </p>
           </div>
           <div className="flex gap-2 items-center flex-wrap">
-            <button
-              onClick={() => setExternalOpen(true)}
-              className="px-3 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 transition flex items-center gap-1.5"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.6}
-                className="w-3.5 h-3.5"
-              >
-                <circle cx="11" cy="11" r="7" />
-                <path strokeLinecap="round" d="m20 20-3.5-3.5" />
-              </svg>
-              Buscar online
-            </button>
             <button
               onClick={() => setEditing("new")}
               className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--color-primary)] text-white hover:opacity-90 transition flex items-center gap-1"
@@ -208,7 +187,7 @@ export default function NutricionFoodsModule() {
               Cargando catálogo…
             </div>
           ) : items.length === 0 ? (
-            <EmptyState onAdd={() => setEditing("new")} onSearch={() => setExternalOpen(true)} />
+            <EmptyState onAdd={() => setEditing("new")} />
           ) : (
             <>
               {/* Cards en móvil (<lg) */}
@@ -242,7 +221,6 @@ export default function NutricionFoodsModule() {
                       <th className="px-3 py-2.5 font-semibold text-right">Carbs</th>
                       <th className="px-3 py-2.5 font-semibold text-right">Grasas</th>
                       <th className="px-3 py-2.5 font-semibold text-right">Fibra</th>
-                      <th className="px-3 py-2.5 font-semibold text-center">Origen</th>
                       <th className="px-3 py-2.5 font-semibold text-right">Acciones</th>
                     </tr>
                   </thead>
@@ -265,6 +243,21 @@ export default function NutricionFoodsModule() {
                   <Pagination page={page} totalPages={totalPages} onChange={setPage} />
                 )}
               </div>
+
+              {/* Atribución exigida por la licencia ODbL del catálogo de marcas
+                  (import one-time de Open Food Facts; sin dependencia en runtime). */}
+              <p className="mt-3 text-[10px] text-gray-400 text-center">
+                Parte de los datos nutricionales de productos de marca proceden de{" "}
+                <a
+                  href="https://world.openfoodfacts.org"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline hover:text-gray-500"
+                >
+                  Open Food Facts
+                </a>{" "}
+                (licencia ODbL).
+              </p>
             </>
           )}
         </div>
@@ -275,13 +268,6 @@ export default function NutricionFoodsModule() {
           food={editing === "new" ? null : editing}
           onClose={() => setEditing(null)}
           onSaved={(saved) => handleSaved(saved, editing === "new" ? "new" : "edit")}
-        />
-      )}
-
-      {externalOpen && (
-        <FoodSearchExternalModal
-          onClose={() => setExternalOpen(false)}
-          onImported={handleImported}
         />
       )}
 
@@ -327,17 +313,6 @@ function FoodRow({ food, onEdit, onArchive, onPatchMacro }) {
       <EditableMacro value={food.carbsPer100} onSave={(v) => onPatchMacro("carbsPer100", v)} />
       <EditableMacro value={food.fatPer100} onSave={(v) => onPatchMacro("fatPer100", v)} />
       <EditableMacro value={food.fiberPer100} onSave={(v) => onPatchMacro("fiberPer100", v)} />
-      <td className="px-3 py-2.5 text-center">
-        {food.source === "openfoodfacts" ? (
-          <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--color-primary)]/10 text-[var(--color-primary)] border border-[var(--color-primary)]/20">
-            OpenFoodFacts
-          </span>
-        ) : (
-          <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
-            Local
-          </span>
-        )}
-      </td>
       <td className="px-3 py-2.5 text-right whitespace-nowrap">
         <button
           onClick={onEdit}
@@ -372,15 +347,6 @@ function FoodCard({ food, onEdit, onArchive, onPatchMacro }) {
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            {food.source === "openfoodfacts" ? (
-              <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--color-primary)]/10 text-[var(--color-primary)] border border-[var(--color-primary)]/20">
-                OpenFoodFacts
-              </span>
-            ) : (
-              <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
-                Local
-              </span>
-            )}
             <span className="text-[10px] text-gray-400 uppercase tracking-wider">
               por 100 {UNIT_LABEL[food.defaultUnit] ?? food.defaultUnit}
             </span>
@@ -568,12 +534,12 @@ function Pagination({ page, totalPages, onChange }) {
   );
 }
 
-function EmptyState({ onAdd, onSearch }) {
+function EmptyState({ onAdd }) {
   return (
     <div className="py-16 text-center bg-white border border-gray-200 rounded-xl">
       <div className="text-base text-gray-700 font-medium">Aún no hay alimentos en tu catálogo</div>
       <p className="text-xs text-gray-400 mt-1">
-        Crea uno manualmente o búscalo en OpenFoodFacts.
+        Añade tu primer alimento con sus macros por 100 g.
       </p>
       <div className="mt-5 flex gap-2 items-center justify-center">
         <button
@@ -581,12 +547,6 @@ function EmptyState({ onAdd, onSearch }) {
           className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--color-primary)] text-white hover:opacity-90 transition"
         >
           Añadir alimento
-        </button>
-        <button
-          onClick={onSearch}
-          className="px-3 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
-        >
-          Buscar online
         </button>
       </div>
     </div>

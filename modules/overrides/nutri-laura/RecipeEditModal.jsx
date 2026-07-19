@@ -203,6 +203,8 @@ function AddIngredient({ onPick }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState(null);
   const timer = useRef(null);
 
   useEffect(() => {
@@ -224,13 +226,42 @@ function AddIngredient({ onPick }) {
     return () => timer.current && clearTimeout(timer.current);
   }, [q]);
 
+  // El alimento no existe: se crea al vuelo en el catálogo (solo nombre; las
+  // macros se completan luego en /nutricion/alimentos) y se añade a la receta.
+  async function createAndPick() {
+    const name = q.trim();
+    if (name.length < 2 || creating) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const r = await fetch(`/api/nutricion/foods`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo crear el alimento");
+      onPick(j.data);
+      setQ("");
+      setResults([]);
+      setOpen(false);
+    } catch (e) {
+      // Feedback visible: sin él no se sabe si el alimento se creó y reintentar
+      // podría duplicarlo en el catálogo.
+      setCreateError(e.message);
+    }
+    setCreating(false);
+  }
+
   return (
     <div className="relative mt-2">
-      <input type="text" value={q} onChange={(e) => setQ(e.target.value)} onFocus={() => results.length && setOpen(true)}
+      <input type="text" value={q} onChange={(e) => setQ(e.target.value)} onFocus={() => q.trim().length >= 1 && setOpen(true)}
         placeholder="+ Buscar alimento del catálogo…"
         className="w-full px-3 py-1.5 text-sm rounded-md border border-dashed border-gray-300 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30" />
       {open && <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />}
-      {open && results.length > 0 && (
+      {/* Sin resultados y con 1 solo carácter no hay nada que pintar: evitar
+          renderizar la caja del dropdown vacía. */}
+      {open && (results.length > 0 || q.trim().length >= 2) && (
         <div className="absolute z-20 mt-1 w-full max-h-56 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg">
           {results.map((f) => (
             <button key={f.id} type="button"
@@ -240,6 +271,19 @@ function AddIngredient({ onPick }) {
               <span className="text-[11px] text-gray-400 shrink-0 ml-2">{f.proteinPer100 ?? "—"}p / 100g</span>
             </button>
           ))}
+          {results.length === 0 && q.trim().length >= 2 && (
+            <button
+              type="button"
+              onClick={createAndPick}
+              disabled={creating}
+              className="w-full text-left px-3 py-2 text-sm text-[var(--color-primary)] hover:bg-gray-50 disabled:opacity-50"
+            >
+              {creating ? "Añadiendo…" : <>+ Añadir «{q.trim()}» al catálogo</>}
+            </button>
+          )}
+          {createError && (
+            <div className="px-3 py-1.5 text-[11px] text-red-600 border-t border-gray-100">{createError}</div>
+          )}
         </div>
       )}
     </div>

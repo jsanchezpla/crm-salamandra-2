@@ -33,7 +33,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Select from "@/components/ui/Select.jsx";
-import FoodSearchExternalModal from "./FoodSearchExternalModal.jsx";
 import {
   computeFoodMacros,
   computeOptionMacros,
@@ -97,9 +96,6 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
   const [activeOptionByMeal, setActiveOptionByMeal] = useState({});
   const [toast, setToast] = useState(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
-
-  // Para "+ Buscar en línea" mientras añadimos un alimento a una opción
-  const [externalSearchFor, setExternalSearchFor] = useState(null);
 
   // Cliente cargado (solo si type='assigned')
   const [clientInfo, setClientInfo] = useState(null);
@@ -263,6 +259,21 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
     if (!plan) return;
     const newDesc = descriptionDraft;
     if ((newDesc || "") === (plan.description || "")) return;
+    await patchPlanMetadata(
+      { description: newDesc },
+      { onErrorRevert: () => setDescriptionDraft(plan.description || "") }
+    );
+  }
+
+  // Inserta el encabezado de un día en los comentarios y PERSISTE al momento.
+  // No basta con mutar el draft: el commit normal ocurre en el blur del
+  // textarea, que nunca dispara si solo se pulsa el chip (se perdería el
+  // cambio al cerrar el modal pese a que el indicador diga "Guardado").
+  async function insertWeekday(day) {
+    if (!plan) return;
+    const base = (descriptionDraft ?? "").trimEnd();
+    const newDesc = base ? `${base}\n\n${day}:\n` : `${day}:\n`;
+    setDescriptionDraft(newDesc);
     await patchPlanMetadata(
       { description: newDesc },
       { onErrorRevert: () => setDescriptionDraft(plan.description || "") }
@@ -733,15 +744,19 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
       <div className="flex-1 px-4 lg:px-7 py-5 lg:py-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         {/* Columna izquierda */}
         <div className="space-y-5 min-w-0">
-          {/* Descripción / Comentarios — autosave en blur */}
+          {/* Días de la semana + Comentarios — autosave en blur.
+              La tira de días es un organizador visual (decisión Nutrinotas: sin
+              cambio de modelo): pulsar un día inserta su encabezado en los
+              comentarios para escribir la planificación de ese día. */}
           <section>
-            <Label>Comentarios</Label>
+            <Label>Planificación semanal · Comentarios</Label>
+            <WeekdayStrip text={descriptionDraft} onInsert={insertWeekday} />
             <textarea
               value={descriptionDraft}
               onChange={(e) => setDescriptionDraft(e.target.value)}
               onBlur={commitDescription}
-              placeholder="Notas generales del plan (texto libre)…"
-              rows={3}
+              placeholder="Notas del plan. Pulsa un día para añadir su planificación (p. ej. «Lunes: comida A, cena B»)…"
+              rows={4}
               className="w-full text-sm rounded-md border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 resize-y"
             />
           </section>
@@ -795,7 +810,6 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
                     onAddRecipe={(recipeId, servings) => addRecipeToOption(meal, currentOption(meal), recipeId, servings)}
                     onUpdateRecipe={(pmor, updates) => updateOptionRecipe(meal, currentOption(meal), pmor, updates)}
                     onDeleteRecipe={(pmor) => deleteOptionRecipe(meal, currentOption(meal), pmor)}
-                    onOpenExternal={() => setExternalSearchFor({ mealId: meal.id, optionId: currentOption(meal)?.id })}
                   />
                 ))}
               </div>
@@ -820,26 +834,6 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
           <MacrosSummary macros={planMacros} />
         </aside>
       </div>
-
-      {/* Modal externo de OFF reusado */}
-      {externalSearchFor && (
-        <FoodSearchExternalModal
-          onClose={() => setExternalSearchFor(null)}
-          onImported={async (imported) => {
-            // Añadir el alimento importado a la opción donde se abrió.
-            const meal = plan.meals.find((m) => m.id === externalSearchFor.mealId);
-            const option = meal?.options.find((o) => o.id === externalSearchFor.optionId);
-            if (meal && option) {
-              await addFoodToOption(meal, option, {
-                foodId: imported.id,
-                unit: "g",
-                amount: 100,
-              });
-            }
-            setExternalSearchFor(null);
-          }}
-        />
-      )}
 
       {/* Toast */}
       {toast && (
@@ -904,7 +898,7 @@ function MealAccordion({
   activeOptionId, onSelectOption,
   onRename, onUpdateDescription, onDelete, onMoveUp, onMoveDown,
   onAddOption, onRenameOption, onSetDefaultOption, onDeleteOption,
-  onAddFood, onUpdateFood, onDeleteFood, onOpenExternal,
+  onAddFood, onUpdateFood, onDeleteFood,
   onAddRecipe, onUpdateRecipe, onDeleteRecipe,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1017,7 +1011,6 @@ function MealAccordion({
                 onAdd={onAddFood}
                 onUpdate={onUpdateFood}
                 onDelete={onDeleteFood}
-                onOpenExternal={onOpenExternal}
               />
             </div>
           ) : (
@@ -1092,7 +1085,7 @@ function OptionPills({ options, activeOptionId, onSelect, onAdd, onRename, onSet
   );
 }
 
-function OptionTable({ option, onAdd, onUpdate, onDelete, onOpenExternal }) {
+function OptionTable({ option, onAdd, onUpdate, onDelete }) {
   const foods = (option.foods || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const totals = useMemo(() => computeOptionMacros(option), [option]);
 
@@ -1121,7 +1114,7 @@ function OptionTable({ option, onAdd, onUpdate, onDelete, onOpenExternal }) {
                 onDelete={() => onDelete(f)}
               />
             ))}
-            <AddFoodRow onAdd={onAdd} onOpenExternal={onOpenExternal} />
+            <AddFoodRow onAdd={onAdd} />
           </tbody>
           <tfoot>
             <tr className="bg-gray-50/80 text-[11px] text-gray-700 font-medium">
@@ -1508,11 +1501,13 @@ function HouseholdMeasureSelect({ foodId, measures, currentLabel, onChange }) {
 // AddFoodRow — fila final con autocomplete para añadir un alimento nuevo
 // ────────────────────────────────────────────────────────────────────────────
 
-function AddFoodRow({ onAdd, onOpenExternal }) {
+function AddFoodRow({ onAdd }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState(null);
   const debounceTimer = useRef(null);
 
   useEffect(() => {
@@ -1546,6 +1541,30 @@ function AddFoodRow({ onAdd, onOpenExternal }) {
     }
   }
 
+  // El alimento no existe en el catálogo: se crea al vuelo (solo nombre; las
+  // macros se completan luego desde /nutricion/alimentos) y se añade a la opción.
+  async function handleCreateAndPick() {
+    const name = query.trim();
+    if (name.length < 2 || creating) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const r = await fetch(`/api/nutricion/foods`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo crear el alimento");
+      await handlePick(j.data);
+    } catch (e) {
+      // Mostrar el fallo: sin esto el botón "revierte" en silencio y no se sabe
+      // si el alimento llegó a crearse (reintentar duplicaría la fila).
+      setCreateError(e.message);
+    }
+    setCreating(false);
+  }
+
   return (
     <tr className="bg-[var(--color-accent,#F7F1EB)]/20">
       <td colSpan={8} className="px-2.5 py-2 relative">
@@ -1559,21 +1578,21 @@ function AddFoodRow({ onAdd, onOpenExternal }) {
             placeholder="Buscar en mi catálogo…"
             className="flex-1 px-2 py-1 text-xs rounded border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
           />
-          <button
-            onClick={onOpenExternal}
-            className="text-[11px] px-2 py-1 rounded border border-gray-200 text-gray-700 hover:bg-gray-50 transition shrink-0"
-            title="Buscar en OpenFoodFacts"
-          >
-            🔍 OFF
-          </button>
         </div>
         {showDropdown && query.trim().length >= 1 && (
           <div className="absolute left-2.5 right-2.5 top-full mt-0.5 bg-white border border-gray-200 rounded-md shadow-lg z-30 max-h-64 overflow-y-auto">
             {loading && <div className="px-3 py-2 text-xs text-gray-400">Buscando…</div>}
             {!loading && results.length === 0 && (
-              <div className="px-3 py-2 text-xs text-gray-400">
-                Sin coincidencias. <button onClick={onOpenExternal} className="text-[var(--color-primary)] hover:underline">¿Buscar online?</button>
-              </div>
+              <button
+                onClick={handleCreateAndPick}
+                disabled={creating || query.trim().length < 2}
+                className="w-full text-left px-3 py-2 text-xs text-[var(--color-primary)] hover:bg-gray-50 disabled:opacity-50"
+              >
+                {creating ? "Añadiendo…" : <>+ Añadir «{query.trim()}» al catálogo</>}
+              </button>
+            )}
+            {createError && (
+              <div className="px-3 py-1.5 text-[11px] text-red-600 border-t border-gray-100">{createError}</div>
             )}
             {results.map((f) => (
               <button
@@ -1587,12 +1606,6 @@ function AddFoodRow({ onAdd, onOpenExternal }) {
                 </span>
               </button>
             ))}
-            <button
-              onClick={onOpenExternal}
-              className="w-full text-left px-3 py-1.5 text-xs border-t border-gray-100 text-[var(--color-primary)] hover:bg-gray-50"
-            >
-              + Buscar en línea (OpenFoodFacts)
-            </button>
           </div>
         )}
         {showDropdown && (
@@ -1668,9 +1681,162 @@ function TemplateSidePanel({ plan }) {
         <Field label="Última edición" value={fmtDate(plan.updatedAt)} />
         <Field label="Comidas" value={String((plan.meals || []).length)} />
       </dl>
-      <p className="text-[10px] text-gray-400 pt-2 border-t border-gray-100">
-        Para asignar esta plantilla a un paciente, ve a su ficha (C4).
+      <TemplateAssignPanel plan={plan} />
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Asignación directa a pacientes desde el editor (Nutrinotas item 9).
+// Lista los pacientes con este menú asignado (copia independiente: editar el
+// menú NO cambia sus planes; para eso está "Re-aplicar" en la ficha) y permite
+// asignar a otro paciente sin salir del editor.
+// ────────────────────────────────────────────────────────────────────────────
+
+function TemplateAssignPanel({ plan }) {
+  const [assignments, setAssignments] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [pickedClientId, setPickedClientId] = useState("");
+  const [assigning, setAssigning] = useState(false);
+  const [msg, setMsg] = useState(null); // { kind: 'ok'|'err', text }
+
+  const loadAssignments = useCallback(async () => {
+    try {
+      const r = await fetch(
+        `/api/nutricion/plans?type=assigned&templateId=${plan.id}&withSummary=true&limit=100`,
+        { cache: "no-store" }
+      );
+      const j = await r.json();
+      if (j.ok) {
+        const items = j.items || j.data?.items || [];
+        setAssignments(items.filter((p) => !p.archivedAt));
+      }
+    } catch { /* noop */ }
+  }, [plan.id]);
+
+  useEffect(() => { loadAssignments(); }, [loadAssignments]);
+
+  // Pacientes (clientes) para el selector — carga única.
+  useEffect(() => {
+    fetch(`/api/clients?limit=200`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setClients(j.data?.clients ?? []))
+      .catch(() => {});
+  }, []);
+
+  async function assign() {
+    if (!pickedClientId || assigning) return;
+    setAssigning(true);
+    setMsg(null);
+    try {
+      const r = await fetch(`/api/nutricion/plans/${plan.id}/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: pickedClientId }),
+      });
+      const j = await r.json();
+      if (r.status === 409) throw new Error("Ese paciente ya tiene este menú asignado");
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo asignar");
+      setMsg({ kind: "ok", text: "Menú asignado (copia independiente)" });
+      setPickedClientId("");
+      loadAssignments();
+    } catch (e) {
+      setMsg({ kind: "err", text: e.message });
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  const clientOptions = useMemo(
+    () => [
+      { value: "", label: "Asignar a paciente…" },
+      ...clients.map((c) => ({ value: c.id, label: c.name })),
+    ],
+    [clients]
+  );
+
+  return (
+    <div className="pt-2 border-t border-gray-100 space-y-2">
+      <div className="text-[10px] uppercase tracking-[0.18em] text-gray-400">Pacientes con este menú</div>
+      {assignments.length === 0 ? (
+        <p className="text-[11px] text-gray-400">Sin asignaciones activas.</p>
+      ) : (
+        <ul className="space-y-1">
+          {assignments.map((a) => (
+            <li key={a.id} className="text-xs text-gray-700 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)] shrink-0" />
+              <span className="truncate">{a.client?.name || a.clientName || a.name}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex items-center gap-1.5">
+        <div className="flex-1 min-w-0">
+          <Select
+            value={pickedClientId}
+            onChange={setPickedClientId}
+            options={clientOptions}
+            searchable
+            className="w-full px-2 py-1.5 text-xs rounded border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 bg-white"
+          />
+        </div>
+        <button
+          onClick={assign}
+          disabled={!pickedClientId || assigning}
+          className="text-[11px] font-medium px-2 py-1.5 rounded-md bg-[var(--color-primary)] text-white disabled:opacity-40 shrink-0"
+        >
+          {assigning ? "…" : "Asignar"}
+        </button>
+      </div>
+      <p className="text-[10px] text-gray-400">
+        La asignación crea una copia independiente: los cambios posteriores del menú no
+        alteran los planes ya asignados (usa «Re-aplicar» en la ficha del paciente).
       </p>
+      {msg && (
+        <p className={`text-[11px] ${msg.kind === "ok" ? "text-emerald-600" : "text-rose-600"}`}>{msg.text}</p>
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Tira de días de la semana (Nutrinotas item 7 — organizador visual, sin
+// cambio de modelo). Un día se marca activo si ya aparece como encabezado
+// "Día:" en el texto de comentarios; pulsarlo inserta su sección.
+// ────────────────────────────────────────────────────────────────────────────
+
+const WEEKDAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+
+function WeekdayStrip({ text, onInsert }) {
+  const present = useMemo(() => {
+    const t = text || "";
+    const set = new Set();
+    for (const d of WEEKDAYS) {
+      if (new RegExp(`(^|\\n)\\s*${d}\\s*:`, "i").test(t)) set.add(d);
+    }
+    return set;
+  }, [text]);
+
+  return (
+    <div className="flex gap-1.5 flex-wrap mb-2">
+      {WEEKDAYS.map((d) => {
+        const on = present.has(d);
+        return (
+          <button
+            key={d}
+            type="button"
+            onClick={() => !on && onInsert(d)}
+            title={on ? `${d} ya tiene planificación en los comentarios` : `Añadir la planificación de ${d}`}
+            className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition ${
+              on
+                ? "bg-[var(--color-primary)]/10 border-[var(--color-primary)]/30 text-[var(--color-primary)] cursor-default"
+                : "bg-white border-gray-200 text-gray-600 hover:border-[var(--color-primary)]/40 hover:text-[var(--color-primary)] cursor-pointer"
+            }`}
+          >
+            {d.slice(0, 3)}
+          </button>
+        );
+      })}
     </div>
   );
 }

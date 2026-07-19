@@ -56,6 +56,10 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     if (!includeArchived) where.archivedAt = null;
     if (q) where.name = { [Op.iLike]: `%${q}%` };
     if (type === "assigned" && clientId) where.clientId = clientId;
+    // Asignados de una plantilla concreta (panel de asignación del editor de
+    // menú): filtrar en BD evita traer los 100 más recientes y filtrar en cliente.
+    const templateId = (searchParams.get("templateId") ?? "").trim();
+    if (type === "assigned" && templateId) where.templateId = templateId;
 
     const withSummary = searchParams.get("withSummary") === "true";
 
@@ -166,12 +170,21 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/nutricion/plans — crear plantilla VACÍA (sin meals)
+// POST /api/nutricion/plans — crear plantilla con las comidas estándar.
+//
+// Nutrinotas (2026-07-18): un menú nuevo nace con las 5 categorías del día
+// (Desayuno, Almuerzo, Comida, Merienda, Cena), cada una con su opción por
+// defecto, para que solo haya que meter comidas dentro. Con `skipDefaultMeals:
+// true` en el body se crea vacío — lo usan los smoke scripts, que montan su
+// propia estructura. (duplicate/assign/reapply NO pasan por este endpoint:
+// hacen deep-copy con Plan.create directamente, sin doble sembrado.)
 // ─────────────────────────────────────────────────────────────────────────────
-export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
+const DEFAULT_MEALS = ["Desayuno", "Almuerzo", "Comida", "Merienda", "Cena"];
+
+export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, tenantSequelize, hasModule }) => {
   try {
     if (!hasModule("nutricion")) return forbidden("Módulo nutricion no activo");
-    const { Plan } = tenantModels;
+    const { Plan, PlanMeal, PlanMealOption } = tenantModels;
     const userId = request.headers.get("x-user-id");
     const ip = request.headers.get("x-forwarded-for") ?? null;
 
@@ -184,12 +197,30 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       ? null
       : String(body.description).slice(0, 10000);
 
-    const row = await Plan.create({
-      name,
-      description,
-      type: "template",
-      visibleToClient: false,
-      // templateId, clientId, assignedAt todos NULL → satisface CHECK
+    const row = await tenantSequelize.transaction(async (t) => {
+      const plan = await Plan.create(
+        {
+          name,
+          description,
+          type: "template",
+          visibleToClient: false,
+          // templateId, clientId, assignedAt todos NULL → satisface CHECK
+        },
+        { transaction: t }
+      );
+      if (body.skipDefaultMeals !== true) {
+        for (const [i, mealName] of DEFAULT_MEALS.entries()) {
+          const meal = await PlanMeal.create(
+            { planId: plan.id, name: mealName, order: i },
+            { transaction: t }
+          );
+          await PlanMealOption.create(
+            { mealId: meal.id, name: "Opción 1", order: 0, isDefault: true },
+            { transaction: t }
+          );
+        }
+      }
+      return plan;
     });
 
     await logAudit({

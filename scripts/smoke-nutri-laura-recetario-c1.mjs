@@ -10,14 +10,9 @@
  *   4. GET /foods → la fila recién creada aparece.
  *   5. PATCH /foods/[id] cambiar protein_per_100 → valor actualizado en BD.
  *   6. DELETE /foods/[id] → 204 + archivedAt set + no aparece en GET /foods.
- *   7. GET /foods/search-external?q=atun → 200 + items con source=openfoodfacts.
- *   8. POST /foods/import-external (external_id del paso 7) → 200 + record OFF.
- *   9. POST /foods/import-external (mismo external_id) → 200 + devuelve existente
- *      (no duplica).
- *  10. OFF caído: searchOpenFoodFacts() con `global.fetch` mockeado a fallo →
- *      items=[] + external_error=true (test in-process del lib helper,
- *      porque el endpoint HTTP usa fetch del runtime de Next y no
- *      podemos monkey-patch desde el smoke).
+ *   7-10. RETIRADO (Nutrinotas 2026-07-18): la integración OpenFoodFacts se
+ *      eliminó del producto. El paso 7 ahora verifica que los endpoints
+ *      search-external / import-external responden 404.
  *  11. Permisos: GET /foods sin cookie de auth → 401 (middleware bounce).
  *      Esto representa el "tenant sin módulo" — el blindaje empieza en
  *      el middleware, y solo si pasa se evalúa hasModule. Documentado.
@@ -360,113 +355,23 @@ async function step6Delete(authed) {
   }
 }
 
-// ── 7. search-external ──────────────────────────────────────────────────────
+// ── 7-10. OpenFoodFacts — RETIRADO (Nutrinotas 2026-07-18) ──────────────────
+// La búsqueda/import externo se eliminó del producto: el catálogo base se
+// siembra con scripts/seed-foods-base-catalog.js. Los pasos 7-10 ahora
+// verifican que los endpoints externos YA NO existen (404).
 
 async function step7SearchExternal(authed) {
-  header("7) GET /foods/search-external?q=atun");
+  header("7-10) OpenFoodFacts retirado → endpoints externos responden 404");
   if (!authed) {
-    log("  · skip (requiere auth HTTP — no hay endpoint de búsqueda externa por Sequelize)");
+    log("  · skip (requiere auth HTTP)");
     counts.skipped++;
     return null;
   }
   const r = await httpJson("GET", "/api/nutricion/foods/search-external?q=atun");
-  if (!r.ok || !r.json?.ok) {
-    fail("search-external respuesta inválida", `status=${r.status} err=${r.json?.error}`);
-    counts.fail++;
-    return null;
-  }
-  pass("GET /foods/search-external OK (200 + ok=true)");
-  counts.pass++;
-
-  if (r.json.external_error) {
-    log("  ⚠ OpenFoodFacts devolvió external_error=true durante el smoke; saltamos 8/9.");
-    counts.skipped += 2;
-    return null;
-  }
-
-  const items = r.json.items || [];
-  const withSource = items.filter((i) => i.source === "openfoodfacts");
-  assertOk(withSource.length > 0, `items con source=openfoodfacts (n=${withSource.length})`);
-
-  // Devolvemos un external_id para el paso 8.
-  return withSource[0]?.external_id ?? null;
-}
-
-// ── 8. import-external ──────────────────────────────────────────────────────
-
-async function step8Import(authed, externalId) {
-  header("8) POST /foods/import-external (alimento nuevo)");
-  if (!authed || !externalId) {
-    log("  · skip");
-    counts.skipped++;
-    return;
-  }
-  cleanup.importedExternalId = externalId;
-  const r = await httpJson("POST", "/api/nutricion/foods/import-external", {
-    external_id: externalId,
-  });
-  assertOk(
-    r.ok && r.json?.ok && r.json.data?.id,
-    "POST import-external OK",
-    `status=${r.status} err=${r.json?.error}`
-  );
-  cleanup.importedFoodId = r.json.data.id;
-
-  const { models } = await getModels(TENANT_SLUG);
-  const row = await models.Food.findByPk(cleanup.importedFoodId);
-  assertOk(!!row, "Food OFF persistido en BD");
-  assertOk(row.source === "openfoodfacts", `source=openfoodfacts (got ${row.source})`);
-  assertOk(row.externalId === externalId, `externalId match (got ${row.externalId})`);
-  assertOk(
-    Array.isArray(row.householdMeasures) && row.householdMeasures.length >= 9,
-    `household_measures seed aplicado (${row.householdMeasures?.length} entradas)`
-  );
-}
-
-// ── 9. import-external idempotente ──────────────────────────────────────────
-
-async function step9ImportIdempotent(authed) {
-  header("9) POST /foods/import-external (mismo external_id) — no duplica");
-  if (!authed || !cleanup.importedExternalId) {
-    log("  · skip");
-    counts.skipped++;
-    return;
-  }
-  const r = await httpJson("POST", "/api/nutricion/foods/import-external", {
-    external_id: cleanup.importedExternalId,
-  });
-  assertOk(
-    r.ok && r.json?.ok && r.json.data?.id,
-    "POST import-external 2ª vez OK",
-    `status=${r.status} err=${r.json?.error}`
-  );
-  assertOk(
-    r.json.data.id === cleanup.importedFoodId,
-    "Devuelve el mismo id (idempotente, sin duplicar)",
-    `expected=${cleanup.importedFoodId} got=${r.json.data.id}`
-  );
-
-  const { models } = await getModels(TENANT_SLUG);
-  const dupCount = await models.Food.count({
-    where: { externalId: cleanup.importedExternalId, archivedAt: null },
-  });
-  assertOk(dupCount === 1, `Solo 1 fila con ese external_id en BD (got ${dupCount})`);
-}
-
-// ── 10. OFF caído (lib in-process con fetch mockeado) ───────────────────────
-
-async function step10OffDown() {
-  header("10) OFF caído → items=[] + external_error=true (lib in-process)");
-  const realFetch = globalThis.fetch;
-  try {
-    globalThis.fetch = () => Promise.reject(new Error("smoke: OFF down"));
-    const { searchOpenFoodFacts } = await import("../lib/nutricion/foods.js");
-    const out = await searchOpenFoodFacts("atun");
-    assertOk(Array.isArray(out.items) && out.items.length === 0, "items=[]");
-    assertOk(out.external_error === true, "external_error=true");
-  } finally {
-    globalThis.fetch = realFetch;
-  }
+  assertOk(r.status === 404, `search-external eliminado (status=${r.status})`);
+  const r2 = await httpJson("POST", "/api/nutricion/foods/import-external", { external_id: "x" });
+  assertOk(r2.status === 404, `import-external eliminado (status=${r2.status})`);
+  return null;
 }
 
 // ── 11. Permisos: sin auth → 401 ────────────────────────────────────────────
@@ -540,10 +445,7 @@ async function main() {
     await step4ListVisible(authed);
     await step5Patch(authed);
     await step6Delete(authed);
-    const externalId = await step7SearchExternal(authed);
-    await step8Import(authed, externalId);
-    await step9ImportIdempotent(authed);
-    await step10OffDown();
+    await step7SearchExternal(authed);
     await step11Permissions();
     await step12Cleanup();
   } catch (err) {

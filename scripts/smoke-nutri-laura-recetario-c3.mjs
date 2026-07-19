@@ -337,6 +337,9 @@ async function partB_plansWithSummary() {
 
   // Crear plantilla, comida, opción, 2 foods
   const tplRes = await httpJson("POST", "/api/nutricion/plans", {
+    // Nutrinotas: los menus nuevos auto-siembran 5 comidas; las plantillas de
+    // prueba se crean vacias para que las aserciones de conteo sigan valiendo.
+    skipDefaultMeals: true,
     name: `${PREFIX}-template`,
     description: "Smoke C3 template",
   });

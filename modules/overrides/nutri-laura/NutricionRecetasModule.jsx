@@ -95,13 +95,26 @@ export default function NutricionRecetasModule() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {items.map((r) => (
-              <div key={r.id} className="border border-gray-200 rounded-xl bg-white p-4 hover:shadow-sm transition group">
+              // Toda la card abre el editor (Nutrinotas item 4): también la zona
+              // de macros P/C/G/F. El botón de archivar corta la propagación.
+              <div
+                key={r.id}
+                onClick={() => setEditing(r)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditing(r); } }}
+                className="border border-gray-200 rounded-xl bg-white p-4 hover:shadow-sm hover:border-[var(--color-primary)]/30 transition group cursor-pointer"
+              >
                 <div className="flex items-start justify-between gap-2">
-                  <button onClick={() => setEditing(r)} className="text-left flex-1 min-w-0">
+                  <div className="text-left flex-1 min-w-0">
                     <div className="font-semibold text-gray-900 truncate">{r.name}</div>
                     <div className="text-xs text-gray-400 mt-0.5">{r.ingredientCount} ingrediente{r.ingredientCount === 1 ? "" : "s"}</div>
-                  </button>
-                  <button onClick={() => archive(r)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition" aria-label="Archivar">
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); archive(r); }}
+                    className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"
+                    aria-label="Archivar"
+                  >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3 7h18M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2m-9 0v12a2 2 0 002 2h6a2 2 0 002-2V7" /></svg>
                   </button>
                 </div>

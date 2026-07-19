@@ -8,7 +8,7 @@
  *
  * Pasos (con asserts):
  *   1. Pre-cleanup + auth.
- *   2. Crear food custom (Avena) + import OpenFoodFacts (idempotente).
+ *   2. Crear food custom (Avena) + verificar que el import OFF ya no existe (404).
  *   3. Crear plantilla "smoke-e2e-Plan" + 2 comidas + 3 opciones + 5 foods
  *      cubriendo los 3 modos (g, household, free).
  *   4. GET árbol y validar macros del plan completo con computePlanMacros.
@@ -72,7 +72,7 @@ async function getModels(slug) {
 
 const state = {
   customFoodId: null,        // food creado manualmente
-  offFoodId: null,           // food importado de OFF (o null si OFF no responde)
+  offFoodId: null,           // siempre null desde Nutrinotas (OFF retirado); f5 usa customFoodId
   clientId: null,
   templateId: null,
   mealIds: [],
@@ -152,7 +152,7 @@ async function step1Bootstrap() {
 // ── 2. Catálogo: food custom + import OFF ───────────────────────────────────
 
 async function step2Catalog() {
-  header("2) Catálogo — custom food + import OpenFoodFacts");
+  header("2) Catálogo — custom food + OFF retirado (404)");
 
   // Custom food (Avena por 100g)
   const r1 = await httpJson("POST", "/api/nutricion/foods", {
@@ -170,22 +170,12 @@ async function step2Catalog() {
   assertOk(r1.ok && r1.json?.data?.id, "POST custom food OK", `status=${r1.status}`);
   state.customFoodId = r1.json.data.id;
 
-  // Import OFF — Coca-Cola tiene un EAN muy conocido. Si OFF no responde,
-  // saltamos sin romper el flujo (red afuera del control del smoke).
-  const offCode = "5449000000996"; // Coca-Cola Classic
+  // OpenFoodFacts RETIRADO (Nutrinotas 2026-07-18): el import externo ya no
+  // existe. Verificamos que el endpoint responde 404 (ruta eliminada).
   const r2 = await httpJson("POST", "/api/nutricion/foods/import-external", {
-    external_id: offCode,
+    external_id: "5449000000996",
   });
-  if (r2.ok && r2.json?.data?.id) {
-    state.offFoodId = r2.json.data.id;
-    pass(`Import OFF OK (${state.offFoodId})`); counts.pass++;
-  } else if (r2.status === 502 || r2.status === 404) {
-    log(`  · OFF no respondió (status=${r2.status}); seguimos sin food OFF.`);
-    counts.skipped++;
-  } else {
-    softAssert(false, `Import OFF responde 2xx/4xx esperado (got ${r2.status})`,
-      JSON.stringify(r2.json));
-  }
+  assertOk(r2.status === 404, `import-external eliminado (status=${r2.status})`);
 }
 
 // ── 3. Crear plantilla + estructura ─────────────────────────────────────────
@@ -194,6 +184,9 @@ async function step3CreateTemplate() {
   header("3) Crear plantilla + 2 comidas + 3 opciones + 5 foods");
 
   const tpl = await httpJson("POST", "/api/nutricion/plans", {
+    // Nutrinotas: los menus nuevos auto-siembran 5 comidas; las plantillas de
+    // prueba se crean vacias para que las aserciones de conteo sigan valiendo.
+    skipDefaultMeals: true,
     name: `${PREFIX}-Plan`,
     description: "Smoke E2E Recetario",
   });

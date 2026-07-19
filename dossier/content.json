@@ -588,7 +588,7 @@
     "bullets": [
       {
         "bold": "Catálogo propio",
-        "rest": "Das de alta alimentos con proteínas, hidratos, grasas y fibra por 100 g, o los importas desde OpenFoodFacts por código de barras sin teclear las macros a mano."
+        "rest": "Partes de un catálogo con ~500 alimentos ya cargados con proteínas, hidratos, grasas y fibra por 100 g, y añades los que falten en dos clics, incluso desde la propia receta."
       },
       {
         "bold": "Medidas caseras",
@@ -631,7 +631,7 @@
       {
         "type": "text",
         "label": "Catálogo conectado",
-        "text": "Creas alimentos a mano o los importas desde **OpenFoodFacts** por código de barras, con sus macros y medidas caseras listas para usar en cualquier plan."
+        "text": "Catálogo con **~500 alimentos de base** (macros y medidas caseras incluidas) listo desde el primer día; los que falten se añaden al vuelo sin salir de la receta o el menú."
       }
     ],
     "ai": [

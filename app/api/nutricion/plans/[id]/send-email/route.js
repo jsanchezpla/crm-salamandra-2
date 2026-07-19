@@ -40,10 +40,15 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, hasM
     if (tree.type !== "assigned") {
       return error("Solo se puede enviar un plan asignado a un paciente");
     }
-    // No enviar un menú vacío: el PDF solo diría "aún no tiene comidas" y el
-    // paciente recibiría un email de aspecto oficial sin contenido.
-    if (!(tree.meals || []).length) {
-      return error("El plan no tiene comidas todavía. Añádelas antes de enviarlo.");
+    // No enviar un menú vacío. OJO: desde Nutrinotas todo plan nace con las 5
+    // comidas estándar, así que contar comidas ya no sirve — hay que comprobar
+    // que al menos una opción tiene contenido (alimentos o recetas). Si no, el
+    // paciente recibiría un PDF de aspecto oficial lleno de "(vacía)".
+    const hasContent = (tree.meals || []).some((m) =>
+      (m.options || []).some((o) => (o.foods || []).length > 0 || (o.recipes || []).length > 0)
+    );
+    if (!hasContent) {
+      return error("El plan no tiene contenido todavía. Añade alimentos o recetas antes de enviarlo.");
     }
 
     const client = tree.clientId
