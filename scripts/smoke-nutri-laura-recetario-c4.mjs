@@ -168,6 +168,9 @@ async function step3CreateTemplate() {
   header("3) Crear plantilla con árbol mínimo + POST /assign");
   // Plantilla vacía
   const tpl = await httpJson("POST", "/api/nutricion/plans", {
+    // Nutrinotas: los menus nuevos auto-siembran 5 comidas; las plantillas de
+    // prueba se crean vacias para que las aserciones de conteo sigan valiendo.
+    skipDefaultMeals: true,
     name: `${PREFIX}-template`,
     description: "Plantilla smoke C4",
   });
@@ -278,6 +281,9 @@ async function step8ReapplyOnArchivedTemplate() {
 
   // Crear plantilla independiente, asignar, archivar plantilla → reapply
   const tpl = await httpJson("POST", "/api/nutricion/plans", {
+    // Nutrinotas: los menus nuevos auto-siembran 5 comidas; las plantillas de
+    // prueba se crean vacias para que las aserciones de conteo sigan valiendo.
+    skipDefaultMeals: true,
     name: `${PREFIX}-template-archived`,
   });
   assertOk(tpl.ok, "POST plantilla a archivar");

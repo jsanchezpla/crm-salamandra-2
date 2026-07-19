@@ -56,8 +56,6 @@ export default function FoodEditModal({ food, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  const isOff = food?.source === "openfoodfacts";
-
   const canSubmit = useMemo(() => name.trim().length >= 2 && !saving, [name, saving]);
 
   function addTag() {
@@ -188,14 +186,6 @@ export default function FoodEditModal({ food, onClose, onSaved }) {
         </header>
 
         <form onSubmit={handleSubmit} className="flex-1 px-6 py-5 space-y-5">
-          {isOff && (
-            <div className="px-3 py-2 bg-[var(--color-primary)]/5 border border-[var(--color-primary)]/15 rounded-md text-[11px] text-[var(--color-primary)]">
-              Este alimento viene de OpenFoodFacts. Los datos nutricionales se
-              pueden ajustar libremente, pero su origen queda registrado como
-              importación externa.
-            </div>
-          )}
-
           <Field label="Nombre" required>
             <input
               type="text"

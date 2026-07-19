@@ -32,6 +32,8 @@ export default function NutricionPlantillasModule() {
   const [editingId, setEditingId] = useState(null);
   const [toast, setToast] = useState(null);
   const [creating, setCreating] = useState(false);
+  // Modal de nombre del nuevo menú (Nutrinotas item 5: nada de window.prompt).
+  const [nameModalOpen, setNameModalOpen] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 350);
@@ -65,18 +67,17 @@ export default function NutricionPlantillasModule() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function handleCreate() {
-    const name = window.prompt("Nombre del nuevo menú", "Menú 1");
-    if (!name || !name.trim()) return;
+  async function handleCreate(name) {
     setCreating(true);
     try {
       const r = await fetch("/api/nutricion/plans", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() }),
+        body: JSON.stringify({ name }),
       });
       const j = await r.json();
       if (j.ok) {
+        setNameModalOpen(false);
         setToast({ kind: "ok", text: "Menú creado" });
         await load();
         setEditingId(j.data?.id ?? null);
@@ -138,7 +139,7 @@ export default function NutricionPlantillasModule() {
             </p>
           </div>
           <button
-            onClick={handleCreate}
+            onClick={() => setNameModalOpen(true)}
             disabled={creating}
             className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--color-primary)] text-white hover:opacity-90 disabled:opacity-50 transition flex items-center gap-1"
           >
@@ -175,7 +176,7 @@ export default function NutricionPlantillasModule() {
           {loading ? (
             <div className="py-16 text-center text-sm text-gray-400">Cargando menús…</div>
           ) : items.length === 0 ? (
-            <EmptyState onCreate={handleCreate} />
+            <EmptyState onCreate={() => setNameModalOpen(true)} />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4">
               {items.map((p) => (
@@ -206,6 +207,14 @@ export default function NutricionPlantillasModule() {
         />
       )}
 
+      {nameModalOpen && (
+        <NewMenuNameModal
+          busy={creating}
+          onCancel={() => setNameModalOpen(false)}
+          onConfirm={handleCreate}
+        />
+      )}
+
       {toast && (
         <div
           className={`fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-md shadow-lg text-sm font-medium ${
@@ -215,6 +224,58 @@ export default function NutricionPlantillasModule() {
           {toast.text}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Modal de nombre para el nuevo menú (Nutrinotas item 5) ──────────────────
+// Sustituye el window.prompt del navegador por un modal con la estética del
+// CRM. El menú nace con las categorías estándar (las siembra el backend).
+
+function NewMenuNameModal({ busy, onCancel, onConfirm }) {
+  const [name, setName] = useState("");
+  const valid = name.trim().length >= 2;
+
+  function submit(e) {
+    e.preventDefault();
+    if (valid && !busy) onConfirm(name.trim());
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onCancel}>
+      <form
+        onSubmit={submit}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5 space-y-4"
+      >
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.18em] text-gray-400 mb-1">Nuevo menú</div>
+          <h2 className="text-lg font-semibold text-gray-900">¿Cómo se llama el menú?</h2>
+        </div>
+        <input
+          autoFocus
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="p. ej. Menú semanal 1500 kcal"
+          className="w-full px-3 py-2 text-sm rounded-md border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+        />
+        <p className="text-[11px] text-gray-400">
+          Se creará con Desayuno, Almuerzo, Comida, Merienda y Cena listos para rellenar.
+        </p>
+        <div className="flex items-center justify-end gap-2">
+          <button type="button" onClick={onCancel} className="px-3 py-1.5 text-xs font-medium rounded-md text-gray-600 hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={!valid || busy}
+            className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--color-primary)] text-white hover:opacity-90 disabled:opacity-50"
+          >
+            {busy ? "Creando…" : "Crear menú"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

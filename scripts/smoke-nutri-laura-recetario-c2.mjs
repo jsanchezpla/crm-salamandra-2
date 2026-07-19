@@ -188,6 +188,9 @@ async function step3CreateTemplate() {
   header("3) POST /plans crear plantilla vacía");
   const name = `${PREFIX}-template-${Math.floor(Math.random() * 100000)}`;
   const r = await httpJson("POST", "/api/nutricion/plans", {
+    // Nutrinotas: los menus nuevos auto-siembran 5 comidas; las plantillas de
+    // prueba se crean vacias para que las aserciones de conteo sigan valiendo.
+    skipDefaultMeals: true,
     name,
     description: "Plantilla smoke C2",
   });
@@ -410,6 +413,9 @@ async function step18bReorder() {
   // creamos, le añadimos 3 comidas, probamos los 4 casos y el cleanup global
   // por prefijo lo elimina al final.
   const tpl = await httpJson("POST", "/api/nutricion/plans", {
+    // Nutrinotas: los menus nuevos auto-siembran 5 comidas; las plantillas de
+    // prueba se crean vacias para que las aserciones de conteo sigan valiendo.
+    skipDefaultMeals: true,
     name: `${PREFIX}-reorder`,
   });
   assertOk(tpl.ok && tpl.json?.data?.id, "POST plantilla reorder");

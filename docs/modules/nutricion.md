@@ -3,6 +3,31 @@
 Estado: **Sprint Recetario cerrado en local 2026-06-24. C1+C2+C3 en
 producción. C4+C5 pendientes de despliegue.**
 
+> **Sprint Nutrinotas (2026-07-18, rama `feat/nutricion-recetario-ux`):**
+> feedback directo de Laura aplicado sobre el estado post-Sprint 8:
+>
+> - **OpenFoodFacts RETIRADO por completo** (búsqueda online, import, badges
+>   "Origen", endpoints `search-external`/`import-external` y funciones de
+>   `lib/nutricion/foods.js`). El catálogo base se siembra con
+>   `scripts/seed-foods-base-catalog.js` (~500 ingredientes genéricos españoles
+>   con macros por 100 g, idempotente por slug, lee tenants de `master.tenants`).
+>   Las filas ya importadas conservan `source='openfoodfacts'` en BD.
+> - **Alta de alimento inline**: si la búsqueda del editor de recetas o del
+>   editor de menús no encuentra el alimento, aparece "+ Añadir «X» al catálogo"
+>   (crea el food solo con nombre; las macros se completan en el catálogo).
+> - **POST `/api/nutricion/plans` ya NO crea la plantilla vacía**: siembra las 5
+>   comidas estándar (Desayuno, Almuerzo, Comida, Merienda, Cena) con una opción
+>   por defecto cada una, en transacción. Escape hatch: `skipDefaultMeals: true`.
+> - El nombre del menú nuevo se pide con un modal del CRM (sin `window.prompt`).
+> - Cards de receta 100% clicables (incluida la zona de macros P/C/G/F).
+> - Tira de días de la semana (L-D) encima de los Comentarios del menú como
+>   organizador visual: pulsar un día inserta su encabezado "Día:" en el texto
+>   (sin cambio de modelo de datos — decisión de Jorge 2026-07-18).
+> - **Asignación directa desde el editor de menú** (panel derecho): lista de
+>   pacientes con el menú + selector para asignar sin salir. Mantiene la
+>   semántica de copia independiente (deep-copy) + "Re-aplicar".
+> - El smoke C1 pasa a verificar que los endpoints externos responden 404.
+
 Tenant activo: `nutri_laura` únicamente. El backend está pensado para
 escalar a otros tenants sin reescribir nada: el módulo `nutricion` se
 "registra" insertando una fila en `master.tenant_modules`.
@@ -192,7 +217,7 @@ Modales reutilizados desde varias rutas:
 - `AssignPlanModal.jsx` — wizard 3 pasos paciente → plantilla →
   confirmar (C4).
 - `FoodEditModal.jsx` — crear/editar food del catálogo (C1).
-- `FoodSearchExternalModal.jsx` — buscar en OFF e importar (C1).
+- ~~`FoodSearchExternalModal.jsx`~~ — ELIMINADO en Nutrinotas (2026-07-18).
 
 ---
 
@@ -211,8 +236,8 @@ con auth pero sin módulo → 403).
 | POST | `/api/nutricion/foods` | Crea food manual. `source='custom'`. |
 | PATCH | `/api/nutricion/foods/[id]` | Editar parcial. Protege `source` (no se puede cambiar). |
 | DELETE | `/api/nutricion/foods/[id]` | Soft delete (`archived_at`). |
-| GET | `/api/nutricion/foods/search-external?q=…` | Proxy OFF. Devuelve `external_error=true` con `items=[]` si OFF cae. |
-| POST | `/api/nutricion/foods/import-external` | Body: `{external_id}`. Idempotente. |
+| ~~GET~~ | ~~`/api/nutricion/foods/search-external`~~ | ELIMINADO en Nutrinotas (2026-07-18). |
+| ~~POST~~ | ~~`/api/nutricion/foods/import-external`~~ | ELIMINADO en Nutrinotas (2026-07-18). |
 
 ### Planes (C2)
 
@@ -220,7 +245,7 @@ con auth pero sin módulo → 403).
 | ------ | ---- | ----- |
 | GET | `/api/nutricion/plans?type=template\|assigned` | Lista. Query: `q`, `clientId`, `includeArchived`, `withSummary`, paginación. |
 | GET | `/api/nutricion/plans/[id]` | Detalle con árbol meals→options→foods. Cada food incluye snapshot de macros + `household_measures`. |
-| POST | `/api/nutricion/plans` | Crea plantilla vacía (`type='template'`). |
+| POST | `/api/nutricion/plans` | Crea plantilla con las 5 comidas estándar + opción por defecto (Nutrinotas); `skipDefaultMeals: true` la crea vacía. |
 | PATCH | `/api/nutricion/plans/[id]` | Edita `name`, `description`, `visibleToClient`. Devuelve `hadAssignments`. |
 | DELETE | `/api/nutricion/plans/[id]` | Soft delete. |
 | POST | `/api/nutricion/plans/[id]/duplicate` | Solo plantillas. Deep-copy en transacción. |
