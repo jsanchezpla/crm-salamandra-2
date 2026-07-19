@@ -4,8 +4,10 @@ CRM SaaS multi-tenant (Next.js 16 + PostgreSQL + Sequelize, JavaScript sin TypeS
 Esta guía es el flujo de trabajo con git para colaborar sin romper producción.
 
 > ⚠️ **`master` es PRODUCCIÓN.** El VPS despliega haciendo `git pull` de `master`.
-> Todo lo que se mergea a `master` puede acabar desplegado. Por eso **nadie hace
-> `git push` directo a `master`**: todo entra por Pull Request revisado.
+> Desde 2026-07-19 se trabaja con **commits directos a `master`** (sin PRs ni
+> ruleset — decisión de Jorge para agilizar el despliegue). Eso traslada la
+> responsabilidad al que pushea: **`npm run build` en verde ANTES de cada push**,
+> porque ya no hay CI que te pare.
 
 ---
 
@@ -73,35 +75,33 @@ Login del tenant demo: **admin@demo.salamandra** / **Admin1234!**
 
 ---
 
-## 2. El flujo de cada tarea (GitHub Flow)
+## 2. El flujo de cada tarea (commits directos a master)
 
-**1 tarea = 1 rama = 1 Pull Request.** Ramas cortas y mergeadas rápido.
+**Commits pequeños, build en verde, push a `master`.**
 
 ```bash
 # 1) Partir de lo último de master
 git checkout master
 git pull origin master
 
-# 2) Crear tu rama (nombre descriptivo: feat/, fix/, chore/, docs/…)
-git checkout -b feat/lo-que-sea
-
-# 3) Trabajar: editar, y confirmar en commits pequeños
-git add .
+# 2) Trabajar: editar, y confirmar en commits pequeños (Conventional Commits)
+git add .          # revisa que NO entren .env* ni secretos
 git commit -m "feat(modulo): descripción corta"
 
-# 4) Subir TU rama (no master)
-git push -u origin feat/lo-que-sea
+# 3) OBLIGATORIO antes de subir: build en verde
+npm run build
+
+# 4) Subir a master
+git push origin master
 ```
 
-Luego, en GitHub, abre un **Pull Request** de tu rama hacia `master`
-(o por terminal: `gh pr create --fill`). El CI corre solo (build + lint de lo
-que cambiaste). Rellena la plantilla del PR.
+Para cambios grandes o arriesgados sigue valiendo trabajar en una rama local
+(`git checkout -b feat/lo-que-sea`) y fusionarla a `master` en local cuando esté
+lista (`git checkout master && git merge feat/lo-que-sea`) — pero el push va
+directo a `master`, sin PR.
 
-**Jorge revisa** (diff + a veces prueba en local) y:
-- pide cambios → tú haces más commits y `git push` (el PR se actualiza), o
-- aprueba → **Squash and merge** (deja 1 commit limpio en master) y borra la rama.
-
-Después de mergear, para empezar otra tarea vuelve al paso 1.
+> Si algo sale mal en master: NO reescribas la historia (`push --force`
+> prohibido). Se arregla hacia delante con un commit nuevo o `git revert`.
 
 ---
 
@@ -122,18 +122,21 @@ Tipos: `feat` (funcionalidad), `fix` (bug), `chore` (mantenimiento/infra),
 
 ## 4. Reglas de oro (no las saltes)
 
-- **`master` = producción.** Nunca fuerces un merge sin que el CI (build) esté verde.
+- **`master` = producción.** Sin CI de por medio, **`npm run build` en verde
+  ANTES de cada push** no es negociable. Si el build falla, no se sube.
+- **Nada de `push --force` ni reescribir historia en `master`.** Los errores se
+  arreglan hacia delante (commit nuevo o `git revert`).
 - **Secretos:** nunca subas `.env*`, claves, tokens ni passwords. Están en
   `.gitignore` por algo. Se comparten por canal cifrado.
 - **Migraciones de BD:** si añades una tabla/columna, escribe una **migración
   idempotente** en `scripts/migrate-*.js` que lea los tenants de `master.tenants`
   en runtime (nunca hardcodees slugs) y que se pueda re-ejecutar sin romper.
-  Indica en el PR si hay que correrla tras el deploy.
+  Indica en el mensaje del commit si hay que correrla y en qué orden respecto
+  al deploy (algunas van ANTES: ver la cabecera del script).
 - **Multi-tenant:** toda query va por `getTenantContext`/`withTenant` + `hasModule`.
   Nunca conectes directo a PostgreSQL desde una ruta.
 - **JavaScript puro** (sin TypeScript). `app/` en la raíz (sin `src/`).
-- Antes de abrir el PR: `npm run build` en local y revisa que el lint de **tus**
-  ficheros está limpio (`npx eslint <tus-ficheros>`).
+- Revisa que el lint de **tus** ficheros está limpio (`npx eslint <tus-ficheros>`).
 
 ---
 
@@ -177,14 +180,18 @@ git status                       # qué has cambiado
 git switch master                # volver a master
 git branch                       # ver tus ramas
 git pull origin master           # actualizar master
-gh pr create --fill              # abrir PR desde terminal
-gh pr checkout <número>          # bajarte la rama de un PR para probarla
+git log --oneline -10            # últimos commits
+git revert <sha>                 # deshacer un commit malo con otro commit
 ```
 
 ---
 
-## 7. Despliegue (lo hace Jorge)
+## 7. Despliegue
 
-Cuando un PR está mergeado y validado, en el VPS:
-`git pull` → `./deploy.sh` (con `--full` si cambiaron dependencias). Si el PR
-traía una migración, se ejecuta dentro del contenedor tras el deploy.
+Con `master` actualizado y el build en verde, en el VPS:
+`git pull` → `./deploy.sh` (con `--full` si cambiaron dependencias). Si el
+commit traía una migración, mira la **cabecera del script** en `scripts/`:
+algunas se ejecutan tras el deploy y otras ANTES (vía `docker cp` del script al
+contenedor + `docker exec`), porque las columnas nuevas deben existir antes de
+que la app nueva las lea. Los seeds (`npm run db:seed-*:prod`) van siempre
+después del deploy.

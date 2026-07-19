@@ -385,23 +385,23 @@ aplique.
 8. Terminal: PowerShell (Windows), no bash.
 9. No usar TypeScript — JavaScript puro.
 10. No usar `src/` — `app/` en la raíz del proyecto.
-11. **Commits: los puede hacer Claude, pero SOLO cuando se lo piden explícitamente**
-    (antes los hacía Jorge a mano; cambiado 2026-07-13). Reglas:
+11. **Commits: los puede hacer Claude, pero SOLO cuando se lo piden explícitamente.**
+    Desde 2026-07-19 el flujo es **commits directos a `master`, sin PRs ni ruleset**
+    (decisión de Jorge; el socio también sube y despliega). Reglas:
     - **No commitear de forma proactiva.** Dejar los cambios sin commitear hasta que
-      Jorge (o el dev que corresponda, p.ej. el socio) lo pida ("commitea esto").
-    - Cuando lo pida, llegar hasta el PR: crear/usar una rama `feat|fix|chore|docs/...`
-      (NUNCA commitear en master), `git add` revisando que NO entren `.env*` ni
-      secretos, `git commit` con Conventional Commits + trailer `Co-Authored-By`,
-      `git push -u` de la rama y abrir el PR (o, si `gh` no está disponible, dejar
-      el enlace "Compare & pull request" listo). Enseñar siempre qué se commiteó.
-    - **NUNCA `git push` directo a master ni mergear un PR a master**: el merge a
-      producción es SIEMPRE humano y lo aprueba Jorge. master está protegido por el
-      ruleset de GitHub igualmente (ver `CONTRIBUTING.md`).
+      Jorge (o el socio) lo pida ("commitea esto").
+    - Cuando lo pidan: `git add` revisando que NO entren `.env*` ni secretos,
+      `git commit` en `master` con Conventional Commits + trailer `Co-Authored-By`,
+      **`npm run build` en verde ANTES del push** (ya no hay CI que lo pare) y
+      `git push origin master`. Enseñar siempre qué se commiteó.
+    - Para trabajos grandes sigue estando bien una rama local temporal, pero se
+      fusiona a `master` en local y el push va a `master` (sin PR).
+    - **Prohibido reescribir historia en master**: nada de `push --force` ni
+      `reset --hard` sobre commits ya subidos; los errores se arreglan con un
+      commit nuevo o `git revert`.
     - **Sincronización local (housekeeping) SÍ la puede hacer Claude** cuando se lo
-      pidan: `git fetch`, `git checkout/switch master`, `git pull` (fast-forward de
-      master) y `git branch -d` de ramas YA fusionadas. Nada destructivo sin permiso
-      explícito (`git reset --hard`, `git branch -D` de ramas sin fusionar,
-      `push --force`).
+      pidan: `git fetch`, `git switch master`, `git pull` y `git branch -d` de ramas
+      ya fusionadas. Nada destructivo sin permiso explícito.
 12. Scripts de migración deben leer la lista de schemas desde `master.tenants`,
     nunca hardcodear slugs (la lista difiere entre local y producción).
 13. En diseño responsivo, todo modal o panel lateral (drawer) debe respetar la
