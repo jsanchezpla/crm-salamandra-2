@@ -21,12 +21,12 @@ function ScoreCircle({ value }) {
   return (
     <div className="relative w-24 h-24 lg:w-28 lg:h-28 shrink-0">
       <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-        <circle cx="50" cy="50" r={radius} stroke="#E5E7EB" strokeWidth="8" fill="none" />
-        <circle cx="50" cy="50" r={radius} stroke="var(--color-primary, #1B3A2D)" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${dash} ${circ}`} />
+        <circle cx="50" cy="50" r={radius} stroke="rgba(255,255,255,0.18)" strokeWidth="8" fill="none" />
+        <circle cx="50" cy="50" r={radius} stroke="#ffffff" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${dash} ${circ}`} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] tabular">{value ?? "—"}</span>
-        <span className="text-[10px] text-neutral-400">/100</span>
+        <span className="font-display text-2xl lg:text-3xl text-white tabular">{value ?? "—"}</span>
+        <span className="text-[10px] text-white/60">/100</span>
       </div>
     </div>
   );
