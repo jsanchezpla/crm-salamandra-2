@@ -408,7 +408,10 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
                         item.children.some(
                           (c) => pathname === c.href || pathname?.startsWith(c.href + "/")
                         ));
-                    const showChildren = hasChildren && branchActive;
+                    // Sub-ítems SIEMPRE visibles bajo su grupo (antes solo al
+                    // estar dentro de la rama). Así "Mi desempeño", "Dirección",
+                    // etc. se descubren sin tener que entrar primero en Clínica.
+                    const showChildren = hasChildren;
                     const parentVisuallyActive = hasChildren ? branchActive : isActive;
                     return (
                       <div key={item.key}>
