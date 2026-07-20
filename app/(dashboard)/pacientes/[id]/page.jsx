@@ -31,6 +31,8 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-di
 const fmtDateTime = (iso) => (iso ? new Date(iso).toLocaleString("es-ES", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
 const inputCls = "w-full px-3 py-2 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400";
 
+const CITA_STATUS = { pending: "Pendiente", confirmed: "Confirmada", completed: "Realizada", cancelled: "Cancelada", no_show: "No asistió" };
+
 function Section({ title, children }) {
   return (<div><div className="eyebrow mb-2">{title}</div><div className="text-xs text-neutral-700 leading-relaxed">{children}</div></div>);
 }
@@ -111,6 +113,7 @@ export default function PacienteFichaPage() {
   const [sessions, setSessions] = useState([]);
   const [reports, setReports] = useState([]);
   const [coordinations, setCoordinations] = useState([]);
+  const [citas, setCitas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState("resumen");
@@ -131,13 +134,19 @@ export default function PacienteFichaPage() {
       fetch(`/api/clinica/sessions?patientId=${id}`, { cache: "no-store" }).then((r) => r.json()),
       fetch(`/api/clinica/reports?patientId=${id}`, { cache: "no-store" }).then((r) => r.json()),
       fetch(`/api/clinica/coordinations?patientId=${id}`, { cache: "no-store" }).then((r) => r.json()),
+      // Citas del paciente. Resiliente: si el tenant no tiene módulo citas (403)
+      // o falla, se ignora y la ficha sigue funcionando.
+      fetch(`/api/citas/bookings?patientId=${id}&limit=100`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
     ])
-      .then(([pj, sj, rj, cj]) => {
+      .then(([pj, sj, rj, cj, bj]) => {
         if (pj === "404" || !pj?.ok) { setNotFound(true); return; }
         setPatient(pj.data);
         setSessions(sj?.data?.sessions ?? []);
         setReports(rj?.data?.reports ?? []);
         setCoordinations(cj?.data?.coordinations ?? []);
+        setCitas(bj?.data?.bookings ?? []);
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
@@ -304,8 +313,35 @@ export default function PacienteFichaPage() {
               ) : <p className="text-[11px] text-neutral-400">Sin objetivos definidos.</p>}
             </div>
             <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-              <div className="eyebrow mb-3">Próximas citas</div>
-              <p className="text-[11px] text-neutral-400">La integración con Citas llegará en una fase posterior.</p>
+              <div className="eyebrow mb-3">Citas del paciente</div>
+              {citas.length ? (
+                <div className="space-y-2">
+                  {[...citas]
+                    .sort((a, b) => new Date(b.scheduledAt) - new Date(a.scheduledAt))
+                    .map((c) => {
+                      const d = new Date(c.scheduledAt);
+                      const past = d < new Date();
+                      return (
+                        <div key={c.id} className={`flex items-center justify-between gap-2 ${past ? "opacity-60" : ""}`}>
+                          <div className="min-w-0">
+                            <div className="text-xs font-medium text-neutral-800 truncate">{c.eventType?.name || "Cita"}</div>
+                            <div className="text-[11px] text-neutral-500">
+                              {d.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" })}
+                              {" · "}
+                              {d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
+                              {c.teamMember?.displayName ? ` · ${c.teamMember.displayName}` : ""}
+                            </div>
+                          </div>
+                          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-100 text-neutral-600">
+                            {CITA_STATUS[c.status] || c.status}
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+              ) : (
+                <p className="text-[11px] text-neutral-400">Sin citas registradas para este paciente.</p>
+              )}
             </div>
             <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
               <div className="eyebrow mb-3">Contacto (pagador)</div>

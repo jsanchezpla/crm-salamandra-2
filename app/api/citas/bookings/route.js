@@ -60,6 +60,8 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     }
     if (searchParams.get("eventTypeId")) where.eventTypeId = searchParams.get("eventTypeId");
     if (searchParams.get("teamMemberId")) where.teamMemberId = searchParams.get("teamMemberId");
+    // ?patientId=… — citas de un paciente concreto (sección "Próximas citas" de su ficha).
+    if (searchParams.get("patientId")) where.patientId = searchParams.get("patientId");
     // ?clientEmail=foo@bar.com — match exacto case-insensitive (Booking no tiene
     // FK a Client; el cruce con la ficha del cliente es por email).
     if (searchParams.get("clientEmail")) {
