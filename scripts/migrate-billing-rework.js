@@ -18,6 +18,7 @@
  */
 
 import { Sequelize } from "sequelize";
+import { byTable } from "./_schema-targets.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -457,27 +458,32 @@ async function main() {
     const [versionRows] = await sequelize.query("SHOW server_version");
     log(`PostgreSQL: ${versionRows[0]?.server_version ?? "?"}`);
 
-    header("Obteniendo lista de tenants activos...");
-    const slugs = await fetchActiveSlugs(sequelize);
-    if (slugs.length === 0) {
-      log("· No hay tenants activos. Nada que hacer.");
+    // Antes esto recorría TODOS los tenants activos, y ahí estaba el fallo: en un
+    // tenant sin Facturación empezaba a crear invoice_series y
+    // tenant_billing_settings y luego moría con
+    // `relation "crm_<x>.invoices" does not exist`, dejando el schema a medias y
+    // tumbando la migración entera para los tenants que SÍ facturan.
+    // `invoices` es el ancla del módulo: si no está, aquí no hay nada que hacer.
+    header("Obteniendo schemas con tabla `invoices`...");
+    const { schemas, skipped } = await byTable(sequelize, "invoices");
+    if (schemas.length === 0) {
+      log("· Ningún schema con tabla invoices. Nada que hacer.");
       await sequelize.close();
       process.exit(0);
     }
-    log(`✓ ${slugs.length} tenants: ${slugs.join(", ")}`);
+    log(`✓ ${schemas.length}: ${schemas.join(", ")}`);
+    if (skipped.length) log(`· sin tabla invoices, se omiten: ${skipped.join(", ")}`);
 
-    // Fase A: ALTER TYPE en autocommit (cada slug por separado)
+    // Fase A: ALTER TYPE en autocommit (cada schema por separado)
     header("Fase A — ALTER TYPE de enums (autocommit)...");
-    for (const slug of slugs) {
-      const schema = `crm_${slug}`;
+    for (const schema of schemas) {
       await alterEnums(sequelize, schema);
     }
 
     // Fase B: ADD COLUMN, CREATE TABLE, backfill (en transacción global)
     header("Fase B — ADD COLUMN, CREATE TABLE y backfill (transacción global)...");
     await sequelize.transaction(async (t) => {
-      for (const slug of slugs) {
-        const schema = `crm_${slug}`;
+      for (const schema of schemas) {
         await processSchemaInTx(sequelize, t, schema);
       }
     });
