@@ -410,15 +410,19 @@ async function processSchemaInTx(s, t, schema) {
     `, { bind: [String(currentYear)], transaction: t });
     const nextNumberF = (Number(maxRows[0]?.max_n) || 0) + 1;
 
+    // `id` explícito con gen_random_uuid(): estas tablas NO llevan DEFAULT en BD
+    // cuando las creó Sequelize (db:sync), porque el UUID lo genera en JS. Sin
+    // esto, el INSERT muere con «null value in column "id" ... violates not-null
+    // constraint» en todo schema que no creara esta misma migración.
     await s.query(`
-      INSERT INTO "${schema}"."invoice_series" (code, name, prefix, year, next_number, is_default, kind)
-      SELECT 'F', 'Facturas ordinarias', 'F', $1, $2, TRUE, 'normal'
+      INSERT INTO "${schema}"."invoice_series" (id, code, name, prefix, year, next_number, is_default, kind)
+      SELECT gen_random_uuid(), 'F', 'Facturas ordinarias', 'F', $1, $2, TRUE, 'normal'
       WHERE NOT EXISTS (SELECT 1 FROM "${schema}"."invoice_series" WHERE code = 'F')
     `, { bind: [currentYear, nextNumberF], transaction: t });
 
     await s.query(`
-      INSERT INTO "${schema}"."invoice_series" (code, name, prefix, year, next_number, is_default, kind)
-      SELECT 'R', 'Rectificativas', 'R', $1, 1, FALSE, 'rectificative'
+      INSERT INTO "${schema}"."invoice_series" (id, code, name, prefix, year, next_number, is_default, kind)
+      SELECT gen_random_uuid(), 'R', 'Rectificativas', 'R', $1, 1, FALSE, 'rectificative'
       WHERE NOT EXISTS (SELECT 1 FROM "${schema}"."invoice_series" WHERE code = 'R')
     `, { bind: [currentYear], transaction: t });
     log(`✓ ${schema}.invoice_series: 'F' (next=${nextNumberF}) y 'R' aseguradas`);
@@ -427,8 +431,8 @@ async function processSchemaInTx(s, t, schema) {
   // ── Crear settings por defecto si no existen ───────────────────────────
   if (await tableExists(s, t, schema, "tenant_billing_settings")) {
     await s.query(`
-      INSERT INTO "${schema}"."tenant_billing_settings" (default_vat_rate, available_vat_rates, default_payment_terms_days)
-      SELECT 21, '[21,10,4,0]'::jsonb, 30
+      INSERT INTO "${schema}"."tenant_billing_settings" (id, default_vat_rate, available_vat_rates, default_payment_terms_days)
+      SELECT gen_random_uuid(), 21, '[21,10,4,0]'::jsonb, 30
       WHERE NOT EXISTS (SELECT 1 FROM "${schema}"."tenant_billing_settings")
     `, { transaction: t });
     log(`✓ ${schema}.tenant_billing_settings: fila por defecto asegurada`);
