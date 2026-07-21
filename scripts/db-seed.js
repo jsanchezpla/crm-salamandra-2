@@ -190,7 +190,7 @@ async function main() {
       const qty = randomBetween(1, 3);
       const total = pricePerUnit * qty;
       const dayOfMonth = randomBetween(1, 8);
-      const status = pick(["sent", "sent", "paid", "partial", "draft"]);
+      const status = pick(["sent", "sent", "paid", "partially_paid", "draft"]);
 
       const [inv, created] = await Invoice.findOrCreate({
         where: {
@@ -246,7 +246,7 @@ async function main() {
   }
 
   // Cobro parcial
-  const partialInvoices = await Invoice.findAll({ where: { status: "partial" } });
+  const partialInvoices = await Invoice.findAll({ where: { status: "partially_paid" } });
   for (const inv of partialInvoices) {
     const [, created] = await Payment.findOrCreate({
       where: { invoiceId: inv.id },
@@ -285,9 +285,23 @@ async function main() {
 
   let costCount = 0;
   for (const c of costsData) {
+    // El modelo Cost reworkeado ya no tiene `month`/`amount`: mapear a
+    // `incurredAt` (fecha real) y a los importes con IVA (taxBase/taxAmount/total).
+    const incurredAt = `${c.month}-15`;
     const [, created] = await Cost.findOrCreate({
-      where: { month: c.month, description: c.description },
-      defaults: c,
+      where: { incurredAt, description: c.description },
+      defaults: {
+        type: c.type,
+        category: c.category,
+        description: c.description,
+        taxBase: c.amount,
+        vatRate: 0,
+        taxAmount: 0,
+        total: c.amount,
+        vatDeductible: false,
+        incurredAt,
+        employeeId: c.employeeId ?? null,
+      },
     });
     if (created) costCount++;
   }
