@@ -1,26 +1,36 @@
-// Render temporal del dossier (scratchpad) → PNG por slide o PDF.
-// Uso: node scripts/_dossier-render.mjs <archivo.html> <png|pdf>
+// Render del dossier → PNG por slide o PDF. Rutas relativas al repo.
+// Uso:
+//   node scripts/_dossier-render.mjs dossier/dossier.html pdf [dossier/Dossier-Salamandra-CRM.pdf]
+//   node scripts/_dossier-render.mjs dossier/dossier.html png
+// Requiere puppeteer (no está en package.json; instalar con `npm i puppeteer --no-save`).
 import puppeteer from "puppeteer";
+import path from "node:path";
 
-const DIR = "C:/Users/jorge/AppData/Local/Temp/claude/C--dev-salamandra-crm-salamandra-2/172dfe3e-dfc3-4598-aa5b-eb425c093156/scratchpad/dossier";
-const input = process.argv[2] || "sample.html";
-const mode = process.argv[3] || "png";
+const input = process.argv[2] || "dossier/dossier.html";
+const mode = process.argv[3] || "pdf";
+const outArg = process.argv[4];
+
+const inputAbs = path.resolve(process.cwd(), input);
+const dir = path.dirname(inputAbs);
+const fileUrl = "file:///" + inputAbs.replace(/\\/g, "/");
 
 const browser = await puppeteer.launch({ args: ["--no-sandbox"] });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 2 });
-await page.goto("file:///" + DIR + "/" + input, { waitUntil: "networkidle0" });
+await page.goto(fileUrl, { waitUntil: "networkidle0" });
 await page.evaluateHandle("document.fonts.ready");
 
 if (mode === "png") {
   const slides = await page.$$(".slide");
   for (let i = 0; i < slides.length; i++) {
-    await slides[i].screenshot({ path: `${DIR}/slide-${i + 1}.png` });
+    await slides[i].screenshot({ path: path.join(dir, `slide-${i + 1}.png`) });
   }
   console.log("PNG OK:", slides.length, "slides");
 } else {
-  const out = input.replace(/\.html$/, ".pdf");
-  await page.pdf({ path: `${DIR}/${out}`, width: "1280px", height: "720px", printBackground: true });
+  const out = outArg
+    ? path.resolve(process.cwd(), outArg)
+    : inputAbs.replace(/\.html$/, ".pdf");
+  await page.pdf({ path: out, width: "1280px", height: "720px", printBackground: true });
   console.log("PDF OK:", out);
 }
 await browser.close();
