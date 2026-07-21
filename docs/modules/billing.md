@@ -23,16 +23,49 @@ Es un módulo opcional por tenant. Todos los endpoints validan
 
 - **Catálogo de productos / servicios** reutilizables. Cada línea de factura
   se escribe a mano.
-- **Presupuestos** convertibles a factura.
-- **Generación de PDF** de la factura (no se renderiza ni se almacena).
 - **Verifactu / Facturantia**: los campos `facturantiaId`, `qrUrl`,
-  `verifactuStatus`, `verifactuSentAt` existen en `Invoice` pero no se rellenan.
+  `verifactuStatus`, `verifactuSentAt` existen en `Invoice` pero **no se rellenan
+  ni hay integración** (ni QR, ni hash, ni envío a la AEAT). El PDF NO es un
+  documento conforme al sistema antifraude. Pendiente (masterclass Quique, ago-2026).
 - **Motor de ejecución automática de RecurringInvoice**: hoy son plantillas
   con `nextRunAt` orientativa. La emisión real es manual (vía POST al
   endpoint, restringido a admin, o creando una factura nueva). Pendiente
   integrar con n8n.
 - **Integración Inventario ↔ Costes**: `Cost.inventoryProductId` está en BD y
   asociado en Sequelize, pero no hay endpoints ni UI que lo usen. FK durmiente.
+
+## Ya implementado (correcciones de doc previa)
+
+Cosas que versiones antiguas de este doc daban por NO hechas y **sí existen**:
+
+- **PDF de la factura** (`lib/billing/invoicePdf.js`): individual y en ZIP por
+  rango; muestra desglose de IVA, IRPF, notas y pie. No lleva QR/Verifactu.
+- **Presupuestos** convertibles a factura (`/api/billing/quotes/[id]/convert`).
+- **IRPF** por factura y **rectificativas** con edición de importe (parcial por
+  diferencias / anulación total).
+
+## Configuración fiscal (sprint 2026-07-21)
+
+`TenantBillingSettings` guarda la config fiscal del emisor. Novedades:
+
+- **Régimen fiscal (`taxRegime`: `company` | `freelance`)** e **IRPF por defecto 0**.
+  Antes `defaultIrpfRate` era 15 y restaba IRPF a TODA factura (mal en SL y B2C).
+  Ahora por defecto 0; solo se aplica si el emisor se marca **Autónomo profesional**
+  (interruptor en Configuración → Facturación). Migración
+  `migrate-billing-tax-regime.js` (resetea el 15 heredado). El cálculo
+  (`invoices/route.js`) defaultea a 0.
+- **Exención general de IVA (`vatExempt` + `vatExemptNote`)**. Con el interruptor
+  activo, las nuevas facturas nacen a **IVA 0** y **congelan la nota legal** (art.20
+  LIVA, editable) en `invoice.customFields.vatExemptNote`, que el PDF muestra.
+  Migración `migrate-billing-vat-exempt.js`. Para exención por-servicio puntual se
+  pone la línea a 0% en el editor.
+- **Numeración en orden de fecha**: `assignInvoiceNumber` bloquea emitir una factura
+  con fecha anterior a la última ya emitida de esa serie+año (error 422). Garantiza
+  correlatividad cronológica además de numérica.
+- **Reparto de cuota del paciente en 2 modos** (`components/billing/PatientReparto.jsx`):
+  A) una factura por el total a un pagador (IVA una vez + cobros parciales), y
+  B) varias facturas (una por pagador, IVA proporcional) con **validación de que la
+  suma cuadre** con el total y limpieza de borradores si algo falla a medias.
 
 ## Modelos
 
