@@ -107,7 +107,10 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
     // Aplicar defaults del tenant: vatRate por línea, IRPF y dueDate desde
     // defaultPaymentTermsDays si no llegan explícitos.
     const settings = await TenantBillingSettings.findOne();
-    const defaultVat = settings ? Number(settings.defaultVatRate) : 21;
+    // Exención general de IVA: si el emisor no repercute IVA, las líneas sin tipo
+    // explícito nacen a 0 y se congela la nota legal en la factura.
+    const vatExempt = !!(settings && settings.vatExempt);
+    const defaultVat = vatExempt ? 0 : settings ? Number(settings.defaultVatRate) : 21;
     const defaultIrpf = settings ? Number(settings.defaultIrpfRate ?? 0) : 0;
     const termsDays = settings ? Number(settings.defaultPaymentTermsDays ?? 30) : 30;
     const linesWithVat = lines.map((l) => ({
@@ -144,7 +147,10 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
       number: `DRAFT-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       status: "draft",
       notes: notes || null,
-      customFields: customFields || {},
+      customFields: {
+        ...(customFields || {}),
+        ...(vatExempt ? { vatExemptNote: settings.vatExemptNote || "Operación exenta de IVA conforme al artículo 20 de la Ley 37/1992 del IVA." } : {}),
+      },
       // legacy campos quedan a 0/null
       subtotal: calc.taxBase,
       vatRate: 0,

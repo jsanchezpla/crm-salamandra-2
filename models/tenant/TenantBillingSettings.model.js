@@ -54,6 +54,20 @@ export function defineTenantBillingSettings(sequelize) {
         allowNull: false,
         defaultValue: [21, 10, 4, 0],
       },
+      // Exención GENERAL de IVA: para emisores que no repercuten IVA (p. ej.
+      // sanidad/educación, art. 20 LIVA). Con esto activo, las nuevas facturas
+      // nacen a IVA 0 y llevan `vatExemptNote` congelada en la propia factura
+      // (para que el PDF muestre la nota legal aunque luego cambie la config).
+      vatExempt: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      vatExemptNote: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        defaultValue: "Operación exenta de IVA conforme al artículo 20 de la Ley 37/1992 del IVA.",
+      },
       defaultPaymentTermsDays: {
         type: DataTypes.INTEGER,
         allowNull: false,

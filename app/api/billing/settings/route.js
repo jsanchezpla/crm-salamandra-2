@@ -47,6 +47,12 @@ export const PUT = withTenant(async (request, _ctx, { tenantModels, hasModule })
       updates.taxRegime = body.taxRegime;
     }
 
+    // Exención general de IVA + su nota legal (texto libre).
+    if ("vatExempt" in body) updates.vatExempt = !!body.vatExempt;
+    if ("vatExemptNote" in body) {
+      updates.vatExemptNote = body.vatExemptNote == null ? null : String(body.vatExemptNote).slice(0, 2000);
+    }
+
     // Socios del negocio: array de { id, name }
     if ("partners" in body) {
       const arr = body.partners;

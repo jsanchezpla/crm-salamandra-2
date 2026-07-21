@@ -145,6 +145,8 @@ export default function ConfigModule() {
           fiscalZip: billing.fiscalZip,
           fiscalCountry: billing.fiscalCountry,
           defaultVatRate: Number(billing.defaultVatRate),
+          vatExempt: !!billing.vatExempt,
+          vatExemptNote: billing.vatExemptNote ?? null,
           taxRegime: billing.taxRegime === "freelance" ? "freelance" : "company",
           defaultIrpfRate: billing.taxRegime === "freelance" ? Number(billing.defaultIrpfRate) : 0,
           defaultPaymentTermsDays: Number(billing.defaultPaymentTermsDays),
@@ -216,6 +218,21 @@ export default function ConfigModule() {
             </Field>
             <Field label="IVA por defecto">
               <Select disabled={!isAdmin} value={Number(billing.defaultVatRate)} onChange={(v) => setBillingField("defaultVatRate", Number(v))} options={(billing.availableVatRates ?? [21, 10, 4, 0]).map((v) => ({ value: Number(v), label: `${v}%` }))} className={inputCls} />
+            </Field>
+            <Field label="Exención de IVA" full>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" disabled={!isAdmin} checked={!!billing.vatExempt} onChange={(e) => setBillingField("vatExempt", e.target.checked)} className="h-4 w-4 accent-[var(--color-primary,#1B3A2D)]" />
+                <span className="text-sm text-neutral-700">Mis servicios están exentos de IVA (no repercuto IVA)</span>
+              </label>
+              {billing.vatExempt ? (
+                <div className="mt-2">
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Nota legal de exención (aparece en la factura)</label>
+                  <textarea disabled={!isAdmin} rows={2} value={billing.vatExemptNote ?? ""} onChange={(e) => setBillingField("vatExemptNote", e.target.value)} className={inputCls} />
+                  <p className="text-[11px] text-neutral-400 mt-1">Con esto activo, las nuevas facturas nacen a IVA 0 y llevan esta nota. El «IVA por defecto» de arriba se ignora.</p>
+                </div>
+              ) : (
+                <p className="text-[11px] text-neutral-400 mt-1">Actívalo si nunca repercutes IVA (p. ej. sanidad/educación): las facturas saldrán sin IVA con su nota legal.</p>
+              )}
             </Field>
             <Field label="¿Cómo facturas? (régimen fiscal)" full>
               <div className="flex flex-wrap items-center gap-2">
