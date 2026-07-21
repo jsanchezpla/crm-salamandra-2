@@ -170,16 +170,19 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/nutricion/plans — crear plantilla con las comidas estándar.
+// POST /api/nutricion/plans — crear plantilla con la SEMANA COMPLETA.
 //
-// Nutrinotas (2026-07-18): un menú nuevo nace con las 5 categorías del día
-// (Desayuno, Almuerzo, Comida, Merienda, Cena), cada una con su opción por
-// defecto, para que solo haya que meter comidas dentro. Con `skipDefaultMeals:
-// true` en el body se crea vacío — lo usan los smoke scripts, que montan su
-// propia estructura. (duplicate/assign/reapply NO pasan por este endpoint:
-// hacen deep-copy con Plan.create directamente, sin doble sembrado.)
+// Rework 2026-07-22: un menú nuevo nace con los 7 días (Lunes…Domingo) × las 5
+// comidas (Desayuno, Almuerzo, Comida, Merienda, Cena), cada comida con su
+// opción por defecto — el paciente tiene que ver claro qué toca cada día, y la
+// nutricionista solo rellena huecos. (Antes se sembraban 5 comidas sin día y la
+// "semana" se apañaba como texto en los comentarios — Nutrinotas 2026-07-18.)
+// Con `skipDefaultMeals: true` en el body se crea vacío — lo usan los smoke
+// scripts, que montan su propia estructura. (duplicate/assign/reapply NO pasan
+// por este endpoint: hacen deep-copy con Plan.create directamente.)
 // ─────────────────────────────────────────────────────────────────────────────
 const DEFAULT_MEALS = ["Desayuno", "Almuerzo", "Comida", "Merienda", "Cena"];
+const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7]; // 1=Lunes … 7=Domingo
 
 export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, tenantSequelize, hasModule }) => {
   try {
@@ -209,15 +212,18 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
         { transaction: t }
       );
       if (body.skipDefaultMeals !== true) {
-        for (const [i, mealName] of DEFAULT_MEALS.entries()) {
-          const meal = await PlanMeal.create(
-            { planId: plan.id, name: mealName, order: i },
-            { transaction: t }
-          );
-          await PlanMealOption.create(
-            { mealId: meal.id, name: "Opción 1", order: 0, isDefault: true },
-            { transaction: t }
-          );
+        // 7 días × 5 comidas = 35 comidas con su opción por defecto.
+        for (const weekday of WEEKDAYS) {
+          for (const [i, mealName] of DEFAULT_MEALS.entries()) {
+            const meal = await PlanMeal.create(
+              { planId: plan.id, name: mealName, order: i, weekday },
+              { transaction: t }
+            );
+            await PlanMealOption.create(
+              { mealId: meal.id, name: "Opción 1", order: 0, isDefault: true },
+              { transaction: t }
+            );
+          }
         }
       }
       return plan;

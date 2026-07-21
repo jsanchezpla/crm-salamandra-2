@@ -73,6 +73,7 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, hasM
       client: { name: client.name },
       tenantName: tenant.name,
       brand,
+      tenantSlug: tenant.slug, // fotos de receta embebidas en el PDF
     });
 
     const { subject, html, text } = menuEmail({

@@ -28,6 +28,7 @@ export const GET = withTenant(async (_request, ctx, { tenant, tenantModels, hasM
       client: client ? { name: client.name } : null,
       tenantName: tenant.name,
       brand,
+      tenantSlug: tenant.slug, // fotos de receta embebidas en el PDF
     });
 
     return new Response(buffer, {

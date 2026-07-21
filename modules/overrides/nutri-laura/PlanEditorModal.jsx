@@ -96,6 +96,11 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
   const [activeOptionByMeal, setActiveOptionByMeal] = useState({});
   const [toast, setToast] = useState(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  // Día activo de la semana: 1=Lunes … 7=Domingo; 0 = comidas sin día
+  // (planes pre-rework). null hasta que el plan carga.
+  const [activeDay, setActiveDay] = useState(null);
+  // Vista semana: cuadrícula 7 días × comidas para verlo todo de un vistazo.
+  const [weekView, setWeekView] = useState(false);
 
   // Cliente cargado (solo si type='assigned')
   const [clientInfo, setClientInfo] = useState(null);
@@ -119,12 +124,18 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
         return;
       }
       setPlan(j.data);
-      // Por defecto expandimos la primera comida
-      const firstMeal = (j.data.meals || [])[0];
+      const allMeals = j.data.meals || [];
+      const hasWeek = allMeals.some((m) => m.weekday != null);
+      // Día inicial: Lunes si el plan tiene semana; el bloque "sin día" si es
+      // un plan pre-rework. En recargas se conserva el día donde estabas.
+      setActiveDay((prev) => (prev != null ? prev : hasWeek ? 1 : 0));
+      // Por defecto expandimos la primera comida del día visible
+      const day = hasWeek ? 1 : 0;
+      const firstMeal = allMeals.find((m) => (m.weekday ?? 0) === day) || allMeals[0];
       if (firstMeal) {
-        setExpandedMealId(firstMeal.id);
+        setExpandedMealId((prev) => prev ?? firstMeal.id);
         const aoMap = {};
-        for (const m of j.data.meals) {
+        for (const m of allMeals) {
           const def = (m.options || []).find((o) => o.isDefault) || (m.options || [])[0];
           if (def) aoMap[m.id] = def.id;
         }
@@ -265,20 +276,9 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
     );
   }
 
-  // Inserta el encabezado de un día en los comentarios y PERSISTE al momento.
-  // No basta con mutar el draft: el commit normal ocurre en el blur del
-  // textarea, que nunca dispara si solo se pulsa el chip (se perdería el
-  // cambio al cerrar el modal pese a que el indicador diga "Guardado").
-  async function insertWeekday(day) {
-    if (!plan) return;
-    const base = (descriptionDraft ?? "").trimEnd();
-    const newDesc = base ? `${base}\n\n${day}:\n` : `${day}:\n`;
-    setDescriptionDraft(newDesc);
-    await patchPlanMetadata(
-      { description: newDesc },
-      { onErrorRevert: () => setDescriptionDraft(plan.description || "") }
-    );
-  }
+  // insertWeekday (Nutrinotas): RETIRADO en el rework 2026-07-22. Los días ya
+  // no son texto en los comentarios: son estructura (plan_meals.weekday) con
+  // sus pestañas Lunes…Domingo. Los comentarios vuelven a ser solo comentarios.
 
   // toggleVisibleToClient: retirado en C4 junto con el toggle del header.
   // patchPlanMetadata sigue aceptando { visibleToClient } por si algún día
@@ -291,6 +291,8 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
     if (!name.trim()) return;
     const { ok, json } = await apiPost(`/api/nutricion/plans/${plan.id}/meals`, {
       name: name.trim(),
+      // La comida nace en el día que estás mirando (0 = bloque "sin día").
+      weekday: activeDay ? activeDay : null,
     });
     if (!ok) {
       setToast({ kind: "err", text: json.error || "No se pudo añadir la comida" });
@@ -347,13 +349,36 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
     if (expandedMealId === meal.id) setExpandedMealId(null);
   }
 
+  // Mover una comida a otro día (o quitarle el día con null). Clave para los
+  // planes pre-rework: sus comidas "sin día" se pueden repartir por la semana.
+  async function changeMealWeekday(meal, weekday) {
+    const { ok, json } = await apiPatch(
+      `/api/nutricion/plans/${plan.id}/meals/${meal.id}`,
+      { weekday }
+    );
+    if (!ok) {
+      setToast({ kind: "err", text: json.error || "No se pudo cambiar el día" });
+      return;
+    }
+    setPlan((p) => ({
+      ...p,
+      meals: p.meals.map((m) => (m.id === meal.id ? { ...m, weekday: json.data.weekday } : m)),
+    }));
+    // Seguir a la comida a su nuevo día para no "perderla" de vista.
+    setActiveDay(json.data.weekday ?? 0);
+  }
+
   async function moveMeal(meal, dir) {
-    const meals = [...(plan.meals || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    const idx = meals.findIndex((m) => m.id === meal.id);
+    // Subir/bajar DENTRO de su día: reordenar contra comidas de otros días no
+    // tendría efecto visible (la lista está agrupada por weekday).
+    const dayMeals = (plan.meals || [])
+      .filter((m) => (m.weekday ?? 0) === (meal.weekday ?? 0))
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const idx = dayMeals.findIndex((m) => m.id === meal.id);
     const swapIdx = dir === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= meals.length) return;
-    const a = meals[idx];
-    const b = meals[swapIdx];
+    if (swapIdx < 0 || swapIdx >= dayMeals.length) return;
+    const a = dayMeals[idx];
+    const b = dayMeals[swapIdx];
     // Swap via dos PATCH (no es lo más eficiente, pero el backlog C2 ya
     // contempla un endpoint /reorder).
     await apiPatch(`/api/nutricion/plans/${plan.id}/meals/${a.id}`, { order: b.order });
@@ -627,7 +652,9 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
     for (const m of src.meals || []) {
       const { ok, json } = await apiPost(
         `/api/nutricion/plans/${plan.id}/meals`,
-        { name: m.name, description: m.description, order: m.order }
+        // weekday viaja con la copia (rework 2026-07-22): sin él, cargar una
+        // plantilla semanal aplastaría toda la semana en "sin día".
+        { name: m.name, description: m.description, order: m.order, weekday: m.weekday ?? null }
       );
       if (!ok) continue;
       const newMealId = json.data.id;
@@ -653,6 +680,17 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
               notes: f.notes,
               order: f.order,
             }
+          );
+        }
+        // Las recetas congeladas de la opción TAMBIÉN se copian (bug del flujo
+        // antiguo: se perdían al cargar plantilla). Solo si conservan
+        // provenance (recipeId): un snapshot cuya receta original se borró no
+        // puede recrearse vía POST /recipes.
+        for (const rec of o.recipes || []) {
+          if (!rec.recipeId) continue;
+          await apiPost(
+            `/api/nutricion/plans/${plan.id}/meals/${newMealId}/options/${newOptId}/recipes`,
+            { recipeId: rec.recipeId, servings: rec.servings ?? 1 }
           );
         }
       }
@@ -682,6 +720,10 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
   }
 
   const meals = (plan.meals || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  // Comidas del día activo (0 = bloque "sin día" de planes pre-rework).
+  const day = activeDay ?? 0;
+  const dayMeals = meals.filter((m) => (m.weekday ?? 0) === day);
+  const hasLegacyMeals = meals.some((m) => m.weekday == null);
 
   return (
     <ModalShell onClose={handleClose}>
@@ -744,47 +786,66 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
       <div className="flex-1 px-4 lg:px-7 py-5 lg:py-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         {/* Columna izquierda */}
         <div className="space-y-5 min-w-0">
-          {/* Días de la semana + Comentarios — autosave en blur.
-              La tira de días es un organizador visual (decisión Nutrinotas: sin
-              cambio de modelo): pulsar un día inserta su encabezado en los
-              comentarios para escribir la planificación de ese día. */}
+          {/* Semana del paciente: pestañas Lunes…Domingo + vista de cuadrícula.
+              Rework 2026-07-22: los días son ESTRUCTURA (plan_meals.weekday),
+              ya no texto en los comentarios. */}
           <section>
-            <Label>Planificación semanal · Comentarios</Label>
-            <WeekdayStrip text={descriptionDraft} onInsert={insertWeekday} />
-            <textarea
-              value={descriptionDraft}
-              onChange={(e) => setDescriptionDraft(e.target.value)}
-              onBlur={commitDescription}
-              placeholder="Notas del plan. Pulsa un día para añadir su planificación (p. ej. «Lunes: comida A, cena B»)…"
-              rows={4}
-              className="w-full text-sm rounded-md border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 resize-y"
-            />
-          </section>
-
-          {/* Comidas */}
-          <section>
-            <div className="flex items-center justify-between mb-2.5">
-              <Label className="mb-0">Planificación de comidas</Label>
-              <button
-                onClick={addMeal}
-                className="text-xs px-2.5 py-1 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
-              >
-                + Añadir comida
-              </button>
+            <div className="flex items-center justify-between mb-2.5 gap-2 flex-wrap">
+              <Label className="mb-0">Semana del paciente</Label>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setWeekView((v) => !v)}
+                  className={`text-xs px-2.5 py-1 rounded-md border transition ${
+                    weekView
+                      ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
+                      : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  {weekView ? "Volver al día" : "Ver semana completa"}
+                </button>
+                {!weekView && (
+                  <button
+                    onClick={addMeal}
+                    className="text-xs px-2.5 py-1 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
+                  >
+                    + Añadir comida
+                  </button>
+                )}
+              </div>
             </div>
 
-            {meals.length === 0 ? (
+            {!weekView && (
+              <WeekTabs
+                activeDay={day}
+                onSelect={(d) => { setActiveDay(d); setExpandedMealId(null); }}
+                meals={meals}
+                showLegacyTab={hasLegacyMeals}
+              />
+            )}
+
+            {weekView ? (
+              <WeekGrid
+                meals={meals}
+                onPickMeal={(meal) => {
+                  setActiveDay(meal.weekday ?? 0);
+                  setWeekView(false);
+                  setExpandedMealId(meal.id);
+                }}
+              />
+            ) : dayMeals.length === 0 ? (
               <div className="border border-dashed border-gray-200 rounded-lg p-8 text-center text-sm text-gray-400">
-                Aún no hay comidas. Crea la primera con &ldquo;Añadir comida&rdquo;.
+                {day === 0
+                  ? "No hay comidas sin día. Usa las pestañas para ir a un día de la semana."
+                  : `${WEEKDAYS[day - 1]} aún no tiene comidas. Créalas con "Añadir comida".`}
               </div>
             ) : (
               <div className="space-y-2.5">
-                {meals.map((meal, idx) => (
+                {dayMeals.map((meal, idx) => (
                   <MealAccordion
                     key={meal.id}
                     meal={meal}
                     index={idx}
-                    total={meals.length}
+                    total={dayMeals.length}
                     expanded={expandedMealId === meal.id}
                     onToggle={() =>
                       setExpandedMealId(expandedMealId === meal.id ? null : meal.id)
@@ -795,6 +856,7 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
                     }
                     onRename={() => renameMeal(meal)}
                     onUpdateDescription={(desc) => updateMealDescription(meal, desc)}
+                    onChangeWeekday={(w) => changeMealWeekday(meal, w)}
                     onDelete={() => deleteMeal(meal)}
                     onMoveUp={() => moveMeal(meal, "up")}
                     onMoveDown={() => moveMeal(meal, "down")}
@@ -814,6 +876,21 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
                 ))}
               </div>
             )}
+          </section>
+
+          {/* Comentarios generales — autosave en blur. Desde el rework los días
+              viven en las pestañas de arriba; esto es SOLO para pautas y notas
+              (hidratación, suplementos, recordatorios…). */}
+          <section>
+            <Label>Comentarios</Label>
+            <textarea
+              value={descriptionDraft}
+              onChange={(e) => setDescriptionDraft(e.target.value)}
+              onBlur={commitDescription}
+              placeholder="Pautas generales para el paciente (hidratación, suplementos, recordatorios…)"
+              rows={3}
+              className="w-full text-sm rounded-md border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 resize-y"
+            />
           </section>
 
           {/* Indicador de autosave — no hay botón Guardar; todos los cambios
@@ -896,7 +973,7 @@ function Label({ children, className = "" }) {
 function MealAccordion({
   meal, index, total, expanded, onToggle,
   activeOptionId, onSelectOption,
-  onRename, onUpdateDescription, onDelete, onMoveUp, onMoveDown,
+  onRename, onUpdateDescription, onChangeWeekday, onDelete, onMoveUp, onMoveDown,
   onAddOption, onRenameOption, onSetDefaultOption, onDeleteOption,
   onAddFood, onUpdateFood, onDeleteFood,
   onAddRecipe, onUpdateRecipe, onDeleteRecipe,
@@ -973,18 +1050,32 @@ function MealAccordion({
       {/* Cuerpo expandido */}
       {expanded && (
         <div className="border-t border-gray-100 p-3.5 space-y-3.5 bg-gray-50/50">
-          {/* Descripción */}
-          <input
-            type="text"
-            value={descDraft}
-            onChange={(e) => setDescDraft(e.target.value)}
-            onBlur={() => onUpdateDescription(descDraft)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.target.blur();
-            }}
-            placeholder="Descripción de la comida (ej. DESAYUNO + BEBIDA + FRUTA)…"
-            className="w-full text-xs uppercase tracking-wider text-gray-700 px-3 py-1.5 rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
-          />
+          {/* Descripción + día de la semana */}
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={descDraft}
+              onChange={(e) => setDescDraft(e.target.value)}
+              onBlur={() => onUpdateDescription(descDraft)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.target.blur();
+              }}
+              placeholder="Descripción de la comida (ej. DESAYUNO + BEBIDA + FRUTA)…"
+              className="flex-1 min-w-0 text-xs uppercase tracking-wider text-gray-700 px-3 py-1.5 rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+            />
+            {/* Cambiar la comida de día (imprescindible en menús pre-rework
+                cuyas comidas nacieron "sin día"). */}
+            <Select
+              value={meal.weekday != null ? String(meal.weekday) : ""}
+              onChange={(v) => onChangeWeekday(v === "" ? null : Number(v))}
+              options={[
+                { value: "", label: "Sin día" },
+                ...WEEKDAYS.map((name, i) => ({ value: String(i + 1), label: name })),
+              ]}
+              className="w-32 shrink-0 px-2 py-1.5 text-xs rounded-md border border-gray-200 bg-white"
+              aria-label="Día de la semana de esta comida"
+            />
+          </div>
 
           {/* Pills de opciones */}
           <OptionPills
@@ -1800,43 +1891,126 @@ function TemplateAssignPanel({ plan }) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Tira de días de la semana (Nutrinotas item 7 — organizador visual, sin
-// cambio de modelo). Un día se marca activo si ya aparece como encabezado
-// "Día:" en el texto de comentarios; pulsarlo inserta su sección.
+// Semana real (rework 2026-07-22). WEEKDAYS[0]="Lunes" ↔ weekday=1 … 7=Domingo.
+// WeekTabs: pestañas de día con contador de comidas rellenas. WeekGrid: la
+// semana completa de un vistazo, cada celda es una comida clicable.
 // ────────────────────────────────────────────────────────────────────────────
 
 const WEEKDAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
-function WeekdayStrip({ text, onInsert }) {
-  const present = useMemo(() => {
-    const t = text || "";
-    const set = new Set();
-    for (const d of WEEKDAYS) {
-      if (new RegExp(`(^|\\n)\\s*${d}\\s*:`, "i").test(t)) set.add(d);
-    }
-    return set;
-  }, [text]);
+function mealFilled(meal) {
+  return (meal.options || []).some((o) => (o.foods || []).length > 0 || (o.recipes || []).length > 0);
+}
 
+function WeekTabs({ activeDay, onSelect, meals, showLegacyTab }) {
   return (
-    <div className="flex gap-1.5 flex-wrap mb-2">
-      {WEEKDAYS.map((d) => {
-        const on = present.has(d);
+    <div className="flex gap-1 flex-wrap mb-3">
+      {WEEKDAYS.map((name, i) => {
+        const d = i + 1;
+        const filled = meals.filter((m) => m.weekday === d && mealFilled(m)).length;
+        const on = activeDay === d;
         return (
           <button
             key={d}
             type="button"
-            onClick={() => !on && onInsert(d)}
-            title={on ? `${d} ya tiene planificación en los comentarios` : `Añadir la planificación de ${d}`}
-            className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition ${
+            onClick={() => onSelect(d)}
+            title={`${name}: ${filled} comida${filled === 1 ? "" : "s"} con contenido`}
+            className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium border transition flex items-center gap-1.5 ${
               on
-                ? "bg-[var(--color-primary)]/10 border-[var(--color-primary)]/30 text-[var(--color-primary)] cursor-default"
-                : "bg-white border-gray-200 text-gray-600 hover:border-[var(--color-primary)]/40 hover:text-[var(--color-primary)] cursor-pointer"
+                ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
+                : "bg-white border-gray-200 text-gray-600 hover:border-[var(--color-primary)]/40 hover:text-[var(--color-primary)]"
             }`}
           >
-            {d.slice(0, 3)}
+            {name.slice(0, 3)}
+            {filled > 0 && (
+              <span className={`text-[9px] rounded-full px-1 min-w-[14px] text-center ${on ? "bg-white/25" : "bg-[var(--color-primary)]/10 text-[var(--color-primary)]"}`}>
+                {filled}
+              </span>
+            )}
           </button>
         );
       })}
+      {showLegacyTab && (
+        <button
+          type="button"
+          onClick={() => onSelect(0)}
+          title="Comidas de este menú que aún no tienen día asignado"
+          className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium border transition ${
+            activeDay === 0
+              ? "bg-amber-500 text-white border-amber-500"
+              : "bg-amber-50 border-amber-200 text-amber-700 hover:border-amber-400"
+          }`}
+        >
+          Sin día
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Resumen ultracorto del contenido de una comida para la celda de la semana:
+// nombres de recetas + nº de alimentos sueltos de la opción por defecto.
+function mealCellSummary(meal) {
+  const opt = (meal.options || []).find((o) => o.isDefault) || (meal.options || [])[0];
+  if (!opt) return null;
+  const parts = (opt.recipes || []).map((r) => r.nameSnapshot || "Receta");
+  const nFoods = (opt.foods || []).length;
+  if (nFoods > 0) parts.push(`${nFoods} alimento${nFoods === 1 ? "" : "s"}`);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+function WeekGrid({ meals, onPickMeal }) {
+  const legacy = meals.filter((m) => m.weekday == null);
+  return (
+    <div className="overflow-x-auto -mx-1 px-1">
+      <div className="grid grid-cols-7 gap-1.5 min-w-[760px]">
+        {WEEKDAYS.map((name, i) => {
+          const d = i + 1;
+          const dayMeals = meals
+            .filter((m) => m.weekday === d)
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          return (
+            <div key={d} className="min-w-0">
+              <div className="text-[10px] uppercase tracking-wider font-semibold text-[var(--color-primary)] text-center py-1 bg-[var(--color-primary)]/[0.07] rounded-t-md">
+                {name}
+              </div>
+              <div className="space-y-1 border border-t-0 border-gray-100 rounded-b-md p-1 bg-gray-50/40">
+                {dayMeals.map((meal) => {
+                  const summary = mealCellSummary(meal);
+                  const filled = mealFilled(meal);
+                  return (
+                    <button
+                      key={meal.id}
+                      type="button"
+                      onClick={() => onPickMeal(meal)}
+                      title={`${name} · ${meal.name} — clic para editar`}
+                      className={`w-full text-left rounded px-1.5 py-1 border transition ${
+                        filled
+                          ? "bg-white border-gray-200 hover:border-[var(--color-primary)]/50"
+                          : "bg-transparent border-dashed border-gray-200 hover:border-[var(--color-primary)]/40"
+                      }`}
+                    >
+                      <div className={`text-[10px] font-semibold truncate ${filled ? "text-gray-800" : "text-gray-400"}`}>{meal.name}</div>
+                      {summary ? (
+                        <div className="text-[9.5px] text-gray-500 leading-tight line-clamp-2">{summary}</div>
+                      ) : (
+                        <div className="text-[9.5px] text-gray-300">vacío</div>
+                      )}
+                    </button>
+                  );
+                })}
+                {dayMeals.length === 0 && <div className="text-[9.5px] text-gray-300 text-center py-2">—</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {legacy.length > 0 && (
+        <div className="mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
+          Este menú tiene {legacy.length} comida{legacy.length === 1 ? "" : "s"} sin día asignado (pestaña “Sin día”).
+          Ábrelas y asígnales un día para que aparezcan en la semana.
+        </div>
+      )}
     </div>
   );
 }

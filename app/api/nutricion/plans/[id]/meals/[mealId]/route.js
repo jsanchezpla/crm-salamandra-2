@@ -42,6 +42,17 @@ export const PATCH = withTenant(async (request, ctx, { tenantModels, hasModule }
       if (!Number.isInteger(n) || n < 0) return error("order inválido");
       updates.order = n;
     }
+    if (body.weekday !== undefined) {
+      // 1=Lunes … 7=Domingo; null = quitar el día (comida "sin día"). Permite
+      // a los planes pre-rework asignar día a sus comidas sueltas.
+      if (body.weekday === null) {
+        updates.weekday = null;
+      } else {
+        const w = Number(body.weekday);
+        if (!Number.isInteger(w) || w < 1 || w > 7) return error("weekday inválido (1-7 o null)");
+        updates.weekday = w;
+      }
+    }
     if (Object.keys(updates).length > 0) await meal.update(updates);
     return ok(meal.toJSON());
   } catch (err) {

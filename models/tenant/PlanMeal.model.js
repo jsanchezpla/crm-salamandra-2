@@ -6,6 +6,12 @@ import { DataTypes } from "sequelize";
  *
  * Nombre libre (sin enum) porque cada nutricionista organiza el día a
  * su manera. `order` define el orden visual dentro del plan.
+ *
+ * `weekday` (rework 2026-07-22): día de la semana al que pertenece la comida,
+ * 1=Lunes … 7=Domingo. NULLABLE: los planes anteriores al rework no tienen
+ * días (su "semana" vivía como texto en plans.description) y siguen
+ * funcionando como "menú sin días". Los planes nuevos nacen con la semana
+ * completa (7 días × 5 comidas). Migración: migrate-nutricion-week-recipe-media.js.
  */
 export function definePlanMeal(sequelize) {
   return sequelize.define(
@@ -33,6 +39,12 @@ export function definePlanMeal(sequelize) {
         type: DataTypes.INTEGER,
         allowNull: false,
         field: "order",
+      },
+      // 1=Lunes … 7=Domingo; NULL = comida sin día (planes pre-rework).
+      weekday: {
+        type: DataTypes.SMALLINT,
+        allowNull: true,
+        validate: { min: 1, max: 7 },
       },
     },
     {

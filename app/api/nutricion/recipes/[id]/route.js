@@ -1,7 +1,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, noContent, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
-import { recipeInclude, serializeRecipe, sanitizeIngredients } from "../../../../../lib/nutricion/recipes.js";
+import { recipeInclude, serializeRecipe, sanitizeIngredients, sanitizeSteps } from "../../../../../lib/nutricion/recipes.js";
 import { UUID_RE } from "../../../../../lib/nutricion/plans.js";
 
 async function logAudit({ tenantId, userId, action, entityId, before, after, ip }) {
@@ -69,6 +69,11 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
           : null;
     }
     if (body.isArchived !== undefined) updates.isArchived = !!body.isArchived;
+
+    // Pasos de preparación (rework 2026-07-22).
+    const st = sanitizeSteps(body.steps);
+    if (!st.ok) return error(st.error);
+    if (st.value !== undefined) updates.steps = st.value;
 
     // Ingredientes: validar antes de abrir la transacción.
     const ing = sanitizeIngredients(body.ingredients);

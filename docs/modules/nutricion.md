@@ -3,6 +3,37 @@
 Estado: **Sprint Recetario cerrado en local 2026-06-24. C1+C2+C3 en
 producción. C4+C5 pendientes de despliegue.**
 
+> **REWORK SEMANA REAL (2026-07-22, decisión de producto Rodrigo+Jorge).**
+> Anula parcialmente lo descrito más abajo; en caso de conflicto prevalece esto
+> (y en última instancia el código):
+>
+> - **La semana existe en el modelo**: `plan_meals.weekday` SMALLINT (1=Lunes …
+>   7=Domingo, NULL = comida sin día para planes pre-rework). Un menú nuevo nace
+>   con **7 días × 5 comidas** (35 comidas, cada una con su "Opción 1").
+>   Migración: `scripts/migrate-nutricion-week-recipe-media.js` (byTable).
+> - **La tira de días sobre los Comentarios está RETIRADA** (insertaba "Lunes:"
+>   como texto en `plans.description`). El editor tiene pestañas Lunes…Domingo
+>   (+ "Sin día" si hay comidas legacy, con selector de día por comida) y una
+>   **vista de semana completa** en cuadrícula 7×comidas. `plans.description`
+>   vuelve a ser solo comentarios generales.
+> - **Recetas con FOTO y PASOS** (revierte D4 "solo ingredientes"):
+>   `recipes.photo_path` (disco, patrón documentStorage, helper
+>   `lib/nutricion/recipePhotoStorage.js`, JPEG/PNG/WebP ≤5 MB, magic bytes) y
+>   `recipes.steps` JSONB [string]. Endpoints POST/GET/DELETE
+>   `/api/nutricion/recipes/[id]/photo`. Foto y pasos se leen EN VIVO desde los
+>   menús (via `recipeId` de provenance); el snapshot sigue congelando solo
+>   nombre e ingredientes.
+> - **El PDF del menú agrupa por día** (banda por día, comidas dentro), embebe
+>   la foto de cada receta y sus pasos numerados, y **omite comidas/días vacíos**.
+>   Los planes sin días se imprimen plano, como antes.
+> - **Catálogo saneado**: el catálogo branded (2.925 productos de marca de OFF)
+>   fue un malentendido y se retiró — `scripts/cleanup-branded-foods.js` archiva
+>   `source='openfoodfacts' AND 'marca'=ANY(tags)`; el seed y sus datos se
+>   eliminaron del repo. El catálogo es `seed-foods-base-catalog.js` (~500
+>   alimentos con macros) + los alimentos propios de la nutricionista.
+> - `loadFromTemplate` del editor copia ahora también `weekday` y las recetas de
+>   cada opción (antes se perdían ambas cosas).
+
 > **Sprint Nutrinotas (2026-07-18, rama `feat/nutricion-recetario-ux`):**
 > feedback directo de Laura aplicado sobre el estado post-Sprint 8:
 >
