@@ -2,11 +2,19 @@
  * migrate-calendar-citas-fks.js
  *
  * Sprint "Calendario/Citas FKs".
- *   - calendar_tasks (tenants con módulo `calendar`): + client_id, + team_member_id
+ *   - calendar_tasks (todo schema que tenga la tabla): + client_id, + team_member_id
  *     (UUID nullable, FK ON DELETE SET NULL a clients/team_members) + índices.
- *   - bookings (tenants con módulo `citas`): + team_member_id
+ *   - bookings (todo schema que tenga la tabla): + team_member_id
  *     (UUID nullable, FK ON DELETE SET NULL a team_members) + índice.
  *     (meet_url ya existía; no se toca.)
+ *
+ * IMPORTANTE — por qué NO filtra por módulo: si un tenant ya tenía la tabla
+ * (creada por un `db:sync` anterior) pero todavía no había comprado Citas o
+ * Calendario, la versión antigua lo saltaba. Al activar el módulo más tarde, la
+ * tabla seguía sin las columnas y TODA lectura reventaba con 42703 — el bug de
+ * las reservas de tunutrilaura.com. Al decidir por existencia de tabla, comprar
+ * un módulo hoy y el otro dentro de seis meses es indiferente: re-ejecutar esta
+ * migración deja ambos schemas correctos.
  *
  * Todo ADITIVO + NULLABLE → retrocompatible (nutri_laura en prod incluido).
  * Idempotente: ADD COLUMN IF NOT EXISTS, CREATE INDEX IF NOT EXISTS y FK dentro
@@ -23,15 +31,27 @@ import { Sequelize } from "sequelize";
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
 
-async function fetchSlugs(s, moduleKey) {
+// Antes esto filtraba por `module_key`, y ahí estaba el agujero: un tenant que
+// ya tenía la tabla creada por un sync anterior pero AÚN no había comprado el
+// módulo se quedaba sin las columnas. El día que lo activaba, toda lectura
+// reventaba con 42703 (fue el bug de las citas de tunutrilaura.com).
+// Ahora se recorren TODOS los tenants activos y se decide por la EXISTENCIA DE
+// LA TABLA, no por el módulo: si la tabla está, se blinda; si no está, ya nacerá
+// correcta desde el modelo cuando `db:sync` la cree.
+async function fetchActiveSlugs(s) {
   const [rows] = await s.query(
-    `SELECT t.slug FROM master.tenants t
-       JOIN master.tenant_modules tm ON tm.tenant_id = t.id
-      WHERE t.status = 'active' AND tm.module_key = :mk AND tm.enabled = TRUE
-      ORDER BY t.slug`,
-    { replacements: { mk: moduleKey } }
+    `SELECT slug FROM master.tenants WHERE status = 'active' ORDER BY slug`
   );
   return rows.map((r) => r.slug);
+}
+
+async function tableExists(s, schema, table) {
+  const [rows] = await s.query(
+    `SELECT 1 FROM information_schema.tables
+      WHERE table_schema = :schema AND table_name = :table`,
+    { replacements: { schema, table } }
+  );
+  return rows.length > 0;
 }
 
 // FK idempotente y robusta (ignora si ya existe o si faltara la tabla/columna).
@@ -88,31 +108,49 @@ async function main() {
   }
   const s = new Sequelize(process.env.DATABASE_URL, { dialect: "postgres", logging: false });
 
-  header("Calendario — tenants con módulo `calendar`...");
-  const calSlugs = await fetchSlugs(s, "calendar");
-  if (calSlugs.length === 0) log("· Ninguno.");
-  else log(`✓ ${calSlugs.length}: ${calSlugs.join(", ")}`);
-  for (const slug of calSlugs) {
-    try {
-      await processCalendar(s, `crm_${slug}`);
-      log(`  ✓ crm_${slug}: calendar_tasks.client_id + team_member_id listos`);
-    } catch (err) {
-      log(`  ✗ crm_${slug}: ${err.message} — se salta`);
-    }
-  }
+  const slugs = await fetchActiveSlugs(s);
+  header(`Tenants activos: ${slugs.length} (${slugs.join(", ")})`);
 
-  header("Citas — tenants con módulo `citas`...");
-  const citasSlugs = await fetchSlugs(s, "citas");
-  if (citasSlugs.length === 0) log("· Ninguno.");
-  else log(`✓ ${citasSlugs.length}: ${citasSlugs.join(", ")}`);
-  for (const slug of citasSlugs) {
+  let calOk = 0, calSkip = 0, citOk = 0, citSkip = 0;
+
+  header("Calendario — schemas con tabla `calendar_tasks`...");
+  for (const slug of slugs) {
+    const schema = `crm_${slug}`;
+    if (!(await tableExists(s, schema, "calendar_tasks"))) {
+      log(`· ${schema}: sin tabla calendar_tasks — se omite`);
+      calSkip++;
+      continue;
+    }
     try {
-      await processCitas(s, `crm_${slug}`);
-      log(`  ✓ crm_${slug}: bookings.team_member_id listo`);
+      await processCalendar(s, schema);
+      log(`✓ ${schema}: calendar_tasks.client_id + team_member_id listos`);
+      calOk++;
     } catch (err) {
-      log(`  ✗ crm_${slug}: ${err.message} — se salta`);
+      log(`✗ ${schema}: ${err.message} — se salta`);
     }
   }
+  if (calOk === 0) log("· Ningún schema con calendar_tasks.");
+
+  header("Citas — schemas con tabla `bookings`...");
+  for (const slug of slugs) {
+    const schema = `crm_${slug}`;
+    if (!(await tableExists(s, schema, "bookings"))) {
+      log(`· ${schema}: sin tabla bookings — se omite`);
+      citSkip++;
+      continue;
+    }
+    try {
+      await processCitas(s, schema);
+      log(`✓ ${schema}: bookings.team_member_id listo`);
+      citOk++;
+    } catch (err) {
+      log(`✗ ${schema}: ${err.message} — se salta`);
+    }
+  }
+  if (citOk === 0) log("· Ningún schema con bookings.");
+
+  log("");
+  log(`Resumen: calendar_tasks ${calOk} blindados / ${calSkip} sin tabla · bookings ${citOk} blindados / ${citSkip} sin tabla`);
 
   process.stdout.write("\n══════════════════════════════════════════════════\n");
   process.stdout.write(" ✓ Migración completada\n");

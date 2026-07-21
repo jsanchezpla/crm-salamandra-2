@@ -21,10 +21,21 @@ echo "────────────────────────�
 
 # 1. Bajar cambios
 echo "→ git pull..."
+BEFORE=$(git rev-parse HEAD)
 git pull
+AFTER=$(git rev-parse HEAD)
 
-# 2. Detectar si package.json cambió en el último pull
-DEPS_CHANGED=$(git diff HEAD~ HEAD --name-only 2>/dev/null | grep -E "package(-lock)?\.json" || true)
+# 2. Detectar si las dependencias cambiaron en TODO lo que ha traído el pull.
+#    Antes esto era `git diff HEAD~ HEAD`, o sea SOLO el último commit: en un
+#    deploy acumulado (varios commits de golpe, lo normal aquí) se saltaba
+#    cambios de dependencias que venían commits atrás, tomaba la ruta rápida sin
+#    `npm ci` y el build podía romper por módulos que faltan. Ahora se compara el
+#    estado previo al pull contra el posterior, que es lo que de verdad entra.
+if [ "$BEFORE" = "$AFTER" ]; then
+  DEPS_CHANGED=""
+else
+  DEPS_CHANGED=$(git diff --name-only "$BEFORE" "$AFTER" -- package.json package-lock.json)
+fi
 
 if [ "$FULL" = true ] || [ -n "$DEPS_CHANGED" ]; then
   echo "→ Dependencias cambiadas — instalando y reconstruyendo todo..."
