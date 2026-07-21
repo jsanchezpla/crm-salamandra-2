@@ -112,6 +112,8 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
     }
     return ok(payload);
   } catch (err) {
+    // Emisión con fecha fuera de orden: mensaje accionable (no un 500 genérico).
+    if (err?.code === "OUT_OF_ORDER_DATE") return error(err.message, 422);
     return serverError(err);
   }
 });
