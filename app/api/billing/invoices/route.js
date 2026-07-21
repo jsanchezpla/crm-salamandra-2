@@ -108,7 +108,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
     // defaultPaymentTermsDays si no llegan explícitos.
     const settings = await TenantBillingSettings.findOne();
     const defaultVat = settings ? Number(settings.defaultVatRate) : 21;
-    const defaultIrpf = settings ? Number(settings.defaultIrpfRate ?? 15) : 15;
+    const defaultIrpf = settings ? Number(settings.defaultIrpfRate ?? 0) : 0;
     const termsDays = settings ? Number(settings.defaultPaymentTermsDays ?? 30) : 30;
     const linesWithVat = lines.map((l) => ({
       ...l,

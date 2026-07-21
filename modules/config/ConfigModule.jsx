@@ -145,7 +145,8 @@ export default function ConfigModule() {
           fiscalZip: billing.fiscalZip,
           fiscalCountry: billing.fiscalCountry,
           defaultVatRate: Number(billing.defaultVatRate),
-          defaultIrpfRate: Number(billing.defaultIrpfRate),
+          taxRegime: billing.taxRegime === "freelance" ? "freelance" : "company",
+          defaultIrpfRate: billing.taxRegime === "freelance" ? Number(billing.defaultIrpfRate) : 0,
           defaultPaymentTermsDays: Number(billing.defaultPaymentTermsDays),
         }),
       });
@@ -216,8 +217,42 @@ export default function ConfigModule() {
             <Field label="IVA por defecto">
               <Select disabled={!isAdmin} value={Number(billing.defaultVatRate)} onChange={(v) => setBillingField("defaultVatRate", Number(v))} options={(billing.availableVatRates ?? [21, 10, 4, 0]).map((v) => ({ value: Number(v), label: `${v}%` }))} className={inputCls} />
             </Field>
-            <Field label="IRPF por defecto (%)">
-              <input disabled={!isAdmin} type="number" min="0" max="100" step="0.01" value={billing.defaultIrpfRate ?? 0} onChange={(e) => setBillingField("defaultIrpfRate", e.target.value)} className={inputCls} />
+            <Field label="¿Cómo facturas? (régimen fiscal)" full>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={!isAdmin}
+                  onClick={() => { setBillingField("taxRegime", "company"); setBillingField("defaultIrpfRate", 0); }}
+                  className={`px-3 py-1.5 rounded-lg text-sm border transition disabled:opacity-60 ${
+                    (billing.taxRegime ?? "company") !== "freelance" ? "border-transparent text-white" : "border-neutral-200 text-neutral-500 hover:bg-neutral-50"
+                  }`}
+                  style={(billing.taxRegime ?? "company") !== "freelance" ? { backgroundColor: "var(--color-primary, #1B3A2D)" } : undefined}
+                >
+                  Empresa / SL
+                </button>
+                <button
+                  type="button"
+                  disabled={!isAdmin}
+                  onClick={() => { setBillingField("taxRegime", "freelance"); setBillingField("defaultIrpfRate", Number(billing.defaultIrpfRate) > 0 ? billing.defaultIrpfRate : 15); }}
+                  className={`px-3 py-1.5 rounded-lg text-sm border transition disabled:opacity-60 ${
+                    billing.taxRegime === "freelance" ? "border-transparent text-white" : "border-neutral-200 text-neutral-500 hover:bg-neutral-50"
+                  }`}
+                  style={billing.taxRegime === "freelance" ? { backgroundColor: "var(--color-primary, #1B3A2D)" } : undefined}
+                >
+                  Autónomo profesional (−15% IRPF)
+                </button>
+                {billing.taxRegime === "freelance" && (
+                  <div className="flex items-center gap-1.5">
+                    <input disabled={!isAdmin} type="number" min="0" max="100" step="0.01" value={billing.defaultIrpfRate ?? 15} onChange={(e) => setBillingField("defaultIrpfRate", e.target.value)} className={`${inputCls} w-20`} />
+                    <span className="text-xs text-neutral-500">% IRPF</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-[11px] text-neutral-400 mt-1">
+                {billing.taxRegime === "freelance"
+                  ? "Se restará este IRPF por defecto en tus facturas (ajustable en cada factura)."
+                  : "Sin retención de IRPF por defecto (lo habitual en SL / empresa)."}
+              </p>
             </Field>
             <Field label="Días de vencimiento">
               <input disabled={!isAdmin} type="number" min="0" value={billing.defaultPaymentTermsDays ?? 30} onChange={(e) => setBillingField("defaultPaymentTermsDays", e.target.value)} className={inputCls} />
