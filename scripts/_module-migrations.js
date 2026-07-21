@@ -9,17 +9,15 @@
  *
  * Lo consume `scripts/ensure-tenant-schema.js`.
  *
- * ── Dos estructuras ────────────────────────────────────────────────────────
+ * ── Tres estructuras ───────────────────────────────────────────────────────
  *
- * ORDER   Orden canónico GLOBAL de todas las migraciones. Cuando un tenant
- *         tiene varios módulos, la unión de sus migraciones se ordena por este
- *         array. Es imprescindible porque hay dependencias CRUZADAS entre
- *         módulos, no solo dentro de uno:
- *           · patients-clients-phase1 debe ir ANTES que client-module-assignments
- *           · client-module-assignments crea el índice único patients_client_unique
- *             que patients-multi-per-client luego ELIMINA → invertirlas rompe
- *           · team-fields antes que team-modules-salary
- *           · billing-rework es la base del resto de billing-*
+ * ORDER   Orden canónico GLOBAL, CALCULADO del SQL de las migraciones (ver
+ *         _migration-order.js). Hace falta porque hay dependencias CRUZADAS
+ *         entre módulos, no solo dentro de uno: p. ej.
+ *         `client-module-assignments` crea el índice único
+ *         `patients_client_unique` que `patients-multi-per-client` luego
+ *         ELIMINA — invertirlas rompe. Esa arista, y las otras 15, salen de
+ *         leer el código, no de acordarse.
  *
  * MODULES Qué migraciones pertenecen a cada `module_key`. Una misma migración
  *         puede estar en varios módulos (ej. calendar-citas-fks toca tanto
@@ -28,11 +26,9 @@
  * CORE    Migraciones transversales que se ejecutan SIEMPRE, tenga el tenant los
  *         módulos que tenga. Son aditivas y deciden por existencia de tabla, así
  *         que en un schema que no las necesita son un no-op.
- *
- * ⚠️ El orden está reconstruido a partir de docs/deploy-notes-2026-07-19.md y de
- *    las cabeceras de cada script. Jorge debería revisarlo: es el único punto de
- *    este diseño que depende de memoria histórica y no de algo verificable.
  */
+
+import { computeOrder } from "./_migration-order.js";
 
 /**
  * Migraciones EXCLUIDAS a propósito: no son migraciones de módulo reutilizables,
@@ -50,57 +46,14 @@ export const ONE_OFF = {
   "migrate-clinica-sprint-1": "cabecera: «solo aumenta»",
 };
 
-export const ORDER = [
-  // ── Base transversal (clientes/pacientes/reservas) ──────────────────────
-  "migrate-stage-to-string",
-  "migrate-calendar-citas-fks",
-  "migrate-citas-sprint-1",
-  "migrate-booking-pending",
-  "migrate-client-attachments-and-notes",
-  "migrate-patients-clients-phase1",
-  "migrate-client-module-assignments",
-  "migrate-patients-multi-per-client",
-
-  // ── Equipo (antes que billing: billing tiene FKs a team_members) ────────
-  "migrate-team-fields",
-  "migrate-rename-therapist-to-employee",
-  "migrate-team-modules-salary",
-  "migrate-team-members-avatar-color",
-
-  // ── Clínica y pacientes ─────────────────────────────────────────────────
-  // (pacientes-sprint-1 y clinica-sprint-1 van en ONE_OFF: hardcodean `aumenta`)
-  "migrate-clinica-module",
-
-  // ── Facturación (rework primero, es la base) ────────────────────────────
-  "migrate-billing-rework",
-  "migrate-billing-fix-kind-enum",
-  "migrate-billing-quotes",
-  "migrate-billing-correction-reason",
-  "migrate-billing-tax-regime",
-  "migrate-billing-vat-exempt",
-  "migrate-billing-irpf-partners",
-
-  // ── Proyectos ───────────────────────────────────────────────────────────
-  "migrate-projects-sprint-1",
-  "migrate-projects-sprint-2",
-  "migrate-projects-task-priority",
-
-  // ── Formación ───────────────────────────────────────────────────────────
-  "migrate-training-fields",
-  "migrate-training-archive",
-  "migrate-course-registrations",
-
-  // ── Inventario, documentos, nutrición ───────────────────────────────────
-  "migrate-inventory-rework",
-  "migrate-documents-sprint-1",
-  "migrate-nutricion-recipes",
-
-  // ── Captación ───────────────────────────────────────────────────────────
-  "migrate-outreach-sprint-1",
-  "migrate-outreach-google-usage",
-  "migrate-outreach-convert",
-  "migrate-outreach-website-text",
-];
+/**
+ * Orden canónico global. NO se escribe a mano: se DEDUCE del SQL de cada
+ * migración (quién crea una tabla va antes que quien la altera) en
+ * scripts/_migration-order.js. Audítalo con:
+ *
+ *   node scripts/check-migration-order.js
+ */
+export const ORDER = computeOrder();
 
 export const CORE = [
   // Aditivas y decididas por existencia de tabla: no-op donde no aplican.
@@ -185,12 +138,20 @@ export function migrationsFor(moduleKeys = []) {
   return ORDER.filter((m) => set.has(m));
 }
 
-/** Migraciones declaradas en MODULES/CORE que no están en ORDER (error de mapa). */
+/**
+ * Salud del mapa. Como ORDER se calcula de los ficheros que hay en disco, esto
+ * detecta las dos formas de que el mapa se desincronice del repo:
+ *   sinOrden   declaradas en MODULES/CORE pero cuyo fichero ya no existe.
+ *   huerfanas  ficheros de migración que nadie ejecutaría nunca: sin módulo, sin
+ *              CORE y sin marcar como ONE_OFF. Lo normal es que alguien haya
+ *              añadido una migración y se le haya olvidado apuntarla aquí.
+ */
 export function mapInconsistencies() {
   const inOrder = new Set(ORDER);
   const declared = new Set([...CORE, ...Object.values(MODULES).flat()]);
+  const oneOff = new Set(Object.keys(ONE_OFF));
   return {
     sinOrden: [...declared].filter((m) => !inOrder.has(m)),
-    huerfanas: ORDER.filter((m) => !declared.has(m)),
+    huerfanas: ORDER.filter((m) => !declared.has(m) && !oneOff.has(m)),
   };
 }

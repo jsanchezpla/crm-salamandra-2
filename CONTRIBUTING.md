@@ -143,7 +143,10 @@ Tipos: `feat` (funcionalidad), `fix` (bug), `chore` (mantenimiento/infra),
   Para poner al día un tenant existente sin activar nada:
   `npm run db:ensure-schema -- <slug>`. Qué migraciones lleva cada módulo se
   declara en `scripts/_module-migrations.js`; si añades una migración de módulo,
-  apúntala ahí o nadie la ejecutará nunca.
+  apúntala ahí o nadie la ejecutará nunca. **El orden en que se ejecutan NO se
+  escribe a mano**: se deduce del SQL de cada una (quien crea una tabla va antes
+  que quien la altera). Audítalo con `npm run db:check-migration-order`, que
+  además avisa de migraciones huérfanas y de aquellas cuyo SQL no consigue leer.
 - **Multi-tenant:** toda query va por `getTenantContext`/`withTenant` + `hasModule`.
   Nunca conectes directo a PostgreSQL desde una ruta.
 - **JavaScript puro** (sin TypeScript). `app/` en la raíz (sin `src/`).
