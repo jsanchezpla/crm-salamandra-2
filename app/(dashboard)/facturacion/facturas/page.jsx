@@ -19,7 +19,7 @@ function addDaysIso(isoDate, days) {
   return d.toISOString().slice(0, 10);
 }
 
-function emptyForm(defaultVat = 21, termsDays = 30, defaultIrpf = 15) {
+function emptyForm(defaultVat = 21, termsDays = 30, defaultIrpf = 0) {
   const issueDate = new Date().toISOString().slice(0, 10);
   return {
     clientId: "",
@@ -60,6 +60,10 @@ export default function FacturasPage() {
 
   // Datos auxiliares
   const [clients, setClients] = useState([]);
+  // Alta rápida de cliente sin salir del editor.
+  const [showNewClient, setShowNewClient] = useState(false);
+  const [newClient, setNewClient] = useState({ name: "", taxId: "" });
+  const [savingClient, setSavingClient] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [series, setSeries] = useState([]);
   const [settings, setSettings] = useState(null);
@@ -124,12 +128,36 @@ export default function FacturasPage() {
     setEditing(false);
     setFormError(null);
   }
+  async function createClient() {
+    const name = newClient.name.trim();
+    if (!name) return;
+    setSavingClient(true);
+    setFormError(null);
+    try {
+      const r = await fetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, taxId: newClient.taxId.trim() || null, type: "company" }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo crear el cliente");
+      const c = j.data;
+      setClients((cs) => [c, ...cs]);
+      setForm((f) => ({ ...f, clientId: c.id }));
+      setNewClient({ name: "", taxId: "" });
+      setShowNewClient(false);
+    } catch (e) {
+      setFormError(e.message);
+    } finally {
+      setSavingClient(false);
+    }
+  }
   function openCreate() {
     setOpenInvoice(null);
     setForm(emptyForm(
       settings?.defaultVatRate ?? 21,
       Number(settings?.defaultPaymentTermsDays ?? 30),
-      Number(settings?.defaultIrpfRate ?? 15)
+      Number(settings?.defaultIrpfRate ?? 0)
     ));
     setShowCreate(true);
     setEditing(true);
@@ -146,7 +174,7 @@ export default function FacturasPage() {
       clientId: openInvoice.clientId ?? "",
       employeeId: openInvoice.employeeId ?? "",
       partnerId: openInvoice.partnerId ?? "",
-      irpfRate: openInvoice.irpfRate ?? settings?.defaultIrpfRate ?? 15,
+      irpfRate: openInvoice.irpfRate ?? settings?.defaultIrpfRate ?? 0,
       issueDate: openInvoice.issueDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
       dueDate: openInvoice.dueDate?.slice(0, 10) ?? "",
       series: openInvoice.series ?? "F",
@@ -465,15 +493,34 @@ export default function FacturasPage() {
                   })()}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <FormRow label="Cliente (pagador) *">
-                      <Select
-                        value={form.clientId}
-                        onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
-                        options={[
-                          { value: "", label: "Selecciona..." },
-                          ...clients.map((c) => ({ value: c.id, label: `${c.fiscalName || c.name}${!c.taxId ? "  ⚠" : ""}` })),
-                        ]}
-                        className={inputCls}
-                      />
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <Select
+                            value={form.clientId}
+                            onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
+                            options={[
+                              { value: "", label: "Selecciona..." },
+                              ...clients.map((c) => ({ value: c.id, label: `${c.fiscalName || c.name}${!c.taxId ? "  ⚠" : ""}` })),
+                            ]}
+                            className={inputCls}
+                          />
+                        </div>
+                        <button type="button" onClick={() => setShowNewClient((v) => !v)} className="shrink-0 text-xs font-semibold text-[var(--color-primary,#1B3A2D)] hover:underline whitespace-nowrap">
+                          + Nuevo
+                        </button>
+                      </div>
+                      {showNewClient && (
+                        <div className="mt-2 p-2.5 bg-neutral-50 border border-neutral-200 rounded-lg space-y-2">
+                          <input placeholder="Nombre / razón social *" value={newClient.name} onChange={(e) => setNewClient((n) => ({ ...n, name: e.target.value }))} className={inputCls} />
+                          <input placeholder="NIF / CIF (opcional)" value={newClient.taxId} onChange={(e) => setNewClient((n) => ({ ...n, taxId: e.target.value }))} className={inputCls} />
+                          <div className="flex gap-2">
+                            <button type="button" onClick={createClient} disabled={savingClient || !newClient.name.trim()} className="text-xs font-medium px-3 py-1.5 rounded-md bg-[var(--color-primary,#1B3A2D)] text-white disabled:opacity-40">
+                              {savingClient ? "Creando…" : "Crear y seleccionar"}
+                            </button>
+                            <button type="button" onClick={() => setShowNewClient(false)} className="text-xs text-neutral-500">Cancelar</button>
+                          </div>
+                        </div>
+                      )}
                     </FormRow>
                     {openInvoice?.patient && (
                       <FormRow label="Paciente">
@@ -606,7 +653,7 @@ export default function FacturasPage() {
                                 <Select
                                   value={l.vatRate}
                                   onChange={(v) => setLine(idx, "vatRate", v)}
-                                  options={(settings?.availableVatRates ?? [21, 10, 4, 0]).map((rate) => ({ value: rate, label: `${rate}%` }))}
+                                  options={(settings?.availableVatRates ?? [21, 10, 4, 0]).map((rate) => ({ value: rate, label: Number(rate) === 0 ? "Exento (0%)" : `${rate}%` }))}
                                   className={inputCls}
                                 />
                               </FormRow>

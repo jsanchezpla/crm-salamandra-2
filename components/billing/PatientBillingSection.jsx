@@ -13,7 +13,7 @@
  * Autocontenido: recibe patientId + clientId (pagador por defecto).
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import PatientReparto from "./PatientReparto.jsx";
 
@@ -60,8 +60,23 @@ export default function PatientBillingSection({ patientId, clientId }) {
 
   useEffect(() => load(), [load]);
 
-  async function nuevaFactura() {
-    if (busy || !clientId) return;
+  // Pagadores frecuentes del paciente (calculados de sus facturas): permiten
+  // crear una factura para un pagador recurrente con un clic, sin re-teclearlo.
+  const frequentPayers = useMemo(() => {
+    const map = new Map();
+    for (const inv of invoices) {
+      const id = inv.clientId;
+      if (!id) continue;
+      const e = map.get(id) || { id, name: inv.client?.name || "—", count: 0 };
+      e.count += 1;
+      map.set(id, e);
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count).slice(0, 5);
+  }, [invoices]);
+
+  async function nuevaFactura(payerId) {
+    const payer = typeof payerId === "string" && payerId ? payerId : clientId;
+    if (busy || !payer) return;
     setBusy(true);
     setError(null);
     try {
@@ -70,7 +85,7 @@ export default function PatientBillingSection({ patientId, clientId }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId, // pagador por defecto = cliente del paciente (editable en el editor)
+          clientId: payer, // pagador elegido (chip) o el cliente del paciente por defecto
           patientId,
           issueDate,
           lines: [{ description: "Cuota", quantity: 1, unitPrice: 0 }],
@@ -109,6 +124,24 @@ export default function PatientBillingSection({ patientId, clientId }) {
           </button>
         </div>
       </div>
+
+      {frequentPayers.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <span className="text-[10px] text-neutral-400">Facturar a un pagador frecuente:</span>
+          {frequentPayers.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => nuevaFactura(p.id)}
+              disabled={busy}
+              className="text-[10px] px-2 py-0.5 rounded-full border border-neutral-200 text-neutral-600 hover:bg-neutral-50 disabled:opacity-40"
+              title={`Nueva factura con ${p.name} como pagador`}
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {showReparto && (
         <PatientReparto
