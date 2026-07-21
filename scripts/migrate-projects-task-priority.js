@@ -17,6 +17,7 @@
  */
 
 import { Sequelize } from "sequelize";
+import { byTable } from "./_schema-targets.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -87,16 +88,8 @@ async function processSchemaInTx(s, t, schema) {
   return result;
 }
 
-async function fetchProjectTenantSlugs(s) {
-  const [rows] = await s.query(`
-    SELECT t.slug
-    FROM master.tenants t
-    JOIN master.tenant_modules tm ON tm.tenant_id = t.id
-    WHERE t.status = 'active' AND tm.module_key = 'projects' AND tm.enabled = TRUE
-    ORDER BY t.slug
-  `);
-  return rows.map((r) => r.slug);
-}
+// Selección por EXISTENCIA de tabla, no por módulo: ver scripts/_schema-targets.js
+// y el incidente del 2026-07-21 (bug de las reservas de tunutrilaura.com).
 
 async function main() {
   process.stdout.write("\n════════════════════════════════════════════════════\n");
@@ -114,20 +107,20 @@ async function main() {
     const [versionRows] = await sequelize.query("SHOW server_version");
     log(`PostgreSQL: ${versionRows[0]?.server_version ?? "?"}`);
 
-    header("Obteniendo tenants con módulo projects activo...");
-    const slugs = await fetchProjectTenantSlugs(sequelize);
-    if (slugs.length === 0) {
-      log("· No hay tenants con módulo `projects` habilitado. Nada que hacer.");
+    header("Obteniendo schemas con tabla `tasks`...");
+    const { schemas, skipped } = await byTable(sequelize, "tasks");
+    if (schemas.length === 0) {
+      log("· Ningún schema con tabla `tasks`. Nada que hacer.");
       await sequelize.close();
       process.exit(0);
     }
-    log(`✓ ${slugs.length} tenants: ${slugs.join(", ")}`);
+    log(`✓ ${schemas.length}: ${schemas.join(", ")}`);
+    if (skipped.length) log(`· sin tabla tasks, se omiten: ${skipped.join(", ")}`);
 
     header("Aplicando migración (transacción global)...");
     const results = [];
     await sequelize.transaction(async (t) => {
-      for (const slug of slugs) {
-        const schema = `crm_${slug}`;
+      for (const schema of schemas) {
         process.stdout.write(`\n· Schema ${schema}\n`);
         results.push(await processSchemaInTx(sequelize, t, schema));
       }

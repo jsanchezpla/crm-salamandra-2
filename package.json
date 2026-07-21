@@ -110,7 +110,9 @@
     "db:enable:outreach": "node --env-file=.env.local scripts/enable-outreach.js",
     "db:seed:outreach": "node --env-file=.env.local scripts/seed-outreach.js",
     "db:setup:outreach": "node --env-file=.env.local scripts/setup-outreach.js",
-    "db:setup:outreach:prod": "node --env-file=.env.production scripts/setup-outreach.js"
+    "db:setup:outreach:prod": "node --env-file=.env.production scripts/setup-outreach.js",
+    "db:ensure-schema": "node --env-file=.env.local scripts/ensure-tenant-schema.js",
+    "db:enable-module": "node --env-file=.env.local scripts/enable-module.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

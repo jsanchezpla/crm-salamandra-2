@@ -89,10 +89,18 @@ async function createTaskAssigneesTable(s, t, schema, result) {
 async function backfillAssignees(s, t, schema, result) {
   // Migra tasks.assignee_id legacy 1-a-1 → filas task_assignees N-a-N.
   // Idempotente: ON CONFLICT DO NOTHING en (task_id, team_member_id).
+  // NO confiar en los DEFAULT de la tabla. El CREATE TABLE de más arriba los
+  // define, pero en un schema donde `task_assignees` la creó Sequelize (db:sync)
+  // en vez de esta migración, las columnas son NOT NULL *sin* DEFAULT: Sequelize
+  // genera id y timestamps en JS, no en Postgres. Un INSERT ... SELECT que se
+  // apoye en los defaults revienta ahí con "el valor nulo en la columna ... viola
+  // la restricción de no nulo". Se rellenan todas explícitamente.
   const [rows] = await s.query(`
-    INSERT INTO "${schema}"."task_assignees" (task_id, team_member_id)
-    SELECT id, assignee_id FROM "${schema}"."tasks"
-    WHERE assignee_id IS NOT NULL
+    INSERT INTO "${schema}"."task_assignees"
+      (id, task_id, team_member_id, assigned_at, created_at, updated_at)
+    SELECT gen_random_uuid(), id, assignee_id, now(), now(), now()
+      FROM "${schema}"."tasks"
+     WHERE assignee_id IS NOT NULL
     ON CONFLICT (task_id, team_member_id) DO NOTHING
     RETURNING id
   `, { transaction: t });

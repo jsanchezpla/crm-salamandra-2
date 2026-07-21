@@ -22,6 +22,7 @@
  */
 
 import { Sequelize } from "sequelize";
+import { byTable } from "./_schema-targets.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -104,16 +105,10 @@ async function setNutriLauraFlagInTx(s, t) {
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
-async function fetchTenantsWithCitas(s) {
-  const [rows] = await s.query(`
-    SELECT t.slug
-    FROM master.tenants t
-    JOIN master.tenant_modules tm ON tm.tenant_id = t.id
-    WHERE t.status = 'active' AND tm.module_key = 'citas' AND tm.enabled = true
-    ORDER BY t.slug
-  `);
-  return rows.map((r) => r.slug);
-}
+// Fase A se decide por EXISTENCIA de la tabla `bookings`, no por módulo activo:
+// si el schema tiene la tabla, su enum debe aceptar 'pending' aunque el tenant
+// todavía no haya comprado Citas (ver scripts/_schema-targets.js y el incidente
+// del 2026-07-21). La Fase B sigue siendo un flag puntual de nutri_laura.
 
 async function main() {
   process.stdout.write("\n══════════════════════════════════════════════════════\n");
@@ -131,16 +126,17 @@ async function main() {
   });
 
   try {
-    header("Obteniendo tenants con módulo citas habilitado...");
-    const slugs = await fetchTenantsWithCitas(sequelize);
-    if (slugs.length === 0) {
-      log("· Ningún tenant tiene el módulo citas habilitado.");
+    header("Obteniendo schemas con tabla `bookings`...");
+    const { schemas, skipped } = await byTable(sequelize, "bookings");
+    if (schemas.length === 0) {
+      log("· Ningún schema tiene tabla bookings.");
     } else {
-      log(`✓ ${slugs.length} tenants: ${slugs.join(", ")}`);
+      log(`✓ ${schemas.length}: ${schemas.join(", ")}`);
+      if (skipped.length) log(`· sin tabla bookings, se omiten: ${skipped.join(", ")}`);
 
       header("Fase A — ALTER TYPE ADD VALUE 'pending' (autocommit)...");
-      for (const slug of slugs) {
-        await addPendingToEnumAutocommit(sequelize, `crm_${slug}`);
+      for (const schema of schemas) {
+        await addPendingToEnumAutocommit(sequelize, schema);
       }
     }
 

@@ -17,6 +17,7 @@
  */
 
 import { Sequelize } from "sequelize";
+import { byTable } from "./_schema-targets.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -44,15 +45,8 @@ async function processSchema(s, schema) {
   `);
 }
 
-async function fetchBillingSlugs(s) {
-  const [rows] = await s.query(`
-    SELECT t.slug FROM master.tenants t
-    JOIN master.tenant_modules tm ON tm.tenant_id = t.id
-    WHERE t.status = 'active' AND tm.module_key = 'billing' AND tm.enabled = TRUE
-    ORDER BY t.slug
-  `);
-  return rows.map((r) => r.slug);
-}
+// Selección por EXISTENCIA de tabla (`invoices` como ancla del módulo), no por
+// módulo activo: ver scripts/_schema-targets.js y el incidente del 2026-07-21.
 
 async function main() {
   process.stdout.write("\n══════════════════════════════════════════════════\n");
@@ -65,17 +59,17 @@ async function main() {
   }
   const sequelize = new Sequelize(process.env.DATABASE_URL, { dialect: "postgres", logging: false });
 
-  header("Tenants con módulo billing activo...");
-  const slugs = await fetchBillingSlugs(sequelize);
-  if (slugs.length === 0) {
-    log("· Ninguno. Nada que hacer.");
+  header("Schemas con tabla `invoices`...");
+  const { schemas, skipped } = await byTable(sequelize, "invoices");
+  if (schemas.length === 0) {
+    log("· Ningún schema con tabla invoices. Nada que hacer.");
     await sequelize.close();
     process.exit(0);
   }
-  log(`✓ ${slugs.length} tenants: ${slugs.join(", ")}`);
+  log(`✓ ${schemas.length}: ${schemas.join(", ")}`);
+  if (skipped.length) log(`· sin tabla invoices, se omiten: ${skipped.join(", ")}`);
 
-  for (const slug of slugs) {
-    const schema = `crm_${slug}`;
+  for (const schema of schemas) {
     try {
       await processSchema(sequelize, schema);
       log(`✓ ${schema}: columnas IRPF/partner listas`);
