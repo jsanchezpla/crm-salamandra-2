@@ -42,6 +42,7 @@ export default function NutricionAsignadosModule() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [sendingId, setSendingId] = useState(null);
+  const [unassigningId, setUnassigningId] = useState(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 350);
@@ -107,6 +108,32 @@ export default function NutricionAsignadosModule() {
       setSendingId(null);
     }
   }, []);
+
+  // Desasignar: archiva el menú del paciente (soft). No se borra — sigue
+  // consultable en el histórico de su ficha — pero deja de estar vigente y el
+  // paciente queda libre para recibir otro menú.
+  const unassign = useCallback(async (plan) => {
+    const who = plan.clientName || "el paciente";
+    if (!confirm(
+      `¿Quitar el menú "${plan.name}" de ${who}?\n\n` +
+      `El menú deja de estar activo, pero queda guardado en el histórico del paciente.`
+    )) return;
+    setUnassigningId(plan.id);
+    try {
+      const r = await fetch(`/api/nutricion/plans/${plan.id}`, { method: "DELETE" });
+      if (r.status === 204 || r.ok) {
+        setToast({ kind: "ok", text: `Menú retirado de ${who}` });
+        load();
+      } else {
+        const j = await r.json().catch(() => ({}));
+        setToast({ kind: "err", text: j.error || "No se pudo quitar el menú" });
+      }
+    } catch {
+      setToast({ kind: "err", text: "No se pudo quitar el menú" });
+    } finally {
+      setUnassigningId(null);
+    }
+  }, [load]);
 
   const filtered = useMemo(() => {
     let out = items;
@@ -195,6 +222,8 @@ export default function NutricionAsignadosModule() {
                     onEdit={() => setEditingId(p.id)}
                     onSend={() => sendMenu(p)}
                     sending={sendingId === p.id}
+                    onUnassign={() => unassign(p)}
+                    unassigning={unassigningId === p.id}
                   />
                 ))}
               </div>
@@ -250,6 +279,14 @@ export default function NutricionAsignadosModule() {
                             >
                               Editar
                             </button>
+                            <button
+                              onClick={() => unassign(p)}
+                              disabled={unassigningId === p.id}
+                              title="Quitar este menú del paciente (queda en su histórico)"
+                              className="text-xs text-gray-400 hover:text-red-600 hover:underline disabled:opacity-50"
+                            >
+                              {unassigningId === p.id ? "Quitando…" : "Quitar"}
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -297,7 +334,7 @@ export default function NutricionAsignadosModule() {
   );
 }
 
-function AssignedCard({ plan, onEdit, onSend, sending }) {
+function AssignedCard({ plan, onEdit, onSend, sending, onUnassign, unassigning }) {
   return (
     <article
       onClick={onEdit}
@@ -331,6 +368,13 @@ function AssignedCard({ plan, onEdit, onSend, sending }) {
           className="text-xs text-gray-600 hover:text-[var(--color-primary)] hover:underline disabled:opacity-50"
         >
           {sending ? "Enviando…" : "Enviar por email"}
+        </button>
+        <button
+          onClick={onUnassign}
+          disabled={unassigning}
+          className="text-xs text-gray-400 hover:text-red-600 disabled:opacity-50"
+        >
+          {unassigning ? "Quitando…" : "Quitar"}
         </button>
         <button onClick={onEdit} className="ml-auto text-xs font-medium text-[var(--color-primary)]">
           Editar

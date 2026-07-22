@@ -81,15 +81,34 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
     const clientId = assigned.clientId;
     const templateId = assigned.templateId;
 
+    // Nombre del paciente, como respaldo para bautizar el plan nuevo si el
+    // anterior no llevaba el separador esperado. Best-effort: si el cliente ya
+    // no existe, el nombre cae a "actualizado".
+    const { Client } = tenantModels;
+    const client = Client && clientId ? await Client.findByPk(clientId, { attributes: ["id", "name"] }) : null;
+
     // ── Transacción: archive viejo + crear nuevo + deep-copy ─────────────────
     const result = await tenantSequelize.transaction(async (t) => {
       const oldBefore = assigned.toJSON();
       await assigned.update({ archivedAt: new Date() }, { transaction: t });
 
+      // El nombre conserva al paciente. OJO: assign crea los nombres con EM
+      // DASH ("Plantilla — Paciente", U+2014) y esto los partía por guión
+      // normal " - ", que NUNCA casaba: cada re-aplicación bautizaba el plan
+      // como "Plantilla - actualizado" y perdía el nombre del paciente.
+      // Se parte por el mismo separador con el que se construyen, y si aun así
+      // no casa se usa el nombre real del cliente en vez de "actualizado".
+      const SEP = " — ";
+      const suffix = oldBefore?.name?.includes(SEP)
+        ? oldBefore.name.split(SEP).slice(1).join(SEP)
+        : client?.name || "actualizado";
+
       const newPlan = await Plan.create(
         {
-          name: `${template.name} - ${oldBefore?.name?.split(" - ")?.[1] || "actualizado"}`,
+          name: `${template.name}${SEP}${suffix}`,
           description: template.description,
+          // Comentarios por día: viajan desde la plantilla como en /assign.
+          dayComments: template.dayComments || {},
           type: "assigned",
           templateId,
           clientId,

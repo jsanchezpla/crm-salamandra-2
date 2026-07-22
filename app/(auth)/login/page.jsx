@@ -3,9 +3,19 @@
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+// Destino tras el login. Solo se acepta una ruta INTERNA ("/algo"): un
+// `next` con host propio ("//evil.com" o "https://…") sería un open redirect
+// que un atacante podría colar en un enlace de login.
+function safeNext(raw) {
+  if (typeof raw !== "string" || !raw.startsWith("/") || raw.startsWith("//")) return "/";
+  if (raw.startsWith("/login")) return "/";
+  return raw;
+}
+
 function LoginForm() {
   const searchParams = useSearchParams();
   const expired = searchParams.get("expired") === "1";
+  const next = safeNext(searchParams.get("next"));
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,7 +46,8 @@ function LoginForm() {
         return;
       }
 
-      window.location.href = "/";
+      // Vuelve a donde estabas cuando caducó la sesión (o al inicio).
+      window.location.href = next;
     } catch {
       setError("Error de conexión. Inténtalo de nuevo.");
     } finally {
