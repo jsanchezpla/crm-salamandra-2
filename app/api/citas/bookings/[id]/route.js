@@ -10,6 +10,52 @@ import { logCitasAudit } from "../../../../../lib/citas/audit.js";
 import { findBookingOverlap } from "../../../../../lib/citas/booking.js";
 import { sendEmail } from "../../../../../lib/email/resendClient.js";
 import { bookingMeetLinkTemplate } from "../../../../../lib/email/templates/citas/bookingMeetLink.js";
+import { bookingCancelledTemplate } from "../../../../../lib/email/templates/citas/bookingCancelled.js";
+import { getTenantResendConfig } from "../../../../../lib/outreach/resendConfig.js";
+
+/**
+ * Email de cancelación al paciente (2026-07-22). Hasta hoy el motivo se
+ * guardaba en BD pero NO se avisaba al paciente — el módulo de citas es
+ * anterior a la llegada de Resend y este correo nunca se escribió.
+ *
+ * Clave de envío como en Captación (BYOK): la Resend key del tenant
+ * (Configuración → Correo, cifrada en reposo) si la tiene; si no, la global
+ * del CRM (RESEND_API_KEY del entorno) — así los tenants sin clave propia no
+ * se quedan mudos. Best-effort: un fallo de email JAMÁS rompe la cancelación.
+ *
+ * Solo se avisa de citas FUTURAS: cancelar un registro antiguo (limpieza de
+ * historial) no debe mandarle a nadie un "tu cita ha sido cancelada".
+ */
+async function sendCancellationEmail({ tenant, tenantModels, booking, reason }) {
+  try {
+    if (!booking.clientEmail) return;
+    if (new Date(booking.scheduledAt).getTime() <= Date.now()) return;
+
+    const { EventType } = tenantModels;
+    const et = await EventType.findByPk(booking.eventTypeId, { attributes: ["name"] });
+    const tpl = bookingCancelledTemplate({
+      tenantName: tenant.name,
+      brand: tenant.settings?.brand,
+      clientName: booking.clientName,
+      eventTypeName: et?.name ?? "tu cita",
+      scheduledAt: booking.scheduledAt,
+      reason: reason ?? null,
+    });
+    const resend = getTenantResendConfig({ tenant });
+    await sendEmail({
+      to: booking.clientEmail,
+      subject: tpl.subject,
+      html: tpl.html,
+      text: tpl.text,
+      // undefined → sendEmail cae a RESEND_FROM_EMAIL / RESEND_API_KEY globales
+      from: resend.fromEmail || undefined,
+      replyTo: resend.replyTo || undefined,
+      apiKey: resend.apiKey || undefined,
+    });
+  } catch (mailErr) {
+    process.stderr.write(`[citas:cancelled] email fail: ${mailErr.message}\n`);
+  }
+}
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["pending", "confirmed", "completed", "cancelled", "no_show"]);
@@ -234,6 +280,16 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
         after: { status: row.status, cancellationReason: row.cancellationReason ?? null },
         ip,
       });
+
+      // Cancelación → avisar al paciente con el motivo (best-effort).
+      if (row.status === "cancelled") {
+        await sendCancellationEmail({
+          tenant,
+          tenantModels,
+          booking: row,
+          reason: row.cancellationReason,
+        });
+      }
     }
 
     // Transición meetUrl null→valor en cita CONFIRMADA + ONLINE: AuditLog +
@@ -323,6 +379,14 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
       before,
       after: { status: "cancelled", cancellationReason: reason ?? null },
       ip,
+    });
+
+    // Avisar al paciente con el motivo (best-effort, solo citas futuras).
+    await sendCancellationEmail({
+      tenant,
+      tenantModels,
+      booking: row,
+      reason: reason ?? row.cancellationReason ?? null,
     });
 
     return noContent();
