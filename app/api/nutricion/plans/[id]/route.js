@@ -89,6 +89,26 @@ export const PATCH = withTenant(async (request, ctx, { tenant, tenantModels, has
     if (body.visibleToClient !== undefined) {
       updates.visibleToClient = Boolean(body.visibleToClient);
     }
+    // Comentarios por día (rediseño 2026-07-22): mapa completo
+    // { "1": "texto", … "7": "texto" }. Se REEMPLAZA entero (son ≤7 textos);
+    // claves fuera de 1-7 o valores no-texto → 422.
+    if (body.dayComments !== undefined) {
+      const dc = body.dayComments;
+      if (dc === null || typeof dc !== "object" || Array.isArray(dc)) {
+        return error("dayComments debe ser un objeto { \"1\"…\"7\": texto }", 422);
+      }
+      const clean = {};
+      for (const [k, v] of Object.entries(dc)) {
+        const day = Number(k);
+        if (!Number.isInteger(day) || day < 1 || day > 7) {
+          return error(`dayComments: clave inválida "${k}" (1-7)`, 422);
+        }
+        if (typeof v !== "string") return error(`dayComments[${k}] debe ser texto`, 422);
+        const text = v.slice(0, 5000).trim();
+        if (text) clean[String(day)] = text; // días en blanco no se guardan
+      }
+      updates.dayComments = clean;
+    }
 
     if (Object.keys(updates).length > 0) {
       await row.update(updates);

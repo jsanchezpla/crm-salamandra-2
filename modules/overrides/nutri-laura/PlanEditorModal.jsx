@@ -33,6 +33,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Select from "@/components/ui/Select.jsx";
+import RecipePickerModal from "./RecipePickerModal.jsx";
 import {
   computeFoodMacros,
   computeOptionMacros,
@@ -101,6 +102,10 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
   const [activeDay, setActiveDay] = useState(null);
   // Vista semana: cuadrícula 7 días × comidas para verlo todo de un vistazo.
   const [weekView, setWeekView] = useState(false);
+  // Picker de recetas abierto: { sectionName, meal|null } (rediseño 2026-07-22:
+  // cada día son las 5 grandes comidas fijas; meal=null si la fila aún no
+  // existe en BD y hay que crearla al vuelo).
+  const [recipePicker, setRecipePicker] = useState(null);
 
   // Cliente cargado (solo si type='assigned')
   const [clientInfo, setClientInfo] = useState(null);
@@ -285,22 +290,81 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
   // se reactiva el portal cliente — basta con volver a montar la UI.
 
   // ── Mutaciones: comidas ───────────────────────────────────────────────────
-  async function addMeal() {
-    if (!plan) return;
-    const name = window.prompt("Nombre de la comida (Desayuno, Comida, Cena…)") || "";
-    if (!name.trim()) return;
+  // "Añadir comida" (nombre libre por prompt) está RETIRADO (rediseño
+  // 2026-07-22): cada día son SIEMPRE las 5 grandes comidas. Si la fila de una
+  // sección no existe todavía en BD (día de un plan antiguo, comida borrada en
+  // su momento…), se crea en silencio la primera vez que se usa.
+
+  // Garantiza que la sección (Desayuno…Cena) del día `day` existe como
+  // plan_meal y devuelve { mealId }. `sectionIndex` fija el orden canónico.
+  async function ensureSectionMeal(day, sectionName, sectionIndex, existingMeal) {
+    if (existingMeal) return { mealId: existingMeal.id };
     const { ok, json } = await apiPost(`/api/nutricion/plans/${plan.id}/meals`, {
-      name: name.trim(),
-      // La comida nace en el día que estás mirando (0 = bloque "sin día").
-      weekday: activeDay ? activeDay : null,
+      name: sectionName,
+      weekday: day,
+      order: sectionIndex,
     });
-    if (!ok) {
-      setToast({ kind: "err", text: json.error || "No se pudo añadir la comida" });
-      return;
+    if (!ok) throw new Error(json.error || "No se pudo crear la comida");
+    return { mealId: json.data.id };
+  }
+
+  // Garantiza que la comida tiene una opción por defecto y devuelve su id.
+  async function ensureDefaultOption(mealId, existingMeal) {
+    const existing = existingMeal
+      ? (existingMeal.options || []).find((o) => o.isDefault) || (existingMeal.options || [])[0]
+      : null;
+    if (existing) return { optionId: existing.id };
+    const { ok, json } = await apiPost(
+      `/api/nutricion/plans/${plan.id}/meals/${mealId}/options`,
+      { isDefault: true }
+    );
+    if (!ok) throw new Error(json.error || "No se pudo crear la opción");
+    return { optionId: json.data.id };
+  }
+
+  // Añadir una receta a una gran comida del día (crea sección/opción al vuelo).
+  async function addRecipeToSection({ day, sectionName, sectionIndex, meal }, recipe) {
+    try {
+      const { mealId } = await ensureSectionMeal(day, sectionName, sectionIndex, meal);
+      const { optionId } = await ensureDefaultOption(mealId, meal);
+      const { ok, json } = await apiPost(
+        `/api/nutricion/plans/${plan.id}/meals/${mealId}/options/${optionId}/recipes`,
+        { recipeId: recipe.id, servings: 1 }
+      );
+      if (!ok) throw new Error(json.error || "No se pudo añadir la receta");
+      await loadPlan();
+      setToast({ kind: "ok", text: `«${recipe.name}» añadida a ${sectionName}` });
+    } catch (e) {
+      setToast({ kind: "err", text: e.message });
     }
-    // Refrescar el árbol para tener IDs limpios y orden correcto
-    await loadPlan();
-    setExpandedMealId(json.data?.id ?? null);
+  }
+
+  // Comentarios de una gran comida (plan_meals.description), creando la
+  // sección al vuelo si aún no existe.
+  async function saveSectionComment({ day, sectionName, sectionIndex, meal }, text) {
+    const current = meal?.description || "";
+    if (current === (text || "")) return;
+    try {
+      const { mealId } = await ensureSectionMeal(day, sectionName, sectionIndex, meal);
+      const { ok, json } = await apiPatch(
+        `/api/nutricion/plans/${plan.id}/meals/${mealId}`,
+        { description: text || null }
+      );
+      if (!ok) throw new Error(json.error || "Error al guardar comentarios");
+      await loadPlan();
+    } catch (e) {
+      setToast({ kind: "err", text: e.message });
+    }
+  }
+
+  // Comentarios del día (plans.day_comments JSONB). Reemplaza el mapa entero.
+  async function saveDayComment(day, text) {
+    const current = plan.dayComments?.[String(day)] || "";
+    if (current === (text || "").trim()) return;
+    const next = { ...(plan.dayComments || {}) };
+    if ((text || "").trim()) next[String(day)] = text.trim();
+    else delete next[String(day)];
+    await patchPlanMetadata({ dayComments: next });
   }
 
   async function renameMeal(meal) {
@@ -803,14 +867,6 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
                 >
                   {weekView ? "Volver al día" : "Ver semana completa"}
                 </button>
-                {!weekView && (
-                  <button
-                    onClick={addMeal}
-                    className="text-xs px-2.5 py-1 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
-                  >
-                    + Añadir comida
-                  </button>
-                )}
               </div>
             </div>
 
@@ -832,11 +888,25 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
                   setExpandedMealId(meal.id);
                 }}
               />
+            ) : day !== 0 ? (
+              /* Rediseño 2026-07-22: el día son SIEMPRE sus 5 grandes comidas,
+                 una debajo de otra, con "+ Añadir receta" y comentarios por
+                 sección; más los comentarios del propio día. */
+              <DayView
+                day={day}
+                meals={dayMeals}
+                dayComment={plan.dayComments?.[String(day)] || ""}
+                onSaveDayComment={(text) => saveDayComment(day, text)}
+                onOpenPicker={(section) => setRecipePicker(section)}
+                onSaveSectionComment={saveSectionComment}
+                onUpdateRecipe={(meal, option, pmor, updates) => updateOptionRecipe(meal, option, pmor, updates)}
+                onDeleteRecipe={(meal, option, pmor) => deleteOptionRecipe(meal, option, pmor)}
+                onDeleteFood={(meal, option, line) => deleteFoodLine(meal, option, line)}
+                onDeleteMeal={(meal) => deleteMeal(meal)}
+              />
             ) : dayMeals.length === 0 ? (
               <div className="border border-dashed border-gray-200 rounded-lg p-8 text-center text-sm text-gray-400">
-                {day === 0
-                  ? "No hay comidas sin día. Usa las pestañas para ir a un día de la semana."
-                  : `${WEEKDAYS[day - 1]} aún no tiene comidas. Créalas con "Añadir comida".`}
+                No hay comidas sin día. Usa las pestañas para ir a un día de la semana.
               </div>
             ) : (
               <div className="space-y-2.5">
@@ -912,10 +982,22 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
         </aside>
       </div>
 
+      {/* Picker de recetas (rediseño 2026-07-22): buscador + Crear receta */}
+      {recipePicker && (
+        <RecipePickerModal
+          title={`${recipePicker.sectionName} · ${WEEKDAYS[(recipePicker.day ?? 1) - 1]}`}
+          onClose={() => setRecipePicker(null)}
+          onPick={async (recipe) => {
+            await addRecipeToSection(recipePicker, recipe);
+            setRecipePicker(null);
+          }}
+        />
+      )}
+
       {/* Toast */}
       {toast && (
         <div
-          className={`fixed bottom-6 right-6 z-[60] px-4 py-2.5 rounded-md shadow-lg text-sm font-medium ${
+          className={`fixed bottom-6 right-6 z-[80] px-4 py-2.5 rounded-md shadow-lg text-sm font-medium ${
             toast.kind === "ok" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"
           }`}
         >
@@ -1898,8 +1980,230 @@ function TemplateAssignPanel({ plan }) {
 
 const WEEKDAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
+// Las 5 grandes comidas de cada día (rediseño 2026-07-22): estructura FIJA,
+// sin "Añadir comida" con nombre libre.
+const STANDARD_MEALS = ["Desayuno", "Almuerzo", "Comida", "Merienda", "Cena"];
+
 function mealFilled(meal) {
   return (meal.options || []).some((o) => (o.foods || []).length > 0 || (o.recipes || []).length > 0);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// DayView — un día del menú: comentarios del día + las 5 grandes comidas, una
+// debajo de otra. Cada sección: recetas (+ "Añadir receta") y comentarios.
+// Las comidas con nombre no estándar (renombradas o antiguas) se muestran
+// después de las 5, con botón para quitarlas — nada queda oculto.
+// ────────────────────────────────────────────────────────────────────────────
+
+function DayView({
+  day, meals, dayComment, onSaveDayComment, onOpenPicker,
+  onSaveSectionComment, onUpdateRecipe, onDeleteRecipe, onDeleteFood, onDeleteMeal,
+}) {
+  const [commentDraft, setCommentDraft] = useState(dayComment);
+  useEffect(() => { setCommentDraft(dayComment); }, [day, dayComment]);
+
+  const norm = (s) => (s || "").trim().toLowerCase();
+  const used = new Set();
+  const sections = STANDARD_MEALS.map((name, idx) => {
+    const meal = meals.find((m) => !used.has(m.id) && norm(m.name) === norm(name)) || null;
+    if (meal) used.add(meal.id);
+    return { day, sectionName: name, sectionIndex: idx, meal };
+  });
+  const extras = meals.filter((m) => !used.has(m.id));
+
+  return (
+    <div className="space-y-3">
+      {/* Comentarios del día */}
+      <div className="rounded-lg border border-gray-200 bg-white px-3.5 py-2.5">
+        <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">
+          Comentarios del {WEEKDAYS[day - 1].toLowerCase()}
+        </div>
+        <textarea
+          value={commentDraft}
+          onChange={(e) => setCommentDraft(e.target.value)}
+          onBlur={() => onSaveDayComment(commentDraft)}
+          placeholder={`Notas para todo el ${WEEKDAYS[day - 1].toLowerCase()} (batch cooking, hidratación…)`}
+          rows={2}
+          className="w-full text-sm rounded-md border border-gray-100 bg-gray-50/50 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:bg-white resize-y"
+        />
+      </div>
+
+      {sections.map((section) => (
+        <DaySection
+          key={section.sectionName}
+          section={section}
+          onOpenPicker={onOpenPicker}
+          onSaveComment={onSaveSectionComment}
+          onUpdateRecipe={onUpdateRecipe}
+          onDeleteRecipe={onDeleteRecipe}
+          onDeleteFood={onDeleteFood}
+        />
+      ))}
+
+      {extras.map((meal) => (
+        <DaySection
+          key={meal.id}
+          section={{ day, sectionName: meal.name, sectionIndex: 99, meal }}
+          isExtra
+          onOpenPicker={onOpenPicker}
+          onSaveComment={onSaveSectionComment}
+          onUpdateRecipe={onUpdateRecipe}
+          onDeleteRecipe={onDeleteRecipe}
+          onDeleteFood={onDeleteFood}
+          onDeleteMeal={onDeleteMeal}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Una gran comida del día: título, recetas con foto/raciones, alimentos
+// sueltos heredados, "+ Añadir receta" y comentarios de la sección.
+function DaySection({
+  section, isExtra = false,
+  onOpenPicker, onSaveComment, onUpdateRecipe, onDeleteRecipe, onDeleteFood, onDeleteMeal,
+}) {
+  const { sectionName, meal } = section;
+  const [commentDraft, setCommentDraft] = useState(meal?.description || "");
+  useEffect(() => { setCommentDraft(meal?.description || ""); }, [meal?.id, meal?.description]);
+
+  // Filas de contenido de TODAS las opciones (los planes nuevos tienen una;
+  // en los heredados con alternativas, cada fila conoce su opción).
+  const options = (meal?.options || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const multi = options.length > 1;
+  const macros = meal ? computeMealMacros(meal) : null;
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+      <div className="px-3.5 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
+        <h4 className="text-[13px] font-semibold uppercase tracking-wide text-[var(--color-primary)]">
+          {sectionName}
+          {isExtra && <span className="ml-2 text-[10px] font-normal normal-case text-amber-600">(comida extra)</span>}
+        </h4>
+        <div className="flex items-center gap-2">
+          {macros && macros.protein !== null && (
+            <span className="text-[10px] text-gray-400 tabular-nums">
+              P {fmtGNumber(macros.protein)} · C {fmtGNumber(macros.carbs)} · G {fmtGNumber(macros.fat)}
+            </span>
+          )}
+          {isExtra && onDeleteMeal && (
+            <button
+              type="button"
+              onClick={() => onDeleteMeal(meal)}
+              className="text-gray-300 hover:text-red-600"
+              aria-label={`Eliminar ${sectionName}`}
+              title="Eliminar esta comida extra"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} className="w-3.5 h-3.5"><path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="px-3.5 pb-3 space-y-1.5">
+        {options.map((option) => (
+          <div key={option.id} className="space-y-1.5">
+            {multi && ((option.recipes || []).length > 0 || (option.foods || []).length > 0) && (
+              <div className="text-[10px] uppercase tracking-wider text-gray-400 pt-1">
+                {option.isDefault ? "⭐ " : ""}{option.name}
+              </div>
+            )}
+            {(option.recipes || []).map((pmor) => (
+              <SectionRecipeRow
+                key={pmor.id}
+                pmor={pmor}
+                onServings={(servings) => onUpdateRecipe(meal, option, pmor, { servings })}
+                onDelete={() => onDeleteRecipe(meal, option, pmor)}
+              />
+            ))}
+            {(option.foods || []).map((line) => (
+              <div key={line.id} className="flex items-center gap-2 text-sm text-gray-700 rounded-md border border-gray-100 bg-gray-50/40 px-2.5 py-1.5">
+                <span className="flex-1 min-w-0 truncate">
+                  {line.food?.name ?? "Alimento"}
+                  <span className="text-gray-400 text-xs ml-1.5">
+                    {line.unit === "g" ? `${fmtGNumber(line.amount)} g` : line.unit === "household" ? `${fmtGNumber(line.amount)} ${line.householdLabel || "ud."}` : line.notes || "cantidad libre"}
+                  </span>
+                </span>
+                <button type="button" onClick={() => onDeleteFood(meal, option, line)} className="text-gray-300 hover:text-red-600" aria-label="Quitar alimento">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} className="w-3.5 h-3.5"><path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        ))}
+
+        {!meal || options.every((o) => (o.recipes || []).length === 0 && (o.foods || []).length === 0) ? (
+          <div className="text-xs text-gray-300 py-0.5">Sin recetas todavía.</div>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={() => onOpenPicker(section)}
+          className="w-full text-left px-2.5 py-1.5 text-xs font-medium rounded-md border border-dashed border-[var(--color-primary)]/40 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5 transition"
+        >
+          + Añadir receta
+        </button>
+
+        <input
+          type="text"
+          value={commentDraft}
+          onChange={(e) => setCommentDraft(e.target.value)}
+          onBlur={() => onSaveComment(section, commentDraft)}
+          onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+          placeholder={`Comentarios de ${sectionName.toLowerCase()}…`}
+          className="w-full text-xs text-gray-600 px-2.5 py-1.5 rounded-md border border-gray-100 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:bg-white"
+        />
+      </div>
+    </div>
+  );
+}
+
+// Fila de receta dentro de una gran comida: foto mini, nombre, raciones, quitar.
+function SectionRecipeRow({ pmor, onServings, onDelete }) {
+  const [servingsDraft, setServingsDraft] = useState(pmor.servings ?? 1);
+  useEffect(() => { setServingsDraft(pmor.servings ?? 1); }, [pmor.id, pmor.servings]);
+
+  function commit() {
+    const n = Number(servingsDraft);
+    if (!Number.isFinite(n) || n <= 0) { setServingsDraft(pmor.servings ?? 1); return; }
+    if (n !== Number(pmor.servings ?? 1)) onServings(n);
+  }
+
+  return (
+    <div className="flex items-center gap-2.5 rounded-md border border-gray-100 px-2.5 py-1.5">
+      {pmor.photoPath && pmor.recipeId ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`/api/nutricion/recipes/${pmor.recipeId}/photo`}
+          alt=""
+          loading="lazy"
+          className="w-9 h-9 object-cover rounded shrink-0 border border-gray-100"
+        />
+      ) : (
+        <div className="w-9 h-9 rounded shrink-0 bg-[var(--color-primary)]/[0.07] flex items-center justify-center text-[var(--color-primary)]">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.87c1.355 0 2.697.055 4.024.165C17.155 8.51 18 9.473 18 10.608v2.513m-3-4.87v-1.5m-6 1.5v-1.5m12 9.75-1.5.75a3.354 3.354 0 0 1-3 0 3.354 3.354 0 0 0-3 0 3.354 3.354 0 0 1-3 0 3.354 3.354 0 0 0-3 0 3.354 3.354 0 0 1-3 0L3 16.5m15-3.379a48.474 48.474 0 0 0-6-.371c-2.032 0-4.034.126-6 .371m12 0c.39.049.777.102 1.163.16 1.07.16 1.837 1.094 1.837 2.175v5.169c0 .621-.504 1.125-1.125 1.125H4.125A1.125 1.125 0 0 1 3 20.625v-5.17c0-1.08.768-2.014 1.837-2.174A47.78 47.78 0 0 1 6 13.12" /></svg>
+        </div>
+      )}
+      <span className="flex-1 min-w-0 text-sm font-medium text-gray-800 truncate">{pmor.nameSnapshot || "Receta"}</span>
+      <label className="flex items-center gap-1 text-[11px] text-gray-400 shrink-0">
+        <input
+          type="number"
+          step="0.5"
+          min="0.5"
+          value={servingsDraft}
+          onChange={(e) => setServingsDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+          className="w-14 px-1.5 py-1 text-xs text-right rounded border border-gray-200"
+          aria-label="Raciones"
+        />
+        rac.
+      </label>
+      <button type="button" onClick={onDelete} className="text-gray-300 hover:text-red-600 shrink-0" aria-label="Quitar receta">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} className="w-4 h-4"><path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
+    </div>
+  );
 }
 
 function WeekTabs({ activeDay, onSelect, meals, showLegacyTab }) {

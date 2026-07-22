@@ -118,7 +118,11 @@ export const MODULES = {
 
   inventory: ["migrate-inventory-rework"],
   documents: ["migrate-documents-sprint-1"],
-  nutricion: ["migrate-nutricion-recipes", "migrate-nutricion-week-recipe-media"],
+  nutricion: [
+    "migrate-nutricion-recipes",
+    "migrate-nutricion-week-recipe-media",
+    "migrate-nutricion-day-comments",
+  ],
 
   outreach: [
     "migrate-outreach-sprint-1",

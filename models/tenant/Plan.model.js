@@ -58,6 +58,16 @@ export function definePlan(sequelize) {
         allowNull: true,
         field: "assigned_at",
       },
+      // Comentarios por día de la semana (rediseño 2026-07-22): JSONB
+      // { "1": "texto del lunes", … "7": "texto del domingo" }. Complementa a
+      // `description` (comentarios generales del menú) y a
+      // plan_meals.description (comentarios por comida).
+      dayComments: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: {},
+        field: "day_comments",
+      },
       archivedAt: {
         type: DataTypes.DATE,
         allowNull: true,
