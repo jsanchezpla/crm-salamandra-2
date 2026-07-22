@@ -25,6 +25,7 @@ Antes de implementar cambios en un módulo concreto, lee su doc:
 | Pacientes         | `docs/modules/pacientes.md`  | Implementado (aumenta)           |
 | Clínica           | `docs/modules/clinica.md`    | Implementado (aumenta)           |
 | Nutrición         | `docs/modules/nutricion.md`  | C1+C2+C3 en prod, C4+C5 en local |
+| Formularios       | `docs/modules/formularios.md` | Implementado (nutri_laura)      |
 | Outreach          | `docs/modules/outreach.md`   | Completo en local, sin desplegar  |
 | Configuración     | `docs/modules/configuracion.md` | Implementado (claves IA por tenant) |
 | Emails (infra)    | `docs/modules/emails.md`     | Infra transversal                |
@@ -311,6 +312,7 @@ aplique.
 | clinica       | Clínica                        | Implementado (aumenta)              | `docs/modules/clinica.md`   |
 | nutricion     | Recetario                      | C1+C2+C3 en prod, C4+C5 en local    | `docs/modules/nutricion.md` |
 | outreach      | Captación (leads + scoring IA) | Completo en local (sandbox); falta desplegar | `docs/modules/outreach.md` |
+| formularios   | Formularios públicos → bandeja → ficha de cliente | Implementado (nutri_laura) | `docs/modules/formularios.md` |
 | —             | Configuración (ajustes + claves IA por tenant) | Implementado (siempre visible, sin `moduleKey`) | `docs/modules/configuracion.md` |
 
 > **`leads` vs `sales`**: hay dos `moduleKey` para el área comercial

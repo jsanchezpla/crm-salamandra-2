@@ -60,16 +60,28 @@ export const PUT = withTenant(async (request, { params }, { tenantModels, tenant
   const client = await Client.findByPk(id);
   if (!client) return notFound("Cliente no encontrado");
 
+  // ARREGLO 2026-07-22: este bloque solo contemplaba ocho claves con nombre
+  // propio, así que un `customFields` enviado por la UI con cualquier otra
+  // (edad, motivo, info_adicional… las que usa la ficha de nutrición) se
+  // perdía EN SILENCIO: la pantalla decía "guardado" y el valor no cambiaba.
+  // Ahora se admite el objeto entero y las claves con nombre siguen mandando
+  // encima, así que el comportamiento anterior no varía para nadie.
+  const entrantes =
+    body.customFields && typeof body.customFields === "object" && !Array.isArray(body.customFields)
+      ? body.customFields
+      : {};
+  const base = { ...client.customFields, ...entrantes };
+
   const customFields = {
-    ...client.customFields,
-    company: body.company?.trim() ?? client.customFields?.company ?? null,
-    country: body.country?.trim() ?? client.customFields?.country ?? null,
-    city: body.city?.trim() ?? client.customFields?.city ?? null,
-    topic: body.topic?.trim() ?? client.customFields?.topic ?? null,
-    interestedProduct: body.interestedProduct?.trim() ?? client.customFields?.interestedProduct ?? null,
-    origin: body.origin ?? client.customFields?.origin ?? "manual",
-    leadId: body.leadId ?? client.customFields?.leadId ?? null,
-    seStatus: body.status ?? client.customFields?.seStatus ?? "new",
+    ...base,
+    company: body.company?.trim() ?? base.company ?? null,
+    country: body.country?.trim() ?? base.country ?? null,
+    city: body.city?.trim() ?? base.city ?? null,
+    topic: body.topic?.trim() ?? base.topic ?? null,
+    interestedProduct: body.interestedProduct?.trim() ?? base.interestedProduct ?? null,
+    origin: body.origin ?? base.origin ?? "manual",
+    leadId: body.leadId ?? base.leadId ?? null,
+    seStatus: body.status ?? base.seStatus ?? "new",
   };
 
   // Datos fiscales (solo si vienen explícitos en el body)

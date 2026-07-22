@@ -131,6 +131,9 @@ export const MODULES = {
     "migrate-outreach-convert",
     "migrate-outreach-website-text",
   ],
+
+  // Formularios públicos → bandeja en el CRM → ficha de cliente al aceptar.
+  formularios: ["migrate-formularios-module"],
 };
 
 /**
