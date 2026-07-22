@@ -274,16 +274,30 @@ function Tarjeta({
   const edad = respuestas.find((a) => /edad|años/i.test(a.label))?.value;
   const esMenor = edad && Number(edad) > 0 && Number(edad) < 18;
 
+  // Plegada por defecto: con 6 respuestas por solicitud, desplegarlas todas
+  // obliga a hacer scroll para ver la siguiente. Plegada caben varias de un
+  // vistazo y se decide a quién abrir.
+  const [abierta, setAbierta] = useState(false);
+  const alternar = () => setAbierta((v) => !v);
+
   return (
     <article className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-      <div className="px-4 lg:px-5 pt-4 pb-3 flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
+      {/* Cabecera: toda ella es el mando para plegar y desplegar. Los enlaces
+          de contacto van FUERA, porque un <a> dentro de un <button> no es
+          HTML válido y el teléfono dejaría de abrirse desde el móvil. */}
+      <button
+        type="button"
+        onClick={alternar}
+        aria-expanded={abierta}
+        className="w-full text-left px-4 lg:px-5 pt-4 pb-3 flex items-start justify-between gap-3 hover:bg-gray-50/70 transition-colors cursor-pointer"
+      >
+        <div className="min-w-0 flex-1">
           <h2 className="text-gray-900 font-semibold text-base leading-tight">{s.name || "Sin nombre"}</h2>
           <p className="text-xs text-gray-500 mt-0.5">
             {fmtFecha(s.createdAt)} <span className="text-gray-400">· {haceCuanto(s.createdAt)}</span>
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap justify-end shrink-0">
           {esMenor && (
             <span className="text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-full">
               Menor de edad
@@ -299,8 +313,15 @@ function Tarjeta({
               Descartada
             </span>
           )}
+          <svg
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+            className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${abierta ? "rotate-180" : ""}`}
+            aria-hidden="true"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+          </svg>
         </div>
-      </div>
+      </button>
 
       {/* Contacto: pinchable, que Laura lo abre desde el móvil */}
       <div className="px-4 lg:px-5 pb-3 flex items-center gap-4 flex-wrap text-sm">
@@ -320,15 +341,29 @@ function Tarjeta({
         )}
       </div>
 
-      {/* Lo que escribió */}
-      <div className="px-4 lg:px-5 pb-4 space-y-2.5">
-        {respuestas.map((a) => (
-          <div key={a.key} className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-2.5">
-            <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">{a.label}</div>
-            <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{a.value}</div>
+      {/* Lo que escribió: solo cuando se despliega */}
+      {abierta ? (
+        <div className="px-4 lg:px-5 pb-4 space-y-2.5">
+          {respuestas.map((a) => (
+            <div key={a.key} className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-2.5">
+              <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">{a.label}</div>
+              <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{a.value}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        respuestas.length > 0 && (
+          <div className="px-4 lg:px-5 pb-4">
+            <button
+              type="button"
+              onClick={alternar}
+              className="text-xs text-gray-500 hover:text-[var(--color-primary)] transition-colors underline underline-offset-2 decoration-gray-300"
+            >
+              Ver {respuestas.length === 1 ? "la respuesta" : `las ${respuestas.length} respuestas`}
+            </button>
           </div>
-        ))}
-      </div>
+        )
+      )}
 
       {s.rejectionReason && (
         <div className="px-4 lg:px-5 pb-4">
