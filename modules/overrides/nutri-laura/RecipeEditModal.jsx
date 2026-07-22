@@ -17,6 +17,7 @@
 import { useEffect, useRef, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
 import { computeFoodMacros, computeRecipeMacros } from "@/lib/nutricion/macros.js";
+import { useFoodSections } from "./foodSections.js";
 
 const UNIT_OPTS = [
   { value: "g", label: "gramos" },
@@ -323,6 +324,10 @@ function IngredientRow({ row, onPatch, onRemove }) {
 
 function AddIngredient({ onPick }) {
   const [q, setQ] = useState("");
+  // Sección activa ("" = todas): acota la búsqueda y, sin texto, lista la
+  // sección entera — "quiero ver qué verduras tengo" sin teclear nada.
+  const [section, setSection] = useState("");
+  const sectionOptions = useFoodSections();
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -333,20 +338,24 @@ function AddIngredient({ onPick }) {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
       const query = q.trim();
-      if (query.length < 1) {
+      if (query.length < 1 && !section) {
         setResults([]);
         setOpen(false);
         return;
       }
       try {
-        const r = await fetch(`/api/nutricion/foods?q=${encodeURIComponent(query)}&limit=8`);
+        const params = new URLSearchParams();
+        if (query) params.set("q", query);
+        if (section) params.set("tag", section);
+        params.set("limit", section && !query ? "20" : "8");
+        const r = await fetch(`/api/nutricion/foods?${params}`);
         const j = await r.json();
         setResults(j.items ?? []);
         setOpen(true);
       } catch { /* noop */ }
     }, 300);
     return () => timer.current && clearTimeout(timer.current);
-  }, [q]);
+  }, [q, section]);
 
   // El alimento no existe: se crea al vuelo en el catálogo (solo nombre; las
   // macros se completan luego en /nutricion/alimentos) y se añade a la receta.
@@ -377,9 +386,18 @@ function AddIngredient({ onPick }) {
 
   return (
     <div className="relative mt-2">
-      <input type="text" value={q} onChange={(e) => setQ(e.target.value)} onFocus={() => q.trim().length >= 1 && setOpen(true)}
-        placeholder="+ Buscar alimento del catálogo…"
-        className="w-full px-3 py-1.5 text-sm rounded-md border border-dashed border-gray-300 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30" />
+      <div className="flex gap-2">
+        <input type="text" value={q} onChange={(e) => setQ(e.target.value)} onFocus={() => (q.trim().length >= 1 || section) && setOpen(true)}
+          placeholder="+ Buscar alimento del catálogo…"
+          className="flex-1 min-w-0 px-3 py-1.5 text-sm rounded-md border border-dashed border-gray-300 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30" />
+        <Select
+          value={section}
+          onChange={setSection}
+          options={sectionOptions}
+          className="w-44 shrink-0 px-2 py-1.5 text-xs rounded-md border border-gray-200"
+          aria-label="Sección del catálogo"
+        />
+      </div>
       {open && <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />}
       {/* Sin resultados y con 1 solo carácter no hay nada que pintar: evitar
           renderizar la caja del dropdown vacía. */}
