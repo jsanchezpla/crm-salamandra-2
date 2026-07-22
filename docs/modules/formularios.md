@@ -170,15 +170,21 @@ Lado WordPress: `nutrilaura-portal-user.php` en el tema.
 ## Puesta en marcha de un tenant
 
 ```bash
-node scripts/enable-module.js <slug> formularios      # activa Y migra
-node scripts/seed-formulario-nutri-laura.js <slug>    # siembra el formulario
+node scripts/enable-module.js <slug> formularios          # activa Y migra
+node scripts/seed-formulario-nutri-laura.js <slug>        # siembra el formulario
+node scripts/grant-module-access.js <slug> formularios    # acceso a los usuarios
 ```
 
 El segundo acepta el slug como argumento para poder ensayarlo en un tenant de
 pruebas antes de tocar el del cliente.
 
-Después hay que dar **acceso al módulo a los usuarios** del tenant: sin eso el
-menú se ve pero la API responde 403.
+**El tercero no es opcional y es donde se falla.** `enable-module` enciende el
+módulo para el TENANT, pero cada usuario tiene además su propia lista
+`master.users.module_access`. Si esa lista existe y no incluye la clave, la
+persona ve la entrada en el menú y **toda la API le responde 403** — parece un
+bug del módulo nuevo y no lo es. Los usuarios con lista vacía o con el comodín
+`all` (y los `superadmin`) no necesitan nada: el script los detecta y no los
+toca. Admite `--dry-run` y `--revoke`.
 
 ---
 
