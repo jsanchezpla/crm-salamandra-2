@@ -122,6 +122,7 @@ export const MODULES = {
     "migrate-nutricion-recipes",
     "migrate-nutricion-week-recipe-media",
     "migrate-nutricion-day-comments",
+    "migrate-nutricion-show-macros",
   ],
 
   outreach: [

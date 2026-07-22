@@ -109,6 +109,7 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
           description: template.description,
           // Comentarios por día: viajan desde la plantilla como en /assign.
           dayComments: template.dayComments || {},
+          showMacros: Boolean(template.showMacros),
           type: "assigned",
           templateId,
           clientId,

@@ -68,6 +68,17 @@ export function definePlan(sequelize) {
         defaultValue: {},
         field: "day_comments",
       },
+      // ¿El PDF del paciente imprime proteínas/hidratos/grasas/fibra?
+      // DEFAULT false a propósito (2026-07-22): Laura trata trastornos de la
+      // conducta alimentaria, donde las cifras de macros suelen ser parte del
+      // problema. Enseñarlas es una decisión consciente por menú; la
+      // nutricionista las sigue viendo siempre en el editor del CRM.
+      showMacros: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: "show_macros",
+      },
       archivedAt: {
         type: DataTypes.DATE,
         allowNull: true,

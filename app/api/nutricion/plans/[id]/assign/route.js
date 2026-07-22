@@ -80,6 +80,9 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
           // Los comentarios por día viajan con la copia: sin esto el paciente
           // recibía el menú sin las notas de cada día de la plantilla.
           dayComments: template.dayComments || {},
+          // Si la plantilla decide no enseñar macros, el plan del paciente
+          // tampoco: la decisión se toma una vez y viaja con la copia.
+          showMacros: Boolean(template.showMacros),
           type: "assigned",
           templateId: id,
           clientId,

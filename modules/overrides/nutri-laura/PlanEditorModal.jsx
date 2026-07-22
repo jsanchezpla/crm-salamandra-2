@@ -281,6 +281,18 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
     );
   }
 
+  // Valores nutricionales en el PDF del paciente (2026-07-22). Optimista: el
+  // interruptor se mueve al instante y se revierte solo si el PATCH falla.
+  async function toggleShowMacros() {
+    if (!plan) return;
+    const next = !plan.showMacros;
+    setPlan((p) => ({ ...p, showMacros: next }));
+    await patchPlanMetadata(
+      { showMacros: next },
+      { onErrorRevert: () => setPlan((p) => ({ ...p, showMacros: !next })) }
+    );
+  }
+
   // insertWeekday (Nutrinotas): RETIRADO en el rework 2026-07-22. Los días ya
   // no son texto en los comentarios: son estructura (plan_meals.weekday) con
   // sus pestañas Lunes…Domingo. Los comentarios vuelven a ser solo comentarios.
@@ -961,6 +973,44 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
               rows={3}
               className="w-full text-sm rounded-md border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 resize-y"
             />
+          </section>
+
+          {/* Lo que ve el paciente en su PDF. De momento una sola decisión:
+              si el documento lleva o no las cifras de macronutrientes. Por
+              defecto NO: en consulta de TCA los gramos suelen ser parte del
+              problema, así que enseñarlos es una decisión consciente. Aquí
+              dentro, la nutricionista sigue viendo todos los cálculos. */}
+          <section>
+            <Label>Lo que ve el paciente</Label>
+            <button
+              type="button"
+              onClick={toggleShowMacros}
+              role="switch"
+              aria-checked={Boolean(plan.showMacros)}
+              className="w-full flex items-start gap-3 text-left rounded-md border border-gray-200 px-3 py-2.5 hover:bg-gray-50 transition focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+            >
+              <span
+                className={`mt-0.5 shrink-0 w-9 h-5 rounded-full transition relative ${
+                  plan.showMacros ? "bg-[var(--color-primary)]" : "bg-gray-300"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${
+                    plan.showMacros ? "left-[1.125rem]" : "left-0.5"
+                  }`}
+                />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm text-gray-900 leading-tight">
+                  Mostrar valores nutricionales en el PDF
+                </span>
+                <span className="block text-xs text-gray-500 leading-snug mt-0.5">
+                  {plan.showMacros
+                    ? "El PDF incluye proteínas, hidratos, grasas y fibra de cada plato."
+                    : "El PDF sale sin cifras: solo platos, ingredientes y preparación."}
+                </span>
+              </span>
+            </button>
           </section>
 
           {/* Indicador de autosave — no hay botón Guardar; todos los cambios

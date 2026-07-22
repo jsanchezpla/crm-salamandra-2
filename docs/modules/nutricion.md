@@ -568,3 +568,68 @@ Líneas de código aproximadas:
 Producción: Laura tiene operativo C1+C2+C3 desde el 2026-06-24. La
 inversión está pendiente solo de validación browser de C4+C5 y un
 último deploy.
+
+---
+
+## PDF del menú — rediseño del 2026-07-22 (segunda pasada)
+
+Fichero: `lib/nutricion/menuPdf.js`. Es el ÚNICO documento que recibe el
+paciente (no hay portal: se envía por email como adjunto).
+
+### Estructura en tres partes
+
+1. **Portada, la única hoja horizontal** — calendario 7 días × comidas.
+2. **Días detallados, en vertical** — cada día dentro de una TARJETA de fondo
+   tenue con el color de marca y una barra lateral, para que se vea de un
+   golpe dónde empieza y acaba cada día. Los días fluyen y paginan solos
+   (típicamente 2 por hoja). Detrás del último día van los comentarios
+   generales de la nutricionista, en su propia tarjeta.
+3. **Recetario** — cada receta usada en la semana, deduplicada por `recipeId`,
+   también en tarjeta: foto, ingredientes con cantidades y pasos numerados.
+
+### Motor de bloques
+
+pdfkit pinta en orden de llamada: un rectángulo trazado después del texto lo
+taparía. Para poder dibujar el fondo de una tarjeta ANTES de su contenido hay
+que saber de antemano cuánto ocupa, así que el contenido se modela como lista
+de bloques (`blk`) que se MIDEN con `heightOfString` y luego se pintan con
+`drawBlocks`. Si un día o una receta no cabe ni en una hoja entera, hay una
+ruta de respaldo que renderiza fluyendo y sin tarjeta (`renderDayFlowing`,
+`renderRecipeFlowing`): un menú raro nunca debe romper el documento.
+
+### Orientación — trampa a recordar
+
+`doc.addPage()` SIN argumentos hereda `doc.options`, que se fijaron al crear el
+documento. Como la portada abre el PDF en horizontal, todas las páginas que
+pdfkit añadía solo (desbordamiento, `ensureSpace`) salían apaisadas. Por eso
+`switchToPortrait(doc)` reescribe `doc.options` en cuanto termina la portada.
+
+### Tipografía
+
+Poppins embebida (`lib/pdf/fonts.js`, ficheros en `lib/pdf/fonts/`, licencia
+OFL en la misma carpeta), la misma que la interfaz. Cuatro pesos: Regular,
+Medium, SemiBold (hace de negrita) e Italic. Los buffers se leen de disco una
+vez por proceso. Si faltasen los ficheros se cae a Helvetica en lugar de
+fallar: un PDF con la fuente equivocada es un problema estético, uno que no se
+genera es un paciente sin su menú. El Dockerfile ya copia `lib/` entera.
+
+### `plans.show_macros` — decisión clínica, no estética
+
+Migración `scripts/migrate-nutricion-show-macros.js`, interruptor en
+`PlanEditorModal` ("Lo que ve el paciente"). Gobierna si el PDF imprime
+P/H/G/fibra.
+
+**Por defecto `false`, y los menús preexistentes también quedaron en `false`.**
+Laura trata trastornos de la conducta alimentaria, donde poner cifras de
+gramos delante del paciente puede reforzar justo la conducta que se está
+tratando. Enseñarlas tiene que ser una decisión consciente por menú. La
+nutricionista sigue viendo todos los macros calculados dentro del CRM: el
+interruptor solo gobierna el documento que sale a la calle.
+
+El valor viaja en las copias (`assign`, `duplicate`, `reapply-template`): si la
+plantilla decide no enseñar macros, el plan del paciente tampoco.
+
+### Sin pies de página
+
+El documento NO lleva "Generado el … · <tenant>" ni ninguna otra firma. Es
+material clínico que entrega la nutricionista.

@@ -89,6 +89,11 @@ export const PATCH = withTenant(async (request, ctx, { tenant, tenantModels, has
     if (body.visibleToClient !== undefined) {
       updates.visibleToClient = Boolean(body.visibleToClient);
     }
+    // ¿El PDF del paciente lleva P/H/G/fibra? (2026-07-22) Gobierna SOLO el
+    // documento que se entrega; el editor del CRM sigue calculándolos siempre.
+    if (body.showMacros !== undefined) {
+      updates.showMacros = Boolean(body.showMacros);
+    }
     // Comentarios por día (rediseño 2026-07-22): mapa completo
     // { "1": "texto", … "7": "texto" }. Se REEMPLAZA entero (son ≤7 textos);
     // claves fuera de 1-7 o valores no-texto → 422.
