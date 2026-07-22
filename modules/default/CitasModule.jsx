@@ -14,6 +14,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import listPlugin from "@fullcalendar/list";
 import interactionPlugin from "@fullcalendar/interaction";
 import Select from "@/components/ui/Select.jsx";
+import BuscadorPaciente from "@/components/citas/BuscadorPaciente.jsx";
 
 const STATUS_LABELS = {
   confirmed: "Confirmada",
@@ -65,6 +66,7 @@ const EMPTY_BOOKING_FORM = {
   eventTypeId: "",
   date: "",
   time: "",
+  clientId: "",
   clientName: "",
   clientEmail: "",
   clientPhone: "",
@@ -241,6 +243,7 @@ export default function CitasModule() {
         body: JSON.stringify({
           eventTypeId: createForm.eventTypeId,
           scheduledAt,
+          clientId: createForm.clientId || null,
           clientName: createForm.clientName.trim(),
           clientEmail: createForm.clientEmail.trim(),
           clientPhone: createForm.clientPhone.trim(),
@@ -668,15 +671,24 @@ export default function CitasModule() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Nombre del cliente</label>
-                <input
-                  type="text"
-                  value={createForm.clientName}
-                  onChange={(e) => updateCreateForm("clientName", e.target.value)}
-                  className={inputCls}
-                />
-              </div>
+              <BuscadorPaciente
+                etiqueta="Cliente / paciente *"
+                nombre={createForm.clientName}
+                vinculadaA={createForm.clientId}
+                onEscribir={(texto) =>
+                  setCreateForm((prev) => ({ ...prev, clientName: texto, clientId: "" }))
+                }
+                onElegir={(c) =>
+                  setCreateForm((prev) => ({
+                    ...prev,
+                    clientId: c.id,
+                    clientName: c.name || "",
+                    clientEmail: c.email || prev.clientEmail,
+                    clientPhone: c.phone || prev.clientPhone,
+                  }))
+                }
+                onDesvincular={() => setCreateForm((prev) => ({ ...prev, clientId: "" }))}
+              />
 
               <div className="grid grid-cols-2 gap-2">
                 <div>

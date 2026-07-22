@@ -62,19 +62,37 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     if (searchParams.get("teamMemberId")) where.teamMemberId = searchParams.get("teamMemberId");
     // ?patientId=… — citas de un paciente concreto (sección "Próximas citas" de su ficha).
     if (searchParams.get("patientId")) where.patientId = searchParams.get("patientId");
-    // ?clientEmail=foo@bar.com — match exacto case-insensitive (Booking no tiene
-    // FK a Client; el cruce con la ficha del cliente es por email).
-    if (searchParams.get("clientEmail")) {
-      where.clientEmail = { [Op.iLike]: searchParams.get("clientEmail").trim() };
+    // ?clientId=… — las citas de una ficha concreta. Desde 2026-07-22 hay FK
+    // real (bookings.client_id). Se acepta además `clientEmail` en la misma
+    // llamada y se buscan las que casen por CUALQUIERA de los dos: el enlace
+    // nuevo no puede dejar fuera de la ficha las citas antiguas que se
+    // quedaron sin enlazar (email escrito de otra forma, o compartido entre
+    // dos fichas, casos que la migración deja a NULL a propósito).
+    const filtroCliente = [];
+    if (searchParams.get("clientId")) {
+      filtroCliente.push({ clientId: searchParams.get("clientId").trim() });
     }
+    if (searchParams.get("clientEmail")) {
+      filtroCliente.push({ clientEmail: { [Op.iLike]: searchParams.get("clientEmail").trim() } });
+    }
+    // OJO: filtro de cliente y búsqueda de texto son DOS grupos "o" distintos y
+    // tienen que combinarse con "y". Escribir los dos en where[Op.or] hacía que
+    // el segundo pisara al primero en silencio.
+    const grupos = [];
+    if (filtroCliente.length === 1) grupos.push(filtroCliente[0]);
+    else if (filtroCliente.length > 1) grupos.push({ [Op.or]: filtroCliente });
+
     const q = (searchParams.get("search") || "").trim();
     if (q) {
-      where[Op.or] = [
-        { clientName: { [Op.iLike]: `%${q}%` } },
-        { clientEmail: { [Op.iLike]: `%${q}%` } },
-        { clientPhone: { [Op.iLike]: `%${q}%` } },
-      ];
+      grupos.push({
+        [Op.or]: [
+          { clientName: { [Op.iLike]: `%${q}%` } },
+          { clientEmail: { [Op.iLike]: `%${q}%` } },
+          { clientPhone: { [Op.iLike]: `%${q}%` } },
+        ],
+      });
     }
+    if (grupos.length) where[Op.and] = grupos;
 
     // teamMember solo si el tenant tiene módulo team (si no, la tabla
     // team_members no existe y el JOIN daría 500 — p.ej. nutri_laura).
@@ -140,6 +158,21 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const clientPhone = normalizeString(body.clientPhone);
     if (!clientPhone) return error("clientPhone es obligatorio");
 
+    // Enlace con la ficha de cliente (2026-07-22). Opcional: una cita para
+    // alguien que todavía no es cliente es válida. Si viene, se comprueba que
+    // la ficha existe DE VERDAD en este tenant antes de guardarla — si no,
+    // una FK rota tumbaría el insert con un error feo.
+    let clientId = null;
+    if (body.clientId != null && body.clientId !== "") {
+      if (typeof body.clientId !== "string" || !UUID_RE.test(body.clientId)) {
+        return error("clientId inválido");
+      }
+      const { Client } = tenantModels;
+      const ficha = Client ? await Client.findByPk(body.clientId, { attributes: ["id"] }) : null;
+      if (!ficha) return error("La ficha de cliente indicada no existe", 422);
+      clientId = ficha.id;
+    }
+
     const additionalData = body.additionalData != null ? String(body.additionalData) : null;
     if (eventType.additionalDataRequired && (!additionalData || additionalData.trim() === "")) {
       return error("additionalData es obligatorio para este tipo de cita");
@@ -197,6 +230,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       notes,
       teamMemberId,
       patientId: patRes.patientId,
+      clientId,
     });
 
     await logCitasAudit({

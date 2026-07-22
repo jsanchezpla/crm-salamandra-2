@@ -323,6 +323,7 @@ export default function NutriLauraClientDetailModule() {
 
         {tab === "bookings" && (
           <ClientBookingsPanel
+            clientId={id}
             clientEmail={client.email}
             userRole={me.role}
           />

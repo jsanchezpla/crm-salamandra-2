@@ -19,6 +19,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import listPlugin from "@fullcalendar/list";
 import interactionPlugin from "@fullcalendar/interaction";
 import Select from "@/components/ui/Select.jsx";
+import BuscadorPaciente from "@/components/citas/BuscadorPaciente.jsx";
 
 const STATUS_LABELS = {
   pending: "Pendiente",
@@ -576,6 +577,7 @@ function NewBookingModal({ onClose, onCreated }) {
     date: "",
     time: "",
     modality: "",
+    clientId: null,
     clientName: "",
     clientEmail: "",
     clientPhone: "",
@@ -642,6 +644,7 @@ function NewBookingModal({ onClose, onCreated }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           eventTypeId: form.eventTypeId,
+          clientId: form.clientId || null,
           clientName: form.clientName.trim(),
           clientEmail: form.clientEmail.trim(),
           clientPhone: form.clientPhone.trim(),
@@ -762,18 +765,21 @@ function NewBookingModal({ onClose, onCreated }) {
               Datos del paciente
             </div>
             <div className="space-y-3">
-              <div>
-                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                  Nombre *
-                </label>
-                <input
-                  type="text"
-                  value={form.clientName}
-                  onChange={(e) => update("clientName", e.target.value)}
-                  placeholder="María García"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]"
-                />
-              </div>
+              <BuscadorPaciente
+                nombre={form.clientName}
+                vinculadaA={form.clientId}
+                onEscribir={(texto) => setForm((f) => ({ ...f, clientName: texto, clientId: null }))}
+                onElegir={(c) =>
+                  setForm((f) => ({
+                    ...f,
+                    clientId: c.id,
+                    clientName: c.name || "",
+                    clientEmail: c.email || f.clientEmail,
+                    clientPhone: c.phone || f.clientPhone,
+                  }))
+                }
+                onDesvincular={() => setForm((f) => ({ ...f, clientId: null }))}
+              />
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">

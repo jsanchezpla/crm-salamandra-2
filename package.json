@@ -62,6 +62,8 @@
     "db:migrate:pacientes:prod": "node --env-file=.env.production scripts/migrate-pacientes-sprint-1.js",
     "db:migrate:clinica:module": "node --env-file=.env.local scripts/migrate-clinica-module.js",
     "db:migrate:clinica:module:prod": "node --env-file=.env.production scripts/migrate-clinica-module.js",
+    "db:migrate:booking-client": "node --env-file=.env.local scripts/migrate-booking-client-link.js",
+    "db:migrate:booking-client:prod": "node --env-file=.env.production scripts/migrate-booking-client-link.js",
     "db:migrate:formularios": "node --env-file=.env.local scripts/migrate-formularios-module.js",
     "db:migrate:formularios:prod": "node --env-file=.env.production scripts/migrate-formularios-module.js",
     "db:seed:formulario-nutri-laura": "node --env-file=.env.local scripts/seed-formulario-nutri-laura.js",

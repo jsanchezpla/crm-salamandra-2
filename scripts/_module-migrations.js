@@ -74,6 +74,7 @@ export const MODULES = {
     "migrate-citas-sprint-1",
     "migrate-calendar-citas-fks",
     "migrate-booking-pending",
+    "migrate-booking-client-link",
   ],
 
   calendar: ["migrate-calendar-citas-fks"],

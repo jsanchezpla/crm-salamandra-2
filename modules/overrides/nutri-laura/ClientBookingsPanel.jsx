@@ -69,7 +69,7 @@ function statusMeta(b) {
   }
 }
 
-export default function ClientBookingsPanel({ clientEmail, userRole }) {
+export default function ClientBookingsPanel({ clientId, clientEmail, userRole }) {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -83,17 +83,19 @@ export default function ClientBookingsPanel({ clientEmail, userRole }) {
   const isAdmin = ADMIN_ROLES.has(userRole);
 
   const reload = useCallback(() => {
-    if (!clientEmail) {
+    // Desde 2026-07-22 se busca por el ENLACE real (clientId) y, además, por
+    // email: así siguen apareciendo las citas antiguas que se quedaron sin
+    // enlazar. Con solo uno de los dos bastaba para que faltaran citas.
+    if (!clientId && !clientEmail) {
       setBookings([]);
       setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
-    const params = new URLSearchParams({
-      clientEmail,
-      limit: "50",
-    });
+    const params = new URLSearchParams({ limit: "50" });
+    if (clientId) params.set("clientId", clientId);
+    if (clientEmail) params.set("clientEmail", clientEmail);
     fetch(`/api/citas/bookings?${params.toString()}`)
       .then((r) => r.json())
       .then((j) => {
@@ -102,7 +104,7 @@ export default function ClientBookingsPanel({ clientEmail, userRole }) {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [clientEmail]);
+  }, [clientId, clientEmail]);
 
   useEffect(() => { reload(); }, [reload]);
 
@@ -167,11 +169,12 @@ export default function ClientBookingsPanel({ clientEmail, userRole }) {
     }
   }
 
-  if (!clientEmail) {
+  // Ya no hace falta email: con el enlace real (clientId) sus citas aparecen
+  // aunque la ficha no tenga correo. Antes esta pantalla se rendía aquí.
+  if (!clientId && !clientEmail) {
     return (
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-6 text-center text-xs text-gray-500 max-w-3xl">
-        El paciente no tiene email registrado, por lo que no se pueden listar sus citas.
-        <br />Añade un email en la pestaña <strong>Información</strong>.
+        No se pueden listar las citas de esta ficha.
       </div>
     );
   }
@@ -182,7 +185,9 @@ export default function ClientBookingsPanel({ clientEmail, userRole }) {
         <div>
           <div className="text-sm font-semibold text-gray-700">Citas del paciente</div>
           <div className="text-[11px] text-gray-400 mt-0.5">
-            Cruce por email <span className="font-mono">{clientEmail}</span>
+            {clientId
+              ? <>Citas enlazadas a esta ficha{clientEmail ? <> y a <span className="font-mono">{clientEmail}</span></> : null}</>
+              : <>Cruce por email <span className="font-mono">{clientEmail}</span></>}
           </div>
         </div>
         <button

@@ -1,3 +1,4 @@
+import { Op } from "sequelize";
 import { withPublicTenant } from "../../../../../../lib/tenant/publicTenantContext.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { created, error, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
@@ -155,6 +156,32 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
       // problema de lectura del flag.
     }
 
+    // Enlace con la ficha de cliente (2026-07-22). Quien reserva desde el
+    // portal viene identificado por el email de su cuenta de WordPress, así
+    // que si ya es paciente podemos atar la cita a su ficha en el momento y no
+    // depender de comparar cadenas de email al mostrarla.
+    //
+    // Best-effort: si no hay ficha (todavía no es cliente) o el tenant no
+    // tiene módulo de clientes, la cita se crea igual sin enlazar. Reservar
+    // NUNCA puede fallar por esto.
+    let clientId = null;
+    try {
+      const { Client } = tenantModels;
+      if (Client && clientEmail) {
+        const ficha = await Client.findOne({
+          where: { email: { [Op.iLike]: clientEmail } },
+          attributes: ["id"],
+          order: [["createdAt", "ASC"]],
+        });
+        if (ficha) clientId = ficha.id;
+      }
+    } catch (err) {
+      const code = err?.parent?.code || err?.original?.code;
+      if (code !== "42P01" && code !== "42703") {
+        console.error(`[book] no se pudo enlazar la cita con su ficha: ${err.message}`);
+      }
+    }
+
     const row = await Booking.create({
       eventTypeId: eventType.id,
       clientName,
@@ -166,6 +193,7 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
       modality: "online",
       meetUrl: eventType.meetUrl,
       status: autoConfirm ? "confirmed" : "pending",
+      clientId,
     });
 
     await logCitasAudit({
