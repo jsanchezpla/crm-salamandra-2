@@ -10,10 +10,14 @@
  *  El CRM no crea cursos: es un ESPEJO de lo que hay en la web. Este snippet es
  *  el "puente" que le cuenta al CRM lo que pasa en TutorLMS:
  *
- *    A) SYNC DE CURSOS (bajo demanda). Cuando visitas una URL secreta, le manda
- *       al CRM la lista de cursos publicados. El CRM crea/actualiza cada curso
- *       (por su ID de TutorLMS) y desactiva los que ya no estén. Lo lanzas la
- *       primera vez y cada vez que crees/cambies un curso.
+ *    A) CURSOS AL PUBLICAR/EDITAR (automático). Cada vez que publicas, editas o
+ *       despublicas un curso en TutorLMS, se manda solo al CRM. No hay que hacer
+ *       nada: los cursos NUEVOS aparecen en el CRM en cuanto los publicas.
+ *
+ *    A-bis) SYNC MASIVO (un clic, para los cursos QUE YA EXISTÍAN). Los cursos ya
+ *       publicados ANTES de instalar este snippet no se "re-publican" solos, así
+ *       que hay que traerlos una primera vez abriendo una URL secreta. También
+ *       sirve para re-sincronizar todo de golpe si hiciera falta.
  *
  *    B) MATRÍCULAS (automático). Cada vez que un alumno se matricula en un curso
  *       (gratis o tras pagar en WooCommerce), avisa al CRM, que da de alta al
@@ -44,8 +48,10 @@
  *     abajo (desde "// ===== BLOQUE 1" hasta el final del fichero), elige
  *     "Ejecutar el snippet en todas partes" y pulsa "Guardar cambios y activar".
  *
- *  PASO 3 · Primer sync de cursos
- *     Estando logueado como administrador de WordPress, abre en el navegador:
+ *  PASO 3 · Sync inicial (UNA vez, para los cursos que YA existían)
+ *     Los cursos NUEVOS que publiques a partir de ahora van solos al CRM. Pero
+ *     los que ya están publicados hay que traerlos esta primera vez: estando
+ *     logueado como administrador de WordPress, abre en el navegador:
  *
  *         https://tunutrilaura.com/?nutrilaura_sync_courses=1
  *
@@ -155,6 +161,33 @@ add_action('init', function () {
         : 'ERROR: no se pudo sincronizar. Que Jorge mire el log de PHP ([nutrilaura-crm]).';
     exit;
 });
+
+/**
+ * A) CURSOS AL PUBLICAR / EDITAR / DESPUBLICAR (automático).
+ *    Cada cambio de estado de un curso se manda solo al CRM: publicar/editar
+ *    lo crea o actualiza; enviar a papelera/borrador lo desactiva.
+ */
+add_action('transition_post_status', function ($new_status, $old_status, $post) {
+    if (!$post || $post->post_type !== 'courses') return;
+    if (wp_is_post_revision($post->ID) || wp_is_post_autosave($post->ID)) return;
+
+    if ($new_status === 'publish') {
+        // Publicado ahora (publish) o editado estando ya publicado (update).
+        $product_id = function_exists('tutor_utils') ? intval(tutor_utils()->get_course_product_id($post->ID)) : 0;
+        nutrilaura_crm_post('/api/webhooks/tutorlms/course', array(
+            'action'        => ($old_status === 'publish' ? 'update' : 'publish'),
+            'course_id'     => intval($post->ID),
+            'course_title'  => $post->post_title,
+            'wc_product_id' => $product_id ?: null,
+        ));
+    } elseif ($old_status === 'publish' && in_array($new_status, array('trash', 'draft', 'private', 'pending'), true)) {
+        // Estaba publicado y deja de estarlo → se desactiva en el CRM.
+        nutrilaura_crm_post('/api/webhooks/tutorlms/course', array(
+            'action'    => 'delete',
+            'course_id' => intval($post->ID),
+        ));
+    }
+}, 10, 3);
 
 /**
  * B) MATRÍCULAS automáticas.
