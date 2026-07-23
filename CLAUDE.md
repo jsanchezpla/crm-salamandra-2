@@ -273,14 +273,17 @@ aplique.
 > construyen sus features:
 > - **`demo` = referencia del módulo CLÍNICO** (tiene clinica + pacientes +
 >   nutricion; es el escaparate con todo). En conversación, "Aumenta" suele
->   significar "el módulo clínico general": esos cambios se montan en `demo`, y
->   Aumenta —y cualquier clínica— heredan el default. NO tratar lo clínico como un
+>   significar "el módulo clínico general". NO tratar lo clínico como un
 >   `overrides/aumenta/`.
 > - **`nutri_laura` = referencia del módulo NUTRICIÓN.** Su comportamiento define
 >   el default de nutrición.
 >
-> Los `modules/overrides/{slug}/` se reservan para cuando un tenant se desvía DE
-> VERDAD del default (UI o lógica propia), no para el comportamiento base del módulo.
+> **Un cambio en un módulo se aplica a TODOS los tenants que lo tengan, a la vez**
+> (mismo código gated por módulo): un cambio clínico va a Aumenta **y** al resto
+> con el módulo, por defecto, "hasta que digamos lo contrario". `demo`/`nutri_laura`
+> son la referencia donde se ve/define, no un sandbox aislado. Los
+> `modules/overrides/{slug}/` se reservan para cuando un tenant se desvía DE VERDAD
+> del default (UI o lógica propia), no para el comportamiento base del módulo.
 
 ---
 
