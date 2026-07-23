@@ -51,6 +51,10 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       const endIso = new Date(startIso.getTime() + b.duration * 60 * 1000);
       const baseColor = b.eventType?.color || "#3F6E5B";
       const color = STATUS_COLOR_DIM[b.status] || baseColor;
+      // Solo las citas ACTIVAS se pueden arrastrar para reprogramar. Mover una
+      // cancelada/no_show/completada no tiene sentido (es historial), así que
+      // FullCalendar la deja fija (startEditable=false).
+      const arrastrable = b.status !== "cancelled" && b.status !== "no_show" && b.status !== "completed";
       return {
         id: b.id,
         title: b.clientName,
@@ -58,6 +62,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
         end: endIso.toISOString(),
         backgroundColor: color,
         borderColor: color,
+        startEditable: arrastrable,
         extendedProps: {
           status: b.status,
           modality: b.modality,

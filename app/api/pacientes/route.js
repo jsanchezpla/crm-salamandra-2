@@ -46,6 +46,10 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   }
   const status = sp.get("status");
   if (status && ["active", "paused", "discharged"].includes(status)) where.status = status;
+  // Filtro por módulo asistencial (Terapia / Nutrición) — útil para vistas que
+  // solo quieran uno de los dos tipos de paciente.
+  const careType = sp.get("careType");
+  if (careType && ["terapia", "nutricion"].includes(careType)) where.careType = careType;
 
   const rows = await Patient.findAll({
     where,
@@ -83,6 +87,9 @@ export const POST = withTenant(async (request, _rc, ctx) => {
 
   const payload = {
     clientId,
+    // Módulo asistencial del subpaciente. Default 'terapia' (la tabla nació
+    // clínica); el formulario deja elegir Terapia / Nutrición.
+    careType: ["terapia", "nutricion"].includes(body.careType) ? body.careType : "terapia",
     firstName: body.firstName.trim(),
     lastName: body.lastName.trim(),
     age: body.age != null && body.age !== "" ? Number(body.age) : null,

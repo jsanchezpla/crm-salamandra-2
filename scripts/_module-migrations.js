@@ -86,9 +86,10 @@ export const MODULES = {
     "migrate-patients-clients-phase1",
     "migrate-client-module-assignments",
     "migrate-patients-multi-per-client",
+    "migrate-patients-care-type",
   ],
 
-  clinica: ["migrate-clinica-module", "migrate-clinica-client-link"],
+  clinica: ["migrate-clinica-module", "migrate-clinica-client-link", "migrate-patients-care-type"],
 
   team: [
     "migrate-team-fields",

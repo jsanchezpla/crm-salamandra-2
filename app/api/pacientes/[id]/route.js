@@ -14,7 +14,7 @@ const PATCH_FIELDS = [
   "firstName", "lastName", "age", "birthDate", "educationCenter", "educationLevel",
   "referralReason", "referredBy", "objectives", "mainTherapistId", "enrollmentDate",
   "attendanceFrequency", "status", "dischargeDate", "dischargeReason", "notes",
-  "dni", "address", "relationship", "contractSigned",
+  "dni", "address", "relationship", "contractSigned", "careType",
 ];
 
 // Un tenant con módulo Clínica/Pacientes NO tiene por qué tener el módulo (ni la
@@ -96,6 +96,7 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   if ("address" in updates) updates.address = cap(updates.address, 255);
   if ("relationship" in updates) updates.relationship = cap(updates.relationship, 60);
   if ("contractSigned" in updates) updates.contractSigned = !!updates.contractSigned;
+  if ("careType" in updates && !["terapia", "nutricion"].includes(updates.careType)) return error("careType inválido");
 
   // Cliente pagador: validar existencia; permitir desenlazar con null/"".
   if ("clientId" in body) {

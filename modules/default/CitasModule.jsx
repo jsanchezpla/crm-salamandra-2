@@ -317,6 +317,32 @@ export default function CitasModule() {
     info.view?.calendar?.unselect();
   }
 
+  // Arrastrar una cita ya existente a otro hueco → reprogramarla. El backend
+  // (PATCH scheduledAt) ya valida el solapamiento; si choca con otra cita
+  // activa o falla, se revierte al sitio original y se avisa. Solo se mueve el
+  // INICIO (la duración no se toca: el resize está desactivado). Las citas
+  // canceladas/completadas no son arrastrables (startEditable=false desde el
+  // endpoint del calendario).
+  async function handleEventDrop(info) {
+    const nuevoIso = info.event.start ? info.event.start.toISOString() : null;
+    if (!nuevoIso) { info.revert(); return; }
+    try {
+      const res = await fetch(`/api/citas/bookings/${info.event.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledAt: nuevoIso }),
+      });
+      const j = await res.json();
+      if (!j.ok) throw new Error(j.error || "No se pudo mover la cita");
+      // FullCalendar ya la ha pintado en el hueco nuevo; refrescamos para
+      // reconciliar con el servidor (color/estado/hora exacta).
+      calendarRef.current?.getApi().refetchEvents();
+    } catch (err) {
+      info.revert();
+      window.alert(err.message);
+    }
+  }
+
   async function submitCreate() {
     setFormError(null);
     if (!createForm.eventTypeId) { setFormError("Selecciona tipo de cita"); return; }
@@ -509,7 +535,7 @@ export default function CitasModule() {
       {tab === "calendar" && (
         <div className="flex-1 p-6 min-h-0">
           <p className="text-[11px] text-neutral-400 mb-2">
-            Doble clic en un hueco para crear una cita, o arrastra sobre un tramo horario.
+            Doble clic en un hueco para crear una cita, arrastra sobre un tramo horario, o arrastra una cita existente para moverla.
           </p>
           <FullCalendar
             ref={calendarRef}
@@ -533,6 +559,9 @@ export default function CitasModule() {
             selectMirror={true}
             dateClick={handleDateClick}
             select={handleDateSelect}
+            editable={true}
+            eventDurationEditable={false}
+            eventDrop={handleEventDrop}
             height="calc(100vh - 280px)"
             buttonText={{ today: "Hoy", month: "Mes", week: "Semana", day: "Día", list: "Lista" }}
           />
