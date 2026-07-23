@@ -268,6 +268,20 @@ Cada tenant puede tener override de UI en `modules/overrides/{slug}/`
 (carpeta con guión) y seed propio en `scripts/seed-{slug}.js` cuando
 aplique.
 
+> **Tenants de referencia ("la reina" de cada módulo).** Cada módulo grande
+> tiene un tenant cuyo comportamiento **ES** el default de ese módulo, y donde se
+> construyen sus features:
+> - **`demo` = referencia del módulo CLÍNICO** (tiene clinica + pacientes +
+>   nutricion; es el escaparate con todo). En conversación, "Aumenta" suele
+>   significar "el módulo clínico general": esos cambios se montan en `demo`, y
+>   Aumenta —y cualquier clínica— heredan el default. NO tratar lo clínico como un
+>   `overrides/aumenta/`.
+> - **`nutri_laura` = referencia del módulo NUTRICIÓN.** Su comportamiento define
+>   el default de nutrición.
+>
+> Los `modules/overrides/{slug}/` se reservan para cuando un tenant se desvía DE
+> VERDAD del default (UI o lógica propia), no para el comportamiento base del módulo.
+
 ---
 
 ## Módulos del CRM — 17 planificados
