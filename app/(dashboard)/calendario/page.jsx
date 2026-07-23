@@ -92,6 +92,25 @@ export default function CalendarioPage() {
     setModal({ mode: "create", form: { ...EMPTY_FORM, startDate, endDate, startTime, endTime, allDay } });
   }
 
+  // Doble clic en un hueco → evento nuevo listo para editar. FullCalendar no
+  // emite doble clic, así que lo detectamos: dos `dateClick` sobre el mismo
+  // hueco en menos de 400 ms. Un clic suelto no crea nada (evita abrir el
+  // formulario al navegar por el calendario).
+  const lastClickRef = useRef({ at: 0, key: "" });
+  function handleDateClick(info) {
+    const key = info.dateStr;
+    const now = Date.now();
+    const prev = lastClickRef.current;
+    if (prev.key === key && now - prev.at < 400) {
+      lastClickRef.current = { at: 0, key: "" };
+      const startDate = info.dateStr.split("T")[0];
+      const startTime = info.dateStr.includes("T") ? info.dateStr.split("T")[1].substring(0, 5) : "";
+      openCreate(startDate, "", startTime, "", info.allDay);
+    } else {
+      lastClickRef.current = { at: now, key };
+    }
+  }
+
   function handleSelect(info) {
     const startDate = info.startStr.split("T")[0];
     let endDate = info.endStr.split("T")[0];
@@ -321,6 +340,7 @@ export default function CalendarioPage() {
           dayMaxEvents={3}
           events={fetchEvents}
           select={handleSelect}
+          dateClick={handleDateClick}
           eventClick={handleEventClick}
           eventDrop={handleEventDrop}
           eventResize={handleEventResize}

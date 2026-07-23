@@ -17,6 +17,7 @@ import Select from "@/components/ui/Select.jsx";
 import BuscadorPaciente from "@/components/citas/BuscadorPaciente.jsx";
 
 const STATUS_LABELS = {
+  pending: "Pendiente",
   confirmed: "Confirmada",
   completed: "Completada",
   cancelled: "Cancelada",
@@ -43,6 +44,26 @@ function fmtDateTime(value) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+// Fecha/hora local para los <input> date/time. NO usar toISOString(): eso pasa
+// a UTC y en España adelantaría/retrasaría una o dos horas el hueco pulsado.
+function toDateInput(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function toTimeInput(d) {
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function fmtRelative(value) {
+  if (!value) return "";
+  const min = Math.floor((Date.now() - new Date(value).getTime()) / 60000);
+  if (min < 1) return "ahora mismo";
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? "ayer" : `hace ${d} días`;
 }
 
 function StatusChip({ value }) {
@@ -78,6 +99,12 @@ const EMPTY_BOOKING_FORM = {
 
 export default function CitasModule() {
   const calendarRef = useRef(null);
+  // Vista: "calendar" (por defecto) o "waitlist". La lista de espera son las
+  // reservas en estado 'pending' (solicitudes de la web sin confirmar). El
+  // globito rojo de la pestaña muestra cuántas hay sin atender.
+  const [tab, setTab] = useState("calendar");
+  const [pendingCount, setPendingCount] = useState(0);
+  const [waitlistKey, setWaitlistKey] = useState(0); // fuerza recarga de la lista
   const [eventTypes, setEventTypes] = useState([]);
   const [visibleEtIds, setVisibleEtIds] = useState(null); // null = todos
   const [openBooking, setOpenBooking] = useState(null); // booking abierto en modal detalle
@@ -89,6 +116,16 @@ export default function CitasModule() {
   const [detailMeet, setDetailMeet] = useState("");
   const [teamMembers, setTeamMembers] = useState([]);
   const [patients, setPatients] = useState([]); // vacío si el tenant no tiene Clínica/Pacientes
+
+  // Cuántas solicitudes pendientes hay (para el globito de la pestaña). No
+  // cambia de vista: el usuario decidió arrancar SIEMPRE en el calendario.
+  const loadPendingCount = useCallback(() => {
+    fetch("/api/citas/bookings?status=pending&limit=1", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setPendingCount(j?.ok ? (j.data.total ?? 0) : 0))
+      .catch(() => {});
+  }, []);
+  useEffect(() => { loadPendingCount(); }, [loadPendingCount]);
 
   const loadEventTypes = useCallback(async () => {
     const res = await fetch("/api/citas/event-types?active=true", { cache: "no-store" });
@@ -225,6 +262,40 @@ export default function CitasModule() {
     setCreateForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  // Abre "Nueva cita" con la fecha/hora ya puestas desde un clic en el
+  // calendario. `iso` es la fecha ISO del hueco pulsado.
+  function abrirCreacionEn(iso) {
+    const d = iso ? new Date(iso) : null;
+    const date = d && !Number.isNaN(d.getTime()) ? toDateInput(d) : "";
+    const time = d && !Number.isNaN(d.getTime()) && iso.includes("T") ? toTimeInput(d) : "";
+    setCreateForm({ ...EMPTY_BOOKING_FORM, date, time });
+    setFormError(null);
+    setOpenCreate(true);
+  }
+
+  // Doble clic en un hueco vacío → nueva cita lista para editar. FullCalendar
+  // no distingue el doble clic, así que lo detectamos: dos `dateClick` sobre
+  // la MISMA hora en menos de 400 ms. Un clic suelto no hace nada (evita abrir
+  // el formulario cada vez que rozas el calendario).
+  const lastClickRef = useRef({ at: 0, key: "" });
+  function handleDateClick(info) {
+    const key = info.dateStr;
+    const now = Date.now();
+    const prev = lastClickRef.current;
+    if (prev.key === key && now - prev.at < 400) {
+      lastClickRef.current = { at: 0, key: "" };
+      abrirCreacionEn(info.dateStr);
+    } else {
+      lastClickRef.current = { at: now, key };
+    }
+  }
+
+  // Clic y arrastrar sobre un rango horario → nueva cita a esa hora de inicio.
+  function handleDateSelect(info) {
+    abrirCreacionEn(info.startStr);
+    info.view?.calendar?.unselect();
+  }
+
   async function submitCreate() {
     setFormError(null);
     if (!createForm.eventTypeId) { setFormError("Selecciona tipo de cita"); return; }
@@ -327,7 +398,7 @@ export default function CitasModule() {
             Disponibilidad
           </Link>
           <button
-            onClick={() => { setOpenCreate(true); setFormError(null); }}
+            onClick={() => { setCreateForm(EMPTY_BOOKING_FORM); setOpenCreate(true); setFormError(null); }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0F0F0F] text-white text-xs font-medium rounded-md hover:bg-[#222] transition-colors"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
@@ -338,8 +409,46 @@ export default function CitasModule() {
         </div>
       </div>
 
+      {/* Pestañas: Calendario · Lista de espera (con globito de pendientes) */}
+      <div className="px-6 lg:px-10 pt-3 flex items-center gap-1 shrink-0">
+        <button
+          onClick={() => setTab("calendar")}
+          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+            tab === "calendar" ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
+          }`}
+        >
+          Calendario
+        </button>
+        <button
+          onClick={() => { setTab("waitlist"); setWaitlistKey((k) => k + 1); }}
+          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${
+            tab === "waitlist" ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
+          }`}
+        >
+          Lista de espera
+          {pendingCount > 0 && (
+            <span className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold ${
+              tab === "waitlist" ? "bg-white/25 text-white" : "bg-red-500 text-white"
+            }`}>
+              {pendingCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* ─── Pestaña Lista de espera ─── */}
+      {tab === "waitlist" && (
+        <div className="flex-1 overflow-auto min-h-0">
+          <Waitlist
+            refreshKey={waitlistKey}
+            onCountChange={setPendingCount}
+            onActioned={() => { loadPendingCount(); calendarRef.current?.getApi().refetchEvents(); }}
+          />
+        </div>
+      )}
+
       {/* Filtro de tipos */}
-      {eventTypes.length > 0 && (
+      {tab === "calendar" && eventTypes.length > 0 && (
         <div className="px-6 lg:px-10 py-3 flex items-center gap-2 flex-wrap shrink-0 border-b border-neutral-100">
           <span className="text-[11px] uppercase tracking-wider text-neutral-400 mr-1">Filtrar:</span>
           <button
@@ -376,27 +485,36 @@ export default function CitasModule() {
       )}
 
       {/* Calendario */}
-      <div className="flex-1 p-6 min-h-0">
-        <FullCalendar
-          ref={calendarRef}
-          plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
-          initialView="timeGridWeek"
-          headerToolbar={{
-            left: "prev,next today",
-            center: "title",
-            right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek",
-          }}
-          locale="es"
-          firstDay={1}
-          slotMinTime="07:00:00"
-          slotMaxTime="22:00:00"
-          allDaySlot={false}
-          events={fetchEvents}
-          eventClick={handleEventClick}
-          height="calc(100vh - 240px)"
-          buttonText={{ today: "Hoy", month: "Mes", week: "Semana", day: "Día", list: "Lista" }}
-        />
-      </div>
+      {tab === "calendar" && (
+        <div className="flex-1 p-6 min-h-0">
+          <p className="text-[11px] text-neutral-400 mb-2">
+            Doble clic en un hueco para crear una cita, o arrastra sobre un tramo horario.
+          </p>
+          <FullCalendar
+            ref={calendarRef}
+            plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
+            initialView="timeGridWeek"
+            headerToolbar={{
+              left: "prev,next today",
+              center: "title",
+              right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek",
+            }}
+            locale="es"
+            firstDay={1}
+            slotMinTime="07:00:00"
+            slotMaxTime="22:00:00"
+            allDaySlot={false}
+            events={fetchEvents}
+            eventClick={handleEventClick}
+            selectable={true}
+            selectMirror={true}
+            dateClick={handleDateClick}
+            select={handleDateSelect}
+            height="calc(100vh - 280px)"
+            buttonText={{ today: "Hoy", month: "Mes", week: "Semana", day: "Día", list: "Lista" }}
+          />
+        </div>
+      )}
 
       {/* ─── Modal de detalle de booking ─── */}
       {openBooking && (
@@ -786,6 +904,162 @@ export default function CitasModule() {
           </aside>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Lista de espera ────────────────────────────────────────────────────────
+// Las reservas en estado 'pending': solicitudes de la web que la persona ya
+// eligió con fecha y hora y esperan que se confirmen o rechacen.
+function Waitlist({ refreshKey, onCountChange, onActioned }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState(null);
+  const [rejectFor, setRejectFor] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [error, setError] = useState(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetch("/api/citas/bookings?status=pending&limit=50", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.ok) {
+          setItems(j.data.bookings ?? []);
+          onCountChange?.(j.data.total ?? 0);
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [onCountChange]);
+
+  useEffect(() => { load(); }, [load, refreshKey]);
+
+  async function confirm(id) {
+    setBusyId(id);
+    setError(null);
+    try {
+      const r = await fetch(`/api/citas/bookings/${id}/confirm`, { method: "PATCH" });
+      const j = await r.json();
+      if (!j.ok) { setError(j.error || "Error al confirmar"); return; }
+      onActioned?.();
+      load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function reject(id) {
+    setBusyId(id);
+    setError(null);
+    try {
+      const r = await fetch(`/api/citas/bookings/${id}/reject`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cancellationReason: rejectReason.trim() || null }),
+      });
+      const j = await r.json();
+      if (!j.ok) { setError(j.error || "Error al rechazar"); return; }
+      setRejectFor(null);
+      setRejectReason("");
+      onActioned?.();
+      load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (loading) {
+    return <div className="px-6 lg:px-10 py-12 text-center text-sm text-neutral-400">Cargando lista de espera…</div>;
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="px-6 lg:px-10 py-16 text-center">
+        <div className="text-base text-neutral-700 font-medium">Sin solicitudes pendientes</div>
+        <p className="text-xs text-neutral-400 mt-1">Las nuevas solicitudes desde la web aparecerán aquí.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 lg:px-10 py-6 max-w-5xl mx-auto space-y-3">
+      {error && <div className="px-3 py-2 bg-red-50 border border-red-100 rounded-md text-xs text-red-700">{error}</div>}
+      {items.map((b) => {
+        const isReject = rejectFor === b.id;
+        return (
+          <article key={b.id} className="bg-white border border-neutral-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="p-5 flex flex-col lg:flex-row lg:items-start gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border bg-amber-50 text-amber-700 border-amber-100">
+                    {STATUS_LABELS.pending}
+                  </span>
+                  <span className="text-xs text-neutral-400">{fmtRelative(b.createdAt)}</span>
+                </div>
+                <h3 className="text-base font-semibold text-neutral-900">{b.clientName}</h3>
+                <div className="text-xs text-neutral-500 mt-0.5">
+                  {b.clientEmail && <a href={`mailto:${b.clientEmail}`} className="hover:text-[var(--color-primary)]">{b.clientEmail}</a>}
+                  {b.clientEmail && b.clientPhone && " · "}
+                  {b.clientPhone && <a href={`tel:${b.clientPhone}`} className="hover:text-[var(--color-primary)]">{b.clientPhone}</a>}
+                </div>
+
+                <dl className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-y-1 gap-x-4 text-xs">
+                  <WaitlistDetail label="Servicio" value={b.eventType?.name ?? "—"} />
+                  <WaitlistDetail label="Cuándo" value={fmtDateTime(b.scheduledAt)} />
+                  <WaitlistDetail label="Modalidad" value={MODALITY_LABELS[b.modality] ?? b.modality} />
+                </dl>
+
+                {b.additionalData && (
+                  <div className="mt-3 px-3 py-2 bg-neutral-50 border border-neutral-100 rounded-md">
+                    <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider mb-0.5">Respuesta al formulario</div>
+                    <p className="text-xs text-neutral-700 whitespace-pre-wrap leading-relaxed">{b.additionalData}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="shrink-0 flex flex-col gap-2 lg:w-44">
+                {isReject ? (
+                  <>
+                    <textarea
+                      rows={2}
+                      value={rejectReason}
+                      onChange={(e) => setRejectReason(e.target.value)}
+                      placeholder="Motivo (opcional, se envía por email)"
+                      className="w-full border border-neutral-200 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:border-[var(--color-primary)] resize-none"
+                    />
+                    <div className="flex gap-2">
+                      <button onClick={() => { setRejectFor(null); setRejectReason(""); }} disabled={busyId === b.id} className="flex-1 bg-white border border-neutral-200 text-neutral-700 text-xs font-medium py-1.5 rounded-md hover:bg-neutral-50 disabled:opacity-50">
+                        Cancelar
+                      </button>
+                      <button onClick={() => reject(b.id)} disabled={busyId === b.id} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold py-1.5 rounded-md disabled:opacity-50">
+                        {busyId === b.id ? "…" : "Rechazar"}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => confirm(b.id)} disabled={busyId === b.id} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2 rounded-md transition-colors disabled:opacity-50">
+                      {busyId === b.id ? "…" : "Confirmar"}
+                    </button>
+                    <button onClick={() => setRejectFor(b.id)} disabled={busyId === b.id} className="bg-white hover:bg-red-50 text-red-600 border border-red-200 text-xs font-medium py-2 rounded-md transition-colors disabled:opacity-50">
+                      Rechazar
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function WaitlistDetail({ label, value }) {
+  return (
+    <div>
+      <dt className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">{label}</dt>
+      <dd className="text-neutral-700 mt-0.5">{value}</dd>
     </div>
   );
 }
