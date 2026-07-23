@@ -49,6 +49,16 @@ export const EXTRA_EDGES = [
     after: "migrate-rename-therapist-to-employee",
     why: "el rename busca columnas/índices que contengan 'therapist'; team-fields es quien los introduce.",
   },
+  {
+    before: "migrate-clinica-module",
+    after: "migrate-clinica-client-link",
+    why: "client-link ALTERea clinic_sessions/clinical_reports/coordinations en un bucle (el analizador no ve el ALTER estático); esas tablas las crea clinica-module.",
+  },
+  {
+    before: "migrate-client-attachments-and-notes",
+    after: "migrate-interactions-notes-team",
+    why: "notes-team ALTERea interactions/client_notes en un bucle; client_notes la crea client-attachments-and-notes.",
+  },
 ];
 
 const RX = {

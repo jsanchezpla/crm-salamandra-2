@@ -8,6 +8,7 @@ import {
   buscarClienteExistente,
 } from "../../../../../lib/formularios/accept.js";
 import { crearUsuarioPortal } from "../../../../../lib/formularios/portalUser.js";
+import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -47,6 +48,7 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
     if (!form) return error("El formulario de origen ya no existe", 422);
 
     const handledBy = request.headers.get("x-user-email") || null;
+    const handledByTeamId = await resolveCurrentTeamMemberId(request, tenantModels);
 
     const { client, creado, yaEstaba } = await aceptarSolicitud({
       sequelize: tenantSequelize,
@@ -56,6 +58,7 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
       submission: submission.toJSON(),
       clientIdExistente: body.clientId && UUID_RE.test(body.clientId) ? body.clientId : null,
       handledBy,
+      handledByTeamId,
     });
 
     if (!client) return error("No se ha podido crear la ficha", 500);

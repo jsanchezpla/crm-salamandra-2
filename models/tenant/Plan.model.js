@@ -84,6 +84,13 @@ export function definePlan(sequelize) {
         allowNull: true,
         field: "archived_at",
       },
+      // Nutricionista que creó el plan (2026-07-23). Nullable: los planes
+      // anteriores no lo tienen. Importa cuando hay más de una nutricionista.
+      teamMemberId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "team_member_id",
+      },
     },
     {
       tableName: "plans",

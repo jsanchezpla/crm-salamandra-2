@@ -479,3 +479,45 @@ Usar automáticamente cuando corresponda:
 
 - Registrar en `AuditLog` cambios de configuración de tenant y accesos fallidos.
 - Logs de auditoría nunca se borran ni modifican.
+
+---
+
+## Conexión cliente/equipo — sprint 2026-07-23
+
+Principio: **todo registro del CRM tiene un CLIENTE (externo, para quién es) y
+un miembro del EQUIPO (interno, quién lo hace/posee)**. Los módulos se
+construyeron independientes y varios cruzaban por texto/email en vez de por FK
+real, lo que dejaba registros huérfanos en silencio (p. ej. citas de Aumenta
+sin cliente durante meses, porque el cruce ficha↔cita era por email).
+
+Enlaces reales añadidos (todos UUID nullable, FK ON DELETE SET NULL):
+
+| Tabla | Columna nueva | Enlace |
+| --- | --- | --- |
+| `bookings` | `client_id` | cita → ficha (sprint citas) |
+| `documents` | `client_id` | documento → cliente |
+| `clinic_sessions` | `client_id` | sesión → cliente (foto del paciente) |
+| `clinical_reports` | `client_id` | informe → cliente |
+| `coordinations` | `client_id` | coordinación → cliente |
+| `plans` | `team_member_id` | plan → nutricionista |
+| `interactions` | `team_member_id` | interacción → autor |
+| `client_notes` | `team_member_id` | nota → autor |
+| `form_submissions` | `handled_by_team_id` | solicitud → quién la atendió |
+
+Los registros clínicos toman `client_id` del paciente al crearse (foto, no se
+resincroniza) para no depender del salto paciente→cliente, que es frágil
+(`patients.client_id` es nullable y a menudo vacío).
+
+Auto-relleno en el alta: `lib/team/currentTeamMember.js` resuelve el TeamMember
+del usuario logueado (por `x-user-id`); `lib/clinica/patientClient.js` resuelve
+el cliente de un paciente. Los campos de texto viejos (`created_by`,
+`handled_by`) se conservan por compatibilidad.
+
+**Chequeo de salud**: `npm run db:check-links` (solo lectura) recorre los
+schemas y cuenta registros sueltos por tabla. Es la red que faltaba: nada
+avisaba cuando algo se quedaba sin conectar. Lanzarlo tras cada sprint que
+toque estos módulos.
+
+Pendiente (fuera de este sprint): rellenar `patients.client_id` donde falte —
+es la causa raíz de que los registros clínicos no lleguen al cliente. Y llevar
+estos enlaces a la UI (mostrar/reasignar en cada ficha).

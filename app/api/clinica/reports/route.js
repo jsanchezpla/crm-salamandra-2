@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
+import { clientIdOfPatient } from "../../../../lib/clinica/patientClient.js";
 import { ok, created, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { serializeReport } from "../../../../lib/clinica/serialize.js";
 import { logClinicaAudit } from "../../../../lib/clinica/audit.js";
@@ -50,6 +51,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     dueDate: body.dueDate || null,
     contentSections: cs,
     status: STATUSES.includes(body.status) ? body.status : "draft",
+    // Cliente/pagador del paciente (foto al crear el informe).
+    clientId: await clientIdOfPatient(ctx.tenantModels, body.patientId),
   };
   const r = await ClinicalReport.create(payload);
   await logClinicaAudit({

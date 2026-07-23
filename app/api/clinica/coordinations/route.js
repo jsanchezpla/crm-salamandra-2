@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
+import { clientIdOfPatient } from "../../../../lib/clinica/patientClient.js";
 import { ok, created, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { serializeCoordination } from "../../../../lib/clinica/serialize.js";
 import { logClinicaAudit } from "../../../../lib/clinica/audit.js";
@@ -48,6 +49,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     nextActions: toArr(body.nextActions),
     relatedPatientId: body.relatedPatientId || null,
     createdById: body.createdById,
+    // Cliente/pagador del paciente relacionado (foto al crear la coordinación).
+    clientId: await clientIdOfPatient(ctx.tenantModels, body.relatedPatientId),
   };
   const c = await Coordination.create(payload);
   await logClinicaAudit({

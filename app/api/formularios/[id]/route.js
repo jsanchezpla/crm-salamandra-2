@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../lib/utils/apiResponse.js";
 import { MODULE_KEYS } from "../../../../lib/tenant/moduleKeys.js";
+import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -80,6 +81,7 @@ export const PATCH = withTenant(async (request, ctx, { tenantModels, hasModule }
         return error("Estado no permitido. Solo se puede descartar o recuperar.", 422);
       }
       cambios.handledBy = request.headers.get("x-user-email") || row.handledBy || null;
+      cambios.handledByTeamId = (await resolveCurrentTeamMemberId(request, tenantModels)) || row.handledByTeamId || null;
     }
 
     if (Object.keys(cambios).length === 0) return error("Nada que cambiar", 422);

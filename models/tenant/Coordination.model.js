@@ -70,6 +70,13 @@ export function defineCoordination(sequelize) {
         type: DataTypes.UUID,
         allowNull: false,
       },
+      // Cliente/pagador (2026-07-23). Foto del paciente relacionado. El
+      // created_by_id ya dice quién del equipo la registró.
+      clientId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "client_id",
+      },
     },
     {
       tableName: "coordinations",

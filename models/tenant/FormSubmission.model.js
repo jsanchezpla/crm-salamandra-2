@@ -121,6 +121,14 @@ export function defineFormSubmission(sequelize) {
         allowNull: true,
         field: "handled_by",
       },
+      // Miembro del equipo que atendió la solicitud (2026-07-23). Enlace real
+      // que sustituye a `handledBy` (texto con el email). Se rellena al
+      // aceptar o descartar.
+      handledByTeamId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "handled_by_team_id",
+      },
       sourceUrl: {
         type: DataTypes.STRING(500),
         allowNull: true,

@@ -68,6 +68,7 @@ export const MODULES = {
     "migrate-client-attachments-and-notes",
     "migrate-patients-clients-phase1",
     "migrate-client-module-assignments",
+    "migrate-interactions-notes-team",
   ],
 
   citas: [
@@ -85,7 +86,7 @@ export const MODULES = {
     "migrate-patients-multi-per-client",
   ],
 
-  clinica: ["migrate-clinica-module"],
+  clinica: ["migrate-clinica-module", "migrate-clinica-client-link"],
 
   team: [
     "migrate-team-fields",
@@ -118,12 +119,13 @@ export const MODULES = {
   ],
 
   inventory: ["migrate-inventory-rework"],
-  documents: ["migrate-documents-sprint-1"],
+  documents: ["migrate-documents-sprint-1", "migrate-documents-client-link"],
   nutricion: [
     "migrate-nutricion-recipes",
     "migrate-nutricion-week-recipe-media",
     "migrate-nutricion-day-comments",
     "migrate-nutricion-show-macros",
+    "migrate-plan-team",
   ],
 
   outreach: [
@@ -134,7 +136,7 @@ export const MODULES = {
   ],
 
   // Formularios públicos → bandeja en el CRM → ficha de cliente al aceptar.
-  formularios: ["migrate-formularios-module"],
+  formularios: ["migrate-formularios-module", "migrate-formsubmission-team"],
 };
 
 /**

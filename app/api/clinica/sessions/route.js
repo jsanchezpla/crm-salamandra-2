@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
+import { clientIdOfPatient } from "../../../../lib/clinica/patientClient.js";
 import { ok, created, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { serializeSession } from "../../../../lib/clinica/serialize.js";
 import { logClinicaAudit } from "../../../../lib/clinica/audit.js";
@@ -58,6 +59,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     audioDurationSec: body.audioDurationSec != null && body.audioDurationSec !== "" ? Number(body.audioDurationSec) : null,
     aiReviewedAt: body.aiReviewedAt ? new Date(body.aiReviewedAt) : null,
     status: STATUSES.includes(body.status) ? body.status : "registered",
+    // Cliente/pagador del paciente (foto al crear la sesión).
+    clientId: await clientIdOfPatient(ctx.tenantModels, body.patientId),
   };
   const s = await ClinicSession.create(payload);
   await logClinicaAudit({

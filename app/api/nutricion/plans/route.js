@@ -8,6 +8,7 @@ import {
   serverError,
 } from "../../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
+import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 
 const MAX_LIMIT = 100;
 
@@ -200,6 +201,10 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
       ? null
       : String(body.description).slice(0, 10000);
 
+    // Nutricionista que crea el plan (enlace al equipo). Fuera de la
+    // transacción: es una lectura, y si falla no debe abortar la creación.
+    const teamMemberId = await resolveCurrentTeamMemberId(request, tenantModels);
+
     const row = await tenantSequelize.transaction(async (t) => {
       const plan = await Plan.create(
         {
@@ -207,6 +212,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
           description,
           type: "template",
           visibleToClient: false,
+          teamMemberId,
           // templateId, clientId, assignedAt todos NULL → satisface CHECK
         },
         { transaction: t }

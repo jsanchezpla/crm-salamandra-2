@@ -72,6 +72,14 @@ export function defineDocument(sequelize) {
           ],
         },
       },
+      // Cliente al que pertenece el documento (2026-07-23). Nullable: hay
+      // documentos internos que no son de ningún cliente. El owner_user_id ya
+      // dice quién lo subió; esto dice PARA QUIÉN es, para verlo desde su ficha.
+      clientId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "client_id",
+      },
     },
     {
       tableName: "documents",
