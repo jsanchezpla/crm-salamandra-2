@@ -19,8 +19,10 @@ export const GET = withTenant(
       const { id, attachmentId } = await params;
       const { Document } = tenantModels;
 
+      // source:'ficha' (arreglo 2026-07-23): no servir por esta ruta documentos
+      // del archivo central de otro origen (manual/privados de otro usuario).
       const row = await Document.findOne({
-        where: { id: attachmentId, clientId: id },
+        where: { id: attachmentId, clientId: id, source: "ficha" },
       });
       if (!row) return notFound("Adjunto no encontrado");
 

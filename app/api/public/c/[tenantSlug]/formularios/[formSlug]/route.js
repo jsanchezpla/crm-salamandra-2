@@ -34,8 +34,13 @@ async function cargarFormulario(tenantModels, formSlug) {
 }
 
 export const GET = withPublicTenant(
-  async (request, ctx, { tenantModels, hasModule, brand }) => {
+  async (request, ctx, { slug, tenantModels, hasModule, brand }) => {
     try {
+      // Rate-limit también en el GET (arreglo 2026-07-23): sin él, cada peticion
+      // ejecutaba un Form.findOne contra la BD sin freno alguno (DoS barato).
+      const limitado = enforceRateLimit(request, { key: `formulario-get:${slug}`, limit: 30, windowMs: 60_000 });
+      if (limitado) return limitado;
+
       if (!hasModule(MODULE_KEYS.FORMULARIOS)) return notFound("Formulario no encontrado");
       const { formSlug } = await ctx.params;
 

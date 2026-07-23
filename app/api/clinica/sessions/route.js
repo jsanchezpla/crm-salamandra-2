@@ -2,7 +2,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { clientIdOfPatient } from "../../../../lib/clinica/patientClient.js";
 import { ok, created, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { serializeSession } from "../../../../lib/clinica/serialize.js";
-import { logClinicaAudit } from "../../../../lib/clinica/audit.js";
+import { logClinicaAudit, auditSummary } from "../../../../lib/clinica/audit.js";
 
 function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
@@ -69,7 +69,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     action: "clinica.session.created",
     entity: "ClinicSession",
     entityId: s.id,
-    after: s.toJSON(),
+    after: auditSummary(s),
     ip: request.headers.get("x-forwarded-for"),
   });
   return created(serializeSession(s));

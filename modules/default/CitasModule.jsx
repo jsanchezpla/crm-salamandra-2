@@ -105,6 +105,11 @@ export default function CitasModule() {
   const [tab, setTab] = useState("calendar");
   const [pendingCount, setPendingCount] = useState(0);
   const [waitlistKey, setWaitlistKey] = useState(0); // fuerza recarga de la lista
+  // Vista/fecha del calendario, para no perder la semana al ir a la lista de
+  // espera y volver (arreglo 2026-07-23). `calViewRef` sigue en vivo la posición
+  // (datesSet); `calView` es lo que se aplica al montar el calendario.
+  const calViewRef = useRef({ view: "timeGridWeek", date: null });
+  const [calView, setCalView] = useState({ view: "timeGridWeek", date: null });
   const [eventTypes, setEventTypes] = useState([]);
   const [visibleEtIds, setVisibleEtIds] = useState(null); // null = todos
   const [openBooking, setOpenBooking] = useState(null); // booking abierto en modal detalle
@@ -220,6 +225,10 @@ export default function CitasModule() {
       if (!j.ok) throw new Error(j.error || "Error guardando");
       setOpenBooking(j.data);
       calendarRef.current?.getApi().refetchEvents();
+      // Refresca el globito de pendientes (arreglo 2026-07-23): cancelar/confirmar
+      // una cita pendiente desde el calendario cambia el número de la lista de
+      // espera; sin esto el contador quedaba desactualizado.
+      loadPendingCount();
       return true;
     } catch (err) {
       setFormError(err.message);
@@ -259,6 +268,18 @@ export default function CitasModule() {
   }, [eventTypes, createForm.eventTypeId]);
 
   function updateCreateForm(field, value) {
+    // Al cambiar de tipo de cita (arreglo 2026-07-23): si la modalidad elegida
+    // ya no la ofrece el tipo nuevo, se limpia. Antes quedaba una modalidad
+    // huérfana (p. ej. 'online') que colaba la validación cliente y el servidor
+    // rechazaba con un error confuso.
+    if (field === "eventTypeId") {
+      const nuevoTipo = eventTypes.find((e) => e.id === value);
+      setCreateForm((prev) => {
+        const modalidadValida = nuevoTipo?.modalities?.includes(prev.modality);
+        return { ...prev, eventTypeId: value, modality: modalidadValida ? prev.modality : "" };
+      });
+      return;
+    }
     setCreateForm((prev) => ({ ...prev, [field]: value }));
   }
 
@@ -412,7 +433,7 @@ export default function CitasModule() {
       {/* Pestañas: Calendario · Lista de espera (con globito de pendientes) */}
       <div className="px-6 lg:px-10 pt-3 flex items-center gap-1 shrink-0">
         <button
-          onClick={() => setTab("calendar")}
+          onClick={() => { setCalView(calViewRef.current); setTab("calendar"); }}
           className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
             tab === "calendar" ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
           }`}
@@ -493,7 +514,9 @@ export default function CitasModule() {
           <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
-            initialView="timeGridWeek"
+            initialView={calView.view}
+            initialDate={calView.date || undefined}
+            datesSet={(arg) => { calViewRef.current = { view: arg.view.type, date: arg.startStr }; }}
             headerToolbar={{
               left: "prev,next today",
               center: "title",

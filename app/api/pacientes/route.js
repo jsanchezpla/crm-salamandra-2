@@ -2,7 +2,7 @@ import { Op, fn, col } from "sequelize";
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden } from "../../../lib/utils/apiResponse.js";
 import { serializePatient } from "../../../lib/clinica/serialize.js";
-import { logClinicaAudit } from "../../../lib/clinica/audit.js";
+import { logClinicaAudit, auditSummary } from "../../../lib/clinica/audit.js";
 import { normalizeConsents } from "../../../lib/clinica/consents.js";
 
 const cap = (v, n) => (v == null ? null : String(v).trim().slice(0, n) || null);
@@ -111,7 +111,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     action: "pacientes.created",
     entity: "Patient",
     entityId: p.id,
-    after: p.toJSON(),
+    after: auditSummary(p),
     ip: request.headers.get("x-forwarded-for"),
   });
   return created(serializePatient(p, { sessionsCount: 0, lastSession: null }));

@@ -187,7 +187,9 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       entity: "Document",
       entityId: row.id,
       before: null,
-      after: { fileName, mimeType: declaredMime, fileSize: realSize, visibility, folderId },
+      // NO se audita fileName: puede llevar el nombre del paciente
+      // ("informe-TCA-Maria.pdf") y el log vive en master (schema compartido).
+      after: { mimeType: declaredMime, fileSize: realSize, visibility, folderId, clientId, source: "manual" },
       ip: request.headers.get("x-forwarded-for"),
     });
 

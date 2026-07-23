@@ -22,8 +22,12 @@ export const DELETE = withTenant(
       const { id, attachmentId } = await params;
       const { Document } = tenantModels;
 
+      // source:'ficha' (arreglo 2026-07-23): esta ruta SOLO opera sobre adjuntos
+      // de ficha. Sin el filtro alcanzaba cualquier documento del cliente en el
+      // archivo central (source='manual', privado de otro usuario) y lo borraba,
+      // saltandose la regla "solo el dueño borra" del modulo Documentos.
       const row = await Document.findOne({
-        where: { id: attachmentId, clientId: id },
+        where: { id: attachmentId, clientId: id, source: "ficha" },
       });
       if (!row) return noContent(); // idempotente
 

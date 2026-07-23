@@ -1,4 +1,5 @@
 import { Op } from "sequelize";
+import { puntuarSpam } from "../../../../../../lib/formularios/antispam.js";
 import { withPublicTenant } from "../../../../../../lib/tenant/publicTenantContext.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { created, error, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
@@ -38,6 +39,14 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
     let body;
     try { body = await request.json(); } catch { return error("Body inválido"); }
 
+    // Antispam (arreglo 2026-07-23): la reserva pública no tenía honeypot ni
+    // trampa de tiempo ni dedup (el formulario sí). A un bot se le responde
+    // "ok" y no se guarda nada; un error le diría qué corregir.
+    const { puntos } = puntuarSpam(body);
+    if (puntos >= 2) {
+      return created({ ok: true, mensaje: "Solicitud recibida" });
+    }
+
     const eventTypeId = normalizeString(body.eventTypeId);
     if (!eventTypeId) return error("eventTypeId es obligatorio");
 
@@ -71,7 +80,9 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
     const clientPhone = normalizeString(body.clientPhone);
     if (!clientPhone) return error("clientPhone es obligatorio", 422);
 
-    const additionalData = body.additionalData != null ? String(body.additionalData).trim() : null;
+    // Recorte de longitud (arreglo 2026-07-23): additionalData es TEXT sin tope
+    // y el endpoint es público; sin recorte se puede escribir MB por reserva.
+    const additionalData = body.additionalData != null ? String(body.additionalData).trim().slice(0, 2000) : null;
     if (eventType.additionalDataRequired && (!additionalData || additionalData === "")) {
       return error("additionalData es obligatorio para este tipo de cita", 422);
     }
@@ -131,6 +142,21 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
     });
     if (overlap) {
       return error("Esa hora ya no está disponible, por favor elige otra", 409);
+    }
+
+    // Dedup (arreglo 2026-07-23): misma persona reservando lo mismo en los
+    // últimos 5 min (doble clic / reintento) → se responde ok sin duplicar.
+    const hace5min = new Date(Date.now() - 5 * 60 * 1000);
+    const yaReservado = await Booking.findOne({
+      where: {
+        scheduledAt,
+        createdAt: { [Op.gte]: hace5min },
+        [Op.or]: [{ clientEmail }, { clientPhone }],
+      },
+      attributes: ["id"],
+    });
+    if (yaReservado) {
+      return created({ ok: true, mensaje: "Solicitud recibida" });
     }
 
     // Determina si el booking nace 'confirmed' (default histórico) o

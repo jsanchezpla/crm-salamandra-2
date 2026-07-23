@@ -49,9 +49,13 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       if (searchParams.get("to")) where.scheduledAt[Op.lte] = new Date(searchParams.get("to"));
     }
     // ?future=true filtra a partir de ahora (útil para "próximas citas" en la ficha cliente).
-    // Convive con ?from si se combinan; el más restrictivo gana.
+    // Convive con ?from: el MÁS RESTRICTIVO gana de verdad (arreglo 2026-07-23).
+    // Antes se reasignaba Op.gte con `now`, que PISABA un `from` posterior y
+    // devolvía citas de más; ahora se toma el máximo de los dos.
     if (searchParams.get("future") === "true") {
-      where.scheduledAt = { ...(where.scheduledAt || {}), [Op.gte]: new Date() };
+      const previo = where.scheduledAt?.[Op.gte];
+      const desde = new Date(Math.max(Date.now(), previo ? new Date(previo).getTime() : 0));
+      where.scheduledAt = { ...(where.scheduledAt || {}), [Op.gte]: desde };
     }
     if (searchParams.get("status")) {
       const s = searchParams.get("status");

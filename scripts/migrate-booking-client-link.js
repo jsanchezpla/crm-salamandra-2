@@ -65,15 +65,16 @@ async function main() {
 
   for (const schema of schemas) {
     try {
-      // La tabla `clients` puede no existir en un tenant que tenga citas pero
-      // no el módulo de clientes. Sin ella no hay a qué enlazar.
+      // ARREGLO 2026-07-23 (revision de bugs): la COLUMNA client_id se añade
+      // SIEMPRE en todo tenant con `bookings`, tenga o no tabla `clients`.
+      // Antes esta migracion se saltaba ENTERO el schema sin `clients`, dejando
+      // el modelo Booking (que declara clientId siempre) apuntando a una columna
+      // inexistente → 42703 al leer citas. Es el mismo patron que tumbo a Laura;
+      // el fix ecb7fff corrigio 5 migraciones hermanas pero se dejo esta.
+      // Solo la FK y el relleno hacia atras necesitan `clients`.
       const [[{ existe }]] = await s.query(
         `SELECT to_regclass('"${schema}"."clients"') IS NOT NULL AS existe`
       );
-      if (!existe) {
-        log(`· ${schema}: sin tabla clients, se salta`);
-        continue;
-      }
 
       await s.transaction(async (t) => {
         await s.query(
@@ -81,20 +82,22 @@ async function main() {
           { transaction: t }
         );
 
-        // FK dentro de DO/EXCEPTION: repetir la migración no puede fallar.
-        await s.query(
-          `DO $$
-           BEGIN
-             ALTER TABLE "${schema}"."bookings"
-               ADD CONSTRAINT bookings_client_id_fkey
-               FOREIGN KEY (client_id) REFERENCES "${schema}"."clients"(id)
-               ON UPDATE CASCADE ON DELETE SET NULL;
-           EXCEPTION
-             WHEN duplicate_object THEN NULL;
-             WHEN duplicate_table  THEN NULL;
-           END $$;`,
-          { transaction: t }
-        );
+        // FK y relleno SOLO si existe clients. addFk hace no-op seguro igual.
+        if (existe) {
+          await s.query(
+            `DO $$
+             BEGIN
+               ALTER TABLE "${schema}"."bookings"
+                 ADD CONSTRAINT bookings_client_id_fkey
+                 FOREIGN KEY (client_id) REFERENCES "${schema}"."clients"(id)
+                 ON UPDATE CASCADE ON DELETE SET NULL;
+             EXCEPTION
+               WHEN duplicate_object THEN NULL;
+               WHEN duplicate_table  THEN NULL;
+             END $$;`,
+            { transaction: t }
+          );
+        }
 
         await s.query(
           `CREATE INDEX IF NOT EXISTS bookings_client_idx
@@ -102,6 +105,11 @@ async function main() {
           { transaction: t }
         );
       });
+
+      if (!existe) {
+        log(`✓ ${schema}: columna lista (sin clients: sin FK ni relleno)`);
+        continue;
+      }
 
       // ── Relleno hacia atrás ────────────────────────────────────────────
       // Solo emails que apuntan a UNA sola ficha. El resto se deja a NULL.

@@ -44,6 +44,7 @@ export const ONE_OFF = {
   "migrate-quality-leads": "atada a quality_energy",
   "migrate-pacientes-sprint-1": "cabecera: «solo aumenta»",
   "migrate-clinica-sprint-1": "cabecera: «solo aumenta»",
+  "migrate-attachments-to-documents": "migración de DATOS (mueve ficheros+filas), se corre a mano una vez, no la ejecuta el disparador",
 };
 
 /**

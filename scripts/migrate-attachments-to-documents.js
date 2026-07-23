@@ -84,15 +84,14 @@ async function main() {
     );
 
     for (const a of adjuntos) {
+      let destAbs = null;
       try {
-        // Idempotencia: ¿ya existe su gemelo en documents?
-        const [[{ n }]] = await s.query(
-          `SELECT count(*) AS n FROM "${schema}"."documents"
-            WHERE client_id = :cid AND file_name = :fn AND file_size = :fs AND source = 'ficha'`,
-          { replacements: { cid: a.client_id, fn: a.original_name, fs: a.file_size } }
-        );
-        if (Number(n) > 0) { saltados++; continue; }
-
+        // Idempotencia por BORRADO (arreglo 2026-07-23): NO se compara por
+        // nombre+tamaño (no son únicos: dos adjuntos iguales colapsaban en uno
+        // y se perdía el segundo). Cada fila de client_attachments que SIGA
+        // existiendo es, por definición, una que aún no se migró — la
+        // transacción borra la vieja al migrar. Así re-ejecutar solo ve las
+        // pendientes y nunca duplica ni pierde.
         const origen = path.join(ROOT, slug, "clients", a.client_id, a.stored_filename);
         try {
           await fs.access(origen);
@@ -106,17 +105,13 @@ async function main() {
         const ext = extFromName(a.original_name);
         const destDir = path.join(ROOT, "documents", slug, "shared");
         const destRel = `documents/${slug}/shared/${docId}.${ext}`;
+        destAbs = path.join(destDir, `${docId}.${ext}`);
         await fs.mkdir(destDir, { recursive: true });
         // Copiar primero (no mover) para no perder el original si algo falla.
-        await fs.copyFile(origen, path.join(destDir, `${docId}.${ext}`));
+        await fs.copyFile(origen, destAbs);
 
-        // Fila en documents. owner_user_id: reutilizamos uploaded_by SOLO si es
-        // un UUID; si es un email o null, ponemos el primer usuario... mejor:
-        // usamos un UUID cero-safe no vale (FK a users no hay). owner_user_id
-        // no tiene FK, así que guardamos el uploaded_by si es UUID, o generamos
-        // uno nulo→ NOT NULL. Usamos el client_id como marcador no es válido.
-        // Solución: owner_user_id acepta cualquier UUID (sin FK); si no hay,
-        // usamos un UUID fijo de sistema.
+        // owner_user_id (NOT NULL, sin FK): el uploaded_by si es UUID; si es un
+        // email o falta, un UUID de sistema.
         const SYSTEM_UUID = "00000000-0000-0000-0000-000000000000";
         const owner = /^[0-9a-f-]{36}$/i.test(a.uploaded_by || "") ? a.uploaded_by : SYSTEM_UUID;
 
@@ -144,6 +139,9 @@ async function main() {
         migrados++;
         log(`✓ ${schema}: "${a.original_name}" → archivo central`);
       } catch (err) {
+        // Si la transacción falló tras copiar, borrar el destino huérfano para
+        // no dejar basura que además se re-copiaría en el siguiente intento.
+        if (destAbs) await fs.unlink(destAbs).catch(() => {});
         log(`✗ ${schema}: "${a.original_name}" — ${err.message}`);
         saltados++;
       }

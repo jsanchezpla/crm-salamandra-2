@@ -140,8 +140,15 @@ async function main() {
   }
   const s = new Sequelize(process.env.DATABASE_URL, { dialect: "postgres", logging: false });
 
-  const { schemas } = await byTable(s, "clients");
-  if (schemas.length === 0) log("· Ningún schema con tabla clients.");
+  // ARREGLO 2026-07-23 (revision de bugs): procesar todo schema que tenga
+  // `clients` O `documents`. Antes solo miraba `clients`, asi que un tenant con
+  // modulo documents SIN clients se quedaba sin la columna `source` (que el
+  // modelo Document referencia siempre) → 42703. La columna source es
+  // inofensiva y debe existir en todo tenant con `documents`.
+  const conClients = (await byTable(s, "clients")).schemas;
+  const conDocs = (await byTable(s, "documents")).schemas;
+  const schemas = [...new Set([...conClients, ...conDocs])].sort();
+  if (schemas.length === 0) log("· Ningún schema con clients ni documents.");
 
   for (const schema of schemas) {
     try {

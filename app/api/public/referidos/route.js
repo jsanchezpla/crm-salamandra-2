@@ -1,6 +1,7 @@
 import { getTenantContext } from "../../../../lib/tenant/tenantResolver.js";
 import { ValidationError } from "../../../../lib/utils/errors.js";
 import { enforceRateLimit } from "../../../../lib/utils/rateLimit.js";
+import { sanearCustomFields } from "../../../../lib/utils/publicInput.js";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -56,11 +57,11 @@ export async function POST(request) {
       );
     }
 
-    const customFields = {
-      ...(customFieldsBody && typeof customFieldsBody === "object" ? customFieldsBody : {}),
+    const customFields = sanearCustomFields({
+      ...(customFieldsBody && typeof customFieldsBody === "object" && !Array.isArray(customFieldsBody) ? customFieldsBody : {}),
       source: "referido_abarcaia",
       ...(codigo_referido ? { codigo_referido: String(codigo_referido).trim().toUpperCase() } : {}),
-    };
+    });
 
     const lead = await Lead.create({
       name: fullName,

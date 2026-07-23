@@ -1,7 +1,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound } from "../../../../../lib/utils/apiResponse.js";
 import { serializeSession } from "../../../../../lib/clinica/serialize.js";
-import { logClinicaAudit } from "../../../../../lib/clinica/audit.js";
+import { logClinicaAudit, auditSummary } from "../../../../../lib/clinica/audit.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function gate(ctx) {
@@ -36,7 +36,7 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
     return error("Body inválido");
   }
   if ("status" in body && !STATUSES.includes(body.status)) return error("status inválido");
-  const before = s.toJSON();
+  const before = auditSummary(s); // solo identificadores: NO datos clínicos al log compartido
   const updates = {};
   for (const k of PATCH_FIELDS) if (k in body) updates[k] = body[k];
   if ("objectives" in updates && !Array.isArray(updates.objectives)) updates.objectives = [];
@@ -50,7 +50,7 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
     entity: "ClinicSession",
     entityId: id,
     before,
-    after: s.toJSON(),
+    after: auditSummary(s),
     ip: request.headers.get("x-forwarded-for"),
   });
   return ok(serializeSession(s));

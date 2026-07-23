@@ -1,6 +1,7 @@
 import { getTenantContext } from "../../../../lib/tenant/tenantResolver.js";
 import { ValidationError } from "../../../../lib/utils/errors.js";
 import { enforceRateLimit } from "../../../../lib/utils/rateLimit.js";
+import { sanearCustomFields } from "../../../../lib/utils/publicInput.js";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -66,24 +67,28 @@ export async function POST(request) {
     const ENUM_MOTIVOS = ["diagnostico", "servicios", "cursos", "talleres"];
     const motivoIsEnum = motivo && ENUM_MOTIVOS.includes(motivo);
 
-    const customFields = {
-      ...(customFieldsBody && typeof customFieldsBody === "object" ? customFieldsBody : {}),
+    // Saneo de customFields (arreglo 2026-07-23): endpoint público sin login.
+    // Antes se volcaba el objeto tal cual, sin tope de tamaño → contaminación y
+    // abuso de almacenamiento. Ahora se recorta a un JSON de 8 KB como máximo.
+    const customFields = sanearCustomFields({
+      ...(customFieldsBody && typeof customFieldsBody === "object" && !Array.isArray(customFieldsBody) ? customFieldsBody : {}),
       ...(empresa ? { empresa: String(empresa).trim() } : {}),
       ...(motivo && !motivoIsEnum ? { motivo: String(motivo).trim() } : {}),
-    };
+    });
 
+    const cap = (v, n) => (typeof v === "string" ? v.trim().slice(0, n) : v);
     const lead = await Lead.create({
-      name: fullName,
-      email: email?.trim().toLowerCase() ?? null,
-      phone,
-      title: fullName,
+      name: cap(fullName, 200),
+      email: email?.trim().toLowerCase().slice(0, 160) ?? null,
+      phone: cap(phone, 40),
+      title: cap(fullName, 200),
       stage: "new",
       tipo_usuario: tipo_usuario ?? "ciudadano",
       motivo: motivoIsEnum ? motivo : null,
-      servicio: servicio?.trim() ?? null,
-      curso: curso?.trim() ?? null,
-      taller: taller?.trim() ?? null,
-      mensaje: mensaje?.trim() ?? null,
+      servicio: cap(servicio, 200) ?? null,
+      curso: cap(curso, 200) ?? null,
+      taller: cap(taller, 200) ?? null,
+      mensaje: cap(mensaje, 4000) ?? null,
       customFields,
     });
 
