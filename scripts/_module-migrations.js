@@ -69,6 +69,7 @@ export const MODULES = {
     "migrate-patients-clients-phase1",
     "migrate-client-module-assignments",
     "migrate-interactions-notes-team",
+    "migrate-documents-transversal",
   ],
 
   citas: [
@@ -119,7 +120,7 @@ export const MODULES = {
   ],
 
   inventory: ["migrate-inventory-rework"],
-  documents: ["migrate-documents-sprint-1", "migrate-documents-client-link"],
+  documents: ["migrate-documents-sprint-1", "migrate-documents-client-link", "migrate-documents-transversal"],
   nutricion: [
     "migrate-nutricion-recipes",
     "migrate-nutricion-week-recipe-media",

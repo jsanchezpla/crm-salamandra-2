@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Op } from "sequelize";
 import { withTenant } from "@/lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, unauthorized, serverError } from "@/lib/utils/apiResponse.js";
 import { MODULE_KEYS } from "@/lib/tenant/moduleKeys.js";
@@ -19,6 +20,7 @@ import {
   saveDocumentFile,
   deleteDocumentFile,
   sanitizeFileName,
+  extFromFileName,
 } from "@/lib/documents/documentStorage.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -35,12 +37,30 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const visibility = ["private", "shared", "all"].includes(sp.get("visibility")) ? sp.get("visibility") : "all";
 
     const where = visibilityWhere(userId, visibility);
-    const folderParam = sp.get("folderId");
-    if (folderParam && folderParam !== "null") {
-      if (!UUID_RE.test(folderParam)) return error("folderId inválido", 400);
-      where.folderId = folderParam;
-    } else {
-      where.folderId = null;
+
+    // Modo BÚSQUEDA (archivo central): filtrar por cliente, origen o texto
+    // recorre TODO el archivo, ignorando la carpeta. Modo NAVEGACIÓN: se
+    // mantiene el comportamiento por carpeta de siempre.
+    const clientId = sp.get("clientId");
+    const source = sp.get("source");
+    const q = (sp.get("q") || "").trim();
+    const modoBusqueda = clientId || source || q;
+
+    if (clientId && clientId !== "null") {
+      if (!UUID_RE.test(clientId)) return error("clientId inválido", 400);
+      where.clientId = clientId;
+    }
+    if (source) where.source = source.slice(0, 40);
+    if (q) where.fileName = { [Op.iLike]: `%${q}%` };
+
+    if (!modoBusqueda) {
+      const folderParam = sp.get("folderId");
+      if (folderParam && folderParam !== "null") {
+        if (!UUID_RE.test(folderParam)) return error("folderId inválido", 400);
+        where.folderId = folderParam;
+      } else {
+        where.folderId = null;
+      }
     }
 
     // LIMIT defensivo (sin paginación aún; la UI del Sprint 2 la añadirá).
@@ -96,11 +116,12 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       }
     }
 
-    // MIME declarado (Content-Type del multipart). Se cruza con magic bytes abajo.
-    const declaredMime = file.type;
-    if (!isAllowedMime(declaredMime)) {
-      return error(`Tipo no permitido: solo PDF, DOCX o XLSX. Recibido: ${declaredMime || "desconocido"}`, 400);
-    }
+    // Archivo central transversal (2026-07-23): se acepta CUALQUIER tipo. Solo
+    // se exige que venga un Content-Type. La comprobación de magic bytes sigue
+    // aplicándose a los tipos que sabemos verificar (PDF/OOXML); para el resto
+    // se confía en el Content-Type (el archivo se sirve como adjunto, nunca se
+    // ejecuta).
+    const declaredMime = file.type || "application/octet-stream";
 
     // Guard barato con el tamaño declarado (evita leer un archivo gigante).
     if (typeof file.size === "number" && file.size > MAX_FILE_SIZE_BYTES) {
@@ -113,8 +134,9 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       return error(`Archivo demasiado grande. Máximo: ${MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB`, 413);
     }
 
-    // Validación de contenido real (magic bytes) — no confiar en la extensión.
-    if (!validateMimeMagicBytes(buffer, declaredMime)) {
+    // Magic bytes SOLO para los tipos que sabemos verificar. Para el resto
+    // (imágenes, txt, etc.) se acepta: es un archivo, no un ejecutable.
+    if (isAllowedMime(declaredMime) && !validateMimeMagicBytes(buffer, declaredMime)) {
       return error("El contenido del archivo no coincide con su tipo declarado", 400);
     }
 
@@ -132,7 +154,12 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     const ownerSegment = ownerSegmentFor(visibility, userId);
 
     // Escribir a disco; si el INSERT falla, limpiar el archivo (best-effort atómico).
-    const storagePath = await saveDocumentFile(ctx.slug, ownerSegment, documentId, buffer, declaredMime);
+    const ext = extFromFileName(file.name);
+    const storagePath = await saveDocumentFile(ctx.slug, ownerSegment, documentId, buffer, ext);
+
+    // Cliente opcional al que se asocia el documento subido desde el módulo.
+    const clientIdRaw = form.get("clientId");
+    const clientId = typeof clientIdRaw === "string" && UUID_RE.test(clientIdRaw) ? clientIdRaw : null;
 
     let row;
     try {
@@ -145,6 +172,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
         storagePath,
         fileSize: realSize,
         mimeType: declaredMime,
+        clientId,
+        source: "manual",
       });
     } catch (dbErr) {
       await deleteDocumentFile(ctx.slug, storagePath);

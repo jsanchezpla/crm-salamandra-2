@@ -27,9 +27,9 @@
 import { useCallback, useEffect, useState } from "react";
 import TimestampRelative from "../../../components/ui/TimestampRelative.jsx";
 
-const MAX_FILE_MB = 10;
+const MAX_FILE_MB = 25;
 const MAX_FILES = 50;
-const ALLOWED_MIME = "application/pdf";
+// Archivo central (2026-07-23): se acepta cualquier tipo de fichero.
 
 function fmtBytes(bytes) {
   if (bytes == null) return "—";
@@ -66,9 +66,6 @@ export default function ClientAttachmentsPanel({ clientId }) {
 
   function validateFile(file) {
     if (!file) return "Selecciona un archivo.";
-    if (file.type !== ALLOWED_MIME) {
-      return `Solo se aceptan PDF (recibido: ${file.type || "tipo desconocido"}).`;
-    }
     if (file.size > MAX_FILE_MB * 1024 * 1024) {
       return `Archivo demasiado grande: ${(file.size / (1024 * 1024)).toFixed(1)} MB · máximo ${MAX_FILE_MB} MB.`;
     }
@@ -129,9 +126,9 @@ export default function ClientAttachmentsPanel({ clientId }) {
       {/* Cabecera */}
       <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-semibold text-gray-700">Adjuntos PDF</div>
+          <div className="text-sm font-semibold text-gray-700">Documentos</div>
           <div className="text-[11px] text-gray-400 mt-0.5">
-            {items.length}/{MAX_FILES} archivos · PDF, máximo {MAX_FILE_MB} MB
+            {items.length}/{MAX_FILES} archivos · cualquier tipo, máximo {MAX_FILE_MB} MB
           </div>
         </div>
       </div>
@@ -157,7 +154,6 @@ export default function ClientAttachmentsPanel({ clientId }) {
         >
           <input
             type="file"
-            accept="application/pdf"
             className="sr-only"
             onChange={(e) => handleFile(e.target.files?.[0])}
             disabled={uploading || limitReached}
@@ -174,7 +170,7 @@ export default function ClientAttachmentsPanel({ clientId }) {
             </div>
           ) : (
             <div className="text-center">
-              <div className="text-sm text-gray-600">Arrastra un PDF o haz clic para subir</div>
+              <div className="text-sm text-gray-600">Arrastra un archivo o haz clic para subir</div>
               <div className="text-[11px] text-gray-400 mt-0.5">Máximo {MAX_FILE_MB} MB</div>
             </div>
           )}

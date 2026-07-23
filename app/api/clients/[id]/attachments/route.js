@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
+import { randomUUID } from "node:crypto";
 import {
   ok,
   created,
@@ -8,34 +9,63 @@ import {
   serverError,
 } from "../../../../../lib/utils/apiResponse.js";
 import {
-  ALLOWED_MIME,
   MAX_FILE_SIZE_BYTES,
-  MAX_FILES_PER_CLIENT,
-  generateStoredFilename,
-  writeAttachment,
-  deleteAttachmentFile,
-} from "../../../../../lib/clients/attachmentStorage.js";
+  TENANT_QUOTA_BYTES,
+  getTenantStorageUsage,
+  saveDocumentFile,
+  deleteDocumentFile,
+  sanitizeFileName,
+  extFromFileName,
+} from "../../../../../lib/documents/documentStorage.js";
 
 /**
- * GET /api/clients/[id]/attachments — lista de PDFs del cliente.
- * Orden DESC por createdAt. No pagina (max 50 por cliente).
+ * Adjuntos de la ficha de cliente.
+ *
+ * ARCHIVO CENTRAL (2026-07-23): estos endpoints ya NO usan la tabla
+ * `client_attachments`, sino el archivo central `documents` (source='ficha').
+ * Así, todo lo que se sube a un cliente aparece también en el buscador de
+ * Documentos, y al revés. Se conserva la URL y la forma de respuesta para no
+ * tocar el panel de la ficha.
+ *
+ * Los adjuntos de ficha se guardan como `shared`: los ve todo el equipo del
+ * tenant (es el archivo común de la consulta), y quedan enlazados al cliente.
  */
+
+const MAX_FILES_PER_CLIENT = 50;
+
+// Un documento del archivo central, con la forma que espera el panel de la ficha.
+function serializeParaFicha(doc) {
+  return {
+    id: doc.id,
+    originalName: doc.fileName,
+    mimeType: doc.mimeType,
+    fileSize: Number(doc.fileSize),
+    createdAt: doc.createdAt,
+    uploadedBy: null, // el owner es un UUID; el panel tolera que no venga
+  };
+}
+
+// Sólo los documentos de este cliente subidos desde su ficha.
+function whereFichaDe(clientId) {
+  return { clientId, source: "ficha" };
+}
+
 export const GET = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
   try {
     if (!hasModule("clients")) return forbidden("Módulo clients no activo");
     const { id } = await params;
-    const { Client, ClientAttachment } = tenantModels;
+    const { Client, Document } = tenantModels;
 
     const client = await Client.findByPk(id, { attributes: ["id"] });
     if (!client) return notFound("Cliente no encontrado");
 
-    const rows = await ClientAttachment.findAll({
-      where: { clientId: id },
+    const rows = await Document.findAll({
+      where: whereFichaDe(id),
       order: [["createdAt", "DESC"]],
     });
 
     return ok({
-      attachments: rows.map((r) => r.toJSON()),
+      attachments: rows.map(serializeParaFicha),
       total: rows.length,
       limit: MAX_FILES_PER_CLIENT,
     });
@@ -44,40 +74,21 @@ export const GET = withTenant(async (_request, { params }, { tenantModels, hasMo
   }
 });
 
-/**
- * POST /api/clients/[id]/attachments — sube un PDF.
- * multipart/form-data, campo "file".
- *
- * Validaciones:
- *   - mimeType === "application/pdf"
- *   - fileSize ≤ 10 MB
- *   - count actual < 50
- *
- * Orden de operaciones (best-effort atómico):
- *   1. Validar.
- *   2. Generar storedFilename.
- *   3. Escribir archivo a disco.
- *   4. Insertar fila BD.
- *   5. Si BD falla → borrar archivo (best effort).
- */
 export const POST = withTenant(
   async (request, { params }, { tenant, tenantModels, hasModule }) => {
     try {
       if (!hasModule("clients")) return forbidden("Módulo clients no activo");
       const { id } = await params;
-      const { Client, ClientAttachment } = tenantModels;
-      const uploadedBy = request.headers.get("x-user-email") ?? null;
+      const { Client, Document } = tenantModels;
+      const ownerUserId = request.headers.get("x-user-id");
+      if (!ownerUserId) return error("No autorizado", 401);
 
       const client = await Client.findByPk(id, { attributes: ["id"] });
       if (!client) return notFound("Cliente no encontrado");
 
-      // Comprobar límite ANTES de leer el archivo (no malgastar bytes).
-      const currentCount = await ClientAttachment.count({ where: { clientId: id } });
+      const currentCount = await Document.count({ where: whereFichaDe(id) });
       if (currentCount >= MAX_FILES_PER_CLIENT) {
-        return error(
-          `Límite alcanzado: máximo ${MAX_FILES_PER_CLIENT} archivos por cliente`,
-          422
-        );
+        return error(`Límite alcanzado: máximo ${MAX_FILES_PER_CLIENT} archivos por cliente`, 422);
       }
 
       let formData;
@@ -92,50 +103,49 @@ export const POST = withTenant(
         return error("Campo 'file' obligatorio (multipart)", 422);
       }
 
-      if (file.type !== ALLOWED_MIME) {
-        return error(
-          `Tipo no permitido: solo ${ALLOWED_MIME}. Recibido: ${file.type || "desconocido"}`,
-          422
-        );
+      // Archivo central: se acepta CUALQUIER tipo (antes solo PDF).
+      const declaredMime = file.type || "application/octet-stream";
+      if (typeof file.size === "number" && file.size > MAX_FILE_SIZE_BYTES) {
+        return error(`Archivo demasiado grande. Máximo: ${MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB`, 413);
       }
 
-      if (file.size > MAX_FILE_SIZE_BYTES) {
-        const mb = (file.size / (1024 * 1024)).toFixed(2);
-        return error(
-          `Archivo demasiado grande: ${mb} MB. Máximo: ${MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB`,
-          422
-        );
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const realSize = buffer.length;
+      if (realSize > MAX_FILE_SIZE_BYTES) {
+        return error(`Archivo demasiado grande. Máximo: ${MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB`, 413);
       }
 
-      const originalName = (file.name || "archivo.pdf").slice(0, 255);
-      const storedFilename = generateStoredFilename();
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
+      const usage = await getTenantStorageUsage(tenant.slug);
+      if (usage + realSize > TENANT_QUOTA_BYTES) {
+        return error(`Cuota de almacenamiento superada`, 507);
+      }
 
-      // ── 3. Escribir archivo a disco ──────────────────────────────────────
-      await writeAttachment(tenant.slug, id, storedFilename, buffer);
+      const documentId = randomUUID();
+      const fileName = sanitizeFileName(file.name || "archivo");
+      const ext = extFromFileName(file.name);
+      // Los adjuntos de ficha son compartidos con el equipo del tenant.
+      const storagePath = await saveDocumentFile(tenant.slug, "shared", documentId, buffer, ext);
 
-      // ── 4. Insertar fila BD; si falla, intentar limpiar el archivo ──────
       let row;
       try {
-        row = await ClientAttachment.create({
+        row = await Document.create({
+          id: documentId,
+          folderId: null,
+          visibility: "shared",
+          ownerUserId,
+          fileName,
+          storagePath,
+          fileSize: realSize,
+          mimeType: declaredMime,
           clientId: id,
-          originalName,
-          storedFilename,
-          mimeType: file.type,
-          fileSize: file.size,
-          uploadedBy,
+          source: "ficha",
         });
       } catch (dbErr) {
-        await deleteAttachmentFile(tenant.slug, id, storedFilename);
+        await deleteDocumentFile(tenant.slug, storagePath);
         throw dbErr;
       }
 
-      process.stdout.write(
-        `[clients:attachment] uploaded tenant=${tenant.slug} client=${id} file=${row.id} size=${file.size}\n`
-      );
-
-      return created(row.toJSON());
+      return created(serializeParaFicha(row.toJSON()));
     } catch (err) {
       return serverError(err);
     }
