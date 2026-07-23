@@ -5,6 +5,13 @@
  *  Snippet de SINCRONIZACIÓN de cursos y matrículas.
  * ═══════════════════════════════════════════════════════════════════════════
  *
+ *  NOTA (2026-07): para nutri_laura esto YA ESTÁ INTEGRADO EN EL THEME, como
+ *  fichero `nutrilaura-tutorlms-sync.php` cargado desde functions.php (misma
+ *  convención que nutrilaura-portal-user.php). Este documento queda como
+ *  REFERENCIA del contrato con el CRM y como versión "standalone" (plugin Code
+ *  Snippets) para instalar en otro WordPress. La versión del theme añade además
+ *  el sync AUTOMÁTICO al publicar/editar un curso (hook transition_post_status).
+ *
  *  QUÉ HACE (en cristiano)
  *  ───────────────────────
  *  El CRM no crea cursos: es un ESPEJO de lo que hay en la web. Este snippet es
