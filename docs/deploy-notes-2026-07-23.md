@@ -122,10 +122,15 @@ docker exec crm-salamandra-app-1 node scripts/check-links.js
 
 - **No hace falta re-sembrar alimentos** (a diferencia del 19-jul): el catálogo ya
   está en prod y este sprint no lo toca.
-- Las claves que faltan para cerrar flujos (no bloquean el deploy):
-  `RESEND_API_KEY` (correo de alta de paciente) y `CRM_WIDGET_SSO_SECRET`
-  (creación del usuario de WordPress). Van en `.env.production`, por SSH, nunca por
-  chat (regla 14).
+- **El alta automática en WordPress YA funciona** (verificado en prod: el usuario
+  de Albert se creó solo el 2026-07-22). No usa un secreto nuevo: reutiliza el
+  del portal de citas —`WIDGET_SSO_SECRETS` en el CRM / `CRM_WIDGET_SSO_SECRET`
+  en `wp-config.php`, la MISMA clave compartida— que ya está puesto en los dos
+  lados desde que el portal salió a producción. No hay que tocar nada.
+- Única clave realmente opcional (no bloquea nada, es best-effort): `RESEND_API_KEY`
+  para correos CRM salientes. El correo de "elige tu contraseña" del portal lo
+  manda WordPress, no el CRM, así que ese flujo no depende de Resend. Cualquier
+  secreto va en `.env.production` por SSH, nunca por chat (regla 14).
 - Si algo va mal: NUNCA `push --force`. Se restaura la BD del backup del paso 0
   (`gunzip < backup-....sql.gz | docker exec -i crm-salamandra-db-1 psql -U postgres salamandra`)
   y se arregla con un commit nuevo + otro deploy.
