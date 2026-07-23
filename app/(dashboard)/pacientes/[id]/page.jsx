@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import Select from "@/components/ui/Select.jsx";
 import PatientBillingSection from "@/components/billing/PatientBillingSection.jsx";
+import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
 
 const TABS = [
@@ -193,6 +194,7 @@ export default function PacienteFichaPage() {
       educationCenter: patient.educationCenter ?? "", educationLevel: patient.educationLevel ?? "",
       attendanceFrequency: patient.attendanceFrequency ?? "", referralReason: patient.referralReason ?? "",
       referredBy: patient.referredBy ?? "", objectives: (patient.objectives ?? []).join(", "), status: patient.status ?? "active",
+      specialties: patient.specialties ?? [],
     });
     setModalError(null);
     setShowEdit(true);
@@ -520,6 +522,7 @@ export default function PacienteFichaPage() {
               </div>
               <textarea className={inputCls} rows={3} placeholder="Motivo de derivación" value={editForm.referralReason} onChange={(e) => setEditForm({ ...editForm, referralReason: e.target.value })} />
               <input className={inputCls} placeholder="Objetivos (separados por comas)" value={editForm.objectives} onChange={(e) => setEditForm({ ...editForm, objectives: e.target.value })} />
+              <SpecialtyPicker value={editForm.specialties} onChange={(v) => setEditForm({ ...editForm, specialties: v })} />
               {modalError && <p className="text-xs text-rose-600">{modalError}</p>}
               <div className="flex justify-end gap-2 pt-1">
                 <button type="button" onClick={() => setShowEdit(false)} disabled={modalBusy} className="px-4 py-2 rounded-lg border border-neutral-200 text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50">Cancelar</button>

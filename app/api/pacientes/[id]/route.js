@@ -4,6 +4,7 @@ import { ok, error, forbidden, notFound } from "../../../../lib/utils/apiRespons
 import { serializePatient } from "../../../../lib/clinica/serialize.js";
 import { logClinicaAudit } from "../../../../lib/clinica/audit.js";
 import { normalizeConsents } from "../../../../lib/clinica/consents.js";
+import { normalizeSpecialties, deriveCareType } from "../../../../lib/clinica/specialties.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const cap = (v, n) => (v == null ? null : String(v).trim().slice(0, n) || null);
@@ -97,6 +98,15 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   if ("relationship" in updates) updates.relationship = cap(updates.relationship, 60);
   if ("contractSigned" in updates) updates.contractSigned = !!updates.contractSigned;
   if ("careType" in updates && !["terapia", "nutricion"].includes(updates.careType)) return error("careType inválido");
+  // Especialidades: normaliza y re-deriva el careType grueso (salvo que venga
+  // uno explícito en la misma petición).
+  if ("specialties" in body) {
+    updates.specialties = normalizeSpecialties(body.specialties);
+    if (!("careType" in body)) {
+      const derived = deriveCareType(updates.specialties);
+      if (derived) updates.careType = derived;
+    }
+  }
 
   // Cliente pagador: validar existencia; permitir desenlazar con null/"".
   if ("clientId" in body) {

@@ -114,6 +114,15 @@ export function defineTeamMember(sequelize) {
         type: DataTypes.JSONB,
         defaultValue: {},
       },
+      // Especialidad(es) clínica(s) del profesional: su rol concreto
+      // (Nutrición, Logopedia, Psicología…). Taxonomía en
+      // lib/clinica/specialties.js. Array: puede cubrir varias. Sólo tiene
+      // sentido si el miembro atiende pacientes (módulo Clínica o Nutrición).
+      specialties: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
     },
     {
       tableName: "team_members",

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
+import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 import PreviewBanner from "../clinica/_components/PreviewBanner.jsx";
 
 const STATUS_STYLES = {
@@ -13,7 +14,7 @@ const STATUS_STYLES = {
 const statusStyle = (s) => STATUS_STYLES[s] ?? STATUS_STYLES.discharged;
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
-const EMPTY_FORM = { firstName: "", lastName: "", age: "", educationCenter: "", educationLevel: "", referralReason: "", mainTherapistId: "", status: "active" };
+const EMPTY_FORM = { firstName: "", lastName: "", age: "", educationCenter: "", educationLevel: "", referralReason: "", mainTherapistId: "", status: "active", specialties: [] };
 
 export default function PacientesPage() {
   const [patients, setPatients] = useState([]);
@@ -277,6 +278,7 @@ export default function PacientesPage() {
                   className={inputCls}
                 />
               </div>
+              <SpecialtyPicker value={form.specialties} onChange={(v) => setForm({ ...form, specialties: v })} />
               {formError && <p className="text-xs text-rose-600">{formError}</p>}
               <div className="flex justify-end gap-2 pt-1">
                 <button type="button" onClick={() => setShowCreate(false)} disabled={saving} className="px-4 py-2 rounded-lg border border-neutral-200 text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50">Cancelar</button>

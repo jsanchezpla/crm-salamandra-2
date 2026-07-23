@@ -87,15 +87,22 @@ export const MODULES = {
     "migrate-client-module-assignments",
     "migrate-patients-multi-per-client",
     "migrate-patients-care-type",
+    "migrate-patients-specialties",
   ],
 
-  clinica: ["migrate-clinica-module", "migrate-clinica-client-link", "migrate-patients-care-type"],
+  clinica: [
+    "migrate-clinica-module",
+    "migrate-clinica-client-link",
+    "migrate-patients-care-type",
+    "migrate-patients-specialties",
+  ],
 
   team: [
     "migrate-team-fields",
     "migrate-rename-therapist-to-employee",
     "migrate-team-modules-salary",
     "migrate-team-members-avatar-color",
+    "migrate-team-specialties",
   ],
 
   billing: [

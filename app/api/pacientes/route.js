@@ -4,6 +4,7 @@ import { ok, created, error, forbidden } from "../../../lib/utils/apiResponse.js
 import { serializePatient } from "../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../lib/clinica/audit.js";
 import { normalizeConsents } from "../../../lib/clinica/consents.js";
+import { normalizeSpecialties, deriveCareType, SPECIALTY_KEYS } from "../../../lib/clinica/specialties.js";
 
 const cap = (v, n) => (v == null ? null : String(v).trim().slice(0, n) || null);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -50,6 +51,10 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   // solo quieran uno de los dos tipos de paciente.
   const careType = sp.get("careType");
   if (careType && ["terapia", "nutricion"].includes(careType)) where.careType = careType;
+  // Filtro por especialidad concreta (logopedia, psicología…): pacientes cuya
+  // lista de especialidades CONTIENE la pedida (JSONB @>).
+  const specialty = sp.get("specialty");
+  if (specialty && SPECIALTY_KEYS.includes(specialty)) where.specialties = { [Op.contains]: [specialty] };
 
   const rows = await Patient.findAll({
     where,
@@ -85,11 +90,17 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     clientId = owner.id;
   }
 
+  // Especialidad(es) del paciente. El módulo grueso `careType` se DERIVA de la
+  // lista (compat con lo desplegado antes de la taxonomía); si no viene lista,
+  // se respeta el careType explícito o 'terapia' por defecto.
+  const specialties = normalizeSpecialties(body.specialties);
+  const careType = deriveCareType(specialties)
+    || (["terapia", "nutricion"].includes(body.careType) ? body.careType : "terapia");
+
   const payload = {
     clientId,
-    // Módulo asistencial del subpaciente. Default 'terapia' (la tabla nació
-    // clínica); el formulario deja elegir Terapia / Nutrición.
-    careType: ["terapia", "nutricion"].includes(body.careType) ? body.careType : "terapia",
+    careType,
+    specialties,
     firstName: body.firstName.trim(),
     lastName: body.lastName.trim(),
     age: body.age != null && body.age !== "" ? Number(body.age) : null,

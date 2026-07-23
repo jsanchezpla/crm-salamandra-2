@@ -36,6 +36,15 @@ export function definePatient(sequelize) {
         defaultValue: "terapia",
         validate: { isIn: [["terapia", "nutricion"]] },
       },
+      // Especialidad(es) clínica(s) del paciente (taxonomía en
+      // lib/clinica/specialties.js). Array: un paciente puede necesitar varias
+      // (p. ej. logopedia + atención temprana). `careType` de arriba es el
+      // módulo grueso derivado de esta lista.
+      specialties: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
       firstName: {
         type: DataTypes.STRING(120),
         allowNull: false,

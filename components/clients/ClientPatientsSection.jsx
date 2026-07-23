@@ -16,18 +16,13 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import SpecialtyPicker from "../clinica/SpecialtyPicker.jsx";
 
 const RELATIONSHIPS = ["hijo/a", "tutor legal", "cónyuge", "el propio cliente", "hermano/a", "Otro"];
 const STATUS_LABEL = { active: "Activo", paused: "En pausa", discharged: "Alta" };
-// Módulo asistencial del subpaciente. "Por ahora" solo estos dos (Rodrigo).
-const CARE_TYPES = [
-  { value: "terapia", label: "Terapia" },
-  { value: "nutricion", label: "Nutrición" },
-];
-const CARE_TYPE_LABEL = { terapia: "Terapia", nutricion: "Nutrición" };
 
 const EMPTY_FORM = {
-  careType: "terapia",
+  specialties: [],
   firstName: "", lastName: "", dni: "", birthDate: "", address: "",
   relationship: "", relationshipOther: "", educationCenter: "",
   images: false, marketing: false, whatsapp: false,
@@ -95,7 +90,7 @@ export default function ClientPatientsSection({ clientId }) {
         form.relationship === "Otro" ? form.relationshipOther.trim() : form.relationship || null;
       const payload = {
         clientId,
-        careType: form.careType,
+        specialties: form.specialties,
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
         dni: form.dni.trim() || null,
@@ -180,16 +175,21 @@ export default function ClientPatientsSection({ clientId }) {
                     {p.relationship && <span>{p.relationship}</span>}
                     {p.contractSigned && <span className="text-emerald-600">· contrato ✓</span>}
                   </div>
+                  {p.specialtyLabels?.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {p.specialtyLabels.map((lbl) => (
+                        <span
+                          key={lbl}
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                            lbl === "Nutrición" ? "bg-emerald-50 text-emerald-700" : "bg-indigo-50 text-indigo-700"
+                          }`}
+                        >
+                          {lbl}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <span
-                  className={`text-[11px] px-2 py-0.5 rounded-full shrink-0 ${
-                    p.careType === "nutricion"
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-indigo-50 text-indigo-700"
-                  }`}
-                >
-                  {p.careTypeLabel || CARE_TYPE_LABEL[p.careType] || "Terapia"}
-                </span>
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 shrink-0">
                   {STATUS_LABEL[p.status] || p.status}
                 </span>
@@ -202,10 +202,7 @@ export default function ClientPatientsSection({ clientId }) {
           <div className="rounded-lg border border-gray-200 p-4 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="sm:col-span-2">
-                <label className={labelCls}>Módulo de paciente</label>
-                <select className={inputCls} value={form.careType} onChange={(e) => set("careType", e.target.value)}>
-                  {CARE_TYPES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-                </select>
+                <SpecialtyPicker value={form.specialties} onChange={(v) => set("specialties", v)} />
               </div>
               <div>
                 <label className={labelCls}>Nombre *</label>
