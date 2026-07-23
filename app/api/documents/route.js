@@ -42,13 +42,18 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     // recorre TODO el archivo, ignorando la carpeta. Modo NAVEGACIÓN: se
     // mantiene el comportamiento por carpeta de siempre.
     const clientId = sp.get("clientId");
+    const patientId = sp.get("patientId");
     const source = sp.get("source");
     const q = (sp.get("q") || "").trim();
-    const modoBusqueda = clientId || source || q;
+    const modoBusqueda = clientId || patientId || source || q;
 
     if (clientId && clientId !== "null") {
       if (!UUID_RE.test(clientId)) return error("clientId inválido", 400);
       where.clientId = clientId;
+    }
+    if (patientId && patientId !== "null") {
+      if (!UUID_RE.test(patientId)) return error("patientId inválido", 400);
+      where.patientId = patientId;
     }
     if (source) where.source = source.slice(0, 40);
     if (q) where.fileName = { [Op.iLike]: `%${q}%` };
@@ -150,16 +155,32 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     }
 
     const documentId = randomUUID();
-    const fileName = sanitizeFileName(file.name);
+    const ext = extFromFileName(file.name);
+
+    // NOMBRE del documento en el CRM. La UI obliga a ponerlo (modal). Si viene,
+    // se usa como nombre para mostrar (conservando la extensión del fichero para
+    // que la descarga siga teniendo tipo). Si no, se cae al nombre del fichero.
+    const nameRaw = form.get("name");
+    const providedName = typeof nameRaw === "string" ? nameRaw.trim().slice(0, 200) : "";
+    let fileName;
+    if (providedName) {
+      const yaTieneExt = /\.[A-Za-z0-9]{1,10}$/.test(providedName);
+      fileName = sanitizeFileName(yaTieneExt || !ext ? providedName : `${providedName}.${ext}`);
+    } else {
+      fileName = sanitizeFileName(file.name);
+    }
     const ownerSegment = ownerSegmentFor(visibility, userId);
 
     // Escribir a disco; si el INSERT falla, limpiar el archivo (best-effort atómico).
-    const ext = extFromFileName(file.name);
     const storagePath = await saveDocumentFile(ctx.slug, ownerSegment, documentId, buffer, ext);
 
-    // Cliente opcional al que se asocia el documento subido desde el módulo.
+    // Cliente y/o paciente al que se asocia el documento subido desde el módulo.
     const clientIdRaw = form.get("clientId");
     const clientId = typeof clientIdRaw === "string" && UUID_RE.test(clientIdRaw) ? clientIdRaw : null;
+    const patientIdRaw = form.get("patientId");
+    const patientId = typeof patientIdRaw === "string" && UUID_RE.test(patientIdRaw) ? patientIdRaw : null;
+    // Origen: si va enganchado a un paciente, 'paciente'; si no, 'manual'.
+    const source = patientId ? "paciente" : "manual";
 
     let row;
     try {
@@ -173,7 +194,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
         fileSize: realSize,
         mimeType: declaredMime,
         clientId,
-        source: "manual",
+        patientId,
+        source,
       });
     } catch (dbErr) {
       await deleteDocumentFile(ctx.slug, storagePath);
@@ -189,7 +211,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       before: null,
       // NO se audita fileName: puede llevar el nombre del paciente
       // ("informe-TCA-Maria.pdf") y el log vive en master (schema compartido).
-      after: { mimeType: declaredMime, fileSize: realSize, visibility, folderId, clientId, source: "manual" },
+      after: { mimeType: declaredMime, fileSize: realSize, visibility, folderId, clientId, patientId, source },
       ip: request.headers.get("x-forwarded-for"),
     });
 

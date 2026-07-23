@@ -81,8 +81,18 @@ export function defineDocument(sequelize) {
         allowNull: true,
         field: "client_id",
       },
+      // Paciente concreto al que pertenece el documento (2026-07-24). Nullable.
+      // Un cliente pagador puede tener varios subpacientes; sin esto, "los docs
+      // de este paciente" traería los de todos los hermanos bajo el mismo pagador.
+      patientId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "patient_id",
+      },
       // De dónde vino el documento: "manual" (subido en el módulo Documents),
-      // "ficha" (adjunto desde la ficha de un cliente), "nota", "factura"…
+      // "ficha" (adjunto desde la ficha de un cliente), "paciente" (documento de
+      // un paciente), "contract_template" (contrato estándar de la clínica,
+      // reutilizable en todos los pacientes), "nota", "factura"…
       // Sirve para filtrar el archivo central por origen.
       source: {
         type: DataTypes.STRING(40),

@@ -88,6 +88,7 @@ export const MODULES = {
     "migrate-patients-multi-per-client",
     "migrate-patients-care-type",
     "migrate-patients-specialties",
+    "migrate-documents-patient-link",
   ],
 
   clinica: [
@@ -95,6 +96,7 @@ export const MODULES = {
     "migrate-clinica-client-link",
     "migrate-patients-care-type",
     "migrate-patients-specialties",
+    "migrate-documents-patient-link",
   ],
 
   team: [
@@ -129,7 +131,7 @@ export const MODULES = {
   ],
 
   inventory: ["migrate-inventory-rework"],
-  documents: ["migrate-documents-sprint-1", "migrate-documents-client-link", "migrate-documents-transversal"],
+  documents: ["migrate-documents-sprint-1", "migrate-documents-client-link", "migrate-documents-transversal", "migrate-documents-patient-link"],
   nutricion: [
     "migrate-nutricion-recipes",
     "migrate-nutricion-week-recipe-media",

@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import Select from "@/components/ui/Select.jsx";
 import PatientBillingSection from "@/components/billing/PatientBillingSection.jsx";
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
+import PatientDocumentsSection from "@/components/clinica/PatientDocumentsSection.jsx";
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
 
 const TABS = [
@@ -13,6 +14,7 @@ const TABS = [
   { key: "sesiones", label: "Sesiones" },
   { key: "informes", label: "Informes" },
   { key: "coordinaciones", label: "Coordinaciones" },
+  { key: "documentos", label: "Documentos" },
 ];
 
 const PATIENT_STATUS = {
@@ -497,6 +499,8 @@ export default function PacienteFichaPage() {
             </div>
           )
         )}
+
+        {activeTab === "documentos" && <PatientDocumentsSection patientId={id} />}
       </div>
 
       {openSession && <SessionDrawer session={openSession} patient={patient} onClose={() => setOpenSession(null)} onPublish={publishSession} busy={busy} />}
