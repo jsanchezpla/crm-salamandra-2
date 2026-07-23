@@ -24,7 +24,7 @@
  * cuando carga inicial.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import TimestampRelative from "../../../components/ui/TimestampRelative.jsx";
 
 const MAX_FILE_MB = 25;
@@ -51,6 +51,8 @@ export default function ClientAttachmentsPanel({ clientId }) {
   // Modal de NOMBRE obligatorio al subir. `pending` = File a la espera de nombre.
   const [pending, setPending] = useState(null);
   const [pendingName, setPendingName] = useState("");
+  const fileInputRef = useRef(null);
+  const resetInput = () => { if (fileInputRef.current) fileInputRef.current.value = ""; };
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -113,8 +115,10 @@ export default function ClientAttachmentsPanel({ clientId }) {
       setItems((prev) => [j.data, ...prev]);
       setPending(null);
       setPendingName("");
+      resetInput();
     } catch (e) {
       setUploadError(e.message);
+      resetInput(); // permite re-elegir el MISMO fichero tras un error
     } finally {
       setUploading(false);
     }
@@ -169,6 +173,7 @@ export default function ClientAttachmentsPanel({ clientId }) {
           }`}
         >
           <input
+            ref={fileInputRef}
             type="file"
             className="sr-only"
             onChange={(e) => handleFile(e.target.files?.[0])}
@@ -310,7 +315,7 @@ export default function ClientAttachmentsPanel({ clientId }) {
             {uploadError && <div className="text-xs text-red-600 mt-2">{uploadError}</div>}
             <div className="flex justify-end gap-2 mt-4">
               <button
-                onClick={() => { setPending(null); setPendingName(""); setUploadError(null); }}
+                onClick={() => { setPending(null); setPendingName(""); setUploadError(null); resetInput(); }}
                 disabled={uploading}
                 className="text-xs font-medium px-3 py-1.5 rounded-md border border-gray-200 text-gray-600"
               >

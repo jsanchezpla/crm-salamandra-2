@@ -9,6 +9,9 @@ import {
 } from "../../../../lib/citas/validation.js";
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { findBookingOverlap } from "../../../../lib/citas/booking.js";
+import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
+
+const NADIE = "00000000-0000-0000-0000-000000000000";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["pending", "confirmed", "completed", "cancelled", "no_show"]);
@@ -97,6 +100,17 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       });
     }
     if (grupos.length) where[Op.and] = grupos;
+
+    // Acceso por rol: un profesional no-admin solo ve SUS citas (misma regla que
+    // el calendario; sin esto, la lista/lista de espera filtraba los datos
+    // personales de las citas de todo el equipo). El jefe (admin) ve todo.
+    if (hasModule("team")) {
+      const userRole = request.headers.get("x-user-role") ?? "user";
+      if (!ADMIN_ROLES.has(userRole)) {
+        const myId = await resolveCurrentTeamMemberId(request, tenantModels);
+        where.teamMemberId = myId ?? NADIE;
+      }
+    }
 
     // teamMember solo si el tenant tiene módulo team (si no, la tabla
     // team_members no existe y el JOIN daría 500 — p.ej. nutri_laura).
@@ -205,6 +219,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
         ? body.teamMemberId.trim()
         : null;
       if (tmId) {
+        if (!UUID_RE.test(tmId)) return error("teamMemberId inválido");
         const tm = await TeamMember.findByPk(tmId, { attributes: ["id"] });
         if (!tm) return error("teamMemberId no existe");
       }

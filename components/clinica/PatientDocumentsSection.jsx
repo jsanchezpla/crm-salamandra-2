@@ -35,7 +35,7 @@ export default function PatientDocumentsSection({ patientId }) {
   const loadDocs = useCallback(
     (query = "") => {
       const url = `/api/pacientes/${patientId}/documents${query ? `?q=${encodeURIComponent(query)}` : ""}`;
-      fetch(url, { cache: "no-store" })
+      return fetch(url, { cache: "no-store" })
         .then((r) => r.json())
         .then((j) => { if (j.ok) setDocs(j.data.documents || []); })
         .catch(() => {});
@@ -44,17 +44,23 @@ export default function PatientDocumentsSection({ patientId }) {
   );
 
   const loadTemplate = useCallback(() => {
-    fetch(`/api/pacientes/contract-template`, { cache: "no-store" })
+    return fetch(`/api/pacientes/contract-template`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (j.ok) setTemplate(j.data.template); })
       .catch(() => {});
   }, []);
 
   useEffect(() => {
+    let alive = true;
     setLoading(true);
-    Promise.all([loadDocs(), loadTemplate()]);
-    setLoading(false);
+    Promise.all([loadDocs(), loadTemplate()]).finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
   }, [loadDocs, loadTemplate]);
+
+  function resetInputs() {
+    if (fileRef.current) fileRef.current.value = "";
+    if (templateFileRef.current) templateFileRef.current.value = "";
+  }
 
   // Buscador con pequeño debounce.
   useEffect(() => {
@@ -91,12 +97,12 @@ export default function PatientDocumentsSection({ patientId }) {
       if (!r.ok) throw new Error(j.error || "No se pudo subir el documento");
       setPending(null);
       setPendingName("");
-      if (fileRef.current) fileRef.current.value = "";
-      if (templateFileRef.current) templateFileRef.current.value = "";
+      resetInputs();
       if (pending.target === "contrato") loadTemplate();
       else loadDocs(q.trim());
     } catch (e) {
       setError(e.message);
+      resetInputs(); // permite re-elegir el MISMO fichero tras un error
     } finally {
       setBusy(false);
     }
@@ -218,7 +224,7 @@ export default function PatientDocumentsSection({ patientId }) {
             {error && <div className="text-xs text-rose-600 mt-2">{error}</div>}
             <div className="flex justify-end gap-2 mt-4">
               <button
-                onClick={() => { setPending(null); setPendingName(""); setError(null); }}
+                onClick={() => { setPending(null); setPendingName(""); setError(null); resetInputs(); }}
                 disabled={busy}
                 className={`${btn} border border-neutral-200 text-neutral-600`}
               >

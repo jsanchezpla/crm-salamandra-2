@@ -71,6 +71,11 @@ export const MODULES = {
     "migrate-client-module-assignments",
     "migrate-interactions-notes-team",
     "migrate-documents-transversal",
+    // El archivo central (documents) se crea para cualquier tenant con clients;
+    // patient_id también debe llegar ahí (la columna es incondicional, la FK
+    // solo si existe patients). Si no, un tenant solo-clientes tendría documents
+    // sin patient_id y el modelo reventaría con 42703 al leer adjuntos.
+    "migrate-documents-patient-link",
   ],
 
   citas: [

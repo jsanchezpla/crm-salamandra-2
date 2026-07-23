@@ -51,7 +51,7 @@ export const GET = withTenant(async (request, { params }, ctx) => {
     const q = (new URL(request.url).searchParams.get("q") || "").trim();
     if (q) where.fileName = { [Op.iLike]: `%${q}%` };
 
-    const rows = await Document.findAll({ where, order: [["createdAt", "DESC"]], limit: 500 });
+    const rows = await Document.findAll({ where, order: [["createdAt", "DESC"]], limit: MAX_FILES_PER_PATIENT });
     return ok({ documents: rows.map((d) => serialize(d.toJSON())), total: rows.length, limit: MAX_FILES_PER_PATIENT });
   } catch (err) {
     return serverError(err);

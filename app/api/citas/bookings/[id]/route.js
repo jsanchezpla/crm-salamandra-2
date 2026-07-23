@@ -8,6 +8,7 @@ import {
 } from "../../../../../lib/citas/validation.js";
 import { logCitasAudit } from "../../../../../lib/citas/audit.js";
 import { findBookingOverlap } from "../../../../../lib/citas/booking.js";
+import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 import { sendEmail } from "../../../../../lib/email/resendClient.js";
 import { bookingMeetLinkTemplate } from "../../../../../lib/email/templates/citas/bookingMeetLink.js";
 import { bookingCancelledTemplate } from "../../../../../lib/email/templates/citas/bookingCancelled.js";
@@ -80,7 +81,7 @@ function bookingIncludes({ EventType, TeamMember, Patient }, hasModule) {
 // ───────────────────────────────────────────────────────────────────────────
 // GET /api/citas/bookings/[id]
 // ───────────────────────────────────────────────────────────────────────────
-export const GET = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
   try {
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
     const { id } = await params;
@@ -89,6 +90,16 @@ export const GET = withTenant(async (_request, { params }, { tenantModels, hasMo
       include: bookingIncludes(tenantModels, hasModule),
     });
     if (!row) return notFound("Cita no encontrada");
+    // Acceso por rol: un profesional no-admin solo puede ver SUS citas (misma
+    // regla que el calendario). Se devuelve 404 (no 403) para no revelar que la
+    // cita existe.
+    if (hasModule("team")) {
+      const userRole = request.headers.get("x-user-role") ?? "user";
+      if (!ADMIN_ROLES.has(userRole)) {
+        const myId = await resolveCurrentTeamMemberId(request, tenantModels);
+        if (!myId || row.teamMemberId !== myId) return notFound("Cita no encontrada");
+      }
+    }
     return ok(row.toJSON());
   } catch (err) {
     return serverError(err);
@@ -145,6 +156,7 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     if (hasModule("team") && "teamMemberId" in body) {
       const tmId = normId(body.teamMemberId);
       if (tmId) {
+        if (!UUID_RE.test(tmId)) return error("teamMemberId inválido");
         const tm = await TeamMember.findByPk(tmId, { attributes: ["id"] });
         if (!tm) return error("teamMemberId no existe");
       }
@@ -239,23 +251,27 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       updates.cancellationReason = body.cancellationReason != null ? String(body.cancellationReason) : null;
     }
 
-    // Validar solapamiento si cambia scheduledAt y la cita queda activa
+    // Validar solapamiento. Antes solo se comprobaba al cambiar la hora; eso
+    // dejaba pasar dos casos que también pueden crear un solape real del MISMO
+    // profesional: (a) reasignar la cita a otro profesional que ya tiene esa
+    // hora ocupada, y (b) confirmar/reactivar por PATCH una cita que solapa.
     const scheduledFinal = updates.scheduledAt ?? row.scheduledAt;
     const statusFinal = updates.status ?? row.status;
-    if (statusFinal !== "cancelled" && statusFinal !== "no_show") {
-      if ("scheduledAt" in updates) {
-        const overlap = await findBookingOverlap(Booking, {
-          scheduledAt: scheduledFinal,
-          duration: row.duration,
-          excludeId: row.id,
-          // Solape por profesional: usa el nuevo si se reasigna en la misma
-          // petición, si no el que ya tenía la cita. Así arrastrar la cita de
-          // una persona sobre la de OTRA no da falso solape.
-          teamMemberId: "teamMemberId" in updates ? updates.teamMemberId : row.teamMemberId,
-        });
-        if (overlap) {
-          return error(`Solapa con otra cita activa el ${overlap.scheduledAt.toISOString?.() ?? overlap.scheduledAt}`, 409);
-        }
+    const teamMemberFinal = "teamMemberId" in updates ? updates.teamMemberId : row.teamMemberId;
+    const cambiaHora = "scheduledAt" in updates;
+    const cambiaProfesional = "teamMemberId" in updates && updates.teamMemberId !== row.teamMemberId;
+    const seReactiva =
+      "status" in updates &&
+      (row.status === "cancelled" || row.status === "no_show" || row.status === "pending");
+    if (statusFinal !== "cancelled" && statusFinal !== "no_show" && (cambiaHora || cambiaProfesional || seReactiva)) {
+      const overlap = await findBookingOverlap(Booking, {
+        scheduledAt: scheduledFinal,
+        duration: row.duration,
+        excludeId: row.id,
+        teamMemberId: teamMemberFinal,
+      });
+      if (overlap) {
+        return error(`Solapa con otra cita activa el ${overlap.scheduledAt.toISOString?.() ?? overlap.scheduledAt}`, 409);
       }
     }
 

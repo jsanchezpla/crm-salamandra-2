@@ -59,6 +59,11 @@ export const EXTRA_EDGES = [
     after: "migrate-interactions-notes-team",
     why: "notes-team ALTERea interactions/client_notes en un bucle; client_notes la crea client-attachments-and-notes.",
   },
+  {
+    before: "migrate-patients-care-type",
+    after: "migrate-patients-specialties",
+    why: "specialties hace UPDATE ... WHERE care_type='nutricion' para el backfill; care_type lo añade care-type. El analizador no ve deps de columna dentro de un UPDATE (hasta ahora solo funcionaba por el desempate alfabético).",
+  },
 ];
 
 const RX = {

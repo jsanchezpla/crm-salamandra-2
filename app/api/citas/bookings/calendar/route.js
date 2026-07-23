@@ -55,11 +55,15 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     if (teamOn) {
       const userRole = request.headers.get("x-user-role") ?? "user";
       if (ADMIN_ROLES.has(userRole)) {
-        // El jefe ve a todos; puede filtrar a uno o varios profesionales.
+        // El jefe ve a todos; puede filtrar a uno o varios profesionales. Las
+        // citas SIN profesional asignado (públicas pendientes de repartir) se
+        // mantienen SIEMPRE visibles aunque filtres, para no perderlas de vista.
         const tmIds = searchParams.get("teamMemberIds");
         if (tmIds) {
           const ids = tmIds.split(",").map((s) => s.trim()).filter(Boolean);
-          if (ids.length > 0) where.teamMemberId = { [Op.in]: ids };
+          if (ids.length > 0) {
+            where.teamMemberId = { [Op.or]: [{ [Op.in]: ids }, { [Op.is]: null }] };
+          }
         }
       } else {
         // Un profesional solo ve SU agenda. Si no tiene ficha de equipo, nada.

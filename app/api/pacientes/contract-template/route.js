@@ -55,6 +55,13 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     if (!ownerUserId) return error("No autorizado", 401);
     const { Document } = ctx.tenantModels;
 
+    // Tope por Content-Length ANTES de bufferizar el cuerpo entero en memoria
+    // (si no, un fichero enorme cargaría del todo antes de rechazarlo → OOM).
+    const contentLength = Number(request.headers.get("content-length") || 0);
+    if (contentLength && contentLength > MAX_FILE_SIZE_BYTES + 1024 * 1024) {
+      return error(`Archivo demasiado grande. Máximo: ${MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB`, 413);
+    }
+
     let form;
     try { form = await request.formData(); } catch { return error("Body inválido: se esperaba multipart/form-data", 400); }
 
@@ -76,11 +83,12 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     const yaTieneExt = /\.[A-Za-z0-9]{1,10}$/.test(name);
     const fileName = sanitizeFileName(yaTieneExt || !ext ? name : `${name}.${ext}`);
 
+    // Leer el anterior ANTES de escribir el fichero nuevo: si esta consulta
+    // fallara después de escribir, el fichero nuevo quedaría huérfano.
+    const prev = await currentTemplate(Document);
+
     const documentId = randomUUID();
     const storagePath = await saveDocumentFile(ctx.tenant.slug, "shared", documentId, buffer, ext);
-
-    // Borrar el anterior (uno por tenant). Best-effort: si falla, no aborta.
-    const prev = await currentTemplate(Document);
 
     let row;
     try {

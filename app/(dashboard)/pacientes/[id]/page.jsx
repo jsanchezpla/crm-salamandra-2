@@ -117,6 +117,7 @@ export default function PacienteFichaPage() {
   const [reports, setReports] = useState([]);
   const [coordinations, setCoordinations] = useState([]);
   const [citas, setCitas] = useState([]);
+  const [therapists, setTherapists] = useState([]); // equipo, para asignar terapeuta
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState("resumen");
@@ -156,6 +157,15 @@ export default function PacienteFichaPage() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Equipo (para asignar/cambiar el terapeuta del paciente). Resiliente: si el
+  // tenant no tiene módulo team (403) queda vacío y no se muestra el selector.
+  useEffect(() => {
+    fetch(`/api/team?status=active&limit=200`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setTherapists(j?.data?.members ?? []))
+      .catch(() => {});
+  }, []);
 
   const publishSession = async (sid) => {
     setBusy(true);
@@ -197,6 +207,7 @@ export default function PacienteFichaPage() {
       attendanceFrequency: patient.attendanceFrequency ?? "", referralReason: patient.referralReason ?? "",
       referredBy: patient.referredBy ?? "", objectives: (patient.objectives ?? []).join(", "), status: patient.status ?? "active",
       specialties: patient.specialties ?? [],
+      mainTherapistId: patient.mainTherapistId ?? "",
     });
     setModalError(null);
     setShowEdit(true);
@@ -210,6 +221,8 @@ export default function PacienteFichaPage() {
         ...editForm,
         age: editForm.age === "" ? null : Number(editForm.age),
         objectives: editForm.objectives.split(",").map((s) => s.trim()).filter(Boolean),
+        // "" (sin asignar) → null, o la columna UUID reventaría (22P02).
+        mainTherapistId: editForm.mainTherapistId || null,
       };
       const r = await fetch(`/api/pacientes/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const j = await r.json();
@@ -527,6 +540,17 @@ export default function PacienteFichaPage() {
               <textarea className={inputCls} rows={3} placeholder="Motivo de derivación" value={editForm.referralReason} onChange={(e) => setEditForm({ ...editForm, referralReason: e.target.value })} />
               <input className={inputCls} placeholder="Objetivos (separados por comas)" value={editForm.objectives} onChange={(e) => setEditForm({ ...editForm, objectives: e.target.value })} />
               <SpecialtyPicker value={editForm.specialties} onChange={(v) => setEditForm({ ...editForm, specialties: v })} />
+              {therapists.length > 0 && (
+                <div>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Terapeuta principal</label>
+                  <Select
+                    value={editForm.mainTherapistId}
+                    onChange={(v) => setEditForm({ ...editForm, mainTherapistId: v })}
+                    options={[{ value: "", label: "— Sin asignar —" }, ...therapists.map((t) => ({ value: t.id, label: t.displayName }))]}
+                    className={inputCls}
+                  />
+                </div>
+              )}
               {modalError && <p className="text-xs text-rose-600">{modalError}</p>}
               <div className="flex justify-end gap-2 pt-1">
                 <button type="button" onClick={() => setShowEdit(false)} disabled={modalBusy} className="px-4 py-2 rounded-lg border border-neutral-200 text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50">Cancelar</button>

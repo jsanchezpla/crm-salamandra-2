@@ -306,6 +306,16 @@ export default function CitasModule() {
       });
       return;
     }
+    // Al elegir paciente, PRIMA su terapeuta asignado como profesional de la cita
+    // (Rodrigo: la reserva pública es general y el terapeuta se decide en el CRM,
+    // primando el asignado al paciente). Si el paciente no tiene terapeuta, se
+    // conserva el profesional que hubiera. El usuario siempre puede cambiarlo.
+    if (field === "patientId") {
+      const p = patients.find((x) => x.id === value);
+      const terapeuta = p?.mainTherapistId ?? p?.therapistId ?? null;
+      setCreateForm((prev) => ({ ...prev, patientId: value, teamMemberId: terapeuta ?? prev.teamMemberId }));
+      return;
+    }
     setCreateForm((prev) => ({ ...prev, [field]: value }));
   }
 

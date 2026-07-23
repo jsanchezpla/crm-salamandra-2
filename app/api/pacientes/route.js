@@ -37,7 +37,11 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const where = {};
   const q = sp.get("q")?.trim();
   if (q) where[Op.or] = [{ firstName: { [Op.iLike]: `%${q}%` } }, { lastName: { [Op.iLike]: `%${q}%` } }];
-  if (sp.get("therapistId")) where.mainTherapistId = sp.get("therapistId");
+  if (sp.get("therapistId")) {
+    const tid = sp.get("therapistId");
+    if (!UUID_RE.test(tid)) return error("therapistId inválido", 422);
+    where.mainTherapistId = tid;
+  }
   // Pacientes de un cliente pagador concreto (sección "Pacientes" de su ficha).
   // Un clientId presente pero malformado NO debe caer al listado completo.
   const clientId = sp.get("clientId");
