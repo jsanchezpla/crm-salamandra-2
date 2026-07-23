@@ -248,6 +248,10 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
           scheduledAt: scheduledFinal,
           duration: row.duration,
           excludeId: row.id,
+          // Solape por profesional: usa el nuevo si se reasigna en la misma
+          // petición, si no el que ya tenía la cita. Así arrastrar la cita de
+          // una persona sobre la de OTRA no da falso solape.
+          teamMemberId: "teamMemberId" in updates ? updates.teamMemberId : row.teamMemberId,
         });
         if (overlap) {
           return error(`Solapa con otra cita activa el ${overlap.scheduledAt.toISOString?.() ?? overlap.scheduledAt}`, 409);

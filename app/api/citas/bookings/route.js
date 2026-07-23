@@ -195,15 +195,10 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const duration = eventType.duration; // snapshot
     const meetUrl = modality === "online" ? eventType.meetUrl : null;
 
-    // Solapamiento
-    const overlap = await findBookingOverlap(Booking, { scheduledAt, duration });
-    if (overlap) {
-      return error(`Solapa con otra cita activa el ${overlap.scheduledAt.toISOString?.() ?? overlap.scheduledAt}`, 409);
-    }
-
     const notes = body.notes != null ? String(body.notes) : null;
 
-    // teamMemberId solo si el tenant tiene módulo team; valida existencia.
+    // teamMemberId solo si el tenant tiene módulo team; valida existencia. Se
+    // resuelve ANTES del solape porque el solape es POR PROFESIONAL.
     let teamMemberId = null;
     if (hasModule("team")) {
       const tmId = typeof body.teamMemberId === "string" && body.teamMemberId.trim()
@@ -214,6 +209,12 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
         if (!tm) return error("teamMemberId no existe");
       }
       teamMemberId = tmId;
+    }
+
+    // Solapamiento (solo con citas del MISMO profesional, o sin asignar).
+    const overlap = await findBookingOverlap(Booking, { scheduledAt, duration, teamMemberId });
+    if (overlap) {
+      return error(`Solapa con otra cita activa el ${overlap.scheduledAt.toISOString?.() ?? overlap.scheduledAt}`, 409);
     }
 
     // Paciente asignado (Clínica/Pacientes). Opcional.

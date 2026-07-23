@@ -43,11 +43,12 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       return forbidden(`No se puede confirmar una cita en estado '${row.status}'`);
     }
 
-    // Validar solapamiento con otras citas activas (excluyendo esta).
+    // Validar solapamiento con otras citas activas del MISMO profesional.
     const overlap = await findBookingOverlap(Booking, {
       scheduledAt: row.scheduledAt,
       duration: row.duration,
       excludeId: row.id,
+      teamMemberId: row.teamMemberId,
     });
     if (overlap) {
       return forbidden(

@@ -95,6 +95,7 @@ const EMPTY_BOOKING_FORM = {
   additionalData: "",
   notes: "",
   patientId: "",
+  teamMemberId: "",
 };
 
 export default function CitasModule() {
@@ -120,6 +121,8 @@ export default function CitasModule() {
   const [detailNotes, setDetailNotes] = useState("");
   const [detailMeet, setDetailMeet] = useState("");
   const [teamMembers, setTeamMembers] = useState([]);
+  const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
+  const [visibleTmIds, setVisibleTmIds] = useState(null); // null = todos los profesionales
   const [patients, setPatients] = useState([]); // vacío si el tenant no tiene Clínica/Pacientes
 
   // Cuántas solicitudes pendientes hay (para el globito de la pestaña). No
@@ -140,11 +143,16 @@ export default function CitasModule() {
 
   useEffect(() => { loadEventTypes(); }, [loadEventTypes]);
 
-  // Equipo para asignar profesional a la cita (opcional).
+  // Equipo para asignar profesional a la cita y para el filtro del calendario.
+  // `viewerIsAdmin` decide si se muestra el filtro por profesional (el jefe ve a
+  // todos; un profesional ya viene acotado a lo suyo desde el servidor).
   useEffect(() => {
     fetch("/api/team?status=all&limit=500", { cache: "no-store" })
       .then((r) => r.json())
-      .then((j) => setTeamMembers(j.data?.members ?? []))
+      .then((j) => {
+        setTeamMembers(j.data?.members ?? []);
+        setViewerIsAdmin(!!j.data?.viewerIsAdmin);
+      })
       .catch(() => {});
   }, []);
 
@@ -177,6 +185,14 @@ export default function CitasModule() {
         success([]);
         return;
       }
+      // Filtro por profesional (solo lo usa el jefe; el servidor ya acota a un
+      // profesional no-admin). null = todos; [] = ninguno seleccionado.
+      if (visibleTmIds && visibleTmIds.length > 0) {
+        params.set("teamMemberIds", visibleTmIds.join(","));
+      } else if (visibleTmIds && visibleTmIds.length === 0) {
+        success([]);
+        return;
+      }
       const res = await fetch(`/api/citas/bookings/calendar?${params}`, { cache: "no-store" });
       const j = await res.json();
       if (!j.ok) throw new Error(j.error || "Error cargando citas");
@@ -184,11 +200,11 @@ export default function CitasModule() {
     } catch (err) {
       failure(err);
     }
-  }, [visibleEtIds]);
+  }, [visibleEtIds, visibleTmIds]);
 
   useEffect(() => {
     calendarRef.current?.getApi().refetchEvents();
-  }, [visibleEtIds]);
+  }, [visibleEtIds, visibleTmIds]);
 
   function toggleEventType(id) {
     setVisibleEtIds((prev) => {
@@ -199,6 +215,16 @@ export default function CitasModule() {
   }
 
   function showAllEventTypes() { setVisibleEtIds(null); }
+
+  function toggleTeamMember(id) {
+    setVisibleTmIds((prev) => {
+      const current = prev ?? teamMembers.map((m) => m.id);
+      if (current.includes(id)) return current.filter((x) => x !== id);
+      return [...current, id];
+    });
+  }
+
+  function showAllTeamMembers() { setVisibleTmIds(null); }
 
   async function handleEventClick(info) {
     const id = info.event.id;
@@ -369,6 +395,7 @@ export default function CitasModule() {
           additionalData: createForm.additionalData.trim() || null,
           notes: createForm.notes.trim() || null,
           patientId: createForm.patientId || null,
+          teamMemberId: createForm.teamMemberId || null,
         }),
       });
       const j = await res.json();
@@ -525,6 +552,44 @@ export default function CitasModule() {
                   style={{ background: et.color ?? "#3F6E5B" }}
                 />
                 {et.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Filtro por profesional — solo el jefe (admin) y si hay más de uno. El
+          color del chip casa con el de sus citas en el calendario. */}
+      {tab === "calendar" && viewerIsAdmin && teamMembers.length > 1 && (
+        <div className="px-6 lg:px-10 py-3 flex items-center gap-2 flex-wrap shrink-0 border-b border-neutral-100">
+          <span className="text-[11px] uppercase tracking-wider text-neutral-400 mr-1">Profesional:</span>
+          <button
+            onClick={showAllTeamMembers}
+            className={`text-[11px] px-2 py-1 rounded-md border ${
+              visibleTmIds == null
+                ? "bg-neutral-900 text-white border-neutral-900"
+                : "bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50"
+            }`}
+          >
+            Todos
+          </button>
+          {teamMembers.map((m) => {
+            const active = visibleTmIds == null || visibleTmIds.includes(m.id);
+            return (
+              <button
+                key={m.id}
+                onClick={() => toggleTeamMember(m.id)}
+                className={`text-[11px] px-2 py-1 rounded-md border flex items-center gap-1.5 transition ${
+                  active
+                    ? "bg-white text-neutral-700 border-neutral-300"
+                    : "bg-neutral-50 text-neutral-400 border-neutral-200 line-through"
+                }`}
+              >
+                <span
+                  className="inline-block w-2 h-2 rounded-full"
+                  style={{ background: m.avatarColor ?? "#3F6E5B" }}
+                />
+                {m.displayName}
               </button>
             );
           })}
@@ -889,6 +954,22 @@ export default function CitasModule() {
                     onChange={(v) => updateCreateForm("patientId", v)}
                     options={patientOptions}
                     placeholder="Sin paciente asignado"
+                    searchable
+                  />
+                </div>
+              )}
+
+              {teamMembers.length > 0 && (
+                <div>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Profesional (opcional)</label>
+                  <Select
+                    value={createForm.teamMemberId}
+                    onChange={(v) => updateCreateForm("teamMemberId", v)}
+                    options={[
+                      { value: "", label: "Sin profesional asignado" },
+                      ...teamMembers.map((m) => ({ value: m.id, label: m.displayName })),
+                    ]}
+                    placeholder="Sin profesional asignado"
                     searchable
                   />
                 </div>
