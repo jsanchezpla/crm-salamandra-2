@@ -26,9 +26,13 @@ cd /opt/crm-salamandra
 
 # ── 0) SALVAGUARDA: copia de la BD y de uploads ANTES de tocar nada ──────────
 #     (hay pacientes reales de Laura; esta copia es el botón de deshacer)
-docker exec crm-salamandra-db-1 pg_dump -U postgres salamandra \
-  | gzip > ~/backup-salamandra-$(date +%Y%m%d-%H%M).sql.gz
-tar czf ~/backup-uploads-$(date +%Y%m%d-%H%M).tar.gz -C /opt/crm-salamandra uploads
+#     OJO: el usuario de la BD es `crm_user`, NO `postgres`. Se usan las
+#     credenciales del PROPIO contenedor para que la contraseña no aparezca en
+#     ningún sitio (se expande dentro del `sh -c`).
+STAMP=$(date +%Y%m%d-%H%M)
+docker exec crm-salamandra-db-1 sh -c 'PGPASSWORD=$POSTGRES_PASSWORD pg_dump -U $POSTGRES_USER $POSTGRES_DB' \
+  | gzip > ~/backup-salamandra-$STAMP.sql.gz
+tar czf ~/backup-uploads-$STAMP.tar.gz -C /opt/crm-salamandra uploads
 
 # ── 1) Bajar el código ───────────────────────────────────────────────────────
 git pull                        # debe traer hasta 80a1996
@@ -132,5 +136,10 @@ docker exec crm-salamandra-app-1 node scripts/check-links.js
   manda WordPress, no el CRM, así que ese flujo no depende de Resend. Cualquier
   secreto va en `.env.production` por SSH, nunca por chat (regla 14).
 - Si algo va mal: NUNCA `push --force`. Se restaura la BD del backup del paso 0
-  (`gunzip < backup-....sql.gz | docker exec -i crm-salamandra-db-1 psql -U postgres salamandra`)
+  (`gunzip < backup-....sql.gz | docker exec -i crm-salamandra-db-1 sh -c 'PGPASSWORD=$POSTGRES_PASSWORD psql -U $POSTGRES_USER $POSTGRES_DB'`)
   y se arregla con un commit nuevo + otro deploy.
+- **Deploy del 2026-07-23 EJECUTADO y verificado** (Claude, desde el portátil, por
+  SSH a `root@srv1545289`): 40 migraciones OK en los 9 schemas de prod, `deploy.sh`
+  rápido (deps sin cambios), adjuntos 0/0 (prod no tenía pendientes), check-links
+  131 sueltos históricos (sin empeorar), y HTTP login 200 / tunutrilaura.com 200
+  sin errores en logs. Backup previo: `backup-salamandra-20260723-0914.sql.gz`.
