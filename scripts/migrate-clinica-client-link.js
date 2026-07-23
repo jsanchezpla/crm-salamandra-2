@@ -71,10 +71,8 @@ async function main() {
 
   for (const schema of schemas) {
     try {
-      const [[{ existe }]] = await s.query(
-        `SELECT to_regclass('"${schema}"."clients"') IS NOT NULL AS existe`
-      );
-      if (!existe) { log(`· ${schema}: sin tabla clients, se salta`); continue; }
+      // La columna client_id se añade SIEMPRE (el modelo la referencia en
+      // todo tenant con esas tablas); la FK y el relleno son condicionales.
       const [[{ hayPacientes }]] = await s.query(
         `SELECT to_regclass('"${schema}"."patients"') IS NOT NULL AS "hayPacientes"`
       );

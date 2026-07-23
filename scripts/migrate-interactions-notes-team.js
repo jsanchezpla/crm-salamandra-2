@@ -70,11 +70,8 @@ async function main() {
 
     for (const schema of schemas) {
       try {
-        const [[{ existe }]] = await s.query(
-          `SELECT to_regclass('"${schema}"."team_members"') IS NOT NULL AS existe`
-        );
-        if (!existe) { log(`· ${schema}.${tabla}: sin team_members, se salta`); continue; }
-
+        // Columna SIEMPRE (el modelo la referencia en todo tenant con la
+        // tabla); FK condicional vía addFk (no-op si falta team_members).
         await s.transaction(async (t) => {
           await s.query(
             `ALTER TABLE "${schema}"."${tabla}" ADD COLUMN IF NOT EXISTS team_member_id UUID`,

@@ -57,11 +57,10 @@ async function main() {
 
   for (const schema of schemas) {
     try {
-      const [[{ existe }]] = await s.query(
-        `SELECT to_regclass('"${schema}"."team_members"') IS NOT NULL AS existe`
-      );
-      if (!existe) { log(`· ${schema}: sin team_members, se salta`); continue; }
-
+      // La COLUMNA se añade SIEMPRE (UUID nullable inofensivo): el modelo la
+      // referencia en todo tenant con form_submissions, tenga o no módulo de
+      // equipo. La FK es lo único condicional; addFk hace no-op si no existe
+      // team_members.
       await s.transaction(async (t) => {
         await s.query(
           `ALTER TABLE "${schema}"."form_submissions" ADD COLUMN IF NOT EXISTS handled_by_team_id UUID`,

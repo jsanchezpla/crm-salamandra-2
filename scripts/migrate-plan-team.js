@@ -54,11 +54,10 @@ async function main() {
 
   for (const schema of schemas) {
     try {
-      const [[{ existe }]] = await s.query(
-        `SELECT to_regclass('"${schema}"."team_members"') IS NOT NULL AS existe`
-      );
-      if (!existe) { log(`· ${schema}: sin tabla team_members, se salta`); continue; }
-
+      // La COLUMNA se añade SIEMPRE: es un UUID nullable inofensivo, y el
+      // modelo Sequelize la referencia en TODOS los tenants con tabla plans
+      // (si no existiera, un SELECT reventaría con 42703). La FK es lo único
+      // que necesita team_members: addFk hace no-op seguro si no existe.
       await s.transaction(async (t) => {
         await s.query(
           `ALTER TABLE "${schema}"."plans" ADD COLUMN IF NOT EXISTS team_member_id UUID`,
