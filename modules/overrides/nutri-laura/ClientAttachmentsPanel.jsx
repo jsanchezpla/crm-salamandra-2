@@ -48,6 +48,9 @@ export default function ClientAttachmentsPanel({ clientId }) {
   const [dragOver, setDragOver] = useState(false);
 
   const [confirmDelete, setConfirmDelete] = useState(null);
+  // Modal de NOMBRE obligatorio al subir. `pending` = File a la espera de nombre.
+  const [pending, setPending] = useState(null);
+  const [pendingName, setPendingName] = useState("");
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -75,17 +78,28 @@ export default function ClientAttachmentsPanel({ clientId }) {
     return null;
   }
 
-  async function handleFile(file) {
+  // Elegir fichero → NO sube todavía: abre el modal para pedir el nombre.
+  function handleFile(file) {
     setUploadError(null);
     const validationError = validateFile(file);
     if (validationError) {
       setUploadError(validationError);
       return;
     }
+    setPending(file);
+    setPendingName(file.name.replace(/\.[^.]+$/, "")); // nombre por defecto sin extensión
+  }
+
+  async function confirmUpload() {
+    if (!pending) return;
+    const name = pendingName.trim();
+    if (!name) { setUploadError("El nombre del documento es obligatorio"); return; }
     setUploading(true);
+    setUploadError(null);
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", pending);
+      fd.append("name", name);
       const r = await fetch(`/api/clients/${clientId}/attachments`, {
         method: "POST",
         body: fd,
@@ -97,6 +111,8 @@ export default function ClientAttachmentsPanel({ clientId }) {
       }
       // Optimista: añadimos arriba sin refetch completo.
       setItems((prev) => [j.data, ...prev]);
+      setPending(null);
+      setPendingName("");
     } catch (e) {
       setUploadError(e.message);
     } finally {
@@ -276,6 +292,42 @@ export default function ClientAttachmentsPanel({ clientId }) {
           </ul>
         )}
       </div>
+
+      {/* Modal de NOMBRE obligatorio al subir */}
+      {pending && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.45)" }}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5">
+            <div className="text-sm font-semibold text-gray-800 mb-1">Nombre del documento</div>
+            <div className="text-xs text-gray-500 mb-3 truncate">Archivo: {pending.name}</div>
+            <input
+              autoFocus
+              value={pendingName}
+              onChange={(e) => setPendingName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") confirmUpload(); }}
+              placeholder="Ej. Contrato firmado, Analítica…"
+              className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm"
+            />
+            {uploadError && <div className="text-xs text-red-600 mt-2">{uploadError}</div>}
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => { setPending(null); setPendingName(""); setUploadError(null); }}
+                disabled={uploading}
+                className="text-xs font-medium px-3 py-1.5 rounded-md border border-gray-200 text-gray-600"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmUpload}
+                disabled={uploading}
+                className="text-xs font-medium px-3 py-1.5 rounded-md text-white disabled:opacity-50"
+                style={{ background: "var(--color-primary, #1B3A2D)" }}
+              >
+                {uploading ? "Subiendo…" : "Subir"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

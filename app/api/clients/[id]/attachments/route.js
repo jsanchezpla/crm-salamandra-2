@@ -121,8 +121,15 @@ export const POST = withTenant(
       }
 
       const documentId = randomUUID();
-      const fileName = sanitizeFileName(file.name || "archivo");
       const ext = extFromFileName(file.name);
+      // NOMBRE del documento en el CRM (el modal de la UI lo exige). Si viene, se
+      // usa como nombre para mostrar conservando la extensión; si no, el del fichero.
+      const nameRaw = formData.get("name");
+      const providedName = typeof nameRaw === "string" ? nameRaw.trim().slice(0, 200) : "";
+      const yaTieneExt = /\.[A-Za-z0-9]{1,10}$/.test(providedName);
+      const fileName = providedName
+        ? sanitizeFileName(yaTieneExt || !ext ? providedName : `${providedName}.${ext}`)
+        : sanitizeFileName(file.name || "archivo");
       // Los adjuntos de ficha son compartidos con el equipo del tenant.
       const storagePath = await saveDocumentFile(tenant.slug, "shared", documentId, buffer, ext);
 
