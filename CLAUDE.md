@@ -268,20 +268,18 @@ Cada tenant puede tener override de UI en `modules/overrides/{slug}/`
 (carpeta con guión) y seed propio en `scripts/seed-{slug}.js` cuando
 aplique.
 
-> **Tenants de referencia ("la reina" de cada módulo).** Cada módulo grande
-> tiene un tenant cuyo comportamiento **ES** el default de ese módulo, y donde se
-> construyen sus features:
-> - **`demo` = referencia del módulo CLÍNICO** (tiene clinica + pacientes +
->   nutricion; es el escaparate con todo). En conversación, "Aumenta" suele
->   significar "el módulo clínico general". NO tratar lo clínico como un
->   `overrides/aumenta/`.
-> - **`nutri_laura` = referencia del módulo NUTRICIÓN.** Su comportamiento define
->   el default de nutrición.
+> **Tenants "reina" de cada módulo.** Cada módulo grande tiene un cliente REAL de
+> referencia cuyo comportamiento/necesidades definen el default de ese módulo:
+> - **`aumenta` = la reina del módulo CLÍNICO** (centro de psicología). Cuando se
+>   habla de "cambios en Aumenta" se habla del **módulo clínico**. NO tratar lo
+>   clínico como un `overrides/aumenta/`.
+> - **`nutri_laura` = la reina del módulo NUTRICIÓN** (Laura).
+> - **`demo` = escaparate**, NO es la reina de nada: tiene todos los módulos con
+>   datos FALSOS para poder VER las features juntas.
 >
 > **Un cambio en un módulo se aplica a TODOS los tenants que lo tengan, a la vez**
 > (mismo código gated por módulo): un cambio clínico va a Aumenta **y** al resto
-> con el módulo, por defecto, "hasta que digamos lo contrario". `demo`/`nutri_laura`
-> son la referencia donde se ve/define, no un sandbox aislado. Los
+> con el módulo (incl. demo), por defecto, "hasta que digamos lo contrario". Los
 > `modules/overrides/{slug}/` se reservan para cuando un tenant se desvía DE VERDAD
 > del default (UI o lógica propia), no para el comportamiento base del módulo.
 
