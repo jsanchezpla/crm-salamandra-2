@@ -62,8 +62,11 @@ estructura: leer el body crudo, validar HMAC, parsear JSON, resolver
 tenant (vía header `x-tenant` o subdominio; no JWT), persistir.
 
 **Validación HMAC**: helper compartido `lib/training/webhookAuth.js`.
-Lee `process.env.RETORIKA_WEBHOOK_SECRET` en runtime, falla ruidoso
-si no está configurado y devuelve `false` ante cualquier firma.
+Lee `process.env.CRM_WEBHOOK_SECRET` en runtime (nombre canónico desde
+2026-07-24; el legacy `RETORIKA_WEBHOOK_SECRET` se acepta como fallback),
+falla ruidoso si no está configurado y devuelve `false` ante cualquier firma.
+En los WordPress conectados el define de wp-config.php usa el MISMO nombre:
+`define('CRM_WEBHOOK_SECRET', '...')`.
 
 ```js
 import { verifyHmacSignature } from "lib/training/webhookAuth.js";
@@ -423,8 +426,9 @@ Belén desde el wp-admin de Retorika:
    el INSERT falla, NO rompe la respuesta — el sync funcional ya
    está hecho.
 
-El secret HMAC compartido vive en `RETORIKA_WEBHOOK_SECRET`
-(ver "Decisión / Secret HMAC fuera del repo"). El meta del curso
+El secret HMAC compartido vive en `CRM_WEBHOOK_SECRET` (legacy
+`RETORIKA_WEBHOOK_SECRET` aceptado como fallback; ver "Decisión / Secret
+HMAC fuera del repo"). El meta del curso
 de TutorLMS que vincula con WooCommerce es
 `_tutor_course_product_id`.
 
@@ -1043,8 +1047,9 @@ Alumno logueado en WP de Retorika
 
 **Variables env requeridas** (`.env.production`):
 ```
-RETORIKA_WEBHOOK_SECRET=<32+ bytes random, mismo en WP de Retorika>
+CRM_WEBHOOK_SECRET=<32+ bytes random, mismo en los WP conectados>
 ```
+(El nombre viejo `RETORIKA_WEBHOOK_SECRET` sigue aceptándose como fallback.)
 
 Sin esta variable, las firmas HMAC se rechazan automáticamente y todo el
 flujo cae a fail-open en el WP (degradación elegante; el alumno entra al

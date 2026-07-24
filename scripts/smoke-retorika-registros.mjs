@@ -22,9 +22,9 @@ import crypto from "node:crypto";
 const BASE_URL = "http://localhost:3000";
 const TENANT_SLUG = "retorika";
 
-const SECRET = process.env.RETORIKA_WEBHOOK_SECRET;
+const SECRET = process.env.CRM_WEBHOOK_SECRET || process.env.RETORIKA_WEBHOOK_SECRET;
 if (!SECRET) {
-  process.stderr.write("\n✗ RETORIKA_WEBHOOK_SECRET no está en .env.local. Aborto.\n");
+  process.stderr.write("\n✗ CRM_WEBHOOK_SECRET (o el legacy RETORIKA_WEBHOOK_SECRET) no está en .env.local. Aborto.\n");
   process.exit(1);
 }
 

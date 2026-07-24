@@ -15,7 +15,8 @@
  *   B)  Matrícula de un alumno → se avisa al CRM (automático).
  *
  * SECRETO: se lee de wp-config.php →  define('CRM_WEBHOOK_SECRET', '...');  con el
- * MISMO valor que la variable RETORIKA_WEBHOOK_SECRET del CRM (lo da Jorge).
+ * MISMO valor que la variable CRM_WEBHOOK_SECRET del .env.production del CRM
+ * (mismo nombre a ambos lados desde 2026-07-24; lo da Jorge por canal seguro).
  * Nunca se pone el secreto en el theme.
  *
  * Fail-open: si el CRM no responde, NO rompe la web; como mucho un aviso no llega.
