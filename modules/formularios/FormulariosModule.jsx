@@ -142,6 +142,23 @@ export default function FormulariosModule() {
     }
   }
 
+  // Eliminar DEL TODO una solicitud descartada (borrado físico, irreversible).
+  async function eliminar(submission) {
+    if (!window.confirm("¿Eliminar del todo esta solicitud descartada? Esta acción no se puede deshacer.")) return;
+    setTrabajando(submission.id);
+    setAviso(null);
+    try {
+      const res = await fetch(`/api/formularios/${submission.id}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "No se ha podido eliminar");
+      await cargar(tab);
+    } catch (e) {
+      setAviso({ tipo: "err", texto: e.message });
+    } finally {
+      setTrabajando(null);
+    }
+  }
+
   const vacio = !cargando && datos.submissions.length === 0;
 
   return (
@@ -253,6 +270,7 @@ export default function FormulariosModule() {
             onCancelarDescarte={() => setDescartando(null)}
             onDescartar={() => cambiarEstado(s, "rejected", motivoDescarte || null)}
             onRecuperar={() => cambiarEstado(s, "pending")}
+            onEliminar={() => eliminar(s)}
           />
         ))}
       </div>
@@ -262,7 +280,7 @@ export default function FormulariosModule() {
 
 function Tarjeta({
   submission, duplicado, ocupada, descartando, motivoDescarte,
-  onMotivo, onAceptar, onPedirDescarte, onCancelarDescarte, onDescartar, onRecuperar,
+  onMotivo, onAceptar, onPedirDescarte, onCancelarDescarte, onDescartar, onRecuperar, onEliminar,
 }) {
   const s = submission;
   const respuestas = useMemo(
@@ -443,13 +461,20 @@ function Tarjeta({
       )}
 
       {s.status === "rejected" && (
-        <div className="border-t border-gray-100 px-4 lg:px-5 py-3 bg-gray-50/60">
+        <div className="border-t border-gray-100 px-4 lg:px-5 py-3 bg-gray-50/60 flex items-center gap-2 flex-wrap">
           <button
             onClick={onRecuperar}
             disabled={ocupada}
             className="bg-white border border-gray-200 hover:border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
           >
             Devolver a pendientes
+          </button>
+          <button
+            onClick={onEliminar}
+            disabled={ocupada}
+            className="bg-white border border-rose-200 hover:border-rose-300 text-rose-600 text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+          >
+            Eliminar del todo
           </button>
         </div>
       )}

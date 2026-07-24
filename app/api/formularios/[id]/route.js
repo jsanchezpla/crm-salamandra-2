@@ -92,3 +92,32 @@ export const PATCH = withTenant(async (request, ctx, { tenantModels, hasModule }
     return serverError(err);
   }
 });
+
+/**
+ * DELETE /api/formularios/[id] — eliminar DEL TODO una solicitud descartada.
+ *
+ * Solo se permite borrar las que están en 'rejected':
+ *   - las 'pending' hay que triarlas (descartar o aceptar), no borrarlas a ciegas;
+ *   - las 'accepted' tienen una ficha de cliente creada detrás.
+ * Es un borrado físico e irreversible (la solicitud ya estaba descartada).
+ */
+export const DELETE = withTenant(async (_request, ctx, { tenantModels, hasModule }) => {
+  try {
+    if (!hasModule(MODULE_KEYS.FORMULARIOS)) return forbidden("Módulo formularios no activo");
+    const { id } = await ctx.params;
+    if (!UUID_RE.test(id)) return error("id inválido");
+
+    const { FormSubmission } = tenantModels;
+    const row = await FormSubmission.findByPk(id);
+    if (!row) return notFound("Solicitud no encontrada");
+
+    if (row.status !== "rejected") {
+      return error("Solo se pueden eliminar del todo las solicitudes descartadas.", 409);
+    }
+
+    await row.destroy();
+    return NextResponse.json({ ok: true, deleted: id });
+  } catch (err) {
+    return serverError(err);
+  }
+});
