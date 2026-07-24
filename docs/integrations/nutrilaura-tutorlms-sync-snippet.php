@@ -1,216 +1,249 @@
 <?php
 /**
- * ═══════════════════════════════════════════════════════════════════════════
- *  tunutrilaura.com (TutorLMS)  →  CRM Salamandra · módulo Formación
- *  Snippet de SINCRONIZACIÓN de cursos y matrículas.
- * ═══════════════════════════════════════════════════════════════════════════
+ * Sincronización TutorLMS → CRM Salamandra (módulo Formación).
  *
- *  NOTA (2026-07): para nutri_laura esto YA ESTÁ INTEGRADO EN EL THEME, como
- *  fichero `nutrilaura-tutorlms-sync.php` cargado desde functions.php (misma
- *  convención que nutrilaura-portal-user.php). Este documento queda como
- *  REFERENCIA del contrato con el CRM y como versión "standalone" (plugin Code
- *  Snippets) para instalar en otro WordPress. La versión del theme añade además
- *  el sync AUTOMÁTICO al publicar/editar un curso (hook transition_post_status).
+ * El CRM es un ESPEJO de la web: no crea cursos, los recibe. Este fichero es el
+ * "puente" y hace tres cosas, todo firmado con HMAC-SHA256:
  *
- *  QUÉ HACE (en cristiano)
- *  ───────────────────────
- *  El CRM no crea cursos: es un ESPEJO de lo que hay en la web. Este snippet es
- *  el "puente" que le cuenta al CRM lo que pasa en TutorLMS:
+ *   A)  Curso al PUBLICAR/EDITAR/DESPUBLICAR → se sincroniza solo (automático).
+ *   A-bis) Sync masivo bajo demanda (para los cursos que YA existían), abriendo
+ *         https://tunutrilaura.com/?nutrilaura_sync_courses=1  (solo administrador).
+ *   A-ter) Re-envío masivo de MATRÍCULAS ya existentes (recupera las que se
+ *         perdieron mientras el puente estuvo roto), abriendo
+ *         https://tunutrilaura.com/?nutrilaura_sync_enrollments=1  (solo admin).
+ *         Es seguro repetirlo: el CRM no duplica nada.
+ *   B)  Matrícula de un alumno → se avisa al CRM (automático).
  *
- *    A) CURSOS AL PUBLICAR/EDITAR (automático). Cada vez que publicas, editas o
- *       despublicas un curso en TutorLMS, se manda solo al CRM. No hay que hacer
- *       nada: los cursos NUEVOS aparecen en el CRM en cuanto los publicas.
+ * SECRETO: se lee de wp-config.php →  define('CRM_WEBHOOK_SECRET', '...');  con el
+ * MISMO valor que la variable RETORIKA_WEBHOOK_SECRET del CRM (lo da Jorge).
+ * Nunca se pone el secreto en el theme.
  *
- *    A-bis) SYNC MASIVO (un clic, para los cursos QUE YA EXISTÍAN). Los cursos ya
- *       publicados ANTES de instalar este snippet no se "re-publican" solos, así
- *       que hay que traerlos una primera vez abriendo una URL secreta. También
- *       sirve para re-sincronizar todo de golpe si hiciera falta.
+ * Fail-open: si el CRM no responde, NO rompe la web; como mucho un aviso no llega.
+ * Todo queda en el log de PHP con la etiqueta [nutrilaura-crm].
  *
- *    B) MATRÍCULAS (automático). Cada vez que un alumno se matricula en un curso
- *       (gratis o tras pagar en WooCommerce), avisa al CRM, que da de alta al
- *       alumno y su matrícula. No hay que hacer nada manual.
- *
- *  Todo va FIRMADO (HMAC-SHA256) con un secreto compartido, así el CRM sabe que
- *  el aviso viene de verdad de esta web y no de un impostor.
- *
- *  ─────────────────────────────────────────────────────────────────────────
- *  INSTALACIÓN (para Albert) — 5 pasos
- *  ─────────────────────────────────────────────────────────────────────────
- *
- *  PASO 1 · El secreto (una sola vez, en wp-config.php)
- *     Pide a Jorge el valor del secreto del CRM (es su variable
- *     RETORIKA_WEBHOOK_SECRET). En el servidor de tunutrilaura.com, edita el
- *     fichero  wp-config.php  y añade esta línea ANTES de la que pone
- *     "/* That's all, stop editing! * /":
- *
- *         define('CRM_WEBHOOK_SECRET', 'EL_VALOR_QUE_TE_DA_JORGE');
- *
- *     ⚠ Tiene que ser IDÉNTICO al del CRM, carácter a carácter. Nunca lo pongas
- *       dentro del snippet ni lo mandes por chat/WhatsApp: solo en wp-config.php.
- *
- *  PASO 2 · El snippet
- *     Instala el plugin "Code Snippets" (Plugins → Añadir nuevo → buscar
- *     "Code Snippets" → Instalar → Activar). Luego: Snippets → Añadir nuevo,
- *     ponle nombre "CRM Salamandra - Sync Formación", pega TODO el BLOQUE 1 de
- *     abajo (desde "// ===== BLOQUE 1" hasta el final del fichero), elige
- *     "Ejecutar el snippet en todas partes" y pulsa "Guardar cambios y activar".
- *
- *  PASO 3 · Sync inicial (UNA vez, para los cursos que YA existían)
- *     Los cursos NUEVOS que publiques a partir de ahora van solos al CRM. Pero
- *     los que ya están publicados hay que traerlos esta primera vez: estando
- *     logueado como administrador de WordPress, abre en el navegador:
- *
- *         https://tunutrilaura.com/?nutrilaura_sync_courses=1
- *
- *     Debe salir un texto tipo:  "OK: enviados 1 curso(s) al CRM."
- *     (Si sale ERROR, mira el PASO "SI ALGO FALLA" de abajo.)
- *
- *  PASO 4 · Comprobar en el CRM
- *     Entra en el CRM → Formación → Cursos. Debe aparecer el curso
- *     "Reconciliándome con la comida...". Si aparece: ¡puente montado! ✅
- *
- *  PASO 5 · (Jorge, lado CRM — opcional) Para que salga el botón
- *     "Sincronizar" dentro del CRM, añadir en el .env.production del VPS:
- *         NUTRI_LAURA_TUTOR_SYNC_URL=https://tunutrilaura.com/?nutrilaura_sync_courses=1
- *     y reiniciar la app. Sin esto igualmente funciona: basta con abrir la URL
- *     del PASO 3 cuando haga falta re-sincronizar.
- *
- *  ─────────────────────────────────────────────────────────────────────────
- *  SI ALGO FALLA (diagnóstico)
- *  ─────────────────────────────────────────────────────────────────────────
- *   · El snippet "falla abierto": si el CRM no responde, NO rompe la web ni el
- *     acceso a los cursos. Como mucho, un aviso no llega.
- *   · Todo lo que pasa se escribe en el log de errores de PHP con la etiqueta
- *     "[nutrilaura-crm]". Pídele a Jorge que mire ese log si algo no cuadra.
- *   · Error más típico: "HTTP 401 Firma inválida" → el secreto del PASO 1 no
- *     coincide con el del CRM. Revisar que sean idénticos.
- *   · "HTTP 403 Módulo training no activo" → avisar a Jorge (se arregla en el CRM).
- *
- *  Cuando crees o edites un curso más adelante, vuelve a abrir la URL del PASO 3
- *  para re-sincronizar. Las matrículas (B) ya van solas, no hay que tocarlas.
- * ═══════════════════════════════════════════════════════════════════════════
+ * @package NutriLaura
  */
 
+if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-// ═════════════════════════ BLOQUE 1 — PEGAR EN CODE SNIPPETS ═════════════════════════
+if ( ! defined( 'NUTRILAURA_CRM_BASE' ) )   { define( 'NUTRILAURA_CRM_BASE', 'https://crm.salamandrasolutions.com' ); }
+if ( ! defined( 'NUTRILAURA_CRM_TENANT' ) ) { define( 'NUTRILAURA_CRM_TENANT', 'nutri_laura' ); }
 
-if (!defined('NUTRILAURA_CRM_BASE'))   define('NUTRILAURA_CRM_BASE', 'https://crm.salamandrasolutions.com');
-if (!defined('NUTRILAURA_CRM_TENANT')) define('NUTRILAURA_CRM_TENANT', 'nutri_laura');
-
-/**
- * Firma el cuerpo JSON con HMAC-SHA256 y lo envía POST al CRM.
- * Devuelve true si el CRM respondió 2xx. Nunca lanza (fail-open).
- */
-function nutrilaura_crm_post($path, $data) {
-    $secret = defined('CRM_WEBHOOK_SECRET') ? CRM_WEBHOOK_SECRET : '';
-    if (!$secret) {
-        error_log('[nutrilaura-crm] Falta define(CRM_WEBHOOK_SECRET) en wp-config.php');
-        return false;
-    }
-    $body = wp_json_encode($data);
-    $sig  = hash_hmac('sha256', $body, $secret); // MISMO cálculo que el CRM
-
-    $res = wp_remote_post(NUTRILAURA_CRM_BASE . $path, array(
-        'timeout' => 8,
-        'headers' => array(
-            'Content-Type'         => 'application/json',
-            'X-Retorika-Signature' => 'sha256=' . $sig,   // cabecera de firma que espera el CRM
-            'x-tenant'             => NUTRILAURA_CRM_TENANT, // a qué cliente pertenece
-        ),
-        'body' => $body,
-    ));
-
-    if (is_wp_error($res)) {
-        error_log('[nutrilaura-crm] ' . $path . ' error: ' . $res->get_error_message());
-        return false;
-    }
-    $code = intval(wp_remote_retrieve_response_code($res));
-    error_log('[nutrilaura-crm] ' . $path . ' => HTTP ' . $code . ' ' . wp_remote_retrieve_body($res));
-    return $code >= 200 && $code < 300;
+/** Secreto compartido para firmar los webhooks (definido en wp-config.php). */
+function nutrilaura_tutorlms_secret() {
+	if ( defined( 'CRM_WEBHOOK_SECRET' ) && CRM_WEBHOOK_SECRET ) {
+		return CRM_WEBHOOK_SECRET;
+	}
+	return '';
 }
 
 /**
- * A) SYNC de cursos bajo demanda.
- *    URL:  https://tunutrilaura.com/?nutrilaura_sync_courses=1  (solo admin)
+ * Firma el cuerpo JSON (HMAC-SHA256), lo envía POST al CRM y devuelve el
+ * DETALLE de qué pasó (para poder diagnosticar sin buscar el log de PHP).
+ * Nunca lanza (fail-open).
+ *
+ * @return array { ok: bool, why: 'sin_secreto'|'wp_error'|'http'|'', code: int, body: string }
  */
-add_action('init', function () {
-    if (empty($_GET['nutrilaura_sync_courses'])) return;
+function nutrilaura_tutorlms_post_full( $path, $data ) {
+	$secret = nutrilaura_tutorlms_secret();
+	if ( ! $secret ) {
+		error_log( '[nutrilaura-crm] Falta define(CRM_WEBHOOK_SECRET) en wp-config.php' );
+		return array( 'ok' => false, 'why' => 'sin_secreto', 'code' => 0, 'body' => '' );
+	}
+	$body = wp_json_encode( $data );
+	$sig  = hash_hmac( 'sha256', $body, $secret ); // mismo cálculo que el CRM
 
-    if (!is_user_logged_in() || !current_user_can('manage_options')) {
-        status_header(403);
-        exit('No autorizado (hay que estar logueado como administrador).');
-    }
-    if (!function_exists('tutor_utils')) {
-        exit('TutorLMS no está activo en esta web.');
-    }
+	$res = wp_remote_post( NUTRILAURA_CRM_BASE . $path, array(
+		'timeout' => 8,
+		'headers' => array(
+			'Content-Type'         => 'application/json',
+			'X-Retorika-Signature' => 'sha256=' . $sig,      // cabecera de firma que espera el CRM
+			'x-tenant'             => NUTRILAURA_CRM_TENANT,  // a qué cliente pertenece
+		),
+		'body' => $body,
+	) );
 
-    $posts = get_posts(array(
-        'post_type'   => 'courses',       // el tipo de contenido de TutorLMS
-        'post_status' => 'publish',
-        'numberposts' => -1,
-    ));
+	if ( is_wp_error( $res ) ) {
+		error_log( '[nutrilaura-crm] ' . $path . ' error: ' . $res->get_error_message() );
+		return array( 'ok' => false, 'why' => 'wp_error', 'code' => 0, 'body' => $res->get_error_message() );
+	}
+	$code = (int) wp_remote_retrieve_response_code( $res );
+	$resp = (string) wp_remote_retrieve_body( $res );
+	if ( $code < 200 || $code >= 300 ) {
+		error_log( '[nutrilaura-crm] ' . $path . ' => HTTP ' . $code . ' ' . $resp );
+		return array( 'ok' => false, 'why' => 'http', 'code' => $code, 'body' => $resp );
+	}
+	return array( 'ok' => true, 'why' => '', 'code' => $code, 'body' => $resp );
+}
 
-    $courses = array();
-    foreach ($posts as $p) {
-        $product_id = intval(tutor_utils()->get_course_product_id($p->ID));
-        $courses[] = array(
-            'course_id'     => intval($p->ID),                 // = wpCourseId en el CRM
-            'course_title'  => $p->post_title,
-            'wc_product_id' => $product_id ?: null,            // producto WooCommerce (si el curso se vende)
-        );
-    }
-
-    $ok = nutrilaura_crm_post('/api/webhooks/tutorlms/sync-courses', array('courses' => $courses));
-
-    header('Content-Type: text/plain; charset=utf-8');
-    echo $ok
-        ? ('OK: enviados ' . count($courses) . ' curso(s) al CRM. Revisa Formación → Cursos.')
-        : 'ERROR: no se pudo sincronizar. Que Jorge mire el log de PHP ([nutrilaura-crm]).';
-    exit;
-});
+/** Variante simple (hooks automáticos): true si el CRM respondió 2xx. */
+function nutrilaura_tutorlms_post( $path, $data ) {
+	$r = nutrilaura_tutorlms_post_full( $path, $data );
+	return $r['ok'];
+}
 
 /**
- * A) CURSOS AL PUBLICAR / EDITAR / DESPUBLICAR (automático).
- *    Cada cambio de estado de un curso se manda solo al CRM: publicar/editar
- *    lo crea o actualiza; enviar a papelera/borrador lo desactiva.
+ * A) Curso al PUBLICAR / EDITAR / DESPUBLICAR (automático).
+ *    publish → crea/actualiza en el CRM; papelera/borrador → lo desactiva.
  */
-add_action('transition_post_status', function ($new_status, $old_status, $post) {
-    if (!$post || $post->post_type !== 'courses') return;
-    if (wp_is_post_revision($post->ID) || wp_is_post_autosave($post->ID)) return;
+add_action( 'transition_post_status', function ( $new_status, $old_status, $post ) {
+	if ( ! $post || 'courses' !== $post->post_type ) { return; }
+	if ( wp_is_post_revision( $post->ID ) || wp_is_post_autosave( $post->ID ) ) { return; }
 
-    if ($new_status === 'publish') {
-        // Publicado ahora (publish) o editado estando ya publicado (update).
-        $product_id = function_exists('tutor_utils') ? intval(tutor_utils()->get_course_product_id($post->ID)) : 0;
-        nutrilaura_crm_post('/api/webhooks/tutorlms/course', array(
-            'action'        => ($old_status === 'publish' ? 'update' : 'publish'),
-            'course_id'     => intval($post->ID),
-            'course_title'  => $post->post_title,
-            'wc_product_id' => $product_id ?: null,
-        ));
-    } elseif ($old_status === 'publish' && in_array($new_status, array('trash', 'draft', 'private', 'pending'), true)) {
-        // Estaba publicado y deja de estarlo → se desactiva en el CRM.
-        nutrilaura_crm_post('/api/webhooks/tutorlms/course', array(
-            'action'    => 'delete',
-            'course_id' => intval($post->ID),
-        ));
-    }
-}, 10, 3);
+	if ( 'publish' === $new_status ) {
+		$product_id = function_exists( 'tutor_utils' ) ? (int) tutor_utils()->get_course_product_id( $post->ID ) : 0;
+		nutrilaura_tutorlms_post( '/api/webhooks/tutorlms/course', array(
+			'action'        => ( 'publish' === $old_status ? 'update' : 'publish' ),
+			'course_id'     => (int) $post->ID,
+			'course_title'  => $post->post_title,
+			'wc_product_id' => $product_id ? $product_id : null,
+		) );
+	} elseif ( 'publish' === $old_status && in_array( $new_status, array( 'trash', 'draft', 'private', 'pending' ), true ) ) {
+		nutrilaura_tutorlms_post( '/api/webhooks/tutorlms/course', array(
+			'action'    => 'delete',
+			'course_id' => (int) $post->ID,
+		) );
+	}
+}, 10, 3 );
 
 /**
- * B) MATRÍCULAS automáticas.
- *    TutorLMS dispara 'tutor_after_enrolled' cuando un alumno queda matriculado
- *    (curso gratis, o tras completarse el pago en WooCommerce).
+ * A-bis) Sync masivo bajo demanda — para traer los cursos que YA existían.
+ *    URL:  https://tunutrilaura.com/?nutrilaura_sync_courses=1   (solo admin)
  */
-add_action('tutor_after_enrolled', function ($course_id, $user_id) {
-    $user = get_userdata($user_id);
-    if (!$user) return;
+add_action( 'init', function () {
+	if ( empty( $_GET['nutrilaura_sync_courses'] ) ) { return; }
 
-    nutrilaura_crm_post('/api/webhooks/tutorlms/enrollment', array(
-        'user_email'   => strtolower($user->user_email),
-        'display_name' => $user->display_name,
-        'user_id'      => intval($user_id),
-        'course_id'    => intval($course_id),       // = wpCourseId; si el curso no existía en el CRM, se crea
-        'course_title' => get_the_title($course_id),
-        'enrolled_at'  => current_time('c'),        // ISO 8601
-    ));
-}, 10, 2);
+	if ( ! is_user_logged_in() || ! current_user_can( 'manage_options' ) ) {
+		status_header( 403 );
+		exit( 'No autorizado (hay que estar logueado como administrador).' );
+	}
+	if ( ! function_exists( 'tutor_utils' ) ) { exit( 'TutorLMS no esta activo en esta web.' ); }
+
+	$posts   = get_posts( array( 'post_type' => 'courses', 'post_status' => 'publish', 'numberposts' => -1 ) );
+	$courses = array();
+	foreach ( $posts as $p ) {
+		$product_id  = (int) tutor_utils()->get_course_product_id( $p->ID );
+		$courses[]   = array(
+			'course_id'     => (int) $p->ID,           // = wpCourseId en el CRM
+			'course_title'  => $p->post_title,
+			'wc_product_id' => $product_id ? $product_id : null,
+		);
+	}
+
+	// ── Autodiagnóstico en pantalla (solo lo ve el admin) ──
+	header( 'Content-Type: text/plain; charset=utf-8' );
+	echo "Sincronizacion NutriLaura -> CRM\n";
+	echo "================================\n\n";
+	echo '1) Secreto CRM_WEBHOOK_SECRET en wp-config.php: ' . ( nutrilaura_tutorlms_secret() ? "OK (definido)\n" : "FALTA\n" );
+	echo "2) TutorLMS activo: OK\n";
+	echo '3) Cursos publicados encontrados: ' . count( $courses ) . "\n";
+	foreach ( $courses as $c ) { echo '   - [' . $c['course_id'] . '] ' . $c['course_title'] . "\n"; }
+	echo '4) Enviando a ' . NUTRILAURA_CRM_BASE . "/api/webhooks/tutorlms/sync-courses ...\n\n";
+
+	$r = nutrilaura_tutorlms_post_full( '/api/webhooks/tutorlms/sync-courses', array( 'courses' => $courses ) );
+
+	if ( $r['ok'] ) {
+		echo 'RESULTADO: OK — enviados ' . count( $courses ) . " curso(s) al CRM. Revisa Formacion > Cursos.\n";
+		echo 'Respuesta del CRM: ' . $r['body'] . "\n";
+	} elseif ( 'sin_secreto' === $r['why'] ) {
+		echo "RESULTADO: ERROR — falta el secreto.\n\n";
+		echo "QUE HACER (Albert): edita wp-config.php (raiz de WordPress) y, ENCIMA de la linea\n";
+		echo "/* That's all, stop editing! */, anade:\n\n";
+		echo "    define( 'CRM_WEBHOOK_SECRET', 'PEGA_AQUI_EL_VALOR' );\n\n";
+		echo "El VALOR te lo pasa Jorge/Rodrigo por canal seguro (es el mismo que usa el CRM).\n";
+		echo "Guarda el fichero y vuelve a abrir esta URL.\n";
+	} elseif ( 'wp_error' === $r['why'] ) {
+		echo "RESULTADO: ERROR — este WordPress no consigue conectar con el CRM.\n\n";
+		echo 'Detalle tecnico: ' . $r['body'] . "\n\n";
+		echo "Suele ser el HOSTING bloqueando conexiones salientes (cURL). Que Albert pida al\n";
+		echo "hosting permitir conexiones HTTPS salientes a crm.salamandrasolutions.com (puerto 443).\n";
+	} elseif ( 401 === $r['code'] ) {
+		echo "RESULTADO: ERROR — el CRM rechaza la firma (HTTP 401).\n\n";
+		echo "El valor de CRM_WEBHOOK_SECRET en wp-config.php NO coincide con el del CRM.\n";
+		echo "Que Albert lo compare (sin espacios ni comillas de mas) con el valor que le paso Jorge.\n";
+	} elseif ( 403 === $r['code'] ) {
+		echo "RESULTADO: ERROR — el CRM responde 403.\n\nDetalle: " . $r['body'] . "\nQue Jorge revise el modulo de formacion del tenant.\n";
+	} else {
+		echo 'RESULTADO: ERROR — el CRM respondio HTTP ' . $r['code'] . ".\n\nDetalle: " . $r['body'] . "\nQue Jorge mire los logs del CRM.\n";
+	}
+	exit;
+} );
+
+/**
+ * A-ter) Re-envío masivo de MATRÍCULAS ya existentes — para recuperar las que
+ *    se perdieron mientras el puente estuvo roto (el aviso automático solo
+ *    salta EN EL MOMENTO de matricularse). TutorLMS guarda cada matrícula como
+ *    un post 'tutor_enrolled' (post_parent = curso, post_author = alumno).
+ *    Es seguro repetirlo: el CRM usa findOrCreate y no duplica nada.
+ *    URL:  https://tunutrilaura.com/?nutrilaura_sync_enrollments=1   (solo admin)
+ */
+add_action( 'init', function () {
+	if ( empty( $_GET['nutrilaura_sync_enrollments'] ) ) { return; }
+
+	if ( ! is_user_logged_in() || ! current_user_can( 'manage_options' ) ) {
+		status_header( 403 );
+		exit( 'No autorizado (hay que estar logueado como administrador).' );
+	}
+	if ( ! function_exists( 'tutor_utils' ) ) { exit( 'TutorLMS no esta activo en esta web.' ); }
+
+	$enrollments = get_posts( array(
+		'post_type'   => 'tutor_enrolled',
+		'post_status' => 'completed',
+		'numberposts' => -1,
+	) );
+
+	header( 'Content-Type: text/plain; charset=utf-8' );
+	echo "Re-envio de matriculas NutriLaura -> CRM\n";
+	echo "========================================\n\n";
+	echo 'Matriculas encontradas en TutorLMS: ' . count( $enrollments ) . "\n\n";
+
+	$ok = 0;
+	$ko = 0;
+	foreach ( $enrollments as $e ) {
+		$user = get_userdata( (int) $e->post_author );
+		if ( ! $user ) { $ko++; echo "  ERR matricula #{$e->ID}: el alumno ya no existe en WordPress\n"; continue; }
+		$course_id = (int) $e->post_parent;
+
+		$r = nutrilaura_tutorlms_post_full( '/api/webhooks/tutorlms/enrollment', array(
+			'user_email'   => strtolower( $user->user_email ),
+			'display_name' => $user->display_name,
+			'user_id'      => (int) $e->post_author,
+			'course_id'    => $course_id,
+			'course_title' => get_the_title( $course_id ),
+			'enrolled_at'  => mysql2date( 'c', $e->post_date_gmt, false ),
+		) );
+
+		if ( $r['ok'] ) {
+			$ok++;
+			echo '  OK  ' . $user->user_email . ' -> [' . $course_id . '] ' . get_the_title( $course_id ) . "\n";
+		} else {
+			$ko++;
+			echo '  ERR ' . $user->user_email . ' -> ' . ( 'http' === $r['why'] ? 'HTTP ' . $r['code'] . ' ' . $r['body'] : $r['body'] ) . "\n";
+			if ( 'sin_secreto' === $r['why'] ) {
+				echo "\n  Falta CRM_WEBHOOK_SECRET en wp-config.php — arregla eso primero\n";
+				echo "  (abre ?nutrilaura_sync_courses=1 para ver las instrucciones) y vuelve.\n";
+				break;
+			}
+		}
+	}
+	echo "\nRESULTADO: {$ok} enviadas, {$ko} con error. Revisa Formacion > Alumnos en el CRM.\n";
+	exit;
+} );
+
+/**
+ * B) Matrículas automáticas. TutorLMS dispara 'tutor_after_enrolled' cuando un
+ *    alumno queda matriculado (curso gratis o tras completarse el pago Woo).
+ */
+add_action( 'tutor_after_enrolled', function ( $course_id, $user_id ) {
+	$user = get_userdata( $user_id );
+	if ( ! $user ) { return; }
+
+	nutrilaura_tutorlms_post( '/api/webhooks/tutorlms/enrollment', array(
+		'user_email'   => strtolower( $user->user_email ),
+		'display_name' => $user->display_name,
+		'user_id'      => (int) $user_id,
+		'course_id'    => (int) $course_id,  // = wpCourseId; si el curso no existia en el CRM, se crea
+		'course_title' => get_the_title( $course_id ),
+		'enrolled_at'  => current_time( 'c' ),
+	) );
+}, 10, 2 );
