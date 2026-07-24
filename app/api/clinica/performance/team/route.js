@@ -4,15 +4,17 @@ import { ok, forbidden } from "../../../../../lib/utils/apiResponse.js";
 import { serializeRankingRow, monthShort } from "../../../../../lib/clinica/serialize.js";
 import { tiersFromTenant } from "../../../../../lib/clinica/incentives.js";
 
+const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
 }
 
 // Panel de Dirección: ranking del periodo, KPIs, alertas computadas, evolución del
-// equipo y total de incentivos propuestos. Soporta ?period=YYYY-MM (por defecto, el
-// último periodo con datos).
+// equipo y total de incentivos propuestos. SOLO DIRECCIÓN. Soporta ?period=YYYY-MM
+// (por defecto, el último periodo con datos).
 export const GET = withTenant(async (request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
+  if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo dirección puede ver el panel del equipo");
   const { PerformanceMetric, TeamMember, ClinicalReport } = ctx.tenantModels;
   const sp = new URL(request.url).searchParams;
   const tiers = tiersFromTenant(ctx.tenant);

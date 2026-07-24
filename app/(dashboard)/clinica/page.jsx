@@ -69,9 +69,15 @@ const SHORTCUTS = [
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short" }) : "—");
 
+// Accesos SOLO de dirección (admin): desempeño/incentivos y vistas de gestión.
+// Se ocultan por defecto y solo aparecen cuando /api/auth/me confirma admin,
+// para que una terapeuta no los vea ni un instante.
+const ADMIN_ONLY_HREFS = new Set(["/clinica/mi-desempeno", "/clinica/direccion", "/clinica/productividad"]);
+
 export default function ClinicaLanding() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     fetch("/api/clinica/overview", { cache: "no-store" })
@@ -81,7 +87,15 @@ export default function ClinicaLanding() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.ok) setIsAdmin(["admin", "superadmin"].includes(j.data?.role));
+      })
+      .catch(() => {});
   }, []);
+
+  const shortcuts = SHORTCUTS.filter((s) => isAdmin || !ADMIN_ONLY_HREFS.has(s.href));
 
   const k = data?.kpis;
   const recent = data?.recentPatients ?? [];
@@ -123,7 +137,7 @@ export default function ClinicaLanding() {
 
       {/* Accesos rápidos */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {SHORTCUTS.map((s) => (
+        {shortcuts.map((s) => (
           <Link
             key={s.href}
             href={s.href}

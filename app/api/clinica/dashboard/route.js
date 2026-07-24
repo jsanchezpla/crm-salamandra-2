@@ -4,16 +4,18 @@ import { ok, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { aggregateTeamProductivity } from "../../../../lib/clinica/productivityQuery.js";
 import { serializeIncidencia, INCIDENCIA_CATEGORIES } from "../../../../lib/clinica/incidencias.js";
 
+const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
 }
 
 /**
  * GET /api/clinica/dashboard — datos operativos del mes para el panel de
- * Dirección: totales de productividad + resumen de incidencias.
+ * Dirección: totales de productividad + resumen de incidencias. SOLO DIRECCIÓN.
  */
 export const GET = withTenant(async (_request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
+  if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo dirección puede ver el dashboard");
   const { Booking, TeamMember, Incidencia, Patient } = ctx.tenantModels;
   const now = new Date();
   const year = now.getFullYear();

@@ -25,6 +25,9 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const sp = new URL(request.url).searchParams;
 
   let therapistId = await resolveCurrentTeamMemberId(request, M);
+  // Solo quien NO tiene ficha de equipo propia (p. ej. el admin de dirección)
+  // puede elegir la bandeja de otra persona; una terapeuta siempre ve LA SUYA.
+  const canSwitch = !therapistId;
   const asked = sp.get("therapistId");
   if (!therapistId && asked && UUID_RE.test(asked)) therapistId = asked;
   if (!therapistId) {
@@ -123,6 +126,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   return ok({
     therapist: { id: therapist.id, name: therapist.displayName, position: therapist.position ?? "", color: therapist.avatarColor ?? "#1B3A2D" },
     therapists,
+    canSwitch,
     reports,
     incidencias,
     citasToday,

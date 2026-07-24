@@ -68,13 +68,16 @@ function LoginForm() {
           htmlFor="email"
           className="block text-[10px] font-semibold text-white/45 uppercase tracking-[0.16em]"
         >
-          Email
+          Email o usuario
         </label>
+        {/* type="text" a propósito: además de emails, hay cuentas con nombre de
+            usuario (p. ej. las terapeutas de Aumenta: "Arantxa_Aumenta"), y
+            type="email" haría que el navegador las bloquease por no llevar @.
+            El backend busca el valor tal cual (en minúsculas) en master.users. */}
         <input
           id="email"
-          type="email"
-          inputMode="email"
-          autoComplete="email"
+          type="text"
+          autoComplete="username"
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
@@ -82,7 +85,7 @@ function LoginForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="w-full rounded-[var(--radius-control)] bg-white/[0.05] border border-white/[0.12] px-4 py-3.5 text-[15px] text-white placeholder-white/25 focus:outline-none focus:border-white/40 focus:bg-white/[0.08] transition font-mono"
-          placeholder="tu@empresa.com"
+          placeholder="tu@empresa.com o usuario"
         />
       </div>
 

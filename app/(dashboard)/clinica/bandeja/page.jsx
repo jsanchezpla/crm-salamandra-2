@@ -64,7 +64,7 @@ export default function BandejaPage() {
           <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">{loading ? "…" : `Bandeja de ${data?.therapist?.name ?? "—"}`}</h1>
           <p className="text-xs text-neutral-400 mt-1">Lo tuyo pendiente: informes, incidencias y citas de hoy.</p>
         </div>
-        {therapists.length > 1 && (
+        {data?.canSwitch && therapists.length > 1 && (
           <Select
             value={therapistId || (data?.therapist?.id ?? "")}
             onChange={setTherapistId}

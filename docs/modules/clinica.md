@@ -325,9 +325,15 @@ más clientes en el futuro, añadirlo al array global.
   `ClinicSession`, `ClinicalReport`, asistencia y coordinaciones.
 - Workflow de aprobación de incentivos con auditoría en
   `master.AuditLog`.
-- Filtrado de vistas por rol (hoy todas las terapeutas son admin y
-  ven el panel de Dirección con el ranking de sus compañeras —
-  decisión consciente).
+- ~~Filtrado de vistas por rol~~ **HECHO (2026-07-24)**: las terapeutas son
+  rol `user` con `moduleAccess` [calendar, citas, clinica, pacientes] (admón.
+  además billing+documents). "Mi desempeño", "Dirección" y "Productividad" son
+  SOLO admin: gates de rol en `/api/clinica/performance/*` (GET incluidos),
+  `/api/clinica/productividad` y `/api/clinica/dashboard`, ocultos también en
+  Sidebar (`adminOnly`) y en la landing de Clínica. El Sidebar además filtra
+  módulos por `user.moduleAccess` (espejo de `hasModule`). Login por NOMBRE DE
+  USUARIO (p. ej. `arantxa_aumenta` en `users.email`, creado con
+  `validate:false`); el formulario de login acepta email o usuario.
 - Descarga PDF de informes con QR / plantilla del centro.
 
 ## Decisiones cerradas

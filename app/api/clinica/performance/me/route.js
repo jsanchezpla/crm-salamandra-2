@@ -4,15 +4,17 @@ import { ok, forbidden } from "../../../../../lib/utils/apiResponse.js";
 import { serializePerformance, serializeTherapist } from "../../../../../lib/clinica/serialize.js";
 import { tiersFromTenant } from "../../../../../lib/clinica/incentives.js";
 
+const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
 }
 
-// Scorecard del terapeuta "logueado" (o el indicado por ?therapistId=). Resuelve
-// el terapeuta desde el team_member ligado al usuario; si no hay (p.ej. un admin
-// sin ficha de equipo), cae al primer terapeuta activo. Soporta ?period=YYYY-MM.
+// Scorecard de desempeño de un terapeuta (?therapistId= o el ligado al usuario).
+// SOLO DIRECCIÓN (decisión Aumenta 2026-07-24): el desempeño/incentivos no lo
+// ven las terapeutas, ni siquiera el suyo propio. Soporta ?period=YYYY-MM.
 export const GET = withTenant(async (request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
+  if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo dirección puede ver el desempeño");
   const { PerformanceMetric, TeamMember } = ctx.tenantModels;
   const sp = new URL(request.url).searchParams;
 

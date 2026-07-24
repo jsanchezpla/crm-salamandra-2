@@ -10,10 +10,11 @@ function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
 }
 
-// GET — tabla de tramos vigente (la del tenant o el default). La pueden leer
-// todos los usuarios con el módulo (se usa para explicar la propuesta).
+// GET — tabla de tramos vigente (la del tenant o el default). SOLO DIRECCIÓN:
+// los tramos describen el esquema de incentivos, que las terapeutas no ven.
 export const GET = withTenant(async (_request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
+  if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo dirección puede ver los tramos");
   const configured = normalizeTiers(ctx.tenant?.settings?.clinica?.incentiveTiers);
   return ok({ tiers: configured ?? DEFAULT_INCENTIVE_TIERS, isDefault: configured == null });
 });
