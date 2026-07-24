@@ -42,8 +42,23 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     include: [{ model: TeamMember, as: "therapist", attributes: ["id", "displayName", "position", "avatarColor"] }],
     order: [["totalScore", "DESC"]],
   });
-  const ranking = metrics.map((m) => serializeRankingRow(m, { therapist: m.therapist, tiers }));
-  const totalProposed = ranking.reduce((s, r) => s + (r.proposedIncentive ?? 0), 0);
+
+  // Incentivos ESCRITOS del periodo (Σ por terapeuta): suman al total propuesto.
+  const { IncentiveItem } = ctx.tenantModels;
+  const itemRows = await IncentiveItem.findAll({
+    where: { periodYear: year, periodMonth: month },
+    attributes: ["therapistId", "resolvedAmount"],
+    raw: true,
+  });
+  const extrasByTherapist = {};
+  for (const r of itemRows) {
+    extrasByTherapist[r.therapistId] = (extrasByTherapist[r.therapistId] ?? 0) + (Number(r.resolvedAmount) || 0);
+  }
+
+  const ranking = metrics.map((m) =>
+    serializeRankingRow(m, { therapist: m.therapist, tiers, extras: extrasByTherapist[m.therapistId] ?? 0 })
+  );
+  const totalProposed = Math.round(ranking.reduce((s, r) => s + (r.totalProposed ?? 0), 0) * 100) / 100;
   const totalApproved = ranking.reduce((s, r) => s + (r.approvedIncentive ?? 0), 0);
 
   // KPIs

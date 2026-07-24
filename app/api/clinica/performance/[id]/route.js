@@ -32,10 +32,17 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
 
   // La propuesta se deriva EN VIVO de la puntuación total y los tramos vigentes
   // (no del valor almacenado, que puede haber quedado desfasado si se editaron
-  // los tramos después).
+  // los tramos después), MÁS los incentivos escritos del periodo.
   const tiers = tiersFromTenant(ctx.tenant);
+  const { IncentiveItem } = ctx.tenantModels;
+  const items = await IncentiveItem.findAll({
+    where: { therapistId: m.therapistId, periodYear: m.periodYear, periodMonth: m.periodMonth },
+    attributes: ["resolvedAmount"],
+    raw: true,
+  });
+  const extras = items.reduce((s, r) => s + (Number(r.resolvedAmount) || 0), 0);
   let approvedIncentive;
-  if (body.action === "approve") approvedIncentive = proposeIncentive(m.totalScore, tiers);
+  if (body.action === "approve") approvedIncentive = Math.round((proposeIncentive(m.totalScore, tiers) + extras) * 100) / 100;
   else if (body.action === "unapprove") approvedIncentive = null;
   else if (body.approvedIncentive != null) {
     approvedIncentive = Number(body.approvedIncentive);
@@ -61,5 +68,5 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
     after: m.toJSON(),
     ip: request.headers.get("x-forwarded-for"),
   });
-  return ok(serializeRankingRow(m, { tiers }));
+  return ok(serializeRankingRow(m, { tiers, extras }));
 });

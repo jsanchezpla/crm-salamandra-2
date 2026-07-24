@@ -107,6 +107,7 @@ export const MODULES = {
     "migrate-patients-specialties",
     "migrate-documents-patient-link",
     "migrate-incidencias-module",
+    "migrate-incentive-items",
   ],
 
   team: [

@@ -124,6 +124,23 @@ terapeutas y sus horas/roles se cargan aparte.
   (flotante abajo-derecha, sondeo cada 60s) montado en `DashboardShell` → visible
   en todo el dashboard.
 
+### 7. Incentivos ESCRITOS a mano (2026-07-24)
+
+- Modelo `IncentiveItem` (tabla `incentive_items`, `migrate-incentive-items.js`,
+  módulo `clinica`): concepto concreto ("Cambiar la bombilla del centro") por
+  terapeuta y mes, con `valueType` 'fixed' (€) o 'percent' (% del SUELDO MENSUAL
+  de la ficha de Equipo). `resolvedAmount` = FOTO del importe al crear/editar
+  (si el sueldo cambia después, los items ya escritos no bailan); `salaryBase`
+  guarda la base usada. Percent sin sueldo configurado → 422 con aviso.
+- API `GET/POST /api/clinica/incentive-items` + `PATCH/DELETE .../[id]`
+  (SOLO admin, auditado). El POST garantiza la fila de PerformanceMetric del
+  periodo (findOrCreate) para que la persona salga en la propuesta sin evaluar.
+- Integración: `serializeRankingRow` acepta `extras` → expone `extrasIncentive`
+  y `totalProposed` (tramos + escritos). `approve`/`approve-all` aprueban ese
+  TOTAL. UI: sección "Incentivos escritos" en `/clinica/direccion`
+  (`IncentiveItemsEditor.jsx`) + columnas Por puntuación / Escritos / Propuesto
+  en la tabla de propuesta.
+
 ### Pendiente del programa
 
 Editar coordinaciones + "próxima fecha" estructurada, y organización documental

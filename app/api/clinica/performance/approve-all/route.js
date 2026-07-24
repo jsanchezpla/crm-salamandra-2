@@ -41,10 +41,23 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   }
 
   const tiers = tiersFromTenant(ctx.tenant);
+  // Incentivos ESCRITOS del periodo: suman al importe aprobado de cada una.
+  const { IncentiveItem } = ctx.tenantModels;
+  const itemRows = await IncentiveItem.findAll({
+    where: { periodYear: year, periodMonth: month },
+    attributes: ["therapistId", "resolvedAmount"],
+    raw: true,
+  });
+  const extrasByTherapist = {};
+  for (const r of itemRows) {
+    extrasByTherapist[r.therapistId] = (extrasByTherapist[r.therapistId] ?? 0) + (Number(r.resolvedAmount) || 0);
+  }
   const pending = await PerformanceMetric.findAll({ where: { periodYear: year, periodMonth: month, approvedIncentive: null } });
   const now = new Date();
   for (const m of pending) {
-    await m.update({ approvedIncentive: proposeIncentive(m.totalScore, tiers), approvedById, approvedAt: now });
+    const extras = extrasByTherapist[m.therapistId] ?? 0;
+    const total = Math.round((proposeIncentive(m.totalScore, tiers) + extras) * 100) / 100;
+    await m.update({ approvedIncentive: total, approvedById, approvedAt: now });
   }
   await logClinicaAudit({
     tenantId: ctx.tenant.id,

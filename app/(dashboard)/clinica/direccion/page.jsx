@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import PreviewBanner from "../_components/PreviewBanner.jsx";
 import IncentiveTiersEditor from "../_components/IncentiveTiersEditor.jsx";
+import IncentiveItemsEditor from "../_components/IncentiveItemsEditor.jsx";
 import PerformanceEditor from "../_components/PerformanceEditor.jsx";
 import { PERFORMANCE_AREAS, scoreToSemaforo } from "@/lib/clinica/performanceAreas.js";
 
@@ -329,6 +330,9 @@ export default function DireccionPage() {
       {/* Configuración de tramos de incentivo */}
       <IncentiveTiersEditor onSaved={load} />
 
+      {/* Incentivos escritos a mano (conceptos con € o % del sueldo) */}
+      <IncentiveItemsEditor period={defaultPeriod} onChanged={load} />
+
       {/* Propuesta incentivos */}
       <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
         <div className="px-4 lg:px-5 py-3 flex items-center justify-between border-b border-neutral-100">
@@ -345,6 +349,8 @@ export default function DireccionPage() {
           <thead className="bg-neutral-50/50">
             <tr className="text-left text-[10px] uppercase tracking-wider text-neutral-400">
               <th className="px-4 py-2 font-medium">Terapeuta</th>
+              <th className="px-4 py-2 font-medium tabular text-right">Por puntuación</th>
+              <th className="px-4 py-2 font-medium tabular text-right">Escritos</th>
               <th className="px-4 py-2 font-medium tabular text-right">Propuesto</th>
               <th className="px-4 py-2 font-medium tabular text-right">Aprobado</th>
               <th className="px-4 py-2 font-medium text-right">Acciones</th>
@@ -354,7 +360,9 @@ export default function DireccionPage() {
             {ranking.map((r) => (
               <tr key={r.id} className="border-t border-neutral-100">
                 <td className="px-4 py-3 text-[var(--ink-900)]">{r.therapist?.name ?? "—"}</td>
-                <td className="px-4 py-3 text-right tabular font-medium">{r.proposedIncentive} €</td>
+                <td className="px-4 py-3 text-right tabular text-neutral-600">{r.proposedIncentive} €</td>
+                <td className="px-4 py-3 text-right tabular text-neutral-600">{r.extrasIncentive ? `${r.extrasIncentive} €` : <span className="text-neutral-300">—</span>}</td>
+                <td className="px-4 py-3 text-right tabular font-medium">{r.totalProposed ?? r.proposedIncentive} €</td>
                 <td className="px-4 py-3 text-right tabular">
                   {r.approved ? <span className="text-emerald-700 font-medium">{r.approvedIncentive} €</span> : <span className="text-neutral-300">—</span>}
                 </td>
@@ -364,7 +372,7 @@ export default function DireccionPage() {
                   ) : (
                     <>
                       <button disabled={busy} onClick={() => patch(r.id, { action: "approve" })} className="text-[11px] text-emerald-700 hover:underline font-medium disabled:opacity-50">Aprobar</button>
-                      <button disabled={busy} onClick={() => setAdjust({ id: r.id, name: r.therapist?.name, value: String(r.proposedIncentive ?? 0) })} className="text-[11px] text-neutral-500 hover:underline disabled:opacity-50">Ajustar</button>
+                      <button disabled={busy} onClick={() => setAdjust({ id: r.id, name: r.therapist?.name, value: String(r.totalProposed ?? r.proposedIncentive ?? 0) })} className="text-[11px] text-neutral-500 hover:underline disabled:opacity-50">Ajustar</button>
                     </>
                   )}
                 </td>
@@ -373,7 +381,7 @@ export default function DireccionPage() {
           </tbody>
         </table>
         <div className="px-4 lg:px-5 py-3 border-t border-neutral-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-neutral-50/40">
-          <span className="text-[11px] text-neutral-500">Las propuestas salen de los tramos configurados arriba, según la puntuación total del periodo.</span>
+          <span className="text-[11px] text-neutral-500">Propuesto = tramos según puntuación + incentivos escritos del mes. Aprobar usa ese total; Ajustar permite cualquier importe.</span>
           <button disabled={busy || pendingCount === 0} onClick={approveAll} className="text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 transition-opacity disabled:opacity-50" style={{ background: "var(--color-primary, #1B3A2D)" }}>
             {busy ? "Procesando…" : pendingCount === 0 ? "Todo aprobado" : `Aprobar todos (${pendingCount})`}
           </button>
