@@ -45,6 +45,68 @@ bloqueado en producción). **Ya no queda ninguna pantalla en maqueta.**
   ya no aumenta-only). Seed `scripts/seed-clinica-demo.js`.
 - IA / audio / PDF / export siguen pendientes (fases posteriores).
 
+## Programa de Excelencia (2026-07-24)
+
+Cuatro bloques nuevos del "Programa de Excelencia" de Aumenta. Todo gated por
+`clinica`/`pacientes`, así que se propaga a todos los tenants con el módulo
+(Aumenta reina + demo). **Sin personas dadas de alta**: la maquinaria está, las
+terapeutas y sus horas/roles se cargan aparte.
+
+### 1. Incentivos REALES (antes eran dummy)
+
+- `lib/clinica/incentives.js`: `computeTotalScore` (media ponderada de las áreas
+  con los pesos de `performanceAreas.js`), `proposeIncentive` (tramos → €),
+  `normalizeTiers`/`tiersFromTenant`.
+- **Tramos configurables** por tenant en `tenant.settings.clinica.incentiveTiers`
+  (JSONB, sin migración). API `GET/PUT /api/clinica/performance/incentive-tiers`
+  (PUT solo admin, invalida caché). Default en `DEFAULT_INCENTIVE_TIERS`.
+- La propuesta se deriva **en vivo** de `totalScore` + tramos en los serializers
+  (`serializePerformance`/`serializeRankingRow` aceptan `tiers`); el campo
+  `proposed_incentive` almacenado pasa a ser caché. `approve`/`approve-all` usan
+  la propuesta viva, no el valor guardado.
+- **Editor de evaluación**: `POST /api/clinica/performance` (upsert por
+  terapeuta+periodo; calcula total y propuesta al guardar). UI:
+  `PerformanceEditor.jsx` (áreas + complementos + notas, vista previa en vivo) y
+  `IncentiveTiersEditor.jsx`, ambos en `/clinica/direccion`.
+
+### 2. Productividad
+
+- `lib/clinica/productivity.js`: `workingDaysInMonth`, `computeProductivity`
+  (% horas directas / disponibles), `occupationFromPct`.
+- Horas directas = suma de `duration` de las **citas** (`bookings`
+  confirmed/completed) del profesional en el mes. Horas disponibles =
+  `team_members.weekly_direct_hours` ÷ 5 × días laborables (nueva columna,
+  `migrate-team-weekly-hours.js`, módulo `team`). El "-5h/semana" de ciertos
+  roles = un número menor, sin hardcodear a nadie.
+- API `GET /api/clinica/productividad` + `PUT /api/clinica/productividad/hours`.
+  UI `/clinica/productividad`. Conecta con incentivos: botón "traer ocupación" en
+  el editor de evaluación.
+
+### 3. Incidencias
+
+- Modelo `Incidencia` (tabla `incidencias`, `migrate-incidencias-module.js`,
+  módulo `clinica`). Categorías + subcategorías, responsable (`assignedToId`),
+  estados Pendiente/En proceso/Resuelta, prioridad, comentarios (JSONB), paciente
+  y cliente-foto opcionales. Taxonomía/serializer en `lib/clinica/incidencias.js`.
+- API `GET/POST /api/clinica/incidencias` + `GET/PATCH/DELETE
+  /api/clinica/incidencias/[id]` (crear/comentar/cambiar estado por cualquier
+  usuario del módulo; borrar solo admin). UI `/clinica/incidencias` +
+  `IncidenciaModal.jsx`. Sin auditoría a master (pueden citar datos clínicos).
+
+### 4. Bandeja de trabajo
+
+- API `GET /api/clinica/bandeja` (resuelve el TeamMember logueado; admin puede ver
+  otra con `?therapistId=`). Agrega "lo mío pendiente": informes sin entregar
+  (vencidos marcados), incidencias asignadas sin resolver y citas de hoy. UI
+  `/clinica/bandeja`.
+
+### Pendiente del programa (no en este bloque)
+
+Dashboard de Dirección ampliado con productividad/incidencias (punto 6) y alertas
+automáticas persistidas + campanita global usando el modelo `Notification`
+durmiente (punto 7). También: editar coordinaciones + "próxima fecha"
+estructurada, y organización documental por trimestre.
+
 > Las secciones "Lo que NO hace" y "Backlog" de abajo describen el Sprint 1 visual
 > original; parte ya está cubierta por Fase 1.
 

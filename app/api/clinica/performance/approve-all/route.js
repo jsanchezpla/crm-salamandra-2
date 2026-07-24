@@ -1,6 +1,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, forbidden } from "../../../../../lib/utils/apiResponse.js";
 import { logClinicaAudit } from "../../../../../lib/clinica/audit.js";
+import { proposeIncentive, tiersFromTenant } from "../../../../../lib/clinica/incentives.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 function gate(ctx) {
@@ -39,10 +40,11 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     approvedById = tm?.id ?? null;
   }
 
+  const tiers = tiersFromTenant(ctx.tenant);
   const pending = await PerformanceMetric.findAll({ where: { periodYear: year, periodMonth: month, approvedIncentive: null } });
   const now = new Date();
   for (const m of pending) {
-    await m.update({ approvedIncentive: m.proposedIncentive ?? 0, approvedById, approvedAt: now });
+    await m.update({ approvedIncentive: proposeIncentive(m.totalScore, tiers), approvedById, approvedAt: now });
   }
   await logClinicaAudit({
     tenantId: ctx.tenant.id,

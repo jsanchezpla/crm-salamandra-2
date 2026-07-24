@@ -200,6 +200,9 @@ const navigation = [
           { key: "clinica-informes", label: "Informes", href: "/clinica/informes" },
           { key: "clinica-desempeno", label: "Mi desempeño", href: "/clinica/mi-desempeno" },
           { key: "clinica-direccion", label: "Dirección", href: "/clinica/direccion" },
+          { key: "clinica-productividad", label: "Productividad", href: "/clinica/productividad" },
+          { key: "clinica-incidencias", label: "Incidencias", href: "/clinica/incidencias" },
+          { key: "clinica-bandeja", label: "Bandeja de trabajo", href: "/clinica/bandeja" },
         ],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">

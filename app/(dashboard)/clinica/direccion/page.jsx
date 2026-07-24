@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import PreviewBanner from "../_components/PreviewBanner.jsx";
+import IncentiveTiersEditor from "../_components/IncentiveTiersEditor.jsx";
+import PerformanceEditor from "../_components/PerformanceEditor.jsx";
 import { PERFORMANCE_AREAS, scoreToSemaforo } from "@/lib/clinica/performanceAreas.js";
 
 const SEMAFORO = {
@@ -54,6 +56,7 @@ export default function DireccionPage() {
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [adjust, setAdjust] = useState(null); // { id, name, value }
+  const [editor, setEditor] = useState(null); // null | { initial } (abre el editor de evaluación)
 
   const load = () => {
     setLoading(true);
@@ -89,6 +92,12 @@ export default function DireccionPage() {
   const alerts = data?.alerts ?? [];
   const totalProposed = data?.totalProposed ?? 0;
   const pendingCount = ranking.filter((r) => !r.approved).length;
+  const therapists = data?.therapists ?? [];
+  const tiers = data?.tiers ?? [];
+  // Periodo por defecto para una evaluación nueva: el del panel, o el mes actual.
+  const now = new Date();
+  const defaultPeriod = data?.period?.value ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const openEditRow = (r) => setEditor({ initial: { therapistId: r.therapistId, therapistName: r.therapist?.name, areaScores: r.areas, complements: r.complements, notes: r.notes } });
 
   const KPI_CARDS = [
     { label: "Equipo activo", value: loading ? "—" : (kpis.teamActive ?? 0), sub: "Terapeutas" },
@@ -129,7 +138,14 @@ export default function DireccionPage() {
       <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
         <div className="px-4 lg:px-5 py-3 flex items-center justify-between border-b border-neutral-100">
           <h2 className="eyebrow">Ranking del equipo</h2>
-          <span className="text-[10px] text-neutral-400">Ordenado por puntuación</span>
+          <button
+            onClick={() => setEditor({ initial: null })}
+            className="inline-flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg text-white hover:opacity-90 transition-opacity"
+            style={{ background: "var(--color-primary, #1B3A2D)" }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+            Nueva evaluación
+          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
@@ -169,7 +185,8 @@ export default function DireccionPage() {
                     <td className="px-4 py-3"><SemaforoMini areas={r.areas} /></td>
                     <td className="px-4 py-3 text-[11px] text-neutral-600">{r.complementsLabel}</td>
                     <td className="px-4 py-3 text-right tabular text-[var(--ink-900)] font-medium">{r.proposedIncentive} €</td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right whitespace-nowrap space-x-2">
+                      <button onClick={() => openEditRow(r)} className="text-[11px] text-neutral-500 hover:underline">Editar</button>
                       <Link href={`/clinica/mi-desempeno?therapistId=${r.therapistId}`} className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">Ver</Link>
                     </td>
                   </tr>
@@ -228,6 +245,9 @@ export default function DireccionPage() {
         </div>
       </div>
 
+      {/* Configuración de tramos de incentivo */}
+      <IncentiveTiersEditor onSaved={load} />
+
       {/* Propuesta incentivos */}
       <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
         <div className="px-4 lg:px-5 py-3 flex items-center justify-between border-b border-neutral-100">
@@ -272,7 +292,7 @@ export default function DireccionPage() {
           </tbody>
         </table>
         <div className="px-4 lg:px-5 py-3 border-t border-neutral-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-neutral-50/40">
-          <span className="text-[11px] text-neutral-500">Las propuestas se basan en puntuación total y complementos del periodo.</span>
+          <span className="text-[11px] text-neutral-500">Las propuestas salen de los tramos configurados arriba, según la puntuación total del periodo.</span>
           <button disabled={busy || pendingCount === 0} onClick={approveAll} className="text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 transition-opacity disabled:opacity-50" style={{ background: "var(--color-primary, #1B3A2D)" }}>
             {busy ? "Procesando…" : pendingCount === 0 ? "Todo aprobado" : `Aprobar todos (${pendingCount})`}
           </button>
@@ -295,6 +315,18 @@ export default function DireccionPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Editor de evaluación (nueva / editar) */}
+      {editor && (
+        <PerformanceEditor
+          therapists={therapists}
+          defaultPeriod={defaultPeriod}
+          tiers={tiers}
+          initial={editor.initial}
+          onClose={() => setEditor(null)}
+          onSaved={() => { setEditor(null); load(); }}
+        />
       )}
     </div>
   );

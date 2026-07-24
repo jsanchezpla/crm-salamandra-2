@@ -2,6 +2,7 @@ import { Op, fn, col } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, forbidden } from "../../../../../lib/utils/apiResponse.js";
 import { serializeRankingRow, monthShort } from "../../../../../lib/clinica/serialize.js";
+import { tiersFromTenant } from "../../../../../lib/clinica/incentives.js";
 
 function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
@@ -14,6 +15,13 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
   const { PerformanceMetric, TeamMember, ClinicalReport } = ctx.tenantModels;
   const sp = new URL(request.url).searchParams;
+  const tiers = tiersFromTenant(ctx.tenant);
+
+  // Lista de terapeutas activos (para el editor de evaluación: permite evaluar
+  // también a quien aún no tiene métrica en el periodo).
+  const therapists = (
+    await TeamMember.findAll({ where: { status: "active" }, attributes: ["id", "displayName"], order: [["displayName", "ASC"]] })
+  ).map((t) => ({ id: t.id, name: t.displayName }));
 
   let year;
   let month;
@@ -22,7 +30,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     [year, month] = period.split("-").map(Number);
   } else {
     const latest = await PerformanceMetric.findOne({ order: [["periodYear", "DESC"], ["periodMonth", "DESC"]], attributes: ["periodYear", "periodMonth"], raw: true });
-    if (!latest) return ok({ period: null, ranking: [], kpis: {}, alerts: [], history: [], totalProposed: 0, totalApproved: 0, periods: [] });
+    if (!latest) return ok({ period: null, ranking: [], kpis: {}, alerts: [], history: [], totalProposed: 0, totalApproved: 0, periods: [], therapists, tiers });
     year = latest.periodYear;
     month = latest.periodMonth;
   }
@@ -32,7 +40,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     include: [{ model: TeamMember, as: "therapist", attributes: ["id", "displayName", "position", "avatarColor"] }],
     order: [["totalScore", "DESC"]],
   });
-  const ranking = metrics.map((m) => serializeRankingRow(m, { therapist: m.therapist }));
+  const ranking = metrics.map((m) => serializeRankingRow(m, { therapist: m.therapist, tiers }));
   const totalProposed = ranking.reduce((s, r) => s + (r.proposedIncentive ?? 0), 0);
   const totalApproved = ranking.reduce((s, r) => s + (r.approvedIncentive ?? 0), 0);
 
@@ -102,5 +110,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     trend,
     totalProposed,
     totalApproved,
+    therapists,
+    tiers,
   });
 });

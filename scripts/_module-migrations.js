@@ -102,6 +102,7 @@ export const MODULES = {
     "migrate-patients-care-type",
     "migrate-patients-specialties",
     "migrate-documents-patient-link",
+    "migrate-incidencias-module",
   ],
 
   team: [
@@ -110,6 +111,7 @@ export const MODULES = {
     "migrate-team-modules-salary",
     "migrate-team-members-avatar-color",
     "migrate-team-specialties",
+    "migrate-team-weekly-hours",
   ],
 
   billing: [

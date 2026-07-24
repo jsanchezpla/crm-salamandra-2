@@ -2,6 +2,7 @@ import { fn, col } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, forbidden } from "../../../../../lib/utils/apiResponse.js";
 import { serializePerformance, serializeTherapist } from "../../../../../lib/clinica/serialize.js";
+import { tiersFromTenant } from "../../../../../lib/clinica/incentives.js";
 
 function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
@@ -60,7 +61,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   }
 
   return ok({
-    metric: metric ? serializePerformance(metric, { therapist, history, teamAverage }) : null,
+    metric: metric ? serializePerformance(metric, { therapist, history, teamAverage, tiers: tiersFromTenant(ctx.tenant) }) : null,
     therapist: therapist ? serializeTherapist(therapist) : null,
     therapists,
   });
