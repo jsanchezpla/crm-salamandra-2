@@ -69,19 +69,25 @@ export default function PerformanceEditor({ therapists = [], defaultPeriod, tier
     if (!therapistId) { setErr("Elige un terapeuta."); return; }
     setBusy(true);
     try {
+      // En ALTA ("Nueva evaluación"), los campos vacíos se OMITEN del body: si
+      // ese terapeuta+mes ya tenía evaluación, el backend conserva lo guardado
+      // (merge) en vez de machacarlo con nulls. En EDICIÓN el formulario va
+      // precargado, así que vaciar un campo es borrado intencional (se envía null).
       const areaScores = {};
-      for (const a of PERFORMANCE_AREAS) areaScores[a.key] = scores[a.key] === "" ? null : Number(scores[a.key]);
-      const body = {
-        therapistId,
-        period,
-        areaScores,
-        complements: {
-          occupation: occupation === "" ? null : Number(occupation),
-          seniority: seniority === "" ? null : Number(seniority),
-          attendance,
-        },
-        notes: notes.trim() || null,
-      };
+      for (const a of PERFORMANCE_AREAS) {
+        const v = scores[a.key];
+        if (v === "") {
+          if (isEdit) areaScores[a.key] = null;
+        } else {
+          areaScores[a.key] = Number(v);
+        }
+      }
+      const complements = {};
+      if (occupation !== "" || isEdit) complements.occupation = occupation === "" ? null : Number(occupation);
+      if (seniority !== "" || isEdit) complements.seniority = seniority === "" ? null : Number(seniority);
+      if (attendance || isEdit) complements.attendance = attendance;
+      const body = { therapistId, period, areaScores, complements };
+      if (notes.trim() || isEdit) body.notes = notes.trim() || null;
       const r = await fetch("/api/clinica/performance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

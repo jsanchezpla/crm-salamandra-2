@@ -30,8 +30,11 @@ export const PUT = withTenant(async (request, _rc, ctx) => {
   if (!hours || typeof hours !== "object") return error("Falta 'hours' (mapa terapeuta → horas)");
 
   const { TeamMember } = ctx.tenantModels;
-  const updated = [];
 
+  // FASE 1 — validar TODO antes de escribir NADA: si una entrada es inválida se
+  // devuelve 400 sin haber tocado la BD (antes se guardaban las anteriores del
+  // bucle y encima sin auditoría).
+  const parsed = [];
   for (const [id, raw] of Object.entries(hours)) {
     if (!UUID_RE.test(id)) return error(`id de terapeuta inválido: ${id}`);
     let value;
@@ -40,13 +43,21 @@ export const PUT = withTenant(async (request, _rc, ctx) => {
       value = Math.round(Number(raw));
       if (!Number.isFinite(value) || value < 0 || value > 80) return error("Las horas deben ir entre 0 y 80");
     }
-    const m = await TeamMember.findByPk(id);
-    if (!m) continue;
-    if ((m.weeklyDirectHours ?? null) !== value) {
-      await m.update({ weeklyDirectHours: value });
-      updated.push({ id, weeklyDirectHours: value });
-    }
+    parsed.push({ id, value });
   }
+
+  // FASE 2 — aplicar en transacción (todo o nada).
+  const updated = [];
+  await ctx.tenantSequelize.transaction(async (t) => {
+    for (const { id, value } of parsed) {
+      const m = await TeamMember.findByPk(id, { transaction: t });
+      if (!m) continue;
+      if ((m.weeklyDirectHours ?? null) !== value) {
+        await m.update({ weeklyDirectHours: value }, { transaction: t });
+        updated.push({ id, weeklyDirectHours: value });
+      }
+    }
+  });
 
   await logClinicaAudit({
     tenantId: ctx.tenant.id,

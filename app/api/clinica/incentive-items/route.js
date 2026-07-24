@@ -3,6 +3,7 @@ import { ok, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { serializeIncentiveItem, resolveItemAmount } from "../../../../lib/clinica/incentiveItems.js";
 import { logClinicaAudit } from "../../../../lib/clinica/audit.js";
+import { madridYearMonth } from "../../../../lib/utils/madridDate.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
@@ -11,8 +12,8 @@ function gate(ctx) {
 }
 
 function parsePeriod(raw) {
-  const now = new Date();
-  if (!raw) return { year: now.getFullYear(), month: now.getMonth() + 1 };
+  // Mes por defecto: el actual en hora española (el servidor corre en UTC).
+  if (!raw) return madridYearMonth();
   const [year, month] = String(raw).split("-").map(Number);
   if (!Number.isInteger(year) || year < 2020 || year > 2100 || !Number.isInteger(month) || month < 1 || month > 12) return null;
   return { year, month };

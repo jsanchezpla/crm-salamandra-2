@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
 import PreviewBanner from "../_components/PreviewBanner.jsx";
@@ -41,13 +41,19 @@ export default function ProductividadPage() {
     return opts;
   }, []);
 
+  // Secuencia de peticiones: al cambiar rápido de mes, una respuesta antigua
+  // que llegue tarde no debe pisar la del mes seleccionado (ni machacar las
+  // horas que el admin esté editando).
+  const seq = useRef(0);
   const load = () => {
+    const mySeq = ++seq.current;
     setLoading(true);
     setErrorMsg(null);
     const qs = period ? `?period=${period}` : "";
     fetch(`/api/clinica/productividad${qs}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
+        if (mySeq !== seq.current) return; // respuesta obsoleta
         if (j.ok) {
           setData(j.data);
           const init = {};
@@ -56,8 +62,8 @@ export default function ProductividadPage() {
           setMsg(null);
         } else setErrorMsg(j.error);
       })
-      .catch((e) => setErrorMsg(e.message))
-      .finally(() => setLoading(false));
+      .catch((e) => { if (mySeq === seq.current) setErrorMsg(e.message); })
+      .finally(() => { if (mySeq === seq.current) setLoading(false); });
   };
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [period]);
 

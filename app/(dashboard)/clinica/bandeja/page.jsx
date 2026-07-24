@@ -34,13 +34,17 @@ export default function BandejaPage() {
   const [errorMsg, setErrorMsg] = useState(null);
 
   useEffect(() => {
+    // `cancelled` en el cleanup: al cambiar de terapeuta rápido, la respuesta
+    // vieja no debe pisar a la nueva si llega más tarde.
+    let cancelled = false;
     setLoading(true); setErrorMsg(null);
     const qs = therapistId ? `?therapistId=${therapistId}` : "";
     fetch(`/api/clinica/bandeja${qs}`, { cache: "no-store" })
       .then((r) => r.json())
-      .then((j) => { if (j.ok) setData(j.data); else setErrorMsg(j.error); })
-      .catch((e) => setErrorMsg(e.message))
-      .finally(() => setLoading(false));
+      .then((j) => { if (!cancelled) { if (j.ok) setData(j.data); else setErrorMsg(j.error); } })
+      .catch((e) => { if (!cancelled) setErrorMsg(e.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [therapistId]);
 
   const c = data?.counts ?? {};

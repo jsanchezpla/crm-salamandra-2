@@ -42,6 +42,7 @@ const WIPE_ORDER = [
   // Clínica (hijos de patients/team_members)
   "notifications",
   "incidencias",
+  "incentive_items",
   "performance_metrics",
   "clinical_reports",
   "clinic_sessions",
@@ -131,6 +132,25 @@ async function main() {
   const [[tenant]] = await s.query(`SELECT id FROM master.tenants WHERE slug = 'aumenta' AND status = 'active'`);
   if (!tenant) {
     process.stderr.write("✗ Tenant 'aumenta' no existe o no está activo. Nada que hacer.\n");
+    await s.close();
+    process.exit(1);
+  }
+
+  // CERROJO: este script era del ARRANQUE (2026-07-24), cuando todo eran datos
+  // de ejemplo. Si ya existen los logins del equipo real (nombre_aumenta),
+  // Aumenta está EN USO y volver a ejecutarlo arrasaría datos reales (equipo,
+  // pacientes, citas…). Se niega incluso con --confirm; solo se puede forzar
+  // con FORCE_RESET_AUMENTA=1, a conciencia.
+  const [[{ n: realUsers }]] = await s.query(
+    `SELECT count(*)::int AS n FROM master.users u
+      WHERE u.tenant_id = '${tenant.id}' AND u.email LIKE '%\\_aumenta' ESCAPE '\\'`
+  );
+  if (realUsers > 0 && process.env.FORCE_RESET_AUMENTA !== "1") {
+    process.stderr.write(
+      `✗ CERROJO: hay ${realUsers} usuarios del equipo real (nombre_aumenta) — Aumenta ya está en uso real.\n` +
+      `  Este script era del arranque; re-ejecutarlo borraría datos REALES.\n` +
+      `  Si de verdad quieres resetear, exporta FORCE_RESET_AUMENTA=1.\n`
+    );
     await s.close();
     process.exit(1);
   }

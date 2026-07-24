@@ -120,21 +120,29 @@ async function main() {
       userId = user.id;
     }
 
-    // 2) Ficha de equipo.
-    let tm = await TeamMember.findOne({ where: { displayName: person.name } });
+    // 2) Ficha de equipo. Se busca PRIMERO por el vínculo estable (userId): el
+    // displayName es editable en el CRM y, como team_members.user_id es UNIQUE,
+    // un renombre + re-ejecución intentaría crear una ficha duplicada y
+    // reventaría a mitad. Solo sin usuario (Dirección) se busca por nombre.
+    let tm = null;
+    if (userId) tm = await TeamMember.findOne({ where: { userId } });
+    if (!tm) tm = await TeamMember.findOne({ where: { displayName: person.name } });
+
     const fields = {
       displayName: person.name,
       position: person.position,
       department: person.department,
       specialties: person.specialties,
       status: "active",
-      userId,
     };
     if (tm) {
+      // userId solo se re-impone si esta persona TIENE usuario; para Dirección
+      // (userId null) no se toca: podría haberse vinculado a mano después.
+      if (userId) fields.userId = userId;
       await tm.update(fields);
       log(`· equipo ${person.name}: ya existía — actualizada`);
     } else {
-      tm = await TeamMember.create(fields);
+      tm = await TeamMember.create({ ...fields, userId });
       log(`✓ equipo ${person.name}: creada (${person.position} · ${person.department})`);
     }
 

@@ -104,7 +104,9 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
   };
 
   const addComment = async () => {
-    if (!comment.trim()) return;
+    // Guard de busy también aquí: el botón se deshabilita, pero Enter en el
+    // input llamaba directo y un doble Enter duplicaba el comentario.
+    if (busy || !comment.trim()) return;
     const okp = await patch({ comment: comment.trim() });
     if (okp) setComment("");
   };

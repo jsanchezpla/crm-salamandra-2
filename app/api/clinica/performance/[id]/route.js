@@ -16,7 +16,9 @@ function gate(ctx) {
 //   { approvedIncentive: <number> }     → importe ajustado
 export const PATCH = withTenant(async (request, rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
-  if (!ADMIN_ROLES.has(request.headers.get("x-user-role"))) return forbidden("Solo dirección puede aprobar incentivos");
+  // ctx.user.role viene FRESCO de master.users en cada request (no del JWT,
+  // que congela el rol 15 min): una degradación admin→user aplica al instante.
+  if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo dirección puede aprobar incentivos");
   const { id } = await rc.params;
   if (!UUID_RE.test(id)) return error("id inválido");
   const { PerformanceMetric, TeamMember } = ctx.tenantModels;

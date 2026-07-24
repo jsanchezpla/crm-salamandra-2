@@ -1,8 +1,11 @@
 import { fn, col } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
-import { ok, forbidden } from "../../../../../lib/utils/apiResponse.js";
+import { ok, error, forbidden } from "../../../../../lib/utils/apiResponse.js";
 import { serializePerformance, serializeTherapist } from "../../../../../lib/clinica/serialize.js";
 import { tiersFromTenant } from "../../../../../lib/clinica/incentives.js";
+import { parsePeriodString } from "../../../../../lib/clinica/period.js";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 function gate(ctx) {
@@ -19,6 +22,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const sp = new URL(request.url).searchParams;
 
   let therapistId = sp.get("therapistId");
+  if (therapistId && !UUID_RE.test(therapistId)) return error("therapistId inválido");
   if (!therapistId) {
     const userId = request.headers.get("x-user-id");
     if (userId) {
@@ -38,8 +42,9 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const period = sp.get("period");
   let metric;
   if (period) {
-    const [y, m] = period.split("-").map(Number);
-    metric = await PerformanceMetric.findOne({ where: { therapistId, periodYear: y, periodMonth: m } });
+    const parsed = parsePeriodString(period);
+    if (!parsed) return error("Periodo inválido (usa YYYY-MM)");
+    metric = await PerformanceMetric.findOne({ where: { therapistId, periodYear: parsed.year, periodMonth: parsed.month } });
   } else {
     metric = await PerformanceMetric.findOne({ where: { therapistId }, order: [["periodYear", "DESC"], ["periodMonth", "DESC"]] });
   }
@@ -62,8 +67,21 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     teamAverage = avg?.avg != null ? Math.round(Number(avg.avg)) : null;
   }
 
+  // Incentivos ESCRITOS del periodo: el propuesto de este scorecard debe ser el
+  // MISMO que en team/approve (tramos + escritos), no solo los tramos.
+  let extras = 0;
+  if (metric) {
+    const { IncentiveItem } = ctx.tenantModels;
+    const items = await IncentiveItem.findAll({
+      where: { therapistId, periodYear: metric.periodYear, periodMonth: metric.periodMonth },
+      attributes: ["resolvedAmount"],
+      raw: true,
+    });
+    extras = items.reduce((s, r) => s + (Number(r.resolvedAmount) || 0), 0);
+  }
+
   return ok({
-    metric: metric ? serializePerformance(metric, { therapist, history, teamAverage, tiers: tiersFromTenant(ctx.tenant) }) : null,
+    metric: metric ? serializePerformance(metric, { therapist, history, teamAverage, tiers: tiersFromTenant(ctx.tenant), extras }) : null,
     therapist: therapist ? serializeTherapist(therapist) : null,
     therapists,
   });

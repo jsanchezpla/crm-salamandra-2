@@ -1,7 +1,8 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
-import { ok, forbidden } from "../../../../../lib/utils/apiResponse.js";
+import { ok, error, forbidden } from "../../../../../lib/utils/apiResponse.js";
 import { logClinicaAudit } from "../../../../../lib/clinica/audit.js";
 import { proposeIncentive, tiersFromTenant } from "../../../../../lib/clinica/incentives.js";
+import { parsePeriodString } from "../../../../../lib/clinica/period.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 function gate(ctx) {
@@ -12,7 +13,8 @@ function gate(ctx) {
 // último). Solo dirección. approvedIncentive := proposedIncentive.
 export const POST = withTenant(async (request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
-  if (!ADMIN_ROLES.has(request.headers.get("x-user-role"))) return forbidden("Solo dirección puede aprobar incentivos");
+  // Rol fresco de BD (no el congelado del JWT): revocación de admin al instante.
+  if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo dirección puede aprobar incentivos");
   const { PerformanceMetric, TeamMember } = ctx.tenantModels;
 
   let body = {};
@@ -25,7 +27,9 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   let year;
   let month;
   if (body.period) {
-    [year, month] = String(body.period).split("-").map(Number);
+    const parsed = parsePeriodString(body.period);
+    if (!parsed) return error("Periodo inválido (usa YYYY-MM)");
+    ({ year, month } = parsed);
   } else {
     const latest = await PerformanceMetric.findOne({ order: [["periodYear", "DESC"], ["periodMonth", "DESC"]], attributes: ["periodYear", "periodMonth"], raw: true });
     if (!latest) return ok({ approved: 0 });

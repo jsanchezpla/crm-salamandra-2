@@ -35,11 +35,26 @@ export default function IncentiveTiersEditor({ onSaved }) {
   const removeRow = (i) => setRows((rs) => rs.filter((_, idx) => idx !== i));
 
   const save = async () => {
-    setBusy(true); setMsg(null);
+    setMsg(null);
+    // Filas a medias (solo puntuación o solo importe): avisar, no adivinar.
+    // OJO: Number("") === 0, así que sin este filtro una fila vacía se colaría
+    // como tramo {0 → 0 €} y machacaría el tramo base configurado.
+    const half = rows.some((r) => (String(r.from).trim() === "") !== (String(r.amount).trim() === ""));
+    if (half) {
+      setMsg("Hay tramos a medias: rellena puntuación E importe, o quita la fila.");
+      return;
+    }
+    setBusy(true);
     try {
       const tiers = rows
+        .filter((r) => String(r.from).trim() !== "" && String(r.amount).trim() !== "")
         .map((r) => ({ from: Number(r.from), amount: Number(r.amount) }))
         .filter((t) => Number.isFinite(t.from) && Number.isFinite(t.amount));
+      if (tiers.length === 0) {
+        setMsg("Define al menos un tramo completo.");
+        setBusy(false);
+        return;
+      }
       const r = await fetch("/api/clinica/performance/incentive-tiers", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

@@ -32,7 +32,9 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
 
   const changes = {};
   if (body.concept !== undefined) {
-    const c = String(body.concept).trim();
+    // `?? ""`: con concept null, String(null) daría el literal "null" y se
+    // guardaría como concepto. Igualado a la validación del POST.
+    const c = String(body.concept ?? "").trim();
     if (!c) return error("El concepto no puede quedar vacío");
     changes.concept = c.slice(0, 200);
   }

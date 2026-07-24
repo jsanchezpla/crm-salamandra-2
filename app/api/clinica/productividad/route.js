@@ -1,6 +1,7 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { aggregateTeamProductivity } from "../../../../lib/clinica/productivityQuery.js";
+import { madridYearMonth } from "../../../../lib/utils/madridDate.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 function gate(ctx) {
@@ -20,9 +21,8 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const { Booking, TeamMember } = ctx.tenantModels;
   const sp = new URL(request.url).searchParams;
 
-  const now = new Date();
-  let year = now.getFullYear();
-  let month = now.getMonth() + 1;
+  // Mes por defecto: el actual en hora española (el servidor corre en UTC).
+  let { year, month } = madridYearMonth();
   const period = sp.get("period");
   if (period) {
     [year, month] = period.split("-").map(Number);

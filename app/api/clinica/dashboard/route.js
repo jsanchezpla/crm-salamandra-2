@@ -3,6 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { aggregateTeamProductivity } from "../../../../lib/clinica/productivityQuery.js";
 import { serializeIncidencia, INCIDENCIA_CATEGORIES } from "../../../../lib/clinica/incidencias.js";
+import { madridYearMonth } from "../../../../lib/utils/madridDate.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 function gate(ctx) {
@@ -17,9 +18,8 @@ export const GET = withTenant(async (_request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
   if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo dirección puede ver el dashboard");
   const { Booking, TeamMember, Incidencia, Patient } = ctx.tenantModels;
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
+  // Mes actual en hora española (el servidor corre en UTC).
+  const { year, month } = madridYearMonth();
   const monthStart = new Date(year, month - 1, 1);
 
   // Productividad del mes en curso (totales).

@@ -98,6 +98,7 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
     }
   }
 
+  let commentEntry = null;
   if (body.comment !== undefined) {
     const text = String(body.comment).trim();
     if (text) {
@@ -107,15 +108,24 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
         const tm = await TeamMember.findByPk(tmId, { attributes: ["displayName"] });
         if (tm?.displayName) authorName = tm.displayName;
       }
-      const comments = Array.isArray(row.comments) ? [...row.comments] : [];
-      comments.push({ authorId: tmId || null, authorName, text: text.slice(0, 3000), at: new Date().toISOString() });
-      changes.comments = comments;
+      commentEntry = { authorId: tmId || null, authorName, text: text.slice(0, 3000), at: new Date().toISOString() };
     }
   }
 
-  if (Object.keys(changes).length === 0) return error("Nada que cambiar", 422);
+  if (Object.keys(changes).length === 0 && !commentEntry) return error("Nada que cambiar", 422);
 
-  await row.update(changes);
+  if (Object.keys(changes).length > 0) await row.update(changes);
+  if (commentEntry) {
+    // Append ATÓMICO en PostgreSQL: dos comentarios simultáneos se concatenan
+    // en vez de pisarse (leer-modificar-escribir perdería uno de los dos).
+    // ctx.slug está validado por el resolver ([a-z0-9_]) — sin inyección.
+    await ctx.tenantSequelize.query(
+      `UPDATE "crm_${ctx.slug}"."incidencias"
+          SET comments = comments || :entry::jsonb, updated_at = now()
+        WHERE id = :id`,
+      { replacements: { entry: JSON.stringify([commentEntry]), id } }
+    );
+  }
   const full = await Incidencia.findByPk(id, { include: INCLUDES(M) });
   return ok(serializeIncidencia(full));
 });

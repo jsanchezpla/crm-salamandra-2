@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
 import { resolveItemAmount } from "@/lib/clinica/incentiveItems.js";
 
 const fmtEUR = (n) => (n == null ? "—" : `${n} €`);
 const fmt = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short" }) : "");
+const MONTHS = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+// "2026-07" → "Julio 2026" (el mes al que se escriben los incentivos debe verse
+// SIEMPRE: el panel puede estar enseñando un periodo distinto del mes actual).
+function periodLabel(p) {
+  if (!p || !/^\d{4}-\d{2}$/.test(p)) return "";
+  const [y, m] = p.split("-").map(Number);
+  return `${MONTHS[m] ?? "?"} ${y}`;
+}
 
 /**
  * Incentivos ESCRITOS a mano (Dirección): conceptos concretos ("Cambiar la
@@ -26,14 +34,22 @@ export default function IncentiveItemsEditor({ period, onChanged }) {
   const [valueType, setValueType] = useState("fixed");
   const [value, setValue] = useState("");
 
+  // Secuencia de peticiones: una respuesta obsoleta (de un periodo anterior,
+  // p. ej. al montar con el mes actual y cambiar enseguida al del panel) no
+  // debe pisar a la vigente aunque llegue más tarde.
+  const seq = useRef(0);
   const load = () => {
+    const mySeq = ++seq.current;
     setLoading(true);
     const qs = period ? `?period=${period}` : "";
     fetch(`/api/clinica/incentive-items${qs}`, { cache: "no-store" })
       .then((r) => r.json())
-      .then((j) => { if (j.ok) setData(j.data); else setErr(j.error); })
-      .catch((e) => setErr(e.message))
-      .finally(() => setLoading(false));
+      .then((j) => {
+        if (mySeq !== seq.current) return; // respuesta obsoleta
+        if (j.ok) setData(j.data); else setErr(j.error);
+      })
+      .catch((e) => { if (mySeq === seq.current) setErr(e.message); })
+      .finally(() => { if (mySeq === seq.current) setLoading(false); });
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [period]);
@@ -111,7 +127,7 @@ export default function IncentiveItemsEditor({ period, onChanged }) {
     <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
       <div className="px-4 lg:px-5 py-3 flex items-center justify-between border-b border-neutral-100">
         <div>
-          <h2 className="eyebrow">Incentivos escritos</h2>
+          <h2 className="eyebrow">Incentivos escritos{periodLabel(period) ? ` · ${periodLabel(period)}` : ""}</h2>
           <p className="text-[11px] text-neutral-500 mt-0.5">
             Conceptos concretos que suman al incentivo del mes, en € fijos o % del sueldo.
           </p>

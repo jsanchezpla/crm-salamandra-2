@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
+import { madridToday, madridDayRange } from "../../../../lib/utils/madridDate.js";
 import { REPORT_TYPE_LABEL } from "../../../../lib/clinica/serialize.js";
 import { categoryLabel, statusLabel, priorityLabel, INCIDENCIA_STATUS } from "../../../../lib/clinica/incidencias.js";
 
@@ -37,8 +38,9 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const therapist = therapistId ? await TeamMember.findByPk(therapistId, { attributes: ["id", "displayName", "position", "avatarColor"] }) : null;
   if (!therapist) return ok({ therapist: null, reports: [], incidencias: [], citasToday: [], counts: { reports: 0, reportsOverdue: 0, incidencias: 0, citasToday: 0 } });
 
-  const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
+  // "Hoy" en hora ESPAÑOLA (el servidor corre en UTC; sin esto, entre las
+  // 00:00 y las 02:00 de España se calcularía el día anterior).
+  const todayStr = madridToday();
 
   // ── Informes pendientes (no entregados) ──
   const reportRows = await ClinicalReport.findAll({
@@ -87,9 +89,8 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     };
   });
 
-  // ── Citas de hoy ──
-  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  // ── Citas de hoy (día de Madrid, como instantes reales) ──
+  const { start: dayStart, end: dayEnd } = madridDayRange();
   const bookingRows = await Booking.findAll({
     where: {
       teamMemberId: therapistId,

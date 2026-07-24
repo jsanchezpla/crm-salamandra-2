@@ -1,6 +1,7 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
+import { madridToday } from "../../../../lib/utils/madridDate.js";
 import {
   serializeIncidencia,
   isValidCategory,
@@ -92,7 +93,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   if (!isValidCategory(body.category)) return error("Categoría inválida");
 
   const priority = isValidPriority(body.priority) ? body.priority : "medium";
-  const date = body.date && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : new Date().toISOString().slice(0, 10);
+  // Fecha por defecto: HOY en hora española (el servidor corre en UTC).
+  const date = body.date && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : madridToday();
 
   const patientId = body.patientId && UUID_RE.test(body.patientId) ? body.patientId : null;
   const assignedToId = body.assignedToId && UUID_RE.test(body.assignedToId) ? body.assignedToId : null;

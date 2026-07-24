@@ -5,9 +5,15 @@ import { useSearchParams } from "next/navigation";
 
 // Destino tras el login. Solo se acepta una ruta INTERNA ("/algo"): un
 // `next` con host propio ("//evil.com" o "https://…") sería un open redirect
-// que un atacante podría colar en un enlace de login.
+// que un atacante podría colar en un enlace de login. OJO: el parser de URLs
+// de los navegadores trata "\" como "/" y descarta tabs/CR/LF, así que
+// "/\evil.com" o "/%09/evil.com" también resolverían fuera del dominio — se
+// rechaza cualquier backslash o carácter de control antes de los demás checks.
 function safeNext(raw) {
-  if (typeof raw !== "string" || !raw.startsWith("/") || raw.startsWith("//")) return "/";
+  if (typeof raw !== "string") return "/";
+  // Backslash o caracteres de control (tab, CR, LF...): fuera.
+  if (raw.includes("\\") || /[\u0000-\u001f\u007f]/.test(raw)) return "/";
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/";
   if (raw.startsWith("/login")) return "/";
   return raw;
 }

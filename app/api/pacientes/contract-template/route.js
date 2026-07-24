@@ -49,8 +49,8 @@ export const GET = withTenant(async (_request, _rc, ctx) => {
 export const POST = withTenant(async (request, _rc, ctx) => {
   try {
     if (!gate(ctx)) return forbidden("Módulo Clínica/Pacientes no activo");
-    const userRole = request.headers.get("x-user-role") ?? "user";
-    if (!ADMIN_ROLES.has(userRole)) return forbidden("Solo admin puede fijar el contrato estándar");
+    // Rol fresco de BD (no el congelado del JWT): revocación de admin al instante.
+    if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo admin puede fijar el contrato estándar");
     const ownerUserId = request.headers.get("x-user-id");
     if (!ownerUserId) return error("No autorizado", 401);
     const { Document } = ctx.tenantModels;
