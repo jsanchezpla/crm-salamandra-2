@@ -57,12 +57,18 @@ export default function DireccionPage() {
   const [errorMsg, setErrorMsg] = useState(null);
   const [adjust, setAdjust] = useState(null); // { id, name, value }
   const [editor, setEditor] = useState(null); // null | { initial } (abre el editor de evaluación)
+  const [dash, setDash] = useState(null); // datos operativos (productividad + incidencias)
 
   const load = () => {
     setLoading(true);
-    fetch("/api/clinica/performance/team", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => { if (j.ok) setData(j.data); else setErrorMsg(j.error); })
+    Promise.all([
+      fetch("/api/clinica/performance/team", { cache: "no-store" }).then((r) => r.json()),
+      fetch("/api/clinica/dashboard", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ ok: false })),
+    ])
+      .then(([t, d]) => {
+        if (t.ok) setData(t.data); else setErrorMsg(t.error);
+        if (d.ok) setDash(d.data);
+      })
       .catch((e) => setErrorMsg(e.message))
       .finally(() => setLoading(false));
   };
@@ -133,6 +139,81 @@ export default function DireccionPage() {
           </div>
         ))}
       </div>
+
+      {/* Operativa del mes: productividad + incidencias */}
+      {dash && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Link href="/clinica/productividad" className="group bg-white border border-neutral-100 rounded-xl p-4 hover:border-[var(--color-primary,#1B3A2D)] transition-colors">
+              <div className="text-[10px] uppercase tracking-wider text-neutral-400">Productividad media</div>
+              <div className="font-display text-2xl text-[var(--ink-900)] mt-1 tabular">{dash.productividad?.teamPct != null ? `${dash.productividad.teamPct}%` : "N/D"}</div>
+              <div className="text-[11px] text-neutral-500 mt-0.5">{dash.productividad?.configuredCount ?? 0}/{dash.productividad?.memberCount ?? 0} con objetivo</div>
+            </Link>
+            <Link href="/clinica/incidencias" className="group bg-white border border-neutral-100 rounded-xl p-4 hover:border-[var(--color-primary,#1B3A2D)] transition-colors">
+              <div className="text-[10px] uppercase tracking-wider text-neutral-400">Incidencias abiertas</div>
+              <div className="font-display text-2xl text-[var(--ink-900)] mt-1 tabular">{dash.incidencias?.open ?? 0}</div>
+              <div className="text-[11px] text-neutral-500 mt-0.5">{dash.incidencias?.pending ?? 0} pendientes · {dash.incidencias?.inProgress ?? 0} en proceso</div>
+            </Link>
+            <div className="bg-white border border-neutral-100 rounded-xl p-4">
+              <div className="text-[10px] uppercase tracking-wider text-neutral-400">Urgentes</div>
+              <div className={`font-display text-2xl mt-1 tabular ${dash.incidencias?.urgent ? "text-red-600" : "text-[var(--ink-900)]"}`}>{dash.incidencias?.urgent ?? 0}</div>
+              <div className="text-[11px] text-neutral-500 mt-0.5">Prioridad alta abiertas</div>
+            </div>
+            <div className="bg-white border border-neutral-100 rounded-xl p-4">
+              <div className="text-[10px] uppercase tracking-wider text-neutral-400">Resueltas (mes)</div>
+              <div className="font-display text-2xl text-[var(--ink-900)] mt-1 tabular">{dash.incidencias?.resolvedMonth ?? 0}</div>
+              <div className="text-[11px] text-neutral-500 mt-0.5">Cerradas este mes</div>
+            </div>
+          </div>
+
+          {(dash.incidencias?.byCategory?.length > 0 || dash.incidencias?.recentOpen?.length > 0) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
+                <h2 className="eyebrow mb-3">Incidencias abiertas por categoría</h2>
+                {dash.incidencias.byCategory.length === 0 ? (
+                  <p className="text-[11px] text-neutral-400">Sin incidencias abiertas.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {dash.incidencias.byCategory.map((c) => {
+                      const max = dash.incidencias.byCategory[0]?.count || 1;
+                      return (
+                        <div key={c.key} className="flex items-center gap-2">
+                          <span className="text-[11px] text-neutral-600 w-40 shrink-0 truncate">{c.label}</span>
+                          <div className="flex-1 h-2 bg-neutral-100 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${(c.count / max) * 100}%`, background: "var(--color-primary, #1B3A2D)" }} />
+                          </div>
+                          <span className="text-[11px] tabular text-neutral-500 w-6 text-right">{c.count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="eyebrow">Incidencias recientes</h2>
+                  <Link href="/clinica/incidencias" className="text-[10px] text-[var(--color-primary,#1B3A2D)] hover:underline">Ver todas</Link>
+                </div>
+                {dash.incidencias.recentOpen.length === 0 ? (
+                  <p className="text-[11px] text-neutral-400">Sin incidencias abiertas.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {dash.incidencias.recentOpen.map((i) => (
+                      <li key={i.id} className="flex items-center gap-2 text-xs">
+                        <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${i.priority === "high" ? "bg-red-500" : i.priority === "medium" ? "bg-amber-400" : "bg-neutral-300"}`} />
+                        <span className="flex-1 min-w-0 truncate text-[var(--ink-900)]">{i.title}</span>
+                        <span className="shrink-0 text-[10px] text-neutral-400">{i.categoryLabel}</span>
+                        <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded-full ${i.statusLevel === "amber" ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"}`}>{i.statusLabel}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Ranking */}
       <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">

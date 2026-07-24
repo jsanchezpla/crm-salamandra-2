@@ -102,10 +102,11 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   });
   const citasToday = bookingRows.map((b) => {
     const j = b.toJSON();
-    const t = new Date(j.scheduledAt);
     return {
       id: j.id,
-      time: `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`,
+      // ISO crudo: la hora se formatea en el cliente (zona del navegador),
+      // no en el servidor (que puede estar en UTC).
+      scheduledAt: j.scheduledAt,
       clientName: j.clientName,
       patientName: patientName(j.patient),
       eventType: j.eventType?.name ?? null,

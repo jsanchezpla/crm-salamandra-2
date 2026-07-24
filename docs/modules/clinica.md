@@ -100,12 +100,36 @@ terapeutas y sus horas/roles se cargan aparte.
   (vencidos marcados), incidencias asignadas sin resolver y citas de hoy. UI
   `/clinica/bandeja`.
 
-### Pendiente del programa (no en este bloque)
+### 5. Dashboard de Dirección ampliado (punto 6)
 
-Dashboard de Dirección ampliado con productividad/incidencias (punto 6) y alertas
-automáticas persistidas + campanita global usando el modelo `Notification`
-durmiente (punto 7). También: editar coordinaciones + "próxima fecha"
-estructurada, y organización documental por trimestre.
+- `GET /api/clinica/dashboard`: totales de productividad del mes +
+  resumen de incidencias (abiertas/pendientes/en proceso, urgentes = prioridad
+  alta abiertas, resueltas del mes, por categoría, y las 5 más recientes).
+- La página `/clinica/direccion` añade la sección "Operativa del mes" con esas
+  tarjetas + barras por categoría + lista de incidencias recientes.
+- La agregación de productividad se factorizó a `lib/clinica/productivityQuery.js`
+  (`aggregateTeamProductivity`), compartida por `/productividad` y `/dashboard`.
+
+### 6. Alertas automáticas + campanita (punto 7)
+
+- Modelo `Notification` (antes durmiente) + tabla creada por
+  `migrate-notifications-table.js` (**CORE**, todos los schemas crm_*; índice
+  único parcial `(user_id, type, entity_id)` para deduplicar).
+- `lib/notifications/alerts.js`: `syncClinicaAlerts` recomputa al vuelo las
+  alertas del usuario (informe vencido, incidencia asignada Pendiente) y hace
+  upsert (crea las que faltan, borra las que ya no aplican, preserva "leído").
+  Sin job en background: se sincroniza al consultar la campanita.
+- API `GET /api/notifications` (sincroniza + lista + nº sin leer, tolerante a
+  fallos) y `POST /api/notifications/read`. Componente `NotificationBell.jsx`
+  (flotante abajo-derecha, sondeo cada 60s) montado en `DashboardShell` → visible
+  en todo el dashboard.
+
+### Pendiente del programa
+
+Editar coordinaciones + "próxima fecha" estructurada, y organización documental
+por trimestre. Nota: la productividad del **mes en curso** compara horas directas
+acumuladas contra las disponibles del mes COMPLETO (se llena según avanza el mes);
+para un mes cerrado es exacta.
 
 > Las secciones "Lo que NO hace" y "Backlog" de abajo describen el Sprint 1 visual
 > original; parte ya está cubierta por Fase 1.

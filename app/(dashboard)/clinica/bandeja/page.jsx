@@ -13,6 +13,7 @@ const STATUS_PILL = {
 };
 const PRIORITY_DOT = { high: "bg-red-500", medium: "bg-amber-400", low: "bg-neutral-300" };
 const fmt = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short" }) : "—");
+const fmtTime = (d) => (d ? new Date(d).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : "—");
 
 function Section({ title, count, children, empty }) {
   return (
@@ -136,7 +137,7 @@ export default function BandejaPage() {
             <ul className="divide-y divide-neutral-100">
               {citas.map((b) => (
                 <li key={b.id} className="px-4 lg:px-5 py-3 flex items-center gap-3">
-                  <span className="shrink-0 font-display text-sm text-[var(--ink-900)] tabular w-12">{b.time}</span>
+                  <span className="shrink-0 font-display text-sm text-[var(--ink-900)] tabular w-12">{fmtTime(b.scheduledAt)}</span>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-[var(--ink-900)] font-medium truncate">{b.patientName ?? b.clientName}</div>
                     <div className="text-[11px] text-neutral-400 truncate">{b.eventType ?? "Cita"} · {b.duration} min · {b.modality}</div>

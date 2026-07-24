@@ -60,6 +60,10 @@ export const CORE = [
   // Aditivas y decididas por existencia de tabla: no-op donde no aplican.
   "migrate-calendar-citas-fks",
   "migrate-patients-clients-phase1",
+  // Tabla notifications (transversal): la usa el sistema de alertas de Clínica,
+  // pero se crea en todos los schemas porque el modelo Notification está
+  // registrado para todos los tenants (evita 42703 si algún código la consulta).
+  "migrate-notifications-table",
 ];
 
 export const MODULES = {
