@@ -69,7 +69,7 @@ export default function NotificationBell() {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 lg:bottom-5 lg:right-5 z-40">
+    <div className="fixed z-[60] bottom-[1.375rem] right-[5.25rem]">
       {open && <div className="fixed inset-0 z-0" onClick={() => setOpen(false)} />}
 
       <button
