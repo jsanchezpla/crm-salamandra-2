@@ -114,6 +114,13 @@ export default function CitasModule() {
   const [eventTypes, setEventTypes] = useState([]);
   const [visibleEtIds, setVisibleEtIds] = useState(null); // null = todos
   const [openBooking, setOpenBooking] = useState(null); // booking abierto en modal detalle
+  // Panel "Proponer 3 horarios (IA)"
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [suggestScope, setSuggestScope] = useState("professional");
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestErr, setSuggestErr] = useState(null);
+  const [suggestNote, setSuggestNote] = useState(null);
   const [openCreate, setOpenCreate] = useState(false);
   const [createForm, setCreateForm] = useState(EMPTY_BOOKING_FORM);
   const [saving, setSaving] = useState(false);
@@ -234,6 +241,7 @@ export default function CitasModule() {
       setOpenBooking(j.data);
       setDetailNotes(j.data.notes ?? "");
       setDetailMeet(j.data.meetUrl ?? "");
+      setSuggestOpen(false); setSuggestions([]); // reset del panel de propuestas al abrir otra cita
       setFormError(null); // no arrastrar un error del drawer de creación / PATCH previo
     }
   }
@@ -264,6 +272,30 @@ export default function CitasModule() {
     }
   }
 
+  async function loadSuggestions(scope) {
+    if (!openBooking) return;
+    setSuggestOpen(true); setSuggestScope(scope); setSuggestLoading(true);
+    setSuggestErr(null); setSuggestions([]); setSuggestNote(null);
+    try {
+      const r = await fetch(`/api/citas/bookings/${openBooking.id}/suggest-slots`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudieron proponer horarios");
+      setSuggestions(j.data.suggestions || []);
+      setSuggestNote(j.data.note || null);
+    } catch (e) {
+      setSuggestErr(e.message);
+    } finally {
+      setSuggestLoading(false);
+    }
+  }
+  async function applySuggestion(s) {
+    const payload = { scheduledAt: s.datetime };
+    if (s.teamMemberId) payload.teamMemberId = s.teamMemberId;
+    const okp = await patchBooking(payload);
+    if (okp) { setSuggestOpen(false); setSuggestions([]); }
+  }
   async function markCompleted() { await patchBooking({ status: "completed" }); }
   async function markNoShow() { await patchBooking({ status: "no_show" }); }
   async function cancelBooking() {
@@ -812,6 +844,41 @@ export default function CitasModule() {
               </div>
             </div>
 
+            {suggestOpen && (
+              <div className="px-5 py-3 border-t border-neutral-100 bg-neutral-50/60">
+                <div className="flex items-center justify-between mb-2 gap-2">
+                  <div className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wide">🦎 Proponer horarios (IA)</div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => loadSuggestions("professional")} disabled={!openBooking.teamMemberId} title={!openBooking.teamMemberId ? "La cita no tiene profesional" : ""}
+                      className={`text-[11px] px-2 py-0.5 rounded-full border disabled:opacity-40 ${suggestScope === "professional" ? "border-transparent text-white" : "border-neutral-200 text-neutral-500 hover:bg-white"}`}
+                      style={suggestScope === "professional" ? { backgroundColor: "var(--color-primary,#1B3A2D)" } : undefined}>Este profesional</button>
+                    <button onClick={() => loadSuggestions("company")}
+                      className={`text-[11px] px-2 py-0.5 rounded-full border ${suggestScope === "company" ? "border-transparent text-white" : "border-neutral-200 text-neutral-500 hover:bg-white"}`}
+                      style={suggestScope === "company" ? { backgroundColor: "var(--color-primary,#1B3A2D)" } : undefined}>Todo el centro</button>
+                    <button onClick={() => setSuggestOpen(false)} className="text-neutral-400 hover:text-neutral-700 px-1" aria-label="Cerrar">✕</button>
+                  </div>
+                </div>
+                {suggestLoading ? (
+                  <p className="text-[12px] text-neutral-400 py-2">Buscando huecos…</p>
+                ) : suggestErr ? (
+                  <p className="text-[12px] text-rose-600 py-2">{suggestErr}</p>
+                ) : suggestions.length === 0 ? (
+                  <p className="text-[12px] text-neutral-400 py-2">{suggestNote || "Sin huecos que proponer."}</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {suggestions.map((s, i) => (
+                      <div key={i} className="bg-white border border-neutral-200 rounded-lg p-2.5 flex flex-col">
+                        <div className="text-[12px] font-medium text-neutral-800 capitalize">{s.label}</div>
+                        {s.teamMemberName && <div className="text-[11px] text-neutral-500">{s.teamMemberName}</div>}
+                        <div className="text-[10px] text-neutral-400 mt-1 flex-1 leading-snug">{s.reason}</div>
+                        <button onClick={() => applySuggestion(s)} disabled={saving} className="mt-2 text-[11px] font-medium px-2 py-1 rounded-md text-white disabled:opacity-50" style={{ backgroundColor: "var(--color-primary,#1B3A2D)" }}>Elegir esta</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="px-5 py-3 border-t border-neutral-100 flex flex-wrap gap-2 justify-between">
               <div className="flex flex-wrap gap-2">
                 {openBooking.status !== "completed" && (
@@ -841,6 +908,14 @@ export default function CitasModule() {
                     Cancelar cita
                   </button>
                 )}
+                <button
+                  onClick={() => loadSuggestions(openBooking.teamMemberId ? "professional" : "company")}
+                  disabled={saving || suggestLoading}
+                  className="text-[12px] px-3 py-1.5 rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+                  title="La IA propone 3 huecos para reprogramar esta cita"
+                >
+                  🦎 Proponer 3 horarios
+                </button>
               </div>
               <button
                 onClick={deleteBooking}
