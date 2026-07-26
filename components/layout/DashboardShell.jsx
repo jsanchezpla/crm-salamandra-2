@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Sidebar from "./Sidebar.jsx";
+import Salamandrobot from "../assistant/Salamandrobot.jsx";
 
 export default function DashboardShell({
   tenant,
@@ -109,6 +110,8 @@ export default function DashboardShell({
 
         <main className="flex-1 overflow-auto min-w-0 fade-in">{children}</main>
       </div>
+
+      <Salamandrobot />
     </div>
   );
 }
