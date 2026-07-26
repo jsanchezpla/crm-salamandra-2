@@ -92,6 +92,11 @@ const navigation = [
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         ),
+        // "Mi horario" = autoservicio del terapeuta (su horario + sus próximas
+        // citas). Visible para todos (no adminOnly): cada uno gestiona el suyo.
+        children: [
+          { key: "citas-mi-horario", label: "Mi horario", href: "/mi-horario" },
+        ],
       },
       {
         key: "nutricion",
