@@ -5,6 +5,7 @@ import { findBookingOverlap } from "../../../../../../lib/citas/booking.js";
 import { buildCandidates, chooseSlots } from "../../../../../../lib/citas/suggestSlots.js";
 import { getTenantAnthropicKey } from "../../../../../../lib/ai/anthropicKey.js";
 import { getTenantAnthropicModel } from "../../../../../../lib/ai/anthropicModel.js";
+import { resolveCurrentTeamMemberId } from "../../../../../../lib/team/currentTeamMember.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -15,19 +16,29 @@ export const POST = withTenant(async (request, { params }, ctx) => {
   try {
     if (!ctx.hasModule("citas")) return forbidden("Módulo citas no activo");
     const role = request.headers.get("x-user-role") ?? "user";
-    if (!ADMIN_ROLES.has(role)) return forbidden("Solo el centro (admin) puede proponer horarios");
+    const isAdmin = ADMIN_ROLES.has(role);
 
     const { id } = await params;
     const { Booking, EventType, TeamMember, TeamMemberHours, Availability, Patient } = ctx.tenantModels;
 
     const booking = await Booking.findByPk(id);
     if (!booking) return notFound("Cita no encontrada");
+
+    // Un profesional no-admin solo puede pedir horarios para SUS propias citas,
+    // y siempre en ámbito "este profesional" (no reorganiza a todo el centro).
+    if (!isAdmin) {
+      const myMemberId = await resolveCurrentTeamMemberId(request, ctx.tenantModels);
+      if (!myMemberId || !booking.teamMemberId || myMemberId !== booking.teamMemberId) {
+        return forbidden("Solo puedes pedir horarios para tus propias citas");
+      }
+    }
+
     const eventType = await EventType.findByPk(booking.eventTypeId);
     if (!eventType) return error("La cita no tiene un tipo válido", 422);
 
     let body = {};
     try { body = await request.json(); } catch { /* body opcional */ }
-    const scope = body?.scope === "company" ? "company" : "professional";
+    const scope = isAdmin && body?.scope === "company" ? "company" : "professional";
     const horizonDays = Math.min(60, Math.max(1, Number(body?.horizonDays) || 14));
     const preferences = typeof body?.preferences === "string" ? body.preferences.slice(0, 300) : "";
     const hasTeam = ctx.tenantHasModule ? ctx.tenantHasModule("team") : ctx.hasModule("team");

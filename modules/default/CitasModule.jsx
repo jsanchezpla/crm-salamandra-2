@@ -106,6 +106,11 @@ export default function CitasModule() {
   const [tab, setTab] = useState("calendar");
   const [pendingCount, setPendingCount] = useState(0);
   const [waitlistKey, setWaitlistKey] = useState(0); // fuerza recarga de la lista
+  // Solicitudes de cambio de cita (terapeuta propone → admin aprueba). Solo admin.
+  const [changeRequests, setChangeRequests] = useState([]);
+  const [changeReqPending, setChangeReqPending] = useState(0);
+  const [changeReqLoading, setChangeReqLoading] = useState(false);
+  const [changeReqBusyId, setChangeReqBusyId] = useState(null);
   // Vista/fecha del calendario, para no perder la semana al ir a la lista de
   // espera y volver (arreglo 2026-07-23). `calViewRef` sigue en vivo la posición
   // (datesSet); `calView` es lo que se aplica al montar el calendario.
@@ -121,6 +126,7 @@ export default function CitasModule() {
   const [suggestions, setSuggestions] = useState([]);
   const [suggestErr, setSuggestErr] = useState(null);
   const [suggestNote, setSuggestNote] = useState(null);
+  const [suggestSent, setSuggestSent] = useState(null); // confirmación tras enviar propuesta al centro
   const [openCreate, setOpenCreate] = useState(false);
   const [createForm, setCreateForm] = useState(EMPTY_BOOKING_FORM);
   const [saving, setSaving] = useState(false);
@@ -141,6 +147,38 @@ export default function CitasModule() {
       .catch(() => {});
   }, []);
   useEffect(() => { loadPendingCount(); }, [loadPendingCount]);
+
+  // Solicitudes de cambio de cita (solo admin; el endpoint devuelve 403 si no).
+  const loadChangeRequests = useCallback(() => {
+    setChangeReqLoading(true);
+    fetch("/api/citas/reschedule-requests?status=pending", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        setChangeRequests(j?.data?.requests ?? []);
+        setChangeReqPending(j?.data?.pendingCount ?? 0);
+      })
+      .catch(() => {})
+      .finally(() => setChangeReqLoading(false));
+  }, []);
+  useEffect(() => { if (viewerIsAdmin) loadChangeRequests(); }, [viewerIsAdmin, loadChangeRequests]);
+
+  async function resolveChangeRequest(id, action) {
+    setChangeReqBusyId(id);
+    try {
+      const r = await fetch(`/api/citas/reschedule-requests/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo procesar la solicitud");
+      loadChangeRequests();
+      if (action === "approve") calendarRef.current?.getApi().refetchEvents();
+    } catch (e) {
+      window.alert(e.message);
+    } finally {
+      setChangeReqBusyId(null);
+    }
+  }
 
   const loadEventTypes = useCallback(async () => {
     const res = await fetch("/api/citas/event-types?active=true", { cache: "no-store" });
@@ -275,7 +313,7 @@ export default function CitasModule() {
   async function loadSuggestions(scope) {
     if (!openBooking) return;
     setSuggestOpen(true); setSuggestScope(scope); setSuggestLoading(true);
-    setSuggestErr(null); setSuggestions([]); setSuggestNote(null);
+    setSuggestErr(null); setSuggestions([]); setSuggestNote(null); setSuggestSent(null);
     try {
       const r = await fetch(`/api/citas/bookings/${openBooking.id}/suggest-slots`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope }),
@@ -295,6 +333,25 @@ export default function CitasModule() {
     if (s.teamMemberId) payload.teamMemberId = s.teamMemberId;
     const okp = await patchBooking(payload);
     if (okp) { setSuggestOpen(false); setSuggestions([]); }
+  }
+  // Terapeuta no-admin: en vez de aplicar, MANDA la propuesta al centro (no es
+  // definitivo hasta que el admin la aprueba).
+  async function sendSuggestionToAdmin(s) {
+    setSaving(true); setSuggestErr(null);
+    try {
+      const r = await fetch(`/api/citas/bookings/${openBooking.id}/reschedule-request`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ datetime: s.datetime, teamMemberId: s.teamMemberId || null, reason: s.reason || null }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo enviar la propuesta");
+      setSuggestions([]);
+      setSuggestSent("Propuesta enviada al centro. Te avisaremos cuando la confirmen.");
+    } catch (e) {
+      setSuggestErr(e.message);
+    } finally {
+      setSaving(false);
+    }
   }
   async function markCompleted() { await patchBooking({ status: "completed" }); }
   async function markNoShow() { await patchBooking({ status: "no_show" }); }
@@ -550,6 +607,23 @@ export default function CitasModule() {
             </span>
           )}
         </button>
+        {viewerIsAdmin && (
+          <button
+            onClick={() => { setTab("requests"); loadChangeRequests(); }}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${
+              tab === "requests" ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
+            }`}
+          >
+            Solicitudes
+            {changeReqPending > 0 && (
+              <span className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold ${
+                tab === "requests" ? "bg-white/25 text-white" : "bg-red-500 text-white"
+              }`}>
+                {changeReqPending}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* ─── Pestaña Lista de espera ─── */}
@@ -560,6 +634,61 @@ export default function CitasModule() {
             onCountChange={setPendingCount}
             onActioned={() => { loadPendingCount(); calendarRef.current?.getApi().refetchEvents(); }}
           />
+        </div>
+      )}
+
+      {/* ─── Pestaña Solicitudes de cambio (solo admin) ─── */}
+      {tab === "requests" && viewerIsAdmin && (
+        <div className="flex-1 overflow-auto min-h-0 px-6 lg:px-10 py-4">
+          <p className="text-xs text-neutral-400 mb-4">
+            Propuestas de cambio de cita que te mandan las terapeutas. Nada cambia hasta que apruebas.
+          </p>
+          {changeReqLoading ? (
+            <p className="text-sm text-neutral-400">Cargando…</p>
+          ) : changeRequests.length === 0 ? (
+            <div className="text-center py-16 text-sm text-neutral-400">No hay solicitudes pendientes.</div>
+          ) : (
+            <ul className="space-y-3 max-w-3xl">
+              {changeRequests.map((req) => (
+                <li key={req.id} className="bg-white border border-neutral-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 text-[11px] text-neutral-400 mb-1.5">
+                    <span className="font-medium text-neutral-600">{req.requestedByName || "Una terapeuta"}</span>
+                    <span>propone mover:</span>
+                  </div>
+                  <div className="text-[14px] font-medium text-neutral-900">
+                    {req.subjectName || "Paciente"}
+                    {req.eventTypeName ? <span className="text-neutral-400 font-normal"> · {req.eventTypeName}</span> : null}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2 text-[13px] flex-wrap">
+                    <span className="line-through text-neutral-400">{fmtDateTime(req.currentScheduledAt)}</span>
+                    <span className="text-neutral-300">→</span>
+                    <span className="font-semibold text-emerald-700">{fmtDateTime(req.proposedScheduledAt)}</span>
+                    {req.proposedTeamMemberName && (
+                      <span className="text-[12px] text-neutral-500">· {req.proposedTeamMemberName}</span>
+                    )}
+                  </div>
+                  {req.reason && <div className="text-[12px] text-neutral-500 mt-1.5">Motivo: {req.reason}</div>}
+                  <div className="mt-3 flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => resolveChangeRequest(req.id, "reject")}
+                      disabled={changeReqBusyId === req.id}
+                      className="text-[12px] px-3 py-1.5 rounded-md border border-neutral-200 text-neutral-600 hover:bg-neutral-50 disabled:opacity-50"
+                    >
+                      Rechazar
+                    </button>
+                    <button
+                      onClick={() => resolveChangeRequest(req.id, "approve")}
+                      disabled={changeReqBusyId === req.id}
+                      className="text-[12px] font-medium px-3 py-1.5 rounded-md text-white disabled:opacity-50"
+                      style={{ backgroundColor: "var(--color-primary,#1B3A2D)" }}
+                    >
+                      {changeReqBusyId === req.id ? "…" : "Aprobar ✓"}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
@@ -852,16 +981,23 @@ export default function CitasModule() {
                     <button onClick={() => loadSuggestions("professional")} disabled={!openBooking.teamMemberId} title={!openBooking.teamMemberId ? "La cita no tiene profesional" : ""}
                       className={`text-[11px] px-2 py-0.5 rounded-full border disabled:opacity-40 ${suggestScope === "professional" ? "border-transparent text-white" : "border-neutral-200 text-neutral-500 hover:bg-white"}`}
                       style={suggestScope === "professional" ? { backgroundColor: "var(--color-primary,#1B3A2D)" } : undefined}>Este profesional</button>
-                    <button onClick={() => loadSuggestions("company")}
-                      className={`text-[11px] px-2 py-0.5 rounded-full border ${suggestScope === "company" ? "border-transparent text-white" : "border-neutral-200 text-neutral-500 hover:bg-white"}`}
-                      style={suggestScope === "company" ? { backgroundColor: "var(--color-primary,#1B3A2D)" } : undefined}>Todo el centro</button>
+                    {viewerIsAdmin && (
+                      <button onClick={() => loadSuggestions("company")}
+                        className={`text-[11px] px-2 py-0.5 rounded-full border ${suggestScope === "company" ? "border-transparent text-white" : "border-neutral-200 text-neutral-500 hover:bg-white"}`}
+                        style={suggestScope === "company" ? { backgroundColor: "var(--color-primary,#1B3A2D)" } : undefined}>Todo el centro</button>
+                    )}
                     <button onClick={() => setSuggestOpen(false)} className="text-neutral-400 hover:text-neutral-700 px-1" aria-label="Cerrar">✕</button>
                   </div>
                 </div>
+                {!viewerIsAdmin && (
+                  <p className="text-[11px] text-neutral-400 mb-2">Elige un horario y se lo mandas al centro para que lo confirme.</p>
+                )}
                 {suggestLoading ? (
                   <p className="text-[12px] text-neutral-400 py-2">Buscando huecos…</p>
                 ) : suggestErr ? (
                   <p className="text-[12px] text-rose-600 py-2">{suggestErr}</p>
+                ) : suggestSent ? (
+                  <p className="text-[12px] text-emerald-600 py-2">✓ {suggestSent}</p>
                 ) : suggestions.length === 0 ? (
                   <p className="text-[12px] text-neutral-400 py-2">{suggestNote || "Sin huecos que proponer."}</p>
                 ) : (
@@ -871,7 +1007,11 @@ export default function CitasModule() {
                         <div className="text-[12px] font-medium text-neutral-800 capitalize">{s.label}</div>
                         {s.teamMemberName && <div className="text-[11px] text-neutral-500">{s.teamMemberName}</div>}
                         <div className="text-[10px] text-neutral-400 mt-1 flex-1 leading-snug">{s.reason}</div>
-                        <button onClick={() => applySuggestion(s)} disabled={saving} className="mt-2 text-[11px] font-medium px-2 py-1 rounded-md text-white disabled:opacity-50" style={{ backgroundColor: "var(--color-primary,#1B3A2D)" }}>Elegir esta</button>
+                        {viewerIsAdmin ? (
+                          <button onClick={() => applySuggestion(s)} disabled={saving} className="mt-2 text-[11px] font-medium px-2 py-1 rounded-md text-white disabled:opacity-50" style={{ backgroundColor: "var(--color-primary,#1B3A2D)" }}>Elegir esta</button>
+                        ) : (
+                          <button onClick={() => sendSuggestionToAdmin(s)} disabled={saving} className="mt-2 text-[11px] font-medium px-2 py-1 rounded-md text-white disabled:opacity-50" style={{ backgroundColor: "var(--color-primary,#1B3A2D)" }}>Enviar al centro</button>
+                        )}
                       </div>
                     ))}
                   </div>
