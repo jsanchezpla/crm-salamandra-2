@@ -50,6 +50,9 @@ export default function CalendarioPage() {
   const [formError, setFormError] = useState(null);
   const [clients, setClients] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
+  // IA "Reorganizar la semana"
+  const [reorg, setReorg] = useState(null); // { loading, moves, err, note, model } | null
+  const [reorgApplying, setReorgApplying] = useState(false);
 
   // Datos para los desplegables de cliente / responsable (opcionales).
   useEffect(() => {
@@ -87,6 +90,44 @@ export default function CalendarioPage() {
     }
   }, []);
 
+  function currentWeekMonday() {
+    const d = new Date();
+    const day = d.getDay(); // 0=domingo..6=sábado
+    const diff = day === 0 ? -6 : 1 - day;
+    const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diff);
+    const p = (n) => String(n).padStart(2, "0");
+    return `${mon.getFullYear()}-${p(mon.getMonth() + 1)}-${p(mon.getDate())}`;
+  }
+  async function loadReorg() {
+    setReorg({ loading: true, moves: [], err: null, note: null });
+    try {
+      const r = await fetch("/api/calendar/reorganize", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ weekStart: currentWeekMonday() }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo reorganizar");
+      setReorg({ loading: false, moves: j.data.moves || [], note: j.data.note || null, model: j.data.model, err: null });
+    } catch (e) {
+      setReorg({ loading: false, moves: [], err: e.message });
+    }
+  }
+  async function applyReorg() {
+    if (!reorg?.moves?.length) return;
+    setReorgApplying(true);
+    try {
+      for (const m of reorg.moves) {
+        await fetch(`/api/calendar/tasks/${m.taskId}`, {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ startDate: m.newDate, startTime: m.startTime || null, endDate: null, endTime: null, allDay: !!m.allDay }),
+        }).catch(() => {});
+      }
+      calendarRef.current?.getApi().refetchEvents();
+      setReorg(null);
+    } finally {
+      setReorgApplying(false);
+    }
+  }
   function openCreate(startDate = todayStr(), endDate = "", startTime = "", endTime = "", allDay = false) {
     setFormError(null);
     setModal({ mode: "create", form: { ...EMPTY_FORM, startDate, endDate, startTime, endTime, allDay } });
@@ -307,15 +348,24 @@ export default function CalendarioPage() {
             Calendario <span className="font-display-italic text-[var(--ink-400)]">— equipo</span>
           </h1>
         </div>
-        <button
-          onClick={() => openCreate()}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0F0F0F] text-white text-xs font-medium rounded-md hover:bg-[#222] transition-colors"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          Nueva tarea
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={loadReorg}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-[var(--ink-200)] text-[var(--ink-700)] text-xs font-medium rounded-md hover:bg-[var(--ink-100)] transition-colors"
+            title="La IA propone repartir las tareas de esta semana"
+          >
+            🦎 Reorganizar semana
+          </button>
+          <button
+            onClick={() => openCreate()}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0F0F0F] text-white text-xs font-medium rounded-md hover:bg-[#222] transition-colors"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Nueva tarea
+          </button>
+        </div>
       </div>
 
       {/* Calendario */}
@@ -354,6 +404,51 @@ export default function CalendarioPage() {
           }}
         />
       </div>
+
+      {/* Modal "Reorganizar semana (IA)" */}
+      {reorg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget) setReorg(null); }}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col">
+            <div className="px-5 py-4 border-b border-[#F0F0F0] flex items-center justify-between shrink-0">
+              <div>
+                <div className="text-[13px] font-semibold text-neutral-800">🦎 Reorganizar la semana (IA)</div>
+                <div className="text-[11px] text-neutral-400">Propuesta para repartir la carga de esta semana.</div>
+              </div>
+              <button onClick={() => setReorg(null)} className="text-neutral-400 hover:text-neutral-700 p-1 -m-1" aria-label="Cerrar">✕</button>
+            </div>
+            <div className="px-5 py-4 overflow-y-auto flex-1">
+              {reorg.loading ? (
+                <p className="text-sm text-neutral-400 py-4 text-center">Analizando la semana…</p>
+              ) : reorg.err ? (
+                <p className="text-sm text-rose-600 py-4">{reorg.err}</p>
+              ) : reorg.moves.length === 0 ? (
+                <p className="text-sm text-neutral-500 py-4">{reorg.note || "No hace falta mover nada: la semana está equilibrada."}</p>
+              ) : (
+                <ul className="space-y-2">
+                  {reorg.moves.map((m, i) => (
+                    <li key={i} className="border border-neutral-200 rounded-lg p-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[13px] font-medium text-neutral-800 truncate">{m.title}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 ${m.priority === "high" ? "bg-red-50 text-red-600" : m.priority === "low" ? "bg-neutral-100 text-neutral-500" : "bg-amber-50 text-amber-600"}`}>{m.priority === "high" ? "Alta" : m.priority === "low" ? "Baja" : "Media"}</span>
+                      </div>
+                      <div className="text-[11px] text-neutral-500 mt-1">{m.oldDate} → <span className="font-medium text-neutral-700">{m.newDate}</span></div>
+                      <div className="text-[10px] text-neutral-400 mt-0.5">{m.reason}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {!reorg.loading && reorg.moves.length > 0 && (
+              <div className="px-5 py-4 border-t border-[#F0F0F0] flex items-center justify-end gap-2 shrink-0">
+                <button onClick={() => setReorg(null)} className="text-xs text-neutral-500 px-3 py-1.5">Cancelar</button>
+                <button onClick={applyReorg} disabled={reorgApplying} className="text-xs font-medium px-3 py-1.5 rounded-md text-white disabled:opacity-50" style={{ backgroundColor: "var(--color-primary,#1B3A2D)" }}>
+                  {reorgApplying ? "Aplicando…" : `Aplicar ${reorg.moves.length} cambio${reorg.moves.length > 1 ? "s" : ""}`}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modal creación / edición */}
       {modal && (
