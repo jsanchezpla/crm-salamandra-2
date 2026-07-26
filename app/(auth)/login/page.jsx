@@ -30,6 +30,26 @@ function LoginForm() {
     expired ? "Tu sesión ha expirado. Inicia sesión de nuevo." : ""
   );
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
+
+  // Demo pública: entra en el tenant "demo" sin credenciales.
+  async function handleDemo() {
+    setError("");
+    setDemoLoading(true);
+    try {
+      const res = await fetch("/api/auth/demo", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setError(data.error || "No se pudo abrir la demo");
+        return;
+      }
+      window.location.href = "/";
+    } catch {
+      setError("Error de conexión. Inténtalo de nuevo.");
+    } finally {
+      setDemoLoading(false);
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -168,7 +188,14 @@ function LoginForm() {
 
       <div className="flex items-center gap-3 pt-1">
         <div className="flex-1 h-px bg-white/[0.10]" />
-        <span className="text-[10px] text-white/25 tracking-[0.16em] uppercase font-mono">Salamandra · v1.0</span>
+        <button
+          type="button"
+          onClick={handleDemo}
+          disabled={demoLoading}
+          className="text-[10px] text-white/55 hover:text-white tracking-[0.16em] uppercase font-mono border border-white/15 hover:border-white/45 rounded-full px-3.5 py-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {demoLoading ? "Entrando…" : "Prueba una demo"}
+        </button>
         <div className="flex-1 h-px bg-white/[0.10]" />
       </div>
 
