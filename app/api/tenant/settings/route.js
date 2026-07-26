@@ -59,6 +59,14 @@ function applyPlain(target, field, value) {
 }
 
 export const GET = withTenant(async (request, _routeContext, ctx) => {
+  // Solo admin: la página de Configuración es de administradores (los perfiles
+  // no-admin ni la ven en el menú) y esto expone pistas enmascaradas de las
+  // claves de IA. La escritura (PATCH) ya estaba gateada.
+  const role = ctx.user?.role;
+  if (role !== "admin" && role !== "superadmin") {
+    throw new ForbiddenError("Solo los administradores pueden ver la configuración");
+  }
+
   const t = ctx.tenant;
   const brand = t.settings?.brand ?? {};
   const integ = t.settings?.integrations ?? {};

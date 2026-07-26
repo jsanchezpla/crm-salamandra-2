@@ -18,6 +18,7 @@
  */
 
 import { Sequelize } from "sequelize";
+import { byTable } from "./_schema-targets.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -409,15 +410,22 @@ async function processSchemaInTx(s, t, schema) {
     `, { bind: [String(currentYear)], transaction: t });
     const nextNumberF = (Number(maxRows[0]?.max_n) || 0) + 1;
 
+    // NO depender de NINGÚN valor por defecto de la tabla. Según quién la creara
+    // —esta migración o Sequelize vía db:sync— cada schema tiene una mezcla
+    // distinta de columnas NOT NULL con y sin DEFAULT (Sequelize genera id y
+    // timestamps en JS, no en Postgres). Verificado en producción: crm_aumenta
+    // no tiene default en created_at/updated_at y crm_demo sí. Se rellena todo.
     await s.query(`
-      INSERT INTO "${schema}"."invoice_series" (code, name, prefix, year, next_number, is_default, kind)
-      SELECT 'F', 'Facturas ordinarias', 'F', $1, $2, TRUE, 'normal'
+      INSERT INTO "${schema}"."invoice_series"
+        (id, code, name, prefix, year, next_number, is_default, kind, created_at, updated_at)
+      SELECT gen_random_uuid(), 'F', 'Facturas ordinarias', 'F', $1, $2, TRUE, 'normal', now(), now()
       WHERE NOT EXISTS (SELECT 1 FROM "${schema}"."invoice_series" WHERE code = 'F')
     `, { bind: [currentYear, nextNumberF], transaction: t });
 
     await s.query(`
-      INSERT INTO "${schema}"."invoice_series" (code, name, prefix, year, next_number, is_default, kind)
-      SELECT 'R', 'Rectificativas', 'R', $1, 1, FALSE, 'rectificative'
+      INSERT INTO "${schema}"."invoice_series"
+        (id, code, name, prefix, year, next_number, is_default, kind, created_at, updated_at)
+      SELECT gen_random_uuid(), 'R', 'Rectificativas', 'R', $1, 1, FALSE, 'rectificative', now(), now()
       WHERE NOT EXISTS (SELECT 1 FROM "${schema}"."invoice_series" WHERE code = 'R')
     `, { bind: [currentYear], transaction: t });
     log(`✓ ${schema}.invoice_series: 'F' (next=${nextNumberF}) y 'R' aseguradas`);
@@ -426,8 +434,9 @@ async function processSchemaInTx(s, t, schema) {
   // ── Crear settings por defecto si no existen ───────────────────────────
   if (await tableExists(s, t, schema, "tenant_billing_settings")) {
     await s.query(`
-      INSERT INTO "${schema}"."tenant_billing_settings" (default_vat_rate, available_vat_rates, default_payment_terms_days)
-      SELECT 21, '[21,10,4,0]'::jsonb, 30
+      INSERT INTO "${schema}"."tenant_billing_settings"
+        (id, default_vat_rate, available_vat_rates, default_payment_terms_days, created_at, updated_at)
+      SELECT gen_random_uuid(), 21, '[21,10,4,0]'::jsonb, 30, now(), now()
       WHERE NOT EXISTS (SELECT 1 FROM "${schema}"."tenant_billing_settings")
     `, { transaction: t });
     log(`✓ ${schema}.tenant_billing_settings: fila por defecto asegurada`);
@@ -457,27 +466,32 @@ async function main() {
     const [versionRows] = await sequelize.query("SHOW server_version");
     log(`PostgreSQL: ${versionRows[0]?.server_version ?? "?"}`);
 
-    header("Obteniendo lista de tenants activos...");
-    const slugs = await fetchActiveSlugs(sequelize);
-    if (slugs.length === 0) {
-      log("· No hay tenants activos. Nada que hacer.");
+    // Antes esto recorría TODOS los tenants activos, y ahí estaba el fallo: en un
+    // tenant sin Facturación empezaba a crear invoice_series y
+    // tenant_billing_settings y luego moría con
+    // `relation "crm_<x>.invoices" does not exist`, dejando el schema a medias y
+    // tumbando la migración entera para los tenants que SÍ facturan.
+    // `invoices` es el ancla del módulo: si no está, aquí no hay nada que hacer.
+    header("Obteniendo schemas con tabla `invoices`...");
+    const { schemas, skipped } = await byTable(sequelize, "invoices");
+    if (schemas.length === 0) {
+      log("· Ningún schema con tabla invoices. Nada que hacer.");
       await sequelize.close();
       process.exit(0);
     }
-    log(`✓ ${slugs.length} tenants: ${slugs.join(", ")}`);
+    log(`✓ ${schemas.length}: ${schemas.join(", ")}`);
+    if (skipped.length) log(`· sin tabla invoices, se omiten: ${skipped.join(", ")}`);
 
-    // Fase A: ALTER TYPE en autocommit (cada slug por separado)
+    // Fase A: ALTER TYPE en autocommit (cada schema por separado)
     header("Fase A — ALTER TYPE de enums (autocommit)...");
-    for (const slug of slugs) {
-      const schema = `crm_${slug}`;
+    for (const schema of schemas) {
       await alterEnums(sequelize, schema);
     }
 
     // Fase B: ADD COLUMN, CREATE TABLE, backfill (en transacción global)
     header("Fase B — ADD COLUMN, CREATE TABLE y backfill (transacción global)...");
     await sequelize.transaction(async (t) => {
-      for (const slug of slugs) {
-        const schema = `crm_${slug}`;
+      for (const schema of schemas) {
         await processSchemaInTx(sequelize, t, schema);
       }
     });

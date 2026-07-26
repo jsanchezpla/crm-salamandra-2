@@ -55,31 +55,34 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
       return error("Solo se pueden asignar plantillas", 422);
     }
 
-    // Antiduplicado: si ya hay un plan asignado ACTIVO para este (template, client)
-    const existing = await Plan.findOne({
-      where: {
-        type: "assigned",
-        templateId: id,
-        clientId,
-        archivedAt: null,
-      },
+    // UN PACIENTE, UN MENÚ ACTIVO (2026-07-22). Antes el antiduplicado miraba el
+    // PAR (plantilla, paciente): asignar una plantilla DISTINTA al mismo
+    // paciente colaba y le dejaba dos menús activos a la vez — la nutricionista
+    // veía menús viejos que creía sustituidos y no sabía cuál estaba vigente.
+    // Ahora el menú nuevo SUSTITUYE al anterior: los activos del paciente se
+    // archivan (siguen consultables en el histórico de su ficha, no se borran).
+    const previousActive = await Plan.findAll({
+      where: { type: "assigned", clientId, archivedAt: null },
     });
-    if (existing) {
-      return error(
-        "Ya hay un plan asignado activo de esta plantilla a este cliente",
-        409
-      );
-    }
 
     const nameOverride = typeof body.nameOverride === "string" && body.nameOverride.trim()
       ? body.nameOverride.trim()
       : `${template.name} — ${client.name}`;
 
     const newPlanId = await tenantSequelize.transaction(async (t) => {
+      for (const old of previousActive) {
+        await old.update({ archivedAt: new Date() }, { transaction: t });
+      }
       const newPlan = await Plan.create(
         {
           name: nameOverride,
           description: template.description,
+          // Los comentarios por día viajan con la copia: sin esto el paciente
+          // recibía el menú sin las notas de cada día de la plantilla.
+          dayComments: template.dayComments || {},
+          // Si la plantilla decide no enseñar macros, el plan del paciente
+          // tampoco: la decisión se toma una vez y viaja con la copia.
+          showMacros: Boolean(template.showMacros),
           type: "assigned",
           templateId: id,
           clientId,
@@ -106,12 +109,14 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
       userId,
       action: "nutricion.plan.assigned",
       entityId: newPlanId,
-      before: { templateId: id },
+      before: { templateId: id, replacedPlanIds: previousActive.map((p) => p.id) },
       after: { id: newPlanId, clientId, name: nameOverride },
       ip,
     });
 
-    return created(tree);
+    // `replacedCount` deja que la UI avise ("se archivó el menú anterior")
+    // en vez de que el cambio ocurra a espaldas de la nutricionista.
+    return created({ ...tree, replacedCount: previousActive.length });
   } catch (err) {
     return serverError(err);
   }

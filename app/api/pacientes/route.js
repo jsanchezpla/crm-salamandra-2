@@ -2,8 +2,9 @@ import { Op, fn, col } from "sequelize";
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden } from "../../../lib/utils/apiResponse.js";
 import { serializePatient } from "../../../lib/clinica/serialize.js";
-import { logClinicaAudit } from "../../../lib/clinica/audit.js";
+import { logClinicaAudit, auditSummary } from "../../../lib/clinica/audit.js";
 import { normalizeConsents } from "../../../lib/clinica/consents.js";
+import { normalizeSpecialties, deriveCareType, SPECIALTY_KEYS } from "../../../lib/clinica/specialties.js";
 
 const cap = (v, n) => (v == null ? null : String(v).trim().slice(0, n) || null);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -36,7 +37,11 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const where = {};
   const q = sp.get("q")?.trim();
   if (q) where[Op.or] = [{ firstName: { [Op.iLike]: `%${q}%` } }, { lastName: { [Op.iLike]: `%${q}%` } }];
-  if (sp.get("therapistId")) where.mainTherapistId = sp.get("therapistId");
+  if (sp.get("therapistId")) {
+    const tid = sp.get("therapistId");
+    if (!UUID_RE.test(tid)) return error("therapistId inválido", 422);
+    where.mainTherapistId = tid;
+  }
   // Pacientes de un cliente pagador concreto (sección "Pacientes" de su ficha).
   // Un clientId presente pero malformado NO debe caer al listado completo.
   const clientId = sp.get("clientId");
@@ -46,6 +51,14 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   }
   const status = sp.get("status");
   if (status && ["active", "paused", "discharged"].includes(status)) where.status = status;
+  // Filtro por módulo asistencial (Terapia / Nutrición) — útil para vistas que
+  // solo quieran uno de los dos tipos de paciente.
+  const careType = sp.get("careType");
+  if (careType && ["terapia", "nutricion"].includes(careType)) where.careType = careType;
+  // Filtro por especialidad concreta (logopedia, psicología…): pacientes cuya
+  // lista de especialidades CONTIENE la pedida (JSONB @>).
+  const specialty = sp.get("specialty");
+  if (specialty && SPECIALTY_KEYS.includes(specialty)) where.specialties = { [Op.contains]: [specialty] };
 
   const rows = await Patient.findAll({
     where,
@@ -81,8 +94,17 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     clientId = owner.id;
   }
 
+  // Especialidad(es) del paciente. El módulo grueso `careType` se DERIVA de la
+  // lista (compat con lo desplegado antes de la taxonomía); si no viene lista,
+  // se respeta el careType explícito o 'terapia' por defecto.
+  const specialties = normalizeSpecialties(body.specialties);
+  const careType = deriveCareType(specialties)
+    || (["terapia", "nutricion"].includes(body.careType) ? body.careType : "terapia");
+
   const payload = {
     clientId,
+    careType,
+    specialties,
     firstName: body.firstName.trim(),
     lastName: body.lastName.trim(),
     age: body.age != null && body.age !== "" ? Number(body.age) : null,
@@ -111,7 +133,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     action: "pacientes.created",
     entity: "Patient",
     entityId: p.id,
-    after: p.toJSON(),
+    after: auditSummary(p),
     ip: request.headers.get("x-forwarded-for"),
   });
   return created(serializePatient(p, { sessionsCount: 0, lastSession: null }));

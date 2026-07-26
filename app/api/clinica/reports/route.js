@@ -1,7 +1,8 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
+import { clientIdOfPatient } from "../../../../lib/clinica/patientClient.js";
 import { ok, created, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { serializeReport } from "../../../../lib/clinica/serialize.js";
-import { logClinicaAudit } from "../../../../lib/clinica/audit.js";
+import { logClinicaAudit, auditSummary } from "../../../../lib/clinica/audit.js";
 
 function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
@@ -50,6 +51,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     dueDate: body.dueDate || null,
     contentSections: cs,
     status: STATUSES.includes(body.status) ? body.status : "draft",
+    // Cliente/pagador del paciente (foto al crear el informe).
+    clientId: await clientIdOfPatient(ctx.tenantModels, body.patientId),
   };
   const r = await ClinicalReport.create(payload);
   await logClinicaAudit({
@@ -58,7 +61,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     action: "clinica.report.created",
     entity: "ClinicalReport",
     entityId: r.id,
-    after: r.toJSON(),
+    after: auditSummary(r),
     ip: request.headers.get("x-forwarded-for"),
   });
   return created(serializeReport(r));

@@ -15,7 +15,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import Select from "@/components/ui/Select.jsx";
 import FoodEditModal from "./FoodEditModal.jsx";
+import { useFoodSections } from "./foodSections.js";
 
 const PAGE_SIZE = 20;
 
@@ -34,6 +36,9 @@ export default function NutricionFoodsModule() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  // Sección activa ("" = todas). Los tags del catálogo hacen de secciones.
+  const [section, setSection] = useState("");
+  const sectionOptions = useFoodSections();
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null); // food | "new"
   const [toast, setToast] = useState(null);
@@ -60,6 +65,7 @@ export default function NutricionFoodsModule() {
       params.set("page", String(page));
       params.set("limit", String(PAGE_SIZE));
       if (debouncedSearch) params.set("q", debouncedSearch);
+      if (section) params.set("tag", section);
       const r = await fetch(`/api/nutricion/foods?${params}`);
       const j = await r.json();
       if (j.ok) {
@@ -69,16 +75,16 @@ export default function NutricionFoodsModule() {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch]);
+  }, [page, debouncedSearch, section]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  // Volver a página 1 al cambiar la búsqueda
+  // Volver a página 1 al cambiar la búsqueda o la sección
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, section]);
 
   async function patchFood(id, updates) {
     const r = await fetch(`/api/nutricion/foods/${id}`, {
@@ -176,6 +182,14 @@ export default function NutricionFoodsModule() {
               className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
             />
           </div>
+          {/* Desplegable de secciones (verduras, carnes, legumbres…) */}
+          <Select
+            value={section}
+            onChange={setSection}
+            options={sectionOptions}
+            className="w-56 shrink-0 px-3 py-2 text-sm rounded-md border border-gray-200 bg-white"
+            aria-label="Filtrar por sección"
+          />
         </div>
       </div>
 

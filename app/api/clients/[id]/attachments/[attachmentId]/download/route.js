@@ -1,53 +1,48 @@
-import { NextResponse } from "next/server";
 import { withTenant } from "../../../../../../../lib/tenant/withTenant.js";
 import { forbidden, notFound, serverError } from "../../../../../../../lib/utils/apiResponse.js";
-import { readAttachment } from "../../../../../../../lib/clients/attachmentStorage.js";
+import { readDocumentStream } from "../../../../../../../lib/documents/documentStorage.js";
 
 /**
  * GET /api/clients/[id]/attachments/[attachmentId]/download
  *
- * Stream del PDF al cliente con Content-Disposition: attachment.
- * El nombre que ve el usuario es el `originalName` con que subió el archivo.
+ * Descarga un adjunto de la ficha. Desde 2026-07-23 los adjuntos viven en el
+ * archivo central (tabla documents, source='ficha'); este endpoint sirve el
+ * fichero por STREAM con Content-Disposition: attachment.
  *
- * Requiere JWT + módulo clients. Cualquier admin del tenant puede descargar
- * (la auditoría de quién descarga queda fuera del scope; apuntado al backlog).
+ * Requiere JWT + módulo clients. Se comprueba que el documento sea de ESTE
+ * cliente (aislamiento).
  */
 export const GET = withTenant(
   async (_request, { params }, { tenant, tenantModels, hasModule }) => {
     try {
       if (!hasModule("clients")) return forbidden("Módulo clients no activo");
       const { id, attachmentId } = await params;
-      const { ClientAttachment } = tenantModels;
+      const { Document } = tenantModels;
 
-      const row = await ClientAttachment.findOne({
-        where: { id: attachmentId, clientId: id },
+      // source:'ficha' (arreglo 2026-07-23): no servir por esta ruta documentos
+      // del archivo central de otro origen (manual/privados de otro usuario).
+      const row = await Document.findOne({
+        where: { id: attachmentId, clientId: id, source: "ficha" },
       });
-      if (!row) return notFound("Attachment no encontrado");
+      if (!row) return notFound("Adjunto no encontrado");
 
-      let buffer;
+      let stream;
+      let size;
       try {
-        buffer = await readAttachment(tenant.slug, id, row.storedFilename);
+        ({ stream, size } = await readDocumentStream(tenant.slug, row.storagePath));
       } catch (err) {
-        if (err.code === "ENOENT") {
-          // Hay registro en BD pero el archivo físico falta — caso de
-          // datos inconsistentes (volumen perdido, restore parcial).
-          return notFound("Archivo físico no encontrado");
-        }
+        if (err.code === "ENOENT") return notFound("Archivo físico no encontrado");
         throw err;
       }
 
-      // Sanitizar el filename para el header (evitar caracteres ilegales).
-      const safeName = row.originalName.replace(/[\r\n"]/g, "_");
+      const safeName = String(row.fileName || "archivo").replace(/[\r\n"]/g, "_");
 
-      const ab = new ArrayBuffer(buffer.byteLength);
-      new Uint8Array(ab).set(new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength));
-
-      return new NextResponse(ab, {
+      return new Response(stream, {
         status: 200,
         headers: {
-          "Content-Type": row.mimeType || "application/pdf",
+          "Content-Type": row.mimeType || "application/octet-stream",
           "Content-Disposition": `attachment; filename="${safeName}"`,
-          "Content-Length": String(buffer.length),
+          "Content-Length": String(size),
           "Cache-Control": "private, no-cache",
         },
       });

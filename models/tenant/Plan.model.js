@@ -58,10 +58,38 @@ export function definePlan(sequelize) {
         allowNull: true,
         field: "assigned_at",
       },
+      // Comentarios por día de la semana (rediseño 2026-07-22): JSONB
+      // { "1": "texto del lunes", … "7": "texto del domingo" }. Complementa a
+      // `description` (comentarios generales del menú) y a
+      // plan_meals.description (comentarios por comida).
+      dayComments: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: {},
+        field: "day_comments",
+      },
+      // ¿El PDF del paciente imprime proteínas/hidratos/grasas/fibra?
+      // DEFAULT false a propósito (2026-07-22): Laura trata trastornos de la
+      // conducta alimentaria, donde las cifras de macros suelen ser parte del
+      // problema. Enseñarlas es una decisión consciente por menú; la
+      // nutricionista las sigue viendo siempre en el editor del CRM.
+      showMacros: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: "show_macros",
+      },
       archivedAt: {
         type: DataTypes.DATE,
         allowNull: true,
         field: "archived_at",
+      },
+      // Nutricionista que creó el plan (2026-07-23). Nullable: los planes
+      // anteriores no lo tienen. Importa cuando hay más de una nutricionista.
+      teamMemberId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "team_member_id",
       },
     },
     {

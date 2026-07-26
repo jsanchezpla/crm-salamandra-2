@@ -4,12 +4,14 @@ import { useEffect, useState, useCallback, useRef } from "react";
 
 // ─── Configuración nutri-laura ────────────────────────────────────────────────
 
+// Embudo de PROFESIONALES (marcas y nutricionistas que quieren trabajar con
+// Laura). Las claves se mantienen (están en BD); solo cambian las etiquetas.
 const STAGES = [
-  { key: "new", label: "Nuevo lead" },
+  { key: "new", label: "Nuevo" },
   { key: "contacted", label: "Contactado" },
-  { key: "consulta_agendada", label: "Consulta agendada" },
-  { key: "consulta_realizada", label: "Consulta realizada" },
-  { key: "paciente", label: "Paciente activo" },
+  { key: "consulta_agendada", label: "En conversación" },
+  { key: "consulta_realizada", label: "Propuesta enviada" },
+  { key: "paciente", label: "Colaboración activa" },
   { key: "lost", label: "Descartado" },
 ];
 
@@ -694,7 +696,7 @@ export default function NutriLauraLeadsModule() {
                           className="rounded border-gray-300 accent-[var(--color-primary)]"
                         />
                       </th>
-                      {["Nombre", "Teléfono", "Email", "Edad", "Motivo", "Estado", "Recibido"].map(
+                      {["Nombre", "Teléfono", "Email", "Empresa", "Propuesta", "Estado", "Recibido"].map(
                         (h) => (
                           <th
                             key={h}
@@ -708,7 +710,8 @@ export default function NutriLauraLeadsModule() {
                   </thead>
                   <tbody>
                     {leads.map((lead) => {
-                      const edad = lead.customFields?.edad;
+                      const empresa = lead.customFields?.empresa;
+                      const tipo = lead.customFields?.tipo;
                       const motivo = lead.customFields?.motivo;
                       const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.new;
                       const isChecked = checkedIds.has(lead.id);
@@ -746,7 +749,7 @@ export default function NutriLauraLeadsModule() {
                             <span className="text-gray-500">{lead.email || "—"}</span>
                           </td>
                           <td className="py-3 px-4">
-                            <span className="text-gray-500">{edad || "—"}</span>
+                            <span className="text-gray-500 text-xs">{[tipo, empresa].filter(Boolean).join(" · ") || "—"}</span>
                           </td>
                           <td className="py-3 px-4 max-w-[260px]">
                             <span className="text-gray-600 text-xs line-clamp-2">
@@ -782,7 +785,8 @@ export default function NutriLauraLeadsModule() {
               {/* Mobile: tarjetas */}
               <div className="lg:hidden space-y-3">
                 {leads.map((lead) => {
-                  const edad = lead.customFields?.edad;
+                  const empresa = lead.customFields?.empresa;
+                  const tipo = lead.customFields?.tipo;
                   const motivo = lead.customFields?.motivo;
                   const style = STAGE_STYLE[lead.stage] ?? STAGE_STYLE.new;
                   const isChecked = checkedIds.has(lead.id);
@@ -820,9 +824,9 @@ export default function NutriLauraLeadsModule() {
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {edad && (
+                        {(tipo || empresa) && (
                           <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">
-                            {edad}
+                            {[tipo, empresa].filter(Boolean).join(" · ")}
                           </span>
                         )}
                       </div>

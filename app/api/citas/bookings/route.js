@@ -9,6 +9,9 @@ import {
 } from "../../../../lib/citas/validation.js";
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { findBookingOverlap } from "../../../../lib/citas/booking.js";
+import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
+
+const NADIE = "00000000-0000-0000-0000-000000000000";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["pending", "confirmed", "completed", "cancelled", "no_show"]);
@@ -49,9 +52,13 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       if (searchParams.get("to")) where.scheduledAt[Op.lte] = new Date(searchParams.get("to"));
     }
     // ?future=true filtra a partir de ahora (útil para "próximas citas" en la ficha cliente).
-    // Convive con ?from si se combinan; el más restrictivo gana.
+    // Convive con ?from: el MÁS RESTRICTIVO gana de verdad (arreglo 2026-07-23).
+    // Antes se reasignaba Op.gte con `now`, que PISABA un `from` posterior y
+    // devolvía citas de más; ahora se toma el máximo de los dos.
     if (searchParams.get("future") === "true") {
-      where.scheduledAt = { ...(where.scheduledAt || {}), [Op.gte]: new Date() };
+      const previo = where.scheduledAt?.[Op.gte];
+      const desde = new Date(Math.max(Date.now(), previo ? new Date(previo).getTime() : 0));
+      where.scheduledAt = { ...(where.scheduledAt || {}), [Op.gte]: desde };
     }
     if (searchParams.get("status")) {
       const s = searchParams.get("status");
@@ -62,18 +69,47 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     if (searchParams.get("teamMemberId")) where.teamMemberId = searchParams.get("teamMemberId");
     // ?patientId=… — citas de un paciente concreto (sección "Próximas citas" de su ficha).
     if (searchParams.get("patientId")) where.patientId = searchParams.get("patientId");
-    // ?clientEmail=foo@bar.com — match exacto case-insensitive (Booking no tiene
-    // FK a Client; el cruce con la ficha del cliente es por email).
-    if (searchParams.get("clientEmail")) {
-      where.clientEmail = { [Op.iLike]: searchParams.get("clientEmail").trim() };
+    // ?clientId=… — las citas de una ficha concreta. Desde 2026-07-22 hay FK
+    // real (bookings.client_id). Se acepta además `clientEmail` en la misma
+    // llamada y se buscan las que casen por CUALQUIERA de los dos: el enlace
+    // nuevo no puede dejar fuera de la ficha las citas antiguas que se
+    // quedaron sin enlazar (email escrito de otra forma, o compartido entre
+    // dos fichas, casos que la migración deja a NULL a propósito).
+    const filtroCliente = [];
+    if (searchParams.get("clientId")) {
+      filtroCliente.push({ clientId: searchParams.get("clientId").trim() });
     }
+    if (searchParams.get("clientEmail")) {
+      filtroCliente.push({ clientEmail: { [Op.iLike]: searchParams.get("clientEmail").trim() } });
+    }
+    // OJO: filtro de cliente y búsqueda de texto son DOS grupos "o" distintos y
+    // tienen que combinarse con "y". Escribir los dos en where[Op.or] hacía que
+    // el segundo pisara al primero en silencio.
+    const grupos = [];
+    if (filtroCliente.length === 1) grupos.push(filtroCliente[0]);
+    else if (filtroCliente.length > 1) grupos.push({ [Op.or]: filtroCliente });
+
     const q = (searchParams.get("search") || "").trim();
     if (q) {
-      where[Op.or] = [
-        { clientName: { [Op.iLike]: `%${q}%` } },
-        { clientEmail: { [Op.iLike]: `%${q}%` } },
-        { clientPhone: { [Op.iLike]: `%${q}%` } },
-      ];
+      grupos.push({
+        [Op.or]: [
+          { clientName: { [Op.iLike]: `%${q}%` } },
+          { clientEmail: { [Op.iLike]: `%${q}%` } },
+          { clientPhone: { [Op.iLike]: `%${q}%` } },
+        ],
+      });
+    }
+    if (grupos.length) where[Op.and] = grupos;
+
+    // Acceso por rol: un profesional no-admin solo ve SUS citas (misma regla que
+    // el calendario; sin esto, la lista/lista de espera filtraba los datos
+    // personales de las citas de todo el equipo). El jefe (admin) ve todo.
+    if (hasModule("team")) {
+      const userRole = request.headers.get("x-user-role") ?? "user";
+      if (!ADMIN_ROLES.has(userRole)) {
+        const myId = await resolveCurrentTeamMemberId(request, tenantModels);
+        where.teamMemberId = myId ?? NADIE;
+      }
     }
 
     // teamMember solo si el tenant tiene módulo team (si no, la tabla
@@ -140,6 +176,21 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const clientPhone = normalizeString(body.clientPhone);
     if (!clientPhone) return error("clientPhone es obligatorio");
 
+    // Enlace con la ficha de cliente (2026-07-22). Opcional: una cita para
+    // alguien que todavía no es cliente es válida. Si viene, se comprueba que
+    // la ficha existe DE VERDAD en este tenant antes de guardarla — si no,
+    // una FK rota tumbaría el insert con un error feo.
+    let clientId = null;
+    if (body.clientId != null && body.clientId !== "") {
+      if (typeof body.clientId !== "string" || !UUID_RE.test(body.clientId)) {
+        return error("clientId inválido");
+      }
+      const { Client } = tenantModels;
+      const ficha = Client ? await Client.findByPk(body.clientId, { attributes: ["id"] }) : null;
+      if (!ficha) return error("La ficha de cliente indicada no existe", 422);
+      clientId = ficha.id;
+    }
+
     const additionalData = body.additionalData != null ? String(body.additionalData) : null;
     if (eventType.additionalDataRequired && (!additionalData || additionalData.trim() === "")) {
       return error("additionalData es obligatorio para este tipo de cita");
@@ -158,25 +209,27 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const duration = eventType.duration; // snapshot
     const meetUrl = modality === "online" ? eventType.meetUrl : null;
 
-    // Solapamiento
-    const overlap = await findBookingOverlap(Booking, { scheduledAt, duration });
-    if (overlap) {
-      return error(`Solapa con otra cita activa el ${overlap.scheduledAt.toISOString?.() ?? overlap.scheduledAt}`, 409);
-    }
-
     const notes = body.notes != null ? String(body.notes) : null;
 
-    // teamMemberId solo si el tenant tiene módulo team; valida existencia.
+    // teamMemberId solo si el tenant tiene módulo team; valida existencia. Se
+    // resuelve ANTES del solape porque el solape es POR PROFESIONAL.
     let teamMemberId = null;
     if (hasModule("team")) {
       const tmId = typeof body.teamMemberId === "string" && body.teamMemberId.trim()
         ? body.teamMemberId.trim()
         : null;
       if (tmId) {
+        if (!UUID_RE.test(tmId)) return error("teamMemberId inválido");
         const tm = await TeamMember.findByPk(tmId, { attributes: ["id"] });
         if (!tm) return error("teamMemberId no existe");
       }
       teamMemberId = tmId;
+    }
+
+    // Solapamiento (solo con citas del MISMO profesional, o sin asignar).
+    const overlap = await findBookingOverlap(Booking, { scheduledAt, duration, teamMemberId });
+    if (overlap) {
+      return error(`Solapa con otra cita activa el ${overlap.scheduledAt.toISOString?.() ?? overlap.scheduledAt}`, 409);
     }
 
     // Paciente asignado (Clínica/Pacientes). Opcional.
@@ -197,6 +250,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       notes,
       teamMemberId,
       patientId: patRes.patientId,
+      clientId,
     });
 
     await logCitasAudit({

@@ -33,6 +33,13 @@ export function defineClientNote(sequelize) {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      // Miembro del equipo que escribió la nota (2026-07-23). Enlace real,
+      // frente a `createdBy` que es solo texto.
+      teamMemberId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "team_member_id",
+      },
     },
     {
       tableName: "client_notes",

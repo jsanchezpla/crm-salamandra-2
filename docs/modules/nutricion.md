@@ -3,6 +3,37 @@
 Estado: **Sprint Recetario cerrado en local 2026-06-24. C1+C2+C3 en
 producción. C4+C5 pendientes de despliegue.**
 
+> **REWORK SEMANA REAL (2026-07-22, decisión de producto Rodrigo+Jorge).**
+> Anula parcialmente lo descrito más abajo; en caso de conflicto prevalece esto
+> (y en última instancia el código):
+>
+> - **La semana existe en el modelo**: `plan_meals.weekday` SMALLINT (1=Lunes …
+>   7=Domingo, NULL = comida sin día para planes pre-rework). Un menú nuevo nace
+>   con **7 días × 5 comidas** (35 comidas, cada una con su "Opción 1").
+>   Migración: `scripts/migrate-nutricion-week-recipe-media.js` (byTable).
+> - **La tira de días sobre los Comentarios está RETIRADA** (insertaba "Lunes:"
+>   como texto en `plans.description`). El editor tiene pestañas Lunes…Domingo
+>   (+ "Sin día" si hay comidas legacy, con selector de día por comida) y una
+>   **vista de semana completa** en cuadrícula 7×comidas. `plans.description`
+>   vuelve a ser solo comentarios generales.
+> - **Recetas con FOTO y PASOS** (revierte D4 "solo ingredientes"):
+>   `recipes.photo_path` (disco, patrón documentStorage, helper
+>   `lib/nutricion/recipePhotoStorage.js`, JPEG/PNG/WebP ≤5 MB, magic bytes) y
+>   `recipes.steps` JSONB [string]. Endpoints POST/GET/DELETE
+>   `/api/nutricion/recipes/[id]/photo`. Foto y pasos se leen EN VIVO desde los
+>   menús (via `recipeId` de provenance); el snapshot sigue congelando solo
+>   nombre e ingredientes.
+> - **El PDF del menú agrupa por día** (banda por día, comidas dentro), embebe
+>   la foto de cada receta y sus pasos numerados, y **omite comidas/días vacíos**.
+>   Los planes sin días se imprimen plano, como antes.
+> - **Catálogo saneado**: el catálogo branded (2.925 productos de marca de OFF)
+>   fue un malentendido y se retiró — `scripts/cleanup-branded-foods.js` archiva
+>   `source='openfoodfacts' AND 'marca'=ANY(tags)`; el seed y sus datos se
+>   eliminaron del repo. El catálogo es `seed-foods-base-catalog.js` (~500
+>   alimentos con macros) + los alimentos propios de la nutricionista.
+> - `loadFromTemplate` del editor copia ahora también `weekday` y las recetas de
+>   cada opción (antes se perdían ambas cosas).
+
 > **Sprint Nutrinotas (2026-07-18, rama `feat/nutricion-recetario-ux`):**
 > feedback directo de Laura aplicado sobre el estado post-Sprint 8:
 >
@@ -537,3 +568,68 @@ Líneas de código aproximadas:
 Producción: Laura tiene operativo C1+C2+C3 desde el 2026-06-24. La
 inversión está pendiente solo de validación browser de C4+C5 y un
 último deploy.
+
+---
+
+## PDF del menú — rediseño del 2026-07-22 (segunda pasada)
+
+Fichero: `lib/nutricion/menuPdf.js`. Es el ÚNICO documento que recibe el
+paciente (no hay portal: se envía por email como adjunto).
+
+### Estructura en tres partes
+
+1. **Portada, la única hoja horizontal** — calendario 7 días × comidas.
+2. **Días detallados, en vertical** — cada día dentro de una TARJETA de fondo
+   tenue con el color de marca y una barra lateral, para que se vea de un
+   golpe dónde empieza y acaba cada día. Los días fluyen y paginan solos
+   (típicamente 2 por hoja). Detrás del último día van los comentarios
+   generales de la nutricionista, en su propia tarjeta.
+3. **Recetario** — cada receta usada en la semana, deduplicada por `recipeId`,
+   también en tarjeta: foto, ingredientes con cantidades y pasos numerados.
+
+### Motor de bloques
+
+pdfkit pinta en orden de llamada: un rectángulo trazado después del texto lo
+taparía. Para poder dibujar el fondo de una tarjeta ANTES de su contenido hay
+que saber de antemano cuánto ocupa, así que el contenido se modela como lista
+de bloques (`blk`) que se MIDEN con `heightOfString` y luego se pintan con
+`drawBlocks`. Si un día o una receta no cabe ni en una hoja entera, hay una
+ruta de respaldo que renderiza fluyendo y sin tarjeta (`renderDayFlowing`,
+`renderRecipeFlowing`): un menú raro nunca debe romper el documento.
+
+### Orientación — trampa a recordar
+
+`doc.addPage()` SIN argumentos hereda `doc.options`, que se fijaron al crear el
+documento. Como la portada abre el PDF en horizontal, todas las páginas que
+pdfkit añadía solo (desbordamiento, `ensureSpace`) salían apaisadas. Por eso
+`switchToPortrait(doc)` reescribe `doc.options` en cuanto termina la portada.
+
+### Tipografía
+
+Poppins embebida (`lib/pdf/fonts.js`, ficheros en `lib/pdf/fonts/`, licencia
+OFL en la misma carpeta), la misma que la interfaz. Cuatro pesos: Regular,
+Medium, SemiBold (hace de negrita) e Italic. Los buffers se leen de disco una
+vez por proceso. Si faltasen los ficheros se cae a Helvetica en lugar de
+fallar: un PDF con la fuente equivocada es un problema estético, uno que no se
+genera es un paciente sin su menú. El Dockerfile ya copia `lib/` entera.
+
+### `plans.show_macros` — decisión clínica, no estética
+
+Migración `scripts/migrate-nutricion-show-macros.js`, interruptor en
+`PlanEditorModal` ("Lo que ve el paciente"). Gobierna si el PDF imprime
+P/H/G/fibra.
+
+**Por defecto `false`, y los menús preexistentes también quedaron en `false`.**
+Laura trata trastornos de la conducta alimentaria, donde poner cifras de
+gramos delante del paciente puede reforzar justo la conducta que se está
+tratando. Enseñarlas tiene que ser una decisión consciente por menú. La
+nutricionista sigue viendo todos los macros calculados dentro del CRM: el
+interruptor solo gobierna el documento que sale a la calle.
+
+El valor viaja en las copias (`assign`, `duplicate`, `reapply-template`): si la
+plantilla decide no enseñar macros, el plan del paciente tampoco.
+
+### Sin pies de página
+
+El documento NO lleva "Generado el … · <tenant>" ni ninguna otra firma. Es
+material clínico que entrega la nutricionista.

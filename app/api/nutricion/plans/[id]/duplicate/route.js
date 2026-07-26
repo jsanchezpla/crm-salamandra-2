@@ -54,6 +54,10 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
         {
           name: newName,
           description: src.description,
+          // Comentarios por día: sin esto, duplicar un menú perdía las notas
+          // de cada día de la semana.
+          dayComments: src.dayComments || {},
+          showMacros: Boolean(src.showMacros),
           type: "template",
           visibleToClient: src.visibleToClient,
         },

@@ -19,6 +19,7 @@
  */
 
 import { Sequelize } from "sequelize";
+import { byTable } from "./_schema-targets.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 
@@ -30,16 +31,8 @@ async function tableExists(s, schema, table) {
   return rows.length > 0;
 }
 
-async function fetchOutreachSlugs(s) {
-  const [rows] = await s.query(`
-    SELECT t.slug
-    FROM master.tenants t
-    JOIN master.tenant_modules tm ON tm.tenant_id = t.id
-    WHERE t.status = 'active' AND tm.module_key = 'outreach' AND tm.enabled = TRUE
-    ORDER BY t.slug
-  `);
-  return rows.map((r) => r.slug);
-}
+// Selección por EXISTENCIA de tabla, no por módulo: ver scripts/_schema-targets.js
+// y el incidente del 2026-07-21 (bug de las reservas de tunutrilaura.com).
 
 async function processSchema(s, schema) {
   if (!(await tableExists(s, schema, "outreach_settings"))) {
@@ -66,16 +59,16 @@ async function main() {
 
   const sequelize = new Sequelize(process.env.DATABASE_URL, { dialect: "postgres", logging: false });
 
-  const slugs = await fetchOutreachSlugs(sequelize);
-  if (slugs.length === 0) {
-    log("· Ningún tenant con outreach activo.");
+  const { schemas, skipped } = await byTable(sequelize, "outreach_settings");
+  if (schemas.length === 0) {
+    log("· Ningún schema con tabla outreach_settings.");
     await sequelize.close();
     process.exit(0);
   }
-  log(`✓ ${slugs.length} tenants: ${slugs.join(", ")}`);
+  log(`✓ ${schemas.length}: ${schemas.join(", ")}`);
+  if (skipped.length) log(`· sin tabla outreach_settings, se omiten: ${skipped.join(", ")}`);
 
-  for (const slug of slugs) {
-    const schema = `crm_${slug}`;
+  for (const schema of schemas) {
     try {
       const r = await processSchema(sequelize, schema);
       log(r.skipped ? `· ${schema}: sin outreach_settings (se salta)` : `· ${schema}: columnas OK`);

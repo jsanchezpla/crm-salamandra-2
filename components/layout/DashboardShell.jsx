@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "./Sidebar.jsx";
 import Salamandrobot from "../assistant/Salamandrobot.jsx";
+import NotificationBell from "./NotificationBell.jsx";
 
 export default function DashboardShell({
   tenant,
@@ -65,6 +66,7 @@ export default function DashboardShell({
 
   return (
     <div className="dashboard-shell flex h-screen" style={shellStyle}>
+      <NotificationBell />
       <Sidebar
         tenant={tenant}
         user={user}

@@ -3,8 +3,11 @@
  * un CLIENTE PAGADOR con VARIOS PACIENTES, cada uno con sus propias citas.
  *
  *   Pedro Giménez Torres  (cliente que paga)
- *     ├─ Juan Giménez López   · hijo · 12 años   → citas con Mónica Ortiz
- *     └─ María Sánchez Giménez · sobrina · 14 años → citas con Roberto Cano
+ *     ├─ Juan Giménez López   · hijo · 12 años     → citas con la 1ª profesional
+ *     └─ María Sánchez Giménez · sobrina · 14 años → citas con el 2º profesional
+ *
+ * Los profesionales y tipos de cita se resuelven por nombre en tiempo de
+ * ejecución (ver resolveRefs): sus UUID cambian en cada `db:rebuild:demo`.
  *
  * Demuestra la cadena Cliente(pagador) → Pacientes → Citas ya integrada.
  * Idempotente: se identifica por client.custom_fields->>'showcase' y se
@@ -20,16 +23,42 @@ const MARK = "familia-pagador";
 const uuid = () => "gen_random_uuid()";
 function L(m) { process.stdout.write("  " + m + "\n"); }
 
-// Referencias existentes en la demo (verificadas en BD)
-const ET_SEGUIMIENTO = "016b85fb-d460-4930-889a-ee5a4c6a9b11"; // Sesión seguimiento 45min
-const ET_PRIMERA = "f490e4d3-625e-4952-819e-7c34f815546a";     // Primera consulta 60min
-const TM_MONICA = "c998155c-983d-453e-9c3a-08a68a639721";      // Mónica Ortiz
-const TM_ROBERTO = "719049b1-15e8-4737-8d76-abed156bc5b3";     // Roberto Cano
+// Referencias resueltas EN RUNTIME. Antes iban hardcodeadas, pero
+// `db:rebuild:demo` regenera los UUID del escaparate en cada ejecución (y los
+// nombres del seed han cambiado con el tiempo), así que el seed reventaba con
+// un fallo de FK en cualquier máquina que no fuese aquella donde se anotaron.
+async function resolveRefs(t) {
+  const [ets] = await s.query(`SELECT id, name FROM "${SC}".event_types`, { transaction: t });
+  const [tms] = await s.query(
+    `SELECT id, display_name FROM "${SC}".team_members ORDER BY display_name`,
+    { transaction: t }
+  );
+  if (!ets.length) throw new Error("crm_demo.event_types vacío — corre antes `npm run db:rebuild:demo`");
+  if (tms.length < 2) throw new Error("crm_demo.team_members necesita 2+ miembros — corre antes `npm run db:rebuild:demo`");
+
+  const find = (rows, field, re) => rows.find((r) => re.test(r[field]));
+  const primera = find(ets, "name", /primera/i) || ets[0];
+  const seguimiento = find(ets, "name", /seguimiento/i) || ets[ets.length - 1];
+  const monica = find(tms, "display_name", /^mónica/i) || tms[0];
+  const roberto = find(tms, "display_name", /^roberto/i) || tms.find((m) => m.id !== monica.id);
+
+  return {
+    ET_PRIMERA: primera.id,
+    ET_SEGUIMIENTO: seguimiento.id,
+    TM_MONICA: monica.id,
+    TM_ROBERTO: roberto.id,
+    nombreMonica: monica.display_name,
+    nombreRoberto: roberto.display_name,
+  };
+}
 
 const s = new Sequelize(process.env.DATABASE_URL, { dialect: "postgres", logging: false });
 
 async function main() {
   await s.transaction(async (t) => {
+    const refs = await resolveRefs(t);
+    L(`terapeutas: ${refs.nombreMonica} y ${refs.nombreRoberto}`);
+
     // ── Limpieza idempotente ──────────────────────────────────────────────
     const [prev] = await s.query(
       `SELECT id FROM "${SC}".clients WHERE custom_fields->>'showcase' = $1`,
@@ -71,9 +100,9 @@ async function main() {
       L(`  paciente: ${first} ${last} · ${relationship} · ${age} años  (${p.id})`);
       return p.id;
     }
-    const juan = await addPatient("Juan", "Giménez López", 12, "hijo", TM_MONICA,
+    const juan = await addPatient("Juan", "Giménez López", 12, "hijo", refs.TM_MONICA,
       "Dificultades de atención y organización en el colegio.", ["Atención sostenida", "Planificación"]);
-    const maria = await addPatient("María", "Sánchez Giménez", 14, "sobrina", TM_ROBERTO,
+    const maria = await addPatient("María", "Sánchez Giménez", 14, "sobrina", refs.TM_ROBERTO,
       "Apoyo en regulación emocional derivada del centro escolar.", ["Regulación emocional", "Habilidades sociales"]);
 
     // ── Citas (bookings) por paciente, con profesional y pagador ──────────
@@ -88,12 +117,12 @@ async function main() {
       );
     }
     // Juan: una sesión pasada (completada) y una próxima (confirmada)
-    await addBooking(juan, TM_MONICA, ET_PRIMERA, "2026-06-30T16:00:00+02:00", 60, "completed", "Primera consulta — Juan");
-    await addBooking(juan, TM_MONICA, ET_SEGUIMIENTO, "2026-07-23T16:00:00+02:00", 45, "confirmed", "Seguimiento — Juan");
-    // María: idem con Roberto
-    await addBooking(maria, TM_ROBERTO, ET_PRIMERA, "2026-07-02T17:30:00+02:00", 60, "completed", "Primera consulta — María");
-    await addBooking(maria, TM_ROBERTO, ET_SEGUIMIENTO, "2026-07-24T17:30:00+02:00", 45, "confirmed", "Seguimiento — María");
-    L("citas: 2 para Juan (Mónica Ortiz) + 2 para María (Roberto Cano)");
+    await addBooking(juan, refs.TM_MONICA, refs.ET_PRIMERA, "2026-06-30T16:00:00+02:00", 60, "completed", "Primera consulta — Juan");
+    await addBooking(juan, refs.TM_MONICA, refs.ET_SEGUIMIENTO, "2026-07-23T16:00:00+02:00", 45, "confirmed", "Seguimiento — Juan");
+    // María: idem con el segundo profesional
+    await addBooking(maria, refs.TM_ROBERTO, refs.ET_PRIMERA, "2026-07-02T17:30:00+02:00", 60, "completed", "Primera consulta — María");
+    await addBooking(maria, refs.TM_ROBERTO, refs.ET_SEGUIMIENTO, "2026-07-24T17:30:00+02:00", 45, "confirmed", "Seguimiento — María");
+    L(`citas: 2 para Juan (${refs.nombreMonica}) + 2 para María (${refs.nombreRoberto})`);
   });
 
   process.stdout.write("\n✓ Escenario 'familia pagador' sembrado en crm_demo\n");

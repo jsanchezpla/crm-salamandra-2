@@ -1,13 +1,17 @@
 /**
- * enable-outreach.js — Activa el módulo `outreach` para un tenant.
+ * enable-outreach.js — Activa el módulo `outreach` para un tenant y deja su
+ * schema listo (llama a ensure-tenant-schema.js al terminar).
  *
- * Debe ejecutarse ANTES de la migración: migrate-outreach-sprint-1.js sólo
- * crea tablas en los tenants que tienen el módulo habilitado (regla #12: la
- * lista de schemas se lee de master.tenants en runtime, nunca se hardcodea).
+ * Para altas nuevas es preferible el genérico:
+ *   node --env-file=.env.local scripts/enable-module.js <slug> outreach
+ * Este se mantiene por compatibilidad con `npm run db:enable:outreach`.
  *
  * Uso: node --env-file=.env.local scripts/enable-outreach.js <slug>
  */
 
+import { spawnSync } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
 import { invalidateTenantCache } from "../lib/tenant/tenantResolver.js";
 
@@ -44,5 +48,22 @@ if (!created && !mod.enabled) await mod.update({ enabled: true });
 
 invalidateTenantCache(slug);
 process.stdout.write(`\n✓ Módulo outreach ${created ? "creado" : "ya existía"} y habilitado para "${slug}" (${tenant.name})\n`);
-process.stdout.write("  Siguiente paso: node --env-file=.env.local scripts/migrate-outreach-sprint-1.js\n\n");
+
+// Antes esto solo imprimía "siguiente paso: corre la migración" y quedaba en que
+// alguien se acordara. No acordarse es justo lo que rompió schemas el
+// 2026-07-21, así que ahora se dispara solo.
+process.stdout.write("\n  ▶ Poniendo el schema al día...\n\n");
+const r = spawnSync(
+  process.execPath,
+  [join(dirname(fileURLToPath(import.meta.url)), "ensure-tenant-schema.js"), slug, "--module", "outreach"],
+  { env: process.env, stdio: "inherit" }
+);
+if (r.status !== 0) {
+  process.stderr.write(
+    `\n✗ Módulo habilitado, pero las migraciones fallaron. El schema de "${slug}" puede\n` +
+      `  estar incompleto: revisa el error y relanza  node scripts/ensure-tenant-schema.js ${slug}\n\n`
+  );
+  process.exit(1);
+}
+process.stdout.write(`\n✓ Captación lista en "${slug}".\n\n`);
 process.exit(0);

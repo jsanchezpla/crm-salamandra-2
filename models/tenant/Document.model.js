@@ -7,7 +7,14 @@ import { DataTypes } from "sequelize";
  * `storagePath` es el path RELATIVO a UPLOADS_ROOT
  *   documents/{tenantSlug}/{ownerUserId | shared}/{documentUUID}.{ext}
  * `fileSize` son bytes REALES medidos en servidor al subir (nunca `file.size`
- * del cliente). MIME restringido por enum a PDF/DOCX/XLSX.
+ * del cliente).
+ *
+ * ARCHIVO CENTRAL TRANSVERSAL (2026-07-23): esta tabla dejó de ser exclusiva
+ * del módulo Documents. Ahora es el archivo único del CRM: cualquier módulo
+ * sube aquí (una nota de cliente, la ficha, en el futuro una factura), y el
+ * módulo Documents es solo el BUSCADOR. Por eso ya NO se restringe el MIME a
+ * PDF/DOCX/XLSX — un archivo central que rechaza una foto no es un archivo
+ * central. `source` dice de dónde vino cada documento y `clientId` para quién.
  *
  * Visibilidad heredada de la carpeta al crear (o elegida en la raíz). private =
  * solo el owner; shared = todos los usuarios del tenant leen, solo el owner borra.
@@ -55,22 +62,42 @@ export function defineDocument(sequelize) {
         validate: { min: 0 },
         field: "file_size",
       },
-      // NB: VARCHAR + validación isIn (no ENUM nativo): las etiquetas de enum
-      // de Postgres se limitan a 63 bytes y los MIME de DOCX/XLSX (72-73 chars)
-      // los superan. En BD hay un CHECK equivalente (migración).
+      // MIME libre desde 2026-07-23 (archivo central transversal). Antes se
+      // limitaba a PDF/DOCX/XLSX con isIn + CHECK en BD; el CHECK lo relaja la
+      // migración migrate-documents-transversal. Solo se exige que no vaya
+      // vacío. La validación de contenido real (magic bytes, tamaño) sigue
+      // haciéndose al subir, en la capa de storage.
       mimeType: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING(150),
         allowNull: false,
         field: "mime_type",
-        validate: {
-          isIn: [
-            [
-              "application/pdf",
-              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            ],
-          ],
-        },
+        validate: { notEmpty: true },
+      },
+      // Cliente al que pertenece el documento (2026-07-23). Nullable: hay
+      // documentos internos que no son de ningún cliente. El owner_user_id ya
+      // dice quién lo subió; esto dice PARA QUIÉN es, para verlo desde su ficha.
+      clientId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "client_id",
+      },
+      // Paciente concreto al que pertenece el documento (2026-07-24). Nullable.
+      // Un cliente pagador puede tener varios subpacientes; sin esto, "los docs
+      // de este paciente" traería los de todos los hermanos bajo el mismo pagador.
+      patientId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "patient_id",
+      },
+      // De dónde vino el documento: "manual" (subido en el módulo Documents),
+      // "ficha" (adjunto desde la ficha de un cliente), "paciente" (documento de
+      // un paciente), "contract_template" (contrato estándar de la clínica,
+      // reutilizable en todos los pacientes), "nota", "factura"…
+      // Sirve para filtrar el archivo central por origen.
+      source: {
+        type: DataTypes.STRING(40),
+        allowNull: false,
+        defaultValue: "manual",
       },
     },
     {

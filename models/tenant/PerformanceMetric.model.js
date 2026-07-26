@@ -7,10 +7,18 @@ import { DataTypes } from "sequelize";
  * el cliente saltó la numeración) + 3 complementos (ocupación, antigüedad,
  * asistencia).
  *
- * Sprint 1: solo estructura. El frontend usa datos dummy hardcoded para el
- * dashboard de "Mi desempeño" y el panel de Dirección.
- * Sprint posterior: cálculo real a partir de ClinicSession, ClinicalReport,
- * BookingsRRHH y Coordination.
+ * Puntuación e incentivo (REALES desde 2026-07-24, ver lib/clinica/incentives.js):
+ *   - las puntuaciones por área (area1..area8) y los complementos los INTRODUCE
+ *     Dirección en el editor de evaluación (POST /api/clinica/performance);
+ *   - `totalScore` se calcula como media PONDERADA de las áreas puntuadas
+ *     (pesos de performanceAreas.js) al guardar;
+ *   - `proposedIncentive` se deriva de `totalScore` según la TABLA DE TRAMOS del
+ *     tenant (tenant.settings.clinica.incentiveTiers); se recalcula en vivo;
+ *   - `approvedIncentive` es el importe que Dirección aprueba/ajusta a mano.
+ *
+ * Sprint posterior (Productividad): auto-derivar el complemento de ocupación (%
+ * horas de intervención directa) a partir de Booking/ClinicSession, en vez de
+ * introducirlo a mano.
  */
 export function definePerformanceMetric(sequelize) {
   return sequelize.define(

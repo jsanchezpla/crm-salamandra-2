@@ -114,6 +114,24 @@ export function defineTeamMember(sequelize) {
         type: DataTypes.JSONB,
         defaultValue: {},
       },
+      // Especialidad(es) clínica(s) del profesional: su rol concreto
+      // (Nutrición, Logopedia, Psicología…). Taxonomía en
+      // lib/clinica/specialties.js. Array: puede cubrir varias. Sólo tiene
+      // sentido si el miembro atiende pacientes (módulo Clínica o Nutrición).
+      specialties: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
+      // Horas de intervención directa objetivo por semana (denominador de la
+      // productividad). NULL = sin objetivo configurado → productividad N/D.
+      // El "-5h/semana" de ciertos roles = un número menor aquí, sin hardcodear.
+      // Columna: weekly_direct_hours (underscored global).
+      weeklyDirectHours: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: { min: 0, max: 80 },
+      },
     },
     {
       tableName: "team_members",

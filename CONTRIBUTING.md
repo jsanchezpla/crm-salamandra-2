@@ -133,6 +133,20 @@ Tipos: `feat` (funcionalidad), `fix` (bug), `chore` (mantenimiento/infra),
   en runtime (nunca hardcodees slugs) y que se pueda re-ejecutar sin romper.
   Indica en el mensaje del commit si hay que correrla y en qué orden respecto
   al deploy (algunas van ANTES: ver la cabecera del script).
+- **Activar un módulo a un cliente:** usa **siempre**
+  `npm run db:enable-module -- <slug> <moduleKey>` (en el VPS:
+  `docker exec crm-salamandra-app-1 node scripts/enable-module.js <slug> <moduleKey>`).
+  Activar un módulo es un cambio de **datos**, pero sus tablas y columnas son
+  **estructura**: ese script hace las dos mitades y en el orden correcto. Si solo
+  tocas `master.tenant_modules` a mano, el schema se queda atrás y la primera
+  lectura revienta con 42703 — fue lo que tumbó las reservas de tunutrilaura.com.
+  Para poner al día un tenant existente sin activar nada:
+  `npm run db:ensure-schema -- <slug>`. Qué migraciones lleva cada módulo se
+  declara en `scripts/_module-migrations.js`; si añades una migración de módulo,
+  apúntala ahí o nadie la ejecutará nunca. **El orden en que se ejecutan NO se
+  escribe a mano**: se deduce del SQL de cada una (quien crea una tabla va antes
+  que quien la altera). Audítalo con `npm run db:check-migration-order`, que
+  además avisa de migraciones huérfanas y de aquellas cuyo SQL no consigue leer.
 - **Multi-tenant:** toda query va por `getTenantContext`/`withTenant` + `hasModule`.
   Nunca conectes directo a PostgreSQL desde una ruta.
 - **JavaScript puro** (sin TypeScript). `app/` en la raíz (sin `src/`).

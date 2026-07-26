@@ -64,6 +64,12 @@ export function defineClinicalReport(sequelize) {
         allowNull: false,
         defaultValue: "draft",
       },
+      // Cliente/pagador (2026-07-23). Foto del paciente al crear el informe.
+      clientId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "client_id",
+      },
     },
     {
       tableName: "clinical_reports",

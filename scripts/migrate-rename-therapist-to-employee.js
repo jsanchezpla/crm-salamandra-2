@@ -88,6 +88,18 @@ async function renameIndexesAndConstraints(sequelize, t, schema) {
   );
   for (const { indexname } of idxRows) {
     const newName = indexname.replace(/therapist/g, "employee");
+    // Si el índice con el nombre NUEVO ya existe, renombrar choca con
+    // "la relación «X» ya existe" y tumba toda la migración. Pasa en cualquier
+    // schema donde Sequelize (db:sync) ya creó el índice desde el modelo, que
+    // usa el nombre nuevo: el viejo se queda como duplicado inofensivo.
+    const [existe] = await sequelize.query(
+      `SELECT 1 FROM pg_indexes WHERE schemaname = $1 AND indexname = $2`,
+      { bind: [schema, newName], transaction: t }
+    );
+    if (existe.length) {
+      log(`· ${schema} index: ${newName} ya existe — se deja ${indexname} como duplicado`);
+      continue;
+    }
     await sequelize.query(
       `ALTER INDEX "${schema}"."${indexname}" RENAME TO "${newName}"`,
       { transaction: t }
@@ -108,6 +120,18 @@ async function renameIndexesAndConstraints(sequelize, t, schema) {
   );
   for (const { conname, schemaname, tablename } of conRows) {
     const newName = conname.replace(/therapist/g, "employee");
+    // Mismo blindaje que con los índices: si la constraint nueva ya existe
+    // (creada por db:sync desde el modelo), no se renombra.
+    const [existe] = await sequelize.query(
+      `SELECT 1 FROM pg_constraint c
+         JOIN pg_namespace n ON n.oid = c.connamespace
+        WHERE n.nspname = $1 AND c.conname = $2`,
+      { bind: [schemaname, newName], transaction: t }
+    );
+    if (existe.length) {
+      log(`· ${schema} constraint: ${newName} ya existe — se deja ${conname} como duplicada`);
+      continue;
+    }
     await sequelize.query(
       `ALTER TABLE "${schemaname}"."${tablename}" RENAME CONSTRAINT "${conname}" TO "${newName}"`,
       { transaction: t }

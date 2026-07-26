@@ -2,8 +2,9 @@
 
 /**
  * NutricionRecetasModule — catálogo de recetas del recetario (Sprint 8.2).
- * Lista recetas (nombre + nº ingredientes + macros), crear/editar/archivar.
- * Solo nutri_laura (y demo por fallback del override).
+ * Cards con FOTO del plato (rework 2026-07-22), nombre, nº ingredientes, nº de
+ * pasos y macros. Crear/editar/archivar. Solo nutri_laura (y demo por fallback
+ * del override).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -103,12 +104,27 @@ export default function NutricionRecetasModule() {
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditing(r); } }}
-                className="border border-gray-200 rounded-xl bg-white p-4 hover:shadow-sm hover:border-[var(--color-primary)]/30 transition group cursor-pointer"
+                className="border border-gray-200 rounded-xl bg-white overflow-hidden hover:shadow-sm hover:border-[var(--color-primary)]/30 transition group cursor-pointer"
               >
+                {/* Foto del plato: cabecera visual de la card. ?v=updatedAt
+                    invalida la caché del navegador al cambiar la foto. */}
+                {r.hasPhoto && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`/api/nutricion/recipes/${r.id}/photo?v=${encodeURIComponent(r.updatedAt ?? "")}`}
+                    alt={`Foto de ${r.name}`}
+                    loading="lazy"
+                    className="w-full h-32 object-cover border-b border-gray-100"
+                  />
+                )}
+                <div className="p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="text-left flex-1 min-w-0">
                     <div className="font-semibold text-gray-900 truncate">{r.name}</div>
-                    <div className="text-xs text-gray-400 mt-0.5">{r.ingredientCount} ingrediente{r.ingredientCount === 1 ? "" : "s"}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {r.ingredientCount} ingrediente{r.ingredientCount === 1 ? "" : "s"}
+                      {Array.isArray(r.steps) && r.steps.length > 0 && <> · {r.steps.length} paso{r.steps.length === 1 ? "" : "s"}</>}
+                    </div>
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); archive(r); }}
@@ -124,6 +140,7 @@ export default function NutricionRecetasModule() {
                   <span>C <strong>{fmt(r.macros?.carbs)}</strong></span>
                   <span>G <strong>{fmt(r.macros?.fat)}</strong></span>
                   <span>F <strong>{fmt(r.macros?.fiber)}</strong></span>
+                </div>
                 </div>
               </div>
             ))}

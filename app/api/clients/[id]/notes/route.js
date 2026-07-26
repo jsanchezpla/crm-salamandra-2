@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
+import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 import {
   ok,
   created,
@@ -71,6 +72,8 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
       clientId: id,
       content,
       createdBy,
+      // Quién del equipo la escribe (enlace real, además del texto createdBy).
+      teamMemberId: await resolveCurrentTeamMemberId(request, tenantModels),
     });
 
     process.stdout.write(`[clients:note] created tenant client=${id} note=${row.id}\n`);

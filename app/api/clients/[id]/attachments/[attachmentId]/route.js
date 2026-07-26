@@ -2,44 +2,38 @@ import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import {
   noContent,
   forbidden,
-  notFound,
   serverError,
 } from "../../../../../../lib/utils/apiResponse.js";
-import { deleteAttachmentFile } from "../../../../../../lib/clients/attachmentStorage.js";
+import { deleteDocumentFile } from "../../../../../../lib/documents/documentStorage.js";
 
 /**
  * DELETE /api/clients/[id]/attachments/[attachmentId]
  *
- * Borra fila BD + archivo físico. Idempotente:
- *   - Si el attachment no existe en BD, devuelve 204.
- *   - Si la fila se borra pero el archivo no estaba, no falla.
+ * Borra un adjunto de la ficha. Desde 2026-07-23 los adjuntos son documentos
+ * del archivo central (source='ficha'): se borra la fila y el fichero.
+ * Idempotente: si no existe, 204.
  *
- * Orden: borrar BD primero (transacción rápida), luego best-effort sobre
- * disco. Si el disco falla queda un huérfano físico (no es crítico —
- * el patrón inverso dejaría un huérfano más visible para el usuario).
+ * Orden: BD primero (transacción rápida), luego best-effort en disco.
  */
 export const DELETE = withTenant(
   async (_request, { params }, { tenant, tenantModels, hasModule }) => {
     try {
       if (!hasModule("clients")) return forbidden("Módulo clients no activo");
       const { id, attachmentId } = await params;
-      const { ClientAttachment } = tenantModels;
+      const { Document } = tenantModels;
 
-      const row = await ClientAttachment.findOne({
-        where: { id: attachmentId, clientId: id },
+      // source:'ficha' (arreglo 2026-07-23): esta ruta SOLO opera sobre adjuntos
+      // de ficha. Sin el filtro alcanzaba cualquier documento del cliente en el
+      // archivo central (source='manual', privado de otro usuario) y lo borraba,
+      // saltandose la regla "solo el dueño borra" del modulo Documentos.
+      const row = await Document.findOne({
+        where: { id: attachmentId, clientId: id, source: "ficha" },
       });
-      if (!row) {
-        // Idempotente: no existir es OK.
-        return noContent();
-      }
+      if (!row) return noContent(); // idempotente
 
-      const { storedFilename } = row;
+      const { storagePath } = row;
       await row.destroy();
-      await deleteAttachmentFile(tenant.slug, id, storedFilename);
-
-      process.stdout.write(
-        `[clients:attachment] deleted tenant=${tenant.slug} client=${id} file=${attachmentId}\n`
-      );
+      await deleteDocumentFile(tenant.slug, storagePath);
 
       return noContent();
     } catch (err) {

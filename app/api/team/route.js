@@ -3,6 +3,7 @@ import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../lib/db/masterDb.js";
 import { serializeTeamMember } from "../../../lib/team/serializeTeamMember.js";
+import { normalizeSpecialties } from "../../../lib/clinica/specialties.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["active", "inactive", "on_leave"]);
@@ -214,6 +215,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       status,
       hiredAt: startDate,
       notes,
+      specialties: normalizeSpecialties(body.specialties),
       customFields: {},
     });
 

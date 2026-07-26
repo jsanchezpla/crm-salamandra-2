@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import EmployeeBillingSection from "../../../components/billing/EmployeeBillingSection.jsx";
 import Select from "@/components/ui/Select.jsx";
+import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 
 const STATUS_LABELS = { active: "Activo", inactive: "Inactivo", on_leave: "De baja" };
 const STATUS_FILTER_OPTIONS = [
@@ -30,6 +31,7 @@ const EMPTY_FORM = {
   phone: "", hourlyRate: "", hourlyCost: "",
   annualGross: "", paymentPeriods: 12,
   currency: "EUR", startDate: "", notes: "", status: "active",
+  specialties: [],
 };
 
 // Mensual = bruto anual / pagas (mismo cálculo que el backend).
@@ -152,6 +154,7 @@ export default function EquipoPage() {
       startDate: openMember.startDate ?? "",
       notes: openMember.notes ?? "",
       status: openMember.status ?? "active",
+      specialties: openMember.specialties ?? [],
     });
     setEditing(true);
   }
@@ -430,6 +433,13 @@ export default function EquipoPage() {
                         className={inputCls} />
                     </FormRow>
                   </div>
+                  {/* Rol clínico: solo relevante si atiende pacientes (módulo
+                      Clínica o Nutrición). Se puede dejar vacío para el resto. */}
+                  <SpecialtyPicker
+                    label="Especialidad clínica (si atiende pacientes)"
+                    value={form.specialties}
+                    onChange={(v) => setForm((f) => ({ ...f, specialties: v }))}
+                  />
                   <div className="grid grid-cols-2 gap-3">
                     <FormRow label="Teléfono">
                       <input value={form.phone}

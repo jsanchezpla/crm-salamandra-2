@@ -5,8 +5,14 @@ import { DataTypes } from "sequelize";
  *
  * Catálogo de recetas que agrupan ingredientes (`foods`). NO sustituye a
  * `foods` (que sigue siendo el catálogo de ingredientes con macros/100g):
- * una receta es una composición nombrada de ingredientes. D4 = SOLO
- * ingredientes (sin pasos, tiempo ni foto).
+ * una receta es una composición nombrada de ingredientes.
+ *
+ * Rework 2026-07-22 (revierte la parte "sin foto ni pasos" de D4, decisión de
+ * producto de Rodrigo+Jorge): `photoPath` guarda la ruta RELATIVA de la foto en
+ * disco (patrón documentStorage; el fichero vive bajo getUploadsRoot()) y
+ * `steps` los pasos de preparación como JSONB [string]. Ambos se leen EN VIVO
+ * también desde los menús asignados (via plan_meal_option_recipes.recipe_id):
+ * el snapshot congela nombre e ingredientes, no la foto ni los pasos.
  *
  * Las macros de una receta se calculan agregando sus `recipe_foods`
  * (ver lib/nutricion/macros.js). Al asignar un menú a un paciente, la receta
@@ -40,6 +46,19 @@ export function defineRecipe(sequelize) {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: false,
+      },
+      // Ruta RELATIVA de la foto bajo getUploadsRoot() (p. ej.
+      // "nutricion/{slug}/recipes/{recipeId}/{uuid}.jpg"). NULL = sin foto.
+      photoPath: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        field: "photo_path",
+      },
+      // Pasos de preparación, en orden: JSONB ["Precalentar el horno…", …].
+      steps: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
       },
     },
     {

@@ -103,6 +103,24 @@ export function defineBooking(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // Ficha de cliente a la que pertenece esta cita (2026-07-22).
+      //
+      // Hasta ahora el cruce ficha↔citas se hacía comparando cadenas de email,
+      // y eso se rompe en cuanto la persona escribe el correo con otra
+      // mayúscula o se lo cambia: sus citas se le despegan de la ficha. Ahora
+      // hay enlace de verdad.
+      //
+      // Nullable a propósito: una reserva pública de alguien que todavía NO es
+      // cliente es perfectamente válida y no debe bloquearse. La FK va con
+      // ON DELETE SET NULL — borrar una ficha nunca puede llevarse por delante
+      // el histórico de citas, que tiene valor contable y clínico.
+      //
+      // client_name/email/phone SE QUEDAN: son la foto del momento de la
+      // reserva y es lo que se imprime y se envía por correo.
+      clientId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       // Notas internas (no visibles al cliente)
       notes: {
         type: DataTypes.TEXT,

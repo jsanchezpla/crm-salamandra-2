@@ -24,12 +24,12 @@
  * cuando carga inicial.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import TimestampRelative from "../../../components/ui/TimestampRelative.jsx";
 
-const MAX_FILE_MB = 10;
+const MAX_FILE_MB = 25;
 const MAX_FILES = 50;
-const ALLOWED_MIME = "application/pdf";
+// Archivo central (2026-07-23): se acepta cualquier tipo de fichero.
 
 function fmtBytes(bytes) {
   if (bytes == null) return "—";
@@ -48,6 +48,11 @@ export default function ClientAttachmentsPanel({ clientId }) {
   const [dragOver, setDragOver] = useState(false);
 
   const [confirmDelete, setConfirmDelete] = useState(null);
+  // Modal de NOMBRE obligatorio al subir. `pending` = File a la espera de nombre.
+  const [pending, setPending] = useState(null);
+  const [pendingName, setPendingName] = useState("");
+  const fileInputRef = useRef(null);
+  const resetInput = () => { if (fileInputRef.current) fileInputRef.current.value = ""; };
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -66,9 +71,6 @@ export default function ClientAttachmentsPanel({ clientId }) {
 
   function validateFile(file) {
     if (!file) return "Selecciona un archivo.";
-    if (file.type !== ALLOWED_MIME) {
-      return `Solo se aceptan PDF (recibido: ${file.type || "tipo desconocido"}).`;
-    }
     if (file.size > MAX_FILE_MB * 1024 * 1024) {
       return `Archivo demasiado grande: ${(file.size / (1024 * 1024)).toFixed(1)} MB · máximo ${MAX_FILE_MB} MB.`;
     }
@@ -78,17 +80,28 @@ export default function ClientAttachmentsPanel({ clientId }) {
     return null;
   }
 
-  async function handleFile(file) {
+  // Elegir fichero → NO sube todavía: abre el modal para pedir el nombre.
+  function handleFile(file) {
     setUploadError(null);
     const validationError = validateFile(file);
     if (validationError) {
       setUploadError(validationError);
       return;
     }
+    setPending(file);
+    setPendingName(file.name.replace(/\.[^.]+$/, "")); // nombre por defecto sin extensión
+  }
+
+  async function confirmUpload() {
+    if (!pending) return;
+    const name = pendingName.trim();
+    if (!name) { setUploadError("El nombre del documento es obligatorio"); return; }
     setUploading(true);
+    setUploadError(null);
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", pending);
+      fd.append("name", name);
       const r = await fetch(`/api/clients/${clientId}/attachments`, {
         method: "POST",
         body: fd,
@@ -100,8 +113,12 @@ export default function ClientAttachmentsPanel({ clientId }) {
       }
       // Optimista: añadimos arriba sin refetch completo.
       setItems((prev) => [j.data, ...prev]);
+      setPending(null);
+      setPendingName("");
+      resetInput();
     } catch (e) {
       setUploadError(e.message);
+      resetInput(); // permite re-elegir el MISMO fichero tras un error
     } finally {
       setUploading(false);
     }
@@ -129,9 +146,9 @@ export default function ClientAttachmentsPanel({ clientId }) {
       {/* Cabecera */}
       <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-semibold text-gray-700">Adjuntos PDF</div>
+          <div className="text-sm font-semibold text-gray-700">Documentos</div>
           <div className="text-[11px] text-gray-400 mt-0.5">
-            {items.length}/{MAX_FILES} archivos · PDF, máximo {MAX_FILE_MB} MB
+            {items.length}/{MAX_FILES} archivos · cualquier tipo, máximo {MAX_FILE_MB} MB
           </div>
         </div>
       </div>
@@ -156,8 +173,8 @@ export default function ClientAttachmentsPanel({ clientId }) {
           }`}
         >
           <input
+            ref={fileInputRef}
             type="file"
-            accept="application/pdf"
             className="sr-only"
             onChange={(e) => handleFile(e.target.files?.[0])}
             disabled={uploading || limitReached}
@@ -174,7 +191,7 @@ export default function ClientAttachmentsPanel({ clientId }) {
             </div>
           ) : (
             <div className="text-center">
-              <div className="text-sm text-gray-600">Arrastra un PDF o haz clic para subir</div>
+              <div className="text-sm text-gray-600">Arrastra un archivo o haz clic para subir</div>
               <div className="text-[11px] text-gray-400 mt-0.5">Máximo {MAX_FILE_MB} MB</div>
             </div>
           )}
@@ -280,6 +297,42 @@ export default function ClientAttachmentsPanel({ clientId }) {
           </ul>
         )}
       </div>
+
+      {/* Modal de NOMBRE obligatorio al subir */}
+      {pending && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.45)" }}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5">
+            <div className="text-sm font-semibold text-gray-800 mb-1">Nombre del documento</div>
+            <div className="text-xs text-gray-500 mb-3 truncate">Archivo: {pending.name}</div>
+            <input
+              autoFocus
+              value={pendingName}
+              onChange={(e) => setPendingName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") confirmUpload(); }}
+              placeholder="Ej. Contrato firmado, Analítica…"
+              className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm"
+            />
+            {uploadError && <div className="text-xs text-red-600 mt-2">{uploadError}</div>}
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => { setPending(null); setPendingName(""); setUploadError(null); resetInput(); }}
+                disabled={uploading}
+                className="text-xs font-medium px-3 py-1.5 rounded-md border border-gray-200 text-gray-600"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmUpload}
+                disabled={uploading}
+                className="text-xs font-medium px-3 py-1.5 rounded-md text-white disabled:opacity-50"
+                style={{ background: "var(--color-primary, #1B3A2D)" }}
+              >
+                {uploading ? "Subiendo…" : "Subir"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

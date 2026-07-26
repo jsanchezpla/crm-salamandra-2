@@ -44,9 +44,9 @@ function line(label, result, expectStatus) {
 }
 
 async function main() {
-  const secret = process.env.RETORIKA_WEBHOOK_SECRET;
+  const secret = process.env.CRM_WEBHOOK_SECRET || process.env.RETORIKA_WEBHOOK_SECRET;
   if (!secret) {
-    process.stderr.write("✗ RETORIKA_WEBHOOK_SECRET no está en el entorno del script\n");
+    process.stderr.write("✗ CRM_WEBHOOK_SECRET (o el legacy RETORIKA_WEBHOOK_SECRET) no está en el entorno del script\n");
     process.exit(1);
   }
   process.stdout.write(`Secret cargado: ${secret.slice(0, 8)}…${secret.slice(-4)}\n\n`);

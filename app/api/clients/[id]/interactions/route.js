@@ -1,5 +1,6 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, created, forbidden, notFound, error } from "../../../../../lib/utils/apiResponse.js";
+import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 
 const VALID_TYPES = ["call", "email", "meeting", "note"];
 
@@ -37,6 +38,8 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
     content: content.trim(),
     date,
     createdBy: createdBy?.trim() || null,
+    // Quién del equipo la registra (enlace real, además del texto createdBy).
+    teamMemberId: await resolveCurrentTeamMemberId(request, tenantModels),
   });
 
   return created(interaction);

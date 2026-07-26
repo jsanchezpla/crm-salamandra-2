@@ -33,6 +33,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Select from "@/components/ui/Select.jsx";
+import RecipePickerModal from "./RecipePickerModal.jsx";
 import {
   computeFoodMacros,
   computeOptionMacros,
@@ -96,6 +97,15 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
   const [activeOptionByMeal, setActiveOptionByMeal] = useState({});
   const [toast, setToast] = useState(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  // Día activo de la semana: 1=Lunes … 7=Domingo; 0 = comidas sin día
+  // (planes pre-rework). null hasta que el plan carga.
+  const [activeDay, setActiveDay] = useState(null);
+  // Vista semana: cuadrícula 7 días × comidas para verlo todo de un vistazo.
+  const [weekView, setWeekView] = useState(false);
+  // Picker de recetas abierto: { sectionName, meal|null } (rediseño 2026-07-22:
+  // cada día son las 5 grandes comidas fijas; meal=null si la fila aún no
+  // existe en BD y hay que crearla al vuelo).
+  const [recipePicker, setRecipePicker] = useState(null);
 
   // Cliente cargado (solo si type='assigned')
   const [clientInfo, setClientInfo] = useState(null);
@@ -119,12 +129,18 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
         return;
       }
       setPlan(j.data);
-      // Por defecto expandimos la primera comida
-      const firstMeal = (j.data.meals || [])[0];
+      const allMeals = j.data.meals || [];
+      const hasWeek = allMeals.some((m) => m.weekday != null);
+      // Día inicial: Lunes si el plan tiene semana; el bloque "sin día" si es
+      // un plan pre-rework. En recargas se conserva el día donde estabas.
+      setActiveDay((prev) => (prev != null ? prev : hasWeek ? 1 : 0));
+      // Por defecto expandimos la primera comida del día visible
+      const day = hasWeek ? 1 : 0;
+      const firstMeal = allMeals.find((m) => (m.weekday ?? 0) === day) || allMeals[0];
       if (firstMeal) {
-        setExpandedMealId(firstMeal.id);
+        setExpandedMealId((prev) => prev ?? firstMeal.id);
         const aoMap = {};
-        for (const m of j.data.meals) {
+        for (const m of allMeals) {
           const def = (m.options || []).find((o) => o.isDefault) || (m.options || [])[0];
           if (def) aoMap[m.id] = def.id;
         }
@@ -265,40 +281,102 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
     );
   }
 
-  // Inserta el encabezado de un día en los comentarios y PERSISTE al momento.
-  // No basta con mutar el draft: el commit normal ocurre en el blur del
-  // textarea, que nunca dispara si solo se pulsa el chip (se perdería el
-  // cambio al cerrar el modal pese a que el indicador diga "Guardado").
-  async function insertWeekday(day) {
+  // Valores nutricionales en el PDF del paciente (2026-07-22). Optimista: el
+  // interruptor se mueve al instante y se revierte solo si el PATCH falla.
+  async function toggleShowMacros() {
     if (!plan) return;
-    const base = (descriptionDraft ?? "").trimEnd();
-    const newDesc = base ? `${base}\n\n${day}:\n` : `${day}:\n`;
-    setDescriptionDraft(newDesc);
+    const next = !plan.showMacros;
+    setPlan((p) => ({ ...p, showMacros: next }));
     await patchPlanMetadata(
-      { description: newDesc },
-      { onErrorRevert: () => setDescriptionDraft(plan.description || "") }
+      { showMacros: next },
+      { onErrorRevert: () => setPlan((p) => ({ ...p, showMacros: !next })) }
     );
   }
+
+  // insertWeekday (Nutrinotas): RETIRADO en el rework 2026-07-22. Los días ya
+  // no son texto en los comentarios: son estructura (plan_meals.weekday) con
+  // sus pestañas Lunes…Domingo. Los comentarios vuelven a ser solo comentarios.
 
   // toggleVisibleToClient: retirado en C4 junto con el toggle del header.
   // patchPlanMetadata sigue aceptando { visibleToClient } por si algún día
   // se reactiva el portal cliente — basta con volver a montar la UI.
 
   // ── Mutaciones: comidas ───────────────────────────────────────────────────
-  async function addMeal() {
-    if (!plan) return;
-    const name = window.prompt("Nombre de la comida (Desayuno, Comida, Cena…)") || "";
-    if (!name.trim()) return;
+  // "Añadir comida" (nombre libre por prompt) está RETIRADO (rediseño
+  // 2026-07-22): cada día son SIEMPRE las 5 grandes comidas. Si la fila de una
+  // sección no existe todavía en BD (día de un plan antiguo, comida borrada en
+  // su momento…), se crea en silencio la primera vez que se usa.
+
+  // Garantiza que la sección (Desayuno…Cena) del día `day` existe como
+  // plan_meal y devuelve { mealId }. `sectionIndex` fija el orden canónico.
+  async function ensureSectionMeal(day, sectionName, sectionIndex, existingMeal) {
+    if (existingMeal) return { mealId: existingMeal.id };
     const { ok, json } = await apiPost(`/api/nutricion/plans/${plan.id}/meals`, {
-      name: name.trim(),
+      name: sectionName,
+      weekday: day,
+      order: sectionIndex,
     });
-    if (!ok) {
-      setToast({ kind: "err", text: json.error || "No se pudo añadir la comida" });
-      return;
+    if (!ok) throw new Error(json.error || "No se pudo crear la comida");
+    return { mealId: json.data.id };
+  }
+
+  // Garantiza que la comida tiene una opción por defecto y devuelve su id.
+  async function ensureDefaultOption(mealId, existingMeal) {
+    const existing = existingMeal
+      ? (existingMeal.options || []).find((o) => o.isDefault) || (existingMeal.options || [])[0]
+      : null;
+    if (existing) return { optionId: existing.id };
+    const { ok, json } = await apiPost(
+      `/api/nutricion/plans/${plan.id}/meals/${mealId}/options`,
+      { isDefault: true }
+    );
+    if (!ok) throw new Error(json.error || "No se pudo crear la opción");
+    return { optionId: json.data.id };
+  }
+
+  // Añadir una receta a una gran comida del día (crea sección/opción al vuelo).
+  async function addRecipeToSection({ day, sectionName, sectionIndex, meal }, recipe) {
+    try {
+      const { mealId } = await ensureSectionMeal(day, sectionName, sectionIndex, meal);
+      const { optionId } = await ensureDefaultOption(mealId, meal);
+      const { ok, json } = await apiPost(
+        `/api/nutricion/plans/${plan.id}/meals/${mealId}/options/${optionId}/recipes`,
+        { recipeId: recipe.id, servings: 1 }
+      );
+      if (!ok) throw new Error(json.error || "No se pudo añadir la receta");
+      await loadPlan();
+      setToast({ kind: "ok", text: `«${recipe.name}» añadida a ${sectionName}` });
+    } catch (e) {
+      setToast({ kind: "err", text: e.message });
     }
-    // Refrescar el árbol para tener IDs limpios y orden correcto
-    await loadPlan();
-    setExpandedMealId(json.data?.id ?? null);
+  }
+
+  // Comentarios de una gran comida (plan_meals.description), creando la
+  // sección al vuelo si aún no existe.
+  async function saveSectionComment({ day, sectionName, sectionIndex, meal }, text) {
+    const current = meal?.description || "";
+    if (current === (text || "")) return;
+    try {
+      const { mealId } = await ensureSectionMeal(day, sectionName, sectionIndex, meal);
+      const { ok, json } = await apiPatch(
+        `/api/nutricion/plans/${plan.id}/meals/${mealId}`,
+        { description: text || null }
+      );
+      if (!ok) throw new Error(json.error || "Error al guardar comentarios");
+      await loadPlan();
+    } catch (e) {
+      setToast({ kind: "err", text: e.message });
+    }
+  }
+
+  // Comentarios del día (plans.day_comments JSONB). Reemplaza el mapa entero.
+  async function saveDayComment(day, text) {
+    const current = plan.dayComments?.[String(day)] || "";
+    if (current === (text || "").trim()) return;
+    const next = { ...(plan.dayComments || {}) };
+    if ((text || "").trim()) next[String(day)] = text.trim();
+    else delete next[String(day)];
+    await patchPlanMetadata({ dayComments: next });
   }
 
   async function renameMeal(meal) {
@@ -347,13 +425,36 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
     if (expandedMealId === meal.id) setExpandedMealId(null);
   }
 
+  // Mover una comida a otro día (o quitarle el día con null). Clave para los
+  // planes pre-rework: sus comidas "sin día" se pueden repartir por la semana.
+  async function changeMealWeekday(meal, weekday) {
+    const { ok, json } = await apiPatch(
+      `/api/nutricion/plans/${plan.id}/meals/${meal.id}`,
+      { weekday }
+    );
+    if (!ok) {
+      setToast({ kind: "err", text: json.error || "No se pudo cambiar el día" });
+      return;
+    }
+    setPlan((p) => ({
+      ...p,
+      meals: p.meals.map((m) => (m.id === meal.id ? { ...m, weekday: json.data.weekday } : m)),
+    }));
+    // Seguir a la comida a su nuevo día para no "perderla" de vista.
+    setActiveDay(json.data.weekday ?? 0);
+  }
+
   async function moveMeal(meal, dir) {
-    const meals = [...(plan.meals || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    const idx = meals.findIndex((m) => m.id === meal.id);
+    // Subir/bajar DENTRO de su día: reordenar contra comidas de otros días no
+    // tendría efecto visible (la lista está agrupada por weekday).
+    const dayMeals = (plan.meals || [])
+      .filter((m) => (m.weekday ?? 0) === (meal.weekday ?? 0))
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const idx = dayMeals.findIndex((m) => m.id === meal.id);
     const swapIdx = dir === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= meals.length) return;
-    const a = meals[idx];
-    const b = meals[swapIdx];
+    if (swapIdx < 0 || swapIdx >= dayMeals.length) return;
+    const a = dayMeals[idx];
+    const b = dayMeals[swapIdx];
     // Swap via dos PATCH (no es lo más eficiente, pero el backlog C2 ya
     // contempla un endpoint /reorder).
     await apiPatch(`/api/nutricion/plans/${plan.id}/meals/${a.id}`, { order: b.order });
@@ -627,7 +728,9 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
     for (const m of src.meals || []) {
       const { ok, json } = await apiPost(
         `/api/nutricion/plans/${plan.id}/meals`,
-        { name: m.name, description: m.description, order: m.order }
+        // weekday viaja con la copia (rework 2026-07-22): sin él, cargar una
+        // plantilla semanal aplastaría toda la semana en "sin día".
+        { name: m.name, description: m.description, order: m.order, weekday: m.weekday ?? null }
       );
       if (!ok) continue;
       const newMealId = json.data.id;
@@ -653,6 +756,17 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
               notes: f.notes,
               order: f.order,
             }
+          );
+        }
+        // Las recetas congeladas de la opción TAMBIÉN se copian (bug del flujo
+        // antiguo: se perdían al cargar plantilla). Solo si conservan
+        // provenance (recipeId): un snapshot cuya receta original se borró no
+        // puede recrearse vía POST /recipes.
+        for (const rec of o.recipes || []) {
+          if (!rec.recipeId) continue;
+          await apiPost(
+            `/api/nutricion/plans/${plan.id}/meals/${newMealId}/options/${newOptId}/recipes`,
+            { recipeId: rec.recipeId, servings: rec.servings ?? 1 }
           );
         }
       }
@@ -682,6 +796,10 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
   }
 
   const meals = (plan.meals || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  // Comidas del día activo (0 = bloque "sin día" de planes pre-rework).
+  const day = activeDay ?? 0;
+  const dayMeals = meals.filter((m) => (m.weekday ?? 0) === day);
+  const hasLegacyMeals = meals.some((m) => m.weekday == null);
 
   return (
     <ModalShell onClose={handleClose}>
@@ -744,47 +862,72 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
       <div className="flex-1 px-4 lg:px-7 py-5 lg:py-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         {/* Columna izquierda */}
         <div className="space-y-5 min-w-0">
-          {/* Días de la semana + Comentarios — autosave en blur.
-              La tira de días es un organizador visual (decisión Nutrinotas: sin
-              cambio de modelo): pulsar un día inserta su encabezado en los
-              comentarios para escribir la planificación de ese día. */}
+          {/* Semana del paciente: pestañas Lunes…Domingo + vista de cuadrícula.
+              Rework 2026-07-22: los días son ESTRUCTURA (plan_meals.weekday),
+              ya no texto en los comentarios. */}
           <section>
-            <Label>Planificación semanal · Comentarios</Label>
-            <WeekdayStrip text={descriptionDraft} onInsert={insertWeekday} />
-            <textarea
-              value={descriptionDraft}
-              onChange={(e) => setDescriptionDraft(e.target.value)}
-              onBlur={commitDescription}
-              placeholder="Notas del plan. Pulsa un día para añadir su planificación (p. ej. «Lunes: comida A, cena B»)…"
-              rows={4}
-              className="w-full text-sm rounded-md border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 resize-y"
-            />
-          </section>
-
-          {/* Comidas */}
-          <section>
-            <div className="flex items-center justify-between mb-2.5">
-              <Label className="mb-0">Planificación de comidas</Label>
-              <button
-                onClick={addMeal}
-                className="text-xs px-2.5 py-1 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
-              >
-                + Añadir comida
-              </button>
+            <div className="flex items-center justify-between mb-2.5 gap-2 flex-wrap">
+              <Label className="mb-0">Semana del paciente</Label>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setWeekView((v) => !v)}
+                  className={`text-xs px-2.5 py-1 rounded-md border transition ${
+                    weekView
+                      ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
+                      : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  {weekView ? "Volver al día" : "Ver semana completa"}
+                </button>
+              </div>
             </div>
 
-            {meals.length === 0 ? (
+            {!weekView && (
+              <WeekTabs
+                activeDay={day}
+                onSelect={(d) => { setActiveDay(d); setExpandedMealId(null); }}
+                meals={meals}
+                showLegacyTab={hasLegacyMeals}
+              />
+            )}
+
+            {weekView ? (
+              <WeekGrid
+                meals={meals}
+                onPickMeal={(meal) => {
+                  setActiveDay(meal.weekday ?? 0);
+                  setWeekView(false);
+                  setExpandedMealId(meal.id);
+                }}
+              />
+            ) : day !== 0 ? (
+              /* Rediseño 2026-07-22: el día son SIEMPRE sus 5 grandes comidas,
+                 una debajo de otra, con "+ Añadir receta" y comentarios por
+                 sección; más los comentarios del propio día. */
+              <DayView
+                day={day}
+                meals={dayMeals}
+                dayComment={plan.dayComments?.[String(day)] || ""}
+                onSaveDayComment={(text) => saveDayComment(day, text)}
+                onOpenPicker={(section) => setRecipePicker(section)}
+                onSaveSectionComment={saveSectionComment}
+                onUpdateRecipe={(meal, option, pmor, updates) => updateOptionRecipe(meal, option, pmor, updates)}
+                onDeleteRecipe={(meal, option, pmor) => deleteOptionRecipe(meal, option, pmor)}
+                onDeleteFood={(meal, option, line) => deleteFoodLine(meal, option, line)}
+                onDeleteMeal={(meal) => deleteMeal(meal)}
+              />
+            ) : dayMeals.length === 0 ? (
               <div className="border border-dashed border-gray-200 rounded-lg p-8 text-center text-sm text-gray-400">
-                Aún no hay comidas. Crea la primera con &ldquo;Añadir comida&rdquo;.
+                No hay comidas sin día. Usa las pestañas para ir a un día de la semana.
               </div>
             ) : (
               <div className="space-y-2.5">
-                {meals.map((meal, idx) => (
+                {dayMeals.map((meal, idx) => (
                   <MealAccordion
                     key={meal.id}
                     meal={meal}
                     index={idx}
-                    total={meals.length}
+                    total={dayMeals.length}
                     expanded={expandedMealId === meal.id}
                     onToggle={() =>
                       setExpandedMealId(expandedMealId === meal.id ? null : meal.id)
@@ -795,6 +938,7 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
                     }
                     onRename={() => renameMeal(meal)}
                     onUpdateDescription={(desc) => updateMealDescription(meal, desc)}
+                    onChangeWeekday={(w) => changeMealWeekday(meal, w)}
                     onDelete={() => deleteMeal(meal)}
                     onMoveUp={() => moveMeal(meal, "up")}
                     onMoveDown={() => moveMeal(meal, "down")}
@@ -816,6 +960,59 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
             )}
           </section>
 
+          {/* Comentarios generales — autosave en blur. Desde el rework los días
+              viven en las pestañas de arriba; esto es SOLO para pautas y notas
+              (hidratación, suplementos, recordatorios…). */}
+          <section>
+            <Label>Comentarios</Label>
+            <textarea
+              value={descriptionDraft}
+              onChange={(e) => setDescriptionDraft(e.target.value)}
+              onBlur={commitDescription}
+              placeholder="Pautas generales para el paciente (hidratación, suplementos, recordatorios…)"
+              rows={3}
+              className="w-full text-sm rounded-md border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 resize-y"
+            />
+          </section>
+
+          {/* Lo que ve el paciente en su PDF. De momento una sola decisión:
+              si el documento lleva o no las cifras de macronutrientes. Por
+              defecto NO: en consulta de TCA los gramos suelen ser parte del
+              problema, así que enseñarlos es una decisión consciente. Aquí
+              dentro, la nutricionista sigue viendo todos los cálculos. */}
+          <section>
+            <Label>Lo que ve el paciente</Label>
+            <button
+              type="button"
+              onClick={toggleShowMacros}
+              role="switch"
+              aria-checked={Boolean(plan.showMacros)}
+              className="w-full flex items-start gap-3 text-left rounded-md border border-gray-200 px-3 py-2.5 hover:bg-gray-50 transition focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+            >
+              <span
+                className={`mt-0.5 shrink-0 w-9 h-5 rounded-full transition relative ${
+                  plan.showMacros ? "bg-[var(--color-primary)]" : "bg-gray-300"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${
+                    plan.showMacros ? "left-[1.125rem]" : "left-0.5"
+                  }`}
+                />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm text-gray-900 leading-tight">
+                  Mostrar valores nutricionales en el PDF
+                </span>
+                <span className="block text-xs text-gray-500 leading-snug mt-0.5">
+                  {plan.showMacros
+                    ? "El PDF incluye proteínas, hidratos, grasas y fibra de cada plato."
+                    : "El PDF sale sin cifras: solo platos, ingredientes y preparación."}
+                </span>
+              </span>
+            </button>
+          </section>
+
           {/* Indicador de autosave — no hay botón Guardar; todos los cambios
               se persisten al instante (estructura: en el momento del click;
               campos de texto: al perder foco). */}
@@ -835,10 +1032,22 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
         </aside>
       </div>
 
+      {/* Picker de recetas (rediseño 2026-07-22): buscador + Crear receta */}
+      {recipePicker && (
+        <RecipePickerModal
+          title={`${recipePicker.sectionName} · ${WEEKDAYS[(recipePicker.day ?? 1) - 1]}`}
+          onClose={() => setRecipePicker(null)}
+          onPick={async (recipe) => {
+            await addRecipeToSection(recipePicker, recipe);
+            setRecipePicker(null);
+          }}
+        />
+      )}
+
       {/* Toast */}
       {toast && (
         <div
-          className={`fixed bottom-6 right-6 z-[60] px-4 py-2.5 rounded-md shadow-lg text-sm font-medium ${
+          className={`fixed bottom-6 right-6 z-[80] px-4 py-2.5 rounded-md shadow-lg text-sm font-medium ${
             toast.kind === "ok" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"
           }`}
         >
@@ -896,7 +1105,7 @@ function Label({ children, className = "" }) {
 function MealAccordion({
   meal, index, total, expanded, onToggle,
   activeOptionId, onSelectOption,
-  onRename, onUpdateDescription, onDelete, onMoveUp, onMoveDown,
+  onRename, onUpdateDescription, onChangeWeekday, onDelete, onMoveUp, onMoveDown,
   onAddOption, onRenameOption, onSetDefaultOption, onDeleteOption,
   onAddFood, onUpdateFood, onDeleteFood,
   onAddRecipe, onUpdateRecipe, onDeleteRecipe,
@@ -973,18 +1182,32 @@ function MealAccordion({
       {/* Cuerpo expandido */}
       {expanded && (
         <div className="border-t border-gray-100 p-3.5 space-y-3.5 bg-gray-50/50">
-          {/* Descripción */}
-          <input
-            type="text"
-            value={descDraft}
-            onChange={(e) => setDescDraft(e.target.value)}
-            onBlur={() => onUpdateDescription(descDraft)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.target.blur();
-            }}
-            placeholder="Descripción de la comida (ej. DESAYUNO + BEBIDA + FRUTA)…"
-            className="w-full text-xs uppercase tracking-wider text-gray-700 px-3 py-1.5 rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
-          />
+          {/* Descripción + día de la semana */}
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={descDraft}
+              onChange={(e) => setDescDraft(e.target.value)}
+              onBlur={() => onUpdateDescription(descDraft)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.target.blur();
+              }}
+              placeholder="Descripción de la comida (ej. DESAYUNO + BEBIDA + FRUTA)…"
+              className="flex-1 min-w-0 text-xs uppercase tracking-wider text-gray-700 px-3 py-1.5 rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+            />
+            {/* Cambiar la comida de día (imprescindible en menús pre-rework
+                cuyas comidas nacieron "sin día"). */}
+            <Select
+              value={meal.weekday != null ? String(meal.weekday) : ""}
+              onChange={(v) => onChangeWeekday(v === "" ? null : Number(v))}
+              options={[
+                { value: "", label: "Sin día" },
+                ...WEEKDAYS.map((name, i) => ({ value: String(i + 1), label: name })),
+              ]}
+              className="w-32 shrink-0 px-2 py-1.5 text-xs rounded-md border border-gray-200 bg-white"
+              aria-label="Día de la semana de esta comida"
+            />
+          </div>
 
           {/* Pills de opciones */}
           <OptionPills
@@ -1800,43 +2023,348 @@ function TemplateAssignPanel({ plan }) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Tira de días de la semana (Nutrinotas item 7 — organizador visual, sin
-// cambio de modelo). Un día se marca activo si ya aparece como encabezado
-// "Día:" en el texto de comentarios; pulsarlo inserta su sección.
+// Semana real (rework 2026-07-22). WEEKDAYS[0]="Lunes" ↔ weekday=1 … 7=Domingo.
+// WeekTabs: pestañas de día con contador de comidas rellenas. WeekGrid: la
+// semana completa de un vistazo, cada celda es una comida clicable.
 // ────────────────────────────────────────────────────────────────────────────
 
 const WEEKDAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
-function WeekdayStrip({ text, onInsert }) {
-  const present = useMemo(() => {
-    const t = text || "";
-    const set = new Set();
-    for (const d of WEEKDAYS) {
-      if (new RegExp(`(^|\\n)\\s*${d}\\s*:`, "i").test(t)) set.add(d);
-    }
-    return set;
-  }, [text]);
+// Las 5 grandes comidas de cada día (rediseño 2026-07-22): estructura FIJA,
+// sin "Añadir comida" con nombre libre.
+const STANDARD_MEALS = ["Desayuno", "Almuerzo", "Comida", "Merienda", "Cena"];
+
+function mealFilled(meal) {
+  return (meal.options || []).some((o) => (o.foods || []).length > 0 || (o.recipes || []).length > 0);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// DayView — un día del menú: comentarios del día + las 5 grandes comidas, una
+// debajo de otra. Cada sección: recetas (+ "Añadir receta") y comentarios.
+// Las comidas con nombre no estándar (renombradas o antiguas) se muestran
+// después de las 5, con botón para quitarlas — nada queda oculto.
+// ────────────────────────────────────────────────────────────────────────────
+
+function DayView({
+  day, meals, dayComment, onSaveDayComment, onOpenPicker,
+  onSaveSectionComment, onUpdateRecipe, onDeleteRecipe, onDeleteFood, onDeleteMeal,
+}) {
+  const [commentDraft, setCommentDraft] = useState(dayComment);
+  useEffect(() => { setCommentDraft(dayComment); }, [day, dayComment]);
+
+  const norm = (s) => (s || "").trim().toLowerCase();
+  const used = new Set();
+  const sections = STANDARD_MEALS.map((name, idx) => {
+    const meal = meals.find((m) => !used.has(m.id) && norm(m.name) === norm(name)) || null;
+    if (meal) used.add(meal.id);
+    return { day, sectionName: name, sectionIndex: idx, meal };
+  });
+  const extras = meals.filter((m) => !used.has(m.id));
 
   return (
-    <div className="flex gap-1.5 flex-wrap mb-2">
-      {WEEKDAYS.map((d) => {
-        const on = present.has(d);
+    <div className="space-y-3">
+      {/* Comentarios del día */}
+      <div className="rounded-lg border border-gray-200 bg-white px-3.5 py-2.5">
+        <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">
+          Comentarios del {WEEKDAYS[day - 1].toLowerCase()}
+        </div>
+        <textarea
+          value={commentDraft}
+          onChange={(e) => setCommentDraft(e.target.value)}
+          onBlur={() => onSaveDayComment(commentDraft)}
+          placeholder={`Notas para todo el ${WEEKDAYS[day - 1].toLowerCase()} (batch cooking, hidratación…)`}
+          rows={2}
+          className="w-full text-sm rounded-md border border-gray-100 bg-gray-50/50 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:bg-white resize-y"
+        />
+      </div>
+
+      {sections.map((section) => (
+        <DaySection
+          key={section.sectionName}
+          section={section}
+          onOpenPicker={onOpenPicker}
+          onSaveComment={onSaveSectionComment}
+          onUpdateRecipe={onUpdateRecipe}
+          onDeleteRecipe={onDeleteRecipe}
+          onDeleteFood={onDeleteFood}
+        />
+      ))}
+
+      {extras.map((meal) => (
+        <DaySection
+          key={meal.id}
+          section={{ day, sectionName: meal.name, sectionIndex: 99, meal }}
+          isExtra
+          onOpenPicker={onOpenPicker}
+          onSaveComment={onSaveSectionComment}
+          onUpdateRecipe={onUpdateRecipe}
+          onDeleteRecipe={onDeleteRecipe}
+          onDeleteFood={onDeleteFood}
+          onDeleteMeal={onDeleteMeal}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Una gran comida del día: título, recetas con foto/raciones, alimentos
+// sueltos heredados, "+ Añadir receta" y comentarios de la sección.
+function DaySection({
+  section, isExtra = false,
+  onOpenPicker, onSaveComment, onUpdateRecipe, onDeleteRecipe, onDeleteFood, onDeleteMeal,
+}) {
+  const { sectionName, meal } = section;
+  const [commentDraft, setCommentDraft] = useState(meal?.description || "");
+  useEffect(() => { setCommentDraft(meal?.description || ""); }, [meal?.id, meal?.description]);
+
+  // Filas de contenido de TODAS las opciones (los planes nuevos tienen una;
+  // en los heredados con alternativas, cada fila conoce su opción).
+  const options = (meal?.options || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const multi = options.length > 1;
+  const macros = meal ? computeMealMacros(meal) : null;
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+      <div className="px-3.5 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
+        <h4 className="text-[13px] font-semibold uppercase tracking-wide text-[var(--color-primary)]">
+          {sectionName}
+          {isExtra && <span className="ml-2 text-[10px] font-normal normal-case text-amber-600">(comida extra)</span>}
+        </h4>
+        <div className="flex items-center gap-2">
+          {macros && macros.protein !== null && (
+            <span className="text-[10px] text-gray-400 tabular-nums">
+              P {fmtGNumber(macros.protein)} · C {fmtGNumber(macros.carbs)} · G {fmtGNumber(macros.fat)}
+            </span>
+          )}
+          {isExtra && onDeleteMeal && (
+            <button
+              type="button"
+              onClick={() => onDeleteMeal(meal)}
+              className="text-gray-300 hover:text-red-600"
+              aria-label={`Eliminar ${sectionName}`}
+              title="Eliminar esta comida extra"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} className="w-3.5 h-3.5"><path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="px-3.5 pb-3 space-y-1.5">
+        {options.map((option) => (
+          <div key={option.id} className="space-y-1.5">
+            {multi && ((option.recipes || []).length > 0 || (option.foods || []).length > 0) && (
+              <div className="text-[10px] uppercase tracking-wider text-gray-400 pt-1">
+                {option.isDefault ? "⭐ " : ""}{option.name}
+              </div>
+            )}
+            {(option.recipes || []).map((pmor) => (
+              <SectionRecipeRow
+                key={pmor.id}
+                pmor={pmor}
+                onServings={(servings) => onUpdateRecipe(meal, option, pmor, { servings })}
+                onDelete={() => onDeleteRecipe(meal, option, pmor)}
+              />
+            ))}
+            {(option.foods || []).map((line) => (
+              <div key={line.id} className="flex items-center gap-2 text-sm text-gray-700 rounded-md border border-gray-100 bg-gray-50/40 px-2.5 py-1.5">
+                <span className="flex-1 min-w-0 truncate">
+                  {line.food?.name ?? "Alimento"}
+                  <span className="text-gray-400 text-xs ml-1.5">
+                    {line.unit === "g" ? `${fmtGNumber(line.amount)} g` : line.unit === "household" ? `${fmtGNumber(line.amount)} ${line.householdLabel || "ud."}` : line.notes || "cantidad libre"}
+                  </span>
+                </span>
+                <button type="button" onClick={() => onDeleteFood(meal, option, line)} className="text-gray-300 hover:text-red-600" aria-label="Quitar alimento">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} className="w-3.5 h-3.5"><path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        ))}
+
+        {!meal || options.every((o) => (o.recipes || []).length === 0 && (o.foods || []).length === 0) ? (
+          <div className="text-xs text-gray-300 py-0.5">Sin recetas todavía.</div>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={() => onOpenPicker(section)}
+          className="w-full text-left px-2.5 py-1.5 text-xs font-medium rounded-md border border-dashed border-[var(--color-primary)]/40 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5 transition"
+        >
+          + Añadir receta
+        </button>
+
+        <input
+          type="text"
+          value={commentDraft}
+          onChange={(e) => setCommentDraft(e.target.value)}
+          onBlur={() => onSaveComment(section, commentDraft)}
+          onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+          placeholder={`Comentarios de ${sectionName.toLowerCase()}…`}
+          className="w-full text-xs text-gray-600 px-2.5 py-1.5 rounded-md border border-gray-100 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:bg-white"
+        />
+      </div>
+    </div>
+  );
+}
+
+// Fila de receta dentro de una gran comida: foto mini, nombre, raciones, quitar.
+function SectionRecipeRow({ pmor, onServings, onDelete }) {
+  const [servingsDraft, setServingsDraft] = useState(pmor.servings ?? 1);
+  useEffect(() => { setServingsDraft(pmor.servings ?? 1); }, [pmor.id, pmor.servings]);
+
+  function commit() {
+    const n = Number(servingsDraft);
+    if (!Number.isFinite(n) || n <= 0) { setServingsDraft(pmor.servings ?? 1); return; }
+    if (n !== Number(pmor.servings ?? 1)) onServings(n);
+  }
+
+  return (
+    <div className="flex items-center gap-2.5 rounded-md border border-gray-100 px-2.5 py-1.5">
+      {pmor.photoPath && pmor.recipeId ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`/api/nutricion/recipes/${pmor.recipeId}/photo`}
+          alt=""
+          loading="lazy"
+          className="w-9 h-9 object-cover rounded shrink-0 border border-gray-100"
+        />
+      ) : (
+        <div className="w-9 h-9 rounded shrink-0 bg-[var(--color-primary)]/[0.07] flex items-center justify-center text-[var(--color-primary)]">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.87c1.355 0 2.697.055 4.024.165C17.155 8.51 18 9.473 18 10.608v2.513m-3-4.87v-1.5m-6 1.5v-1.5m12 9.75-1.5.75a3.354 3.354 0 0 1-3 0 3.354 3.354 0 0 0-3 0 3.354 3.354 0 0 1-3 0 3.354 3.354 0 0 0-3 0 3.354 3.354 0 0 1-3 0L3 16.5m15-3.379a48.474 48.474 0 0 0-6-.371c-2.032 0-4.034.126-6 .371m12 0c.39.049.777.102 1.163.16 1.07.16 1.837 1.094 1.837 2.175v5.169c0 .621-.504 1.125-1.125 1.125H4.125A1.125 1.125 0 0 1 3 20.625v-5.17c0-1.08.768-2.014 1.837-2.174A47.78 47.78 0 0 1 6 13.12" /></svg>
+        </div>
+      )}
+      <span className="flex-1 min-w-0 text-sm font-medium text-gray-800 truncate">{pmor.nameSnapshot || "Receta"}</span>
+      <label className="flex items-center gap-1 text-[11px] text-gray-400 shrink-0">
+        <input
+          type="number"
+          step="0.5"
+          min="0.5"
+          value={servingsDraft}
+          onChange={(e) => setServingsDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+          className="w-14 px-1.5 py-1 text-xs text-right rounded border border-gray-200"
+          aria-label="Raciones"
+        />
+        rac.
+      </label>
+      <button type="button" onClick={onDelete} className="text-gray-300 hover:text-red-600 shrink-0" aria-label="Quitar receta">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} className="w-4 h-4"><path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
+    </div>
+  );
+}
+
+function WeekTabs({ activeDay, onSelect, meals, showLegacyTab }) {
+  return (
+    <div className="flex gap-1 flex-wrap mb-3">
+      {WEEKDAYS.map((name, i) => {
+        const d = i + 1;
+        const filled = meals.filter((m) => m.weekday === d && mealFilled(m)).length;
+        const on = activeDay === d;
         return (
           <button
             key={d}
             type="button"
-            onClick={() => !on && onInsert(d)}
-            title={on ? `${d} ya tiene planificación en los comentarios` : `Añadir la planificación de ${d}`}
-            className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition ${
+            onClick={() => onSelect(d)}
+            title={`${name}: ${filled} comida${filled === 1 ? "" : "s"} con contenido`}
+            className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium border transition flex items-center gap-1.5 ${
               on
-                ? "bg-[var(--color-primary)]/10 border-[var(--color-primary)]/30 text-[var(--color-primary)] cursor-default"
-                : "bg-white border-gray-200 text-gray-600 hover:border-[var(--color-primary)]/40 hover:text-[var(--color-primary)] cursor-pointer"
+                ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
+                : "bg-white border-gray-200 text-gray-600 hover:border-[var(--color-primary)]/40 hover:text-[var(--color-primary)]"
             }`}
           >
-            {d.slice(0, 3)}
+            {name.slice(0, 3)}
+            {filled > 0 && (
+              <span className={`text-[9px] rounded-full px-1 min-w-[14px] text-center ${on ? "bg-white/25" : "bg-[var(--color-primary)]/10 text-[var(--color-primary)]"}`}>
+                {filled}
+              </span>
+            )}
           </button>
         );
       })}
+      {showLegacyTab && (
+        <button
+          type="button"
+          onClick={() => onSelect(0)}
+          title="Comidas de este menú que aún no tienen día asignado"
+          className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium border transition ${
+            activeDay === 0
+              ? "bg-amber-500 text-white border-amber-500"
+              : "bg-amber-50 border-amber-200 text-amber-700 hover:border-amber-400"
+          }`}
+        >
+          Sin día
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Resumen ultracorto del contenido de una comida para la celda de la semana:
+// nombres de recetas + nº de alimentos sueltos de la opción por defecto.
+function mealCellSummary(meal) {
+  const opt = (meal.options || []).find((o) => o.isDefault) || (meal.options || [])[0];
+  if (!opt) return null;
+  const parts = (opt.recipes || []).map((r) => r.nameSnapshot || "Receta");
+  const nFoods = (opt.foods || []).length;
+  if (nFoods > 0) parts.push(`${nFoods} alimento${nFoods === 1 ? "" : "s"}`);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+function WeekGrid({ meals, onPickMeal }) {
+  const legacy = meals.filter((m) => m.weekday == null);
+  return (
+    <div className="overflow-x-auto -mx-1 px-1">
+      <div className="grid grid-cols-7 gap-1.5 min-w-[760px]">
+        {WEEKDAYS.map((name, i) => {
+          const d = i + 1;
+          const dayMeals = meals
+            .filter((m) => m.weekday === d)
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          return (
+            <div key={d} className="min-w-0">
+              <div className="text-[10px] uppercase tracking-wider font-semibold text-[var(--color-primary)] text-center py-1 bg-[var(--color-primary)]/[0.07] rounded-t-md">
+                {name}
+              </div>
+              <div className="space-y-1 border border-t-0 border-gray-100 rounded-b-md p-1 bg-gray-50/40">
+                {dayMeals.map((meal) => {
+                  const summary = mealCellSummary(meal);
+                  const filled = mealFilled(meal);
+                  return (
+                    <button
+                      key={meal.id}
+                      type="button"
+                      onClick={() => onPickMeal(meal)}
+                      title={`${name} · ${meal.name} — clic para editar`}
+                      className={`w-full text-left rounded px-1.5 py-1 border transition ${
+                        filled
+                          ? "bg-white border-gray-200 hover:border-[var(--color-primary)]/50"
+                          : "bg-transparent border-dashed border-gray-200 hover:border-[var(--color-primary)]/40"
+                      }`}
+                    >
+                      <div className={`text-[10px] font-semibold truncate ${filled ? "text-gray-800" : "text-gray-400"}`}>{meal.name}</div>
+                      {summary ? (
+                        <div className="text-[9.5px] text-gray-500 leading-tight line-clamp-2">{summary}</div>
+                      ) : (
+                        <div className="text-[9.5px] text-gray-300">vacío</div>
+                      )}
+                    </button>
+                  );
+                })}
+                {dayMeals.length === 0 && <div className="text-[9.5px] text-gray-300 text-center py-2">—</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {legacy.length > 0 && (
+        <div className="mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
+          Este menú tiene {legacy.length} comida{legacy.length === 1 ? "" : "s"} sin día asignado (pestaña “Sin día”).
+          Ábrelas y asígnales un día para que aparezcan en la semana.
+        </div>
+      )}
     </div>
   );
 }

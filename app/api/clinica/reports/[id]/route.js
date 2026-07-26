@@ -1,7 +1,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound } from "../../../../../lib/utils/apiResponse.js";
 import { serializeReport } from "../../../../../lib/clinica/serialize.js";
-import { logClinicaAudit } from "../../../../../lib/clinica/audit.js";
+import { logClinicaAudit, auditSummary } from "../../../../../lib/clinica/audit.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function gate(ctx) {
@@ -41,7 +41,7 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   }
   if ("reportType" in body && !TYPES.includes(body.reportType)) return error("reportType inválido");
   if ("status" in body && !STATUSES.includes(body.status)) return error("status inválido");
-  const before = r.toJSON();
+  const before = auditSummary(r);
   const updates = {};
   for (const k of PATCH_FIELDS) if (k in body) updates[k] = body[k];
   // Al marcar como entregado, sellar deliveredAt; al revertir, limpiarla.
@@ -58,7 +58,7 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
     entity: "ClinicalReport",
     entityId: id,
     before,
-    after: r.toJSON(),
+    after: auditSummary(r),
     ip: request.headers.get("x-forwarded-for"),
   });
   return ok(serializeReport(r));

@@ -25,6 +25,7 @@ Antes de implementar cambios en un módulo concreto, lee su doc:
 | Pacientes         | `docs/modules/pacientes.md`  | Implementado (aumenta)           |
 | Clínica           | `docs/modules/clinica.md`    | Implementado (aumenta)           |
 | Nutrición         | `docs/modules/nutricion.md`  | C1+C2+C3 en prod, C4+C5 en local |
+| Formularios       | `docs/modules/formularios.md` | Implementado (nutri_laura)      |
 | Outreach          | `docs/modules/outreach.md`   | Completo en local, sin desplegar  |
 | Configuración     | `docs/modules/configuracion.md` | Implementado (claves IA por tenant) |
 | Emails (infra)    | `docs/modules/emails.md`     | Infra transversal                |
@@ -250,10 +251,10 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 | `demo`           | local + prod    | clients, leads, calendar, inventory, billing, team, training | Tenant de desarrollo y pruebas; show-room                                                       |
 | `retorika`       | solo producción | training, clients                                            | Academia online (WordPress + TutorLMS)                                                          |
 | `quality_energy` | local + prod    | leads                                                        | Empresa energética. Tuvo `referidos` en su día (limpiado por `remove-abarcaia-from-quality.js`) |
-| `aumenta`        | local + prod    | leads\*, training\*, clients, calendar, citas, clinica, pacientes, projects, billing, inventory, orders, team (12) | Centro de psicología y formación. 12 módulos en prod (verif. 2026-07-07). \* = override UI: `aumenta/LeadsModule` y `aumenta/FormacionOverview` (este último con `logicOverrides` declarativos que hoy no lee ningún código). Label sidebar "Leads" → "Interesados". |
+| `aumenta`        | local + prod    | leads\*, training\*, clients, calendar, citas, clinica, pacientes, projects, billing, inventory, orders, team, documents (13) | Centro de psicología y formación. \* = override UI: `aumenta/LeadsModule` y `aumenta/FormacionOverview`. Label sidebar "Leads" → "Interesados". **CRM en uso REAL desde 2026-07-24**: datos de ejemplo borrados (`reset-aumenta-real-data.js`; los LEADS eran reales y se conservaron) y equipo real de 15 personas dado de alta (`seed-aumenta-equipo-real.js`: 13 logins tipo `nombre_aumenta` con rol `user`; dirección usa admin@aumenta.es). Desempeño/Dirección/Productividad son SOLO admin. NO wipear/sembrar sin permiso. |
 | `abarcaia`       | solo producción | leads, referidos                                             | Programa de referidos vía formulario público                                                    |
 | `spain_enzymes`  | solo local      | leads, clients, inventory, billing, orders                   | Tenant de pruebas creado por Jorge. Módulo orders (Pedidos) específico de Spain Enzymes         |
-| `nutri_laura`    | local + prod    | citas, leads, clients, training, nutricion                   | Nutricionista (Laura). Override leads (embudo nutricional) + conversión lead→paciente + override overview formación (B2C, sin TutorLMS aún). Subido a prod 2026-06-23 con sprint Recetario C1. |
+| `nutri_laura`    | local + prod    | citas, leads, clients, training, nutricion, formularios, team | Nutricionista (Laura). Override leads (embudo nutricional) + conversión lead→paciente + override overview formación (B2C, sin TutorLMS aún). Subido a prod 2026-06-23 con sprint Recetario C1. **Módulo `team` activado 2026-07-24** (`add-team-module-nutri-laura.js`): Laura es el 1er miembro (nutricionista); va a fichar más. NO tiene clinica/pacientes: sus "pacientes" son Clients con plan de menú. |
 
 Datos verificados contra `master.tenants` y `master.tenant_modules` el
 2026-04-30 (entorno local), salvo `aumenta`, re-verificado en
@@ -266,6 +267,21 @@ a producción — re-verificar con `scripts/inspect-tenant-modules.js <slug>`
 Cada tenant puede tener override de UI en `modules/overrides/{slug}/`
 (carpeta con guión) y seed propio en `scripts/seed-{slug}.js` cuando
 aplique.
+
+> **Tenants "reina" de cada módulo.** Cada módulo grande tiene un cliente REAL de
+> referencia cuyo comportamiento/necesidades definen el default de ese módulo:
+> - **`aumenta` = la reina del módulo CLÍNICO** (centro de psicología). Cuando se
+>   habla de "cambios en Aumenta" se habla del **módulo clínico**. NO tratar lo
+>   clínico como un `overrides/aumenta/`.
+> - **`nutri_laura` = la reina del módulo NUTRICIÓN** (Laura).
+> - **`demo` = escaparate**, NO es la reina de nada: tiene todos los módulos con
+>   datos FALSOS para poder VER las features juntas.
+>
+> **Un cambio en un módulo se aplica a TODOS los tenants que lo tengan, a la vez**
+> (mismo código gated por módulo): un cambio clínico va a Aumenta **y** al resto
+> con el módulo (incl. demo), por defecto, "hasta que digamos lo contrario". Los
+> `modules/overrides/{slug}/` se reservan para cuando un tenant se desvía DE VERDAD
+> del default (UI o lógica propia), no para el comportamiento base del módulo.
 
 ---
 
@@ -311,6 +327,7 @@ aplique.
 | clinica       | Clínica                        | Implementado (aumenta)              | `docs/modules/clinica.md`   |
 | nutricion     | Recetario                      | C1+C2+C3 en prod, C4+C5 en local    | `docs/modules/nutricion.md` |
 | outreach      | Captación (leads + scoring IA) | Completo en local (sandbox); falta desplegar | `docs/modules/outreach.md` |
+| formularios   | Formularios públicos → bandeja → ficha de cliente | Implementado (nutri_laura) | `docs/modules/formularios.md` |
 | —             | Configuración (ajustes + claves IA por tenant) | Implementado (siempre visible, sin `moduleKey`) | `docs/modules/configuracion.md` |
 
 > **`leads` vs `sales`**: hay dos `moduleKey` para el área comercial
@@ -477,3 +494,45 @@ Usar automáticamente cuando corresponda:
 
 - Registrar en `AuditLog` cambios de configuración de tenant y accesos fallidos.
 - Logs de auditoría nunca se borran ni modifican.
+
+---
+
+## Conexión cliente/equipo — sprint 2026-07-23
+
+Principio: **todo registro del CRM tiene un CLIENTE (externo, para quién es) y
+un miembro del EQUIPO (interno, quién lo hace/posee)**. Los módulos se
+construyeron independientes y varios cruzaban por texto/email en vez de por FK
+real, lo que dejaba registros huérfanos en silencio (p. ej. citas de Aumenta
+sin cliente durante meses, porque el cruce ficha↔cita era por email).
+
+Enlaces reales añadidos (todos UUID nullable, FK ON DELETE SET NULL):
+
+| Tabla | Columna nueva | Enlace |
+| --- | --- | --- |
+| `bookings` | `client_id` | cita → ficha (sprint citas) |
+| `documents` | `client_id` | documento → cliente |
+| `clinic_sessions` | `client_id` | sesión → cliente (foto del paciente) |
+| `clinical_reports` | `client_id` | informe → cliente |
+| `coordinations` | `client_id` | coordinación → cliente |
+| `plans` | `team_member_id` | plan → nutricionista |
+| `interactions` | `team_member_id` | interacción → autor |
+| `client_notes` | `team_member_id` | nota → autor |
+| `form_submissions` | `handled_by_team_id` | solicitud → quién la atendió |
+
+Los registros clínicos toman `client_id` del paciente al crearse (foto, no se
+resincroniza) para no depender del salto paciente→cliente, que es frágil
+(`patients.client_id` es nullable y a menudo vacío).
+
+Auto-relleno en el alta: `lib/team/currentTeamMember.js` resuelve el TeamMember
+del usuario logueado (por `x-user-id`); `lib/clinica/patientClient.js` resuelve
+el cliente de un paciente. Los campos de texto viejos (`created_by`,
+`handled_by`) se conservan por compatibilidad.
+
+**Chequeo de salud**: `npm run db:check-links` (solo lectura) recorre los
+schemas y cuenta registros sueltos por tabla. Es la red que faltaba: nada
+avisaba cuando algo se quedaba sin conectar. Lanzarlo tras cada sprint que
+toque estos módulos.
+
+Pendiente (fuera de este sprint): rellenar `patients.client_id` donde falte —
+es la causa raíz de que los registros clínicos no lleguen al cliente. Y llevar
+estos enlaces a la UI (mostrar/reasignar en cada ficha).

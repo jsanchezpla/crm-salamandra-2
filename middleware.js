@@ -82,9 +82,13 @@ export async function middleware(request) {
   const token = request.cookies.get("access_token")?.value;
 
   if (!token) {
-    return isApiPath(pathname)
-      ? NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 })
-      : NextResponse.redirect(new URL("/login", request.url));
+    if (isApiPath(pathname)) {
+      return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
+    }
+    // `next` para devolver al usuario a la pantalla donde estaba tras entrar.
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("next", pathname + request.nextUrl.search);
+    return NextResponse.redirect(loginUrl);
   }
 
   try {
@@ -109,6 +113,7 @@ export async function middleware(request) {
     }
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("expired", "1");
+    loginUrl.searchParams.set("next", pathname + request.nextUrl.search);
     return NextResponse.redirect(loginUrl);
   }
 }

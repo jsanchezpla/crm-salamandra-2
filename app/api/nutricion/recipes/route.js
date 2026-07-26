@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
-import { recipeInclude, serializeRecipe, sanitizeIngredients } from "../../../../lib/nutricion/recipes.js";
+import { recipeInclude, serializeRecipe, sanitizeIngredients, sanitizeSteps } from "../../../../lib/nutricion/recipes.js";
 
 const MAX_LIMIT = 100;
 
@@ -90,6 +90,11 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
     if (!ing.ok) return error(ing.error);
     const lines = ing.value ?? [];
 
+    // Pasos de preparación (rework 2026-07-22).
+    const st = sanitizeSteps(body.steps);
+    if (!st.ok) return error(st.error);
+    const steps = st.value ?? [];
+
     // Validar que todos los food_id existen en el catálogo.
     if (lines.length > 0) {
       const foodIds = [...new Set(lines.map((l) => l.foodId))];
@@ -101,7 +106,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
 
     const recipeId = await tenantSequelize.transaction(async (t) => {
       const recipe = await Recipe.create(
-        { name, description, createdBy: userId ?? null, isArchived: false },
+        { name, description, steps, createdBy: userId ?? null, isArchived: false },
         { transaction: t }
       );
       if (lines.length > 0) {

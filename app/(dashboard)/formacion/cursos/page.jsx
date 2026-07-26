@@ -202,7 +202,7 @@ function SyncBanner({ lastSync, onOpenInstructions }) {
     return (
       <div className="mb-4 px-4 py-3 rounded-lg border border-neutral-200 bg-neutral-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <p className="text-xs text-neutral-600 leading-snug">
-          Los cursos aún no se han sincronizado con WordPress. Configura los cursos manualmente o sincroniza desde Retorika.
+          Los cursos aún no se han sincronizado con WordPress. Configura los cursos manualmente o sincroniza desde tu WordPress.
         </p>
         <button
           onClick={onOpenInstructions}
@@ -274,11 +274,26 @@ function relativeDays(ms) {
 // ─────────────────────── SyncInstructionsModal ───────────────────────────
 
 function SyncInstructionsModal({ syncUrl, onClose }) {
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
     function onKey(e) { if (e.key === "Escape") onClose(); }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // wp-admin del propio tenant, derivado del enlace de sync (no hardcodear).
+  const wpAdmin = (() => {
+    try { return new URL(syncUrl).origin + "/wp-admin"; } catch { return "tu WordPress (wp-admin)"; }
+  })();
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(syncUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard bloqueado: el usuario puede copiar del cuadro a mano */ }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
@@ -287,13 +302,13 @@ function SyncInstructionsModal({ syncUrl, onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-base font-bold text-neutral-900 mb-3" style={{ fontFamily: "'Syne', sans-serif" }}>
-          Sincronizar cursos desde Retorika
+          Sincronizar cursos
         </h2>
         <div className="text-xs text-neutral-600 leading-relaxed space-y-2">
-          <p>Para sincronizar los cursos publicados en TutorLMS con el CRM:</p>
+          <p>Para traer o actualizar los cursos publicados en TutorLMS al CRM:</p>
           <ol className="list-decimal pl-5 space-y-1.5">
-            <li>Accede como administrador a <code className="bg-neutral-100 px-1 rounded">retorika.es/wp-admin</code>.</li>
-            <li>Abre la siguiente URL en tu navegador:
+            <li>Accede como administrador a <code className="bg-neutral-100 px-1 rounded break-all">{wpAdmin}</code>.</li>
+            <li>Abre este enlace en tu navegador (botón «Abrir») o cópialo:
               <div className="mt-1 bg-neutral-50 border border-neutral-200 rounded-md px-2 py-1.5 text-[11px] font-mono text-neutral-700 break-all">
                 {syncUrl}
               </div>
@@ -301,6 +316,7 @@ function SyncInstructionsModal({ syncUrl, onClose }) {
             <li>Verás el resumen de la sincronización en pantalla.</li>
             <li>Vuelve aquí y recarga la página para ver los cursos actualizados.</li>
           </ol>
+          <p className="text-[11px] text-neutral-400">Los cursos nuevos y editados se sincronizan solos; esto es solo para forzar una sincronización.</p>
         </div>
         <div className="flex justify-end gap-2 pt-5">
           <button
@@ -310,6 +326,13 @@ function SyncInstructionsModal({ syncUrl, onClose }) {
           >
             Cerrar
           </button>
+          <button
+            type="button"
+            onClick={copiar}
+            className="px-4 py-2 rounded-lg text-xs font-semibold text-neutral-700 border border-neutral-300 hover:bg-neutral-50 transition"
+          >
+            {copied ? "¡Copiado!" : "Copiar enlace"}
+          </button>
           <a
             href={syncUrl}
             target="_blank"
@@ -317,7 +340,7 @@ function SyncInstructionsModal({ syncUrl, onClose }) {
             className="px-4 py-2 rounded-lg text-xs font-bold text-white transition-opacity hover:opacity-80"
             style={{ background: "var(--color-primary)" }}
           >
-            Abrir URL de sincronización
+            Abrir
           </a>
         </div>
       </div>

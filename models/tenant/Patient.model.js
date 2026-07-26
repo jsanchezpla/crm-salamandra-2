@@ -26,6 +26,25 @@ export function definePatient(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // Módulo asistencial al que pertenece el (sub)paciente: 'terapia'
+      // (clínica/psico) o 'nutricion'. Permite que un mismo centro con los dos
+      // servicios (p. ej. el escaparate `demo`) clasifique a cada persona. Los
+      // pacientes históricos son todos terapéuticos → default 'terapia'.
+      careType: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: "terapia",
+        validate: { isIn: [["terapia", "nutricion"]] },
+      },
+      // Especialidad(es) clínica(s) del paciente (taxonomía en
+      // lib/clinica/specialties.js). Array: un paciente puede necesitar varias
+      // (p. ej. logopedia + atención temprana). `careType` de arriba es el
+      // módulo grueso derivado de esta lista.
+      specialties: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
       firstName: {
         type: DataTypes.STRING(120),
         allowNull: false,

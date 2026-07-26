@@ -79,6 +79,14 @@ export function defineClinicSession(sequelize) {
         allowNull: false,
         defaultValue: "registered",
       },
+      // Cliente/pagador (2026-07-23). Foto tomada del paciente al crear la
+      // sesión, para llegar a la ficha del cliente sin depender del salto
+      // paciente→cliente, que es frágil. El terapeuta ya se guarda aparte.
+      clientId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "client_id",
+      },
     },
     {
       tableName: "clinic_sessions",

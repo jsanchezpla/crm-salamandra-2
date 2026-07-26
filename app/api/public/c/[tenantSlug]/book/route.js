@@ -1,3 +1,5 @@
+import { Op } from "sequelize";
+import { puntuarSpam } from "../../../../../../lib/formularios/antispam.js";
 import { withPublicTenant } from "../../../../../../lib/tenant/publicTenantContext.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { created, error, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
@@ -37,6 +39,14 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
     let body;
     try { body = await request.json(); } catch { return error("Body inválido"); }
 
+    // Antispam (arreglo 2026-07-23): la reserva pública no tenía honeypot ni
+    // trampa de tiempo ni dedup (el formulario sí). A un bot se le responde
+    // "ok" y no se guarda nada; un error le diría qué corregir.
+    const { puntos } = puntuarSpam(body);
+    if (puntos >= 2) {
+      return created({ ok: true, mensaje: "Solicitud recibida" });
+    }
+
     const eventTypeId = normalizeString(body.eventTypeId);
     if (!eventTypeId) return error("eventTypeId es obligatorio");
 
@@ -70,7 +80,9 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
     const clientPhone = normalizeString(body.clientPhone);
     if (!clientPhone) return error("clientPhone es obligatorio", 422);
 
-    const additionalData = body.additionalData != null ? String(body.additionalData).trim() : null;
+    // Recorte de longitud (arreglo 2026-07-23): additionalData es TEXT sin tope
+    // y el endpoint es público; sin recorte se puede escribir MB por reserva.
+    const additionalData = body.additionalData != null ? String(body.additionalData).trim().slice(0, 2000) : null;
     if (eventType.additionalDataRequired && (!additionalData || additionalData === "")) {
       return error("additionalData es obligatorio para este tipo de cita", 422);
     }
@@ -132,6 +144,21 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
       return error("Esa hora ya no está disponible, por favor elige otra", 409);
     }
 
+    // Dedup (arreglo 2026-07-23): misma persona reservando lo mismo en los
+    // últimos 5 min (doble clic / reintento) → se responde ok sin duplicar.
+    const hace5min = new Date(Date.now() - 5 * 60 * 1000);
+    const yaReservado = await Booking.findOne({
+      where: {
+        scheduledAt,
+        createdAt: { [Op.gte]: hace5min },
+        [Op.or]: [{ clientEmail }, { clientPhone }],
+      },
+      attributes: ["id"],
+    });
+    if (yaReservado) {
+      return created({ ok: true, mensaje: "Solicitud recibida" });
+    }
+
     // Determina si el booking nace 'confirmed' (default histórico) o
     // 'pending' (lista de espera). El flag vive en master.tenant_modules
     // del módulo citas del tenant. Default: true (auto-confirm) — solo
@@ -155,6 +182,32 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
       // problema de lectura del flag.
     }
 
+    // Enlace con la ficha de cliente (2026-07-22). Quien reserva desde el
+    // portal viene identificado por el email de su cuenta de WordPress, así
+    // que si ya es paciente podemos atar la cita a su ficha en el momento y no
+    // depender de comparar cadenas de email al mostrarla.
+    //
+    // Best-effort: si no hay ficha (todavía no es cliente) o el tenant no
+    // tiene módulo de clientes, la cita se crea igual sin enlazar. Reservar
+    // NUNCA puede fallar por esto.
+    let clientId = null;
+    try {
+      const { Client } = tenantModels;
+      if (Client && clientEmail) {
+        const ficha = await Client.findOne({
+          where: { email: { [Op.iLike]: clientEmail } },
+          attributes: ["id"],
+          order: [["createdAt", "ASC"]],
+        });
+        if (ficha) clientId = ficha.id;
+      }
+    } catch (err) {
+      const code = err?.parent?.code || err?.original?.code;
+      if (code !== "42P01" && code !== "42703") {
+        console.error(`[book] no se pudo enlazar la cita con su ficha: ${err.message}`);
+      }
+    }
+
     const row = await Booking.create({
       eventTypeId: eventType.id,
       clientName,
@@ -166,6 +219,7 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
       modality: "online",
       meetUrl: eventType.meetUrl,
       status: autoConfirm ? "confirmed" : "pending",
+      clientId,
     });
 
     await logCitasAudit({

@@ -91,13 +91,7 @@ export default function AssignPlanModal({ onClose, onAssigned }) {
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) {
-        const msg = r.status === 409
-          ? `Ya existe una asignación activa de "${template.name}" para ${client.name}.`
-          : (j.error || "No se pudo crear la asignación");
-        setError(msg);
-        // 409 = duplicado activo: volvemos al paso 2 para que Laura pueda
-        // elegir otra plantilla (la suya quedó pre-seleccionada en estado).
-        if (r.status === 409) setStep(2);
+        setError(j.error || "No se pudo crear la asignación");
         return;
       }
       onAssigned?.(j.data);
@@ -335,10 +329,12 @@ function StepClient({ onSelect }) {
 // ────────────────────────────────────────────────────────────────────────────
 
 function StepTemplate({ client, templates, activeAssignmentsForClient, selectedTemplateId, onSelect, error }) {
-  const visible = useMemo(() => {
-    if (!templates) return [];
-    return templates.filter((t) => !activeAssignmentsForClient.has(t.id));
-  }, [templates, activeAssignmentsForClient]);
+  // Desde 2026-07-22 un menú nuevo SUSTITUYE al anterior del paciente, así que
+  // ya no se ocultan las plantillas ya asignadas: se muestran todas, marcando
+  // cuál está vigente. Antes se escondían (y si estaban todas asignadas, no
+  // salía ninguna y no se podía reasignar).
+  const visible = templates || [];
+  const hasActive = activeAssignmentsForClient.size > 0;
 
   if (templates === null) {
     return (
@@ -366,12 +362,10 @@ function StepTemplate({ client, templates, activeAssignmentsForClient, selectedT
         </div>
       )}
 
-      {templates.length > 0 && visible.length === 0 && (
-        <div className="py-6 text-center text-sm text-gray-500 border border-dashed border-gray-200 rounded-md">
-          <p>Todas las plantillas ya están asignadas activas a {client?.name}.</p>
-          <p className="text-xs text-gray-400 mt-1">
-            Crea una nueva plantilla o archiva la asignación existente para reasignar.
-          </p>
+      {hasActive && (
+        <div className="px-3 py-2 bg-amber-50 border border-amber-100 rounded-md text-xs text-amber-800">
+          {client?.name} ya tiene un menú activo. Al asignar este, el anterior se
+          archivará automáticamente y quedará en su histórico.
         </div>
       )}
 
