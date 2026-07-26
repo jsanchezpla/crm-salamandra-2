@@ -43,6 +43,29 @@ function todayStr() {
   return new Date().toISOString().split("T")[0];
 }
 
+function addDaysStr(iso, n) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + n);
+  const p = (x) => String(x).padStart(2, "0");
+  return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
+}
+
+// Eventos del calendario "resultado propuesto": las tareas de la semana con los
+// movimientos de la propuesta activa aplicados. Las movidas se resaltan en verde;
+// el resto se atenúa para que destaquen los cambios.
+function buildPreviewEvents(weekEvents, moves) {
+  const moveById = new Map((moves || []).map((m) => [m.taskId, m]));
+  return (weekEvents || []).map((ev) => {
+    const { color, backgroundColor, borderColor, ...rest } = ev; // eslint-disable-line no-unused-vars
+    const m = moveById.get(ev.id);
+    if (!m) {
+      return { ...rest, backgroundColor: "#E5E7EB", borderColor: "#E5E7EB", textColor: "#4B5563" };
+    }
+    const start = m.allDay ? m.newDate : m.startTime ? `${m.newDate}T${m.startTime}` : m.newDate;
+    return { ...rest, start, end: null, allDay: !!m.allDay, backgroundColor: "#10B981", borderColor: "#059669", textColor: "#FFFFFF" };
+  });
+}
+
 export default function CalendarioPage() {
   const calendarRef = useRef(null);
   const [modal, setModal] = useState(null);
@@ -102,14 +125,29 @@ export default function CalendarioPage() {
   async function loadReorg() {
     setReorgIndex(0);
     setReorg({ loading: true, proposals: [], err: null });
+    const monday = currentWeekMonday();
+    const end = addDaysStr(monday, 7);
     try {
-      const r = await fetch("/api/calendar/reorganize", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ weekStart: currentWeekMonday() }),
-      });
+      // En paralelo: propuestas + todas las tareas de la semana (para el calendario preview).
+      const [r, te] = await Promise.all([
+        fetch("/api/calendar/reorganize", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ weekStart: monday }),
+        }),
+        fetch(`/api/calendar/tasks?start=${monday}&end=${end}`, { cache: "no-store" }),
+      ]);
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo reorganizar");
-      setReorg({ loading: false, proposals: j.data.proposals || [], model: j.data.model, taskCount: j.data.taskCount ?? 0, err: null });
+      const tj = te.ok ? await te.json() : null;
+      setReorg({
+        loading: false,
+        proposals: j.data.proposals || [],
+        model: j.data.model,
+        taskCount: j.data.taskCount ?? 0,
+        weekStart: monday,
+        weekEvents: tj?.data || [],
+        err: null,
+      });
     } catch (e) {
       setReorg({ loading: false, proposals: [], err: e.message });
     }
@@ -466,39 +504,66 @@ export default function CalendarioPage() {
                     <button onClick={() => stepReorg(1)} className="absolute right-3 lg:right-5 top-1/2 -translate-y-1/2 w-9 h-9 grid place-items-center rounded-full border border-neutral-200 text-neutral-500 hover:bg-neutral-50 hover:text-neutral-800 text-xl leading-none" aria-label="Propuesta siguiente">›</button>
                   </div>
 
-                  {/* Lista scrollable: una modificación por línea, con a quién afecta */}
-                  <div className="flex-1 overflow-y-auto px-5 lg:px-7 py-4">
-                    {activeMoves.length === 0 ? (
-                      <div className="grid place-items-center h-full text-center">
-                        <div>
+                  {/* Scroll: calendario del resultado (arriba, grande) + cambios en texto */}
+                  <div className="flex-1 overflow-y-auto px-5 lg:px-7 py-4 space-y-6">
+                    {/* Calendario del resultado propuesto (mes / semana / día) */}
+                    <div>
+                      <div className="text-[12px] text-neutral-500 mb-2">Así quedaría la semana con esta propuesta:</div>
+                      <div className="border border-neutral-100 rounded-xl p-2 reorg-preview">
+                        <FullCalendar
+                          plugins={[dayGridPlugin, timeGridPlugin]}
+                          initialView="timeGridWeek"
+                          initialDate={reorg.weekStart}
+                          headerToolbar={{ left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay" }}
+                          locale="es"
+                          firstDay={1}
+                          allDaySlot={true}
+                          height={440}
+                          editable={false}
+                          selectable={false}
+                          dayMaxEvents={4}
+                          events={buildPreviewEvents(reorg.weekEvents, activeMoves)}
+                          buttonText={{ today: "Hoy", month: "Mes", week: "Semana", day: "Día" }}
+                        />
+                      </div>
+                      <div className="flex items-center gap-4 mt-2 text-[11px] text-neutral-400">
+                        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: "#10B981" }} /> Se mueve</span>
+                        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: "#E5E7EB" }} /> Se queda igual</span>
+                      </div>
+                    </div>
+
+                    {/* Cambios en texto (una modificación por línea, con a quién afecta) */}
+                    <div>
+                      {activeMoves.length === 0 ? (
+                        <div className="text-center py-6">
                           <div className="text-3xl mb-2">✅</div>
                           <p className="text-sm text-neutral-500">Con este criterio la semana ya está bien: no hace falta mover nada.</p>
                           <p className="text-xs text-neutral-400 mt-1">Prueba las otras propuestas con las flechas.</p>
                         </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="text-[12px] text-neutral-500 mb-3">{activeMoves.length} cambio{activeMoves.length > 1 ? "s" : ""} · a quién afecta cada uno:</div>
-                        <ul className="divide-y divide-neutral-100 border border-neutral-100 rounded-xl overflow-hidden">
-                          {activeMoves.map((m, i) => (
-                            <li key={i} className="px-3.5 py-3 hover:bg-neutral-50/60">
-                              <div className="flex items-center gap-2.5 flex-wrap">
-                                <span className={`w-2 h-2 rounded-full shrink-0 ${m.priority === "high" ? "bg-rose-500" : m.priority === "low" ? "bg-neutral-300" : "bg-amber-400"}`} title={`Prioridad ${m.priority === "high" ? "alta" : m.priority === "low" ? "baja" : "media"}`} />
-                                <span className="text-[14px] font-medium text-neutral-900">{m.title}</span>
-                                <span className="text-[12px] text-neutral-300">·</span>
-                                <span className="text-[12.5px] text-neutral-600">{m.teamMemberName || "Sin asignar"}</span>
-                                <span className="ml-auto text-[12.5px] text-neutral-500 flex items-center gap-1.5 whitespace-nowrap">
-                                  <span className="line-through text-neutral-400">{m.oldLabel}</span>
-                                  <span className="text-neutral-300">→</span>
-                                  <span className="font-semibold text-emerald-700">{m.newLabel}</span>
-                                </span>
-                              </div>
-                              <div className="text-[11.5px] text-neutral-400 mt-1 pl-[18px]">{m.reason}</div>
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    )}
+                      ) : (
+                        <>
+                          <div className="text-[12px] text-neutral-500 mb-3">{activeMoves.length} cambio{activeMoves.length > 1 ? "s" : ""} · a quién afecta cada uno:</div>
+                          <ul className="divide-y divide-neutral-100 border border-neutral-100 rounded-xl overflow-hidden">
+                            {activeMoves.map((m, i) => (
+                              <li key={i} className="px-3.5 py-3 hover:bg-neutral-50/60">
+                                <div className="flex items-center gap-2.5 flex-wrap">
+                                  <span className={`w-2 h-2 rounded-full shrink-0 ${m.priority === "high" ? "bg-rose-500" : m.priority === "low" ? "bg-neutral-300" : "bg-amber-400"}`} title={`Prioridad ${m.priority === "high" ? "alta" : m.priority === "low" ? "baja" : "media"}`} />
+                                  <span className="text-[14px] font-medium text-neutral-900">{m.title}</span>
+                                  <span className="text-[12px] text-neutral-300">·</span>
+                                  <span className="text-[12.5px] text-neutral-600">{m.teamMemberName || "Sin asignar"}</span>
+                                  <span className="ml-auto text-[12.5px] text-neutral-500 flex items-center gap-1.5 whitespace-nowrap">
+                                    <span className="line-through text-neutral-400">{m.oldLabel}</span>
+                                    <span className="text-neutral-300">→</span>
+                                    <span className="font-semibold text-emerald-700">{m.newLabel}</span>
+                                  </span>
+                                </div>
+                                <div className="text-[11.5px] text-neutral-400 mt-1 pl-[18px]">{m.reason}</div>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   {/* Pie: selector 1/2/3 + aplicar la propuesta activa */}
