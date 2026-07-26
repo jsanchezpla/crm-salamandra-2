@@ -12,7 +12,15 @@ function addDays(iso, n) {
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
 
-// POST /api/calendar/reorganize — propone mover tareas de la semana para repartir carga.
+// "Lun 27 jul" — etiqueta legible para la UI (UTC para no desplazar el día).
+function dayLabel(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const s = new Intl.DateTimeFormat("es-ES", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).format(dt);
+  return s.charAt(0).toUpperCase() + s.slice(1).replace(".", "");
+}
+
+// POST /api/calendar/reorganize — SIEMPRE devuelve 3 propuestas para repartir la semana.
 export const POST = withTenant(async (request, _rc, ctx) => {
   try {
     if (!ctx.hasModule("calendar")) return forbidden("Módulo calendario no activo");
@@ -58,9 +66,6 @@ export const POST = withTenant(async (request, _rc, ctx) => {
 
     // La IA solo mueve tareas de UN SOLO día (mantiene la hora); las multi-día se dejan como están.
     const movable = tasks.filter((t) => !t.endDate || t.endDate === t.startDate);
-    if (movable.length < 2) {
-      return ok({ moves: [], model: "none", note: "La semana no está saturada (o no hay tareas de un día que reorganizar)." });
-    }
 
     const apiKey = getTenantAnthropicKey(ctx);
     const model = getTenantAnthropicModel(ctx);
@@ -68,20 +73,41 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     try {
       result = await reorganizeWeek({ tasks: movable, weekDates, apiKey, model, preferences });
     } catch {
-      result = { model: "sin-ia", moves: [] };
+      result = { model: "sin-ia", proposals: [] };
     }
 
-    // Enriquecer con título + día actual para la UI (y descartar no-moves).
+    // Enriquecer cada propuesta con título + día actual + profesional + etiquetas legibles.
     const byId = new Map(tasks.map((t) => [t.id, t]));
-    const moves = (result.moves || [])
-      .map((m) => {
-        const t = byId.get(m.taskId);
-        if (!t || t.startDate === m.newDate) return null;
-        return { taskId: m.taskId, title: t.title, priority: t.priority, oldDate: t.startDate, newDate: m.newDate, startTime: t.startTime, allDay: t.allDay, reason: m.reason };
-      })
-      .filter(Boolean);
+    const proposals = (result.proposals || []).map((p) => {
+      const moves = (p.moves || [])
+        .map((m) => {
+          const t = byId.get(m.taskId);
+          if (!t || t.startDate === m.newDate) return null;
+          return {
+            taskId: m.taskId,
+            title: t.title,
+            priority: t.priority,
+            teamMemberName: t.teamMemberName || null,
+            oldDate: t.startDate,
+            newDate: m.newDate,
+            oldLabel: dayLabel(t.startDate),
+            newLabel: dayLabel(m.newDate),
+            startTime: t.startTime,
+            allDay: t.allDay,
+            reason: m.reason,
+          };
+        })
+        .filter(Boolean);
+      return { key: p.key, title: p.title, description: p.description, moves };
+    });
 
-    return ok({ moves, model: result.model, weekStart, weekEnd, note: moves.length === 0 ? "La semana ya está equilibrada; no hace falta mover nada." : undefined });
+    return ok({
+      proposals,
+      model: result.model,
+      weekStart,
+      weekEnd,
+      taskCount: movable.length,
+    });
   } catch (err) {
     return serverError(err);
   }
