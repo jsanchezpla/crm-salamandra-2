@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import EmployeeBillingSection from "../../../components/billing/EmployeeBillingSection.jsx";
 import Select from "@/components/ui/Select.jsx";
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
+import TeamHoursEditor from "@/components/team/TeamHoursEditor.jsx";
 
 const STATUS_LABELS = { active: "Activo", inactive: "Inactivo", on_leave: "De baja" };
 const STATUS_FILTER_OPTIONS = [
@@ -390,6 +391,14 @@ export default function EquipoPage() {
                   <EmployeeBillingSection employeeId={openMember.id} isAdmin={viewerIsAdmin} />
 
                   {viewerIsAdmin && <ModulesSection memberId={openMember.id} />}
+
+                  <div className="pt-2">
+                    <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-2">Horario de trabajo</div>
+                    <TeamHoursEditor
+                      memberId={openMember.id}
+                      canEdit={viewerIsAdmin || !!(me?.id && openMember?.userId && me.id === openMember.userId)}
+                    />
+                  </div>
 
                   {viewerIsAdmin && (
                     <div className="flex flex-wrap gap-2 pt-4 border-t border-neutral-100">
