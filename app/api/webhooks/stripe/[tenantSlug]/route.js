@@ -148,13 +148,69 @@ async function procesar(ctx, { PaymentSession, event, t }) {
         return await onEntityPaymentPending(ctx, ps, t);
       }
 
-      // El importe cobrado debe coincidir con el que guardamos. Si no, no se marca
-      // como pagada: es señal de manipulación o de un precio cambiado a mitad.
-      if (Number.isInteger(obj.amount_total) && obj.amount_total !== ps.amount) {
-        process.stderr.write(
-          `[stripe:webhook] importe distinto ps=${ps.id} esperado=${ps.amount} recibido=${obj.amount_total}\n`
+      // ── El importe y la moneda tienen que cuadrar ─────────────────────────
+      // La comprobación del importe era condicional (`Number.isInteger(...) &&`),
+      // así que un evento SIN `amount_total` se la saltaba entera. Y la moneda no
+      // se miraba: con conversión de divisa activada, 52 GBP pasaban por 52 €.
+      const pi = typeof obj.payment_intent === "string" ? obj.payment_intent : null;
+      const importeOk = Number.isInteger(obj.amount_total) && obj.amount_total === ps.amount;
+      const monedaOk =
+        !obj.currency || String(obj.currency).toLowerCase() === String(ps.currency).toLowerCase();
+
+      if (!importeOk || !monedaOk) {
+        // El dinero YA está capturado en Stripe. Antes esto solo escribía una
+        // línea de log y respondía 200: el evento quedaba marcado como procesado,
+        // Stripe no reintentaba, y el paciente se quedaba sin cita Y sin dinero,
+        // con el único rastro en una columna que ninguna pantalla lee.
+        //
+        // Ahora se guarda la referencia del cobro —sin ella la devolución es
+        // imposible desde el CRM— y se devuelve automáticamente.
+        await ps.update(
+          {
+            status: "failed",
+            stripePaymentIntentId: pi ?? ps.stripePaymentIntentId,
+            metadata: {
+              ...(ps.metadata ?? {}),
+              cobroInesperado: {
+                recibido: obj.amount_total ?? null,
+                monedaRecibida: obj.currency ?? null,
+                esperado: ps.amount,
+                monedaEsperada: ps.currency,
+              },
+            },
+          },
+          { transaction: t }
         );
-        return "importe no coincide";
+
+        process.stderr.write(
+          `[stripe:webhook] COBRO INESPERADO ${ctx.slug} ps=${ps.id}: esperado ${ps.amount} ${ps.currency}, recibido ${obj.amount_total} ${obj.currency}\n`
+        );
+
+        return {
+          outcome: `importe/moneda no coinciden (recibido ${obj.amount_total} ${obj.currency}, esperado ${ps.amount} ${ps.currency})`,
+          // Fuera de la transacción: llamar a Stripe dentro la alargaría y, si se
+          // deshiciera, habríamos devuelto un dinero que en la BD sigue cobrado.
+          postCommit: pi
+            ? async () => {
+                const stripe = await getStripe(ctx);
+                // Sin `amount`: Stripe devuelve TODO lo que se cobró de verdad,
+                // que es justo lo que hay que hacer (no sabemos por qué difiere).
+                await stripe.refunds.create(
+                  {
+                    payment_intent: pi,
+                    metadata: { paymentSessionId: ps.id, tenantSlug: ctx.slug, motivo: "importe inesperado" },
+                  },
+                  { idempotencyKey: `refund-mismatch:${ps.id}` }
+                );
+                await ps.update({
+                  status: "refunded",
+                  refundAmount: Number.isInteger(obj.amount_total) ? obj.amount_total : ps.amount,
+                  refundedAt: new Date(),
+                  refundReason: "importe inesperado — devuelto automáticamente",
+                });
+              }
+            : null,
+        };
       }
 
       await ps.update({
@@ -195,12 +251,27 @@ async function procesar(ctx, { PaymentSession, event, t }) {
       if (!pi) return "sin payment_intent";
       const ps = await PaymentSession.findOne({ where: { stripePaymentIntentId: pi }, transaction: t });
       if (!ps || ps.status === "refunded") return "no aplica";
+
+      // Stripe emite `charge.refunded` también en devoluciones PARCIALES.
+      // `amount_refunded` es el ACUMULADO del cargo, no lo de esta vez. Marcarlo
+      // siempre como 'refunded' hacía dos daños: la cita figuraba devuelta entera
+      // habiendo cobrado la diferencia, y `refundPayment` cortaba en seco al ver
+      // el estado, dejando el resto del dinero imposible de devolver desde el CRM.
+      const devuelto = Number.isInteger(obj.amount_refunded) ? obj.amount_refunded : ps.amount;
+      const esTotal = devuelto >= ps.amount;
+
       await ps.update({
-        status: "refunded",
-        refundAmount: Number.isInteger(obj.amount_refunded) ? obj.amount_refunded : ps.amount,
+        status: esTotal ? "refunded" : "paid",
+        refundAmount: devuelto,
         refundedAt: new Date(),
         refundReason: ps.refundReason ?? "devuelto desde Stripe",
       }, { transaction: t });
+
+      // La cita solo deja de estar pagada si se devolvió TODO. Con un parcial
+      // sigue habiendo dinero del paciente sobre la mesa.
+      if (!esTotal) {
+        return `reembolso parcial (${devuelto}/${ps.amount}) — la cita sigue pagada`;
+      }
       return await onEntityRefunded(ctx, ps, t);
     }
 

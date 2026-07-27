@@ -4,6 +4,7 @@ import { logCitasAudit } from "../../../../../../lib/citas/audit.js";
 import { normalizeString } from "../../../../../../lib/citas/validation.js";
 import { sendEmail } from "../../../../../../lib/email/resendClient.js";
 import { bookingRejectedTemplate } from "../../../../../../lib/email/templates/citas/bookingRejected.js";
+import { reembolsarCitaSiProcede } from "../../../../../../lib/citas/reembolsoCita.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -21,8 +22,9 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * Dispara email "booking-rejected" en Checkpoint 2 (Resend). En este
  * checkpoint solo cambia el estado.
  */
-export const PATCH = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
+export const PATCH = withTenant(async (request, { params }, ctx) => {
   try {
+    const { tenant, tenantModels, hasModule } = ctx;
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
     const userRole = request.headers.get("x-user-role") ?? "user";
     const userId = request.headers.get("x-user-id");
@@ -63,6 +65,11 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     });
     await row.reload();
 
+    // Si la rechaza el profesional, el dinero vuelve íntegro pase lo que pase
+    // (política acordada). Best-effort: el rechazo no falla si Stripe no responde.
+    const reembolso = await reembolsarCitaSiProcede(ctx, row, { quienCancela: "profesional" });
+    if (reembolso.reembolsado) await row.reload();
+
     await logCitasAudit({
       tenantId: tenant.id,
       userId,
@@ -70,7 +77,7 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       entity: "Booking",
       entityId: row.id,
       before: { status: before.status },
-      after: { status: "cancelled", cancellationReason: reason ?? null },
+      after: { status: "cancelled", cancellationReason: reason ?? null, reembolso },
       ip,
     });
 

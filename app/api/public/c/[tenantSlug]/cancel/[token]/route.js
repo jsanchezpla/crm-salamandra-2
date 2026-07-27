@@ -15,8 +15,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * La lógica de cancelación (validar + update + audit) vive en
  * `lib/citas/cancelBooking.js`, compartida con el portal SSO `citas-portal/cancel/[id]`.
  */
-export const POST = withPublicTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
+export const POST = withPublicTenant(async (request, { params }, ctx) => {
   try {
+    const { tenant, tenantModels, hasModule } = ctx;
     if (!hasModule("citas")) return notFound("Módulo no disponible");
     const ip = request.headers.get("x-forwarded-for") ?? null;
 
@@ -31,15 +32,27 @@ export const POST = withPublicTenant(async (request, { params }, { tenant, tenan
     const row = await Booking.findOne({ where: { cancellationToken: token } });
     if (!row) return notFound("Reserva no encontrada");
 
+    let res;
     try {
-      await cancelBookingRow({ booking: row, tenantId: tenant.id, reason, source: "landing", ip });
+      res = await cancelBookingRow({
+        booking: row,
+        tenantId: tenant.id,
+        reason,
+        source: "landing",
+        ip,
+        // Con ctx se aplica la política de reembolso: quien cancela desde el
+        // enlace de su email es siempre el paciente.
+        ctx,
+        quienCancela: "cliente",
+      });
     } catch (err) {
       if (err.code === "ALREADY_CANCELLED") return error("Esta cita ya fue cancelada", 410);
       if (err.code === "ALREADY_PAST") return error("Esta cita ya ha pasado y no se puede cancelar", 410);
       throw err;
     }
 
-    return ok({ ok: true });
+    // Se informa del dinero: el paciente tiene que saber si se le devuelve.
+    return ok({ ok: true, reembolso: res?.reembolso ?? null });
   } catch (err) {
     return serverError(err);
   }

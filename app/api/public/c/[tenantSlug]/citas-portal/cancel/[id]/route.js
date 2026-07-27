@@ -20,8 +20,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * Ownership: si el id no existe O pertenece a otro email → 404 (no 403), para no
  * revelar la existencia de citas ajenas.
  */
-export const POST = withPublicTenant(async (request, { params }, { slug, tenant, tenantModels, hasModule }) => {
+export const POST = withPublicTenant(async (request, { params }, ctx) => {
   try {
+    const { slug, tenant, tenantModels, hasModule } = ctx;
     if (!hasModule("citas")) return notFound("Módulo no disponible");
     if (tenant.settings?.widget?.sso?.enabled !== true) return forbidden("Portal de citas no habilitado");
 
@@ -46,15 +47,24 @@ export const POST = withPublicTenant(async (request, { params }, { slug, tenant,
       row && String(row.clientEmail).trim().toLowerCase() === String(email).trim().toLowerCase();
     if (!owner) return notFound("Reserva no encontrada");
 
+    let res;
     try {
-      await cancelBookingRow({ booking: row, tenantId: tenant.id, reason, source: "citas-portal", ip });
+      res = await cancelBookingRow({
+        booking: row,
+        tenantId: tenant.id,
+        reason,
+        source: "citas-portal",
+        ip,
+        ctx,
+        quienCancela: "cliente",
+      });
     } catch (err) {
       if (err.code === "ALREADY_CANCELLED") return error("Esta cita ya fue cancelada", 410);
       if (err.code === "ALREADY_PAST") return error("Esta cita ya ha pasado y no se puede cancelar", 410);
       throw err;
     }
 
-    return ok({ ok: true });
+    return ok({ ok: true, reembolso: res?.reembolso ?? null });
   } catch (err) {
     return serverError(err);
   }

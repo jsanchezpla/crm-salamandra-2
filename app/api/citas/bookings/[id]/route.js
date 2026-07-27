@@ -13,6 +13,7 @@ import { sendEmail } from "../../../../../lib/email/resendClient.js";
 import { bookingMeetLinkTemplate } from "../../../../../lib/email/templates/citas/bookingMeetLink.js";
 import { bookingCancelledTemplate } from "../../../../../lib/email/templates/citas/bookingCancelled.js";
 import { getTenantResendConfig } from "../../../../../lib/outreach/resendConfig.js";
+import { reembolsarCitaSiProcede } from "../../../../../lib/citas/reembolsoCita.js";
 
 /**
  * Email de cancelación al paciente (2026-07-22). Hasta hoy el motivo se
@@ -109,8 +110,9 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
 // ───────────────────────────────────────────────────────────────────────────
 // PATCH /api/citas/bookings/[id]
 // ───────────────────────────────────────────────────────────────────────────
-export const PATCH = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
+export const PATCH = withTenant(async (request, { params }, ctx) => {
   try {
+    const { tenant, tenantModels, hasModule } = ctx;
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
     const userRole = request.headers.get("x-user-role") ?? "user";
     const userId = request.headers.get("x-user-id");
@@ -278,6 +280,17 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     await row.update(updates);
     await row.reload();
 
+    // Cancelar desde el panel es cancelar el profesional: si la cita estaba
+    // cobrada, el dinero vuelve íntegro. Un 'no_show' NO devuelve nada (el
+    // paciente no se presentó), y por eso se distinguen los dos casos.
+    let reembolso = null;
+    if (statusChanged && (updates.status === "cancelled" || updates.status === "no_show")) {
+      reembolso = await reembolsarCitaSiProcede(ctx, row, {
+        quienCancela: updates.status === "no_show" ? "no_show" : "profesional",
+      });
+      if (reembolso.reembolsado) await row.reload();
+    }
+
     await logCitasAudit({
       tenantId: tenant.id,
       userId,
@@ -285,7 +298,7 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       entity: "Booking",
       entityId: row.id,
       before,
-      after: row.toJSON(),
+      after: { ...row.toJSON(), ...(reembolso ? { reembolso } : {}) },
       ip,
     });
 
