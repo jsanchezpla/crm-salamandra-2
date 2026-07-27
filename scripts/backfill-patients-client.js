@@ -54,12 +54,19 @@ async function schemasConPacientes(s) {
   return only.length ? todos.filter((x) => only.includes(x)) : todos;
 }
 
-async function tabla(s, schema, nombre) {
+/**
+ * ¿Existe la tabla CON las dos columnas que necesitamos? No basta con que la
+ * tabla exista: hay schemas donde `coordinations` o `clinical_reports` nacieron
+ * antes de las columnas de enlace y no tienen patient_id o client_id.
+ */
+async function sirveDeFuente(s, schema, nombre) {
   const [rows] = await s.query(
-    `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
+    `SELECT column_name FROM information_schema.columns
+      WHERE table_schema = $1 AND table_name = $2
+        AND column_name IN ('patient_id', 'client_id')`,
     { bind: [schema, nombre] }
   );
-  return rows.length > 0;
+  return rows.length === 2;
 }
 
 async function main() {
@@ -89,7 +96,7 @@ async function main() {
     // Fuentes de prueba disponibles en ESTE schema (unas tablas pueden faltar).
     const fuentes = [];
     for (const t of ["bookings", "clinic_sessions", "clinical_reports", "coordinations"]) {
-      if (await tabla(s, schema, t)) fuentes.push(t);
+      if (await sirveDeFuente(s, schema, t)) fuentes.push(t);
     }
     if (!fuentes.length) {
       log("No hay ninguna tabla de la que deducir el pagador. Se salta.");
