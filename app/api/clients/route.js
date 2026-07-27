@@ -1,4 +1,5 @@
 import { withTenant } from "../../../lib/tenant/withTenant.js";
+import { auditar, datosPeticion, resumen } from "../../../lib/utils/auditoria.js";
 import { ok, created, forbidden, error } from "../../../lib/utils/apiResponse.js";
 import { Op } from "sequelize";
 import {
@@ -70,7 +71,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   return ok({ clients: rows, total: count, page, pages: Math.ceil(count / limit) });
 });
 
-export const POST = withTenant(async (request, _ctx, { tenantModels, tenantSequelize, hasModule, tenantHasModule, user }) => {
+export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, tenantSequelize, hasModule, tenantHasModule, user }) => {
   if (!hasModule("clients")) return forbidden();
 
   const { Client, ClientContactMethod } = tenantModels;
@@ -130,6 +131,14 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, tenantSeque
     // (p. ej. "Paciente Nutrición" en tenants de nutrición) es un extra y no
     // puede tumbar un alta ya hecha.
     await applyAutoAssignments({ tenantModels, clientId: client.id, tenantHasModule, userId: user?.id ?? null });
+    await auditar({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "client.created",
+      entity: "Client",
+      entityId: client.id,
+      after: resumen(client, ["name", "email", "phone", "type", "status"]),
+    });
     return created(client);
   } catch (err) {
     if (err?.name === "SequelizeValidationError" || err?.name === "SequelizeUniqueConstraintError") {

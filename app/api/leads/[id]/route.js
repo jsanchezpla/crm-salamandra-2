@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
+import { auditar, datosPeticion, resumen } from "../../../../lib/utils/auditoria.js";
 import { ok, noContent, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { NotFoundError, ForbiddenError } from "../../../../lib/utils/errors.js";
 import { ALLOWED_STAGES } from "../../../../lib/leads/stages.js";
@@ -20,7 +21,7 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
   return ok(lead);
 });
 
-export const PATCH = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const PATCH = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("leads") && !hasModule("sales")) throw new ForbiddenError();
   const role = request.headers.get("x-user-role");
   if (!ADMIN_ROLES.has(role)) return forbidden(ADMIN_DENY);
@@ -76,16 +77,36 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
     updates.customFields = { ...(lead.customFields ?? {}), ...updates.customFields };
   }
 
+  const antes = resumen(lead, ["name", "email", "stage", "value"]);
   await lead.update(updates);
+  await auditar({
+    tenantId: tenant.id,
+    ...datosPeticion(request),
+    action: "lead.updated",
+    entity: "Lead",
+    entityId: lead.id,
+    before: antes,
+    after: resumen(lead, ["name", "email", "stage", "value"]),
+  });
   return ok(lead);
 });
 
-export const DELETE = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("leads") && !hasModule("sales")) throw new ForbiddenError();
   const role = request.headers.get("x-user-role");
   if (!ADMIN_ROLES.has(role)) return forbidden(ADMIN_DENY);
   const { id } = await params;
   const lead = await resolveLead(tenantModels, id);
+  const antesBorrar = resumen(lead, ["name", "email", "stage", "value"]);
+  const idLead = lead.id;
   await lead.destroy();
+  await auditar({
+    tenantId: tenant.id,
+    ...datosPeticion(request),
+    action: "lead.deleted",
+    entity: "Lead",
+    entityId: idLead,
+    before: antesBorrar,
+  });
   return noContent();
 });

@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
+import { auditar, datosPeticion, resumen } from "../../../../lib/utils/auditoria.js";
 import { ok, noContent, forbidden, notFound, error } from "../../../../lib/utils/apiResponse.js";
 import { getClientDir } from "../../../../lib/clients/attachmentStorage.js";
 import {
@@ -50,7 +51,7 @@ export const GET = withTenant(async (_request, { params }, { tenant, tenantModel
   return ok(client);
 });
 
-export const PUT = withTenant(async (request, { params }, { tenantModels, tenantSequelize, hasModule }) => {
+export const PUT = withTenant(async (request, { params }, { tenant, tenantModels, tenantSequelize, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
 
   const { Client, ClientContactMethod } = tenantModels;
@@ -131,10 +132,18 @@ export const PUT = withTenant(async (request, { params }, { tenantModels, tenant
   }
 
   await client.reload();
+  await auditar({
+    tenantId: tenant.id,
+    ...datosPeticion(request),
+    action: "client.updated",
+    entity: "Client",
+    entityId: client.id,
+    after: resumen(client, ["name", "email", "phone", "type", "status"]),
+  });
   return ok(client);
 });
 
-export const DELETE = withTenant(async (_request, { params }, { tenant, tenantModels, hasModule }) => {
+export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
 
   const { Client, Invoice } = tenantModels;
@@ -166,6 +175,10 @@ export const DELETE = withTenant(async (_request, { params }, { tenant, tenantMo
     }
   }
 
+  // Borrar un cliente se lleva por delante sus adjuntos y su historial:
+  // tiene que quedar constancia de quién lo hizo.
+  const antesBorrar = resumen(client, ["name", "email", "phone", "type", "status"]);
+  const idBorrado = client.id;
   await client.destroy();
 
   // GC del directorio físico de adjuntos. El CASCADE ya borró client_attachments
@@ -180,5 +193,13 @@ export const DELETE = withTenant(async (_request, { params }, { tenant, tenantMo
     process.stderr.write(`[clients:attachment] cleanup dir failed: ${err.message}\n`);
   }
 
+  await auditar({
+    tenantId: tenant.id,
+    ...datosPeticion(request),
+    action: "client.deleted",
+    entity: "Client",
+    entityId: idBorrado,
+    before: antesBorrar,
+  });
   return noContent();
 });

@@ -1,4 +1,5 @@
 import { withTenant } from "@/lib/tenant/withTenant.js";
+import { auditar, datosPeticion, resumen } from "@/lib/utils/auditoria.js";
 import { ok, error, forbidden, notFound, unauthorized, serverError } from "@/lib/utils/apiResponse.js";
 import { MODULE_KEYS } from "@/lib/tenant/moduleKeys.js";
 import {
@@ -179,7 +180,17 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       return ok(serializeTicket(fullSin, { withThread: true }));
     }
 
+    const antesTicket = resumen(ticket, ["number", "subject", "status", "priority"]);
     await ticket.update(cambios);
+    await auditar({
+      tenantId: ctx.tenant.id,
+      ...datosPeticion(request),
+      action: "ticket.updated",
+      entity: "Ticket",
+      entityId: ticket.id,
+      before: antesTicket,
+      after: resumen(ticket, ["number", "subject", "status", "priority"]),
+    });
 
     // Nota de sistema en el hilo (interna) para que quede rastro de quién y cuándo.
     if (efectos.includes("nota_estado")) {
@@ -228,7 +239,19 @@ export const DELETE = withTenant(async (request, { params }, ctx) => {
     await deleteTicketFolder(ctx.slug, ticket.id);
     await TicketAttachment.destroy({ where: { ticketId: ticket.id } });
     await TicketMessage.destroy({ where: { ticketId: ticket.id } });
+    // Borrar un ticket elimina su hilo Y sus adjuntos del disco: sin rastro,
+    // una conversación con un cliente podía desaparecer sin explicación.
+    const antesBorrar = resumen(ticket, ["number", "subject", "status", "clientEmail"]);
+    const idTicket = ticket.id;
     await ticket.destroy();
+    await auditar({
+      tenantId: ctx.tenant.id,
+      ...datosPeticion(request),
+      action: "ticket.deleted",
+      entity: "Ticket",
+      entityId: idTicket,
+      before: antesBorrar,
+    });
 
     return ok({ deleted: true });
   } catch (err) {
