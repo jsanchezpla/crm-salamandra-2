@@ -476,6 +476,12 @@ Usar automáticamente cuando corresponda:
 ### Autenticación y autorización
 
 - Validar JWT antes de resolver tenant — nunca fiar slug de URL sin verificar.
+- **El rol SIEMPRE se lee fresco de BD** (arreglo 2026-07-28). El middleware
+  copia el rol del JWT (15 min de vida) a `x-user-role`, pero `withTenant`
+  reescribe esa cabecera con el rol real antes de llamar al handler, mediante un
+  proxy que delega todo lo demás (cuerpo, cookies, url) en el request original.
+  Así degradar o dar de baja a alguien surte efecto AL INSTANTE en los ~90
+  endpoints que gatean por esa cabecera, sin tocarlos uno a uno.
 - JWT en httpOnly cookies — nunca localStorage.
 - Refresh token con rotación.
 - Rate limiting en endpoints de auth.
