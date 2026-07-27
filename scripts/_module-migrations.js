@@ -87,6 +87,11 @@ export const MODULES = {
     "migrate-calendar-citas-fks",
     "migrate-booking-pending",
     "migrate-booking-client-link",
+    "migrate-booking-change-requests",
+    // Horario propio del profesional (team_member_hours): lo usa la generación
+    // de huecos de citas, pero su tabla base es team_members (por eso está
+    // también en `team`).
+    "migrate-team-member-hours",
   ],
 
   calendar: ["migrate-calendar-citas-fks"],
@@ -117,6 +122,7 @@ export const MODULES = {
     "migrate-team-members-avatar-color",
     "migrate-team-specialties",
     "migrate-team-weekly-hours",
+    "migrate-team-member-hours",
   ],
 
   billing: [
