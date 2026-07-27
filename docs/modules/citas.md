@@ -11,6 +11,22 @@ Tenants que lo usan hoy: `nutri_laura` (única con flujo activo en
 producción tras Fase 1).
 
 
+
+## Informe de ocupación y ausencias (2026-07-27)
+
+`/equipo/ocupacion` (hijo adminOnly del grupo Equipo, `moduleKey: citas`):
+cuántas citas hubo en el mes, cuántas se atendieron, cuántas se cancelaron y a
+cuántas NO SE PRESENTÓ NADIE, por profesional, más el reparto por tipo de cita.
+El estado `no_show` existía desde el principio pero no se agregaba en ninguna
+pantalla: había que contarlo cita a cita.
+
+- API: `GET /api/citas/informe-ocupacion?periodo=YYYY-MM` (solo admin con rol
+  fresco de BD; sin periodo usa el mes en curso EN MADRID, no el del servidor).
+- **La tasa de ausencias se calcula sobre las citas que llegaron a su hora**
+  (atendidas + no presentadas). Las canceladas con aviso NO cuentan: avisar a
+  tiempo es justo lo que se quiere fomentar, penalizarlo sería absurdo.
+- Semáforo: verde <8%, ámbar 8-15%, rojo ≥15%.
+
 ## Recordatorio de cita (2026-07-27)
 
 Correo automático la víspera. **Apagado por defecto**: se enciende por cliente

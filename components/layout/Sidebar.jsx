@@ -150,6 +150,9 @@ const navigation = [
           // Actividad: registro legible de auditoría de TODO el CRM. Sin
           // moduleKey a propósito (hereda la visibilidad del grupo Equipo:
           // team O clinica); la API es solo-admin igualmente.
+          // Ocupación depende de CITAS (no de clinica): un tenant con agenda
+          // pero sin módulo clínico también quiere saber sus ausencias.
+          { key: "team-ocupacion", label: "Ocupación", href: "/equipo/ocupacion", adminOnly: true, moduleKey: "citas" },
           { key: "team-actividad", label: "Actividad", href: "/equipo/actividad", adminOnly: true },
         ],
         icon: (
