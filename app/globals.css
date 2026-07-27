@@ -1,5 +1,31 @@
 @import "tailwindcss";
 
+/* ── Botones flotantes vs. paneles ───────────────────────────────────────
+ * La campanita de notificaciones y el Salamandrobot se anclan abajo a la
+ * derecha, justo donde los paneles laterales y los modales ponen su botón de
+ * Guardar/Crear. Los tapaban: pulsar "Guardar" abría el asistente. Afectaba a
+ * TODO el CRM (69 paneles usan `fixed inset-0 z-50`), no a una pantalla suelta.
+ *
+ * Bajarles el z-index NO lo arregla (probado hasta z-10: el widget seguía
+ * recibiendo el clic, porque los paneles se montan dentro de `main` y no
+ * compiten en la misma capa). Lo que funciona es ocultarlos mientras hay algo
+ * abierto por encima — que además es lo correcto: con un panel abierto no
+ * quieres el chat ni la campanita.
+ *
+ * Se detecta el overlay por su z: z-50 (la mayoría de paneles) y los z-[60..90]
+ * puntuales. Quedan fuera a propósito:
+ *   · `z-40` — el fondo del menú móvil (`lg:hidden fixed inset-0 z-40`) está
+ *     SIEMPRE en el DOM, solo oculto por `lg:hidden`, y `:has()` lo detecta
+ *     igualmente: incluirlo escondía los botones flotantes en todo momento.
+ *     No se pierde nada, porque un fondo z-40 siempre acompaña a un panel z-50.
+ *   · `z-0` — el capturador de clics de la propia campanita; si no, se
+ *     ocultaría a sí misma al abrir su desplegable.
+ */
+.dashboard-shell:has(.fixed.inset-0.z-50) .crm-flotante,
+.dashboard-shell:has(.fixed.inset-0[class*="z-["]) .crm-flotante {
+  display: none;
+}
+
 /* ── Tokens del sistema ──────────────────────────────────────────────── */
 :root {
   /* Tinta cálida (reemplaza el gray-* frío) */

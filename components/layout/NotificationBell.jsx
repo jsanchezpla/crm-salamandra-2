@@ -71,8 +71,12 @@ export default function NotificationBell() {
   // z-30 A PROPÓSITO: los widgets flotantes (campana, Salamandrobot) viven
   // POR DEBAJO de cualquier drawer o modal (convención del CRM: backdrop z-40
   // + panel z-50). Si no, taparían botones de las vistas laterales.
+  //
+  // Y además `crm-flotante`: el z-index solo NO evita el solape (probado hasta
+  // z-10). Esa clase la usa globals.css para OCULTAR el botón mientras hay un
+  // panel abierto — ver el comentario largo en Salamandrobot.jsx.
   return (
-    <div className="fixed z-30 bottom-[1.375rem] right-[5.25rem]">
+    <div className="crm-flotante fixed z-30 bottom-[1.375rem] right-[5.25rem]">
       {open && <div className="fixed inset-0 z-0" onClick={() => setOpen(false)} />}
 
       <button

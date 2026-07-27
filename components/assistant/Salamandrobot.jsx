@@ -65,11 +65,26 @@ export default function Salamandrobot() {
     router.push(href);
   }
 
-  // z-30 A PROPÓSITO: los widgets flotantes (Salamandrobot, campana) viven
-  // POR DEBAJO de cualquier drawer o modal (convención del CRM: backdrop z-40
-  // + panel z-50). Si no, taparían botones de las vistas laterales.
+  /**
+   * z-30 A PROPÓSITO: los widgets flotantes (Salamandrobot, campana) viven POR
+   * DEBAJO de cualquier drawer o modal (convención del CRM: backdrop z-40 +
+   * panel z-50).
+   *
+   * PERO el z-index SOLO NO BASTA, y por eso está además `crm-flotante`:
+   * estos botones se anclan abajo a la derecha, exactamente donde los paneles
+   * ponen su Guardar/Crear, y lo tapaban — pulsar "Guardar" abría el asistente.
+   * Comprobado con `document.elementFromPoint` sobre el centro del botón:
+   * devolvía este widget. Se probó bajarlos a z-30 e incluso a z-10 en caliente
+   * y SEGUÍAN recibiendo el clic (los paneles se montan dentro de `main` y no
+   * compiten en la misma capa).
+   *
+   * Lo que sí funciona: `crm-flotante` + la regla de globals.css que los OCULTA
+   * mientras hay un panel abierto. Afectaba a los 69 paneles del CRM; alguien ya
+   * lo había parcheado subiendo su panel a z-[61] (facturacion/presupuestos),
+   * apaño que ya no hace falta.
+   */
   return (
-    <div className="fixed bottom-4 right-4 z-30 flex flex-col items-end gap-3 print:hidden">
+    <div className="crm-flotante fixed bottom-4 right-4 z-30 flex flex-col items-end gap-3 print:hidden">
       {/* Panel de chat */}
       {open && (
         <div className="w-[min(92vw,22rem)] h-[min(70vh,32rem)] bg-white rounded-2xl shadow-2xl border border-neutral-200 flex flex-col overflow-hidden">
