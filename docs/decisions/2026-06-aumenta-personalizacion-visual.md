@@ -133,11 +133,21 @@ Pequeño detalle de copy. La landing del módulo `clinica` no muestra
 admin) sino "Área clínica" — más institucional, menos dependiente
 del nombre del usuario logueado.
 
-## 10. Botón "← Volver a Clínica" en las 3 internas
+## 10. Mini-link de vuelta en las páginas internas
 
-Las páginas `/clinica/informes`, `/equipo/mi-desempeno` y
-`/equipo/direccion` tienen un mini-link discreto arriba del banner
-para volver a `/clinica`. La landing no lo lleva.
+Cada página interna lleva arriba un mini-link discreto para volver a su
+landing; las landings no lo llevan (son el destino).
+
+> **Actualizado 2026-07-27:** cuando se escribió esta decisión, las cinco
+> pantallas de gestión de equipo vivían en `/clinica/*` y todas volvían a
+> Clínica. Tras el traslado a `/equipo/*` el destino cambia según dónde viva
+> cada una:
+> - `/clinica/informes` → **"← Volver a Clínica"** (`/clinica`).
+> - `/equipo/{mi-desempeno, direccion, productividad, incidencias, bandeja}` →
+>   **"← Volver a Equipo"** (`/equipo`).
+>
+> La regla que se decidió aquí sigue valiendo: el mini-link apunta a la landing
+> del área a la que pertenece la pantalla, no a la carpeta donde vivió antes.
 
 ## 11. Datos dummy honestos
 
@@ -150,6 +160,11 @@ son placeholders explícitos: la ficha existe pero los tabs muestran
 "Sin sesiones registradas en esta demo".
 
 ## Coherencia entre módulos
+
+> **Histórico:** lo que sigue describe la MAQUETA de junio de 2026. Desde el
+> sprint de backend real, esas pantallas leen datos de verdad de la API y los
+> nombres de abajo (Diego Martín, Lorena Vázquez…) ya no existen en producción.
+> Se conserva porque documenta las decisiones de diseño que se tomaron entonces.
 
 Los datos dummy de Pacientes están alineados con los de Clínica:
 

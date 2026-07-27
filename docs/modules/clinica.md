@@ -270,42 +270,63 @@ de Aumenta saltó la numeración) + 3 complementos.
 
 ## Frontend
 
-Cuatro páginas en `app/(dashboard)/clinica/`. Todas son `"use client"`
-con datos hardcoded.
+Las pantallas del área viven en DOS carpetas desde el traslado del 2026-07-27
+(ver "Dónde vive cada pantalla" arriba). Todas son `"use client"` y leen datos
+REALES de la API (ya no hay datos hardcoded).
+
+**En `app/(dashboard)/clinica/` (2 páginas):**
 
 | Ruta | Propósito |
 | --- | --- |
-| `/clinica` | Landing del módulo. KPIs (sesiones, informes pendientes, coordinaciones, próxima entrega), 3 cards de accesos rápidos, pacientes recientes. H1: "Área clínica". |
-| `/clinica/informes` | Listado de informes con filtros decorativos. Click en fila abre **drawer** con el informe completo (Diego Martín, `r-1`) — texto extenso con 7 secciones. Otros informes muestran empty state. |
-| `/equipo/mi-desempeno` | Dashboard del terapeuta logueado (Lorena Vázquez, 87/100). Anillo SVG con puntuación total, grid de 7 áreas semáforo, complementos, gráfico histórico 6 meses. |
-| `/equipo/direccion` | Panel de dirección. 4 KPIs, ranking de 6 terapeutas con chips semáforo en miniatura, alertas, gráfico SVG de evolución del equipo, propuesta de incentivos por terapeuta. |
+| `/clinica` | Landing del módulo. KPIs (sesiones, informes pendientes, coordinaciones, próxima entrega), accesos rápidos a Pacientes e Informes, pacientes recientes. H1: "Área clínica". |
+| `/clinica/informes` | Listado de informes con filtros. Click en fila abre **drawer** con el informe completo. |
 
-Cada página interna tiene mini-link "← Volver a Clínica" arriba del
-banner. La landing no lo lleva (es el destino).
+**En `app/(dashboard)/equipo/` (5 páginas, gestión de equipo):**
 
-### Componentes compartidos
+| Ruta | Propósito |
+| --- | --- |
+| `/equipo/mi-desempeno` | Scorecard del terapeuta logueado: anillo SVG con puntuación total, 7 áreas semáforo, complementos e histórico de 6 meses. |
+| `/equipo/direccion` | Panel de dirección: KPIs, ranking del equipo, alertas, evolución, "Operativa del mes" y propuesta de incentivos (tramos + escritos). |
+| `/equipo/productividad` | % de horas de intervención directa sobre disponibles, por profesional, y edición de las horas/semana objetivo. |
+| `/equipo/incidencias` | Registro y seguimiento de incidencias (categorías, responsable, estados, comentarios). |
+| `/equipo/bandeja` | "Lo mío pendiente" por terapeuta: informes sin entregar, incidencias asignadas y citas de hoy. |
 
-- `_components/PreviewBanner.jsx`: aviso cerrable "Esta es la maqueta
-  visual…". **Reutilizado también por el módulo Pacientes**.
-- `_components/dummyData.js`: datos hardcoded. Terapeutas, pacientes,
-  informes, áreas, ranking del equipo. Cambiar aquí cualquier dato de
-  la demo.
+Cada página interna lleva un mini-link de vuelta arriba: **"← Volver a Clínica"**
+en `/clinica/informes`, y **"← Volver a Equipo"** en las cinco de `/equipo/*`.
+Las landings no lo llevan (son el destino).
+
+### Componentes
+
+- `clinica/_components/PreviewBanner.jsx`: **desactivado** (devuelve `null`); se
+  conserva por si hiciera falta reactivarlo. Lo siguen importando la landing,
+  Informes y el módulo Pacientes; las 5 páginas movidas a `/equipo/*` ya no.
+- `clinica/_components/dummyData.js`: resto histórico de la maqueta. Las
+  pantallas ya no lo usan.
+- `equipo/_components/`: componentes exclusivos de las pantallas de gestión de
+  equipo — `PerformanceEditor`, `IncentiveTiersEditor`, `IncentiveItemsEditor`
+  e `IncidenciaModal`.
 
 ### Sidebar
 
-"Clínica" es un **grupo plegable** en la sección "Empresa" (icono heartbeat),
-visible si `enabledModules.has('clinica')`. Cuelgan de él, como sub-ítems que se
-**auto-expanden** al estar en `/clinica/*` o `/pacientes/*`:
+Las pantallas del área cuelgan de **dos grupos distintos** (`components/layout/Sidebar.jsx`):
+
+**Grupo "Clínica"** (icono heartbeat, gating: módulo `clinica`), se auto-expande
+en `/clinica/*` y `/pacientes/*`:
 
 - **Pacientes** (`/pacientes`) — primero, es el dato del área clínica.
 - **Informes** (`/clinica/informes`)
-- **Mi desempeño** (`/equipo/mi-desempeno`)
-- **Dirección** (`/equipo/direccion`)
 
-Ya **no** hay entrada "Pacientes" a nivel raíz: vive dentro de Clínica. Usa el
-mismo patrón de submenú que Nutrición (`components/layout/Sidebar.jsx`, campo
-`children` del item). El gating del grupo es el módulo `clinica`, que en la
-práctica siempre va activado junto a `pacientes` (ambos solo en aumenta).
+**Grupo "Equipo"** (`visibleModules: ["team", "clinica"]`, para que la terapeuta
+lo vea aunque no tenga `team`). Sus 5 hijos llevan `moduleKey: "clinica"`, así
+que un tenant con `team` pero SIN `clinica` (p. ej. nutri_laura) NO los ve:
+
+- **Desempeño** (`/equipo/mi-desempeno`) — `adminOnly`
+- **Dirección** (`/equipo/direccion`) — `adminOnly`
+- **Productividad** (`/equipo/productividad`) — `adminOnly`
+- **Incidencias** (`/equipo/incidencias`) — todo el equipo
+- **Bandeja de trabajo** (`/equipo/bandeja`) — todo el equipo
+
+Ya **no** hay entrada "Pacientes" a nivel raíz: vive dentro de Clínica.
 
 ## Migración
 
