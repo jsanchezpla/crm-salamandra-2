@@ -8,6 +8,7 @@ const ACCESS_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 // privada del módulo. La forma pública correcta vive bajo `/api/public/`.
 const PUBLIC_API_PATHS = [
   "/api/auth/login",
+  "/api/auth/demo", // demo pública: el visitante aún no tiene cookie
   "/api/auth/refresh",
   "/api/public/",
   "/api/cursos-empresas/",
