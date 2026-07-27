@@ -45,6 +45,7 @@ export const ONE_OFF = {
   "migrate-pacientes-sprint-1": "cabecera: «solo aumenta»",
   "migrate-clinica-sprint-1": "cabecera: «solo aumenta»",
   "migrate-attachments-to-documents": "migración de DATOS (mueve ficheros+filas), se corre a mano una vez, no la ejecuta el disparador",
+  "backfill-nutricion-assignments": "DATOS: marca «Paciente Nutrición» a los clientes previos al auto-marcado (2026-07-27); repetible, se corre a mano",
 };
 
 /**

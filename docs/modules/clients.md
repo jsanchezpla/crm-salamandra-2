@@ -266,9 +266,26 @@ histórico y metadata.
   (`syncClinicPatient`). Índice único parcial `patients_client_unique` = un
   Client materializa como mucho un Patient.
 
+**Auto-marcado en el alta (2026-07-27, decisión de nutri_laura, reina de
+nutrición)**: en tenants con el módulo `nutricion` activo, TODA alta de cliente
+marca sola la asignación `nutricion` (`AUTO_ASSIGN_MODULE_KEYS` +
+`applyAutoAssignments` en `lib/clients/moduleAssignments.js`). Cubre los tres
+caminos de alta: POST `/api/clients` (manual y conversión de lead),
+aceptar solicitud de Formularios e importación masiva. Siempre FUERA de la
+transacción del alta y best-effort (`findOrCreate` sobre el único, tolera tabla
+sin migrar): un fallo del extra no tumba el alta. Decide con `tenantHasModule`
+(módulo del tenant), no `hasModule` (que exige además el moduleAccess del
+usuario que crea la ficha). `clinica` queda EXPRESAMENTE fuera: Aumenta pidió
+paciente siempre explícito. Metadata `{auto: true}` distingue el marcado
+automático del manual.
+
 **Backfill** (`scripts/migrate-client-module-assignments.js`, solo `nutri_laura`):
 marca `nutricion` a los clients con plan asignado activo **o** `origin='lead'`.
 Idempotente; no toca los dados de alta a mano.
+`scripts/backfill-nutricion-assignments.js` (ONE_OFF, 2026-07-27) completa el
+resto: marca `nutricion` a TODOS los clientes no inactivos de los tenants con el
+módulo, para alinear a los creados antes del auto-marcado. Repetible
+(`ON CONFLICT DO NOTHING`; respeta un `enabled=false` puesto a mano).
 
 **⚠️ Orden de deploy**: el nuevo atributo `Patient.clientId` hace que toda lectura
 de Patient seleccione `patients.client_id`; correr la migración **ANTES** de

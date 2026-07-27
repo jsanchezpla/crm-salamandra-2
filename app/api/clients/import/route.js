@@ -5,10 +5,11 @@ import {
   setPrimaryContactValue,
   isMissingTable,
 } from "../../../../lib/clients/contactMethods.js";
+import { applyAutoAssignments } from "../../../../lib/clients/moduleAssignments.js";
 
 const VALID_STATUSES = ["new", "contacted", "following", "converted", "discarded"];
 
-export const POST = withTenant(async (request, _ctx, { tenantModels, tenantSequelize, hasModule }) => {
+export const POST = withTenant(async (request, _ctx, { tenantModels, tenantSequelize, hasModule, tenantHasModule, user }) => {
   if (!hasModule("clients")) return forbidden();
 
   const { Client, ClientContactMethod } = tenantModels;
@@ -62,21 +63,27 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, tenantSeque
       const payload = { name, email: emailN, phone: phoneN, notes, customFields };
 
       try {
+        let clientId = null;
         if (mirrorAvailable) {
           await tenantSequelize.transaction(async (t) => {
             const c = await Client.create(payload, { transaction: t });
+            clientId = c.id;
             if (emailN) await setPrimaryContactValue({ client: c, ClientContactMethod, kind: "email", value: emailN, transaction: t });
             if (phoneN) await setPrimaryContactValue({ client: c, ClientContactMethod, kind: "phone", value: phoneN, transaction: t });
           });
         } else {
-          await Client.create(payload);
+          const c = await Client.create(payload);
+          clientId = c.id;
         }
+        // Marcado automático de módulos (fuera de la tx, best-effort).
+        await applyAutoAssignments({ tenantModels, clientId, tenantHasModule, userId: user?.id ?? null });
         results.imported++;
       } catch (err) {
         // Tenant sin la tabla de contactos: desactiva el espejo y reintenta en plano.
         if (mirrorAvailable && isMissingTable(err)) {
           mirrorAvailable = false;
-          await Client.create(payload);
+          const c = await Client.create(payload);
+          await applyAutoAssignments({ tenantModels, clientId: c.id, tenantHasModule, userId: user?.id ?? null });
           results.imported++;
         } else {
           throw err;

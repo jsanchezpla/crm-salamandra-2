@@ -48,6 +48,9 @@ export default function MisDocumentos({ tenantSlug, authFetch, profesional }) {
   // Nunca dejamos el botón gris "porque sí": si está deshabilitado, hay motivo
   // escrito debajo.
   const [blockedReason, setBlockedReason] = useState(null);
+  // Email de la sesión cuando no hay ficha: la causa habitual es que la ficha
+  // del CRM tenga OTRO correo, y enseñándolo se ve al instante.
+  const [sessionEmail, setSessionEmail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
@@ -72,6 +75,7 @@ export default function MisDocumentos({ tenantSlug, authFetch, profesional }) {
       setDocs(j.data?.documents ?? []);
       setCanUpload(!!j.data?.canUpload);
       setBlockedReason(j.data?.canUpload ? null : (j.data?.blockedReason ?? "limite"));
+      setSessionEmail(j.data?.sessionEmail ?? null);
     } catch (err) {
       setLoadError(err.message);
       setBlockedReason("error");
@@ -164,7 +168,7 @@ export default function MisDocumentos({ tenantSlug, authFetch, profesional }) {
           {!canUpload && !loading && blockedReason && (
             <p className="text-[12px] text-[var(--widget-text-faint)] mt-2">
               {blockedReason === "sin-ficha" &&
-                `Todavía no podemos asociar tus documentos a tu ficha. Escríbele a ${nombreProfesional} y lo soluciona en un momento.`}
+                `Todavía no podemos asociar tus documentos a tu ficha${sessionEmail ? ` (tu cuenta: ${sessionEmail})` : ""}. Escríbele a ${nombreProfesional} y lo soluciona en un momento.`}
               {blockedReason === "limite" &&
                 `Has alcanzado el máximo de documentos que puedes subir. Si necesitas enviar algo más, escríbele a ${nombreProfesional}.`}
               {blockedReason === "sesion" &&

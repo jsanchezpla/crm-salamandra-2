@@ -6,6 +6,7 @@ import {
   setPrimaryContactValue,
   isMissingTable,
 } from "../../../lib/clients/contactMethods.js";
+import { applyAutoAssignments } from "../../../lib/clients/moduleAssignments.js";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
@@ -69,7 +70,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   return ok({ clients: rows, total: count, page, pages: Math.ceil(count / limit) });
 });
 
-export const POST = withTenant(async (request, _ctx, { tenantModels, tenantSequelize, hasModule }) => {
+export const POST = withTenant(async (request, _ctx, { tenantModels, tenantSequelize, hasModule, tenantHasModule, user }) => {
   if (!hasModule("clients")) return forbidden();
 
   const { Client, ClientContactMethod } = tenantModels;
@@ -125,6 +126,10 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, tenantSeque
       if (phoneN) await setPrimaryContactValue({ client: c, ClientContactMethod, kind: "phone", value: phoneN, transaction: t });
       return c;
     });
+    // Fuera de la transacción a propósito: el marcado automático de módulos
+    // (p. ej. "Paciente Nutrición" en tenants de nutrición) es un extra y no
+    // puede tumbar un alta ya hecha.
+    await applyAutoAssignments({ tenantModels, clientId: client.id, tenantHasModule, userId: user?.id ?? null });
     return created(client);
   } catch (err) {
     if (err?.name === "SequelizeValidationError" || err?.name === "SequelizeUniqueConstraintError") {
@@ -135,6 +140,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, tenantSeque
     // hizo rollback → creamos el cliente sin métodos (comportamiento legacy).
     if (isMissingTable(err)) {
       const c = await Client.create(clientPayload);
+      await applyAutoAssignments({ tenantModels, clientId: c.id, tenantHasModule, userId: user?.id ?? null });
       return created(c);
     }
     throw err;

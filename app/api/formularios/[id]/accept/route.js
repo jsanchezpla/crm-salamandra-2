@@ -9,6 +9,7 @@ import {
 } from "../../../../../lib/formularios/accept.js";
 import { crearUsuarioPortal } from "../../../../../lib/formularios/portalUser.js";
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
+import { applyAutoAssignments } from "../../../../../lib/clients/moduleAssignments.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -27,7 +28,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  *      Si falla, la ficha YA está creada y se informa del fallo; no se deshace
  *      nada, porque deshacerlo sería peor.
  */
-export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tenantSequelize, hasModule }) => {
+export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tenantSequelize, hasModule, tenantHasModule, user }) => {
   try {
     if (!hasModule(MODULE_KEYS.FORMULARIOS)) return forbidden("Módulo formularios no activo");
 
@@ -62,6 +63,11 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
     });
 
     if (!client) return error("No se ha podido crear la ficha", 500);
+
+    // Marcado automático de módulos (p. ej. "Paciente Nutrición"): fuera de la
+    // transacción y best-effort, como el resto de extras de esta ruta. También
+    // al reutilizar una ficha existente: si Laura la acepta, es paciente.
+    await applyAutoAssignments({ tenantModels, clientId: client.id, tenantHasModule, userId: user?.id ?? null });
 
     // ── Alta en el WordPress del tenant (best-effort) ────────────────────────
     let acceso = { intentado: false };

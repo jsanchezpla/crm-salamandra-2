@@ -84,15 +84,18 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
     const blocked = gate(tenant, hasModule);
     if (blocked) return blocked;
 
-    const { response, client } = await resolveSession(request, slug, tenantModels);
+    const { response, client, email } = await resolveSession(request, slug, tenantModels);
     if (response) return response;
     // Sin ficha todavía: se dice POR QUÉ, para que el portal pueda explicarlo en
-    // vez de dejar un botón gris sin motivo.
+    // vez de dejar un botón gris sin motivo. Se devuelve el email de la sesión
+    // (es el del propio paciente, no filtra nada) porque la causa habitual es
+    // que la ficha del CRM esté con OTRO correo: viéndolo, se diagnostica solo.
     if (!client) {
       return ok({
         documents: [],
         canUpload: false,
         blockedReason: "sin-ficha",
+        sessionEmail: email,
         limit: MAX_FILES_PER_CLIENT_PORTAL,
       });
     }
