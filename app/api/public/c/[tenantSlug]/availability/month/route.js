@@ -8,6 +8,7 @@ import {
   getMadridTodayMidnight,
   pickAvailabilitiesForEventType,
 } from "../../../../../../../lib/citas/slots.js";
+import { ocupaHuecoWhere } from "../../../../../../../lib/citas/booking.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/availability/month?eventTypeId=X&year=2026&month=5
@@ -50,9 +51,12 @@ export const GET = withPublicTenant(async (request, _ctx, { tenantModels, hasMod
     const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
     const monthEnd = buildMadridDate(year, month, daysInMonth, 23, 59);
 
+    // Misma condición de ocupación que /availability y que la creación de
+    // reservas (ver ocupaHuecoWhere): las reservas provisionales caducadas no
+    // deben pintar un día como lleno.
     const existingBookings = await Booking.findAll({
       where: {
-        status: { [Op.notIn]: ["cancelled", "no_show"] },
+        ...ocupaHuecoWhere(now),
         scheduledAt: {
           [Op.gte]: new Date(monthStart.getTime() - 24 * 60 * 60 * 1000),
           [Op.lt]: new Date(monthEnd.getTime() + 24 * 60 * 60 * 1000),

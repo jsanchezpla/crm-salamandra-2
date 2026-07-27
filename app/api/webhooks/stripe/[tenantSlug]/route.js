@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { withPublicTenant } from "../../../../../lib/tenant/publicTenantContext.js";
 import { getStripe, getTenantStripeConfig } from "../../../../../lib/payments/stripeConfig.js";
-import { onEntityPaid, onEntityRefunded } from "../../../../../lib/payments/entityHooks.js";
+import {
+  onEntityPaid,
+  onEntityPaymentFailed,
+  onEntityPaymentPending,
+  onEntityRefunded,
+} from "../../../../../lib/payments/entityHooks.js";
 
 /**
  * POST /api/webhooks/stripe/[tenantSlug]
@@ -68,15 +73,31 @@ export const POST = withPublicTenant(
 
     // ── Marcar + procesar, todo o nada ───────────────────────────────────────
     try {
+      let postCommit = null;
       const outcome = await tenantContext.tenantSequelize.transaction(async (t) => {
         const claim = await StripeWebhookEvent.create(
           { stripeEventId: event.id, type: event.type },
           { transaction: t }
         );
         const res = await procesar(tenantContext, { PaymentSession, event, t });
-        await claim.update({ outcome: String(res).slice(0, 255) }, { transaction: t });
-        return res;
+        postCommit = res?.postCommit ?? null;
+        const texto = typeof res === "string" ? res : (res?.outcome ?? "ok");
+        await claim.update({ outcome: texto.slice(0, 255) }, { transaction: t });
+        return texto;
       });
+
+      // Efectos hacia FUERA (correos) solo con la transacción ya confirmada: si
+      // se hubieran hecho dentro y algo fallara, habríamos avisado al cliente de
+      // una confirmación que en la base de datos no existe. Best-effort: que
+      // falle el correo no debe hacer que Stripe reintente un cobro ya procesado.
+      if (postCommit) {
+        try {
+          await postCommit();
+        } catch (mailErr) {
+          process.stderr.write(`[stripe:webhook] postCommit falló (${slug}): ${mailErr.message}\n`);
+        }
+      }
+
       return NextResponse.json({ ok: true, outcome });
     } catch (err) {
       // Ya procesado antes: reintento de Stripe. No se repite el trabajo.
@@ -98,13 +119,34 @@ async function procesar(ctx, { PaymentSession, event, t }) {
   const obj = event.data.object;
 
   switch (event.type) {
-    case "checkout.session.completed": {
+    // `completed` se emite en cuanto el cliente TERMINA el checkout, que no es lo
+    // mismo que haber pagado. `async_payment_succeeded` es su pareja para los
+    // métodos de liquidación diferida. Comparten rama porque, una vez hay dinero,
+    // el tratamiento es idéntico.
+    case "checkout.session.completed":
+    case "checkout.session.async_payment_succeeded": {
       const ps = await buscarSesion(PaymentSession, {
         id: obj?.metadata?.paymentSessionId,
         checkoutSessionId: obj?.id,
       }, t);
       if (!ps) return "sin PaymentSession";
       if (ps.status === "paid" || ps.status === "refunded") return "ya estaba pagada";
+
+      // ── ¿HAY DINERO DE VERDAD? ────────────────────────────────────────────
+      // Con métodos de liquidación diferida (SEPA, Multibanco, Boleto…) este
+      // evento llega con `payment_status: 'unpaid'` y el cobro se resuelve días
+      // después. Confirmar aquí sería dar la cita por buena y mandarle al
+      // paciente un email de confirmación de un pago que todavía no existe —y
+      // que puede acabar fallando—.
+      //
+      // Se falla del lado seguro: si el campo no viene, se trata como NO pagado.
+      // Stripe siempre lo manda en una checkout.session; su ausencia significa
+      // que el evento no es lo que creemos, y confiar sale caro.
+      const cobrado =
+        obj?.payment_status === "paid" || obj?.payment_status === "no_payment_required";
+      if (!cobrado) {
+        return await onEntityPaymentPending(ctx, ps, t);
+      }
 
       // El importe cobrado debe coincidir con el que guardamos. Si no, no se marca
       // como pagada: es señal de manipulación o de un precio cambiado a mitad.
@@ -121,6 +163,20 @@ async function procesar(ctx, { PaymentSession, event, t }) {
         stripePaymentIntentId: typeof obj.payment_intent === "string" ? obj.payment_intent : null,
       }, { transaction: t });
       return await onEntityPaid(ctx, ps, t);
+    }
+
+    // El cobro diferido acabó fallando: ni dinero, ni cita. Se libera el hueco.
+    case "checkout.session.async_payment_failed": {
+      const ps = await buscarSesion(PaymentSession, {
+        id: obj?.metadata?.paymentSessionId,
+        checkoutSessionId: obj?.id,
+      }, t);
+      if (!ps) return "sin PaymentSession";
+      if (ps.status === "paid" || ps.status === "refunded") {
+        return "la sesión consta pagada — no se toca";
+      }
+      await ps.update({ status: "failed" }, { transaction: t });
+      return await onEntityPaymentFailed(ctx, ps, t);
     }
 
     case "checkout.session.expired": {

@@ -121,6 +121,40 @@ export function defineBooking(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // ── Cobro online (sprint pagos) ─────────────────────────────────────
+      //
+      // Va SEPARADO de `status` a propósito: `status` es la agenda (¿va a venir?)
+      // y `paymentStatus` es el dinero (¿está pagada?). Mezclarlos metería
+      // "esperando pago" en la lista de espera del profesional, que es otra cosa.
+      //
+      // `none` = cita sin cobro (tipo de cita gratuito, o creada a mano desde el
+      // dashboard). Es el valor de TODAS las citas existentes: nada cambia para
+      // los tenants que no cobran.
+      paymentStatus: {
+        type: DataTypes.ENUM("none", "pending", "paid", "refunded", "failed"),
+        allowNull: false,
+        defaultValue: "none",
+      },
+      // Importe EN CÉNTIMOS, copiado del EventType al reservar. Es una foto: si
+      // el profesional cambia la tarifa después, esta cita conserva lo que se
+      // cobró de verdad.
+      amount: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+      // Hasta cuándo esta reserva provisional bloquea el hueco. Mientras
+      // paymentStatus='pending' y esta fecha no haya pasado, el hueco está
+      // ocupado; cuando pasa, se libera solo (ver ocupaHuecoWhere en
+      // lib/citas/booking.js). Así un carrito abandonado no deja el hueco muerto
+      // ni depende de que un cron funcione.
+      holdExpiresAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      paymentSessionId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       // Notas internas (no visibles al cliente)
       notes: {
         type: DataTypes.TEXT,

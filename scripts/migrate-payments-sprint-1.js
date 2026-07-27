@@ -16,6 +16,13 @@
  *  · `stripe_event_id` UNIQUE: es lo que hace idempotente el webhook. En Postgres
  *    varios NULL no colisionan, así que las filas sin id de Stripe conviven.
  *
+ * ⚠️ ESTA MIGRACIÓN VA **ANTES** DEL DEPLOY (§8 de CONTRIBUTING).
+ * Desde el sprint de cobro, el código de disponibilidad y de reserva CONSULTA
+ * `bookings.payment_status` y `bookings.hold_expires_at` en el WHERE. Si la app
+ * nueva arranca antes de que existan esas columnas, toda consulta de huecos
+ * revienta con 42703 y nadie puede reservar. Correr primero la migración, luego
+ * `./deploy.sh`.
+ *
  * Uso local:  node --env-file=.env.local scripts/migrate-payments-sprint-1.js
  * Uso VPS:    docker exec crm-salamandra-app-1 node scripts/migrate-payments-sprint-1.js
  */
@@ -76,6 +83,16 @@ async function processSchema(s, schema, uuidDefault) {
       `CREATE TYPE "${schema}"."${enumName}" AS ENUM ('pending', 'paid', 'failed', 'refunded', 'expired')`
     );
     log(`✓ ${schema} enum ${enumName}: creado`);
+  }
+
+  // Enum del estado de cobro de una CITA (distinto del de la sesión de pago:
+  // aquí 'none' significa "esta cita no lleva cobro", que no existe en el otro).
+  const payEnum = "enum_bookings_payment_status";
+  if (!(await enumTypeExists(s, payEnum, schema))) {
+    await s.query(
+      `CREATE TYPE "${schema}"."${payEnum}" AS ENUM ('none', 'pending', 'paid', 'refunded', 'failed')`
+    );
+    log(`✓ ${schema} enum ${payEnum}: creado`);
   }
 
   await s.transaction(async (t) => {
@@ -146,6 +163,27 @@ async function processSchema(s, schema, uuidDefault) {
       } else {
         log(`· ${schema}.event_types.price: ya existe`);
       }
+    }
+
+    // Estado de cobro de cada cita. Aditivo: las citas existentes quedan en
+    // 'none' (sin cobro), que es como se comportaban.
+    if (await tableExists(s, t, schema, "bookings")) {
+      const cols = [
+        ["payment_status", `"${schema}"."${payEnum}" NOT NULL DEFAULT 'none'`],
+        ["amount", "INTEGER"],
+        ["hold_expires_at", "TIMESTAMPTZ"],
+        ["payment_session_id", "UUID"],
+      ];
+      for (const [col, tipo] of cols) {
+        if (!(await columnExists(s, t, schema, "bookings", col))) {
+          await s.query(`ALTER TABLE "${schema}"."bookings" ADD COLUMN ${col} ${tipo}`, { transaction: t });
+          log(`✓ ${schema}.bookings.${col}: columna creada`);
+        }
+      }
+      // Índice para la caducidad perezosa: las consultas de huecos filtran por
+      // (payment_status, hold_expires_at) en cada búsqueda de disponibilidad.
+      await ensureIndex(s, t, schema, "bookings_hold_idx",
+        `CREATE INDEX "bookings_hold_idx" ON "${schema}"."bookings" (payment_status, hold_expires_at)`);
     }
   });
 

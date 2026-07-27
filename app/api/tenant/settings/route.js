@@ -1,11 +1,12 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok } from "../../../../lib/utils/apiResponse.js";
-import { ForbiddenError, NotFoundError, ValidationError } from "../../../../lib/utils/errors.js";
+import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../../../../lib/utils/errors.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { invalidateTenantCache } from "../../../../lib/tenant/tenantResolver.js";
 import { isDemoTenant, assertNotDemoMasterWrite } from "../../../../lib/demo/isDemo.js";
-import { encryptSecret, decryptSecret } from "../../../../lib/crypto/secretBox.js";
+import { encryptSecret, decryptSecret, isEncryptionConfigured } from "../../../../lib/crypto/secretBox.js";
 import { isAllowedAnthropicModel, DEFAULT_ANTHROPIC_MODEL } from "../../../../lib/ai/anthropicModel.js";
+import { getTenantStripeConfig } from "../../../../lib/payments/stripeConfig.js";
 
 /**
  * /api/tenant/settings — configuración básica del tenant.
@@ -111,7 +112,9 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
         ...ks(integ.stripeSecretKey),
         publishableKey: integ.stripePublishableKey ?? null,
         webhook: keyStatus(integ.stripeWebhookSecret).configured,
-        ready: !!integ.stripeSecretKey && !!integ.stripeWebhookSecret,
+        // Mismo criterio que el cobro real (getTenantStripeConfig): hay que poder
+        // DESCIFRAR las claves, no solo que estén guardadas.
+        ready: getTenantStripeConfig({ tenant: t }).configured,
       },
     },
   });
@@ -142,6 +145,31 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   const settings = { ...(tenant.settings ?? {}) };
   settings.brand = { ...(settings.brand ?? {}) };
   settings.integrations = { ...(settings.integrations ?? {}) };
+
+  // ── Sin clave de cifrado no se guardan secretos ─────────────────────────────
+  // `encryptSecret` degrada a texto plano cuando falta SETTINGS_ENCRYPTION_KEY
+  // (ver lib/crypto/secretBox.js). Sin este guard, guardar la clave secreta de
+  // Stripe con la variable sin configurar la dejaba LEGIBLE en la base de datos
+  // — y la respuesta decía "configurada", así que nada delataba el problema.
+  // `.env.production.example` trae la variable vacía, o sea que es un escenario
+  // realista, no teórico.
+  const CAMPOS_SECRETOS = [
+    "anthropicApiKey",
+    "googlePlacesApiKey",
+    "openaiApiKey",
+    "resendApiKey",
+    "stripeSecretKey",
+    "stripeWebhookSecret",
+  ];
+  const traeSecreto = CAMPOS_SECRETOS.some(
+    (f) => typeof body[f] === "string" && body[f].trim() !== ""
+  );
+  if (traeSecreto && !isEncryptionConfigured()) {
+    throw new AppError(
+      "No se pueden guardar credenciales: falta la clave de cifrado del servidor (SETTINGS_ENCRYPTION_KEY). Avisa al administrador del sistema.",
+      500
+    );
+  }
 
   const updates = {};
 
@@ -213,7 +241,11 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
         ...keyStatus(settings.integrations.stripeSecretKey),
         publishableKey: settings.integrations.stripePublishableKey ?? null,
         webhook: keyStatus(settings.integrations.stripeWebhookSecret).configured,
-        ready: !!settings.integrations.stripeSecretKey && !!settings.integrations.stripeWebhookSecret,
+        // MISMO criterio que usa el cobro de verdad (getTenantStripeConfig): no
+        // basta con que las claves estén, hay que poder DESCIFRARLAS. Si se
+        // rotara SETTINGS_ENCRYPTION_KEY, mirar la mera presencia diría "listo
+        // para cobrar" mientras todos los cobros fallan.
+        ready: getTenantStripeConfig({ tenant: { settings } }).configured,
       },
     },
   });

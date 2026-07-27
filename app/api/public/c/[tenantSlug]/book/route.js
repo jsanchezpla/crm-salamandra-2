@@ -11,9 +11,15 @@ import {
   normalizeEmail,
   isValidEmail,
 } from "../../../../../../lib/citas/validation.js";
-import { findBookingOverlap } from "../../../../../../lib/citas/booking.js";
+import { findBookingOverlap, lockBookingSlot } from "../../../../../../lib/citas/booking.js";
 import { logCitasAudit } from "../../../../../../lib/citas/audit.js";
 import { verifyPortalSession, readBearer } from "../../../../../../lib/citas/portalSession.js";
+import {
+  createCheckoutSession,
+  CHECKOUT_WINDOW_MS,
+  HOLD_WINDOW_MS,
+} from "../../../../../../lib/payments/checkout.js";
+import { tenantHasStripe } from "../../../../../../lib/payments/stripeConfig.js";
 import {
   getMadridDayOfWeek,
   getMadridParts,
@@ -22,15 +28,25 @@ import {
   timeStrToMinutes,
 } from "../../../../../../lib/citas/slots.js";
 
+/** Origen público desde el que se sirvió la petición (para las URLs de Stripe). */
+function baseUrl(request) {
+  return new URL(request.url).origin;
+}
+
 /**
  * POST /api/public/c/[tenantSlug]/book
  *
  * Body: { eventTypeId, scheduledAt, clientName, clientEmail, clientPhone, additionalData? }
  *
  * Crea un Booking desde la landing pública. Solo modalidad 'online'.
+ *
+ * Si el tipo de cita tiene precio, la reserva nace como PROVISIONAL (bloquea el
+ * hueco, `paymentStatus: 'pending'`, con caducidad) y se devuelve la URL de
+ * Stripe. La cita solo se confirma cuando el webhook recibe el cobro.
  */
-export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenantModels, hasModule }) => {
+export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
   try {
+    const { slug, tenant, tenantModels, hasModule } = tenantContext;
     if (!hasModule("citas")) return notFound("Módulo no disponible");
     const ip = request.headers.get("x-forwarded-for") ?? null;
 
@@ -135,29 +151,10 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
       return error("La hora seleccionada no está dentro de la disponibilidad", 422);
     }
 
-    // Solapamiento con otros bookings activos
-    const overlap = await findBookingOverlap(Booking, {
-      scheduledAt,
-      duration: eventType.duration,
-    });
-    if (overlap) {
-      return error("Esa hora ya no está disponible, por favor elige otra", 409);
-    }
-
-    // Dedup (arreglo 2026-07-23): misma persona reservando lo mismo en los
-    // últimos 5 min (doble clic / reintento) → se responde ok sin duplicar.
-    const hace5min = new Date(Date.now() - 5 * 60 * 1000);
-    const yaReservado = await Booking.findOne({
-      where: {
-        scheduledAt,
-        createdAt: { [Op.gte]: hace5min },
-        [Op.or]: [{ clientEmail }, { clientPhone }],
-      },
-      attributes: ["id"],
-    });
-    if (yaReservado) {
-      return created({ ok: true, mensaje: "Solicitud recibida" });
-    }
+    // El solapamiento y el dedup se comprueban más abajo, DENTRO de la
+    // transacción que reserva el hueco (ver "Reserva del hueco"): comprobarlos
+    // aquí sueltos era una carrera — entre la lectura y el INSERT cabía otra
+    // petición que leía lo mismo y concluía lo mismo.
 
     // Determina si el booking nace 'confirmed' (default histórico) o
     // 'pending' (lista de espera). El flag vive en master.tenant_modules
@@ -208,19 +205,100 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
       }
     }
 
-    const row = await Booking.create({
-      eventTypeId: eventType.id,
-      clientName,
-      clientEmail,
-      clientPhone,
-      additionalData,
-      scheduledAt,
-      duration: eventType.duration,
-      modality: "online",
-      meetUrl: eventType.meetUrl,
-      status: autoConfirm ? "confirmed" : "pending",
-      clientId,
-    });
+    // ── ¿Esta cita se cobra? ────────────────────────────────────────────────
+    // Solo si su tipo tiene precio. Sin precio (null o 0) el flujo es el de
+    // siempre, así que los tenants que no cobran no notan absolutamente nada.
+    const precio = Number.isInteger(eventType.price) && eventType.price > 0 ? eventType.price : null;
+
+    if (precio && !tenantHasStripe(tenantContext)) {
+      // Hay precio pero el profesional no ha terminado de configurar el cobro.
+      // Mejor decirlo que crear una cita "gratis" que él cree cobrada.
+      return error(
+        "Este servicio requiere pago online, pero el profesional aún no lo tiene activado. Contacta con él.",
+        503
+      );
+    }
+
+    // ── Reserva del hueco (serializada) ─────────────────────────────────────
+    // Ambas ventanas se calculan de UNA VEZ, aquí. Antes el hold usaba su propio
+    // `Date.now()` y la sesión de Stripe otro posterior, así que la de Stripe
+    // terminaba siempre más tarde: el hueco quedaba libre mientras el pago aún
+    // era posible. Ahora el hold dura más que la sesión, a propósito.
+    const ahora = Date.now();
+    const stripeCaducaEn = new Date(ahora + CHECKOUT_WINDOW_MS);
+    const holdCaducaEn = new Date(ahora + HOLD_WINDOW_MS);
+
+    let row;
+    try {
+      row = await tenantContext.tenantSequelize.transaction(async (t) => {
+        // Serializa contra otras reservas y contra los cambios de hora del panel.
+        // A partir de aquí, la comprobación de hueco es de fiar.
+        await lockBookingSlot(tenantContext.tenantSequelize, { transaction: t });
+
+        const overlap = await findBookingOverlap(Booking, {
+          scheduledAt,
+          duration: eventType.duration,
+          transaction: t,
+        });
+        if (overlap) {
+          const e = new Error("OCUPADO");
+          e.code = "OCUPADO";
+          throw e;
+        }
+
+        // Dedup (arreglo 2026-07-23): misma persona reservando lo mismo en los
+        // últimos 5 min (doble clic / reintento) → se responde ok sin duplicar.
+        const hace5min = new Date(ahora - 5 * 60 * 1000);
+        const yaReservado = await Booking.findOne({
+          where: {
+            scheduledAt,
+            createdAt: { [Op.gte]: hace5min },
+            [Op.or]: [{ clientEmail }, { clientPhone }],
+          },
+          attributes: ["id"],
+          transaction: t,
+        });
+        if (yaReservado) {
+          const e = new Error("DUPLICADO");
+          e.code = "DUPLICADO";
+          throw e;
+        }
+
+        return await Booking.create(
+          {
+            eventTypeId: eventType.id,
+            clientName,
+            clientEmail,
+            clientPhone,
+            additionalData,
+            scheduledAt,
+            duration: eventType.duration,
+            modality: "online",
+            meetUrl: eventType.meetUrl,
+            // Con pago, la cita nace SIEMPRE 'pending' y solo pasa a 'confirmed'
+            // cuando Stripe confirma el cobro — da igual lo que diga autoConfirm:
+            // confirmar antes de cobrar sería regalar el hueco.
+            status: precio ? "pending" : autoConfirm ? "confirmed" : "pending",
+            // Reserva provisional: bloquea el hueco mientras se paga, con margen
+            // por encima de la ventana de Stripe. Si no se paga, caduca sola
+            // (ocupaHuecoWhere), sin depender de ningún proceso de limpieza.
+            paymentStatus: precio ? "pending" : "none",
+            amount: precio,
+            holdExpiresAt: precio ? holdCaducaEn : null,
+            clientId,
+          },
+          { transaction: t }
+        );
+      });
+    } catch (err) {
+      if (err?.code === "OCUPADO") {
+        return error("Esa hora ya no está disponible, por favor elige otra", 409);
+      }
+      if (err?.code === "DUPLICADO") {
+        return created({ ok: true, mensaje: "Solicitud recibida" });
+      }
+      throw err;
+    }
 
     await logCitasAudit({
       tenantId: tenant.id,
@@ -232,6 +310,52 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
       after: { ...row.toJSON(), source: "landing" },
       ip,
     });
+
+    // ── Cita con pago: crear la sesión de Stripe y devolver su URL ──────────
+    // El importe NO viene del cliente: se toma de EventType.price, ya validado
+    // arriba. Ver la nota de seguridad en lib/payments/checkout.js.
+    if (precio) {
+      let checkoutUrl;
+      try {
+        const res = await createCheckoutSession(tenantContext, {
+          entityType: "booking",
+          entityId: row.id,
+          amount: precio,
+          description: `${eventType.name} — ${tenant.name}`,
+          customerEmail: row.clientEmail,
+          successUrl: `${baseUrl(request)}/widget/c/${tenant.slug}/mi-perfil`,
+          cancelUrl: `${baseUrl(request)}/widget/c/${tenant.slug}`,
+          metadata: { bookingId: row.id },
+          // El MISMO instante que se usó para el hold, no un `Date.now()` nuevo.
+          expiresAt: stripeCaducaEn,
+        });
+        checkoutUrl = res.checkoutUrl;
+        await row.update({ paymentSessionId: res.paymentSession.id });
+      } catch (err) {
+        // Si no se puede cobrar, la reserva provisional no debe quedarse
+        // bloqueando el hueco 30 minutos: se retira ya.
+        await row.destroy().catch(() => {});
+        process.stderr.write(`[citas:book] checkout falló: ${err.message}\n`);
+        return error("No se pudo iniciar el pago. Inténtalo de nuevo en un momento.", 502);
+      }
+
+      // Sin email todavía: la cita aún no existe para el cliente hasta que pague.
+      // El de confirmación lo dispara el webhook al cobrarse.
+      return created({
+        booking: {
+          id: row.id,
+          scheduledAt: row.scheduledAt.toISOString(),
+          duration: row.duration,
+          eventTypeName: eventType.name,
+          eventTypeColor: eventType.color,
+          clientEmail: row.clientEmail,
+        },
+        paymentRequired: true,
+        amount: precio,
+        checkoutUrl,
+        expiresAt: row.holdExpiresAt.toISOString(),
+      });
+    }
 
     // Email best-effort según modo del tenant:
     //   - autoConfirm=true  → booking nace confirmed → bookingConfirmed inmediato

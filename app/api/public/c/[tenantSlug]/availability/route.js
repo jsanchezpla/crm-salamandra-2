@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import { withPublicTenant } from "../../../../../../lib/tenant/publicTenantContext.js";
 import { ok, error, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
+import { ocupaHuecoWhere } from "../../../../../../lib/citas/booking.js";
 import {
   buildMadridDate,
   generateSlotsForDay,
@@ -73,10 +74,13 @@ export const GET = withPublicTenant(async (request, _ctx, { tenantModels, hasMod
       return ok({ slots: [], reason: "no_availability" });
     }
 
-    // Bookings activos que solapen con el día solicitado
+    // Citas que ocupan hueco y solapan con el día solicitado. La condición sale
+    // de `ocupaHuecoWhere` (única fuente de verdad, compartida con la creación de
+    // reservas): así una reserva provisional sin pagar y ya caducada NO sigue
+    // bloqueando la hora.
     const existingBookings = await Booking.findAll({
       where: {
-        status: { [Op.notIn]: ["cancelled", "no_show"] },
+        ...ocupaHuecoWhere(now),
         scheduledAt: { [Op.gte]: new Date(dayStart.getTime() - 24 * 60 * 60 * 1000), [Op.lt]: new Date(dayEnd.getTime() + 24 * 60 * 60 * 1000) },
       },
       attributes: ["id", "scheduledAt", "duration"],
