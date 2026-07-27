@@ -4,6 +4,7 @@ import { getMasterModels } from "../../../../../lib/db/masterDb.js";
 import { invalidateTenantCache } from "../../../../../lib/tenant/tenantResolver.js";
 import { normalizeTiers, tiersFromTenant, DEFAULT_INCENTIVE_TIERS } from "../../../../../lib/clinica/incentives.js";
 import { logClinicaAudit } from "../../../../../lib/clinica/audit.js";
+import { assertNotDemoMasterWrite } from "../../../../../lib/demo/isDemo.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 function gate(ctx) {
@@ -25,6 +26,7 @@ export const GET = withTenant(async (_request, _rc, ctx) => {
 export const PUT = withTenant(async (request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
   if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo dirección puede configurar los tramos");
+  assertNotDemoMasterWrite(ctx); // demo pública: no escribir en master
 
   let body;
   try {

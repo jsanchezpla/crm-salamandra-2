@@ -41,12 +41,14 @@ function LoginForm() {
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setError(data.error || "No se pudo abrir la demo");
+        setDemoLoading(false); // solo se reactiva el botón si NO navegamos
         return;
       }
-      window.location.href = "/";
+      // Deja el botón deshabilitado mientras navega (evita el doble POST) y
+      // respeta ?next igual que el login normal.
+      window.location.href = next;
     } catch {
       setError("Error de conexión. Inténtalo de nuevo.");
-    } finally {
       setDemoLoading(false);
     }
   }

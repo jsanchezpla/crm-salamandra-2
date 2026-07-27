@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Op } from "sequelize";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { signAccessToken, signRefreshToken, setAuthCookies } from "../../../../lib/auth/jwt.js";
+import { enforceRateLimit } from "../../../../lib/utils/rateLimit.js";
 
 // POST /api/auth/demo — entra en el tenant DEMO sin credenciales (demo pública).
 // SOLO el tenant "demo": inicia sesión con su cuenta de administración para que
@@ -9,7 +10,12 @@ import { signAccessToken, signRefreshToken, setAuthCookies } from "../../../../l
 const DEMO_SLUG = "demo";
 const DEMO_EMAIL = "admin@demo.salamandra";
 
-export async function POST() {
+export async function POST(request) {
+  // Endpoint público (sin JWT): rate-limit por IP para que nadie martillee el
+  // login demo (firma de JWT + UPDATE de lastLoginAt sobre master.users).
+  const limited = enforceRateLimit(request, { key: "auth-demo", limit: 10, windowMs: 60_000 });
+  if (limited) return limited;
+
   const { User, Tenant } = getMasterModels();
 
   const tenant = await Tenant.findOne({ where: { slug: DEMO_SLUG, status: "active" } });

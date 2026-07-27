@@ -57,6 +57,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     try {
       result = await answerQuestion({
         messages, relevant, clients, apiKey, model, companyName: ctx.tenant?.name,
+        forceFake: ctx.slug === "demo",
       });
     } catch {
       // La IA falló (clave inválida, timeout, 503…): no rompemos el chat.

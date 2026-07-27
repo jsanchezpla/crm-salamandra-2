@@ -3,6 +3,7 @@ import { ok } from "../../../../lib/utils/apiResponse.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../../../../lib/utils/errors.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { invalidateTenantCache } from "../../../../lib/tenant/tenantResolver.js";
+import { isDemoTenant, assertNotDemoMasterWrite } from "../../../../lib/demo/isDemo.js";
 import { encryptSecret, decryptSecret } from "../../../../lib/crypto/secretBox.js";
 import { isAllowedAnthropicModel, DEFAULT_ANTHROPIC_MODEL } from "../../../../lib/ai/anthropicModel.js";
 
@@ -71,10 +72,19 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
   const brand = t.settings?.brand ?? {};
   const integ = t.settings?.integrations ?? {};
 
+  // En la demo pública NO se filtra la pista de la clave (últimos 4 chars de una
+  // credencial real): solo si está configurada o no.
+  const demo = isDemoTenant(ctx);
+  const ks = (stored) => {
+    const r = keyStatus(stored);
+    return demo ? { configured: r.configured, hint: null } : r;
+  };
+
   return ok({
     name: t.name,
     slug: t.slug,
     plan: t.plan,
+    readOnly: demo, // la UI deshabilita el guardado en la demo
     brand: {
       primaryColor: brand.primaryColor ?? null,
       secondaryColor: brand.secondaryColor ?? null,
@@ -82,13 +92,13 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     },
     integrations: {
       anthropic: {
-        ...keyStatus(integ.anthropicApiKey),
+        ...ks(integ.anthropicApiKey),
         model: isAllowedAnthropicModel(integ.anthropicModel) ? integ.anthropicModel : DEFAULT_ANTHROPIC_MODEL,
       },
-      googlePlaces: keyStatus(integ.googlePlacesApiKey),
-      openai: keyStatus(integ.openaiApiKey),
+      googlePlaces: ks(integ.googlePlacesApiKey),
+      openai: ks(integ.openaiApiKey),
       resend: {
-        ...keyStatus(integ.resendApiKey),
+        ...ks(integ.resendApiKey),
         fromEmail: integ.resendFromEmail ?? null,
         replyTo: integ.resendReplyTo ?? null,
       },
@@ -101,6 +111,9 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   if (role !== "admin" && role !== "superadmin") {
     throw new ForbiddenError("Solo los administradores pueden cambiar la configuración");
   }
+  // La demo es pública: cualquiera entra como admin. Bloquear que un visitante
+  // desfigure el tenant o borre/cambie claves en master (el reset no lo restaura).
+  assertNotDemoMasterWrite(ctx);
 
   let body;
   try {

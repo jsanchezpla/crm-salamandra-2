@@ -250,10 +250,14 @@ export default function ConfigModule() {
                 return (
                   <>
                     <div className="flex flex-wrap items-center gap-2">
+                      {/* company/autonomo NO tocan defaultIrpfRate: se conserva
+                          el % que tuviera el tenant (saveBilling ya manda 0 al
+                          guardar si el régimen no es freelance), así volver a
+                          "Autónomo profesional" recupera el % personalizado. */}
                       <button
                         type="button"
                         disabled={!isAdmin}
-                        onClick={() => { setBillingField("taxRegime", "company"); setBillingField("defaultIrpfRate", 0); }}
+                        onClick={() => setBillingField("taxRegime", "company")}
                         className={btnCls(regime === "company")}
                         style={btnStyle(regime === "company")}
                       >
@@ -262,7 +266,7 @@ export default function ConfigModule() {
                       <button
                         type="button"
                         disabled={!isAdmin}
-                        onClick={() => { setBillingField("taxRegime", "autonomo"); setBillingField("defaultIrpfRate", 0); }}
+                        onClick={() => setBillingField("taxRegime", "autonomo")}
                         className={btnCls(regime === "autonomo")}
                         style={btnStyle(regime === "autonomo")}
                       >
@@ -271,7 +275,7 @@ export default function ConfigModule() {
                       <button
                         type="button"
                         disabled={!isAdmin}
-                        onClick={() => { setBillingField("taxRegime", "freelance"); setBillingField("defaultIrpfRate", Number(billing.defaultIrpfRate) > 0 ? billing.defaultIrpfRate : 15); }}
+                        onClick={() => { setBillingField("taxRegime", "freelance"); if (!(Number(billing.defaultIrpfRate) > 0)) setBillingField("defaultIrpfRate", 15); }}
                         className={btnCls(regime === "freelance")}
                         style={btnStyle(regime === "freelance")}
                       >
