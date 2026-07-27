@@ -75,7 +75,13 @@ export function defineBooking(sequelize) {
         defaultValue: "confirmed",
       },
       // Uso futuro Sprint 2 (cancelación desde email)
-      cancellationToken: {
+      // Cuándo se envió el recordatorio de la víspera. NULL = todavía no.
+    // Es lo que impide que cada pasada del temporizador reenvíe el mismo aviso.
+    reminderSentAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    cancellationToken: {
         type: DataTypes.UUID,
         allowNull: false,
         defaultValue: DataTypes.UUIDV4,

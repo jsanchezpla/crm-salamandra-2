@@ -10,6 +10,29 @@ sin auth + endpoints admin bajo `/api/citas/*`.
 Tenants que lo usan hoy: `nutri_laura` (única con flujo activo en
 producción tras Fase 1).
 
+
+## Recordatorio de cita (2026-07-27)
+
+Correo automático la víspera. **Apagado por defecto**: se enciende por cliente
+en Configuración (`settings.citas.recordatorios`), porque encenderlo empieza a
+mandar correos a pacientes reales.
+
+- Lógica: `lib/citas/recordatorios.js`; plantilla
+  `lib/email/templates/citas/bookingReminder.js` (lleva SIEMPRE el enlace de
+  cancelación: el objetivo es que quien no pueda venir lo diga a tiempo y el
+  hueco se libere).
+- Ejecutor: `scripts/enviar-recordatorios.js`, lanzado cada hora por el
+  temporizador de systemd `scripts/deploy/crm-recordatorios.timer`. Con
+  `--simular` no manda nada y dice a cuántos escribiría.
+- Ventana ancha (18-30h antes) para que ninguna cita se escape por el borde
+  entre pasadas; `bookings.reminder_sent_at` (migración
+  `migrate-booking-reminder`) garantiza UNO por persona.
+- Solo citas **confirmadas**, futuras y con email. Las pendientes de confirmar
+  no reciben recordatorio (todavía no hay nada que recordar).
+- La marca se pone DESPUÉS de enviar: si el correo falla, se reintenta en la
+  pasada siguiente en vez de dar por avisada a una persona que no lo está.
+- URL pública de los enlaces: `APP_PUBLIC_URL` (por defecto el dominio del CRM).
+
 ## Modelos
 
 - `EventType` — tipo de servicio reservable (Primera consulta, Seguimiento,

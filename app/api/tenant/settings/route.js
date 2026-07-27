@@ -91,6 +91,9 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // Cómo consigue su enlace una cita online: a mano (por defecto) o
     // heredado del tipo de cita (tenant con sala de videollamada contratada).
     meetModo: t.settings?.citas?.meetModo === "automatico" ? "automatico" : "manual",
+    // Recordatorio automático la víspera de la cita. Apagado por defecto:
+    // encenderlo empieza a mandar correos a pacientes reales.
+    recordatoriosCitas: t.settings?.citas?.recordatorios === true,
     brand: {
       primaryColor: brand.primaryColor ?? null,
       secondaryColor: brand.secondaryColor ?? null,
@@ -223,6 +226,9 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   if (body.meetModo === "manual" || body.meetModo === "automatico") {
     settings.citas = { ...(settings.citas ?? {}), meetModo: body.meetModo };
   }
+  if (typeof body.recordatoriosCitas === "boolean") {
+    settings.citas = { ...(settings.citas ?? {}), recordatorios: body.recordatoriosCitas };
+  }
 
   // Candado de la IA para empleados (no es un secreto): lista cerrada.
   if (body.aiAccess === "libre" || body.aiAccess === "restringido") {
@@ -238,6 +244,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     name: tenant.name,
     aiAccess: settings.aiAccess === "restringido" ? "restringido" : "libre",
     meetModo: settings.citas?.meetModo === "automatico" ? "automatico" : "manual",
+    recordatoriosCitas: settings.citas?.recordatorios === true,
     brand: {
       primaryColor: settings.brand.primaryColor ?? null,
       secondaryColor: settings.brand.secondaryColor ?? null,

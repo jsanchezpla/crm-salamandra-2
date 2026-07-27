@@ -104,6 +104,8 @@ export const MODULES = {
     "migrate-booking-pending",
     "migrate-booking-client-link",
     "migrate-booking-change-requests",
+    // Marca de "ya se le mandó el recordatorio de la víspera".
+    "migrate-booking-reminder",
     // Horario propio del profesional (team_member_hours): lo usa la generación
     // de huecos de citas, pero su tabla base es team_members (por eso está
     // también en `team`).

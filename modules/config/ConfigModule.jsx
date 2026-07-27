@@ -427,6 +427,14 @@ export default function ConfigModule() {
           </div>
 
           {isAdmin && (
+            <RecordatoriosCard
+              activo={!!cfg.recordatoriosCitas}
+              readOnly={!!cfg.readOnly}
+              onChange={(v) => patchTenant({ recordatoriosCitas: v }, v ? "Recordatorios activados" : "Recordatorios desactivados")}
+            />
+          )}
+
+          {isAdmin && (
             <VideollamadaCard
               meetModo={cfg.meetModo}
               readOnly={!!cfg.readOnly}
@@ -636,6 +644,46 @@ function WhatsappPhoneField({ value, isAdmin, onSave }) {
  * para quien tiene sala de videollamada contratada y la ha puesto en el tipo
  * de cita: la cita lo hereda sola.
  */
+/**
+ * Recordatorio automático la víspera de la cita. APAGADO por defecto: al
+ * encenderlo empiezan a salir correos hacia pacientes reales, y esa decisión
+ * es del cliente, no del CRM.
+ */
+function RecordatoriosCard({ activo, readOnly, onChange }) {
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-neutral-800">Recordatorio de cita</div>
+          <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+            Un correo automático el día antes, con la hora, el sitio (o el enlace de videollamada)
+            y un botón para avisar si no puede venir. Reduce las citas a las que no se presenta
+            nadie, que es una hora perdida que no se recupera.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange(!activo)}
+          className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 ${activo ? "bg-[var(--color-primary,#1B3A2D)]" : "bg-neutral-300"}`}
+          aria-label={activo ? "Desactivar recordatorios" : "Activar recordatorios"}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${activo ? "translate-x-6" : "translate-x-1"}`} />
+        </button>
+      </div>
+      <div className="mt-1 text-[11px] font-medium">
+        {activo
+          ? <span className="text-emerald-700">Activo: se envía a las citas confirmadas del día siguiente.</span>
+          : <span className="text-neutral-400">Apagado: no se manda ningún recordatorio.</span>}
+      </div>
+      <p className="text-[10px] text-neutral-400 mt-2">
+        Solo a citas <strong>confirmadas</strong> y con email. Cada persona recibe uno y solo uno.
+        Las citas pendientes de confirmar no reciben recordatorio.
+      </p>
+    </div>
+  );
+}
+
 function VideollamadaCard({ meetModo, readOnly, onChange }) {
   const auto = meetModo === "automatico";
   const opciones = [

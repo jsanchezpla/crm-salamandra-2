@@ -1,0 +1,10 @@
+[Unit]
+Description=Recordatorios de cita del CRM Salamandra (la víspera)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec crm-salamandra-app-1 node scripts/enviar-recordatorios.js
+StandardOutput=append:/var/log/crm-recordatorios.log
+StandardError=append:/var/log/crm-recordatorios.log
