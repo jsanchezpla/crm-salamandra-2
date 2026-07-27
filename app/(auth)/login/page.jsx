@@ -231,8 +231,8 @@ export default function LoginPage() {
       >
         {/* Logo */}
         <div className="flex items-center gap-3 fade-up">
-          <div className="w-8 h-8 rounded-md bg-[#1B3A2D] flex items-center justify-center shrink-0">
-            <span className="text-white font-display text-base leading-none">S</span>
+          <div className="w-8 h-8 rounded-md bg-[#1B3A2D] flex items-center justify-center shrink-0 p-[3px]">
+            <img src="/salamandrobot-blanco.png" alt="Salamandra Solutions" className="w-full h-full object-contain" />
           </div>
           <span className="font-display text-[17px] tracking-tight text-[#1B3A2D]">Salamandra Solutions</span>
         </div>
@@ -302,8 +302,8 @@ export default function LoginPage() {
         <div className="w-full max-w-sm relative">
           {/* Logo mobile */}
           <div className="flex items-center gap-3 mb-12 md:hidden">
-            <div className="w-8 h-8 rounded-md bg-white/15 flex items-center justify-center shrink-0">
-              <span className="text-white font-display text-base leading-none">S</span>
+            <div className="w-8 h-8 rounded-md bg-white/15 flex items-center justify-center shrink-0 p-[3px]">
+              <img src="/salamandrobot-blanco.png" alt="Salamandra Solutions" className="w-full h-full object-contain" />
             </div>
             <span className="font-display text-[16px] tracking-tight text-white">Salamandra Solutions</span>
           </div>

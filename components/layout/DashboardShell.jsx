@@ -103,7 +103,7 @@ export default function DashboardShell({
                   className="w-full h-full object-contain"
                 />
               ) : (
-                <span className="text-white font-display text-xs leading-none">S</span>
+                <img src="/salamandrobot-blanco.png" alt="Salamandra Solutions" className="w-full h-full object-contain p-[3px]" />
               )}
             </div>
             <span className="font-display text-[15px] text-[var(--ink-900)] truncate tracking-tight">{tenant?.name ?? "CRM"}</span>

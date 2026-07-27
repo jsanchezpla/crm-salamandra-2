@@ -316,7 +316,6 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
   }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const primaryColor = tenant?.settings?.brand?.primaryColor ?? "#1B3A2D";
-  const logoUrl = tenant?.settings?.brand?.logoUrl ?? null;
 
   const enabledModules = new Set(modules.filter((m) => m.enabled).map((m) => m.moduleKey));
 
@@ -364,14 +363,10 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
         <div className="px-5 pt-6 pb-5">
           <div className="flex items-center justify-between mb-7">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-7 h-7 rounded-md bg-white/[0.10] border border-white/15 flex items-center justify-center shrink-0 overflow-hidden">
-                {logoUrl ? (
-                  <img src={logoUrl} alt={tenant?.name ?? "Logo"} className="w-full h-full object-contain" />
-                ) : (
-                  <span className="text-white font-display text-base leading-none">S</span>
-                )}
+              <div className="w-7 h-7 rounded-md bg-white/[0.10] border border-white/15 flex items-center justify-center shrink-0 overflow-hidden p-[3px]">
+                <img src="/salamandrobot-blanco.png" alt="Salamandra Solutions" className="w-full h-full object-contain" />
               </div>
-              <span className="font-display text-white text-[17px] tracking-tight truncate">Salamandra</span>
+              <span className="font-display text-white text-[13.5px] leading-[1.12] tracking-tight">Salamandra<br />Solutions</span>
             </div>
 
             {/* Cerrar (solo móvil) */}
