@@ -117,11 +117,15 @@ export default function FormacionOverview() {
   }, []);
 
   return (
-    <div className="p-4 lg:p-10 max-w-6xl mx-auto bg-[var(--color-accent)] min-h-full">
+    // Dimensionado 2026-07-27: antes p-10 + hero de 40px + banda bg-accent de
+    // 72rem (copiado del workspace de Clientes) — en esta landing casi vacía se
+    // veía todo demasiado ancho. Ahora sigue el patrón estándar de las páginas
+    // del CRM (p-4 lg:p-8 max-w-5xl, h1 text-2xl lg:text-4xl, sin banda).
+    <div className="p-4 lg:p-8 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="mb-7 lg:mb-10">
+      <div className="mb-6 lg:mb-8">
         <div className="eyebrow mb-1.5 lg:mb-2">Conocimiento · Formación</div>
-        <h1 className="font-display text-[26px] lg:text-[40px] leading-[1.05] text-[var(--ink-900)] tracking-tight mb-3 flex items-center gap-2">
+        <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mb-3 flex items-center gap-2">
           <span>
             Formación <span className="font-display-italic text-[var(--ink-400)]">— empresas, cursos, alumnos</span>
           </span>
@@ -131,7 +135,7 @@ export default function FormacionOverview() {
             automáticamente desde tu WordPress, no tienes que meterlos a mano.
           </HelpTooltip>
         </h1>
-        <p className="text-[14px] lg:text-[15px] text-[var(--ink-500)] max-w-xl leading-relaxed">
+        <p className="text-sm text-[var(--ink-500)] max-w-xl leading-relaxed">
           Gestión centralizada de empresas cliente, catálogo de cursos y matrículas de alumnos.
         </p>
       </div>

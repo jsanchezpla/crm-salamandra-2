@@ -89,17 +89,19 @@ export default function AumentaFormacionOverview() {
   }, []);
 
   return (
-    <div className="p-4 lg:p-10 max-w-6xl mx-auto bg-[var(--color-accent)] min-h-full">
+    // Dimensionado 2026-07-27: mismo arreglo que modules/training/FormacionOverview
+    // (p-8, max-w-5xl, h1 estándar, sin banda de color) — eran copy-paste.
+    <div className="p-4 lg:p-8 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="mb-7 lg:mb-10">
+      <div className="mb-6 lg:mb-8">
         <div className="eyebrow mb-1.5 lg:mb-2">Conocimiento · Formación abierta</div>
-        <h1 className="font-display text-[26px] lg:text-[40px] leading-[1.05] text-[var(--ink-900)] tracking-tight mb-3">
+        <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mb-3">
           Formación{" "}
           <span className="font-display-italic text-[var(--ink-400)]">
             — cursos para familias y profesionales
           </span>
         </h1>
-        <p className="text-[14px] lg:text-[15px] text-[var(--ink-500)] max-w-xl leading-relaxed">
+        <p className="text-sm text-[var(--ink-500)] max-w-xl leading-relaxed">
           Cursos abiertos del centro: del espectro autista al TDAH, de la regulación emocional al autocuidado de quien cuida. Inscripciones individuales, sin empresas intermediarias.
         </p>
       </div>
