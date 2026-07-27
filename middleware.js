@@ -36,16 +36,47 @@ function isApiPath(pathname) {
   return pathname.startsWith("/api/");
 }
 
-// Rutas de la landing pública embebibles vía iframe. Necesitan
-// `frame-ancestors *` para que cualquier dominio pueda incrustarlas. En
-// Sprint 2 (cuando el dominio de Laura esté confirmado) se restringirá a
-// `frame-ancestors https://tunutrilaura.com https://www.tunutrilaura.com`.
+// Rutas de la landing pública embebibles vía iframe.
 function isEmbeddableWidgetPath(pathname) {
   return pathname.startsWith("/widget/c/");
 }
 
-function applyWidgetCspHeaders(response) {
-  response.headers.set("Content-Security-Policy", "frame-ancestors *");
+/** Slug del tenant a partir de /widget/c/{slug}/... */
+function slugDeWidget(pathname) {
+  const partes = pathname.split("/").filter(Boolean); // ["widget","c","slug",...]
+  return partes[2] && /^[a-z0-9_]+$/.test(partes[2]) ? partes[2] : null;
+}
+
+/**
+ * Dominios que pueden incrustar el widget de cada tenant.
+ *
+ * Se configura con la variable de entorno WIDGET_FRAME_ANCESTORS, un JSON
+ * { slug: "https://dominio.com https://www.dominio.com" }. El middleware corre
+ * antes que la BD (no puede consultar Sequelize), por eso va en el entorno.
+ *
+ * Un tenant SIN entrada sigue con `*` (comportamiento de siempre): así activar
+ * esto no rompe a nadie, y se va cerrando cliente a cliente según confirman su
+ * dominio. Cerrado = un tercero no puede incrustar la reserva de citas del
+ * cliente en su web y hacerse pasar por él ante sus pacientes.
+ */
+function frameAncestorsDe(slug) {
+  if (!slug) return "*";
+  try {
+    const mapa = JSON.parse(process.env.WIDGET_FRAME_ANCESTORS || "{}");
+    const permitidos = mapa[slug];
+    if (typeof permitidos === "string" && permitidos.trim()) {
+      // 'self' siempre: si no, el propio CRM no podría previsualizarlo.
+      return `'self' ${permitidos.trim()}`;
+    }
+  } catch {
+    /* JSON mal formado: no romper el widget por un error de configuración */
+  }
+  return "*";
+}
+
+function applyWidgetCspHeaders(response, pathname) {
+  const ancestros = frameAncestorsDe(slugDeWidget(pathname));
+  response.headers.set("Content-Security-Policy", `frame-ancestors ${ancestros}`);
   // X-Frame-Options legacy: eliminar para no bloquear el iframe. NextResponse
   // no lo añade por defecto, pero lo borramos por si algún proxy lo inyecta.
   response.headers.delete("X-Frame-Options");
@@ -62,7 +93,7 @@ export async function middleware(request) {
 
   // Landing pública del módulo Citas — pública + embebible
   if (isEmbeddableWidgetPath(pathname)) {
-    return applyWidgetCspHeaders(NextResponse.next());
+    return applyWidgetCspHeaders(NextResponse.next(), pathname);
   }
 
   // Dejar pasar rutas públicas sin token, con CORS headers en la respuesta.

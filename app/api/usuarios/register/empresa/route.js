@@ -2,15 +2,14 @@ import { NextResponse } from "next/server";
 import { getTenantContext } from "../../../../../lib/tenant/tenantResolver.js";
 import { handleRouteError } from "../../../../../lib/utils/errors.js";
 import { enforceRateLimit } from "../../../../../lib/utils/rateLimit.js";
+import { origenPermitido, corsParaOrigen } from "../../../../../lib/utils/wpOrigin.js";
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, x-tenant",
-};
-
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+// CORS acotado al dominio del cliente (antes era "*", contra la propia norma
+// de CLAUDE.md). El preflight no conoce el tenant todavía, así que responde con
+// el origen solo si está en la lista por defecto; el POST vuelve a comprobarlo
+// ya con el tenant resuelto.
+export async function OPTIONS(request) {
+  return new NextResponse(null, { status: 204, headers: corsParaOrigen(request, null) });
 }
 
 // POST /api/usuarios/register/empresa
@@ -27,11 +26,22 @@ export async function POST(request) {
       // CORS abierto en este endpoint (lo invoca el WP de Retorika); las
       // respuestas 4xx también deben llevarlo para que el navegador del
       // alumno no se quede sin ver el mensaje "demasiadas solicitudes".
-      for (const [h, v] of Object.entries(CORS_HEADERS)) limited.headers.set(h, v);
+      for (const [h, v] of Object.entries(corsParaOrigen(request, null))) limited.headers.set(h, v);
       return limited;
     }
 
     const ctx = await getTenantContext(request);
+
+    // Sin barrera, este endpoint permitía enumerar qué emails son de empresa
+    // (distingue 403 de 200) y activar cuentas solo con el email. Lo llama el
+    // navegador del alumno desde el WordPress del cliente.
+    if (!origenPermitido(request, ctx.tenant)) {
+      return NextResponse.json(
+        { ok: false, error: "Origen no autorizado." },
+        { status: 403, headers: corsParaOrigen(request, ctx.tenant) }
+      );
+    }
+
     const { TrainingUser, Company, Course, CompanyCourse } = ctx.tenantModels;
 
     const body = await request.json();
@@ -41,7 +51,7 @@ export async function POST(request) {
     if (!rawEmail) {
       return NextResponse.json(
         { ok: false, error: "El email es obligatorio." },
-        { status: 422, headers: CORS_HEADERS }
+        { status: 422, headers: corsParaOrigen(request, ctx?.tenant ?? null) }
       );
     }
 
@@ -71,14 +81,14 @@ export async function POST(request) {
       }
       return NextResponse.json(
         { exists: false, message: "No autorizado para registrarte." },
-        { status: 403, headers: CORS_HEADERS }
+        { status: 403, headers: corsParaOrigen(request, ctx?.tenant ?? null) }
       );
     }
 
     if (user.active) {
       return NextResponse.json(
         { exists: true, already_active: true, message: "Usuario ya activo." },
-        { status: 200, headers: CORS_HEADERS }
+        { status: 200, headers: corsParaOrigen(request, ctx?.tenant ?? null) }
       );
     }
 
@@ -130,7 +140,7 @@ export async function POST(request) {
         name: user.name,
         product_ids: productIds,
       },
-      { status: 200, headers: CORS_HEADERS }
+      { status: 200, headers: corsParaOrigen(request, ctx?.tenant ?? null) }
     );
   } catch (err) {
     const response = handleRouteError(err);
