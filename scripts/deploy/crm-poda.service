@@ -1,0 +1,10 @@
+[Unit]
+Description=Poda del registro de auditoría del CRM Salamandra
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec crm-salamandra-app-1 node scripts/podar-audit-logs.js --confirm
+StandardOutput=append:/var/log/crm-poda.log
+StandardError=append:/var/log/crm-poda.log

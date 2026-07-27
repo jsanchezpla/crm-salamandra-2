@@ -1,0 +1,9 @@
+[Unit]
+Description=Poda semanal del registro de auditoría
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
