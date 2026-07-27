@@ -426,6 +426,11 @@ aplique.
     el botón del menú hamburguesa. Patrón: `top-14 lg:top-0 ... bottom-0`
     (en lugar de `top-0 h-full`). Aplica al módulo Equipo, Leads y cualquier
     otro nuevo o existente que abra paneles encima de la página.
+    **Capas (z-index), decisión del socio 2026-07-27**: los overlays usan
+    backdrop `z-40` + panel `z-50`; los widgets flotantes (campana de
+    notificaciones, Salamandrobot) van a `z-30`, POR DEBAJO — al abrir
+    cualquier drawer o modal quedan tapados y no pisan botones. Todo drawer o
+    modal nuevo debe seguir esa escala.
 14. **Secrets de producción NUNCA pasan por chats con LLMs ni por canales no seguros**.
     Cuando se rote un secret (HMAC, API key, password), generarlo localmente,
     configurarlo directamente en `.env.production` del VPS por SSH, y comunicarlo

@@ -4,12 +4,14 @@ import { MODULE_KEYS } from "@/lib/tenant/moduleKeys.js";
 import { getSupportSettings, isAdminRequest } from "@/lib/support/context.js";
 import { serializeSettings } from "@/lib/support/serialize.js";
 import { effectiveSla, SLA_PRIORITIES, DEFAULT_SLA } from "@/lib/support/sla.js";
+import { captureAddress } from "@/lib/support/notify.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * GET /api/tickets/settings — ajustes del módulo + SLA efectivo (con defaults
- * aplicados) + la URL del portal público del tenant, lista para copiar.
+ * aplicados) + la URL del portal público del tenant + la dirección de CAPTURA
+ * de correo (null si la plataforma no tiene el inbound configurado).
  */
 export const GET = withTenant(async (request, _rc, ctx) => {
   try {
@@ -20,6 +22,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       slaEffective: effectiveSla(settings),
       slaDefaults: DEFAULT_SLA,
       portalPath: `/widget/c/${ctx.slug}/soporte`,
+      captureAddress: captureAddress(ctx.slug),
     });
   } catch (err) {
     return serverError(err);
@@ -60,6 +63,12 @@ export const PATCH = withTenant(async (request, _rc, ctx) => {
       cambios.notifyEmails = [...new Set(emails)].slice(0, 10);
     }
 
+    if (body.supportEmail !== undefined) {
+      const email = String(body.supportEmail || "").trim().toLowerCase();
+      if (email && !EMAIL_RE.test(email)) return error("Correo de soporte inválido", 422);
+      cambios.supportEmail = email || null;
+    }
+
     if (body.slaConfig !== undefined) {
       if (typeof body.slaConfig !== "object" || Array.isArray(body.slaConfig) || !body.slaConfig) {
         return error("slaConfig inválido", 422);
@@ -85,6 +94,7 @@ export const PATCH = withTenant(async (request, _rc, ctx) => {
       slaEffective: effectiveSla(settings),
       slaDefaults: DEFAULT_SLA,
       portalPath: `/widget/c/${ctx.slug}/soporte`,
+      captureAddress: captureAddress(ctx.slug),
     });
   } catch (err) {
     return serverError(err);

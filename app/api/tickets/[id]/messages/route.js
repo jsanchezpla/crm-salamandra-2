@@ -17,13 +17,16 @@ import {
 /**
  * POST /api/tickets/[id]/messages — añadir al hilo desde el CRM.
  *
- * Acepta JSON { body, isInternal } o multipart (body + isInternal + files[]).
+ * Acepta JSON { body, isInternal, sendEmail } o multipart (mismos campos + files[]).
  *
  * Una RESPUESTA (isInternal=false):
  *   - marca la primera respuesta del SLA si es la primera,
  *   - pasa el ticket a "waiting" (la pelota queda en el tejado del cliente),
- *   - envía el email al cliente con el texto y su enlace del portal
- *     (el resultado queda anotado en el mensaje: sent/failed/skipped).
+ *   - si `sendEmail` !== false, envía el email al cliente vía Resend con su
+ *     enlace del portal (resultado anotado: sent/failed/skipped). Con
+ *     `sendEmail: false` la respuesta SOLO queda en el hilo (emailStatus
+ *     "manual"): para cuando el equipo contesta desde su propio buzón
+ *     (Outlook/Gmail) y no quiere gastar envíos de Resend.
  * Una NOTA INTERNA no toca estado, ni SLA, ni envía nada.
  */
 export const POST = withTenant(async (request, { params }, ctx) => {
@@ -41,6 +44,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     // ── Leer body: multipart (con adjuntos) o JSON ────────────────────────────
     let texto = "";
     let isInternal = false;
+    let quiereEmail = true;
     let files = [];
     const contentType = request.headers.get("content-type") || "";
     if (contentType.includes("multipart/form-data")) {
@@ -56,6 +60,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       }
       texto = String(form.get("body") || "").trim();
       isInternal = String(form.get("isInternal")) === "true";
+      quiereEmail = String(form.get("sendEmail")) !== "false";
       files = form.getAll("files").filter((f) => f && typeof f !== "string");
     } else {
       let body;
@@ -66,6 +71,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       }
       texto = String(body?.body || "").trim();
       isInternal = body?.isInternal === true;
+      quiereEmail = body?.sendEmail !== false;
     }
 
     if (!texto && files.length === 0) return error("El mensaje no puede estar vacío", 422);
@@ -127,15 +133,21 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     await ticket.update(cambios);
 
     // Email al cliente (solo respuestas públicas), con resultado anotado.
+    // "manual" = el agente eligió NO enviarlo por Resend (responderá desde su
+    // buzón, o simplemente lo deja registrado).
     if (!isInternal) {
-      const resultado = await emailClient({
-        ctx,
-        ticket,
-        kind: "reply",
-        replyBody: texto,
-        baseUrl: requestBaseUrl(request),
-      });
-      await mensaje.update({ emailStatus: resultado }).catch(() => {});
+      if (quiereEmail) {
+        const resultado = await emailClient({
+          ctx,
+          ticket,
+          kind: "reply",
+          replyBody: texto,
+          baseUrl: requestBaseUrl(request),
+        });
+        await mensaje.update({ emailStatus: resultado }).catch(() => {});
+      } else {
+        await mensaje.update({ emailStatus: "manual" }).catch(() => {});
+      }
     }
 
     const full = await TicketMessage.findByPk(mensaje.id, {

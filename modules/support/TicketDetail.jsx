@@ -23,8 +23,11 @@ export default function TicketDetail({ ticketId, categorias, equipo, esAdmin, on
   const [modo, setModo] = useState("reply"); // reply | note
   const [texto, setTexto] = useState("");
   const [files, setFiles] = useState([]);
+  const [mandarEmail, setMandarEmail] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [plantillas, setPlantillas] = useState([]);
+  const [editandoSla, setEditandoSla] = useState(false);
+  const [slaForm, setSlaForm] = useState({ firstResponseDueAt: "", resolutionDueAt: "" });
 
   const [resumen, setResumen] = useState(null);
   const [iaOcupada, setIaOcupada] = useState(null); // summarize | draft | classify
@@ -97,13 +100,14 @@ export default function TicketDetail({ ticketId, categorias, equipo, esAdmin, on
         const fd = new FormData();
         fd.set("body", texto);
         fd.set("isInternal", String(isInternal));
+        fd.set("sendEmail", String(mandarEmail));
         for (const f of files) fd.append("files", f);
         res = await fetch(`/api/tickets/${ticketId}/messages`, { method: "POST", body: fd });
       } else {
         res = await fetch(`/api/tickets/${ticketId}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ body: texto, isInternal }),
+          body: JSON.stringify({ body: texto, isInternal, sendEmail: mandarEmail }),
         });
       }
       const json = await res.json();
@@ -335,10 +339,12 @@ export default function TicketDetail({ ticketId, categorias, equipo, esAdmin, on
                     <Mensaje
                       key={m.id}
                       autor={m.authorName || (m.authorType === "client" ? "Cliente" : "Equipo")}
+                      autorEmail={m.authorEmail}
                       fecha={m.createdAt}
                       tipo={m.authorType}
                       interna={m.isInternal}
                       emailStatus={m.emailStatus}
+                      via={m.via}
                     >
                       {m.body}
                       <ListaAdjuntos lista={m.attachments} />
@@ -411,10 +417,86 @@ export default function TicketDetail({ ticketId, categorias, equipo, esAdmin, on
                   {ticket.requesterEmail && <div className="text-xs text-gray-500 break-all mt-0.5">{ticket.requesterEmail}</div>}
                 </Prop>
 
-                {/* SLA */}
-                <Prop label="SLA">
-                  <SlaLinea titulo="1ª respuesta" hito={ticket.sla?.firstResponse} />
-                  <SlaLinea titulo="Resolución" hito={ticket.sla?.resolution} />
+                {/* SLA — editable POR TICKET: los plazos de config son el punto
+                    de partida, pero un ticket concreto puede pactarse aparte. */}
+                <Prop
+                  label="SLA"
+                  accion={
+                    !editandoSla && (
+                      <button
+                        onClick={() => {
+                          setSlaForm({
+                            firstResponseDueAt: toLocalInput(ticket.sla?.firstResponse?.dueAt),
+                            resolutionDueAt: toLocalInput(ticket.sla?.resolution?.dueAt),
+                          });
+                          setEditandoSla(true);
+                        }}
+                        className="text-[10px] font-medium text-gray-400 hover:text-gray-700 transition-colors"
+                      >
+                        Ajustar
+                      </button>
+                    )
+                  }
+                >
+                  {!editandoSla ? (
+                    <>
+                      <SlaLinea titulo="1ª respuesta" hito={ticket.sla?.firstResponse} />
+                      <SlaLinea titulo="Resolución" hito={ticket.sla?.resolution} />
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <label className="block">
+                        <span className="block text-[10px] text-gray-500 mb-1">Objetivo de 1ª respuesta</span>
+                        <input
+                          type="datetime-local"
+                          value={slaForm.firstResponseDueAt}
+                          onChange={(e) => setSlaForm({ ...slaForm, firstResponseDueAt: e.target.value })}
+                          className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-gray-400"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="block text-[10px] text-gray-500 mb-1">Objetivo de resolución</span>
+                        <input
+                          type="datetime-local"
+                          value={slaForm.resolutionDueAt}
+                          onChange={(e) => setSlaForm({ ...slaForm, resolutionDueAt: e.target.value })}
+                          className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-gray-400"
+                        />
+                      </label>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={() => {
+                            patch({
+                              firstResponseDueAt: slaForm.firstResponseDueAt ? new Date(slaForm.firstResponseDueAt).toISOString() : null,
+                              resolutionDueAt: slaForm.resolutionDueAt ? new Date(slaForm.resolutionDueAt).toISOString() : null,
+                            });
+                            setEditandoSla(false);
+                          }}
+                          disabled={guardandoProp}
+                          className="text-xs font-semibold text-white bg-gray-900 hover:bg-gray-800 rounded-md px-2.5 py-1.5 transition-colors disabled:opacity-50"
+                        >
+                          Guardar
+                        </button>
+                        <button
+                          onClick={() => {
+                            patch({ slaReset: true });
+                            setEditandoSla(false);
+                          }}
+                          disabled={guardandoProp}
+                          className="text-xs text-gray-600 border border-gray-200 rounded-md px-2.5 py-1.5 hover:border-gray-300 transition-colors disabled:opacity-50"
+                          title="Recalcular según la prioridad y la configuración del módulo"
+                        >
+                          Según prioridad
+                        </button>
+                        <button
+                          onClick={() => setEditandoSla(false)}
+                          className="text-xs text-gray-400 hover:text-gray-600 px-1"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </Prop>
 
                 <Prop label="Fechas">
@@ -513,14 +595,29 @@ export default function TicketDetail({ ticketId, categorias, equipo, esAdmin, on
                   </ul>
                 )}
 
-                <div className="flex items-center justify-between gap-3 mt-2">
-                  <label className="inline-flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer hover:text-gray-700 transition-colors">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-                    </svg>
-                    Adjuntar ({files.length}/{MAX_FILES})
-                    <input type="file" multiple className="hidden" onChange={elegirArchivos} />
-                  </label>
+                <div className="flex items-center justify-between gap-3 mt-2 flex-wrap">
+                  <div className="flex items-center gap-4">
+                    <label className="inline-flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer hover:text-gray-700 transition-colors">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                      </svg>
+                      Adjuntar ({files.length}/{MAX_FILES})
+                      <input type="file" multiple className="hidden" onChange={elegirArchivos} />
+                    </label>
+                    {/* Enviar por email es una POSIBILIDAD, no una obligación: si el
+                        equipo contesta desde su propio buzón (Outlook...), lo
+                        desmarca y la respuesta solo queda registrada en el hilo. */}
+                    {modo === "reply" && (
+                      <label className="inline-flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer hover:text-gray-700 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={mandarEmail}
+                          onChange={(e) => setMandarEmail(e.target.checked)}
+                        />
+                        Enviar por email al cliente
+                      </label>
+                    )}
+                  </div>
                   <button
                     type="submit"
                     disabled={enviando || (!texto.trim() && files.length === 0)}
@@ -529,7 +626,7 @@ export default function TicketDetail({ ticketId, categorias, equipo, esAdmin, on
                     }`}
                   >
                     {enviando && <span className="w-3.5 h-3.5 border-2 border-white/50 border-t-transparent rounded-full animate-spin" />}
-                    {modo === "note" ? "Guardar nota" : "Enviar respuesta"}
+                    {modo === "note" ? "Guardar nota" : mandarEmail ? "Enviar respuesta" : "Registrar respuesta"}
                   </button>
                 </div>
               </form>
@@ -541,7 +638,7 @@ export default function TicketDetail({ ticketId, categorias, equipo, esAdmin, on
   );
 }
 
-function Mensaje({ autor, fecha, tipo, interna, emailStatus, children }) {
+function Mensaje({ autor, autorEmail, fecha, tipo, interna, emailStatus, via, children }) {
   const esCliente = tipo === "client";
   return (
     <div
@@ -555,6 +652,18 @@ function Mensaje({ autor, fecha, tipo, interna, emailStatus, children }) {
     >
       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
         <span className="text-xs font-semibold text-gray-700">{autor}</span>
+        {/* Origen del mensaje: que quede claro quién escribió un correo normal
+            (con su dirección) o quién entró por el portal. */}
+        {via === "email" && (
+          <span className="text-[10px] font-medium text-sky-700 bg-sky-50 border border-sky-200 rounded px-1.5 py-0.5" title={autorEmail || undefined}>
+            ✉ por correo{autorEmail ? ` · ${autorEmail}` : ""}
+          </span>
+        )}
+        {via === "portal" && (
+          <span className="text-[10px] font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5">
+            desde el portal
+          </span>
+        )}
         {interna && (
           <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 bg-amber-100 rounded px-1.5 py-0.5">
             Nota interna
@@ -562,6 +671,9 @@ function Mensaje({ autor, fecha, tipo, interna, emailStatus, children }) {
         )}
         {!interna && !esCliente && emailStatus === "sent" && (
           <span className="text-[10px] text-emerald-600">✓ enviado por email</span>
+        )}
+        {!interna && !esCliente && emailStatus === "manual" && (
+          <span className="text-[10px] text-gray-400">registrado sin envío</span>
         )}
         {!interna && !esCliente && emailStatus === "skipped" && (
           <span className="text-[10px] text-gray-400">sin email del cliente</span>
@@ -597,13 +709,25 @@ function ListaAdjuntos({ lista }) {
   );
 }
 
-function Prop({ label, children }) {
+function Prop({ label, accion, children }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold mb-1.5">{label}</div>
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">{label}</div>
+        {accion || null}
+      </div>
       {children}
     </div>
   );
+}
+
+/** ISO → valor de <input type="datetime-local"> en hora local (o ""). */
+function toLocalInput(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function SlaLinea({ titulo, hito }) {

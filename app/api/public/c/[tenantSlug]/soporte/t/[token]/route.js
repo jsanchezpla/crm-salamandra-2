@@ -3,8 +3,8 @@ import { withPublicTenant } from "@/lib/tenant/publicTenantContext.js";
 import { enforceRateLimit } from "@/lib/utils/rateLimit.js";
 import { ok, created, error, notFound, serverError } from "@/lib/utils/apiResponse.js";
 import { MODULE_KEYS } from "@/lib/tenant/moduleKeys.js";
-import { serializePortalTicket, ticketRef } from "@/lib/support/serialize.js";
-import { notifyUser, notifyTenantAdmins, emailTeam, teamMemberUser, requestBaseUrl } from "@/lib/support/notify.js";
+import { serializePortalTicket } from "@/lib/support/serialize.js";
+import { notifyTeamOfClientReply, requestBaseUrl } from "@/lib/support/notify.js";
 import {
   MAX_TICKET_FILE_BYTES,
   saveTicketFile,
@@ -105,13 +105,15 @@ export const POST = withPublicTenant(
         }
       }
 
-      const { TicketMessage, TicketAttachment, TeamMember } = tenantModels;
+      const { TicketMessage, TicketAttachment } = tenantModels;
       const mensaje = await TicketMessage.create({
         ticketId: ticket.id,
         authorType: "client",
         authorName: ticket.requesterName || "Cliente",
+        authorEmail: ticket.requesterEmail || null,
         body: texto || "(adjuntos)",
         isInternal: false,
+        via: "portal",
       });
 
       for (const f of files) {
@@ -146,35 +148,12 @@ export const POST = withPublicTenant(
       await ticket.update(cambios);
 
       // Avisos al equipo: asignado si lo hay; si no, admins. Best-effort.
-      const baseUrl = requestBaseUrl(request);
-      const preview = texto || "(adjuntos)";
-      (async () => {
-        if (ticket.assignedTo) {
-          const assignee = await TeamMember.findByPk(ticket.assignedTo).catch(() => null);
-          const user = assignee ? await teamMemberUser(assignee) : null;
-          if (user?.id) {
-            await notifyUser({
-              tenantModels,
-              userId: user.id,
-              type: "ticket_reply",
-              title: "El cliente ha respondido",
-              body: `${ticketRef(ticket.number)} · ${ticket.title}`,
-              ticketId: ticket.id,
-            });
-          }
-          if (user?.email) {
-            await emailTeam({ ctx, ticket, kind: "client_reply", to: user.email, preview, baseUrl });
-          }
-        } else {
-          await notifyTenantAdmins({
-            ctx,
-            type: "ticket_reply",
-            title: "El cliente ha respondido",
-            body: `${ticketRef(ticket.number)} · ${ticket.title}`,
-            ticketId: ticket.id,
-          });
-        }
-      })().catch(() => {});
+      notifyTeamOfClientReply({
+        ctx,
+        ticket,
+        preview: texto || "(adjuntos)",
+        baseUrl: requestBaseUrl(request),
+      }).catch(() => {});
 
       return created({ ok: true, status: cambios.status || ticket.status });
     } catch (err) {

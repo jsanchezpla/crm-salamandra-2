@@ -105,6 +105,53 @@ a la tarjeta de contacto con Salamandra.
 Pie del sidebar (pedido del socio 2026-07-27): **Soporte · Configuración ·
 Cerrar sesión**, en ese orden.
 
+## Conversación por CORREO (bidireccional, 2026-07-27 tarde)
+
+El email de Resend es UNA posibilidad, no una obligación:
+
+- **Correo de soporte propio** (`support_settings.support_email`, p.ej.
+  soporte@empresa.com): si está, los emails de Resend salen con reply-to a ESE
+  buzón — la conversación puede seguir en el Outlook/Gmail del tenant.
+- **Dirección de captura** `soporte-{slug}@{RESEND_INBOUND_DOMAIN}`: todo lo
+  que llegue ahí lo procesa `app/api/webhooks/resend-inbound/route.js` (firma
+  svix verificada a mano con `RESEND_WEBHOOK_SECRET`, ±5 min, rate limit; tras
+  firma válida SIEMPRE 200 para no provocar reintentos eternos). Sin
+  `support_email`, el reply-to ES la captura (respuesta directa al CRM). El
+  buzón propio del tenant captura TODO reenviando a esta dirección (y CC al
+  responder desde Outlook) — instrucciones en la config del módulo.
+- **Matching del entrante**: nº TK-XXXX en el asunto → remitente con ticket
+  activo → si nada, ABRE ticket (email-to-ticket, channel "email"). Remitente ∈
+  {support_email, users master del tenant, team_members.email} → mensaje del
+  EQUIPO (marca 1ª respuesta y pasa a waiting; no reenvía nada); resto →
+  CLIENTE (reabre y avisa). Dedupe de reintentos por (ticket, body, 10 min).
+  Cita del reply recortada best-effort (stripQuotedReply); adjuntos solo si
+  vienen inline base64 (si no, se anota "(N adjuntos no importados)").
+- **Trazabilidad**: `ticket_messages.via` ("crm"/"portal"/"email") +
+  `author_email` — el hilo enseña "✉ por correo · quien@escribio.com", también
+  si se une un tercero a la conversación.
+- **Composer**: checkbox "Enviar por email al cliente" (default sí). Desmarcado
+  → la respuesta solo se registra (`email_status` "manual"), para quien
+  contesta desde su buzón y no quiere gastar envíos de Resend.
+- Envs (plataforma, no por tenant): `RESEND_INBOUND_DOMAIN` +
+  `RESEND_WEBHOOK_SECRET` (setup en `.env.production.example`). Sin ellas no
+  hay captura y el portal sigue siendo el camino de vuelta.
+
+## SLA por ticket
+
+Los plazos de la config son el punto de partida; cada ticket puede pactarse
+aparte: el drawer (SLA → "Ajustar") edita `first_response_due_at` /
+`resolution_due_at` (o los quita), y "Según prioridad" los recalcula desde el
+alta (PATCH `slaReset: true`). Cambiar la prioridad después vuelve a recalcular
+los hitos no cumplidos.
+
+## IA simulada en la demo
+
+La IA del módulo responde en modo SIMULADO en la demo pública
+(`demoForcesFakeAi`, como el resto del CRM): resumen/borrador/clasificación
+deterministas construidos con los datos del ticket, sin API real (arregla el
+401 de "Borrador IA" en demo). El envío de correo real también está cortado en
+demo (`isDemoTenant` en emailClient/emailTeam): la demo da admin a anónimos.
+
 ## Campana y emails
 
 - `lib/notifications/alerts.js`: `syncSupportAlerts` (tipo auto `ticket_sla`)
@@ -126,9 +173,9 @@ el módulo).
 
 ## Deuda conocida
 
-- Email ENTRANTE (responder al email y que caiga en el hilo) no existe: el
-  cliente responde por el enlace del portal. Inbound parsing = proyecto aparte.
 - El reloj SLA no se pausa en `waiting` (ver arriba).
+- Adjuntos del correo entrante: solo se importan si el webhook los trae inline
+  (base64). Si Resend manda solo referencias, se anota en el hilo sin importar.
 - `scripts/enable-module.js` no arranca en Node puro local por la cadena
   `tenantResolver → lib/utils/errors.js → next/server` (preexistente). Rodeo
   usado: fila en `master.tenant_modules` a mano + `ensure-tenant-schema.js`.

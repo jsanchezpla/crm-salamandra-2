@@ -38,6 +38,21 @@ export function defineTicketMessage(sequelize) {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      // Email del remitente cuando el mensaje llegó POR CORREO (via "email"):
+      // si alguien se une a la conversación desde su buzón, aquí queda claro
+      // quién escribió. Null en mensajes del CRM y del portal.
+      authorEmail: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      // Por dónde entró el mensaje: "crm" (composer), "portal" (enlace de
+      // seguimiento) o "email" (capturado del correo por el webhook inbound).
+      via: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: "crm",
+        validate: { isIn: [["crm", "portal", "email"]] },
+      },
       body: {
         type: DataTypes.TEXT,
         allowNull: false,

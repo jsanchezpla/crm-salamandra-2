@@ -65,8 +65,11 @@ export default function Salamandrobot() {
     router.push(href);
   }
 
+  // z-30 A PROPÓSITO: los widgets flotantes (Salamandrobot, campana) viven
+  // POR DEBAJO de cualquier drawer o modal (convención del CRM: backdrop z-40
+  // + panel z-50). Si no, taparían botones de las vistas laterales.
   return (
-    <div className="fixed bottom-4 right-4 z-[60] flex flex-col items-end gap-3 print:hidden">
+    <div className="fixed bottom-4 right-4 z-30 flex flex-col items-end gap-3 print:hidden">
       {/* Panel de chat */}
       {open && (
         <div className="w-[min(92vw,22rem)] h-[min(70vh,32rem)] bg-white rounded-2xl shadow-2xl border border-neutral-200 flex flex-col overflow-hidden">

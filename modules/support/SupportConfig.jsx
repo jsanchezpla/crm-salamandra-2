@@ -255,6 +255,70 @@ export default function SupportConfig({ categorias, onCategoriasChange }) {
             </div>
           </Seccion>
 
+          {/* Conversaciones por correo */}
+          <Seccion
+            titulo="Conversaciones por correo"
+            descripcion="Los clientes pueden responder a los emails del CRM y su respuesta cae en el hilo del ticket. Y si prefieres llevar la conversación desde tu propio buzón (Outlook, Gmail...), también queda registrada."
+          >
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                  Tu correo de soporte (opcional) — p. ej. soporte@tuempresa.com
+                </label>
+                <input
+                  type="email"
+                  defaultValue={settings.supportEmail || ""}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v !== (settings.supportEmail || "")) guardar({ supportEmail: v || null });
+                  }}
+                  placeholder="soporte@tuempresa.com"
+                  className={CAMPO}
+                />
+                <p className="text-[11px] text-gray-400 mt-1.5">
+                  Si lo pones, las respuestas de tus clientes a los emails del CRM llegarán a ESTE buzón (y podrás
+                  seguir la conversación desde ahí). Si lo dejas vacío{settings.captureAddress ? ", llegarán directas al CRM" : ", el cliente responde por su enlace del portal"}.
+                </p>
+              </div>
+
+              {settings.captureAddress ? (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">Dirección de captura del CRM</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      value={settings.captureAddress}
+                      className={`${CAMPO} font-mono text-xs text-gray-500`}
+                      onFocus={(e) => e.target.select()}
+                    />
+                    <button
+                      onClick={() => navigator.clipboard?.writeText(settings.captureAddress)}
+                      className="shrink-0 text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-3 py-2 hover:border-gray-300 transition-colors"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                  <div className="text-[11px] text-gray-400 mt-2 leading-relaxed space-y-1">
+                    <p>
+                      Todo correo que llegue a esa dirección entra solo en el CRM: se une a su ticket (por el número
+                      TK-XXXX del asunto o por el remitente) o abre uno nuevo.
+                    </p>
+                    <p>
+                      <strong className="text-gray-500">Para capturarlo todo:</strong> configura en tu buzón de soporte un
+                      reenvío automático hacia esta dirección; y cuando respondas desde tu correo, ponla en CC. Los
+                      mensajes capturados salen en el hilo con el remitente visible.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] text-gray-400">
+                  La captura de correo entrante no está activada en la plataforma (falta configurar el dominio de
+                  recepción). Mientras tanto, los clientes responden por su enlace del portal.
+                </p>
+              )}
+            </div>
+          </Seccion>
+
           {/* IA */}
           <Seccion
             titulo="Clasificación automática (IA)"

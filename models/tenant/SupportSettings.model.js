@@ -46,6 +46,14 @@ export function defineSupportSettings(sequelize) {
         allowNull: false,
         defaultValue: [],
       },
+      // Correo de soporte PROPIO del tenant (p.ej. soporte@empresa.com). Si está
+      // definido, los emails de Resend salen con reply-to a ESTA dirección: la
+      // conversación puede seguir en el buzón del tenant (Outlook, Gmail...) y
+      // el CRM la captura vía el reenvío a la dirección de captura del inbound.
+      supportEmail: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       autoClassify: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

@@ -68,8 +68,11 @@ export default function NotificationBell() {
     await markRead({ all: true });
   };
 
+  // z-30 A PROPÓSITO: los widgets flotantes (campana, Salamandrobot) viven
+  // POR DEBAJO de cualquier drawer o modal (convención del CRM: backdrop z-40
+  // + panel z-50). Si no, taparían botones de las vistas laterales.
   return (
-    <div className="fixed z-[60] bottom-[1.375rem] right-[5.25rem]">
+    <div className="fixed z-30 bottom-[1.375rem] right-[5.25rem]">
       {open && <div className="fixed inset-0 z-0" onClick={() => setOpen(false)} />}
 
       <button

@@ -95,9 +95,11 @@ async function crearTablas(s, schema, t) {
        author_type    VARCHAR(20)  NOT NULL DEFAULT 'team',
        author_user_id UUID,
        author_name    VARCHAR(255),
+       author_email   VARCHAR(255),
        body           TEXT         NOT NULL,
        is_internal    BOOLEAN      NOT NULL DEFAULT FALSE,
        email_status   VARCHAR(20),
+       via            VARCHAR(20)  NOT NULL DEFAULT 'crm',
        created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
        updated_at     TIMESTAMPTZ  NOT NULL DEFAULT now()
      )`,
@@ -155,6 +157,7 @@ async function crearTablas(s, schema, t) {
        portal_intro   TEXT,
        notify_emails  JSONB       NOT NULL DEFAULT '[]'::jsonb,
        auto_classify  BOOLEAN     NOT NULL DEFAULT FALSE,
+       support_email  VARCHAR(255),
        created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
        updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
      )`,
@@ -223,6 +226,25 @@ async function numerar(s, schema, t) {
 }
 
 /**
+ * Columnas añadidas DESPUÉS de la primera versión del módulo (2026-07-27
+ * tarde: conversación por correo). Para schemas donde las tablas ya existían.
+ */
+async function ampliarMensajesYAjustes(s, schema, t) {
+  await s.query(
+    `ALTER TABLE "${schema}"."${TABLA_MESSAGES}" ADD COLUMN IF NOT EXISTS author_email VARCHAR(255)`,
+    { transaction: t }
+  );
+  await s.query(
+    `ALTER TABLE "${schema}"."${TABLA_MESSAGES}" ADD COLUMN IF NOT EXISTS via VARCHAR(20) NOT NULL DEFAULT 'crm'`,
+    { transaction: t }
+  );
+  await s.query(
+    `ALTER TABLE "${schema}"."${TABLA_SETTINGS}" ADD COLUMN IF NOT EXISTS support_email VARCHAR(255)`,
+    { transaction: t }
+  );
+}
+
+/**
  * Índices, DEFAULTs de base de datos, CHECKs y FKs. Todo lo que también hay
  * que garantizar en un schema donde las tablas las creó `db:sync` (allí los
  * DEFAULT viven en JavaScript, no en la base de datos).
@@ -273,6 +295,7 @@ async function blindar(s, schema, t) {
     [TABLA_MESSAGES, "id", "gen_random_uuid()"],
     [TABLA_MESSAGES, "author_type", `'team'`],
     [TABLA_MESSAGES, "is_internal", "FALSE"],
+    [TABLA_MESSAGES, "via", `'crm'`],
     [TABLA_ATTACHMENTS, "id", "gen_random_uuid()"],
     [TABLA_ATTACHMENTS, "file_size", "0"],
     [TABLA_ATTACHMENTS, "uploaded_by_type", `'team'`],
@@ -303,11 +326,19 @@ async function blindar(s, schema, t) {
   // una columna enum con literales de texto es frágil entre versiones. El
   // modelo Sequelize valida ambos en JS.
   const checks = [
-    [TABLA_TICKETS, "tickets_channel_chk", `channel IN ('manual','portal')`],
+    [TABLA_TICKETS, "tickets_channel_chk", `channel IN ('manual','portal','email')`],
     [TABLA_MESSAGES, "ticket_messages_author_type_chk", `author_type IN ('team','client','system')`],
+    [TABLA_MESSAGES, "ticket_messages_via_chk", `via IN ('crm','portal','email')`],
     [TABLA_ATTACHMENTS, "ticket_attachments_uploader_chk", `uploaded_by_type IN ('team','client')`],
   ];
+  // Drop + re-add: si la lista de valores crece (p.ej. channel ganó 'email'),
+  // el CHECK viejo se sustituye en vez de quedarse fosilizado por el
+  // duplicate_object. Es barato y deja el CHECK siempre igual al del código.
   for (const [tabla, nombre, condicion] of checks) {
+    await s.query(
+      `ALTER TABLE "${schema}"."${tabla}" DROP CONSTRAINT IF EXISTS ${nombre}`,
+      { transaction: t }
+    );
     await s.query(
       `DO $$
        BEGIN
@@ -388,6 +419,7 @@ async function main() {
       await s.transaction(async (t) => {
         await crearTablas(s, schema, t); // hermanas IF NOT EXISTS (42P01-proof)
         await ampliarTickets(s, schema, t);
+        await ampliarMensajesYAjustes(s, schema, t);
         await numerar(s, schema, t);
         await blindar(s, schema, t);
       });

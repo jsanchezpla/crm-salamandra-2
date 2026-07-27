@@ -132,6 +132,28 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       }
     }
 
+    // SLA a medida para ESTE ticket (editable desde el drawer): fechas
+    // objetivo explícitas (o null = sin objetivo). Pisan lo calculado por
+    // prioridad; cambiar la prioridad después vuelve a recalcular.
+    for (const campo of ["firstResponseDueAt", "resolutionDueAt"]) {
+      if (body[campo] === undefined) continue;
+      if (body[campo] === null) {
+        cambios[campo] = null;
+        continue;
+      }
+      const fecha = new Date(body[campo]);
+      if (Number.isNaN(fecha.getTime())) return error(`${campo} inválida`, 422);
+      cambios[campo] = fecha;
+    }
+
+    // Atajo del drawer: "restablecer SLA según prioridad" (desde el alta).
+    if (body.slaReset === true) {
+      const settings = await getSupportSettings(ctx.tenantModels);
+      const dues = computeDueDates(cambios.priority || ticket.priority, settings, ticket.createdAt);
+      cambios.firstResponseDueAt = dues.firstResponseDueAt;
+      cambios.resolutionDueAt = dues.resolutionDueAt;
+    }
+
     // Estado → fechas de cierre/reapertura + aviso al cliente si se resuelve.
     if (body.status !== undefined) {
       if (!TICKET_STATUSES.includes(body.status)) return error("status inválido", 422);
