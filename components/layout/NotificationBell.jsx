@@ -94,8 +94,12 @@ export default function NotificationBell() {
         )}
       </button>
 
+      {/* MÓVIL: el panel se ancla a la PANTALLA, no a la campana. La campana vive
+          a 5.25rem del borde derecho (para dejar sitio al Salamandrobot), así que
+          un panel de 320px colgado de ella se salía 29px por la izquierda en un
+          móvil de 375px. Desde sm: vuelve a colgar de la campana. */}
       {open && (
-        <div className="absolute bottom-full mb-2 right-0 w-80 max-w-[calc(100vw-1.5rem)] z-10 bg-white rounded-xl shadow-xl border border-neutral-100 overflow-hidden">
+        <div className="fixed sm:absolute inset-x-3 sm:inset-x-auto bottom-[4.25rem] sm:bottom-full sm:mb-2 sm:right-0 sm:w-80 z-10 bg-white rounded-xl shadow-xl border border-neutral-100 overflow-hidden">
           <div className="px-4 py-2.5 flex items-center justify-between border-b border-neutral-100">
             <span className="eyebrow">Notificaciones</span>
             {unread > 0 && (
