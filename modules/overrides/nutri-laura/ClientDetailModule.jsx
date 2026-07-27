@@ -5,7 +5,9 @@
  *
  * Tabs:
  *   1. Información — PatientCard editable inline + historial legacy collapsible.
- *   2. Notas — timeline interno (ClientNotesPanel).
+ *   2. Historia clínica — timeline interno (ClientNotesPanel). Se llamaba
+ *      "Notas"; renombrada en la UI de nutri_laura (la clave y la tabla siguen
+ *      siendo `notes` / `client_notes`).
  *   3. Adjuntos — PDFs del paciente (ClientAttachmentsPanel).
  *   4. Citas — bookings del paciente con confirm/reject (ClientBookingsPanel).
  *
@@ -44,7 +46,12 @@ import ClientModulesSection from "../../../components/clients/ClientModulesSecti
 
 const TABS = [
   { key: "info", label: "Información" },
-  { key: "notes", label: "Notas" },
+  // "Historia clínica" (antes "Notas"): para Laura estas anotaciones SON el
+  // seguimiento clínico de la paciente, no notas sueltas. La clave interna
+  // sigue siendo `notes` (misma tabla client_notes y mismos endpoints): solo
+  // cambia el nombre visible, y SOLO en nutri_laura (el resto de tenants usa
+  // modules/default/ClientDetailModule.jsx, donde siguen siendo "Notas").
+  { key: "notes", label: "Historia clínica" },
   { key: "attachments", label: "Adjuntos" },
   { key: "bookings", label: "Citas" },
   // Tab "Plan" añadida en Sprint Recetario C4. Solo visible en nutri_laura.
@@ -399,7 +406,7 @@ function InfoTab({
       ) : (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
           <p className="text-xs text-red-700 font-medium">
-            ¿Eliminar a {client.name}? Esto borra también sus archivos y notas.
+            ¿Eliminar a {client.name}? Esto borra también sus archivos y su historia clínica.
           </p>
           <div className="flex gap-2">
             <button

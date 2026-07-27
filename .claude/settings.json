@@ -1,4 +1,18 @@
 {
   "model": "claude-opus-4-8",
-  "skipDangerousModePermissionPrompt": false
+  "skipDangerousModePermissionPrompt": false,
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/git-sync-check.mjs",
+            "timeout": 30,
+            "statusMessage": "Comprobando si hay cambios nuevos en GitHub..."
+          }
+        ]
+      }
+    ]
+  }
 }

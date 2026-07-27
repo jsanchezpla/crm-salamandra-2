@@ -1,11 +1,16 @@
 "use client";
 
 /**
- * ClientNotesPanel — tab "Notas" del detalle de paciente (nutri_laura).
+ * ClientNotesPanel — tab "Historia clínica" del detalle de paciente (nutri_laura).
+ *
+ * Se llamaba "Notas"; para Laura estas anotaciones SON el seguimiento clínico,
+ * así que se renombró la UI. Por dentro NO cambia nada: misma tabla
+ * `client_notes`, mismos endpoints /api/clients/:id/notes y misma clave de tab
+ * (`notes`). El resto de tenants sigue viendo "Notas" (modules/default/).
  *
  * Funcionalidad:
  *   - GET /api/clients/:id/notes paginado (limit 50 por página, incremental).
- *   - POST nueva nota (textarea + botón "Añadir").
+ *   - POST nueva entrada (textarea + botón "Añadir entrada").
  *   - DELETE nota (sin restricción por autor — backend no enforza y Laura es
  *     la única usuaria; aplicamos la regla de borrado-sin-restricción del
  *     Checkpoint 3).
@@ -122,7 +127,7 @@ export default function ClientNotesPanel({ clientId }) {
       {/* Composer */}
       <div className="px-5 py-4 border-b border-gray-100">
         <div className="text-sm font-semibold text-gray-700 mb-2">
-          Nueva nota interna
+          Nueva entrada de historia clínica
         </div>
         {submitError && (
           <div className="px-3 py-2 mb-2 bg-red-50 border border-red-100 rounded-md text-xs text-red-700">
@@ -133,7 +138,7 @@ export default function ClientNotesPanel({ clientId }) {
           value={content}
           onChange={(e) => setContent(e.target.value)}
           rows={3}
-          placeholder="Escribe una anotación privada del equipo (no la verá el paciente)…"
+          placeholder="Evolución, observaciones, acuerdos de la sesión… (uso interno, no lo ve la paciente)"
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] resize-none placeholder:text-gray-300"
         />
         <div className="flex justify-end mt-2">
@@ -142,7 +147,7 @@ export default function ClientNotesPanel({ clientId }) {
             disabled={!content.trim() || saving}
             className="bg-[var(--color-primary)] hover:opacity-90 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-opacity disabled:opacity-40"
           >
-            {saving ? "Guardando…" : "Añadir nota"}
+            {saving ? "Guardando…" : "Añadir entrada"}
           </button>
         </div>
       </div>
@@ -174,7 +179,7 @@ export default function ClientNotesPanel({ clientId }) {
           </ul>
         ) : notes.length === 0 && !error ? (
           <div className="py-10 text-center text-xs text-gray-400">
-            Aún no hay notas registradas. Escribe la primera arriba.
+            La historia clínica está vacía. Escribe la primera entrada arriba.
           </div>
         ) : (
           <ul className="divide-y divide-gray-50">

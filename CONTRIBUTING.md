@@ -105,7 +105,63 @@ directo a `master`, sin PR.
 
 ---
 
-## 3. Convención de commits
+## 3. Trabajando los dos a la vez
+
+Somos dos empujando a la MISMA rama (`master`) y esa rama ES producción. Los
+conflictos de texto (dos tocando las mismas líneas) son el problema **pequeño**:
+git se para, avisa y no pierde nada. Los tres que sí duelen:
+
+1. **Push rechazado** — el otro subió mientras tú acumulabas commits en local.
+   No se pierde nada, pero se pierde el rato.
+2. **Choque silencioso** — tocáis ficheros distintos, git fusiona sin quejarse y
+   la combinación revienta. Ejemplo real: uno mueve una página a `/equipo/*` y el
+   otro deja un enlace a la ruta vieja en otro fichero → 404 en producción sin
+   que git haya dicho nada.
+3. **Desplegar el trabajo a medias del otro** — el deploy sube TODO lo que haya
+   en `master`, no solo lo tuyo. Y ahí abajo hay clientes reales (Aumenta con su
+   equipo, `nutri_laura` con pacientes de verdad).
+
+### El protocolo (4 reglas)
+
+1. **Bajar lo del otro al empezar Y otra vez justo antes de subir:**
+   ```bash
+   git pull --rebase origin master
+   ```
+2. **Commits pequeños y subir el mismo día.** Sentarse encima de 10 commits
+   durante horas es lo que fabrica los choques. Subiendo cada 30-60 min casi
+   nunca hay nada que fusionar.
+3. **Avisar por chat antes de tocar los ficheros calientes** (los que más se
+   pisan, por historial): `package.json`, `lib/db/tenantDb.js`,
+   `components/layout/Sidebar.jsx`, `scripts/_module-migrations.js` y `CLAUDE.md`.
+4. **Avisar antes de desplegar.** Quien lanza `deploy.sh` se lleva a producción
+   lo que haya en `master`, sea suyo o no: el otro confirma que no tiene nada a
+   medias subido.
+
+Trabajo largo o arriesgado → rama local, y se fusiona a `master` cuando compile
+(§2). Con dos personas y módulos distintos esto basta; volver a PRs sería más
+ceremonia de la que necesitamos.
+
+### Puesta a punto en cada máquina (una vez)
+
+Que `git pull` rebase por defecto, en vez de generar merges basura, y que no
+falle si tienes cambios sin guardar:
+
+```bash
+git config --local pull.rebase true
+git config --local rebase.autoStash true
+```
+
+### Aviso automático al arrancar Claude Code
+
+`.claude/hooks/git-sync-check.mjs` (registrado como hook `SessionStart` en
+`.claude/settings.json`) hace `git fetch` al abrir la sesión y avisa **antes de
+tocar una línea** si tu `master` va por detrás del de GitHub, si tienes commits
+sin subir o cambios sin commitear. Solo mira, no modifica nada; si no hay red lo
+dice y sigue.
+
+---
+
+## 4. Convención de commits
 
 Seguimos **Conventional Commits** (como el historial):
 
@@ -120,7 +176,7 @@ Tipos: `feat` (funcionalidad), `fix` (bug), `chore` (mantenimiento/infra),
 
 ---
 
-## 4. Reglas de oro (no las saltes)
+## 5. Reglas de oro (no las saltes)
 
 - **`master` = producción.** Sin CI de por medio, **`npm run build` en verde
   ANTES de cada push** no es negociable. Si el build falla, no se sube.
@@ -154,24 +210,24 @@ Tipos: `feat` (funcionalidad), `fix` (bug), `chore` (mantenimiento/infra),
 
 ---
 
-## 5. Resolver un conflicto (cuando dos tocáis lo mismo)
+## 6. Resolver un conflicto (cuando dos tocáis lo mismo)
 
 Tocar el mismo **fichero** no da conflicto; solo tocar las **mismas líneas**.
-Si al abrir el PR GitHub dice *"This branch has conflicts"*, resuélvelo en tu rama:
+El conflicto salta al bajar lo del otro, que es justo donde queremos que salte
+(antes de subir, no después):
 
 ```bash
-git checkout feat/tu-rama
-git pull origin master        # trae master → aquí saltan los conflictos
+git pull --rebase origin master   # trae master → aquí saltan los conflictos
 ```
 
 Git marca el trozo en conflicto en el fichero:
 
 ```
 <<<<<<< HEAD
-(la versión de master)
+(lo que ya estaba en master)
 =======
 (tu versión)
->>>>>>> feat/tu-rama
+>>>>>>> tu commit
 ```
 
 Edita el fichero dejándolo como debe quedar (elige una versión o combina),
@@ -179,28 +235,34 @@ Edita el fichero dejándolo como debe quedar (elige una versión o combina),
 
 ```bash
 git add <fichero-resuelto>
-git commit          # cierra la fusión
-git push
+git rebase --continue   # sigue con el resto de tus commits
+git push origin master
 ```
+
+Si te lías a mitad y quieres volver al punto de partida:
+`git rebase --abort` (deja todo como estaba, no pierdes nada).
 
 Git **nunca** descarta cambios en silencio: si hay duda, para y te pregunta.
 
 ---
 
-## 6. Comandos útiles
+## 7. Comandos útiles
 
 ```bash
 git status                       # qué has cambiado
 git switch master                # volver a master
 git branch                       # ver tus ramas
-git pull origin master           # actualizar master
+git pull --rebase origin master  # bajar lo que ha subido el otro
 git log --oneline -10            # últimos commits
 git revert <sha>                 # deshacer un commit malo con otro commit
 ```
 
 ---
 
-## 7. Despliegue
+## 8. Despliegue
+
+> Avisa al otro antes de lanzarlo: el deploy sube a producción **todo** lo que
+> haya en `master`, sea tuyo o no (§3).
 
 Con `master` actualizado y el build en verde, en el VPS:
 `git pull` → `./deploy.sh` (con `--full` si cambiaron dependencias). Si el
