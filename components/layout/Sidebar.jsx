@@ -44,20 +44,17 @@ const navigation = [
         label: "Leads",
         href: "/leads",
         badge: null,
+        // Formularios y Referidos son canales de ENTRADA de leads: viven como
+        // sub-entradas de Leads. Llevan `moduleKey` porque los hijos no gatean
+        // por módulo por defecto y estos solo existen en algunos tenants
+        // (formularios → nutri_laura; referidos → abarcaia).
+        children: [
+          { key: "leads-formularios", label: "Formularios", href: "/formularios", moduleKey: "formularios" },
+          { key: "leads-referidos", label: "Referidos", href: "/referidos", moduleKey: "referidos" },
+        ],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-          </svg>
-        ),
-      },
-      {
-        key: "formularios",
-        label: "Formularios",
-        href: "/formularios",
-        badge: null,
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
           </svg>
         ),
       },
@@ -69,17 +66,6 @@ const navigation = [
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-          </svg>
-        ),
-      },
-      {
-        key: "referidos",
-        label: "Referidos",
-        href: "/referidos",
-        badge: null,
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
           </svg>
         ),
       },
@@ -123,16 +109,6 @@ const navigation = [
           { key: "citas-mi-horario", label: "Mi horario", href: "/mi-horario" },
         ],
       },
-      {
-        key: "planning",
-        label: "Planificación",
-        href: "/planificacion",
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-          </svg>
-        ),
-      },
     ],
   },
   {
@@ -165,16 +141,6 @@ const navigation = [
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
-          </svg>
-        ),
-      },
-      {
-        key: "support",
-        label: "Soporte",
-        href: "/soporte",
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
           </svg>
         ),
       },
@@ -498,7 +464,17 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
                         {showChildren && (
                           <div className="ml-7 mt-0.5 mb-1 space-y-0.5 border-l border-white/[0.08] pl-2.5">
                             {item.children
-                              .filter((child) => !(child.adminOnly && !isAdminRole))
+                              .filter((child) => {
+                                if (child.adminOnly && !isAdminRole) return false;
+                                // Hijos con `moduleKey` gatean por módulo del
+                                // tenant (p.ej. Formularios/Referidos bajo Leads:
+                                // solo salen donde el módulo está activo).
+                                if (child.moduleKey) {
+                                  const tenantHasIt = enabledModules.has(child.moduleKey) || enabledModules.size === 0;
+                                  return tenantHasIt && userCanSee(child.moduleKey);
+                                }
+                                return true;
+                              })
                               .map((child) => {
                               const childActive = pathname === child.href;
                               return (
@@ -526,7 +502,9 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
           })}
         </nav>
 
-        {/* Usuario + logout */}
+        {/* Usuario + acciones. A la derecha, en columna: Configuración (engranaje,
+            solo admin), Cerrar sesión y Soporte (llave inglesa) — Configuración y
+            Soporte ya no son entradas del menú. */}
         <div className="px-4 py-4 border-t border-white/[0.08]">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-white/[0.08] border border-white/15 flex items-center justify-center font-display text-[13px] text-white/70 shrink-0">
@@ -536,32 +514,44 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
               <div className="text-white/65 text-[11px] font-mono truncate">{user?.email ?? "Usuario"}</div>
               <div className="text-white/30 text-[10px] uppercase tracking-wider mt-0.5">{user?.role ?? "—"}</div>
             </div>
-            {/* Configuración = engranaje junto a cerrar sesión (ya no es
-                entrada del menú). Solo admins: ajustes del tenant + claves IA. */}
-            {isAdminRole && (
-              <Link
-                href="/configuracion"
-                className={`shrink-0 p-1 rounded transition-colors hover:bg-white/[0.06] ${
-                  pathname?.startsWith("/configuracion") ? "text-white" : "text-white/30 hover:text-white/70"
-                }`}
-                title="Configuración"
-                aria-label="Configuración"
+            <div className="flex flex-col items-center gap-0.5 shrink-0">
+              {isAdminRole && (
+                <Link
+                  href="/configuracion"
+                  className={`p-1 rounded transition-colors hover:bg-white/[0.06] ${
+                    pathname?.startsWith("/configuracion") ? "text-white" : "text-white/30 hover:text-white/70"
+                  }`}
+                  title="Configuración"
+                  aria-label="Configuración"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a6.932 6.932 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.431l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.542-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.759 6.759 0 010-.255c.007-.378-.138-.75-.43-.991l-1.004-.827a1.125 1.125 0 01-.26-1.431l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.147-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </Link>
+              )}
+              <button
+                onClick={handleLogout}
+                className="text-white/30 hover:text-white/70 transition-colors cursor-pointer p-1 rounded hover:bg-white/[0.06]"
+                title="Cerrar sesión"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a6.932 6.932 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.431l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.542-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.759 6.759 0 010-.255c.007-.378-.138-.75-.43-.991l-1.004-.827a1.125 1.125 0 01-.26-1.431l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.147-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                </svg>
+              </button>
+              <Link
+                href="/soporte"
+                className={`p-1 rounded transition-colors hover:bg-white/[0.06] ${
+                  pathname?.startsWith("/soporte") ? "text-white" : "text-white/30 hover:text-white/70"
+                }`}
+                title="Soporte"
+                aria-label="Soporte"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75a4.5 4.5 0 01-4.884 4.484c-1.076-.091-2.264.071-2.95.904l-7.152 8.684a2.548 2.548 0 11-3.586-3.586l8.684-7.152c.833-.686.995-1.874.904-2.95a4.5 4.5 0 016.336-4.486l-3.276 3.275a3.004 3.004 0 002.25 2.25l3.276-3.276c.256.565.398 1.192.398 1.853z" />
                 </svg>
               </Link>
-            )}
-            <button
-              onClick={handleLogout}
-              className="text-white/30 hover:text-white/70 transition-colors shrink-0 cursor-pointer p-1 rounded hover:bg-white/[0.06]"
-              title="Cerrar sesión"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
-              </svg>
-            </button>
+            </div>
           </div>
         </div>
       </aside>
