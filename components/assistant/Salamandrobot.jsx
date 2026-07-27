@@ -9,33 +9,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
-/** Logo: salamandra estilizada (vista cenital). Hereda el color con currentColor. */
+/** Logo del bot: la salamandra de Salamandra Solutions en blanco (imagen de marca original). */
 function SalamanderIcon({ className = "w-6 h-6" }) {
-  return (
-    <svg viewBox="0 0 48 48" className={className} fill="currentColor" aria-hidden="true">
-      {/* cuerpo + cola en S */}
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="5"
-        strokeLinecap="round"
-        d="M24 10c0 6 5 7 5 13s-7 6-7 12c0 3 3 4 6 3.2"
-      />
-      {/* patas */}
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="3"
-        strokeLinecap="round"
-        d="M25.5 15l7-3M25.5 17l6.5 5M28.5 25l-7-3M28.5 27l-6.5 5"
-      />
-      {/* cabeza */}
-      <circle cx="24" cy="10" r="6.2" />
-      {/* ojo */}
-      <circle cx="26.4" cy="8.4" r="1.5" fill="#0f231b" />
-    </svg>
-  );
+  return <Image src="/salamandrobot-blanco.png" alt="" width={64} height={64} className={className} aria-hidden="true" />;
 }
 
 const GREETING = {
