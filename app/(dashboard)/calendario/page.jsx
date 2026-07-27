@@ -73,6 +73,10 @@ export default function CalendarioPage() {
   const [formError, setFormError] = useState(null);
   const [clients, setClients] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
+  // Integración con Proyectos: eventos de tarjetas Kanban (dueDate) e hitos.
+  const [showProjects, setShowProjects] = useState(true);
+  const showProjectsRef = useRef(true); // fetchEvents vive en un useCallback([]): lee el ref
+  const [projectInfo, setProjectInfo] = useState(null); // mini-modal de evento de proyecto
   // IA "Reorganizar la semana" — 3 propuestas navegables (1/2/3 + flechas)
   const [reorg, setReorg] = useState(null); // { loading, err, proposals, model, taskCount } | null
   const [reorgIndex, setReorgIndex] = useState(0); // propuesta activa (0..2)
@@ -105,6 +109,7 @@ export default function CalendarioPage() {
         start: fetchInfo.startStr.split("T")[0],
         end: fetchInfo.endStr.split("T")[0],
       });
+      if (!showProjectsRef.current) params.set("projects", "0");
       const res = await fetch(`/api/calendar/tasks?${params}`);
       if (!res.ok) throw new Error("Error cargando eventos");
       const json = await res.json();
@@ -113,6 +118,13 @@ export default function CalendarioPage() {
       failureCallback(err);
     }
   }, []);
+
+  function toggleProjects() {
+    const next = !showProjectsRef.current;
+    showProjectsRef.current = next;
+    setShowProjects(next);
+    calendarRef.current?.getApi().refetchEvents();
+  }
 
   function currentWeekMonday() {
     const d = new Date();
@@ -231,6 +243,22 @@ export default function CalendarioPage() {
   function handleEventClick(info) {
     const { event } = info;
     const ep = event.extendedProps;
+    // Eventos de PROYECTOS: no son CalendarTask — mini-modal con enlace al
+    // proyecto en vez del formulario de edición (editarlos aquí corrompería).
+    if (ep.kind === "projectTask" || ep.kind === "projectMilestone") {
+      setProjectInfo({
+        kind: ep.kind,
+        title: event.title,
+        date: event.startStr?.split("T")[0] ?? "",
+        projectId: ep.projectId,
+        projectName: ep.projectName,
+        projectCode: ep.projectCode,
+        columnName: ep.columnName ?? null,
+        priority: ep.priority ?? null,
+        status: ep.status ?? null,
+      });
+      return;
+    }
     const start = parseISOToFields(event.startStr);
     const end = parseISOToFields(event.endStr);
     setFormError(null);
@@ -253,7 +281,36 @@ export default function CalendarioPage() {
     });
   }
 
+  // Arrastrar un evento de PROYECTO = cambiar su fecha límite real (PATCH en el
+  // módulo de proyectos). Devuelve true si lo gestionó (era de proyecto).
+  async function dropProjectEvent(info) {
+    const ep = info.event.extendedProps;
+    if (ep.kind !== "projectTask" && ep.kind !== "projectMilestone") return false;
+    const dueDate = info.event.startStr?.split("T")[0];
+    const url = ep.kind === "projectTask"
+      ? `/api/tasks/${ep.taskId}`
+      : `/api/projects/${ep.projectId}/milestones/${ep.milestoneId}`;
+    try {
+      const res = await fetch(url, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dueDate }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Sin permiso para mover fechas de proyectos");
+      }
+      // Refresca para que el evento vuelva a pintarse como todo-el-día.
+      calendarRef.current?.getApi().refetchEvents();
+    } catch (e) {
+      info.revert();
+      window.alert(e.message);
+    }
+    return true;
+  }
+
   async function handleEventDrop(info) {
+    if (await dropProjectEvent(info)) return;
     const { event } = info;
     const start = parseISOToFields(event.startStr);
     const end = parseISOToFields(event.endStr);
@@ -277,6 +334,12 @@ export default function CalendarioPage() {
 
   async function handleEventResize(info) {
     const { event } = info;
+    const ep = event.extendedProps;
+    // Los eventos de proyecto son de un solo día (fecha límite): no se estiran.
+    if (ep.kind === "projectTask" || ep.kind === "projectMilestone") {
+      info.revert();
+      return;
+    }
     const start = parseISOToFields(event.startStr);
     const end = parseISOToFields(event.endStr);
     try {
@@ -411,6 +474,14 @@ export default function CalendarioPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={toggleProjects}
+            className={`flex items-center gap-1.5 px-3 py-1.5 border text-xs font-medium rounded-md transition-colors ${showProjects ? "border-[#6366F1]/40 bg-[#6366F1]/10 text-[#4F46E5]" : "border-[var(--ink-200)] text-[var(--ink-400)] hover:bg-[var(--ink-100)]"}`}
+            title="Mostrar u ocultar las fechas límite e hitos de los proyectos"
+          >
+            <span className={`w-2 h-2 rounded-full ${showProjects ? "bg-[#6366F1]" : "bg-neutral-300"}`} />
+            Proyectos
+          </button>
+          <button
             onClick={loadReorg}
             className="flex items-center gap-1.5 px-3 py-1.5 border border-[var(--ink-200)] text-[var(--ink-700)] text-xs font-medium rounded-md hover:bg-[var(--ink-100)] transition-colors"
             title="La IA propone repartir las tareas de esta semana"
@@ -465,6 +536,36 @@ export default function CalendarioPage() {
           }}
         />
       </div>
+
+      {/* Mini-modal de evento de PROYECTO (fecha límite / hito) */}
+      {projectInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget) setProjectInfo(null); }}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm">
+            <div className="px-5 py-4 border-b border-[#F0F0F0] flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-neutral-400 mb-1">
+                  {projectInfo.kind === "projectMilestone" ? "Hito de proyecto" : "Tarea de proyecto · fecha límite"}
+                </div>
+                <div className="text-[14px] font-semibold text-neutral-900 leading-snug">{projectInfo.title}</div>
+              </div>
+              <button onClick={() => setProjectInfo(null)} className="text-neutral-400 hover:text-neutral-700 p-1 -m-1" aria-label="Cerrar">✕</button>
+            </div>
+            <div className="px-5 py-4 space-y-1.5 text-[12.5px] text-neutral-600">
+              <div><span className="text-neutral-400">Proyecto:</span> {projectInfo.projectName}{projectInfo.projectCode ? ` (${projectInfo.projectCode})` : ""}</div>
+              <div><span className="text-neutral-400">Fecha:</span> {projectInfo.date}</div>
+              {projectInfo.columnName && <div><span className="text-neutral-400">Columna:</span> {projectInfo.columnName}</div>}
+              {projectInfo.status && <div><span className="text-neutral-400">Estado:</span> {projectInfo.status === "pending" ? "Pendiente" : projectInfo.status === "completed" ? "Completado" : "No cumplido"}</div>}
+              <p className="text-[11px] text-neutral-400 pt-1.5">Se gestiona desde el módulo de Proyectos. Arrástralo en el calendario para cambiar su fecha límite.</p>
+            </div>
+            <div className="px-5 py-3.5 border-t border-[#F0F0F0] flex justify-end gap-2">
+              <button onClick={() => setProjectInfo(null)} className="text-xs text-neutral-500 px-3 py-1.5">Cerrar</button>
+              <a href={`/proyectos/${projectInfo.projectId}/board`} className="text-xs font-medium px-3 py-1.5 rounded-md text-white" style={{ backgroundColor: "var(--color-primary,#1B3A2D)" }}>
+                Abrir proyecto →
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal "Reorganizar semana (IA)" — 3 propuestas navegables, casi pantalla completa */}
       {reorg && (() => {

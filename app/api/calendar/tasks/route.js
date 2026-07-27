@@ -5,6 +5,7 @@ import { getTenantContext } from "../../../../lib/tenant/tenantResolver.js";
 import { Op } from "sequelize";
 import { NextResponse } from "next/server";
 import { toFCEvent, calendarIncludes, resolveCalendarFks } from "../../../../lib/calendar/calendarEvent.js";
+import { fetchProjectEvents } from "../../../../lib/calendar/projectEvents.js";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("calendar")) return forbidden();
@@ -34,7 +35,16 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     order: [["startDate", "ASC"], ["startTime", "ASC"]],
   });
 
-  return ok(tasks.map(toFCEvent));
+  // Integración con Proyectos: tarjetas Kanban con fecha límite + hitos, como
+  // eventos con extendedProps.kind (el frontend los trata distinto). Se omiten
+  // si se filtra por cliente/miembro (son filtros de calendar_tasks) o con
+  // ?projects=0 (toggle de la UI).
+  let projectEvents = [];
+  if (!clientId && !teamMemberId && searchParams.get("projects") !== "0") {
+    projectEvents = await fetchProjectEvents({ tenantModels, hasModule, start, end });
+  }
+
+  return ok([...tasks.map(toFCEvent), ...projectEvents]);
 });
 
 export async function POST(request) {
