@@ -95,6 +95,14 @@ export function defineEventType(sequelize) {
         defaultValue: 60,
         validate: { min: 1 },
       },
+      // Precio EN CÉNTIMOS (ver lib/payments/money.js). null o 0 = cita gratuita:
+      // el flujo de reserva no pide pago, que es como siguen funcionando los
+      // tenants que no cobran online.
+      price: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: { min: 0 },
+      },
       active: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

@@ -70,6 +70,11 @@ export const CORE = [
   // de pago cuando el tenant activa settings.aiAccess = "restringido". Modelo
   // registrado para todos los tenants, mismo criterio que notifications.
   "migrate-ai-permissions",
+  // Capa de pagos online (payment_sessions + stripe_webhook_events). Transversal
+  // por el mismo motivo: los modelos están registrados para todos los tenants.
+  // Cobrar o no depende de que el tenant tenga sus claves de Stripe, no de que
+  // exista la tabla.
+  "migrate-payments-sprint-1",
 ];
 
 export const MODULES = {

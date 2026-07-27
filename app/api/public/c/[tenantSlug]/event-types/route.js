@@ -30,6 +30,9 @@ export const GET = withPublicTenant(async (_request, _ctx, { tenantModels, hasMo
         additionalDataRequired: r.additionalDataRequired,
         minNoticeHours: r.minNoticeHours,
         maxAdvanceDays: r.maxAdvanceDays,
+        // Precio en céntimos (null = gratuita). El widget lo muestra y, si hay
+        // precio, la reserva pasará por el checkout.
+        price: r.price ?? null,
         order: r.order,
       }));
 

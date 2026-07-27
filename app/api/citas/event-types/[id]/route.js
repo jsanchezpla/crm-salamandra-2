@@ -125,6 +125,19 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       if (!Number.isInteger(v) || v <= 0) return error("maxAdvanceDays inválido");
       updates.maxAdvanceDays = v;
     }
+    // Precio EN CÉNTIMOS. null o "" lo deja gratuito (deja de pedir pago).
+    if ("price" in body) {
+      if (body.price === null || body.price === "") {
+        updates.price = null;
+      } else {
+        const v = Number(body.price);
+        if (!Number.isInteger(v) || v < 0) {
+          return error("price debe ser un número entero de céntimos (0 o más)");
+        }
+        // 0 == gratis == null: una sola representación (ver POST).
+        updates.price = v === 0 ? null : v;
+      }
+    }
     if ("active" in body) updates.active = Boolean(body.active);
     if ("order" in body) {
       const v = Number(body.order);

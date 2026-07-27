@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { eurosToCents, centsToEuros, formatMoney } from "../../../../lib/payments/money.js";
 
 const MODALITY_LABELS = { presencial: "Presencial", phone: "Teléfono", online: "Online" };
 const ALL_MODALITIES = ["presencial", "phone", "online"];
@@ -25,6 +26,8 @@ const EMPTY_FORM = {
   additionalDataRequired: false,
   minNoticeHours: 3,
   maxAdvanceDays: 60,
+  // En EUROS mientras se edita; se convierte a céntimos al guardar. Vacío = gratis.
+  price: "",
   active: true,
   order: 0,
 };
@@ -92,6 +95,7 @@ export default function CitasTiposPage() {
         additionalDataRequired: !!data.additionalDataRequired,
         minNoticeHours: data.minNoticeHours ?? 3,
         maxAdvanceDays: data.maxAdvanceDays ?? 60,
+        price: data.price != null ? centsToEuros(data.price) : "",
         active: !!data.active,
         order: data.order ?? 0,
         _bookingCount: data.bookingCount ?? 0,
@@ -143,6 +147,8 @@ export default function CitasTiposPage() {
       additionalDataRequired: !!form.additionalDataRequired,
       minNoticeHours: Number(form.minNoticeHours),
       maxAdvanceDays: Number(form.maxAdvanceDays),
+      // La API trabaja en CÉNTIMOS; el formulario, en euros. Vacío → null (gratis).
+      price: eurosToCents(form.price),
       active: !!form.active,
       order: Number(form.order),
     };
@@ -231,6 +237,7 @@ export default function CitasTiposPage() {
                 <tr className="bg-neutral-50 border-b border-neutral-200">
                   <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Nombre</th>
                   <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Duración</th>
+                  <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Precio</th>
                   <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Modalidades</th>
                   <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Color</th>
                   <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Estado</th>
@@ -249,6 +256,13 @@ export default function CitasTiposPage() {
                       <div className="text-[11px] text-neutral-400">{it.slug}</div>
                     </td>
                     <td className="px-4 py-3 text-neutral-700">{it.duration} min</td>
+                    <td className="px-4 py-3">
+                      {it.price != null && it.price > 0 ? (
+                        <span className="font-medium text-neutral-800">{formatMoney(it.price)}</span>
+                      ) : (
+                        <span className="text-neutral-400">Gratis</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
                         {it.modalities?.map((m) => (
@@ -354,16 +368,33 @@ export default function CitasTiposPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Duración (min)</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={480}
-                  value={form.duration}
-                  onChange={(e) => updateForm("duration", e.target.value)}
-                  className={inputCls}
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Duración (min)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={480}
+                    value={form.duration}
+                    onChange={(e) => updateForm("duration", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Precio (€)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="Gratis"
+                    value={form.price}
+                    onChange={(e) => updateForm("price", e.target.value)}
+                    className={inputCls}
+                  />
+                  <p className="text-[10px] text-neutral-400 mt-1">
+                    Vacío = sin cobro. Con precio, se cobra al reservar.
+                  </p>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">

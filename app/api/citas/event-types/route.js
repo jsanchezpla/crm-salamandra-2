@@ -101,6 +101,16 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const order = body.order == null ? 0 : Number(body.order);
     if (!Number.isInteger(order)) return error("order inválido");
 
+    // Precio EN CÉNTIMOS (null = cita gratuita, sin pago online). La conversión
+    // desde euros la hace la UI con lib/payments/money.js.
+    let price = body.price == null || body.price === "" ? null : Number(body.price);
+    if (price !== null && (!Number.isInteger(price) || price < 0)) {
+      return error("price debe ser un número entero de céntimos (0 o más)");
+    }
+    // 0 y null significan lo mismo (gratis). Se normaliza a null para que exista
+    // UNA sola forma de decirlo y nadie tenga que acordarse de comprobar las dos.
+    if (price === 0) price = null;
+
     // Unicidad de slug
     const dup = await EventType.findOne({ where: { slug } });
     if (dup) return error("Ya existe un tipo de cita con ese slug", 409);
@@ -121,6 +131,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       additionalDataRequired,
       minNoticeHours,
       maxAdvanceDays,
+      price,
       active,
       order,
     });

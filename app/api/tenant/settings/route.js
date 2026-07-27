@@ -104,6 +104,15 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
         fromEmail: integ.resendFromEmail ?? null,
         replyTo: integ.resendReplyTo ?? null,
       },
+      // Cobro online. `ready` = se puede cobrar de verdad: hacen falta AMBOS
+      // secretos. Con la clave pero sin el secreto del webhook, el cliente pagaría
+      // y su cita nunca se confirmaría (nadie nos avisa del cobro).
+      stripe: {
+        ...ks(integ.stripeSecretKey),
+        publishableKey: integ.stripePublishableKey ?? null,
+        webhook: keyStatus(integ.stripeWebhookSecret).configured,
+        ready: !!integ.stripeSecretKey && !!integ.stripeWebhookSecret,
+      },
     },
   });
 });
@@ -158,6 +167,12 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   applyKey(settings.integrations, "resendApiKey", body.resendApiKey);
   applyPlain(settings.integrations, "resendFromEmail", body.resendFromEmail);
 
+  // Cobro online (Stripe). La clave secreta y la del webhook son SECRETOS; la
+  // publicable no lo es por definición (viaja al navegador).
+  applyKey(settings.integrations, "stripeSecretKey", body.stripeSecretKey);
+  applyKey(settings.integrations, "stripeWebhookSecret", body.stripeWebhookSecret);
+  applyPlain(settings.integrations, "stripePublishableKey", body.stripePublishableKey);
+
   // Modelo de Claude (no es un secreto). Solo se guarda si es un id válido.
   if (typeof body.anthropicModel === "string" && isAllowedAnthropicModel(body.anthropicModel)) {
     settings.integrations.anthropicModel = body.anthropicModel;
@@ -193,6 +208,12 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
         ...keyStatus(settings.integrations.resendApiKey),
         fromEmail: settings.integrations.resendFromEmail ?? null,
         replyTo: settings.integrations.resendReplyTo ?? null,
+      },
+      stripe: {
+        ...keyStatus(settings.integrations.stripeSecretKey),
+        publishableKey: settings.integrations.stripePublishableKey ?? null,
+        webhook: keyStatus(settings.integrations.stripeWebhookSecret).configured,
+        ready: !!settings.integrations.stripeSecretKey && !!settings.integrations.stripeWebhookSecret,
       },
     },
   });
