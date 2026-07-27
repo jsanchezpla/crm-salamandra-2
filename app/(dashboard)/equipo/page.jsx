@@ -348,8 +348,48 @@ export default function EquipoPage() {
         <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{errorMsg}</div>
       )}
 
-      {/* Tabla */}
-      <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
+      {/* MÓVIL: tarjetas. La tabla de 8 columnas obligaba a hacer scroll lateral
+          en el móvil, que es donde de verdad se consulta la plantilla. */}
+      <div className="lg:hidden space-y-2">
+        {loading && members.length === 0 && (
+          <div className="bg-white border border-neutral-100 rounded-xl py-10 text-center text-xs text-neutral-400">Cargando...</div>
+        )}
+        {!loading && members.length === 0 && (
+          <div className="bg-white border border-neutral-100 rounded-xl py-10 text-center text-xs text-neutral-400">Sin resultados</div>
+        )}
+        {members.map((m) => (
+          <button
+            key={m.id}
+            onClick={() => openDetail(m)}
+            className="w-full text-left bg-white border border-neutral-100 rounded-xl p-3 active:bg-neutral-50 transition-colors"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 shrink-0 rounded-full bg-neutral-100 border border-neutral-200 flex items-center justify-center text-[11px] font-semibold text-neutral-500">
+                {m.avatarUrl ? <img src={m.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" /> : initials(m.displayName)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-neutral-800 truncate">{m.displayName}</span>
+                  <StatusBadge value={m.status} />
+                </div>
+                <div className="text-xs text-neutral-500 truncate">
+                  {[m.role, m.department].filter(Boolean).join(" · ") || "—"}
+                </div>
+                {m.email && <div className="text-[11px] text-neutral-400 font-mono truncate">{m.email}</div>}
+                <div className="flex gap-3 mt-1.5 text-[11px] text-neutral-500">
+                  <span>Tarifa <span className="text-neutral-700 tabular">{fmtMoney(m.hourlyRate, m.currency)}</span></span>
+                  {viewerIsAdmin && m.monthlySalary != null && (
+                    <span>Salario <span className="text-neutral-700 tabular">{fmtMoney(m.monthlySalary, m.currency)}</span></span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* ESCRITORIO: tabla completa */}
+      <div className="hidden lg:block bg-white border border-neutral-100 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[820px]">
             <thead>
@@ -447,7 +487,7 @@ export default function EquipoPage() {
                     <DetailRow label="Coste por hora" value={fmtMoney(openMember.hourlyCost, openMember.currency)} />
                   )}
                   {viewerIsAdmin && (
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <DetailRow label="Bruto anual" value={fmtMoney(openMember.annualGross, openMember.currency)} />
                       <DetailRow label="Pagas" value={openMember.paymentPeriods ?? 12} />
                       <DetailRow label="Salario mensual" value={fmtMoney(openMember.monthlySalary, openMember.currency)} />
@@ -508,7 +548,7 @@ export default function EquipoPage() {
                       onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                       className={inputCls} placeholder="nombre@dominio.com" />
                   </FormRow>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <FormRow label="Rol">
                       <input value={form.role}
                         onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
@@ -527,7 +567,7 @@ export default function EquipoPage() {
                     value={form.specialties}
                     onChange={(v) => setForm((f) => ({ ...f, specialties: v }))}
                   />
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <FormRow label="Teléfono">
                       <input value={form.phone}
                         onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
@@ -539,7 +579,7 @@ export default function EquipoPage() {
                         className={inputCls} />
                     </FormRow>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <FormRow label="Tarifa/h">
                       <input type="number" min="0" step="0.01" value={form.hourlyRate}
                         onChange={(e) => setForm((f) => ({ ...f, hourlyRate: e.target.value }))}
@@ -561,7 +601,7 @@ export default function EquipoPage() {
                   {viewerIsAdmin && (
                     <div className="rounded-lg border border-neutral-100 bg-neutral-50/60 p-3 space-y-3">
                       <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Retribución</div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <FormRow label="Bruto anual">
                           <input type="number" min="0" step="0.01" value={form.annualGross}
                             onChange={(e) => setForm((f) => ({ ...f, annualGross: e.target.value }))}

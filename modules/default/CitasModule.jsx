@@ -114,6 +114,29 @@ export default function CitasModule() {
   // Vista/fecha del calendario, para no perder la semana al ir a la lista de
   // espera y volver (arreglo 2026-07-23). `calViewRef` sigue en vivo la posición
   // (datesSet); `calView` es lo que se aplica al montar el calendario.
+  // En móvil la vista SEMANA es ilegible (7 columnas de franjas horarias en
+  // 375px). Se arranca en "lista", que es como se consulta la agenda desde el
+  // teléfono: qué toca hoy y a qué hora.
+  const [esMovil, setEsMovil] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const aplicar = () => setEsMovil(mq.matches);
+    aplicar();
+    mq.addEventListener("change", aplicar);
+    return () => mq.removeEventListener("change", aplicar);
+  }, []);
+
+  // `initialView` solo lo lee FullCalendar al montarse, y para entonces
+  // todavía no sabemos el tamaño de la pantalla: hay que cambiar la vista a
+  // mano cuando se resuelve (o cuando se gira el móvil).
+  useEffect(() => {
+    const api = calendarRef.current?.getApi?.();
+    if (!api) return;
+    const actual = api.view?.type;
+    if (esMovil && actual === "timeGridWeek") api.changeView("listWeek");
+    if (!esMovil && actual === "listWeek") api.changeView("timeGridWeek");
+  }, [esMovil, tab]);
+
   const calViewRef = useRef({ view: "timeGridWeek", date: null });
   const [calView, setCalView] = useState({ view: "timeGridWeek", date: null });
   const [eventTypes, setEventTypes] = useState([]);
@@ -792,20 +815,23 @@ export default function CitasModule() {
       {/* Calendario */}
       {tab === "calendar" && (
         <div className="flex-1 p-6 min-h-0">
-          <p className="text-[11px] text-neutral-400 mb-2">
+          <p className="text-[11px] text-neutral-400 mb-2 hidden lg:block">
             Doble clic en un hueco para crear una cita, arrastra sobre un tramo horario, o arrastra una cita existente para moverla.
+          </p>
+          <p className="text-[11px] text-neutral-400 mb-2 lg:hidden">
+            Toca una cita para ver su ficha. Para crear o mover citas, mejor desde el ordenador.
           </p>
           <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
-            initialView={calView.view}
+            initialView={esMovil && calView.view === "timeGridWeek" ? "listWeek" : calView.view}
             initialDate={calView.date || undefined}
             datesSet={(arg) => { calViewRef.current = { view: arg.view.type, date: arg.startStr }; }}
-            headerToolbar={{
-              left: "prev,next today",
-              center: "title",
-              right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek",
-            }}
+            headerToolbar={
+              esMovil
+                ? { left: "prev,next", center: "title", right: "listWeek,timeGridDay" }
+                : { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek" }
+            }
             locale="es"
             firstDay={1}
             slotMinTime="07:00:00"
@@ -820,7 +846,7 @@ export default function CitasModule() {
             editable={true}
             eventDurationEditable={false}
             eventDrop={handleEventDrop}
-            height="calc(100vh - 280px)"
+            height={esMovil ? "calc(100vh - 230px)" : "calc(100vh - 280px)"}
             buttonText={{ today: "Hoy", month: "Mes", week: "Semana", day: "Día", list: "Lista" }}
           />
         </div>

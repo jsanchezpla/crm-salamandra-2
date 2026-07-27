@@ -394,8 +394,42 @@ export default function FacturasPage() {
         <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{errorMsg}</div>
       )}
 
-      {/* Tabla */}
-      <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
+      {/* MÓVIL: tarjetas. Lo que importa de una factura en el móvil es cliente,
+          total y si está cobrada; el resto se ve al abrirla. */}
+      <div className="lg:hidden space-y-2">
+        {loading && invoices.length === 0 && (
+          <div className="bg-white border border-neutral-100 rounded-xl py-10 text-center text-xs text-neutral-400">Cargando...</div>
+        )}
+        {!loading && invoices.length === 0 && (
+          <div className="bg-white border border-neutral-100 rounded-xl py-10 text-center text-xs text-neutral-400">Sin facturas</div>
+        )}
+        {invoices.map((inv) => (
+          <button
+            key={inv.id}
+            onClick={() => openDetail(inv)}
+            className="w-full text-left bg-white border border-neutral-100 rounded-xl p-3 active:bg-neutral-50 transition-colors"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="font-medium text-neutral-800 truncate">{inv.client?.name ?? "—"}</div>
+                <div className="text-[11px] text-neutral-400 font-mono">
+                  {inv.status === "draft" ? <span className="italic">borrador</span> : inv.number} · {fmtDate(inv.issueDate)}
+                </div>
+              </div>
+              <StatusBadge status={inv.status} />
+            </div>
+            <div className="flex items-baseline justify-between gap-2 mt-2">
+              <span className="text-lg font-semibold text-neutral-900 tabular">{fmtMoney(inv.total)}</span>
+              {Number(inv.paidAmount) > 0 && (
+                <span className="text-[11px] text-emerald-700 tabular">Cobrado {fmtMoney(inv.paidAmount)}</span>
+              )}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* ESCRITORIO: tabla completa */}
+      <div className="hidden lg:block bg-white border border-neutral-100 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[760px]">
             <thead>
