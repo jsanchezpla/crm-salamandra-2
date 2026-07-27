@@ -27,6 +27,7 @@ Antes de implementar cambios en un módulo concreto, lee su doc:
 | Nutrición         | `docs/modules/nutricion.md`  | C1+C2+C3 en prod, C4+C5 en local |
 | Formularios       | `docs/modules/formularios.md` | Implementado (nutri_laura)      |
 | Outreach          | `docs/modules/outreach.md`   | Completo en local, sin desplegar  |
+| Soporte           | `docs/modules/support.md`    | Completo en local (demo), sin desplegar |
 | Configuración     | `docs/modules/configuracion.md` | Implementado (claves IA por tenant) |
 | Emails (infra)    | `docs/modules/emails.md`     | Infra transversal                |
 
@@ -219,7 +220,7 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 - `Lead` — oportunidades comerciales (detalle en `docs/modules/leads.md`)
 - `Project` — proyectos con columnas Kanban
 - `Task` — tarjetas Kanban (columnId, order, checklist)
-- `Ticket` — incidencias con mensajes tipo chat
+- `Ticket`, `TicketMessage`, `TicketAttachment`, `TicketCategory`, `TicketTemplate`, `SupportSettings` — módulo Soporte: helpdesk del tenant hacia SUS clientes, con nº correlativo, hilo con notas internas, SLA y portal público (detalle en `docs/modules/support.md`)
 - `Invoice` — facturas, incl. campos Verifactu y `employeeId` (detalle en `docs/modules/billing.md`)
 - `RecurringInvoice` — facturas recurrentes programadas (detalle en `docs/modules/billing.md`)
 - `Payment` — cobros asociados a facturas (detalle en `docs/modules/billing.md`)
@@ -248,7 +249,7 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 
 | Slug             | Entorno         | Módulos activos                                              | Notas                                                                                           |
 | ---------------- | --------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `demo`           | local + prod    | clients, leads, calendar, inventory, billing, team, training | Tenant de desarrollo y pruebas; show-room                                                       |
+| `demo`           | local + prod    | clients, leads, calendar, inventory, billing, team, training, support\* | Tenant de desarrollo y pruebas; show-room. \* = `support` activado solo en LOCAL (2026-07-27, con seed y foto dorada); en prod se activará al desplegar el módulo |
 | `retorika`       | solo producción | training, clients                                            | Academia online (WordPress + TutorLMS)                                                          |
 | `quality_energy` | local + prod    | leads                                                        | Empresa energética. Tuvo `referidos` en su día (limpiado por `remove-abarcaia-from-quality.js`) |
 | `aumenta`        | local + prod    | leads\*, training\*, clients, calendar, citas, clinica, pacientes, projects, billing, inventory, orders, team, documents (13) | Centro de psicología y formación. \* = override UI: `aumenta/LeadsModule` y `aumenta/FormacionOverview`. Label sidebar "Leads" → "Interesados". **CRM en uso REAL desde 2026-07-24**: datos de ejemplo borrados (`reset-aumenta-real-data.js`; los LEADS eran reales y se conservaron) y equipo real de 15 personas dado de alta (`seed-aumenta-equipo-real.js`: 13 logins tipo `nombre_aumenta` con rol `user`; dirección usa admin@aumenta.es). Desempeño/Dirección/Productividad son SOLO admin. NO wipear/sembrar sin permiso. |
@@ -300,7 +301,7 @@ aplique.
 | clients         | #1 Clientes & Cuentas         | Implementado                                 | `docs/modules/clients.md`   |
 | sales / leads   | #2 Comercial & Ventas (Leads) | Implementado (varios tenants)                | `docs/modules/leads.md`     |
 | projects        | #3 Proyectos (Kanban)         | Implementado (demo, aumenta)                 | `docs/modules/projects.md`  |
-| support         | #4 Soporte & Calidad          | Pendiente (solo modelo `Ticket`, sin API/UI) | —                           |
+| support         | #4 Soporte & Calidad          | Completo en local (demo), sin desplegar      | `docs/modules/support.md`   |
 | billing         | #5 Facturación                | Implementado (demo, aumenta, spain_enzymes)  | `docs/modules/billing.md`   |
 | team            | #6 Equipo & RRHH              | Implementado                                 | `docs/modules/team.md`      |
 | planning        | #7 Planificación & Recursos   | Pendiente                                    | —                           |
@@ -345,8 +346,7 @@ aplique.
 > `docs/modules/{clinica,pacientes}.md`.
 >
 > **Placeholders sin construir** (entradas en `Sidebar.jsx` que hoy nadie
-> activa): `support`, `planning`, `documents`, `analytics`, `ai`,
-> `automations`, `integrations`.
+> activa): `planning`, `analytics`, `ai`, `automations`, `integrations`.
 
 ---
 

@@ -1,7 +1,7 @@
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok } from "../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../lib/team/currentTeamMember.js";
-import { syncClinicaAlerts, serializeNotification } from "../../../lib/notifications/alerts.js";
+import { syncClinicaAlerts, syncSupportAlerts, serializeNotification } from "../../../lib/notifications/alerts.js";
 
 /**
  * GET /api/notifications — campanita del usuario logueado.
@@ -19,6 +19,16 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     if (ctx.tenantHasModule("clinica") || ctx.tenantHasModule("pacientes")) {
       const teamMemberId = await resolveCurrentTeamMemberId(request, ctx.tenantModels);
       if (teamMemberId) await syncClinicaAlerts({ models: ctx.tenantModels, userId, teamMemberId });
+    }
+    if (ctx.tenantHasModule("support")) {
+      const teamMemberId = await resolveCurrentTeamMemberId(request, ctx.tenantModels).catch(() => null);
+      const role = request.headers.get("x-user-role");
+      await syncSupportAlerts({
+        models: ctx.tenantModels,
+        userId,
+        teamMemberId,
+        isAdmin: role === "admin" || role === "superadmin",
+      });
     }
     const rows = await Notification.findAll({
       where: { userId, channel: "app" },

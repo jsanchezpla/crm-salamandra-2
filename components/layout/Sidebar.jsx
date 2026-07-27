@@ -518,8 +518,9 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
           })}
         </nav>
 
-        {/* Usuario + acciones debajo, en horizontal y a la derecha:
-            Configuración (solo admin) · Cerrar sesión · Soporte. */}
+        {/* Usuario + acciones debajo, en horizontal y a la derecha. Orden
+            pedido por el socio (2026-07-27): Soporte · Configuración (solo
+            admin) · Cerrar sesión. */}
         <div className="px-4 py-3 border-t border-white/[0.08]">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-white/[0.08] border border-white/15 flex items-center justify-center font-display text-[13px] text-white/70 shrink-0">
@@ -531,6 +532,18 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
             </div>
           </div>
           <div className="flex items-center justify-end gap-1 mt-1.5">
+            <Link
+              href="/soporte"
+              className={`p-1 rounded transition-colors hover:bg-white/[0.06] ${
+                pathname?.startsWith("/soporte") ? "text-white" : "text-white/30 hover:text-white/70"
+              }`}
+              title="Soporte"
+              aria-label="Soporte"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75a4.5 4.5 0 01-4.884 4.484c-1.076-.091-2.264.071-2.95.904l-7.152 8.684a2.548 2.548 0 11-3.586-3.586l8.684-7.152c.833-.686.995-1.874.904-2.95a4.5 4.5 0 016.336-4.486l-3.276 3.275a3.004 3.004 0 002.25 2.25l3.276-3.276c.256.565.398 1.192.398 1.853z" />
+              </svg>
+            </Link>
             {isAdminRole && (
               <Link
                 href="/configuracion"
@@ -555,18 +568,6 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
               </svg>
             </button>
-            <Link
-              href="/soporte"
-              className={`p-1 rounded transition-colors hover:bg-white/[0.06] ${
-                pathname?.startsWith("/soporte") ? "text-white" : "text-white/30 hover:text-white/70"
-              }`}
-              title="Soporte"
-              aria-label="Soporte"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75a4.5 4.5 0 01-4.884 4.484c-1.076-.091-2.264.071-2.95.904l-7.152 8.684a2.548 2.548 0 11-3.586-3.586l8.684-7.152c.833-.686.995-1.874.904-2.95a4.5 4.5 0 016.336-4.486l-3.276 3.275a3.004 3.004 0 002.25 2.25l3.276-3.276c.256.565.398 1.192.398 1.853z" />
-              </svg>
-            </Link>
           </div>
         </div>
       </aside>

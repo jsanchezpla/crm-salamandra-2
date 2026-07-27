@@ -171,6 +171,10 @@ export const MODULES = {
 
   // Formularios públicos → bandeja en el CRM → ficha de cliente al aceptar.
   formularios: ["migrate-formularios-module", "migrate-formsubmission-team"],
+
+  // Helpdesk del tenant hacia SUS clientes: tickets numerados, hilo con notas
+  // internas, adjuntos, SLA y portal público de seguimiento.
+  support: ["migrate-support-module"],
 };
 
 /**
