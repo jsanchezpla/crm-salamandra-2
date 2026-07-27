@@ -44,6 +44,10 @@ function DocIcon() {
 export default function MisDocumentos({ tenantSlug, authFetch, profesional }) {
   const [docs, setDocs] = useState([]);
   const [canUpload, setCanUpload] = useState(false);
+  // Por qué no se puede subir: "sin-ficha" | "limite" | "sesion" | null.
+  // Nunca dejamos el botón gris "porque sí": si está deshabilitado, hay motivo
+  // escrito debajo.
+  const [blockedReason, setBlockedReason] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
@@ -57,13 +61,20 @@ export default function MisDocumentos({ tenantSlug, authFetch, profesional }) {
     setLoadError(null);
     try {
       const res = await authFetch("/citas-portal/documents", { cache: "no-store" });
-      if (res.status === 401) return; // el hook del portal pasa a "expired"
+      if (res.status === 401) {
+        // El hook del portal pasa a "expired" y pinta su propia pantalla, pero
+        // dejamos constancia por si esta sección se queda visible.
+        setBlockedReason("sesion");
+        return;
+      }
       if (!res.ok) throw new Error("No pudimos cargar tus documentos");
       const j = await res.json();
       setDocs(j.data?.documents ?? []);
       setCanUpload(!!j.data?.canUpload);
+      setBlockedReason(j.data?.canUpload ? null : (j.data?.blockedReason ?? "limite"));
     } catch (err) {
       setLoadError(err.message);
+      setBlockedReason("error");
     } finally {
       setLoading(false);
     }
@@ -141,17 +152,25 @@ export default function MisDocumentos({ tenantSlug, authFetch, profesional }) {
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              disabled={uploading || !canUpload}
+              disabled={uploading || loading || !canUpload}
               className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md text-white bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
             >
-              {uploading ? "Subiendo…" : "Subir un documento"}
+              {uploading ? "Subiendo…" : loading ? "Cargando…" : "Subir un documento"}
             </button>
             <input ref={inputRef} type="file" onChange={onPick} className="hidden" />
           </div>
 
-          {!canUpload && !loading && (
+          {/* Si el botón está apagado, aquí SIEMPRE se dice por qué. */}
+          {!canUpload && !loading && blockedReason && (
             <p className="text-[12px] text-[var(--widget-text-faint)] mt-2">
-              Ahora mismo no puedes subir más documentos. Si necesitas enviar algo, escríbenos.
+              {blockedReason === "sin-ficha" &&
+                `Todavía no podemos asociar tus documentos a tu ficha. Escríbele a ${nombreProfesional} y lo soluciona en un momento.`}
+              {blockedReason === "limite" &&
+                `Has alcanzado el máximo de documentos que puedes subir. Si necesitas enviar algo más, escríbele a ${nombreProfesional}.`}
+              {blockedReason === "sesion" &&
+                "Tu sesión ha caducado. Vuelve a entrar desde tu cuenta en la web para subir documentos."}
+              {blockedReason === "error" &&
+                "No hemos podido comprobar si puedes subir documentos. Recarga la página e inténtalo de nuevo."}
             </p>
           )}
           {uploadError && (

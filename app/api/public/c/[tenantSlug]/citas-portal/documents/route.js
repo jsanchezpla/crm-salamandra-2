@@ -86,7 +86,16 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
 
     const { response, client } = await resolveSession(request, slug, tenantModels);
     if (response) return response;
-    if (!client) return ok({ documents: [], canUpload: false, limit: MAX_FILES_PER_CLIENT_PORTAL });
+    // Sin ficha todavía: se dice POR QUÉ, para que el portal pueda explicarlo en
+    // vez de dejar un botón gris sin motivo.
+    if (!client) {
+      return ok({
+        documents: [],
+        canUpload: false,
+        blockedReason: "sin-ficha",
+        limit: MAX_FILES_PER_CLIENT_PORTAL,
+      });
+    }
 
     const { Document } = tenantModels;
     const rows = await Document.findAll({
@@ -98,10 +107,12 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
     const mineCount = await Document.count({
       where: { clientId: client.id, source: "ficha", uploadedByClient: true },
     });
+    const canUpload = mineCount < MAX_FILES_PER_CLIENT_PORTAL;
 
     return ok({
       documents: rows.map(serialize),
-      canUpload: mineCount < MAX_FILES_PER_CLIENT_PORTAL,
+      canUpload,
+      blockedReason: canUpload ? null : "limite",
       limit: MAX_FILES_PER_CLIENT_PORTAL,
     });
   } catch (err) {
