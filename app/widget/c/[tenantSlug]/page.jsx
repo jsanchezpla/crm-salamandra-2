@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { AuthGateScreen, useWidgetAuth } from "./_components/AuthGate.jsx";
 import { useCitasPortalSession } from "./_components/useCitasPortalSession.js";
+import { formatMoney } from "../../../../lib/payments/money.js";
 
 const MONTH_NAMES_ES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -275,7 +276,18 @@ export default function WidgetSelectionPage() {
                           style={{ background: et.color || "var(--brand-primary, var(--widget-button))" }}
                         />
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-[var(--widget-text)]">{et.name}</div>
+                          <div className="flex items-baseline gap-2">
+                            <div className="text-sm font-medium text-[var(--widget-text)] flex-1 min-w-0">
+                              {et.name}
+                            </div>
+                            {/* El precio se ve ANTES de elegir: nadie debe descubrir
+                                que la cita se paga al final del formulario. */}
+                            {Number.isInteger(et.price) && et.price > 0 && (
+                              <span className="text-[13px] text-[var(--widget-text)] shrink-0 tabular-nums">
+                                {formatMoney(et.price)}
+                              </span>
+                            )}
+                          </div>
                           {et.description && (
                             <div className="text-[12px] text-[var(--widget-text-muted)] mt-0.5 line-clamp-2">
                               {et.description}
