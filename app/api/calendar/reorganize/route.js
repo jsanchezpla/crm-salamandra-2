@@ -4,6 +4,7 @@ import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResp
 import { reorganizeWeek } from "../../../../lib/calendar/reorganizeWeek.js";
 import { getTenantAnthropicKey } from "../../../../lib/ai/anthropicKey.js";
 import { getTenantAnthropicModel } from "../../../../lib/ai/anthropicModel.js";
+import { vetoAi } from "../../../../lib/ai/aiAccess.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -24,6 +25,8 @@ function dayLabel(iso) {
 export const POST = withTenant(async (request, _rc, ctx) => {
   try {
     if (!ctx.hasModule("calendar")) return forbidden("Módulo calendario no activo");
+    const veto = await vetoAi(ctx, request, "reorganizar la semana con IA");
+    if (veto) return veto;
     const { CalendarTask, TeamMember } = ctx.tenantModels;
 
     let body = {};

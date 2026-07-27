@@ -46,6 +46,7 @@ export const ONE_OFF = {
   "migrate-clinica-sprint-1": "cabecera: «solo aumenta»",
   "migrate-attachments-to-documents": "migración de DATOS (mueve ficheros+filas), se corre a mano una vez, no la ejecuta el disparador",
   "backfill-nutricion-assignments": "DATOS: marca «Paciente Nutrición» a los clientes previos al auto-marcado (2026-07-27); repetible, se corre a mano",
+  "migrate-audit-logs-index": "índice en el schema MASTER (audit_logs), no por-tenant; idempotente, se corre a mano una vez",
 };
 
 /**
@@ -65,6 +66,10 @@ export const CORE = [
   // pero se crea en todos los schemas porque el modelo Notification está
   // registrado para todos los tenants (evita 42703 si algún código la consulta).
   "migrate-notifications-table",
+  // Tabla ai_permissions (transversal): permisos de empleados para usar la IA
+  // de pago cuando el tenant activa settings.aiAccess = "restringido". Modelo
+  // registrado para todos los tenants, mismo criterio que notifications.
+  "migrate-ai-permissions",
 ];
 
 export const MODULES = {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Select from "../../components/ui/Select.jsx";
 import { ANTHROPIC_MODELS } from "../../lib/ai/anthropicModel.js";
@@ -395,6 +395,14 @@ export default function ConfigModule() {
               </div>
             )}
           </div>
+
+          {isAdmin && (
+            <AiPermissionsCard
+              aiAccess={cfg.aiAccess}
+              readOnly={!!cfg.readOnly}
+              onToggle={(v) => patchTenant({ aiAccess: v }, v === "restringido" ? "La IA ahora requiere tu permiso" : "La IA vuelve a ser libre para el equipo")}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -402,6 +410,150 @@ export default function ConfigModule() {
 }
 
 // ── Tarjeta de credencial de IA con tutorial + botón + campo ─────────────────
+/**
+ * Permisos de IA — el candado para empleados.
+ *
+ * Con el candado puesto (aiAccess = "restringido"), un empleado que dispare
+ * una acción de IA genera una solicitud que cae aquí: el admin la concede
+ * (para siempre o para una sola vez), la deniega, o revoca lo concedido.
+ * Los avisos van por la campana en ambos sentidos.
+ */
+function AiPermissionsCard({ aiAccess, readOnly, onToggle }) {
+  const [datos, setDatos] = useState(null);
+  const [err, setErr] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
+  const restringido = aiAccess === "restringido";
+
+  const cargar = useCallback(() => {
+    fetch("/api/ai-permisos", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (j.ok) setDatos(j.data); else setErr(j.error || "Error"); })
+      .catch(() => setErr("No se pudieron cargar los permisos"));
+  }, []);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  async function decidir(id, decision) {
+    setBusyId(id); setErr(null);
+    try {
+      const r = await fetch(`/api/ai-permisos/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo guardar la decisión");
+      cargar();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const btn = "px-2.5 py-1 rounded-md text-[11px] font-semibold border transition disabled:opacity-40";
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-neutral-800">Permisos de IA del equipo</div>
+          <p className="text-xs text-neutral-400 mt-0.5 max-w-md">
+            La IA consume tu clave (cuesta dinero). Con el candado puesto, los empleados
+            necesitan tu permiso para usarla: al intentarlo te llega una solicitud a la campana
+            y decides si es para siempre o para una sola vez. Los administradores nunca lo necesitan.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={() => onToggle(restringido ? "libre" : "restringido")}
+          className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 ${restringido ? "bg-[var(--color-primary,#1B3A2D)]" : "bg-neutral-300"}`}
+          aria-label={restringido ? "Quitar el candado de la IA" : "Poner candado a la IA"}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${restringido ? "translate-x-6" : "translate-x-1"}`} />
+        </button>
+      </div>
+      <div className="mt-1 text-[11px] font-medium">
+        {restringido
+          ? <span className="text-amber-700">Candado puesto: los empleados piden permiso.</span>
+          : <span className="text-neutral-400">Sin candado: todo el equipo puede usar la IA.</span>}
+      </div>
+
+      {err && <div className="mt-3 text-xs text-red-600">{err}</div>}
+
+      {datos && (datos.pendientes.length > 0 || datos.concedidos.length > 0) && (
+        <div className="mt-4 space-y-4">
+          {datos.pendientes.length > 0 && (
+            <div>
+              <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-2">
+                Solicitudes pendientes
+              </div>
+              <ul className="divide-y divide-neutral-100 border border-neutral-100 rounded-lg overflow-hidden">
+                {datos.pendientes.map((p) => (
+                  <li key={p.id} className="px-3 py-2.5 flex items-center justify-between gap-3 flex-wrap bg-amber-50/40">
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium text-neutral-800 truncate">{p.usuario}</div>
+                      <div className="text-[11px] text-neutral-500">
+                        {p.accion || "usar la IA"} · {new Date(p.solicitadaEl).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </div>
+                    <div className="flex gap-1.5 shrink-0">
+                      <button disabled={busyId === p.id} onClick={() => decidir(p.id, "conceder-general")}
+                        className={`${btn} text-white border-transparent`} style={{ background: "var(--color-primary, #1B3A2D)" }}>
+                        Siempre
+                      </button>
+                      <button disabled={busyId === p.id} onClick={() => decidir(p.id, "conceder-una-vez")}
+                        className={`${btn} border-neutral-300 text-neutral-700 hover:bg-neutral-50`}>
+                        Solo una vez
+                      </button>
+                      <button disabled={busyId === p.id} onClick={() => decidir(p.id, "denegar")}
+                        className={`${btn} border-red-200 text-red-600 hover:bg-red-50`}>
+                        Denegar
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {datos.concedidos.length > 0 && (
+            <div>
+              <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-2">
+                Permisos concedidos
+              </div>
+              <ul className="divide-y divide-neutral-100 border border-neutral-100 rounded-lg overflow-hidden">
+                {datos.concedidos.map((p) => (
+                  <li key={p.id} className="px-3 py-2.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium text-neutral-800 truncate">{p.usuario}</div>
+                      <div className="text-[11px] text-neutral-500">
+                        {p.scope === "general" ? "Para siempre" : "Un solo uso (sin gastar)"}
+                        {p.decididaPor ? ` · concedido por ${p.decididaPor}` : ""}
+                      </div>
+                    </div>
+                    <button disabled={busyId === p.id} onClick={() => decidir(p.id, "revocar")}
+                      className={`${btn} border-red-200 text-red-600 hover:bg-red-50 shrink-0`}>
+                      Revocar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {restringido && datos && datos.pendientes.length === 0 && datos.concedidos.length === 0 && (
+        <p className="mt-3 text-[11px] text-neutral-400">
+          Nadie ha pedido permiso todavía. Cuando un empleado intente usar la IA, su solicitud aparecerá aquí.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ApiKeyCard({ provider, status, isAdmin, onSave, onClear, models, currentModel, onModelChange }) {
   const [showSteps, setShowSteps] = useState(false);
   const [value, setValue] = useState("");

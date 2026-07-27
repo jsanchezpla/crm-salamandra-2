@@ -5,6 +5,7 @@ import { UUID_RE } from "@/lib/support/context.js";
 import { getTenantAnthropicKey } from "@/lib/ai/anthropicKey.js";
 import { getTenantAnthropicModel } from "@/lib/ai/anthropicModel.js";
 import { demoForcesFakeAi } from "@/lib/demo/isDemo.js";
+import { vetoAi } from "@/lib/ai/aiAccess.js";
 import {
   ticketAiSummary,
   ticketAiDraft,
@@ -32,6 +33,9 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     if (!userId) return unauthorized();
     const { id } = await params;
     if (!UUID_RE.test(id)) return error("id inválido", 400);
+
+    const veto = await vetoAi(ctx, request, "IA de soporte (resumen/borrador)");
+    if (veto) return veto;
 
     const esFake = demoForcesFakeAi(ctx);
     const apiKey = esFake ? null : getTenantAnthropicKey(ctx);

@@ -153,6 +153,32 @@ Detalle en `lib/crypto/secretBox.js`. Migración para cifrar claves antiguas en
 claro: `scripts/encrypt-tenant-secrets.js` (idempotente). Sin la env var, se
 guardan en claro (aviso por stderr) — hay que configurarla en el `.env`.
 
+## Permisos de IA del equipo (2026-07-27)
+
+La IA de pago (Claude, Whisper, Google Places) puede quedar bajo candado por
+tenant: `settings.aiAccess` = `"libre"` (default, nada cambia) o
+`"restringido"`. Con el candado, un usuario NO-admin que dispare una acción de
+IA recibe un 403 y se crea sola una solicitud (tabla tenant `ai_permissions`);
+los admins reciben aviso por la campana y deciden en Configuración → IA
+(tarjeta «Permisos de IA del equipo»): **Siempre** (concesión general),
+**Solo una vez** (se consume con el primer uso) o **Denegar**; lo concedido se
+puede **Revocar**. El solicitante recibe la decisión por la campana.
+
+Piezas:
+- Gate: `lib/ai/aiAccess.js` → `vetoAi(ctx, request, accion)` (estilo RETURN,
+  no throw: varios handlers de IA tienen try/catch propio). Está en los 7
+  endpoints de IA: clinica/transcribe, outreach analizar y buscar-nuevos,
+  tickets/[id]/ai, assistant (Salamandrobot), calendar/reorganize y
+  citas suggest-slots. Todo uso PERMITIDO audita `ai.uso` en master.
+- Panel: `GET /api/ai-permisos` + `PATCH /api/ai-permisos/[id]`
+  (decision: conceder-general | conceder-una-vez | denegar | revocar).
+  Solo admin con rol fresco de BD; PATCH vetado en la demo.
+- Flag: whitelisted en el PATCH de `/api/tenant/settings` (lista cerrada,
+  patrón anthropicModel); el GET lo expone como `aiAccess`.
+- Migración: `scripts/migrate-ai-permissions.js` (CORE, todos los schemas).
+- Auditoría de decisiones: `ai.permiso_concedido|denegado|revocado`.
+- Fallo del sistema de permisos = cerrado (nunca IA gratis por error).
+
 ## Pendiente / ideas
 
 - Reactivar "Datos del tenant" (marca/logo) si se necesita edición desde aquí.

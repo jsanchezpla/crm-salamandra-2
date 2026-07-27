@@ -4,6 +4,7 @@ import { ok, error, serverError } from "../../../lib/utils/apiResponse.js";
 import { findRelevant } from "../../../lib/assistant/knowledge.js";
 import { answerQuestion } from "../../../lib/assistant/answer.js";
 import { getTenantAnthropicKey } from "../../../lib/ai/anthropicKey.js";
+import { vetoAi } from "../../../lib/ai/aiAccess.js";
 import { getTenantAnthropicModel } from "../../../lib/ai/anthropicModel.js";
 
 const MAX_MSGS = 12;
@@ -47,6 +48,9 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     const messages = sanitizeMessages(body?.messages);
     if (!messages.length) return error("Sin mensajes");
     const query = [...messages].reverse().find((m) => m.role === "user")?.content || "";
+
+    const veto = await vetoAi(ctx, request, "el asistente Salamandrobot");
+    if (veto) return veto;
 
     const relevant = findRelevant(query);
     const clients = await searchClients(ctx.tenantModels, query);

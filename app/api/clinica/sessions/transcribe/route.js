@@ -1,6 +1,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden } from "../../../../../lib/utils/apiResponse.js";
 import { assertNotDemoPaidCall } from "../../../../../lib/demo/isDemo.js";
+import { vetoAi } from "../../../../../lib/ai/aiAccess.js";
 import { getTenantOpenAIKey } from "../../../../../lib/ai/openaiKey.js";
 import { getTenantAnthropicKey } from "../../../../../lib/ai/anthropicKey.js";
 import { getTenantAnthropicModel } from "../../../../../lib/ai/anthropicModel.js";
@@ -41,6 +42,9 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   // con la clave del tenant. Aquí no se puede simular (el modo fake está
   // limitado a desarrollo), así que se corta.
   assertNotDemoPaidCall(ctx, "La transcripción por voz");
+
+  const veto = await vetoAi(ctx, request, "transcribir una sesión clínica");
+  if (veto) return veto;
 
   const isDev = process.env.NODE_ENV !== "production";
   const openaiKey = getTenantOpenAIKey(ctx);

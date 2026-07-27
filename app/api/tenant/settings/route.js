@@ -85,6 +85,8 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     slug: t.slug,
     plan: t.plan,
     readOnly: demo, // la UI deshabilita el guardado en la demo
+    // Candado de la IA para empleados: "libre" (default) o "restringido".
+    aiAccess: t.settings?.aiAccess === "restringido" ? "restringido" : "libre",
     brand: {
       primaryColor: brand.primaryColor ?? null,
       secondaryColor: brand.secondaryColor ?? null,
@@ -162,6 +164,11 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   }
   applyPlain(settings.integrations, "resendReplyTo", body.resendReplyTo);
 
+  // Candado de la IA para empleados (no es un secreto): lista cerrada.
+  if (body.aiAccess === "libre" || body.aiAccess === "restringido") {
+    settings.aiAccess = body.aiAccess;
+  }
+
   updates.settings = settings;
   await tenant.update(updates);
 
@@ -169,6 +176,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
 
   return ok({
     name: tenant.name,
+    aiAccess: settings.aiAccess === "restringido" ? "restringido" : "libre",
     brand: {
       primaryColor: settings.brand.primaryColor ?? null,
       secondaryColor: settings.brand.secondaryColor ?? null,

@@ -342,6 +342,20 @@ la unicidad. Si Ana ya está vinculada, no-op.
 (salarios mensuales de 1.900 € a 2.900 € según el miembro). Ejecutar el
 seed de equipo solo deja los empleados con `monthlySalary` en `NULL`.
 
+## Actividad (registro legible) — 2026-07-27
+
+`/equipo/actividad` (hijo adminOnly del grupo Equipo, sin moduleKey: hereda la
+visibilidad team|clinica) enseña master.audit_logs del tenant en frases
+legibles, agrupado por días, con filtros por módulo, usuario y rango
+(7/30/90 días). Piezas: `GET /api/actividad` (solo admin, rol fresco de BD;
+máx. 400 filas por consulta) + catálogo de etiquetas
+`lib/actividad/etiquetas.js` (acción → { modulo, texto }; las acciones nuevas
+caen en un traductor genérico, nunca salen en crudo — al añadir una acción de
+AuditLog, añade su frase al catálogo). Índice de apoyo en master:
+`scripts/migrate-audit-logs-index.js` (ONE_OFF, se corre a mano; la tabla no
+tenía ninguno). Limitación conocida: solo aparece lo que ya se audita — el CRUD
+de clients/leads/billing-pagos/inventario/orders/tickets no audita todavía.
+
 ## Backlog
 
 - Vacaciones / ausencias (uso real del estado `on_leave` con fechas y

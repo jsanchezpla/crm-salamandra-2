@@ -6,6 +6,7 @@ import { buildCandidates, chooseSlots } from "../../../../../../lib/citas/sugges
 import { getTenantAnthropicKey } from "../../../../../../lib/ai/anthropicKey.js";
 import { getTenantAnthropicModel } from "../../../../../../lib/ai/anthropicModel.js";
 import { resolveCurrentTeamMemberId } from "../../../../../../lib/team/currentTeamMember.js";
+import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -32,6 +33,9 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         return forbidden("Solo puedes pedir horarios para tus propias citas");
       }
     }
+
+    const veto = await vetoAi(ctx, request, "sugerir horarios de cita con IA");
+    if (veto) return veto;
 
     const eventType = await EventType.findByPk(booking.eventTypeId);
     if (!eventType) return error("La cita no tiene un tipo válido", 422);

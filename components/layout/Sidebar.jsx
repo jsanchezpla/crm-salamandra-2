@@ -147,6 +147,10 @@ const navigation = [
           { key: "team-productividad", label: "Productividad", href: "/equipo/productividad", adminOnly: true, moduleKey: "clinica" },
           { key: "team-incidencias", label: "Incidencias", href: "/equipo/incidencias", moduleKey: "clinica" },
           { key: "team-bandeja", label: "Bandeja de trabajo", href: "/equipo/bandeja", moduleKey: "clinica" },
+          // Actividad: registro legible de auditoría de TODO el CRM. Sin
+          // moduleKey a propósito (hereda la visibilidad del grupo Equipo:
+          // team O clinica); la API es solo-admin igualmente.
+          { key: "team-actividad", label: "Actividad", href: "/equipo/actividad", adminOnly: true },
         ],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">

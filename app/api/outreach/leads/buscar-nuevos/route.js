@@ -2,6 +2,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok } from "../../../../../lib/utils/apiResponse.js";
 import { AppError, ForbiddenError, ValidationError } from "../../../../../lib/utils/errors.js";
 import { assertNotDemoPaidCall } from "../../../../../lib/demo/isDemo.js";
+import { vetoAi } from "../../../../../lib/ai/aiAccess.js";
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
 import { searchGooglePlaces, GOOGLE_MONTHLY_LIMIT, currentMonth } from "../../../../../lib/outreach/googlePlaces.js";
 import { extractEmailFromWebsite } from "../../../../../lib/outreach/enrichWebsite.js";
@@ -82,6 +83,8 @@ export const POST = withTenant(async (request, _routeContext, ctx) => {
   // Demo pública: Google Places se cobra por consulta y el contador mensual de
   // uso vive en el schema demo, que el auto-reset repone (tope inservible ahí).
   assertNotDemoPaidCall(ctx, "La búsqueda de empresas");
+  const veto = await vetoAi(ctx, request, "búsqueda de empresas nuevas (Google)");
+  if (veto) return veto;
   const { OutreachLead } = ctx.tenantModels;
 
   let body;
