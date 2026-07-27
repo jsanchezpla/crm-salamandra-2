@@ -37,12 +37,14 @@ const CONFIRM = process.argv.includes("--confirm");
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Todos los módulos con página real, sin override (leads según flag). Se omiten
-// los placeholders del sidebar sin pantalla (support, planning, documents,
+// los placeholders del sidebar sin pantalla (support, planning,
 // analytics, ai, automations, integrations) y `sales` (duplica a leads).
+// 2026-07-27: + formularios, referidos y documents (ya tienen página real).
 const MODULES = [
   "clients", "leads", "projects", "billing", "team", "inventory", "training",
   "cuestionarios", "calendar", "citas", "orders",
   "pacientes", "clinica", "nutricion", "outreach",
+  "formularios", "referidos", "documents",
 ];
 
 function log(m) { process.stdout.write(`  ${m}\n`); }
