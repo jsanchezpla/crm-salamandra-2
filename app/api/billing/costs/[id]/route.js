@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
+import { logBillingAudit, resumenImporte, datosPeticion } from "../../../../../lib/billing/audit.js";
 import { ok, noContent, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
@@ -31,7 +32,7 @@ export const GET = withTenant(async (_request, { params }, { tenantModels, hasMo
   }
 });
 
-export const PATCH = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const PATCH = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const role = request.headers.get("x-user-role");
@@ -62,14 +63,24 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
       Object.assign(updates, totals);
     }
 
+    const antes = resumenImporte(cost);
     await cost.update(updates);
+    await logBillingAudit({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "cost.updated",
+      entity: "Cost",
+      entityId: cost.id,
+      before: antes,
+      after: resumenImporte(cost),
+    });
     return ok(cost);
   } catch (err) {
     return serverError(err);
   }
 });
 
-export const DELETE = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const role = request.headers.get("x-user-role");
@@ -79,7 +90,18 @@ export const DELETE = withTenant(async (request, { params }, { tenantModels, has
     const { id } = await params;
     const cost = await Cost.findByPk(id);
     if (!cost) return notFound("Coste no encontrado");
+    const antesBorrar = resumenImporte(cost);
+    const idGasto = cost.id;
     await cost.destroy();
+    await logBillingAudit({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "cost.deleted",
+      entity: "Cost",
+      entityId: idGasto,
+      before: antesBorrar,
+      after: null,
+    });
     return noContent();
   } catch (err) {
     return serverError(err);

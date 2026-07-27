@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
+import { logBillingAudit, resumenImporte, datosPeticion } from "../../../../lib/billing/audit.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../lib/billing/calculateInvoice.js";
 import { assignQuoteNumber } from "../../../../lib/billing/generateQuoteNumber.js";
@@ -64,7 +65,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 });
 
 // POST /api/billing/quotes — crear presupuesto (borrador, numerado al crear)
-export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const { Quote, TenantBillingSettings } = tenantModels;
@@ -129,6 +130,15 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
       }
     }
 
+    await logBillingAudit({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "quote.created",
+      entity: "Quote",
+      entityId: quote.id,
+      before: null,
+      after: { numero: quote.number ?? null, estado: quote.status ?? null, total: quote.total != null ? String(quote.total) : null },
+    });
     return created(quote);
   } catch (err) {
     return serverError(err);

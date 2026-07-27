@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
+import { logBillingAudit, resumenFactura, datosPeticion } from "../../../../lib/billing/audit.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../lib/billing/calculateInvoice.js";
 import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
@@ -74,7 +75,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 });
 
 // POST /api/billing/invoices — crear borrador (sin asignar número)
-export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const { Invoice, TenantBillingSettings } = tenantModels;
@@ -156,6 +157,15 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
       vatRate: 0,
     });
 
+    await logBillingAudit({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "invoice.created",
+      entity: "Invoice",
+      entityId: invoice.id,
+      before: null,
+      after: resumenFactura(invoice),
+    });
     return created(invoice);
   } catch (err) {
     return serverError(err);

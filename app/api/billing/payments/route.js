@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
+import { logBillingAudit, resumenImporte, datosPeticion } from "../../../../lib/billing/audit.js";
 import { ok, created, error, forbidden, notFound, serverError } from "../../../../lib/utils/apiResponse.js";
 import { updateInvoiceStatus } from "../../../../lib/billing/updateInvoiceStatus.js";
 import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
@@ -51,7 +52,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   }
 });
 
-export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const role = request.headers.get("x-user-role");
@@ -88,6 +89,15 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
 
     await updateInvoiceStatus(invoice, Payment);
 
+    await logBillingAudit({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "payment.created",
+      entity: "Payment",
+      entityId: payment.id,
+      before: null,
+      after: resumenImporte(payment),
+    });
     return created(payment);
   } catch (err) {
     return serverError(err);

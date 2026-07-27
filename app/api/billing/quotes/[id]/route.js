@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
+import { logBillingAudit, datosPeticion } from "../../../../../lib/billing/audit.js";
 import { ok, noContent, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../../lib/billing/calculateInvoice.js";
 
@@ -88,7 +89,7 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
 });
 
 // DELETE /api/billing/quotes/[id]
-export const DELETE = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const role = request.headers.get("x-user-role");
@@ -103,7 +104,18 @@ export const DELETE = withTenant(async (request, { params }, { tenantModels, has
       return error("No se puede borrar un presupuesto convertido en factura", 409);
     }
 
+    const antes = { numero: quote.number ?? null, estado: quote.status ?? null, total: quote.total != null ? String(quote.total) : null };
+    const idPres = quote.id;
     await quote.destroy();
+    await logBillingAudit({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "quote.deleted",
+      entity: "Quote",
+      entityId: idPres,
+      before: antes,
+      after: null,
+    });
     return noContent();
   } catch (err) {
     return serverError(err);

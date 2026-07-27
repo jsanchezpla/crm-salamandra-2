@@ -3,6 +3,7 @@ import { ok, noContent, error, forbidden, notFound, serverError } from "../../..
 import { calculateInvoice } from "../../../../../lib/billing/calculateInvoice.js";
 import { withEffectiveStatus } from "../../../../../lib/billing/invoiceStatus.js";
 import { resolveInvoicePatientId, invoicePatientInclude } from "../../../../../lib/billing/patientLink.js";
+import { logBillingAudit, resumenFactura, datosPeticion } from "../../../../../lib/billing/audit.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -32,7 +33,7 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
 });
 
 // PATCH /api/billing/invoices/[id] — solo en draft
-export const PATCH = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const PATCH = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const role = request.headers.get("x-user-role");
@@ -78,7 +79,17 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
       updates.subtotal = calc.taxBase; // legacy campo, se mantiene cuadrado
     }
 
+    const antes = resumenFactura(invoice);
     await invoice.update(updates);
+    await logBillingAudit({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "invoice.updated",
+      entity: "Invoice",
+      entityId: invoice.id,
+      before: antes,
+      after: resumenFactura(invoice),
+    });
     return ok(invoice);
   } catch (err) {
     return serverError(err);
@@ -86,7 +97,7 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
 });
 
 // DELETE /api/billing/invoices/[id] — solo en draft
-export const DELETE = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const role = request.headers.get("x-user-role");
@@ -100,7 +111,19 @@ export const DELETE = withTenant(async (request, { params }, { tenantModels, has
     if (invoice.status !== "draft") {
       return error("Solo se pueden eliminar facturas en borrador", 409);
     }
+    // Borrar una factura (aunque sea borrador) no dejaba NINGÚN rastro.
+    const antes = resumenFactura(invoice);
+    const idBorrado = invoice.id;
     await invoice.destroy();
+    await logBillingAudit({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "invoice.deleted",
+      entity: "Invoice",
+      entityId: idBorrado,
+      before: antes,
+      after: null,
+    });
     return noContent();
   } catch (err) {
     return serverError(err);

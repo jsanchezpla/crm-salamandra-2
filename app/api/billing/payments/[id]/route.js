@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
+import { logBillingAudit, resumenImporte, datosPeticion } from "../../../../../lib/billing/audit.js";
 import { ok, noContent, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { updateInvoiceStatus } from "../../../../../lib/billing/updateInvoiceStatus.js";
 
@@ -20,7 +21,7 @@ export const GET = withTenant(async (_request, { params }, { tenantModels, hasMo
   }
 });
 
-export const PATCH = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const PATCH = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const role = request.headers.get("x-user-role");
@@ -44,7 +45,17 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
       return error("amount debe ser mayor que 0");
     }
 
+    const antes = resumenImporte(payment);
     await payment.update(updates);
+    await logBillingAudit({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "payment.updated",
+      entity: "Payment",
+      entityId: payment.id,
+      before: antes,
+      after: resumenImporte(payment),
+    });
 
     const invoice = await Invoice.findByPk(payment.invoiceId);
     if (invoice) await updateInvoiceStatus(invoice, Payment);
@@ -55,7 +66,7 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
   }
 });
 
-export const DELETE = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const role = request.headers.get("x-user-role");
@@ -67,7 +78,19 @@ export const DELETE = withTenant(async (request, { params }, { tenantModels, has
     if (!payment) return notFound("Cobro no encontrado");
 
     const invoiceId = payment.invoiceId;
+    // Borrar un cobro cambia lo que el cliente debe: tiene que quedar rastro.
+    const antesBorrar = resumenImporte(payment);
+    const idPago = payment.id;
     await payment.destroy();
+    await logBillingAudit({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "payment.deleted",
+      entity: "Payment",
+      entityId: idPago,
+      before: antesBorrar,
+      after: null,
+    });
     const invoice = await Invoice.findByPk(invoiceId);
     if (invoice) await updateInvoiceStatus(invoice, Payment);
     return noContent();
