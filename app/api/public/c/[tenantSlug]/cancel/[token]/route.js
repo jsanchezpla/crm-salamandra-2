@@ -44,6 +44,9 @@ export const POST = withPublicTenant(async (request, { params }, ctx) => {
         // enlace de su email es siempre el paciente.
         ctx,
         quienCancela: "cliente",
+        // Avisa al centro por la campana: antes esta cancelación era muda.
+        tenant,
+        tenantModels,
       });
     } catch (err) {
       if (err.code === "ALREADY_CANCELLED") return error("Esta cita ya fue cancelada", 410);

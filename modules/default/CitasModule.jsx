@@ -133,6 +133,8 @@ export default function CitasModule() {
   const [formError, setFormError] = useState(null);
   const [detailNotes, setDetailNotes] = useState("");
   const [detailMeet, setDetailMeet] = useState("");
+  // Aviso efímero tras "Guardar y enviar" (enviado / solo guardado).
+  const [meetAviso, setMeetAviso] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
   const [visibleTmIds, setVisibleTmIds] = useState(null); // null = todos los profesionales
@@ -303,14 +305,16 @@ export default function CitasModule() {
       if (!j.ok) throw new Error(j.error || "Error guardando");
       setOpenBooking(j.data);
       calendarRef.current?.getApi().refetchEvents();
+      // (se devuelve j.data al final para que quien llama pueda leer flags
+      //  como `emailEnviado` del guardado del enlace de videollamada)
       // Refresca el globito de pendientes (arreglo 2026-07-23): cancelar/confirmar
       // una cita pendiente desde el calendario cambia el número de la lista de
       // espera; sin esto el contador quedaba desactualizado.
       loadPendingCount();
-      return true;
+      return j.data;
     } catch (err) {
       setFormError(err.message);
-      return false;
+      return null;
     } finally {
       setSaving(false);
     }
@@ -366,7 +370,19 @@ export default function CitasModule() {
     await patchBooking({ status: "cancelled", cancellationReason: reason.trim() || null });
   }
   async function saveNotes() { await patchBooking({ notes: detailNotes.trim() || null }); }
-  async function saveMeet() { await patchBooking({ meetUrl: detailMeet.trim() || null }); }
+  /**
+   * Guarda el enlace de videollamada. Con `enviar`, además manda el email al
+   * cliente SIEMPRE (aunque el enlace ya estuviera puesto o se esté
+   * corrigiendo): es el botón "Guardar y enviar".
+   */
+  async function saveMeet(enviar = false) {
+    const url = detailMeet.trim() || null;
+    const res = await patchBooking({ meetUrl: url, ...(enviar ? { enviarEmail: true } : {}) });
+    if (enviar) {
+      setMeetAviso(res?.emailEnviado ? "enviado" : "guardado");
+      setTimeout(() => setMeetAviso(null), 4000);
+    }
+  }
   async function assignTeamMember(v) { await patchBooking({ teamMemberId: v || null }); }
   async function assignPatient(v) { await patchBooking({ patientId: v || null }); }
   async function deleteBooking() {
@@ -933,17 +949,31 @@ export default function CitasModule() {
                     placeholder="Pega aquí el link de Google Meet cuando lo tengas"
                     className={inputCls}
                   />
-                  <div className="flex items-center justify-between mt-1.5">
+                  <div className="flex items-center justify-between gap-2 mt-1.5 flex-wrap">
                     <span className="text-[11px] text-neutral-400">
-                      Al guardar por primera vez se avisa al cliente por email.
+                      {meetAviso === "enviado"
+                        ? "✓ Enlace enviado por email al cliente."
+                        : meetAviso === "guardado"
+                          ? "Enlace guardado (no se envió: revisa que la cita sea online y no esté cancelada)."
+                          : "«Guardar y enviar» manda el enlace por email, aunque ya lo hubieras guardado antes."}
                     </span>
-                    <button
-                      onClick={saveMeet}
-                      disabled={saving || detailMeet.trim() === (openBooking.meetUrl ?? "")}
-                      className="text-[11px] px-2.5 py-1 rounded border border-neutral-300 text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
-                    >
-                      Guardar enlace
-                    </button>
+                    <div className="flex gap-1.5 shrink-0">
+                      <button
+                        onClick={() => saveMeet(false)}
+                        disabled={saving || detailMeet.trim() === (openBooking.meetUrl ?? "")}
+                        className="text-[11px] px-2.5 py-1 rounded border border-neutral-300 text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+                      >
+                        Guardar
+                      </button>
+                      <button
+                        onClick={() => saveMeet(true)}
+                        disabled={saving || !detailMeet.trim()}
+                        className="text-[11px] px-2.5 py-1 rounded font-semibold text-white disabled:opacity-50"
+                        style={{ background: "var(--color-primary, #1B3A2D)" }}
+                      >
+                        Guardar y enviar
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

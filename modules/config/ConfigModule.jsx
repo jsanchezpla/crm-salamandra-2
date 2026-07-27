@@ -27,6 +27,22 @@ const AI_PROVIDERS = {
     ],
     note: "El análisis con IA es de pago por uso: añade saldo en Plans & Billing dentro de la consola.",
   },
+  whatsapp: {
+    title: "WhatsApp (Meta Cloud API)",
+    subtitle: "Envío automático de mensajes desde el número de WhatsApp del negocio: avisos de cita, menús, recordatorios.",
+    field: "whatsappToken",
+    prefix: "EAA",
+    platformUrl: "https://business.facebook.com/wa/manage/home/",
+    platformLabel: "Abrir WhatsApp Business",
+    steps: [
+      "Necesitas una cuenta de WhatsApp Business y un número dado de alta en Meta (no vale el WhatsApp normal del móvil).",
+      "Entra en developers.facebook.com → tu app → WhatsApp → Configuración de la API.",
+      'Copia el "Identificador del número de teléfono" y pégalo en el campo de abajo.',
+      'Genera un token de acceso PERMANENTE (Usuarios del sistema → Generar token). Los temporales caducan en 24h.',
+      "Pega el token y pulsa Guardar.",
+    ],
+    note: "Meta cobra por conversación iniciada por el negocio. El primer mensaje a alguien que no te ha escrito en 24h debe usar una plantilla aprobada por Meta.",
+  },
   openai: {
     title: "OpenAI (Whisper)",
     subtitle: "Transcripción de audio de sesiones clínicas (voz → texto) con la API de Whisper. Luego Claude resume la sesión.",
@@ -336,6 +352,20 @@ export default function ConfigModule() {
             onClear={() => patchTenant({ openaiApiKey: null }, "Clave de OpenAI eliminada")}
           />
           <ApiKeyCard
+            provider={AI_PROVIDERS.whatsapp}
+            status={cfg.integrations?.whatsapp}
+            isAdmin={isAdmin}
+            onSave={(value) => patchTenant({ whatsappToken: value }, "Token de WhatsApp guardado")}
+            onClear={() => patchTenant({ whatsappToken: null }, "Token de WhatsApp eliminado")}
+            extra={
+              <WhatsappPhoneField
+                value={cfg.integrations?.whatsapp?.phoneNumberId ?? ""}
+                isAdmin={isAdmin}
+                onSave={(v) => patchTenant({ whatsappPhoneNumberId: v }, "Número de WhatsApp guardado")}
+              />
+            }
+          />
+          <ApiKeyCard
             provider={AI_PROVIDERS.googlePlaces}
             status={cfg.integrations?.googlePlaces}
             isAdmin={isAdmin}
@@ -395,6 +425,14 @@ export default function ConfigModule() {
               </div>
             )}
           </div>
+
+          {isAdmin && (
+            <VideollamadaCard
+              meetModo={cfg.meetModo}
+              readOnly={!!cfg.readOnly}
+              onChange={(v) => patchTenant({ meetModo: v }, v === "automatico" ? "Las citas online heredarán el enlace del tipo de cita" : "El enlace de videollamada se pondrá a mano en cada cita")}
+            />
+          )}
 
           {isAdmin && (
             <AiPermissionsCard
@@ -554,7 +592,106 @@ function AiPermissionsCard({ aiAccess, readOnly, onToggle }) {
   );
 }
 
-function ApiKeyCard({ provider, status, isAdmin, onSave, onClear, models, currentModel, onModelChange }) {
+/** Identificador del número de WhatsApp (no es secreto: se enseña entero). */
+function WhatsappPhoneField({ value, isAdmin, onSave }) {
+  const [v, setV] = useState(value ?? "");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setV(value ?? ""); }, [value]);
+  const sucio = (v ?? "").trim() !== (value ?? "");
+
+  return (
+    <div className="mt-4 pt-4 border-t border-neutral-100">
+      <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">
+        Identificador del número de teléfono
+      </label>
+      <p className="text-[11px] text-neutral-400 mt-0.5 mb-2">
+        No es el número en sí: es el identificador largo que da Meta en la configuración de la API.
+      </p>
+      <div className="flex gap-2">
+        <input
+          disabled={!isAdmin}
+          value={v}
+          onChange={(e) => setV(e.target.value)}
+          placeholder="p. ej. 123456789012345"
+          className={inputCls + " font-mono flex-1"}
+        />
+        {isAdmin && sucio && (
+          <button
+            onClick={async () => { setBusy(true); try { await onSave(v.trim() || null); } finally { setBusy(false); } }}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-40"
+            style={{ background: "var(--color-primary, #1B3A2D)" }}
+          >
+            {busy ? "..." : "Guardar"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Cómo consigue su enlace una cita online. Por defecto MANUAL: la cita nace
+ * sin enlace, la profesional lo pega y pulsa «Guardar y enviar». Automático es
+ * para quien tiene sala de videollamada contratada y la ha puesto en el tipo
+ * de cita: la cita lo hereda sola.
+ */
+function VideollamadaCard({ meetModo, readOnly, onChange }) {
+  const auto = meetModo === "automatico";
+  const opciones = [
+    {
+      id: "manual",
+      titulo: "A mano (recomendado)",
+      desc: "La cita se crea sin enlace. Lo pegas en su ficha y pulsas «Guardar y enviar» para que le llegue al paciente por email.",
+    },
+    {
+      id: "automatico",
+      titulo: "Automático (sala fija)",
+      desc: "Si tienes sala de videollamada contratada (Google Meet, Zoom…) y su enlace puesto en el tipo de cita, la cita lo hereda sola y el paciente lo recibe al confirmar.",
+    },
+  ];
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="text-sm font-semibold text-neutral-800">Enlace de videollamada</div>
+      <p className="text-xs text-neutral-400 mt-0.5 mb-3 max-w-xl">
+        Solo afecta a las citas online del módulo de Citas.
+      </p>
+      <div className="space-y-2">
+        {opciones.map((o) => {
+          const activa = (o.id === "automatico") === auto;
+          return (
+            <label
+              key={o.id}
+              className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition ${
+                activa ? "border-[var(--color-primary,#1B3A2D)] bg-neutral-50/60" : "border-neutral-200 hover:border-neutral-300"
+              } ${readOnly ? "opacity-60 cursor-not-allowed" : ""}`}
+            >
+              <input
+                type="radio"
+                name="meetModo"
+                checked={activa}
+                disabled={readOnly}
+                onChange={() => onChange(o.id)}
+                className="mt-0.5 accent-[var(--color-primary,#1B3A2D)]"
+              />
+              <div>
+                <div className="text-sm font-medium text-neutral-800">{o.titulo}</div>
+                <div className="text-[11px] text-neutral-500 leading-snug">{o.desc}</div>
+              </div>
+            </label>
+          );
+        })}
+      </div>
+      <p className="text-[10px] text-neutral-400 mt-3">
+        El modo automático reutiliza el enlace de sala fija del tipo de cita. Crear salas nuevas en Google
+        automáticamente requiere conectar Google Calendar, que todavía no está disponible.
+      </p>
+    </div>
+  );
+}
+
+function ApiKeyCard({ provider, status, isAdmin, onSave, onClear, models, currentModel, onModelChange, extra }) {
   const [showSteps, setShowSteps] = useState(false);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
@@ -638,6 +775,8 @@ function ApiKeyCard({ provider, status, isAdmin, onSave, onClear, models, curren
           )}
         </div>
       )}
+
+      {extra}
 
       {models && (
         <div className="mt-4 pt-4 border-t border-neutral-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">

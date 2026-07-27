@@ -179,6 +179,34 @@ Piezas:
 - Auditoría de decisiones: `ai.permiso_concedido|denegado|revocado`.
 - Fallo del sistema de permisos = cerrado (nunca IA gratis por error).
 
+## WhatsApp (Meta Cloud API) — 2026-07-27
+
+BYOK como el resto: cada tenant pone su cuenta de WhatsApp Business en
+Configuración. Dos campos en `settings.integrations`:
+`whatsappToken` (CIFRADO, patrón `applyKey`) y `whatsappPhoneNumberId` (plano).
+Resolver: `lib/whatsapp/whatsappConfig.js` → `getTenantWhatsappConfig(ctx)`,
+`tenantTieneWhatsapp(ctx)` y `enviarWhatsapp(ctx, {telefono, texto})` (Cloud API
+v21, best-effort: devuelve `{ok:false,error}` y NUNCA lanza).
+
+⚠️ Estado: la INFRAESTRUCTURA está lista y probada (guardado cifrado, descifrado
+y envío), pero todavía NO hay ningún flujo del CRM que dispare mensajes solos.
+Enganchar los avisos (recordatorio de cita, menú de nutrición, aviso de ticket)
+es el paso siguiente. Ojo con la regla de Meta: el primer mensaje a alguien que
+no ha escrito en 24h exige plantilla aprobada.
+
+## Enlace de videollamada de las citas — 2026-07-27
+
+`settings.citas.meetModo`: `"manual"` (POR DEFECTO) o `"automatico"`.
+Resolver: `lib/citas/videollamada.js` → `meetUrlInicial(tenant, eventType, modality)`,
+usado por el alta del panel y por la reserva pública.
+
+- **manual**: la cita online nace SIN enlace. Se pega en su ficha y con el botón
+  **«Guardar y enviar»** se manda por email al paciente — funciona SIEMPRE, también
+  al corregir un enlace ya guardado (antes solo se enviaba en la transición
+  null→valor y no había forma de reenviar desde la UI).
+- **automatico**: hereda el enlace de sala fija del tipo de cita. NO genera salas
+  en Google (eso exige la integración con Google Calendar, aún no construida).
+
 ## Pendiente / ideas
 
 - Reactivar "Datos del tenant" (marca/logo) si se necesita edición desde aquí.

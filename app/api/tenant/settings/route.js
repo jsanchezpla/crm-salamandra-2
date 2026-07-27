@@ -88,6 +88,9 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     readOnly: demo, // la UI deshabilita el guardado en la demo
     // Candado de la IA para empleados: "libre" (default) o "restringido".
     aiAccess: t.settings?.aiAccess === "restringido" ? "restringido" : "libre",
+    // Cómo consigue su enlace una cita online: a mano (por defecto) o
+    // heredado del tipo de cita (tenant con sala de videollamada contratada).
+    meetModo: t.settings?.citas?.meetModo === "automatico" ? "automatico" : "manual",
     brand: {
       primaryColor: brand.primaryColor ?? null,
       secondaryColor: brand.secondaryColor ?? null,
@@ -100,6 +103,10 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
       },
       googlePlaces: ks(integ.googlePlacesApiKey),
       openai: ks(integ.openaiApiKey),
+      whatsapp: {
+        ...ks(integ.whatsappToken),
+        phoneNumberId: integ.whatsappPhoneNumberId ?? null,
+      },
       resend: {
         ...ks(integ.resendApiKey),
         fromEmail: integ.resendFromEmail ?? null,
@@ -207,6 +214,16 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   }
   applyPlain(settings.integrations, "resendReplyTo", body.resendReplyTo);
 
+  // WhatsApp Cloud API (Meta): el token es SECRETO (se cifra como el resto de
+  // claves); el identificador del número no lo es.
+  applyKey(settings.integrations, "whatsappToken", body.whatsappToken);
+  applyPlain(settings.integrations, "whatsappPhoneNumberId", body.whatsappPhoneNumberId);
+
+  // Modo de videollamada del módulo Citas. Lista cerrada.
+  if (body.meetModo === "manual" || body.meetModo === "automatico") {
+    settings.citas = { ...(settings.citas ?? {}), meetModo: body.meetModo };
+  }
+
   // Candado de la IA para empleados (no es un secreto): lista cerrada.
   if (body.aiAccess === "libre" || body.aiAccess === "restringido") {
     settings.aiAccess = body.aiAccess;
@@ -220,6 +237,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   return ok({
     name: tenant.name,
     aiAccess: settings.aiAccess === "restringido" ? "restringido" : "libre",
+    meetModo: settings.citas?.meetModo === "automatico" ? "automatico" : "manual",
     brand: {
       primaryColor: settings.brand.primaryColor ?? null,
       secondaryColor: settings.brand.secondaryColor ?? null,
@@ -232,6 +250,10 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
       },
       googlePlaces: keyStatus(settings.integrations.googlePlacesApiKey),
       openai: keyStatus(settings.integrations.openaiApiKey),
+      whatsapp: {
+        ...keyStatus(settings.integrations.whatsappToken),
+        phoneNumberId: settings.integrations.whatsappPhoneNumberId ?? null,
+      },
       resend: {
         ...keyStatus(settings.integrations.resendApiKey),
         fromEmail: settings.integrations.resendFromEmail ?? null,

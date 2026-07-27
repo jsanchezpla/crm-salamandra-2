@@ -10,6 +10,7 @@ import {
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { findBookingOverlap } from "../../../../lib/citas/booking.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
+import { meetUrlInicial } from "../../../../lib/citas/videollamada.js";
 
 const NADIE = "00000000-0000-0000-0000-000000000000";
 
@@ -211,7 +212,10 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     }
 
     const duration = eventType.duration; // snapshot
-    const meetUrl = modality === "online" ? eventType.meetUrl : null;
+    // El enlace solo se hereda del tipo de cita si el tenant tiene el modo
+    // "automatico" (Configuración → Citas). Por defecto la cita nace sin
+    // enlace y se pega a mano con «Guardar y enviar».
+    const meetUrl = meetUrlInicial(tenant, eventType, modality);
 
     const notes = body.notes != null ? String(body.notes) : null;
 

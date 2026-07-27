@@ -51,3 +51,11 @@ qa-credentials.txt
 
 # Git Bash crash dumps en Windows
 bash.exe.stackdump
+
+# Ficheros de pruebas manuales con credenciales/tokens (QA local).
+# NUNCA deben volver al repo: contienen contraseñas y cookies de sesión.
+cookie.txt
+cookies.txt
+login.json
+fiscal.json
+*.cookies.txt

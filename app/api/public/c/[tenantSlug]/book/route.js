@@ -20,6 +20,7 @@ import {
   HOLD_WINDOW_MS,
 } from "../../../../../../lib/payments/checkout.js";
 import { tenantHasStripe } from "../../../../../../lib/payments/stripeConfig.js";
+import { meetUrlInicial } from "../../../../../../lib/citas/videollamada.js";
 import {
   getMadridDayOfWeek,
   getMadridParts,
@@ -274,7 +275,7 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
             scheduledAt,
             duration: eventType.duration,
             modality: "online",
-            meetUrl: eventType.meetUrl,
+            meetUrl: meetUrlInicial(tenant, eventType, "online"),
             // Con pago, la cita nace SIEMPRE 'pending' y solo pasa a 'confirmed'
             // cuando Stripe confirma el cobro — da igual lo que diga autoConfirm:
             // confirmar antes de cobrar sería regalar el hueco.

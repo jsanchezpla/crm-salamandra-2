@@ -2,6 +2,14 @@ import bcrypt from "bcrypt";
 import { NextResponse } from "next/server";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { signAccessToken, signRefreshToken, setAuthCookies } from "../../../../lib/auth/jwt.js";
+import {
+  comprobarIntentoLogin,
+  registrarFalloLogin,
+  limpiarFallosLogin,
+  auditarLogin,
+  bloqueoYaAvisado,
+  tenantDeEmail,
+} from "../../../../lib/auth/loginGuard.js";
 
 export async function POST(request) {
   let body;
@@ -21,6 +29,30 @@ export async function POST(request) {
   // El password NO se trimea: puede contener espacios intencionales.
   const email = rawEmail.trim().toLowerCase();
 
+  // Cerrojo ANTES de tocar la BD: por IP (barrido automático) y por cuenta
+  // (ataque distribuido contra un mismo usuario). Ver lib/auth/loginGuard.js.
+  const cerrojo = comprobarIntentoLogin(request, email);
+  if (cerrojo.bloqueado) {
+    // Solo la PRIMERA vez de cada ventana: si no, el propio ataque llenaría
+    // la tabla de auditoría a base de intentos.
+    if (!bloqueoYaAvisado(email)) {
+      const quien = await tenantDeEmail(email);
+      await auditarLogin({
+        action: "auth.login_blocked",
+        email,
+        ip: cerrojo.ip,
+        motivo: cerrojo.motivo,
+        userId: quien?.userId ?? null,
+        tenantId: quien?.tenantId ?? null,
+      });
+    }
+    console.warn(`[auth] login BLOQUEADO motivo=${cerrojo.motivo} ip=${cerrojo.ip}`);
+    return NextResponse.json(
+      { ok: false, error: `Demasiados intentos. Prueba de nuevo en ${cerrojo.retryAfter}s.` },
+      { status: 429, headers: { "Retry-After": String(cerrojo.retryAfter), "Cache-Control": "no-store" } }
+    );
+  }
+
   const { User, Tenant } = getMasterModels();
 
   const user = await User.scope("withPassword").findOne({
@@ -33,6 +65,17 @@ export async function POST(request) {
   const passwordOk = await bcrypt.compare(password, hashToCheck);
 
   if (!user || !passwordOk) {
+    // Mismo mensaje exista o no el usuario (no se filtra qué emails son reales),
+    // pero en la auditoría SÍ se distingue: es lo que permite ver un ataque.
+    registrarFalloLogin(cerrojo.ip, email);
+    await auditarLogin({
+      action: "auth.login_failed",
+      email,
+      ip: cerrojo.ip,
+      userId: user?.id ?? null,
+      tenantId: user?.tenantId ?? null,
+      motivo: user ? "password" : "usuario_inexistente",
+    });
     return NextResponse.json({ ok: false, error: "Credenciales incorrectas" }, { status: 401 });
   }
 
@@ -42,6 +85,15 @@ export async function POST(request) {
   });
 
   if (!tenant) {
+    registrarFalloLogin(cerrojo.ip, email);
+    await auditarLogin({
+      action: "auth.login_failed",
+      email,
+      ip: cerrojo.ip,
+      userId: user.id,
+      tenantId: user.tenantId,
+      motivo: "tenant_inactivo",
+    });
     return NextResponse.json({ ok: false, error: "Credenciales incorrectas" }, { status: 401 });
   }
 
@@ -59,7 +111,15 @@ export async function POST(request) {
     }),
   ]);
 
+  limpiarFallosLogin(email);
   await user.update({ lastLoginAt: new Date() });
+  await auditarLogin({
+    action: "auth.login",
+    email,
+    ip: cerrojo.ip,
+    userId: user.id,
+    tenantId: tenant.id,
+  });
 
   const response = NextResponse.json({
     ok: true,

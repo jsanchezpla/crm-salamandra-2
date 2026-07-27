@@ -331,11 +331,19 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     // no avisar de un enlace en una cita pendiente/cancelada. Para citas que
     // aún esperan confirmación, el enlace se entrega al confirmar (el email de
     // /confirm ya incluye meetUrl).
+    // El botón "Guardar y enviar" del panel manda `enviarEmail: true`: con eso
+    // se reenvía SIEMPRE (aunque el enlace ya estuviera puesto o se corrija),
+    // que es justo lo que antes era imposible — el envío solo ocurría en la
+    // transición null→valor y no había forma de reenviar desde la UI.
+    const envioForzado = body.enviarEmail === true;
+    const hayEnlace = row.meetUrl != null && row.meetUrl !== "";
     const meetLinkFilled =
-      (before.meetUrl == null || before.meetUrl === "") &&
-      row.meetUrl != null && row.meetUrl !== "" &&
+      hayEnlace &&
       row.modality === "online" &&
-      row.status === "confirmed";
+      (envioForzado
+        ? row.status !== "cancelled" // reenviar sí, pero no de una cita anulada
+        : (before.meetUrl == null || before.meetUrl === "") && row.status === "confirmed");
+    let emailEnviado = false;
     if (meetLinkFilled) {
       await logCitasAudit({
         tenantId: tenant.id,
@@ -359,7 +367,19 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
           duration: row.duration,
           meetUrl: row.meetUrl,
         });
-        await sendEmail({ to: row.clientEmail, subject: tpl.subject, html: tpl.html, text: tpl.text });
+        // Con las credenciales del tenant, como el resto de emails de citas
+        // (antes este envío concreto usaba siempre las globales del CRM).
+        const resendCfg = getTenantResendConfig({ tenant });
+        await sendEmail({
+          to: row.clientEmail,
+          subject: tpl.subject,
+          html: tpl.html,
+          text: tpl.text,
+          from: resendCfg.fromEmail || undefined,
+          replyTo: resendCfg.replyTo || undefined,
+          apiKey: resendCfg.apiKey || undefined,
+        });
+        emailEnviado = true;
       } catch (mailErr) {
         process.stderr.write(`[citas:meet-link] email fail: ${mailErr.message}\n`);
       }
@@ -368,7 +388,8 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     // Respuesta con eventType (para que el modal no pierda 'Servicio'/dirección)
     // y el profesional asignado (si el tenant tiene módulo team).
     await row.reload({ include: bookingIncludes(tenantModels, hasModule) });
-    return ok(row.toJSON());
+    // `emailEnviado` permite que el panel confirme "enviado" en vez de callar.
+    return ok({ ...row.toJSON(), emailEnviado });
   } catch (err) {
     return serverError(err);
   }
