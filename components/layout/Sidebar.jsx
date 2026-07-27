@@ -128,6 +128,20 @@ const navigation = [
         key: "team",
         label: "Equipo",
         href: "/equipo",
+        // Herramientas de GESTIÓN DE EQUIPO (las pidió Aumenta para gestionar
+        // su equipo, no son clínicas): antes colgaban de Clínica. Las páginas
+        // siguen viviendo en /clinica/* — solo cambia dónde salen en el menú.
+        // `moduleKey: "clinica"` porque esas pantallas son del módulo clinica:
+        // un tenant con team pero sin clinica (p.ej. nutri_laura) no las ve.
+        // adminOnly en Desempeño/Dirección/Productividad (decisión de Aumenta
+        // 2026-07-24); Incidencias y Bandeja las usa todo el equipo.
+        children: [
+          { key: "team-desempeno", label: "Desempeño", href: "/clinica/mi-desempeno", adminOnly: true, moduleKey: "clinica" },
+          { key: "team-direccion", label: "Dirección", href: "/clinica/direccion", adminOnly: true, moduleKey: "clinica" },
+          { key: "team-productividad", label: "Productividad", href: "/clinica/productividad", adminOnly: true, moduleKey: "clinica" },
+          { key: "team-incidencias", label: "Incidencias", href: "/clinica/incidencias", moduleKey: "clinica" },
+          { key: "team-bandeja", label: "Bandeja de trabajo", href: "/clinica/bandeja", moduleKey: "clinica" },
+        ],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
@@ -150,27 +164,16 @@ const navigation = [
     label: "Salud",
     items: [
       {
-        // "Clínica" es el paraguas del área clínica. Pacientes (el dato) vive
-        // DENTRO como primer sub-ítem, junto a las vistas de acción (informes,
-        // desempeño, dirección). Los hijos se auto-expanden al estar en
-        // /clinica/* o /pacientes/*. Gating: el grupo depende del módulo
-        // `clinica`, que en la práctica siempre va activado junto a `pacientes`
-        // (ambos solo en aumenta; ver docs/modules/clinica.md y pacientes.md).
+        // "Clínica" = solo lo CLÍNICO: Pacientes e Informes. Las herramientas
+        // de gestión (Desempeño/Dirección/Productividad/Incidencias/Bandeja)
+        // cuelgan de Equipo desde 2026-07-27 (eran de gestión de equipo, las
+        // pidió Aumenta para su equipo). Gating del grupo: módulo `clinica`.
         key: "clinica",
         label: "Clínica",
         href: "/clinica",
         children: [
           { key: "pacientes", label: "Pacientes", href: "/pacientes" },
           { key: "clinica-informes", label: "Informes", href: "/clinica/informes" },
-          // adminOnly: desempeño/incentivos y las vistas de gestión son SOLO de
-          // dirección (decisión de Aumenta 2026-07-24: "Mi desempeño solo lo
-          // puede ver la dirección"). Las terapeutas ven pacientes, informes,
-          // incidencias y su bandeja.
-          { key: "clinica-desempeno", label: "Mi desempeño", href: "/clinica/mi-desempeno", adminOnly: true },
-          { key: "clinica-direccion", label: "Dirección", href: "/clinica/direccion", adminOnly: true },
-          { key: "clinica-productividad", label: "Productividad", href: "/clinica/productividad", adminOnly: true },
-          { key: "clinica-incidencias", label: "Incidencias", href: "/clinica/incidencias" },
-          { key: "clinica-bandeja", label: "Bandeja de trabajo", href: "/clinica/bandeja" },
         ],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">

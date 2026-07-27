@@ -4,7 +4,20 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import PreviewBanner from "./_components/PreviewBanner.jsx";
 
+// Solo lo CLÍNICO: pacientes e informes. Desempeño/Dirección/Productividad/
+// Incidencias/Bandeja son gestión de EQUIPO (los pidió Aumenta para su equipo)
+// y viven como sub-entradas de Equipo en el sidebar desde 2026-07-27.
 const SHORTCUTS = [
+  {
+    href: "/pacientes",
+    title: "Pacientes",
+    desc: "Fichas, sesiones y seguimiento de cada paciente.",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+      </svg>
+    ),
+  },
   {
     href: "/clinica/informes",
     title: "Informes",
@@ -15,69 +28,13 @@ const SHORTCUTS = [
       </svg>
     ),
   },
-  {
-    href: "/clinica/mi-desempeno",
-    title: "Mi desempeño",
-    desc: "Tus 7 áreas + complementos, evolución y propuesta de incentivo.",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 12h3.75l1.5-4.5 3 9 1.5-4.5h8.25" />
-      </svg>
-    ),
-  },
-  {
-    href: "/clinica/direccion",
-    title: "Dirección",
-    desc: "Ranking del equipo, alertas y propuesta de incentivos del mes.",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v18m16.5-18v18M3.75 9h16.5m-16.5 6h16.5" />
-      </svg>
-    ),
-  },
-  {
-    href: "/clinica/productividad",
-    title: "Productividad",
-    desc: "Horas de intervención directa sobre las disponibles, por profesional.",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m5-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
-  {
-    href: "/clinica/incidencias",
-    title: "Incidencias",
-    desc: "Registro y seguimiento de incidencias del equipo por categoría.",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-      </svg>
-    ),
-  },
-  {
-    href: "/clinica/bandeja",
-    title: "Bandeja de trabajo",
-    desc: "Lo tuyo pendiente: informes, incidencias y citas de hoy.",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 00-2.15-1.588H6.911a2.25 2.25 0 00-2.15 1.588L2.35 13.177a2.25 2.25 0 00-.1.661z" />
-      </svg>
-    ),
-  },
 ];
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short" }) : "—");
 
-// Accesos SOLO de dirección (admin): desempeño/incentivos y vistas de gestión.
-// Se ocultan por defecto y solo aparecen cuando /api/auth/me confirma admin,
-// para que una terapeuta no los vea ni un instante.
-const ADMIN_ONLY_HREFS = new Set(["/clinica/mi-desempeno", "/clinica/direccion", "/clinica/productividad"]);
-
 export default function ClinicaLanding() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     fetch("/api/clinica/overview", { cache: "no-store" })
@@ -87,15 +44,10 @@ export default function ClinicaLanding() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-    fetch("/api/auth/me", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
-        if (j.ok) setIsAdmin(["admin", "superadmin"].includes(j.data?.role));
-      })
-      .catch(() => {});
   }, []);
 
-  const shortcuts = SHORTCUTS.filter((s) => isAdmin || !ADMIN_ONLY_HREFS.has(s.href));
+  // Ambas cards (Pacientes, Informes) son para todo el equipo clínico.
+  const shortcuts = SHORTCUTS;
 
   const k = data?.kpis;
   const recent = data?.recentPatients ?? [];
@@ -135,8 +87,8 @@ export default function ClinicaLanding() {
         ))}
       </div>
 
-      {/* Accesos rápidos */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {/* Accesos rápidos — 2 cards: Pacientes e Informes */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {shortcuts.map((s) => (
           <Link
             key={s.href}
