@@ -75,13 +75,16 @@ export function defineTenantBillingSettings(sequelize) {
       },
       // Régimen fiscal del emisor. Determina si se aplica IRPF por defecto:
       //   'company'   → SL / empresa: SIN retención de IRPF (0%).
-      //   'freelance' → autónomo profesional: aplica `defaultIrpfRate` (típico 15%).
-      // El usuario lo elige con un interruptor claro en Configuración → Facturación.
+      //   'autonomo'  → autónomo con actividad empresarial: SIN retención (0%).
+      //   'freelance' → autónomo PROFESIONAL: aplica `defaultIrpfRate` (típico 15%).
+      // El usuario lo elige con botones claros en Configuración → Facturación.
+      // La columna es VARCHAR(20) sin CHECK en BD: añadir un valor aquí no
+      // necesita migración.
       taxRegime: {
         type: DataTypes.STRING(20),
         allowNull: false,
         defaultValue: "company",
-        validate: { isIn: [["company", "freelance"]] },
+        validate: { isIn: [["company", "autonomo", "freelance"]] },
       },
       // Retención IRPF por defecto aplicada a nuevas facturas (sobre base).
       // Por defecto 0: solo se aplica si el emisor es autónomo profesional

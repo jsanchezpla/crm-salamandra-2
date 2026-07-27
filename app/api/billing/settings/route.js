@@ -39,10 +39,11 @@ export const PUT = withTenant(async (request, _ctx, { tenantModels, hasModule })
       if (k in body) updates[k] = body[k];
     }
 
-    // Régimen fiscal del emisor: 'company' (SL, sin IRPF) | 'freelance' (autónomo).
+    // Régimen fiscal del emisor: 'company' (SL, sin IRPF) | 'autonomo' (autónomo
+    // con actividad empresarial, sin IRPF) | 'freelance' (autónomo PROFESIONAL, −15%).
     if ("taxRegime" in body) {
-      if (body.taxRegime !== "company" && body.taxRegime !== "freelance") {
-        return error("taxRegime debe ser 'company' o 'freelance'");
+      if (!["company", "autonomo", "freelance"].includes(body.taxRegime)) {
+        return error("taxRegime debe ser 'company', 'autonomo' o 'freelance'");
       }
       updates.taxRegime = body.taxRegime;
     }

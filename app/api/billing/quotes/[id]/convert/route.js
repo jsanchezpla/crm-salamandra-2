@@ -29,7 +29,9 @@ export const POST = withTenant(async (request, { params }, { tenantModels, tenan
 
     const settings = await TenantBillingSettings.findOne();
     const termsDays = settings ? Number(settings.defaultPaymentTermsDays ?? 30) : 30;
-    const defaultIrpf = settings ? Number(settings.defaultIrpfRate ?? 15) : 15;
+    // Fallback 0 (no 15, resto legacy): desde el sprint fiscal el IRPF solo se
+    // aplica si el tenant lo configura (autónomo profesional). Sin settings → 0.
+    const defaultIrpf = settings ? Number(settings.defaultIrpfRate ?? 0) : 0;
 
     const issueDate = new Date().toISOString().slice(0, 10);
     let dueDate = null;

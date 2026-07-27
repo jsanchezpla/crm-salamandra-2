@@ -48,7 +48,9 @@ Cosas que versiones antiguas de este doc daban por NO hechas y **sí existen**:
 
 `TenantBillingSettings` guarda la config fiscal del emisor. Novedades:
 
-- **Régimen fiscal (`taxRegime`: `company` | `freelance`)** e **IRPF por defecto 0**.
+- **Régimen fiscal (`taxRegime`: `company` | `autonomo` | `freelance`)** e **IRPF por defecto 0**.
+  `autonomo` (añadido 2026-07-27) = autónomo con actividad empresarial: factura SIN
+  retención, igual que `company`; solo `freelance` (autónomo PROFESIONAL) aplica el −15%.
   Antes `defaultIrpfRate` era 15 y restaba IRPF a TODA factura (mal en SL y B2C).
   Ahora por defecto 0; solo se aplica si el emisor se marca **Autónomo profesional**
   (interruptor en Configuración → Facturación). Migración
