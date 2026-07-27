@@ -6,6 +6,8 @@ import Select from "@/components/ui/Select.jsx";
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 import TeamHoursEditor from "@/components/team/TeamHoursEditor.jsx";
 import MiEquipo from "@/components/team/MiEquipo.jsx";
+import AccessSection, { moduleLabel, suggestUsername } from "@/components/team/AccessSection.jsx";
+import CredentialsModal from "@/components/team/CredentialsModal.jsx";
 
 const STATUS_LABELS = { active: "Activo", inactive: "Inactivo", on_leave: "De baja" };
 const STATUS_FILTER_OPTIONS = [
@@ -34,6 +36,9 @@ const EMPTY_FORM = {
   annualGross: "", paymentPeriods: 12,
   currency: "EUR", startDate: "", notes: "", status: "active",
   specialties: [],
+  // Acceso al CRM en el alta (solo modo crear): si crearAcceso, tras crear el
+  // empleado se le crea también su usuario de login con estos módulos.
+  crearAcceso: false, accessUsername: "", accessModules: [],
 };
 
 // Mensual = bruto anual / pagas (mismo cálculo que el backend).
@@ -76,6 +81,10 @@ export default function EquipoPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
+  // Módulos del tenant para los checkboxes de "Acceso al CRM" en el alta.
+  const [tenantModules, setTenantModules] = useState(null);
+  // Credenciales generadas en el alta (se enseñan UNA vez).
+  const [credentials, setCredentials] = useState(null);
 
   // Debounce para búsqueda
   useEffect(() => {
@@ -137,6 +146,13 @@ export default function EquipoPage() {
     setEditing(true);
     setShowCreate(true);
     setFormError(null);
+    // Módulos del tenant para el bloque "Acceso al CRM" (una sola carga).
+    if (tenantModules == null) {
+      fetch("/api/team/modules", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => { if (j.ok) setTenantModules(j.data.modules); })
+        .catch(() => {});
+    }
   }
   function openDetail(member) {
     setShowCreate(false);
@@ -167,6 +183,10 @@ export default function EquipoPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (showCreate && form.crearAcceso) {
+      if (!form.accessUsername.trim()) { setFormError("Escribe el nombre de usuario para el acceso al CRM"); return; }
+      if (form.accessModules.length === 0) { setFormError("Marca al menos un módulo al que pueda acceder"); return; }
+    }
     setSaving(true);
     setFormError(null);
     try {
@@ -185,6 +205,11 @@ export default function EquipoPage() {
         delete payload.annualGross;
         delete payload.paymentPeriods;
       }
+      // Los campos de acceso no son del empleado: fuera del payload de /api/team.
+      delete payload.crearAcceso;
+      delete payload.accessUsername;
+      delete payload.accessModules;
+
       const url = openMember ? `/api/team/${openMember.id}` : "/api/team";
       const method = openMember ? "PATCH" : "POST";
       const res = await fetch(url, {
@@ -196,6 +221,25 @@ export default function EquipoPage() {
       if (openMember) {
         setOpenMember(json.data);
         setEditing(false);
+      } else if (form.crearAcceso) {
+        // Paso 2: crear su usuario de login. Si falla, el empleado YA está
+        // creado — se abre su ficha con el error para corregirlo desde ahí.
+        try {
+          const resAcc = await fetch(`/api/team/${json.data.id}/access`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: form.accessUsername, modules: form.accessModules }),
+          });
+          const jAcc = await resAcc.json();
+          if (!resAcc.ok) throw new Error(jAcc.error || "No se pudo crear el usuario");
+          setCredentials({ username: jAcc.data.username, password: jAcc.data.password });
+          closePanel();
+        } catch (accErr) {
+          setOpenMember(json.data);
+          setShowCreate(false);
+          setEditing(false);
+          setFormError(null);
+          alert(`El empleado se guardó, pero su usuario no: ${accErr.message}\nCréalo desde su ficha, en «Acceso al CRM».`);
+        }
       } else {
         closePanel();
       }
@@ -209,9 +253,23 @@ export default function EquipoPage() {
 
   async function handleDeactivate() {
     if (!openMember) return;
-    if (!confirm(`¿Desactivar a ${openMember.displayName}? El histórico se conserva.`)) return;
+    const conAcceso = !!openMember.userId;
+    const aviso = conAcceso
+      ? `¿Desactivar a ${openMember.displayName}? El histórico se conserva y se le quitará también su acceso al CRM.`
+      : `¿Desactivar a ${openMember.displayName}? El histórico se conserva.`;
+    if (!confirm(aviso)) return;
     setSaving(true);
     try {
+      // Primero el acceso: una baja no debe dejar un login vivo. Si su cuenta
+      // es de administrador, el endpoint la protege (403) y se avisa sin
+      // bloquear la desactivación.
+      if (conAcceso) {
+        const resAcc = await fetch(`/api/team/${openMember.id}/access`, { method: "DELETE" });
+        if (!resAcc.ok && resAcc.status !== 404) {
+          const jAcc = await resAcc.json().catch(() => ({}));
+          alert(`Aviso: no se pudo quitar su acceso al CRM (${jAcc.error || resAcc.status}). Revísalo en su ficha.`);
+        }
+      }
       const res = await fetch(`/api/team/${openMember.id}`, { method: "DELETE" });
       if (res.status !== 204) {
         const json = await res.json().catch(() => ({}));
@@ -404,7 +462,13 @@ export default function EquipoPage() {
 
                   <EmployeeBillingSection employeeId={openMember.id} isAdmin={viewerIsAdmin} />
 
-                  {viewerIsAdmin && <ModulesSection memberId={openMember.id} />}
+                  {viewerIsAdmin && (
+                    <AccessSection
+                      memberId={openMember.id}
+                      displayName={openMember.displayName}
+                      tenantSlug={me?.tenantSlug}
+                    />
+                  )}
 
                   <div className="pt-2">
                     <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-2">Horario de trabajo</div>
@@ -550,6 +614,65 @@ export default function EquipoPage() {
                       className={inputCls + " resize-y"} />
                   </FormRow>
 
+                  {/* Acceso al CRM: solo en el ALTA (en la ficha ya existe la
+                      sección propia). Crea el login con los módulos marcados. */}
+                  {showCreate && (
+                    <div className="rounded-lg border border-neutral-100 bg-neutral-50/60 p-3 space-y-3">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input type="checkbox" checked={form.crearAcceso}
+                          onChange={(e) => {
+                            const on = e.target.checked;
+                            setForm((f) => ({
+                              ...f,
+                              crearAcceso: on,
+                              accessUsername: on && !f.accessUsername
+                                ? suggestUsername(f.displayName, me?.tenantSlug)
+                                : f.accessUsername,
+                            }));
+                          }}
+                          className="rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)]" />
+                        <span className="text-sm font-medium text-neutral-800">Crear usuario para que entre al CRM</span>
+                      </label>
+                      {form.crearAcceso && (
+                        <>
+                          <FormRow label="Nombre de usuario">
+                            <input value={form.accessUsername}
+                              onChange={(e) => setForm((f) => ({ ...f, accessUsername: e.target.value }))}
+                              className={inputCls + " font-mono"} placeholder={`nombre_${me?.tenantSlug ?? ""}`} />
+                          </FormRow>
+                          <div>
+                            <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-1.5">
+                              Módulos a los que puede acceder
+                            </div>
+                            {tenantModules == null ? (
+                              <div className="text-xs text-neutral-400">Cargando módulos...</div>
+                            ) : (
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                                {tenantModules.map((key) => (
+                                  <label key={key} className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer py-0.5">
+                                    <input type="checkbox"
+                                      checked={form.accessModules.includes(key)}
+                                      onChange={() => setForm((f) => ({
+                                        ...f,
+                                        accessModules: f.accessModules.includes(key)
+                                          ? f.accessModules.filter((k) => k !== key)
+                                          : [...f.accessModules, key],
+                                      }))}
+                                      className="rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)]" />
+                                    {moduleLabel(key)}
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-neutral-400">
+                            La contraseña se genera sola y se enseña UNA vez al crear. Verá solo los módulos marcados.
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   {formError && (
                     <div className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{formError}</div>
                   )}
@@ -579,6 +702,14 @@ export default function EquipoPage() {
           </aside>
         </>
       )}
+
+      {credentials && (
+        <CredentialsModal
+          username={credentials.username}
+          password={credentials.password}
+          onClose={() => setCredentials(null)}
+        />
+      )}
     </div>
   );
 }
@@ -597,89 +728,6 @@ function FormRow({ label, children }) {
     <div className="flex flex-col gap-1.5">
       <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">{label}</label>
       {children}
-    </div>
-  );
-}
-
-const MODULE_LABELS = {
-  clients: "Clientes", leads: "Leads", outreach: "Captación", referidos: "Referidos",
-  calendar: "Calendario", citas: "Citas", nutricion: "Nutrición", projects: "Proyectos",
-  orders: "Pedidos", billing: "Facturación", documents: "Documentos", clinica: "Clínica",
-  pacientes: "Pacientes", team: "Equipo", inventory: "Inventario", training: "Formación",
-  cuestionarios: "Cuestionarios", support: "Soporte", planning: "Planificación",
-  analytics: "Analítica", ai: "IA", automations: "Automatizaciones",
-  integrations: "Integraciones", configuracion: "Configuración",
-};
-const moduleLabel = (key) => MODULE_LABELS[key] || key;
-
-// Sección "Módulos con acceso" — asignación de módulos por miembro. Config
-// informativa (SIN gate real este sprint). Autónoma: carga y guarda por su cuenta.
-function ModulesSection({ memberId }) {
-  const [modules, setModules] = useState(null); // [{ moduleKey, enabled }]
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState(null);
-
-  useEffect(() => {
-    setModules(null); setDirty(false); setErr(null);
-    fetch(`/api/team/${memberId}/modules`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => { if (j.ok) setModules(j.data.modules); else setErr(j.error || "Error"); })
-      .catch(() => setErr("No se pudieron cargar los módulos"));
-  }, [memberId]);
-
-  function toggle(key) {
-    setModules((prev) => prev.map((m) => (m.moduleKey === key ? { ...m, enabled: !m.enabled } : m)));
-    setDirty(true);
-  }
-
-  async function save() {
-    setSaving(true); setErr(null);
-    try {
-      const res = await fetch(`/api/team/${memberId}/modules`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modules }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || "Error");
-      setModules(j.data.modules); setDirty(false);
-    } catch (e) {
-      setErr(e.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="pt-4 border-t border-neutral-100">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Módulos con acceso</div>
-        {dirty && (
-          <button onClick={save} disabled={saving}
-            className="text-[11px] px-2.5 py-1 rounded border border-neutral-300 text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">
-            {saving ? "Guardando..." : "Guardar módulos"}
-          </button>
-        )}
-      </div>
-      {err && <div className="text-xs text-red-600 mb-2">{err}</div>}
-      {modules == null ? (
-        <div className="text-xs text-neutral-400">Cargando módulos...</div>
-      ) : modules.length === 0 ? (
-        <div className="text-xs text-neutral-400">El tenant no tiene módulos activos.</div>
-      ) : (
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-          {modules.map((m) => (
-            <label key={m.moduleKey} className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer py-0.5">
-              <input type="checkbox" checked={m.enabled} onChange={() => toggle(m.moduleKey)}
-                className="rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)]" />
-              {moduleLabel(m.moduleKey)}
-            </label>
-          ))}
-        </div>
-      )}
-      <p className="text-[10px] text-neutral-400 mt-2">
-        Config informativa por ahora: no bloquea el acceso al CRM (eso lo controla el usuario de login).
-      </p>
     </div>
   );
 }

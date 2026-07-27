@@ -118,6 +118,40 @@ Todos validan `hasModule("team")` antes de operar.
 | `PATCH /api/team/[id]` | Edita; auditoría granular por campo (ver eventos). | Solo admin/superadmin. |
 | `DELETE /api/team/[id]` | **Soft delete**: cambia `status` a `inactive`. NUNCA borrado físico. Idempotente (si ya está inactivo devuelve `204` sin tocar nada). | Solo admin/superadmin. |
 | `GET /api/team/[id]/billing-summary` | Resumen de facturación del empleado (ver módulo Billing). | Cualquier autenticado del tenant; `monthlySalary` y `projectedSalaryCost` solo a admin. |
+| `GET /api/team/modules` | Módulos activos del TENANT (para los checkboxes de acceso en el alta). No confundir con `/api/auth/me → enabledModules` (esa es la intersección del usuario actual). | Solo admin (rol fresco de BD). |
+| `GET /api/team/[id]/access` | Estado del login del miembro: `{ hasUser, username, lastLoginAt, managedElsewhere, modules }`. Sin usuario, `modules` propone lo marcado en `team_member_modules`. | Solo admin (rol fresco de BD). |
+| `POST /api/team/[id]/access` | **Crea el usuario de login** en `master.users` (patrón terapeutas de Aumenta): username sin `@` con sufijo `_{slug}` forzado (o email real), rol `user`, `moduleAccess` = módulos marcados (mínimo 1). Devuelve `{ username, password }` UNA única vez. | Solo admin; nunca en demo; 409 si ya tiene usuario o el username existe. |
+| `PATCH /api/team/[id]/access` | Cambia `moduleAccess` (lo que ve al entrar; aplica al instante — el resolver no cachea ACLs). `[]` permitido = bloquear sin borrar. Espeja en `team_member_modules`. | Solo admin; nunca en demo; nunca sobre cuentas admin ni sobre uno mismo. |
+| `DELETE /api/team/[id]/access` | Quita el acceso: desenlaza `userId` y borra el User. El token vivo muere en la siguiente request (el resolver falla en cerrado). La ficha del empleado se conserva. | Ídem. |
+| `POST /api/team/[id]/access/password` | Restablece la contraseña (aleatoria, bcrypt 12, `tokenVersion++` para tumbar sesiones). Se devuelve una única vez. | Ídem. |
+
+### Acceso al CRM desde Equipo (2026-07-27)
+
+El alta de logins dejó de ser solo-por-script: la ficha del empleado tiene la
+sección **«Acceso al CRM»** (`components/team/AccessSection.jsx`) y el alta un
+bloque «Crear usuario para que entre al CRM». La contraseña generada se enseña
+una única vez (`components/team/CredentialsModal.jsx`); no hay invitación por
+email (Resend es BYOK, no garantizado). Helpers en `lib/team/access.js`.
+
+Decisiones clave:
+
+- **La fuente de verdad de módulos es `master.users.moduleAccess`** (el gate
+  real de `hasModule()`); la tabla `team_member_modules` pasó de "config
+  informativa" a ESPEJO sincronizado para miembros con usuario, y sigue siendo
+  informativa para miembros sin él. La antigua `ModulesSection` decorativa de
+  la página fue sustituida por `AccessSection`.
+- Estos endpoints leen el rol del solicitante FRESCO de BD (`ctx.user.role`),
+  no del header `x-user-role` (JWT, TTL 15 min): escriben en master.
+- Guardas: nunca cuentas `admin`/`superadmin` (se gestionan por script), nunca
+  uno mismo, nunca desde la demo pública (que da sesión admin a anónimos).
+- Al **desactivar** un miembro con usuario, la UI encadena primero
+  `DELETE .../access` (una baja no deja un login vivo) y avisa si no puede
+  (p. ej. cuenta admin).
+- Eventos de auditoría: `team.user_created`, `team.access_changed`,
+  `team.password_reset`, `team.user_removed` — nunca incluyen la contraseña.
+- OJO `scripts/grant-module-access.js`: trata la lista vacía como "sin
+  restricciones, no tocar", la semántica CONTRARIA al gate (`[]` = sin
+  acceso). No usarlo para cuentas creadas desde Equipo.
 
 Reglas adicionales:
 
