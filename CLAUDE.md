@@ -538,6 +538,20 @@ schemas y cuenta registros sueltos por tabla. Es la red que faltaba: nada
 avisaba cuando algo se quedaba sin conectar. Lanzarlo tras cada sprint que
 toque estos módulos.
 
-Pendiente (fuera de este sprint): rellenar `patients.client_id` donde falte —
-es la causa raíz de que los registros clínicos no lleguen al cliente. Y llevar
-estos enlaces a la UI (mostrar/reasignar en cada ficha).
+**Reparación del histórico (2026-07-27)**: existe
+`scripts/backfill-patients-client.js` (ONE_OFF, dry-run por defecto). Deduce el
+pagador de las PROPIAS citas/sesiones/informes del paciente y enlaza solo si
+todas coinciden en el mismo cliente; los ambiguos (padres separados) se listan
+para revisión humana. NO cruza por nombre a propósito: el cliente es el tutor
+que paga y confundir familias sería una fuga de datos clínicos. Deja un
+`.rollback.sql` con las filas exactas que tocó.
+
+Estado real comprobado en producción el 2026-07-27: **`aumenta` no tiene ningún
+paciente suelto** (de hecho `check-links` lo da como "todo conectado"), porque
+el reset del 24-jul dejó el módulo clínico vacío y los pacientes nuevos ya
+nacen enlazados. Los únicos huérfanos están en `demo`/`demo_golden` (datos
+falsos, sin ninguna prueba de la que deducir el pagador). El script queda como
+red para cuando Aumenta empiece a cargar pacientes de verdad.
+
+Pendiente (fuera de este sprint): llevar estos enlaces a la UI (mostrar y
+reasignar el cliente desde cada ficha).
