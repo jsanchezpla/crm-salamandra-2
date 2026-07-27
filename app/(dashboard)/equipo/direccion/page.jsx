@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import PreviewBanner from "../_components/PreviewBanner.jsx";
 import IncentiveTiersEditor from "../_components/IncentiveTiersEditor.jsx";
 import IncentiveItemsEditor from "../_components/IncentiveItemsEditor.jsx";
 import PerformanceEditor from "../_components/PerformanceEditor.jsx";
@@ -115,15 +114,13 @@ export default function DireccionPage() {
 
   return (
     <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-5">
-      <Link href="/clinica" className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit">
+      <Link href="/equipo" className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-        Volver a Clínica
+        Volver a Equipo
       </Link>
 
-      <PreviewBanner />
-
       <div>
-        <div className="eyebrow">Clínica · Dirección</div>
+        <div className="eyebrow">Equipo · Dirección</div>
         <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">Panel de dirección</h1>
         <p className="text-xs text-neutral-400 mt-1">Visión global del equipo · Periodo de {data?.period ? `${["","Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][data.period.month]} ${data.period.year}` : "—"}</p>
       </div>
@@ -145,12 +142,12 @@ export default function DireccionPage() {
       {dash && (
         <div className="space-y-3">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Link href="/clinica/productividad" className="group bg-white border border-neutral-100 rounded-xl p-4 hover:border-[var(--color-primary,#1B3A2D)] transition-colors">
+            <Link href="/equipo/productividad" className="group bg-white border border-neutral-100 rounded-xl p-4 hover:border-[var(--color-primary,#1B3A2D)] transition-colors">
               <div className="text-[10px] uppercase tracking-wider text-neutral-400">Productividad media</div>
               <div className="font-display text-2xl text-[var(--ink-900)] mt-1 tabular">{dash.productividad?.teamPct != null ? `${dash.productividad.teamPct}%` : "N/D"}</div>
               <div className="text-[11px] text-neutral-500 mt-0.5">{dash.productividad?.configuredCount ?? 0}/{dash.productividad?.memberCount ?? 0} con objetivo</div>
             </Link>
-            <Link href="/clinica/incidencias" className="group bg-white border border-neutral-100 rounded-xl p-4 hover:border-[var(--color-primary,#1B3A2D)] transition-colors">
+            <Link href="/equipo/incidencias" className="group bg-white border border-neutral-100 rounded-xl p-4 hover:border-[var(--color-primary,#1B3A2D)] transition-colors">
               <div className="text-[10px] uppercase tracking-wider text-neutral-400">Incidencias abiertas</div>
               <div className="font-display text-2xl text-[var(--ink-900)] mt-1 tabular">{dash.incidencias?.open ?? 0}</div>
               <div className="text-[11px] text-neutral-500 mt-0.5">{dash.incidencias?.pending ?? 0} pendientes · {dash.incidencias?.inProgress ?? 0} en proceso</div>
@@ -194,7 +191,7 @@ export default function DireccionPage() {
               <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="eyebrow">Incidencias recientes</h2>
-                  <Link href="/clinica/incidencias" className="text-[10px] text-[var(--color-primary,#1B3A2D)] hover:underline">Ver todas</Link>
+                  <Link href="/equipo/incidencias" className="text-[10px] text-[var(--color-primary,#1B3A2D)] hover:underline">Ver todas</Link>
                 </div>
                 {dash.incidencias.recentOpen.length === 0 ? (
                   <p className="text-[11px] text-neutral-400">Sin incidencias abiertas.</p>
@@ -269,7 +266,7 @@ export default function DireccionPage() {
                     <td className="px-4 py-3 text-right tabular text-[var(--ink-900)] font-medium">{r.proposedIncentive} €</td>
                     <td className="px-4 py-3 text-right whitespace-nowrap space-x-2">
                       <button onClick={() => openEditRow(r)} className="text-[11px] text-neutral-500 hover:underline">Editar</button>
-                      <Link href={`/clinica/mi-desempeno?therapistId=${r.therapistId}`} className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">Ver</Link>
+                      <Link href={`/equipo/mi-desempeno?therapistId=${r.therapistId}`} className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">Ver</Link>
                     </td>
                   </tr>
                 );

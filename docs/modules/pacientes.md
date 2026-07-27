@@ -234,7 +234,7 @@ Los datos dummy de Pacientes están **alineados con los de Clínica**:
 - Diego Martín (`p-1`, 8 años, CEIP Las Acacias, 3º Primaria) es el
   paciente del informe extenso de `/clinica/informes`.
 - Su terapeuta principal **Lorena Vázquez** (`t-1`) es la
-  protagonista del dashboard `/clinica/mi-desempeno` con 87/100.
+  protagonista del dashboard `/equipo/mi-desempeno` con 87/100.
 - El array de terapeutas (`THERAPISTS`) se **importa desde
   `clinica/_components/dummyData.js`** vía re-export en
   `pacientes/_components/dummyData.js`. Cambiar terapeutas: editar

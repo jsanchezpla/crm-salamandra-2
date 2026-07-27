@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
-import PreviewBanner from "../_components/PreviewBanner.jsx";
 
 const SEMAFORO = {
   green: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
@@ -107,16 +106,14 @@ export default function MiDesempenoPage() {
 
   return (
     <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-5">
-      <Link href="/clinica" className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit">
+      <Link href="/equipo" className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-        Volver a Clínica
+        Volver a Equipo
       </Link>
-
-      <PreviewBanner />
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="eyebrow">Clínica · Mi desempeño</div>
+          <div className="eyebrow">Equipo · Mi desempeño</div>
           <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">{loading ? "…" : (m?.therapist?.name ?? "—")}</h1>
           <p className="text-xs text-neutral-400 mt-1">{m?.therapist?.position ?? "—"} · Periodo de {m?.period?.label ?? "—"}</p>
         </div>

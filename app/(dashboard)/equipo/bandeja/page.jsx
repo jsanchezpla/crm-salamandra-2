@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
-import PreviewBanner from "../_components/PreviewBanner.jsx";
 
 const STATUS_PILL = {
   amber: "bg-amber-50 text-amber-700",
@@ -55,16 +54,13 @@ export default function BandejaPage() {
 
   return (
     <div className="p-4 lg:p-8 max-w-5xl mx-auto space-y-5">
-      <Link href="/clinica" className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit">
+      <Link href="/equipo" className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-        Volver a Clínica
+        Volver a Equipo
       </Link>
-
-      <PreviewBanner />
-
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="eyebrow">Clínica · Bandeja de trabajo</div>
+          <div className="eyebrow">Equipo · Bandeja de trabajo</div>
           <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">{loading ? "…" : `Bandeja de ${data?.therapist?.name ?? "—"}`}</h1>
           <p className="text-xs text-neutral-400 mt-1">Lo tuyo pendiente: informes, incidencias y citas de hoy.</p>
         </div>
@@ -132,7 +128,7 @@ export default function BandejaPage() {
               ))}
             </ul>
             <div className="px-4 lg:px-5 py-2.5 border-t border-neutral-100 bg-neutral-50/40 text-right">
-              <Link href="/clinica/incidencias" className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">Ver todas las incidencias →</Link>
+              <Link href="/equipo/incidencias" className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">Ver todas las incidencias →</Link>
             </div>
           </Section>
 

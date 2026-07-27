@@ -179,7 +179,7 @@ export default function MiEquipo() {
 
       {/* Accesos: Incidencias + Bandeja de trabajo */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
-        <Link href="/clinica/incidencias" className="group bg-white border border-neutral-100 rounded-xl p-5 hover:border-[var(--color-primary,#1B3A2D)] hover:shadow-sm transition-all">
+        <Link href="/equipo/incidencias" className="group bg-white border border-neutral-100 rounded-xl p-5 hover:border-[var(--color-primary,#1B3A2D)] hover:shadow-sm transition-all">
           <div className="w-10 h-10 rounded-lg flex items-center justify-center mb-3 text-white" style={{ backgroundColor: "var(--color-primary, #1B3A2D)" }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
@@ -188,7 +188,7 @@ export default function MiEquipo() {
           <div className="font-display text-base text-neutral-900">Incidencias</div>
           <div className="text-xs text-neutral-500 mt-1 leading-relaxed">Registra y sigue las incidencias que te asignan.</div>
         </Link>
-        <Link href="/clinica/bandeja" className="group bg-white border border-neutral-100 rounded-xl p-5 hover:border-[var(--color-primary,#1B3A2D)] hover:shadow-sm transition-all">
+        <Link href="/equipo/bandeja" className="group bg-white border border-neutral-100 rounded-xl p-5 hover:border-[var(--color-primary,#1B3A2D)] hover:shadow-sm transition-all">
           <div className="w-10 h-10 rounded-lg flex items-center justify-center mb-3 text-white" style={{ backgroundColor: "var(--color-primary, #1B3A2D)" }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 00-2.15-1.588H6.911a2.25 2.25 0 00-2.15 1.588L2.35 13.177a2.25 2.25 0 00-.1.661z" />

@@ -293,9 +293,9 @@ function EmptyState() {
     <div className="max-w-md mx-auto py-12 text-center">
       <div className="text-base text-gray-700 font-medium">Sin plan asignado</div>
       <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-        Asigna un plan desde{" "}
+        Asigna un menú desde{" "}
         <Link href="/nutricion/asignados" className="text-[var(--color-primary)] hover:underline">
-          Nutrición &gt; Asignados &gt; + Nueva asignación
+          Nutrición &gt; Pacientes &gt; + Nueva asignación
         </Link>
         .
       </p>

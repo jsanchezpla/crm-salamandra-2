@@ -135,8 +135,8 @@ del nombre del usuario logueado.
 
 ## 10. Botón "← Volver a Clínica" en las 3 internas
 
-Las páginas `/clinica/informes`, `/clinica/mi-desempeno` y
-`/clinica/direccion` tienen un mini-link discreto arriba del banner
+Las páginas `/clinica/informes`, `/equipo/mi-desempeno` y
+`/equipo/direccion` tienen un mini-link discreto arriba del banner
 para volver a `/clinica`. La landing no lo lleva.
 
 ## 11. Datos dummy honestos
@@ -156,7 +156,7 @@ Los datos dummy de Pacientes están alineados con los de Clínica:
 - Diego Martín es el paciente del informe largo en
   `/clinica/informes`.
 - Lorena Vázquez es la terapeuta protagonista de
-  `/clinica/mi-desempeno` (87/100) y la terapeuta principal de
+  `/equipo/mi-desempeno` (87/100) y la terapeuta principal de
   Diego.
 - El array `THERAPISTS` se define en
   `app/(dashboard)/clinica/_components/dummyData.js` y se

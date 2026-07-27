@@ -133,19 +133,20 @@ const navigation = [
         // gestión completa, la terapeuta su mini-módulo (datos + docs + accesos).
         visibleModules: ["team", "clinica"],
         // Herramientas de GESTIÓN DE EQUIPO (las pidió Aumenta para gestionar
-        // su equipo, no son clínicas): antes colgaban de Clínica. Las páginas
-        // siguen viviendo en /clinica/* — solo cambia dónde salen en el menú.
-        // `moduleKey: "clinica"` porque esas pantallas son del módulo clinica:
-        // un tenant con team pero sin clinica (p.ej. nutri_laura) no las ve.
-        // adminOnly en Desempeño/Dirección/Productividad (decisión de Aumenta
-        // 2026-07-24); Incidencias y Bandeja las usa todo el equipo (terapeutas
-        // incluidas), por eso van con moduleKey clinica y SIN adminOnly.
+        // su equipo, no son clínicas): antes colgaban de Clínica. Desde
+        // 2026-07-27 viven TAMBIÉN en /equipo/* (se movieron las páginas), para
+        // que la URL y las migas no digan "Clínica" en algo que no lo es.
+        // `moduleKey: "clinica"` porque el CONTENIDO sigue siendo del módulo
+        // clinica: un tenant con team pero sin clinica (p.ej. nutri_laura) no
+        // las ve. adminOnly en Desempeño/Dirección/Productividad (decisión de
+        // Aumenta 2026-07-24); Incidencias y Bandeja las usa todo el equipo
+        // (terapeutas incluidas), por eso van SIN adminOnly.
         children: [
-          { key: "team-desempeno", label: "Desempeño", href: "/clinica/mi-desempeno", adminOnly: true, moduleKey: "clinica" },
-          { key: "team-direccion", label: "Dirección", href: "/clinica/direccion", adminOnly: true, moduleKey: "clinica" },
-          { key: "team-productividad", label: "Productividad", href: "/clinica/productividad", adminOnly: true, moduleKey: "clinica" },
-          { key: "team-incidencias", label: "Incidencias", href: "/clinica/incidencias", moduleKey: "clinica" },
-          { key: "team-bandeja", label: "Bandeja de trabajo", href: "/clinica/bandeja", moduleKey: "clinica" },
+          { key: "team-desempeno", label: "Desempeño", href: "/equipo/mi-desempeno", adminOnly: true, moduleKey: "clinica" },
+          { key: "team-direccion", label: "Dirección", href: "/equipo/direccion", adminOnly: true, moduleKey: "clinica" },
+          { key: "team-productividad", label: "Productividad", href: "/equipo/productividad", adminOnly: true, moduleKey: "clinica" },
+          { key: "team-incidencias", label: "Incidencias", href: "/equipo/incidencias", moduleKey: "clinica" },
+          { key: "team-bandeja", label: "Bandeja de trabajo", href: "/equipo/bandeja", moduleKey: "clinica" },
         ],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">

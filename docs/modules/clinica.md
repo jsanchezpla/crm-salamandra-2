@@ -26,8 +26,8 @@ tienen backend real: endpoints CRUD + persistencia + KPIs computados. Las págin
 `/clinica` (landing), `/clinica/informes`, `/pacientes` y `/pacientes/[id]` leen y
 escriben datos reales (ya no `dummyData.js`).
 
-**Fase 2 (desempeño/incentivos) también real:** `/clinica/mi-desempeno` y
-`/clinica/direccion` leen de `/api/clinica/performance/*` (scoring por áreas,
+**Fase 2 (desempeño/incentivos) también real:** `/equipo/mi-desempeno` y
+`/equipo/direccion` leen de `/api/clinica/performance/*` (scoring por áreas,
 ranking, media de equipo, alertas computadas, aprobación de incentivos con
 auditoría). Áreas definidas en `lib/clinica/performanceAreas.js`.
 
@@ -44,6 +44,26 @@ bloqueado en producción). **Ya no queda ninguna pantalla en maqueta.**
 - Migración **generalizada** `scripts/migrate-clinica-module.js` (lee `master.tenants`,
   ya no aumenta-only). Seed `scripts/seed-clinica-demo.js`.
 - IA / audio / PDF / export siguen pendientes (fases posteriores).
+
+## Dónde vive cada pantalla (traslado del 2026-07-27)
+
+Las herramientas de **gestión de equipo** (Desempeño, Dirección, Productividad,
+Incidencias y Bandeja de trabajo) ya **no cuelgan de Clínica**: son de gestión
+del equipo, no clínicas. Se movieron de `/clinica/*` a **`/equipo/*`** (páginas,
+menú, migas "Equipo · X" y enlace "Volver a Equipo"). Las URLs viejas redirigen
+de forma permanente (`next.config.mjs`), así que los marcadores del equipo de
+Aumenta siguen funcionando.
+
+Lo que NO cambió (es interno, no lo ve el usuario):
+- los **endpoints** siguen en `/api/clinica/*`,
+- la **lógica** sigue en `lib/clinica/*`,
+- el **gating** sigue siendo `moduleKey: "clinica"` — un tenant con `team` pero
+  sin `clinica` (p. ej. nutri_laura) NO ve estas pantallas.
+
+En `/clinica` se quedan la landing y **Informes**; Pacientes sigue en `/pacientes`.
+Los componentes exclusivos de esas pantallas (`PerformanceEditor`,
+`IncentiveTiersEditor`, `IncentiveItemsEditor`, `IncidenciaModal`) se movieron a
+`app/(dashboard)/equipo/_components/`.
 
 ## Programa de Excelencia (2026-07-24)
 
@@ -67,7 +87,7 @@ terapeutas y sus horas/roles se cargan aparte.
 - **Editor de evaluación**: `POST /api/clinica/performance` (upsert por
   terapeuta+periodo; calcula total y propuesta al guardar). UI:
   `PerformanceEditor.jsx` (áreas + complementos + notas, vista previa en vivo) y
-  `IncentiveTiersEditor.jsx`, ambos en `/clinica/direccion`.
+  `IncentiveTiersEditor.jsx`, ambos en `/equipo/direccion`.
 
 ### 2. Productividad
 
@@ -79,7 +99,7 @@ terapeutas y sus horas/roles se cargan aparte.
   `migrate-team-weekly-hours.js`, módulo `team`). El "-5h/semana" de ciertos
   roles = un número menor, sin hardcodear a nadie.
 - API `GET /api/clinica/productividad` + `PUT /api/clinica/productividad/hours`.
-  UI `/clinica/productividad`. Conecta con incentivos: botón "traer ocupación" en
+  UI `/equipo/productividad`. Conecta con incentivos: botón "traer ocupación" en
   el editor de evaluación.
 
 ### 3. Incidencias
@@ -90,7 +110,7 @@ terapeutas y sus horas/roles se cargan aparte.
   y cliente-foto opcionales. Taxonomía/serializer en `lib/clinica/incidencias.js`.
 - API `GET/POST /api/clinica/incidencias` + `GET/PATCH/DELETE
   /api/clinica/incidencias/[id]` (crear/comentar/cambiar estado por cualquier
-  usuario del módulo; borrar solo admin). UI `/clinica/incidencias` +
+  usuario del módulo; borrar solo admin). UI `/equipo/incidencias` +
   `IncidenciaModal.jsx`. Sin auditoría a master (pueden citar datos clínicos).
 
 ### 4. Bandeja de trabajo
@@ -98,14 +118,14 @@ terapeutas y sus horas/roles se cargan aparte.
 - API `GET /api/clinica/bandeja` (resuelve el TeamMember logueado; admin puede ver
   otra con `?therapistId=`). Agrega "lo mío pendiente": informes sin entregar
   (vencidos marcados), incidencias asignadas sin resolver y citas de hoy. UI
-  `/clinica/bandeja`.
+  `/equipo/bandeja`.
 
 ### 5. Dashboard de Dirección ampliado (punto 6)
 
 - `GET /api/clinica/dashboard`: totales de productividad del mes +
   resumen de incidencias (abiertas/pendientes/en proceso, urgentes = prioridad
   alta abiertas, resueltas del mes, por categoría, y las 5 más recientes).
-- La página `/clinica/direccion` añade la sección "Operativa del mes" con esas
+- La página `/equipo/direccion` añade la sección "Operativa del mes" con esas
   tarjetas + barras por categoría + lista de incidencias recientes.
 - La agregación de productividad se factorizó a `lib/clinica/productivityQuery.js`
   (`aggregateTeamProductivity`), compartida por `/productividad` y `/dashboard`.
@@ -137,7 +157,7 @@ terapeutas y sus horas/roles se cargan aparte.
   periodo (findOrCreate) para que la persona salga en la propuesta sin evaluar.
 - Integración: `serializeRankingRow` acepta `extras` → expone `extrasIncentive`
   y `totalProposed` (tramos + escritos). `approve`/`approve-all` aprueban ese
-  TOTAL. UI: sección "Incentivos escritos" en `/clinica/direccion`
+  TOTAL. UI: sección "Incentivos escritos" en `/equipo/direccion`
   (`IncentiveItemsEditor.jsx`) + columnas Por puntuación / Escritos / Propuesto
   en la tabla de propuesta.
 
@@ -257,8 +277,8 @@ con datos hardcoded.
 | --- | --- |
 | `/clinica` | Landing del módulo. KPIs (sesiones, informes pendientes, coordinaciones, próxima entrega), 3 cards de accesos rápidos, pacientes recientes. H1: "Área clínica". |
 | `/clinica/informes` | Listado de informes con filtros decorativos. Click en fila abre **drawer** con el informe completo (Diego Martín, `r-1`) — texto extenso con 7 secciones. Otros informes muestran empty state. |
-| `/clinica/mi-desempeno` | Dashboard del terapeuta logueado (Lorena Vázquez, 87/100). Anillo SVG con puntuación total, grid de 7 áreas semáforo, complementos, gráfico histórico 6 meses. |
-| `/clinica/direccion` | Panel de dirección. 4 KPIs, ranking de 6 terapeutas con chips semáforo en miniatura, alertas, gráfico SVG de evolución del equipo, propuesta de incentivos por terapeuta. |
+| `/equipo/mi-desempeno` | Dashboard del terapeuta logueado (Lorena Vázquez, 87/100). Anillo SVG con puntuación total, grid de 7 áreas semáforo, complementos, gráfico histórico 6 meses. |
+| `/equipo/direccion` | Panel de dirección. 4 KPIs, ranking de 6 terapeutas con chips semáforo en miniatura, alertas, gráfico SVG de evolución del equipo, propuesta de incentivos por terapeuta. |
 
 Cada página interna tiene mini-link "← Volver a Clínica" arriba del
 banner. La landing no lo lleva (es el destino).
@@ -279,8 +299,8 @@ visible si `enabledModules.has('clinica')`. Cuelgan de él, como sub-ítems que 
 
 - **Pacientes** (`/pacientes`) — primero, es el dato del área clínica.
 - **Informes** (`/clinica/informes`)
-- **Mi desempeño** (`/clinica/mi-desempeno`)
-- **Dirección** (`/clinica/direccion`)
+- **Mi desempeño** (`/equipo/mi-desempeno`)
+- **Dirección** (`/equipo/direccion`)
 
 Ya **no** hay entrada "Pacientes" a nivel raíz: vive dentro de Clínica. Usa el
 mismo patrón de submenú que Nutrición (`components/layout/Sidebar.jsx`, campo
