@@ -279,6 +279,13 @@ export default function FacturasPage() {
     if (action === "rectify") { setRectifyOpen(true); return; }
     if (action === "delete" && !confirm("¿Eliminar este borrador?")) return;
     if (action === "cancel" && !confirm("¿Cancelar la factura? Solo permitido sin cobros.")) return;
+    if (action === "send") {
+      const destino = openInvoice.client?.email;
+      const aviso = destino
+        ? `Se enviará la factura por email a ${destino}, con el PDF adjunto. ¿Continuar?`
+        : "El cliente no tiene email en su ficha: la factura se marcará como enviada, pero NO se mandará nada. ¿Continuar?";
+      if (!confirm(aviso)) return;
+    }
     setSaving(true);
     try {
       let res;
@@ -294,6 +301,13 @@ export default function FacturasPage() {
         const j = await res.json();
         if (!res.ok) throw new Error(j.error || "Error");
         setOpenInvoice(j.data);
+        if (action === "send") {
+          alert(
+            j.data?.emailEnviado
+              ? "Factura enviada por email con el PDF adjunto."
+              : `Factura marcada como enviada, pero el correo NO salió: ${j.data?.emailError || "motivo desconocido"}.`
+          );
+        }
       }
       await load();
     } catch (err) {
@@ -889,8 +903,8 @@ function DetailView({ invoice, isAdmin, onAction, onEdit, onOpenLinked, saving }
           )}
           {invoice.status === "issued" && (
             <button onClick={() => onAction("send")} disabled={saving}
-              title="Marcar la factura como enviada (el envío por email real llegará en un próximo sprint)"
-              aria-label="Marcar factura como enviada"
+              title="Enviar la factura al cliente por email, con el PDF adjunto"
+              aria-label="Enviar factura al cliente por email"
               className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-blue-700 border border-blue-200 hover:bg-blue-50 disabled:opacity-40">Enviar</button>
           )}
           {["issued", "sent", "paid", "partially_paid", "overdue"].includes(invoice.status) && !invoice.rectifiedByInvoiceId && !invoice.rectifiesInvoiceId && (

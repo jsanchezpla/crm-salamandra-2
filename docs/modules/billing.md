@@ -4,6 +4,23 @@
 > `CLAUDE.md` (sección "Módulos del CRM"). Si encuentras una discrepancia entre
 > este documento y el código, **prevalece el código**: actualiza este fichero.
 
+
+## Envío de facturas por email (2026-07-27)
+
+`POST /api/billing/invoices/[id]/send` ya NO se limita a marcar la factura:
+**envía el PDF adjunto al email del cliente** con la plantilla
+`lib/email/templates/billing/invoiceSent.js` y las credenciales Resend del
+tenant. Antes solo anotaba el canal ("Sin integraciones reales todavía") y
+había que descargar el PDF y mandarlo a mano.
+
+- `?via=whatsapp|other` → solo anota el canal, no manda nada (para quien la
+  entrega por su cuenta). Sin `via`, o `?via=email`, envía.
+- Cliente sin email → se marca como enviada igualmente y la respuesta trae
+  `emailError`; la UI avisa antes de pulsar y después del resultado.
+- Best-effort: si Resend falla, la factura QUEDA en estado `sent` (el estado
+  contable no puede depender de que conteste un proveedor de correo) y la
+  respuesta lo dice en `emailEnviado`/`emailError`.
+
 ## Visión general
 
 El módulo cubre el ciclo financiero del tenant:
