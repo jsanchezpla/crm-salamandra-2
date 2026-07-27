@@ -80,6 +80,10 @@ export const MODULES = {
     // solo si existe patients). Si no, un tenant solo-clientes tendría documents
     // sin patient_id y el modelo reventaría con 42703 al leer adjuntos.
     "migrate-documents-patient-link",
+    // Mismo motivo: el modelo Document referencia client_visible y
+    // uploaded_by_client en TODOS los tenants con tabla documents, así que las
+    // columnas tienen que existir aunque el tenant no tenga portal de paciente.
+    "migrate-documents-client-portal",
   ],
 
   citas: [
@@ -149,7 +153,7 @@ export const MODULES = {
   ],
 
   inventory: ["migrate-inventory-rework"],
-  documents: ["migrate-documents-sprint-1", "migrate-documents-client-link", "migrate-documents-transversal", "migrate-documents-patient-link"],
+  documents: ["migrate-documents-sprint-1", "migrate-documents-client-link", "migrate-documents-transversal", "migrate-documents-patient-link", "migrate-documents-client-portal"],
   nutricion: [
     "migrate-nutricion-recipes",
     "migrate-nutricion-week-recipe-media",

@@ -42,6 +42,9 @@ function serializeParaFicha(doc) {
     fileSize: Number(doc.fileSize),
     createdAt: doc.createdAt,
     uploadedBy: null, // el owner es un UUID; el panel tolera que no venga
+    // Portal del paciente (2026-07-27).
+    clientVisible: !!doc.clientVisible,
+    uploadedByClient: !!doc.uploadedByClient,
   };
 }
 
@@ -130,6 +133,11 @@ export const POST = withTenant(
       const fileName = providedName
         ? sanitizeFileName(yaTieneExt || !ext ? providedName : `${providedName}.${ext}`)
         : sanitizeFileName(file.name || "archivo");
+      // ¿Se comparte con el paciente en su portal? Explícito y por defecto NO:
+      // compartir un documento clínico tiene que ser una decisión consciente.
+      const visRaw = formData.get("visibleToClient");
+      const clientVisible = visRaw === "true" || visRaw === "1" || visRaw === "on";
+
       // Los adjuntos de ficha son compartidos con el equipo del tenant.
       const storagePath = await saveDocumentFile(tenant.slug, "shared", documentId, buffer, ext);
 
@@ -146,6 +154,8 @@ export const POST = withTenant(
           mimeType: declaredMime,
           clientId: id,
           source: "ficha",
+          clientVisible,
+          uploadedByClient: false,
         });
       } catch (dbErr) {
         await deleteDocumentFile(tenant.slug, storagePath);

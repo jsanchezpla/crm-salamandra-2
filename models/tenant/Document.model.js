@@ -38,9 +38,11 @@ export function defineDocument(sequelize) {
         type: DataTypes.ENUM("private", "shared"),
         allowNull: false,
       },
+      // NULL solo para lo que sube el PACIENTE desde su portal: no es usuario
+      // del CRM, así que no hay owner (ver `uploadedByClient`).
       ownerUserId: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
         field: "owner_user_id",
       },
       // Nombre original visible (saneado: sin control chars ni separadores).
@@ -98,6 +100,24 @@ export function defineDocument(sequelize) {
         type: DataTypes.STRING(40),
         allowNull: false,
         defaultValue: "manual",
+      },
+      // ¿Lo ve el PACIENTE en su portal? (2026-07-27). Por defecto NO: al
+      // activar la feature nada de lo ya subido se expone por accidente. Solo
+      // tiene sentido junto a `clientId`; lo decide quien sube desde la ficha.
+      clientVisible: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: "client_visible",
+      },
+      // Lo subió el paciente desde su portal (no el equipo). Su propio archivo
+      // siempre lo ve él, y en la ficha se marca para que Laura sepa de dónde
+      // viene. Estos documentos van sin `ownerUserId`.
+      uploadedByClient: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: "uploaded_by_client",
       },
     },
     {

@@ -51,6 +51,10 @@ export default function ClientAttachmentsPanel({ clientId }) {
   // Modal de NOMBRE obligatorio al subir. `pending` = File a la espera de nombre.
   const [pending, setPending] = useState(null);
   const [pendingName, setPendingName] = useState("");
+  // ¿Lo verá la paciente en su portal (Mi perfil → Mis documentos)? Por
+  // defecto NO: compartir es una decisión consciente, no el camino por descuido.
+  const [pendingVisible, setPendingVisible] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
   const fileInputRef = useRef(null);
   const resetInput = () => { if (fileInputRef.current) fileInputRef.current.value = ""; };
 
@@ -90,6 +94,29 @@ export default function ClientAttachmentsPanel({ clientId }) {
     }
     setPending(file);
     setPendingName(file.name.replace(/\.[^.]+$/, "")); // nombre por defecto sin extensión
+    setPendingVisible(false); // cada subida decide de nuevo
+  }
+
+  /** Cambia si la paciente ve (o deja de ver) un documento ya subido. */
+  async function toggleVisible(att) {
+    setTogglingId(att.id);
+    setError(null);
+    try {
+      const r = await fetch(`/api/clients/${clientId}/attachments/${att.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visibleToClient: !att.clientVisible }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!j?.ok) throw new Error(j?.error || "No se pudo cambiar la visibilidad");
+      setItems((prev) =>
+        prev.map((x) => (x.id === att.id ? { ...x, clientVisible: j.data.clientVisible } : x))
+      );
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setTogglingId(null);
+    }
   }
 
   async function confirmUpload() {
@@ -102,6 +129,7 @@ export default function ClientAttachmentsPanel({ clientId }) {
       const fd = new FormData();
       fd.append("file", pending);
       fd.append("name", name);
+      fd.append("visibleToClient", pendingVisible ? "true" : "false");
       const r = await fetch(`/api/clients/${clientId}/attachments`, {
         method: "POST",
         body: fd,
@@ -115,6 +143,7 @@ export default function ClientAttachmentsPanel({ clientId }) {
       setItems((prev) => [j.data, ...prev]);
       setPending(null);
       setPendingName("");
+      setPendingVisible(false); // la siguiente subida vuelve a decidir
       resetInput();
     } catch (e) {
       setUploadError(e.message);
@@ -258,6 +287,33 @@ export default function ClientAttachmentsPanel({ clientId }) {
                           <span className="truncate">{a.uploadedBy}</span>
                         </>
                       )}
+                      {a.uploadedByClient && (
+                        <span className="ml-1 px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 font-medium">
+                          Lo subió la paciente
+                        </span>
+                      )}
+                    </div>
+                    {/* Visibilidad para la paciente. Lo que sube ella lo ve
+                        siempre (es suyo), así que ahí no hay interruptor. */}
+                    <div className="mt-1">
+                      {a.uploadedByClient ? (
+                        <span className="text-[11px] text-gray-400">Lo ve en su perfil</span>
+                      ) : (
+                        <label className="inline-flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={!!a.clientVisible}
+                            disabled={togglingId === a.id}
+                            onChange={() => toggleVisible(a)}
+                            className="rounded border-gray-300 text-[var(--color-primary)] focus:ring-[var(--color-primary)] w-3.5 h-3.5"
+                          />
+                          {a.clientVisible ? (
+                            <span className="text-emerald-700 font-medium">La paciente lo ve</span>
+                          ) : (
+                            <span>Solo para ti</span>
+                          )}
+                        </label>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -312,10 +368,32 @@ export default function ClientAttachmentsPanel({ clientId }) {
               placeholder="Ej. Contrato firmado, Analítica…"
               className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm"
             />
+            {/* ¿Se comparte con la paciente? Va aquí, en el mismo gesto de
+                subir, para que sea una decisión consciente y no un ajuste que
+                haya que recordar después. Desmarcado por defecto. */}
+            <label className="mt-3 flex items-start gap-2 rounded-lg border border-gray-200 px-3 py-2.5 cursor-pointer select-none hover:bg-gray-50">
+              <input
+                type="checkbox"
+                checked={pendingVisible}
+                onChange={(e) => setPendingVisible(e.target.checked)}
+                className="mt-0.5 rounded border-gray-300 text-[var(--color-primary)] focus:ring-[var(--color-primary)] w-4 h-4"
+              />
+              <span className="min-w-0">
+                <span className="block text-xs font-medium text-gray-700">
+                  Que la paciente lo vea
+                </span>
+                <span className="block text-[11px] text-gray-500 leading-snug mt-0.5">
+                  {pendingVisible
+                    ? "Aparecerá en su perfil de la web, en «Mis documentos»."
+                    : "Si lo dejas sin marcar, el documento es solo para ti."}
+                </span>
+              </span>
+            </label>
+
             {uploadError && <div className="text-xs text-red-600 mt-2">{uploadError}</div>}
             <div className="flex justify-end gap-2 mt-4">
               <button
-                onClick={() => { setPending(null); setPendingName(""); setUploadError(null); resetInput(); }}
+                onClick={() => { setPending(null); setPendingName(""); setPendingVisible(false); setUploadError(null); resetInput(); }}
                 disabled={uploading}
                 className="text-xs font-medium px-3 py-1.5 rounded-md border border-gray-200 text-gray-600"
               >

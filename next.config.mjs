@@ -21,11 +21,21 @@ const nextConfig = {
   //
   // OJO: solo rutas de PÁGINA. Los endpoints /api/clinica/* NO se tocan.
   async redirects() {
-    return ["mi-desempeno", "direccion", "productividad", "incidencias", "bandeja"].map((p) => ({
-      source: `/clinica/${p}`,
-      destination: `/equipo/${p}`,
-      permanent: true,
-    }));
+    return [
+      ...["mi-desempeno", "direccion", "productividad", "incidencias", "bandeja"].map((p) => ({
+        source: `/clinica/${p}`,
+        destination: `/equipo/${p}`,
+        permanent: true,
+      })),
+      // El portal del paciente pasó de "Mis citas" a "Mi perfil" (2026-07-27):
+      // ahora también tiene sus documentos. La URL vieja la tienen enlazada
+      // desde la web y en correos ya enviados, así que sigue funcionando.
+      {
+        source: "/widget/c/:tenantSlug/mis-citas",
+        destination: "/widget/c/:tenantSlug/mi-perfil",
+        permanent: true,
+      },
+    ];
   },
 };
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useCitasPortalSession } from "../_components/useCitasPortalSession.js";
+import MisDocumentos from "../_components/MisDocumentos.jsx";
 
 function fmtLong(iso) {
   if (!iso) return "—";
@@ -97,11 +98,11 @@ function Gate({ info, variant }) {
   if (info?.brand?.primaryColor) brandStyle["--brand-primary"] = info.brand.primaryColor;
   if (info?.brand?.secondaryColor) brandStyle["--brand-secondary"] = info.brand.secondaryColor;
 
-  const title = variant === "expired" ? "Tu sesión ha caducado" : "Inicia sesión para ver tus citas";
+  const title = variant === "expired" ? "Tu sesión ha caducado" : "Inicia sesión para ver tu perfil";
   const body =
     variant === "expired"
       ? `Vuelve a abrir esta página desde tu cuenta en la web de ${info?.name ?? "la profesional"}.`
-      : `Para ver tus citas necesitas abrir esta página desde tu cuenta en la web de ${info?.name ?? "la profesional"}. Inicia sesión y vuelve a esta página.`;
+      : `Para ver tus citas y tus documentos necesitas abrir esta página desde tu cuenta en la web de ${info?.name ?? "la profesional"}. Inicia sesión y vuelve a esta página.`;
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-10" style={brandStyle}>
@@ -136,7 +137,7 @@ function Gate({ info, variant }) {
   );
 }
 
-export default function MisCitasPage() {
+export default function MiPerfilPage() {
   const params = useParams();
   const tenantSlug = params?.tenantSlug;
 
@@ -264,7 +265,7 @@ export default function MisCitasPage() {
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)]">Mis citas</div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)]">Mi perfil</div>
             <h1 className="text-[22px] lg:text-[26px] leading-tight text-[var(--widget-text)] truncate tracking-tight" style={headingStyle}>
               {info?.name}
             </h1>
@@ -282,58 +283,66 @@ export default function MisCitasPage() {
           </div>
         )}
 
-        {isEmpty && (
-          <div className="bg-[var(--widget-card)] rounded-xl border border-[var(--widget-border)] p-8 text-center">
-            <h2 className="text-[20px] text-[var(--widget-text)] tracking-tight mb-2" style={headingStyle}>
-              Todavía no tienes citas
-            </h2>
-            <p className="text-sm text-[var(--widget-text-muted)] mb-5">
-              Cuando reserves una cita, aparecerá aquí.
-            </p>
-            <a
-              href={`/widget/c/${tenantSlug}`}
-              target="_top"
-              rel="noopener"
-              className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md text-white bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
-            >
-              Reservar una cita
-            </a>
-          </div>
-        )}
+        <div className="space-y-10">
+          {/* ── Mis citas ── */}
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-3">
+              Mis citas
+            </div>
 
-        {!loadingData && !isEmpty && (
-          <div className="space-y-8">
-            <section>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-3">
-                Próximas citas
+            {isEmpty && (
+              <div className="bg-[var(--widget-card)] rounded-xl border border-[var(--widget-border)] p-8 text-center">
+                <h2 className="text-[20px] text-[var(--widget-text)] tracking-tight mb-2" style={headingStyle}>
+                  Todavía no tienes citas
+                </h2>
+                <p className="text-sm text-[var(--widget-text-muted)] mb-5">
+                  Cuando reserves una cita, aparecerá aquí.
+                </p>
+                <a
+                  href={`/widget/c/${tenantSlug}`}
+                  target="_top"
+                  rel="noopener"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md text-white bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
+                >
+                  Reservar una cita
+                </a>
               </div>
-              {upcoming.length === 0 ? (
-                <div className="text-[13px] text-[var(--widget-text-muted)] bg-[var(--widget-card)] rounded-lg border border-[var(--widget-border)] p-4">
-                  No tienes citas próximas.
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {upcoming.map((b) => (
-                    <BookingCard key={b.id} booking={b} onCancel={openCancel} />
-                  ))}
-                </div>
-              )}
-            </section>
+            )}
 
-            {history.length > 0 && (
-              <section>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-3">
-                  Historial
-                </div>
-                <div className="flex flex-col gap-3">
-                  {history.map((b) => (
-                    <BookingCard key={b.id} booking={b} muted />
-                  ))}
-                </div>
-              </section>
+            {!loadingData && !isEmpty && (
+              <div className="space-y-8">
+                <section>
+                  <div className="text-[12px] text-[var(--widget-text-muted)] mb-2">Próximas</div>
+                  {upcoming.length === 0 ? (
+                    <div className="text-[13px] text-[var(--widget-text-muted)] bg-[var(--widget-card)] rounded-lg border border-[var(--widget-border)] p-4">
+                      No tienes citas próximas.
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      {upcoming.map((b) => (
+                        <BookingCard key={b.id} booking={b} onCancel={openCancel} />
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                {history.length > 0 && (
+                  <section>
+                    <div className="text-[12px] text-[var(--widget-text-muted)] mb-2">Historial</div>
+                    <div className="flex flex-col gap-3">
+                      {history.map((b) => (
+                        <BookingCard key={b.id} booking={b} muted />
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
             )}
           </div>
-        )}
+
+          {/* ── Mis documentos ── (siempre, aunque aún no haya citas) */}
+          <MisDocumentos tenantSlug={tenantSlug} authFetch={authFetch} profesional={info?.name} />
+        </div>
       </div>
 
       {/* Confirmación de cancelación */}
