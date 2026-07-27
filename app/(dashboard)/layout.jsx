@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { getMasterModels } from "../../lib/db/masterDb.js";
+import { maybeResetDemo } from "../../lib/demo/resetDemo.js";
 import DashboardShell from "../../components/layout/DashboardShell.jsx";
 import SessionKeeper from "../../components/auth/SessionKeeper.jsx";
 
@@ -16,6 +17,11 @@ export default async function DashboardLayout({ children }) {
   const headersList = await headers();
   const userId = headersList.get("x-user-id");
   const tenantSlug = headersList.get("x-tenant");
+
+  // Demo pública auto-restaurable: en cada recarga dura del demo se restaura
+  // la foto dorada (si existe) ANTES de que el cliente pida datos. Ver
+  // lib/demo/resetDemo.js — para los demás tenants es un no-op inmediato.
+  if (tenantSlug === "demo") await maybeResetDemo(tenantSlug);
 
   const { User, Tenant, TenantModule } = getMasterModels();
 
