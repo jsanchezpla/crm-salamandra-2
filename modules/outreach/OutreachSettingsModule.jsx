@@ -29,6 +29,8 @@ function BusinessLineCard({ line, onSaved, onError }) {
     active: line.active,
   });
   const [saving, setSaving] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const save = async () => {
     setSaving(true);
@@ -52,6 +54,28 @@ function BusinessLineCard({ line, onSaved, onError }) {
       onError(e.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Borrado duro (el DELETE arrastra por CASCADE los análisis de la línea).
+  // La alternativa blanda ya existe: desmarcar "Línea activa" conserva el histórico.
+  const doDelete = async () => {
+    setDeleting(true);
+    try {
+      const r = await fetch(`/api/outreach/business-lines/${line.id}`, { method: "DELETE" });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j?.error || "Error eliminando la línea");
+      }
+      // 204 sin body: no hacer r.json().
+      setShowDelete(false);
+      setEditing(false);
+      onSaved();
+    } catch (e) {
+      onError(e.message);
+      setShowDelete(false);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -162,11 +186,18 @@ function BusinessLineCard({ line, onSaved, onError }) {
         <div className="flex gap-2 pt-1">
           <button
             onClick={save}
-            disabled={saving}
+            disabled={saving || deleting}
             className="px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50 hover:opacity-90 transition"
             style={{ backgroundColor: "var(--color-primary)" }}
           >
             {saving ? "Guardando..." : "Guardar"}
+          </button>
+          <button
+            onClick={() => setShowDelete(true)}
+            disabled={saving || deleting}
+            className="px-4 py-2 rounded-lg text-white text-sm font-medium bg-red-600 hover:bg-red-700 disabled:opacity-50"
+          >
+            Eliminar
           </button>
           <button
             onClick={() => setEditing(false)}
@@ -176,6 +207,28 @@ function BusinessLineCard({ line, onSaved, onError }) {
           </button>
         </div>
       </div>
+
+      {/* Confirmación de borrado (mismo patrón que OutreachLeadDetail) */}
+      {showDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !deleting && setShowDelete(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-[Fraunces] text-xl text-neutral-800">Eliminar «{line.name}»</h3>
+            <p className="text-sm text-neutral-600 mt-2">
+              Esta acción no se puede deshacer: se borrarán también <strong>todos los análisis</strong> hechos
+              con esta línea (puntuaciones, pitches, borradores de email). Si solo quieres dejar de usarla,
+              desmarca «Línea activa» y guarda — así conservas el histórico.
+            </p>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setShowDelete(false)} disabled={deleting} className="px-4 py-2 rounded-lg border border-neutral-200 text-sm text-neutral-600 hover:bg-neutral-50 disabled:opacity-50">
+                Cancelar
+              </button>
+              <button onClick={doDelete} disabled={deleting} className="px-4 py-2 rounded-lg text-white text-sm font-medium bg-red-600 hover:bg-red-700 disabled:opacity-50">
+                {deleting ? "Eliminando..." : "Eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
