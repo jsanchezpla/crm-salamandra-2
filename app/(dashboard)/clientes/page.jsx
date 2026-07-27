@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import SyncWebButton from "../../../components/clients/SyncWebButton.jsx";
 
 function useMounted() {
   const [m, setM] = useState(false);
@@ -270,6 +271,7 @@ export default function ClientesPage() {
               </h1>
             </div>
             <div className="flex items-center gap-2">
+              <SyncWebButton />
               <button
                 onClick={handleExport}
                 disabled={exporting}
