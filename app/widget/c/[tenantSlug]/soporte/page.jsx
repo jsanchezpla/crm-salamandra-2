@@ -209,7 +209,7 @@ export default function SoportePortalPage() {
             maxLength={255}
             value={form.subject}
             onChange={(e) => setForm({ ...form, subject: e.target.value })}
-            className="campo"
+            className={CAMPO}
             placeholder="Resume en una línea qué necesitas"
           />
         </Campo>
