@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTenantContext } from "../../../../../lib/tenant/tenantResolver.js";
 import { handleRouteError } from "../../../../../lib/utils/errors.js";
-import { verifyHmacSignature } from "../../../../../lib/training/webhookAuth.js";
+import { verifyWebhookSignature } from "../../../../../lib/training/webhookAuth.js";
 import { enforceRateLimit, getClientIp } from "../../../../../lib/utils/rateLimit.js";
 import { logTrainingAudit } from "../../../../../lib/training/audit.js";
 
@@ -109,7 +109,7 @@ export async function POST(request) {
 
     if (signature) {
       // ── Modo 2 — HMAC ────────────────────────────────────────────────
-      if (!verifyHmacSignature(rawBody, signature)) {
+      if (!(await verifyWebhookSignature(rawBody, signature, request))) {
         return NextResponse.json({ ok: false, error: "Firma inválida" }, { status: 401 });
       }
       authMode = "hmac";

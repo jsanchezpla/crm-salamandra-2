@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTenantContext } from "../../../../../../lib/tenant/tenantResolver.js";
 import { handleRouteError } from "../../../../../../lib/utils/errors.js";
-import { verifyHmacSignature } from "../../../../../../lib/training/webhookAuth.js";
+import { verifyWebhookSignature } from "../../../../../../lib/training/webhookAuth.js";
 import { enforceRateLimit } from "../../../../../../lib/utils/rateLimit.js";
 
 /**
@@ -35,7 +35,7 @@ export async function GET(request) {
     const query = url.searchParams.toString(); // "email=...&productId=..."
     const signature = request.headers.get("x-retorika-signature");
 
-    if (!verifyHmacSignature(query, signature)) {
+    if (!(await verifyWebhookSignature(query, signature, request))) {
       return NextResponse.json({ ok: false, error: "Firma inválida" }, { status: 401 });
     }
 

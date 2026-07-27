@@ -1,6 +1,6 @@
 import { getTenantContext } from "../../../../../lib/tenant/tenantResolver.js";
 import { handleRouteError } from "../../../../../lib/utils/errors.js";
-import { verifyHmacSignature } from "../../../../../lib/training/webhookAuth.js";
+import { verifyWebhookSignature } from "../../../../../lib/training/webhookAuth.js";
 import { NextResponse } from "next/server";
 import { Op } from "sequelize";
 
@@ -11,7 +11,7 @@ export async function POST(request) {
     const rawBody = await request.text();
     const signatureHeader = request.headers.get("x-retorika-signature");
 
-    if (!verifyHmacSignature(rawBody, signatureHeader)) {
+    if (!(await verifyWebhookSignature(rawBody, signatureHeader, request))) {
       return NextResponse.json({ ok: false, error: "Firma inválida" }, { status: 401 });
     }
 

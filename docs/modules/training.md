@@ -61,16 +61,35 @@ Cinco endpoints en `app/api/webhooks/tutorlms/*`, todos con la misma
 estructura: leer el body crudo, validar HMAC, parsear JSON, resolver
 tenant (vía header `x-tenant` o subdominio; no JWT), persistir.
 
-**Validación HMAC**: helper compartido `lib/training/webhookAuth.js`.
-Lee `process.env.CRM_WEBHOOK_SECRET` en runtime (nombre canónico desde
-2026-07-24; el legacy `RETORIKA_WEBHOOK_SECRET` se acepta como fallback),
-falla ruidoso si no está configurado y devuelve `false` ante cualquier firma.
-En los WordPress conectados el define de wp-config.php usa el MISMO nombre:
-`define('CRM_WEBHOOK_SECRET', '...')`.
+**Validación HMAC — un secreto POR TENANT** (desde 2026-07-26): helper
+compartido `lib/training/webhookAuth.js`. Lee `CRM_WEBHOOK_SECRETS`, un JSON
+`{slug: secret}`, y valida la firma contra el secreto **del tenant al que la
+petición dice ir**. Si ese tenant no tiene entrada propia, cae al global
+`CRM_WEBHOOK_SECRET` (o el legacy `RETORIKA_WEBHOOK_SECRET`) — las entradas
+por-tenant tienen precedencia, así que migrar un tenant lo aísla al instante.
+Falla ruidoso si no hay ningún secreto y devuelve `false` ante cualquier firma.
+
+En cada WordPress conectado el define de wp-config.php usa siempre el MISMO
+nombre; lo que cambia es el valor: `define('CRM_WEBHOOK_SECRET', '<el de ESE tenant>')`.
+
+> **Por qué por tenant.** El tenant destino viaja en la cabecera `x-tenant`, que
+> la pone quien llama, y la firma no lo cubría. Con un único secreto compartido,
+> cualquiera que lo tuviera podía escribir en CUALQUIER tenant con `training`
+> activo (el WP de una clienta inyectando matrículas en el de otra). Ahora la
+> firma demuestra "tengo la llave del tenant que digo ser": firmar con el
+> secreto de A y mandar `x-tenant: B` da 401.
+
+El slug se resuelve con `resolveRequestSlug` (exportado de
+`lib/tenant/tenantResolver.js`), **la misma** función que usa `getTenantContext`
+para elegir el schema donde se escribe. Es deliberado: si divergieran, se podría
+firmar como un tenant y acabar escribiendo en otro.
 
 ```js
-import { verifyHmacSignature } from "lib/training/webhookAuth.js";
-if (!verifyHmacSignature(rawBody, signatureHeader)) return 401;
+import { verifyWebhookSignature } from "lib/training/webhookAuth.js";
+// ¡async! Sin `await`, `!promise` sería false y dejaría pasar todo — por eso
+// el helper se renombró (antes `verifyHmacSignature`): un llamante sin
+// actualizar peta en vez de abrir un bypass silencioso.
+if (!(await verifyWebhookSignature(rawBody, signatureHeader, request))) return 401;
 ```
 
 Header esperado: `X-Retorika-Signature` (acepta tanto `sha256=<hex>`
@@ -859,14 +878,14 @@ Detectado durante la documentación, en orden vagamente sugerido:
 - **Rate limiting** en webhooks y endpoints externos.
 - **Captcha o token compartido** en `/api/usuarios/register/empresa` y
   `/api/cursos-empresas/codigos-cursos/:email` (ver #6 y #7).
-- **HMAC secret por-tenant**. `lib/training/webhookAuth.js` lee un
-  único `RETORIKA_WEBHOOK_SECRET`. Funcional mientras solo Retorika
-  reciba webhooks de TutorLMS. Cuando un segundo tenant (nutri_laura
-  está perfilado) conecte su propio WP + TutorLMS, hay que pasar el
-  slug del tenant al helper y leer `TUTORLMS_WEBHOOK_SECRET_{SLUG}`
-  (o un valor desde `tenant.settings`) para que cada cliente firme
-  con su propio secret. Compartir secret entre tenants es un riesgo:
-  un WP comprometido escribiría sobre los demás.
+- ~~**HMAC secret por-tenant**~~ — **RESUELTO 2026-07-26**, al conectar el
+  WordPress de nutri_laura (el segundo tenant con TutorLMS, que es justo el
+  escenario que este punto anticipaba). `verifyWebhookSignature` recibe la
+  request, resuelve el slug con `resolveRequestSlug` y valida contra
+  `CRM_WEBHOOK_SECRETS` (JSON `{slug: secret}`), con fallback al global para
+  los que aún no han migrado. Ver "WordPress + TutorLMS (webhooks entrantes)".
+  **Pendiente de cierre completo**: cuando Retorika tenga su propio secreto en
+  `CRM_WEBHOOK_SECRETS`, vaciar y borrar el global `CRM_WEBHOOK_SECRET`.
 
 ## Incoherencias resueltas en este sprint
 
