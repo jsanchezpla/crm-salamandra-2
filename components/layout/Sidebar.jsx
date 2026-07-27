@@ -128,13 +128,18 @@ const navigation = [
         key: "team",
         label: "Equipo",
         href: "/equipo",
+        // Visible para el CENTRO (módulo team) Y para las terapeutas (módulo
+        // clinica, aunque no tengan `team` en su moduleAccess): el admin ve la
+        // gestión completa, la terapeuta su mini-módulo (datos + docs + accesos).
+        visibleModules: ["team", "clinica"],
         // Herramientas de GESTIÓN DE EQUIPO (las pidió Aumenta para gestionar
         // su equipo, no son clínicas): antes colgaban de Clínica. Las páginas
         // siguen viviendo en /clinica/* — solo cambia dónde salen en el menú.
         // `moduleKey: "clinica"` porque esas pantallas son del módulo clinica:
         // un tenant con team pero sin clinica (p.ej. nutri_laura) no las ve.
         // adminOnly en Desempeño/Dirección/Productividad (decisión de Aumenta
-        // 2026-07-24); Incidencias y Bandeja las usa todo el equipo.
+        // 2026-07-24); Incidencias y Bandeja las usa todo el equipo (terapeutas
+        // incluidas), por eso van con moduleKey clinica y SIN adminOnly.
         children: [
           { key: "team-desempeno", label: "Desempeño", href: "/clinica/mi-desempeno", adminOnly: true, moduleKey: "clinica" },
           { key: "team-direccion", label: "Dirección", href: "/clinica/direccion", adminOnly: true, moduleKey: "clinica" },
@@ -397,11 +402,17 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
         {/* Navegación */}
         <nav className="flex-1 overflow-y-auto px-3 space-y-4 pb-4 slim-scroll">
           {navigation.map((section) => {
+            // Un item es visible si el tenant tiene el módulo Y el usuario puede verlo.
+            // `visibleModules` permite un OR de módulos (p.ej. Equipo se muestra a
+            // quien tenga `team` O `clinica`: el admin gestiona el equipo, la
+            // terapeuta ve su mini-módulo aunque no tenga acceso a `team`).
+            const canSeeModule = (key) =>
+              (enabledModules.has(key) || enabledModules.size === 0) && userCanSee(key);
             const visibleItems = section.items.filter((item) => {
               if (item.adminOnly && !isAdminRole) return false;
               if (item.key === "inicio" || item.always) return true;
-              const tenantHasIt = enabledModules.has(item.key) || enabledModules.size === 0;
-              return tenantHasIt && userCanSee(item.key);
+              const keys = item.visibleModules || [item.key];
+              return keys.some(canSeeModule);
             });
             if (visibleItems.length === 0) return null;
 

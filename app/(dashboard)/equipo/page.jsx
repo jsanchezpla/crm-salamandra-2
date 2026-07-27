@@ -5,6 +5,7 @@ import EmployeeBillingSection from "../../../components/billing/EmployeeBillingS
 import Select from "@/components/ui/Select.jsx";
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 import TeamHoursEditor from "@/components/team/TeamHoursEditor.jsx";
+import MiEquipo from "@/components/team/MiEquipo.jsx";
 
 const STATUS_LABELS = { active: "Activo", inactive: "Inactivo", on_leave: "De baja" };
 const STATUS_FILTER_OPTIONS = [
@@ -111,7 +112,11 @@ export default function EquipoPage() {
     }
   }, [filterStatus, filterRole, search]);
 
-  useEffect(() => { load(); }, [load]);
+  // Admin lo decide /api/auth/me (NO /api/team, que da 403 a las terapeutas).
+  // La gestión completa (lista + retribución) solo se carga para admin; las
+  // terapeutas ven el mini-módulo <MiEquipo/> y nunca llaman a /api/team.
+  const meIsAdmin = me?.role === "admin" || me?.role === "superadmin";
+  useEffect(() => { if (meIsAdmin) load(); }, [load, meIsAdmin]);
 
   const total = members.length;
   const inactivos = useMemo(() => members.filter((m) => m.status === "inactive").length, [members]);
@@ -219,6 +224,15 @@ export default function EquipoPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  // Mientras resolvemos el rol, no parpadear la UI de gestión.
+  if (!me) {
+    return <div className="p-4 lg:p-8 max-w-6xl mx-auto"><p className="text-xs text-neutral-400">Cargando…</p></div>;
+  }
+  // Perfil NO admin (terapeutas): mini-módulo de Equipo (datos + docs + accesos).
+  if (!meIsAdmin) {
+    return <MiEquipo />;
   }
 
   return (

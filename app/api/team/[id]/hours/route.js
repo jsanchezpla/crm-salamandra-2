@@ -16,7 +16,12 @@ async function canAccess(request, tenantModels, memberId) {
 
 export const GET = withTenant(async (request, { params }, ctx) => {
   try {
-    if (!ctx.hasModule("team")) return forbidden("Módulo equipo no activo");
+    // Gate a nivel de TENANT (team o clinica): las terapeutas no tienen `team`
+    // en su moduleAccess de usuario pero SÍ gestionan su propio horario (el
+    // acceso individual lo controla canAccess). Antes esto daba 403 y rompía
+    // "Mi horario" para ellas (bug 2026-07-27).
+    const tHas = ctx.tenantHasModule ? ctx.tenantHasModule.bind(ctx) : ctx.hasModule.bind(ctx);
+    if (!tHas("team") && !tHas("clinica")) return forbidden("Módulo equipo no activo");
     const { id } = await params;
     const { TeamMember, TeamMemberHours } = ctx.tenantModels;
     const member = await TeamMember.findByPk(id, { attributes: ["id"] });
@@ -36,7 +41,12 @@ export const GET = withTenant(async (request, { params }, ctx) => {
 
 export const PUT = withTenant(async (request, { params }, ctx) => {
   try {
-    if (!ctx.hasModule("team")) return forbidden("Módulo equipo no activo");
+    // Gate a nivel de TENANT (team o clinica): las terapeutas no tienen `team`
+    // en su moduleAccess de usuario pero SÍ gestionan su propio horario (el
+    // acceso individual lo controla canAccess). Antes esto daba 403 y rompía
+    // "Mi horario" para ellas (bug 2026-07-27).
+    const tHas = ctx.tenantHasModule ? ctx.tenantHasModule.bind(ctx) : ctx.hasModule.bind(ctx);
+    if (!tHas("team") && !tHas("clinica")) return forbidden("Módulo equipo no activo");
     const { id } = await params;
     const { TeamMember, TeamMemberHours } = ctx.tenantModels;
     const member = await TeamMember.findByPk(id, { attributes: ["id"] });
