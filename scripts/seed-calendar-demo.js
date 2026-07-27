@@ -14,6 +14,17 @@ import { Op } from "sequelize";
 import { getTenantDb } from "../lib/db/tenantDb.js";
 
 const SLUG = process.argv[2] || "demo";
+
+// Salvaguarda: este seed crea tareas FICTICIAS. Lanzarlo por error contra un
+// tenant en uso real (aumenta, nutri_laura…) le contaminaría el calendario, así
+// que fuera de `demo` hay que pedirlo a conciencia con --force.
+if (SLUG !== "demo" && !process.argv.includes("--force")) {
+  process.stderr.write(
+    `\n✗ Este seed es de datos FALSOS y has apuntado a '${SLUG}'.\n` +
+      `  Si de verdad quieres sembrar ahí, repite el comando con --force.\n\n`
+  );
+  process.exit(1);
+}
 const MARK = "seed-calendar-demo";
 
 function log(m) { process.stdout.write(`  ${m}\n`); }

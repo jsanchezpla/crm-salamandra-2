@@ -1,6 +1,7 @@
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok } from "../../../../../../lib/utils/apiResponse.js";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../../../../../../lib/utils/errors.js";
+import { assertNotDemoPaidCall } from "../../../../../../lib/demo/isDemo.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { sendEmail } from "../../../../../../lib/email/resendClient.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
@@ -32,6 +33,9 @@ async function auditLog(data) {
  */
 export const POST = withTenant(async (request, { params }, ctx) => {
   if (!ctx.hasModule("outreach")) throw new ForbiddenError();
+  // Demo pública: el destinatario, asunto y cuerpo vienen en el body, así que
+  // con una clave de Resend configurada esto sería un relé de spam abierto.
+  assertNotDemoPaidCall(ctx, "El envío de correos");
   const { id } = await params;
   if (!UUID_RE.test(id)) throw new ValidationError("Identificador inválido");
 

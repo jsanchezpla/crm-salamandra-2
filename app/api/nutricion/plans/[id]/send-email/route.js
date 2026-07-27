@@ -1,5 +1,6 @@
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
+import { isDemoTenant } from "../../../../../../lib/demo/isDemo.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { UUID_RE, loadPlanTree } from "../../../../../../lib/nutricion/plans.js";
 import { buildMenuPdfBuffer, menuPdfFilename } from "../../../../../../lib/nutricion/menuPdf.js";
@@ -28,9 +29,16 @@ const lastSentByPlan = new Map();
 // al email del paciente, con el PDF adjunto. Solo planes `assigned` (una
 // plantilla no tiene destinatario).
 // ─────────────────────────────────────────────────────────────────────────────
-export const POST = withTenant(async (request, ctx, { tenant, tenantModels, hasModule, brand }) => {
+export const POST = withTenant(async (request, ctx, tenantCtx) => {
+  const { tenant, tenantModels, hasModule, brand } = tenantCtx;
   try {
     if (!hasModule("nutricion")) return forbidden("Módulo nutricion no activo");
+    // Demo pública: no enviar correo real con la clave de Resend del tenant.
+    // (Se devuelve 403 en vez de lanzar: este handler tiene su propio catch,
+    // que convertiría cualquier excepción en un 500 genérico.)
+    if (isDemoTenant(tenantCtx)) {
+      return forbidden("El envío del menú por correo está desactivado en la demo: usa datos de ejemplo.");
+    }
     const { id } = await ctx.params;
     if (!UUID_RE.test(id)) return error("id inválido");
 

@@ -1,5 +1,6 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden } from "../../../../../lib/utils/apiResponse.js";
+import { assertNotDemoPaidCall } from "../../../../../lib/demo/isDemo.js";
 import { getTenantOpenAIKey } from "../../../../../lib/ai/openaiKey.js";
 import { getTenantAnthropicKey } from "../../../../../lib/ai/anthropicKey.js";
 import { getTenantAnthropicModel } from "../../../../../lib/ai/anthropicModel.js";
@@ -36,6 +37,10 @@ const DEMO = {
  */
 export const POST = withTenant(async (request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
+  // La demo es pública (sesión admin anónima): nunca llamar a Whisper/Claude
+  // con la clave del tenant. Aquí no se puede simular (el modo fake está
+  // limitado a desarrollo), así que se corta.
+  assertNotDemoPaidCall(ctx, "La transcripción por voz");
 
   const isDev = process.env.NODE_ENV !== "production";
   const openaiKey = getTenantOpenAIKey(ctx);

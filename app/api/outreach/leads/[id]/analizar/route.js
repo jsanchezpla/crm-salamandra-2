@@ -1,6 +1,7 @@
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok } from "../../../../../../lib/utils/apiResponse.js";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../../../../../../lib/utils/errors.js";
+import { assertNotDemoPaidCall } from "../../../../../../lib/demo/isDemo.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { analyzeLead } from "../../../../../../lib/outreach/analysis/index.js";
 import { getTenantAnthropicKey } from "../../../../../../lib/ai/anthropicKey.js";
@@ -30,6 +31,8 @@ async function auditLog(data) {
  */
 export const POST = withTenant(async (request, { params }, ctx) => {
   if (!ctx.hasModule("outreach")) throw new ForbiddenError();
+  // Demo pública: no quemar tokens de Claude (análisis de hasta 16k tokens).
+  assertNotDemoPaidCall(ctx, "El análisis con IA");
   const { id } = await params;
   if (!UUID_RE.test(id)) throw new ValidationError("Identificador inválido");
 
