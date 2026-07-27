@@ -5,6 +5,8 @@ import { resolveCurrentTeamMemberId } from "../../../../../../lib/team/currentTe
 import { notifyAdminsNewRequest, serializeChangeRequest } from "../../../../../../lib/citas/rescheduleRequests.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
+const RESCHEDULABLE_STATUS = new Set(["pending", "confirmed"]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // POST /api/citas/bookings/[id]/reschedule-request
 // Una terapeuta (o el admin) PROPONE mover una cita. La cita NO se cambia: se
@@ -18,6 +20,11 @@ export const POST = withTenant(async (request, { params }, ctx) => {
 
     const booking = await Booking.findByPk(id);
     if (!booking) return notFound("Cita no encontrada");
+    // Solo se proponen cambios sobre citas VIGENTES: una cancelada/completada/
+    // no-asistida no se reprograma (evita mover una cita que el paciente cree cancelada).
+    if (!RESCHEDULABLE_STATUS.has(booking.status)) {
+      return error("Esta cita no admite reprogramación (está cancelada, completada o marcada como no asistida).", 409);
+    }
 
     // Acceso: admin, o el profesional dueño de la cita (solo lo suyo).
     const role = request.headers.get("x-user-role") ?? "user";
@@ -37,7 +44,17 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     if (!when || Number.isNaN(when.getTime())) return error("datetime inválido");
     if (when.getTime() <= Date.now()) return error("El horario propuesto ya pasó");
     const reason = typeof body?.reason === "string" ? body.reason.slice(0, 400) : null;
-    const proposedTeamMemberId = typeof body?.teamMemberId === "string" && body.teamMemberId ? body.teamMemberId : (booking.teamMemberId || null);
+
+    // teamMemberId propuesto: si viene, debe ser un UUID de un profesional REAL
+    // (si no, un id inválido reventaba con 500 al crear, o con violación de FK
+    // al aprobar). Sin él, se mantiene el profesional actual de la cita.
+    let proposedTeamMemberId = booking.teamMemberId || null;
+    if (typeof body?.teamMemberId === "string" && body.teamMemberId) {
+      if (!UUID_RE.test(body.teamMemberId)) return error("teamMemberId inválido");
+      const exists = TeamMember ? await TeamMember.findByPk(body.teamMemberId, { attributes: ["id"] }) : null;
+      if (!exists) return error("El profesional indicado no existe", 422);
+      proposedTeamMemberId = body.teamMemberId;
+    }
 
     // Re-validar que el hueco propuesto sigue libre (para ese profesional).
     const overlap = await findBookingOverlap(Booking, {

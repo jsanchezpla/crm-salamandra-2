@@ -40,7 +40,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     if (teamMemberId) where.teamMemberId = teamMemberId;
     const rows = await CalendarTask.findAll({
       where,
-      attributes: ["id", "title", "priority", "startDate", "startTime", "endDate", "allDay", "teamMemberId"],
+      attributes: ["id", "title", "priority", "startDate", "startTime", "endDate", "endTime", "allDay", "teamMemberId"],
       order: [["startDate", "ASC"], ["startTime", "ASC"]],
     });
 
@@ -59,6 +59,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       priority: r.priority,
       startDate: String(r.startDate).slice(0, 10),
       startTime: r.startTime || null,
+      endTime: r.endTime || null,
       allDay: !!r.allDay,
       endDate: r.endDate ? String(r.endDate).slice(0, 10) : null,
       teamMemberName: r.teamMemberId ? nameById[r.teamMemberId] : null,
@@ -71,7 +72,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     const model = getTenantAnthropicModel(ctx);
     let result;
     try {
-      result = await reorganizeWeek({ tasks: movable, weekDates, apiKey, model, preferences });
+      result = await reorganizeWeek({ tasks: movable, weekDates, apiKey, model, preferences, forceFake: ctx.slug === "demo" });
     } catch {
       result = { model: "sin-ia", proposals: [] };
     }
@@ -93,6 +94,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
             oldLabel: dayLabel(t.startDate),
             newLabel: dayLabel(m.newDate),
             startTime: t.startTime,
+            endTime: t.endTime,
             allDay: t.allDay,
             reason: m.reason,
           };

@@ -104,7 +104,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       chosen = await chooseSlots({
         candidates,
         context: { serviceName: eventType.name, duration: eventType.duration, patientName, preferences, scope },
-        apiKey, model,
+        apiKey, model, forceFake: ctx.slug === "demo",
       });
     } catch {
       chosen = { model: "sin-ia", suggestions: [] };

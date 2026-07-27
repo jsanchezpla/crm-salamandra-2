@@ -74,6 +74,7 @@ export default function CalendarioPage() {
   const [clients, setClients] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
   // Integración con Proyectos: eventos de tarjetas Kanban (dueDate) e hitos.
+  const [hasProjects, setHasProjects] = useState(false); // ¿el tenant/usuario tiene el módulo?
   const [showProjects, setShowProjects] = useState(true);
   const showProjectsRef = useRef(true); // fetchEvents vive en un useCallback([]): lee el ref
   const [projectInfo, setProjectInfo] = useState(null); // mini-modal de evento de proyecto
@@ -91,6 +92,11 @@ export default function CalendarioPage() {
     fetch("/api/team?status=all&limit=500", { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => setTeamMembers(j.data?.members ?? []))
+      .catch(() => {});
+    // ¿El tenant/usuario tiene módulo Proyectos? Si /api/projects responde OK,
+    // se muestra el toggle "Proyectos"; si 403, se oculta (no confundir).
+    fetch("/api/projects?limit=1", { cache: "no-store" })
+      .then((r) => setHasProjects(r.ok))
       .catch(() => {});
   }, []);
 
@@ -126,8 +132,12 @@ export default function CalendarioPage() {
     calendarRef.current?.getApi().refetchEvents();
   }
 
+  // Lunes de la semana que el usuario está VIENDO (no siempre hoy): getDate()
+  // da la fecha de referencia de la vista actual de FullCalendar.
   function currentWeekMonday() {
-    const d = new Date();
+    let d;
+    try { d = calendarRef.current?.getApi()?.getDate() || new Date(); }
+    catch { d = new Date(); }
     const day = d.getDay(); // 0=domingo..6=sábado
     const diff = day === 0 ? -6 : 1 - day;
     const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diff);
@@ -138,7 +148,9 @@ export default function CalendarioPage() {
     setReorgIndex(0);
     setReorg({ loading: true, proposals: [], err: null });
     const monday = currentWeekMonday();
-    const end = addDaysStr(monday, 7);
+    const sunday = addDaysStr(monday, 6); // rango inclusivo lunes..domingo (no toca la semana siguiente)
+    // El preview respeta el toggle de Proyectos: si está apagado, no trae sus eventos.
+    const projParam = showProjectsRef.current ? "" : "&projects=0";
     try {
       // En paralelo: propuestas + todas las tareas de la semana (para el calendario preview).
       const [r, te] = await Promise.all([
@@ -146,7 +158,7 @@ export default function CalendarioPage() {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ weekStart: monday }),
         }),
-        fetch(`/api/calendar/tasks?start=${monday}&end=${end}`, { cache: "no-store" }),
+        fetch(`/api/calendar/tasks?start=${monday}&end=${sunday}${projParam}`, { cache: "no-store" }),
       ]);
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo reorganizar");
@@ -159,6 +171,7 @@ export default function CalendarioPage() {
         weekStart: monday,
         weekEvents: tj?.data || [],
         err: null,
+        applyError: null,
       });
     } catch (e) {
       setReorg({ loading: false, proposals: [], err: e.message });
@@ -168,15 +181,32 @@ export default function CalendarioPage() {
     const moves = reorg?.proposals?.[reorgIndex]?.moves || [];
     if (!moves.length) return;
     setReorgApplying(true);
+    let failed = 0;
     try {
       for (const m of moves) {
-        await fetch(`/api/calendar/tasks/${m.taskId}`, {
-          method: "PUT", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ startDate: m.newDate, startTime: m.startTime || null, endDate: null, endTime: null, allDay: !!m.allDay }),
-        }).catch(() => {});
+        try {
+          const res = await fetch(`/api/calendar/tasks/${m.taskId}`, {
+            method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              startDate: m.newDate,
+              startTime: m.startTime || null,
+              // Tarea de un solo día: si tenía hora de fin, se conserva EN EL NUEVO día
+              // (antes se mandaba null y se perdía la duración).
+              endDate: m.endTime ? m.newDate : null,
+              endTime: m.endTime || null,
+              allDay: !!m.allDay,
+            }),
+          });
+          if (!res.ok) failed += 1;
+        } catch { failed += 1; }
       }
       calendarRef.current?.getApi().refetchEvents();
-      setReorg(null);
+      if (failed > 0) {
+        // Aplicación parcial: NO cerrar en silencio, avisar de lo que falló.
+        setReorg((r) => (r ? { ...r, applyError: `Se aplicaron ${moves.length - failed} de ${moves.length} cambios; ${failed} fallaron. Cierra y vuelve a intentarlo.` } : r));
+      } else {
+        setReorg(null);
+      }
     } finally {
       setReorgApplying(false);
     }
@@ -187,9 +217,16 @@ export default function CalendarioPage() {
     if (reorgCount < 2) return;
     setReorgIndex((i) => (i + delta + reorgCount) % reorgCount);
   }
+  // Cerrar el modal de reorganizar. No cierra mientras se están aplicando los
+  // cambios (evita dejar PUTs a medias y el calendario moviéndose "solo").
+  function closeReorg() {
+    if (reorgApplying) return;
+    setReorg(null);
+  }
   useEffect(() => {
     if (!reorg || reorg.loading || reorg.err || reorgCount < 1) return;
     function onKey(e) {
+      if (reorgApplying) return; // congelar navegación/cierre durante el aplicado
       if (e.key === "ArrowRight") stepReorg(1);
       else if (e.key === "ArrowLeft") stepReorg(-1);
       else if (e.key === "Escape") setReorg(null);
@@ -200,7 +237,7 @@ export default function CalendarioPage() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [reorg, reorgCount]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reorg, reorgCount, reorgApplying]); // eslint-disable-line react-hooks/exhaustive-deps
   function openCreate(startDate = todayStr(), endDate = "", startTime = "", endTime = "", allDay = false) {
     setFormError(null);
     setModal({ mode: "create", form: { ...EMPTY_FORM, startDate, endDate, startTime, endTime, allDay } });
@@ -473,14 +510,16 @@ export default function CalendarioPage() {
           </h1>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={toggleProjects}
-            className={`flex items-center gap-1.5 px-3 py-1.5 border text-xs font-medium rounded-md transition-colors ${showProjects ? "border-[#6366F1]/40 bg-[#6366F1]/10 text-[#4F46E5]" : "border-[var(--ink-200)] text-[var(--ink-400)] hover:bg-[var(--ink-100)]"}`}
-            title="Mostrar u ocultar las fechas límite e hitos de los proyectos"
-          >
-            <span className={`w-2 h-2 rounded-full ${showProjects ? "bg-[#6366F1]" : "bg-neutral-300"}`} />
-            Proyectos
-          </button>
+          {hasProjects && (
+            <button
+              onClick={toggleProjects}
+              className={`flex items-center gap-1.5 px-3 py-1.5 border text-xs font-medium rounded-md transition-colors ${showProjects ? "border-[#6366F1]/40 bg-[#6366F1]/10 text-[#4F46E5]" : "border-[var(--ink-200)] text-[var(--ink-400)] hover:bg-[var(--ink-100)]"}`}
+              title="Mostrar u ocultar las fechas límite e hitos de los proyectos"
+            >
+              <span className={`w-2 h-2 rounded-full ${showProjects ? "bg-[#6366F1]" : "bg-neutral-300"}`} />
+              Proyectos
+            </button>
+          )}
           <button
             onClick={loadReorg}
             className="flex items-center gap-1.5 px-3 py-1.5 border border-[var(--ink-200)] text-[var(--ink-700)] text-xs font-medium rounded-md hover:bg-[var(--ink-100)] transition-colors"
@@ -574,7 +613,7 @@ export default function CalendarioPage() {
         const activeMoves = active?.moves || [];
         const modelBadge = reorg.model === "fake" ? "Simulado" : reorg.model === "sin-ia" ? "Sin IA" : reorg.model === "none" ? "—" : "IA";
         return (
-          <div className="fixed inset-0 z-50" style={{ backgroundColor: "rgba(0,0,0,0.5)" }} onClick={(e) => { if (e.target === e.currentTarget) setReorg(null); }}>
+          <div className="fixed inset-0 z-50" style={{ backgroundColor: "rgba(0,0,0,0.5)" }} onClick={(e) => { if (e.target === e.currentTarget) closeReorg(); }}>
             <div className="bg-white shadow-2xl flex flex-col fixed inset-x-2 top-14 bottom-2 lg:inset-8 rounded-2xl overflow-hidden">
               {/* Cabecera */}
               <div className="px-5 lg:px-7 py-4 border-b border-[#F0F0F0] flex items-start justify-between shrink-0 gap-4">
@@ -584,8 +623,9 @@ export default function CalendarioPage() {
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">{modelBadge}</span>
                   </div>
                   <div className="text-[12px] text-neutral-400 mt-0.5">3 propuestas para repartir las tareas de esta semana. Elige la que prefieras.</div>
+                  {reorg.applyError && <div className="text-[12px] text-rose-600 mt-1.5">{reorg.applyError}</div>}
                 </div>
-                <button onClick={() => setReorg(null)} className="text-neutral-400 hover:text-neutral-700 p-1 -m-1 text-lg leading-none" aria-label="Cerrar">✕</button>
+                <button onClick={closeReorg} disabled={reorgApplying} className="text-neutral-400 hover:text-neutral-700 p-1 -m-1 text-lg leading-none disabled:opacity-40" aria-label="Cerrar">✕</button>
               </div>
 
               {reorg.loading ? (
@@ -679,7 +719,7 @@ export default function CalendarioPage() {
                       <span className="text-[11px] text-neutral-400 ml-2 hidden sm:inline">← → para cambiar de propuesta</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => setReorg(null)} className="text-[13px] text-neutral-500 px-3 py-2 hover:text-neutral-800">Cancelar</button>
+                      <button onClick={closeReorg} disabled={reorgApplying} className="text-[13px] text-neutral-500 px-3 py-2 hover:text-neutral-800 disabled:opacity-40">Cancelar</button>
                       <button onClick={applyReorg} disabled={reorgApplying || activeMoves.length === 0}
                         className="text-[13px] font-medium px-4 py-2 rounded-lg text-white disabled:opacity-40" style={{ backgroundColor: "var(--color-primary,#1B3A2D)" }}>
                         {reorgApplying ? "Aplicando…" : activeMoves.length === 0 ? "Sin cambios" : `Aplicar propuesta ${reorgIndex + 1} · ${activeMoves.length} cambio${activeMoves.length > 1 ? "s" : ""}`}

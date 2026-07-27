@@ -188,16 +188,22 @@ export default function CitasModule() {
 
   useEffect(() => { loadEventTypes(); }, [loadEventTypes]);
 
-  // Equipo para asignar profesional a la cita y para el filtro del calendario.
-  // `viewerIsAdmin` decide si se muestra el filtro por profesional (el jefe ve a
-  // todos; un profesional ya viene acotado a lo suyo desde el servidor).
+  // `viewerIsAdmin` se decide con /api/auth/me (el ROL), NO con /api/team: en un
+  // tenant con citas pero SIN módulo team, /api/team da 403 y un admin real se
+  // quedaba como no-admin (perdía "Elegir esta" y la pestaña Solicitudes).
+  useEffect(() => {
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setViewerIsAdmin(["admin", "superadmin"].includes(j?.data?.role)))
+      .catch(() => {});
+  }, []);
+
+  // Equipo para asignar profesional a la cita y para el filtro del calendario
+  // (si el tenant no tiene team, /api/team da 403 y la lista queda vacía: ok).
   useEffect(() => {
     fetch("/api/team?status=all&limit=500", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
-        setTeamMembers(j.data?.members ?? []);
-        setViewerIsAdmin(!!j.data?.viewerIsAdmin);
-      })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setTeamMembers(j?.data?.members ?? []))
       .catch(() => {});
   }, []);
 

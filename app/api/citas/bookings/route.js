@@ -122,10 +122,14 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       include.push({ model: Patient, as: "patient", attributes: ["id", "firstName", "lastName"] });
     }
 
+    // ?future=true = "próximas citas": orden ASCENDENTE (la más cercana primero),
+    // para que un limit pequeño devuelva las SIGUIENTES, no las más lejanas.
+    // El resto (listado, lista de espera) mantiene DESC (lo más reciente arriba).
+    const sortDir = searchParams.get("future") === "true" ? "ASC" : "DESC";
     const { count, rows } = await Booking.findAndCountAll({
       where,
       include,
-      order: [["scheduledAt", "DESC"]],
+      order: [["scheduledAt", sortDir]],
       limit,
       offset,
     });
