@@ -16,6 +16,9 @@ function gate(ctx) {
  */
 export const GET = withTenant(async (_request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
+  // Pantalla de EQUIPO AVANZADO: se vende aparte del módulo Equipo
+  // básico (que es solo plantilla, usuarios, roles y accesos).
+  if (!ctx.hasModule("team_avanzado")) return forbidden("Módulo Equipo avanzado no activo");
   if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo dirección puede ver el dashboard");
   const { Booking, TeamMember, Incidencia, Patient } = ctx.tenantModels;
   // Mes actual en hora española (el servidor corre en UTC).

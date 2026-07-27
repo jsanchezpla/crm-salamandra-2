@@ -21,6 +21,9 @@ const isoDate = (d) => (d ? (typeof d === "string" ? d : new Date(d).toISOString
  */
 export const GET = withTenant(async (request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
+  // Pantalla de EQUIPO AVANZADO: se vende aparte del módulo Equipo
+  // básico (que es solo plantilla, usuarios, roles y accesos).
+  if (!ctx.hasModule("team_avanzado")) return forbidden("Módulo Equipo avanzado no activo");
   const M = ctx.tenantModels;
   const { ClinicalReport, Incidencia, Booking, TeamMember, Patient, EventType } = M;
   const sp = new URL(request.url).searchParams;

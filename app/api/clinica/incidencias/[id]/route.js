@@ -21,6 +21,9 @@ const INCLUDES = (M) => [
 
 export const GET = withTenant(async (_request, rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
+  // Pantalla de EQUIPO AVANZADO: se vende aparte del módulo Equipo
+  // básico (que es solo plantilla, usuarios, roles y accesos).
+  if (!ctx.hasModule("team_avanzado")) return forbidden("Módulo Equipo avanzado no activo");
   const { id } = await rc.params;
   if (!UUID_RE.test(id)) return error("id inválido");
   const M = ctx.tenantModels;

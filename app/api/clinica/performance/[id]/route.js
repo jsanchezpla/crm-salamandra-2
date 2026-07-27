@@ -16,6 +16,9 @@ function gate(ctx) {
 //   { approvedIncentive: <number> }     → importe ajustado
 export const PATCH = withTenant(async (request, rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
+  // Pantalla de EQUIPO AVANZADO: se vende aparte del módulo Equipo
+  // básico (que es solo plantilla, usuarios, roles y accesos).
+  if (!ctx.hasModule("team_avanzado")) return forbidden("Módulo Equipo avanzado no activo");
   // ctx.user.role viene FRESCO de master.users en cada request (no del JWT,
   // que congela el rol 15 min): una degradación admin→user aplica al instante.
   if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo dirección puede aprobar incentivos");

@@ -17,6 +17,9 @@ function gate(ctx) {
 // ven las terapeutas, ni siquiera el suyo propio. Soporta ?period=YYYY-MM.
 export const GET = withTenant(async (request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
+  // Pantalla de EQUIPO AVANZADO: se vende aparte del módulo Equipo
+  // básico (que es solo plantilla, usuarios, roles y accesos).
+  if (!ctx.hasModule("team_avanzado")) return forbidden("Módulo Equipo avanzado no activo");
   if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo dirección puede ver el desempeño");
   const { PerformanceMetric, TeamMember } = ctx.tenantModels;
   const sp = new URL(request.url).searchParams;

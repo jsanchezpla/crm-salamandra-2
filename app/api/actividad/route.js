@@ -24,6 +24,7 @@ const MAX_FILAS = 400;
 export const GET = withTenant(async (request, _rc, ctx) => {
   try {
     if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo admin");
+    if (!ctx.hasModule("team_avanzado")) return forbidden("Módulo Equipo avanzado no activo");
 
     const { searchParams } = new URL(request.url);
     const dias = Math.min(90, Math.max(1, Number(searchParams.get("dias")) || 7));

@@ -331,6 +331,18 @@ aplique.
 | formularios   | Formularios públicos → bandeja → ficha de cliente | Implementado (nutri_laura) | `docs/modules/formularios.md` |
 | —             | Configuración (ajustes + claves IA por tenant) | Implementado (siempre visible, sin `moduleKey`) | `docs/modules/configuracion.md` |
 
+### Módulos nuevos (2026-07-27/28)
+
+| moduleKey | Módulo | Notas |
+| --- | --- | --- |
+| `team` | **Equipo básico** | Plantilla, altas, usuarios del CRM, roles y accesos por módulo. Es lo que necesita cualquier cliente. |
+| `team_avanzado` | **Equipo avanzado** | Desempeño, Dirección, Productividad, Incidencias, Bandeja, Ocupación y Actividad. Se vende aparte; los submenús exigen `requiresAll` (avanzado + el módulo que aporta el contenido) y sus 16 endpoints lo comprueban. |
+| `provisioning` | **Alta de clientes** | Panel interno SOLO de `salamandra_solutions`: crea el cliente entero (schema, tablas, módulos con dependencias, admin, marca y datos fiscales). `lib/provisioning/`. |
+
+⚠️ **Retirados del menú (2026-07-27)**: `analytics`, `ai`, `automations`,
+`integrations` — eran entradas sin página detrás y llevaban a un 404 en mitad
+de una demo. Se vuelven a añadir cuando exista su página.
+
 > **`leads` vs `sales`**: hay dos `moduleKey` para el área comercial
 > (`leads` → `/leads`, `sales` → `/comercial`). En producción los tenants
 > activan `leads`. Inconsistencia de nomenclatura heredada, pendiente de

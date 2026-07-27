@@ -8,8 +8,13 @@ const navigation = [
   // Áreas reorganizadas 2026-07-27 (pedido del socio): Inicio suelto arriba y
   // luego Comercial / Tareas / Gestión / Salud / Educación / Operaciones.
   // "Configuración" ya NO es entrada del menú: es el engranaje del pie del
-  // sidebar, junto a "Cerrar sesión". "Inteligencia" agrupa los placeholders
-  // que hoy ningún tenant activa (analytics/ia/automations/integrations).
+  // sidebar, junto a "Cerrar sesión".
+  //
+  // ⚠️ RETIRADO 2026-07-27 el grupo "Inteligencia" (analytics, ai, automations,
+  // integrations): eran entradas de menú SIN página detrás. Si un comercial
+  // activaba uno en una demo, el enlace llevaba a un 404 delante del cliente.
+  // Cuando alguno se construya de verdad, se vuelve a añadir aquí junto con su
+  // página en app/(dashboard)/.
   {
     label: "",
     items: [
@@ -136,24 +141,29 @@ const navigation = [
         // su equipo, no son clínicas): antes colgaban de Clínica. Desde
         // 2026-07-27 viven TAMBIÉN en /equipo/* (se movieron las páginas), para
         // que la URL y las migas no digan "Clínica" en algo que no lo es.
-        // `moduleKey: "clinica"` porque el CONTENIDO sigue siendo del módulo
-        // clinica: un tenant con team pero sin clinica (p.ej. nutri_laura) no
-        // las ve. adminOnly en Desempeño/Dirección/Productividad (decisión de
-        // Aumenta 2026-07-24); Incidencias y Bandeja las usa todo el equipo
-        // (terapeutas incluidas), por eso van SIN adminOnly.
+        // SEPARACIÓN EQUIPO BÁSICO / AVANZADO (2026-07-27, decisión de Rodrigo):
+        // el módulo `team` es ahora solo la PRIMERA pantalla (plantilla, altas,
+        // usuarios del CRM, módulos y roles) — lo que necesita cualquier cliente.
+        // Los submenús de gestión viven en `team_avanzado`, que se vende aparte.
+        // `requiresAll` exige AMBOS: el módulo avanzado Y el que aporta el
+        // contenido (clinica o citas), porque un tenant con avanzado pero sin
+        // clínica vería entradas que su API rechazaría.
+        // adminOnly en Desempeño/Dirección/Productividad/Ocupación/Actividad
+        // (decisión de Aumenta 2026-07-24); Incidencias y Bandeja las usa todo
+        // el equipo, por eso van SIN adminOnly.
         children: [
-          { key: "team-desempeno", label: "Desempeño", href: "/equipo/mi-desempeno", adminOnly: true, moduleKey: "clinica" },
-          { key: "team-direccion", label: "Dirección", href: "/equipo/direccion", adminOnly: true, moduleKey: "clinica" },
-          { key: "team-productividad", label: "Productividad", href: "/equipo/productividad", adminOnly: true, moduleKey: "clinica" },
-          { key: "team-incidencias", label: "Incidencias", href: "/equipo/incidencias", moduleKey: "clinica" },
-          { key: "team-bandeja", label: "Bandeja de trabajo", href: "/equipo/bandeja", moduleKey: "clinica" },
+          { key: "team-desempeno", label: "Desempeño", href: "/equipo/mi-desempeno", adminOnly: true, requiresAll: ["team_avanzado", "clinica"] },
+          { key: "team-direccion", label: "Dirección", href: "/equipo/direccion", adminOnly: true, requiresAll: ["team_avanzado", "clinica"] },
+          { key: "team-productividad", label: "Productividad", href: "/equipo/productividad", adminOnly: true, requiresAll: ["team_avanzado", "clinica"] },
+          { key: "team-incidencias", label: "Incidencias", href: "/equipo/incidencias", requiresAll: ["team_avanzado", "clinica"] },
+          { key: "team-bandeja", label: "Bandeja de trabajo", href: "/equipo/bandeja", requiresAll: ["team_avanzado", "clinica"] },
           // Actividad: registro legible de auditoría de TODO el CRM. Sin
           // moduleKey a propósito (hereda la visibilidad del grupo Equipo:
           // team O clinica); la API es solo-admin igualmente.
           // Ocupación depende de CITAS (no de clinica): un tenant con agenda
           // pero sin módulo clínico también quiere saber sus ausencias.
-          { key: "team-ocupacion", label: "Ocupación", href: "/equipo/ocupacion", adminOnly: true, moduleKey: "citas" },
-          { key: "team-actividad", label: "Actividad", href: "/equipo/actividad", adminOnly: true },
+          { key: "team-ocupacion", label: "Ocupación", href: "/equipo/ocupacion", adminOnly: true, requiresAll: ["team_avanzado", "citas"] },
+          { key: "team-actividad", label: "Actividad", href: "/equipo/actividad", adminOnly: true, moduleKey: "team_avanzado" },
         ],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
@@ -259,45 +269,18 @@ const navigation = [
     ],
   },
   {
-    label: "Inteligencia",
+    // Solo lo ve el tenant de Salamandra Solutions (módulo `provisioning`):
+    // es el panel con el que damos de alta a los clientes.
+    label: "Salamandra",
     items: [
       {
-        key: "analytics",
-        label: "Analítica",
-        href: "/analitica",
+        key: "provisioning",
+        label: "Alta de clientes",
+        href: "/alta-clientes",
+        adminOnly: true,
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
-          </svg>
-        ),
-      },
-      {
-        key: "ai",
-        label: "IA & Asistente",
-        href: "/ia",
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
-          </svg>
-        ),
-      },
-      {
-        key: "automations",
-        label: "Automatizaciones",
-        href: "/automatizaciones",
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-          </svg>
-        ),
-      },
-      {
-        key: "integrations",
-        label: "Integraciones",
-        href: "/integraciones",
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
           </svg>
         ),
       },
@@ -487,11 +470,13 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
                                 // Hijos con `moduleKey` gatean por módulo del
                                 // tenant (p.ej. Formularios/Referidos bajo Leads:
                                 // solo salen donde el módulo está activo).
-                                if (child.moduleKey) {
-                                  const tenantHasIt = enabledModules.has(child.moduleKey) || enabledModules.size === 0;
-                                  return tenantHasIt && userCanSee(child.moduleKey);
-                                }
-                                return true;
+                                // `requiresAll`: el hijo necesita TODOS esos
+                                // módulos (p.ej. Desempeño = avanzado + clínica).
+                                const exigidos = child.requiresAll || (child.moduleKey ? [child.moduleKey] : []);
+                                return exigidos.every((k) => {
+                                  const tenantHasIt = enabledModules.has(k) || enabledModules.size === 0;
+                                  return tenantHasIt && userCanSee(k);
+                                });
                               })
                               .map((child) => {
                               const childActive = pathname === child.href;

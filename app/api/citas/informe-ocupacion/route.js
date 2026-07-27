@@ -24,6 +24,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   try {
     if (!ctx.hasModule("citas")) return forbidden("Módulo citas no activo");
     if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo admin");
+    if (!ctx.hasModule("team_avanzado")) return forbidden("Módulo Equipo avanzado no activo");
 
     const { searchParams } = new URL(request.url);
     // Sin periodo → mes en curso EN MADRID (el contenedor va en UTC: usar la
