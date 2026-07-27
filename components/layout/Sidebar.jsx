@@ -5,8 +5,13 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 
 const navigation = [
+  // Áreas reorganizadas 2026-07-27 (pedido del socio): Inicio suelto arriba y
+  // luego Comercial / Tareas / Gestión / Salud / Educación / Operaciones.
+  // "Configuración" ya NO es entrada del menú: es el engranaje del pie del
+  // sidebar, junto a "Cerrar sesión". "Inteligencia" agrupa los placeholders
+  // que hoy ningún tenant activa (analytics/ia/automations/integrations).
   {
-    label: "Principal",
+    label: "",
     items: [
       {
         key: "inicio",
@@ -18,6 +23,11 @@ const navigation = [
           </svg>
         ),
       },
+    ],
+  },
+  {
+    label: "Comercial",
+    items: [
       {
         key: "clients",
         label: "Clientes",
@@ -73,6 +83,21 @@ const navigation = [
           </svg>
         ),
       },
+    ],
+  },
+  {
+    label: "Tareas",
+    items: [
+      {
+        key: "projects",
+        label: "Proyectos",
+        href: "/proyectos",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zm0 9.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zm9.75-9.75A2.25 2.25 0 0115.75 3.75H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zm0 9.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+          </svg>
+        ),
+      },
       {
         key: "calendar",
         label: "Calendario",
@@ -99,62 +124,20 @@ const navigation = [
         ],
       },
       {
-        key: "nutricion",
-        label: "Nutrición",
-        href: "/nutricion/alimentos",
-        // Sub-entradas plegables debajo de Nutrición. Se muestran auto-
-        // expandidas cuando la ruta empieza por /nutricion/.
-        children: [
-          { key: "nutricion-alimentos", label: "Alimentos", href: "/nutricion/alimentos" },
-          { key: "nutricion-recetas", label: "Recetas", href: "/nutricion/recetas" },
-          { key: "nutricion-plantillas", label: "Menús", href: "/nutricion/plantillas" },
-          { key: "nutricion-asignados", label: "Pacientes", href: "/nutricion/asignados" },
-        ],
+        key: "planning",
+        label: "Planificación",
+        href: "/planificacion",
         icon: (
-          // lucide-react Salad — combina con el tono terracota de nutri-laura
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-            <path d="M7 21h10" />
-            <path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9Z" />
-            <path d="M11.38 12a2.4 2.4 0 0 1-.4-4.77 2.4 2.4 0 0 1 3.2-2.77 2.4 2.4 0 0 1 3.47-.63 2.4 2.4 0 0 1 3.37 3.37 2.4 2.4 0 0 1-1.1 3.7 2.51 2.51 0 0 1 .03 1.1" />
-            <path d="M11 12a3 3 0 0 0-3 3" />
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
           </svg>
         ),
       },
     ],
   },
   {
-    label: "Operaciones",
+    label: "Gestión",
     items: [
-      {
-        key: "projects",
-        label: "Proyectos",
-        href: "/proyectos",
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zm0 9.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zm9.75-9.75A2.25 2.25 0 0115.75 3.75H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zm0 9.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-          </svg>
-        ),
-      },
-      {
-        key: "support",
-        label: "Soporte",
-        href: "/soporte",
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
-          </svg>
-        ),
-      },
-      {
-        key: "orders",
-        label: "Pedidos",
-        href: "/pedidos",
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-          </svg>
-        ),
-      },
       {
         key: "billing",
         label: "Facturación",
@@ -166,12 +149,12 @@ const navigation = [
         ),
       },
       {
-        key: "planning",
-        label: "Planificación",
-        href: "/planificacion",
+        key: "team",
+        label: "Equipo",
+        href: "/equipo",
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
           </svg>
         ),
       },
@@ -185,10 +168,20 @@ const navigation = [
           </svg>
         ),
       },
+      {
+        key: "support",
+        label: "Soporte",
+        href: "/soporte",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
+          </svg>
+        ),
+      },
     ],
   },
   {
-    label: "Empresa",
+    label: "Salud",
     items: [
       {
         // "Clínica" es el paraguas del área clínica. Pacientes (el dato) vive
@@ -220,12 +213,54 @@ const navigation = [
         ),
       },
       {
-        key: "team",
-        label: "Equipo",
-        href: "/equipo",
+        key: "nutricion",
+        label: "Nutrición",
+        href: "/nutricion/alimentos",
+        // Sub-entradas plegables debajo de Nutrición. Se muestran auto-
+        // expandidas cuando la ruta empieza por /nutricion/.
+        children: [
+          { key: "nutricion-alimentos", label: "Alimentos", href: "/nutricion/alimentos" },
+          { key: "nutricion-recetas", label: "Recetas", href: "/nutricion/recetas" },
+          { key: "nutricion-plantillas", label: "Menús", href: "/nutricion/plantillas" },
+          { key: "nutricion-asignados", label: "Pacientes", href: "/nutricion/asignados" },
+        ],
+        icon: (
+          // lucide-react Salad — combina con el tono terracota de nutri-laura
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+            <path d="M7 21h10" />
+            <path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9Z" />
+            <path d="M11.38 12a2.4 2.4 0 0 1-.4-4.77 2.4 2.4 0 0 1 3.2-2.77 2.4 2.4 0 0 1 3.47-.63 2.4 2.4 0 0 1 3.37 3.37 2.4 2.4 0 0 1-1.1 3.7 2.51 2.51 0 0 1 .03 1.1" />
+            <path d="M11 12a3 3 0 0 0-3 3" />
+          </svg>
+        ),
+      },
+    ],
+  },
+  {
+    label: "Educación",
+    items: [
+      {
+        key: "training",
+        label: "Formación",
+        href: "/formacion",
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5" />
+          </svg>
+        ),
+      },
+    ],
+  },
+  {
+    label: "Operaciones",
+    items: [
+      {
+        key: "orders",
+        label: "Pedidos",
+        href: "/pedidos",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
           </svg>
         ),
       },
@@ -236,16 +271,6 @@ const navigation = [
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 2.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
-          </svg>
-        ),
-      },
-      {
-        key: "training",
-        label: "Formación",
-        href: "/formacion",
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5" />
           </svg>
         ),
       },
@@ -291,28 +316,6 @@ const navigation = [
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-          </svg>
-        ),
-      },
-    ],
-  },
-  {
-    label: "Ajustes",
-    items: [
-      {
-        // `always: true` → visible para todo tenant, como "inicio"; no depende
-        // de que haya un módulo "configuracion" activado en tenant_modules.
-        // `adminOnly` → los perfiles no-admin (p.ej. terapeutas de Aumenta) no
-        // tienen nada que hacer aquí (ajustes del tenant + claves IA).
-        key: "configuracion",
-        label: "Configuración",
-        href: "/configuracion",
-        always: true,
-        adminOnly: true,
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a6.932 6.932 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.431l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.542-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.759 6.759 0 010-.255c.007-.378-.138-.75-.43-.991l-1.004-.827a1.125 1.125 0 01-.26-1.431l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.147-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
         ),
       },
@@ -433,10 +436,13 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
             if (visibleItems.length === 0) return null;
 
             return (
-              <div key={section.label}>
-                <div className="px-2.5 mb-2 text-[10px] font-semibold text-white/30 uppercase tracking-[0.16em]">
-                  {section.label}
-                </div>
+              <div key={section.label || "top"}>
+                {/* La sección de Inicio va sin rótulo de área */}
+                {section.label && (
+                  <div className="px-2.5 mb-2 text-[10px] font-semibold text-white/30 uppercase tracking-[0.16em]">
+                    {section.label}
+                  </div>
+                )}
                 <div className="space-y-0.5">
                   {visibleItems.map((item) => {
                     const isActive = pathname === item.href;
@@ -530,6 +536,23 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
               <div className="text-white/65 text-[11px] font-mono truncate">{user?.email ?? "Usuario"}</div>
               <div className="text-white/30 text-[10px] uppercase tracking-wider mt-0.5">{user?.role ?? "—"}</div>
             </div>
+            {/* Configuración = engranaje junto a cerrar sesión (ya no es
+                entrada del menú). Solo admins: ajustes del tenant + claves IA. */}
+            {isAdminRole && (
+              <Link
+                href="/configuracion"
+                className={`shrink-0 p-1 rounded transition-colors hover:bg-white/[0.06] ${
+                  pathname?.startsWith("/configuracion") ? "text-white" : "text-white/30 hover:text-white/70"
+                }`}
+                title="Configuración"
+                aria-label="Configuración"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a6.932 6.932 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.431l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.542-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.759 6.759 0 010-.255c.007-.378-.138-.75-.43-.991l-1.004-.827a1.125 1.125 0 01-.26-1.431l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.147-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </Link>
+            )}
             <button
               onClick={handleLogout}
               className="text-white/30 hover:text-white/70 transition-colors shrink-0 cursor-pointer p-1 rounded hover:bg-white/[0.06]"
