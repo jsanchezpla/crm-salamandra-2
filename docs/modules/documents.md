@@ -158,7 +158,11 @@ Códigos de estado: 413 (tamaño), 507 (cuota), 400 (tipo/magic/validación), 40
 
 - **MIME real** por magic bytes (no confía en extensión ni Content-Type declarado).
 - **Nombre en disco = UUID**; el original saneado (sin control chars ni separadores)
-  vive solo en BD. Guards regex por segmento + `path.resolve` con `startsWith(root)`.
+  vive solo en BD. Guards regex por segmento + contención bajo root verificada con
+  `path.relative` (sin `path.join`/`path.resolve` sobre el storagePath: el trazador
+  NFT de Turbopack trata un join de un string que también pasa por `split()` como
+  ruta irresoluble y traza el proyecto entero en `next build` — aviso "Encountered
+  unexpected file in NFT list").
 - **Streaming** en download/preview (no bufferiza 2× como el legacy de clients).
 - **Preview inline** endurecido: `Content-Type: application/pdf` forzado + `nosniff` + CSP
   restrictiva; DOCX/XLSX nunca inline.
