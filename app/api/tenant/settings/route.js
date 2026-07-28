@@ -125,6 +125,11 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
         // Mismo criterio que el cobro real (getTenantStripeConfig): hay que poder
         // DESCIFRAR las claves, no solo que estén guardadas.
         ready: getTenantStripeConfig({ tenant: t }).configured,
+        // Con claves de prueba no se cobra dinero de verdad. Es la diferencia
+        // entre estar cobrando y creer que se está cobrando, así que la pantalla
+        // tiene que decirlo. Se deduce del prefijo de la clave, no se guarda
+        // aparte: así no puede desincronizarse.
+        liveMode: getTenantStripeConfig({ tenant: t }).liveMode,
       },
     },
   });
@@ -275,6 +280,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
         // rotara SETTINGS_ENCRYPTION_KEY, mirar la mera presencia diría "listo
         // para cobrar" mientras todos los cobros fallan.
         ready: getTenantStripeConfig({ tenant: { settings } }).configured,
+        liveMode: getTenantStripeConfig({ tenant: { settings } }).liveMode,
       },
     },
   });

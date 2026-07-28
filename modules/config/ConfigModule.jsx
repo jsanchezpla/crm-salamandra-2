@@ -93,6 +93,38 @@ const AI_PROVIDERS = {
     ],
     note: "El remitente (from) debe ser de un dominio verificado en ESTA cuenta de Resend, o Resend rechaza el envío.",
   },
+  stripeSecret: {
+    title: "Stripe — clave secreta",
+    subtitle: "Cobrar por adelantado las citas que tengan precio. El dinero va a TU cuenta de Stripe.",
+    field: "stripeSecretKey",
+    prefix: "sk_",
+    platformUrl: "https://dashboard.stripe.com/apikeys",
+    platformLabel: "Abrir Stripe",
+    steps: [
+      "Entra en dashboard.stripe.com y crea una cuenta (o inicia sesión).",
+      'Para probar sin cobrar dinero real, activa el interruptor "Modo de prueba" arriba a la derecha.',
+      'Ve a "Desarrolladores" → "Claves de API".',
+      'En "Clave secreta" pulsa "Revelar" y cópiala (empieza por sk_test_ o sk_live_).',
+      "Pégala abajo y pulsa Guardar. Después configura el webhook (más abajo).",
+    ],
+    note: "Con una clave sk_test_ no se cobra dinero real: sirve para probar el circuito entero antes de abrir a pacientes.",
+  },
+  stripeWebhook: {
+    title: "Stripe — secreto del webhook",
+    subtitle: "Es lo que nos avisa de que un pago se ha completado. Sin esto, el paciente paga y su cita no se confirma nunca.",
+    field: "stripeWebhookSecret",
+    prefix: "whsec_",
+    platformUrl: "https://dashboard.stripe.com/webhooks",
+    platformLabel: "Abrir webhooks de Stripe",
+    steps: [
+      'En Stripe, ve a "Desarrolladores" → "Webhooks" → "Añadir punto de conexión".',
+      "Pega como URL la dirección que aparece justo debajo de este recuadro.",
+      'Selecciona estos eventos: checkout.session.completed, checkout.session.expired, checkout.session.async_payment_succeeded, checkout.session.async_payment_failed y charge.refunded.',
+      'Crea el punto de conexión y copia su "Secreto de firma" (empieza por whsec_).',
+      "Pégalo abajo y pulsa Guardar.",
+    ],
+    note: "El secreto es distinto en modo prueba y en producción: si cambias de uno a otro, hay que actualizar también este campo.",
+  },
 };
 
 export default function ConfigModule() {
@@ -378,6 +410,28 @@ export default function ConfigModule() {
             isAdmin={isAdmin}
             onSave={(value) => patchTenant({ resendApiKey: value }, "Clave de Resend guardada")}
             onClear={() => patchTenant({ resendApiKey: null }, "Clave de Resend eliminada")}
+          />
+
+          {/* ── Cobro online ────────────────────────────────────────────────
+              Hasta ahora estas claves solo se podían meter con un script por
+              SSH, lo que convertía "activar el cobro" en una tarea nuestra. */}
+          <EstadoCobro status={cfg.integrations?.stripe} />
+          <ApiKeyCard
+            provider={AI_PROVIDERS.stripeSecret}
+            status={cfg.integrations?.stripe}
+            isAdmin={isAdmin}
+            onSave={(value) => patchTenant({ stripeSecretKey: value }, "Clave de Stripe guardada")}
+            onClear={() => patchTenant({ stripeSecretKey: null }, "Clave de Stripe eliminada")}
+          />
+          <ApiKeyCard
+            provider={AI_PROVIDERS.stripeWebhook}
+            // El webhook solo tiene un sí/no: su valor no se devuelve nunca, ni
+            // enmascarado, porque no aporta nada y es un secreto de firma.
+            status={{ configured: !!cfg.integrations?.stripe?.webhook, hint: null }}
+            isAdmin={isAdmin}
+            onSave={(value) => patchTenant({ stripeWebhookSecret: value }, "Secreto del webhook guardado")}
+            onClear={() => patchTenant({ stripeWebhookSecret: null }, "Secreto del webhook eliminado")}
+            extra={<UrlWebhook slug={cfg.slug} />}
           />
 
           {/* Remitente + reply-to del correo de captación (no son secretos). */}
@@ -735,6 +789,84 @@ function VideollamadaCard({ meetModo, readOnly, onChange }) {
         El modo automático reutiliza el enlace de sala fija del tipo de cita. Crear salas nuevas en Google
         automáticamente requiere conectar Google Calendar, que todavía no está disponible.
       </p>
+    </div>
+  );
+}
+
+/**
+ * Resumen de si el cobro online funciona de verdad.
+ *
+ * Los dos estados peligrosos son silenciosos y se avisan en amarillo: tener la
+ * clave sin el secreto del webhook (el paciente paga y su cita no se confirma
+ * jamás, porque nadie nos avisa del cobro), y estar en modo prueba creyendo que
+ * se está cobrando.
+ */
+function EstadoCobro({ status }) {
+  const tieneClave = !!status?.configured;
+  const tieneWebhook = !!status?.webhook;
+  const listo = !!status?.ready;
+  const real = !!status?.liveMode;
+
+  let tono = "bg-neutral-50 border-neutral-200 text-neutral-600";
+  let titulo = "Cobro online sin configurar";
+  let detalle = "Las citas con precio no se podrán reservar hasta que rellenes las dos claves de abajo.";
+
+  if (tieneClave && !tieneWebhook) {
+    tono = "bg-amber-50 border-amber-200 text-amber-800";
+    titulo = "Falta el secreto del webhook";
+    detalle =
+      "Con la clave puesta pero sin webhook, el paciente pagaría y su cita no se confirmaría nunca, porque nadie nos avisa del cobro. El cobro sigue desactivado a propósito hasta que lo rellenes.";
+  } else if (listo && !real) {
+    tono = "bg-amber-50 border-amber-200 text-amber-800";
+    titulo = "Listo, pero en modo PRUEBA";
+    detalle =
+      "El circuito funciona de principio a fin, pero con claves de prueba no se cobra dinero real. Cuando lo hayas comprobado, sustituye ambas claves por las de producción.";
+  } else if (listo && real) {
+    tono = "bg-emerald-50 border-emerald-200 text-emerald-800";
+    titulo = "Cobrando de verdad";
+    detalle = "Las citas con precio se cobran por adelantado y el dinero entra en tu cuenta de Stripe.";
+  }
+
+  return (
+    <div className={`rounded-xl border p-4 lg:p-5 ${tono}`}>
+      <div className="font-display text-lg">{titulo}</div>
+      <p className="text-xs mt-1 leading-relaxed">{detalle}</p>
+    </div>
+  );
+}
+
+/** La URL que hay que dar de alta en Stripe. El paso que más se olvida. */
+function UrlWebhook({ slug }) {
+  const [copiado, setCopiado] = useState(false);
+  const url = typeof window !== "undefined" ? `${window.location.origin}/api/webhooks/stripe/${slug}` : "";
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      /* sin portapapeles: queda visible para copiar a mano */
+    }
+  }
+
+  return (
+    <div className="mt-4 pt-4 border-t border-neutral-100">
+      <div className="text-xs text-neutral-500 mb-2">
+        Esta es la URL que hay que pegar en Stripe al crear el punto de conexión:
+      </div>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 min-w-0 truncate text-[12px] bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-700">
+          {url}
+        </code>
+        <button
+          type="button"
+          onClick={copiar}
+          className="shrink-0 text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-600 hover:border-neutral-400 transition"
+        >
+          {copiado ? "Copiada" : "Copiar"}
+        </button>
+      </div>
     </div>
   );
 }
