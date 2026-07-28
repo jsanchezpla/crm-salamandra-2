@@ -8,6 +8,7 @@ import { encryptSecret, decryptSecret, isEncryptionConfigured } from "../../../.
 import { isAllowedAnthropicModel, DEFAULT_ANTHROPIC_MODEL } from "../../../../lib/ai/anthropicModel.js";
 import { getTenantStripeConfig } from "../../../../lib/payments/stripeConfig.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
+import { avisarCambioDeConfiguracion } from "../../../../lib/configuracion/avisoCambio.js";
 
 /**
  * /api/tenant/settings — configuración básica del tenant.
@@ -344,6 +345,10 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
       after: cambios.after,
       ip,
     });
+    // Y el recibo al cliente. El registro es la prueba; esto es el aviso.
+    // No se espera a que salga para responder: que el correo tarde no debe
+    // hacer que la pantalla de Configuración parezca colgada.
+    avisarCambioDeConfiguracion({ tenant, cambios, autorId: userId }).catch(() => {});
   }
 
   invalidateTenantCache(ctx.slug);
