@@ -15,6 +15,7 @@ import listPlugin from "@fullcalendar/list";
 import interactionPlugin from "@fullcalendar/interaction";
 import Select from "@/components/ui/Select.jsx";
 import BuscadorPaciente from "@/components/citas/BuscadorPaciente.jsx";
+import { formatMoney } from "@/lib/payments/money.js";
 
 const STATUS_LABELS = {
   pending: "Pendiente",
@@ -79,6 +80,35 @@ function ModalityChip({ value }) {
   return (
     <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border bg-white border-neutral-200 text-neutral-600">
       {MODALITY_LABELS[value] ?? value}
+    </span>
+  );
+}
+
+// ── Cobro online ───────────────────────────────────────────────────────────
+// Sin esto había que abrir el panel de Stripe para saber si una cita estaba
+// pagada. Las citas sin precio (paymentStatus 'none') no pintan nada: quien no
+// cobra online no debe ver ni rastro de esto.
+const PAGO_LABELS = {
+  pending: "Pago pendiente",
+  paid: "Pagada",
+  refunded: "Devuelta",
+  failed: "Pago fallido",
+};
+const PAGO_COLORS = {
+  pending: "bg-amber-50 text-amber-700 border-amber-100",
+  paid: "bg-emerald-50 text-emerald-700 border-emerald-100",
+  refunded: "bg-sky-50 text-sky-700 border-sky-100",
+  failed: "bg-red-50 text-red-700 border-red-100",
+};
+
+function PagoChip({ estado, amount }) {
+  if (!estado || estado === "none") return null;
+  const cls = PAGO_COLORS[estado] ?? "bg-neutral-100 text-neutral-500 border-neutral-200";
+  const importe = Number.isInteger(amount) && amount > 0 ? ` · ${formatMoney(amount)}` : "";
+  return (
+    <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border ${cls}`}>
+      {PAGO_LABELS[estado] ?? estado}
+      {importe}
     </span>
   );
 }
@@ -867,6 +897,7 @@ export default function CitasModule() {
                 </div>
                 <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                   <StatusChip value={openBooking.status} />
+                  <PagoChip estado={openBooking.paymentStatus} amount={openBooking.amount} />
                   <ModalityChip value={openBooking.modality} />
                   {openBooking.eventType && (
                     <span className="inline-flex items-center gap-1 text-[11px] text-neutral-500">
@@ -918,6 +949,37 @@ export default function CitasModule() {
                   <span className="w-24 text-neutral-400">Duración</span>
                   <span className="text-neutral-800">{openBooking.duration} min</span>
                 </div>
+                {/* Qué implica el estado del cobro para lo que ella va a hacer.
+                    Enseñar solo la etiqueta obligaría a saberse las reglas de
+                    memoria; lo que necesita es la consecuencia. */}
+                {openBooking.paymentStatus === "pending" && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400">Cobro</span>
+                    <span className="text-neutral-500">
+                      Todavía sin pagar. Si no completa el pago, el hueco se libera solo.
+                    </span>
+                  </div>
+                )}
+                {openBooking.paymentStatus === "paid" && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400">Cobro</span>
+                    <span className="text-neutral-500">
+                      Cobrada. Si la cancelas tú, se le devuelve el importe íntegro.
+                    </span>
+                  </div>
+                )}
+                {openBooking.paymentStatus === "refunded" && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400">Cobro</span>
+                    <span className="text-neutral-500">Importe ya devuelto al paciente.</span>
+                  </div>
+                )}
+                {openBooking.paymentStatus === "failed" && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400">Cobro</span>
+                    <span className="text-neutral-500">El pago no llegó a completarse.</span>
+                  </div>
+                )}
                 {openBooking.modality === "presencial" && openBooking.eventType?.location && (
                   <div className="flex">
                     <span className="w-24 text-neutral-400">Dirección</span>
@@ -1414,6 +1476,9 @@ function Waitlist({ refreshKey, onCountChange, onActioned }) {
                   <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border bg-amber-50 text-amber-700 border-amber-100">
                     {STATUS_LABELS.pending}
                   </span>
+                  {/* Sin esto, una solicitud cobrada y otra sin pagar se veían
+                      idénticas aquí, y se podía confirmar la que nadie ha pagado. */}
+                  <PagoChip estado={b.paymentStatus} amount={b.amount} />
                   <span className="text-xs text-neutral-400">{fmtRelative(b.createdAt)}</span>
                 </div>
                 <h3 className="text-base font-semibold text-neutral-900">{b.clientName}</h3>
