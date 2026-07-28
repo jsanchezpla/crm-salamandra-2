@@ -2,7 +2,7 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../lib/db/masterDb.js";
-import { etiqueta } from "../../../lib/actividad/etiquetas.js";
+import { etiqueta, prefijosDeModulo } from "../../../lib/actividad/etiquetas.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const MAX_FILAS = 400;
@@ -38,6 +38,16 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const where = { tenantId: ctx.tenant.id, createdAt: { [Op.gte]: desde } };
     if (filtroUsuario) where.userId = filtroUsuario;
 
+    // El filtro por módulo va en SQL, ANTES del límite: aplicado después, pedir
+    // "solo Facturación" enseñaba las de facturación que hubiera entre las 400
+    // últimas de TODO el CRM, no las 400 últimas de facturación.
+    const porModulo = prefijosDeModulo(filtroModulo);
+    if (porModulo?.prefijos) {
+      where.action = { [Op.or]: porModulo.prefijos.map((p) => ({ [Op.like]: `${p}.%` })) };
+    } else if (porModulo?.excluir) {
+      where.action = { [Op.and]: porModulo.excluir.map((p) => ({ [Op.notLike]: `${p}.%` })) };
+    }
+
     const rows = await AuditLog.findAll({
       where,
       attributes: ["id", "userId", "action", "createdAt"],
@@ -45,8 +55,28 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       limit: MAX_FILAS,
     });
 
+    // Opciones de los desplegables: los módulos y usuarios CON actividad en el
+    // rango, calculados sin aplicar los filtros (si no, al elegir un módulo el
+    // desplegable se quedaría con esa única opción y no habría forma de volver).
+    const opciones = await (async () => {
+      try {
+        const filas = await AuditLog.findAll({
+          where: { tenantId: ctx.tenant.id, createdAt: { [Op.gte]: desde } },
+          attributes: ["action", "userId"],
+          group: ["action", "userId"],
+          raw: true,
+        });
+        return {
+          modulos: [...new Set(filas.map((f) => etiqueta(f.action).modulo))].sort((a, b) => a.localeCompare(b)),
+          usuarios: [...new Set(filas.map((f) => f.userId).filter(Boolean))],
+        };
+      } catch {
+        return null; // se cae al cálculo sobre las filas ya traídas
+      }
+    })();
+
     // Emails de todos los autores del rango, resueltos de una vez.
-    const ids = [...new Set(rows.map((r) => r.userId).filter(Boolean))];
+    const ids = [...new Set([...rows.map((r) => r.userId), ...(opciones?.usuarios ?? [])].filter(Boolean))];
     const emails = {};
     if (ids.length) {
       const users = await User.findAll({ where: { id: ids }, attributes: ["id", "email"] });
@@ -65,6 +95,10 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       };
     });
 
+    // Red de seguridad: el LIKE por prefijo no distingue "client." de
+    // "clinica." mejor que el propio catálogo, así que se vuelve a comprobar
+    // la etiqueta ya calculada. Sobre un conjunto ya filtrado en SQL, esto no
+    // recorta nada real.
     const filas = filtroModulo ? todas.filter((f) => f.modulo === filtroModulo) : todas;
 
     return ok({
@@ -72,7 +106,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       truncado: rows.length === MAX_FILAS,
       filas,
       usuarios: ids.map((id) => ({ id, email: emails[id] || "(usuario eliminado)" })).sort((a, b) => a.email.localeCompare(b.email)),
-      modulos: [...new Set(todas.map((f) => f.modulo))].sort((a, b) => a.localeCompare(b)),
+      modulos: opciones?.modulos ?? [...new Set(todas.map((f) => f.modulo))].sort((a, b) => a.localeCompare(b)),
     });
   } catch (err) {
     return serverError(err);

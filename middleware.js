@@ -41,10 +41,25 @@ function isEmbeddableWidgetPath(pathname) {
   return pathname.startsWith("/widget/c/");
 }
 
-/** Slug del tenant a partir de /widget/c/{slug}/... */
+/**
+ * Slug del tenant a partir de /widget/c/{slug}/...
+ *
+ * Se DECODIFICA antes de comparar (arreglado 2026-07-28): Next decodifica el
+ * segmento dinámico antes de dárselo a la página, así que pidiendo
+ * /widget/c/nutri%5Flaura el widget se servía igual mientras el regex del
+ * pathname crudo no casaba y este candado se caía a `*`. Percent-codificar una
+ * letra era todo lo que hacía falta para saltárselo.
+ */
 function slugDeWidget(pathname) {
   const partes = pathname.split("/").filter(Boolean); // ["widget","c","slug",...]
-  return partes[2] && /^[a-z0-9_]+$/.test(partes[2]) ? partes[2] : null;
+  if (!partes[2]) return null;
+  let crudo = partes[2];
+  try {
+    crudo = decodeURIComponent(crudo);
+  } catch {
+    return null; // codificación inválida: no es el slug de nadie
+  }
+  return /^[a-z0-9_]+$/.test(crudo) ? crudo : null;
 }
 
 /**

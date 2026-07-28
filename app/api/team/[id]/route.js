@@ -4,6 +4,8 @@ import { ok, error, forbidden, notFound, noContent, serverError } from "../../..
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { serializeTeamMember } from "../../../../lib/team/serializeTeamMember.js";
 import { normalizeSpecialties } from "../../../../lib/clinica/specialties.js";
+import { revocarAccesoPorBaja } from "../../../../lib/team/access.js";
+import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["active", "inactive", "on_leave"]);
@@ -54,6 +56,42 @@ async function logAudit({ tenantId, userId, action, entityId, before, after, ip 
   } catch {}
 }
 
+/**
+ * Quita el login del CRM al pasar a INACTIVO — desde el servidor, sea cual sea
+ * el camino (botón «Dar de baja» o Editar → Estado → Inactivo).
+ *
+ * En la DEMO no se toca: es pública, da sesión de admin a anónimos y su
+ * auto-reset NO restaura el schema master, así que borrar allí un login sería
+ * un destrozo permanente.
+ */
+async function revocarAcceso({ ctx, member, requesterUserId, ip }) {
+  if (isDemoTenant(ctx)) return { revocado: false, motivo: "demo" };
+  try {
+    const r = await revocarAccesoPorBaja({
+      member,
+      tenantId: ctx.tenant.id,
+      requesterUserId,
+    });
+    if (r.revocado) {
+      await logAudit({
+        tenantId: ctx.tenant.id,
+        userId: requesterUserId,
+        action: "team.user_removed",
+        entityId: member.id,
+        before: { username: r.username },
+        after: { motivo: "baja del empleado" },
+        ip,
+      });
+    }
+    return r;
+  } catch (err) {
+    // Que no se pueda borrar el login no puede impedir dar de baja a alguien,
+    // pero tiene que quedar gritado en el log: es un acceso que sigue vivo.
+    process.stderr.write(`[team] NO se pudo revocar el acceso de ${member.id}: ${err.message}\n`);
+    return { revocado: false, motivo: err.message };
+  }
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // GET /api/team/[id]
 // ───────────────────────────────────────────────────────────────────────────
@@ -76,7 +114,8 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
 // ───────────────────────────────────────────────────────────────────────────
 // PATCH /api/team/[id]
 // ───────────────────────────────────────────────────────────────────────────
-export const PATCH = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
+export const PATCH = withTenant(async (request, { params }, ctx) => {
+  const { tenant, tenantModels, hasModule } = ctx;
   try {
     if (!hasModule("team")) return forbidden("Módulo team no activo");
     const userRole = request.headers.get("x-user-role") ?? "user";
@@ -227,6 +266,13 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       await logAudit({ ...auditCommon, action: "team.status_changed" });
     }
 
+    // Editar → Estado → «Inactivo» es una baja igual que el botón de dar de
+    // baja: si deja el login vivo, la persona sigue entrando al CRM.
+    if (beforeSnapshot.status !== "inactive" && afterSnapshot.status === "inactive") {
+      await revocarAcceso({ ctx, member, requesterUserId: userId, ip });
+      await member.reload();
+    }
+
     return ok(serializeTeamMember(member, { isAdmin: true }));
   } catch (err) {
     return serverError(err);
@@ -236,7 +282,8 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
 // ───────────────────────────────────────────────────────────────────────────
 // DELETE /api/team/[id] — soft delete (status = 'inactive')
 // ───────────────────────────────────────────────────────────────────────────
-export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
+export const DELETE = withTenant(async (request, { params }, ctx) => {
+  const { tenant, tenantModels, hasModule } = ctx;
   try {
     if (!hasModule("team")) return forbidden("Módulo team no activo");
     const userRole = request.headers.get("x-user-role") ?? "user";
@@ -252,13 +299,17 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
 
     const before = { status: member.status };
     await member.update({ status: "inactive" });
+
+    // Dar de baja tiene que cerrar la puerta AQUÍ, no en el navegador.
+    const revocacion = await revocarAcceso({ ctx, member, requesterUserId: userId, ip });
+
     await logAudit({
       tenantId: tenant.id,
       userId,
       action: "team.deactivated",
       entityId: member.id,
       before,
-      after: { status: "inactive" },
+      after: { status: "inactive", ...(revocacion.revocado ? { accesoRevocado: revocacion.username } : {}) },
       ip,
     });
     return noContent();

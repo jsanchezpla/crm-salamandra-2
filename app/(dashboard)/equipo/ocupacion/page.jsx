@@ -114,7 +114,14 @@ export default function OcupacionPage() {
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <Tarjeta titulo="Citas del mes" valor={t.total} pista={`${t.horasAtendidas} h atendidas`} />
-            <Tarjeta titulo="Atendidas" valor={t.atendidas} acento="text-emerald-700" />
+            <Tarjeta
+              titulo="Atendidas"
+              valor={t.atendidas}
+              // Las confirmadas que aún no han llegado a su hora se cuentan
+              // aparte: antes entraban como atendidas e inflaban el mes en curso.
+              pista={t.proximas ? `${t.proximas} aún por venir` : undefined}
+              acento="text-emerald-700"
+            />
             <Tarjeta
               titulo="No se presentaron"
               valor={t.noShow}

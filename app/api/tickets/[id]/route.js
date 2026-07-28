@@ -180,7 +180,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       return ok(serializeTicket(fullSin, { withThread: true }));
     }
 
-    const antesTicket = resumen(ticket, ["number", "subject", "status", "priority"]);
+    const antesTicket = resumen(ticket, ["number", "title", "status", "priority"]);
     await ticket.update(cambios);
     await auditar({
       tenantId: ctx.tenant.id,
@@ -189,7 +189,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       entity: "Ticket",
       entityId: ticket.id,
       before: antesTicket,
-      after: resumen(ticket, ["number", "subject", "status", "priority"]),
+      after: resumen(ticket, ["number", "title", "status", "priority"]),
     });
 
     // Nota de sistema en el hilo (interna) para que quede rastro de quién y cuándo.
@@ -241,7 +241,7 @@ export const DELETE = withTenant(async (request, { params }, ctx) => {
     await TicketMessage.destroy({ where: { ticketId: ticket.id } });
     // Borrar un ticket elimina su hilo Y sus adjuntos del disco: sin rastro,
     // una conversación con un cliente podía desaparecer sin explicación.
-    const antesBorrar = resumen(ticket, ["number", "subject", "status", "clientEmail"]);
+    const antesBorrar = resumen(ticket, ["number", "title", "status"]);
     const idTicket = ticket.id;
     await ticket.destroy();
     await auditar({

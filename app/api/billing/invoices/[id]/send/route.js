@@ -6,6 +6,7 @@ import { buildInvoicePdfBuffer, invoicePdfFilename } from "../../../../../../lib
 import { invoiceSentTemplate } from "../../../../../../lib/email/templates/billing/invoiceSent.js";
 import { sendEmail } from "../../../../../../lib/email/resendClient.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
+import { isDemoTenant } from "../../../../../../lib/demo/isDemo.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_VIA = new Set(["email", "whatsapp", "other"]);
@@ -23,9 +24,16 @@ const VALID_VIA = new Set(["email", "whatsapp", "other"]);
  *
  * El envío es best-effort: si el correo falla, la factura QUEDA marcada como
  * enviada igualmente (la respuesta lo dice en `emailEnviado`/`emailError`) —
- * el estado contable no puede depender de que Resend conteste.
+ * el estado contable no puede depender de que Resend conteste. `emailEnviado`
+ * solo es `true` si Resend confirmó el envío: `sendEmail` NUNCA lanza (devuelve
+ * `{ok:false}` o `{dryRun:true}`), así que hay que mirar lo que devuelve.
+ *
+ * NO se envía desde la DEMO: es pública y da sesión de admin a visitantes
+ * anónimos, así que sin este candado cualquiera podría mandar un PDF con pinta
+ * de factura oficial desde nuestro dominio al destinatario que quisiera.
  */
-export const POST = withTenant(async (request, { params }, { tenantModels, hasModule, tenant }) => {
+export const POST = withTenant(async (request, { params }, ctx) => {
+  const { tenantModels, hasModule, tenant } = ctx;
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const role = request.headers.get("x-user-role");
@@ -55,7 +63,9 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
     let emailEnviado = false;
     let emailError = null;
 
-    if (quiereEmail && destino) {
+    if (quiereEmail && destino && isDemoTenant(ctx)) {
+      emailError = "El envío de facturas por correo está desactivado en la demo";
+    } else if (quiereEmail && destino) {
       try {
         const settings = (await TenantBillingSettings.findOne()) || {};
         const partners = Array.isArray(settings.partners) ? settings.partners : [];
@@ -80,7 +90,7 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
         });
 
         const resend = getTenantResendConfig({ tenant });
-        await sendEmail({
+        const envio = await sendEmail({
           to: destino,
           subject: tpl.subject,
           html: tpl.html,
@@ -90,7 +100,17 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
           apiKey: resend.apiKey || undefined,
           attachments: [{ filename: invoicePdfFilename(invoice), content: pdf }],
         });
-        emailEnviado = true;
+        // sendEmail no lanza: devuelve {ok:false} si Resend rechaza y
+        // {dryRun:true} si no hay correo configurado. Dar por enviado sin
+        // mirarlo era decirle al admin que el cliente tiene la factura.
+        if (!envio.ok) {
+          emailError = envio.error || "Resend rechazó el envío";
+        } else if (envio.dryRun) {
+          emailError = "Correo no configurado: la factura no ha salido (modo simulacro)";
+        } else {
+          emailEnviado = true;
+        }
+        if (emailError) process.stderr.write(`[billing:send] ${invoice.id}: ${emailError}\n`);
       } catch (mailErr) {
         emailError = mailErr.message;
         process.stderr.write(`[billing:send] email fail: ${mailErr.message}

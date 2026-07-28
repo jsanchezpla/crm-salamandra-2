@@ -6,6 +6,25 @@ Envío de emails transaccionales con [Resend](https://resend.com).
 Helper único en `lib/email/resendClient.js` + templates por módulo bajo
 `lib/email/templates/{módulo}/`.
 
+> ⚠️ **`sendEmail` NUNCA lanza. Hay que MIRAR lo que devuelve.**
+> Devuelve `{ok:false, error}` si Resend rechaza y `{ok:true, dryRun:true}` si
+> no hay correo configurado — en ninguno de los dos casos sale un email, y en
+> ninguno de los dos se entera un `try/catch`. Si el caller **persiste** que
+> se envió (`reminderSentAt`, `emailEnviado`, `status:"sent"`), tiene que
+> comprobar `ok` y `dryRun` primero. En la auditoría del 2026-07-28 fallaban
+> tres sitios a la vez: los recordatorios de cita se marcaban como avisados
+> PARA SIEMPRE sin haber salido, y el envío de facturas devolvía
+> `emailEnviado: true` con Resend rechazando. Lo grave no es que un correo
+> falle: es que el sistema afirme que salió.
+>
+> ```js
+> const r = await sendEmail({ ... });
+> if (!r.ok || r.dryRun) { /* NO marcar como enviado */ }
+> ```
+>
+> Y si el endpoint es alcanzable desde el dashboard, además necesita su guard
+> de `lib/demo/isDemo.js` (la demo pública da sesión de admin a anónimos).
+
 Estado actual: sprint Fase 1 nutri_laura (junio 2026) — 3 templates de
 `citas`. El patrón es reutilizable para futuros módulos (billing,
 training, etc.).

@@ -1,4 +1,4 @@
-import { Op, fn, col } from "sequelize";
+import { Op, fn, col, literal } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { parsePeriodString } from "../../../../lib/clinica/period.js";
@@ -40,15 +40,21 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const { Booking, TeamMember, EventType } = ctx.tenantModels;
     const tieneEquipo = ctx.tenantHasModule ? ctx.tenantHasModule("team") : ctx.hasModule("team");
 
+    // Se agrupa también por PASADA/FUTURA: una cita `confirmed` de dentro de
+    // dos semanas no está atendida, está por venir. Contarla como atendida
+    // inflaba las horas del mes en curso y hundía artificialmente el % de
+    // ausencias (el denominador crecía con citas que aún no han ocurrido).
+    const yaPasada = literal("(scheduled_at < NOW())");
     const filas = await Booking.findAll({
       where: { scheduledAt: { [Op.gte]: desde, [Op.lt]: hasta } },
       attributes: [
         "teamMemberId",
         "status",
+        [yaPasada, "pasada"],
         [fn("count", col("id")), "n"],
         [fn("sum", col("duration")), "minutos"],
       ],
-      group: ["teamMemberId", "status"],
+      group: ["teamMemberId", "status", yaPasada],
       raw: true,
     });
 
@@ -64,7 +70,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     // Agregado por profesional.
     const porProfesional = new Map();
     const vacio = () => ({
-      total: 0, atendidas: 0, canceladas: 0, noShow: 0, pendientes: 0, minutosAtendidos: 0,
+      total: 0, atendidas: 0, canceladas: 0, noShow: 0, pendientes: 0, proximas: 0, minutosAtendidos: 0,
     });
 
     for (const f of filas) {
@@ -73,9 +79,13 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       const acc = porProfesional.get(clave);
       const n = Number(f.n) || 0;
       const minutos = Number(f.minutos) || 0;
+      const pasada = f.pasada === true || f.pasada === "true" || f.pasada === "t";
 
       acc.total += n;
-      if (f.status === "completed" || f.status === "confirmed") {
+      if (f.status === "confirmed" && !pasada) {
+        // Confirmada pero todavía no ha llegado su hora: ni atendida ni fallada.
+        acc.proximas += n;
+      } else if (f.status === "completed" || f.status === "confirmed") {
         acc.atendidas += n;
         acc.minutosAtendidos += minutos;
       } else if (f.status === "cancelled") {
@@ -110,9 +120,10 @@ export const GET = withTenant(async (request, _rc, ctx) => {
         canceladas: acc.canceladas + p.canceladas,
         noShow: acc.noShow + p.noShow,
         pendientes: acc.pendientes + p.pendientes,
+        proximas: acc.proximas + p.proximas,
         minutosAtendidos: acc.minutosAtendidos + p.minutosAtendidos,
       }),
-      { total: 0, atendidas: 0, canceladas: 0, noShow: 0, pendientes: 0, minutosAtendidos: 0 }
+      { total: 0, atendidas: 0, canceladas: 0, noShow: 0, pendientes: 0, proximas: 0, minutosAtendidos: 0 }
     );
     const baseTotal = totales.atendidas + totales.noShow;
 

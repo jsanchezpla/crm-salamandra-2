@@ -33,7 +33,7 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
   const alias = await ClientOutboundAlias.findByPk(id);
   if (!alias) return notFound("Alias no encontrado");
 
-  const antesBorrar = resumen(alias, ["alias"]);
+  const antesBorrar = resumen(alias, ["aliasName", "outboundProductId", "clientId"]);
   const idBorrado = alias.id;
   await alias.destroy();
   await auditar({

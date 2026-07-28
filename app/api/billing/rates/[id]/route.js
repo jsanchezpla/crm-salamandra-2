@@ -50,7 +50,7 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       action: "rate.updated",
       entity: "Rate",
       entityId: rate.id,
-      after: resumen(rate, ["name", "amount", "unit"]),
+      after: resumen(rate, ["serviceType", "pricePerSession", "validFrom", "validTo"]),
     });
     return ok(rate);
   } catch (err) {
@@ -71,7 +71,7 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
     const rate = await Rate.findByPk(id);
     if (!rate) return notFound("Tarifa no encontrada");
 
-    const antesBorrar = resumen(rate, ["name", "amount", "unit"]);
+    const antesBorrar = resumen(rate, ["serviceType", "pricePerSession", "validFrom", "validTo"]);
     const idBorrado = rate.id;
     await rate.destroy();
     await auditar({

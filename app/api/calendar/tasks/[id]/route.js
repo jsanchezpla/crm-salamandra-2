@@ -52,7 +52,7 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
     action: "calendar.task.updated",
     entity: "CalendarTask",
     entityId: task.id,
-    after: resumen(task, ["title", "date"]),
+    after: resumen(task, ["title", "startDate", "status"]),
   });
   await task.reload({ include: calendarIncludes(tenantModels, hasModule) });
   return ok(toFCEvent(task));
@@ -63,7 +63,7 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
 
   const { id } = await params;
   const task = await resolveTask(tenantModels, id);
-  const antesBorrar = resumen(task, ["title", "date"]);
+  const antesBorrar = resumen(task, ["title", "startDate", "status"]);
   const idBorrado = task.id;
   await task.destroy();
   await auditar({

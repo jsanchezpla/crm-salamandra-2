@@ -22,7 +22,7 @@ export const GET = withTenant(async (request, { params }, { tenant, tenantModels
     include: [
       { model: OrderLine, as: "lines" },
       { model: Client, as: "client" },
-      { model: Invoice, as: "invoice", attributes: ["id", "number", "status", "total", "issueDate"] },
+      { model: Invoice, as: "invoice", attributes: ["id", "status", "total", "clientId", "scheduledDate", "issueDate"] },
     ],
   });
   if (!order) return notFound("Pedido no encontrado");
@@ -96,7 +96,7 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       action: "order.updated",
       entity: "Order",
       entityId: order.id,
-      after: resumen(order, ["number", "status", "total"]),
+      after: resumen(order, ["status", "total", "clientId", "scheduledDate"]),
     });
 
     const fresh = await Order.findByPk(id, {
@@ -128,7 +128,7 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
     );
   }
 
-  const antesBorrar = resumen(order, ["number", "status", "total"]);
+  const antesBorrar = resumen(order, ["status", "total", "clientId", "scheduledDate"]);
   const idBorrado = order.id;
   await order.destroy();
   await auditar({

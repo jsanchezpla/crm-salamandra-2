@@ -29,8 +29,9 @@ export async function POST(request) {
   // El password NO se trimea: puede contener espacios intencionales.
   const email = rawEmail.trim().toLowerCase();
 
-  // Cerrojo ANTES de tocar la BD: por IP (barrido automático) y por cuenta
-  // (ataque distribuido contra un mismo usuario). Ver lib/auth/loginGuard.js.
+  // Cerrojo ANTES de tocar la BD: por cuenta+IP (el duro), por IP (barrido
+  // automático) y por cuenta a secas con umbral alto (ataque distribuido
+  // contra un mismo usuario). Ver lib/auth/loginGuard.js.
   const cerrojo = comprobarIntentoLogin(request, email);
   if (cerrojo.bloqueado) {
     // Solo la PRIMERA vez de cada ventana: si no, el propio ataque llenaría
@@ -111,7 +112,7 @@ export async function POST(request) {
     }),
   ]);
 
-  limpiarFallosLogin(email);
+  limpiarFallosLogin(email, cerrojo.ip);
   await user.update({ lastLoginAt: new Date() });
   await auditarLogin({
     action: "auth.login",

@@ -42,6 +42,9 @@ export default function AltaClientesPage() {
   const [err, setErr] = useState(null);
   const [creando, setCreando] = useState(false);
   const [credenciales, setCredenciales] = useState(null);
+  // Aparte de las credenciales a propósito: los avisos son tareas pendientes y
+  // no deben desaparecer al cerrar el modal de la contraseña.
+  const [avisos, setAvisos] = useState([]);
   const [abierto, setAbierto] = useState(false);
 
   const [form, setForm] = useState({
@@ -128,6 +131,7 @@ export default function AltaClientesPage() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo crear el cliente");
       setCredenciales({ username: j.data.adminEmail, password: j.data.password, slug: j.data.slug, modulos: j.data.modulos });
+      setAvisos(Array.isArray(j.data.avisos) ? j.data.avisos : []);
       setAbierto(false);
       setForm((f) => ({ ...f, nombre: "", slug: "", slugTocado: false, adminEmail: "", fiscalName: "", taxId: "", address: "", city: "", zip: "" }));
       cargar();
@@ -322,6 +326,27 @@ export default function AltaClientesPage() {
                 </div>
                 <div className="text-[11px] text-neutral-400 mt-1 truncate">{c.modulos.join(" · ") || "sin módulos"}</div>
               </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Avisos del alta (p.ej. migraciones que no se pudieron aplicar). Van
+          FUERA del modal de credenciales para que no se cierren con él: son
+          cosas que hay que hacer, no un "hecho". */}
+      {avisos.length > 0 && (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="flex items-start justify-between gap-3 mb-1.5">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-amber-800">
+              El alta terminó, pero queda algo por hacer
+            </div>
+            <button onClick={() => setAvisos([])} className="text-[11px] text-amber-700 hover:underline shrink-0">
+              Entendido
+            </button>
+          </div>
+          <ul className="space-y-1">
+            {avisos.map((a, i) => (
+              <li key={i} className="text-xs text-amber-900 break-words">{a}</li>
             ))}
           </ul>
         </div>

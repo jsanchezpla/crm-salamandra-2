@@ -484,7 +484,18 @@ Usar automáticamente cuando corresponda:
   endpoints que gatean por esa cabecera, sin tocarlos uno a uno.
 - JWT en httpOnly cookies — nunca localStorage.
 - Refresh token con rotación.
-- Rate limiting en endpoints de auth.
+- Rate limiting en endpoints de auth. **El cerrojo duro va por CUENTA+IP**
+  (`lib/auth/loginGuard.js`, revisado 2026-07-28), nunca por cuenta a secas: el
+  429 salta ANTES de comprobar la contraseña, así que un cerrojo global a la
+  cuenta convertía 6 peticiones cada 15 min en un DoS gratuito contra una
+  persona concreta (los logins de Aumenta son adivinables: `nombre_aumenta`).
+  El cerrojo por cuenta global existe pero con umbral POR ENCIMA del de IP,
+  para que solo lo alcance un ataque distribuido.
+- **Un endpoint nuevo que envíe correo, gaste IA o escriba en master necesita
+  su guard de `lib/demo/isDemo.js`**. La demo es pública y da sesión de ADMIN a
+  visitantes anónimos: sin el guard, cualquiera con el enlace usa el CRM como
+  relé (en la auditoría del 2026-07-28 apareció el envío de facturas por correo,
+  que salía con la clave global de Resend y desde nuestro dominio verificado).
 
 ### Aislamiento entre tenants
 
@@ -530,6 +541,13 @@ Usar automáticamente cuando corresponda:
     duplicarse en la tabla de master, compartida por todos los clientes.
   - Cada acción nueva necesita su frase en `lib/actividad/etiquetas.js`, o
     saldrá con el traductor genérico en Equipo → Actividad.
+  - **Los campos del resumen tienen que existir EN ESE modelo.** Sequelize solo
+    hace SELECT de los atributos definidos, así que leer un campo que el modelo
+    no expone devuelve `undefined` en silencio y la auditoría sale muda o con
+    el `before` y el `after` idénticos. En el repaso del 2026-07-28 fallaban 11
+    de 15 sitios (p. ej. `Cost` no tiene `amount` —es legacy en BD, fuera del
+    modelo a propósito— ni `date` ni `method`, así que borrar un gasto de
+    12.000 € no dejaba rastro del importe).
   - Deliberadamente SIN auditar: la edición granular de un menú de nutrición
     (comidas, opciones, alimentos) — el plan ya audita created/updated y
     auditar cada alimento generaría cientos de filas sin valor.

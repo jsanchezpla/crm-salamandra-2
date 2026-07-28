@@ -50,7 +50,7 @@ function ModuleChecks({ modules, onToggle, disabled }) {
 
 const btnSecondary = "text-[11px] px-2.5 py-1 rounded border border-neutral-300 text-neutral-700 hover:bg-neutral-50 disabled:opacity-50";
 
-export default function AccessSection({ memberId, displayName, tenantSlug }) {
+export default function AccessSection({ memberId, displayName, tenantSlug, onAccessChange }) {
   const [state, setState] = useState(null); // respuesta del GET
   const [err, setErr] = useState(null);
 
@@ -142,8 +142,13 @@ export default function AccessSection({ memberId, displayName, tenantSlug }) {
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "No se pudo quitar el acceso");
       load();
+      onAccessChange?.();
     } catch (e) {
       setErr(e.message);
+    } finally {
+      // Sin este finally, tras quitar el acceso `busy` se quedaba en true para
+      // siempre y el botón de crear usuario nuevo nacía deshabilitado: había
+      // que recargar la página, justo lo contrario de lo que promete el aviso.
       setBusy(false);
     }
   }
@@ -244,7 +249,10 @@ export default function AccessSection({ memberId, displayName, tenantSlug }) {
           username={credentials.username}
           password={credentials.password}
           title={credentials.title}
-          onClose={() => { setCredentials(null); load(); }}
+          // onAccessChange avisa a la ficha de que este empleado YA tiene (o ya
+          // no tiene) login: si no, su copia en memoria se queda con el userId
+          // viejo y las decisiones que dependan de él salen mal.
+          onClose={() => { setCredentials(null); load(); onAccessChange?.(); }}
         />
       )}
     </div>

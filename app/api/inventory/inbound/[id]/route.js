@@ -49,7 +49,7 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
     action: "inventory.inbound.updated",
     entity: "InboundProduct",
     entityId: product.id,
-    after: resumen(product, ["name", "sku"]),
+    after: resumen(product, ["name", "tags"]),
   });
 
   return ok(product);
@@ -73,7 +73,7 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
     return error("No se puede eliminar: forma parte de recetas. Quita las recetas primero.", 409);
   }
 
-  const antesBorrar = resumen(product, ["name", "sku"]);
+  const antesBorrar = resumen(product, ["name", "tags"]);
   const idBorrado = product.id;
   await product.destroy();
   await auditar({

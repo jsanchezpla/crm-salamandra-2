@@ -507,6 +507,7 @@ export default function EquipoPage() {
                       memberId={openMember.id}
                       displayName={openMember.displayName}
                       tenantSlug={me?.tenantSlug}
+                      onAccessChange={load}
                     />
                   )}
 

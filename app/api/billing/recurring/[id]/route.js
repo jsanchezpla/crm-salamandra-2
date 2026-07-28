@@ -45,6 +45,14 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     }
 
     await recurring.update(updates);
+    await auditar({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "recurring.updated",
+      entity: "RecurringInvoice",
+      entityId: recurring.id,
+      after: resumen(recurring, ["frequency", "nextRunAt", "active", "clientId"]),
+    });
     return ok(recurring);
   } catch (err) {
     return serverError(err);
@@ -130,7 +138,17 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
     const recurring = await RecurringInvoice.findByPk(id);
     if (!recurring) return notFound("Factura recurrente no encontrada");
 
+    const antesBorrar = resumen(recurring, ["frequency", "nextRunAt", "active", "clientId"]);
+    const idBorrado = recurring.id;
     await recurring.destroy();
+    await auditar({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "recurring.deleted",
+      entity: "RecurringInvoice",
+      entityId: idBorrado,
+      before: antesBorrar,
+    });
     return noContent();
   } catch (err) {
     return serverError(err);

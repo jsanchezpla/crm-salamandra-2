@@ -36,12 +36,26 @@
  */
 
 import { Sequelize } from "sequelize";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const CONFIRM = process.argv.includes("--confirm");
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
+
+/**
+ * Dónde dejar el .rollback.sql. En el VPS esto corre con `docker exec` dentro
+ * del contenedor, cuyo cwd (/app) es de root mientras el proceso va como
+ * `nextjs`: escribir ahí daba EACCES y tumbaba la reparación antes de empezar.
+ * Se puede fijar con ROLLBACK_DIR; si no, /tmp, que siempre es escribible.
+ */
+function rutaRollback(nombre) {
+  const dir = process.env.ROLLBACK_DIR || tmpdir();
+  try { mkdirSync(dir, { recursive: true }); } catch { /* ya existe */ }
+  return join(dir, nombre);
+}
 
 async function schemasConPacientes(s) {
   const only = (process.env.ONLY_SCHEMAS || "").split(",").map((x) => x.trim()).filter(Boolean);
@@ -143,14 +157,30 @@ async function main() {
     // Rollback quirúrgico ANTES de escribir: patients no tiene columna de
     // metadatos donde marcar "esto lo puso el backfill".
     const marca = new Date().toISOString().replace(/[:.]/g, "-");
-    const ficheroRollback = `backfill-patients-client-${schema}-${marca}.rollback.sql`;
     const ids = unicos.map((u) => `'${u.patient_id}'`).join(", ");
-    writeFileSync(
-      ficheroRollback,
+    const sqlRollback =
       `-- Deshace EXACTAMENTE lo que escribió el backfill en ${schema} (${unicos.length} pacientes).\n` +
-        `UPDATE "${schema}".patients SET client_id = NULL WHERE id IN (${ids});\n`
-    );
-    log(`Rollback guardado en ${ficheroRollback}`);
+      `UPDATE "${schema}".patients SET client_id = NULL WHERE id IN (${ids});\n` +
+      `-- Y los registros clínicos que tomaron el cliente del paciente en la segunda pasada:\n` +
+      fuentes
+        .map(
+          (t) =>
+            `UPDATE "${schema}"."${t}" SET client_id = NULL WHERE patient_id IN (${ids});\n`
+        )
+        .join("");
+
+    // Se escribe donde SÍ se puede escribir: dentro del contenedor el cwd es
+    // /app y pertenece a root, así que el proceso (usuario `nextjs`) se comía
+    // un EACCES ANTES de enlazar nada. Si el destino falla, el SQL sale por
+    // pantalla en vez de abortar la reparación.
+    const ficheroRollback = rutaRollback(`backfill-patients-client-${schema}-${marca}.rollback.sql`);
+    try {
+      writeFileSync(ficheroRollback, sqlRollback);
+      log(`Rollback guardado en ${ficheroRollback}`);
+    } catch (err) {
+      log(`⚠ No se pudo guardar el rollback (${err.message}). CÓPIALO DE AQUÍ ANTES DE SEGUIR:`);
+      process.stdout.write(`\n${sqlRollback}\n`);
+    }
 
     let enlazados = 0;
     for (const u of unicos) {

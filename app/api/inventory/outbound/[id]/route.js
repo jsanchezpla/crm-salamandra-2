@@ -52,7 +52,7 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
     action: "inventory.outbound.updated",
     entity: "OutboundProduct",
     entityId: product.id,
-    after: resumen(product, ["name", "sku"]),
+    after: resumen(product, ["name", "defaultSalePrice"]),
   });
 
   return ok(product);
@@ -80,7 +80,7 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
     return error("No se puede eliminar: tiene movimientos de stock históricos.", 409);
   }
 
-  const antesBorrar = resumen(product, ["name", "sku"]);
+  const antesBorrar = resumen(product, ["name", "defaultSalePrice"]);
   const idBorrado = product.id;
   await product.destroy();
   await auditar({

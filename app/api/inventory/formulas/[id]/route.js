@@ -32,7 +32,7 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
   const formula = await Formula.findByPk(id);
   if (!formula) return notFound("Receta no encontrada");
 
-  const antesBorrar = resumen(formula, ["name"]);
+  const antesBorrar = resumen(formula, ["outboundProductId", "inboundProductId", "qtyKgPerOutputKg"]);
   const idBorrado = formula.id;
   await formula.destroy();
   await auditar({
