@@ -4,6 +4,7 @@ import { logCitasAudit } from "../../../../../../lib/citas/audit.js";
 import { findBookingOverlap } from "../../../../../../lib/citas/booking.js";
 import { sendEmail } from "../../../../../../lib/email/resendClient.js";
 import { bookingConfirmedTemplate } from "../../../../../../lib/email/templates/citas/bookingConfirmed.js";
+import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -90,7 +91,18 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
         cancelUrl,
         location: row.eventType?.location ?? null,
       });
-      await sendEmail({ to: row.clientEmail, subject, html, text });
+      // BYOK: cada cliente manda desde SU cuenta de Resend y su dominio
+      // (mejor entrega, y su consumo no gasta el cupo de los demás).
+      const cfgResend = getTenantResendConfig({ tenant });
+      await sendEmail({
+        to: row.clientEmail,
+        subject,
+        html,
+        text,
+        from: cfgResend.fromEmail || undefined,
+        replyTo: cfgResend.replyTo || undefined,
+        apiKey: cfgResend.apiKey || undefined,
+      });
     } catch (mailErr) {
       process.stderr.write(`[citas:confirm] email-confirmed fail: ${mailErr.message}\n`);
     }

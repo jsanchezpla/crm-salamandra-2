@@ -6,6 +6,7 @@ import { UUID_RE, loadPlanTree } from "../../../../../../lib/nutricion/plans.js"
 import { buildMenuPdfBuffer, menuPdfFilename } from "../../../../../../lib/nutricion/menuPdf.js";
 import { menuEmail } from "../../../../../../lib/email/templates/nutricion/menuEmail.js";
 import { sendEmail } from "../../../../../../lib/email/resendClient.js";
+import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
 
 async function logAudit({ tenantId, userId, action, entityId, after, ip }) {
   try {
@@ -91,11 +92,16 @@ export const POST = withTenant(async (request, ctx, tenantCtx) => {
       planName: tree.name,
     });
 
+    // BYOK: el menú sale de la cuenta de Resend de la nutricionista.
+    const cfgResend = getTenantResendConfig({ tenant });
     const result = await sendEmail({
       to: client.email,
       subject,
       html,
       text,
+      from: cfgResend.fromEmail || undefined,
+      replyTo: cfgResend.replyTo || undefined,
+      apiKey: cfgResend.apiKey || undefined,
       attachments: [{ filename: menuPdfFilename(tree, client), content: buffer }],
       tags: [
         { name: "module", value: "nutricion" },

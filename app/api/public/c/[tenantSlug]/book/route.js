@@ -21,6 +21,7 @@ import {
 } from "../../../../../../lib/payments/checkout.js";
 import { tenantHasStripe } from "../../../../../../lib/payments/stripeConfig.js";
 import { meetUrlInicial } from "../../../../../../lib/citas/videollamada.js";
+import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
 import {
   getMadridDayOfWeek,
   getMadridParts,
@@ -389,7 +390,18 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
           scheduledAt: row.scheduledAt,
         });
       }
-      await sendEmail({ to: row.clientEmail, subject: tpl.subject, html: tpl.html, text: tpl.text });
+      // BYOK: el correo de "cita recibida" sale de la cuenta del propio
+      // negocio, no de la de Salamandra.
+      const cfgResend = getTenantResendConfig({ tenant });
+      await sendEmail({
+        to: row.clientEmail,
+        subject: tpl.subject,
+        html: tpl.html,
+        text: tpl.text,
+        from: cfgResend.fromEmail || undefined,
+        replyTo: cfgResend.replyTo || undefined,
+        apiKey: cfgResend.apiKey || undefined,
+      });
     } catch (mailErr) {
       process.stderr.write(`[citas:book] email fail (autoConfirm=${autoConfirm}): ${mailErr.message}\n`);
     }

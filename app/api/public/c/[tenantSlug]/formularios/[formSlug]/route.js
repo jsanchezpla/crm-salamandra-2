@@ -4,6 +4,7 @@ import { ok, created, error, notFound, serverError } from "../../../../../../../
 import { validarRespuestas, formPublico } from "../../../../../../../lib/formularios/fields.js";
 import { puntuarSpam, buscarDuplicadoReciente } from "../../../../../../../lib/formularios/antispam.js";
 import { MODULE_KEYS } from "../../../../../../../lib/tenant/moduleKeys.js";
+import { getTenantResendConfig } from "../../../../../../../lib/outreach/resendConfig.js";
 
 /**
  * Formulario público del módulo Formularios.
@@ -56,7 +57,7 @@ export const GET = withPublicTenant(
 );
 
 export const POST = withPublicTenant(
-  async (request, ctx, { slug, tenantModels, hasModule }) => {
+  async (request, ctx, { slug, tenant, tenantModels, hasModule }) => {
     try {
       // 1. Límite por IP, con cubo propio por tenant y por formulario.
       const { formSlug } = await ctx.params;
@@ -125,7 +126,7 @@ export const POST = withPublicTenant(
 
       // El aviso a la nutricionista se dispara aparte y sin bloquear: que no
       // salga un correo no puede impedir que la solicitud quede guardada.
-      notificarNuevaSolicitud({ ajustes, form, destinos }).catch(() => {});
+      notificarNuevaSolicitud({ ajustes, form, destinos, tenant }).catch(() => {});
 
       return created({ ok: true, mensaje: form.thankYouMessage || "¡Gracias!" });
     } catch (err) {
@@ -140,7 +141,7 @@ export const POST = withPublicTenant(
  * motivo de consulta es información de salud y no tiene por qué viajar por
  * correo. Solo dice quién y que entre en el CRM.
  */
-async function notificarNuevaSolicitud({ ajustes, form, destinos }) {
+async function notificarNuevaSolicitud({ ajustes, form, destinos, tenant }) {
   const destinatarios = Array.isArray(ajustes?.notifyEmails) ? ajustes.notifyEmails.filter(Boolean) : [];
   if (destinatarios.length === 0) return;
 
@@ -148,8 +149,13 @@ async function notificarNuevaSolicitud({ ajustes, form, destinos }) {
   const nombre = destinos.name || "Alguien";
   const telefono = destinos.phone ? ` · ${destinos.phone}` : "";
 
+  // BYOK: el aviso sale de la cuenta del propio negocio.
+  const cfgResend = getTenantResendConfig({ tenant });
   await sendEmail({
     to: destinatarios,
+    from: cfgResend.fromEmail || undefined,
+    replyTo: cfgResend.replyTo || undefined,
+    apiKey: cfgResend.apiKey || undefined,
     subject: `Nueva solicitud desde la web — ${nombre}`,
     html:
       `<p><strong>${escapar(nombre)}</strong>${escapar(telefono)} ha enviado el formulario ` +
