@@ -31,6 +31,11 @@ export const metadata = {
   robots: { index: false, follow: false, nocache: true },
 };
 
+const SECCIONES = [
+  { href: "/admin", texto: "Custodia" },
+  { href: "/admin/clientes", texto: "Alta de clientes" },
+];
+
 export default function AdminLayout({ children }) {
   return (
     <div
@@ -59,6 +64,34 @@ export default function AdminLayout({ children }) {
         backgroundSize: "56px 56px",
       }}
     >
+      <nav
+        className="flex items-center gap-1 px-6 lg:px-12 h-12"
+        style={{ borderBottom: "1px solid var(--line)", background: "color-mix(in srgb, var(--bg) 80%, transparent)" }}
+      >
+        <span
+          className="text-[11px] uppercase tracking-[0.2em] mr-5"
+          style={{ color: "var(--ok)" }}
+        >
+          Salamandra
+        </span>
+        {SECCIONES.map((s) => (
+          <a
+            key={s.href}
+            href={s.href}
+            className="text-[12px] px-3 py-1.5 rounded transition-colors"
+            style={{ color: "var(--dim)" }}
+          >
+            {s.texto}
+          </a>
+        ))}
+        <a
+          href="/api/auth/logout"
+          className="ml-auto text-[11px] uppercase tracking-[0.16em]"
+          style={{ color: "var(--tenue)" }}
+        >
+          salir
+        </a>
+      </nav>
       {children}
     </div>
   );

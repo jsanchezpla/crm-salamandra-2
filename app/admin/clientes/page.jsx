@@ -10,7 +10,17 @@ import CredentialsModal from "@/components/team/CredentialsModal.jsx";
  * 400 líneas, un script por módulo, otro para la marca...). Aquí es un
  * formulario: nombre, identificador, módulos, marca opcional y datos fiscales.
  *
- * Solo lo ve nuestro propio tenant (módulo `provisioning`).
+ * Vivía en el CRM de clientes (/alta-clientes) y se movió al back-office
+ * (2026-07-28). El motivo no es estético: dar de alta un cliente no es una tarea
+ * DE un cliente, y tenerlo en el mismo sitio donde se atiende a Aumenta o a
+ * Laura invitaba a confundir el contexto. Ahora vive detrás del subdominio, con
+ * su puerta de nginx delante.
+ *
+ * Sigue protegido por el módulo `provisioning`, que solo tiene nuestro tenant:
+ * el subdominio reduce superficie, no autoriza.
+ *
+ * Sobre el aspecto: el back-office es oscuro, pero un FORMULARIO largo se lee
+ * mejor sobre claro. Chrome oscuro, superficie de trabajo clara.
  */
 
 const inputCls =
@@ -143,11 +153,13 @@ export default function AltaClientesPage() {
   }
 
   return (
-    <div className="p-4 lg:p-8 max-w-5xl mx-auto">
+    <div className="p-4 lg:p-8 max-w-5xl mx-auto my-6 lg:my-10 rounded-xl bg-[#FAF9F7] text-neutral-800 shadow-[0_2px_40px_rgba(0,0,0,0.5)]">
       <div className="flex items-end justify-between gap-4 flex-wrap mb-6">
         <div>
-          <div className="eyebrow mb-1.5">Salamandra · Interno</div>
-          <h1 className="font-display text-[26px] lg:text-[34px] leading-[1.05] text-[var(--ink-900)] tracking-tight">
+          <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-[0.18em] mb-1.5">
+            Salamandra · Interno
+          </div>
+          <h1 className="text-[26px] lg:text-[34px] leading-[1.05] text-neutral-900 tracking-tight">
             Alta de clientes
           </h1>
           <p className="text-xs text-neutral-400 mt-2 max-w-xl">

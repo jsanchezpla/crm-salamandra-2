@@ -268,24 +268,11 @@ const navigation = [
       },
     ],
   },
-  {
-    // Solo lo ve el tenant de Salamandra Solutions (módulo `provisioning`):
-    // es el panel con el que damos de alta a los clientes.
-    label: "Salamandra",
-    items: [
-      {
-        key: "provisioning",
-        label: "Alta de clientes",
-        href: "/alta-clientes",
-        adminOnly: true,
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
-          </svg>
-        ),
-      },
-    ],
-  },
+  // El alta de clientes YA NO está aquí (2026-07-28). Se movió al back-office
+  // interno, en su propio subdominio: dar de alta un cliente no es una tarea DE
+  // un cliente, y tenerla en el mismo menú donde se atiende a Aumenta o a Laura
+  // invitaba a confundir el contexto. Vive en /admin/clientes de ADMIN_HOST, que
+  // además tiene su propia puerta en nginx.
 ];
 
 // Overrides de label de sidebar por tenant. Solo cambia el texto visible;
