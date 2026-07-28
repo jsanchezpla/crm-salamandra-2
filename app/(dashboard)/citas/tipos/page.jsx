@@ -101,7 +101,15 @@ export default function CitasTiposPage() {
         _bookingCount: data.bookingCount ?? 0,
       });
     } catch {
-      setForm({ ...EMPTY_FORM, ...item });
+      // Respaldo con la fila del listado si el detalle no carga. OJO CON LAS
+      // UNIDADES: ahí `price` viene en CÉNTIMOS, y este formulario trabaja en
+      // euros. Volcarlo tal cual ponía 6000 en un campo etiquetado "Precio (€)",
+      // y al guardar se convertía otra vez: 60 € pasaban a 6.000 €.
+      setForm({
+        ...EMPTY_FORM,
+        ...item,
+        price: item?.price != null ? centsToEuros(item.price) : "",
+      });
     }
   }
 

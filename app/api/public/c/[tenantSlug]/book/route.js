@@ -11,7 +11,11 @@ import {
   normalizeEmail,
   isValidEmail,
 } from "../../../../../../lib/citas/validation.js";
-import { findBookingOverlap, lockBookingSlot } from "../../../../../../lib/citas/booking.js";
+import {
+  findBookingOverlap,
+  lockBookingSlot,
+  noEsCarritoAbandonado,
+} from "../../../../../../lib/citas/booking.js";
 import { logCitasAudit } from "../../../../../../lib/citas/audit.js";
 import { verifyPortalSession, readBearer } from "../../../../../../lib/citas/portalSession.js";
 import {
@@ -19,7 +23,7 @@ import {
   CHECKOUT_WINDOW_MS,
   HOLD_WINDOW_MS,
 } from "../../../../../../lib/payments/checkout.js";
-import { tenantHasStripe } from "../../../../../../lib/payments/stripeConfig.js";
+import { getStripe, tenantHasStripe } from "../../../../../../lib/payments/stripeConfig.js";
 import { meetUrlInicial } from "../../../../../../lib/citas/videollamada.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
 import {
@@ -33,6 +37,37 @@ import {
 /** Origen público desde el que se sirvió la petición (para las URLs de Stripe). */
 function baseUrl(request) {
   return new URL(request.url).origin;
+}
+
+/**
+ * URL de una sesión de Stripe que siga ABIERTA, para reenviar allí a quien ya
+ * tenía un pago a medias. Devuelve null ante cualquier problema: esto es una
+ * comodidad, y no puede tumbar una reserva.
+ */
+async function urlDePagoAbierta(ctx, { id: bookingId, paymentSessionId }) {
+  try {
+    const { PaymentSession } = ctx.tenantModels;
+    const atributos = ["id", "status", "stripeCheckoutSessionId"];
+    // Por id de sesión si la cita ya lo tiene; si no, buscándola por la propia
+    // cita. `bookings.payment_session_id` se escribe DESPUÉS de la transacción
+    // que crea la reserva (hay que llamar a Stripe antes), así que una segunda
+    // petición que llegue en ese hueco lo vería vacío.
+    const ps = paymentSessionId
+      ? await PaymentSession.findByPk(paymentSessionId, { attributes: atributos })
+      : await PaymentSession.findOne({
+          where: { entityType: "booking", entityId: bookingId, status: "pending" },
+          attributes: atributos,
+          order: [["createdAt", "DESC"]],
+        });
+    if (!ps || ps.status !== "pending" || !ps.stripeCheckoutSessionId) return null;
+    const stripe = await getStripe(ctx);
+    if (!stripe) return null;
+    const cs = await stripe.checkout.sessions.retrieve(ps.stripeCheckoutSessionId);
+    return cs?.status === "open" && cs.url ? cs.url : null;
+  } catch (err) {
+    process.stderr.write(`[citas:book] no se pudo recuperar la sesión de pago: ${err.message}\n`);
+    return null;
+  }
 }
 
 /**
@@ -237,32 +272,60 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
         // A partir de aquí, la comprobación de hueco es de fiar.
         await lockBookingSlot(tenantContext.tenantSequelize, { transaction: t });
 
+        const hace5min = new Date(ahora - 5 * 60 * 1000);
+
         const overlap = await findBookingOverlap(Booking, {
           scheduledAt,
           duration: eventType.duration,
           transaction: t,
         });
         if (overlap) {
+          // ¿Es SUYA? El caso típico es el doble clic: su primera petición ya
+          // creó la reserva, así que la segunda choca contra ella misma. Antes
+          // se le respondía "esa hora ya no está disponible" sobre la hora que
+          // acababa de reservar él, y —si era de pago— sin manera de llegar al
+          // cobro: su propio hueco le bloqueaba media hora.
+          const suya = await Booking.findOne({
+            where: {
+              id: overlap.id,
+              createdAt: { [Op.gte]: hace5min },
+              [Op.or]: [{ clientEmail }, { clientPhone }],
+            },
+            attributes: ["id", "paymentSessionId"],
+            transaction: t,
+          });
+          if (suya) {
+            const e = new Error("DUPLICADO");
+            e.code = "DUPLICADO";
+            e.duplicado = suya;
+            throw e;
+          }
           const e = new Error("OCUPADO");
           e.code = "OCUPADO";
           throw e;
         }
 
-        // Dedup (arreglo 2026-07-23): misma persona reservando lo mismo en los
-        // últimos 5 min (doble clic / reintento) → se responde ok sin duplicar.
-        const hace5min = new Date(ahora - 5 * 60 * 1000);
+        // Dedup residual: misma persona, misma hora, hace menos de 5 min, pero
+        // con una reserva que NO ocupa el hueco (p. ej. quedó en 'no_show').
+        // El caso común —su reserva sigue en pie— lo resuelve ya la rama de
+        // arriba. Las canceladas y los carritos caducados quedan fuera a
+        // propósito: si canceló, tiene todo el derecho a volver a reservar sin
+        // esperar cinco minutos.
         const yaReservado = await Booking.findOne({
           where: {
             scheduledAt,
             createdAt: { [Op.gte]: hace5min },
             [Op.or]: [{ clientEmail }, { clientPhone }],
+            status: { [Op.ne]: "cancelled" },
+            ...noEsCarritoAbandonado(),
           },
-          attributes: ["id"],
+          attributes: ["id", "paymentSessionId"],
           transaction: t,
         });
         if (yaReservado) {
           const e = new Error("DUPLICADO");
           e.code = "DUPLICADO";
+          e.duplicado = yaReservado;
           throw e;
         }
 
@@ -297,7 +360,31 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
         return error("Esa hora ya no está disponible, por favor elige otra", 409);
       }
       if (err?.code === "DUPLICADO") {
-        return created({ ok: true, mensaje: "Solicitud recibida" });
+        // Cita gratuita: comportamiento de siempre.
+        if (!precio) return created({ ok: true, mensaje: "Solicitud recibida" });
+
+        // Con precio, responder "Solicitud recibida" a secas dejaba al paciente
+        // creyendo que tenía cita sin haber pagado nada, y sin forma de llegar
+        // al pago: su propia reserva le bloqueaba el hueco media hora. Se le
+        // devuelve LA MISMA sesión de Stripe que ya tiene abierta, que es lo que
+        // de verdad quiere quien hace doble clic.
+        const url = err.duplicado ? await urlDePagoAbierta(tenantContext, err.duplicado) : null;
+        if (url) {
+          return created({
+            booking: { id: err.duplicado.id },
+            paymentRequired: true,
+            amount: precio,
+            checkoutUrl: url,
+          });
+        }
+        // Su reserva existe pero su sesión de pago aún se está creando (pasa con
+        // clics simultáneos: la primera petición llama a Stripe fuera de la
+        // transacción). Se le dice que espere, no que la hora esté ocupada —
+        // está ocupada POR ÉL.
+        return error(
+          "Ya estamos preparando tu pago para esa hora. Espera unos segundos y vuelve a intentarlo.",
+          409
+        );
       }
       throw err;
     }
