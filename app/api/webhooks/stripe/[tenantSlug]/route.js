@@ -252,9 +252,46 @@ async function procesar(ctx, { PaymentSession, event, t }) {
     case "charge.refunded": {
       // Devolución hecha desde el panel de Stripe (fuera del CRM).
       const pi = typeof obj.payment_intent === "string" ? obj.payment_intent : null;
-      if (!pi) return "sin payment_intent";
-      const ps = await PaymentSession.findOne({ where: { stripePaymentIntentId: pi }, transaction: t });
-      if (!ps || ps.status === "refunded") return "no aplica";
+
+      // Se busca por metadata primero y por payment_intent después. El
+      // `payment_intent` SOLO lo escribe el handler de checkout.session.completed,
+      // así que si ese evento aún no se ha procesado la columna está vacía y la
+      // búsqueda no encuentra nada.
+      let ps = null;
+      if (obj?.metadata?.paymentSessionId) {
+        ps = await PaymentSession.findByPk(obj.metadata.paymentSessionId, { transaction: t });
+      }
+      if (!ps && pi) {
+        ps = await PaymentSession.findOne({ where: { stripePaymentIntentId: pi }, transaction: t });
+      }
+
+      if (!ps) {
+        // ── NO se da por bueno ────────────────────────────────────────────
+        // Antes se respondía "no aplica" y el evento quedaba marcado como
+        // procesado PARA SIEMPRE. Escenario real: el `completed` del paciente
+        // falla con 500 (contenedor reiniciándose durante un deploy) y entra en
+        // la cola de reintentos; en esos minutos la profesional ve el cobro en
+        // su panel y lo devuelve; llega el `charge.refunded`, no encuentra nada,
+        // y la devolución no se registra nunca — la cita se queda como pagada.
+        //
+        // Lanzar deshace la transacción ENTERA (la marca del evento incluida),
+        // así que Stripe reintenta y para entonces el `completed` ya habrá
+        // pasado. Con un tope: si tras unas horas sigue sin aparecer, no es
+        // nuestro (un cobro ajeno de la misma cuenta de Stripe) y seguir dando
+        // 500 durante tres días solo llena el log.
+        const horas = (Date.now() / 1000 - (event.created ?? 0)) / 3600;
+        if (horas < 6) {
+          throw new Error(
+            `charge.refunded sin PaymentSession (pi=${pi}) — probablemente el cobro aún no se ha procesado; se reintentará`
+          );
+        }
+        process.stderr.write(
+          `[stripe:webhook] ${ctx.slug}: charge.refunded huérfano tras ${Math.round(horas)} h (pi=${pi}). Devolución NO registrada.\n`
+        );
+        return "devolución sin PaymentSession — revisar a mano";
+      }
+
+      if (ps.status === "refunded") return "no aplica";
 
       // Stripe emite `charge.refunded` también en devoluciones PARCIALES.
       // `amount_refunded` es el ACUMULADO del cargo, no lo de esta vez. Marcarlo
