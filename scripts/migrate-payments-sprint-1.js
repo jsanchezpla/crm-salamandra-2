@@ -210,17 +210,43 @@ async function main() {
   }
   log(`✓ ${schemas.length} schemas: ${schemas.join(", ")}`);
 
+  const fallidos = [];
   for (const schema of schemas) {
     header(`Schema ${schema}`);
     try {
       await processSchema(s, schema, uuidDefault);
     } catch (err) {
+      fallidos.push({ schema, motivo: err.message });
       log(`✗ ${schema}: ${err.message} — se salta, sigue con el resto`);
     }
   }
 
-  process.stdout.write("\n✓ Migración completada\n\n");
   await s.close();
+
+  // ── UN FALLO PARCIAL TIENE QUE PARAR EL DESPLIEGUE ────────────────────────
+  // Antes se seguía adelante, se imprimía "Migración completada" y se salía con
+  // código 0 aunque un schema hubiera fallado. Como esta migración es
+  // PREREQUISITO del deploy (el código nuevo consulta bookings.payment_status y
+  // bookings.hold_expires_at), el operador leía el mensaje de éxito, lanzaba
+  // ./deploy.sh, y en los tenants sin migrar TODA consulta de huecos reventaba
+  // con 42703: nadie podía reservar y nada lo había avisado.
+  //
+  // Un ALTER TABLE que no consigue el lock por una consulta larga en curso es un
+  // escenario perfectamente normal en producción, no una rareza.
+  if (fallidos.length > 0) {
+    const raya = "!".repeat(60);
+    process.stderr.write(`\n${raya}\n`);
+    process.stderr.write(` MIGRACIÓN INCOMPLETA: ${fallidos.length} de ${schemas.length} schemas han fallado\n`);
+    process.stderr.write(`${raya}\n`);
+    for (const f of fallidos) process.stderr.write(`  ✗ ${f.schema}: ${f.motivo}\n`);
+    process.stderr.write("\n  NO despliegues todavía. El código nuevo consulta columnas que en esos\n");
+    process.stderr.write("  schemas no existen, y sus reservas dejarían de funcionar.\n");
+    process.stderr.write("  Arregla la causa y vuelve a lanzar esto: es idempotente, los schemas\n");
+    process.stderr.write("  que ya pasaron no se tocan.\n\n");
+    process.exit(1);
+  }
+
+  process.stdout.write(`\n✓ Migración completada — ${schemas.length} schemas, ninguno fallido\n\n`);
   process.exit(0);
 }
 

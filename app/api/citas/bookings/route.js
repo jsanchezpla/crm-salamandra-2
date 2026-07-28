@@ -8,7 +8,7 @@ import {
   VALID_MODALITIES,
 } from "../../../../lib/citas/validation.js";
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
-import { findBookingOverlap } from "../../../../lib/citas/booking.js";
+import { findBookingOverlap, noEsCarritoAbandonado } from "../../../../lib/citas/booking.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { meetUrlInicial } from "../../../../lib/citas/videollamada.js";
 
@@ -100,6 +100,16 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
         ],
       });
     }
+    // Fuera los carritos abandonados: alguien empezó a reservar, se fue a pagar
+    // y no volvió. Esas filas se quedan en 'pending' y aparecían en la lista de
+    // espera mezcladas con las solicitudes de verdad, indistinguibles — la
+    // profesional podía confirmar a mano una cita que nadie ha pagado.
+    // El webhook `checkout.session.expired` las retira, pero filtrar también al
+    // leer hace que no dependa de que ese evento llegue.
+    // Las YA retiradas (cancelled) siguen viéndose: esto solo esconde las que
+    // están en el limbo.
+    grupos.push(noEsCarritoAbandonado());
+
     if (grupos.length) where[Op.and] = grupos;
 
     // Acceso por rol: un profesional no-admin solo ve SUS citas (misma regla que

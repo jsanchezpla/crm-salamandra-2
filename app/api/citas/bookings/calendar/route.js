@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, error, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
+import { noEsCarritoAbandonado } from "../../../../../lib/citas/booking.js";
 
 const STATUS_COLOR_DIM = {
   cancelled: "#9ca3af",
@@ -43,7 +44,12 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       return error("start/end inválidos");
     }
 
-    const where = { scheduledAt: { [Op.gte]: startDate, [Op.lt]: endDate } };
+    // Sin el filtro de carritos abandonados, el calendario pintaba como cita una
+    // reserva que nadie llegó a pagar y cuyo hueco ya está libre para otros.
+    const where = {
+      scheduledAt: { [Op.gte]: startDate, [Op.lt]: endDate },
+      ...noEsCarritoAbandonado(),
+    };
 
     const eventTypeIds = searchParams.get("eventTypeIds"); // CSV opcional
     if (eventTypeIds) {

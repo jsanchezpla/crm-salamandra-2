@@ -4,6 +4,7 @@ import { ok, unauthorized, forbidden, notFound, serverError } from "../../../../
 import { verifyPortalSession, readBearer } from "../../../../../../../lib/citas/portalSession.js";
 import { splitBookings } from "../../../../../../../lib/citas/clientBookingSerializer.js";
 import { normalizeEmail } from "../../../../../../../lib/citas/validation.js";
+import { noEsCarritoAbandonado } from "../../../../../../../lib/citas/booking.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/citas-portal/bookings
@@ -36,7 +37,13 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
 
     const { Booking, EventType } = tenantModels;
     const rows = await Booking.findAll({
-      where: { clientEmail: { [Op.iLike]: normalizedEmail } }, // usa bookings_client_email_idx
+      where: {
+        clientEmail: { [Op.iLike]: normalizedEmail }, // usa bookings_client_email_idx
+        // Fuera los carritos abandonados: si empezó a reservar y no llegó a
+        // pagar, no es una cita suya y su hueco puede estar ya vendido a otra
+        // persona. Enseñársela como "próxima" sería mentirle.
+        ...noEsCarritoAbandonado(),
+      },
       include: [{ model: EventType, as: "eventType", attributes: ["id", "name", "color"] }],
       order: [["scheduledAt", "ASC"]],
     });

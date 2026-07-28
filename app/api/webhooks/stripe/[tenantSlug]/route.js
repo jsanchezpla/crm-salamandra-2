@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withPublicTenant } from "../../../../../lib/tenant/publicTenantContext.js";
 import { getStripe, getTenantStripeConfig } from "../../../../../lib/payments/stripeConfig.js";
 import {
+  onEntityExpired,
   onEntityPaid,
   onEntityPaymentFailed,
   onEntityPaymentPending,
@@ -242,7 +243,10 @@ async function procesar(ctx, { PaymentSession, event, t }) {
       }, t);
       if (!ps || ps.status !== "pending") return "no aplica";
       await ps.update({ status: "expired" }, { transaction: t });
-      return "marcada como caducada";
+      // Y se retira la cita: marcar solo la sesión dejaba una reserva 'pending'
+      // eterna en la lista de espera de la profesional y en "Mi perfil" del
+      // paciente, aunque el hueco ya se hubiera revendido.
+      return await onEntityExpired(ctx, ps, t);
     }
 
     case "charge.refunded": {
