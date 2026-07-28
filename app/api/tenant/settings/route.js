@@ -7,6 +7,7 @@ import { isDemoTenant, assertNotDemoMasterWrite } from "../../../../lib/demo/isD
 import { encryptSecret, decryptSecret, isEncryptionConfigured } from "../../../../lib/crypto/secretBox.js";
 import { isAllowedAnthropicModel, DEFAULT_ANTHROPIC_MODEL } from "../../../../lib/ai/anthropicModel.js";
 import { getTenantStripeConfig } from "../../../../lib/payments/stripeConfig.js";
+import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 
 /**
  * /api/tenant/settings — configuración básica del tenant.
@@ -58,6 +59,85 @@ function applyPlain(target, field, value) {
     return;
   }
   if (typeof value === "string" && value.trim()) target[field] = value.trim();
+}
+
+// Campos de `integrations` que son SECRETOS. De estos jamás se audita el valor
+// —ni cifrado— sino solo qué les pasó: puesta, cambiada o borrada.
+const CAMPOS_SECRETOS_AUDIT = [
+  "anthropicApiKey",
+  "googlePlacesApiKey",
+  "openaiApiKey",
+  "resendApiKey",
+  "stripeSecretKey",
+  "stripeWebhookSecret",
+  "whatsappToken",
+];
+
+// Estos NO son secretos y su valor sí ayuda a entender qué pasó.
+const CAMPOS_ABIERTOS_AUDIT = [
+  "anthropicModel",
+  "resendFromEmail",
+  "resendReplyTo",
+  "stripePublishableKey",
+  "whatsappPhoneNumberId",
+];
+
+/**
+ * Qué ha cambiado en la configuración, en forma auditable.
+ *
+ * Devuelve `null` si no cambió nada, para no llenar el registro de filas vacías
+ * cuando se guarda la pantalla sin tocar nada.
+ *
+ * REGLA: de un secreto solo se guarda el NOMBRE del campo y qué le ocurrió.
+ * El valor no entra ni cifrado: la tabla de auditoría vive en `master` y la
+ * comparten todos los clientes.
+ *
+ * Nota sobre "cambiada": el cifrado usa IV aleatorio, así que volver a guardar
+ * la MISMA clave produce un texto cifrado distinto. Por eso no se puede
+ * distinguir "la cambió" de "la volvió a pegar igual"; se registra como
+ * cambiada, que es la lectura conservadora.
+ */
+function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
+  const iAntes = antes?.integrations ?? {};
+  const iDespues = despues?.integrations ?? {};
+
+  const secretos = {};
+  for (const campo of CAMPOS_SECRETOS_AUDIT) {
+    const habia = !!iAntes[campo];
+    const hay = !!iDespues[campo];
+    if (!habia && hay) secretos[campo] = "puesta";
+    else if (habia && !hay) secretos[campo] = "borrada";
+    else if (habia && hay && iAntes[campo] !== iDespues[campo]) secretos[campo] = "cambiada";
+  }
+
+  const before = {};
+  const after = {};
+  const anota = (clave, va, vd) => {
+    if (JSON.stringify(va ?? null) === JSON.stringify(vd ?? null)) return;
+    before[clave] = va ?? null;
+    after[clave] = vd ?? null;
+  };
+
+  if (nombreDespues !== undefined) anota("name", nombreAntes, nombreDespues);
+  for (const campo of CAMPOS_ABIERTOS_AUDIT) anota(campo, iAntes[campo], iDespues[campo]);
+  for (const campo of ["primaryColor", "secondaryColor", "logoUrl"]) {
+    anota(`brand.${campo}`, antes?.brand?.[campo], despues?.brand?.[campo]);
+  }
+  anota("aiAccess", antes?.aiAccess, despues?.aiAccess);
+  anota("citas.meetModo", antes?.citas?.meetModo, despues?.citas?.meetModo);
+  anota("citas.recordatorios", antes?.citas?.recordatorios, despues?.citas?.recordatorios);
+
+  const huboSecretos = Object.keys(secretos).length > 0;
+  const huboAbiertos = Object.keys(after).length > 0;
+  if (!huboSecretos && !huboAbiertos) return null;
+
+  return {
+    before: huboAbiertos ? before : null,
+    after: {
+      ...(huboAbiertos ? after : {}),
+      ...(huboSecretos ? { credenciales: secretos } : {}),
+    },
+  };
 }
 
 export const GET = withTenant(async (request, _routeContext, ctx) => {
@@ -240,8 +320,31 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     settings.aiAccess = body.aiAccess;
   }
 
+  // ── Qué cambia, para el rastro de auditoría ──────────────────────────────
+  // Se calcula ANTES del update, comparando el estado previo con el nuevo.
+  // Aquí se decide sobre el dinero y las credenciales de un cliente (su clave
+  // de Stripe, la de correo, las de IA) y hasta ahora no quedaba ni una fila:
+  // no había forma de saber quién cambió qué ni cuándo.
+  const antes = ctx.tenant.settings ?? {};
+  const cambios = diffConfiguracion(antes, settings, tenant.name, updates.name);
+
   updates.settings = settings;
   await tenant.update(updates);
+
+  // DESPUÉS de la mutación y best-effort, como el resto del CRM.
+  if (cambios) {
+    const { userId, ip } = datosPeticion(request);
+    await auditar({
+      tenantId: ctx.tenant.id,
+      userId,
+      action: "configuracion.updated",
+      entity: "Tenant",
+      entityId: ctx.tenant.id,
+      before: cambios.before,
+      after: cambios.after,
+      ip,
+    });
+  }
 
   invalidateTenantCache(ctx.slug);
 
