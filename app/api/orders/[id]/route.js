@@ -1,5 +1,6 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, noContent, forbidden, notFound, error, serverError } from "../../../../lib/utils/apiResponse.js";
+import { auditar, datosPeticion, resumen } from "../../../../lib/utils/auditoria.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -12,7 +13,7 @@ function recalculateOrder(lines, transportAmount) {
   };
 }
 
-export const GET = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("orders")) return forbidden("Módulo orders no activo");
   const { Order, OrderLine, Client, Invoice } = tenantModels;
   const { id } = await params;
@@ -28,7 +29,7 @@ export const GET = withTenant(async (_request, { params }, { tenantModels, hasMo
   return ok(order);
 });
 
-export const PATCH = withTenant(async (request, { params }, { tenantModels, hasModule, tenantSequelize }) => {
+export const PATCH = withTenant(async (request, { params }, { tenant, tenantModels, hasModule, tenantSequelize }) => {
   if (!hasModule("orders")) return forbidden("Módulo orders no activo");
   const role = request.headers.get("x-user-role");
   if (!ADMIN_ROLES.has(role)) return forbidden("Solo administradores pueden modificar pedidos");
@@ -86,6 +87,18 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
       await order.update(patch, { transaction: t });
     });
 
+    // La auditoría va FUERA de la transacción y después de que confirme: se
+    // escribe en master, con otra conexión, así que dentro habría dejado
+    // rastro de un cambio que un rollback posterior deshiciera.
+    await auditar({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "order.updated",
+      entity: "Order",
+      entityId: order.id,
+      after: resumen(order, ["number", "status", "total"]),
+    });
+
     const fresh = await Order.findByPk(id, {
       include: [{ model: OrderLine, as: "lines" }],
     });
@@ -98,7 +111,7 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
   }
 });
 
-export const DELETE = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("orders")) return forbidden("Módulo orders no activo");
   const role = request.headers.get("x-user-role");
   if (!ADMIN_ROLES.has(role)) return forbidden("Solo administradores pueden borrar pedidos");
@@ -115,6 +128,16 @@ export const DELETE = withTenant(async (request, { params }, { tenantModels, has
     );
   }
 
+  const antesBorrar = resumen(order, ["number", "status", "total"]);
+  const idBorrado = order.id;
   await order.destroy();
+  await auditar({
+    tenantId: tenant.id,
+    ...datosPeticion(request),
+    action: "order.deleted",
+    entity: "Order",
+    entityId: idBorrado,
+    before: antesBorrar,
+  });
   return noContent();
 });

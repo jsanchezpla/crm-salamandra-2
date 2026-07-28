@@ -3,6 +3,7 @@ import { ok, noContent, forbidden } from "../../../../../lib/utils/apiResponse.j
 import { NotFoundError } from "../../../../../lib/utils/errors.js";
 import { toFCEvent, calendarIncludes, resolveCalendarFks } from "../../../../../lib/calendar/calendarEvent.js";
 import { error as errorResponse } from "../../../../../lib/utils/apiResponse.js";
+import { auditar, datosPeticion, resumen } from "../../../../../lib/utils/auditoria.js";
 
 async function resolveTask(tenantModels, id) {
   const { CalendarTask } = tenantModels;
@@ -11,7 +12,7 @@ async function resolveTask(tenantModels, id) {
   return task;
 }
 
-export const PUT = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const PUT = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("calendar")) return forbidden();
 
   const { id } = await params;
@@ -45,15 +46,33 @@ export const PUT = withTenant(async (request, { params }, { tenantModels, hasMod
   }
 
   await task.update(updates);
+  await auditar({
+    tenantId: tenant.id,
+    ...datosPeticion(request),
+    action: "calendar.task.updated",
+    entity: "CalendarTask",
+    entityId: task.id,
+    after: resumen(task, ["title", "date"]),
+  });
   await task.reload({ include: calendarIncludes(tenantModels, hasModule) });
   return ok(toFCEvent(task));
 });
 
-export const DELETE = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("calendar")) return forbidden();
 
   const { id } = await params;
   const task = await resolveTask(tenantModels, id);
+  const antesBorrar = resumen(task, ["title", "date"]);
+  const idBorrado = task.id;
   await task.destroy();
+  await auditar({
+    tenantId: tenant.id,
+    ...datosPeticion(request),
+    action: "calendar.task.deleted",
+    entity: "CalendarTask",
+    entityId: idBorrado,
+    before: antesBorrar,
+  });
   return noContent();
 });

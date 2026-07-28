@@ -1,7 +1,8 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, noContent, forbidden, notFound, error } from "../../../../../lib/utils/apiResponse.js";
+import { auditar, datosPeticion, resumen } from "../../../../../lib/utils/auditoria.js";
 
-export const PUT = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const PUT = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("inventory")) return forbidden();
 
   const { Formula } = tenantModels;
@@ -22,7 +23,7 @@ export const PUT = withTenant(async (request, { params }, { tenantModels, hasMod
   return ok(formula);
 });
 
-export const DELETE = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
+export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("inventory")) return forbidden();
 
   const { Formula } = tenantModels;
@@ -31,6 +32,16 @@ export const DELETE = withTenant(async (_request, { params }, { tenantModels, ha
   const formula = await Formula.findByPk(id);
   if (!formula) return notFound("Receta no encontrada");
 
+  const antesBorrar = resumen(formula, ["name"]);
+  const idBorrado = formula.id;
   await formula.destroy();
+  await auditar({
+    tenantId: tenant.id,
+    ...datosPeticion(request),
+    action: "inventory.formula.deleted",
+    entity: "Formula",
+    entityId: idBorrado,
+    before: antesBorrar,
+  });
   return noContent();
 });

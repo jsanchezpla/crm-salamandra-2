@@ -1,7 +1,8 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, noContent, forbidden, notFound, error } from "../../../../../lib/utils/apiResponse.js";
+import { auditar, datosPeticion, resumen } from "../../../../../lib/utils/auditoria.js";
 
-export const GET = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("inventory")) return forbidden();
 
   const { OutboundProduct, Formula, InboundProduct, Client, ClientOutboundAlias } = tenantModels;
@@ -29,7 +30,7 @@ export const GET = withTenant(async (_request, { params }, { tenantModels, hasMo
   return ok(product);
 });
 
-export const PUT = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const PUT = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("inventory")) return forbidden();
 
   const { OutboundProduct } = tenantModels;
@@ -45,11 +46,19 @@ export const PUT = withTenant(async (request, { params }, { tenantModels, hasMod
     defaultSalePrice: "defaultSalePrice" in body ? (body.defaultSalePrice ? parseFloat(body.defaultSalePrice) : null) : product.defaultSalePrice,
     notes: "notes" in body ? (body.notes?.trim() || null) : product.notes,
   });
+  await auditar({
+    tenantId: tenant.id,
+    ...datosPeticion(request),
+    action: "inventory.outbound.updated",
+    entity: "OutboundProduct",
+    entityId: product.id,
+    after: resumen(product, ["name", "sku"]),
+  });
 
   return ok(product);
 });
 
-export const DELETE = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
+export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("inventory")) return forbidden();
 
   const { OutboundProduct, Formula, ClientOutboundAlias, StockMovement } = tenantModels;
@@ -71,6 +80,16 @@ export const DELETE = withTenant(async (_request, { params }, { tenantModels, ha
     return error("No se puede eliminar: tiene movimientos de stock históricos.", 409);
   }
 
+  const antesBorrar = resumen(product, ["name", "sku"]);
+  const idBorrado = product.id;
   await product.destroy();
+  await auditar({
+    tenantId: tenant.id,
+    ...datosPeticion(request),
+    action: "inventory.outbound.deleted",
+    entity: "OutboundProduct",
+    entityId: idBorrado,
+    before: antesBorrar,
+  });
   return noContent();
 });

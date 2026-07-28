@@ -1,5 +1,6 @@
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { noContent, forbidden, serverError } from "../../../../../../lib/utils/apiResponse.js";
+import { auditar, datosPeticion, resumen } from "../../../../../../lib/utils/auditoria.js";
 
 /**
  * DELETE /api/clients/[id]/notes/[noteId] — borra una nota.

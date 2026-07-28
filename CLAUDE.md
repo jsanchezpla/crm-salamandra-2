@@ -516,7 +516,23 @@ Usar automáticamente cuando corresponda:
 ### Auditoría
 
 - Registrar en `AuditLog` cambios de configuración de tenant y accesos fallidos.
-- Logs de auditoría nunca se borran ni modifican.
+- Logs de auditoría nunca se borran ni modifican (salvo la retención por
+  antigüedad de `scripts/podar-audit-logs.js`: demo 7 días, clientes reales 3
+  años con suelo de 1 año).
+- **Auditar SIEMPRE lo destructivo y lo que mueve dinero** (2026-07-28). Helper
+  genérico `lib/utils/auditoria.js` (o el de cada módulo si ya existe:
+  citas, clínica, documentos, facturación). Reglas:
+  - Se llama DESPUÉS de la mutación y FUERA de la transacción: la auditoría
+    escribe en master con otra conexión, y dentro dejaría rastro de un cambio
+    que un rollback deshiciera.
+  - Se guarda un RESUMEN de la fila, nunca la fila entera: en clientes,
+    tickets y pacientes hay datos personales (y de salud) que no deben
+    duplicarse en la tabla de master, compartida por todos los clientes.
+  - Cada acción nueva necesita su frase en `lib/actividad/etiquetas.js`, o
+    saldrá con el traductor genérico en Equipo → Actividad.
+  - Deliberadamente SIN auditar: la edición granular de un menú de nutrición
+    (comidas, opciones, alimentos) — el plan ya audita created/updated y
+    auditar cada alimento generaría cientos de filas sin valor.
 
 ---
 

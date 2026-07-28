@@ -1,11 +1,12 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, noContent, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
+import { auditar, datosPeticion, resumen } from "../../../../../lib/utils/auditoria.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const ADMIN_DENY = "Solo administradores pueden gestionar tarifas";
 
 // GET /api/billing/rates/[id]
-export const GET = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const { Rate, TeamMember } = tenantModels;
@@ -23,7 +24,7 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
 });
 
 // PATCH /api/billing/rates/[id]
-export const PATCH = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const PATCH = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const role = request.headers.get("x-user-role");
@@ -43,6 +44,14 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
     }
 
     await rate.update(updates);
+    await auditar({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "rate.updated",
+      entity: "Rate",
+      entityId: rate.id,
+      after: resumen(rate, ["name", "amount", "unit"]),
+    });
     return ok(rate);
   } catch (err) {
     return serverError(err);
@@ -50,7 +59,7 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
 });
 
 // DELETE /api/billing/rates/[id]
-export const DELETE = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const role = request.headers.get("x-user-role");
@@ -62,7 +71,17 @@ export const DELETE = withTenant(async (request, { params }, { tenantModels, has
     const rate = await Rate.findByPk(id);
     if (!rate) return notFound("Tarifa no encontrada");
 
+    const antesBorrar = resumen(rate, ["name", "amount", "unit"]);
+    const idBorrado = rate.id;
     await rate.destroy();
+    await auditar({
+      tenantId: tenant.id,
+      ...datosPeticion(request),
+      action: "rate.deleted",
+      entity: "Rate",
+      entityId: idBorrado,
+      before: antesBorrar,
+    });
     return noContent();
   } catch (err) {
     return serverError(err);

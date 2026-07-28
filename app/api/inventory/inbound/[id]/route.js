@@ -1,7 +1,8 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, noContent, forbidden, notFound, error } from "../../../../../lib/utils/apiResponse.js";
+import { auditar, datosPeticion, resumen } from "../../../../../lib/utils/auditoria.js";
 
-export const GET = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("inventory")) return forbidden();
 
   const { InboundProduct, InboundBatch, Formula, OutboundProduct, Client } = tenantModels;
@@ -27,7 +28,7 @@ export const GET = withTenant(async (_request, { params }, { tenantModels, hasMo
   return ok({ ...j, stockKg: +stockKg.toFixed(3) });
 });
 
-export const PUT = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const PUT = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("inventory")) return forbidden();
 
   const { InboundProduct } = tenantModels;
@@ -42,11 +43,19 @@ export const PUT = withTenant(async (request, { params }, { tenantModels, hasMod
     tags: Array.isArray(body.tags) ? body.tags.map((t) => String(t).trim()).filter(Boolean) : product.tags,
     notes: "notes" in body ? (body.notes?.trim() || null) : product.notes,
   });
+  await auditar({
+    tenantId: tenant.id,
+    ...datosPeticion(request),
+    action: "inventory.inbound.updated",
+    entity: "InboundProduct",
+    entityId: product.id,
+    after: resumen(product, ["name", "sku"]),
+  });
 
   return ok(product);
 });
 
-export const DELETE = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
+export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("inventory")) return forbidden();
 
   const { InboundProduct, InboundBatch, Formula } = tenantModels;
@@ -64,6 +73,16 @@ export const DELETE = withTenant(async (_request, { params }, { tenantModels, ha
     return error("No se puede eliminar: forma parte de recetas. Quita las recetas primero.", 409);
   }
 
+  const antesBorrar = resumen(product, ["name", "sku"]);
+  const idBorrado = product.id;
   await product.destroy();
+  await auditar({
+    tenantId: tenant.id,
+    ...datosPeticion(request),
+    action: "inventory.inbound.deleted",
+    entity: "InboundProduct",
+    entityId: idBorrado,
+    before: antesBorrar,
+  });
   return noContent();
 });
