@@ -25,6 +25,42 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, x-tenant",
 };
 
+// ─── Separación por HOST: back-office interno vs CRM de clientes ─────────────
+//
+// `ADMIN_HOST` (p. ej. "admin.salamandrasolutions.com"; en local
+// "admin.localhost:3000"). Sin la variable, todo se comporta como siempre.
+//
+// Esto REDUCE SUPERFICIE, no autoriza. Quien de verdad decide si alguien puede
+// dar de alta un cliente sigue siendo el endpoint, con su `hasModule` y su rol
+// leído fresco de BD. Un 404 por host no sustituye a eso: sirve para que el
+// subdominio interno no exponga además toda la superficie anónima del CRM.
+const ADMIN_HOST = (process.env.ADMIN_HOST || "").toLowerCase().trim();
+
+// En el back-office no pinta nada la superficie ANÓNIMA del producto: widgets
+// embebibles, portal del paciente, webhooks de terceros, altas públicas y —muy
+// especialmente— /api/auth/demo, que firma un token de admin a un visitante sin
+// credenciales.
+const FUERA_DEL_BACKOFFICE = [
+  "/widget/",
+  "/portal/",
+  "/api/public/",
+  "/api/webhooks/",
+  "/api/external/",
+  "/api/cursos-empresas/",
+  "/api/register",
+  "/api/usuarios/register/",
+  "/api/auth/demo",
+];
+
+// Y al revés: lo que se construya para Salamandra no se sirve desde el host que
+// usan los clientes. Hoy no existen estas rutas; la regla se deja puesta para
+// que el día que existan nazcan ya cerradas.
+const SOLO_BACKOFFICE = ["/admin", "/api/admin"];
+
+function coincide(pathname, prefijos) {
+  return prefijos.some((p) => pathname === p || pathname.startsWith(p.endsWith("/") ? p : p + "/"));
+}
+
 function isPublicPath(pathname) {
   return (
     PUBLIC_API_PATHS.some((p) => pathname.startsWith(p)) ||
@@ -100,6 +136,22 @@ function applyWidgetCspHeaders(response, pathname) {
 
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
+
+  // Reparto por host. VA LO PRIMERO, antes incluso de los preflights: si fuera
+  // después, un OPTIONS o la rama del widget (que retornan antes) se saltarían
+  // el reparto y el subdominio interno seguiría sirviéndolos.
+  if (ADMIN_HOST) {
+    const host = (request.headers.get("host") || "").toLowerCase();
+    const enBackoffice = host === ADMIN_HOST;
+    const prohibidas = enBackoffice ? FUERA_DEL_BACKOFFICE : SOLO_BACKOFFICE;
+    if (coincide(pathname, prohibidas)) {
+      return new NextResponse(null, { status: 404 });
+    }
+  } else if (coincide(pathname, SOLO_BACKOFFICE)) {
+    // Sin ADMIN_HOST configurado, el back-office no se sirve en NINGÚN sitio.
+    // Falla en cerrado: una variable ausente nunca debe abrir una puerta.
+    return new NextResponse(null, { status: 404 });
+  }
 
   // Dejar pasar todos los preflights CORS — los Route Handlers añaden sus propios headers
   if (request.method === "OPTIONS") {
