@@ -51,6 +51,36 @@ function Pip({ puesta, cifrada, titulo }) {
   );
 }
 
+function tamaño(bytes) {
+  if (!bytes) return "—";
+  const mb = bytes / 1024 / 1024;
+  return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.round(bytes / 1024)} kB`;
+}
+
+function fecha(iso) {
+  if (!iso) return "nunca";
+  return new Date(iso).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+/** Distintivo de un tipo de personalización, con si el código lo lee o no. */
+function Marca({ tipo, meta }) {
+  const lee = meta?.lee;
+  const color = lee === true ? "var(--ok)" : lee === false ? "var(--tenue)" : "var(--alerta)";
+  return (
+    <span
+      title={meta?.nota ?? ""}
+      className="text-[10px] px-1.5 py-0.5 rounded"
+      style={{
+        color,
+        border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
+        textDecoration: lee === false ? "line-through" : "none",
+      }}
+    >
+      {tipo}
+    </span>
+  );
+}
+
 function Etiqueta({ children, tono = "dim" }) {
   const color = tono === "alerta" ? "var(--alerta)" : tono === "ok" ? "var(--ok)" : "var(--tenue)";
   return (
@@ -174,7 +204,7 @@ export default function CustodiaPage() {
             </div>
           ))}
           <div className="text-right">
-            <Etiqueta>módulos</Etiqueta>
+            <Etiqueta>mód · propio · bd</Etiqueta>
           </div>
         </div>
 
@@ -213,8 +243,12 @@ export default function CustodiaPage() {
                 </div>
               ))}
 
-              <div className="text-right text-[12px] tabular-nums" style={{ color: "var(--dim)" }}>
+              <div className="text-right text-[11px] tabular-nums whitespace-nowrap" style={{ color: "var(--dim)" }}>
                 {c.modulos.length}
+                <span style={{ color: c.personalizados ? "var(--ok)" : "var(--apagado)" }}> · {c.personalizados}</span>
+                <span style={{ color: c.bd?.existe ? "var(--tenue)" : "var(--alerta)" }}>
+                  {" · "}{c.bd?.existe ? tamaño(c.bd.bytes) : "sin bd"}
+                </span>
               </div>
             </button>
           );
@@ -282,39 +316,127 @@ export default function CustodiaPage() {
               </div>
             </div>
 
-            <div>
-              <Etiqueta>ajustes</Etiqueta>
-              <dl className="mt-3 text-[12px] space-y-1.5">
-                {[
-                  ["Remitente correo", detalle.ajustes.remitenteCorreo ?? "—"],
-                  ["Modelo de IA", detalle.ajustes.modeloIA ?? "por defecto"],
-                  ["Acceso del equipo a IA", detalle.ajustes.accesoIA],
-                  ["Videollamada", detalle.ajustes.modoVideollamada],
-                  ["Recordatorio de citas", detalle.ajustes.recordatorios ? "activado" : "desactivado"],
-                ].map(([k, v]) => (
-                  <div key={k} className="flex gap-3">
-                    <dt className="w-44 shrink-0" style={{ color: "var(--tenue)" }}>{k}</dt>
-                    <dd className="truncate">{String(v)}</dd>
-                  </div>
-                ))}
-              </dl>
-
-              <div className="mt-5">
-                <Etiqueta>módulos activos</Etiqueta>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {detalle.modulos.map((m) => (
-                    <span
-                      key={m}
-                      className="text-[10px] px-2 py-0.5 rounded"
-                      style={{ background: "var(--panel-alto)", color: "var(--dim)", border: "1px solid var(--line)" }}
-                    >
-                      {m}
-                    </span>
+            <div className="space-y-5">
+              <div>
+                <Etiqueta>la cuenta</Etiqueta>
+                <dl className="mt-3 text-[12px] space-y-1.5">
+                  {[
+                    ["Plan / estado", `${detalle.plan} · ${detalle.estado}`],
+                    ["Alta", fecha(detalle.alta)],
+                    ["Último acceso", fecha(detalle.ultimoAcceso)],
+                    ["Usuarios", `${detalle.usuarios.total} (${detalle.usuarios.admins} admin)`],
+                    ["Base de datos", detalle.bd.existe ? `${detalle.bd.tablas} tablas · ${tamaño(detalle.bd.bytes)}` : "SIN SCHEMA"],
+                  ].map(([k, v]) => (
+                    <div key={k} className="flex gap-3">
+                      <dt className="w-40 shrink-0" style={{ color: "var(--tenue)" }}>{k}</dt>
+                      <dd className="truncate" style={{ color: v === "SIN SCHEMA" ? "var(--alerta)" : undefined }}>{String(v)}</dd>
+                    </div>
                   ))}
-                </div>
+                </dl>
               </div>
+
+              <div>
+                <Etiqueta>ajustes</Etiqueta>
+                <dl className="mt-3 text-[12px] space-y-1.5">
+                  {[
+                    ["Remitente correo", detalle.ajustes.remitenteCorreo ?? "—"],
+                    ["Modelo de IA", detalle.ajustes.modeloIA ?? "por defecto"],
+                    ["Acceso del equipo a IA", detalle.ajustes.accesoIA],
+                    ["Videollamada", detalle.ajustes.modoVideollamada],
+                    ["Recordatorio de citas", detalle.ajustes.recordatorios ? "activado" : "desactivado"],
+                  ].map(([k, v]) => (
+                    <div key={k} className="flex gap-3">
+                      <dt className="w-40 shrink-0" style={{ color: "var(--tenue)" }}>{k}</dt>
+                      <dd className="truncate">{String(v)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+
+              {/* Lo que de verdad usa: sin esto, "tiene 12 módulos" no dice nada. */}
+              {detalle.uso?.length > 0 && (
+                <div>
+                  <Etiqueta>cuánto lo usa</Etiqueta>
+                  <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-[12px]">
+                    {detalle.uso.map((u) => (
+                      <div key={u.etiqueta} className="flex justify-between gap-3">
+                        <span style={{ color: "var(--tenue)" }}>{u.etiqueta}</span>
+                        <span className="tabular-nums" style={{ color: u.filas > 0 ? "var(--text)" : "var(--apagado)" }}>
+                          {u.filas > 0 ? u.filas.toLocaleString("es-ES") : "0"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] mt-2" style={{ color: "var(--apagado)" }}>
+                    Cifras estimadas por PostgreSQL, no un recuento exacto.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
+        </section>
+      )}
+
+      {/* ── Módulos y personalización del cliente abierto ─────────────────── */}
+      {detalle && (
+        <section
+          className="mt-4 rounded-lg p-6"
+          style={{ background: "var(--panel)", border: "1px solid var(--line)" }}
+        >
+          <div className="flex items-baseline gap-4 mb-4">
+            <Etiqueta>módulos y personalización</Etiqueta>
+            <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
+              {detalle.modulos.length} activos · {detalle.personalizados} con algo propio
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1">
+            {detalle.modulosDetalle.map((m) => {
+              const p = m.personalizacion;
+              const algo = p.ui || p.logica || p.flags || p.camposExtra;
+              return (
+                <div
+                  key={m.clave}
+                  className="flex items-start gap-2.5 py-1.5"
+                  style={{ borderTop: "1px solid var(--line-suave)" }}
+                >
+                  <span
+                    className="inline-block w-[7px] h-[7px] rounded-full mt-[6px] shrink-0"
+                    style={{ background: m.activo ? "var(--ok)" : "var(--apagado)" }}
+                    title={m.activo ? "activo" : "desactivado (sus datos siguen ahí)"}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[12px]" style={{ color: m.activo ? "var(--text)" : "var(--tenue)" }}>
+                        {m.clave}
+                      </span>
+                      {p.flags && <Marca tipo="flags" meta={datos.loLeeElCodigo?.featureFlags} />}
+                      {p.logica && <Marca tipo="lógica" meta={datos.loLeeElCodigo?.logicOverrides} />}
+                      {p.ui && <Marca tipo="ui" meta={datos.loLeeElCodigo?.uiOverride} />}
+                      {p.camposExtra && <Marca tipo={`+${p.camposExtra.length} campos`} meta={datos.loLeeElCodigo?.schemaExtensions} />}
+                    </div>
+                    {algo && (
+                      <div className="text-[10px] mt-0.5 leading-snug" style={{ color: "var(--apagado)" }}>
+                        {p.flags && <span>{JSON.stringify(p.flags)} </span>}
+                        {p.logica && <span>{JSON.stringify(p.logica)} </span>}
+                        {p.ui && <span>ui: {p.ui} </span>}
+                        {p.camposExtra && <span>campos: {p.camposExtra.join(", ")}</span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* La parte incómoda, y la razón de que este bloque exista. */}
+          <p className="text-[11px] mt-5 leading-relaxed max-w-2xl" style={{ color: "var(--dim)" }}>
+            Los distintivos <span style={{ color: "var(--tenue)", textDecoration: "line-through" }}>tachados</span> son
+            personalización que está guardada en la base de datos pero que{" "}
+            <b>ningún código lee</b>: la pantalla propia de un cliente se elige con un <code>if</code> por slug dentro
+            de cada página, y sus campos extra están escritos a mano dentro del componente. Pasa el ratón por cada uno
+            para ver el detalle.
+          </p>
         </section>
       )}
 
