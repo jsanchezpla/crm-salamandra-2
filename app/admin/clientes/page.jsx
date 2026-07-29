@@ -36,6 +36,115 @@ function Campo({ etiqueta, pista, children }) {
   );
 }
 
+/**
+ * Editor de un cliente ya existente.
+ *
+ * Dos cosas que la pantalla tiene que dejar clarísimas, porque el backend las
+ * trata en serio y de nada sirve si aquí se disimulan:
+ *
+ *  · Activar un módulo tarda ~20 s: dispara las migraciones del schema de ese
+ *    cliente. Si no se avisa ANTES de pulsar, parece que se ha colgado y alguien
+ *    recargará la página a mitad.
+ *  · Suspender echa a sus usuarios en el acto. No es un ajuste, es cortarle el
+ *    servicio a un negocio.
+ */
+function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
+  const [f, setF] = useState({
+    nombre: cliente.nombre,
+    plan: cliente.plan,
+    modulos: [...cliente.modulos],
+  });
+
+  const nuevos = f.modulos.filter((m) => !cliente.modulos.includes(m));
+  const quitados = cliente.modulos.filter((m) => !f.modulos.includes(m));
+  const hayCambios =
+    f.nombre !== cliente.nombre || f.plan !== cliente.plan || nuevos.length > 0 || quitados.length > 0;
+
+  function alternar(key) {
+    setF((p) => ({
+      ...p,
+      modulos: p.modulos.includes(key) ? p.modulos.filter((k) => k !== key) : [...p.modulos, key],
+    }));
+  }
+
+  async function suspender() {
+    const suspendido = cliente.estado === "suspended";
+    const texto = suspendido
+      ? `Reactivar «${cliente.nombre}».\n\nSus usuarios volverán a poder entrar.`
+      : `SUSPENDER «${cliente.nombre}».\n\nSus usuarios dejarán de poder entrar DE INMEDIATO y sus formularios públicos dejarán de responder.\n\nLos datos se conservan intactos.\n\n¿Seguro?`;
+    if (!confirm(texto)) return;
+    await onGuardar(cliente.slug, { estado: suspendido ? "active" : "suspended", confirmar: true });
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-neutral-100 space-y-4">
+      <div className="grid md:grid-cols-2 gap-3">
+        <Campo etiqueta="Nombre">
+          <input value={f.nombre} onChange={(e) => setF((p) => ({ ...p, nombre: e.target.value }))} className={inputCls} />
+        </Campo>
+        <Campo etiqueta="Plan">
+          <input value={f.plan} onChange={(e) => setF((p) => ({ ...p, plan: e.target.value }))} className={inputCls} />
+        </Campo>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-2">
+          Módulos ({f.modulos.length})
+        </div>
+        <div className="grid md:grid-cols-2 gap-x-4 gap-y-1">
+          {catalogo.flatMap((g) => g.modulos).map((m) => {
+            const marcado = f.modulos.includes(m.key);
+            const esNuevo = marcado && !cliente.modulos.includes(m.key);
+            const seQuita = !marcado && cliente.modulos.includes(m.key);
+            return (
+              <label key={m.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm">
+                <input type="checkbox" checked={marcado} onChange={() => alternar(m.key)}
+                  className="rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)]" />
+                <span className={seQuita ? "text-neutral-400 line-through" : "text-neutral-700"}>{m.nombre}</span>
+                {esNuevo && <span className="text-[10px] text-emerald-700">se activará</span>}
+                {seQuita && <span className="text-[10px] text-amber-700">se quitará</span>}
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      {nuevos.length > 0 && (
+        <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+          Al guardar se prepararán las tablas de {nuevos.join(", ")} en la base de datos de este cliente.
+          <b> Tarda unos 20 segundos.</b> No cierres la página.
+        </div>
+      )}
+      {quitados.length > 0 && (
+        <div className="text-[11px] text-neutral-600 bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2">
+          Quitar {quitados.join(", ")} solo los esconde del menú. <b>Sus datos se conservan</b> y vuelven si los reactivas.
+        </div>
+      )}
+
+      {avisos?.length > 0 && (
+        <ul className="text-[11px] text-neutral-700 bg-[#F4F6F4] border border-neutral-200 rounded-lg px-3 py-2 space-y-1">
+          {avisos.map((a, i) => <li key={i}>· {a}</li>)}
+        </ul>
+      )}
+
+      <div className="flex items-center justify-between gap-3 pt-1">
+        <button type="button" onClick={suspender} disabled={guardando}
+          className={`text-xs font-semibold uppercase tracking-wide disabled:opacity-40 ${
+            cliente.estado === "suspended" ? "text-emerald-700" : "text-red-700"
+          }`}>
+          {cliente.estado === "suspended" ? "Reactivar cliente" : "Suspender cliente"}
+        </button>
+        <button type="button" disabled={!hayCambios || guardando}
+          onClick={() => onGuardar(cliente.slug, { nombre: f.nombre, plan: f.plan, modulos: f.modulos })}
+          className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-40"
+          style={{ background: "var(--color-primary, #1B3A2D)" }}>
+          {guardando ? (nuevos.length ? "Preparando la base de datos…" : "Guardando…") : "Guardar cambios"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function sugerirSlug(nombre) {
   return String(nombre || "")
     .trim()
@@ -56,6 +165,10 @@ export default function AltaClientesPage() {
   // no deben desaparecer al cerrar el modal de la contraseña.
   const [avisos, setAvisos] = useState([]);
   const [abierto, setAbierto] = useState(false);
+  // Edición de un cliente ya existente.
+  const [editando, setEditando] = useState(null);
+  const [guardando, setGuardando] = useState(false);
+  const [avisosEdit, setAvisosEdit] = useState([]);
 
   const [form, setForm] = useState({
     nombre: "",
@@ -115,6 +228,35 @@ export default function AltaClientesPage() {
 
   function cambiarNombre(v) {
     setForm((f) => ({ ...f, nombre: v, slug: f.slugTocado ? f.slug : sugerirSlug(v) }));
+  }
+
+  /**
+   * Guarda cambios de un cliente existente.
+   *
+   * La petición puede tardar ~20 s cuando activa módulos (dispara las
+   * migraciones de su schema), por eso no hay ningún timeout: cortarla dejaría
+   * las filas escritas y el schema a medias, que es justo el estado que el
+   * backend se esfuerza en evitar.
+   */
+  async function guardarEdicion(slug, cambios) {
+    setErr(null);
+    setAvisosEdit([]);
+    setGuardando(true);
+    try {
+      const r = await fetch(`/api/admin/clientes/${slug}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cambios),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo guardar");
+      setAvisosEdit(Array.isArray(j.data?.avisos) ? j.data.avisos : []);
+      cargar();
+    } catch (e2) {
+      setErr(e2.message);
+    } finally {
+      setGuardando(false);
+    }
   }
 
   async function crear(e) {
@@ -332,11 +474,28 @@ export default function AltaClientesPage() {
                       </span>
                     )}
                   </div>
-                  <span className="text-[11px] text-neutral-400 shrink-0">
-                    {c.modulos.length} módulo{c.modulos.length === 1 ? "" : "s"}
-                  </span>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-[11px] text-neutral-400">
+                      {c.modulos.length} módulo{c.modulos.length === 1 ? "" : "s"}
+                    </span>
+                    <button
+                      onClick={() => { setEditando(editando === c.slug ? null : c.slug); setAvisosEdit([]); }}
+                      className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 hover:text-neutral-900"
+                    >
+                      {editando === c.slug ? "Cerrar" : "Editar"}
+                    </button>
+                  </div>
                 </div>
                 <div className="text-[11px] text-neutral-400 mt-1 truncate">{c.modulos.join(" · ") || "sin módulos"}</div>
+                {editando === c.slug && datos && (
+                  <EditorCliente
+                    cliente={c}
+                    catalogo={datos.catalogo}
+                    onGuardar={guardarEdicion}
+                    guardando={guardando}
+                    avisos={avisosEdit}
+                  />
+                )}
               </li>
             ))}
           </ul>
