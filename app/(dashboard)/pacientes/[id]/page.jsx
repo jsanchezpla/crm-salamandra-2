@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import Select from "@/components/ui/Select.jsx";
 import PatientBillingSection from "@/components/billing/PatientBillingSection.jsx";
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
+import NuevaCoordinacionModal from "../../../../components/clinica/NuevaCoordinacionModal.jsx";
 import PatientDocumentsSection from "@/components/clinica/PatientDocumentsSection.jsx";
 import InterventionPlanSection from "@/components/clinica/InterventionPlanSection.jsx";
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
@@ -268,6 +269,8 @@ export default function PacienteFichaPage() {
   // Contrato de la FAMILIA (vive en el cliente pagador desde el sprint 2026-07,
   // punto 1.1). La ficha del paciente solo lo muestra; se sube en la del cliente.
   const [familyContract, setFamilyContract] = useState(null);
+  // Alta de coordinación desde la propia ficha (sprint 2026-07, punto 7).
+  const [nuevaCoordinacion, setNuevaCoordinacion] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState("resumen");
@@ -277,7 +280,13 @@ export default function PacienteFichaPage() {
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState(null);
   const [showReport, setShowReport] = useState(false);
-  const [reportForm, setReportForm] = useState({ reportType: "evolution", dueDate: "" });
+  // `sourceSessionIds`: qué registros de sesión alimentan el informe evolutivo
+  // (sprint 2026-07, punto 3.1). Selección LIBRE: el trimestre natural no
+  // siempre es el que toca —hubo bajas, se recuperaron sesiones— y quien sabe
+  // cuáles cuentan es la terapeuta.
+  const [reportForm, setReportForm] = useState({ reportType: "evolution", dueDate: "", sourceSessionIds: [], referralSpecialty: "" });
+  // Catálogo de derivación del centro (editable por cliente desde 2026-07-31).
+  const [derivaciones, setDerivaciones] = useState([]);
   const [modalBusy, setModalBusy] = useState(false);
   const [modalError, setModalError] = useState(null);
 
@@ -320,6 +329,13 @@ export default function PacienteFichaPage() {
       .catch(() => {});
     return () => { alive = false; };
   }, [patient?.clientId]);
+
+  useEffect(() => {
+    fetch("/api/clinica/derivaciones", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setDerivaciones(j?.data?.especialidades ?? []))
+      .catch(() => {});
+  }, []);
 
   // Equipo (para asignar/cambiar el terapeuta del paciente). Resiliente: si el
   // tenant no tiene módulo team (403) queda vacío y no se muestra el selector.
@@ -377,7 +393,18 @@ export default function PacienteFichaPage() {
     if (!patient.mainTherapistId) { setModalError("El paciente no tiene terapeuta asignado"); return; }
     setModalBusy(true); setModalError(null);
     try {
-      const payload = { patientId: id, therapistId: patient.mainTherapistId, reportType: reportForm.reportType, dueDate: reportForm.dueDate || null };
+      const payload = {
+        patientId: id,
+        therapistId: patient.mainTherapistId,
+        reportType: reportForm.reportType,
+        dueDate: reportForm.dueDate || null,
+        contentSections:
+          reportForm.reportType === "evolution" && reportForm.sourceSessionIds.length
+            ? { sourceSessionIds: reportForm.sourceSessionIds }
+            : reportForm.reportType === "referral" && reportForm.referralSpecialty
+              ? { referralSpecialty: reportForm.referralSpecialty }
+              : {},
+      };
       const r = await fetch("/api/clinica/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo crear");
@@ -651,7 +678,17 @@ export default function PacienteFichaPage() {
         )}
 
         {activeTab === "coordinaciones" && (
-          coordinations.length === 0 ? (
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <button
+                onClick={() => setNuevaCoordinacion(true)}
+                className="text-xs font-medium px-3 py-2 rounded-lg text-white hover:opacity-90"
+                style={{ background: "var(--color-primary, #1B3A2D)" }}
+              >
+                + Nueva coordinación
+              </button>
+            </div>
+            {coordinations.length === 0 ? (
             <div className="bg-white border border-dashed border-neutral-200 rounded-xl p-10 text-center"><p className="text-sm text-neutral-600">Sin coordinaciones registradas.</p></div>
           ) : (
             <div className="space-y-3">
@@ -666,12 +703,22 @@ export default function PacienteFichaPage() {
                 </div>
               ))}
             </div>
-          )
+          )}
+          </div>
         )}
 
         {activeTab === "plan" && <InterventionPlanSection patientId={id} />}
         {activeTab === "documentos" && <PatientDocumentsSection patientId={id} />}
       </div>
+
+      {nuevaCoordinacion && (
+        <NuevaCoordinacionModal
+          patientId={id}
+          patientName={`${patient.firstName} ${patient.lastName}`}
+          onClose={() => setNuevaCoordinacion(false)}
+          onCreada={() => load()}
+        />
+      )}
 
       {openSession && (
         <SessionDrawer
@@ -750,6 +797,61 @@ export default function PacienteFichaPage() {
                 <Select value={reportForm.reportType} onChange={(v) => setReportForm({ ...reportForm, reportType: v })} options={REPORT_TYPE_OPTIONS} className={inputCls} />
                 <input type="date" className={inputCls} value={reportForm.dueDate} onChange={(e) => setReportForm({ ...reportForm, dueDate: e.target.value })} title="Fecha de entrega" />
               </div>
+              {/* Derivación: a qué especialista externo se manda. El catálogo lo
+                  fija cada centro (Configuración → Derivaciones). */}
+              {reportForm.reportType === "referral" && derivaciones.length > 0 && (
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Especialidad de destino</div>
+                  <select
+                    className={inputCls}
+                    value={reportForm.referralSpecialty}
+                    onChange={(e) => setReportForm({ ...reportForm, referralSpecialty: e.target.value })}
+                  >
+                    <option value="">Sin especificar</option>
+                    {derivaciones.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {/* Solo en el evolutivo: el informe se redacta A PARTIR de sesiones
+                  concretas, y elegirlas es cosa de quien las dio. */}
+              {reportForm.reportType === "evolution" && (
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1">
+                    Sesiones en las que se basa {reportForm.sourceSessionIds.length > 0 && `(${reportForm.sourceSessionIds.length})`}
+                  </div>
+                  {sessions.length === 0 ? (
+                    <p className="text-[11px] text-neutral-400">Este paciente aún no tiene sesiones registradas.</p>
+                  ) : (
+                    <div className="max-h-40 overflow-y-auto border border-neutral-200 rounded-lg divide-y divide-neutral-100">
+                      {sessions.map((se) => {
+                        const marcada = reportForm.sourceSessionIds.includes(se.id);
+                        return (
+                          <label key={se.id} className="flex items-start gap-2 px-2.5 py-2 cursor-pointer hover:bg-neutral-50">
+                            <input
+                              type="checkbox"
+                              checked={marcada}
+                              onChange={() =>
+                                setReportForm((f) => ({
+                                  ...f,
+                                  sourceSessionIds: marcada
+                                    ? f.sourceSessionIds.filter((x) => x !== se.id)
+                                    : [...f.sourceSessionIds, se.id],
+                                }))
+                              }
+                              className="mt-0.5 w-3.5 h-3.5 rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)]"
+                            />
+                            <span className="min-w-0">
+                              <span className="block text-[11px] text-neutral-700">{fmtDate(se.sessionDate)}</span>
+                              <span className="block text-[10px] text-neutral-400 truncate">{se.preview || se.statusLabel}</span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
               <p className="text-[11px] text-neutral-400">Se crea como borrador.</p>
               {modalError && <p className="text-xs text-rose-600">{modalError}</p>}
               <div className="flex justify-end gap-2 pt-1">

@@ -549,6 +549,8 @@ export default function ConfigModule() {
             />
           )}
 
+          {isAdmin && <DerivacionesCard />}
+
           {isAdmin && (
             <VideollamadaCard
               meetModo={cfg.meetModo}
@@ -871,6 +873,75 @@ function AgendaCompartidaCard({ activo, readOnly, onChange }) {
       <p className="text-[10px] text-neutral-400 mt-2">
         Ojo: el listado de citas enseña <strong>nombre, email y teléfono</strong> del paciente. Al
         encenderlo, esos datos quedan a la vista de toda la plantilla.
+      </p>
+    </div>
+  );
+}
+
+function DerivacionesCard() {
+  const [lineas, setLineas] = useState(null);
+  const [guardando, setGuardando] = useState(false);
+  const [aviso, setAviso] = useState(null);
+
+  useEffect(() => {
+    fetch("/api/clinica/derivaciones", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!j?.data) return; // 403: el cliente no tiene Clínica → la tarjeta no se pinta
+        setLineas((j.data.especialidades ?? []).map((e) => e.label).join("\n"));
+      })
+      .catch(() => {});
+  }, []);
+
+  async function guardar() {
+    setGuardando(true);
+    setAviso(null);
+    try {
+      const r = await fetch("/api/clinica/derivaciones", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ especialidades: lineas.split("\n").map((l) => l.trim()).filter(Boolean) }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo guardar");
+      setLineas((j.data.especialidades ?? []).map((e) => e.label).join("\n"));
+      setAviso("Catálogo guardado");
+    } catch (e) {
+      setAviso(e.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  if (lineas === null) return null;
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="text-sm font-semibold text-neutral-800">Especialidades de derivación</div>
+      <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+        A qué especialistas EXTERNOS deriva el centro (no son las especialidades propias). Una por
+        línea; es lo que se puede elegir al crear un informe de derivación.
+      </p>
+      <textarea
+        rows={8}
+        value={lineas}
+        onChange={(e) => setLineas(e.target.value)}
+        className="mt-3 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm font-mono leading-relaxed focus:outline-none focus:border-neutral-400"
+      />
+      <div className="mt-2 flex items-center gap-3">
+        <button
+          onClick={guardar}
+          disabled={guardando}
+          className="text-xs font-medium px-3 py-2 rounded-lg text-white disabled:opacity-50"
+          style={{ background: "var(--color-primary, #1B3A2D)" }}
+        >
+          {guardando ? "Guardando…" : "Guardar catálogo"}
+        </button>
+        {aviso && <span className="text-[11px] text-neutral-500">{aviso}</span>}
+      </div>
+      <p className="text-[10px] text-neutral-400 mt-2">
+        Renombrar una línea cambia solo la etiqueta: los informes ya escritos siguen apuntando a la
+        misma especialidad. Quitar una no borra los informes que la usaban.
       </p>
     </div>
   );

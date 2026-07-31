@@ -158,13 +158,17 @@ migración. `patients.contractSigned` queda como columna legada, sin uso en la U
   Adjuntos en `/api/clinica/sessions/[id]/prep-files` (fotos/audio/PDF, 10 por
   sesión); NO son documentos del archivo a propósito — detalle en
   `docs/modules/clinica.md`.
-- **3.1** informe de evolución con selección libre de registros de sesión.
-- **3.1** catálogo de derivación: hoy es constante en
-  `lib/clinica/derivaciones.js`; el brief pide que sea **seed editable por
-  tenant**. Pendiente.
-- **7** coordinaciones: `Coordination.scope` (interna/externa) y
-  `externalEntity` ya existen. Falta el botón «Nueva coordinación» (hoy no hay
-  ninguno) y el módulo del menú.
+- **3.1** informe de evolución con selección libre de registros de sesión —
+  **HECHO en local** (31/07): al crear un informe evolutivo se marcan las
+  sesiones que lo alimentan (`contentSections.sourceSessionIds`).
+- **3.1** catálogo de derivación — **HECHO en local** (31/07): vive en
+  `settings.clinica.referralSpecialties`, se edita en Configuración y se elige
+  al crear un informe de derivación. Renombrar una etiqueta NO rompe los
+  informes ya escritos (apuntan a la clave, que se conserva).
+- **7** coordinaciones — **HECHO en local** (31/07): módulo propio en el menú
+  (`/clinica/coordinaciones`) con listado general y filtros, más el botón
+  «Nueva coordinación» en la pestaña de la ficha del paciente. El POST ya
+  guarda `scope` y `externalEntity`, y resuelve solo quién la registra.
 - **1.4** agregado por terapeuta de los contadores trimestrales (para el
   programa de incentivos).
 
