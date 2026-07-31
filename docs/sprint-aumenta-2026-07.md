@@ -29,9 +29,16 @@ node scripts/migrate-sprint-aumenta-2026-07.js
 
 ---
 
-## 1.b DESPLEGADO en producción el 31/07 (bloque 3 + bloque 4)
+## 1.b DESPLEGADO en producción el 31/07 (bloques 3, 4, 5 y 6)
 
-> Desplegado desde el commit `3333bec`. Copia de seguridad previa en el VPS:
+> **Segundo despliegue del día, desde `34a5cfb`**: resto del bloque 4, bloque 5
+> entero y las estadísticas. Copia previa en `/opt/backups-pre-b456.dump`. Sin
+> migraciones (todo usa tablas y columnas que ya existían). Verificado:
+> estadísticas, planes por terapeuta, coordinaciones, derivaciones, morosidad y
+> lista de espera a 200; Excel y PDF descargando; las tres páginas nuevas a 200;
+> cero errores en el log.
+>
+> Primer despliegue, desde el commit `3333bec`. Copia de seguridad previa en el VPS:
 > `/opt/backups-pre-sprint3.dump`. Migraciones ejecutadas:
 > `migrate-booking-authorization` (la del sprint de pagos, que faltaba) y
 > `migrate-contract-patient-to-client`, que en producción **no tenía nada que
