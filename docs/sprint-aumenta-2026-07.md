@@ -29,7 +29,16 @@ node scripts/migrate-sprint-aumenta-2026-07.js
 
 ---
 
-## 1.b Hecho en LOCAL, pendiente de desplegar (31/07)
+## 1.b DESPLEGADO en producción el 31/07 (bloque 3 + bloque 4)
+
+> Desplegado desde el commit `3333bec`. Copia de seguridad previa en el VPS:
+> `/opt/backups-pre-sprint3.dump`. Migraciones ejecutadas:
+> `migrate-booking-authorization` (la del sprint de pagos, que faltaba) y
+> `migrate-contract-patient-to-client`, que en producción **no tenía nada que
+> mover**: ningún paciente tenía contrato subido (el reset del 24/07 dejó el
+> módulo clínico vacío). Verificado tras el despliegue: `/login` 200, endpoints
+> de contrato, meses del portal, coordinaciones y derivaciones a 200, páginas
+> nuevas a 200 y cero errores en el log del contenedor.
 
 **Punto 1.1 — el contrato pasa del paciente al cliente.** El contrato es de la
 FAMILIA: quien firma y quien paga son los padres, y con dos hermanos en el
