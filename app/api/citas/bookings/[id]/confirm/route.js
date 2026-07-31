@@ -2,7 +2,13 @@ import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { logCitasAudit } from "../../../../../../lib/citas/audit.js";
 import { findBookingOverlap, lockBookingSlot } from "../../../../../../lib/citas/booking.js";
-import { cobrarCitaAlConfirmar, tieneRetencionPendiente } from "../../../../../../lib/citas/cobroCita.js";
+import {
+  cobrarCitaAlConfirmar,
+  soltarRetencionDeCita,
+  tieneRetencionPendiente,
+  estaEsperandoAlPaciente,
+} from "../../../../../../lib/citas/cobroCita.js";
+import { reembolsarCitaSiProcede } from "../../../../../../lib/citas/reembolsoCita.js";
 import { sendEmail } from "../../../../../../lib/email/resendClient.js";
 import { bookingConfirmedTemplate } from "../../../../../../lib/email/templates/citas/bookingConfirmed.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
@@ -116,6 +122,16 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
 
         const estadoAnterior = row.status;
 
+        // El paciente está tecleando su tarjeta AHORA. Confirmar en este
+        // instante confirmaba la cita sin cobrar y dejaba el dinero muerto:
+        // segundos después el webhook escribía 'authorized' sobre una cita ya
+        // confirmada, un par que no captura nadie. Se para aquí.
+        if (estaEsperandoAlPaciente(row)) {
+          const e = new Error("TECLEANDO");
+          e.code = "TECLEANDO";
+          throw e;
+        }
+
         // Con dinero retenido, la cita NO se confirma todavía: primero hay que
         // cobrarlo. Se marca `capturing` para que ninguna otra petición intente
         // capturar lo mismo mientras esta habla con Stripe.
@@ -124,8 +140,14 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
           return { row, estadoAnterior, hayQueCobrar: true };
         }
 
+        // Confirmar SIN COBRAR teniendo dinero retenido seria dar la cita y
+        // dejar el importe bloqueado en su tarjeta sin cobrarlo jamás. Se suelta
+        // primero; el paciente pagará en consulta, que es lo que significa este
+        // botón.
+        const hayQueSoltar = sinCobrar && tieneRetencionPendiente(row);
+
         await row.update({ status: "confirmed" }, { transaction: t });
-        return { row, estadoAnterior, hayQueCobrar: false };
+        return { row, estadoAnterior, hayQueCobrar: false, hayQueSoltar };
       });
     } catch (err) {
       if (err?.code === "NO_EXISTE") return notFound("Cita no encontrada");
@@ -135,6 +157,13 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       if (err?.code === "PASADA") {
         return error("No se puede confirmar una cita cuya hora ya ha pasado", 409);
       }
+      if (err?.code === "TECLEANDO") {
+        return error(
+          "El paciente está introduciendo su tarjeta ahora mismo. Espera unos segundos y vuelve a intentarlo.",
+          409,
+          { code: "TECLEANDO" }
+        );
+      }
       if (err?.code === "SOLAPA") {
         const cuando = err.cuando?.toISOString?.() ?? err.cuando;
         return forbidden(`La cita solapa con otra activa el ${cuando}`);
@@ -142,7 +171,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       throw err;
     }
 
-    const { row, yaEstaba, estadoAnterior, hayQueCobrar } = resultado;
+    const { row, yaEstaba, estadoAnterior, hayQueCobrar, hayQueSoltar } = resultado;
     if (yaEstaba) {
       process.stdout.write(`[citas:confirm] booking=${row.id} noop (ya confirmed)\n`);
       return ok(row.toJSON());
@@ -172,7 +201,63 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
         return error(cobro.mensaje, 409, { code: cobro.code });
       }
 
-      await row.update({ status: "confirmed" });
+      // ── El dinero ya está cobrado. ¿Sigue habiendo cita? ──────────────────
+      // Entre que soltamos el lock para hablar con Stripe y volvemos aquí caben
+      // varios segundos, y en ellos el paciente puede haber cancelado desde el
+      // enlace de su correo. Escribir 'confirmed' a ciegas resucitaba una cita
+      // cancelada Y le dejaba el cobro hecho.
+      //
+      // Se relee dentro de una transacción: si ya no está en pie, no se
+      // confirma y se devuelve el dinero, que es lo único honesto cuando has
+      // cobrado por algo que la otra parte ya había cancelado.
+      // OJO con qué cuenta como "ya no está en pie". La primera versión de esta
+      // guarda exigía `status === 'pending'` y devolvía el dinero en cuanto no
+      // lo fuera — incluida la cita que otra petición simultánea acababa de
+      // dejar en 'confirmed'. Resultado: dos confirmaciones a la vez cobraban
+      // bien y acto seguido se devolvían el cobro solas. Lo detectó la prueba de
+      // carreras, no el ojo.
+      //
+      // Solo se devuelve el dinero si la cita ha DESAPARECIDO de la agenda
+      // (cancelada o no presentado). Que ya esté confirmada es el resultado que
+      // buscábamos, no un problema.
+      const sigueEnPie = await tenantSequelize.transaction(async (t) => {
+        const fresca = await Booking.findByPk(row.id, { transaction: t, lock: t.LOCK.UPDATE });
+        if (!fresca) return false;
+        if (fresca.status === "cancelled" || fresca.status === "no_show") return false;
+        if (fresca.status === "pending") {
+          await fresca.update({ status: "confirmed" }, { transaction: t });
+        }
+        return true;
+      });
+
+      if (!sigueEnPie) {
+        await row.reload();
+        process.stderr.write(
+          `[citas:confirm] booking=${row.id} COBRADA PERO YA NO ESTABA EN PIE (${row.status}) — se devuelve\n`
+        );
+        const dev = await reembolsarCitaSiProcede(ctx, row, { quienCancela: "profesional" });
+        await logCitasAudit({
+          tenantId: tenant.id,
+          userId,
+          action: "citas.booking_confirm_tarde",
+          entity: "Booking",
+          entityId: row.id,
+          before: { status: estadoAnterior },
+          after: { status: row.status, cobrado: cobro.importe ?? null, devolucion: dev },
+          ip,
+        });
+        return error(
+          "La cita dejó de estar disponible mientras se procesaba el cobro. El importe se ha devuelto.",
+          409,
+          { code: "CANCELADA_A_MEDIAS" }
+        );
+      }
+    }
+
+    // Confirmada sin cobrar teniendo dinero retenido: se suelta, o quedaría
+    // bloqueado en su tarjeta por una cita que se le ha dado igualmente.
+    if (hayQueSoltar) {
+      await soltarRetencionDeCita(ctx, row, "Confirmada sin cobrar online");
     }
 
     await row.reload();
@@ -216,6 +301,9 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
         meetUrl: row.meetUrl,
         cancelUrl,
         location: row.eventType?.location ?? null,
+        // Para que el correo no diga lo mismo cobrando que sin cobrar.
+        importe: row.amount ?? null,
+        cobro: cobro?.cobrado ? "cobrada" : sinCobrar ? "sin_cobrar" : null,
       });
       // BYOK: cada cliente manda desde SU cuenta de Resend y su dominio
       // (mejor entrega, y su consumo no gasta el cupo de los demás).

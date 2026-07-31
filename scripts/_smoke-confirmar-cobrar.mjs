@@ -27,6 +27,8 @@ const SLUG = process.argv[2] || "nutri_laura";
 const BASE = process.env.SMOKE_BASE_URL || "http://localhost:3000";
 const PRECIO = 4500;
 const MARCA = "smoke-cobro@example.com";
+/** IP propia: el limite de /book es POR IP y la tanda entera desde una sola se agotaria el cupo. */
+const IP_PRUEBA = "203.0.113.12";
 
 let fallos = 0;
 const ok = (m) => process.stdout.write(`  ✓ ${m}\n`);
@@ -73,7 +75,7 @@ async function main() {
     if (!Array.isArray(huecos) || !huecos.length) return null;
 
     const rb = await fetch(`${BASE}/api/public/c/${SLUG}/book`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json", "x-real-ip": IP_PRUEBA },
       body: JSON.stringify({
         eventTypeId: eventType.id, scheduledAt: horaDelHueco(huecos[huecos.length - 1]),
         clientName: "Smoke Cobro", clientEmail: MARCA, clientPhone: "+34600555666",
@@ -144,7 +146,7 @@ async function main() {
     const b = await solicitudConTarjetaRetenida(5);
     if (b) {
       const rSin = await fetch(`${BASE}/api/citas/bookings/${b.cita.id}/confirm`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" }, body: "{}",
+        method: "PATCH", headers: { "Content-Type": "application/json", "x-real-ip": IP_PRUEBA }, body: "{}",
       });
       esperar(rSin.status === 401 || rSin.status === 403, `rechazado (es ${rSin.status})`);
       await b.cita.reload();
@@ -177,6 +179,81 @@ async function main() {
       await b.cita.reload();
       esperar(b.cita.status === "confirmed", `la cita queda confirmada (es '${b.cita.status}')`);
       esperar(b.cita.paymentStatus === "void", `sin cobro, para cobrar en consulta (es '${b.cita.paymentStatus}')`);
+    }
+
+    // ── 5b. Confirmar MIENTRAS teclea la tarjeta ────────────────────────────
+    // Era el fallo mas caro que tenia esto: la solicitud ya se ve en la lista de
+    // espera durante los 20 min de la ventana, y confirmarla entonces daba la
+    // cita sin cobrar. Luego el webhook escribia 'authorized' encima y ese par
+    // no lo capturaba nadie: dinero bloqueado 7 dias y evaporado.
+    paso("5b. Confirmar mientras el paciente teclea la tarjeta");
+    {
+      const dia = new Date(Date.now() + 11 * 86400000).toISOString().slice(0, 10);
+      const rh = await fetch(`${BASE}/api/public/c/${SLUG}/availability?date=${dia}&eventTypeId=${eventType.id}`);
+      const huecos = (await rh.json())?.data?.slots ?? [];
+      if (huecos.length) {
+        const rb = await fetch(`${BASE}/api/public/c/${SLUG}/book`, {
+          method: "POST", headers: { "Content-Type": "application/json", "x-real-ip": IP_PRUEBA },
+          body: JSON.stringify({
+            eventTypeId: eventType.id, scheduledAt: horaDelHueco(huecos[huecos.length - 1]),
+            clientName: "Smoke Tecleando", clientEmail: MARCA, clientPhone: "+34600777111",
+            aceptaRetencion: true,
+          }),
+        });
+        const id = (await rb.json())?.data?.booking?.id;
+        const tecleando = await Booking.findByPk(id);
+        const psT = await PaymentSession.findByPk(tecleando.paymentSessionId);
+        intents.push(psT.stripePaymentIntentId);
+
+        esperar(tecleando.paymentStatus === "authorizing", `está en 'authorizing' (es '${tecleando.paymentStatus}')`);
+        const rc = await fetch(`${BASE}/api/citas/bookings/${id}/confirm`, {
+          method: "PATCH", headers: authHeaders, body: "{}",
+        });
+        esperar(rc.status === 409, `NO deja confirmar (es ${rc.status})`);
+        process.stdout.write(`      dice: "${(await rc.json())?.error}"\n`);
+        await tecleando.reload();
+        esperar(tecleando.status === "pending",
+          `la cita sigue pendiente (es '${tecleando.status}') — nunca "dada sin cobrar"`);
+
+        // Y con dinero ya retenido, "confirmar sin cobrar" tiene que SOLTARLO,
+        // no dejarlo bloqueado por una cita que se da igualmente.
+        paso("5c. Confirmar sin cobrar teniendo dinero retenido lo suelta");
+        const pi = await stripe.paymentIntents.confirm(psT.stripePaymentIntentId, { payment_method: "pm_card_visa" });
+        const ev = JSON.stringify({
+          id: `evt_smoke_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`,
+          object: "event", api_version: stripe.getApiField("version"),
+          created: Math.floor(Date.now() / 1000),
+          type: "payment_intent.amount_capturable_updated", data: { object: pi },
+        });
+        const { getTenantStripeConfig } = await import("../lib/payments/stripeConfig.js");
+        await fetch(`${BASE}/api/webhooks/stripe/${SLUG}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "stripe-signature": stripe.webhooks.generateTestHeaderString({
+              payload: ev, secret: getTenantStripeConfig(ctx).webhookSecret,
+            }),
+          },
+          body: ev,
+        });
+        await tecleando.reload();
+        esperar(tecleando.paymentStatus === "authorized", `ahora sí hay dinero retenido (es '${tecleando.paymentStatus}')`);
+
+        // Marcar completada por el PATCH no puede atenderla sin cobrar.
+        const rp = await fetch(`${BASE}/api/citas/bookings/${id}`, {
+          method: "PATCH", headers: authHeaders, body: JSON.stringify({ status: "completed" }),
+        });
+        esperar(rp.status === 409, `"marcar completada" tampoco cuela con dinero retenido (es ${rp.status})`);
+
+        const rs = await fetch(`${BASE}/api/citas/bookings/${id}/confirm`, {
+          method: "PATCH", headers: authHeaders, body: JSON.stringify({ sinCobrar: true }),
+        });
+        esperar(rs.status === 200, `deja confirmar sin cobrar (es ${rs.status})`);
+        await tecleando.reload();
+        esperar(tecleando.paymentStatus === "void", `y SUELTA el dinero (es '${tecleando.paymentStatus}')`);
+        const piFinal = await stripe.paymentIntents.retrieve(psT.stripePaymentIntentId);
+        esperar(piFinal.status === "canceled", `confirmado en Stripe (es '${piFinal.status}')`);
+      }
     }
 
     // ── 6. Rechazar suelta el dinero ─────────────────────────────────────────

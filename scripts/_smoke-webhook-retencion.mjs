@@ -23,6 +23,8 @@ const SLUG = process.argv[2] || "nutri_laura";
 const BASE = process.env.SMOKE_BASE_URL || "http://localhost:3000";
 const PRECIO = 4500;
 const MARCA = "smoke-webhook@example.com";
+/** IP propia: el limite de /book es POR IP y la tanda entera desde una sola se agotaria el cupo. */
+const IP_PRUEBA = "203.0.113.11";
 
 let fallos = 0;
 const ok = (m) => process.stdout.write(`  ✓ ${m}\n`);
@@ -93,7 +95,7 @@ async function main() {
     if (!hora) throw new Error("sin huecos libres");
 
     const rb = await fetch(`${BASE}/api/public/c/${SLUG}/book`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json", "x-real-ip": IP_PRUEBA },
       body: JSON.stringify({
         eventTypeId: eventType.id, scheduledAt: hora,
         clientName: "Smoke Webhook", clientEmail: MARCA, clientPhone: "+34600333444",

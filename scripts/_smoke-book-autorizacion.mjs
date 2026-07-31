@@ -23,6 +23,8 @@ import { getStripe } from "../lib/payments/stripeConfig.js";
 const SLUG = process.argv[2] || "nutri_laura";
 const BASE = process.env.SMOKE_BASE_URL || "http://localhost:3000";
 const PRECIO = 4500; // 45,00 €
+/** IP propia: el limite de /book es POR IP y la tanda entera desde una sola se agotaria el cupo. */
+const IP_PRUEBA = "203.0.113.10";
 
 let fallos = 0;
 const ok = (m) => process.stdout.write(`  ✓ ${m}\n`);
@@ -88,7 +90,7 @@ async function main() {
       // El servidor lo exige cuando la cita tiene precio.
       aceptaRetencion: true,
     };
-    const cabeceras = { "Content-Type": "application/json" };
+    const cabeceras = { "Content-Type": "application/json", "x-real-ip": IP_PRUEBA };
 
     // ── Reservar ───────────────────────────────────────────────────────────
     paso("2. POST /book de una cita con precio");

@@ -25,6 +25,8 @@ const SLUG = process.argv[2] || "nutri_laura";
 const BASE = process.env.SMOKE_BASE_URL || "http://localhost:3000";
 const PRECIO = 4500;
 const MARCA = "smoke-cancelar@example.com";
+/** IP propia: el limite de /book es POR IP y la tanda entera desde una sola se agotaria el cupo. */
+const IP_PRUEBA = "203.0.113.13";
 
 let fallos = 0;
 const ok = (m) => process.stdout.write(`  ✓ ${m}\n`);
@@ -69,7 +71,7 @@ async function main() {
     if (!huecos.length) return null;
 
     const rb = await fetch(`${BASE}/api/public/c/${SLUG}/book`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json", "x-real-ip": IP_PRUEBA },
       body: JSON.stringify({
         eventTypeId: eventType.id, scheduledAt: horaDelHueco(huecos[huecos.length - 1]),
         clientName: "Smoke Cancelar", clientEmail: MARCA, clientPhone: "+34600999000",
@@ -125,7 +127,7 @@ async function main() {
     const b = await conTarjetaRetenida(6);
     if (b) {
       const rt = await fetch(`${BASE}/api/public/c/${SLUG}/cancel/${b.cita.cancellationToken}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", "x-real-ip": IP_PRUEBA },
         body: JSON.stringify({ reason: "Me ha surgido algo" }),
       });
       esperar(rt.status === 200, `cancela (es ${rt.status})`);

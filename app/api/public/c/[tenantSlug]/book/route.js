@@ -25,6 +25,13 @@ import {
 } from "../../../../../../lib/payments/autorizacion.js";
 import { getStripe, getTenantStripeConfig } from "../../../../../../lib/payments/stripeConfig.js";
 import { pruebaDeConsentimiento } from "../../../../../../lib/citas/consentimientoRetencion.js";
+// `getClientIp` ya resolvía esto desde el arreglo del 2026-07-23: no coge el
+// PRIMER valor de X-Forwarded-For (que antepone lo que mande el cliente) sino
+// X-Real-IP o el último de la cadena, que es el que pone nginx. Escribí un
+// helper nuevo para el consentimiento antes de encontrarlo; duplicar el parseo
+// de IPs es exactamente cómo acaban divergiendo dos copias de una comprobación
+// de seguridad, así que se usa el que ya existe.
+import { getClientIp } from "../../../../../../lib/utils/rateLimit.js";
 import { meetUrlInicial } from "../../../../../../lib/citas/videollamada.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
 import {
@@ -48,10 +55,10 @@ import { cargarFestivos, esFestivo } from "../../../../../../lib/citas/festivos.
  * Devuelve null ante cualquier problema: esto es una comodidad, y no puede
  * tumbar una reserva.
  */
-async function tarjetaPendienteDe(ctx, { id: bookingId, paymentSessionId }) {
+async function tarjetaPendienteDe(ctx, { id: bookingId, paymentSessionId }, importeEsperado) {
   try {
     const { PaymentSession } = ctx.tenantModels;
-    const atributos = ["id", "status", "stripePaymentIntentId"];
+    const atributos = ["id", "status", "stripePaymentIntentId", "amount"];
     // Por id de sesión si la cita ya lo tiene; si no, buscándola por la propia
     // cita. `bookings.payment_session_id` se escribe DESPUÉS de la transacción
     // que crea la reserva (hay que llamar a Stripe antes), así que una segunda
@@ -64,6 +71,15 @@ async function tarjetaPendienteDe(ctx, { id: bookingId, paymentSessionId }) {
           order: [["createdAt", "DESC"]],
         });
     if (!ps || ps.status !== "authorizing" || !ps.stripePaymentIntentId) return null;
+    // La reserva contra la que se ha chocado puede ser de OTRO tipo de cita, con
+    // otro precio. Devolverle ese formulario mientras la pantalla le enseña el
+    // importe nuevo es cobrarle una cosa distinta de la que está leyendo.
+    if (Number.isInteger(importeEsperado) && ps.amount !== importeEsperado) {
+      process.stderr.write(
+        `[citas:book] no se reutiliza el pago ${ps.id}: es de ${ps.amount} y aquí se esperan ${importeEsperado}\n`
+      );
+      return null;
+    }
     const stripe = await getStripe(ctx);
     if (!stripe) return null;
     const pi = await stripe.paymentIntents.retrieve(ps.stripePaymentIntentId);
@@ -341,6 +357,33 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
           throw e;
         }
 
+        // ── Tope de huecos bloqueados sin pagar ────────────────────────────
+        // El endpoint es PÚBLICO y una reserva sin pagar bloquea su hora 20
+        // minutos. Sin tope, cualquiera podía dejar la agenda entera sin huecos
+        // repitiendo la llamada: bloqueaba de verdad, y encima de forma
+        // INVISIBLE, porque esas reservas no llegan a la lista de espera. La
+        // profesional vería su agenda llena sin una sola solicitud.
+        //
+        // Tres a la vez es más de lo que necesita nadie reservando de buena fe
+        // (una persona rellena un formulario cada vez) y poco para hacer daño.
+        // No es la defensa definitiva —quien cambie de email y de IP sigue
+        // pudiendo—, pero sube muchísimo el coste del ruido tonto.
+        if (precio) {
+          const bloqueando = await Booking.count({
+            where: {
+              paymentStatus: "authorizing",
+              holdExpiresAt: { [Op.gt]: new Date() },
+              [Op.or]: [{ clientEmail }, { clientPhone }],
+            },
+            transaction: t,
+          });
+          if (bloqueando >= 3) {
+            const e = new Error("DEMASIADAS");
+            e.code = "DEMASIADAS";
+            throw e;
+          }
+        }
+
         // Dedup residual: misma persona, misma hora, hace menos de 5 min, pero
         // con una reserva que NO ocupa el hueco (p. ej. quedó en 'no_show').
         // El caso común —su reserva sigue en pie— lo resuelve ya la rama de
@@ -395,6 +438,12 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
       if (err?.code === "OCUPADO") {
         return error("Esa hora ya no está disponible, por favor elige otra", 409);
       }
+      if (err?.code === "DEMASIADAS") {
+        return error(
+          "Tienes varias reservas a medias esperando el pago. Termina una o espera unos minutos antes de pedir otra hora.",
+          429
+        );
+      }
       if (err?.code === "DUPLICADO") {
         // Cita gratuita: comportamiento de siempre.
         if (!precio) return created({ ok: true, mensaje: "Solicitud recibida" });
@@ -408,11 +457,22 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
         // una SEGUNDA retención por la misma cita y dejar a una persona con el
         // doble de dinero bloqueado en su tarjeta.
         const clientSecret = err.duplicado
-          ? await tarjetaPendienteDe(tenantContext, err.duplicado)
+          ? await tarjetaPendienteDe(tenantContext, err.duplicado, precio)
           : null;
         if (clientSecret) {
           return created({
-            booking: { id: err.duplicado.id },
+            // Los mismos campos que la rama normal. Devolver solo el id dejaba
+            // al widget pintando "Duración undefined min" en la pantalla final
+            // a quien hubiera hecho doble clic — que es precisamente quien ya
+            // dudaba de si su reserva había salido.
+            booking: {
+              id: err.duplicado.id,
+              scheduledAt: scheduledAt.toISOString(),
+              duration: eventType.duration,
+              eventTypeName: eventType.name,
+              eventTypeColor: eventType.color,
+              clientEmail,
+            },
             paymentRequired: true,
             amount: precio,
             clientSecret,
@@ -464,7 +524,13 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
             bookingId: row.id,
             // La prueba de qué aceptó, cuándo y por cuánto. La IP la pone el
             // servidor, no el cliente: si viniera del body no probaría nada.
-            consentimiento: pruebaDeConsentimiento({ importeCentimos: precio, ip }),
+            consentimiento: pruebaDeConsentimiento({
+              importeCentimos: precio,
+              ip: getClientIp(request),
+              // La cadena tal cual llegó, por si algún día hay que enseñar el
+              // contexto de una reclamación: la IP sola no dice de dónde salió.
+              cadenaProxies: (request.headers.get("x-forwarded-for") || "").slice(0, 300) || null,
+            }),
           },
         });
         await row.update({ paymentSessionId: datosPago.paymentSession.id });
@@ -558,4 +624,9 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
   } catch (err) {
     return serverError(err);
   }
-});
+},
+// Segunda capa contra el mismo abuso, esta por origen: el tope de arriba se
+// esquiva cambiando de email, este no sin cambiar también de IP. Generoso a
+// propósito — una familia reservando desde la misma casa o una oficina con IP
+// compartida no pueden verse cortadas por reservar tres veces seguidas.
+{ rateLimit: { limit: 20, windowMs: 10 * 60_000, key: "citas-book" } });

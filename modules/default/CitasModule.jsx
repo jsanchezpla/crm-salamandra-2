@@ -1642,6 +1642,32 @@ function Waitlist({ refreshKey, onCountChange, onActioned }) {
     }
   }
 
+  /**
+   * Pedirle al paciente que vuelva a poner una tarjeta.
+   *
+   * Se le dice a la profesional si el correo salió DE VERDAD: dar esto por hecho
+   * cuando el envío ha fallado la deja esperando una respuesta que nadie va a
+   * dar. Si no salió, se le ofrece el enlace para mandarlo por donde pueda.
+   */
+  async function pedirTarjeta(id) {
+    setBusyId(id);
+    setError(null);
+    try {
+      const r = await fetch(`/api/citas/bookings/${id}/pedir-tarjeta`, { method: "POST" });
+      const j = await r.json();
+      if (!j.ok) { setError(j.error || "No se pudo pedir la tarjeta"); return; }
+      if (j.data?.correoEnviado === false) {
+        setError(
+          `Retención preparada, pero el correo NO salió. Pásale este enlace: ${j.data.enlace}`
+        );
+      }
+      onActioned?.();
+      load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function reject(id) {
     setBusyId(id);
     setError(null);
@@ -1741,27 +1767,49 @@ function Waitlist({ refreshKey, onCountChange, onActioned }) {
                   <>
                     {/* El botón dice lo que va a pasar. "Confirmar" a secas,
                         cuando además cobra 45 €, es información que se le
-                        oculta justo en el momento en que la necesita. */}
-                    <button onClick={() => confirm(b.id)} disabled={busyId === b.id} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2 rounded-md transition-colors disabled:opacity-50">
+                        oculta justo en el momento en que la necesita.
+
+                        Y mientras el paciente teclea su tarjeta NO se puede
+                        confirmar: el servidor lo rechaza, pero un botón activo
+                        que devuelve un error es una trampa. Se apaga y se dice
+                        por qué. */}
+                    <button
+                      onClick={() => confirm(b.id)}
+                      disabled={busyId === b.id || b.paymentStatus === "authorizing"}
+                      title={b.paymentStatus === "authorizing" ? "Está introduciendo su tarjeta ahora mismo" : undefined}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2 rounded-md transition-colors disabled:opacity-50"
+                    >
                       {busyId === b.id
                         ? "…"
-                        : b.paymentStatus === "authorized" && Number.isInteger(b.amount)
-                          ? `Confirmar y cobrar ${formatMoney(b.amount)}`
-                          : "Confirmar"}
+                        : b.paymentStatus === "authorizing"
+                          ? "Esperando su tarjeta…"
+                          : b.paymentStatus === "authorized" && Number.isInteger(b.amount)
+                            ? `Confirmar y cobrar ${formatMoney(b.amount)}`
+                            : "Confirmar"}
                     </button>
 
                     {/* Sin dinero reservado (caducó, lo soltaron o el banco lo
                         rechazó) queda una persona real esperando. La salida no
                         es rechazarla: es aceptarla y cobrarle en consulta. */}
                     {(b.paymentStatus === "void" || b.paymentStatus === "failed") && (
-                      <button
-                        onClick={() => confirm(b.id, { sinCobrar: true })}
-                        disabled={busyId === b.id}
-                        className="bg-white hover:bg-neutral-50 text-neutral-700 border border-neutral-300 text-xs font-medium py-2 rounded-md transition-colors disabled:opacity-50"
-                        title="La cita queda confirmada sin cobrar nada online. Le cobras en consulta."
-                      >
-                        Confirmar sin cobrar
-                      </button>
+                      <>
+                        <button
+                          onClick={() => pedirTarjeta(b.id)}
+                          disabled={busyId === b.id}
+                          className="bg-white hover:bg-neutral-50 text-neutral-700 border border-neutral-300 text-xs font-medium py-2 rounded-md transition-colors disabled:opacity-50"
+                          title="Le enviamos un correo con un enlace para que meta otra tarjeta. La cita se le guarda mientras tanto."
+                        >
+                          Pedirle otra tarjeta
+                        </button>
+                        <button
+                          onClick={() => confirm(b.id, { sinCobrar: true })}
+                          disabled={busyId === b.id}
+                          className="bg-white hover:bg-neutral-50 text-neutral-700 border border-neutral-300 text-xs font-medium py-2 rounded-md transition-colors disabled:opacity-50"
+                          title="La cita queda confirmada sin cobrar nada online. Le cobras en consulta."
+                        >
+                          Confirmar sin cobrar
+                        </button>
+                      </>
                     )}
 
                     <button onClick={() => setRejectFor(b.id)} disabled={busyId === b.id} className="bg-white hover:bg-red-50 text-red-600 border border-red-200 text-xs font-medium py-2 rounded-md transition-colors disabled:opacity-50">

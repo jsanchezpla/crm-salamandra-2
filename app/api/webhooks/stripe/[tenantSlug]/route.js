@@ -168,12 +168,29 @@ async function procesar(ctx, { PaymentSession, event, t, caducaEn = null }) {
       // El importe retenido tiene que ser el que pedimos. Si no cuadra, no se
       // mete en la lista de espera: se suelta, que es gratis y reversible (a
       // diferencia de un cobro, que habría que devolver).
+      //
+      // OJO: esto ANTES solo marcaba la fila como fallida y decía en el log que
+      // se soltaba, pero no soltaba nada — el dinero se quedaba bloqueado en la
+      // tarjeta de una persona hasta caducar, con la cita fuera de la lista de
+      // espera y por tanto sin que nadie pudiera verla. La liberación va en
+      // postCommit porque llamar a Stripe dentro de la transacción la alargaría
+      // y, si se deshiciera, habríamos soltado un dinero que en la base de datos
+      // sigue comprometido.
       if (Number.isInteger(obj.amount_capturable) && obj.amount_capturable !== ps.amount) {
         await ps.update({ status: "failed" }, { transaction: t });
         process.stderr.write(
           `[stripe:webhook] RETENCIÓN INESPERADA ${ctx.slug} ps=${ps.id}: esperado ${ps.amount}, retenido ${obj.amount_capturable}\n`
         );
-        return `importe retenido no coincide (${obj.amount_capturable} vs ${ps.amount})`;
+        return {
+          outcome: `importe retenido no coincide (${obj.amount_capturable} vs ${ps.amount}) — se suelta`,
+          postCommit: async () => {
+            const { liberarAutorizacion } = await import("../../../../../lib/payments/autorizacion.js");
+            await liberarAutorizacion(ctx, ps, {
+              motivo: `importe inesperado: ${obj.amount_capturable} en vez de ${ps.amount}`,
+              razonStripe: "abandoned",
+            });
+          },
+        };
       }
 
       await ps.update(

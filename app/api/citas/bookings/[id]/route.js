@@ -15,6 +15,7 @@ import { bookingMeetLinkTemplate } from "../../../../../lib/email/templates/cita
 import { bookingCancelledTemplate } from "../../../../../lib/email/templates/citas/bookingCancelled.js";
 import { getTenantResendConfig } from "../../../../../lib/outreach/resendConfig.js";
 import { reembolsarCitaSiProcede } from "../../../../../lib/citas/reembolsoCita.js";
+import { tieneRetencionPendiente } from "../../../../../lib/citas/cobroCita.js";
 
 /**
  * Email de cancelación al paciente (2026-07-22). Hasta hoy el motivo se
@@ -240,6 +241,21 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
           "Una cita no puede volver al estado pendiente una vez confirmada o procesada."
         );
       }
+      // ── El dinero solo se mueve por UN sitio ────────────────────────────
+      // Dar por buena una cita con dinero retenido desde aquí la atendía sin
+      // cobrarlo: quedaba 'completed' con el importe todavía bloqueado en la
+      // tarjeta del paciente, que caducaba solo días después. La profesional
+      // cerraba el día creyendo que había cobrado. Este endpoint no captura —
+      // captura `/confirm`— así que se remite allí en vez de avanzar el estado
+      // por detrás. Cancelar y no_show sí siguen aquí: esos ya liquidan.
+      if ((v === "confirmed" || v === "completed") && tieneRetencionPendiente(row)) {
+        return error(
+          "Esta cita tiene dinero reservado en la tarjeta del paciente. Confírmala desde la lista de espera para cobrarlo.",
+          409,
+          { code: "COBRO_PENDIENTE" }
+        );
+      }
+
       if (v !== row.status) statusChanged = true;
       updates.status = v;
       if (v === "cancelled") {

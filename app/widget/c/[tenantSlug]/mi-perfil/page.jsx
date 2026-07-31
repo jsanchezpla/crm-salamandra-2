@@ -434,6 +434,13 @@ export default function MiPerfilPage() {
               Si confirmas, liberaremos el hueco para que otra persona pueda reservarlo.
             </p>
 
+            {/* Qué pasa con su dinero, ANTES de pulsar. Sin esto, alguien con la
+                cita pagada cancelaba con menos de 24 h, perdía el importe entero
+                y no se enteraba ni antes ni después. */}
+            <p className="text-[13px] leading-relaxed">
+              <AvisoDinero siCancela={cancelTarget?.siCancela} />
+            </p>
+
             <div className="bg-[var(--widget-bg)] rounded-lg border border-[var(--widget-border)] p-3 text-[13px] mb-4">
               <div className="font-medium text-[var(--widget-text)]">{cancelTarget.eventTypeName ?? "Cita"}</div>
               <div className="text-[var(--widget-text)] first-letter:uppercase">{fmtLong(cancelTarget.scheduledAt)}</div>
@@ -477,4 +484,44 @@ export default function MiPerfilPage() {
       )}
     </div>
   );
+}
+
+/**
+ * Lo que pasa con el dinero si cancela. El servidor lo calcula (`siCancela`) y
+ * aquí solo se pinta: si la pantalla hiciera su propia cuenta acabaría
+ * prometiendo devoluciones que la política real no da.
+ *
+ * El caso que hay que decir SÍ O SÍ es "se_pierde": cancelar con menos de 24
+ * horas no devuelve nada, y enterarse después es enterarse tarde.
+ */
+export function AvisoDinero({ siCancela }) {
+  if (!siCancela || siCancela.tipo === "nada" || !siCancela.importe) return null;
+  const importe = (siCancela.importe / 100).toLocaleString("es-ES", {
+    style: "currency",
+    currency: "EUR",
+  });
+
+  if (siCancela.tipo === "se_pierde") {
+    return (
+      <span className="block rounded-md border border-red-200 bg-red-50 px-3 py-2 text-red-800">
+        Quedan menos de 24 horas para la cita, así que <b>no se te devolverán los {importe}</b> que
+        ya has pagado.
+      </span>
+    );
+  }
+  if (siCancela.tipo === "se_devuelve") {
+    return (
+      <span className="block rounded-md border border-[var(--widget-border)] bg-[var(--widget-bg)] px-3 py-2 text-[var(--widget-text-muted)]">
+        Se te devolverán los {importe} íntegros.
+      </span>
+    );
+  }
+  if (siCancela.tipo === "se_libera") {
+    return (
+      <span className="block rounded-md border border-[var(--widget-border)] bg-[var(--widget-bg)] px-3 py-2 text-[var(--widget-text-muted)]">
+        No se te ha cobrado nada: los {importe} reservados en tu tarjeta se liberan.
+      </span>
+    );
+  }
+  return null;
 }

@@ -1,0 +1,11 @@
+[Unit]
+Description=Retenciones de tarjeta del CRM, cada hora
+
+[Timer]
+# A y media, para no coincidir con los recordatorios (:05) ni con la poda: son
+# tres tareas que abren conexiones a la misma base de datos.
+OnCalendar=*-*-* *:35:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
