@@ -224,8 +224,28 @@ y listado de la lista de espera.
   solicitudes de reserva pendientes. Son cosas distintas con el mismo nombre:
   hay que decidir cómo se llaman para no liar al usuario.
 
-### 3.5 — Bloque 6: Estadísticas (punto 10)
-Sprint aparte, como marca el propio brief.
+### 3.5 — Bloque 6: Estadísticas (punto 10) — **HECHO en local el 31/07**
+
+Módulo propio: `/clinica/estadisticas` (solo dirección), con selector de
+periodo (mes, trimestre, curso o fechas libres) y descarga en **Excel y PDF**.
+Tres bloques, los que pidió Rodrigo:
+
+- **Actividad clínica**: pacientes activos y en pausa, altas y bajas del
+  periodo, sesiones e informes por terapeuta, % de informes entregados en
+  plazo y pacientes activos por especialidad.
+- **Agenda y ausencias**: citas por estado, faltas justificadas vs sin
+  justificar y tasa de ausencias por profesional. La tasa se calcula sobre las
+  citas que LLEGARON A SU HORA (atendidas + no presentadas), igual que el
+  informe de ocupación: cancelar avisando no penaliza.
+- **Captación**: leads por origen, cómo entran los clientes nuevos (lead,
+  lista de espera o alta directa) y cuánto se espera de media.
+
+El **dinero se queda fuera a propósito** (decisión de Rodrigo): vive en
+Facturación —cobros y morosidad— y duplicarlo aquí sería duplicar la verdad.
+
+El cálculo vive UNA sola vez en `lib/clinica/estadisticas.js` y lo comparten la
+pantalla, el Excel y el PDF: si contase cada salida por su cuenta, el papel que
+se lleva a la reunión de dirección y el CRM acabarían diciendo cosas distintas.
 
 ---
 

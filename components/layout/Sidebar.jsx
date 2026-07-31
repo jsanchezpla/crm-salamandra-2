@@ -225,6 +225,9 @@ const navigation = [
           // punto 7): módulo propio con listado general, además del botón que
           // hay en la ficha del paciente.
           { key: "clinica-coordinaciones", label: "Coordinaciones", href: "/clinica/coordinaciones" },
+          // Estadísticas del centro (sprint 2026-07, punto 10). adminOnly: son
+          // datos agregados de TODO el equipo, y el endpoint también lo exige.
+          { key: "clinica-estadisticas", label: "Estadísticas", href: "/clinica/estadisticas", adminOnly: true },
         ],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
