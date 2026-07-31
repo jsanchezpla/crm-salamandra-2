@@ -230,7 +230,16 @@ Sprint aparte, como marca el propio brief.
 7. **`docker exec` corre los scripts de la IMAGEN, no del checkout del host.**
    Si editas un script, hay que reconstruir el contenedor antes de ejecutarlo.
 
-8. **La demo pública da sesión de ADMIN a visitantes anónimos.** Todo endpoint
+8. **Una feature del PORTAL cae sobre el único tenant que tiene portal, y no
+   es Aumenta: es `nutri_laura`, que es un CRM en uso REAL.** El cerrojo del
+   contrato se escribió para Aumenta y se activaba con solo tener el portal
+   encendido; al desplegarlo (31/07), a las pacientes de Laura les apareció una
+   pantalla completa pidiéndoles firmar un contrato inexistente. Arreglado
+   condicionándolo a que el centro haya subido su Contrato del Centro. Antes de
+   desplegar algo del portal: `SELECT slug, settings->'widget'->'sso'->>'enabled'
+   FROM master.tenants` y piensa en ESOS tenants, no en el que te lo pidió.
+
+9. **La demo pública da sesión de ADMIN a visitantes anónimos.** Todo endpoint
    nuevo que mande correo, gaste IA o escriba en master necesita su guard de
    `lib/demo/isDemo.js`.
 
