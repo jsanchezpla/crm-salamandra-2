@@ -191,6 +191,12 @@ consultar ni subir— hasta que firmen todos (decisión de Rodrigo, 31/07). El
 aplazamiento dura lo que la pestaña: al volver a entrar, el contrato vuelve a
 salir.
 
+- **Sin Contrato del Centro subido no se pide nada**: si el tenant no tiene
+  documento `contract_template`, no hay pantalla ni bloqueo. Subirlo es la
+  señal de que el centro quiere exigir la firma. (Arreglo del 31/07: sin esta
+  condición, el cerrojo se activaba con solo tener el portal encendido y a los
+  pacientes de nutri_laura —el único tenant con portal— les apareció una
+  pantalla pidiendo firmar un documento que no existe.)
 - **Quién firma**: los tutores marcados como firmantes en la ficha
   (`Client.guardians`). Si la ficha no tiene tutores, firma el **titular** —
   `effectiveSigners()` en `lib/clients/clientContract.js`—. Sin ese respaldo,
