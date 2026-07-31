@@ -82,28 +82,49 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const role = request.headers.get("x-user-role");
     if (!new Set(["admin", "superadmin"]).has(role)) return forbidden("Solo admin");
 
-    const { Payment, Invoice } = tenantModels;
+    const { Payment, Invoice, Client } = tenantModels;
     const body = await request.json();
-    const { invoiceId, amount, paidAt, method, notes } = body;
+    const { invoiceId, clientId, periodMonth, amount, paidAt, method, notes } = body;
 
-    if (!invoiceId) return error("invoiceId es obligatorio");
+    // COBRO SIN FACTURA (sprint Aumenta 2026-07, punto 8): en el centro se
+    // cobra primero y se factura después, así que exigir factura obligaba a
+    // inventarse una o a no registrar el dinero. Sin factura hace falta saber
+    // de QUIÉN es el cobro.
+    if (!invoiceId && !clientId) return error("Hace falta una factura o un cliente");
     if (!amount || Number(amount) <= 0) return error("amount debe ser mayor que 0");
     if (!method) return error("method es obligatorio");
     if (!paidAt) return error("paidAt es obligatorio");
 
-    const invoice = await Invoice.findByPk(invoiceId);
-    if (!invoice) return notFound("Factura no encontrada");
-    if (["draft", "cancelled", "rectified"].includes(invoice.status)) {
-      return error(`No se puede registrar un cobro en una factura en estado '${invoice.status}'`, 409);
+    // Mes al que corresponde ('YYYY-MM' desde la UI → primer día del mes). Es
+    // lo que abre los documentos de ese mes en el portal de la familia.
+    let mes = null;
+    if (periodMonth) {
+      const m = String(periodMonth).slice(0, 7);
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(m)) return error("El mes debe ser 'AAAA-MM'");
+      mes = `${m}-01`;
     }
 
-    const remaining = Number(invoice.total) - Number(invoice.paidAmount);
-    if (Number(amount) > remaining + 0.0049) {
-      return error(`El importe (${Number(amount)}) excede el pendiente de la factura (${remaining.toFixed(2)})`, 400);
+    let invoice = null;
+    if (invoiceId) {
+      invoice = await Invoice.findByPk(invoiceId);
+      if (!invoice) return notFound("Factura no encontrada");
+      if (["draft", "cancelled", "rectified"].includes(invoice.status)) {
+        return error(`No se puede registrar un cobro en una factura en estado '${invoice.status}'`, 409);
+      }
+      const remaining = Number(invoice.total) - Number(invoice.paidAmount);
+      if (Number(amount) > remaining + 0.0049) {
+        return error(`El importe (${Number(amount)}) excede el pendiente de la factura (${remaining.toFixed(2)})`, 400);
+      }
+    } else if (Client) {
+      const cliente = await Client.findByPk(clientId, { attributes: ["id"] });
+      if (!cliente) return notFound("Cliente no encontrado");
     }
 
     const payment = await Payment.create({
-      invoiceId,
+      invoiceId: invoiceId || null,
+      // Con factura, el cliente se hereda de ella; sin factura viene en el body.
+      clientId: invoice ? invoice.clientId : clientId,
+      periodMonth: mes,
       amount: Number(amount),
       paidAt,
       method,
@@ -111,7 +132,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       notes: notes || null,
     });
 
-    await updateInvoiceStatus(invoice, Payment);
+    if (invoice) await updateInvoiceStatus(invoice, Payment);
 
     await logBillingAudit({
       tenantId: tenant.id,

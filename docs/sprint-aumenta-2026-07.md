@@ -181,7 +181,34 @@ migración. `patients.contractSigned` queda como columna legada, sin uso en la U
 - **1.4** agregado por terapeuta de los contadores trimestrales (para el
   programa de incentivos).
 
-### 3.4 — Bloque 5: administración
+### 3.4 — Bloque 5: administración — **HECHO en local el 31/07**
+
+- **8 cobros**: se puede registrar un cobro SIN factura, con su cliente y su
+  **mes** (`periodMonth`), que es el flujo real del centro —se cobra la cuota y
+  se factura después— y además es lo que abre los documentos de ese mes en el
+  área privada. Los cobros ya registrados se editan desde la pantalla (importe,
+  método, fecha, estado y notas), auditado; antes había que tocar la base de
+  datos a mano.
+- **8 morosidad**: `GET /api/billing/morosidad?mes=AAAA-MM` y su panel dentro de
+  Cobros. Debe quien tiene un paciente ACTIVO y no tiene cobro de ese mes —el
+  MISMO criterio que abre el portal, para que Cobros y el área privada no se
+  contradigan— con los meses seguidos que acumula.
+- **6.1 faltas**: al marcar «No asistió» se pregunta si la falta estaba
+  justificada y por qué. Las NO justificadas avisan a administración
+  (`settings.citas.avisoFaltas`; sin lista configurada, a los usuarios con rol
+  admin — por rol y no por persona, que quien se va de vacaciones no se lleve
+  los avisos).
+- **9 lista de espera**: `/clientes/lista-espera`, con alta, reordenar y
+  «Convertir en cliente» (crea la ficha y deja la entrada enlazada, para poder
+  responder cuánto esperó cada familia). **Se llama «Lista de espera de
+  admisión»** para no confundirla con la de Citas, que son solicitudes de
+  reserva: era la decisión pendiente del brief.
+
+Probado contra el servidor: cobro sin factura creado y desapareciendo de
+morosidad, falta sin justificar generando el aviso a administración, y el alta
+y listado de la lista de espera.
+
+### 3.4.bis — lo que era el bloque 5 (referencia)
 - **8** cobros editables, con notas y **sin factura asociada**
   (`payments.invoice_id` ya es nullable, `client_id` y `period_month` añadidos).
 - **8** sección **Morosidad** dentro de Cobros.

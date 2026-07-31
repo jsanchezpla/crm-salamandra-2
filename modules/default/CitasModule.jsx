@@ -509,7 +509,22 @@ export default function CitasModule() {
     }
   }
   async function markCompleted() { await patchBooking({ status: "completed" }); }
-  async function markNoShow() { await patchBooking({ status: "no_show" }); }
+  /**
+   * Falta: se pregunta si estaba JUSTIFICADA (punto 6.1 del sprint). No es lo
+   * mismo un niño con fiebre que una familia que no aparece sin avisar; y solo
+   * las NO justificadas avisan a administración.
+   */
+  async function markNoShow() {
+    const justificada = window.confirm(
+      "¿La falta estaba JUSTIFICADA (avisaron, enfermedad…)?\n\nAceptar = justificada · Cancelar = sin justificar"
+    );
+    const motivo = window.prompt(justificada ? "Motivo (opcional)" : "¿Qué ha pasado? (opcional)") ?? "";
+    await patchBooking({
+      status: "no_show",
+      noShowJustified: justificada,
+      noShowReason: motivo.trim() || null,
+    });
+  }
   async function cancelBooking() {
     const reason = window.prompt("Motivo de cancelación (opcional)") ?? "";
     await patchBooking({ status: "cancelled", cancellationReason: reason.trim() || null });
@@ -1351,6 +1366,12 @@ export default function CitasModule() {
                   >
                     Marcar completada
                   </button>
+                )}
+                {openBooking.status === "no_show" && (
+                  <span className={`text-[12px] px-2.5 py-1.5 rounded-md ${openBooking.noShowJustified ? "bg-neutral-100 text-neutral-600" : "bg-red-50 text-red-700"}`}>
+                    {openBooking.noShowJustified ? "Falta justificada" : "Falta sin justificar"}
+                    {openBooking.noShowReason ? ` · ${openBooking.noShowReason}` : ""}
+                  </span>
                 )}
                 {openBooking.status !== "no_show" && (
                   <button

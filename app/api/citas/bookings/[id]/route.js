@@ -1,3 +1,5 @@
+import { getMasterModels } from "../../../../../lib/db/masterDb.js";
+import { notifyUsers } from "../../../../../lib/notifications/notifyUsers.js";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, noContent, serverError } from "../../../../../lib/utils/apiResponse.js";
 import {
@@ -258,6 +260,20 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
 
       if (v !== row.status) statusChanged = true;
       updates.status = v;
+      // Falta JUSTIFICADA o no (sprint Aumenta 2026-07, punto 6.1). No es lo
+      // mismo un niño con fiebre que una familia que no aparece sin avisar: lo
+      // segundo es lo que el centro necesita ver acumulado.
+      if (v === "no_show") {
+        updates.noShowJustified = body.noShowJustified === true;
+        updates.noShowReason =
+          typeof body.noShowReason === "string" && body.noShowReason.trim()
+            ? body.noShowReason.trim().slice(0, 500)
+            : null;
+      } else if (row.status === "no_show") {
+        // Deja de ser falta: se limpia, o quedaría un motivo suelto mintiendo.
+        updates.noShowJustified = false;
+        updates.noShowReason = null;
+      }
       if (v === "cancelled") {
         updates.cancelledAt = updates.cancelledAt ?? new Date();
         if ("cancellationReason" in body) {
@@ -308,6 +324,46 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
         quienCancela: updates.status === "no_show" ? "no_show" : "profesional",
       });
       if (reembolso.reembolsado) await row.reload();
+    }
+
+    // Aviso a administración de una falta NO justificada (punto 6.1). La lista
+    // de destinatarios es configurable por cliente (`settings.citas.avisoFaltas`,
+    // ids de usuario): nunca una persona a fuego, que se va de vacaciones o se
+    // va del centro y los avisos se pierden.
+    if (statusChanged && updates.status === "no_show" && !row.noShowJustified) {
+      let destinatarios = Array.isArray(tenant.settings?.citas?.avisoFaltas)
+        ? tenant.settings.citas.avisoFaltas.filter(Boolean)
+        : [];
+      if (destinatarios.length === 0) {
+        // Sin lista configurada, avisa a la ADMINISTRACIÓN del cliente (rol
+        // admin). Por rol y no por persona: quien se va de vacaciones o se va
+        // del centro no puede llevarse los avisos con él.
+        try {
+          const { User } = getMasterModels();
+          const admins = await User.findAll({
+            where: { tenantId: tenant.id, role: "admin" },
+            attributes: ["id"],
+          });
+          destinatarios = admins.map((u) => u.id);
+        } catch {
+          destinatarios = [];
+        }
+      }
+      if (destinatarios.length) {
+        const cuando = new Date(row.scheduledAt).toLocaleString("es-ES", {
+          timeZone: "Europe/Madrid", day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit",
+        });
+        await notifyUsers({
+          tenantModels,
+          userIds: destinatarios,
+          type: "cita_falta",
+          title: "Falta sin justificar",
+          body: `${row.clientName || "Un paciente"} no acudió a su cita del ${cuando}.`,
+          entityType: "Booking",
+          entityId: row.id,
+          dedupe: true,
+        });
+      }
     }
 
     await logCitasAudit({

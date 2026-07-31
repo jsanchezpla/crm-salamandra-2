@@ -42,6 +42,10 @@ const navigation = [
         key: "clients",
         label: "Clientes",
         href: "/clientes",
+        // Lista de espera de ADMISIÓN (sprint 2026-07, punto 9): gente
+        // esperando plaza. La "lista de espera" de Citas es otra cosa —
+        // solicitudes de reserva— y por eso esta lleva apellido.
+        children: [{ key: "clients-waitlist", label: "Lista de espera", href: "/clientes/lista-espera" }],
         badge: null,
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">

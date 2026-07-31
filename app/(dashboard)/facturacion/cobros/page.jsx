@@ -27,7 +27,14 @@ export default function CobrosPage() {
 
   const [unpaidInvoices, setUnpaidInvoices] = useState([]);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ invoiceId: "", amount: "", method: "transfer", paidAt: new Date().toISOString().slice(0, 10), notes: "" });
+  // `modo`: "factura" (cobro de una factura emitida) o "cuota" (el flujo real
+  // del centro: se cobra la mensualidad y se factura después). El mes es lo que
+  // abre los documentos de esa familia en su área privada.
+  const [form, setForm] = useState({ modo: "factura", invoiceId: "", clientId: "", periodMonth: new Date().toISOString().slice(0, 7), amount: "", method: "transfer", paidAt: new Date().toISOString().slice(0, 10), notes: "" });
+  const [editing, setEditing] = useState(null); // cobro que se está editando
+  const [clientes, setClientes] = useState([]);
+  const [morosidad, setMorosidad] = useState(null);
+  const [mesMorosidad, setMesMorosidad] = useState(new Date().toISOString().slice(0, 7));
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
 
@@ -44,6 +51,10 @@ export default function CobrosPage() {
 
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" }).then((r) => r.json()).then((j) => j.ok && setMe(j.data)).catch(() => {});
+    fetch("/api/clients?limit=300", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setClientes(j?.data?.clients ?? j?.data ?? []))
+      .catch(() => {});
   }, []);
 
   const load = useCallback(async () => {
@@ -101,17 +112,30 @@ export default function CobrosPage() {
     [filtered]
   );
 
+  const loadMorosidad = useCallback(() => {
+    fetch(`/api/billing/morosidad?mes=${mesMorosidad}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setMorosidad(j?.data ?? null))
+      .catch(() => {});
+  }, [mesMorosidad]);
+
+  useEffect(() => { loadMorosidad(); }, [loadMorosidad]);
+
   async function handleCreate(e) {
     e.preventDefault();
     setSaving(true);
     setFormError(null);
     try {
-      if (!form.invoiceId) throw new Error("Selecciona una factura");
+      const porFactura = form.modo === "factura";
+      if (porFactura && !form.invoiceId) throw new Error("Selecciona una factura");
+      if (!porFactura && !form.clientId) throw new Error("Selecciona el cliente que ha pagado");
       const res = await fetch("/api/billing/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          invoiceId: form.invoiceId,
+          invoiceId: porFactura ? form.invoiceId : null,
+          clientId: porFactura ? null : form.clientId,
+          periodMonth: porFactura ? null : form.periodMonth,
           amount: Number(form.amount),
           method: form.method,
           paidAt: form.paidAt,
@@ -120,11 +144,40 @@ export default function CobrosPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
-      setForm({ invoiceId: "", amount: "", method: "transfer", paidAt: new Date().toISOString().slice(0, 10), notes: "" });
+      setForm((f) => ({ ...f, invoiceId: "", clientId: "", amount: "", notes: "" }));
       setShowForm(false);
       load();
+      loadMorosidad();
     } catch (e) {
       setFormError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function guardarEdicion(e) {
+    e.preventDefault();
+    setSaving(true);
+    setFormError(null);
+    try {
+      const res = await fetch(`/api/billing/payments/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: Number(editing.amount),
+          method: editing.method,
+          paidAt: editing.paidAt,
+          notes: editing.notes || null,
+          status: editing.status,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) throw new Error(json.error || "No se pudo guardar");
+      setEditing(null);
+      load();
+      loadMorosidad();
+    } catch (err) {
+      setFormError(err.message);
     } finally {
       setSaving(false);
     }
@@ -200,6 +253,43 @@ export default function CobrosPage() {
         <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{errorMsg}</div>
       )}
 
+      {/* ── Morosidad ── quién no ha pagado el mes. Mismo criterio que abre los
+          documentos del portal, para que Cobros y el área privada no se
+          contradigan. */}
+      {morosidad?.aplicable && (
+        <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden mb-4">
+          <div className="px-4 py-3 border-b border-neutral-100 flex flex-wrap items-center gap-3">
+            <span className="text-sm font-semibold text-neutral-800">Morosidad</span>
+            <input
+              type="month"
+              value={mesMorosidad}
+              onChange={(e) => setMesMorosidad(e.target.value)}
+              className="rounded-lg px-2.5 py-1 text-xs border border-neutral-200"
+            />
+            <span className="text-[11px] text-neutral-400">
+              {morosidad.morosos.length} sin pagar · {morosidad.alDia} al día · {morosidad.familias} familias con paciente activo
+            </span>
+          </div>
+          {morosidad.morosos.length === 0 ? (
+            <div className="px-4 py-6 text-center text-xs text-neutral-400">Nadie debe este mes.</div>
+          ) : (
+            <ul className="divide-y divide-neutral-50 max-h-64 overflow-y-auto">
+              {morosidad.morosos.map((m) => (
+                <li key={m.clientId} className="px-4 py-2.5 flex items-center gap-3 flex-wrap">
+                  <Link href={`/clientes/${m.clientId}`} className="text-xs text-[var(--color-primary,#1B3A2D)] hover:underline min-w-0 flex-1 truncate">
+                    {m.name}
+                  </Link>
+                  <span className="text-[11px] text-neutral-500">{m.phone || m.email || "sin contacto"}</span>
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full ${m.mesesSeguidos >= 3 ? "bg-red-50 text-red-700" : m.mesesSeguidos === 2 ? "bg-amber-50 text-amber-700" : "bg-neutral-100 text-neutral-600"}`}>
+                    {m.mesesSeguidos === 1 ? "1 mes" : `${m.mesesSeguidos} meses`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[700px]">
@@ -215,6 +305,7 @@ export default function CobrosPage() {
                 <SortableTh k="paidAt" label="Fecha" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                 <SortableTh k="status" label="Estado" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                 <SortableTh k="amount" label="Importe" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
+                {isAdmin && <th className="px-4 py-3" />}
               </tr>
             </thead>
             <tbody>
@@ -236,13 +327,25 @@ export default function CobrosPage() {
                         {p.invoice.number}
                       </Link>
                     ) : (
-                      <span className="text-amber-600" title="Cobro registrado sin factura todavía">sin factura</span>
+                      <span className="text-amber-600" title="Cobro registrado sin factura todavía">
+                        sin factura{p.periodMonth ? ` · ${String(p.periodMonth).slice(0, 7)}` : ""}
+                      </span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-neutral-600 text-xs">{METHOD_LABELS[p.method] ?? p.method}</td>
                   <td className="px-4 py-3 text-neutral-500 text-xs">{fmtDate(p.paidAt)}</td>
                   <td className="px-4 py-3"><StatusBadge status={p.status} kind="payment" /></td>
                   <td className="px-4 py-3 text-right font-semibold text-neutral-900 tabular">{fmtMoney(p.amount)}</td>
+                  {isAdmin && (
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => setEditing({ ...p, paidAt: String(p.paidAt).slice(0, 10) })}
+                        className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline"
+                      >
+                        Editar
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -268,6 +371,46 @@ export default function CobrosPage() {
             </div>
 
             <form onSubmit={handleCreate} className="px-6 py-5 space-y-3">
+              {/* El centro cobra la cuota y factura después: obligar a elegir
+                  factura dejaba ese dinero sin registrar. */}
+              <FormRow label="¿De qué es el cobro?">
+                <div className="flex gap-2">
+                  {[["factura", "De una factura"], ["cuota", "Cuota del mes"]].map(([k, lbl]) => (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, modo: k }))}
+                      className={`px-3 py-1.5 rounded-lg text-xs border transition ${form.modo === k ? "border-transparent text-white" : "bg-white border-neutral-200 text-neutral-500"}`}
+                      style={form.modo === k ? { background: "var(--color-primary, #1B3A2D)" } : undefined}
+                    >
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              </FormRow>
+
+              {form.modo === "cuota" && (
+                <>
+                  <FormRow label="Cliente *">
+                    <Select
+                      value={form.clientId}
+                      onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
+                      className={inputCls}
+                      options={[{ value: "", label: "Selecciona cliente..." }, ...clientes.map((c) => ({ value: c.id, label: c.name }))]}
+                    />
+                  </FormRow>
+                  <FormRow label="Mes que se paga *">
+                    <input type="month" required value={form.periodMonth}
+                      onChange={(e) => setForm((f) => ({ ...f, periodMonth: e.target.value }))} className={inputCls} />
+                  </FormRow>
+                  <p className="text-[10px] text-neutral-400 -mt-1">
+                    Al registrarlo, si el centro tiene activado el bloqueo por impago, la familia
+                    pasa a ver los documentos de ese mes en su área privada.
+                  </p>
+                </>
+              )}
+
+              {form.modo === "factura" && (
               <FormRow label="Factura *">
                 <Select
                   value={form.invoiceId}
@@ -285,6 +428,7 @@ export default function CobrosPage() {
                   ]}
                 />
               </FormRow>
+              )}
               <FormRow label="Importe (€) *">
                 <input required type="number" min="0.01" step="0.01" value={form.amount}
                   onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} className={inputCls} />
@@ -312,6 +456,59 @@ export default function CobrosPage() {
                 <button type="submit" disabled={saving}
                   className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-50 transition"
                   style={{ background: "var(--color-primary, #1B3A2D)" }}>{saving ? "Guardando..." : "Registrar"}</button>
+              </div>
+            </form>
+          </aside>
+        </>
+      )}
+      {/* DRAWER DE EDICIÓN — un cobro mal tecleado se corregía antes a mano en
+          la base de datos. Queda auditado por el PATCH. */}
+      {editing && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => !saving && setEditing(null)} />
+          <aside className="fixed top-14 lg:top-0 right-0 bottom-0 w-full sm:w-[480px] bg-white z-50 shadow-pop overflow-y-auto ink-scroll slide-right">
+            <div className="px-6 pt-6 pb-4 border-b border-neutral-100">
+              <div className="eyebrow">Editar</div>
+              <h2 className="font-display text-xl text-neutral-900 mt-1">Cobro de {editing.clientName ?? "—"}</h2>
+              <p className="text-[11px] text-neutral-400 mt-1">
+                {editing.invoice?.number ? `Factura ${editing.invoice.number}` : "Sin factura asociada"}
+              </p>
+            </div>
+            <form onSubmit={guardarEdicion} className="px-6 py-5 space-y-3">
+              <FormRow label="Importe (€) *">
+                <input required type="number" min="0.01" step="0.01" value={editing.amount}
+                  onChange={(e) => setEditing((p) => ({ ...p, amount: e.target.value }))} className={inputCls} />
+              </FormRow>
+              <FormRow label="Método de pago">
+                <Select value={editing.method} onChange={(v) => setEditing((p) => ({ ...p, method: v }))}
+                  className={inputCls}
+                  options={Object.entries(METHOD_LABELS).map(([k, v]) => ({ value: k, label: v }))} />
+              </FormRow>
+              <FormRow label="Fecha *">
+                <input required type="date" value={editing.paidAt}
+                  onChange={(e) => setEditing((p) => ({ ...p, paidAt: e.target.value }))} className={inputCls} />
+              </FormRow>
+              <FormRow label="Estado">
+                <Select value={editing.status} onChange={(v) => setEditing((p) => ({ ...p, status: v }))}
+                  className={inputCls}
+                  options={[
+                    { value: "completed", label: "Cobrado" },
+                    { value: "pending", label: "Pendiente" },
+                    { value: "failed", label: "Fallido" },
+                    { value: "refunded", label: "Devuelto" },
+                  ]} />
+              </FormRow>
+              <FormRow label="Notas">
+                <textarea rows={3} value={editing.notes ?? ""}
+                  onChange={(e) => setEditing((p) => ({ ...p, notes: e.target.value }))} className={inputCls + " resize-y"} />
+              </FormRow>
+              {formError && <div className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{formError}</div>}
+              <div className="flex gap-2 justify-end pt-3 border-t border-neutral-100">
+                <button type="button" onClick={() => setEditing(null)}
+                  className="px-4 py-2 text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700">Cancelar</button>
+                <button type="submit" disabled={saving}
+                  className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-50"
+                  style={{ background: "var(--color-primary, #1B3A2D)" }}>{saving ? "Guardando..." : "Guardar"}</button>
               </div>
             </form>
           </aside>
