@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import PasoTarjeta from "../_components/PasoTarjeta.jsx";
+import { textoConsentimiento } from "../../../../../lib/citas/consentimientoRetencion.js";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AuthGateScreen, useWidgetAuth } from "../_components/AuthGate.jsx";
 import { useCitasPortalSession } from "../_components/useCitasPortalSession.js";
@@ -57,16 +59,17 @@ export default function WidgetBookPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [success, setSuccess] = useState(null);
-  // Salida hacia Stripe: el botón debe seguir bloqueado mientras el navegador
-  // abandona la página, o da tiempo a pulsarlo otra vez y crear una reserva
-  // duplicada que bloquearía el hueco.
-  const [redirigiendo, setRedirigiendo] = useState(false);
-  // Red de seguridad para el embebido en WordPress: si la salida hacia Stripe no
-  // llega a ocurrir (el navegador puede bloquear que un iframe navegue la ventana
-  // de arriba), el paciente se quedaría mirando "Te llevamos al pago…" para
-  // siempre. Pasados unos segundos se le ofrece el enlace para ir él mismo.
-  const [urlPago, setUrlPago] = useState(null);
-  const [enlaceManual, setEnlaceManual] = useState(false);
+  // Paso de tarjeta: cuando está puesto, se pinta el formulario de Stripe en
+  // lugar del formulario de datos. Ya no se sale del iframe a ninguna parte.
+  const [pago, setPago] = useState(null);
+  // La casilla de condiciones. Empieza SIN marcar a propósito: es la prueba de
+  // que leyó que se le va a retener dinero, y una casilla premarcada no prueba
+  // nada.
+  const [aceptaRetencion, setAceptaRetencion] = useState(false);
+  // Tarjeta ya validada y dinero retenido. NO es "cita confirmada": la solicitud
+  // queda esperando a que la profesional decida, y decirle otra cosa al paciente
+  // sería mentirle.
+  const [solicitudEnviada, setSolicitudEnviada] = useState(null);
 
   useEffect(() => {
     if (!eventTypeId || !datetime) {
@@ -121,6 +124,11 @@ export default function WidgetBookPage() {
       return;
     }
 
+    if (precio != null && !aceptaRetencion) {
+      setSubmitError("Tienes que aceptar las condiciones de la reserva para continuar");
+      return;
+    }
+
     setSubmitting(true);
     try {
       const headers = { "Content-Type": "application/json" };
@@ -135,6 +143,9 @@ export default function WidgetBookPage() {
           clientEmail: form.clientEmail.trim(),
           clientPhone: form.clientPhone.trim(),
           additionalData: form.additionalData.trim() || null,
+          // Solo se manda si hay precio; el servidor lo exige en ese caso y
+          // archiva la prueba con la sesión de pago.
+          ...(precio != null ? { aceptaRetencion } : {}),
         }),
       });
       const j = await res.json();
@@ -152,31 +163,26 @@ export default function WidgetBookPage() {
       }
 
       // ── Cita de pago ────────────────────────────────────────────────────
-      // El backend ha creado una reserva PROVISIONAL que caduca sola y devuelve
-      // la URL de Stripe. Se sale del widget hacia el checkout: la pantalla de
-      // "cita confirmada" solo se alcanza al volver de Stripe, porque hasta que
-      // no hay dinero la cita no existe para el paciente (ni se le manda email).
-      if (j.data?.paymentRequired && j.data?.checkoutUrl) {
-        const destino = j.data.checkoutUrl;
-        setRedirigiendo(true);
-        setUrlPago(destino);
-        // Se navega la ventana DE ARRIBA: Stripe Checkout se niega a mostrarse
-        // dentro de un iframe, así que llevar solo el iframe daría pantalla en
-        // blanco. Si el navegador lo impide, abajo aparece el enlace manual.
-        try {
-          if (window.top && window.top !== window.self) window.top.location.href = destino;
-          else window.location.assign(destino);
-        } catch {
-          setEnlaceManual(true);
-        }
-        setTimeout(() => setEnlaceManual(true), 2500);
-        return; // sin liberar el botón: la página se está yendo
+      // El backend ha creado una reserva provisional y devuelve lo necesario
+      // para pintar el formulario de tarjeta AQUÍ MISMO. Antes se sacaba al
+      // paciente del iframe hacia la página de Stripe, o sea que se le echaba de
+      // la web de su nutricionista a mitad de la reserva.
+      //
+      // Al pasar a este paso NO hay dinero retenido todavía, y la cita aún no
+      // existe para nadie: eso pasa cuando confirme la tarjeta.
+      if (j.data?.paymentRequired && j.data?.clientSecret) {
+        setPago({
+          clientSecret: j.data.clientSecret,
+          publishableKey: j.data.publishableKey,
+          importe: j.data.amount,
+          booking: j.data.booking,
+        });
+        return;
       }
 
       setSuccess(j.data.booking);
     } catch (err) {
       setSubmitError(err.message);
-      setRedirigiendo(false);
     } finally {
       setSubmitting(false);
     }
@@ -249,6 +255,94 @@ export default function WidgetBookPage() {
       );
     }
     if (!auth.allowed) return <AuthGateScreen info={info} />;
+  }
+
+  // ── Solicitud enviada (con tarjeta retenida) ─────────────────────────────
+  // Deliberadamente NO dice "cita confirmada". Hay dinero retenido y una
+  // solicitud en la lista de espera; la cita existe cuando la profesional la
+  // confirme. Prometer aquí una cita confirmada es exactamente lo que hace que
+  // alguien se presente a una hora que nadie le dio.
+  if (solicitudEnviada) {
+    return (
+      <div className="min-h-screen bg-[var(--widget-bg)] px-4 py-10">
+        <div className="max-w-md mx-auto">
+          <div className="rounded-lg border border-[var(--widget-border)] bg-[var(--widget-card)] p-6">
+            <p className="text-[11px] tracking-[0.14em] uppercase text-[var(--widget-text-faint)] mb-2">
+              Solicitud enviada
+            </p>
+            <h1 className="text-[26px] leading-tight text-[var(--widget-text)] mb-3" style={{ fontFamily: "var(--widget-font-display)", fontWeight: 500 }}>
+              Hemos recibido tu solicitud
+            </h1>
+            <p className="text-[13px] leading-relaxed text-[var(--widget-text-muted)] mb-5">
+              {info?.name ?? "El profesional"} la revisará y te avisará por email en cuanto la
+              confirme. Suele ser cuestión de horas.
+            </p>
+
+            <div className="space-y-2 border-t border-[var(--widget-border)] pt-4">
+              <Row label="Servicio" value={solicitudEnviada.eventTypeName} />
+              <Row label="Fecha propuesta" value={fmtLong(solicitudEnviada.scheduledAt)} extra="(hora de Madrid)" />
+              <Row label="Duración" value={`${solicitudEnviada.duration} min`} />
+            </div>
+
+            <div className="mt-5 rounded-md border border-[var(--widget-border)] bg-[var(--widget-bg)] p-4">
+              <p className="text-[13px] font-medium text-[var(--widget-text)] mb-1.5">
+                No se te ha cobrado nada
+              </p>
+              <p className="text-[12px] leading-relaxed text-[var(--widget-text-muted)]">
+                Hemos reservado {formatMoney(solicitudEnviada.importe)} en tu tarjeta para guardarte
+                la hora. Tu banco puede mostrarlo como un cargo pendiente: no lo es. Solo se cobrará
+                si se confirma la cita; si no, se libera solo.
+              </p>
+            </div>
+
+            {solicitudEnviada.clientEmail && (
+              <p className="text-[12px] text-[var(--widget-text-faint)] mt-4 text-center">
+                Te hemos escrito a{" "}
+                <b className="text-[var(--widget-text-muted)]">{solicitudEnviada.clientEmail}</b>.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Paso de tarjeta ───────────────────────────────────────────────────────
+  if (pago) {
+    return (
+      <div className="min-h-screen bg-[var(--widget-bg)] px-4 py-10">
+        <div className="max-w-md mx-auto">
+          <div className="rounded-lg border border-[var(--widget-border)] bg-[var(--widget-card)] p-6">
+            <p className="text-[11px] tracking-[0.14em] uppercase text-[var(--widget-text-faint)] mb-2">
+              Último paso
+            </p>
+            <h1 className="text-[26px] leading-tight text-[var(--widget-text)] mb-3" style={{ fontFamily: "var(--widget-font-display)", fontWeight: 500 }}>
+              Tus datos de pago
+            </h1>
+
+            <div className="space-y-2 border-b border-[var(--widget-border)] pb-4 mb-5">
+              <Row label="Servicio" value={eventType?.name} />
+              <Row label="Cuándo" value={fmtLong(datetime)} extra="(hora de Madrid)" />
+              <Row label="Importe" value={formatMoney(pago.importe)} />
+            </div>
+
+            <PasoTarjeta
+              clientSecret={pago.clientSecret}
+              publishableKey={pago.publishableKey}
+              importe={pago.importe}
+              nombreServicio={eventType?.name}
+              onListo={() =>
+                setSolicitudEnviada({
+                  ...pago.booking,
+                  eventTypeName: pago.booking?.eventTypeName ?? eventType?.name,
+                  importe: pago.importe,
+                })
+              }
+            />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // ── Estado SUCCESS ────────────────────────────────────────────────────────
@@ -418,9 +512,13 @@ export default function WidgetBookPage() {
                 {eventType?.duration} min · Hora de Madrid
               </div>
 
+              {/* Decía "A pagar ahora". Con el flujo de retención eso es
+                  literalmente falso y contradecía al aviso de dos centímetros
+                  más abajo ("no es un cobro"): la contradicción no la resuelve
+                  el paciente, la sufre. */}
               {precio != null && (
                 <div className="mt-3 pt-3 border-t border-[var(--widget-border)]/60 flex items-baseline justify-between">
-                  <span className="text-[12px] text-[var(--widget-text-muted)]">A pagar ahora</span>
+                  <span className="text-[12px] text-[var(--widget-text-muted)]">Precio de la sesión</span>
                   <span
                     className="text-[17px] text-[var(--widget-text)] tracking-tight"
                     style={{ fontFamily: "var(--widget-font-display)", fontWeight: 500 }}
@@ -432,13 +530,14 @@ export default function WidgetBookPage() {
 
               <div className="text-[12px] text-[var(--widget-text-muted)] mt-3 pt-3 border-t border-[var(--widget-border)]/60">
                 {precio != null
-                  ? "Reunión online · la plaza se reserva al completar el pago."
+                  ? "Reunión online · te confirmaremos la plaza por email."
                   : "Reunión online · enviaremos el enlace al confirmar."}
               </div>
 
               {precio != null && (
                 <div className="text-[11px] text-[var(--widget-text-faint)] mt-2 leading-relaxed">
-                  Cancelando con 24 h o más de antelación se te devuelve el importe íntegro.
+                  Una vez confirmada, cancelando con 24 h o más de antelación se te devuelve el
+                  importe íntegro.
                 </div>
               )}
             </div>
@@ -503,41 +602,41 @@ export default function WidgetBookPage() {
               />
             </Field>
 
+            {/* Condiciones de la retención. Solo aparecen si la cita se cobra, y
+                la casilla NO viene marcada: es la prueba de que lo ha leído. */}
+            {precio != null && (
+              <label className="flex gap-2.5 items-start rounded-md border border-[var(--widget-border)] bg-[var(--widget-bg)] p-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={aceptaRetencion}
+                  onChange={(e) => setAceptaRetencion(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--brand-primary,var(--widget-button))]"
+                />
+                <span className="text-[12px] leading-relaxed text-[var(--widget-text-muted)]">
+                  {textoConsentimiento(precio).map((f, i) => (
+                    <span key={f} className={i === 0 ? "text-[var(--widget-text)]" : undefined}>
+                      {f}{" "}
+                    </span>
+                  ))}
+                </span>
+              </label>
+            )}
+
             <div className="pt-2">
               <button
                 type="submit"
-                disabled={submitting || redirigiendo}
+                disabled={submitting || (precio != null && !aceptaRetencion)}
                 className="w-full px-4 py-2.5 text-sm font-medium rounded-md text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)] focus:ring-offset-2 focus:ring-offset-[var(--widget-bg)]"
               >
-                {redirigiendo
-                  ? "Te llevamos al pago…"
-                  : submitting
-                    ? "Confirmando…"
-                    : precio != null
-                      ? `Pagar ${formatMoney(precio)} y reservar`
-                      : "Confirmar reserva"}
+                {submitting
+                  ? "Preparando…"
+                  : precio != null
+                    ? "Continuar al pago"
+                    : "Confirmar reserva"}
               </button>
-              {precio != null && !submitting && !redirigiendo && (
+              {precio != null && !submitting && (
                 <p className="text-[11px] text-[var(--widget-text-faint)] text-center mt-2">
-                  Te llevaremos a una página segura de Stripe para completar el pago.
-                </p>
-              )}
-
-              {enlaceManual && urlPago && (
-                <p className="text-[12px] text-center mt-3">
-                  ¿No se ha abierto la página de pago?{" "}
-                  <a
-                    href={urlPago}
-                    target="_top"
-                    rel="noreferrer"
-                    className="underline text-[var(--widget-text)] hover:opacity-80"
-                  >
-                    Continuar al pago
-                  </a>
-                  <br />
-                  <span className="text-[var(--widget-text-faint)]">
-                    Tu hueco queda reservado unos minutos.
-                  </span>
+                  El siguiente paso son los datos de tu tarjeta. No se te cobrará nada todavía.
                 </p>
               )}
             </div>

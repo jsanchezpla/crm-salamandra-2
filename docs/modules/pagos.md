@@ -257,10 +257,67 @@ Las citas creadas por Laura **desde el dashboard** (paciente que llama por telé
 
 ---
 
-## 4. Reembolsos
+## 3.4 El consentimiento (y por qué se archiva)
 
-Se enganchan en `lib/citas/cancelBooking.js`, que ya es el helper compartido por las
-dos vías de cancelación (enlace del email y portal "Mis citas").
+El paciente marca una casilla —**no premarcada**— antes de dar la tarjeta:
+
+> *Al reservar, tu banco retendrá 45,00 € en tu tarjeta. No es un cobro. Solo se te
+> cobrará cuando se confirme la cita. Si no se confirma, la retención se libera sola.*
+
+El texto y su versión viven en `lib/citas/consentimientoRetencion.js`, en un solo
+sitio, porque los usa el navegador (para enseñarlo) y el servidor (para archivar qué
+se aceptó). Si cada uno tuviera el suyo, archivaríamos la aceptación de un texto
+distinto del que se leyó, que es no tener prueba de nada.
+
+`/book` lo **exige** (sin él, 422) y guarda en `PaymentSession.metadata`: versión,
+texto literal, importe, fecha e IP. La IP la pone el servidor; si viniera del body no
+probaría nada. Al cambiar el texto hay que **subir la versión**.
+
+Existe porque el banco del paciente le enseña un cargo pendiente que él no distingue
+de un cobro. Sin esto, la primera reacción es una reclamación; con esto, la llamada
+dura un minuto.
+
+## 3.5 Qué ve la profesional
+
+| Estado | Etiqueta | Qué puede hacer |
+| --- | --- | --- |
+| `authorized` | **Retenido, sin cobrar · 45,00 €** + *caduca en N días* | **Confirmar y cobrar 45,00 €** · Rechazar |
+| `void` / `failed` | **Sin cobro · 45,00 €** | Confirmar (reintenta) · **Confirmar sin cobrar** · Rechazar |
+| `paid` | Cobrada | — |
+
+Dos decisiones deliberadas:
+
+- **Ningún estado de retención usa el verde de "Cobrada".** "Retenido" leído como
+  "cobrado" es la diferencia entre cerrar el día creyendo que has cobrado y saberlo.
+- **El botón dice el importe.** "Confirmar" a secas, cuando además mueve 45 €, oculta
+  justo el dato que hace falta en ese momento.
+
+**Confirmar sin cobrar** es la salida cuando la retención ha caducado: hay una persona
+real esperando y lo correcto no es rechazarla, es aceptarla y cobrarle en consulta.
+Queda en auditoría.
+
+> Pendiente: el tercer botón del diseño, **"Pedir otra tarjeta al paciente"**, no está
+> construido. Necesita autorización nueva (el PaymentIntent muerto no se reutiliza),
+> correo con token y página pública.
+
+---
+
+## 4. Cancelaciones: devolver o soltar
+
+Todas las vías pasan por `reembolsarCitaSiProcede`, que decide **qué forma tiene el
+dinero** antes de aplicar ninguna política:
+
+- **Solo retenido** → se **suelta** (no hay comisión ni movimiento que devolver). No
+  depende de quién cancele ni de la antelación: quedarse el dinero de alguien a quien
+  no se le ha dado la cita no es una política, es un error.
+- **Ya cobrado** → se **devuelve**, con la tabla de abajo.
+
+> **El agujero que esto tapó (2026-07-29):** de las cinco vías de cancelación, el
+> `DELETE` del panel era la ÚNICA que no liquidaba nada — cancelaba, auditaba y
+> avisaba, pero el dinero se quedaba donde estuviera. Y `decidirReembolso` corta en su
+> primera puerta si no consta `paid`, así que las retenidas ni se miraban: el paciente
+> se quedaba con el importe bloqueado hasta que caducara solo. La decisión se toma
+> DENTRO del helper, no en cada llamante, para que ninguna vía futura pueda olvidarse.
 
 | Quién cancela | Cuándo | Reembolso |
 | --- | --- | --- |
@@ -307,7 +364,17 @@ secreto del tenant, que es lo que hace `stripe listen`.
 | `_smoke-ocupa-hueco.mjs` | qué citas bloquean su hora, en 11 estados. **Lleva un control** que exige que el filtro nuevo dé un veredicto distinto al viejo: sin él, la prueba pasaría sin probar nada |
 | `_smoke-book-autorizacion.mjs` | `POST /book` por HTTP y, sobre todo, que el **doble clic no cree dos retenciones** |
 | `_smoke-webhook-retencion.mjs` | el webhook mete la solicitud en la lista de espera; idempotencia y firma falsa |
+| `_smoke-confirmar-cobrar.mjs` | confirmar cobra y rechazar suelta, con sesión de admin. Fija **la regla de oro**: sin dinero, la cita NO se confirma |
+| `_smoke-cancelar-retencion.mjs` | cancelar suelta el dinero por todas las vías, y una cita ya cobrada se sigue **devolviendo** |
 | `_probe-capture-before.mjs` | sonda: dónde vive de verdad `capture_before` |
+
+Utilidades de desarrollo (no son pruebas, sirven para mirar pantallas con datos de
+verdad): `dev-precio-cita.js`, `dev-cita-retenida.js` (con `--soltar` para simular una
+retención caducada), `dev-token-admin.js` y `dev-limpiar-pruebas.js`.
+
+> `dev-limpiar-pruebas.js` solo borra los prefijos de los propios scripts
+> (`smoke-…`, `ui-…`). Su primera versión filtraba por todo `@example.com` y se llevó
+> por delante los datos de ejemplo del seed, que usan ese mismo dominio.
 
 Todos limpian lo que crean y devuelven el precio del tipo de cita a como estaba.
 Se paran solos si detectan claves `sk_live_`.

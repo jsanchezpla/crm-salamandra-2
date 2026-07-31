@@ -88,27 +88,67 @@ function ModalityChip({ value }) {
 // Sin esto había que abrir el panel de Stripe para saber si una cita estaba
 // pagada. Las citas sin precio (paymentStatus 'none') no pintan nada: quien no
 // cobra online no debe ver ni rastro de esto.
+// La palabra IMPORTA. "Retenido" no puede leerse como "cobrado": es la
+// diferencia entre cerrar el día creyendo que has cobrado y saber que aún no.
+// Por eso ninguno de los estados de retención usa el verde de "Cobrada".
 const PAGO_LABELS = {
   pending: "Pago pendiente",
-  paid: "Pagada",
+  authorizing: "Esperando tarjeta",
+  authorized: "Retenido, sin cobrar",
+  capturing: "Cobrando…",
+  paid: "Cobrada",
   refunded: "Devuelta",
-  failed: "Pago fallido",
+  failed: "No se pudo cobrar",
+  void: "Sin cobro",
 };
 const PAGO_COLORS = {
   pending: "bg-amber-50 text-amber-700 border-amber-100",
+  authorizing: "bg-neutral-100 text-neutral-600 border-neutral-200",
+  authorized: "bg-amber-50 text-amber-800 border-amber-200",
+  capturing: "bg-sky-50 text-sky-700 border-sky-100",
   paid: "bg-emerald-50 text-emerald-700 border-emerald-100",
   refunded: "bg-sky-50 text-sky-700 border-sky-100",
   failed: "bg-red-50 text-red-700 border-red-100",
+  void: "bg-neutral-100 text-neutral-500 border-neutral-200",
+};
+const PAGO_AYUDA = {
+  authorized: "El importe está reservado en su tarjeta. Se cobrará al confirmar la cita.",
+  capturing: "Se está cobrando ahora mismo.",
+  failed: "El banco rechazó el cobro. Puedes reintentarlo o pedirle otra tarjeta.",
+  void: "No hay dinero reservado: se liberó o caducó. Puedes confirmarla y cobrar en consulta.",
 };
 
-function PagoChip({ estado, amount }) {
+/** Cuánto queda para que muera una retención, en cristiano. */
+export function cuantoQuedaDeRetencion(fecha) {
+  if (!fecha) return null;
+  const ms = new Date(fecha).getTime() - Date.now();
+  if (Number.isNaN(ms)) return null;
+  if (ms <= 0) return { texto: "caducada", urgente: true };
+  const horas = ms / 3_600_000;
+  if (horas < 1) return { texto: `caduca en ${Math.max(1, Math.round(ms / 60_000))} min`, urgente: true };
+  if (horas < 48) return { texto: `caduca en ${Math.round(horas)} h`, urgente: horas < 24 };
+  return { texto: `caduca en ${Math.round(horas / 24)} días`, urgente: false };
+}
+
+function PagoChip({ estado, amount, caducaEn }) {
   if (!estado || estado === "none") return null;
   const cls = PAGO_COLORS[estado] ?? "bg-neutral-100 text-neutral-500 border-neutral-200";
   const importe = Number.isInteger(amount) && amount > 0 ? ` · ${formatMoney(amount)}` : "";
+  const queda = estado === "authorized" ? cuantoQuedaDeRetencion(caducaEn) : null;
   return (
-    <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border ${cls}`}>
-      {PAGO_LABELS[estado] ?? estado}
-      {importe}
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border ${cls}`}
+        title={PAGO_AYUDA[estado] ?? undefined}
+      >
+        {PAGO_LABELS[estado] ?? estado}
+        {importe}
+      </span>
+      {queda && (
+        <span className={`text-[11px] ${queda.urgente ? "text-red-600 font-medium" : "text-neutral-400"}`}>
+          {queda.texto}
+        </span>
+      )}
     </span>
   );
 }
@@ -1005,7 +1045,11 @@ export default function CitasModule() {
                 </div>
                 <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                   <StatusChip value={openBooking.status} />
-                  <PagoChip estado={openBooking.paymentStatus} amount={openBooking.amount} />
+                  <PagoChip
+                    estado={openBooking.paymentStatus}
+                    amount={openBooking.amount}
+                    caducaEn={openBooking.authorizationExpiresAt}
+                  />
                   <ModalityChip value={openBooking.modality} />
                   {openBooking.eventType && (
                     <span className="inline-flex items-center gap-1 text-[11px] text-neutral-500">
@@ -1068,6 +1112,38 @@ export default function CitasModule() {
                     </span>
                   </div>
                 )}
+                {openBooking.paymentStatus === "authorizing" && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400">Cobro</span>
+                    <span className="text-neutral-500">
+                      Está introduciendo su tarjeta ahora mismo. Si lo deja a medias, el hueco se
+                      libera solo.
+                    </span>
+                  </div>
+                )}
+                {openBooking.paymentStatus === "authorized" && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400">Cobro</span>
+                    <span className="text-neutral-500">
+                      El importe está <b className="text-neutral-700">reservado</b> en su tarjeta,
+                      pero <b className="text-neutral-700">todavía no cobrado</b>. Se le cobrará en
+                      cuanto confirmes la cita.
+                      {openBooking.authorizationExpiresAt && (
+                        <>
+                          {" "}
+                          La reserva {cuantoQuedaDeRetencion(openBooking.authorizationExpiresAt)?.texto};
+                          después habría que pedirle la tarjeta otra vez.
+                        </>
+                      )}
+                    </span>
+                  </div>
+                )}
+                {openBooking.paymentStatus === "capturing" && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400">Cobro</span>
+                    <span className="text-neutral-500">Cobrándose ahora mismo…</span>
+                  </div>
+                )}
                 {openBooking.paymentStatus === "paid" && (
                   <div className="flex">
                     <span className="w-24 text-neutral-400">Cobro</span>
@@ -1082,10 +1158,24 @@ export default function CitasModule() {
                     <span className="text-neutral-500">Importe ya devuelto al paciente.</span>
                   </div>
                 )}
+                {openBooking.paymentStatus === "void" && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400">Cobro</span>
+                    <span className="text-neutral-500">
+                      No hay nada reservado en su tarjeta: se liberó o caducó.{" "}
+                      <b className="text-neutral-700">No se le ha cobrado nada.</b> Puedes confirmar
+                      la cita igualmente y cobrarle en consulta.
+                    </span>
+                  </div>
+                )}
                 {openBooking.paymentStatus === "failed" && (
                   <div className="flex">
                     <span className="w-24 text-neutral-400">Cobro</span>
-                    <span className="text-neutral-500">El pago no llegó a completarse.</span>
+                    <span className="text-neutral-500">
+                      El banco rechazó el cobro y{" "}
+                      <b className="text-neutral-700">no se le ha cobrado nada</b>. Puedes
+                      reintentarlo, pedirle otra tarjeta o confirmar y cobrar en consulta.
+                    </span>
                   </div>
                 )}
                 {openBooking.modality === "presencial" && openBooking.eventType?.location && (
@@ -1524,11 +1614,25 @@ function Waitlist({ refreshKey, onCountChange, onActioned }) {
 
   useEffect(() => { load(); }, [load, refreshKey]);
 
-  async function confirm(id) {
+  /**
+   * Confirmar. Cuando la cita tiene dinero retenido, esto ADEMÁS lo cobra, y si
+   * el cobro no sale la cita NO se confirma: el servidor responde 409 con el
+   * motivo. Se le enseña ese motivo tal cual —es una frase escrita para ella— en
+   * vez de un "error al confirmar" que no dice nada.
+   *
+   * `sinCobrar` es la salida para cuando la reserva de la tarjeta ha caducado:
+   * hay una persona real esperando y lo correcto no es rechazarla, es aceptarla
+   * y cobrarle en consulta.
+   */
+  async function confirm(id, { sinCobrar = false } = {}) {
     setBusyId(id);
     setError(null);
     try {
-      const r = await fetch(`/api/citas/bookings/${id}/confirm`, { method: "PATCH" });
+      const r = await fetch(`/api/citas/bookings/${id}/confirm`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sinCobrar ? { sinCobrar: true } : {}),
+      });
       const j = await r.json();
       if (!j.ok) { setError(j.error || "Error al confirmar"); return; }
       onActioned?.();
@@ -1586,7 +1690,11 @@ function Waitlist({ refreshKey, onCountChange, onActioned }) {
                   </span>
                   {/* Sin esto, una solicitud cobrada y otra sin pagar se veían
                       idénticas aquí, y se podía confirmar la que nadie ha pagado. */}
-                  <PagoChip estado={b.paymentStatus} amount={b.amount} />
+                  <PagoChip
+                    estado={b.paymentStatus}
+                    amount={b.amount}
+                    caducaEn={b.authorizationExpiresAt}
+                  />
                   <span className="text-xs text-neutral-400">{fmtRelative(b.createdAt)}</span>
                 </div>
                 <h3 className="text-base font-semibold text-neutral-900">{b.clientName}</h3>
@@ -1631,9 +1739,31 @@ function Waitlist({ refreshKey, onCountChange, onActioned }) {
                   </>
                 ) : (
                   <>
+                    {/* El botón dice lo que va a pasar. "Confirmar" a secas,
+                        cuando además cobra 45 €, es información que se le
+                        oculta justo en el momento en que la necesita. */}
                     <button onClick={() => confirm(b.id)} disabled={busyId === b.id} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2 rounded-md transition-colors disabled:opacity-50">
-                      {busyId === b.id ? "…" : "Confirmar"}
+                      {busyId === b.id
+                        ? "…"
+                        : b.paymentStatus === "authorized" && Number.isInteger(b.amount)
+                          ? `Confirmar y cobrar ${formatMoney(b.amount)}`
+                          : "Confirmar"}
                     </button>
+
+                    {/* Sin dinero reservado (caducó, lo soltaron o el banco lo
+                        rechazó) queda una persona real esperando. La salida no
+                        es rechazarla: es aceptarla y cobrarle en consulta. */}
+                    {(b.paymentStatus === "void" || b.paymentStatus === "failed") && (
+                      <button
+                        onClick={() => confirm(b.id, { sinCobrar: true })}
+                        disabled={busyId === b.id}
+                        className="bg-white hover:bg-neutral-50 text-neutral-700 border border-neutral-300 text-xs font-medium py-2 rounded-md transition-colors disabled:opacity-50"
+                        title="La cita queda confirmada sin cobrar nada online. Le cobras en consulta."
+                      >
+                        Confirmar sin cobrar
+                      </button>
+                    )}
+
                     <button onClick={() => setRejectFor(b.id)} disabled={busyId === b.id} className="bg-white hover:bg-red-50 text-red-600 border border-red-200 text-xs font-medium py-2 rounded-md transition-colors disabled:opacity-50">
                       Rechazar
                     </button>

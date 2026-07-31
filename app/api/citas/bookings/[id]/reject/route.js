@@ -66,10 +66,14 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     });
     await row.reload();
 
-    // Si la rechaza el profesional, el dinero vuelve íntegro pase lo que pase
-    // (política acordada). Best-effort: el rechazo no falla si Stripe no responde.
-    const reembolso = await reembolsarCitaSiProcede(ctx, row, { quienCancela: "profesional" });
-    if (reembolso.reembolsado) await row.reload();
+    // El dinero, sea cual sea su forma: si estaba solo retenido se suelta, y si
+    // ya se había cobrado se devuelve íntegro (lo rechaza la profesional, así
+    // que la antelación no cuenta). Los dos casos los resuelve el mismo helper
+    // para que ninguna vía de cancelación pueda olvidarse de uno.
+    //
+    // Best-effort: que Stripe no responda no puede impedir que ella rechace.
+    const dinero = await reembolsarCitaSiProcede(ctx, row, { quienCancela: "profesional" });
+    await row.reload();
 
     await logCitasAudit({
       tenantId: tenant.id,
@@ -77,8 +81,8 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       action: "citas.booking_rejected",
       entity: "Booking",
       entityId: row.id,
-      before: { status: before.status },
-      after: { status: "cancelled", cancellationReason: reason ?? null, reembolso },
+      before: { status: before.status, paymentStatus: before.paymentStatus, importe: before.amount ?? null },
+      after: { status: "cancelled", cancellationReason: reason ?? null, dinero },
       ip,
     });
 

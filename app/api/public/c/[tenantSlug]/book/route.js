@@ -24,6 +24,7 @@ import {
   VENTANA_TARJETA_MS,
 } from "../../../../../../lib/payments/autorizacion.js";
 import { getStripe, getTenantStripeConfig } from "../../../../../../lib/payments/stripeConfig.js";
+import { pruebaDeConsentimiento } from "../../../../../../lib/citas/consentimientoRetencion.js";
 import { meetUrlInicial } from "../../../../../../lib/citas/videollamada.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
 import {
@@ -270,6 +271,15 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     // siempre, así que los tenants que no cobran no notan absolutamente nada.
     const precio = Number.isInteger(eventType.price) && eventType.price > 0 ? eventType.price : null;
 
+    // ── Consentimiento de la retención ──────────────────────────────────────
+    // Se exige ANTES de crear nada. El paciente tiene que haber leído que su
+    // banco le va a enseñar un cargo pendiente que no es un cobro; si no, la
+    // primera reacción al verlo es una reclamación. La prueba se archiva con la
+    // sesión de pago (ver lib/citas/consentimientoRetencion.js).
+    if (precio && body.aceptaRetencion !== true) {
+      return error("Hay que aceptar las condiciones de la reserva para continuar", 422);
+    }
+
     if (precio && !tenantPuedeAutorizar(tenantContext)) {
       // Hay precio pero el profesional no ha terminado de configurar el cobro.
       // Mejor decirlo que crear una cita "gratis" que él cree cobrada.
@@ -450,7 +460,12 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
           amount: precio,
           description: `${eventType.name} — ${tenant.name}`,
           customerEmail: row.clientEmail,
-          metadata: { bookingId: row.id },
+          metadata: {
+            bookingId: row.id,
+            // La prueba de qué aceptó, cuándo y por cuánto. La IP la pone el
+            // servidor, no el cliente: si viniera del body no probaría nada.
+            consentimiento: pruebaDeConsentimiento({ importeCentimos: precio, ip }),
+          },
         });
         await row.update({ paymentSessionId: datosPago.paymentSession.id });
       } catch (err) {

@@ -85,6 +85,8 @@ async function main() {
       clientName: "Smoke Reserva",
       clientEmail: "smoke-book@example.com",
       clientPhone: "+34600111222",
+      // El servidor lo exige cuando la cita tiene precio.
+      aceptaRetencion: true,
     };
     const cabeceras = { "Content-Type": "application/json" };
 
@@ -119,6 +121,31 @@ async function main() {
     const ps = row?.paymentSessionId ? await PaymentSession.findByPk(row.paymentSessionId) : null;
     esperar(ps?.status === "authorizing", `PaymentSession enlazada y 'authorizing' (es '${ps?.status}')`);
     if (ps?.stripePaymentIntentId) intents.push(ps.stripePaymentIntentId);
+
+    // ── Consentimiento ─────────────────────────────────────────────────────
+    paso("2b. Queda archivado QUÉ aceptó, cuándo y por cuánto");
+    const prueba = ps?.metadata?.consentimiento;
+    esperar(!!prueba, "la sesión de pago guarda la prueba del consentimiento");
+    if (prueba) {
+      esperar(typeof prueba.version === "string" && prueba.version.length > 0,
+        `con versión del texto (${prueba.version})`);
+      esperar(prueba.importe === PRECIO, `y el importe que se le enseñó (${prueba.importe})`);
+      esperar(Array.isArray(prueba.texto) && prueba.texto.length > 0,
+        "y el texto literal que leyó, no una referencia a él");
+      esperar(!!prueba.aceptadoEn, "y cuándo lo aceptó");
+    }
+
+    paso("2c. Sin aceptar las condiciones NO se puede reservar");
+    const rSin = await json(`${BASE}/api/public/c/${SLUG}/book`, {
+      method: "POST", headers: cabeceras,
+      body: JSON.stringify({
+        ...cuerpo,
+        clientEmail: "smoke-book-sin@example.com",
+        scheduledAt: hora,
+        aceptaRetencion: false,
+      }),
+    });
+    esperar(rSin.status === 422, `se rechaza con 422 (es ${rSin.status})`);
 
     // ── Doble clic ─────────────────────────────────────────────────────────
     paso("3. Doble clic: NO puede crear una segunda retención");
@@ -158,7 +185,9 @@ async function main() {
       } catch { /* ya no existe */ }
     }
     await PaymentSession.destroy({ where: { entityType: "booking", entityId: creados } });
-    const n = await Booking.destroy({ where: { clientEmail: "smoke-book@example.com" } });
+    const n = await Booking.destroy({
+      where: { clientEmail: ["smoke-book@example.com", "smoke-book-sin@example.com"] },
+    });
     await eventType.update({ price: precioOriginal });
     process.stdout.write(`  · ${n} cita(s) y sus retenciones borradas; precio devuelto a ${precioOriginal ?? "sin precio"}\n`);
   }

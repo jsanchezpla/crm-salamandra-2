@@ -401,8 +401,9 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
 // ───────────────────────────────────────────────────────────────────────────
 // DELETE /api/citas/bookings/[id] — equivale a cancelar
 // ───────────────────────────────────────────────────────────────────────────
-export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
+export const DELETE = withTenant(async (request, { params }, ctx) => {
   try {
+    const { tenant, tenantModels, hasModule } = ctx;
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
     const userRole = request.headers.get("x-user-role") ?? "user";
     const userId = request.headers.get("x-user-id");
@@ -427,6 +428,18 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
       cancellationReason: reason ?? row.cancellationReason ?? null,
     });
 
+    // ── El dinero ────────────────────────────────────────────────────────────
+    // Esta vía era la ÚNICA de las cinco que no liquidaba nada: cancelaba la
+    // cita, la auditaba y avisaba al paciente, pero su dinero se quedaba donde
+    // estuviera. Con cobro ya hecho eso era quedarse con el importe de una cita
+    // que no se va a dar; con tarjeta retenida, dejarle el dinero bloqueado sin
+    // que nadie lo suelte.
+    //
+    // Cancelar desde el panel es cancelar la profesional, así que devuelve
+    // íntegro (o suelta la retención, según lo que hubiera).
+    const dinero = await reembolsarCitaSiProcede(ctx, row, { quienCancela: "profesional" });
+    await row.reload();
+
     await logCitasAudit({
       tenantId: tenant.id,
       userId,
@@ -434,7 +447,7 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
       entity: "Booking",
       entityId: row.id,
       before,
-      after: { status: "cancelled", cancellationReason: reason ?? null },
+      after: { status: "cancelled", cancellationReason: reason ?? null, dinero },
       ip,
     });
 
