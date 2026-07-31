@@ -89,6 +89,35 @@ function Panel({ titulo, ayuda, children, acciones }) {
   );
 }
 
+/**
+ * Nombre legible de una página a partir de su ruta.
+ *
+ * Cloudflare devuelve la ruta cruda, y la portada es literalmente "/". En una
+ * lista titulada "Páginas más vistas", una fila que pone «/» no dice nada: el
+ * cliente no tiene por qué saber que esa barra es su portada. Se le pone
+ * nombre, y a las demás se les quita la barra inicial y los guiones, que es
+ * como las llama la gente al hablar de ellas.
+ *
+ *   /                 → Inicio
+ *   /leather-line     → Leather line  ·  /leather-line
+ *   /about-us/        → About us      ·  /about-us
+ */
+function etiquetaDePagina(ruta) {
+  const limpia = String(ruta ?? "").trim();
+  if (!limpia || limpia === "/") return "Inicio";
+
+  // Se conserva la ruta al lado: es lo que permite distinguir dos páginas con
+  // títulos parecidos, y lo que se pega en el navegador para ir a verla.
+  const sinBarras = limpia.replace(/^\/+|\/+$/g, "");
+  if (!sinBarras) return "Inicio";
+
+  const ultimo = sinBarras.split("/").pop() ?? sinBarras;
+  const bonito = ultimo.replace(/[-_]+/g, " ").trim();
+  if (!bonito) return `/${sinBarras}`;
+
+  return `${bonito.charAt(0).toUpperCase()}${bonito.slice(1)}  ·  /${sinBarras}`;
+}
+
 function ListaBarras({ items, vacio = "Sin datos en este periodo", sufijo = "visitas" }) {
   if (!items || items.length === 0) {
     return <p className="text-sm text-neutral-400 py-6 text-center">{vacio}</p>;
@@ -443,27 +472,19 @@ export default function AnaliticasModule({ esAdmin = false }) {
       {/* Rango largo servido desde nuestra copia: hay que decir desde cuándo
           existe, porque antes de esa fecha no es que no hubiera visitas, es que
           nadie las estaba guardando todavía. */}
-      {datos?.fuente === "historico" && (
+      {/* El cartel explicativo de "esto viene del histórico propio" se quitó a
+          petición del cliente (2026-07-31): salía en TODOS los rangos largos y
+          repetía en cada visita algo que solo hace falta entender una vez.
+          Se conserva únicamente el aviso de cuando NO hay nada guardado, porque
+          ahí la pantalla saldría en blanco y eso sí se lee como una avería. */}
+      {datos?.fuente === "historico" && !datos.historicoDesde && (
         <div className="bg-neutral-50 border border-neutral-200 text-[var(--ink-700)] rounded-xl p-4 text-sm mb-6">
-          {datos.historicoDesde ? (
-            <>
-              <p className="font-medium mb-0.5">Histórico propio del CRM</p>
-              <p className="text-[var(--ink-500)]">
-                Cloudflare solo guarda 7 días, así que el CRM copia las visitas cada día para poder
-                enseñarte periodos largos. Hay datos guardados desde el {datos.historicoDesde}; antes de
-                esa fecha no hay nada porque todavía no se estaban recogiendo.
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="font-medium mb-0.5">Todavía no hay histórico</p>
-              <p className="text-[var(--ink-500)]">
-                El CRM empieza a guardar las visitas de la web a partir de ahora, una foto al día.
-                Dentro de unos días este periodo ya tendrá datos. Mientras tanto, usa «Hoy» o «7 días»,
-                que salen directamente de Cloudflare.
-              </p>
-            </>
-          )}
+          <p className="font-medium mb-0.5">Todavía no hay histórico</p>
+          <p className="text-[var(--ink-500)]">
+            El CRM empieza a guardar las visitas de la web a partir de ahora, una foto al día. Dentro
+            de unos días este periodo ya tendrá datos. Mientras tanto, usa «Hoy» o «7 días», que salen
+            directamente de Cloudflare.
+          </p>
         </div>
       )}
 
@@ -604,7 +625,7 @@ export default function AnaliticasModule({ esAdmin = false }) {
                     sufijo="vistas"
                     items={(datos?.paginas ?? []).slice(0, 10).map((p) => ({
                       clave: p.clave,
-                      etiqueta: p.clave || "/",
+                      etiqueta: etiquetaDePagina(p.clave),
                       valor: p.vistas,
                     }))}
                   />
