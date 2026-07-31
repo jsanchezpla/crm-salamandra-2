@@ -303,8 +303,8 @@ se lleva a la reunión de dirección y el CRM acabarían diciendo cosas distinta
   del sprint de pagos): el modelo `Booking` pide `authorization_expires_at` y en
   local no estaba, así que CUALQUIER consulta de citas —incluido el portal de la
   familia— devolvía 500. Se ejecutó en local el 31/07 (`npm run
-  db:migrate:booking-auth`) y **hay que ejecutarla en producción antes o durante
-  el próximo despliegue**. De paso se registró en `_module-migrations.js` (no
+  db:migrate:booking-auth`) y **ya se ejecutó en producción el 31/07**, durante
+  el despliegue del bloque 3. De paso se registró en `_module-migrations.js` (no
   estaba: un cliente nuevo con Citas nacía sin esas columnas) y se declaró su
   arista de orden.
 
@@ -317,6 +317,14 @@ se lleva a la reunión de dirección y el CRM acabarían diciendo cosas distinta
   entonces.
 - **App OAuth de Google** (Calendar/Meet): pendiente, bloquea la integración
   real de videollamada.
+- **Para que Aumenta use la firma del portal**: hay que subir su **Contrato del
+  Centro** (ficha de un paciente → contrato estándar) y **encenderles el
+  portal**, que hoy tienen apagado. Sin contrato estándar subido no se le pide
+  la firma a nadie, por diseño (ver trampa 8).
+- **Destinatarios del aviso de faltas**: sin configurar,
+  `settings.citas.avisoFaltas` está vacío y el aviso va a todos los usuarios
+  con rol admin. Si el centro quiere que vaya solo a administración, hay que
+  poner ahí sus ids.
 
 ---
 
