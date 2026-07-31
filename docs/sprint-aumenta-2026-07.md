@@ -315,10 +315,9 @@ se lleva a la reunión de dirección y el CRM acabarían diciendo cosas distinta
   estaba: un cliente nuevo con Citas nacía sin esas columnas) y se declaró su
   arista de orden.
 
-- **Agenda compartida de Aumenta**: está APAGADA. Para que las terapeutas se
-  vean las citas entre ellas hay que encenderla en Configuración. No se activó
-  por decisión: expone nombre, email y teléfono del paciente a toda la
-  plantilla, y eso lo decide el centro.
+- ~~**Agenda compartida de Aumenta**~~: **ENCENDIDA el 31/07** a petición de
+  Rodrigo. Todo el equipo ve ahora la agenda completa; el listado enseña
+  nombre, email y teléfono del paciente, así que el centro debería saberlo.
 - **Resend**: sigue sin configurar. Sin él no sale ningún correo — el CRM lo
   dice en vez de mentir, pero los recordatorios de cita no sirven hasta
   entonces.
