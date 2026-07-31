@@ -77,6 +77,8 @@ async function main() {
       body: JSON.stringify({
         eventTypeId: eventType.id, scheduledAt: horaDelHueco(huecos[huecos.length - 1]),
         clientName: "Smoke Cobro", clientEmail: MARCA, clientPhone: "+34600555666",
+        // Obligatorio desde que /book exige el consentimiento de la retención.
+        aceptaRetencion: true,
       }),
     });
     const jb = await rb.json();

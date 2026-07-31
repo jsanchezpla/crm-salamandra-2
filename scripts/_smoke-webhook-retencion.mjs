@@ -97,6 +97,8 @@ async function main() {
       body: JSON.stringify({
         eventTypeId: eventType.id, scheduledAt: hora,
         clientName: "Smoke Webhook", clientEmail: MARCA, clientPhone: "+34600333444",
+        // Obligatorio desde que /book exige el consentimiento de la retención.
+        aceptaRetencion: true,
       }),
     });
     const jb = await rb.json();
