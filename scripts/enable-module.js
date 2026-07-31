@@ -46,7 +46,7 @@ if (!slug || !moduleKey) {
 }
 
 getMasterDb();
-const { Tenant, TenantModule } = getMasterModels();
+const { Tenant, TenantModule, User } = getMasterModels();
 
 const tenant = await Tenant.findOne({ where: { slug } });
 if (!tenant) die(`No existe el tenant "${slug}"`);
@@ -121,7 +121,50 @@ process.stdout.write(`  ✓ Módulo ${created ? "creado" : "ya existía"} y habi
 // exponer esa ruta. Ojo: quedan 9 scripts más con el mismo import.
 process.stdout.write("    (la caché de tenant del servidor caduca sola en ~60 s)\n");
 
-// ── 2. El cambio de ESTRUCTURA ──────────────────────────────────────────────
+// ── 2. El PERMISO de los usuarios ───────────────────────────────────────────
+//
+// Activar un módulo en el tenant NO basta para que se vea. Hay DOS puertas y
+// esta es la segunda: si un usuario tiene `module_access` con una lista
+// explícita, el sidebar oculta lo que no esté en ella y `hasModule()` devuelve
+// false, así que la API responde 403 aunque el tenant tenga el módulo.
+//
+// Sin este aviso el alta PARECÍA terminada y el cliente no veía nada. Pasó el
+// 2026-07-31 con `analytics` en spain_enzymes: módulo activo, schema al día, y
+// el admin del cliente con module_access = ["leads"] seguía sin verlo en el
+// menú. Va ANTES del paso del schema para que salga también con --skip-schema.
+//
+// Solo afecta a quien tiene lista explícita: con `["all"]` o rol superadmin no
+// hace falta tocar nada.
+const usuarios = await User.findAll({
+  where: { tenantId: tenant.id },
+  attributes: ["id", "email", "role", "moduleAccess"],
+});
+
+const sinPermiso = usuarios.filter((u) => {
+  if (u.role === "superadmin") return false;
+  const acc = u.moduleAccess;
+  if (!Array.isArray(acc)) return false; // sin lista explícita = ve todo lo del tenant
+  return !acc.includes("all") && !acc.includes(moduleKey);
+});
+
+if (sinPermiso.length) {
+  if (flags.has("--grant-users")) {
+    for (const u of sinPermiso) {
+      await u.update({ moduleAccess: [...u.moduleAccess, moduleKey] });
+      process.stdout.write(`  ✓ permiso concedido a ${u.email}\n`);
+    }
+  } else {
+    process.stdout.write(
+      `\n  ⚠ ${sinPermiso.length} usuario(s) NO verán "${moduleKey}": su module_access\n` +
+        `    es una lista explícita que no lo incluye. El módulo está activo en el\n` +
+        `    tenant, pero para ellos el menú lo oculta y la API responde 403.\n\n` +
+        sinPermiso.map((u) => `      · ${u.email} → ${JSON.stringify(u.moduleAccess)}\n`).join("") +
+        `\n    Para dárselo:  node scripts/enable-module.js ${slug} ${moduleKey} --grant-users\n`
+    );
+  }
+}
+
+// ── 3. El cambio de ESTRUCTURA ──────────────────────────────────────────────
 if (flags.has("--skip-schema")) {
   process.stdout.write("\n  ⚠ --skip-schema: NO se han corrido las migraciones.\n");
   process.stdout.write(`    Acuérdate de: node scripts/ensure-tenant-schema.js ${slug}\n\n`);
