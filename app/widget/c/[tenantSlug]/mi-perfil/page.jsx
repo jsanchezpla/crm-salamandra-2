@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useCitasPortalSession } from "../_components/useCitasPortalSession.js";
 import MisDocumentos from "../_components/MisDocumentos.jsx";
+import ContratoGate from "../_components/ContratoGate.jsx";
 
 function fmtLong(iso) {
   if (!iso) return "—";
@@ -153,6 +154,13 @@ export default function MiPerfilPage() {
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState(null);
 
+  // Contrato del Centro (sprint 2026-07, 2.1): nada más entrar tapa el portal
+  // hasta que la familia firma. `aplazado` es el «lo firmo más tarde»: deja
+  // pasar, pero solo hasta que se cierre la pestaña — al volver a entrar la
+  // pantalla vuelve a salir, que para eso el contrato es obligatorio.
+  const [contrato, setContrato] = useState(null);
+  const [aplazado, setAplazado] = useState(false);
+
   // Info del tenant (branding / header / loginUrl).
   useEffect(() => {
     if (!tenantSlug) return;
@@ -180,9 +188,23 @@ export default function MiPerfilPage() {
     }
   }, [authFetch]);
 
+  const loadContrato = useCallback(async () => {
+    try {
+      const res = await authFetch("/citas-portal/contract", { cache: "no-store" });
+      if (!res.ok) return; // 401 lo gestiona el hook; cualquier otro fallo no cierra el portal
+      const j = await res.json();
+      setContrato(j.data ?? null);
+    } catch {
+      /* si no se puede consultar, no se bloquea a nadie */
+    }
+  }, [authFetch]);
+
   useEffect(() => {
-    if (status === "ready") loadBookings();
-  }, [status, loadBookings]);
+    if (status === "ready") {
+      loadBookings();
+      loadContrato();
+    }
+  }, [status, loadBookings, loadContrato]);
 
   const brandStyle = useMemo(() => {
     if (!info?.brand) return {};
@@ -250,6 +272,22 @@ export default function MiPerfilPage() {
   const history = data?.history ?? [];
   const isEmpty = !loadingData && !dataError && upcoming.length === 0 && history.length === 0;
 
+  // La pantalla del contrato va DELANTE de todo lo demás.
+  if (contrato?.requiereFirma && !aplazado) {
+    return (
+      <div style={brandStyle}>
+        <ContratoGate
+          estado={contrato}
+          authFetch={authFetch}
+          tenantSlug={tenantSlug}
+          profesional={info?.name}
+          onFirmado={(nuevo) => { setContrato((c) => ({ ...c, ...nuevo, requiereFirma: false, yaFirme: true })); loadContrato(); }}
+          onMasTarde={() => setAplazado(true)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen" style={brandStyle}>
       <header className="px-6 lg:px-10 py-6 border-b border-[var(--widget-border)] bg-[var(--widget-card)]">
@@ -274,6 +312,34 @@ export default function MiPerfilPage() {
       </header>
 
       <div className="max-w-3xl mx-auto px-4 lg:px-10 py-6 lg:py-10">
+        {/* Contrato pendiente: o lo aplazó quien entra, o falta la firma del
+            otro progenitor. En los dos casos la documentación sigue cerrada,
+            así que se dice aquí arriba y no escondido en «Mis documentos». */}
+        {contrato?.bloqueado && (
+          <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5 flex flex-wrap items-center justify-between gap-3">
+            <div className="text-[13px] text-amber-900 min-w-0">
+              {contrato.yaFirme ? (
+                <>
+                  Ya has firmado. Falta la firma de{" "}
+                  <span className="font-medium">{contrato.pendientes?.join(" y ") || "el otro tutor"}</span> para
+                  abrir la documentación.
+                </>
+              ) : (
+                <>Tienes el contrato del centro pendiente de firmar. Hasta entonces no podrás ver tus documentos.</>
+              )}
+            </div>
+            {!contrato.yaFirme && contrato.puedeFirmar && (
+              <button
+                type="button"
+                onClick={() => setAplazado(false)}
+                className="shrink-0 px-3.5 py-2 text-[13px] font-medium rounded-md text-white bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
+              >
+                Firmar ahora
+              </button>
+            )}
+          </div>
+        )}
+
         {loadingData && (
           <div className="text-[13px] text-[var(--widget-text-muted)] py-6">Cargando tus citas…</div>
         )}
@@ -341,7 +407,12 @@ export default function MiPerfilPage() {
           </div>
 
           {/* ── Mis documentos ── (siempre, aunque aún no haya citas) */}
-          <MisDocumentos tenantSlug={tenantSlug} authFetch={authFetch} profesional={info?.name} />
+          <MisDocumentos
+            tenantSlug={tenantSlug}
+            authFetch={authFetch}
+            profesional={info?.name}
+            onFirmar={contrato?.puedeFirmar ? () => setAplazado(false) : null}
+          />
         </div>
       </div>
 

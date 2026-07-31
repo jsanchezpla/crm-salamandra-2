@@ -123,6 +123,9 @@ export default function PacienteFichaPage() {
   const [coordinations, setCoordinations] = useState([]);
   const [citas, setCitas] = useState([]);
   const [therapists, setTherapists] = useState([]); // equipo, para asignar terapeuta
+  // Contrato de la FAMILIA (vive en el cliente pagador desde el sprint 2026-07,
+  // punto 1.1). La ficha del paciente solo lo muestra; se sube en la del cliente.
+  const [familyContract, setFamilyContract] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState("resumen");
@@ -163,6 +166,19 @@ export default function PacienteFichaPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Contrato de la familia. Resiliente: sin cliente pagador enlazado, o si el
+  // tenant no tiene el archivo de documentos, se queda en null y la ficha lo dice.
+  useEffect(() => {
+    const clientId = patient?.clientId;
+    if (!clientId) { setFamilyContract(null); return; }
+    let alive = true;
+    fetch(`/api/clients/${clientId}/contract`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => alive && setFamilyContract(j?.data ?? null))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [patient?.clientId]);
+
   // Equipo (para asignar/cambiar el terapeuta del paciente). Resiliente: si el
   // tenant no tiene módulo team (403) queda vacío y no se muestra el selector.
   useEffect(() => {
@@ -182,28 +198,6 @@ export default function PacienteFichaPage() {
     } catch { /* noop */ } finally { setBusy(false); }
   };
 
-  // Contrato (PDF): subir/reemplazar/eliminar desde la ficha. Así, si la subida
-  // falló al crear el paciente desde la ficha del cliente, se puede reintentar aquí.
-  const uploadContract = async (file) => {
-    if (!file) return;
-    setBusy(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const r = await fetch(`/api/pacientes/${id}/contract`, { method: "POST", body: fd });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "No se pudo subir el contrato"); }
-      load();
-    } catch (e) { window.alert(e.message); } finally { setBusy(false); }
-  };
-  const deleteContract = async () => {
-    if (!window.confirm("¿Eliminar el PDF del contrato?")) return;
-    setBusy(true);
-    try {
-      const r = await fetch(`/api/pacientes/${id}/contract`, { method: "DELETE" });
-      if (!r.ok && r.status !== 204) throw new Error("No se pudo eliminar");
-      load();
-    } catch (e) { window.alert(e.message); } finally { setBusy(false); }
-  };
 
   const openEdit = () => {
     setEditForm({
@@ -418,30 +412,45 @@ export default function PacienteFichaPage() {
                   );
                 })}
               </div>
+              {/* El contrato es de la FAMILIA y vive en la ficha del cliente
+                  pagador (sprint 2026-07, punto 1.1): quien firma y quien paga
+                  son los padres. Aquí solo se consulta; con dos hermanos en el
+                  centro, el contrato es el mismo para los dos. */}
               <div className="text-[11px] flex items-center gap-2 flex-wrap">
-                <span className="text-neutral-400">Contrato:</span>
-                {patient.contractSigned ? <span className="text-emerald-600">firmado</span> : <span className="text-neutral-400">pendiente</span>}
-                {patient.contractFile && (
+                <span className="text-neutral-400">Contrato de la familia:</span>
+                {!patient.clientId ? (
+                  <span className="text-neutral-400">sin cliente pagador enlazado</span>
+                ) : familyContract?.contract ? (
+                  <>
+                    <span className="text-emerald-600">subido</span>
+                    <a href={`/api/clients/${patient.clientId}/contract/download`} className="text-[var(--color-primary,#1B3A2D)] hover:underline">
+                      descargar PDF
+                    </a>
+                  </>
+                ) : (
+                  <span className="text-neutral-400">pendiente</span>
+                )}
+                {patient.clientId && (
+                  <a href={`/clientes/${patient.clientId}`} className="text-[var(--color-primary,#1B3A2D)] hover:underline">
+                    gestionar en la ficha del cliente
+                  </a>
+                )}
+                {familyContract?.firmantes > 0 && (
+                  <span className={familyContract.contratoCompleto ? "text-emerald-600" : "text-amber-600"}>
+                    · firmas {familyContract.firmas}/{familyContract.firmantes}
+                  </span>
+                )}
+              </div>
+              {/* Contrato antiguo, de cuando se subía por paciente. Solo aparece
+                  si la migración no lo pudo mover (paciente sin cliente). */}
+              {patient.contractFile && (
+                <div className="text-[11px] flex items-center gap-2 flex-wrap mt-1.5 text-neutral-400">
+                  <span>Contrato antiguo del paciente:</span>
                   <a href={`/api/pacientes/${patient.id}/contract`} className="text-[var(--color-primary,#1B3A2D)] hover:underline">
                     descargar PDF
                   </a>
-                )}
-                <label className={`text-[var(--color-primary,#1B3A2D)] hover:underline cursor-pointer ${busy ? "opacity-40 pointer-events-none" : ""}`}>
-                  {patient.contractFile ? "reemplazar" : "subir PDF"}
-                  <input
-                    type="file"
-                    accept="application/pdf"
-                    className="hidden"
-                    disabled={busy}
-                    onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; uploadContract(f); }}
-                  />
-                </label>
-                {patient.contractFile && (
-                  <button onClick={deleteContract} disabled={busy} className="text-rose-500 hover:text-rose-700 disabled:opacity-40">
-                    eliminar
-                  </button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
             <PatientBillingSection patientId={patient.id} clientId={patient.clientId} />
           </div>

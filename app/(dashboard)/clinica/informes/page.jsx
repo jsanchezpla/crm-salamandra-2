@@ -91,16 +91,21 @@ function ReportDrawer({ report, onClose, onDeliver, busy }) {
               <span className={`w-1.5 h-1.5 rounded-full ${STATUS_STYLES[report.status].dot}`} />
               {report.statusLabel}
             </span>
-            {report.status !== "delivered" && (
-              <button
-                onClick={() => onDeliver(report.id)}
-                disabled={busy}
-                className="text-xs px-3 py-2 rounded-lg text-white hover:opacity-90 ml-auto disabled:opacity-50"
-                style={{ background: "var(--color-primary, #1B3A2D)" }}
-              >
-                {busy ? "Guardando…" : "Marcar como entregado"}
-              </button>
-            )}
+            {/* «Enviar al paciente» (sprint 2026-07, punto 3.2): ya no es un
+                cambio de estado a mano, exporta el informe a PDF y lo publica
+                en el área privada de la familia. Reenviar sustituye el PDF. */}
+            <button
+              onClick={() => onDeliver(report.id)}
+              disabled={busy}
+              className="text-xs px-3 py-2 rounded-lg text-white hover:opacity-90 ml-auto disabled:opacity-50"
+              style={{ background: "var(--color-primary, #1B3A2D)" }}
+            >
+              {busy
+                ? "Enviando…"
+                : report.status === "delivered"
+                  ? "Volver a enviar"
+                  : "Enviar al paciente"}
+            </button>
           </div>
         </div>
       </aside>
@@ -154,10 +159,13 @@ export default function InformesPage() {
 
   const deliver = async (id) => {
     setBusy(true);
+    setErrorMsg(null);
     try {
-      const r = await fetch(`/api/clinica/reports/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "delivered" }) });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || "No se pudo actualizar");
+      // El endpoint genera el PDF y lo publica en el área privada de la
+      // familia; el estado "entregado" lo pone él, no la pantalla.
+      const r = await fetch(`/api/clinica/reports/${id}/enviar`, { method: "POST" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo enviar el informe");
       load();
     } catch (e) {
       setErrorMsg(e.message);

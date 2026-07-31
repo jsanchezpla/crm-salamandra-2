@@ -5,6 +5,8 @@ import { ok, created, error, unauthorized, forbidden, notFound, serverError } fr
 import { verifyPortalSession, readBearer } from "../../../../../../../lib/citas/portalSession.js";
 import { normalizeEmail } from "../../../../../../../lib/citas/validation.js";
 import { resolvePortalClient } from "../../../../../../../lib/citas/portalClient.js";
+import { estadoContrato } from "../../../../../../../lib/citas/portalContract.js";
+import { bloqueoImpagoActivo, mesesAbiertos, filtrarPorMes } from "../../../../../../../lib/citas/portalMeses.js";
 import {
   MAX_FILE_SIZE_BYTES,
   TENANT_QUOTA_BYTES,
@@ -42,10 +44,14 @@ function gate(tenant, hasModule) {
 }
 
 // Solo lo que este paciente puede ver: compartido con él o subido por él.
+// `informe` entra desde el sprint 2026-07 (punto 3.2): al pulsar «Enviar al
+// paciente» el informe clínico se publica aquí como PDF.
+const FUENTES_VISIBLES = ["ficha", "informe"];
+
 function wherePaciente(clientId) {
   return {
     clientId,
-    source: "ficha",
+    source: { [Op.in]: FUENTES_VISIBLES },
     [Op.or]: [{ clientVisible: true }, { uploadedByClient: true }],
   };
 }
@@ -100,6 +106,21 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
       });
     }
 
+    // Contrato sin firmar → aquí no se ve NADA (decisión de Rodrigo, 31/07:
+    // ni consultar ni subir). Es la palanca que hace que la firma no se quede
+    // eternamente pendiente. Mientras falte una de las dos firmas, cerrado
+    // también para el progenitor que sí firmó.
+    const contrato = await estadoContrato(tenantModels, client, null);
+    if (contrato.bloqueado) {
+      return ok({
+        documents: [],
+        canUpload: false,
+        blockedReason: "contrato",
+        contrato: { firmas: contrato.situacion.firmas, firmantes: contrato.situacion.firmantes, pendientes: contrato.situacion.pendientes },
+        limit: MAX_FILES_PER_CLIENT_PORTAL,
+      });
+    }
+
     const { Document } = tenantModels;
     const rows = await Document.findAll({
       where: wherePaciente(client.id),
@@ -107,15 +128,29 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
       limit: 200,
     });
 
+    // Bloqueo mensual por impago (punto 2.3), si el centro lo tiene encendido:
+    // los documentos que comparte el equipo se abren mes a mes al registrar el
+    // cobro de ese mes. Lo que subió la familia no se toca nunca.
+    let visibles = rows;
+    let mesesBloqueados = [];
+    if (bloqueoImpagoActivo(tenant)) {
+      const abiertos = await mesesAbiertos(tenantModels, client);
+      ({ visibles, mesesBloqueados } = filtrarPorMes(rows, abiertos));
+    }
+
     const mineCount = await Document.count({
       where: { clientId: client.id, source: "ficha", uploadedByClient: true },
     });
     const canUpload = mineCount < MAX_FILES_PER_CLIENT_PORTAL;
 
     return ok({
-      documents: rows.map(serialize),
+      documents: visibles.map(serialize),
       canUpload,
       blockedReason: canUpload ? null : "limite",
+      // Meses con documentos retenidos por un cobro pendiente. Se dicen: que
+      // un informe desaparezca sin explicación es peor que decir que falta un
+      // pago (y la familia sabe lo que debe mejor que nosotros).
+      mesesBloqueados,
       limit: MAX_FILES_PER_CLIENT_PORTAL,
     });
   } catch (err) {
@@ -132,6 +167,12 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
     if (response) return response;
     if (!client) {
       return error("Todavía no podemos asociar tus documentos. Escríbenos y lo revisamos.", 409);
+    }
+
+    // Mismo cerrojo que en el GET: sin contrato firmado no se sube nada.
+    const contrato = await estadoContrato(tenantModels, client, null);
+    if (contrato.bloqueado) {
+      return error("Para poder enviar documentos hace falta firmar antes el contrato del centro.", 409);
     }
 
     const { Document } = tenantModels;

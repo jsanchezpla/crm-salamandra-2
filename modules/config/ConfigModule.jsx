@@ -535,6 +535,21 @@ export default function ConfigModule() {
           )}
 
           {isAdmin && (
+            <BloqueoImpagoCard
+              activo={!!cfg.portalBloqueoImpago}
+              readOnly={!!cfg.readOnly}
+              onChange={(v) =>
+                patchTenant(
+                  { portalBloqueoImpago: v },
+                  v
+                    ? "Los documentos del portal se abrirán al registrar el cobro de cada mes"
+                    : "Las familias vuelven a ver toda su documentación"
+                )
+              }
+            />
+          )}
+
+          {isAdmin && (
             <VideollamadaCard
               meetModo={cfg.meetModo}
               readOnly={!!cfg.readOnly}
@@ -856,6 +871,41 @@ function AgendaCompartidaCard({ activo, readOnly, onChange }) {
       <p className="text-[10px] text-neutral-400 mt-2">
         Ojo: el listado de citas enseña <strong>nombre, email y teléfono</strong> del paciente. Al
         encenderlo, esos datos quedan a la vista de toda la plantilla.
+      </p>
+    </div>
+  );
+}
+
+function BloqueoImpagoCard({ activo, readOnly, onChange }) {
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-neutral-800">Documentos del portal por mes pagado</div>
+          <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+            En el área privada, la familia ve los documentos de un mes solo cuando consta el cobro
+            de ese mes. Al registrar el cobro, sus documentos se abren solos. Lo que sube la propia
+            familia nunca se bloquea, y siempre se puede abrir un mes a mano desde su ficha.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange(!activo)}
+          className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 ${activo ? "bg-[var(--color-primary,#1B3A2D)]" : "bg-neutral-300"}`}
+          aria-label={activo ? "Desactivar bloqueo por impago" : "Activar bloqueo por impago"}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${activo ? "translate-x-6" : "translate-x-1"}`} />
+        </button>
+      </div>
+      <div className="mt-1 text-[11px] font-medium">
+        {activo
+          ? <span className="text-emerald-700">Activo: cada mes se abre al registrar su cobro.</span>
+          : <span className="text-neutral-400">Apagado: la familia ve toda su documentación.</span>}
+      </div>
+      <p className="text-[10px] text-neutral-400 mt-2">
+        Ojo: si el centro no registra los cobros con su <strong>mes</strong>, al encenderlo
+        desaparece de golpe la documentación de todas las familias.
       </p>
     </div>
   );

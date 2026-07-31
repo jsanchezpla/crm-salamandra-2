@@ -132,6 +132,7 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("citas.meetModo", antes?.citas?.meetModo, despues?.citas?.meetModo);
   anota("citas.recordatorios", antes?.citas?.recordatorios, despues?.citas?.recordatorios);
   anota("citas.agendaCompartida", antes?.citas?.agendaCompartida, despues?.citas?.agendaCompartida);
+  anota("citas.portalBloqueoImpago", antes?.citas?.portalBloqueoImpago, despues?.citas?.portalBloqueoImpago);
 
   const huboSecretos = Object.keys(secretos).length > 0;
   const huboAbiertos = Object.keys(after).length > 0;
@@ -181,6 +182,8 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // encenderlo empieza a mandar correos a pacientes reales.
     recordatoriosCitas: t.settings?.citas?.recordatorios === true,
     agendaCompartida: t.settings?.citas?.agendaCompartida === true,
+    // Bloqueo del área privada mes a mes hasta que consta el cobro de ese mes.
+    portalBloqueoImpago: t.settings?.citas?.portalBloqueoImpago === true,
     brand: {
       primaryColor: brand.primaryColor ?? null,
       secondaryColor: brand.secondaryColor ?? null,
@@ -367,6 +370,12 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   if (typeof body.agendaCompartida === "boolean") {
     settings.citas = { ...(settings.citas ?? {}), agendaCompartida: body.agendaCompartida };
   }
+  // Bloqueo por impago del área privada (sprint Aumenta 2026-07, punto 2.3).
+  // APAGADO por defecto: encenderlo en un centro que no registra los cobros por
+  // mes esconde de golpe la documentación de todas las familias.
+  if (typeof body.portalBloqueoImpago === "boolean") {
+    settings.citas = { ...(settings.citas ?? {}), portalBloqueoImpago: body.portalBloqueoImpago };
+  }
 
   // Candado de la IA para empleados (no es un secreto): lista cerrada.
   if (body.aiAccess === "libre" || body.aiAccess === "restringido") {
@@ -411,6 +420,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     meetModo: settings.citas?.meetModo === "automatico" ? "automatico" : "manual",
     recordatoriosCitas: settings.citas?.recordatorios === true,
     agendaCompartida: settings.citas?.agendaCompartida === true,
+    portalBloqueoImpago: settings.citas?.portalBloqueoImpago === true,
     brand: {
       primaryColor: settings.brand.primaryColor ?? null,
       secondaryColor: settings.brand.secondaryColor ?? null,

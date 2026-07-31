@@ -21,12 +21,14 @@ import SpecialtyPicker from "../clinica/SpecialtyPicker.jsx";
 const RELATIONSHIPS = ["hijo/a", "tutor legal", "cónyuge", "el propio cliente", "hermano/a", "Otro"];
 const STATUS_LABEL = { active: "Activo", paused: "En pausa", discharged: "Alta" };
 
+// Sin contrato: desde el sprint 2026-07 (punto 1.1) el contrato es de la
+// FAMILIA y se sube en la sección "Contrato" de esta misma ficha, no por
+// paciente.
 const EMPTY_FORM = {
   specialties: [],
   firstName: "", lastName: "", dni: "", birthDate: "", address: "",
   relationship: "", relationshipOther: "", educationCenter: "",
   images: false, marketing: false, whatsapp: false,
-  contractSigned: false,
 };
 
 export default function ClientPatientsSection({ clientId }) {
@@ -36,7 +38,6 @@ export default function ClientPatientsSection({ clientId }) {
   const [separated, setSeparated] = useState(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -99,7 +100,6 @@ export default function ClientPatientsSection({ clientId }) {
         relationship,
         educationCenter: form.educationCenter.trim() || null,
         consents: { images: form.images, marketing: form.marketing, whatsapp: form.whatsapp },
-        contractSigned: form.contractSigned,
       };
       const r = await fetch(`/api/pacientes`, {
         method: "POST",
@@ -108,21 +108,8 @@ export default function ClientPatientsSection({ clientId }) {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "No se pudo crear el paciente");
-      const newId = d.data?.id;
 
-      // Subida opcional del contrato (necesita el id del paciente ya creado).
-      if (newId && file) {
-        const fd = new FormData();
-        fd.append("file", file);
-        const cr = await fetch(`/api/pacientes/${newId}/contract`, { method: "POST", body: fd });
-        if (!cr.ok) {
-          const cd = await cr.json().catch(() => ({}));
-          // El paciente ya se creó; avisamos del fallo del PDF sin abortar todo.
-          setError(`Paciente creado, pero el contrato no se pudo subir: ${cd.error || cr.status}`);
-        }
-      }
       setForm(EMPTY_FORM);
-      setFile(null);
       setCreating(false);
       load();
     } catch (e) {
@@ -173,7 +160,6 @@ export default function ClientPatientsSection({ clientId }) {
                   </a>
                   <div className="text-xs text-gray-500 flex items-center gap-2 flex-wrap">
                     {p.relationship && <span>{p.relationship}</span>}
-                    {p.contractSigned && <span className="text-emerald-600">· contrato ✓</span>}
                   </div>
                   {p.specialtyLabels?.length > 0 && (
                     <div className="mt-1 flex flex-wrap gap-1">
@@ -259,17 +245,6 @@ export default function ClientPatientsSection({ clientId }) {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-1">
-              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                <input type="checkbox" checked={form.contractSigned} onChange={(e) => set("contractSigned", e.target.checked)} className="w-4 h-4 rounded border-gray-300 accent-[var(--color-primary)]" />
-                Contrato firmado
-              </label>
-              <label className="text-sm text-gray-600">
-                <span className="text-xs text-gray-500 mr-2">Contrato (PDF):</span>
-                <input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-xs" />
-              </label>
-            </div>
-
             {error && <div className="text-xs text-rose-600">{error}</div>}
 
             <div className="flex items-center gap-2 pt-1">
@@ -280,7 +255,7 @@ export default function ClientPatientsSection({ clientId }) {
               >
                 {busy ? "Creando…" : "Crear paciente"}
               </button>
-              <button onClick={() => { setCreating(false); setForm(EMPTY_FORM); setFile(null); setError(null); }} className="text-sm text-gray-500">
+              <button onClick={() => { setCreating(false); setForm(EMPTY_FORM); setError(null); }} className="text-sm text-gray-500">
                 Cancelar
               </button>
             </div>

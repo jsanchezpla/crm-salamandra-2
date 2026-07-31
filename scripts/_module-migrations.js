@@ -47,6 +47,7 @@ export const ONE_OFF = {
   "migrate-attachments-to-documents": "migración de DATOS (mueve ficheros+filas), se corre a mano una vez, no la ejecuta el disparador",
   "backfill-nutricion-assignments": "DATOS: marca «Paciente Nutrición» a los clientes previos al auto-marcado (2026-07-27); repetible, se corre a mano",
   "backfill-patients-client": "DATOS: enlaza pacientes con su ficha de pagador a partir de sus citas/sesiones; dry-run por defecto, se corre a mano con --confirm",
+  "migrate-contract-patient-to-client": "DATOS: mueve el contrato del paciente a la familia (sprint 2026-07, 1.1); copia el PDF a `documents` y apunta clients.contract_document_id; dry-run por defecto, se corre a mano con --confirm",
   "podar-audit-logs": "MANTENIMIENTO del schema MASTER: retención del registro de auditoría; dry-run por defecto, lo lanza un temporizador semanal",
   "migrate-audit-logs-index": "índice en el schema MASTER (audit_logs), no por-tenant; idempotente, se corre a mano una vez",
 };
@@ -91,6 +92,11 @@ export const CORE = [
 export const MODULES = {
   leads: ["migrate-stage-to-string"],
 
+  // Tabla donde el CRM guarda su propia foto diaria de las visitas. Hace falta
+  // porque Cloudflare solo conserva 7 días: sin esta copia no hay forma de
+  // enseñar meses ni años, y el dato viejo se pierde para siempre.
+  analytics: ["migrate-web-visits-daily"],
+
   clients: [
     "migrate-client-attachments-and-notes",
     "migrate-patients-clients-phase1",
@@ -116,6 +122,13 @@ export const MODULES = {
     "migrate-booking-change-requests",
     // Marca de "ya se le mandó el recordatorio de la víspera".
     "migrate-booking-reminder",
+    // Retención de tarjeta (autorizado sin cobrar): valores nuevos del enum de
+    // payment_status y `authorization_expires_at`. Va aquí porque un tenant que
+    // estrene Citas nace con `bookings`, y sin esta migración el modelo pide una
+    // columna que no existe y CUALQUIER consulta de citas revienta con un 500
+    // (visto en local el 31/07). El script se salta solo los schemas sin las
+    // tablas de pagos, así que es inofensivo para quien no cobre online.
+    "migrate-booking-authorization",
     // Horario propio del profesional (team_member_hours): lo usa la generación
     // de huecos de citas, pero su tabla base es team_members (por eso está
     // también en `team`).

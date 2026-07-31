@@ -45,6 +45,11 @@ export const EXTRA_EDGES = [
     why: "booking-pending hace ALTER TYPE sobre enum_bookings_status, que nace con la tabla bookings de citas-sprint-1. El analizador no relaciona un enum con su tabla.",
   },
   {
+    before: "migrate-payments-sprint-1",
+    after: "migrate-booking-authorization",
+    why: "booking-authorization amplía enums y añade columnas recorriendo dos listas de constantes, así que el analizador no ve NINGÚN SQL estático. Toca bookings (de citas-sprint-1, ya encadenada por booking-pending) y payment_sessions, que la crea payments-sprint-1.",
+  },
+  {
     before: "migrate-team-fields",
     after: "migrate-rename-therapist-to-employee",
     why: "el rename busca columnas/índices que contengan 'therapist'; team-fields es quien los introduce.",

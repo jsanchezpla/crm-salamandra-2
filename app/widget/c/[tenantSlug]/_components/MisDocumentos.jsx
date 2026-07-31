@@ -41,9 +41,13 @@ function DocIcon() {
   );
 }
 
-export default function MisDocumentos({ tenantSlug, authFetch, profesional }) {
+export default function MisDocumentos({ tenantSlug, authFetch, profesional, onFirmar }) {
   const [docs, setDocs] = useState([]);
   const [canUpload, setCanUpload] = useState(false);
+  // Firmas que faltan cuando el bloqueo es por contrato (2026-07, punto 2.2).
+  const [contrato, setContrato] = useState(null);
+  // Meses cuyos documentos están retenidos por un cobro pendiente (punto 2.3).
+  const [mesesBloqueados, setMesesBloqueados] = useState([]);
   // Por qué no se puede subir: "sin-ficha" | "limite" | "sesion" | null.
   // Nunca dejamos el botón gris "porque sí": si está deshabilitado, hay motivo
   // escrito debajo.
@@ -76,6 +80,8 @@ export default function MisDocumentos({ tenantSlug, authFetch, profesional }) {
       setCanUpload(!!j.data?.canUpload);
       setBlockedReason(j.data?.canUpload ? null : (j.data?.blockedReason ?? "limite"));
       setSessionEmail(j.data?.sessionEmail ?? null);
+      setContrato(j.data?.contrato ?? null);
+      setMesesBloqueados(j.data?.mesesBloqueados ?? []);
     } catch (err) {
       setLoadError(err.message);
       setBlockedReason("error");
@@ -135,6 +141,38 @@ export default function MisDocumentos({ tenantSlug, authFetch, profesional }) {
 
   const nombreProfesional = profesional || "tu profesional";
 
+  // Contrato sin firmar: aquí no se enseña nada ni se deja subir. Se explica
+  // POR QUÉ y, si quien mira es quien tiene que firmar, se le ofrece hacerlo.
+  if (!loading && blockedReason === "contrato") {
+    const faltan = contrato?.pendientes?.length ? contrato.pendientes.join(" y ") : null;
+    return (
+      <section>
+        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-3">
+          Mis documentos
+        </div>
+        <div className="bg-[var(--widget-card)] rounded-xl border border-[var(--widget-border)] p-6 text-center">
+          <h3 className="text-[18px] text-[var(--widget-text)] tracking-tight mb-2" style={headingStyle}>
+            Pendiente de firmar el contrato
+          </h3>
+          <p className="text-[13px] text-[var(--widget-text-muted)] leading-relaxed mb-4">
+            En cuanto esté firmado, aquí verás lo que {nombreProfesional} comparta contigo y podrás
+            enviarle documentos.
+            {faltan && ` Falta la firma de ${faltan}.`}
+          </p>
+          {onFirmar && (
+            <button
+              type="button"
+              onClick={onFirmar}
+              className="inline-flex items-center px-4 py-2.5 text-sm font-medium rounded-md text-white bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
+            >
+              Firmar el contrato
+            </button>
+          )}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section>
       <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-3">
@@ -188,6 +226,26 @@ export default function MisDocumentos({ tenantSlug, authFetch, profesional }) {
             </div>
           )}
         </div>
+
+        {/* Documentos retenidos por un mes sin cobrar. Se dice: que un informe
+            desaparezca sin explicación es peor que nombrar el mes pendiente. */}
+        {mesesBloqueados.length > 0 && (
+          <div className="px-4 lg:px-5 py-3 border-b border-[var(--widget-border)] bg-amber-50/60">
+            <p className="text-[13px] text-amber-900">
+              Tienes documentos guardados de{" "}
+              <span className="font-medium">
+                {mesesBloqueados
+                  .map((m) => {
+                    const [a, mm] = m.mes.split("-").map(Number);
+                    return new Date(a, mm - 1, 1).toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+                  })
+                  .join(", ")}
+              </span>
+              {mesesBloqueados.length === 1 ? ", pendientes del pago de ese mes." : ", pendientes del pago de esos meses."}
+              {" En cuanto conste el cobro, aparecen aquí."}
+            </p>
+          </div>
+        )}
 
         {/* Listado */}
         <div className="px-4 lg:px-5 py-2">

@@ -13,6 +13,9 @@ import Link from "next/link";
 import ClientBillingSection from "../../components/billing/ClientBillingSection.jsx";
 import ClientModulesSection from "../../components/clients/ClientModulesSection.jsx";
 import ClientContactMethodsSection from "../../components/clients/ClientContactMethodsSection.jsx";
+import ClientContractSection from "../../components/clients/ClientContractSection.jsx";
+import ClientGuardiansSection from "../../components/clients/ClientGuardiansSection.jsx";
+import ClientPortalMonthsSection from "../../components/clients/ClientPortalMonthsSection.jsx";
 import ClientPatientsSection from "../../components/clients/ClientPatientsSection.jsx";
 
 const STATUSES = [
@@ -417,6 +420,15 @@ export default function ClientDetailModule() {
         <ClientModulesSection clientId={id} />
 
         <ClientPatientsSection clientId={id} />
+
+        {/* Los tutores son quienes firman; el contrato es de la familia, no del
+            paciente (sprint 2026-07, puntos 1.2 y 1.1). */}
+        <ClientGuardiansSection clientId={id} />
+
+        <ClientContractSection clientId={id} />
+
+        {/* Solo se pinta si el centro tiene el bloqueo por impago encendido. */}
+        <ClientPortalMonthsSection clientId={id} />
 
         <ClientBillingSection clientId={id} />
       </div>

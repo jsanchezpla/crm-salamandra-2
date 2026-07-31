@@ -171,7 +171,34 @@ para un mes cerrado es exacta.
 > Las secciones "Lo que NO hace" y "Backlog" de abajo describen el Sprint 1 visual
 > original; parte ya está cubierta por Fase 1.
 
+## «Enviar al paciente» (sprint Aumenta 2026-07, punto 3.2)
+
+`POST /api/clinica/reports/[id]/enviar` sustituye al viejo «Marcar como
+entregado», que era un cambio de estado que **no entregaba nada**: la familia no
+recibía el informe por ningún sitio.
+
+Ahora el endpoint exporta el informe a PDF (`lib/clinica/reportPdf.js`, pdfkit +
+Poppins, solo las secciones con contenido), lo publica como documento del
+archivo central (`source='informe'`, `client_visible=true`, con `clientId` y
+`patientId`) y lo enlaza en `ClinicalReport.deliveredDocumentId`, además de
+sellar `status='delivered'` y `deliveredAt`. La familia lo ve en «Mis
+documentos» de su área privada.
+
+- **Reenviar es reemplazar**: se genera un PDF nuevo y se borra el anterior,
+  para que nadie tenga dos versiones del mismo informe. El botón pasa a decir
+  «Volver a enviar».
+- Un informe de un paciente **sin cliente pagador** no se puede entregar (el
+  portal filtra por cliente): responde 409 explicándolo, no falla en silencio.
+- Auditoría: `clinica.report.sent`, sin el nombre del paciente (dato de salud;
+  `AuditLog` vive en el schema `master`, compartido).
+- Si el centro tiene el bloqueo por impago encendido, el informe queda sujeto a
+  la regla del mes como cualquier otro documento — ver `docs/modules/citas.md`.
+
 ## Lo que NO hace (Sprint 1)
+
+> Sección histórica: varias de estas líneas ya NO son ciertas (hay endpoints
+> CRUD, transcripción con Whisper, desempeño e incentivos, auditoría y envío de
+> informes a familias). Se conserva como registro del punto de partida.
 
 - No hay endpoints CRUD (`/api/clinica/*` no existe).
 - No hay dictado de voz ni transcripción automática.

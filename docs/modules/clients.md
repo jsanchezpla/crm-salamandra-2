@@ -25,6 +25,10 @@ campos. Resumen:
 - Portal: `portalAccess`, `portalEmail`.
 - `notes` TEXT (notas rápidas en la propia ficha — distinto del
   timeline `ClientNote`).
+- Familia (sprint Aumenta 2026-07): `separated` (padres separados),
+  `guardians` JSONB (tutores, ver `lib/clients/guardians.js`),
+  `portalUnlockedMonths` JSONB y `contractDocumentId` → contrato firmado
+  de la familia (ver «Contrato del Centro» más abajo).
 - `customFields` JSONB libre por tenant.
 
 ## Endpoints
@@ -42,6 +46,10 @@ campos. Resumen:
 | `/api/clients/[id]/attachments` | GET/POST | Archivos PDF (ver sección abajo) | JWT |
 | `/api/clients/[id]/attachments/[attachmentId]` | DELETE | Borrar attachment (BD + disco) | JWT |
 | `/api/clients/[id]/attachments/[attachmentId]/download` | GET | Stream del PDF | JWT |
+| `/api/clients/[id]/guardians` | GET/PUT | Padres/tutores de la familia + estado de firma | JWT + `hasModule(clients)` |
+| `/api/clients/[id]/contract` | GET/POST/DELETE | Contrato del Centro de la familia (PDF) | JWT + `hasModule(clients)` |
+| `/api/clients/[id]/contract/download` | GET | Stream del PDF del contrato | JWT + `hasModule(clients)` |
+| `/api/clients/[id]/portal-months` | GET/PUT | Meses abiertos del área privada (bloqueo por impago) | JWT + `hasModule(clients)` |
 | `/api/clients/[id]/projects` | GET | Proyectos del cliente | JWT + `hasModule(projects)` |
 | `/api/clients/[id]/billing-summary` | GET | Resumen facturas | JWT + `hasModule(billing)` |
 | `/api/clients/export` | GET | XLSX de listado | JWT |
@@ -60,6 +68,54 @@ y los overrides `modules/overrides/{spain-enzymes,nutri-laura}/LeadsModule.jsx`.
 
 Pendiente backlog: endpoint atómico server-side
 `POST /api/leads/[id]/convert` con transacción real.
+
+---
+
+## Contrato del Centro (sprint Aumenta 2026-07, punto 1.1)
+
+El contrato es de la **familia**, no del paciente: quien firma y quien paga son
+los padres. Antes vivía en `patients.contract_file` y con dos hermanos en el
+centro había **dos contratos para una sola familia**; con padres separados,
+además, no se sabía cuál de los dos tutores había firmado.
+
+- El PDF **no** tiene almacén propio: es una fila de `documents`
+  (`source='contrato'`, `client_id` del pagador, `client_visible=true`) y
+  `clients.contract_document_id` apunta a ella. Así aparece también en el
+  buscador de Documentos y no hay un segundo almacén que mantener.
+- Lógica compartida en `lib/clients/clientContract.js`. Si el puntero apunta a
+  un documento borrado, cae al último `source='contrato'` de ese cliente: sin
+  ese respaldo, borrar el documento desde el módulo Documentos dejaría la ficha
+  diciendo «sin contrato» teniendo uno.
+- Solo PDF, validado por **magic bytes** (`%PDF-`), 25 MB y cuota de tenant
+  como cualquier documento.
+- La **firma** es otra cosa (`ContractSignature` + `lib/clients/guardians.js`):
+  este endpoint solo responde «¿hay contrato subido?» y de paso cuántas firmas
+  faltan. Con padres separados hacen falta las dos. La firma web se hace en el
+  portal de la familia — ver `docs/modules/citas.md` → «Contrato del Centro en
+  el portal». **El contrato en papel subido aquí cuenta como firmado** y
+  desactiva la firma web (decisión de Rodrigo, 31/07).
+- **Quién firma**: los tutores marcados como firmantes; si la ficha no tiene
+  tutores, el titular (`effectiveSigners()`). La lista de tutores se edita en
+  la sección «Padres y tutores» de la ficha
+  (`components/clients/ClientGuardiansSection.jsx`): el endpoint existía desde
+  el 29/07 pero no había pantalla, así que en la práctica ninguna familia tenía
+  tutores y el caso de los padres separados no se podía representar.
+- UI: sección «Contrato» de la ficha de cliente
+  (`components/clients/ClientContractSection.jsx`). Se esconde sola si el
+  tenant no tiene la tabla `documents` (`archivoDisponible: false`).
+- Auditoría: `client.contract.uploaded` / `client.contract.deleted` (solo
+  nombre del fichero y tamaño — el contrato lleva datos personales y la
+  auditoría vive en `master`, compartida).
+
+**Migración de lo ya subido**: `scripts/migrate-contract-patient-to-client.js`
+(ONE_OFF, dry-run por defecto, deja `.rollback.sql`). Mueve el contrato solo si
+el paciente tiene cliente pagador; con dos hermanos con contrato mueve el más
+reciente y lista el otro. El PDF se **copia** (el original sigue en
+`{uploads}/{slug}/patients/{id}/`), así que el rollback no depende de ficheros.
+
+`GET /api/pacientes/[id]/contract` sobrevive **solo como descarga** de los
+contratos que la migración no pudo mover (pacientes sin cliente). Sus POST y
+DELETE se retiraron.
 
 ---
 

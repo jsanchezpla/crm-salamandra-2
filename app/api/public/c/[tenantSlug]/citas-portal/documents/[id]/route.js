@@ -5,6 +5,8 @@ import { verifyPortalSession, readBearer } from "../../../../../../../../lib/cit
 import { normalizeEmail } from "../../../../../../../../lib/citas/validation.js";
 import { resolvePortalClient } from "../../../../../../../../lib/citas/portalClient.js";
 import { readDocumentStream } from "../../../../../../../../lib/documents/documentStorage.js";
+import { estadoContrato } from "../../../../../../../../lib/citas/portalContract.js";
+import { bloqueoImpagoActivo, mesesAbiertos, mesDe } from "../../../../../../../../lib/citas/portalMeses.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -36,16 +38,32 @@ export const GET = withPublicTenant(async (request, ctx, { slug, tenant, tenantM
     const client = await resolvePortalClient(tenantModels, normalized);
     if (!client) return notFound("Documento no encontrado");
 
+    // El cerrojo del contrato va TAMBIÉN aquí, no solo en el listado: si no,
+    // un enlace de descarga guardado de antes seguiría abriendo el documento
+    // con el contrato sin firmar.
+    const contrato = await estadoContrato(tenantModels, client, null);
+    if (contrato.bloqueado) return forbidden("Falta firmar el contrato del centro");
+
     const { Document } = tenantModels;
     const row = await Document.findOne({
       where: {
         id,
         clientId: client.id,
-        source: "ficha",
+        // Mismas fuentes que el listado: la ficha y los informes clínicos
+        // entregados (sprint 2026-07, punto 3.2).
+        source: { [Op.in]: ["ficha", "informe"] },
         [Op.or]: [{ clientVisible: true }, { uploadedByClient: true }],
       },
     });
     if (!row) return notFound("Documento no encontrado");
+
+    // Bloqueo mensual por impago: la MISMA regla que el listado, o un enlace
+    // guardado seguiría abriendo un documento de un mes sin pagar.
+    if (bloqueoImpagoActivo(tenant) && !row.uploadedByClient) {
+      const mes = mesDe(row.createdAt);
+      const abiertos = await mesesAbiertos(tenantModels, client);
+      if (mes && !abiertos.has(mes)) return forbidden("Este documento está pendiente del pago de su mes");
+    }
 
     let stream;
     let size;

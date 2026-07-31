@@ -134,6 +134,12 @@ Semántica de las claves en `PATCH`:
 
 No hay migración: `settings` es JSONB, ya existe en `master.tenants`.
 
+Interruptores de Citas que viajan por el mismo `PATCH` (todos booleanos, todos
+**apagados** por defecto): `recordatoriosCitas`, `agendaCompartida` y
+`portalBloqueoImpago` (sprint Aumenta 2026-07, punto 2.3 — los documentos del
+área privada se abren mes a mes al registrar el cobro de ese mes; detalle en
+`docs/modules/citas.md`). Los tres quedan anotados en `AuditLog` al cambiarlos.
+
 ---
 
 ## Ficheros

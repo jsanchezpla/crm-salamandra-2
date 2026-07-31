@@ -169,6 +169,70 @@ migración). Otros tenants conservan el comportamiento histórico.
 | `/api/public/c/[tenantSlug]/booking/[token]` | GET | Detalle desde token |
 | `/api/public/c/[tenantSlug]/cancel/[token]` | POST | Cancelar desde token |
 
+### Portal de la familia (sesión SSO, `Authorization: Bearer`)
+
+| Ruta | Método | Descripción |
+|---|---|---|
+| `/api/public/c/[tenantSlug]/citas-portal/session` | POST | Canjea el `wpsso` de WordPress por sesión del portal |
+| `/api/public/c/[tenantSlug]/citas-portal/bookings` | GET | Citas de quien ha entrado |
+| `/api/public/c/[tenantSlug]/citas-portal/cancel/[id]` | POST | Cancelar su cita |
+| `/api/public/c/[tenantSlug]/citas-portal/documents` | GET/POST | «Mis documentos» (cerrado si falta firmar el contrato) |
+| `/api/public/c/[tenantSlug]/citas-portal/documents/[id]` | GET | Descarga de un documento suyo |
+| `/api/public/c/[tenantSlug]/citas-portal/contract` | GET | Estado del Contrato del Centro (ver abajo) |
+| `/api/public/c/[tenantSlug]/citas-portal/contract/sign` | POST | Firma dibujada `{ signature: dataURL PNG }` |
+| `/api/public/c/[tenantSlug]/citas-portal/contract/documento` | GET | PDF del contrato, para leerlo antes de firmar |
+
+## Contrato del Centro en el portal (sprint Aumenta 2026-07, 2.1 y 2.2)
+
+Al entrar al portal, lo PRIMERO es el contrato: si falta la firma de quien
+entra, `ContratoGate.jsx` tapa la pantalla entera. Hay un «Lo firmo más tarde»
+que deja pasar a ver las citas, pero **«Mis documentos» sigue cerrado** —ni
+consultar ni subir— hasta que firmen todos (decisión de Rodrigo, 31/07). El
+aplazamiento dura lo que la pestaña: al volver a entrar, el contrato vuelve a
+salir.
+
+- **Quién firma**: los tutores marcados como firmantes en la ficha
+  (`Client.guardians`). Si la ficha no tiene tutores, firma el **titular** —
+  `effectiveSigners()` en `lib/clients/clientContract.js`—. Sin ese respaldo,
+  «no hay firmantes» dejaría a la familia encerrada en una puerta sin llave.
+- **Qué firma**: el contrato estándar del centro
+  (`documents.source='contract_template'`). Si el equipo ya subió a la ficha el
+  contrato firmado en **papel**, cuenta como firmado y no se pide firma web.
+- **Padres separados**: hacen falta las DOS firmas. El que ya firmó ve un aviso
+  de que falta el otro, y la documentación sigue cerrada para ambos.
+- **Qué se guarda** (`ContractSignature`): imagen PNG de la firma
+  (`lib/clients/signatureStorage.js`, fuera del archivo de documentos), nombre
+  del firmante en ese momento, fecha, IP y navegador. Índice único
+  cliente+tutor: firmar dos veces no duplica nada.
+- El cerrojo se aplica también en la **descarga individual** de documentos, no
+  solo en el listado: si no, un enlace guardado seguiría abriendo el PDF.
+- Lógica compartida en `lib/citas/portalContract.js` (los ficheros de rutas de
+  Next solo deben exportar manejadores HTTP).
+
+## Bloqueo mensual por impago (sprint Aumenta 2026-07, 2.3)
+
+`settings.citas.portalBloqueoImpago`, **apagado por defecto** (interruptor en
+Configuración). Con él encendido, la familia ve los documentos de un mes solo
+si consta el cobro de ese mes:
+
+- Mes abierto = existe un `Payment` **completado** con `periodMonth` de ese mes
+  para esa familia, **o** el mes está en `Client.portalUnlockedMonths` (abierto
+  a mano desde la ficha: becas, acuerdos de pago, cobros que entraron fuera del
+  CRM). Regla única en `lib/citas/portalMeses.js`.
+- **Nunca** se bloquea lo que subió la propia familia (`uploadedByClient`):
+  retenerle sus analíticas por un recibo no es palanca de cobro.
+- El portal **dice** qué meses tiene retenidos y cuántos documentos hay en cada
+  uno; no los esconde en silencio. Nombres de fichero, no: el título de un
+  informe clínico ya es información sensible.
+- La misma regla se aplica en la descarga individual (un enlace guardado no
+  puede saltarse el cerrojo).
+- Se gestiona en la ficha del cliente → «Acceso al portal por meses»
+  (`GET/PUT /api/clients/[id]/portal-months`, auditado).
+
+⚠️ Encenderlo en un centro que NO registra los cobros con su mes esconde de
+golpe la documentación de todas las familias. Por eso está apagado por defecto
+y el interruptor lo avisa.
+
 ### Admin (JWT + `hasModule(citas)`)
 
 | Ruta | Método | Descripción |

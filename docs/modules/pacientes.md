@@ -106,6 +106,17 @@ Fichero: `models/tenant/Patient.model.js`. Tabla: `patients`.
 
 Índices: `(last_name, first_name)`, `(main_therapist_id)`, `(status)`.
 
+> **Contrato: ya no es del paciente** (sprint Aumenta 2026-07, punto 1.1).
+> `contractSigned` y `contractFile` quedan como **legado**: el contrato pasó a
+> la familia (`clients.contract_document_id` + `documents.source='contrato'`),
+> porque quien firma y quien paga son los padres y dos hermanos en el centro
+> generaban dos contratos para una misma familia. Se sube y se borra en
+> `/api/clients/[id]/contract`; la ficha del paciente solo lo muestra y enlaza
+> a la del cliente. `GET /api/pacientes/[id]/contract` sigue vivo únicamente
+> para descargar los PDF que la migración no pudo mover (pacientes sin cliente
+> pagador). Detalle y migración: `docs/modules/clients.md` → «Contrato del
+> Centro».
+
 Enum: `enum_patients_status` con valores `active`, `paused`,
 `discharged`.
 
