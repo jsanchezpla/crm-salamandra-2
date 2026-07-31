@@ -35,16 +35,20 @@ escribe nadie»), no para cuadrar cifras.
 | --- | --- |
 | `lib/analytics/cloudflareConfig.js` | Resuelve las credenciales del tenant (patrón BYOK, como `lib/ai/anthropicKey.js`) |
 | `lib/analytics/cloudflareRum.js` | Cliente de la GraphQL Analytics API de Cloudflare (dataset RUM) |
-| `app/api/analiticas/route.js` | `GET /api/analiticas?dias=7\|30\|90`, gateado por `hasModule("analytics")` |
+| `app/api/analiticas/route.js` | `GET /api/analiticas?dias=1\|7\|30\|90\|180\|365`, gateado por `hasModule("analytics")` |
+| `lib/analytics/historico.js` | Lee los rangos largos de nuestra propia copia (`web_visits_daily`) |
+| `models/tenant/WebVisitDaily.model.js` | La foto diaria guardada por el CRM |
+| `scripts/capturar-visitas-web.js` | Captura diaria (timer de systemd en el VPS) |
+| `scripts/migrate-web-visits-daily.js` | Crea `web_visits_daily` en cada schema |
 | `app/(dashboard)/analiticas/page.jsx` | Página; lee el rol y lo baja como booleano |
 | `modules/analytics/AnaliticasModule.jsx` | Toda la interfaz (KPIs, mapa, serie, listas) |
 | `modules/analytics/worldMap.js` | **Generado**: contornos de países en SVG |
 | `scripts/check-cloudflare-analytics.js` | Diagnóstico de solo lectura desde consola |
 
-No hay modelos ni tablas: **el módulo no guarda nada**. Los datos viven en
-Cloudflare y se leen en cada consulta (con 5 minutos de caché en memoria, ver
-`lib/tenant/tenantCache.js`). Por eso `enable-module.js` no tiene migraciones
-que ejecutar para este módulo.
+Los rangos cortos (hoy, 7 días) se leen de Cloudflare en cada consulta, con 5
+minutos de caché en memoria (`lib/tenant/tenantCache.js`). Los largos salen de
+`web_visits_daily`, la copia diaria que guarda el propio CRM porque Cloudflare
+solo conserva 7 días — ver «Histórico propio» al final de este documento.
 
 ---
 
@@ -78,10 +82,14 @@ esa opción al escribir «Analytics»). No puede tocar DNS, dominios ni nada má
 docker exec crm-salamandra-app-1 node scripts/enable-module.js <slug> analytics --force
 ```
 
-`--force` es necesario **la primera vez**: `analytics` no está en
-`MODULE_KEYS` ni en el mapa de migraciones, así que `enable-module.js` lo trata
-como clave desconocida (protección contra typos). A partir de que un tenant lo
-tenga, ya aparece como conocido y el `--force` sobra.
+`--force` es necesario **la primera vez**: `analytics` no está en `MODULE_KEYS`,
+así que `enable-module.js` lo trata como clave desconocida (protección contra
+typos). A partir de que un tenant lo tenga, ya aparece como conocido y el
+`--force` sobra.
+
+Desde que existe el histórico, el módulo **sí tiene migración**
+(`migrate-web-visits-daily`, registrada en `scripts/_module-migrations.js`), así
+que el alta crea también la tabla `web_visits_daily`.
 
 Después, comprobar la conexión:
 
@@ -138,3 +146,84 @@ anillos de menos de 0,7 px.
 - **Caché de 5 minutos** por tenant y rango. Cloudflare limita la frecuencia de
   llamadas y estos datos se agregan por día: no tiene sentido consultarlos en
   cada repintado.
+
+---
+
+## Histórico propio: por qué el CRM copia las visitas
+
+**Cloudflare Web Analytics solo conserva 7 días.** Medido contra producción el
+2026-07-31, no sacado de la documentación: si el inicio del rango está a 8 días
+o más del día de hoy, la consulta devuelve cero filas. Y no da error — responde
+HTTP 200 con la lista vacía, indistinguible de «esta web no ha tenido visitas».
+Se comprobó además que **no** es un límite de anchura del rango: 31 días de
+ancho funcionan mientras el rango empiece dentro de la ventana retenida. Lo que
+caduca es el dato viejo, no la consulta larga. La constante está en
+`MAX_DIAS_RUM` (`lib/analytics/cloudflareRum.js`) por si el plan de la cuenta
+cambia.
+
+Pasada esa ventana el dato **no se puede recuperar de ninguna manera**. Así que
+para enseñar meses, trimestres o años el CRM va copiando cada día lo que
+Cloudflare da mientras lo da.
+
+### Las dos fuentes
+
+| Rango en pantalla | De dónde sale |
+| --- | --- |
+| Hoy, 7 días | Cloudflare **en vivo** (el día en curso sale al minuto) |
+| Mes, trimestre, semestre, año | La copia propia, tabla `web_visits_daily` |
+
+La respuesta del endpoint trae `fuente` (`cloudflare` \| `historico`) y, en el
+segundo caso, `historicoDesde`: el primer día del que hay copia. La pantalla lo
+enseña porque antes de esa fecha **no es que no hubiera visitas, es que nadie
+las estaba guardando** — y un cero sin explicación se lee como una avería.
+
+### La tabla
+
+`web_visits_daily`, una por tenant. Una fila por `(fecha, dimension, valor)`,
+desnormalizada por dimensión para que los rangos largos salgan con un `GROUP BY`
+normal. `valor` es cadena vacía —no NULL— en la dimensión `total`: en PostgreSQL
+dos NULL no chocan en un índice único, y con NULL el mismo día podría entrar dos
+veces. Migración: `scripts/migrate-web-visits-daily.js`.
+
+### La captura
+
+`scripts/capturar-visitas-web.js`. Recorre los tenants con `analytics` activo
+leyendo `master.tenants` en tiempo de ejecución (regla 12), pide los últimos 7
+días y hace upsert. Es **idempotente**: repetir la pasada corrige huecos y no
+duplica. Un tenant que falle (token caducado, Cloudflare caído) no corta a los
+demás; el código de salida es 1 si falló alguno.
+
+Al pedir 7 días cada día, la captura aguanta que el disparador falle varios días
+seguidos: mientras no se pierdan **7 pasadas consecutivas**, el hueco se rellena
+solo en la siguiente. Esa holgura es a propósito.
+
+> **Lo que Cloudflare NO da por día**: los desgloses (países, páginas,
+> referrers, dispositivos, navegadores) vienen agregados de TODO el rango
+> consultado; solo la serie temporal viene partida por días. Por eso los
+> desgloses se guardan atribuidos al último día del rango y **la captura tiene
+> que ser diaria**. Si se lanzara semanalmente, los desgloses de esos 7 días
+> quedarían apilados en uno solo. Los totales diarios sí son correctos siempre,
+> porque salen de la serie — y por eso `consultarHistorico` suma los totales de
+> la serie y nunca de los desgloses.
+
+### El disparador
+
+**Timer de systemd**, que es como están las otras tareas del VPS
+(`crm-backup`, `crm-recordatorios`). El servidor **no tiene cron instalado**:
+un `/etc/cron.d/…` allí no se ejecuta nunca.
+
+```
+/etc/systemd/system/crm-capturar-visitas.service
+/etc/systemd/system/crm-capturar-visitas.timer     → 03:40 UTC, Persistent=true
+/var/log/crm-capturar-visitas.log
+```
+
+Comprobar que sigue vivo:
+
+```
+systemctl list-timers crm-capturar-visitas.timer
+tail /var/log/crm-capturar-visitas.log
+```
+
+**Si el timer se para, el histórico deja de crecer en silencio** y lo no
+capturado se pierde para siempre. No hay forma de recuperarlo después.
