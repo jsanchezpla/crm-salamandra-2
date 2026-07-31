@@ -4,7 +4,8 @@ import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok } from "../../../lib/utils/apiResponse.js";
 import { ForbiddenError, ValidationError } from "../../../lib/utils/errors.js";
 import { getTenantCloudflareConfig } from "../../../lib/analytics/cloudflareConfig.js";
-import { consultarRum } from "../../../lib/analytics/cloudflareRum.js";
+import { consultarRum, MAX_DIAS_RUM } from "../../../lib/analytics/cloudflareRum.js";
+import { consultarHistorico, primerDiaGuardado } from "../../../lib/analytics/historico.js";
 import { cacheGet, cacheSet } from "../../../lib/tenant/tenantCache.js";
 
 /**
@@ -21,12 +22,18 @@ import { cacheGet, cacheSet } from "../../../lib/tenant/tenantCache.js";
  * visita-a-lead.
  */
 
-// Cloudflare solo conserva los últimos MAX_DIAS_RUM días (7, medido en
-// producción el 2026-07-31). Ofrecer 30 y 90 era vender lo que la fuente no
-// puede dar: la consulta salía bien y la pantalla enseñaba ceros. Se dejan los
-// rangos que SÍ tienen respuesta; `consultarRum` recorta y avisa por si a algún
-// tenant le llega una petición vieja con ?dias=90.
-const RANGOS_VALIDOS = [1, 7];
+// Dos fuentes, una pantalla:
+//
+//   ≤ 7 días  → Cloudflare EN VIVO. Es lo único que Cloudflare conserva, y así
+//               el día en curso sale al minuto, sin esperar a la captura.
+//   > 7 días  → NUESTRA copia (tabla web_visits_daily), que llena a diario
+//               scripts/capturar-visitas-web.js.
+//
+// El histórico largo solo tiene datos desde que se encendió la captura: lo
+// anterior Cloudflare ya lo había tirado y no hay forma de recuperarlo. Por eso
+// la respuesta incluye `historicoDesde`, para que la pantalla lo diga en vez de
+// enseñar un vacío que parece una avería.
+const RANGOS_VALIDOS = [1, 7, 30, 90, 180, 365];
 
 // Cloudflare limita la frecuencia de llamadas y estos datos se mueven despacio
 // (se agregan por día). Cinco minutos evitan machacar la API cuando alguien
@@ -115,14 +122,24 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
   const cacheado = cacheGet(claveCache);
   if (cacheado) return ok(cacheado);
 
-  const rum = await consultarRum({
-    token: config.token,
-    accountId: config.accountId,
-    siteTag: config.siteTag,
-    desde,
-    hasta,
-    signal: request.signal,
-  });
+  // Rangos cortos: Cloudflare en vivo. Largos: nuestra copia diaria.
+  const enVivo = dias <= MAX_DIAS_RUM;
+  let historicoDesde = null;
+
+  let rum;
+  if (enVivo) {
+    rum = await consultarRum({
+      token: config.token,
+      accountId: config.accountId,
+      siteTag: config.siteTag,
+      desde,
+      hasta,
+      signal: request.signal,
+    });
+  } else {
+    rum = await consultarHistorico({ tenantModels: ctx.tenantModels, desde, hasta });
+    historicoDesde = await primerDiaGuardado(ctx.tenantModels.WebVisitDaily);
+  }
 
   // El cruce con leads es un extra: si el tenant no tiene el módulo comercial,
   // o si la consulta falla, la pantalla de visitas debe seguir funcionando.
@@ -140,6 +157,9 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     siteTagInvalido: config.siteTagInvalido,
     filtradoPorSitio: !!config.siteTag,
     rango: { desde, hasta, dias },
+    // De dónde salieron los números, y desde cuándo hay copia guardada.
+    fuente: enVivo ? "cloudflare" : "historico",
+    historicoDesde,
     ...rum,
     leads,
     actualizado: new Date().toISOString(),

@@ -18,13 +18,17 @@ import { MAPA_VIEWBOX, MAPA_ALTO, MAPA_ANCHO, PAISES } from "./worldMap.js";
  * completo con reinstalación de dependencias.
  */
 
-// Cloudflare solo guarda los últimos 7 días de visitas (medido contra
-// producción el 2026-07-31). Había opciones de 30 y 90 días: la consulta salía
-// "bien" y la pantalla enseñaba ceros, que es justo lo que parece una web sin
-// tráfico. Mejor no ofrecer lo que la fuente no puede responder.
+// Los rangos cortos salen de Cloudflare en vivo (es lo único que conserva: 7
+// días). Los largos salen de la copia diaria que guarda el propio CRM, y por
+// eso solo tienen datos desde que se encendió la captura — la pantalla lo avisa
+// con `historicoDesde` en vez de enseñar un vacío que parece una avería.
 const RANGOS = [
   { dias: 1, etiqueta: "Hoy" },
   { dias: 7, etiqueta: "7 días" },
+  { dias: 30, etiqueta: "Mes" },
+  { dias: 90, etiqueta: "Trimestre" },
+  { dias: 180, etiqueta: "Semestre" },
+  { dias: 365, etiqueta: "Año" },
 ];
 
 const numero = new Intl.NumberFormat("es-ES");
@@ -433,6 +437,33 @@ export default function AnaliticasModule({ esAdmin = false }) {
         <div className="bg-red-50 border border-red-100 text-red-700 rounded-xl p-4 text-sm mb-6">
           <p className="font-medium mb-0.5">No se pudieron cargar las visitas</p>
           <p className="text-red-600/90">{error}</p>
+        </div>
+      )}
+
+      {/* Rango largo servido desde nuestra copia: hay que decir desde cuándo
+          existe, porque antes de esa fecha no es que no hubiera visitas, es que
+          nadie las estaba guardando todavía. */}
+      {datos?.fuente === "historico" && (
+        <div className="bg-neutral-50 border border-neutral-200 text-[var(--ink-700)] rounded-xl p-4 text-sm mb-6">
+          {datos.historicoDesde ? (
+            <>
+              <p className="font-medium mb-0.5">Histórico propio del CRM</p>
+              <p className="text-[var(--ink-500)]">
+                Cloudflare solo guarda 7 días, así que el CRM copia las visitas cada día para poder
+                enseñarte periodos largos. Hay datos guardados desde el {datos.historicoDesde}; antes de
+                esa fecha no hay nada porque todavía no se estaban recogiendo.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="font-medium mb-0.5">Todavía no hay histórico</p>
+              <p className="text-[var(--ink-500)]">
+                El CRM empieza a guardar las visitas de la web a partir de ahora, una foto al día.
+                Dentro de unos días este periodo ya tendrá datos. Mientras tanto, usa «Hoy» o «7 días»,
+                que salen directamente de Cloudflare.
+              </p>
+            </>
+          )}
         </div>
       )}
 
