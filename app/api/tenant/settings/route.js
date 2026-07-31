@@ -7,6 +7,7 @@ import { isDemoTenant, assertNotDemoMasterWrite } from "../../../../lib/demo/isD
 import { encryptSecret, decryptSecret, isEncryptionConfigured } from "../../../../lib/crypto/secretBox.js";
 import { isAllowedAnthropicModel, DEFAULT_ANTHROPIC_MODEL } from "../../../../lib/ai/anthropicModel.js";
 import { getTenantStripeConfig } from "../../../../lib/payments/stripeConfig.js";
+import { getTenantCloudflareConfig } from "../../../../lib/analytics/cloudflareConfig.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { avisarCambioDeConfiguracion } from "../../../../lib/configuracion/avisoCambio.js";
 
@@ -66,6 +67,7 @@ function applyPlain(target, field, value) {
 // —ni cifrado— sino solo qué les pasó: puesta, cambiada o borrada.
 const CAMPOS_SECRETOS_AUDIT = [
   "anthropicApiKey",
+  "cloudflareApiToken",
   "googlePlacesApiKey",
   "openaiApiKey",
   "resendApiKey",
@@ -77,6 +79,8 @@ const CAMPOS_SECRETOS_AUDIT = [
 // Estos NO son secretos y su valor sí ayuda a entender qué pasó.
 const CAMPOS_ABIERTOS_AUDIT = [
   "anthropicModel",
+  "cloudflareAccountId",
+  "cloudflareSiteTag",
   "resendFromEmail",
   "resendReplyTo",
   "stripePublishableKey",
@@ -189,6 +193,15 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
       },
       googlePlaces: ks(integ.googlePlacesApiKey),
       openai: ks(integ.openaiApiKey),
+      // Visitas de la web (módulo Analíticas). `ready` = se puede consultar de
+      // verdad: sin id de cuenta el token no sirve para nada, igual que en
+      // Stripe hacen falta las dos piezas.
+      cloudflare: {
+        ...ks(integ.cloudflareApiToken),
+        accountId: integ.cloudflareAccountId ?? null,
+        siteTag: integ.cloudflareSiteTag ?? null,
+        ready: getTenantCloudflareConfig({ tenant: t }).configured,
+      },
       whatsapp: {
         ...ks(integ.whatsappToken),
         phoneNumberId: integ.whatsappPhoneNumberId ?? null,
@@ -253,6 +266,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   // realista, no teórico.
   const CAMPOS_SECRETOS = [
     "anthropicApiKey",
+    "cloudflareApiToken",
     "googlePlacesApiKey",
     "openaiApiKey",
     "resendApiKey",
@@ -309,6 +323,13 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   // claves); el identificador del número no lo es.
   applyKey(settings.integrations, "whatsappToken", body.whatsappToken);
   applyPlain(settings.integrations, "whatsappPhoneNumberId", body.whatsappPhoneNumberId);
+
+  // Cloudflare Web Analytics (módulo Analíticas). El token de API es SECRETO;
+  // el id de cuenta y el del sitio no lo son (salen de la URL del panel de
+  // Cloudflare y no dan acceso a nada por sí solos).
+  applyKey(settings.integrations, "cloudflareApiToken", body.cloudflareApiToken);
+  applyPlain(settings.integrations, "cloudflareAccountId", body.cloudflareAccountId);
+  applyPlain(settings.integrations, "cloudflareSiteTag", body.cloudflareSiteTag);
 
   // Modo de videollamada del módulo Citas. Lista cerrada.
   if (body.meetModo === "manual" || body.meetModo === "automatico") {
@@ -379,6 +400,12 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
       },
       googlePlaces: keyStatus(settings.integrations.googlePlacesApiKey),
       openai: keyStatus(settings.integrations.openaiApiKey),
+      cloudflare: {
+        ...keyStatus(settings.integrations.cloudflareApiToken),
+        accountId: settings.integrations.cloudflareAccountId ?? null,
+        siteTag: settings.integrations.cloudflareSiteTag ?? null,
+        ready: getTenantCloudflareConfig({ tenant: { settings } }).configured,
+      },
       whatsapp: {
         ...keyStatus(settings.integrations.whatsappToken),
         phoneNumberId: settings.integrations.whatsappPhoneNumberId ?? null,

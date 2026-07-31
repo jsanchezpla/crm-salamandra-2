@@ -28,6 +28,7 @@ Antes de implementar cambios en un módulo concreto, lee su doc:
 | Formularios       | `docs/modules/formularios.md` | Implementado (nutri_laura)      |
 | Outreach          | `docs/modules/outreach.md`   | Completo en local, sin desplegar  |
 | Soporte           | `docs/modules/support.md`    | Completo en local (demo), sin desplegar |
+| Analíticas        | `docs/modules/analytics.md`  | Implementado (spain_enzymes)     |
 | Configuración     | `docs/modules/configuracion.md` | Implementado (claves IA por tenant) |
 | Emails (infra)    | `docs/modules/emails.md`     | Infra transversal                |
 
@@ -93,9 +94,12 @@ El proyecto tiene DOS entornos completamente separados con bases de datos indepe
 Los datos de cada entorno son completamente independientes — no hay sincronización de datos entre local y producción.**
 
 > **Nota sobre tenants:** la lista de tenants en local y en producción NO es necesariamente la misma.
-> Algunos tenants viven solo en producción (`retorika`, `abarcaia`) y otros solo en local
-> (`spain_enzymes` por ahora). Cualquier script de migración debe leer la lista de schemas a
-> procesar desde `master.tenants` en tiempo de ejecución, nunca hardcodearla.
+> Algunos tenants viven solo en producción (`retorika`, `abarcaia`). Y sobre todo: **un mismo
+> tenant puede tener módulos DISTINTOS en cada entorno** — `spain_enzymes` tiene cinco en local
+> y solo los contratados en producción. Cualquier script de migración debe leer la lista de
+> schemas a procesar desde `master.tenants` en tiempo de ejecución, nunca hardcodearla, y nadie
+> debe dar por buena la lista de módulos de esta tabla sin verificarla con
+> `scripts/inspect-tenant-modules.js <slug>` contra el entorno que toque.
 
 ### Flujo de deploy (`deploy.sh`)
 
@@ -145,7 +149,7 @@ PostgreSQL DB: salamandra
 ├── schema: crm_quality_energy  ← Quality Energy (leads)
 ├── schema: crm_aumenta         ← Aumenta (leads)
 ├── schema: crm_abarcaia        ← Abarcaia (leads + referidos) — solo producción
-└── schema: crm_spain_enzymes   ← Spain Enzymes (leads, clientes, inventario, billing) — solo local por ahora
+└── schema: crm_spain_enzymes   ← Spain Enzymes (leads + analytics en prod; en local además clientes/inventario/billing/orders)
 ```
 
 ### Motor de personalización por tenant
@@ -254,7 +258,7 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 | `quality_energy` | local + prod    | leads                                                        | Empresa energética. Tuvo `referidos` en su día (limpiado por `remove-abarcaia-from-quality.js`) |
 | `aumenta`        | local + prod    | leads\*, training\*, clients, calendar, citas, clinica, pacientes, projects, billing, inventory, orders, team, documents (13) | Centro de psicología y formación. \* = override UI: `aumenta/LeadsModule` y `aumenta/FormacionOverview`. Label sidebar "Leads" → "Interesados". **CRM en uso REAL desde 2026-07-24**: datos de ejemplo borrados (`reset-aumenta-real-data.js`; los LEADS eran reales y se conservaron) y equipo real de 15 personas dado de alta (`seed-aumenta-equipo-real.js`: 13 logins tipo `nombre_aumenta` con rol `user`; dirección usa admin@aumenta.es). Desempeño/Dirección/Productividad son SOLO admin. NO wipear/sembrar sin permiso. |
 | `abarcaia`       | solo producción | leads, referidos                                             | Programa de referidos vía formulario público                                                    |
-| `spain_enzymes`  | solo local      | leads, clients, inventory, billing, orders                   | Tenant de pruebas creado por Jorge. Módulo orders (Pedidos) específico de Spain Enzymes         |
+| `spain_enzymes`  | local + prod    | **prod: leads, analytics** · local: leads, clients, inventory, billing, orders | **Corregido 2026-07-31**: ya NO es "solo local". Está EN PRODUCCIÓN y es un cliente real (admin `admin@spain-enzymes.salamandra`); acabó contratando **solo leads**, así que la lista larga de módulos es la del entorno local, no la suya. Verificado contra el endpoint público: `x-tenant: spain_enzymes` resuelve y `leads` está activo. La web (spainenzymes.com, WordPress) manda los leads del formulario a `/api/public/leads`. `analytics` se le añade en el sprint del 2026-07-31 |
 | `nutri_laura`    | local + prod    | citas, leads, clients, training, nutricion, formularios, team | Nutricionista (Laura). Override leads (embudo nutricional) + conversión lead→paciente + override overview formación (B2C, sin TutorLMS aún). Subido a prod 2026-06-23 con sprint Recetario C1. **Módulo `team` activado 2026-07-24** (`add-team-module-nutri-laura.js`): Laura es el 1er miembro (nutricionista); va a fichar más. NO tiene clinica/pacientes: sus "pacientes" son Clients con plan de menú. |
 
 Datos verificados contra `master.tenants` y `master.tenant_modules` el
@@ -312,7 +316,7 @@ aplique.
 | automations     | #12 Automatizaciones & Flujos | Pendiente (motor n8n externo, sin módulo UI) | —                           |
 | ai              | #13 IA & Asistente            | Pendiente                                    | —                           |
 | integrations    | #14 Integraciones & API       | Pendiente (infra parcial: webhooks/external) | —                           |
-| analytics       | #15 Analítica & BI            | Pendiente                                    | —                           |
+| analytics       | #15 Analítica & BI            | Implementado (spain_enzymes) — visitas web   | `docs/modules/analytics.md` |
 | communications  | #16 Comunicaciones            | Pendiente (modelos `Message`/`Notification`) | —                           |
 
 ### Fuera del plan 1-16 (ya implementados)
@@ -342,6 +346,11 @@ aplique.
 ⚠️ **Retirados del menú (2026-07-27)**: `analytics`, `ai`, `automations`,
 `integrations` — eran entradas sin página detrás y llevaban a un 404 en mitad
 de una demo. Se vuelven a añadir cuando exista su página.
+
+✅ **`analytics` reincorporado (2026-07-31)**: ya tiene página (`/analiticas`) y
+endpoint (`/api/analiticas`), así que cumple la condición. Vuelve dentro del
+área **Comercial** (junto a Leads), no en el grupo "Inteligencia", que sigue
+desaparecido. `ai`, `automations` e `integrations` continúan fuera.
 
 > **`leads` vs `sales`**: hay dos `moduleKey` para el área comercial
 > (`leads` → `/leads`, `sales` → `/comercial`). En producción los tenants

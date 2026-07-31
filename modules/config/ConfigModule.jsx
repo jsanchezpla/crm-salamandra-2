@@ -77,6 +77,26 @@ const AI_PROVIDERS = {
     ],
     note: "Con el límite de cuota a 1.000 es imposible que Google te cobre: la API deja de responder al llegar al tope gratis.",
   },
+  cloudflare: {
+    title: "Cloudflare (visitas de la web)",
+    subtitle: "Alimenta el módulo Analíticas: visitas, países, páginas y origen del tráfico. Medición sin cookies.",
+    field: "cloudflareApiToken",
+    // Los tokens de Cloudflare no tienen prefijo fijo, así que no se valida por
+    // forma: se comprueba de verdad en la primera consulta, que es cuando
+    // Cloudflare responde si sirve o no.
+    prefix: "",
+    platformUrl: "https://dash.cloudflare.com/profile/api-tokens",
+    platformLabel: "Abrir tokens de Cloudflare",
+    steps: [
+      "La web tiene que tener ya activado Cloudflare Web Analytics y su fragmento de medición puesto.",
+      "Entra en dash.cloudflare.com → Mi perfil → Tokens de API.",
+      'Pulsa "Crear token" y elige "Crear token personalizado" (empezar desde cero).',
+      'Añade UN solo permiso: Cuenta · "Analytics de Cloudflare Web" · Lectura. En "Recursos de la cuenta" elige la cuenta de la web.',
+      "Crea el token y cópialo (Cloudflare solo lo enseña una vez).",
+      "Pégalo abajo, rellena el identificador de cuenta y pulsa Guardar.",
+    ],
+    note: "Es un token de SOLO LECTURA de estadísticas: no puede tocar dominios, DNS ni nada de la cuenta. Web Analytics es gratis.",
+  },
   resend: {
     title: "Resend (correo de captación)",
     subtitle: "Enviar el correo modelo en frío a los leads captados.",
@@ -405,6 +425,23 @@ export default function ConfigModule() {
             onClear={() => patchTenant({ googlePlacesApiKey: null }, "Clave de Google eliminada")}
           />
           <ApiKeyCard
+            provider={AI_PROVIDERS.cloudflare}
+            status={cfg.integrations?.cloudflare}
+            isAdmin={isAdmin}
+            onSave={(value) => patchTenant({ cloudflareApiToken: value }, "Token de Cloudflare guardado")}
+            onClear={() => patchTenant({ cloudflareApiToken: null }, "Token de Cloudflare eliminado")}
+            extra={
+              <CloudflareIdsField
+                accountId={cfg.integrations?.cloudflare?.accountId ?? ""}
+                siteTag={cfg.integrations?.cloudflare?.siteTag ?? ""}
+                ready={cfg.integrations?.cloudflare?.ready}
+                isAdmin={isAdmin}
+                onSaveAccount={(v) => patchTenant({ cloudflareAccountId: v }, "Cuenta de Cloudflare guardada")}
+                onSaveSite={(v) => patchTenant({ cloudflareSiteTag: v }, "Sitio de Cloudflare guardado")}
+              />
+            }
+          />
+          <ApiKeyCard
             provider={AI_PROVIDERS.resend}
             status={cfg.integrations?.resend}
             isAdmin={isAdmin}
@@ -701,6 +738,83 @@ function WhatsappPhoneField({ value, isAdmin, onSave }) {
 }
 
 /**
+ * Los dos identificadores de Cloudflare que acompañan al token.
+ *
+ * Ninguno es secreto: salen de la barra de direcciones del panel de Cloudflare
+ * y por sí solos no dan acceso a nada. El de cuenta es OBLIGATORIO (sin él el
+ * token no sabe a qué cuenta preguntar); el de sitio es opcional y solo hace
+ * falta cuando la misma cuenta mide varias webs.
+ */
+function CloudflareIdsField({ accountId, siteTag, ready, isAdmin, onSaveAccount, onSaveSite }) {
+  const [cuenta, setCuenta] = useState(accountId ?? "");
+  const [sitio, setSitio] = useState(siteTag ?? "");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => { setCuenta(accountId ?? ""); }, [accountId]);
+  useEffect(() => { setSitio(siteTag ?? ""); }, [siteTag]);
+
+  const cuentaSucia = (cuenta ?? "").trim() !== (accountId ?? "");
+  const sitioSucio = (sitio ?? "").trim() !== (siteTag ?? "");
+
+  const guardar = async (fn, valor) => {
+    setBusy(true);
+    try {
+      await fn(valor.trim() || null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const campo = (etiqueta, ayuda, valor, setValor, sucio, onSave, placeholder) => (
+    <div className="mb-3 last:mb-0">
+      <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">{etiqueta}</label>
+      <p className="text-[11px] text-neutral-400 mt-0.5 mb-2">{ayuda}</p>
+      <div className="flex gap-2">
+        <input
+          disabled={!isAdmin}
+          value={valor}
+          onChange={(e) => setValor(e.target.value)}
+          placeholder={placeholder}
+          className={inputCls + " font-mono flex-1"}
+        />
+        {isAdmin && sucio && (
+          <button
+            onClick={() => guardar(onSave, valor)}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-40"
+            style={{ background: "var(--color-primary, #1B3A2D)" }}
+          >
+            {busy ? "..." : "Guardar"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="mt-4 pt-4 border-t border-neutral-100">
+      {campo(
+        "Identificador de cuenta (obligatorio)",
+        "Es el código que sale en la dirección del panel, justo después de dash.cloudflare.com/",
+        cuenta, setCuenta, cuentaSucia, onSaveAccount,
+        "p. ej. 70a432e290147ab582ed3d8f2e70498c"
+      )}
+      {campo(
+        "Identificador del sitio (opcional)",
+        "Solo si esa cuenta mide varias webs. Se ve en Web Analytics → Administrar sitio, al final de la dirección. Vacío = se suman todas.",
+        sitio, setSitio, sitioSucio, onSaveSite,
+        "vacío = todos los sitios"
+      )}
+      <p className={`text-[11px] mt-1 ${ready ? "text-emerald-600" : "text-amber-600"}`}>
+        {ready
+          ? "Listo: el módulo Analíticas ya puede leer las visitas."
+          : "Faltan datos: hacen falta el token y el identificador de cuenta para que Analíticas funcione."}
+      </p>
+    </div>
+  );
+}
+
+/**
  * Cómo consigue su enlace una cita online. Por defecto MANUAL: la cita nace
  * sin enlace, la profesional lo pega y pulsa «Guardar y enviar». Automático es
  * para quien tiene sala de videollamada contratada y la ha puesto en el tipo
@@ -984,7 +1098,15 @@ function ApiKeyCard({ provider, status, isAdmin, onSave, onClear, models, curren
             autoComplete="off"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder={configured ? "Pega una clave nueva para reemplazarla" : `Pega la clave (${provider.prefix}...)`}
+            // Cloudflare no usa prefijo fijo en sus tokens: sin este condicional
+            // el hueco decía "Pega la clave (...)", que no ayuda a nadie.
+            placeholder={
+              configured
+                ? "Pega una clave nueva para reemplazarla"
+                : provider.prefix
+                  ? `Pega la clave (${provider.prefix}...)`
+                  : "Pega el token"
+            }
             className={inputCls + " font-mono flex-1"}
           />
           <button onClick={handleSave} disabled={busy || !value.trim()} className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-40"

@@ -7,6 +7,7 @@ import Select from "@/components/ui/Select.jsx";
 import PatientBillingSection from "@/components/billing/PatientBillingSection.jsx";
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 import PatientDocumentsSection from "@/components/clinica/PatientDocumentsSection.jsx";
+import InterventionPlanSection from "@/components/clinica/InterventionPlanSection.jsx";
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
 import { REPORT_TYPES, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
 
@@ -14,6 +15,7 @@ const REPORT_TYPE_OPTIONS = REPORT_TYPES.map((value) => ({ value, label: REPORT_
 
 const TABS = [
   { key: "resumen", label: "Resumen" },
+  { key: "plan", label: "Plan" },
   { key: "sesiones", label: "Sesiones" },
   { key: "informes", label: "Informes" },
   { key: "coordinaciones", label: "Coordinaciones" },
@@ -516,6 +518,7 @@ export default function PacienteFichaPage() {
           )
         )}
 
+        {activeTab === "plan" && <InterventionPlanSection patientId={id} />}
         {activeTab === "documentos" && <PatientDocumentsSection patientId={id} />}
       </div>
 

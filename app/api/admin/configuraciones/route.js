@@ -40,6 +40,7 @@ const CREDENCIALES = [
   { clave: "openaiApiKey", nombre: "Transcripción (OpenAI)", grupo: "IA" },
   { clave: "googlePlacesApiKey", nombre: "Google Places", grupo: "Otros" },
   { clave: "whatsappToken", nombre: "WhatsApp", grupo: "Otros" },
+  { clave: "cloudflareApiToken", nombre: "Cloudflare (visitas web)", grupo: "Otros" },
 ];
 
 /**

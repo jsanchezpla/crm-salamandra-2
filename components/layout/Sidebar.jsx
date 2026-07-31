@@ -15,6 +15,11 @@ const navigation = [
   // activaba uno en una demo, el enlace llevaba a un 404 delante del cliente.
   // Cuando alguno se construya de verdad, se vuelve a añadir aquí junto con su
   // página en app/(dashboard)/.
+  //
+  // `analytics` YA cumple esa condición desde 2026-07-31: tiene página
+  // (/analiticas) y endpoint (/api/analiticas), así que vuelve al menú — dentro
+  // de Comercial, no en un grupo "Inteligencia" que ya no existe. Siguen fuera
+  // `ai`, `automations` e `integrations`.
   {
     label: "",
     items: [
@@ -71,6 +76,21 @@ const navigation = [
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+          </svg>
+        ),
+      },
+      // Visitas de la web (Cloudflare Web Analytics). Va en Comercial y no en un
+      // área propia porque se lee junto a Leads: el embudo empieza en la visita
+      // y acaba en el formulario. Reincorporado con página real (ver el aviso de
+      // 2026-07-27 arriba): /analiticas existe, no es un enlace a un 404.
+      {
+        key: "analytics",
+        label: "Analíticas",
+        href: "/analiticas",
+        badge: null,
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 100-18 9 9 0 000 18zm0 0a8.949 8.949 0 004.951-1.488A3.987 3.987 0 0013 16h-2a3.987 3.987 0 00-3.951 3.512A8.949 8.949 0 0012 21zM3.6 9h16.8M3.6 15h16.8M12 3a13.5 13.5 0 000 18 13.5 13.5 0 000-18z" />
           </svg>
         ),
       },
