@@ -28,7 +28,6 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { invalidateTenantCache } from "../lib/tenant/tenantResolver.js";
 import { MODULE_KEYS } from "../lib/tenant/moduleKeys.js";
 import { MODULES } from "./_module-migrations.js";
 
@@ -107,8 +106,20 @@ const [mod, created] = await TenantModule.findOrCreate({
   },
 });
 if (!created && !mod.enabled) await mod.update({ enabled: true });
-invalidateTenantCache(slug);
 process.stdout.write(`  ✓ Módulo ${created ? "creado" : "ya existía"} y habilitado\n`);
+// La caché de tenant NO se invalida desde aquí, y no es un olvido: vive en la
+// memoria del PROCESO (Map de lib/tenant/tenantCache.js), así que llamarla
+// desde este script solo vaciaba la caché de este propio script — que acaba de
+// nacer y muere en dos segundos. El servidor no se entera. Se aplica sola al
+// caducar, en 60 segundos.
+//
+// Además, importarla arrastraba lib/tenant/tenantResolver.js → lib/utils/errors.js
+// → `next/server`, un especificador que Node no sabe resolver fuera del
+// empaquetador de Next: el script MORÍA con ERR_MODULE_NOT_FOUND antes de hacer
+// nada (visto en producción el 2026-07-31 al dar de alta `analytics`). Es decir,
+// la "vía correcta" para activar módulos llevaba rota desde que Next dejó de
+// exponer esa ruta. Ojo: quedan 9 scripts más con el mismo import.
+process.stdout.write("    (la caché de tenant del servidor caduca sola en ~60 s)\n");
 
 // ── 2. El cambio de ESTRUCTURA ──────────────────────────────────────────────
 if (flags.has("--skip-schema")) {
