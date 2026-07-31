@@ -127,9 +127,12 @@ function SerieVisitas({ serie }) {
     if (n === 0) return { area: "", linea: "", puntos: [], max: 0 };
 
     const maximo = Math.max(...serie.map((d) => d.visitas), 1);
+    // Margen lateral: sin él, el primer y el último punto quedan cortados justo
+    // en el borde del lienzo y el gráfico parece que se sale de la tarjeta.
+    const PAD = 10;
     // Con un solo día no hay recta que trazar: se coloca en el centro para que
     // el punto no quede pegado al borde izquierdo.
-    const x = (i) => (n === 1 ? W / 2 : (i / (n - 1)) * W);
+    const x = (i) => (n === 1 ? W / 2 : PAD + (i / (n - 1)) * (W - PAD * 2));
     const y = (v) => H - (v / maximo) * (H - 12);
 
     const pts = serie.map((d, i) => ({ ...d, x: x(i), y: y(d.visitas) }));
@@ -180,10 +183,13 @@ function SerieVisitas({ serie }) {
         <span>{fechaCorta(serie[serie.length - 1]?.fecha)}</span>
       </div>
 
+      {/* `left` en % del contenedor + `translateX(-50%)` para centrar el globo
+          sobre el punto. Con transform a secas el porcentaje sería del ancho
+          del propio globo, no del gráfico, y se quedaba clavado a la izquierda. */}
       {activo && (
-        <div className="absolute top-0 left-0 pointer-events-none bg-[var(--ink-900)] text-white text-xs
-                        rounded-lg px-2.5 py-1.5 shadow-lg"
-             style={{ transform: `translateX(${(activo.x / 720) * 100}%)`, marginLeft: "-2rem" }}>
+        <div className="absolute top-0 pointer-events-none bg-[var(--ink-900)] text-white text-xs
+                        rounded-lg px-2.5 py-1.5 shadow-lg whitespace-nowrap"
+             style={{ left: `${(activo.x / 720) * 100}%`, transform: "translateX(-50%)" }}>
           <div className="font-medium">{fmt(activo.visitas)} visitas</div>
           <div className="text-white/60">{activo.fecha} · {fmt(activo.vistas)} páginas</div>
         </div>
