@@ -200,6 +200,34 @@ cada uno, solo fotos / audio / PDF (`lib/clinica/prepFiles.js`).
 > cuarto almacén. La metadata vive en `clinic_sessions.prep_files` (JSONB) y el
 > serializador NO expone `storagePath`.
 
+## Redactar un informe (31/07/2026)
+
+El informe **se escribe en el CRM**. Hasta el 31/07 el cajón solo mostraba lo
+que hubiera y, sin contenido, decía que la redacción asistida por IA llegaría
+«en una fase posterior»: en la práctica, no se podía redactar un informe.
+
+- Editor completo en `components/clinica/InformeDrawer.jsx`: motivo,
+  objetivos, evolución, logros, dificultades, recomendaciones, propuesta de
+  continuidad y —en los de derivación— la especialidad de destino. Guarda con
+  `PATCH /api/clinica/reports/[id]` sobre `contentSections`.
+- **Volcado desde las sesiones**: `POST /api/clinica/reports/[id]/desde-sesiones`
+  con `{ sessionIds }`. Compone el borrador con lo escrito en esas sesiones
+  (`lib/clinica/redactarInforme.js`): objetivos, evolución fechada, lo que
+  refiere la familia identificado como tal, incidencias en «dificultades» y
+  tareas/notas en «recomendaciones».
+  - **No pisa lo escrito**: rellena lo vacío y añade a las listas lo que falta,
+    comparando sin mayúsculas ni espacios. Volcar dos veces no duplica nada.
+  - **No inventa**: cada línea sale literal de un registro, con su fecha. Un
+    informe clínico acaba en manos de una familia y a veces de un juzgado.
+  - Solo sesiones **del mismo paciente** y **completadas** (`registered` o
+    `published`). Cruzar pacientes sería un incidente de datos de salud.
+  - Un informe ya **entregado** no se puede volcar: la familia tiene un PDF que
+    dejaría de coincidir con el CRM.
+  - Devuelve `aporte` (cuántas líneas ha traído cada apartado) para que la
+    pantalla pueda decirlo: si no, parece que el botón no ha hecho nada.
+- La IA llegará y **partirá de esto**, no lo sustituirá: primero se junta lo que
+  dicen las sesiones, luego se pule.
+
 ## «Enviar al paciente» (sprint Aumenta 2026-07, punto 3.2)
 
 `POST /api/clinica/reports/[id]/enviar` sustituye al viejo «Marcar como

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
 import PreviewBanner from "../_components/PreviewBanner.jsx";
+import InformeDrawer from "@/components/clinica/InformeDrawer.jsx";
 import { REPORT_TYPES, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
 
 // Opciones del desplegable derivadas del catálogo compartido: añadir un tipo
@@ -22,96 +23,6 @@ const TYPE_STYLES = {
   referral: { bg: "bg-amber-50", text: "text-amber-700" },
 };
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—");
-
-function Section({ title, children }) {
-  return (
-    <div>
-      <div className="eyebrow mb-2">{title}</div>
-      <div className="text-xs text-neutral-700 leading-relaxed">{children}</div>
-    </div>
-  );
-}
-
-function ReportDrawer({ report, onClose, onDeliver, busy }) {
-  const patient = report.patient ?? { name: "—", age: null };
-  const therapist = report.therapist ?? { name: "—" };
-  const c = report.contentSections;
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} aria-hidden="true" />
-      <aside className="fixed right-0 top-14 lg:top-0 bottom-0 z-50 w-full sm:w-[640px] bg-white shadow-2xl overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-neutral-100 px-5 lg:px-7 py-4 flex items-start justify-between gap-3 z-10">
-          <div className="min-w-0">
-            <div className="eyebrow">Informe {report.typeLabel.toLowerCase()}</div>
-            <h2 className="font-display text-xl text-[var(--ink-900)] mt-1 leading-tight">
-              {patient.name} <span className="text-neutral-400 font-normal">· {patient.age ?? "—"} años</span>
-            </h2>
-            <p className="text-[11px] text-neutral-500 mt-1">{therapist.name} · {fmtDate(report.reportDate)}</p>
-          </div>
-          <button onClick={onClose} className="shrink-0 text-neutral-400 hover:text-neutral-700 p-1 -m-1" aria-label="Cerrar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="px-5 lg:px-7 py-5 space-y-5">
-          {report.hasContent ? (
-            <>
-              <Section title="Motivo de intervención"><p>{c.motiveOfIntervention}</p></Section>
-              {c.objectives.length > 0 && (
-                <Section title="Objetivos terapéuticos"><ul className="list-disc list-outside ml-4 space-y-1">{c.objectives.map((o, i) => <li key={i}>{o}</li>)}</ul></Section>
-              )}
-              {c.evolution.length > 0 && (
-                <Section title="Evolución observada">{c.evolution.map((p, i) => <p key={i} className={i > 0 ? "mt-2" : ""}>{p}</p>)}</Section>
-              )}
-              {c.achievements.length > 0 && (
-                <Section title="Logros alcanzados"><ul className="list-disc list-outside ml-4 space-y-1">{c.achievements.map((a, i) => <li key={i}>{a}</li>)}</ul></Section>
-              )}
-              {c.persistentDifficulties.length > 0 && (
-                <Section title="Dificultades persistentes"><ul className="list-disc list-outside ml-4 space-y-1">{c.persistentDifficulties.map((d, i) => <li key={i}>{d}</li>)}</ul></Section>
-              )}
-              {c.recommendations.length > 0 && (
-                <Section title="Recomendaciones"><ul className="list-disc list-outside ml-4 space-y-1">{c.recommendations.map((r, i) => <li key={i}>{r}</li>)}</ul></Section>
-              )}
-              {c.continuityProposal && <Section title="Propuesta de continuidad"><p>{c.continuityProposal}</p></Section>}
-            </>
-          ) : (
-            <div className="bg-neutral-50 border border-dashed border-neutral-200 rounded-lg px-5 py-12 text-center">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-8 h-8 mx-auto text-neutral-300">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <p className="text-sm text-neutral-600 mt-2">Informe sin contenido todavía.</p>
-              <p className="text-[11px] text-neutral-400 mt-1">La redacción asistida por IA llegará en una fase posterior.</p>
-            </div>
-          )}
-
-          <div className="border-t border-neutral-100 pt-4 flex flex-wrap gap-2">
-            <span className={`inline-flex items-center gap-1.5 self-center ${STATUS_STYLES[report.status].bg} ${STATUS_STYLES[report.status].text} text-[10px] font-medium px-2 py-0.5 rounded-full`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${STATUS_STYLES[report.status].dot}`} />
-              {report.statusLabel}
-            </span>
-            {/* «Enviar al paciente» (sprint 2026-07, punto 3.2): ya no es un
-                cambio de estado a mano, exporta el informe a PDF y lo publica
-                en el área privada de la familia. Reenviar sustituye el PDF. */}
-            <button
-              onClick={() => onDeliver(report.id)}
-              disabled={busy}
-              className="text-xs px-3 py-2 rounded-lg text-white hover:opacity-90 ml-auto disabled:opacity-50"
-              style={{ background: "var(--color-primary, #1B3A2D)" }}
-            >
-              {busy
-                ? "Enviando…"
-                : report.status === "delivered"
-                  ? "Volver a enviar"
-                  : "Enviar al paciente"}
-            </button>
-          </div>
-        </div>
-      </aside>
-    </>
-  );
-}
 
 const EMPTY_FORM = { patientId: "", reportType: "evolution", dueDate: "" };
 
@@ -328,7 +239,15 @@ export default function InformesPage() {
         </div>
       </div>
 
-      {selected && <ReportDrawer report={selected} onClose={() => setSelectedId(null)} onDeliver={deliver} busy={busy} />}
+      {selected && (
+        <InformeDrawer
+          report={selected}
+          onClose={() => setSelectedId(null)}
+          onDeliver={deliver}
+          onGuardado={load}
+          busy={busy}
+        />
+      )}
 
       {/* Modal nuevo informe */}
       {showCreate && (
