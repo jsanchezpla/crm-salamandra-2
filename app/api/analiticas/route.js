@@ -7,6 +7,7 @@ import { getTenantCloudflareConfig } from "../../../lib/analytics/cloudflareConf
 import { consultarRum, MAX_DIAS_RUM } from "../../../lib/analytics/cloudflareRum.js";
 import { consultarHistorico, primerDiaGuardado } from "../../../lib/analytics/historico.js";
 import { cacheGet, cacheSet } from "../../../lib/tenant/tenantCache.js";
+import { isDemoTenant } from "../../../lib/demo/isDemo.js";
 
 /**
  * /api/analiticas — visitas de la web del cliente (Cloudflare Web Analytics).
@@ -105,6 +106,52 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
 
   const config = getTenantCloudflareConfig(ctx);
   const { desde, hasta } = rangoDeFechas(dias);
+
+  // ── La demo pública nunca habla con Cloudflare ─────────────────────────────
+  //
+  // La demo da sesión de ADMIN a visitantes anónimos, así que NO puede tener
+  // credenciales de Cloudflare de nadie: sería el token de un cliente real
+  // detrás de un enlace público. Pero sin credenciales la pantalla enseñaba el
+  // "configura tu token", que como escaparate no vale nada — el visitante ve el
+  // andamio en vez del producto.
+  //
+  // Solución: en la demo TODOS los rangos, cortos incluidos, salen de
+  // `web_visits_daily`, que viene sembrada con datos inventados
+  // (scripts/seed-analiticas-demo.js). Nadie llama a Cloudflare ni hace falta
+  // ninguna clave.
+  const demo = isDemoTenant(ctx);
+  if (demo) {
+    const claveDemo = `analiticas:${ctx.slug}:${dias}`;
+    const cacheadoDemo = cacheGet(claveDemo);
+    if (cacheadoDemo) return ok(cacheadoDemo);
+
+    const historico = await consultarHistorico({ tenantModels: ctx.tenantModels, desde, hasta });
+    let leadsDemo = null;
+    if (ctx.tenantHasModule("leads") || ctx.tenantHasModule("sales")) {
+      try {
+        leadsDemo = await leadsPorPais({ tenantModels: ctx.tenantModels, desde, hasta });
+      } catch (err) {
+        console.error("[analiticas] cruce con leads fallido:", err?.message);
+      }
+    }
+
+    const datosDemo = {
+      configurado: true,
+      siteTagInvalido: false,
+      filtradoPorSitio: false,
+      rango: { desde, hasta, dias },
+      // `cloudflare` a propósito: la pantalla no debe enseñar el aviso de
+      // "esto sale del histórico propio" en un escaparate.
+      fuente: "cloudflare",
+      historicoDesde: null,
+      ...historico,
+      leads: leadsDemo,
+      actualizado: new Date().toISOString(),
+    };
+
+    cacheSet(claveDemo, datosDemo, TTL_CACHE_MS);
+    return ok(datosDemo);
+  }
 
   // Sin credenciales no es un error: es el estado inicial de un cliente al que
   // aún no le han puesto el token. La pantalla enseña las instrucciones.

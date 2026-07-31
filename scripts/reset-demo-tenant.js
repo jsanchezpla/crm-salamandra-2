@@ -116,6 +116,12 @@ const SEEDS = [
   { script: "add-training-module-demo.js", description: "Formación (empresas, cursos, alumnos)" },
   { script: "seed-cuestionarios-demo.js", description: "Cuestionarios" },
   { script: "seed-projects-demo.js", description: "Proyectos Sprint 1 (4 + 2 plantillas)" },
+  // Visitas web del escaparate. Va aquí porque el TRUNCATE de arriba se lleva
+  // `web_visits_daily` como cualquier otra tabla, y sin resembrar la pantalla
+  // de Analíticas se queda VACÍA — que en la demo es peor que no tener el
+  // módulo. No depende de nada: son datos inventados, sin FK a clientes ni
+  // equipo, así que puede ir el último.
+  { script: "seed-analiticas-demo.js", description: "Analíticas (400 días de visitas web)" },
 ];
 
 const TEST_USERS = [
