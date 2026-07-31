@@ -11,6 +11,9 @@ import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { findBookingOverlap, noEsCarritoAbandonado } from "../../../../lib/citas/booking.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { meetUrlInicial } from "../../../../lib/citas/videollamada.js";
+import { veTodaLaAgenda } from "../../../../lib/citas/visibilidad.js";
+import { cargarFestivos, esFestivo } from "../../../../lib/citas/festivos.js";
+import { getMadridParts } from "../../../../lib/citas/slots.js";
 
 const NADIE = "00000000-0000-0000-0000-000000000000";
 
@@ -35,7 +38,7 @@ async function resolvePatientId(body, tenantModels, hasModule) {
 // ───────────────────────────────────────────────────────────────────────────
 // GET /api/citas/bookings — listado paginado
 // ───────────────────────────────────────────────────────────────────────────
-export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
 
@@ -114,10 +117,11 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 
     // Acceso por rol: un profesional no-admin solo ve SUS citas (misma regla que
     // el calendario; sin esto, la lista/lista de espera filtraba los datos
-    // personales de las citas de todo el equipo). El jefe (admin) ve todo.
+    // personales de las citas de todo el equipo). El jefe (admin) ve todo, y
+    // un tenant con agenda compartida enseña la de todos (lib/citas/visibilidad.js).
     if (hasModule("team")) {
       const userRole = request.headers.get("x-user-role") ?? "user";
-      if (!ADMIN_ROLES.has(userRole)) {
+      if (!veTodaLaAgenda({ tenant, role: userRole })) {
         const myId = await resolveCurrentTeamMemberId(request, tenantModels);
         where.teamMemberId = myId ?? NADIE;
       }
@@ -214,6 +218,14 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     if (!body.scheduledAt) return error("scheduledAt es obligatorio");
     const scheduledAt = new Date(body.scheduledAt);
     if (Number.isNaN(scheduledAt.getTime())) return error("scheduledAt inválido");
+
+    // Día cerrado del centro. Se avisa, no se impone: si el admin insiste
+    // (una urgencia el día del puente) puede mandar `permitirFestivo: true`.
+    // El festivo protege la agenda pública, no ata las manos a quien manda.
+    const festivos = await cargarFestivos(tenantModels);
+    if (esFestivo(festivos, getMadridParts(scheduledAt)) && body.permitirFestivo !== true) {
+      return error("Ese día está marcado como festivo o cierre del centro. Vuelve a enviarlo confirmando si quieres crearla igualmente.", 409);
+    }
 
     const modality = String(body.modality || "").toLowerCase();
     if (!VALID_MODALITIES.includes(modality)) return error("modality inválida");

@@ -2,30 +2,39 @@
 
 import { useState } from "react";
 import Select from "@/components/ui/Select.jsx";
-import { PERFORMANCE_AREAS, scoreToSemaforo } from "@/lib/clinica/performanceAreas.js";
+import { scoreToSemaforo } from "@/lib/clinica/performanceAreas.js";
 import { computeTotalScore, proposeIncentive } from "@/lib/clinica/incentives.js";
 
 const SEMAFORO_DOT = { green: "bg-emerald-500", amber: "bg-amber-500", red: "bg-red-500", gray: "bg-neutral-300" };
 
 /**
- * Editor de la evaluación mensual de un terapeuta (Dirección).
+ * Editor de la evaluación mensual de un miembro del equipo (Dirección).
  * Se monta fresco cada vez (el padre lo renderiza solo cuando está abierto y le
  * pasa `initial`), así que inicializa el estado directamente desde props.
+ *
+ * Desempeño por roles: ya NO importa PERFORMANCE_AREAS. Las áreas y los umbrales
+ * del semáforo llegan por props: el PADRE resuelve el rol de la persona elegida
+ * (y al cambiar de persona en el alta, via onTherapistChange, re-resuelve y las
+ * áreas del formulario cambian).
  *
  * Props:
  *   therapists  [{id,name}]  lista para el desplegable (solo alta nueva)
  *   defaultPeriod "YYYY-MM"  periodo por defecto
  *   tiers       [{from,amount}]  para la vista previa del incentivo
+ *   areas       [{key,name,weight,goal?}]  áreas del ROL de la persona elegida
+ *   thresholds  {green,amber}  umbrales del semáforo del rol
+ *   roleKey     clave del rol (se envía en el body del POST)
+ *   onTherapistChange(id)  aviso al padre para que re-resuelva el rol
  *   initial     null | { therapistId, therapistName, areaScores, complements, notes }
  *   onClose()   onSaved(row)
  */
-export default function PerformanceEditor({ therapists = [], defaultPeriod, tiers = [], initial = null, onClose, onSaved }) {
+export default function PerformanceEditor({ therapists = [], defaultPeriod, tiers = [], areas = [], thresholds, roleKey = null, onTherapistChange, initial = null, onClose, onSaved }) {
   const isEdit = !!initial;
   const [therapistId, setTherapistId] = useState(initial?.therapistId ?? "");
   const [period, setPeriod] = useState(defaultPeriod);
   const [scores, setScores] = useState(() => {
     const o = {};
-    for (const a of PERFORMANCE_AREAS) {
+    for (const a of areas) {
       const v = initial?.areaScores?.[a.key];
       o[a.key] = v == null ? "" : String(v);
     }
@@ -39,9 +48,14 @@ export default function PerformanceEditor({ therapists = [], defaultPeriod, tier
   const [err, setErr] = useState(null);
   const [pullingOcc, setPullingOcc] = useState(false);
 
+  const pickTherapist = (id) => {
+    setTherapistId(id);
+    onTherapistChange?.(id); // el padre re-resuelve el rol → cambian `areas`/`thresholds`
+  };
+
   // Trae el % de productividad del profesional/periodo y lo pone como ocupación.
   const pullOccupation = async () => {
-    if (!therapistId) { setErr("Elige un terapeuta antes de traer la ocupación."); return; }
+    if (!therapistId) { setErr("Elige a la persona antes de traer la ocupación."); return; }
     setPullingOcc(true); setErr(null);
     try {
       const r = await fetch(`/api/clinica/productividad?period=${period}`, { cache: "no-store" });
@@ -57,25 +71,25 @@ export default function PerformanceEditor({ therapists = [], defaultPeriod, tier
     }
   };
 
-  // Vista previa en vivo (mismas fórmulas que el backend).
+  // Vista previa en vivo (mismas fórmulas que el backend, con las áreas del rol).
   const merged = {};
-  for (const a of PERFORMANCE_AREAS) merged[a.key] = scores[a.key] === "" ? null : Number(scores[a.key]);
-  const totalPreview = computeTotalScore(merged);
+  for (const a of areas) merged[a.key] = (scores[a.key] ?? "") === "" ? null : Number(scores[a.key]);
+  const totalPreview = computeTotalScore(merged, areas);
   const proposedPreview = proposeIncentive(totalPreview, tiers);
-  const totalLevel = scoreToSemaforo(totalPreview);
+  const totalLevel = scoreToSemaforo(totalPreview, thresholds);
 
   const save = async () => {
     setErr(null);
-    if (!therapistId) { setErr("Elige un terapeuta."); return; }
+    if (!therapistId) { setErr("Elige un miembro del equipo."); return; }
     setBusy(true);
     try {
       // En ALTA ("Nueva evaluación"), los campos vacíos se OMITEN del body: si
-      // ese terapeuta+mes ya tenía evaluación, el backend conserva lo guardado
+      // esa persona+mes ya tenía evaluación, el backend conserva lo guardado
       // (merge) en vez de machacarlo con nulls. En EDICIÓN el formulario va
       // precargado, así que vaciar un campo es borrado intencional (se envía null).
       const areaScores = {};
-      for (const a of PERFORMANCE_AREAS) {
-        const v = scores[a.key];
+      for (const a of areas) {
+        const v = scores[a.key] ?? "";
         if (v === "") {
           if (isEdit) areaScores[a.key] = null;
         } else {
@@ -87,6 +101,7 @@ export default function PerformanceEditor({ therapists = [], defaultPeriod, tier
       if (seniority !== "" || isEdit) complements.seniority = seniority === "" ? null : Number(seniority);
       if (attendance || isEdit) complements.attendance = attendance;
       const body = { therapistId, period, areaScores, complements };
+      if (roleKey) body.roleKey = roleKey;
       if (notes.trim() || isEdit) body.notes = notes.trim() || null;
       const r = await fetch("/api/clinica/performance", {
         method: "POST",
@@ -110,7 +125,7 @@ export default function PerformanceEditor({ therapists = [], defaultPeriod, tier
         <div className="px-5 py-4 border-b border-neutral-100 flex items-start justify-between gap-4">
           <div>
             <h3 className="font-display text-lg text-[var(--ink-900)]">{isEdit ? "Editar evaluación" : "Nueva evaluación"}</h3>
-            <p className="text-[11px] text-neutral-400 mt-0.5">{isEdit ? initial?.therapistName ?? "" : "Puntúa las áreas del terapeuta en el periodo."}</p>
+            <p className="text-[11px] text-neutral-400 mt-0.5">{isEdit ? initial?.therapistName ?? "" : "Puntúa las áreas del rol de la persona en el periodo."}</p>
           </div>
           <button onClick={() => !busy && onClose?.()} className="p-1.5 text-neutral-400 hover:text-neutral-700">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -118,16 +133,16 @@ export default function PerformanceEditor({ therapists = [], defaultPeriod, tier
         </div>
 
         <div className="p-5 space-y-5">
-          {/* Terapeuta + periodo */}
+          {/* Miembro del equipo + periodo */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-[10px] uppercase tracking-wider text-neutral-400">Terapeuta</label>
+              <label className="text-[10px] uppercase tracking-wider text-neutral-400">Miembro del equipo</label>
               {isEdit ? (
                 <div className="mt-1 px-3 py-2 text-sm border border-neutral-100 rounded-lg bg-neutral-50 text-neutral-700">{initial?.therapistName ?? "—"}</div>
               ) : (
                 <Select
                   value={therapistId}
-                  onChange={setTherapistId}
+                  onChange={pickTherapist}
                   options={[{ value: "", label: "Elegir…" }, ...therapists.map((t) => ({ value: t.id, label: t.name }))]}
                   className="mt-1 w-full text-sm border border-neutral-200 rounded-lg px-3 py-2 bg-white"
                 />
@@ -142,28 +157,33 @@ export default function PerformanceEditor({ therapists = [], defaultPeriod, tier
             </div>
           </div>
 
-          {/* Áreas */}
+          {/* Áreas (las del rol resuelto por el padre) */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="eyebrow">Puntuación por áreas (0-100)</label>
               <span className="text-[10px] text-neutral-400">El peso pondera la puntuación total</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {PERFORMANCE_AREAS.map((a) => (
-                <div key={a.key} className="flex items-center gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs text-[var(--ink-900)] truncate">{a.n}. {a.name}</div>
-                    <div className="text-[10px] text-neutral-400">Peso {a.weight}%</div>
+            {areas.length === 0 ? (
+              <p className="text-[11px] text-neutral-400">Elige a la persona para cargar las áreas de su rol.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {areas.map((a, idx) => (
+                  <div key={a.key} className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-[var(--ink-900)] truncate">{a.n ?? idx + 1}. {a.name}</div>
+                      {a.goal ? <div className="text-[10px] text-neutral-400 truncate" title={a.goal}>Meta: {a.goal}</div> : null}
+                      <div className="text-[10px] text-neutral-400">Peso {a.weight}%</div>
+                    </div>
+                    <input
+                      type="number" min={0} max={100} value={scores[a.key] ?? ""}
+                      onChange={(e) => setScores((s) => ({ ...s, [a.key]: e.target.value }))}
+                      className="w-20 px-2 py-1.5 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400 tabular text-right"
+                      placeholder="—"
+                    />
                   </div>
-                  <input
-                    type="number" min={0} max={100} value={scores[a.key]}
-                    onChange={(e) => setScores((s) => ({ ...s, [a.key]: e.target.value }))}
-                    className="w-20 px-2 py-1.5 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400 tabular text-right"
-                    placeholder="—"
-                  />
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Complementos */}
@@ -204,7 +224,7 @@ export default function PerformanceEditor({ therapists = [], defaultPeriod, tier
           {/* Vista previa */}
           <div className="flex items-center justify-between rounded-xl bg-neutral-50 border border-neutral-100 px-4 py-3">
             <div className="flex items-center gap-3">
-              <span className={`w-2.5 h-2.5 rounded-full ${SEMAFORO_DOT[totalLevel]}`} />
+              <span className={`w-2.5 h-2.5 rounded-full ${SEMAFORO_DOT[totalLevel] ?? SEMAFORO_DOT.gray}`} />
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-neutral-400">Puntuación total</div>
                 <div className="font-display text-xl text-[var(--ink-900)] tabular">{totalPreview ?? "—"}<span className="text-xs text-neutral-400">/100</span></div>

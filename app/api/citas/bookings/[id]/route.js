@@ -9,6 +9,7 @@ import {
 import { logCitasAudit } from "../../../../../lib/citas/audit.js";
 import { findBookingOverlap } from "../../../../../lib/citas/booking.js";
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
+import { veTodaLaAgenda } from "../../../../../lib/citas/visibilidad.js";
 import { sendEmail } from "../../../../../lib/email/resendClient.js";
 import { bookingMeetLinkTemplate } from "../../../../../lib/email/templates/citas/bookingMeetLink.js";
 import { bookingCancelledTemplate } from "../../../../../lib/email/templates/citas/bookingCancelled.js";
@@ -82,7 +83,7 @@ function bookingIncludes({ EventType, TeamMember, Patient }, hasModule) {
 // ───────────────────────────────────────────────────────────────────────────
 // GET /api/citas/bookings/[id]
 // ───────────────────────────────────────────────────────────────────────────
-export const GET = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
     const { id } = await params;
@@ -91,12 +92,14 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
       include: bookingIncludes(tenantModels, hasModule),
     });
     if (!row) return notFound("Cita no encontrada");
-    // Acceso por rol: un profesional no-admin solo puede ver SUS citas (misma
-    // regla que el calendario). Se devuelve 404 (no 403) para no revelar que la
-    // cita existe.
+    // Acceso: un profesional no-admin solo ve SUS citas, salvo que el tenant
+    // comparta agenda. Tiene que ser la MISMA regla que el listado y el
+    // calendario (lib/citas/visibilidad.js): ver la cita en el calendario y
+    // que al abrirla dijera "no encontrada" parecía un fallo del CRM.
+    // Se devuelve 404 (no 403) para no revelar que la cita existe.
     if (hasModule("team")) {
       const userRole = request.headers.get("x-user-role") ?? "user";
-      if (!ADMIN_ROLES.has(userRole)) {
+      if (!veTodaLaAgenda({ tenant, role: userRole })) {
         const myId = await resolveCurrentTeamMemberId(request, tenantModels);
         if (!myId || row.teamMemberId !== myId) return notFound("Cita no encontrada");
       }

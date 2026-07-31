@@ -57,7 +57,7 @@ const TEAM = [
   { name: "Elena Gutiérrez García", department: "Logopedia", position: "Logopeda", specialties: ["logopedia"], user: { username: "elena_aumenta", password: "Elena", profile: "therapist" } },
   { name: "Isabel Vara Perea", department: "Logopedia", position: "Logopeda", specialties: ["logopedia"], user: { username: "isabel_aumenta", password: "Isabel", profile: "therapist" } },
   // ── Psicología ───────────────────────────────────────────────────────────
-  { name: "Silvia Pérez Fernández", department: "Psicología", position: "Psicóloga", specialties: ["psicologia"], user: { username: "silvia_aumenta", password: "Silvia", profile: "therapist" } },
+  { name: "Silvia Pérez Hernández", department: "Psicología", position: "Psicóloga", specialties: ["psicologia"], user: { username: "silvia_aumenta", password: "Silvia", profile: "therapist" } },
   // ── Neuropsicología ──────────────────────────────────────────────────────
   { name: "Laura Garrido Rascón", department: "Neuropsicología", position: "Neuropsicóloga", specialties: ["neuropsicologia"], user: { username: "laura_aumenta", password: "Laura", profile: "therapist" } },
   { name: "Raquel Mesones Bernal", department: "Neuropsicología", position: "Neuropsicóloga", specialties: ["neuropsicologia"], user: { username: "raquelm_aumenta", password: "Raquel", profile: "therapist" } },

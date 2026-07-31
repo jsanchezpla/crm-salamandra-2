@@ -182,3 +182,14 @@ body {
   to   { opacity: 1; }
 }
 .fade-in { animation: ink-fade 240ms ease-out both; }
+
+/* Días cerrados del centro (festivos, puentes, formación) — sprint 2026-07-29.
+   Se pintan atenuados en el calendario para que se distinga de un vistazo un
+   día sin agenda de un día simplemente vacío. */
+.fc .dia-festivo {
+  background-color: color-mix(in srgb, #f43f5e 7%, transparent);
+}
+.fc .dia-festivo .fc-daygrid-day-number,
+.fc .dia-festivo .fc-timegrid-axis-cushion {
+  opacity: 0.55;
+}

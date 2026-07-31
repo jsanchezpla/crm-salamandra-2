@@ -39,14 +39,38 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       [["paidAt", "DESC"]]
     );
 
+    // El cliente se trae por los DOS caminos: el enlace directo del cobro
+    // (cobros registrados antes de existir la factura, sprint 2026-07-29) y el
+    // de su factura. En el listado, Olga necesita ver de QUIÉN es cada cobro
+    // sin abrir la factura una por una.
+    const { Client } = tenantModels;
+    const include = [
+      {
+        model: Invoice, as: "invoice",
+        attributes: ["id", "number", "total", "status", "clientId", "issueDate"],
+        ...(Client ? { include: [{ model: Client, as: "client", attributes: ["id", "name"] }] } : {}),
+      },
+    ];
+    if (Client) include.push({ model: Client, as: "client", attributes: ["id", "name"] });
+
     const { count, rows } = await Payment.findAndCountAll({
       where,
-      include: [{ model: Invoice, as: "invoice", attributes: ["id", "number", "total", "status", "clientId", "issueDate"] }],
+      include,
       order,
       limit, offset,
     });
 
-    return ok({ payments: rows, total: count, page, limit });
+    // `clientName`/`clientId` planos para que la tabla no tenga que saber por
+    // cuál de los dos caminos llegó el dato.
+    const payments = rows.map((p) => {
+      const fila = p.toJSON();
+      const directo = fila.client ?? null;
+      const porFactura = fila.invoice?.client ?? null;
+      const cliente = directo ?? porFactura;
+      return { ...fila, clientId: cliente?.id ?? fila.clientId ?? null, clientName: cliente?.name ?? null };
+    });
+
+    return ok({ payments, total: count, page, limit });
   } catch (err) {
     return serverError(err);
   }

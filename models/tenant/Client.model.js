@@ -84,6 +84,30 @@ export function defineClient(sequelize) {
         allowNull: true,
         defaultValue: null,
       },
+      // ── Sprint Aumenta 2026-07-28 ───────────────────────────────────────
+      // Padres/tutores estructurados: [{ id, name, relationship, dni, phone,
+      // email, signer }] (lib/clients/guardians.js). Ambos progenitores viven
+      // SIEMPRE en el mismo cliente, también separados; las firmas del
+      // contrato apuntan al `id` de cada tutor.
+      guardians: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
+      // Meses ('YYYY-MM') desbloqueados A MANO por administración en el
+      // portal aunque no conste el cobro (becas, acuerdos, errores). El
+      // desbloqueo normal es automático al registrar el cobro del mes.
+      portalUnlockedMonths: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
+      // Contrato del Centro subido al inscribir al cliente (FK lógica a
+      // documents; el flujo de firma vive en ContractSignature).
+      contractDocumentId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       customFields: {
         type: DataTypes.JSONB,
         defaultValue: {},

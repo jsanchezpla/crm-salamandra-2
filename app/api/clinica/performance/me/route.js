@@ -3,6 +3,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden } from "../../../../../lib/utils/apiResponse.js";
 import { serializePerformance, serializeTherapist } from "../../../../../lib/clinica/serialize.js";
 import { tiersFromTenant } from "../../../../../lib/clinica/incentives.js";
+import { getPerformanceRoles, findRoleByKey, resolveRoleForMember } from "../../../../../lib/clinica/performanceConfig.js";
 import { parsePeriodString } from "../../../../../lib/clinica/period.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -12,9 +13,12 @@ function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
 }
 
-// Scorecard de desempeño de un terapeuta (?therapistId= o el ligado al usuario).
-// SOLO DIRECCIÓN (decisión Aumenta 2026-07-24): el desempeño/incentivos no lo
-// ven las terapeutas, ni siquiera el suyo propio. Soporta ?period=YYYY-MM.
+// Scorecard de desempeño de un miembro del equipo (?therapistId= o el ligado al
+// usuario). SOLO DIRECCIÓN (decisión Aumenta 2026-07-24): el desempeño/incentivos
+// no lo ven las terapeutas, ni siquiera el suyo propio. Soporta ?period=YYYY-MM.
+// Desempeño por roles (2026-07-29): la respuesta incluye el bloque `roles` de
+// config y el rol resuelto de la persona, para que el front pinte las áreas
+// dinámicas sin otro fetch.
 export const GET = withTenant(async (request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
   // Pantalla de EQUIPO AVANZADO: se vende aparte del módulo Equipo
@@ -38,8 +42,19 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     }
   }
 
-  const therapists = (await TeamMember.findAll({ where: { status: "active" }, attributes: ["id", "displayName"], order: [["displayName", "ASC"]] })).map((t) => ({ id: t.id, name: t.displayName }));
-  if (!therapistId) return ok({ metric: null, therapist: null, therapists });
+  const rolesConfig = getPerformanceRoles(ctx.tenant);
+
+  // Personas evaluables: TODOS los miembros del equipo activos (no solo
+  // terapeutas), en orden alfabético, cada uno con su rol de desempeño.
+  const therapists = (
+    await TeamMember.findAll({ where: { status: "active" }, attributes: ["id", "displayName", "position"], order: [["displayName", "ASC"]] })
+  ).map((t) => {
+    const r = resolveRoleForMember(rolesConfig, t);
+    return { id: t.id, name: t.displayName, roleKey: r.key, roleName: r.name };
+  });
+  if (!therapistId) {
+    return ok({ metric: null, therapist: null, therapists, roles: rolesConfig.roles, isDefaultConfig: rolesConfig.isDefaultConfig, role: null });
+  }
 
   const therapist = await TeamMember.findByPk(therapistId);
   const period = sp.get("period");
@@ -51,6 +66,10 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   } else {
     metric = await PerformanceMetric.findOne({ where: { therapistId }, order: [["periodYear", "DESC"], ["periodMonth", "DESC"]] });
   }
+
+  // Rol para pintar el scorecard: el guardado en la fila si sigue existiendo en
+  // la config; si no, el que corresponda al puesto de la persona.
+  const role = findRoleByKey(rolesConfig, metric?.roleKey) ?? resolveRoleForMember(rolesConfig, therapist);
 
   const histRows = await PerformanceMetric.findAll({
     where: { therapistId },
@@ -84,8 +103,11 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   }
 
   return ok({
-    metric: metric ? serializePerformance(metric, { therapist, history, teamAverage, tiers: tiersFromTenant(ctx.tenant), extras }) : null,
+    metric: metric ? serializePerformance(metric, { therapist, history, teamAverage, tiers: tiersFromTenant(ctx.tenant), extras, role }) : null,
     therapist: therapist ? serializeTherapist(therapist) : null,
     therapists,
+    roles: rolesConfig.roles,
+    isDefaultConfig: rolesConfig.isDefaultConfig,
+    role: role ? { key: role.key, name: role.name } : null,
   });
 });

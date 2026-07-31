@@ -86,6 +86,7 @@ export default function CobrosPage() {
     if (!search) return payments;
     return payments.filter((p) => {
       const hay = [
+        p.clientName,
         p.invoice?.number,
         METHOD_LABELS[p.method] ?? p.method,
         p.notes,
@@ -169,7 +170,7 @@ export default function CobrosPage() {
         <input
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Buscar por nº factura, método, notas..."
+          placeholder="Buscar por cliente, nº factura, método, notas..."
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
         />
         <Select value={filterMethod} onChange={(v) => setFilterMethod(v)}
@@ -204,6 +205,11 @@ export default function CobrosPage() {
           <table className="w-full text-sm min-w-[700px]">
             <thead>
               <tr className="border-b border-neutral-100">
+                {/* Sin onClick = cabecera no ordenable (así lo decide
+                    SortableTh). El cliente llega por dos caminos —enlace
+                    directo del cobro o su factura— y un solo ORDER BY no puede
+                    con los dos: antes que una flecha que ordena mal, ninguna. */}
+                <SortableTh k="clientName" label="Cliente" />
                 <SortableTh k="invoice.number" label="Factura" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                 <SortableTh k="method" label="Método" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                 <SortableTh k="paidAt" label="Fecha" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
@@ -213,14 +219,26 @@ export default function CobrosPage() {
             </thead>
             <tbody>
               {loading && filtered.length === 0 && (
-                <tr><td colSpan={5} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
+                <tr><td colSpan={6} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
               )}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={5} className="text-center py-12 text-xs text-neutral-400">Sin cobros{(search || filterMethod || filterStatus) ? " que coincidan con los filtros" : " registrados"}</td></tr>
+                <tr><td colSpan={6} className="text-center py-12 text-xs text-neutral-400">Sin cobros{(search || filterMethod || filterStatus) ? " que coincidan con los filtros" : " registrados"}</td></tr>
               )}
               {filtered.map((p) => (
                 <tr key={p.id} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">
-                  <td className="px-4 py-3 font-mono text-xs text-neutral-500">{p.invoice?.number ?? "—"}</td>
+                  <td className="px-4 py-3 text-neutral-800 text-xs">{p.clientName ?? "—"}</td>
+                  {/* Enlace a la factura: el flujo real es cobro → factura, y
+                      desde el cobro hay que poder saltar a la suya. Un cobro
+                      registrado antes de facturar todavía no tiene ninguna. */}
+                  <td className="px-4 py-3 font-mono text-xs">
+                    {p.invoice?.id ? (
+                      <Link href={`/facturacion/facturas/${p.invoice.id}`} className="text-[var(--color-primary,#1B3A2D)] hover:underline">
+                        {p.invoice.number}
+                      </Link>
+                    ) : (
+                      <span className="text-amber-600" title="Cobro registrado sin factura todavía">sin factura</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-neutral-600 text-xs">{METHOD_LABELS[p.method] ?? p.method}</td>
                   <td className="px-4 py-3 text-neutral-500 text-xs">{fmtDate(p.paidAt)}</td>
                   <td className="px-4 py-3"><StatusBadge status={p.status} kind="payment" /></td>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import StatusBadge, { STATUS_OPTIONS } from "../../../components/projects/StatusBadge.jsx";
 import PriorityBadge, { PRIORITY_OPTIONS } from "../../../components/projects/PriorityBadge.jsx";
+import AiProjectModal from "../../../components/projects/AiProjectModal.jsx";
 import Select from "../../../components/ui/Select.jsx";
 
 const inputCls =
@@ -50,6 +51,7 @@ export default function ProyectosPage() {
   const [includeArchived, setIncludeArchived] = useState(false);
 
   const [showCreate, setShowCreate] = useState(false);
+  const [showAiCreate, setShowAiCreate] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
 
@@ -152,12 +154,20 @@ export default function ProyectosPage() {
             {filterStatus || filterClient || search ? " (filtrados)" : ""}
           </p>
         </div>
-        <button
-          onClick={() => { setShowCreate(true); setForm(EMPTY_FORM); }}
-          className="px-4 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-700 transition"
-        >
-          + Nuevo proyecto
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAiCreate(true)}
+            className="px-4 py-2 rounded-lg border border-neutral-200 text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition"
+          >
+            <span aria-hidden="true">✦</span> Crear con IA
+          </button>
+          <button
+            onClick={() => { setShowCreate(true); setForm(EMPTY_FORM); }}
+            className="px-4 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-700 transition"
+          >
+            + Nuevo proyecto
+          </button>
+        </div>
       </header>
 
       {/* Filtros */}
@@ -405,6 +415,11 @@ export default function ProyectosPage() {
             </form>
           </aside>
         </div>
+      )}
+
+      {/* Drawer "Crear con IA" */}
+      {showAiCreate && (
+        <AiProjectModal clients={clients} onClose={() => setShowAiCreate(false)} />
       )}
     </div>
   );

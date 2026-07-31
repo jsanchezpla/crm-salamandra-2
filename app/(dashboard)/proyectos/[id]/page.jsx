@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import StatusBadge, { STATUS_OPTIONS } from "../../../../components/projects/StatusBadge.jsx";
 import PriorityBadge, { PRIORITY_OPTIONS } from "../../../../components/projects/PriorityBadge.jsx";
+import AiEditModal from "../../../../components/projects/AiEditModal.jsx";
 import Select from "@/components/ui/Select.jsx";
 
 const TABS = [
@@ -57,8 +58,20 @@ export default function ProyectoDetallePage() {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showAiEdit, setShowAiEdit] = useState(false);
 
   const isAdmin = me?.role === "admin" || me?.role === "superadmin";
+
+  // ¿Puede editar el proyecto? Admin O lead (mismo criterio que el backend en
+  // lib/projects/projectAuth.js: TeamMember.userId === userId + ProjectMember
+  // con role="lead").
+  const isLead = useMemo(() => {
+    if (!me?.id) return false;
+    const myTm = teamMembers.find((tm) => tm.userId === me.id);
+    if (!myTm) return false;
+    return members.some((m) => m.teamMemberId === myTm.id && m.role === "lead");
+  }, [me, teamMembers, members]);
+  const canEdit = isAdmin || isLead;
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -128,13 +141,23 @@ export default function ProyectoDetallePage() {
               )}
             </div>
           </div>
-          <Link
-            href={`/proyectos/${project.id}/board`}
-            className="self-start lg:self-auto shrink-0 px-4 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-700 inline-flex items-center gap-2"
-          >
-            Abrir tablero
-            <span aria-hidden="true">→</span>
-          </Link>
+          <div className="self-start lg:self-auto shrink-0 flex items-center gap-2">
+            {canEdit && (
+              <button
+                onClick={() => setShowAiEdit(true)}
+                className="px-4 py-2 rounded-lg border border-neutral-200 text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition"
+              >
+                <span aria-hidden="true">✦</span> Reorganizar con IA
+              </button>
+            )}
+            <Link
+              href={`/proyectos/${project.id}/board`}
+              className="px-4 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-700 inline-flex items-center gap-2"
+            >
+              Abrir tablero
+              <span aria-hidden="true">→</span>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -185,6 +208,15 @@ export default function ProyectoDetallePage() {
           isAdmin={isAdmin}
           onChange={fetchAll}
           onArchive={() => { router.push("/proyectos"); }}
+        />
+      )}
+
+      {/* Drawer "Reorganizar con IA" */}
+      {showAiEdit && (
+        <AiEditModal
+          projectId={project.id}
+          onClose={() => setShowAiEdit(false)}
+          onApplied={fetchAll}
         />
       )}
     </div>

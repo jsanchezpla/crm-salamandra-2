@@ -134,6 +134,9 @@ export default function CitasModule() {
   // reservas en estado 'pending' (solicitudes de la web sin confirmar). El
   // globito rojo de la pestaña muestra cuántas hay sin atender.
   const [tab, setTab] = useState("calendar");
+  // Festivos/cierres del centro: Map "YYYY-MM-DD" → { id, label }. Se recargan
+  // al cambiar de mes/semana (datesSet) para no traerse el año entero.
+  const [festivos, setFestivos] = useState(new Map());
   const [pendingCount, setPendingCount] = useState(0);
   const [waitlistKey, setWaitlistKey] = useState(0); // fuerza recarga de la lista
   // Solicitudes de cambio de cita (terapeuta propone → admin aprueba). Solo admin.
@@ -252,6 +255,55 @@ export default function CitasModule() {
       .then((j) => setViewerIsAdmin(["admin", "superadmin"].includes(j?.data?.role)))
       .catch(() => {});
   }, []);
+
+  // ── Festivos del centro ────────────────────────────────────────────────────
+  // Fecha local en YYYY-MM-DD. NO se usa toISOString(): pasa a UTC y en España
+  // (UTC+1/+2) devolvería el día anterior para cualquier fecha a medianoche.
+  const ymdLocal = useCallback((d) => {
+    const x = d instanceof Date ? d : new Date(d);
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+  }, []);
+
+  const cargarFestivos = useCallback((from, to) => {
+    fetch(`/api/citas/blocked-days?from=${from}&to=${to}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!j?.ok) return;
+        setFestivos(new Map((j.data.blockedDays ?? []).map((f) => [f.date, f])));
+      })
+      .catch(() => {});
+  }, []);
+
+  const alternarFestivo = useCallback(async (fecha) => {
+    const existente = festivos.get(fecha);
+    try {
+      if (existente) {
+        if (!confirm(`¿Quitar el cierre del ${fecha}? Volverán a ofrecerse huecos ese día.`)) return;
+        const r = await fetch(`/api/citas/blocked-days?date=${fecha}`, { method: "DELETE" });
+        if (!r.ok) throw new Error((await r.json()).error || "No se pudo quitar");
+      } else {
+        const label = prompt(`Marcar el ${fecha} como festivo o cierre del centro.\n\nMotivo (opcional):`, "Festivo");
+        if (label === null) return; // canceló
+        const r = await fetch("/api/citas/blocked-days", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date: fecha, label: label || null }),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || "No se pudo marcar");
+        // Las citas ya puestas NO se tocan: se avisa para que alguien decida.
+        if (j.data?.citasEseDia > 0) {
+          alert(`Marcado. OJO: ese día ya hay ${j.data.citasEseDia} cita(s) puestas. No se han tocado: decide tú si avisar o reubicar.`);
+        }
+      }
+      const v = calViewRef.current;
+      const cal = calendarRef.current?.getApi();
+      if (cal) cargarFestivos(ymdLocal(cal.view.activeStart), ymdLocal(cal.view.activeEnd));
+      else if (v) cargarFestivos(fecha, fecha);
+    } catch (e) {
+      alert(e.message);
+    }
+  }, [festivos, cargarFestivos, ymdLocal]);
 
   // Equipo para asignar profesional a la cita y para el filtro del calendario
   // (si el tenant no tiene team, /api/team da 403 y la lista queda vacía: ok).
@@ -555,24 +607,38 @@ export default function CitasModule() {
     setSaving(true);
     try {
       const scheduledAt = new Date(`${createForm.date}T${createForm.time}`).toISOString();
-      const res = await fetch("/api/citas/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventTypeId: createForm.eventTypeId,
-          scheduledAt,
-          clientId: createForm.clientId || null,
-          clientName: createForm.clientName.trim(),
-          clientEmail: createForm.clientEmail.trim(),
-          clientPhone: createForm.clientPhone.trim(),
-          modality: createForm.modality,
-          additionalData: createForm.additionalData.trim() || null,
-          notes: createForm.notes.trim() || null,
-          patientId: createForm.patientId || null,
-          teamMemberId: createForm.teamMemberId || null,
-        }),
-      });
-      const j = await res.json();
+      const enviar = (permitirFestivo) =>
+        fetch("/api/citas/bookings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            eventTypeId: createForm.eventTypeId,
+            scheduledAt,
+            clientId: createForm.clientId || null,
+            clientName: createForm.clientName.trim(),
+            clientEmail: createForm.clientEmail.trim(),
+            clientPhone: createForm.clientPhone.trim(),
+            modality: createForm.modality,
+            additionalData: createForm.additionalData.trim() || null,
+            notes: createForm.notes.trim() || null,
+            patientId: createForm.patientId || null,
+            teamMemberId: createForm.teamMemberId || null,
+            ...(permitirFestivo ? { permitirFestivo: true } : {}),
+          }),
+        });
+
+      let res = await enviar(false);
+      let j = await res.json();
+      // 409 = el día está marcado como cerrado. No se impone: se pregunta, y
+      // si el admin insiste (una urgencia en el puente) se reenvía confirmando.
+      if (res.status === 409 && !j.ok) {
+        if (!confirm(`${j.error}\n\n¿Crear la cita igualmente?`)) {
+          setSaving(false);
+          return;
+        }
+        res = await enviar(true);
+        j = await res.json();
+      }
       if (!j.ok) throw new Error(j.error || "Error creando cita");
       calendarRef.current?.getApi().refetchEvents();
       setOpenCreate(false);
@@ -851,12 +917,54 @@ export default function CitasModule() {
           <p className="text-[11px] text-neutral-400 mb-2 lg:hidden">
             Toca una cita para ver su ficha. Para crear o mover citas, mejor desde el ordenador.
           </p>
+          {/* Festivos y cierres del centro. Solo admin: cerrar un día afecta a
+              la agenda de todo el equipo y a la reserva pública. */}
+          {viewerIsAdmin && (
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  const hoy = ymdLocal(new Date());
+                  const f = prompt("Marcar o quitar un día cerrado (festivo, puente, formación).\n\nFecha en formato AAAA-MM-DD:", hoy);
+                  if (!f) return;
+                  if (!/^\d{4}-\d{2}-\d{2}$/.test(f.trim())) { alert("La fecha debe ser AAAA-MM-DD."); return; }
+                  alternarFestivo(f.trim());
+                }}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-neutral-200 text-neutral-600 hover:bg-neutral-50 transition-colors"
+              >
+                Festivos y cierres
+              </button>
+              {festivos.size > 0 && (
+                <span className="text-[11px] text-neutral-400">
+                  {festivos.size} día(s) cerrado(s) en la vista actual
+                </span>
+              )}
+            </div>
+          )}
           <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
             initialView={esMovil && calView.view === "timeGridWeek" ? "listWeek" : calView.view}
             initialDate={calView.date || undefined}
-            datesSet={(arg) => { calViewRef.current = { view: arg.view.type, date: arg.startStr }; }}
+            datesSet={(arg) => {
+              calViewRef.current = { view: arg.view.type, date: arg.startStr };
+              cargarFestivos(arg.startStr.slice(0, 10), arg.endStr.slice(0, 10));
+            }}
+            // Los festivos se pintan atenuados y con la etiqueta del cierre.
+            dayCellClassNames={(arg) => (festivos.has(ymdLocal(arg.date)) ? ["dia-festivo"] : [])}
+            dayCellContent={(arg) => {
+              const clave = ymdLocal(arg.date);
+              const f = festivos.get(clave);
+              if (!f) return undefined;
+              return (
+                <div className="flex flex-col items-end">
+                  <span>{arg.dayNumberText}</span>
+                  <span className="text-[9px] leading-tight text-rose-600 font-semibold truncate max-w-[90px]">
+                    {f.label || "Cerrado"}
+                  </span>
+                </div>
+              );
+            }}
             headerToolbar={
               esMovil
                 ? { left: "prev,next", center: "title", right: "listWeek,timeGridDay" }

@@ -77,6 +77,15 @@ export const CORE = [
   // Cobrar o no depende de que el tenant tenga sus claves de Stripe, no de que
   // exista la tabla.
   "migrate-payments-sprint-1",
+  // Sprint Aumenta 2026-07: cobros sin factura, faltas justificadas, registro
+  // de sesión en 3 partes, tipo "Derivación", tutores del cliente, festivos,
+  // lista de espera, plan de intervención y multi-responsable en incidencias.
+  // CORE y no por módulo porque toca tablas de VARIOS módulos (billing, citas,
+  // clinica, clients) y cada bloque decide por existencia de tabla: en un
+  // tenant sin esa tabla es un no-op. Sin registrarla aquí, un cliente dado de
+  // alta desde el panel nacía sin blocked_days ni intervention_plans y esas
+  // pantallas le respondían 503.
+  "migrate-sprint-aumenta-2026-07",
 ];
 
 export const MODULES = {
@@ -132,6 +141,8 @@ export const MODULES = {
     "migrate-documents-patient-link",
     "migrate-incidencias-module",
     "migrate-incentive-items",
+    // Desempeño por roles: role_key + area_scores en performance_metrics.
+    "migrate-clinica-performance-roles",
   ],
 
   team: [

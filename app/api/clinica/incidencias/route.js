@@ -1,3 +1,4 @@
+import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
@@ -7,6 +8,8 @@ import {
   isValidCategory,
   isValidStatus,
   isValidPriority,
+  responsablesDe,
+  sincronizarResponsables,
 } from "../../../../lib/clinica/incidencias.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -18,6 +21,15 @@ const INCLUDES = (M) => [
   { model: M.Patient, as: "patient", attributes: ["id", "firstName", "lastName"], required: false },
   { model: M.TeamMember, as: "assignedTo", attributes: ["id", "displayName", "avatarColor"], required: false },
   { model: M.TeamMember, as: "reportedBy", attributes: ["id", "displayName", "avatarColor"], required: false },
+  // Multi-responsable (sprint 2026-07-29): una incidencia puede tener varias
+  // personas al cargo. `assignedTo` se conserva como espejo del primero para
+  // no romper los filtros y las vistas que ya lo usan.
+  {
+    model: M.TeamMember, as: "assignees",
+    attributes: ["id", "displayName", "avatarColor"],
+    through: { attributes: [] },
+    required: false,
+  },
 ];
 
 /**
@@ -45,7 +57,22 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   if (sp.get("mine") === "1") {
     assignedToId = (await resolveCurrentTeamMemberId(request, M)) || "00000000-0000-0000-0000-000000000000";
   }
-  if (assignedToId && UUID_RE.test(assignedToId)) where.assignedToId = assignedToId;
+  if (assignedToId && UUID_RE.test(assignedToId)) {
+    // Filtra por la tabla PIVOTE, no por `assignedToId`: ese campo solo guarda
+    // al responsable PRINCIPAL, así que quien fuera segundo responsable no veía
+    // la incidencia en "mis incidencias" — justo lo que el multi-responsable
+    // venía a resolver. La migración rellenó la pivote con los responsables
+    // antiguos, así que las incidencias de siempre siguen saliendo.
+    if (M.IncidenciaAssignee) {
+      const enlaces = await M.IncidenciaAssignee.findAll({
+        where: { teamMemberId: assignedToId },
+        attributes: ["incidenciaId"],
+      });
+      where.id = { [Op.in]: enlaces.map((e) => e.incidenciaId) };
+    } else {
+      where.assignedToId = assignedToId; // tenant sin migrar
+    }
+  }
 
   const rows = await Incidencia.findAll({
     where,
@@ -100,7 +127,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   const date = body.date && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : madridToday();
 
   const patientId = body.patientId && UUID_RE.test(body.patientId) ? body.patientId : null;
-  const assignedToId = body.assignedToId && UUID_RE.test(body.assignedToId) ? body.assignedToId : null;
+  const responsables = responsablesDe(body);
+  const assignedToId = responsables[0] ?? null;
 
   // clientId: foto del paciente (si se indica y tiene ficha de cliente).
   let clientId = null;
@@ -125,6 +153,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     reportedById: reportedById || null,
     comments: [],
   });
+
+  await sincronizarResponsables(created, responsables, M);
 
   const full = await Incidencia.findByPk(created.id, { include: INCLUDES(M) });
   return ok(serializeIncidencia(full));

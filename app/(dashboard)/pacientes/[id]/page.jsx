@@ -8,6 +8,9 @@ import PatientBillingSection from "@/components/billing/PatientBillingSection.js
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 import PatientDocumentsSection from "@/components/clinica/PatientDocumentsSection.jsx";
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
+import { REPORT_TYPES, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
+
+const REPORT_TYPE_OPTIONS = REPORT_TYPES.map((value) => ({ value, label: REPORT_TYPE_LABEL[value] }));
 
 const TABS = [
   { key: "resumen", label: "Resumen" },
@@ -569,7 +572,7 @@ export default function PacienteFichaPage() {
             <p className="text-[11px] text-neutral-400 mb-3">Para {patient.firstName} {patient.lastName}</p>
             <form onSubmit={createReport} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <Select value={reportForm.reportType} onChange={(v) => setReportForm({ ...reportForm, reportType: v })} options={[{ value: "evolution", label: "Evolutivo" }, { value: "admission", label: "Admisión" }, { value: "discharge", label: "Alta" }]} className={inputCls} />
+                <Select value={reportForm.reportType} onChange={(v) => setReportForm({ ...reportForm, reportType: v })} options={REPORT_TYPE_OPTIONS} className={inputCls} />
                 <input type="date" className={inputCls} value={reportForm.dueDate} onChange={(e) => setReportForm({ ...reportForm, dueDate: e.target.value })} title="Fecha de entrega" />
               </div>
               <p className="text-[11px] text-neutral-400">Se crea como borrador.</p>

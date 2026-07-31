@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Select from "@/components/ui/Select.jsx";
 import IncentiveTiersEditor from "../_components/IncentiveTiersEditor.jsx";
 import IncentiveItemsEditor from "../_components/IncentiveItemsEditor.jsx";
 import PerformanceEditor from "../_components/PerformanceEditor.jsx";
-import { PERFORMANCE_AREAS, scoreToSemaforo } from "@/lib/clinica/performanceAreas.js";
+import { scoreToSemaforo } from "@/lib/clinica/performanceAreas.js";
 
 const SEMAFORO = {
   green: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", ring: "ring-emerald-200" },
@@ -39,12 +40,14 @@ function TeamLineChart({ data }) {
   );
 }
 
-function SemaforoMini({ areas }) {
+// Puntos de área por fila: usa las áreas y los umbrales del ROL de esa fila
+// (desempeño por roles: cada fila puede tener un set de áreas distinto).
+function SemaforoMini({ areas, roleAreas = [], thresholds }) {
   return (
     <div className="inline-flex items-center gap-0.5">
-      {PERFORMANCE_AREAS.map((a) => {
-        const c = sc(scoreToSemaforo(areas[a.key]));
-        return <span key={a.key} className={`w-2 h-2 rounded-full ${c.dot}`} title={`Área ${a.n}: ${a.name} — ${areas[a.key] ?? "—"}/100`} />;
+      {roleAreas.map((a, i) => {
+        const c = sc(scoreToSemaforo(areas?.[a.key], thresholds));
+        return <span key={a.key} className={`w-2 h-2 rounded-full ${c.dot}`} title={`Área ${a.n ?? i + 1}: ${a.name} — ${areas?.[a.key] ?? "—"}/100`} />;
       })}
     </div>
   );
@@ -57,6 +60,8 @@ export default function DireccionPage() {
   const [errorMsg, setErrorMsg] = useState(null);
   const [adjust, setAdjust] = useState(null); // { id, name, value }
   const [editor, setEditor] = useState(null); // null | { initial } (abre el editor de evaluación)
+  const [editorTherapistId, setEditorTherapistId] = useState(""); // persona elegida en el editor → resuelve su rol
+  const [roleFilter, setRoleFilter] = useState(""); // "" = todos los roles
   const [dash, setDash] = useState(null); // datos operativos (productividad + incidencias)
 
   const load = () => {
@@ -100,10 +105,31 @@ export default function DireccionPage() {
   const pendingCount = ranking.filter((r) => !r.approved).length;
   const therapists = data?.therapists ?? [];
   const tiers = data?.tiers ?? [];
+
+  // ── Desempeño por roles: bloque `roles` de la config (viene en el GET team) ──
+  const rolesList = Array.isArray(data?.roles) ? data.roles : (data?.roles?.roles ?? []);
+  const roleByKey = Object.fromEntries(rolesList.map((r) => [r.key, r]));
+  const defaultRole = rolesList.find((r) => r.isDefault) ?? rolesList[0] ?? null;
+  const roleForRow = (r) => roleByKey[r.roleKey] ?? defaultRole;
+  // Rol de una persona para una evaluación NUEVA: el roleKey que traiga la lista
+  // de evaluables (si el backend lo aporta) o el rol por defecto.
+  const roleKeyForTherapist = (id) => {
+    const t = therapists.find((x) => x.id === id);
+    return t?.roleKey && roleByKey[t.roleKey] ? t.roleKey : (defaultRole?.key ?? null);
+  };
+  const editorRole = editor ? (roleByKey[roleKeyForTherapist(editorTherapistId)] ?? defaultRole) : null;
+  // Filtro por rol del ranking (solo visible si hay >1 rol configurado).
+  const visibleRanking = roleFilter ? ranking.filter((r) => (roleForRow(r)?.key ?? "") === roleFilter) : ranking;
+  // Leyenda de áreas: la del rol filtrado, o la del único rol configurado.
+  const legendRole = roleFilter ? roleByKey[roleFilter] : (rolesList.length === 1 ? rolesList[0] : null);
+
   // Periodo por defecto para una evaluación nueva: el del panel, o el mes actual.
   const now = new Date();
   const defaultPeriod = data?.period?.value ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const openEditRow = (r) => setEditor({ initial: { therapistId: r.therapistId, therapistName: r.therapist?.name, areaScores: r.areas, complements: r.complements, notes: r.notes } });
+  const openEditRow = (r) => {
+    setEditorTherapistId(r.therapistId);
+    setEditor({ initial: { therapistId: r.therapistId, therapistName: r.therapist?.name, areaScores: r.areas, complements: r.complements, notes: r.notes } });
+  };
 
   const KPI_CARDS = [
     { label: "Equipo activo", value: loading ? "—" : (kpis.teamActive ?? 0), sub: "Terapeutas" },
@@ -119,10 +145,20 @@ export default function DireccionPage() {
         Volver a Equipo
       </Link>
 
-      <div>
-        <div className="eyebrow">Equipo · Dirección</div>
-        <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">Panel de dirección</h1>
-        <p className="text-xs text-neutral-400 mt-1">Visión global del equipo · Periodo de {data?.period ? `${["","Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][data.period.month]} ${data.period.year}` : "—"}</p>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="eyebrow">Equipo · Dirección</div>
+          <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">Panel de dirección</h1>
+          <p className="text-xs text-neutral-400 mt-1">Visión global del equipo · Periodo de {data?.period ? `${["","Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][data.period.month]} ${data.period.year}` : "—"}</p>
+        </div>
+        <Link
+          href="/equipo/desempeno-config"
+          className="inline-flex items-center gap-1.5 self-start lg:self-auto text-[11px] font-medium px-3 py-2 rounded-lg border border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 transition-colors"
+          title="Roles, áreas, pesos y metas de la evaluación"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 011.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 01-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 01-.12-1.45l.527-.737c.25-.35.272-.806.108-1.204-.165-.397-.506-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.164-.398.142-.854-.108-1.204l-.526-.738a1.125 1.125 0 01.12-1.45l.773-.773a1.125 1.125 0 011.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894z M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          Configurar desempeño
+        </Link>
       </div>
 
       {errorMsg && <div className="px-4 py-3 rounded-lg bg-rose-50 border border-rose-100 text-xs text-rose-700">{errorMsg}</div>}
@@ -215,16 +251,27 @@ export default function DireccionPage() {
 
       {/* Ranking */}
       <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
-        <div className="px-4 lg:px-5 py-3 flex items-center justify-between border-b border-neutral-100">
+        <div className="px-4 lg:px-5 py-3 flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100">
           <h2 className="eyebrow">Ranking del equipo</h2>
-          <button
-            onClick={() => setEditor({ initial: null })}
-            className="inline-flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg text-white hover:opacity-90 transition-opacity"
-            style={{ background: "var(--color-primary, #1B3A2D)" }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-            Nueva evaluación
-          </button>
+          <div className="flex items-center gap-2">
+            {rolesList.length > 1 && (
+              <Select
+                value={roleFilter}
+                onChange={setRoleFilter}
+                options={[{ value: "", label: "Todos los roles" }, ...rolesList.map((r) => ({ value: r.key, label: r.name }))]}
+                className="text-[11px] border border-neutral-200 rounded-lg px-2.5 py-1.5 bg-white hover:border-neutral-300 cursor-pointer"
+                aria-label="Filtrar por rol"
+              />
+            )}
+            <button
+              onClick={() => { setEditorTherapistId(""); setEditor({ initial: null }); }}
+              className="inline-flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg text-white hover:opacity-90 transition-opacity"
+              style={{ background: "var(--color-primary, #1B3A2D)" }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+              Nueva evaluación
+            </button>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
@@ -241,9 +288,11 @@ export default function DireccionPage() {
             </thead>
             <tbody>
               {loading && <tr><td colSpan={7} className="px-4 py-10 text-center text-neutral-400">Cargando…</td></tr>}
-              {!loading && ranking.map((r, idx) => {
+              {!loading && visibleRanking.length === 0 && <tr><td colSpan={7} className="px-4 py-10 text-center text-neutral-400">Sin evaluaciones{roleFilter ? " para este rol" : ""} en el periodo.</td></tr>}
+              {!loading && visibleRanking.map((r, idx) => {
                 const t = r.therapist ?? { name: "—", initials: "?", color: "#666", position: "" };
                 const c = sc(r.totalLevel);
+                const rowRole = roleForRow(r);
                 return (
                   <tr key={r.id} className="border-t border-neutral-100 hover:bg-neutral-50/50">
                     <td className="px-4 py-3 font-display text-base text-neutral-400 tabular w-8">{idx + 1}</td>
@@ -251,7 +300,12 @@ export default function DireccionPage() {
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-display" style={{ backgroundColor: t.color ?? "#1B3A2D" }}>{t.initials}</div>
                         <div>
-                          <div className="text-[var(--ink-900)] font-medium leading-tight">{t.name}</div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[var(--ink-900)] font-medium leading-tight">{t.name}</span>
+                            {rowRole && (
+                              <span className="inline-flex items-center bg-neutral-100 text-neutral-500 text-[9px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap" title="Rol de desempeño de esta evaluación">{r.roleName ?? rowRole.name}</span>
+                            )}
+                          </div>
                           <div className="text-[10px] text-neutral-400">{t.position}</div>
                         </div>
                       </div>
@@ -261,7 +315,7 @@ export default function DireccionPage() {
                         <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />{r.totalScore}
                       </span>
                     </td>
-                    <td className="px-4 py-3"><SemaforoMini areas={r.areas} /></td>
+                    <td className="px-4 py-3"><SemaforoMini areas={r.areas} roleAreas={rowRole?.areas ?? []} thresholds={rowRole?.thresholds} /></td>
                     <td className="px-4 py-3 text-[11px] text-neutral-600">{r.complementsLabel}</td>
                     <td className="px-4 py-3 text-right tabular text-[var(--ink-900)] font-medium">{r.proposedIncentive} €</td>
                     <td className="px-4 py-3 text-right whitespace-nowrap space-x-2">
@@ -275,10 +329,16 @@ export default function DireccionPage() {
           </table>
         </div>
         <div className="px-4 lg:px-5 py-3 border-t border-neutral-100 bg-neutral-50/40 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-neutral-500">
-          <span className="uppercase tracking-wider text-neutral-400">Leyenda áreas:</span>
-          {PERFORMANCE_AREAS.map((a) => (
-            <span key={a.key} className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-neutral-300" /> {a.n}. {a.name}</span>
-          ))}
+          {legendRole ? (
+            <>
+              <span className="uppercase tracking-wider text-neutral-400">Leyenda áreas ({legendRole.name}):</span>
+              {(legendRole.areas ?? []).map((a, i) => (
+                <span key={a.key} className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-neutral-300" /> {a.n ?? i + 1}. {a.name}</span>
+              ))}
+            </>
+          ) : (
+            <span className="text-neutral-400">Cada rol tiene sus propias áreas: pasa el ratón por los puntos, o filtra por rol para ver su leyenda.</span>
+          )}
         </div>
       </div>
 
@@ -409,6 +469,10 @@ export default function DireccionPage() {
           therapists={therapists}
           defaultPeriod={defaultPeriod}
           tiers={tiers}
+          areas={editorRole?.areas ?? []}
+          thresholds={editorRole?.thresholds}
+          roleKey={editorRole?.key ?? null}
+          onTherapistChange={setEditorTherapistId}
           initial={editor.initial}
           onClose={() => setEditor(null)}
           onSaved={() => { setEditor(null); load(); }}

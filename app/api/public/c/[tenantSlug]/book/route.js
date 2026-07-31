@@ -33,6 +33,7 @@ import {
   pickAvailabilitiesForEventType,
   timeStrToMinutes,
 } from "../../../../../../lib/citas/slots.js";
+import { cargarFestivos, esFestivo } from "../../../../../../lib/citas/festivos.js";
 
 /** Origen público desde el que se sirvió la petición (para las URLs de Stripe). */
 function baseUrl(request) {
@@ -145,6 +146,14 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     if (Number.isNaN(scheduledAt.getTime())) return error("scheduledAt inválido", 422);
 
     const now = new Date();
+
+    // Día cerrado del centro. Se comprueba también AQUÍ y no solo al generar
+    // los huecos: quien manda el POST a mano (o con una pestaña abierta desde
+    // antes de marcar el festivo) se saltaría el filtro visual.
+    const festivos = await cargarFestivos(tenantModels);
+    if (esFestivo(festivos, getMadridParts(scheduledAt))) {
+      return error("Ese día el centro está cerrado. Elige otra fecha.", 422);
+    }
 
     // Validar antelación mínima
     const minNoticeMs = (eventType.minNoticeHours ?? 0) * 60 * 60 * 1000;

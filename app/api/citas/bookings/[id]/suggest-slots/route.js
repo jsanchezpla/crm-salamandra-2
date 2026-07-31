@@ -6,6 +6,7 @@ import { buildCandidates, chooseSlots } from "../../../../../../lib/citas/sugges
 import { getTenantAnthropicKey } from "../../../../../../lib/ai/anthropicKey.js";
 import { getTenantAnthropicModel } from "../../../../../../lib/ai/anthropicModel.js";
 import { resolveCurrentTeamMemberId } from "../../../../../../lib/team/currentTeamMember.js";
+import { cargarFestivos } from "../../../../../../lib/citas/festivos.js";
 import { vetoAi } from "../../../../../../lib/ai/aiAccess.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
@@ -90,7 +91,9 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     }
 
     // 1) Candidatos VÁLIDOS (horario propio − citas).
-    const candidates = buildCandidates({ eventType, members, horizonDays, now, centerAvailabilities });
+    // Un festivo del centro no puede salir como hueco sugerido.
+    const festivos = await cargarFestivos(ctx.tenantModels);
+    const candidates = buildCandidates({ eventType, members, horizonDays, now, centerAvailabilities, blockedDates: festivos });
     if (candidates.length === 0) {
       return ok({ suggestions: [], model: "none", note: "No hay huecos libres en el horizonte. Configura el horario de los terapeutas o amplía los días." });
     }

@@ -489,6 +489,14 @@ export default function ConfigModule() {
           )}
 
           {isAdmin && (
+            <AgendaCompartidaCard
+              activo={!!cfg.agendaCompartida}
+              readOnly={!!cfg.readOnly}
+              onChange={(v) => patchTenant({ agendaCompartida: v }, v ? "Todo el equipo verá la agenda completa" : "Cada profesional volverá a ver solo su agenda")}
+            />
+          )}
+
+          {isAdmin && (
             <VideollamadaCard
               meetModo={cfg.meetModo}
               readOnly={!!cfg.readOnly}
@@ -703,6 +711,41 @@ function WhatsappPhoneField({ value, isAdmin, onSave }) {
  * encenderlo empiezan a salir correos hacia pacientes reales, y esa decisión
  * es del cliente, no del CRM.
  */
+function AgendaCompartidaCard({ activo, readOnly, onChange }) {
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-neutral-800">Agenda compartida</div>
+          <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+            Que cada profesional vea las citas de TODO el equipo, no solo las suyas. Útil en un
+            centro donde se cubren entre compañeras y hay que cuadrar recuperaciones sin
+            preguntar. Con el interruptor apagado, cada una ve únicamente su agenda.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange(!activo)}
+          className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 ${activo ? "bg-[var(--color-primary,#1B3A2D)]" : "bg-neutral-300"}`}
+          aria-label={activo ? "Desactivar agenda compartida" : "Activar agenda compartida"}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${activo ? "translate-x-6" : "translate-x-1"}`} />
+        </button>
+      </div>
+      <div className="mt-1 text-[11px] font-medium">
+        {activo
+          ? <span className="text-emerald-700">Activa: todo el equipo ve la agenda completa.</span>
+          : <span className="text-neutral-400">Apagada: cada profesional ve solo sus citas.</span>}
+      </div>
+      <p className="text-[10px] text-neutral-400 mt-2">
+        Ojo: el listado de citas enseña <strong>nombre, email y teléfono</strong> del paciente. Al
+        encenderlo, esos datos quedan a la vista de toda la plantilla.
+      </p>
+    </div>
+  );
+}
+
 function RecordatoriosCard({ activo, readOnly, onChange }) {
   return (
     <div className="bg-white border border-neutral-200 rounded-xl p-5">

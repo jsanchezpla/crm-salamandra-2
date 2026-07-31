@@ -1,13 +1,13 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound } from "../../../../../lib/utils/apiResponse.js";
-import { serializeReport } from "../../../../../lib/clinica/serialize.js";
+import { serializeReport, REPORT_TYPES } from "../../../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../../../lib/clinica/audit.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
 }
-const TYPES = ["evolution", "admission", "discharge"];
+const TYPES = REPORT_TYPES;
 const STATUSES = ["draft", "reviewed", "delivered"];
 const PATCH_FIELDS = ["reportType", "reportDate", "dueDate", "contentSections", "status"];
 

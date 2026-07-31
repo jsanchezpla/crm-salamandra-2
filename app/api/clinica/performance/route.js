@@ -1,8 +1,9 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound } from "../../../../lib/utils/apiResponse.js";
-import { serializeRankingRow } from "../../../../lib/clinica/serialize.js";
+import { serializeRankingRow, readAreaScores } from "../../../../lib/clinica/serialize.js";
 import { AREA_KEYS } from "../../../../lib/clinica/performanceAreas.js";
 import { computeTotalScore, proposeIncentive, tiersFromTenant } from "../../../../lib/clinica/incentives.js";
+import { getPerformanceRoles, findRoleByKey, resolveRoleForMember } from "../../../../lib/clinica/performanceConfig.js";
 import { logClinicaAudit } from "../../../../lib/clinica/audit.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -35,14 +36,24 @@ function parsePeriod(body) {
 
 /**
  * POST /api/clinica/performance — crear o actualizar (upsert) la evaluación
- * mensual de un terapeuta. Solo dirección.
+ * mensual de un miembro del equipo. Solo dirección.
  *
  * Body: {
  *   therapistId, period: "YYYY-MM",
- *   areaScores: { area1:0..100, area2:…, area8:… },   // cada una opcional
+ *   roleKey?,                                          // rol de desempeño (opcional)
+ *   areaScores: { <claveDeArea>: 0..100, … },          // claves del rol resuelto
  *   complements: { occupation:0..100, seniority:>=0, attendance:bool },
  *   notes
  * }
+ *
+ * Desempeño por roles (2026-07-29): el rol se resuelve con el `roleKey` del
+ * body si existe en la config del tenant, o por el puesto del miembro
+ * (resolveRoleForMember). Sin config guardada todo se reduce al rol legacy
+ * (mismas 7 áreas y pesos de siempre). Las puntuaciones se escriben SIEMPRE en
+ * `area_scores` (JSONB, merge por clave) y se espejan a la columna legacy
+ * `${key}Score` cuando la clave es area1..area8 (mantiene vivas las queries
+ * viejas). Claves de OTRO rol ya guardadas en la fila se conservan en el JSONB
+ * pero NO puntúan: el total se calcula solo con las áreas del rol resuelto.
  *
  * La puntuación total se calcula (media ponderada de las áreas puntuadas) y el
  * incentivo propuesto se deriva de los tramos del tenant. La aprobación
@@ -71,20 +82,35 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   const therapist = await TeamMember.findByPk(therapistId);
   if (!therapist) return notFound("Terapeuta no encontrado");
 
-  // Áreas: cada una entero 0-100 o null. Guardamos también un mapa por clave
-  // para calcular la puntuación total.
-  const fields = {};
+  // Rol de desempeño: el pedido en el body (si existe en la config) o el que
+  // corresponda al puesto del miembro. Sin config → rol legacy.
+  const rolesConfig = getPerformanceRoles(ctx.tenant);
+  let role = null;
+  if (body.roleKey !== undefined && body.roleKey !== null && body.roleKey !== "") {
+    role = findRoleByKey(rolesConfig, String(body.roleKey));
+    if (!role) return error("roleKey no existe en la configuración de desempeño");
+  } else {
+    role = resolveRoleForMember(rolesConfig, therapist);
+  }
+  const roleAreaKeys = new Set(role.areas.map((a) => a.key));
+
+  // Áreas: cada clave debe pertenecer al rol resuelto; cada valor, entero
+  // 0-100 o null (null borra la puntuación de esa área).
   const scores = {};
   const areaIn = body.areaScores ?? {};
-  for (const key of AREA_KEYS) {
-    if (!(key in areaIn)) continue;
-    const val = intInRange(areaIn[key], 0, 100);
+  for (const [key, value] of Object.entries(areaIn)) {
+    if (!roleAreaKeys.has(key)) return error(`El área "${key}" no pertenece al rol "${role.name}"`);
+    const val = intInRange(value, 0, 100);
     if (val === undefined) return error(`Puntuación de ${key} inválida (0-100)`);
-    fields[`${key}Score`] = val;
     scores[key] = val;
   }
-  // Para el total necesitamos TODAS las áreas (las no enviadas, desde la fila
-  // existente si la hay); se resuelve más abajo tras localizar la fila.
+
+  const fields = {};
+  // Espejo legacy: las claves area1..area8 siguen escribiendo su columna
+  // (area5 no existe como columna, y AREA_KEYS ya la excluye).
+  for (const key of AREA_KEYS) {
+    if (key in scores) fields[`${key}Score`] = scores[key];
+  }
 
   // Complementos.
   const comp = body.complements ?? {};
@@ -110,12 +136,25 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   let metric = await PerformanceMetric.findOne({ where });
   const before = metric ? metric.toJSON() : null;
 
-  // Puntuación total: combina las áreas nuevas con las ya guardadas.
-  const merged = {};
-  for (const key of AREA_KEYS) {
-    merged[key] = key in scores ? scores[key] : metric ? metric[`${key}Score`] ?? null : null;
+  // JSONB nuevo: merge por clave sobre lo ya guardado (regla de lectura con
+  // fallback legacy). Un null borra la clave; las claves huérfanas de otro rol
+  // se conservan tal cual.
+  const existingScores = metric ? readAreaScores(metric) : {};
+  const newStored = { ...existingScores };
+  for (const [key, val] of Object.entries(scores)) {
+    if (val === null) delete newStored[key];
+    else newStored[key] = val;
   }
-  const totalScore = computeTotalScore(merged);
+  fields.areaScores = newStored;
+  fields.roleKey = role.key;
+
+  // Puntuación total: SOLO las áreas del rol resuelto (combinando lo nuevo con
+  // lo ya guardado de esas mismas claves).
+  const merged = {};
+  for (const key of roleAreaKeys) {
+    merged[key] = key in scores ? scores[key] : newStored[key] ?? null;
+  }
+  const totalScore = computeTotalScore(merged, role.areas);
   fields.totalScore = totalScore;
   fields.proposedIncentive = proposeIncentive(totalScore, tiersFromTenant(ctx.tenant));
 
@@ -136,5 +175,5 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     ip: request.headers.get("x-forwarded-for"),
   });
 
-  return ok(serializeRankingRow(metric, { therapist, tiers: tiersFromTenant(ctx.tenant) }));
+  return ok(serializeRankingRow(metric, { therapist, tiers: tiersFromTenant(ctx.tenant), role }));
 });

@@ -4,6 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
 import PreviewBanner from "../_components/PreviewBanner.jsx";
+import { REPORT_TYPES, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
+
+// Opciones del desplegable derivadas del catálogo compartido: añadir un tipo
+// nuevo (como "Derivación") no debe obligar a tocar cada pantalla.
+const TYPE_OPTIONS = REPORT_TYPES.map((value) => ({ value, label: REPORT_TYPE_LABEL[value] }));
 
 const STATUS_STYLES = {
   draft: { bg: "bg-neutral-100", text: "text-neutral-600", dot: "bg-neutral-400" },
@@ -14,6 +19,7 @@ const TYPE_STYLES = {
   evolution: { bg: "bg-sky-50", text: "text-sky-700" },
   admission: { bg: "bg-violet-50", text: "text-violet-700" },
   discharge: { bg: "bg-emerald-50", text: "text-emerald-700" },
+  referral: { bg: "bg-amber-50", text: "text-amber-700" },
 };
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
@@ -332,7 +338,7 @@ export default function InformesPage() {
                 <Select
                   value={form.reportType}
                   onChange={(v) => setForm({ ...form, reportType: v })}
-                  options={[{ value: "evolution", label: "Evolutivo" }, { value: "admission", label: "Admisión" }, { value: "discharge", label: "Alta" }]}
+                  options={TYPE_OPTIONS}
                   className={inputCls}
                 />
                 <input type="date" className={inputCls} value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} title="Fecha de entrega" />

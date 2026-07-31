@@ -11,6 +11,7 @@ import {
   pickAvailabilitiesForEventType,
   toMadridISOString,
 } from "../../../../../../lib/citas/slots.js";
+import { cargarFestivos } from "../../../../../../lib/citas/festivos.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/availability?eventTypeId=X&date=YYYY-MM-DD
@@ -86,12 +87,16 @@ export const GET = withPublicTenant(async (request, _ctx, { tenantModels, hasMod
       attributes: ["id", "scheduledAt", "duration"],
     });
 
+    // Festivos del centro: un día cerrado no ofrece ningún hueco.
+    const festivos = await cargarFestivos(tenantModels);
+
     const rawSlots = generateSlotsForDay({
       eventType: eventType.toJSON(),
       availabilities: applicable,
       date: parsed,
       existingBookings: existingBookings.map((b) => b.toJSON()),
       now,
+      blockedDates: festivos,
     });
 
     const slots = rawSlots.map((s) => ({

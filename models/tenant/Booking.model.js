@@ -94,6 +94,18 @@ export function defineBooking(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // ── Faltas de asistencia (sprint Aumenta 2026-07-28) ────────────────
+      // Solo tienen sentido con status='no_show'. Tri-estado: null = falta
+      // sin clasificar (citas antiguas), true = justificada, false = no
+      // justificada. El motivo es texto libre opcional.
+      noShowJustified: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+      },
+      noShowReason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       // Miembro del equipo (profesional) asignado a la cita. Nullable/aditivo:
       // las citas existentes (incl. nutri_laura en prod) quedan sin asignar.
       // underscored global → columna team_member_id.

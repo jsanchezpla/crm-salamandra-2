@@ -53,6 +53,25 @@ export function defineClinicSession(sequelize) {
         allowNull: false,
         defaultValue: {},
       },
+      // ── Registro de sesión en 3 partes (sprint Aumenta 2026-07-28) ──────
+      // 1) Preparación (OPCIONAL): notas previas + adjuntos (fotos/audio)
+      //    que enriquecen el informe. prepFiles = [{ name, path, mimeType, size }].
+      // 2) Informe (OBLIGATORIO): los campos de siempre (objectives,
+      //    activities, performance, observations), por audio o por escrito.
+      // 3) Feedback de los padres (OPCIONAL): recogido en la propia sesión.
+      prepText: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      prepFiles: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
+      parentFeedback: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       aiTranscription: {
         type: DataTypes.TEXT,
         allowNull: true,

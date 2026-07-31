@@ -43,6 +43,13 @@ export function definePerformanceMetric(sequelize) {
         allowNull: false,
         validate: { min: 2020, max: 2100 },
       },
+      // Desempeño por roles (2026-07-29): rol de desempeño con el que se evaluó
+      // la fila y puntuaciones por clave de área en JSONB (fuente de verdad
+      // nueva). Las columnas areaNScore legacy SE QUEDAN: se espejan al
+      // escribir claves area1..area8 y son el fallback de lectura de las filas
+      // históricas de aumenta (migración migrate-clinica-performance-roles.js).
+      roleKey: { type: DataTypes.STRING(64), allowNull: true, field: "role_key" },
+      areaScores: { type: DataTypes.JSONB, allowNull: true, defaultValue: {}, field: "area_scores" },
       area1Score: { type: DataTypes.INTEGER, allowNull: true, validate: { min: 0, max: 100 } },
       area2Score: { type: DataTypes.INTEGER, allowNull: true, validate: { min: 0, max: 100 } },
       area3Score: { type: DataTypes.INTEGER, allowNull: true, validate: { min: 0, max: 100 } },

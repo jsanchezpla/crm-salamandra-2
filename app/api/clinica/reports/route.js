@@ -1,13 +1,16 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { clientIdOfPatient } from "../../../../lib/clinica/patientClient.js";
 import { ok, created, error, forbidden } from "../../../../lib/utils/apiResponse.js";
-import { serializeReport } from "../../../../lib/clinica/serialize.js";
+import { serializeReport, REPORT_TYPES } from "../../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../../lib/clinica/audit.js";
 
 function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
 }
-const TYPES = ["evolution", "admission", "discharge"];
+// Fuente única de tipos (lib/clinica/serialize.js): antes esta lista vivía
+// duplicada aquí y en otros cuatro sitios, y añadir "Derivación" al sprint
+// habría dejado el tipo válido en unos y rechazado en otros.
+const TYPES = REPORT_TYPES;
 const STATUSES = ["draft", "reviewed", "delivered"];
 
 export const GET = withTenant(async (request, _rc, ctx) => {

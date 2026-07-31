@@ -3,6 +3,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, error, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 import { noEsCarritoAbandonado } from "../../../../../lib/citas/booking.js";
+import { veTodaLaAgenda } from "../../../../../lib/citas/visibilidad.js";
 
 const STATUS_COLOR_DIM = {
   cancelled: "#9ca3af",
@@ -10,7 +11,6 @@ const STATUS_COLOR_DIM = {
   completed: "#475569",
 };
 
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const NADIE = "00000000-0000-0000-0000-000000000000";
 
 /**
@@ -20,15 +20,16 @@ const NADIE = "00000000-0000-0000-0000-000000000000";
  *
  * Devuelve bookings en formato FullCalendar para el rango pedido.
  *
- * Visibilidad por rol (tenants con módulo team):
+ * Visibilidad (tenants con módulo team), en lib/citas/visibilidad.js:
  *   · Admin/jefe: ve las citas de TODO el equipo; puede acotar con teamMemberIds.
- *   · Resto: ve SOLO sus propias citas (las de su ficha de equipo).
+ *   · Resto: ve SOLO sus propias citas… salvo que el tenant tenga
+ *     `settings.citas.agendaCompartida`, y entonces ve (y filtra) la de todos.
  *
  * Color del evento: por PERSONA (avatar_color del profesional) si la cita tiene
  * profesional asignado; si no, el color del tipo de cita. Las
  * canceladas/no_show/completadas van apagadas.
  */
-export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
 
@@ -60,7 +61,10 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const teamOn = hasModule("team");
     if (teamOn) {
       const userRole = request.headers.get("x-user-role") ?? "user";
-      if (ADMIN_ROLES.has(userRole)) {
+      // Con agenda compartida, una terapeuta ve —y filtra— la agenda entera
+      // igual que dirección: es lo que pidió Aumenta para cuadrar
+      // recuperaciones entre compañeras (lib/citas/visibilidad.js).
+      if (veTodaLaAgenda({ tenant, role: userRole })) {
         // El jefe ve a todos; puede filtrar a uno o varios profesionales. Las
         // citas SIN profesional asignado (públicas pendientes de repartir) se
         // mantienen SIEMPRE visibles aunque filtres, para no perderlas de vista.

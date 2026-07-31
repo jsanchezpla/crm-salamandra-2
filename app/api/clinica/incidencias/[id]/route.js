@@ -6,6 +6,8 @@ import {
   isValidCategory,
   isValidStatus,
   isValidPriority,
+  responsablesDe,
+  sincronizarResponsables,
 } from "../../../../../lib/clinica/incidencias.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -17,6 +19,8 @@ const INCLUDES = (M) => [
   { model: M.Patient, as: "patient", attributes: ["id", "firstName", "lastName"], required: false },
   { model: M.TeamMember, as: "assignedTo", attributes: ["id", "displayName", "avatarColor"], required: false },
   { model: M.TeamMember, as: "reportedBy", attributes: ["id", "displayName", "avatarColor"], required: false },
+  // Multi-responsable (sprint 2026-07-29). Ver app/api/clinica/incidencias/route.js.
+  { model: M.TeamMember, as: "assignees", attributes: ["id", "displayName", "avatarColor"], through: { attributes: [] }, required: false },
 ];
 
 export const GET = withTenant(async (_request, rc, ctx) => {
@@ -75,9 +79,11 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   if (body.incidenceDate !== undefined && /^\d{4}-\d{2}-\d{2}$/.test(body.incidenceDate)) {
     changes.incidenceDate = body.incidenceDate;
   }
-  if (body.assignedToId !== undefined) {
-    changes.assignedToId = body.assignedToId && UUID_RE.test(body.assignedToId) ? body.assignedToId : null;
-  }
+  // Responsables: `assigneeIds` (multi) manda; `assignedToId` sigue aceptándose
+  // solo. El espejo assignedToId lo pone sincronizarResponsables más abajo.
+  const responsables = body.assigneeIds !== undefined || body.assignedToId !== undefined
+    ? responsablesDe(body)
+    : null;
   if (body.patientId !== undefined) {
     const pid = body.patientId && UUID_RE.test(body.patientId) ? body.patientId : null;
     changes.patientId = pid;
@@ -115,7 +121,12 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
     }
   }
 
-  if (Object.keys(changes).length === 0 && !commentEntry) return error("Nada que cambiar", 422);
+  // `responsables` NO va en `changes` (vive en la tabla pivote), así que hay
+  // que contarlo aparte: si no, cambiar solo los responsables se rechazaba con
+  // "Nada que cambiar".
+  if (Object.keys(changes).length === 0 && !commentEntry && !responsables) {
+    return error("Nada que cambiar", 422);
+  }
 
   if (Object.keys(changes).length > 0) await row.update(changes);
   if (commentEntry) {
@@ -129,6 +140,8 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
       { replacements: { entry: JSON.stringify([commentEntry]), id } }
     );
   }
+  if (responsables) await sincronizarResponsables(row, responsables, M);
+
   const full = await Incidencia.findByPk(id, { include: INCLUDES(M) });
   return ok(serializeIncidencia(full));
 });

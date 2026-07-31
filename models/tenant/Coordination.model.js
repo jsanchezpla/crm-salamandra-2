@@ -58,6 +58,19 @@ export function defineCoordination(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // ── Interna / externa (sprint Aumenta 2026-07-28) ───────────────────
+      // internal = entre terapeutas del centro; external = con colegios,
+      // hospitales, otros profesionales… Nullable: las filas antiguas quedan
+      // sin clasificar. Con external, `externalEntity` dice con quién
+      // ("Colegio San José", "Hospital Niño Jesús").
+      scope: {
+        type: DataTypes.ENUM("internal", "external"),
+        allowNull: true,
+      },
+      externalEntity: {
+        type: DataTypes.STRING(200),
+        allowNull: true,
+      },
       aiTranscription: {
         type: DataTypes.TEXT,
         allowNull: true,

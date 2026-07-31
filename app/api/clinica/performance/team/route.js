@@ -3,6 +3,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden } from "../../../../../lib/utils/apiResponse.js";
 import { serializeRankingRow, monthShort } from "../../../../../lib/clinica/serialize.js";
 import { tiersFromTenant } from "../../../../../lib/clinica/incentives.js";
+import { getPerformanceRoles, findRoleByKey, resolveRoleForMember } from "../../../../../lib/clinica/performanceConfig.js";
 import { parsePeriodString } from "../../../../../lib/clinica/period.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
@@ -22,12 +23,19 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const { PerformanceMetric, TeamMember, ClinicalReport } = ctx.tenantModels;
   const sp = new URL(request.url).searchParams;
   const tiers = tiersFromTenant(ctx.tenant);
+  // Desempeño por roles (2026-07-29): config del tenant (o rol legacy) para
+  // etiquetar cada fila con su rol y que el editor cargue las áreas correctas.
+  const rolesConfig = getPerformanceRoles(ctx.tenant);
 
-  // Lista de terapeutas activos (para el editor de evaluación: permite evaluar
-  // también a quien aún no tiene métrica en el periodo).
+  // Lista de miembros del equipo activos (para el editor de evaluación: permite
+  // evaluar también a quien aún no tiene métrica en el periodo), cada uno con
+  // su rol de desempeño resuelto por su puesto.
   const therapists = (
-    await TeamMember.findAll({ where: { status: "active" }, attributes: ["id", "displayName"], order: [["displayName", "ASC"]] })
-  ).map((t) => ({ id: t.id, name: t.displayName }));
+    await TeamMember.findAll({ where: { status: "active" }, attributes: ["id", "displayName", "position"], order: [["displayName", "ASC"]] })
+  ).map((t) => {
+    const r = resolveRoleForMember(rolesConfig, t);
+    return { id: t.id, name: t.displayName, roleKey: r.key, roleName: r.name };
+  });
 
   let year;
   let month;
@@ -38,7 +46,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     ({ year, month } = parsed);
   } else {
     const latest = await PerformanceMetric.findOne({ order: [["periodYear", "DESC"], ["periodMonth", "DESC"]], attributes: ["periodYear", "periodMonth"], raw: true });
-    if (!latest) return ok({ period: null, ranking: [], kpis: {}, alerts: [], history: [], totalProposed: 0, totalApproved: 0, periods: [], therapists, tiers });
+    if (!latest) return ok({ period: null, ranking: [], kpis: {}, alerts: [], history: [], totalProposed: 0, totalApproved: 0, periods: [], therapists, tiers, roles: rolesConfig.roles, isDefaultConfig: rolesConfig.isDefaultConfig });
     year = latest.periodYear;
     month = latest.periodMonth;
   }
@@ -65,7 +73,14 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   }
 
   const ranking = metrics.map((m) =>
-    serializeRankingRow(m, { therapist: m.therapist, tiers, extras: extrasByTherapist[m.therapistId] ?? 0 })
+    serializeRankingRow(m, {
+      therapist: m.therapist,
+      tiers,
+      extras: extrasByTherapist[m.therapistId] ?? 0,
+      // Rol de la fila: el guardado al evaluar si sigue en la config; si no,
+      // el que corresponda hoy al puesto de la persona.
+      role: findRoleByKey(rolesConfig, m.roleKey) ?? resolveRoleForMember(rolesConfig, m.therapist),
+    })
   );
   const totalProposed = Math.round(ranking.reduce((s, r) => s + (r.totalProposed ?? 0), 0) * 100) / 100;
   const totalApproved = ranking.reduce((s, r) => s + (r.approvedIncentive ?? 0), 0);

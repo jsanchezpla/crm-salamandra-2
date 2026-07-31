@@ -127,6 +127,7 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("aiAccess", antes?.aiAccess, despues?.aiAccess);
   anota("citas.meetModo", antes?.citas?.meetModo, despues?.citas?.meetModo);
   anota("citas.recordatorios", antes?.citas?.recordatorios, despues?.citas?.recordatorios);
+  anota("citas.agendaCompartida", antes?.citas?.agendaCompartida, despues?.citas?.agendaCompartida);
 
   const huboSecretos = Object.keys(secretos).length > 0;
   const huboAbiertos = Object.keys(after).length > 0;
@@ -175,6 +176,7 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // Recordatorio automático la víspera de la cita. Apagado por defecto:
     // encenderlo empieza a mandar correos a pacientes reales.
     recordatoriosCitas: t.settings?.citas?.recordatorios === true,
+    agendaCompartida: t.settings?.citas?.agendaCompartida === true,
     brand: {
       primaryColor: brand.primaryColor ?? null,
       secondaryColor: brand.secondaryColor ?? null,
@@ -315,6 +317,12 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   if (typeof body.recordatoriosCitas === "boolean") {
     settings.citas = { ...(settings.citas ?? {}), recordatorios: body.recordatoriosCitas };
   }
+  // Agenda compartida: todo el equipo ve las citas de todo el equipo. Apagada
+  // por defecto porque el listado enseña datos personales del paciente
+  // (lib/citas/visibilidad.js); encenderla es decisión de cada cliente.
+  if (typeof body.agendaCompartida === "boolean") {
+    settings.citas = { ...(settings.citas ?? {}), agendaCompartida: body.agendaCompartida };
+  }
 
   // Candado de la IA para empleados (no es un secreto): lista cerrada.
   if (body.aiAccess === "libre" || body.aiAccess === "restringido") {
@@ -358,6 +366,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     aiAccess: settings.aiAccess === "restringido" ? "restringido" : "libre",
     meetModo: settings.citas?.meetModo === "automatico" ? "automatico" : "manual",
     recordatoriosCitas: settings.citas?.recordatorios === true,
+    agendaCompartida: settings.citas?.agendaCompartida === true,
     brand: {
       primaryColor: settings.brand.primaryColor ?? null,
       secondaryColor: settings.brand.secondaryColor ?? null,

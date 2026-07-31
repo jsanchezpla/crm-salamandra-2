@@ -118,7 +118,12 @@ export default function IncidenciasPage() {
                     <div className="text-[11px] text-neutral-400 mt-0.5 truncate">
                       {fmt(r.date)}
                       {r.patient ? ` · ${r.patient.name}` : ""}
-                      {r.assignedTo ? ` · ${r.assignedTo.name}` : " · sin asignar"}
+                      {/* Con varios responsables se enseñan todos: era el
+                          punto del cambio, ver solo al principal lo dejaba a
+                          medias. */}
+                      {r.assignees?.length
+                        ? ` · ${r.assignees.map((a) => a.name).join(", ")}`
+                        : " · sin asignar"}
                     </div>
                   </div>
                   <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full ${STATUS_PILL[r.statusLevel] ?? STATUS_PILL.gray}`}>{r.statusLabel}</span>

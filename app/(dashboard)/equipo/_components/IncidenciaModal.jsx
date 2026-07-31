@@ -27,7 +27,14 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
   const [priority, setPriority] = useState(inc?.priority ?? "medium");
   const [date, setDate] = useState(inc?.date ?? new Date().toISOString().slice(0, 10));
   const [patientId, setPatientId] = useState(inc?.patientId ?? "");
-  const [assignedToId, setAssignedToId] = useState(inc?.assignedToId ?? "");
+  // Multi-responsable: se parte de `assignees` (nuevo) y se cae al legacy
+  // `assignedToId` para las incidencias creadas antes del cambio.
+  const [assigneeIds, setAssigneeIds] = useState(() => {
+    if (Array.isArray(inc?.assignees) && inc.assignees.length) return inc.assignees.map((a) => a.id);
+    return inc?.assignedToId ? [inc.assignedToId] : [];
+  });
+  const toggleAssignee = (id) =>
+    setAssigneeIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const [description, setDescription] = useState(inc?.description ?? "");
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
@@ -61,7 +68,7 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
     if (!title.trim()) { setErr("El título es obligatorio."); return; }
     const fields = {
       title: title.trim(), category, subcategory: subcategory || null, priority,
-      incidenceDate: date, patientId: patientId || null, assignedToId: assignedToId || null,
+      incidenceDate: date, patientId: patientId || null, assigneeIds,
       description: description || null,
     };
     if (isNew) {
@@ -175,10 +182,39 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`mt-1 ${inputCls}`} />
             </div>
             <div>
-              <label className="text-[10px] uppercase tracking-wider text-neutral-400">Responsable</label>
-              <Select value={assignedToId} onChange={setAssignedToId}
-                options={[{ value: "", label: "Sin asignar" }, ...therapists.map((t) => ({ value: t.id, label: t.name }))]}
-                className={`mt-1 ${inputCls} bg-white`} />
+              <label className="text-[10px] uppercase tracking-wider text-neutral-400">
+                Responsables
+                {assigneeIds.length > 1 && <span className="ml-1 text-neutral-300">· {assigneeIds.length}</span>}
+              </label>
+              {/* Varias personas pueden estar al cargo de una misma incidencia
+                  (sprint 2026-07-29). El PRIMERO que se marca queda como
+                  responsable principal, que es el que sale en los listados. */}
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {therapists.length === 0 && (
+                  <span className="text-xs text-neutral-400">No hay profesionales activos.</span>
+                )}
+                {therapists.map((t) => {
+                  const puesto = assigneeIds.indexOf(t.id);
+                  const marcado = puesto >= 0;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => toggleAssignee(t.id)}
+                      aria-pressed={marcado}
+                      className={`px-2.5 py-1 rounded-full text-[11px] border transition-colors ${
+                        marcado
+                          ? "border-transparent text-white"
+                          : "border-neutral-200 text-neutral-600 hover:bg-neutral-50"
+                      }`}
+                      style={marcado ? { background: "var(--color-primary, #1B3A2D)" } : undefined}
+                    >
+                      {t.name}
+                      {puesto === 0 && assigneeIds.length > 1 && <span className="ml-1 opacity-70">· principal</span>}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 

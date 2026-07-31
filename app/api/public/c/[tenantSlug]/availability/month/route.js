@@ -9,6 +9,7 @@ import {
   pickAvailabilitiesForEventType,
 } from "../../../../../../../lib/citas/slots.js";
 import { ocupaHuecoWhere } from "../../../../../../../lib/citas/booking.js";
+import { cargarFestivos } from "../../../../../../../lib/citas/festivos.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/availability/month?eventTypeId=X&year=2026&month=5
@@ -66,6 +67,9 @@ export const GET = withPublicTenant(async (request, _ctx, { tenantModels, hasMod
     });
     const existingBookingsJson = existingBookings.map((b) => b.toJSON());
 
+    // Festivos del centro: el widget no puede ofrecer hueco un día cerrado.
+    const festivos = await cargarFestivos(tenantModels);
+
     const availableDays = [];
     for (let day = 1; day <= daysInMonth; day++) {
       const dayStart = buildMadridDate(year, month, day, 0, 0);
@@ -86,6 +90,7 @@ export const GET = withPublicTenant(async (request, _ctx, { tenantModels, hasMod
         date: { year, month, day },
         existingBookings: existingBookingsJson,
         now,
+        blockedDates: festivos,
       });
       if (has) availableDays.push(day);
     }
