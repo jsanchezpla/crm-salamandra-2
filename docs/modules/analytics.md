@@ -59,8 +59,10 @@ web)»**, con las instrucciones paso a paso dentro de la propia tarjeta.
 | `cloudflareAccountId` | no | Identificador de cuenta (sale en la URL del panel) |
 | `cloudflareSiteTag` | no | Sitio concreto. Vacío = todos los de la cuenta |
 
-El token necesita **un solo permiso**: `Cuenta · Analytics de Cloudflare Web ·
-Lectura`. No puede tocar DNS, dominios ni nada más.
+El token necesita **un solo permiso**, tal y como lo llama Cloudflare en su
+pantalla de tokens personalizados: `Cuenta` · `Account Analytics` · `Leer`
+(comprobado en el panel el 2026-07-31 — el desplegable del medio solo ofrece
+esa opción al escribir «Analytics»). No puede tocar DNS, dominios ni nada más.
 
 > **El token no se pide ni se pega nunca por chat ni por correo** (regla 14 de
 > CLAUDE.md). Lo crea el cliente o el administrador en Cloudflare y lo pega

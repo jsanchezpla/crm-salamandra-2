@@ -90,8 +90,9 @@ const AI_PROVIDERS = {
     steps: [
       "La web tiene que tener ya activado Cloudflare Web Analytics y su fragmento de medición puesto.",
       "Entra en dash.cloudflare.com → Mi perfil → Tokens de API.",
-      'Pulsa "Crear token" y elige "Crear token personalizado" (empezar desde cero).',
-      'Añade UN solo permiso: Cuenta · "Analytics de Cloudflare Web" · Lectura. En "Recursos de la cuenta" elige la cuenta de la web.',
+      'Pulsa "Crear token" y elige "Crear token personalizado" (botón "Comenzar").',
+      'Añade UN solo permiso, con los tres desplegables: "Cuenta" · "Account Analytics" · "Leer". El del medio sale escribiendo «Analytics».',
+      'En "Recursos de cuenta" deja "Incluir" y elige tu cuenta concreta en vez de "Todas las cuentas".',
       "Crea el token y cópialo (Cloudflare solo lo enseña una vez).",
       "Pégalo abajo, rellena el identificador de cuenta y pulsa Guardar.",
     ],

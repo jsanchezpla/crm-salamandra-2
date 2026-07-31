@@ -308,8 +308,9 @@ function SinConfigurar({ datos, esAdmin }) {
               {" "}<strong>Crear token → Crear token personalizado</strong>.
             </li>
             <li>
-              Dale un permiso y solo uno: <strong>Cuenta · Analytics de Cloudflare Web · Lectura</strong>.
-              En «Recursos de la cuenta» elige la cuenta de la web.
+              Dale un permiso y solo uno, con los tres desplegables:
+              {" "}<strong>Cuenta · Account Analytics · Leer</strong> (el del medio sale escribiendo
+              «Analytics»). En «Recursos de cuenta» elige tu cuenta concreta.
             </li>
             <li>Copia el token que sale al final (Cloudflare solo lo enseña una vez).</li>
             <li>
