@@ -178,8 +178,13 @@ migración. `patients.contractSigned` queda como columna legada, sin uso en la U
   (`/clinica/coordinaciones`) con listado general y filtros, más el botón
   «Nueva coordinación» en la pestaña de la ficha del paciente. El POST ya
   guarda `scope` y `externalEntity`, y resuelve solo quién la registra.
-- **1.4** agregado por terapeuta de los contadores trimestrales (para el
-  programa de incentivos).
+- **1.4** agregado por terapeuta de los contadores trimestrales — **HECHO en
+  local** (31/07): `GET /api/clinica/performance/planes` y su tabla en Equipo →
+  Dirección, con selector de trimestre. Cuenta sobre los informes y las
+  sesiones REALES, igual que la pestaña «Plan» del paciente, así que los dos
+  números no pueden contradecirse. Cada parte se topa a lo previsto: hacer 20
+  registros de más no compensa un informe sin entregar, que es justo lo que
+  mide el incentivo.
 
 ### 3.4 — Bloque 5: administración — **HECHO en local el 31/07**
 

@@ -63,6 +63,11 @@ export default function DireccionPage() {
   const [editorTherapistId, setEditorTherapistId] = useState(""); // persona elegida en el editor → resuelve su rol
   const [roleFilter, setRoleFilter] = useState(""); // "" = todos los roles
   const [dash, setDash] = useState(null); // datos operativos (productividad + incidencias)
+  // Cumplimiento de los planes de intervención por terapeuta (punto 1.4 del
+  // sprint): lo que cada uno lleva del trimestre, para el programa de
+  // incentivos. Antes había que abrir las fichas una a una y sumar a mano.
+  const [planes, setPlanes] = useState(null);
+  const [trimestre, setTrimestre] = useState("");
 
   const load = () => {
     setLoading(true);
@@ -78,6 +83,17 @@ export default function DireccionPage() {
       .finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    fetch(`/api/clinica/performance/planes${trimestre ? `?trimestre=${trimestre}` : ""}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!j?.data) return;
+        setPlanes(j.data);
+        if (!trimestre && j.data.trimestre?.key) setTrimestre(j.data.trimestre.key);
+      })
+      .catch(() => {});
+  }, [trimestre]);
 
   const patch = async (id, body) => {
     setBusy(true); setErrorMsg(null);
@@ -246,6 +262,74 @@ export default function DireccionPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Cumplimiento de planes por terapeuta (punto 1.4) */}
+      {planes?.aplicable && planes.terapeutas.length > 0 && (
+        <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden mb-4">
+          <div className="px-4 lg:px-5 py-3 flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100">
+            <h2 className="eyebrow">Planes de intervención · cumplimiento del trimestre</h2>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-neutral-400">Curso {planes.curso}</span>
+              <select
+                value={trimestre}
+                onChange={(e) => setTrimestre(e.target.value)}
+                className="text-[11px] border border-neutral-200 rounded-lg px-2.5 py-1.5 bg-white"
+              >
+                {(planes.trimestres ?? []).map((t) => (
+                  <option key={t.key} value={t.key}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[600px]">
+              <thead>
+                <tr className="border-b border-neutral-100 text-[10px] uppercase tracking-wider text-neutral-400">
+                  <th className="text-left px-4 py-2 font-medium">Terapeuta</th>
+                  <th className="text-right px-4 py-2 font-medium">Pacientes</th>
+                  <th className="text-right px-4 py-2 font-medium">Informes</th>
+                  <th className="text-right px-4 py-2 font-medium">Registros</th>
+                  <th className="text-right px-4 py-2 font-medium">Al día</th>
+                  <th className="text-right px-4 py-2 font-medium">Cumplimiento</th>
+                </tr>
+              </thead>
+              <tbody>
+                {planes.terapeutas.map((t) => (
+                  <tr key={t.therapistId ?? "sin"} className="border-b border-neutral-50">
+                    <td className="px-4 py-2.5 text-xs text-neutral-800">
+                      {t.name}
+                      {t.position && <span className="text-neutral-400"> · {t.position}</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-right text-neutral-600 tabular">{t.pacientes}</td>
+                    <td className="px-4 py-2.5 text-xs text-right tabular text-neutral-600">
+                      {t.informes.hechos}/{t.informes.previstos}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-right tabular text-neutral-600">
+                      {t.registros.hechos}/{t.registros.previstos}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-right tabular text-neutral-600">
+                      {t.alDia}/{t.pacientes}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      {t.cumplimiento == null ? (
+                        <span className="text-[11px] text-neutral-400">sin plan</span>
+                      ) : (
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full ${t.cumplimiento >= 85 ? "bg-emerald-50 text-emerald-700" : t.cumplimiento >= 60 ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>
+                          {t.cumplimiento}%
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="px-4 py-2 text-[10px] text-neutral-400 border-t border-neutral-50">
+            Se cuenta sobre los informes y las sesiones reales del trimestre, igual que la pestaña
+            «Plan» de cada paciente: no hay contadores guardados que puedan desfasarse.
+          </p>
         </div>
       )}
 
