@@ -19,11 +19,11 @@ import {
 import { logCitasAudit } from "../../../../../../lib/citas/audit.js";
 import { verifyPortalSession, readBearer } from "../../../../../../lib/citas/portalSession.js";
 import {
-  createCheckoutSession,
-  CHECKOUT_WINDOW_MS,
-  HOLD_WINDOW_MS,
-} from "../../../../../../lib/payments/checkout.js";
-import { getStripe, tenantHasStripe } from "../../../../../../lib/payments/stripeConfig.js";
+  autorizarPago,
+  tenantPuedeAutorizar,
+  VENTANA_TARJETA_MS,
+} from "../../../../../../lib/payments/autorizacion.js";
+import { getStripe, getTenantStripeConfig } from "../../../../../../lib/payments/stripeConfig.js";
 import { meetUrlInicial } from "../../../../../../lib/citas/videollamada.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
 import {
@@ -35,20 +35,22 @@ import {
 } from "../../../../../../lib/citas/slots.js";
 import { cargarFestivos, esFestivo } from "../../../../../../lib/citas/festivos.js";
 
-/** Origen público desde el que se sirvió la petición (para las URLs de Stripe). */
-function baseUrl(request) {
-  return new URL(request.url).origin;
-}
-
 /**
- * URL de una sesión de Stripe que siga ABIERTA, para reenviar allí a quien ya
- * tenía un pago a medias. Devuelve null ante cualquier problema: esto es una
- * comodidad, y no puede tumbar una reserva.
+ * Recupera el formulario de tarjeta de quien ya tenía una reserva a medias.
+ *
+ * El caso típico es el doble clic o el "volver atrás": su primera petición ya
+ * creó la reserva y la retención, así que la segunda choca contra ella misma.
+ * Devolverle el MISMO `clientSecret` le lleva al formulario que ya tenía abierto,
+ * en vez de crear una segunda retención — que es como una persona acaba con el
+ * doble de dinero bloqueado en su tarjeta por una sola cita.
+ *
+ * Devuelve null ante cualquier problema: esto es una comodidad, y no puede
+ * tumbar una reserva.
  */
-async function urlDePagoAbierta(ctx, { id: bookingId, paymentSessionId }) {
+async function tarjetaPendienteDe(ctx, { id: bookingId, paymentSessionId }) {
   try {
     const { PaymentSession } = ctx.tenantModels;
-    const atributos = ["id", "status", "stripeCheckoutSessionId"];
+    const atributos = ["id", "status", "stripePaymentIntentId"];
     // Por id de sesión si la cita ya lo tiene; si no, buscándola por la propia
     // cita. `bookings.payment_session_id` se escribe DESPUÉS de la transacción
     // que crea la reserva (hay que llamar a Stripe antes), así que una segunda
@@ -56,17 +58,20 @@ async function urlDePagoAbierta(ctx, { id: bookingId, paymentSessionId }) {
     const ps = paymentSessionId
       ? await PaymentSession.findByPk(paymentSessionId, { attributes: atributos })
       : await PaymentSession.findOne({
-          where: { entityType: "booking", entityId: bookingId, status: "pending" },
+          where: { entityType: "booking", entityId: bookingId, status: "authorizing" },
           attributes: atributos,
           order: [["createdAt", "DESC"]],
         });
-    if (!ps || ps.status !== "pending" || !ps.stripeCheckoutSessionId) return null;
+    if (!ps || ps.status !== "authorizing" || !ps.stripePaymentIntentId) return null;
     const stripe = await getStripe(ctx);
     if (!stripe) return null;
-    const cs = await stripe.checkout.sessions.retrieve(ps.stripeCheckoutSessionId);
-    return cs?.status === "open" && cs.url ? cs.url : null;
+    const pi = await stripe.paymentIntents.retrieve(ps.stripePaymentIntentId);
+    // Solo sirve si todavía espera tarjeta. Si ya está retenido, no hay nada que
+    // rellenar; y si murió, hay que empezar de cero.
+    if (pi?.status !== "requires_payment_method") return null;
+    return pi.client_secret ?? null;
   } catch (err) {
-    process.stderr.write(`[citas:book] no se pudo recuperar la sesión de pago: ${err.message}\n`);
+    process.stderr.write(`[citas:book] no se pudo recuperar el formulario de pago: ${err.message}\n`);
     return null;
   }
 }
@@ -78,9 +83,18 @@ async function urlDePagoAbierta(ctx, { id: bookingId, paymentSessionId }) {
  *
  * Crea un Booking desde la landing pública. Solo modalidad 'online'.
  *
- * Si el tipo de cita tiene precio, la reserva nace como PROVISIONAL (bloquea el
- * hueco, `paymentStatus: 'pending'`, con caducidad) y se devuelve la URL de
- * Stripe. La cita solo se confirma cuando el webhook recibe el cobro.
+ * ── SI EL TIPO DE CITA TIENE PRECIO ──────────────────────────────────────────
+ * NO se cobra aquí. La reserva nace 'pending' + `paymentStatus: 'authorizing'`,
+ * bloquea el hueco durante una ventana corta y se devuelve un `clientSecret`
+ * para que el widget pinte el formulario de tarjeta.
+ *
+ * Cuando el paciente confirma la tarjeta, Stripe RETIENE el importe (no lo
+ * cobra) y su webhook pasa la cita a `authorized`: ahí es cuando la solicitud
+ * entra de verdad en la lista de espera y se le manda el correo. El dinero se
+ * captura después, cuando la profesional confirma la cita desde el CRM.
+ *
+ * Es decir: esta ruta ya no decide nada sobre el dinero, solo lo prepara. Quien
+ * cobra es `/api/citas/bookings/[id]/confirm`.
  */
 export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
   try {
@@ -256,9 +270,12 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     // siempre, así que los tenants que no cobran no notan absolutamente nada.
     const precio = Number.isInteger(eventType.price) && eventType.price > 0 ? eventType.price : null;
 
-    if (precio && !tenantHasStripe(tenantContext)) {
+    if (precio && !tenantPuedeAutorizar(tenantContext)) {
       // Hay precio pero el profesional no ha terminado de configurar el cobro.
       // Mejor decirlo que crear una cita "gratis" que él cree cobrada.
+      // `tenantPuedeAutorizar` exige también la clave PUBLICABLE: sin ella el
+      // formulario de tarjeta no puede ni pintarse, así que dejar pasar la
+      // reserva solo serviría para dejarla colgada esperando un pago imposible.
       return error(
         "Este servicio requiere pago online, pero el profesional aún no lo tiene activado. Contacta con él.",
         503
@@ -266,13 +283,13 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     }
 
     // ── Reserva del hueco (serializada) ─────────────────────────────────────
-    // Ambas ventanas se calculan de UNA VEZ, aquí. Antes el hold usaba su propio
-    // `Date.now()` y la sesión de Stripe otro posterior, así que la de Stripe
-    // terminaba siempre más tarde: el hueco quedaba libre mientras el pago aún
-    // era posible. Ahora el hold dura más que la sesión, a propósito.
+    // Un solo reloj aquí, y es CORTO: lo único que protege es la hora mientras
+    // el paciente teclea la tarjeta. El reloj largo —cuándo caduca el dinero
+    // retenido— lo pone Stripe y se guarda cuando la retención existe de verdad
+    // (ver `authorizationExpiresAt`). Confundirlos fue el error del flujo
+    // anterior, donde un único hold servía para las dos cosas.
     const ahora = Date.now();
-    const stripeCaducaEn = new Date(ahora + CHECKOUT_WINDOW_MS);
-    const holdCaducaEn = new Date(ahora + HOLD_WINDOW_MS);
+    const holdCaducaEn = new Date(ahora + VENTANA_TARJETA_MS);
 
     let row;
     try {
@@ -349,14 +366,14 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
             duration: eventType.duration,
             modality: "online",
             meetUrl: meetUrlInicial(tenant, eventType, "online"),
-            // Con pago, la cita nace SIEMPRE 'pending' y solo pasa a 'confirmed'
-            // cuando Stripe confirma el cobro — da igual lo que diga autoConfirm:
-            // confirmar antes de cobrar sería regalar el hueco.
+            // Con pago la cita nace 'pending' y AHÍ SE QUEDA hasta que la
+            // profesional decida: ese es todo el sentido del flujo nuevo. Ya no
+            // se confirma sola al cobrar, porque ya no se cobra al reservar.
             status: precio ? "pending" : autoConfirm ? "confirmed" : "pending",
-            // Reserva provisional: bloquea el hueco mientras se paga, con margen
-            // por encima de la ventana de Stripe. Si no se paga, caduca sola
-            // (ocupaHuecoWhere), sin depender de ningún proceso de limpieza.
-            paymentStatus: precio ? "pending" : "none",
+            // 'authorizing' = está a punto de meter la tarjeta. Bloquea el hueco
+            // solo durante esa ventana corta; si abandona el formulario, la hora
+            // se libera sola al consultarse (ocupaHuecoWhere), sin cron.
+            paymentStatus: precio ? "authorizing" : "none",
             amount: precio,
             holdExpiresAt: precio ? holdCaducaEn : null,
             clientId,
@@ -373,20 +390,26 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
         if (!precio) return created({ ok: true, mensaje: "Solicitud recibida" });
 
         // Con precio, responder "Solicitud recibida" a secas dejaba al paciente
-        // creyendo que tenía cita sin haber pagado nada, y sin forma de llegar
-        // al pago: su propia reserva le bloqueaba el hueco media hora. Se le
-        // devuelve LA MISMA sesión de Stripe que ya tiene abierta, que es lo que
-        // de verdad quiere quien hace doble clic.
-        const url = err.duplicado ? await urlDePagoAbierta(tenantContext, err.duplicado) : null;
-        if (url) {
+        // creyendo que tenía cita sin haber dado la tarjeta, y sin forma de
+        // llegar al formulario: su propia reserva le bloqueaba el hueco. Se le
+        // devuelve EL MISMO formulario que ya tiene abierto.
+        //
+        // Que esto funcione es lo que impide el fallo más caro de todos: crear
+        // una SEGUNDA retención por la misma cita y dejar a una persona con el
+        // doble de dinero bloqueado en su tarjeta.
+        const clientSecret = err.duplicado
+          ? await tarjetaPendienteDe(tenantContext, err.duplicado)
+          : null;
+        if (clientSecret) {
           return created({
             booking: { id: err.duplicado.id },
             paymentRequired: true,
             amount: precio,
-            checkoutUrl: url,
+            clientSecret,
+            publishableKey: getTenantStripeConfig(tenantContext).publishableKey,
           });
         }
-        // Su reserva existe pero su sesión de pago aún se está creando (pasa con
+        // Su reserva existe pero la retención aún se está creando (pasa con
         // clics simultáneos: la primera petición llama a Stripe fuera de la
         // transacción). Se le dice que espere, no que la hora esté ocupada —
         // está ocupada POR ÉL.
@@ -409,36 +432,35 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
       ip,
     });
 
-    // ── Cita con pago: crear la sesión de Stripe y devolver su URL ──────────
+    // ── Cita con pago: preparar la RETENCIÓN de la tarjeta ─────────────────
     // El importe NO viene del cliente: se toma de EventType.price, ya validado
-    // arriba. Ver la nota de seguridad en lib/payments/checkout.js.
+    // arriba. Ver la nota de seguridad en lib/payments/autorizacion.js.
+    //
+    // Al salir de aquí NO hay dinero retenido todavía: solo un PaymentIntent
+    // esperando a que el navegador confirme la tarjeta. Por eso no se manda
+    // ningún correo ni se da la solicitud por buena: eso lo hace el webhook
+    // cuando la retención existe de verdad. Prometerle algo al paciente antes
+    // sería prometerle una cita que puede no llegar a tener.
     if (precio) {
-      let checkoutUrl;
+      let datosPago;
       try {
-        const res = await createCheckoutSession(tenantContext, {
+        datosPago = await autorizarPago(tenantContext, {
           entityType: "booking",
           entityId: row.id,
           amount: precio,
           description: `${eventType.name} — ${tenant.name}`,
           customerEmail: row.clientEmail,
-          successUrl: `${baseUrl(request)}/widget/c/${tenant.slug}/mi-perfil`,
-          cancelUrl: `${baseUrl(request)}/widget/c/${tenant.slug}`,
           metadata: { bookingId: row.id },
-          // El MISMO instante que se usó para el hold, no un `Date.now()` nuevo.
-          expiresAt: stripeCaducaEn,
         });
-        checkoutUrl = res.checkoutUrl;
-        await row.update({ paymentSessionId: res.paymentSession.id });
+        await row.update({ paymentSessionId: datosPago.paymentSession.id });
       } catch (err) {
-        // Si no se puede cobrar, la reserva provisional no debe quedarse
-        // bloqueando el hueco 30 minutos: se retira ya.
+        // Si no se puede ni preparar el cobro, la reserva provisional no debe
+        // quedarse bloqueando el hueco: se retira ya.
         await row.destroy().catch(() => {});
-        process.stderr.write(`[citas:book] checkout falló: ${err.message}\n`);
+        process.stderr.write(`[citas:book] autorización falló: ${err.message}\n`);
         return error("No se pudo iniciar el pago. Inténtalo de nuevo en un momento.", 502);
       }
 
-      // Sin email todavía: la cita aún no existe para el cliente hasta que pague.
-      // El de confirmación lo dispara el webhook al cobrarse.
       return created({
         booking: {
           id: row.id,
@@ -450,7 +472,11 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
         },
         paymentRequired: true,
         amount: precio,
-        checkoutUrl,
+        // Lo que el widget necesita para pintar el formulario de tarjeta.
+        clientSecret: datosPago.clientSecret,
+        publishableKey: datosPago.publishableKey,
+        // Hasta cuándo se le guarda la hora mientras rellena. NO es la caducidad
+        // del dinero: esa nace después y la pone Stripe.
         expiresAt: row.holdExpiresAt.toISOString(),
       });
     }

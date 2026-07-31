@@ -47,8 +47,23 @@ export function definePaymentSession(sequelize) {
         allowNull: false,
         defaultValue: "eur",
       },
+      // 'authorizing' / 'authorized' / 'void' son del flujo de RETENCIÓN
+      // (autorizar al reservar, capturar al confirmar). 'authorized' significa
+      // que hay dinero apartado en la tarjeta del cliente que TODAVÍA NO ES
+      // NUESTRO: no es un ingreso, no ha generado comisión, y se libera solo si
+      // nadie lo captura. Cuidado al sumar importes para informes o facturas:
+      // solo cuenta 'paid'.
       status: {
-        type: DataTypes.ENUM("pending", "paid", "failed", "refunded", "expired"),
+        type: DataTypes.ENUM(
+          "pending",
+          "authorizing",
+          "authorized",
+          "paid",
+          "failed",
+          "refunded",
+          "expired",
+          "void"
+        ),
         allowNull: false,
         defaultValue: "pending",
       },
@@ -68,6 +83,20 @@ export function definePaymentSession(sequelize) {
       },
       paidAt: {
         type: DataTypes.DATE,
+        allowNull: true,
+      },
+      // Copia literal del `capture_before` de Stripe: cuándo caduca la retención.
+      // Al caducar, el PaymentIntent queda muerto y no se puede capturar; hay que
+      // autorizar de cero. Nunca se calcula por nuestra cuenta.
+      authorizationExpiresAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      // Hueco reservado para el plan B (guardar la tarjeta y poder reintentar si
+      // una retención caduca). Hoy NO se escribe ni se lee: está aquí para no
+      // tener que migrar todos los tenants otra vez si se activa más adelante.
+      stripeCustomerId: {
+        type: DataTypes.STRING,
         allowNull: true,
       },
       stripeRefundId: {

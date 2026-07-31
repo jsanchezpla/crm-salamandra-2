@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import { withPublicTenant } from "../../../../../lib/tenant/publicTenantContext.js";
 import { getStripe, getTenantStripeConfig } from "../../../../../lib/payments/stripeConfig.js";
 import {
+  onEntityAuthorized,
+  onEntityAuthorizationVoided,
   onEntityExpired,
   onEntityPaid,
   onEntityPaymentFailed,
   onEntityPaymentPending,
   onEntityRefunded,
 } from "../../../../../lib/payments/entityHooks.js";
+import { leerCaducidadAutorizacion } from "../../../../../lib/payments/autorizacion.js";
 
 /**
  * POST /api/webhooks/stripe/[tenantSlug]
@@ -72,6 +75,31 @@ export const POST = withPublicTenant(
       return NextResponse.json({ ok: true, ignored: "tenant-mismatch" });
     }
 
+    // ── Cuándo caduca la retención, ANTES de abrir la transacción ────────────
+    // El plazo (`capture_before`) vive en el CARGO, no en el PaymentIntent, así
+    // que hay que pedírselo a Stripe. Se hace aquí y no dentro de la transacción
+    // a propósito: una llamada de red dentro alargaría el bloqueo de las filas
+    // y, si Stripe tardara, mantendría abierta una transacción que toca la
+    // agenda. Aquí fuera, lo peor que pasa es que tarde en responder.
+    let caducaEn = null;
+    if (event.type === "payment_intent.amount_capturable_updated") {
+      try {
+        const cargoId =
+          typeof event.data.object?.latest_charge === "string"
+            ? event.data.object.latest_charge
+            : event.data.object?.latest_charge?.id;
+        if (cargoId) {
+          caducaEn = leerCaducidadAutorizacion(await stripe.charges.retrieve(cargoId));
+        }
+      } catch (err) {
+        // Sin caducidad la retención sigue siendo válida; lo que se pierde es el
+        // aviso previo. No se inventa un plazo: se deja en null y se registra.
+        process.stderr.write(
+          `[stripe:webhook] ${slug}: no se pudo leer la caducidad de la retención: ${err.message}\n`
+        );
+      }
+    }
+
     // ── Marcar + procesar, todo o nada ───────────────────────────────────────
     try {
       let postCommit = null;
@@ -80,7 +108,7 @@ export const POST = withPublicTenant(
           { stripeEventId: event.id, type: event.type },
           { transaction: t }
         );
-        const res = await procesar(tenantContext, { PaymentSession, event, t });
+        const res = await procesar(tenantContext, { PaymentSession, event, t, caducaEn });
         postCommit = res?.postCommit ?? null;
         const texto = typeof res === "string" ? res : (res?.outcome ?? "ok");
         await claim.update({ outcome: texto.slice(0, 255) }, { transaction: t });
@@ -116,10 +144,100 @@ export const POST = withPublicTenant(
   { rateLimit: { limit: 300, windowMs: 60_000, key: "stripe-webhook" } }
 );
 
-async function procesar(ctx, { PaymentSession, event, t }) {
+async function procesar(ctx, { PaymentSession, event, t, caducaEn = null }) {
   const obj = event.data.object;
 
   switch (event.type) {
+    // ── FLUJO DE RETENCIÓN ───────────────────────────────────────────────────
+    // El paciente confirmó la tarjeta y Stripe apartó el dinero SIN cobrarlo.
+    // Aquí es donde la solicitud pasa a ser real y entra en la lista de espera.
+    //
+    // OJO con lo que este flujo NO tiene: un PaymentIntent nunca emite un evento
+    // de caducidad (eso solo lo hacen las Checkout Sessions). Cuando la retención
+    // muera, Stripe no avisará: hay que vigilarlo contra `capture_before`.
+    case "payment_intent.amount_capturable_updated": {
+      const ps = await buscarSesion(PaymentSession, {
+        id: obj?.metadata?.paymentSessionId,
+        paymentIntentId: obj?.id,
+      }, t);
+      if (!ps) return "sin PaymentSession";
+      if (["paid", "refunded", "void"].includes(ps.status)) {
+        return `la sesión ya iba por delante (${ps.status})`;
+      }
+
+      // El importe retenido tiene que ser el que pedimos. Si no cuadra, no se
+      // mete en la lista de espera: se suelta, que es gratis y reversible (a
+      // diferencia de un cobro, que habría que devolver).
+      if (Number.isInteger(obj.amount_capturable) && obj.amount_capturable !== ps.amount) {
+        await ps.update({ status: "failed" }, { transaction: t });
+        process.stderr.write(
+          `[stripe:webhook] RETENCIÓN INESPERADA ${ctx.slug} ps=${ps.id}: esperado ${ps.amount}, retenido ${obj.amount_capturable}\n`
+        );
+        return `importe retenido no coincide (${obj.amount_capturable} vs ${ps.amount})`;
+      }
+
+      await ps.update(
+        {
+          status: "authorized",
+          stripePaymentIntentId: obj.id,
+          authorizationExpiresAt: caducaEn,
+        },
+        { transaction: t }
+      );
+      return await onEntityAuthorized(ctx, ps, t, caducaEn);
+    }
+
+    // El dinero retenido se capturó de verdad (lo dispara `/confirm`).
+    case "payment_intent.succeeded": {
+      const ps = await buscarSesion(PaymentSession, {
+        id: obj?.metadata?.paymentSessionId,
+        paymentIntentId: obj?.id,
+      }, t);
+      if (!ps) return "sin PaymentSession";
+      if (ps.status === "paid" || ps.status === "refunded") return "ya estaba pagada";
+
+      await ps.update(
+        { status: "paid", paidAt: new Date(), stripePaymentIntentId: obj.id },
+        { transaction: t }
+      );
+      return await onEntityPaid(ctx, ps, t);
+    }
+
+    // La retención se soltó (rechazo, cancelación o caducidad). No hubo cobro.
+    case "payment_intent.canceled": {
+      const ps = await buscarSesion(PaymentSession, {
+        id: obj?.metadata?.paymentSessionId,
+        paymentIntentId: obj?.id,
+      }, t);
+      if (!ps) return "sin PaymentSession";
+      if (ps.status === "paid" || ps.status === "refunded") {
+        // Contradice a lo que tenemos guardado: no se toca nada por si acaso.
+        process.stderr.write(
+          `[stripe:webhook] ${ctx.slug}: payment_intent.canceled sobre un cobro que consta ${ps.status} (ps=${ps.id}) — revisar\n`
+        );
+        return `la sesión consta ${ps.status} — no se toca`;
+      }
+      if (ps.status === "void") return "ya estaba liberada";
+      await ps.update({ status: "void" }, { transaction: t });
+      return await onEntityAuthorizationVoided(ctx, ps, t);
+    }
+
+    // El banco dijo que no: ni al retener ni al capturar hubo dinero.
+    case "payment_intent.payment_failed": {
+      const ps = await buscarSesion(PaymentSession, {
+        id: obj?.metadata?.paymentSessionId,
+        paymentIntentId: obj?.id,
+      }, t);
+      if (!ps) return "sin PaymentSession";
+      if (ps.status === "paid" || ps.status === "refunded") return "la sesión consta pagada — no se toca";
+      // NO se marca la sesión como fallida definitivamente: mientras el
+      // PaymentIntent siga vivo el paciente puede reintentar con otra tarjeta en
+      // el mismo formulario. Cerrarlo aquí le dejaría sin poder terminar.
+      const motivo = obj?.last_payment_error?.message ?? "sin detalle";
+      process.stderr.write(`[stripe:webhook] ${ctx.slug} pago rechazado ps=${ps.id}: ${motivo}\n`);
+      return `intento de pago rechazado (${motivo}) — el paciente puede reintentar`;
+    }
+
     // `completed` se emite en cuanto el cliente TERMINA el checkout, que no es lo
     // mismo que haber pagado. `async_payment_succeeded` es su pareja para los
     // métodos de liquidación diferida. Comparten rama porque, una vez hay dinero,
@@ -321,10 +439,15 @@ async function procesar(ctx, { PaymentSession, event, t }) {
   }
 }
 
-function buscarSesion(PaymentSession, { id, checkoutSessionId }, t) {
+function buscarSesion(PaymentSession, { id, checkoutSessionId, paymentIntentId }, t) {
   if (id) return PaymentSession.findByPk(id, { transaction: t });
   if (checkoutSessionId) {
     return PaymentSession.findOne({ where: { stripeCheckoutSessionId: checkoutSessionId }, transaction: t });
+  }
+  // Por el PaymentIntent: es el ancla del flujo de retención, donde no hay
+  // ninguna Checkout Session de por medio.
+  if (paymentIntentId) {
+    return PaymentSession.findOne({ where: { stripePaymentIntentId: paymentIntentId }, transaction: t });
   }
   return null;
 }

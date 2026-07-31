@@ -148,8 +148,30 @@ export function defineBooking(sequelize) {
       // `none` = cita sin cobro (tipo de cita gratuito, o creada a mano desde el
       // dashboard). Es el valor de TODAS las citas existentes: nada cambia para
       // los tenants que no cobran.
+      // Los cuatro valores de RETENCIÓN (sprint "cobrar al confirmar") describen
+      // dinero apartado en la tarjeta del paciente pero AÚN NO COBRADO:
+      //   · authorizing → está metiendo la tarjeta ahora mismo
+      //   · authorized  → retenido, esperando a que la profesional decida
+      //   · capturing   → captura en vuelo (impide cobrar dos veces)
+      //   · void        → retención liberada (rechazo o cancelación sin cobrar)
+      //
+      // NO se reutiliza 'pending' para esto a propósito: 'pending' significa
+      // "carrito potencialmente abandonado" y hay código que, con el hold
+      // vencido, esconde esas citas (`noEsCarritoAbandonado`) y las cancela
+      // (`retirarCitaImpagada`). Una solicitud legítima esperando decisión no
+      // puede compartir estado con algo que el sistema borra solo.
       paymentStatus: {
-        type: DataTypes.ENUM("none", "pending", "paid", "refunded", "failed"),
+        type: DataTypes.ENUM(
+          "none",
+          "pending",
+          "authorizing",
+          "authorized",
+          "capturing",
+          "paid",
+          "refunded",
+          "failed",
+          "void"
+        ),
         allowNull: false,
         defaultValue: "none",
       },
@@ -166,6 +188,20 @@ export function defineBooking(sequelize) {
       // lib/citas/booking.js). Así un carrito abandonado no deja el hueco muerto
       // ni depende de que un cron funcione.
       holdExpiresAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      // Cuándo MUERE la retención de la tarjeta. Es otro reloj distinto del de
+      // arriba y no debe confundirse con él: `holdExpiresAt` protege el HUECO
+      // mientras el paciente teclea la tarjeta (minutos), y este protege el
+      // DINERO (días). Que este venza no libera el hueco: la cita sigue siendo
+      // una solicitud válida esperando decisión, solo que ya no se puede cobrar
+      // sin volver a pedir la tarjeta.
+      //
+      // Se guarda TAL CUAL el `capture_before` que devuelve Stripe. Nunca se
+      // calcula aquí: el plazo real depende de la red de la tarjeta y del tipo
+      // de operación, y estimarlo de más es cómo se pierden autorizaciones.
+      authorizationExpiresAt: {
         type: DataTypes.DATE,
         allowNull: true,
       },

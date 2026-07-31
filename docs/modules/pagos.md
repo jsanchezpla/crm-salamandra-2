@@ -86,15 +86,38 @@ Tabla nueva `payment_sessions` (no se reutiliza `Payment`, que está atada a
 | `entityType` / `entityId` | STRING / UUID | `booking`, `order`… |
 | `amount` | **INTEGER** | **céntimos**. Nunca decimales para dinero |
 | `currency` | STRING(3) | `eur` |
-| `status` | ENUM | `pending, paid, failed, refunded, expired` |
-| `stripeCheckoutSessionId` | STRING **UNIQUE** | |
-| `stripePaymentIntentId` | STRING **UNIQUE** | idempotencia |
+| `status` | ENUM | `pending, authorizing, authorized, paid, failed, refunded, expired, void` |
+| `stripeCheckoutSessionId` | STRING **UNIQUE** | solo flujo de cobro inmediato |
+| `stripePaymentIntentId` | STRING **UNIQUE** | idempotencia; ancla del flujo de retención |
+| `authorizationExpiresAt` | DATE | copia de `capture_before`. **Nunca calculado** |
+| `stripeCustomerId` | STRING | hueco reservado, hoy sin usar (ver §5) |
 | `stripeRefundId`, `refundAmount`, `refundedAt` | | |
 | `amountSnapshot` | INTEGER | precio en el momento de reservar (si cambia el tarifario, no afecta) |
 | `metadata` | JSONB | |
 
-Y en `Booking`: `paymentStatus` (`none|pending|paid|refunded|failed`), `amount`,
-`holdExpiresAt`, `paymentSessionId` *(fase 3)*.
+Y en `Booking`: `paymentStatus`, `amount`, `holdExpiresAt`,
+`authorizationExpiresAt`, `paymentSessionId`.
+
+`Booking.paymentStatus` = `none | pending | authorizing | authorized | capturing |
+paid | refunded | failed | void`:
+
+| Valor | Significa | ¿Bloquea la hora? |
+| --- | --- | --- |
+| `none` | cita gratuita o creada a mano | sí |
+| `authorizing` | está metiendo la tarjeta ahora | sí, mientras dure el hold |
+| `authorized` | **dinero retenido, esperando a la profesional** | **sí, sin caducidad** |
+| `capturing` | captura en vuelo (impide cobrar dos veces) | sí |
+| `paid` | cobrado | sí |
+| `void` | retención liberada, sin cobro | sí (la cita sigue en pie) |
+| `pending` | flujo viejo de cobro inmediato | solo mientras dure el hold |
+
+> **Por qué `authorized` no reutiliza `pending`.** `pending` significa "carrito
+> potencialmente abandonado", y hay código que con el hold vencido esconde esas citas
+> y las cancela. Una solicitud legítima con dinero retenido no puede compartir estado
+> con algo que el sistema borra solo.
+
+Migración: `npm run db:migrate:booking-auth` (aditiva e idempotente; descubre los
+schemas por existencia de la tabla `bookings`, no por módulo activo).
 
 En `EventType`: **`price`** (INTEGER, céntimos, nullable) — **null o 0 = cita
 gratuita**, y entonces la reserva no pasa por el checkout. Así los tenants que no
@@ -118,20 +141,35 @@ por la UI es exactamente como se cuela un cobro de 0,75 € en vez de 75 €.
 
 | Qué | Dónde |
 | --- | --- |
-| Crear el cobro | `lib/payments/checkout.js` → `createCheckoutSession(ctx, {...})` — **función de librería, NO endpoint público** |
-| Confirmación de Stripe | `POST /api/webhooks/stripe/[tenantSlug]` |
+| **Retener / cobrar / soltar** | `lib/payments/autorizacion.js` → `autorizarPago` · `capturarPago` · `liberarAutorizacion` — **funciones de librería, NO endpoints públicos** |
+| Leer la caducidad | `lib/payments/autorizacion.js` → `leerCaducidadAutorizacion(charge)` |
+| Cobro inmediato (sin llamantes hoy) | `lib/payments/checkout.js` → `createCheckoutSession(ctx, {...})` |
+| Avisos de Stripe | `POST /api/webhooks/stripe/[tenantSlug]` |
 | Reembolsar | `lib/payments/refund.js` → `refundPayment(ctx, session, { amount, reason })` |
-| Enganche por módulo | `lib/payments/entityHooks.js` → `onEntityPaid` / `onEntityRefunded` |
+| Enganche por módulo | `lib/payments/entityHooks.js` → `onEntityAuthorized` / `onEntityPaid` / `onEntityAuthorizationVoided` / `onEntityRefunded` |
 
-> **Por qué el checkout NO es un endpoint público** (cambio respecto al primer boceto):
-> si expusiéramos una ruta que recibe `amount` en el body, cualquiera podría pagar
-> 1 céntimo por una consulta. El importe lo calcula **siempre el servidor** a partir
-> de sus propios datos (`EventType.price`). El flujo es
-> `POST /book` → (servidor lee el precio) → `createCheckoutSession()` → URL de Stripe.
+Eventos de webhook que se procesan:
 
-> **Métodos de pago:** la sesión se crea **sin** `payment_method_types`, así que se
-> ofrecen los que el tenant tenga activados en su panel de Stripe. Activar Klarna (o
-> Bizum) es una casilla en su panel, **sin tocar código**.
+| Evento | Qué hace |
+| --- | --- |
+| `payment_intent.amount_capturable_updated` | la tarjeta quedó retenida → a la lista de espera |
+| `payment_intent.succeeded` | se capturó → `paid` |
+| `payment_intent.canceled` | retención liberada → `void`, **la cita no se cancela** |
+| `payment_intent.payment_failed` | rechazo; **no** se cierra la sesión (puede reintentar con otra tarjeta) |
+| `checkout.session.*`, `charge.refunded` | flujo de cobro inmediato y devoluciones |
+
+> ⚠️ **Un PaymentIntent NUNCA emite un evento de caducidad** (eso solo lo hacen las
+> Checkout Sessions). Cuando una retención muere, Stripe no avisa: hay que vigilarlo
+> contra `authorizationExpiresAt`.
+
+> **Por qué no hay endpoint público de cobro:** si expusiéramos una ruta que recibe
+> `amount` en el body, cualquiera podría pagar 1 céntimo por una consulta. El importe
+> lo calcula **siempre el servidor** a partir de `EventType.price`.
+
+> **Métodos de pago: SOLO TARJETA**, y no es una simplificación. Bizum, SEPA e iDEAL
+> no admiten captura manual (Stripe lo documenta como *"Manual capture support: No"*).
+> Si se dejara elegir, el paciente escogería Bizum y o fallaría o cobraría al instante,
+> rompiendo la promesa del flujo.
 
 **El tenant va en la URL del webhook, deliberadamente.** Stripe no manda cabecera
 `x-tenant`, y aunque la mandara no habría que fiarse: es exactamente el fallo que se
@@ -141,43 +179,78 @@ firma se verifica con el `stripeWebhookSecret` **de ese** tenant.
 
 ---
 
-## 3. Flujo de reserva con pago
+## 3. Flujo de reserva con pago — RETENCIÓN, no cobro
 
-El problema a resolver es **la carrera por el hueco**: entre que el cliente pulsa
-"pagar" y Stripe confirma pasan minutos. Si no se bloquea el hueco, dos personas pagan
-la misma hora; si se bloquea para siempre, quien abandona el carrito deja el hueco
-muerto.
+> **Cambio de fondo (2026-07-29).** Antes se cobraba al reservar y pagar era lo que
+> confirmaba la cita. Ahora **el paciente deja la tarjeta al reservar, no se le cobra,
+> y el dinero se captura cuando la profesional confirma**. Decisión de Jorge: la
+> profesional tiene que poder decir que no antes de que nadie pague.
 
 ```
-1. Cliente elige hueco
-2. POST /book  →  Booking { status: pending, paymentStatus: pending,
-                            holdExpiresAt: now + 15 min }     ← BLOQUEA el hueco
-3. POST /checkout  →  URL de Stripe
-4a. Paga     → webhook → paymentStatus: paid, status: confirmed  ✅
-4b. Abandona → a los 15 min el hueco vuelve a estar libre
+1. El paciente elige hueco y rellena el formulario
+2. POST /book → Booking { status: pending, paymentStatus: 'authorizing',
+                          holdExpiresAt: now + 20 min }   ← guarda la HORA
+              → devuelve clientSecret + publishableKey (NO una URL de Stripe)
+3. El widget pinta el formulario de tarjeta DENTRO del iframe (Payment Element)
+4. El paciente confirma la tarjeta → Stripe RETIENE el importe (no lo cobra)
+5. webhook payment_intent.amount_capturable_updated
+              → paymentStatus: 'authorized', holdExpiresAt: null,
+                authorizationExpiresAt: <capture_before de Stripe>
+              → AHORA entra en la lista de espera + email al paciente
+6a. La profesional CONFIRMA → se captura → paymentStatus: 'paid'  ✅
+6b. La profesional RECHAZA  → se suelta la retención → 'void', sin cobro
+6c. Nadie decide en 7 días  → la retención caduca sola; la cita SIGUE EN PIE
+                              marcada sin cobro, para que ella decida
 ```
 
-### 3.1 Caducidad perezosa (importante)
+### 3.1 Dos relojes, y no hay que confundirlos
 
-La expiración se aplica **al calcular disponibilidad**, no con un cron:
+Esta es la parte que más fácil se rompe.
 
-```js
-// una reserva provisional caducada NO bloquea
-paymentStatus !== 'pending' || holdExpiresAt > now()
-```
+| Reloj | Qué protege | Cuánto dura | Quién lo pone |
+| --- | --- | --- | --- |
+| `holdExpiresAt` | la **hora** mientras el paciente teclea la tarjeta | 20 min | nosotros |
+| `authorizationExpiresAt` | el **dinero** retenido | ~7 días | **Stripe** |
 
-Hay que tocarlo en `lib/citas/booking.js` (`findBookingOverlap`) y en los endpoints
-`availability` y `availability/month`. Un cron de limpieza es opcional y **solo
-cosmético**: si se cae, los huecos se liberan igual. Sin esta decisión, un fallo del
-cron dejaría la agenda de Laura bloqueada.
+`authorizationExpiresAt` es copia literal del `capture_before` de Stripe y **nunca se
+calcula por nuestra cuenta**: el plazo real depende de la red de la tarjeta. Vive en
+`charge.payment_method_details.card.capture_before` — **no** en `charge.capture_before`,
+que no existe. Se lee en un único sitio: `leerCaducidadAutorizacion()`.
+Comprobado empíricamente con `scripts/_probe-capture-before.mjs`.
 
-### 3.2 Matriz de casos (para no romper a los demás tenants)
+Que caduque el segundo reloj **no libera la hora**: hay una persona esperando y quien
+decide es la profesional.
+
+### 3.2 Caducidad perezosa (importante)
+
+La expiración del reloj CORTO se aplica **al calcular disponibilidad**, no con un cron
+(`ocupaHuecoWhere` / `noEsCarritoAbandonado` en `lib/citas/booking.js`, con seis
+consumidores). Un cron de limpieza sería solo cosmético: si se cae, los huecos se
+liberan igual.
+
+El matiz nuevo: solo son "carrito abandonado" los estados en los que **falta que actúe
+el paciente** (`pending`, `authorizing`). Con la tarjeta ya retenida (`authorized`)
+quien tiene que actuar es la profesional, y esa espera puede durar días sin que la
+hora se libere. Fijado en `scripts/_smoke-ocupa-hueco.mjs`, que además lleva un control
+que demuestra que la prueba distingue el comportamiento nuevo del viejo.
+
+### 3.3 Matriz de casos (para no romper a los demás tenants)
 
 | Tenant | `EventType.price` | Comportamiento |
 | --- | --- | --- |
-| nutri_laura | > 0 | Cobra al reservar; pagar = confirmada |
+| nutri_laura | > 0 | Retiene al reservar; **cobra al confirmar** |
 | aumenta / healim / demo | null | **Flujo actual intacto** (con o sin lista de espera) |
-| cualquiera | > 0 pero sin Stripe configurado | Error 402 claro, no reserva silenciosa |
+| cualquiera | > 0 pero sin Stripe **completo** | Error 503 claro, no reserva silenciosa |
+
+"Stripe completo" ahora incluye la **clave publicable**: con el formulario embebido ya
+no es opcional (`tenantPuedeAutorizar`). Con el checkout redirigido no se usaba.
+
+**Solo tarjeta.** `payment_method_types: ["card"]` es deliberado: Bizum, SEPA e iDEAL
+**no admiten captura manual**. Ofrecerlos rompería la promesa de "no se te cobra hasta
+que se confirme". Un tenant que quiera Bizum necesita otro flujo.
+
+Las citas creadas por la profesional **desde el dashboard** (paciente que llama por
+teléfono) **no exigen pago**: nacen `paymentStatus: 'none'`.
 
 Las citas creadas por Laura **desde el dashboard** (paciente que llama por teléfono)
 **no exigen pago**: nacen `paymentStatus: 'none'`.
@@ -218,6 +291,26 @@ De 25 riesgos revisados adversarialmente, los que **cambian el diseño**:
 | **Precio cambiado entre reservar y pagar** | `amountSnapshot` en la sesión; el webhook valida que el importe cobrado coincide |
 | **Tenant `demo` cobrando de verdad** | `assertNotDemoPaidCall` (ya existe en `lib/demo/isDemo.js`) + demo nunca tiene claves Stripe |
 | **Secretos en logs** | Nunca loguear el objeto de Stripe ni las claves; redactar antes de escribir |
+
+---
+
+## 5.bis Cómo se prueba esto (2026-07-29)
+
+**No hay framework de tests en el repo.** Las pruebas son scripts que ejercitan el
+código de verdad contra Stripe en **modo prueba** y comprueban la base de datos.
+**No hace falta la CLI de Stripe**: el SDK firma eventos de webhook con el mismo
+secreto del tenant, que es lo que hace `stripe listen`.
+
+| Script | Qué fija |
+| --- | --- |
+| `_smoke-autorizacion.mjs` | retener → cobrar → soltar, y los casos límite (doble captura, doble liberación, capturar lo caducado) |
+| `_smoke-ocupa-hueco.mjs` | qué citas bloquean su hora, en 11 estados. **Lleva un control** que exige que el filtro nuevo dé un veredicto distinto al viejo: sin él, la prueba pasaría sin probar nada |
+| `_smoke-book-autorizacion.mjs` | `POST /book` por HTTP y, sobre todo, que el **doble clic no cree dos retenciones** |
+| `_smoke-webhook-retencion.mjs` | el webhook mete la solicitud en la lista de espera; idempotencia y firma falsa |
+| `_probe-capture-before.mjs` | sonda: dónde vive de verdad `capture_before` |
+
+Todos limpian lo que crean y devuelven el precio del tipo de cita a como estaba.
+Se paran solos si detectan claves `sk_live_`.
 
 ---
 
