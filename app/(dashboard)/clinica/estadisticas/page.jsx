@@ -13,10 +13,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-function primeroDeMes(d = new Date()) {
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+/**
+ * 'AAAA-MM-DD' EN LOCAL. Con `toISOString()` (UTC) el 1 de julio a las 00:00
+ * en España se convierte en «30 de junio»: el periodo empezaba un día antes de
+ * lo que decía el botón.
+ */
+function fechaISO(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-const hoyISO = () => new Date().toISOString().slice(0, 10);
+function primeroDeMes(d = new Date()) {
+  return fechaISO(new Date(d.getFullYear(), d.getMonth(), 1));
+}
+const hoyISO = () => fechaISO(new Date());
 
 /** Curso escolar en marcha: de septiembre a agosto. */
 function cursoActual() {
@@ -29,7 +37,7 @@ function trimestreActual() {
   const hoy = new Date();
   const t = Math.floor(hoy.getMonth() / 3);
   return {
-    desde: new Date(hoy.getFullYear(), t * 3, 1).toISOString().slice(0, 10),
+    desde: fechaISO(new Date(hoy.getFullYear(), t * 3, 1)),
     hasta: hoyISO(),
   };
 }
