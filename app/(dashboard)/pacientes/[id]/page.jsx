@@ -51,8 +51,71 @@ function Field({ label, value }) {
   return (<div><div className="text-[10px] uppercase tracking-wider text-neutral-400">{label}</div><div className="text-xs text-[var(--ink-900)] font-medium mt-0.5">{value || "—"}</div></div>);
 }
 
-function SessionDrawer({ session, patient, onClose, onPublish, busy }) {
+function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) {
   const ss = sStatus(session.status);
+  // Partes 1 y 3 del registro (sprint 2026-07, punto 4): la preparación se
+  // escribe antes de la sesión y la devolución de la familia llega a veces
+  // días después, así que se pueden rellenar aquí en cualquier momento.
+  const [editando, setEditando] = useState(false);
+  const [prepText, setPrepText] = useState(session.prepText ?? "");
+  const [parentFeedback, setParentFeedback] = useState(session.parentFeedback ?? "");
+  const [guardando, setGuardando] = useState(false);
+  const [errorPartes, setErrorPartes] = useState(null);
+
+  async function guardarPartes() {
+    setGuardando(true);
+    setErrorPartes(null);
+    try {
+      const r = await fetch(`/api/clinica/sessions/${session.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prepText, parentFeedback }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo guardar");
+      setEditando(false);
+      onSaved?.();
+    } catch (e) {
+      setErrorPartes(e.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  async function subirAdjunto(file) {
+    if (!file) return;
+    setGuardando(true);
+    setErrorPartes(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      const r = await fetch(`/api/clinica/sessions/${session.id}/prep-files`, { method: "POST", body: fd });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo subir el archivo");
+      onSaved?.();
+    } catch (e) {
+      setErrorPartes(e.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  async function borrarAdjunto(fileId) {
+    if (!window.confirm("¿Quitar este adjunto de la preparación?")) return;
+    setGuardando(true);
+    try {
+      const r = await fetch(`/api/clinica/sessions/${session.id}/prep-files/${fileId}`, { method: "DELETE" });
+      if (!r.ok && r.status !== 204) throw new Error("No se pudo borrar");
+      onSaved?.();
+    } catch (e) {
+      setErrorPartes(e.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  const ta = "w-full px-3 py-2 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400 leading-relaxed";
+
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} aria-hidden="true" />
@@ -100,6 +163,85 @@ function SessionDrawer({ session, patient, onClose, onPublish, busy }) {
               <SubField label="Incidencias" value={session.observations.incidents} />
             </div>
           </Section>
+
+          {/* ── Registro en 3 partes: preparación y devolución de la familia ── */}
+          <div className="border-t border-neutral-100 pt-4 space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="eyebrow">Preparación y devolución</div>
+              {!editando && (
+                <button onClick={() => setEditando(true)} className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">
+                  {session.prepText || session.parentFeedback ? "Editar" : "Añadir"}
+                </button>
+              )}
+            </div>
+
+            {editando ? (
+              <div className="space-y-3">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Preparación previa</div>
+                  <textarea className={ta} rows={3} value={prepText} onChange={(e) => setPrepText(e.target.value)} placeholder="Material previsto, hipótesis de trabajo…" />
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Devolución de la familia</div>
+                  <textarea className={ta} rows={3} value={parentFeedback} onChange={(e) => setParentFeedback(e.target.value)} placeholder="Qué cuentan los padres…" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={guardarPartes} disabled={guardando} className="text-xs font-medium px-3 py-1.5 rounded-lg text-white disabled:opacity-50" style={{ background: "var(--color-primary, #1B3A2D)" }}>
+                    {guardando ? "Guardando…" : "Guardar"}
+                  </button>
+                  <button
+                    onClick={() => { setEditando(false); setPrepText(session.prepText ?? ""); setParentFeedback(session.parentFeedback ?? ""); }}
+                    className="text-xs text-neutral-500"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <SubField label="Preparación previa" value={session.prepText} />
+                <SubField label="Devolución de la familia" value={session.parentFeedback} />
+              </div>
+            )}
+
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">
+                Material de preparación <span className="normal-case tracking-normal">(interno, no lo ve la familia)</span>
+              </div>
+              {session.prepFiles?.length > 0 ? (
+                <ul className="space-y-1 mb-2">
+                  {session.prepFiles.map((f) => (
+                    <li key={f.id} className="text-[11px] flex items-center gap-2">
+                      <a
+                        href={`/api/clinica/sessions/${session.id}/prep-files/${f.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[var(--color-primary,#1B3A2D)] hover:underline truncate"
+                      >
+                        {f.name}
+                      </a>
+                      <button onClick={() => borrarAdjunto(f.id)} disabled={guardando} className="text-rose-500 hover:text-rose-700 shrink-0 disabled:opacity-40">
+                        quitar
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[11px] text-neutral-400 mb-2">Sin adjuntos.</p>
+              )}
+              <label className={`text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline cursor-pointer ${guardando ? "opacity-40 pointer-events-none" : ""}`}>
+                + Adjuntar foto, audio o PDF
+                <input
+                  type="file"
+                  accept="image/*,audio/*,application/pdf"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; subirAdjunto(f); }}
+                />
+              </label>
+            </div>
+
+            {errorPartes && <div className="text-[11px] text-rose-600">{errorPartes}</div>}
+          </div>
 
           <div className="border-t border-neutral-100 pt-4 flex flex-wrap gap-2">
             {session.status !== "published" && (
@@ -531,7 +673,28 @@ export default function PacienteFichaPage() {
         {activeTab === "documentos" && <PatientDocumentsSection patientId={id} />}
       </div>
 
-      {openSession && <SessionDrawer session={openSession} patient={patient} onClose={() => setOpenSession(null)} onPublish={publishSession} busy={busy} />}
+      {openSession && (
+        <SessionDrawer
+          session={openSession}
+          patient={patient}
+          onClose={() => setOpenSession(null)}
+          onPublish={publishSession}
+          // Tras tocar la preparación o los adjuntos hay que releer: el cajón
+          // enseña la sesión que trajo la lista, y se quedaría con la vieja.
+          onSaved={async () => {
+            const j = await fetch(`/api/clinica/sessions?patientId=${id}`, { cache: "no-store" })
+              .then((r) => r.json())
+              .catch(() => null);
+            const arr = j?.data?.sessions ?? [];
+            if (arr.length) {
+              setSessions(arr);
+              const actual = arr.find((s) => s.id === openSession.id);
+              if (actual) setOpenSession(actual);
+            }
+          }}
+          busy={busy}
+        />
+      )}
 
       {/* Modal editar ficha */}
       {showEdit && editForm && (

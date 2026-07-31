@@ -8,7 +8,11 @@ function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
 }
 const STATUSES = ["draft", "ai_pending", "registered", "published"];
-const PATCH_FIELDS = ["sessionDate", "duration", "objectives", "activities", "performance", "observations", "status"];
+// `prepText` y `parentFeedback` (registro en 3 partes, sprint Aumenta 2026-07):
+// se pueden rellenar DESPUÉS — la preparación se escribe antes de la sesión y
+// la devolución de la familia a veces llega días más tarde. Los adjuntos de
+// preparación van por su propio endpoint (son ficheros, no texto).
+const PATCH_FIELDS = ["sessionDate", "duration", "objectives", "activities", "performance", "observations", "status", "prepText", "parentFeedback"];
 
 export const GET = withTenant(async (request, rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");

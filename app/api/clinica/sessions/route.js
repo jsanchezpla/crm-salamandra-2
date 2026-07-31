@@ -58,6 +58,13 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     aiStructured: body.aiStructured && typeof body.aiStructured === "object" ? body.aiStructured : null,
     audioDurationSec: body.audioDurationSec != null && body.audioDurationSec !== "" ? Number(body.audioDurationSec) : null,
     aiReviewedAt: body.aiReviewedAt ? new Date(body.aiReviewedAt) : null,
+    // Registro en 3 partes (sprint Aumenta 2026-07): la preparación previa y la
+    // devolución de la familia son OPCIONALES; los adjuntos de preparación
+    // llegan aparte (necesitan que la sesión ya exista) por
+    // /api/clinica/sessions/[id]/prep-files.
+    prepText: typeof body.prepText === "string" && body.prepText.trim() ? body.prepText.trim() : null,
+    parentFeedback:
+      typeof body.parentFeedback === "string" && body.parentFeedback.trim() ? body.parentFeedback.trim() : null,
     status: STATUSES.includes(body.status) ? body.status : "registered",
     // Cliente/pagador del paciente (foto al crear la sesión).
     clientId: await clientIdOfPatient(ctx.tenantModels, body.patientId),

@@ -31,6 +31,9 @@ export default function NuevaSesionPage() {
   const [form, setForm] = useState(null); // campos editables
   const [errorMsg, setErrorMsg] = useState(null);
   const [saving, setSaving] = useState(false);
+  // Adjuntos de la PREPARACIÓN (punto 4 del sprint). Se quedan en memoria hasta
+  // que la sesión existe: el endpoint de adjuntos necesita su id.
+  const [prepFiles, setPrepFiles] = useState([]);
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -76,6 +79,8 @@ export default function NuevaSesionPage() {
         nextSessionNotes: s.observations?.nextSessionNotes ?? "",
         homeworkTasks: s.observations?.homeworkTasks ?? "",
         incidents: s.observations?.incidents ?? "",
+        prepText: "",
+        parentFeedback: "",
       });
       setState(STATE.STRUCTURED);
     } catch (e) {
@@ -89,6 +94,7 @@ export default function NuevaSesionPage() {
     setFile(null);
     setResult(null);
     setForm(null);
+    setPrepFiles([]);
     setErrorMsg(null);
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -118,11 +124,28 @@ export default function NuevaSesionPage() {
         aiStructured: result.structured,
         audioDurationSec: result.audioDurationSec,
         aiReviewedAt: new Date().toISOString(),
+        prepText: form.prepText,
+        parentFeedback: form.parentFeedback,
         status: "registered",
       };
       const r = await fetch("/api/clinica/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo guardar la sesión");
+
+      // Los adjuntos van DESPUÉS: necesitan el id de la sesión recién creada.
+      // Si alguno falla no se pierde la sesión: se avisa y se queda en pantalla.
+      const fallidos = [];
+      for (const f of prepFiles) {
+        const fd = new FormData();
+        fd.append("file", f, f.name);
+        const up = await fetch(`/api/clinica/sessions/${j.data.id}/prep-files`, { method: "POST", body: fd });
+        if (!up.ok) fallidos.push(f.name);
+      }
+      if (fallidos.length) {
+        setErrorMsg(`Sesión guardada, pero no se pudieron subir: ${fallidos.join(", ")}. Puedes añadirlos desde la ficha.`);
+        setSaving(false);
+        return;
+      }
       router.push(`/pacientes/${id}`);
     } catch (e) {
       setErrorMsg(e.message);
@@ -288,6 +311,74 @@ export default function NuevaSesionPage() {
                   <SubField label="Incidencias" ta={ta} value={form.incidents} onChange={(v) => setForm({ ...form, incidents: v })} />
                 </div>
               </Block>
+            </div>
+          </div>
+
+          {/* Partes 1 y 3 del registro (sprint 2026-07, punto 4). El informe de
+              arriba es lo obligatorio; esto es opcional y a menudo se rellena
+              después, desde la ficha del paciente. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5 space-y-3">
+              <div className="eyebrow">1 · Preparación</div>
+              <p className="text-[10px] text-neutral-400 -mt-2">
+                Lo que preparaste antes de la sesión. Se guarda con ella y sirve para redactar el informe.
+              </p>
+              <textarea
+                className={ta}
+                rows={4}
+                placeholder="Material previsto, hipótesis de trabajo, qué observar…"
+                value={form.prepText}
+                onChange={(e) => setForm({ ...form, prepText: e.target.value })}
+              />
+              <div>
+                <label className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline cursor-pointer">
+                  + Adjuntar fotos, audio o PDF
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*,audio/*,application/pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      const nuevos = Array.from(e.target.files ?? []);
+                      e.target.value = "";
+                      setPrepFiles((prev) => [...prev, ...nuevos].slice(0, 10));
+                    }}
+                  />
+                </label>
+                {prepFiles.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {prepFiles.map((f, i) => (
+                      <li key={`${f.name}-${i}`} className="text-[11px] text-neutral-600 flex items-center gap-2">
+                        <span className="truncate">{f.name}</span>
+                        <span className="text-neutral-400 shrink-0">{fmtSize(f.size)}</span>
+                        <button
+                          onClick={() => setPrepFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                          className="text-rose-500 hover:text-rose-700 shrink-0"
+                        >
+                          quitar
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="text-[10px] text-neutral-400 mt-1">
+                  Material interno del equipo: no se comparte con la familia.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5 space-y-3">
+              <div className="eyebrow">3 · Devolución de la familia</div>
+              <p className="text-[10px] text-neutral-400 -mt-2">
+                Lo que te han contado los padres al recoger: cómo ha ido la semana, qué han notado en casa.
+              </p>
+              <textarea
+                className={ta}
+                rows={4}
+                placeholder="Qué dice la familia…"
+                value={form.parentFeedback}
+                onChange={(e) => setForm({ ...form, parentFeedback: e.target.value })}
+              />
             </div>
           </div>
 

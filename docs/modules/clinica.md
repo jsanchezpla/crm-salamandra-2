@@ -171,6 +171,35 @@ para un mes cerrado es exacta.
 > Las secciones "Lo que NO hace" y "Backlog" de abajo describen el Sprint 1 visual
 > original; parte ya está cubierta por Fase 1.
 
+## Registro de sesión en 3 partes (sprint Aumenta 2026-07, punto 4)
+
+Una sesión ya no es solo el informe de lo que pasó dentro:
+
+1. **Preparación** (opcional) — `prepText` + `prepFiles`: lo que la terapeuta
+   prepara ANTES (material, hipótesis, qué observar) y los adjuntos que trae
+   (fotos, notas de voz, un PDF).
+2. **Informe** (obligatorio) — los campos de siempre: objetivos, actividades,
+   desempeño y observaciones, por audio o escritos a mano.
+3. **Devolución de la familia** (opcional) — `parentFeedback`: lo que cuentan
+   los padres al recoger.
+
+Las partes 1 y 3 se pueden rellenar **después**: van en `PATCH
+/api/clinica/sessions/[id]` (además del POST de creación), porque la
+preparación se escribe antes y la devolución llega a veces días más tarde. En
+la UI están tanto en el flujo de «Subir audio» como en el cajón de la sesión de
+la ficha del paciente.
+
+**Adjuntos de preparación**: `POST /api/clinica/sessions/[id]/prep-files`
+(multipart) y `GET/DELETE …/prep-files/[fileId]`. Máximo 10 por sesión, 25 MB
+cada uno, solo fotos / audio / PDF (`lib/clinica/prepFiles.js`).
+
+> **No son documentos del archivo**: NO se crea fila en `documents` a propósito.
+> Es material de trabajo interno; si fuese un Document aparecería en el buscador
+> del CRM y podría acabar colándose en el área privada de la familia. Solo se
+> reutilizan las primitivas de disco de `documentStorage` para no montar un
+> cuarto almacén. La metadata vive en `clinic_sessions.prep_files` (JSONB) y el
+> serializador NO expone `storagePath`.
+
 ## «Enviar al paciente» (sprint Aumenta 2026-07, punto 3.2)
 
 `POST /api/clinica/reports/[id]/enviar` sustituye al viejo «Marcar como

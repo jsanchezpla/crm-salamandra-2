@@ -152,9 +152,12 @@ migración. `patients.contractSigned` queda como columna legada, sin uso en la U
 - **3.2** «Enviar al paciente» — **HECHO en local** (sección 1.b).
 
 ### 3.3 — Bloque 4: clínico
-- **4** registro de sesión en 3 partes. Campos ya en `ClinicSession`:
-  `prepText`, `prepFiles` (JSONB), `parentFeedback`. Falta UI y subida de
-  ficheros (nginx del VPS ya admite 30M).
+- **4** registro de sesión en 3 partes — **HECHO en local** (31/07):
+  preparación (texto + adjuntos), informe y devolución de la familia. Las
+  partes 1 y 3 se pueden rellenar después, desde el cajón de la sesión.
+  Adjuntos en `/api/clinica/sessions/[id]/prep-files` (fotos/audio/PDF, 10 por
+  sesión); NO son documentos del archivo a propósito — detalle en
+  `docs/modules/clinica.md`.
 - **3.1** informe de evolución con selección libre de registros de sesión.
 - **3.1** catálogo de derivación: hoy es constante en
   `lib/clinica/derivaciones.js`; el brief pide que sea **seed editable por
@@ -261,8 +264,9 @@ Sprint aparte, como marca el propio brief.
 
 > Continúa el sprint Aumenta. Lee `docs/sprint-aumenta-2026-07.md` antes de
 > tocar nada. El **bloque 3 está entero en local, sin desplegar** (1.1, 2.1,
-> 2.2, 2.3 y 3.2 — ver sección 1.b). Lo siguiente es el bloque 4 (registro de
-> sesión en 3 partes, informe de evolución con selección de sesiones, catálogo
-> de derivación editable, coordinaciones) y el bloque 5 (cobros, morosidad,
-> faltas, lista de espera). Rodrigo puede estar trabajando en paralelo en el
+> 2.2, 2.3 y 3.2 — ver sección 1.b), y del bloque 4 está hecho el **registro de
+> sesión en 3 partes**. Lo siguiente del bloque 4: informe de evolución con
+> selección libre de sesiones, catálogo de derivación editable por tenant,
+> coordinaciones (botón + módulo del menú) y el agregado trimestral por
+> terapeuta. Después, el bloque 5 (cobros, morosidad, faltas, lista de espera). Rodrigo puede estar trabajando en paralelo en el
 > mismo árbol: commitea solo tus ficheros.
