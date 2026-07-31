@@ -346,9 +346,16 @@ export default function MiPerfilPage() {
       </div>
 
       {/* Confirmación de cancelación */}
+      {/* SIN sombreado de fondo a propósito: esto vive dentro de un iframe
+          embebido en la web del profesional, así que un `bg-black/40` no oscurece
+          la página — solo pinta un rectángulo oscuro del tamaño del widget en
+          mitad de su web, que parece un error de maquetación. La capa sigue
+          existiendo (invisible) para centrar el diálogo y para que no se pueda
+          tocar la lista de detrás; lo que separa el diálogo del fondo es ahora su
+          sombra, por eso es más marcada que la de un modal normal. */}
       {cancelTarget && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-4 py-6">
-          <div className="w-full max-w-md bg-[var(--widget-card)] rounded-xl border border-[var(--widget-border)] p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 py-6">
+          <div className="w-full max-w-md bg-[var(--widget-card)] rounded-xl border border-[var(--widget-border)] p-6 shadow-[0_8px_40px_rgba(0,0,0,0.28)]">
             <h2 className="text-[20px] text-[var(--widget-text)] tracking-tight mb-1" style={headingStyle}>
               ¿Cancelar esta cita?
             </h2>
