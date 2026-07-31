@@ -327,6 +327,29 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   // Cloudflare Web Analytics (módulo Analíticas). El token de API es SECRETO;
   // el id de cuenta y el del sitio no lo son (salen de la URL del panel de
   // Cloudflare y no dan acceso a nada por sí solos).
+  // El token de Cloudflare se valida por FORMA antes de guardarlo. Motivo
+  // (2026-07-31): se guardó un valor de 13 caracteres —un pegado a medias— y el
+  // CRM lo dio por bueno; el fallo no salía aquí sino mucho después, al consultar
+  // la API, y con un "Authentication failed" de Cloudflare que no apunta a la
+  // causa. Un secreto mal pegado tiene que cantar EN EL MOMENTO de pegarlo.
+  //
+  // El suelo es holgado a propósito (30, no 40 exactos): hoy miden 40, pero no
+  // queremos que un cambio de formato de Cloudflare deje a un cliente sin poder
+  // guardar un token que sí es válido. Lo que se descarta es lo que no puede
+  // serlo de ninguna manera.
+  if (typeof body.cloudflareApiToken === "string" && body.cloudflareApiToken.trim()) {
+    const tok = body.cloudflareApiToken.trim();
+    if (!/^[A-Za-z0-9_-]+$/.test(tok)) {
+      throw new ValidationError(
+        "El token de Cloudflare tiene caracteres que no le corresponden. Cópialo entero desde el panel, sin espacios ni saltos de línea."
+      );
+    }
+    if (tok.length < 30) {
+      throw new ValidationError(
+        `Eso no parece un token de Cloudflare: has pegado ${tok.length} caracteres y los suyos rondan los 40. Vuelve a copiarlo entero (Cloudflare solo lo enseña una vez; si ya lo cerraste, crea otro).`
+      );
+    }
+  }
   applyKey(settings.integrations, "cloudflareApiToken", body.cloudflareApiToken);
   applyPlain(settings.integrations, "cloudflareAccountId", body.cloudflareAccountId);
   applyPlain(settings.integrations, "cloudflareSiteTag", body.cloudflareSiteTag);
