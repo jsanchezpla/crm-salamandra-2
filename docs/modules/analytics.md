@@ -146,6 +146,15 @@ anillos de menos de 0,7 px.
 - **Caché de 5 minutos** por tenant y rango. Cloudflare limita la frecuencia de
   llamadas y estos datos se agregan por día: no tiene sentido consultarlos en
   cada repintado.
+- **Los desgloses no cuadran exactamente con el total, y no es un fallo
+  nuestro.** El dataset es *Adaptive*: Cloudflare muestrea, y agrupaciones
+  distintas de los mismos eventos no reconcilian al dedillo. Observado en
+  producción el 2026-07-31 con la respuesta **de Cloudflare**: total 5 visitas,
+  mientras el desglose por país sumaba 7 (GB 3, US 2, ES 1, AT 1). Con
+  volúmenes pequeños la diferencia relativa canta mucho; con tráfico real se
+  diluye. El CRM guarda y enseña lo que Cloudflare da, sin cuadrarlo a la
+  fuerza: inventar un ajuste sería peor que la descuadre. Si alguien pregunta
+  «¿por qué el mapa suma más que el total?», la respuesta es esta.
 
 ---
 
