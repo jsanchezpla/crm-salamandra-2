@@ -18,10 +18,13 @@ import { MAPA_VIEWBOX, MAPA_ALTO, MAPA_ANCHO, PAISES } from "./worldMap.js";
  * completo con reinstalación de dependencias.
  */
 
+// Cloudflare solo guarda los últimos 7 días de visitas (medido contra
+// producción el 2026-07-31). Había opciones de 30 y 90 días: la consulta salía
+// "bien" y la pantalla enseñaba ceros, que es justo lo que parece una web sin
+// tráfico. Mejor no ofrecer lo que la fuente no puede responder.
 const RANGOS = [
+  { dias: 1, etiqueta: "Hoy" },
   { dias: 7, etiqueta: "7 días" },
-  { dias: 30, etiqueta: "30 días" },
-  { dias: 90, etiqueta: "90 días" },
 ];
 
 const numero = new Intl.NumberFormat("es-ES");
@@ -341,7 +344,7 @@ function SinConfigurar({ datos, esAdmin }) {
 // ── Pantalla ────────────────────────────────────────────────────────────────
 
 export default function AnaliticasModule({ esAdmin = false }) {
-  const [dias, setDias] = useState(30);
+  const [dias, setDias] = useState(7);
 
   // Un solo estado que lleva DE QUÉ RANGO son los datos que tiene. "Cargando"
   // se deduce de comparar ese rango con el pedido, en vez de ser una bandera
@@ -430,6 +433,18 @@ export default function AnaliticasModule({ esAdmin = false }) {
         <div className="bg-red-50 border border-red-100 text-red-700 rounded-xl p-4 text-sm mb-6">
           <p className="font-medium mb-0.5">No se pudieron cargar las visitas</p>
           <p className="text-red-600/90">{error}</p>
+        </div>
+      )}
+
+      {/* Se pidió más historia de la que Cloudflare guarda. Callarlo sería
+          enseñar números de un periodo distinto del que cree el que mira. */}
+      {datos?.recorte && (
+        <div className="bg-amber-50 border border-amber-100 text-amber-800 rounded-xl p-4 text-sm mb-6">
+          <p className="font-medium mb-0.5">Se ha acortado el periodo</p>
+          <p className="text-amber-700/90">
+            Cloudflare solo guarda los últimos {datos.recorte.maxDias} días de visitas, así que estos
+            números van desde el {datos.recorte.aplicado} y no desde el {datos.recorte.pedido}.
+          </p>
         </div>
       )}
 

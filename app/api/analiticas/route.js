@@ -21,7 +21,12 @@ import { cacheGet, cacheSet } from "../../../lib/tenant/tenantCache.js";
  * visita-a-lead.
  */
 
-const RANGOS_VALIDOS = [7, 30, 90];
+// Cloudflare solo conserva los últimos MAX_DIAS_RUM días (7, medido en
+// producción el 2026-07-31). Ofrecer 30 y 90 era vender lo que la fuente no
+// puede dar: la consulta salía bien y la pantalla enseñaba ceros. Se dejan los
+// rangos que SÍ tienen respuesta; `consultarRum` recorta y avisa por si a algún
+// tenant le llega una petición vieja con ?dias=90.
+const RANGOS_VALIDOS = [1, 7];
 
 // Cloudflare limita la frecuencia de llamadas y estos datos se mueven despacio
 // (se agregan por día). Cinco minutos evitan machacar la API cuando alguien
@@ -86,7 +91,7 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
   }
 
   const url = new URL(request.url);
-  const dias = Number(url.searchParams.get("dias") ?? 30);
+  const dias = Number(url.searchParams.get("dias") ?? 7);
   if (!RANGOS_VALIDOS.includes(dias)) {
     throw new ValidationError(`Rango no válido: usa ${RANGOS_VALIDOS.join(", ")} días`);
   }
