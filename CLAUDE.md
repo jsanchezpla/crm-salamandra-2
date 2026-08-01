@@ -202,7 +202,19 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 | `lib/team/`     | Serializer de `TeamMember`                                                                                              | Detalle en `docs/modules/team.md`                                             |
 | `lib/leads/`    | Stages canónicos de leads                                                                                               | Detalle en `docs/modules/leads.md`                                            |
 | `lib/training/` | Helper de auth HMAC para webhooks de TutorLMS                                                                           | Detalle en `docs/modules/training.md`                                         |
-| `lib/utils/`    | Utilidades comunes: `apiResponse`, `errors`, `apiKeyAuth`                                                               | —                                                                             |
+| `lib/utils/`    | Utilidades comunes: `apiResponse`, `errors`, `apiKeyAuth`, `auditoria`                                                  | —                                                                             |
+
+> **La tabla de arriba se quedó corta** (revisado 01/08/2026): `/lib` tiene hoy
+> 33 carpetas. Las que faltaban, por si ahorran un `ls`: `actividad` (frases de
+> la auditoría), `ai`, `analytics`, `assistant`, `calendar`, `citas` (incluye
+> `portalContract`, `portalMeses`, `avisosWhatsapp`, `recordatorios`,
+> `visibilidad`), `clients` (`guardians`, `clientContract`, `signatureStorage`,
+> `attachmentStorage`), `clinica` (serializers, `estadisticas`,
+> `redactarInforme`, `reportPdf`, `prepFiles`, `trimestres`, `incentives`…),
+> `configuracion`, `crypto` (`secretBox`), `demo` (`isDemo`), `documents`,
+> `email`, `formularios`, `home`, `inventory`, `notifications`, `nutricion`,
+> `outreach`, `payments`, `pdf` (fuentes de los PDF), `projects`,
+> `provisioning`, `support` y `whatsapp`.
 
 **Regla**: no modificar nada de `/lib/` sin explicar el motivo (regla #2).
 
@@ -256,7 +268,7 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 | `demo`           | local + prod    | clients, leads, calendar, inventory, billing, team, training, support\* | Tenant de desarrollo y pruebas; show-room. \* = `support` activado solo en LOCAL (2026-07-27, con seed y foto dorada); en prod se activará al desplegar el módulo |
 | `retorika`       | solo producción | training, clients                                            | Academia online (WordPress + TutorLMS)                                                          |
 | `quality_energy` | local + prod    | leads                                                        | Empresa energética. Tuvo `referidos` en su día (limpiado por `remove-abarcaia-from-quality.js`) |
-| `aumenta`        | local + prod    | leads\*, training\*, clients, calendar, citas, clinica, pacientes, projects, billing, inventory, orders, team, documents (13) | Centro de psicología y formación. \* = override UI: `aumenta/LeadsModule` y `aumenta/FormacionOverview`. Label sidebar "Leads" → "Interesados". **CRM en uso REAL desde 2026-07-24**: datos de ejemplo borrados (`reset-aumenta-real-data.js`; los LEADS eran reales y se conservaron) y equipo real de 15 personas dado de alta (`seed-aumenta-equipo-real.js`: 13 logins tipo `nombre_aumenta` con rol `user`; dirección usa admin@aumenta.es). Desempeño/Dirección/Productividad son SOLO admin. NO wipear/sembrar sin permiso. |
+| `aumenta`        | local + prod    | leads\*, training\*, clients, calendar, citas, clinica, pacientes, projects, billing, inventory, orders, team, documents (13) | Centro de psicología y formación. \* = override UI: `aumenta/LeadsModule` y `aumenta/FormacionOverview`. Label sidebar "Leads" → "Interesados". **CRM en uso REAL desde 2026-07-24**: datos de ejemplo borrados (`reset-aumenta-real-data.js`; los LEADS eran reales y se conservaron) y equipo real de 15 personas dado de alta (`seed-aumenta-equipo-real.js`: 13 logins tipo `nombre_aumenta` con rol `user`; dirección usa admin@aumenta.es). Desempeño/Dirección/Productividad son SOLO admin. NO wipear/sembrar sin permiso. **Agenda compartida ENCENDIDA el 01/08/2026** a petición de Rodrigo: todo el equipo ve la agenda completa (y con ella los datos de contacto del paciente). |
 | `abarcaia`       | solo producción | leads, referidos                                             | Programa de referidos vía formulario público                                                    |
 | `spain_enzymes`  | local + prod    | **prod: leads, analytics** · local: leads, clients, inventory, billing, orders | **Corregido 2026-07-31**: ya NO es "solo local". Está EN PRODUCCIÓN y es un cliente real (admin `admin@spain-enzymes.salamandra`); acabó contratando **solo leads**, así que la lista larga de módulos es la del entorno local, no la suya. Verificado contra el endpoint público: `x-tenant: spain_enzymes` resuelve y `leads` está activo. La web (spainenzymes.com, WordPress) manda los leads del formulario a `/api/public/leads`. `analytics` se le añade en el sprint del 2026-07-31 |
 | `nutri_laura`    | local + prod    | citas, leads, clients, training, nutricion, formularios, team | Nutricionista (Laura). Override leads (embudo nutricional) + conversión lead→paciente + override overview formación (B2C, sin TutorLMS aún). Subido a prod 2026-06-23 con sprint Recetario C1. **Módulo `team` activado 2026-07-24** (`add-team-module-nutri-laura.js`): Laura es el 1er miembro (nutricionista); va a fichar más. NO tiene clinica/pacientes: sus "pacientes" son Clients con plan de menú. |
@@ -367,7 +379,25 @@ desaparecido. `ai`, `automations` e `integrations` continúan fuera.
 > `docs/modules/{clinica,pacientes}.md`.
 >
 > **Placeholders sin construir** (entradas en `Sidebar.jsx` que hoy nadie
-> activa): `planning`, `analytics`, `ai`, `automations`, `integrations`.
+> activa): `planning`, `ai`, `automations`, `integrations`.
+
+### Pantallas nuevas del sprint Aumenta (31/07 - 01/08/2026)
+
+No son `moduleKey` nuevos: cuelgan de módulos que ya existen y viajan con ellos
+a todos sus tenants. Detalle en `docs/sprint-aumenta-2026-07.md`.
+
+| Pantalla | Ruta | Cuelga de |
+| --- | --- | --- |
+| Coordinaciones (listado general + alta) | `/clinica/coordinaciones` | `clinica` |
+| Estadísticas del centro (Excel + PDF, solo dirección) | `/clinica/estadisticas` | `clinica` |
+| Lista de espera de admisión | `/clientes/lista-espera` | `clients` |
+| Contrato, tutores y meses del portal | ficha de cliente | `clients` |
+| Morosidad | dentro de `/facturacion/cobros` | `billing` |
+
+⚠️ **La «lista de espera» de Citas y la de admisión son cosas distintas**: la
+primera son solicitudes de reserva concretas (`bookings` en `pending`); la
+segunda, gente esperando plaza sin cita ni fecha. Por eso la segunda lleva
+apellido en toda la UI.
 
 ---
 
@@ -452,7 +482,15 @@ desaparecido. `ai`, `automations` e `integrations` continúan fuera.
     notificaciones, Salamandrobot) van a `z-30`, POR DEBAJO — al abrir
     cualquier drawer o modal quedan tapados y no pisan botones. Todo drawer o
     modal nuevo debe seguir esa escala.
-14. **Secrets de producción NUNCA pasan por chats con LLMs ni por canales no seguros**.
+14. **La CONFIGURACIÓN es UNIVERSAL** (Rodrigo, 01/08/2026). Las tarjetas de
+    integración de Configuración —WhatsApp, Cloudflare, Anthropic, OpenAI,
+    Google Places, Resend— y los interruptores del tenant se muestran en
+    **TODOS los clientes**, usen o no ese servicio: nada de gatearlos por
+    módulo. Quien mañana quiera conectar WhatsApp o la analítica de su web
+    tiene que poder hacerlo solo, sin que nadie toque código. Lo que sí depende
+    del módulo es la FUNCIÓN (la pantalla, el endpoint), no el sitio donde se
+    pegan las credenciales.
+15. **Secrets de producción NUNCA pasan por chats con LLMs ni por canales no seguros**.
     Cuando se rote un secret (HMAC, API key, password), generarlo localmente,
     configurarlo directamente en `.env.production` del VPS por SSH, y comunicarlo
     a terceros (clientes, integraciones) por canal cifrado. Si un secret se ha

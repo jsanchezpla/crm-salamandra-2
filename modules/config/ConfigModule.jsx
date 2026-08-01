@@ -549,6 +549,20 @@ export default function ConfigModule() {
             />
           )}
 
+          {isAdmin && (
+            <AvisosWhatsappCard
+              activo={!!cfg.avisosWhatsapp}
+              readOnly={!!cfg.readOnly}
+              configurado={!!cfg.integrations?.whatsapp?.configured}
+              onChange={(v) =>
+                patchTenant(
+                  { avisosWhatsapp: v },
+                  v ? "Los avisos de cita saldrán también por WhatsApp" : "Los avisos vuelven a ir solo por correo"
+                )
+              }
+            />
+          )}
+
           {isAdmin && <DerivacionesCard />}
 
           {isAdmin && (
@@ -942,6 +956,48 @@ function DerivacionesCard() {
       <p className="text-[10px] text-neutral-400 mt-2">
         Renombrar una línea cambia solo la etiqueta: los informes ya escritos siguen apuntando a la
         misma especialidad. Quitar una no borra los informes que la usaban.
+      </p>
+    </div>
+  );
+}
+
+function AvisosWhatsappCard({ activo, readOnly, configurado, onChange }) {
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-neutral-800">Avisos de cita por WhatsApp</div>
+          <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+            Además del correo, mandar por WhatsApp la confirmación de la cita, el enlace de la
+            videollamada y el recordatorio de la víspera. Sale desde el número del negocio, y nunca
+            se escribe a quien tenga marcado que no quiere WhatsApp.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange(!activo)}
+          className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 ${activo ? "bg-[var(--color-primary,#1B3A2D)]" : "bg-neutral-300"}`}
+          aria-label={activo ? "Desactivar avisos por WhatsApp" : "Activar avisos por WhatsApp"}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${activo ? "translate-x-6" : "translate-x-1"}`} />
+        </button>
+      </div>
+      <div className="mt-1 text-[11px] font-medium">
+        {!configurado ? (
+          <span className="text-amber-700">
+            Falta conectar WhatsApp abajo (token y número): mientras tanto no sale ningún mensaje.
+          </span>
+        ) : activo ? (
+          <span className="text-emerald-700">Activos: cada aviso de cita va por correo y por WhatsApp.</span>
+        ) : (
+          <span className="text-neutral-400">Apagados: los avisos van solo por correo.</span>
+        )}
+      </div>
+      <p className="text-[10px] text-neutral-400 mt-2">
+        Meta cobra por conversación iniciada por el negocio, y si la persona no te ha escrito en las
+        últimas 24 h exige una <strong>plantilla aprobada</strong>: esos mensajes los rechaza hasta
+        que la tengas dada de alta.
       </p>
     </div>
   );

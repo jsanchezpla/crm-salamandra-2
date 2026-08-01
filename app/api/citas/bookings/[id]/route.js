@@ -1,4 +1,5 @@
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
+import { avisarCitaPorWhatsapp } from "../../../../../lib/citas/avisosWhatsapp.js";
 import { notifyUsers } from "../../../../../lib/notifications/notifyUsers.js";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, noContent, serverError } from "../../../../../lib/utils/apiResponse.js";
@@ -419,6 +420,8 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
         ? row.status !== "cancelled" // reenviar sí, pero no de una cita anulada
         : (before.meetUrl == null || before.meetUrl === "") && row.status === "confirmed");
     let emailEnviado = false;
+    let whatsappEnviado = false;
+    let whatsappMotivo = null;
     if (meetLinkFilled) {
       await logCitasAudit({
         tenantId: tenant.id,
@@ -458,13 +461,21 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       } catch (mailErr) {
         process.stderr.write(`[citas:meet-link] email fail: ${mailErr.message}\n`);
       }
+
+      // El mismo aviso por WhatsApp, si el cliente lo tiene encendido y la
+      // familia no lo ha denegado. El correo sigue siendo el canal principal:
+      // esto se suma, no lo sustituye.
+      const etWa = await EventType.findByPk(row.eventTypeId, { attributes: ["name"] }).catch(() => null);
+      const wa = await avisarCitaPorWhatsapp(ctx, { booking: row, tipo: "enlace", eventTypeName: etWa?.name });
+      whatsappEnviado = wa.ok;
+      whatsappMotivo = wa.ok ? null : wa.motivo;
     }
 
     // Respuesta con eventType (para que el modal no pierda 'Servicio'/dirección)
     // y el profesional asignado (si el tenant tiene módulo team).
     await row.reload({ include: bookingIncludes(tenantModels, hasModule) });
     // `emailEnviado` permite que el panel confirme "enviado" en vez de callar.
-    return ok({ ...row.toJSON(), emailEnviado });
+    return ok({ ...row.toJSON(), emailEnviado, whatsappEnviado, whatsappMotivo });
   } catch (err) {
     return serverError(err);
   }

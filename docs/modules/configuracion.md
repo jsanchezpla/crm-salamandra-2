@@ -134,11 +134,18 @@ Semántica de las claves en `PATCH`:
 
 No hay migración: `settings` es JSONB, ya existe en `master.tenants`.
 
+> **LA CONFIGURACIÓN ES UNIVERSAL** (criterio de Rodrigo, 01/08/2026). Las
+> tarjetas de integración —Anthropic, OpenAI, WhatsApp, Google Places,
+> Cloudflare, Resend— se muestran en **TODOS los tenants**, usen o no ese
+> servicio, y no se gatean por módulo. Un cliente que mañana quiera WhatsApp o
+> analítica de visitas tiene que poder conectarlo sin que nadie toque código.
+> Verificado el 01/08: ninguna tarjeta lleva `hasModule`.
+
 Interruptores de Citas que viajan por el mismo `PATCH` (todos booleanos, todos
 **apagados** por defecto): `recordatoriosCitas`, `agendaCompartida` y
-`portalBloqueoImpago` (sprint Aumenta 2026-07, punto 2.3 — los documentos del
+`avisosWhatsapp` (avisos de cita también por WhatsApp) y `portalBloqueoImpago` (sprint Aumenta 2026-07, punto 2.3 — los documentos del
 área privada se abren mes a mes al registrar el cobro de ese mes; detalle en
-`docs/modules/citas.md`). Los tres quedan anotados en `AuditLog` al cambiarlos.
+`docs/modules/citas.md`). Los cuatro quedan anotados en `AuditLog` al cambiarlos.
 
 ---
 

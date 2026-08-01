@@ -133,6 +133,7 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("citas.recordatorios", antes?.citas?.recordatorios, despues?.citas?.recordatorios);
   anota("citas.agendaCompartida", antes?.citas?.agendaCompartida, despues?.citas?.agendaCompartida);
   anota("citas.portalBloqueoImpago", antes?.citas?.portalBloqueoImpago, despues?.citas?.portalBloqueoImpago);
+  anota("citas.avisosWhatsapp", antes?.citas?.avisosWhatsapp, despues?.citas?.avisosWhatsapp);
 
   const huboSecretos = Object.keys(secretos).length > 0;
   const huboAbiertos = Object.keys(after).length > 0;
@@ -184,6 +185,8 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     agendaCompartida: t.settings?.citas?.agendaCompartida === true,
     // Bloqueo del área privada mes a mes hasta que consta el cobro de ese mes.
     portalBloqueoImpago: t.settings?.citas?.portalBloqueoImpago === true,
+    // Avisos de cita también por WhatsApp (01/08). Apagado por defecto.
+    avisosWhatsapp: t.settings?.citas?.avisosWhatsapp === true,
     brand: {
       primaryColor: brand.primaryColor ?? null,
       secondaryColor: brand.secondaryColor ?? null,
@@ -376,6 +379,12 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   if (typeof body.portalBloqueoImpago === "boolean") {
     settings.citas = { ...(settings.citas ?? {}), portalBloqueoImpago: body.portalBloqueoImpago };
   }
+  // Avisos de cita por WhatsApp. APAGADO por defecto: encenderlo sin las
+  // credenciales de Meta no manda nada, y con ellas empieza a escribir a
+  // pacientes reales (y Meta cobra por conversación).
+  if (typeof body.avisosWhatsapp === "boolean") {
+    settings.citas = { ...(settings.citas ?? {}), avisosWhatsapp: body.avisosWhatsapp };
+  }
 
   // Candado de la IA para empleados (no es un secreto): lista cerrada.
   if (body.aiAccess === "libre" || body.aiAccess === "restringido") {
@@ -421,6 +430,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     recordatoriosCitas: settings.citas?.recordatorios === true,
     agendaCompartida: settings.citas?.agendaCompartida === true,
     portalBloqueoImpago: settings.citas?.portalBloqueoImpago === true,
+    avisosWhatsapp: settings.citas?.avisosWhatsapp === true,
     brand: {
       primaryColor: settings.brand.primaryColor ?? null,
       secondaryColor: settings.brand.secondaryColor ?? null,

@@ -27,6 +27,29 @@ pantalla: había que contarlo cita a cita.
   tiempo es justo lo que se quiere fomentar, penalizarlo sería absurdo.
 - Semáforo: verde <8%, ámbar 8-15%, rojo ≥15%.
 
+## Avisos por WhatsApp (01/08/2026)
+
+Además del correo, los avisos de cita pueden salir por WhatsApp desde el número
+del propio negocio (Meta Cloud API, BYOK: credenciales y gasto del cliente).
+
+- Interruptor por cliente: `settings.citas.avisosWhatsapp`, **apagado por
+  defecto**, en Configuración. Sin las credenciales de Meta no manda nada y la
+  tarjeta lo dice.
+- Enganchado en tres sitios: «Guardar y enviar» del enlace de videollamada,
+  confirmación de la cita y recordatorio de la víspera.
+- Lógica en `lib/citas/avisosWhatsapp.js`; el envío HTTP en
+  `lib/whatsapp/whatsappConfig.js`. **Tres condiciones**: credenciales +
+  interruptor + que la familia no lo haya denegado (`Patient.consents.whatsapp`).
+  Si el consentimiento no se puede comprobar, NO se manda: ante la duda, callar
+  sale más barato que escribir a quien dijo que no.
+- Nunca lanza: el correo sigue siendo el canal principal y un WhatsApp que falla
+  no puede tumbar la cita. El PATCH del enlace devuelve `whatsappEnviado` y
+  `whatsappMotivo` para poder explicarlo en pantalla.
+- ⚠️ Meta cobra por conversación iniciada por el negocio y, fuera de la ventana
+  de 24 h, exige **plantilla aprobada**: los textos planos los rechaza. Hasta
+  tener plantillas dadas de alta, esto sirve para responder dentro de esa
+  ventana.
+
 ## Recordatorio de cita (2026-07-27)
 
 Correo automático la víspera. **Apagado por defecto**: se enciende por cliente

@@ -10,6 +10,7 @@ import {
 } from "../../../../../../lib/citas/cobroCita.js";
 import { reembolsarCitaSiProcede } from "../../../../../../lib/citas/reembolsoCita.js";
 import { sendEmail } from "../../../../../../lib/email/resendClient.js";
+import { avisarCitaPorWhatsapp } from "../../../../../../lib/citas/avisosWhatsapp.js";
 import { bookingConfirmedTemplate } from "../../../../../../lib/email/templates/citas/bookingConfirmed.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
 
@@ -320,6 +321,15 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     } catch (mailErr) {
       process.stderr.write(`[citas:confirm] email-confirmed fail: ${mailErr.message}\n`);
     }
+
+    // Y por WhatsApp, si el cliente lo tiene encendido: credenciales propias,
+    // interruptor del cliente y consentimiento de la familia (ver
+    // lib/citas/avisosWhatsapp.js). Nunca lanza.
+    await avisarCitaPorWhatsapp(ctx, {
+      booking: row,
+      tipo: "confirmada",
+      eventTypeName: row.eventType?.name,
+    });
 
     return ok(row.toJSON());
   } catch (err) {
