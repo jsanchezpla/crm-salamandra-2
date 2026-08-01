@@ -147,18 +147,37 @@ const sinPermiso = usuarios.filter((u) => {
   return !acc.includes("all") && !acc.includes(moduleKey);
 });
 
-if (sinPermiso.length) {
+// A los ADMIN se les da acceso SOLO (01/08/2026). Quien administra un cliente
+// tiene que ver lo que ese cliente ha contratado: si no, activar un módulo deja
+// al responsable sin verlo y el aviso de abajo se lo lleva el `tail` de quien
+// lanzó el script — que es exactamente lo que pasó con `documents` en
+// nutri_laura, después de haber pasado ya con `analytics` en spain_enzymes.
+// Se puede evitar con --sin-admins. Los usuarios normales siguen necesitando
+// --grant-users: que una terapeuta vea Facturación es una decisión, no un
+// descuido.
+const adminsSinPermiso = sinPermiso.filter((u) => u.role === "admin");
+const otrosSinPermiso = sinPermiso.filter((u) => u.role !== "admin");
+
+if (adminsSinPermiso.length && !flags.has("--sin-admins")) {
+  for (const u of adminsSinPermiso) {
+    await u.update({ moduleAccess: [...u.moduleAccess, moduleKey] });
+    process.stdout.write(`  ✓ acceso dado al admin ${u.email}\n`);
+  }
+}
+
+const pendientes = flags.has("--sin-admins") ? sinPermiso : otrosSinPermiso;
+if (pendientes.length) {
   if (flags.has("--grant-users")) {
-    for (const u of sinPermiso) {
+    for (const u of pendientes) {
       await u.update({ moduleAccess: [...u.moduleAccess, moduleKey] });
       process.stdout.write(`  ✓ permiso concedido a ${u.email}\n`);
     }
   } else {
     process.stdout.write(
-      `\n  ⚠ ${sinPermiso.length} usuario(s) NO verán "${moduleKey}": su module_access\n` +
+      `\n  ⚠ ${pendientes.length} usuario(s) NO verán "${moduleKey}": su module_access\n` +
         `    es una lista explícita que no lo incluye. El módulo está activo en el\n` +
         `    tenant, pero para ellos el menú lo oculta y la API responde 403.\n\n` +
-        sinPermiso.map((u) => `      · ${u.email} → ${JSON.stringify(u.moduleAccess)}\n`).join("") +
+        pendientes.map((u) => `      · ${u.email} → ${JSON.stringify(u.moduleAccess)}\n`).join("") +
         `\n    Para dárselo:  node scripts/enable-module.js ${slug} ${moduleKey} --grant-users\n`
     );
   }

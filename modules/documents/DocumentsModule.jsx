@@ -54,6 +54,13 @@ export default function DocumentsModule({ avanzado = true }) {
 
   useEffect(() => {
     let alive = true;
+    // Sin el avanzado no hay archivo que pedir: estas tres llamadas responden
+    // 403 y la pantalla acababa enseñando un error a quien solo tiene el
+    // contrato — que no es que le falle nada, es que eso no es suyo.
+    if (!avanzado) {
+      setLoading(false);
+      return () => { alive = false; };
+    }
     const fp = currentFolderId ? `parentFolderId=${currentFolderId}` : "parentFolderId=null";
     const dp = currentFolderId ? `folderId=${currentFolderId}` : "folderId=null";
     Promise.all([
@@ -74,7 +81,7 @@ export default function DocumentsModule({ avanzado = true }) {
     return () => {
       alive = false;
     };
-  }, [visibility, currentFolderId, reloadKey]);
+  }, [visibility, currentFolderId, reloadKey, avanzado]);
 
   const canManage = (row) => me && row.ownerUserId === me.id;
 
@@ -197,13 +204,6 @@ export default function DocumentsModule({ avanzado = true }) {
       {/* El contrato del centro: lo ve cualquiera que tenga Documentos, básico
           o avanzado. Es lo ÚNICO que ve quien solo tiene el básico. */}
       <ContratoServiciosCard isAdmin={me?.role === "admin" || me?.role === "superadmin"} />
-
-      {!avanzado && (
-        <p className="text-[11px] text-neutral-400">
-          Tu plan incluye el contrato del centro. El archivo completo —carpetas, búsqueda y subida
-          de cualquier documento— va en Documentos avanzado.
-        </p>
-      )}
 
       {avanzado && (
       <>
