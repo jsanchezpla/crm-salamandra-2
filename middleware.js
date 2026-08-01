@@ -41,16 +41,33 @@ const ADMIN_HOST = (process.env.ADMIN_HOST || "").toLowerCase().trim();
 // embebibles, portal del paciente, webhooks de terceros, altas públicas y —muy
 // especialmente— /api/auth/demo, que firma un token de admin a un visitante sin
 // credenciales.
-const FUERA_DEL_BACKOFFICE = [
-  "/widget/",
-  "/portal/",
-  "/api/public/",
-  "/api/webhooks/",
-  "/api/external/",
-  "/api/cursos-empresas/",
-  "/api/register",
-  "/api/usuarios/register/",
-  "/api/auth/demo",
+/**
+ * LO ÚNICO que existe en el host del back-office. Es una lista blanca, no negra.
+ *
+ * ── POR QUÉ SE CAMBIÓ DE PLANTEAMIENTO (2026-08-01) ──────────────────────────
+ * Antes solo se QUITABA de este host la superficie anónima (widgets, portal,
+ * webhooks, demo), y con eso se daba por hecho que quedaba "el back-office".
+ * No: quedaba el CRM ENTERO. Al entrar por la raíz del subdominio con la cuenta
+ * del panel, lo que salía era el escritorio de Salamandra —sus clientes, su
+ * facturación, su captación—, que es exactamente lo que esta cuenta no debería
+ * poder ni ver.
+ *
+ * Una lista negra en una frontera es una promesa de acordarse de todo lo que
+ * venga después. Aquí la respuesta correcta es la contraria: este host sirve el
+ * panel y lo imprescindible para entrar en él, y todo lo demás no existe.
+ *
+ * Las tres primeras son lo que llaman de verdad sus dos pantallas; el resto es
+ * poder identificarse y que carguen los recursos de Next.
+ */
+const SOLO_ESTO_EN_BACKOFFICE = [
+  "/admin",
+  "/api/admin",
+  "/api/provisioning",
+  "/login",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/auth/refresh",
+  "/_next/",
 ];
 
 // Y al revés: lo que se construya para Salamandra no se sirve desde el host que
@@ -146,10 +163,20 @@ export async function middleware(request) {
   // después, un OPTIONS o la rama del widget (que retornan antes) se saltarían
   // el reparto y el subdominio interno seguiría sirviéndolos.
   if (ADMIN_HOST) {
-    const host = (request.headers.get("host") || "").toLowerCase();
-    const enBackoffice = host === ADMIN_HOST;
-    const prohibidas = enBackoffice ? FUERA_DEL_BACKOFFICE : SOLO_BACKOFFICE;
-    if (coincide(pathname, prohibidas)) {
+    if (esPeticionDeBackoffice(request)) {
+      // La raíz del subdominio lleva al panel, no al escritorio del CRM. Sin
+      // esto, entrar por "admin.salamandrasolutions.com" a secas dejaba a la
+      // cuenta del panel mirando los clientes y la facturación de Salamandra,
+      // y sin ningún enlace para llegar a lo que venía a hacer.
+      if (pathname === "/") {
+        return NextResponse.redirect(new URL("/admin", request.url));
+      }
+      // Lista BLANCA: aquí solo existe el back-office (ver la nota de
+      // SOLO_ESTO_EN_BACKOFFICE). Lo que no esté, no está.
+      if (!coincide(pathname, SOLO_ESTO_EN_BACKOFFICE)) {
+        return new NextResponse(null, { status: 404 });
+      }
+    } else if (coincide(pathname, SOLO_BACKOFFICE)) {
       return new NextResponse(null, { status: 404 });
     }
   } else if (coincide(pathname, SOLO_BACKOFFICE)) {

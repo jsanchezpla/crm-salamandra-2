@@ -147,7 +147,22 @@ async function main() {
     const replay = await conCookie(ADMIN, "/api/admin/configuraciones", sesionCrm.access);
     esperar(replay === 401, `pero en el panel NO (HTTP ${replay}) — sin esto, el panel estaba abierto`);
 
-    paso("8. Canjear el refresh del CRM contra el panel tampoco");
+    paso("8. En el back-office SOLO existe el back-office");
+    const sesionBo = await entrarConCookies(ADMIN, EMAIL_BO);
+    esperar(!!sesionBo.access, "se obtiene sesión del panel");
+    for (const ruta of ["/clientes", "/facturacion", "/api/clients", "/api/citas/bookings"]) {
+      const cod = await conCookie(ADMIN, ruta, sesionBo.access);
+      esperar(cod === 404, `  ${ruta} no existe aquí (HTTP ${cod})`);
+    }
+    const raiz = await fetch(`${ADMIN}/`, {
+      headers: { Cookie: `access_token=${sesionBo.access}` }, redirect: "manual",
+    });
+    esperar(raiz.status === 307 && (raiz.headers.get("location") || "").endsWith("/admin"),
+      `la raíz lleva al panel, no al CRM (${raiz.status} -> ${raiz.headers.get("location")})`);
+    const panel = await conCookie(ADMIN, "/api/admin/configuraciones", sesionBo.access);
+    esperar(panel !== 404 && panel !== 401, `y el panel sí responde (HTTP ${panel})`);
+
+    paso("9. Canjear el refresh del CRM contra el panel tampoco");
     const r = await fetch(`${ADMIN}/api/auth/refresh`, {
       method: "POST",
       headers: { Cookie: `refresh_token=${sesionCrm.refresh}` },
