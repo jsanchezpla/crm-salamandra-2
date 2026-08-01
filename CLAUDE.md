@@ -357,6 +357,19 @@ aplique.
 | `documents_avanzado` | **Documentos avanzado** | El archivo completo: carpetas, buscador, subida general y cuota. Mismo patrón que `team`/`team_avanzado`; los endpoints de `/api/documents/*` lo exigen. |
 | `provisioning` | **Alta de clientes** | Panel interno SOLO de `salamandra_solutions`: crea el cliente entero (schema, tablas, módulos con dependencias, admin, marca y datos fiscales). `lib/provisioning/`. |
 
+> **ACTIVAR UN MÓDULO TIENE DOS PUERTAS** (01/08/2026, después de tropezar dos
+> veces). No basta con `master.tenant_modules`: si el usuario tiene una lista
+> explícita en `users.module_access`, el sidebar le oculta el módulo y la API le
+> responde 403 aunque el cliente lo tenga contratado. Pasó con `analytics` en
+> spain_enzymes (31/07) y con `documents` en nutri_laura (01/08); las dos veces
+> lo detectó el cliente, no nosotros.
+>
+> - `scripts/enable-module.js <slug> <moduleKey>` da acceso a los **admin**
+>   automáticamente (`--sin-admins` para evitarlo) y avisa de los usuarios
+>   normales, que se dan con `--grant-users`.
+> - `npm run db:check-access` (solo lectura) lista quién no ve qué en TODOS los
+>   clientes. Lanzarlo tras activar módulos y en cada despliegue que los toque.
+
 ⚠️ **Retirados del menú (2026-07-27)**: `analytics`, `ai`, `automations`,
 `integrations` — eran entradas sin página detrás y llevaban a un 404 en mitad
 de una demo. Se vuelven a añadir cuando exista su página.
