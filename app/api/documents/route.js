@@ -28,7 +28,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // GET /api/documents?folderId=<uuid|null>&visibility=private|shared|all
 export const GET = withTenant(async (request, _rc, ctx) => {
   try {
-    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS)) return forbidden("Módulo documents no activo");
+    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS_AVANZADO)) return forbidden("El archivo de documentos exige el módulo Documentos avanzado");
     const userId = request.headers.get("x-user-id");
     if (!userId) return unauthorized();
 
@@ -80,7 +80,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
 // POST /api/documents (multipart: file + folderId? + visibility?)
 export const POST = withTenant(async (request, _rc, ctx) => {
   try {
-    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS)) return forbidden("Módulo documents no activo");
+    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS_AVANZADO)) return forbidden("El archivo de documentos exige el módulo Documentos avanzado");
     const userId = request.headers.get("x-user-id");
     if (!userId) return unauthorized();
 

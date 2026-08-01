@@ -49,6 +49,7 @@ export const ONE_OFF = {
   "backfill-patients-client": "DATOS: enlaza pacientes con su ficha de pagador a partir de sus citas/sesiones; dry-run por defecto, se corre a mano con --confirm",
   "migrate-contract-patient-to-client": "DATOS: mueve el contrato del paciente a la familia (sprint 2026-07, 1.1); copia el PDF a `documents` y apunta clients.contract_document_id; dry-run por defecto, se corre a mano con --confirm",
   "podar-audit-logs": "MANTENIMIENTO del schema MASTER: retención del registro de auditoría; dry-run por defecto, lo lanza un temporizador semanal",
+  "migrate-documents-avanzado": "MASTER, no toca schemas de tenant: reparte el módulo Documentos en básico/avanzado y da el avanzado a quien ya tenía Documentos, para que nadie pierda el archivo por el cambio de nomenclatura. Se corre a mano una vez, idempotente",
   "migrate-audit-logs-index": "índice en el schema MASTER (audit_logs), no por-tenant; idempotente, se corre a mano una vez",
 };
 
@@ -196,6 +197,12 @@ export const MODULES = {
 
   inventory: ["migrate-inventory-rework"],
   documents: ["migrate-documents-sprint-1", "migrate-documents-client-link", "migrate-documents-transversal", "migrate-documents-patient-link", "migrate-documents-client-portal"],
+
+  // Documentos AVANZADO (01/08/2026): mismas tablas que el básico —el archivo
+  // ya existe, lo que cambia es quién puede verlo entero—, así que comparte
+  // migraciones. Se declara para que un cliente que estrene el avanzado sin
+  // haber tenido el básico no nazca sin `documents`.
+  documents_avanzado: ["migrate-documents-sprint-1", "migrate-documents-client-link", "migrate-documents-transversal", "migrate-documents-patient-link", "migrate-documents-client-portal"],
   nutricion: [
     "migrate-nutricion-recipes",
     "migrate-nutricion-week-recipe-media",

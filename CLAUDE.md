@@ -353,6 +353,8 @@ aplique.
 | --- | --- | --- |
 | `team` | **Equipo básico** | Plantilla, altas, usuarios del CRM, roles y accesos por módulo. Es lo que necesita cualquier cliente. |
 | `team_avanzado` | **Equipo avanzado** | Desempeño, Dirección, Productividad, Incidencias, Bandeja, Ocupación y Actividad. Se vende aparte; los submenús exigen `requiresAll` (avanzado + el módulo que aporta el contenido) y sus 16 endpoints lo comprueban. |
+| `documents` | **Documentos básico** | Solo el Contrato de Prestación de Servicios del centro. Es lo que necesita un cliente que no quiere un gestor documental (nutri_laura). |
+| `documents_avanzado` | **Documentos avanzado** | El archivo completo: carpetas, buscador, subida general y cuota. Mismo patrón que `team`/`team_avanzado`; los endpoints de `/api/documents/*` lo exigen. |
 | `provisioning` | **Alta de clientes** | Panel interno SOLO de `salamandra_solutions`: crea el cliente entero (schema, tablas, módulos con dependencias, admin, marca y datos fiscales). `lib/provisioning/`. |
 
 ⚠️ **Retirados del menú (2026-07-27)**: `analytics`, `ai`, `automations`,

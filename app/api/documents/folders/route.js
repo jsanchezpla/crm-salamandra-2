@@ -16,7 +16,7 @@ const MAX_LEVEL = 3; // 0..3 → máximo 4 niveles
 // GET /api/documents/folders?visibility=private|shared|all&parentFolderId=<uuid|null>
 export const GET = withTenant(async (request, _rc, ctx) => {
   try {
-    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS)) return forbidden("Módulo documents no activo");
+    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS_AVANZADO)) return forbidden("Módulo documents no activo");
     const userId = request.headers.get("x-user-id");
     if (!userId) return unauthorized();
 
@@ -74,7 +74,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
 // POST /api/documents/folders  { name, visibility, parentFolderId? }
 export const POST = withTenant(async (request, _rc, ctx) => {
   try {
-    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS)) return forbidden("Módulo documents no activo");
+    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS_AVANZADO)) return forbidden("Módulo documents no activo");
     const userId = request.headers.get("x-user-id");
     if (!userId) return unauthorized();
 

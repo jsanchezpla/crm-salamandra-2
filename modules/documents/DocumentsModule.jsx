@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import ContratoServiciosCard from "@/components/documents/ContratoServiciosCard.jsx";
 import FileTypeIcon from "@/components/documents/FileTypeIcon.jsx";
 import UploadDropzone from "@/components/documents/UploadDropzone.jsx";
 import PdfPreviewModal from "@/components/documents/PdfPreviewModal.jsx";
@@ -18,7 +19,7 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export default function DocumentsModule() {
+export default function DocumentsModule({ avanzado = true }) {
   const [me, setMe] = useState(null);
   const [visibility, setVisibility] = useState("private"); // private | shared
   const [path, setPath] = useState([]); // [{id,name,level}], vacío = raíz
@@ -172,7 +173,11 @@ export default function DocumentsModule() {
         <div>
           <div className="eyebrow">Empresa · Documentos</div>
           <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1">Documentos</h1>
-          <p className="text-xs text-neutral-400 mt-1">Tus documentos privados y las carpetas compartidas del equipo.</p>
+          <p className="text-xs text-neutral-400 mt-1">
+            {avanzado
+              ? "Tus documentos privados y las carpetas compartidas del equipo."
+              : "El contrato que firman las familias en su área privada."}
+          </p>
         </div>
         {quota && (
           <div className="w-full lg:w-64">
@@ -189,6 +194,19 @@ export default function DocumentsModule() {
         )}
       </div>
 
+      {/* El contrato del centro: lo ve cualquiera que tenga Documentos, básico
+          o avanzado. Es lo ÚNICO que ve quien solo tiene el básico. */}
+      <ContratoServiciosCard isAdmin={me?.role === "admin" || me?.role === "superadmin"} />
+
+      {!avanzado && (
+        <p className="text-[11px] text-neutral-400">
+          Tu plan incluye el contrato del centro. El archivo completo —carpetas, búsqueda y subida
+          de cualquier documento— va en Documentos avanzado.
+        </p>
+      )}
+
+      {avanzado && (
+      <>
       {/* Tabs private/shared */}
       <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5" role="tablist">
         {[
@@ -403,6 +421,8 @@ export default function DocumentsModule() {
       )}
 
       <PdfPreviewModal doc={preview} onClose={() => setPreview(null)} />
+      </>
+      )}
     </div>
   );
 }

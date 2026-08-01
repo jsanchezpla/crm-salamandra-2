@@ -6,7 +6,7 @@ import { getTenantStorageUsage, TENANT_QUOTA_BYTES } from "@/lib/documents/docum
 // GET /api/documents/quota — uso de almacenamiento del tenant.
 export const GET = withTenant(async (request, _rc, ctx) => {
   try {
-    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS)) return forbidden("Módulo documents no activo");
+    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS_AVANZADO)) return forbidden("Módulo documents no activo");
     const userId = request.headers.get("x-user-id");
     if (!userId) return unauthorized();
 

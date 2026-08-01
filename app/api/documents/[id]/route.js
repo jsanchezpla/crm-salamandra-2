@@ -9,7 +9,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // GET /api/documents/[id] — metadatos.
 export const GET = withTenant(async (request, { params }, ctx) => {
   try {
-    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS)) return forbidden("Módulo documents no activo");
+    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS_AVANZADO)) return forbidden("Módulo documents no activo");
     const userId = request.headers.get("x-user-id");
     if (!userId) return unauthorized();
     const { id } = await params;
@@ -30,7 +30,7 @@ export const GET = withTenant(async (request, { params }, ctx) => {
 // DELETE /api/documents/[id] — solo owner. Borra archivo físico + fila BD.
 export const DELETE = withTenant(async (request, { params }, ctx) => {
   try {
-    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS)) return forbidden("Módulo documents no activo");
+    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS_AVANZADO)) return forbidden("Módulo documents no activo");
     const userId = request.headers.get("x-user-id");
     if (!userId) return unauthorized();
     const { id } = await params;

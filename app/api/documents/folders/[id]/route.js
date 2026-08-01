@@ -26,7 +26,7 @@ async function collectSubtreeIds(DocumentFolder, rootId) {
 // GET /api/documents/folders/[id] — detalle + breadcrumb (raíz → actual).
 export const GET = withTenant(async (request, { params }, ctx) => {
   try {
-    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS)) return forbidden("Módulo documents no activo");
+    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS_AVANZADO)) return forbidden("Módulo documents no activo");
     const userId = request.headers.get("x-user-id");
     if (!userId) return unauthorized();
     const { id } = await params;
@@ -59,7 +59,7 @@ export const GET = withTenant(async (request, { params }, ctx) => {
 // PATCH /api/documents/folders/[id] — renombrar (solo el owner).
 export const PATCH = withTenant(async (request, { params }, ctx) => {
   try {
-    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS)) return forbidden("Módulo documents no activo");
+    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS_AVANZADO)) return forbidden("Módulo documents no activo");
     const userId = request.headers.get("x-user-id");
     if (!userId) return unauthorized();
     const { id } = await params;
@@ -115,7 +115,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
 // en BD por FK) + borrado FÍSICO de todos los archivos del subárbol.
 export const DELETE = withTenant(async (request, { params }, ctx) => {
   try {
-    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS)) return forbidden("Módulo documents no activo");
+    if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS_AVANZADO)) return forbidden("Módulo documents no activo");
     const userId = request.headers.get("x-user-id");
     if (!userId) return unauthorized();
     const { id } = await params;

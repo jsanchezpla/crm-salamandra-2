@@ -4,6 +4,37 @@
 > Módulo genérico: aplica a **todos los tenants activos**.
 > Tenants con el módulo activo en local: `demo`, `sandbox` (vía enable-all-tenants).
 
+## Básico vs avanzado (01/08/2026)
+
+Documentos se parte en dos, como Equipo:
+
+| Módulo | Qué incluye |
+| --- | --- |
+| `documents` | **Básico**: SOLO el Contrato de Prestación de Servicios del centro (subir, reemplazar, descargar). |
+| `documents_avanzado` | El **archivo completo**: carpetas, buscador, subida general y cuota. |
+
+- El contrato vive en `/documentos` (arriba del todo), no en Configuración: es
+  un documento del centro y ahí es donde lo busca quien lo necesita.
+  `GET/POST /api/documents/contrato-servicios` + `/download`, gated al BÁSICO.
+- Los endpoints del archivo (`/api/documents`, `folders`, `quota`, `[id]`…)
+  exigen `documents_avanzado`. Un cliente con el básico recibe 403: no puede
+  listar ni descargar nada que no sea su contrato.
+- La lógica del contrato vive en `lib/documents/contratoServicios.js` y la
+  comparten DOS puertas: esta y la de la ficha del paciente
+  (`/api/pacientes/contract-template`, la de siempre en Aumenta). Es el MISMO
+  documento: uno por centro.
+- **Por qué existe el básico**: `nutri_laura` no tiene módulo clínico, así que
+  no podía subir su contrato por ningún sitio — y sin contrato subido el portal
+  no le pide la firma a ninguna familia. Con el básico lo sube ella sola sin
+  llevarse de propina un gestor documental que no necesita.
+
+⚠️ **`documents` significa MENOS que antes.** Quien ya lo tenía esperaba el
+archivo entero, así que `scripts/migrate-documents-avanzado.js` (ONE_OFF,
+idempotente) le añade el avanzado a todo el que tuviera `documents` activo.
+Ejecutarlo en el despliegue o alguien se queda sin sus documentos un lunes.
+
+---
+
 Drive básico por tenant: carpetas anidadas (máx 4 niveles), archivos PDF/DOCX/XLSX,
 documentos privados por usuario + carpetas/documentos compartidos con el tenant.
 
