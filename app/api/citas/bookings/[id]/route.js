@@ -1,5 +1,6 @@
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
 import { avisarCitaPorWhatsapp } from "../../../../../lib/citas/avisosWhatsapp.js";
+import { citaPuedeAvisar } from "../../../../../lib/clients/comunicaciones.js";
 import { notifyUsers } from "../../../../../lib/notifications/notifyUsers.js";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, noContent, serverError } from "../../../../../lib/utils/apiResponse.js";
@@ -433,8 +434,10 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
         after: { meetUrl: row.meetUrl },
         ip,
       });
-      // Best-effort: un fallo de email NO rompe el guardado.
+      // Best-effort: un fallo de email NO rompe el guardado. Y solo si la
+      // familia quiere avisos por correo.
       try {
+        if (!(await citaPuedeAvisar(tenantModels, row, "citasEmail"))) throw new Error("SIN_CONSENTIMIENTO_EMAIL");
         const et = await EventType.findByPk(row.eventTypeId, { attributes: ["name"] });
         const tpl = bookingMeetLinkTemplate({
           tenantName: tenant.name,
@@ -459,7 +462,11 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
         });
         emailEnviado = true;
       } catch (mailErr) {
-        process.stderr.write(`[citas:meet-link] email fail: ${mailErr.message}\n`);
+        if (mailErr.message === "SIN_CONSENTIMIENTO_EMAIL") {
+          process.stdout.write(`[citas:meet-link] ${row.id}: sin correo, la familia no quiere avisos por email\n`);
+        } else {
+          process.stderr.write(`[citas:meet-link] email fail: ${mailErr.message}\n`);
+        }
       }
 
       // El mismo aviso por WhatsApp, si el cliente lo tiene encendido y la

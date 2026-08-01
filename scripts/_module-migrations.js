@@ -101,6 +101,9 @@ export const MODULES = {
     "migrate-client-attachments-and-notes",
     "migrate-patients-clients-phase1",
     "migrate-client-module-assignments",
+    // Consentimiento de comunicaciones de la familia (01/08/2026): aditiva,
+    // una columna JSONB en clients.
+    "migrate-client-communication-prefs",
     "migrate-interactions-notes-team",
     "migrate-documents-transversal",
     // El archivo central (documents) se crea para cualquier tenant con clients;

@@ -11,6 +11,7 @@ import {
 import { reembolsarCitaSiProcede } from "../../../../../../lib/citas/reembolsoCita.js";
 import { sendEmail } from "../../../../../../lib/email/resendClient.js";
 import { avisarCitaPorWhatsapp } from "../../../../../../lib/citas/avisosWhatsapp.js";
+import { citaPuedeAvisar } from "../../../../../../lib/clients/comunicaciones.js";
 import { bookingConfirmedTemplate } from "../../../../../../lib/email/templates/citas/bookingConfirmed.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
 
@@ -287,7 +288,10 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     );
 
     // Email best-effort: si falla, log + sigue. No rompe el flujo.
+    // Y solo si la familia quiere avisos por correo (01/08/2026): quien
+    // desmarcó esa casilla no recibe correos de citas, sin excepciones.
     try {
+      if (!(await citaPuedeAvisar(tenantModels, row, "citasEmail"))) throw new Error("SIN_CONSENTIMIENTO_EMAIL");
       const cancelUrl = row.cancellationToken
         ? `/widget/c/${tenant.slug}/cancel/${row.cancellationToken}`
         : null;
@@ -319,7 +323,11 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
         apiKey: cfgResend.apiKey || undefined,
       });
     } catch (mailErr) {
-      process.stderr.write(`[citas:confirm] email-confirmed fail: ${mailErr.message}\n`);
+      if (mailErr.message === "SIN_CONSENTIMIENTO_EMAIL") {
+        process.stdout.write(`[citas:confirm] ${row.id}: sin correo, la familia no quiere avisos por email\n`);
+      } else {
+        process.stderr.write(`[citas:confirm] email-confirmed fail: ${mailErr.message}\n`);
+      }
     }
 
     // Y por WhatsApp, si el cliente lo tiene encendido: credenciales propias,

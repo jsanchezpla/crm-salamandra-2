@@ -16,6 +16,7 @@ import ClientContactMethodsSection from "../../components/clients/ClientContactM
 import ClientContractSection from "../../components/clients/ClientContractSection.jsx";
 import ClientGuardiansSection from "../../components/clients/ClientGuardiansSection.jsx";
 import ClientPortalMonthsSection from "../../components/clients/ClientPortalMonthsSection.jsx";
+import ClientComunicacionesSection from "../../components/clients/ClientComunicacionesSection.jsx";
 import ClientPatientsSection from "../../components/clients/ClientPatientsSection.jsx";
 
 const STATUSES = [
@@ -426,6 +427,9 @@ export default function ClientDetailModule() {
         <ClientGuardiansSection clientId={id} />
 
         <ClientContractSection clientId={id} />
+
+        {/* Por dónde acepta la familia que se le escriba (01/08). */}
+        <ClientComunicacionesSection clientId={id} />
 
         {/* Solo se pinta si el centro tiene el bloqueo por impago encendido. */}
         <ClientPortalMonthsSection clientId={id} />

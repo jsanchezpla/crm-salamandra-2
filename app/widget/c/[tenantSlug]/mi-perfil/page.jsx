@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCitasPortalSession } from "../_components/useCitasPortalSession.js";
 import MisDocumentos from "../_components/MisDocumentos.jsx";
 import ContratoGate from "../_components/ContratoGate.jsx";
+import ComunicacionesGate from "../_components/ComunicacionesGate.jsx";
 
 function fmtLong(iso) {
   if (!iso) return "—";
@@ -160,6 +161,10 @@ export default function MiPerfilPage() {
   // pantalla vuelve a salir, que para eso el contrato es obligatorio.
   const [contrato, setContrato] = useState(null);
   const [aplazado, setAplazado] = useState(false);
+  // Segundo paso al entrar (01/08): por dónde quiere que le escribamos. NO
+  // bloquea —se puede pasar sin marcar nada— pero se pregunta una vez.
+  const [comunicaciones, setComunicaciones] = useState(null);
+  const [comunicacionesVistas, setComunicacionesVistas] = useState(false);
 
   // Info del tenant (branding / header / loginUrl).
   useEffect(() => {
@@ -199,12 +204,24 @@ export default function MiPerfilPage() {
     }
   }, [authFetch]);
 
+  const loadComunicaciones = useCallback(async () => {
+    try {
+      const res = await authFetch("/citas-portal/comunicaciones", { cache: "no-store" });
+      if (!res.ok) return;
+      const j = await res.json();
+      setComunicaciones(j.data ?? null);
+    } catch {
+      /* si no se puede consultar, no se le pregunta nada */
+    }
+  }, [authFetch]);
+
   useEffect(() => {
     if (status === "ready") {
       loadBookings();
       loadContrato();
+      loadComunicaciones();
     }
-  }, [status, loadBookings, loadContrato]);
+  }, [status, loadBookings, loadContrato, loadComunicaciones]);
 
   const brandStyle = useMemo(() => {
     if (!info?.brand) return {};
@@ -283,6 +300,29 @@ export default function MiPerfilPage() {
           profesional={info?.name}
           onFirmado={(nuevo) => { setContrato((c) => ({ ...c, ...nuevo, requiereFirma: false, yaFirme: true })); loadContrato(); }}
           onMasTarde={() => setAplazado(true)}
+        />
+      </div>
+    );
+  }
+
+  // Segundo paso: las comunicaciones. Solo la primera vez (mientras no hayan
+  // contestado nunca) y solo si el contrato ya no tapa la pantalla.
+  if (
+    comunicaciones?.disponible &&
+    !comunicaciones.yaRespondio &&
+    !comunicacionesVistas &&
+    !(contrato?.requiereFirma && !aplazado)
+  ) {
+    return (
+      <div style={brandStyle}>
+        <ComunicacionesGate
+          authFetch={authFetch}
+          profesional={info?.name}
+          onGuardado={(d) => {
+            setComunicaciones((c) => ({ ...c, ...d, yaRespondio: true }));
+            setComunicacionesVistas(true);
+          }}
+          onMasTarde={() => setComunicacionesVistas(true)}
         />
       </div>
     );

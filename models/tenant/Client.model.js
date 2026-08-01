@@ -108,6 +108,16 @@ export function defineClient(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // Consentimiento de COMUNICACIONES de la familia (01/08/2026): por qué
+      // canales quiere que se le escriba y si acepta novedades del centro, con
+      // la traza de cuándo y desde dónde lo dijo (lib/clients/comunicaciones.js).
+      // Va en el cliente y no en el paciente porque quien recibe los mensajes es
+      // la familia; lo del niño (imágenes) sigue en `patients.consents`.
+      communicationPrefs: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: {},
+      },
       customFields: {
         type: DataTypes.JSONB,
         defaultValue: {},

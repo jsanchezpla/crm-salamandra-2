@@ -119,6 +119,57 @@ DELETE se retiraron.
 
 ---
 
+## Comunicaciones: por dónde se le escribe a cada familia (01/08/2026)
+
+`clients.communication_prefs` (JSONB, migración
+`migrate-client-communication-prefs`). **Tres casillas** y ninguna más:
+
+| Canal | Qué gobierna |
+| --- | --- |
+| `citasEmail` | Confirmaciones, recordatorios, cambios y cancelaciones **por correo** |
+| `citasWhatsapp` | Los mismos avisos **por WhatsApp** |
+| `novedades` | Publicidad del centro (talleres, charlas). **Nada que ver con las citas** |
+
+Decisiones que sostienen esto (`lib/clients/comunicaciones.js`):
+
+- **Vive en el CLIENTE, no en el paciente.** Quien recibe los mensajes es la
+  familia y el área privada es suya. Con dos hermanos en el centro el teléfono
+  es uno: preguntarlo dos veces sería absurdo y contestar distinto,
+  irresoluble. Lo del NIÑO (imágenes) sigue en `patients.consents`.
+- **Si desmarcan los dos canales de citas, NO se les escribe. Punto.**
+  (Criterio de Rodrigo, 01/08.) No hay puerta trasera para "avisos
+  imprescindibles": quien dice que no quiere correos no quiere correos. Sigue
+  viendo sus citas entrando en el portal, que es suyo y no necesita permiso.
+- **Solo un NO explícito bloquea.** Mientras no contesten valen los valores por
+  defecto (correo sí, WhatsApp no): si no, activar esto habría dejado a todas
+  las familias existentes sin confirmación de cita de un día para otro.
+- **Publicidad separada y la pantalla se puede pasar con todo desmarcado**: si
+  aceptar novedades fuera el peaje para entrar en tu área privada, ese
+  consentimiento no valdría nada.
+
+Dónde se marca:
+
+- **La familia**, en su área privada: segundo paso al entrar, después de firmar
+  el contrato (`ComunicacionesGate.jsx`, `GET/POST
+  /api/public/c/[slug]/citas-portal/comunicaciones`). Se guarda con **fecha, IP
+  y navegador**: es la prueba de que lo marcó ella.
+- **El equipo**, en la ficha del cliente → «Comunicaciones»
+  (`GET/PUT /api/clients/[id]/comunicaciones`), para cuando lo piden por
+  teléfono. Retirar un consentimiento tiene que ser tan fácil como darlo. La UI
+  distingue quién lo marcó (`portal` vs `equipo`): como prueba no es lo mismo.
+
+Quien envía consulta `citaPuedeAvisar(tenantModels, booking, canal)`, que
+resuelve la familia por `booking.clientId` y, si falta, por el correo de la
+reserva. Sin ficha de cliente se aplica el valor por defecto del canal: una
+reserva pública tiene que poder recibir su confirmación.
+
+⚠️ `lib/citas/portalClient.js` tiene que traer `communicationPrefs` entre sus
+atributos. Sequelize solo trae lo que se le pide: sin eso, el portal leía
+`undefined` y enseñaba los valores por defecto dijera lo que dijera la familia
+(pillado el 01/08, mismo tropiezo que tuvo el contrato con `contractDocumentId`).
+
+---
+
 ## Archivos adjuntos
 
 Sprint Fase 1 (junio 2026). Permite a Laura (y por extensión a cualquier

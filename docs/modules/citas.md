@@ -37,6 +37,10 @@ del propio negocio (Meta Cloud API, BYOK: credenciales y gasto del cliente).
   tarjeta lo dice.
 - Enganchado en tres sitios: «Guardar y enviar» del enlace de videollamada,
   confirmación de la cita y recordatorio de la víspera.
+- **Manda lo que haya marcado la familia** (01/08): los avisos de cita, por
+  correo Y por WhatsApp, solo salen si la familia aceptó ese canal en su área
+  privada — ver `docs/modules/clients.md` → «Comunicaciones». Si desmarca los
+  dos, no se le escribe por ninguno.
 - Lógica en `lib/citas/avisosWhatsapp.js`; el envío HTTP en
   `lib/whatsapp/whatsappConfig.js`. **Tres condiciones**: credenciales +
   interruptor + que la familia no lo haya denegado (`Patient.consents.whatsapp`).
