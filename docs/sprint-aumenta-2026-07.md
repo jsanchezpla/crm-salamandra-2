@@ -329,6 +329,11 @@ se lleva a la reunión de dirección y el CRM acabarían diciendo cosas distinta
   **hoy la pantalla la verán sus pacientes REALES** la próxima vez que entren;
   Aumenta la verá el día que encienda el portal. Nadie pierde avisos por esto:
   mientras no contesten valen los valores por defecto (correo sí, WhatsApp no).
+- **Documentos básico para nutri_laura (01/08, ya en producción)**: se le activó
+  el módulo `documents` (solo el Contrato de Prestación de Servicios). Ya puede
+  subir el suyo desde Documentos; en cuanto lo suba, sus pacientes tendrán que
+  firmarlo al entrar al portal. `demo` y `aumenta` recibieron
+  `documents_avanzado` para no perder el archivo completo.
 - **Claves de nutri_laura**: pendiente dárselas la semana del 04/08 para que
   pueda configurar ella misma Resend, WhatsApp y lo que necesite.
 - **Para que Aumenta use la firma del portal**: hay que subir su **Contrato del
