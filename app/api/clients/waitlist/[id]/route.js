@@ -2,6 +2,10 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion } from "../../../../../lib/utils/auditoria.js";
 import { MODULE_KEYS } from "../../../../../lib/tenant/moduleKeys.js";
+// Se reutiliza la validación del alta en vez de duplicarla: asignar un
+// profesional que no existe tiene que fallar igual se haga al entrar en la cola
+// o al editarla después.
+import { terapeutaValido } from "../../../../../lib/clients/listaEspera.js";
 
 /**
  * /api/clients/waitlist/[id] — una entrada de la lista de espera de admisión.
@@ -91,6 +95,14 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
     if ("status" in body) {
       if (!STATUSES.includes(body.status)) return error("status inválido", 422);
       updates.status = body.status;
+    }
+    // Asignar (o desasignar, mandando null) el profesional que llevará a la
+    // familia. Es la operación que da sentido a la cola: se entra sin terapeuta
+    // y se sale con uno.
+    if ("assignedTherapistId" in body) {
+      const terapeuta = await terapeutaValido(ctx, body.assignedTherapistId);
+      if (terapeuta === false) return error("El profesional indicado no existe en el equipo", 422);
+      updates.assignedTherapistId = terapeuta;
     }
     if (Object.keys(updates).length === 0) return ok({ id });
 

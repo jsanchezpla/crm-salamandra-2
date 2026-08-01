@@ -89,6 +89,10 @@ export const CORE = [
   // alta desde el panel nacía sin blocked_days ni intervention_plans y esas
   // pantallas le respondían 503.
   "migrate-sprint-aumenta-2026-07",
+  // Terapeuta asignado en la cola de admisión. CORE por el mismo motivo que la
+  // de arriba —que es quien crea `waitlist_entries`—: decide por existencia de
+  // tabla, así que en un tenant sin `clients_avanzado` es un no-op.
+  "migrate-waitlist-therapist",
 ];
 
 export const MODULES = {

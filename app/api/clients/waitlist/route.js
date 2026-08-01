@@ -3,6 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { MODULE_KEYS } from "../../../../lib/tenant/moduleKeys.js";
+import { terapeutaValido } from "../../../../lib/clients/listaEspera.js";
 
 /**
  * /api/clients/waitlist — LISTA DE ESPERA DE ADMISIÓN (sprint Aumenta 2026-07,
@@ -34,6 +35,16 @@ const limpio = (v, max = 200) => {
   return s ? s.slice(0, max) : null;
 };
 
+/**
+ * Comprueba que el profesional existe EN ESTE tenant.
+ *
+ * Devuelve el id si vale, `null` si no se ha indicado ninguno (entrar en la
+ * cola sin terapeuta es el caso normal) y `false` si el id no corresponde a
+ * nadie del equipo. Se distingue `null` de `false` a propósito: "no asignar"
+ * y "asignar a alguien que no existe" son cosas distintas, y la segunda tiene
+ * que dar error en vez de guardarse como si nada.
+ */
+
 export const GET = withTenant(async (request, _rc, ctx) => {
   try {
     const veto = gate(ctx);
@@ -48,6 +59,22 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       order: [["position", "ASC"]],
       limit: 500,
     });
+
+    // El nombre del profesional asignado, resuelto de una vez para toda la
+    // página. Se hace aquí y no con un include porque no hay asociación
+    // declarada entre WaitlistEntry y TeamMember (el enlace es lógico, como el
+    // resto del CRM) y montarla solo para esto sería tocar el modelo.
+    const { TeamMember } = ctx.tenantModels;
+    const idsTerapeutas = [...new Set(rows.map((r) => r.assignedTherapistId).filter(Boolean))];
+    const nombres = new Map();
+    if (TeamMember && idsTerapeutas.length) {
+      const miembros = await TeamMember.findAll({
+        where: { id: idsTerapeutas },
+        attributes: ["id", "displayName"],
+      });
+      for (const m of miembros) nombres.set(m.id, m.displayName);
+    }
+
     return ok({
       entries: rows.map((r) => {
         const j = r.toJSON();
@@ -61,6 +88,10 @@ export const GET = withTenant(async (request, _rc, ctx) => {
           status: j.status,
           position: j.position,
           clientId: j.clientId,
+          assignedTherapistId: j.assignedTherapistId ?? null,
+          // `null` cuando el profesional ya no está: la fila sigue en la cola y
+          // se ve que está pendiente de reasignar, que es la información útil.
+          assignedTherapistName: j.assignedTherapistId ? (nombres.get(j.assignedTherapistId) ?? null) : null,
           createdAt: j.createdAt,
         };
       }),
@@ -92,6 +123,12 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     const ultima = await WaitlistEntry.findOne({ order: [["position", "DESC"]], attributes: ["position"] });
     const position = (ultima?.position ?? 0) + 1;
 
+    // El terapeuta se valida contra la plantilla del propio tenant antes de
+    // guardarlo: un UUID cualquiera dejaría la fila apuntando a nadie y la
+    // lista enseñaría "sin asignar" sin que nadie entienda por qué.
+    const terapeuta = await terapeutaValido(ctx, body?.assignedTherapistId);
+    if (terapeuta === false) return error("El profesional indicado no existe en el equipo", 422);
+
     const fila = await WaitlistEntry.create({
       name,
       phone: limpio(body?.phone, 50),
@@ -100,6 +137,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       notes: limpio(body?.notes, 2000),
       status: "active",
       position,
+      assignedTherapistId: terapeuta,
     });
 
     await auditar({

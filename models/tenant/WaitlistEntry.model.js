@@ -54,10 +54,25 @@ export function defineWaitlistEntry(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // Profesional al que se le asigna la familia mientras espera plaza
+      // (Rodrigo, 01/08/2026). Nullable a propósito: la cola es «esperando
+      // asignación», así que entrar sin terapeuta es un estado LEGÍTIMO, no un
+      // dato incompleto. Lo que no vale es que no se pueda asignar nunca.
+      //
+      // FK lógica a `team_members`, con SET NULL en la migración: si el
+      // profesional se da de baja, la familia sigue en la cola —vuelve a estar
+      // pendiente de asignación— en vez de desaparecer con él.
+      assignedTherapistId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
     },
     {
       tableName: "waitlist_entries",
-      indexes: [{ fields: ["status", "position"], name: "waitlist_entries_status_position_idx" }],
+      indexes: [
+        { fields: ["status", "position"], name: "waitlist_entries_status_position_idx" },
+        { fields: ["assigned_therapist_id"], name: "waitlist_entries_therapist_idx" },
+      ],
     }
   );
 }

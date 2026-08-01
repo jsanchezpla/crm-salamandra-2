@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
-const VACIO = { name: "", phone: "", email: "", notes: "" };
+const VACIO = { name: "", phone: "", email: "", notes: "", assignedTherapistId: "" };
 
 function fmtDate(iso) {
   if (!iso) return "—";
@@ -35,6 +35,24 @@ export default function ListaEsperaClient() {
   const [form, setForm] = useState(VACIO);
   const [creando, setCreando] = useState(false);
   const [busy, setBusy] = useState(null);
+  // Plantilla para el desplegable de asignación. Si el tenant no tiene el
+  // módulo de equipo, la respuesta no trae miembros y el selector no se pinta:
+  // la cola sigue funcionando igual, solo que sin a quién asignar.
+  const [equipo, setEquipo] = useState([]);
+
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/team?limit=200", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!vivo || !j?.data?.members) return;
+        setEquipo(j.data.members.filter((m) => m.status !== "inactive"));
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, []);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -139,7 +157,12 @@ export default function ListaEsperaClient() {
       </div>
 
       {status === "active" && (
-        <form onSubmit={crear} className="bg-white border border-neutral-100 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+        <form
+          onSubmit={crear}
+          className={`bg-white border border-neutral-100 rounded-xl p-4 grid grid-cols-1 gap-3 items-end ${
+            equipo.length > 0 ? "sm:grid-cols-5" : "sm:grid-cols-4"
+          }`}
+        >
           <div className="sm:col-span-1">
             <label className="block text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Nombre *</label>
             <input className={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -152,6 +175,25 @@ export default function ListaEsperaClient() {
             <label className="block text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Notas</label>
             <input className={input} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Qué pide, disponibilidad…" />
           </div>
+          {equipo.length > 0 && (
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Profesional</label>
+              <select
+                className={input}
+                value={form.assignedTherapistId}
+                onChange={(e) => setForm({ ...form, assignedTherapistId: e.target.value })}
+              >
+                {/* Se puede entrar sin asignar: es el caso normal de una cola.
+                    Lo que antes no se podía era asignarlo nunca. */}
+                <option value="">Sin asignar</option>
+                {equipo.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.displayName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <button
             type="submit"
             disabled={creando || !form.name.trim()}
@@ -186,6 +228,39 @@ export default function ListaEsperaClient() {
                   <span>En la lista desde {fmtDate(e.createdAt)} · {diasEsperando(e.createdAt)}</span>
                 </div>
                 {e.notes && <div className="text-[11px] text-neutral-600 mt-0.5">{e.notes}</div>}
+
+                {/* Quién lleva a la familia. En una cola de admisión esta es LA
+                    pregunta: se entra sin terapeuta y se sale con uno, así que
+                    el selector va en la propia fila y no escondido en un modal. */}
+                {equipo.length > 0 && status === "active" && (
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <span className="text-[11px] text-neutral-400">Profesional:</span>
+                    <select
+                      value={e.assignedTherapistId ?? ""}
+                      disabled={busy === e.id}
+                      onChange={(ev) =>
+                        accion(e.id, { assignedTherapistId: ev.target.value || null })
+                      }
+                      className={`text-[11px] border rounded px-1.5 py-0.5 bg-white disabled:opacity-40 ${
+                        e.assignedTherapistId
+                          ? "border-neutral-200 text-neutral-700"
+                          : "border-amber-300 text-amber-700"
+                      }`}
+                    >
+                      <option value="">Sin asignar</option>
+                      {equipo.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.displayName}
+                        </option>
+                      ))}
+                    </select>
+                    {/* El profesional asignado ya no está en plantilla: la
+                        familia sigue en la cola, pendiente de reasignar. */}
+                    {e.assignedTherapistId && !e.assignedTherapistName && (
+                      <span className="text-[11px] text-amber-700">(ya no está en el equipo)</span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {status === "active" && (
