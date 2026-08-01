@@ -192,13 +192,26 @@ export default function ListaEsperaClient() {
                 <div className="flex items-center gap-2 shrink-0">
                   <button onClick={() => mover(i, -1)} disabled={i === 0} className="text-neutral-400 hover:text-neutral-700 disabled:opacity-30 text-xs">↑</button>
                   <button onClick={() => mover(i, 1)} disabled={i === entries.length - 1} className="text-neutral-400 hover:text-neutral-700 disabled:opacity-30 text-xs">↓</button>
-                  <button
-                    onClick={() => accion(e.id, { convertir: true }, `¿Crear la ficha de cliente de ${e.name}?`)}
-                    disabled={busy === e.id}
-                    className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline disabled:opacity-40"
-                  >
-                    Convertir en cliente
-                  </button>
+                  {/* Quien entró por el alta de clientes YA tiene ficha: ahí
+                      lo que falta no es crearla, es darle la plaza. Ofrecer
+                      «convertir» solo servía para que la API respondiera 409. */}
+                  {e.clientId ? (
+                    <button
+                      onClick={() => accion(e.id, { status: "converted" }, `¿${e.name} ya tiene plaza?`)}
+                      disabled={busy === e.id}
+                      className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline disabled:opacity-40"
+                    >
+                      Ya tiene plaza
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => accion(e.id, { convertir: true }, `¿Crear la ficha de cliente de ${e.name}?`)}
+                      disabled={busy === e.id}
+                      className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline disabled:opacity-40"
+                    >
+                      Convertir en cliente
+                    </button>
+                  )}
                   <button
                     onClick={() => accion(e.id, { status: "removed" }, `¿Sacar a ${e.name} de la lista?`)}
                     disabled={busy === e.id}

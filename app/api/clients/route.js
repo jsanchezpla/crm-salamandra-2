@@ -8,6 +8,8 @@ import {
   isMissingTable,
 } from "../../../lib/clients/contactMethods.js";
 import { applyAutoAssignments } from "../../../lib/clients/moduleAssignments.js";
+import { normalizarPacientes, tipoPorDefecto, perfilDeAlta } from "../../../lib/clients/formularioAlta.js";
+import { entrarEnListaEspera } from "../../../lib/clients/listaEspera.js";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
@@ -90,6 +92,9 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
     company: body.company?.trim() || null,
     country: body.country?.trim() || null,
     city: body.city?.trim() || null,
+    // Código postal (01/08/2026). Va a `customFields` con ciudad y país, y no a
+    // `fiscalZip`: recepción apunta dónde vive la familia, no dónde factura.
+    postalCode: body.postalCode?.trim() || null,
     topic: body.topic?.trim() || null,
     interestedProduct: body.interestedProduct?.trim() || null,
     origin: body.origin || "manual",
@@ -99,9 +104,26 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
 
   const emailN = normalizeContactValue("email", email);
   const phoneN = normalizeContactValue("phone", phone);
+  // Los pacientes se validan ANTES de tocar la base de datos: si a uno le falta
+  // el nombre, recepción tiene que enterarse antes de que exista media familia.
+  const perfil = perfilDeAlta(hasModule);
+  // La cola es de `clients_avanzado`: sin ese módulo la casilla ni se pinta, y
+  // si alguien la manda a mano se ignora en silencio en vez de crear filas en
+  // una tabla que ese cliente no usa.
+  const enListaEspera = !!body.listaEspera && hasModule("clients_avanzado") && !!tenantModels.WaitlistEntry;
+  const { pacientes, error: errorPacientes } = hasModule("pacientes")
+    ? normalizarPacientes(body.pacientes)
+    : { pacientes: [] };
+  if (errorPacientes) return error(errorPacientes, 422);
+
   const clientPayload = {
     name: name.trim(),
-    type: type === "individual" ? "individual" : "company",
+    // En un centro de salud el cliente es una FAMILIA, no una empresa. El alta
+    // manual creaba `company` siempre, mientras la lista de espera y los
+    // formularios web creaban `individual`: la misma familia salía de un tipo o
+    // de otro según por dónde hubiera entrado.
+    type: type === "individual" || type === "company" ? type : tipoPorDefecto(perfil),
+    address: body.address?.trim() || null,
     email: emailN,
     phone: phoneN,
     notes: notes?.trim() || null,
@@ -125,6 +147,24 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
       const c = await Client.create(clientPayload, { transaction: t });
       if (emailN) await setPrimaryContactValue({ client: c, ClientContactMethod, kind: "email", value: emailN, transaction: t });
       if (phoneN) await setPrimaryContactValue({ client: c, ClientContactMethod, kind: "phone", value: phoneN, transaction: t });
+      // DENTRO de la transacción: una familia sin los pacientes que recepción
+      // acaba de teclear es peor que un alta que falla y se repite.
+      if (pacientes.length && tenantModels.Patient) {
+        await tenantModels.Patient.bulkCreate(
+          pacientes.map((p) => ({ ...p, clientId: c.id })),
+          { transaction: t }
+        );
+      }
+      // A la cola de admisión desde el propio mostrador (01/08/2026), en vez de
+      // crear la ficha aquí y apuntarla a mano en la otra pantalla.
+      if (enListaEspera) {
+        await entrarEnListaEspera({
+          WaitlistEntry: tenantModels.WaitlistEntry,
+          client: c,
+          notes: notes?.trim() || null,
+          transaction: t,
+        });
+      }
       return c;
     });
     // Fuera de la transacción a propósito: el marcado automático de módulos

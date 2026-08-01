@@ -3,6 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { auditar, datosPeticion, resumen } from "../../../../lib/utils/auditoria.js";
 import { ok, noContent, forbidden, notFound, error } from "../../../../lib/utils/apiResponse.js";
 import { getClientDir } from "../../../../lib/clients/attachmentStorage.js";
+import { entradaDeCliente } from "../../../../lib/clients/listaEspera.js";
 import {
   normalizeContactValue,
   validateContactValue,
@@ -13,8 +14,16 @@ import {
 export const GET = withTenant(async (_request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
 
-  const { Client, Interaction } = tenantModels;
+  const { Client, Interaction, WaitlistEntry } = tenantModels;
   const { id } = await params;
+
+  // Si la familia está esperando plaza, la ficha lo dice en su primera
+  // pantalla: es lo que pregunta cualquiera que la abra («¿desde cuándo llevan
+  // esperando?»), y hasta ahora había que ir a otra pantalla a buscarlo.
+  const enCola = hasModule("clients_avanzado") ? await entradaDeCliente(WaitlistEntry, id) : null;
+  const listaEspera = enCola
+    ? { desde: enCola.createdAt, posicion: enCola.position, id: enCola.id }
+    : null;
 
   // Intento principal: cliente + interactions (timeline legacy usado por el
   // ClientDetailModule default). Si la tabla `interactions` no existe en el
@@ -43,12 +52,13 @@ export const GET = withTenant(async (_request, { params }, { tenant, tenantModel
       // la misma forma (default module lee data.data.interactions).
       const json = client.toJSON();
       json.interactions = [];
+      json.listaEspera = listaEspera;
       return ok(json);
     }
   }
 
   if (!client) return notFound("Cliente no encontrado");
-  return ok(client);
+  return ok({ ...client.toJSON(), listaEspera });
 });
 
 export const PUT = withTenant(async (request, { params }, { tenant, tenantModels, tenantSequelize, hasModule }) => {
@@ -78,6 +88,7 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
     company: body.company?.trim() ?? base.company ?? null,
     country: body.country?.trim() ?? base.country ?? null,
     city: body.city?.trim() ?? base.city ?? null,
+    postalCode: body.postalCode?.trim() ?? base.postalCode ?? null,
     topic: body.topic?.trim() ?? base.topic ?? null,
     interestedProduct: body.interestedProduct?.trim() ?? base.interestedProduct ?? null,
     origin: body.origin ?? base.origin ?? "manual",
@@ -105,6 +116,10 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
 
   const baseUpdate = {
     name: body.name?.trim() || client.name,
+    // `address` es columna, no customField: la ficha ya la enseñaba pero el
+    // formulario no la editaba, así que se quedaba con lo que hubiera puesto
+    // quien creó el cliente.
+    address: "address" in body ? (body.address?.trim() || null) : client.address,
     notes: "notes" in body ? (body.notes?.trim() || null) : client.notes,
     customFields,
     ...fiscalUpdates,

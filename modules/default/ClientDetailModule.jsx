@@ -54,6 +54,15 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+/** "1 de agosto de 2026" — la fecha se lee, no se descifra. */
+function fechaLarga(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? "—"
+    : d.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
+}
+
 export default function ClientDetailModule() {
   const { id } = useParams();
   const router = useRouter();
@@ -179,6 +188,19 @@ export default function ClientDetailModule() {
             <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
             {STATUSES.find((s) => s.key === status)?.label ?? status}
           </span>
+          {/* Lista de espera de ADMISIÓN: lo primero que se pregunta al abrir
+              la ficha de una familia que aún no tiene plaza. */}
+          {client.listaEspera && (
+            <Link
+              href="/clientes/lista-espera"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 hover:bg-amber-200 transition-colors"
+              title="Ver la lista de espera"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              En lista de espera desde el {fechaLarga(client.listaEspera.desde)}
+              {client.listaEspera.posicion != null && ` · nº ${client.listaEspera.posicion}`}
+            </Link>
+          )}
         </div>
         {client.customFields?.company && (
           <p className="text-sm text-gray-500 ml-7">{client.customFields.company}</p>

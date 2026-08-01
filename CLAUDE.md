@@ -410,6 +410,32 @@ a todos sus tenants. Detalle en `docs/sprint-aumenta-2026-07.md`.
 | Contrato, tutores y meses del portal | ficha de cliente | `clients` |
 | Morosidad | dentro de `/facturacion/cobros` | `billing` |
 
+### El alta de clientes se adapta al cliente (01/08/2026)
+`lib/clients/formularioAlta.js` decide QUÉ se pregunta, y lo comparten la
+pantalla y el endpoint. Dos perfiles, por MÓDULOS y no por slug, para que un
+centro nuevo salga bien de fábrica:
+
+| Perfil | Cuándo | Campos | Tipo de cliente |
+| --- | --- | --- | --- |
+| `salud` | tiene `pacientes`, `clinica` o `nutricion` | sin Empresa/Tema/Producto | `individual` |
+| `comercial` | el resto | como estaba | `company` |
+
+**Código postal para todos**, en `customFields.postalCode` (no en `fiscalZip`:
+recepción apunta dónde vive la familia, no dónde factura).
+
+Con `pacientes` activo, el alta crea también a los pacientes **en la misma
+transacción** (`components/clients/PacientesDelAlta.jsx`): o entra la familia
+con sus pacientes, o no entra nada. La casilla «el paciente es el propio
+cliente» PRERRELLENA nombre y apellidos partiendo el nombre del cliente — a la
+vista y editables, sin adivinar nada por detrás.
+
+Con `clients_avanzado` activo, una casilla mete a la familia en la cola de
+admisión (`lib/clients/listaEspera.js`). Esa entrada queda **`active` con
+`clientId`**, que antes no pasaba: `converted` significa «ya tiene plaza» y la
+sacaría de la cola el mismo día. Por eso la lista ofrece «Ya tiene plaza» en vez
+de «Convertir en cliente» a quien ya tiene ficha. La ficha enseña «En lista de
+espera desde el …» en su cabecera.
+
 ### Leads: dos orígenes, un solo grupo (01/08/2026)
 `leads` y `formularios` son **submódulos de Leads** y se nombran por su origen:
 
