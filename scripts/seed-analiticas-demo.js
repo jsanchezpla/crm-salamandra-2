@@ -155,7 +155,17 @@ async function main() {
   const hoy = new Date();
   const filas = [];
 
-  for (let i = 0; i < DIAS; i += 1) {
+  // Se siembra hasta MAÑANA, no hasta hoy. Dos motivos:
+  //
+  //  1. El rango "Hoy" de la pantalla pregunta por el día en curso. Si la
+  //     siembra acaba ayer, la demo enseña un CERO enorme — que fue justo lo
+  //     que pasó el 2026-08-01, con la siembra hecha el día 31.
+  //  2. Da un día de margen: si el timer diario falla una vez, "Hoy" sigue
+  //     teniendo datos en lugar de vaciarse.
+  //
+  // Sembrar un día por delante no molesta a nadie: ningún rango de la pantalla
+  // pregunta más allá de hoy, así que esa fila simplemente espera su turno.
+  for (let i = 0; i < DIAS + 1; i += 1) {
     const fecha = new Date(hoy);
     fecha.setUTCDate(fecha.getUTCDate() - (DIAS - 1 - i));
     const iso = fecha.toISOString().slice(0, 10);
