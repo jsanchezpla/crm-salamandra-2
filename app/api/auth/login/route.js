@@ -2,6 +2,7 @@ import bcrypt from "bcrypt";
 import { NextResponse } from "next/server";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { signAccessToken, signRefreshToken, setAuthCookies } from "../../../../lib/auth/jwt.js";
+import { esPeticionDeBackoffice } from "../../../../lib/auth/backoffice.js";
 import {
   comprobarIntentoLogin,
   registrarFalloLogin,
@@ -80,6 +81,33 @@ export async function POST(request) {
     return NextResponse.json({ ok: false, error: "Credenciales incorrectas" }, { status: 401 });
   }
 
+  // ── ¿Puede esta cuenta entrar POR AQUÍ? ──────────────────────────────────
+  // El back-office guarda la ficha de todos los clientes, así que tiene su
+  // propia cuenta: las del CRM no valen allí, y la suya no vale en el CRM.
+  //
+  // Va DESPUÉS de comprobar la contraseña, no antes, y a propósito: cortar
+  // aquí antes de ejecutar bcrypt convertiría el tiempo de respuesta en un
+  // chivato de qué cuentas son de back-office. Por lo mismo la respuesta es
+  // exactamente la misma que la de una contraseña mala; quien lo intente no
+  // aprende nada. Lo que sí distingue el motivo es la auditoría, que es donde
+  // hace falta verlo.
+  const enBackoffice = esPeticionDeBackoffice(request);
+  if (user.soloBackoffice !== enBackoffice) {
+    registrarFalloLogin(cerrojo.ip, email);
+    await auditarLogin({
+      action: "auth.login_failed",
+      email,
+      ip: cerrojo.ip,
+      userId: user.id,
+      tenantId: user.tenantId,
+      motivo: user.soloBackoffice ? "cuenta_solo_backoffice" : "cuenta_no_backoffice",
+    });
+    console.warn(
+      `[auth] login RECHAZADO por host: ${email} ${user.soloBackoffice ? "es de back-office y entró por el CRM" : "es del CRM y entró por el back-office"}`
+    );
+    return NextResponse.json({ ok: false, error: "Credenciales incorrectas" }, { status: 401 });
+  }
+
   // Obtener el tenant directamente desde el usuario — sin necesitar slug externo
   const tenant = await Tenant.findOne({
     where: { id: user.tenantId, status: "active" },
@@ -104,6 +132,10 @@ export async function POST(request) {
       email: user.email,
       role: user.role,
       tenantSlug: tenant.slug,
+      // Sello de dónde nace la sesión. El middleware exige que coincida con el
+      // host en CADA petición: sin él, este token valdría igual en el panel
+      // interno con solo copiar la cookie.
+      bo: enBackoffice,
     }),
     signRefreshToken({
       userId: user.id,

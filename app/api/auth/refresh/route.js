@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { enforceRateLimit } from "../../../../lib/utils/rateLimit.js";
 import { verifyRefreshToken, signAccessToken, signRefreshToken, setAuthCookies, clearAuthCookies } from "../../../../lib/auth/jwt.js";
+import { esPeticionDeBackoffice } from "../../../../lib/auth/backoffice.js";
 
 export async function POST(request) {
   // Sin límite, un refresh token robado se podía renovar en bucle sin coste.
@@ -47,6 +48,20 @@ export async function POST(request) {
     return response;
   }
 
+  // ── El refresh es la OTRA puerta, y tenía el candado sin poner ────────────
+  // El login ya comprobaba que la cuenta corresponda al host, pero aquí no se
+  // miraba nada: bastaba entrar por el CRM, quedarse el refresh token y
+  // canjearlo contra el subdominio del panel para salir con una sesión válida
+  // allí. Un refresh token es un portador puro; que la cookie sea httpOnly no
+  // protege de quien ES el cliente (curl), que es justo el atacante del que este
+  // panel se defiende.
+  const enBackoffice = esPeticionDeBackoffice(request);
+  if (user.soloBackoffice !== enBackoffice) {
+    const response = NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
+    clearAuthCookies(response);
+    return response;
+  }
+
   // Rotar tokenVersion
   const newVersion = user.tokenVersion + 1;
   await user.update({ tokenVersion: newVersion });
@@ -56,6 +71,10 @@ export async function POST(request) {
     email: user.email,
     role: user.role,
     tenantSlug: payload.tenantSlug,
+    // El mismo sello que pone el login: si no se arrastrara, la primera
+    // renovación devolvería un token sin marca y el middleware lo tomaría por
+    // sesión del CRM, echando a la persona del panel cada 15 minutos.
+    bo: enBackoffice,
   };
 
   const [accessToken, refreshToken] = await Promise.all([

@@ -42,6 +42,8 @@
     "db:migrate:booking-pending:prod": "node --env-file=.env.production scripts/migrate-booking-pending.js",
     "db:migrate:booking-auth": "node --env-file=.env.local scripts/migrate-booking-authorization.js",
     "db:migrate:booking-auth:prod": "node --env-file=.env.production scripts/migrate-booking-authorization.js",
+    "db:migrate:backoffice": "node --env-file=.env.local scripts/migrate-usuario-backoffice.js",
+    "db:migrate:backoffice:prod": "node --env-file=.env.production scripts/migrate-usuario-backoffice.js",
     "db:migrate:projects-1": "node --env-file=.env.local scripts/migrate-projects-sprint-1.js",
     "db:migrate:projects-1:prod": "node --env-file=.env.production scripts/migrate-projects-sprint-1.js",
     "db:migrate:projects-2": "node --env-file=.env.local scripts/migrate-projects-sprint-2.js",

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
+import { esPeticionDeBackoffice } from "./lib/auth/backoffice.js";
 
 const ACCESS_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
@@ -55,7 +56,11 @@ const FUERA_DEL_BACKOFFICE = [
 // Y al revés: lo que se construya para Salamandra no se sirve desde el host que
 // usan los clientes. Hoy no existen estas rutas; la regla se deja puesta para
 // que el día que existan nazcan ya cerradas.
-const SOLO_BACKOFFICE = ["/admin", "/api/admin"];
+// `/api/provisioning` va aquí desde el 2026-08-01: es el endpoint que CREA
+// clientes enteros (schema, módulos, admin, marca). Estaba fuera de la lista, o
+// sea que se podía llamar desde el host del CRM — la pantalla vive en el
+// back-office, pero la puerta estaba en los dos sitios.
+const SOLO_BACKOFFICE = ["/admin", "/api/admin", "/api/provisioning"];
 
 function coincide(pathname, prefijos) {
   return prefijos.some((p) => pathname === p || pathname.startsWith(p.endsWith("/") ? p : p + "/"));
@@ -192,6 +197,36 @@ export async function middleware(request) {
 
   try {
     const payload = await jwtVerify(token, ACCESS_SECRET);
+
+    // ── ¿Nació esta sesión en este host? ────────────────────────────────────
+    // El back-office y el CRM son la MISMA app, en el mismo contenedor, con el
+    // MISMO secreto de firma. Sin esta comprobación, un `access_token` obtenido
+    // en el CRM vale tal cual en el panel: basta copiar la cookie con curl. Que
+    // se ponga sin `domain` solo impide que la mande sola un NAVEGADOR; a quien
+    // usa curl no le impide nada, y quien tiene la contraseña es exactamente la
+    // amenaza de la que este panel se defiende.
+    //
+    // Por eso el token va SELLADO con dónde se emitió (`bo`) y aquí se exige que
+    // coincida, en las dos direcciones. Comprobarlo en el middleware y no en
+    // cada endpoint es lo que hace que no haya que acordarse mañana, al añadir
+    // la siguiente ruta.
+    //
+    // Los tokens de antes de este cambio no llevan `bo`: cuentan como del CRM,
+    // así que las sesiones abiertas siguen valiendo ahí y solo hay que volver a
+    // entrar en el panel.
+    const sesionDeBackoffice = payload.payload.bo === true;
+    if (sesionDeBackoffice !== esPeticionDeBackoffice(request)) {
+      if (isApiPath(pathname)) {
+        return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
+      }
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("next", pathname + request.nextUrl.search);
+      const res = NextResponse.redirect(loginUrl);
+      // Se limpia la cookie: si no, quedaría rebotando contra el login con una
+      // sesión que en este host no vale para nada.
+      res.cookies.set("access_token", "", { maxAge: 0, path: "/" });
+      return res;
+    }
 
     // Pasar datos del usuario a los Route Handlers via headers
     const headers = new Headers(request.headers);
