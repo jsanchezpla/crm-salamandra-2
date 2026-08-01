@@ -340,11 +340,12 @@ aplique.
 | orders        | Pedidos                        | Implementado (spain_enzymes, aumenta) | —                         |
 | referidos     | Referidos (formulario público) | Implementado (abarcaia)             | —                           |
 | cuestionarios | Cuestionarios (TutorLMS)       | Implementado (retorika)             | (dentro de `training.md`)   |
+| clients_avanzado | Clientes avanzado: lista de espera de admisión (aumenta, demo) | Implementado | — |
 | pacientes     | Pacientes                      | Implementado (aumenta)              | `docs/modules/pacientes.md` |
 | clinica       | Clínica                        | Implementado (aumenta)              | `docs/modules/clinica.md`   |
 | nutricion     | Recetario                      | C1+C2+C3 en prod, C4+C5 en local    | `docs/modules/nutricion.md` |
 | outreach      | Captación (leads + scoring IA) | Completo en local (sandbox); falta desplegar | `docs/modules/outreach.md` |
-| formularios   | Formularios públicos → bandeja → ficha de cliente | Implementado (nutri_laura) | `docs/modules/formularios.md` |
+| formularios   | **Leads Comerciales**: formularios públicos → bandeja → ficha (antes «Formularios») | Implementado (nutri_laura) | `docs/modules/formularios.md` |
 | —             | Configuración (ajustes + claves IA por tenant) | Implementado (siempre visible, sin `moduleKey`) | `docs/modules/configuracion.md` |
 
 ### Módulos nuevos (2026-07-27/28)
@@ -405,9 +406,30 @@ a todos sus tenants. Detalle en `docs/sprint-aumenta-2026-07.md`.
 | --- | --- | --- |
 | Coordinaciones (listado general + alta) | `/clinica/coordinaciones` | `clinica` |
 | Estadísticas del centro (Excel + PDF, solo dirección) | `/clinica/estadisticas` | `clinica` |
-| Lista de espera de admisión | `/clientes/lista-espera` | `clients` |
+| Lista de espera de admisión | `/clientes/lista-espera` | `clients_avanzado` |
 | Contrato, tutores y meses del portal | ficha de cliente | `clients` |
 | Morosidad | dentro de `/facturacion/cobros` | `billing` |
+
+### Leads: dos orígenes, un solo grupo (01/08/2026)
+`leads` y `formularios` son **submódulos de Leads** y se nombran por su origen:
+
+| Módulo | Se llama | Sidebar | Ruta | Qué es |
+| --- | --- | --- | --- | --- |
+| — | Leads (el grupo) | «Leads» | `/leads/estadisticas` | Estadísticas: lo único que mira los dos orígenes juntos. |
+| `leads` | Leads Profesionales | «Profesionales» | `/leads` | El embudo por etapas: quien deriva o pregunta. |
+| `formularios` | Leads Comerciales | «Comerciales» | `/formularios` | Quien llega por la web, a una bandeja de aceptación. |
+
+En el menú van SIN la palabra «Leads» delante (ya la pone el grupo); dentro de
+cada pantalla, completa. `formularios` ahora **requiere `leads`**: una bandeja
+de comerciales sin embudo donde caer no es un producto.
+
+⚠️ **El padre del grupo NO es `/leads`**: es la pantalla de estadísticas. El
+embudo no se movió de `/leads` porque tiene ocho overrides por tenant colgando
+de esa ruta. Quien no tenga `formularios` ve el bloque de comerciales
+directamente ausente, no a cero.
+
+Aumenta y sandbox llaman «Interesados» al grupo por override de tenant
+(`TENANT_LABEL_OVERRIDES`), y sus hijos se llaman igual que en todas partes.
 
 ⚠️ **La «lista de espera» de Citas y la de admisión son cosas distintas**: la
 primera son solicitudes de reserva concretas (`bookings` en `pending`); la

@@ -168,7 +168,7 @@ export default function FormulariosModule() {
         <div className="text-[10px] uppercase tracking-[0.18em] text-gray-400 mb-1">
           Solicitudes desde la web
         </div>
-        <h1 className="text-gray-900 text-xl font-semibold">Formularios</h1>
+        <h1 className="text-gray-900 text-xl font-semibold">Leads Comerciales</h1>
         {datos.forms?.length > 0 && (
           <p className="text-sm text-gray-500 mt-1">
             {datos.forms.filter((f) => f.active).map((f) => f.title).join(" · ")}

@@ -45,7 +45,11 @@ const navigation = [
         // Lista de espera de ADMISIÓN (sprint 2026-07, punto 9): gente
         // esperando plaza. La "lista de espera" de Citas es otra cosa —
         // solicitudes de reserva— y por eso esta lleva apellido.
-        children: [{ key: "clients-waitlist", label: "Lista de espera", href: "/clientes/lista-espera" }],
+        // Lleva `moduleKey` porque no la tiene todo el que tiene Clientes: un
+        // centro de nutrición no admite por cola (01/08/2026).
+        children: [
+          { key: "clients-waitlist", label: "Lista de espera", href: "/clientes/lista-espera", moduleKey: "clients_avanzado" },
+        ],
         badge: null,
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
@@ -56,14 +60,21 @@ const navigation = [
       {
         key: "leads",
         label: "Leads",
-        href: "/leads",
+        // El padre son las ESTADÍSTICAS (01/08/2026): es lo único que mira los
+        // dos orígenes a la vez. El embudo de siempre no se mueve de /leads —
+        // tiene ocho overrides por tenant colgando— y pasa a ser un hijo.
+        href: "/leads/estadisticas",
         badge: null,
-        // Formularios y Referidos son canales de ENTRADA de leads: viven como
-        // sub-entradas de Leads. Llevan `moduleKey` porque los hijos no gatean
-        // por módulo por defecto y estos solo existen en algunos tenants
-        // (formularios → nutri_laura; referidos → abarcaia).
+        // Leads tiene DOS orígenes y se llaman por su origen (01/08/2026):
+        //   Profesionales → quien deriva (el embudo de siempre, /leads).
+        //   Comerciales   → quien llega por la web (el antiguo Formularios).
+        // En el menú van sin la palabra «Leads» delante, que ya la pone el
+        // grupo; dentro de cada pantalla sí, completa. Referidos es un tercer
+        // origen. Llevan `moduleKey` porque los hijos no gatean por módulo por
+        // defecto y estos solo existen en algunos tenants.
         children: [
-          { key: "leads-formularios", label: "Formularios", href: "/formularios", moduleKey: "formularios" },
+          { key: "leads-profesionales", label: "Profesionales", href: "/leads", moduleKey: "leads" },
+          { key: "leads-comerciales", label: "Comerciales", href: "/formularios", moduleKey: "formularios" },
           { key: "leads-referidos", label: "Referidos", href: "/referidos", moduleKey: "referidos" },
         ],
         icon: (
@@ -339,6 +350,19 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
   const userCanSee = (moduleKey) =>
     userWildcard || (userAccess !== null && userAccess.includes(moduleKey));
 
+  // Visibilidad de un sub-ítem. Hijos con `moduleKey` gatean por módulo del
+  // tenant (p.ej. Comerciales/Referidos bajo Leads: solo salen donde el módulo
+  // está activo). `requiresAll`: el hijo necesita TODOS esos módulos (p.ej.
+  // Desempeño = avanzado + clínica).
+  const puedeVerHijo = (child) => {
+    if (child.adminOnly && !isAdminRole) return false;
+    const exigidos = child.requiresAll || (child.moduleKey ? [child.moduleKey] : []);
+    return exigidos.every((k) => {
+      const tenantHasIt = enabledModules.has(k) || enabledModules.size === 0;
+      return tenantHasIt && userCanSee(k);
+    });
+  };
+
   const initials = user?.email ? user.email.slice(0, 2).toUpperCase() : "??";
 
   async function handleLogout() {
@@ -443,7 +467,8 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
                     // Sub-ítems SIEMPRE visibles bajo su grupo (antes solo al
                     // estar dentro de la rama). Así "Mi desempeño", "Dirección",
                     // etc. se descubren sin tener que entrar primero en Clínica.
-                    const showChildren = hasChildren;
+                    const hijosVisibles = hasChildren ? item.children.filter(puedeVerHijo) : [];
+                    const showChildren = hijosVisibles.length > 0;
                     const parentVisuallyActive = hasChildren ? branchActive : isActive;
                     return (
                       <div key={item.key}>
@@ -482,21 +507,7 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
                         </Link>
                         {showChildren && (
                           <div className="ml-7 mt-0.5 mb-1 space-y-0.5 border-l border-white/[0.08] pl-2.5">
-                            {item.children
-                              .filter((child) => {
-                                if (child.adminOnly && !isAdminRole) return false;
-                                // Hijos con `moduleKey` gatean por módulo del
-                                // tenant (p.ej. Formularios/Referidos bajo Leads:
-                                // solo salen donde el módulo está activo).
-                                // `requiresAll`: el hijo necesita TODOS esos
-                                // módulos (p.ej. Desempeño = avanzado + clínica).
-                                const exigidos = child.requiresAll || (child.moduleKey ? [child.moduleKey] : []);
-                                return exigidos.every((k) => {
-                                  const tenantHasIt = enabledModules.has(k) || enabledModules.size === 0;
-                                  return tenantHasIt && userCanSee(k);
-                                });
-                              })
-                              .map((child) => {
+                            {hijosVisibles.map((child) => {
                               const childActive = pathname === child.href;
                               return (
                                 <Link

@@ -1,6 +1,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion } from "../../../../../lib/utils/auditoria.js";
+import { MODULE_KEYS } from "../../../../../lib/tenant/moduleKeys.js";
 
 /**
  * /api/clients/waitlist/[id] — una entrada de la lista de espera de admisión.
@@ -16,8 +17,13 @@ import { auditar, datosPeticion } from "../../../../../lib/utils/auditoria.js";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STATUSES = ["active", "converted", "removed"];
 
+// Mismo gate que el listado: `clients_avanzado` (01/08/2026). Si este se
+// quedara en `clients`, quien no ve la lista podría seguir convirtiendo
+// entradas en clientes llamando a la API a mano.
 function gate(ctx) {
-  return ctx.hasModule("clients") ? null : forbidden("Módulo clients no activo");
+  return ctx.hasModule(MODULE_KEYS.CLIENTS_AVANZADO)
+    ? null
+    : forbidden("Módulo clients_avanzado no activo");
 }
 
 const limpio = (v, max = 200) => {

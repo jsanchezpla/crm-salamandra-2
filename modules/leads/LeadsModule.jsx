@@ -37,7 +37,7 @@ export default function LeadsModule() {
 
   return (
     <div className="p-8">
-      <h1 className="text-xl font-extrabold text-neutral-900 mb-6">Leads</h1>
+      <h1 className="text-xl font-extrabold text-neutral-900 mb-6">Leads Profesionales</h1>
       {loading ? (
         <p className="text-neutral-400 text-sm">Cargando…</p>
       ) : (

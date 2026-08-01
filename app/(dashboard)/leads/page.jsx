@@ -29,7 +29,7 @@ const TENANT_TITLE_OVERRIDES = {
 export async function generateMetadata() {
   const headersList = await headers();
   const slug = headersList.get("x-tenant");
-  return { title: TENANT_TITLE_OVERRIDES[slug] ?? "Leads" };
+  return { title: TENANT_TITLE_OVERRIDES[slug] ?? "Leads Profesionales" };
 }
 
 export default async function LeadsPage() {

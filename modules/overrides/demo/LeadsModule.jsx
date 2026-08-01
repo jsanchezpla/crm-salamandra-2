@@ -132,7 +132,7 @@ export default function DemoLeadsModule() {
         <div className="px-6 lg:px-8 pt-8 pb-0">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
-              <h1 className="text-gray-900 text-2xl font-bold">Leads</h1>
+              <h1 className="text-gray-900 text-2xl font-bold">Leads Profesionales</h1>
               <p className="text-gray-500 text-sm mt-0.5">
                 Usuarios que han pedido información desde la web.{" "}
                 <span className="font-semibold" style={{ color: "var(--color-primary)" }}>

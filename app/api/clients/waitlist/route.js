@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
+import { MODULE_KEYS } from "../../../../lib/tenant/moduleKeys.js";
 
 /**
  * /api/clients/waitlist — LISTA DE ESPERA DE ADMISIÓN (sprint Aumenta 2026-07,
@@ -18,8 +19,13 @@ import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 
 const STATUSES = ["active", "converted", "removed"];
 
+// Gatea por `clients_avanzado`, no por `clients` (01/08/2026): la admisión por
+// cola es de un centro que reparte plazas, no de todo el que tiene fichas de
+// cliente. Ver lib/tenant/moduleKeys.js.
 function gate(ctx) {
-  return ctx.hasModule("clients") ? null : forbidden("Módulo clients no activo");
+  return ctx.hasModule(MODULE_KEYS.CLIENTS_AVANZADO)
+    ? null
+    : forbidden("Módulo clients_avanzado no activo");
 }
 
 const limpio = (v, max = 200) => {

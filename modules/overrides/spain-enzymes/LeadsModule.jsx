@@ -477,7 +477,7 @@ export default function SpainEnzymesLeadsModule() {
             <div>
               <div className="eyebrow mb-1.5 lg:mb-2">Comercial · Pipeline</div>
               <h1 className="font-display text-[26px] lg:text-[40px] leading-[1.05] text-[var(--ink-900)] tracking-tight">
-                Leads <span className="font-display-italic text-[var(--ink-400)]">— {total} {total === 1 ? "oportunidad" : "oportunidades"}</span>
+                Leads Profesionales <span className="font-display-italic text-[var(--ink-400)]">— {total} {total === 1 ? "oportunidad" : "oportunidades"}</span>
               </h1>
             </div>
             <div className="flex items-center gap-2">

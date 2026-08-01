@@ -2,7 +2,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
-import { CATALOGO, RECOMENDADOS } from "../../../../lib/provisioning/catalogo.js";
+import { CATALOGO, RECOMENDADOS, PAQUETES } from "../../../../lib/provisioning/catalogo.js";
 import { altaTenant, slugDesdeNombre } from "../../../../lib/provisioning/altaTenant.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
@@ -49,6 +49,7 @@ export const GET = withTenant(async (_request, _rc, ctx) => {
     return ok({
       catalogo: CATALOGO,
       recomendados: RECOMENDADOS,
+      paquetes: PAQUETES,
       clientes: tenants.map((t) => ({
         id: t.id,
         nombre: t.name,

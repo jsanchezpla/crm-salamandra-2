@@ -347,6 +347,21 @@ export default function AltaClientesPage() {
             <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-2">
               Módulos contratados ({form.modulos.length})
             </div>
+
+            {/* Paquetes: marcan de golpe lo que se vende con un nombre. No
+                sustituyen a las casillas — después se añade o se quita. */}
+            {(datos.paquetes ?? []).length > 0 && (
+              <div className="mb-4 flex flex-wrap gap-2">
+                {datos.paquetes.map((p) => (
+                  <button key={p.key} type="button" title={p.desc}
+                    onClick={() => setForm((f) => ({ ...f, modulos: [...p.modulos] }))}
+                    className="px-3 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50 transition">
+                    {p.nombre}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="space-y-4">
               {datos.catalogo.map((g) => (
                 <div key={g.grupo}>

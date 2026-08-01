@@ -12,7 +12,7 @@ import FormulariosModule from "../../../modules/formularios/FormulariosModule.js
  */
 const UI_OVERRIDES = {};
 
-export const metadata = { title: "Formularios" };
+export const metadata = { title: "Leads Comerciales" };
 
 export default async function FormulariosPage() {
   const headersList = await headers();

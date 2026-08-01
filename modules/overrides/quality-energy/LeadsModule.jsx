@@ -342,7 +342,7 @@ export default function QECLeadsModule() {
         <div className="px-4 lg:px-8 pt-6 lg:pt-8 pb-0">
           <div className="flex items-center justify-between mb-5">
             <div>
-              <h1 className="text-gray-900 text-xl font-semibold">Leads</h1>
+              <h1 className="text-gray-900 text-xl font-semibold">Leads Profesionales</h1>
               <p className="text-gray-500 text-sm mt-0.5">
                 {total} candidato{total !== 1 ? "s" : ""} en total
               </p>
