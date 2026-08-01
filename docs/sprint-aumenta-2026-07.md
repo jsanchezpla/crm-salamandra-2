@@ -29,6 +29,34 @@ node scripts/migrate-sprint-aumenta-2026-07.js
 
 ---
 
+## 1.a DESPLEGADO en producción el 01/08 (Leads en dos orígenes, paquetes)
+
+> Desde `f259c45`. Copia previa en `/opt/backups-pre-leads-20260801.dump`.
+>
+> - **Leads pasa a ser un grupo con dos orígenes**, nombrados por su origen:
+>   **Profesionales** (el embudo de siempre, `/leads`) y **Comerciales** (lo que
+>   entra por la web, el antiguo Formularios). En el menú van sin la palabra
+>   «Leads» delante; dentro de cada pantalla, completa. Cambiado en el módulo por
+>   defecto y en los siete overrides por tenant. Aumenta y sandbox conservan
+>   «Interesados» para el grupo.
+> - **Pantalla nueva: `/leads/estadisticas`**, que es el PADRE del grupo en el
+>   menú. Entrada por mes con los dos orígenes, embudo por etapa, orígenes y
+>   estado de la bandeja. Quien no tiene Comerciales no ve ese bloque.
+> - **`formularios` ahora requiere `leads`** y se ACTIVÓ en `aumenta` (con sus
+>   migraciones). Su bandeja empieza vacía: el despliegue web de Aumenta —dos
+>   tipos de formulario, portal— es una iteración futura.
+> - **La lista de espera de admisión sale de `clients` a `clients_avanzado`**
+>   (`migrate-clients-avanzado.js`, dada a `aumenta` y `demo`). Cerrada por menú,
+>   pantalla (`notFound()`) y API. El paquete Nutrición lleva Clientes SIN ella.
+> - **El alta de clientes estrena PAQUETES** (`lib/provisioning/catalogo.js`):
+>   «Paquete Nutrición» = `citas, clients, leads, formularios, team, documents,
+>   nutricion`. Formación queda fuera, es un extra de Laura. De paso entran al
+>   catálogo `documents_avanzado` y `clients_avanzado`.
+>
+> Verificado en producción con sesión de la demo: `/leads/estadisticas`,
+> `/leads`, `/formularios` y `/clientes/lista-espera` a 200, el endpoint
+> devolviendo cifras reales, cero errores en el log.
+
 ## 1.b DESPLEGADO en producción el 31/07 (bloques 3, 4, 5 y 6)
 
 > **Segundo despliegue del día, desde `34a5cfb`**: resto del bloque 4, bloque 5
@@ -264,32 +292,43 @@ se lleva a la reunión de dirección y el CRM acabarían diciendo cosas distinta
    misma carpeta. **Commitea con `git add <rutas>`, nunca `git add -A`**: en el
    commit `48804fa` se coló su módulo a medias y el mensaje no lo menciona.
 
-2. **Compilar no es probar.** Los festivos compilaban y estaban rotos: faltaba
+2. **El contenedor NO compila: se lleva el `.next` del host.** El Dockerfile
+   hace `COPY .next ./.next`. Si se lanza `docker compose up -d --build` sin
+   `npm run build` antes, ese COPY sale **CACHED**, el contenedor arranca sin
+   una sola queja y sirve el código VIEJO. Las rutas nuevas ni siquiera dan
+   404: las come la ruta dinámica hermana (`/api/leads/estadisticas` cayó en
+   `/api/leads/[id]` y dio 500 «invalid input syntax for type uuid»). Pasó el
+   01/08. Comprobación: `docker exec crm-salamandra-app-1 grep -o
+   "api/ruta/nueva" /app/.next/routes-manifest.json`.
+   Y no esperar el build con `until ! pgrep -f 'next build'`: el propio `bash
+   -c` contiene esa cadena, se encuentra a sí mismo y el bucle no acaba nunca.
+
+3. **Compilar no es probar.** Los festivos compilaban y estaban rotos: faltaba
    un `import` y el endpoint reventaba con `cargarFestivos is not defined`.
    Solo salió al llamar al endpoint de verdad. Y peor: la comprobación con la
    que lo «verifiqué» estaba mal, porque buscaba la palabra en el fichero y
    aparecía por el USO, no por el import. **Comprueba `^import`, no la palabra.**
 
-3. **Un modelo con columnas nuevas sin migración = 500 en producción.** Los
+4. **Un modelo con columnas nuevas sin migración = 500 en producción.** Los
    endpoints de Desempeño devolvían `no existe la columna role_key`. La
    migración existía y nunca se había ejecutado. Antes de desplegar, arranca y
    **llama a los endpoints**, no te fíes del build.
 
-4. **Migración nueva → registrarla en `scripts/_module-migrations.js`.**
+5. **Migración nueva → registrarla en `scripts/_module-migrations.js`.**
    `node scripts/check-migration-order.js` la caza. Si no está, un cliente dado
    de alta desde el panel nace sin esas tablas y sus pantallas dan 503.
 
-5. **JSONB no se compara con arrays de JS por Sequelize.** El filtro de tutores
+6. **JSONB no se compara con arrays de JS por Sequelize.** El filtro de tutores
    va en SQL crudo: `Client.sequelize.literal("jsonb_array_length(guardians) > 0")`.
 
-6. **Un hash bcrypt no sobrevive a `ssh` + `psql`**: el shell se come los `$` y
+7. **Un hash bcrypt no sobrevive a `ssh` + `psql`**: el shell se come los `$` y
    el login da 401 como si fuera un bug del código. Generar y guardar dentro
    del MISMO `node -e`.
 
-7. **`docker exec` corre los scripts de la IMAGEN, no del checkout del host.**
+8. **`docker exec` corre los scripts de la IMAGEN, no del checkout del host.**
    Si editas un script, hay que reconstruir el contenedor antes de ejecutarlo.
 
-8. **Una feature del PORTAL cae sobre el único tenant que tiene portal, y no
+9. **Una feature del PORTAL cae sobre el único tenant que tiene portal, y no
    es Aumenta: es `nutri_laura`, que es un CRM en uso REAL.** El cerrojo del
    contrato se escribió para Aumenta y se activaba con solo tener el portal
    encendido; al desplegarlo (31/07), a las pacientes de Laura les apareció una
@@ -298,7 +337,7 @@ se lleva a la reunión de dirección y el CRM acabarían diciendo cosas distinta
    desplegar algo del portal: `SELECT slug, settings->'widget'->'sso'->>'enabled'
    FROM master.tenants` y piensa en ESOS tenants, no en el que te lo pidió.
 
-9. **La demo pública da sesión de ADMIN a visitantes anónimos.** Todo endpoint
+10. **La demo pública da sesión de ADMIN a visitantes anónimos.** Todo endpoint
    nuevo que mande correo, gaste IA o escriba en master necesita su guard de
    `lib/demo/isDemo.js`.
 
