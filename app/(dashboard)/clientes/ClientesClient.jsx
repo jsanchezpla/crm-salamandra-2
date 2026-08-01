@@ -106,13 +106,10 @@ export default function ClientesClient({ perfil = PERFIL_COMERCIAL, conPacientes
       phone: client.phone || "",
       notes: client.notes || "",
       status: client.customFields?.seStatus || "new",
-      address: client.address || "",
       company: client.customFields?.company || "",
       country: client.customFields?.country || "",
       city: client.customFields?.city || "",
       postalCode: client.customFields?.postalCode || "",
-      topic: client.customFields?.topic || "",
-      interestedProduct: client.customFields?.interestedProduct || "",
     });
   }
 

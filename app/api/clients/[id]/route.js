@@ -89,8 +89,6 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
     country: body.country?.trim() ?? base.country ?? null,
     city: body.city?.trim() ?? base.city ?? null,
     postalCode: body.postalCode?.trim() ?? base.postalCode ?? null,
-    topic: body.topic?.trim() ?? base.topic ?? null,
-    interestedProduct: body.interestedProduct?.trim() ?? base.interestedProduct ?? null,
     origin: body.origin ?? base.origin ?? "manual",
     leadId: body.leadId ?? base.leadId ?? null,
     seStatus: body.status ?? base.seStatus ?? "new",
@@ -116,10 +114,6 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
 
   const baseUpdate = {
     name: body.name?.trim() || client.name,
-    // `address` es columna, no customField: la ficha ya la enseñaba pero el
-    // formulario no la editaba, así que se quedaba con lo que hubiera puesto
-    // quien creó el cliente.
-    address: "address" in body ? (body.address?.trim() || null) : client.address,
     notes: "notes" in body ? (body.notes?.trim() || null) : client.notes,
     customFields,
     ...fiscalUpdates,

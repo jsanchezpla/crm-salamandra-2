@@ -13,6 +13,7 @@ import Link from "next/link";
 import ClientBillingSection from "../../components/billing/ClientBillingSection.jsx";
 import ClientModulesSection from "../../components/clients/ClientModulesSection.jsx";
 import ClientContactMethodsSection from "../../components/clients/ClientContactMethodsSection.jsx";
+import { camposCliente, PERFIL_COMERCIAL } from "../../lib/clients/formularioAlta.js";
 import ClientContractSection from "../../components/clients/ClientContractSection.jsx";
 import ClientGuardiansSection from "../../components/clients/ClientGuardiansSection.jsx";
 import ClientPortalMonthsSection from "../../components/clients/ClientPortalMonthsSection.jsx";
@@ -63,7 +64,7 @@ function fechaLarga(iso) {
     : d.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
 }
 
-export default function ClientDetailModule() {
+export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL }) {
   const { id } = useParams();
   const router = useRouter();
   const [client, setClient] = useState(null);
@@ -97,13 +98,12 @@ export default function ClientDetailModule() {
     // el PUT y pisaría el contacto principal.
     setEditForm({
       name: client.name || "",
+      postalCode: client.customFields?.postalCode || "",
       notes: client.notes || "",
       status: client.customFields?.seStatus || "new",
       company: client.customFields?.company || "",
       country: client.customFields?.country || "",
       city: client.customFields?.city || "",
-      topic: client.customFields?.topic || "",
-      interestedProduct: client.customFields?.interestedProduct || "",
     });
     setEditMode(true);
   }
@@ -169,6 +169,10 @@ export default function ClientDetailModule() {
       </div>
     );
   }
+
+  // La ficha edita lo mismo que se pregunta en el mostrador, menos email y
+  // teléfono: esos los gestiona la sección "Contactos", que admite varios.
+  const CAMPOS_FICHA = camposCliente(perfil).filter((c) => c.key !== "email" && c.key !== "phone");
 
   const status = client.customFields?.seStatus || "new";
   const st = STATUS_STYLE[status] ?? STATUS_STYLE.new;
@@ -258,14 +262,7 @@ export default function ClientDetailModule() {
 
             {editMode ? (
               <div className="p-5 space-y-4">
-                {[
-                  { label: "Nombre *", key: "name", type: "text" },
-                  { label: "Empresa", key: "company", type: "text" },
-                  { label: "País", key: "country", type: "text" },
-                  { label: "Ciudad", key: "city", type: "text" },
-                  { label: "Tema de interés", key: "topic", type: "text" },
-                  { label: "Producto de interés", key: "interestedProduct", type: "text" },
-                ].map(({ label, key, type }) => (
+                {CAMPOS_FICHA.map(({ label, key, type }) => (
                   <div key={key}>
                     <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
                     <input
@@ -320,10 +317,9 @@ export default function ClientDetailModule() {
                   {[
                     { label: "País", value: client.customFields?.country },
                     { label: "Ciudad", value: client.customFields?.city },
+                    { label: "Código postal", value: client.customFields?.postalCode },
                     { label: "Empresa", value: client.customFields?.company },
                     { label: "Origen", value: client.customFields?.origin },
-                    { label: "Tema", value: client.customFields?.topic },
-                    { label: "Producto interés", value: client.customFields?.interestedProduct },
                   ]
                     .filter(({ value }) => !!value)
                     .map(({ label, value, href }) => (

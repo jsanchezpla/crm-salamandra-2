@@ -50,8 +50,6 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, tenantSeque
         company: (row.empresa || row.company)?.toString().trim() || null,
         country: (row.país || row.pais || row.country)?.toString().trim() || null,
         city: (row.ciudad || row.city)?.toString().trim() || null,
-        topic: (row.tema || row.topic)?.toString().trim() || null,
-        interestedProduct: (row.producto_de_interés || row.producto || row.interestedProduct)?.toString().trim() || null,
         origin: row.origin || "import",
         seStatus: VALID_STATUSES.includes(row.status) ? row.status : "new",
       };

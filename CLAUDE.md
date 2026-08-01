@@ -421,7 +421,16 @@ centro nuevo salga bien de fábrica:
 | `comercial` | el resto | como estaba | `company` |
 
 **Código postal para todos**, en `customFields.postalCode` (no en `fiscalZip`:
-recepción apunta dónde vive la familia, no dónde factura).
+recepción apunta dónde vive la familia, no dónde factura). **Tema y Producto de
+interés se han quitado de todos los formularios, del Excel y del importador**
+(01/08/2026): no había un solo cliente con ellos rellenos en producción, y las
+notas internas de la ficha cubren lo que hiciera falta.
+
+⚠️ **`Client.address` es JSONB, no texto.** Un campo «Dirección» de texto en la
+ficha metió el `{}` por defecto como hijo de React y tumbó la pantalla entera —
+compilaba y el servidor devolvía 200; solo se veía abriendo la ficha dos veces.
+Si algún día se pide la dirección completa, hay que tratarla como el objeto que
+es.
 
 Con `pacientes` activo, el alta crea también a los pacientes **en la misma
 transacción** (`components/clients/PacientesDelAlta.jsx`): o entra la familia

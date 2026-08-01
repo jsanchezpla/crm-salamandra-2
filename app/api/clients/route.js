@@ -95,8 +95,6 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
     // Código postal (01/08/2026). Va a `customFields` con ciudad y país, y no a
     // `fiscalZip`: recepción apunta dónde vive la familia, no dónde factura.
     postalCode: body.postalCode?.trim() || null,
-    topic: body.topic?.trim() || null,
-    interestedProduct: body.interestedProduct?.trim() || null,
     origin: body.origin || "manual",
     leadId: body.leadId || null,
     seStatus: body.status || "new",
@@ -123,7 +121,6 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
     // formularios web creaban `individual`: la misma familia salía de un tipo o
     // de otro según por dónde hubiera entrado.
     type: type === "individual" || type === "company" ? type : tipoPorDefecto(perfil),
-    address: body.address?.trim() || null,
     email: emailN,
     phone: phoneN,
     notes: notes?.trim() || null,
