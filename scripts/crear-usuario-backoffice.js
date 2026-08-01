@@ -122,12 +122,35 @@ async function main() {
   }
 
   if (generada) {
-    // La contraseña NO se imprime: se deja donde solo root puede leerla.
-    fs.writeFileSync(FICHERO_CLAVE, `${email}\n${clave}\n`, { mode: 0o600 });
+    // Preferido: dejarla donde solo root puede leerla, sin pasar por ninguna
+    // pantalla. Pero este script suele correr DENTRO del contenedor, que va como
+    // usuario `nextjs` y no puede escribir en /root — y aunque pudiera, sería el
+    // sistema de ficheros del contenedor, que desaparece al recrearlo.
+    //
+    // Si no se puede escribir, se enseña UNA vez, que es lo que ya hace el alta
+    // de clientes del panel. Es peor que un fichero, pero mucho mejor que
+    // fallar dejando una cuenta con una contraseña que nadie conoce.
+    let guardada = false;
+    try {
+      fs.writeFileSync(FICHERO_CLAVE, `${email}\n${clave}\n`, { mode: 0o600 });
+      guardada = true;
+    } catch {
+      /* sin permiso: se enseña abajo */
+    }
+
     log("");
-    log(`· Contraseña generada y guardada en ${FICHERO_CLAVE} (solo root)`);
-    log("  Léela con:  cat /root/.backoffice-password");
-    log("  Guárdala en tu gestor de contraseñas y borra el fichero.");
+    if (guardada) {
+      log(`· Contraseña generada y guardada en ${FICHERO_CLAVE} (solo root)`);
+      log("  Léela con:  cat /root/.backoffice-password");
+      log("  Guárdala en tu gestor de contraseñas y borra el fichero.");
+    } else {
+      log("· Contraseña generada. SE ENSEÑA UNA SOLA VEZ:");
+      log("");
+      log(`      ${clave}`);
+      log("");
+      log("  Cópiala a tu gestor de contraseñas AHORA y limpia la pantalla");
+      log("  (en la terminal: clear && history -c).");
+    }
   }
 
   log("");
