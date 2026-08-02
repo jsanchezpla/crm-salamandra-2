@@ -33,6 +33,18 @@ const FORZAR = process.argv.includes("--forzar");
 
 function log(m) { process.stdout.write(`  ${m}\n`); }
 
+/**
+ * Schemas cuyos datos de inventario SÍ se pueden tirar sin preguntar.
+ *
+ * `crm_demo_golden` es la FOTO de la demo (la que se usa para restaurarla), así
+ * que tiene exactamente los mismos datos falsos. Se descubrió al mirar
+ * producción antes de desplegar: la salvaguarda habría parado la migración a
+ * media lista de schemas, que es justo lo que pasó el 02/08 con
+ * migrate-external-contacts. Mejor nombrarlo aquí que lanzar con `--forzar`,
+ * que desactivaría la protección para TODOS.
+ */
+const SCHEMAS_DEMO = new Set(["crm_demo", "crm_demo_golden"]);
+
 // Las que se van. Ver cabecera.
 const TABLAS_VIEJAS = [
   "formulas",              // unir productos para fabricar otro: submódulo aparte si se pide
@@ -115,7 +127,7 @@ async function processSchema(s, schema, uuidDefault) {
 
   // ── Salvaguarda: no borrar datos que alguien crea suyos ──────────────────
   const viejo = await inventarioViejo(s, schema);
-  if (viejo.total > 0 && schema !== "crm_demo" && !FORZAR) {
+  if (viejo.total > 0 && !SCHEMAS_DEMO.has(schema) && !FORZAR) {
     const detalle = Object.entries(viejo.partes).map(([t, n]) => `${t}=${n}`).join(", ");
     throw new Error(
       `${schema} tiene datos de inventario (${detalle}).\n` +
