@@ -34,7 +34,14 @@ export function defineBooking(sequelize) {
       },
       clientEmail: {
         type: DataTypes.STRING,
-        allowNull: false,
+        // Opcional desde el 02/08/2026. Era obligatorio porque el módulo nació
+        // para RESERVAS PÚBLICAS, donde la familia teclea su correo. Pero una
+        // cita también la apunta recepción por teléfono, o llega importada, y
+        // entonces puede no haberlo: al traer la agenda de Aumenta aparecieron
+        // 1.394 así. Con la columna obligatoria la única salida era inventarse
+        // una dirección. Quien sí lo necesita (la reserva pública, el
+        // recordatorio) lo sigue exigiendo en su endpoint.
+        allowNull: true,
         validate: { isEmail: true },
       },
       clientPhone: {
