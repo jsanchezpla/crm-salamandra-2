@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Paginador from "@/components/ui/Paginador.jsx";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
@@ -26,25 +27,55 @@ export default function PacientesPage() {
   const [therapistFilter, setTherapistFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
+  // Paginación (02/08/2026). Antes se pedían 300 pacientes fijos y se filtraba
+  // en el navegador: con los 1.174 de Aumenta, 874 eran invisibles. Ahora el
+  // filtro y la búsqueda viajan al servidor, que además devuelve el resumen por
+  // estado sobre TODOS los que cumplen el filtro — si no, los indicadores de
+  // arriba contarían solo la página.
+  const POR_PAGINA = 50;
+  const [pagina, setPagina] = useState(1);
+  const [paginas, setPaginas] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [resumen, setResumen] = useState({ active: 0, paused: 0, discharged: 0, total: 0 });
+  const [busqueda, setBusqueda] = useState("");
+
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
-    fetch("/api/pacientes", { cache: "no-store" })
+    const p = new URLSearchParams({ limit: String(POR_PAGINA), page: String(pagina) });
+    if (busqueda.trim()) p.set("q", busqueda.trim());
+    if (therapistFilter !== "all") p.set("therapistId", therapistFilter);
+    if (statusFilter !== "all") p.set("status", statusFilter);
+    fetch(`/api/pacientes?${p}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
         if (!j.ok) throw new Error(j.error || "Error cargando pacientes");
         setPatients(j.data.patients ?? []);
+        setTotal(j.data.total ?? 0);
+        setPaginas(j.data.pages ?? 1);
+        if (j.data.resumen) setResumen(j.data.resumen);
       })
       .catch((e) => setErrorMsg(e.message))
       .finally(() => setLoading(false));
-  };
+  }, [pagina, busqueda, therapistFilter, statusFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // El buscador escribe letra a letra: se espera 300 ms antes de ir al servidor.
+  useEffect(() => {
+    const t = setTimeout(() => { setBusqueda(search); setPagina(1); }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Cualquier filtro devuelve a la primera página: quedarse en la 12 con un
+  // filtro que da 8 resultados deja la lista vacía sin explicar por qué.
+  useEffect(() => { setPagina(1); }, [therapistFilter, statusFilter]);
 
   useEffect(() => {
-    load();
     // Terapeutas para el filtro y el alta (equipo del tenant).
     fetch("/api/team?status=active&limit=200", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
@@ -60,18 +91,18 @@ export default function PacientesPage() {
     return base;
   }, [therapists, patients]);
 
-  const filtered = patients.filter((p) => {
-    if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
-    if (therapistFilter !== "all" && p.mainTherapistId !== therapistFilter) return false;
-    if (statusFilter !== "all" && p.status !== statusFilter) return false;
-    return true;
-  });
+  // El filtrado lo hace el SERVIDOR: `filtered` se mantiene como nombre para no
+  // tocar toda la tabla, pero ya viene filtrado de la API.
+  const filtered = patients;
 
+  // Los tres primeros salen del RESUMEN del servidor, no de la página cargada.
+  // Las sesiones siguen siendo de la página: sumarlas de todo el centro pide
+  // otra consulta y no compensa por un indicador.
   const kpis = [
-    { label: "Pacientes activos", value: patients.filter((p) => p.status === "active").length, sub: `${patients.length} en seguimiento` },
-    { label: "En pausa", value: patients.filter((p) => p.status === "paused").length, sub: "Revisar continuidad" },
-    { label: "Altas", value: patients.filter((p) => p.status === "discharged").length, sub: "Este periodo" },
-    { label: "Sesiones registradas", value: patients.reduce((s, p) => s + (p.sessionsCount ?? 0), 0), sub: "Total del centro" },
+    { label: "Pacientes activos", value: resumen.active, sub: `${resumen.total} en seguimiento` },
+    { label: "En pausa", value: resumen.paused, sub: "Revisar continuidad" },
+    { label: "Altas", value: resumen.discharged, sub: "Este periodo" },
+    { label: "Sesiones registradas", value: patients.reduce((s, p) => s + (p.sessionsCount ?? 0), 0), sub: "En esta página" },
   ];
 
   const submitCreate = async (e) => {
@@ -245,6 +276,10 @@ export default function PacientesPage() {
               )}
             </tbody>
           </table>
+          <Paginador
+            pagina={pagina} paginas={paginas} total={total}
+            porPagina={POR_PAGINA} cargando={loading} onCambio={setPagina}
+          />
         </div>
       </div>
 

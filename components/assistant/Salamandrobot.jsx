@@ -84,7 +84,7 @@ export default function Salamandrobot() {
    * apaño que ya no hace falta.
    */
   return (
-    <div className="crm-flotante fixed bottom-4 right-4 z-30 flex flex-col items-end gap-3 print:hidden">
+    <div className="crm-flotante fixed top-16 lg:top-4 right-4 z-30 flex flex-col-reverse items-end gap-3 print:hidden">
       {/* Panel de chat */}
       {open && (
         <div className="w-[min(92vw,22rem)] h-[min(70vh,32rem)] bg-white rounded-2xl shadow-2xl border border-neutral-200 flex flex-col overflow-hidden">

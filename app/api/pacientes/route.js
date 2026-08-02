@@ -83,7 +83,20 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   });
   const agg = await sessionAgg(ClinicSession, rows.map((r) => r.id));
   const patients = rows.map((p) => serializePatient(p, agg[p.id] ?? { sessionsCount: 0, lastSession: null }));
-  return ok({ patients, total: count, page, pages: Math.ceil(count / limit) });
+
+  // Resumen sobre TODOS los pacientes que cumplen el filtro, no solo la página.
+  // Sin esto, al paginar los indicadores de la cabecera contarían 50 y dirían
+  // que el centro tiene 50 pacientes activos.
+  const porEstado = await Patient.findAll({
+    where,
+    attributes: ["status", [fn("COUNT", col("id")), "n"]],
+    group: ["status"],
+    raw: true,
+  });
+  const resumen = { active: 0, paused: 0, discharged: 0, total: count };
+  for (const r of porEstado) resumen[r.status] = Number(r.n);
+
+  return ok({ patients, total: count, page, pages: Math.ceil(count / limit), resumen });
 });
 
 export const POST = withTenant(async (request, _rc, ctx) => {

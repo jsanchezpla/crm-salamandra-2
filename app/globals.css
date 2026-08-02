@@ -20,7 +20,13 @@
  *     No se pierde nada, porque un fondo z-40 siempre acompaña a un panel z-50.
  *   · `z-0` — el capturador de clics de la propia campanita; si no, se
  *     ocultaría a sí misma al abrir su desplegable.
+ *
+ * ⚠️ El fondo `z-40` se añadió el 02/08/2026, y era el fallo que hacía que los
+ * widgets siguieran pisando botones de vez en cuando: la regla solo miraba
+ * `z-50`, pero la convención del CRM (regla 13 de CLAUDE.md) es backdrop z-40 +
+ * panel z-50, así que NINGÚN panel lateral moderno los ocultaba.
  */
+.dashboard-shell:has(.fixed.inset-0.z-40) .crm-flotante,
 .dashboard-shell:has(.fixed.inset-0.z-50) .crm-flotante,
 .dashboard-shell:has(.fixed.inset-0[class*="z-["]) .crm-flotante {
   display: none;

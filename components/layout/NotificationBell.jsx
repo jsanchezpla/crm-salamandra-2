@@ -76,7 +76,7 @@ export default function NotificationBell() {
   // z-10). Esa clase la usa globals.css para OCULTAR el botón mientras hay un
   // panel abierto — ver el comentario largo en Salamandrobot.jsx.
   return (
-    <div className="crm-flotante fixed z-30 bottom-[1.375rem] right-[5.25rem]">
+    <div className="crm-flotante fixed z-30 top-[4.1875rem] lg:top-[1.1875rem] right-[5.25rem]">
       {open && <div className="fixed inset-0 z-0" onClick={() => setOpen(false)} />}
 
       <button
@@ -99,7 +99,7 @@ export default function NotificationBell() {
           un panel de 320px colgado de ella se salía 29px por la izquierda en un
           móvil de 375px. Desde sm: vuelve a colgar de la campana. */}
       {open && (
-        <div className="fixed sm:absolute inset-x-3 sm:inset-x-auto bottom-[4.25rem] sm:bottom-full sm:mb-2 sm:right-0 sm:w-80 z-10 bg-white rounded-xl shadow-xl border border-neutral-100 overflow-hidden">
+        <div className="fixed sm:absolute inset-x-3 sm:inset-x-auto top-[4.25rem] sm:top-full sm:mt-2 sm:right-0 sm:w-80 z-10 bg-white rounded-xl shadow-xl border border-neutral-100 overflow-hidden">
           <div className="px-4 py-2.5 flex items-center justify-between border-b border-neutral-100">
             <span className="eyebrow">Notificaciones</span>
             {unread > 0 && (
