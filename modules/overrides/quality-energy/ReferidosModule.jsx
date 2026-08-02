@@ -336,7 +336,7 @@ export default function AbarcaIAReferidosModule() {
 
       {/* Panel lateral */}
       <ReferidoDetailPanel
-        ref={selected}
+        referido={selected}
         open={panelOpen}
         saving={saving}
         onClose={closePanel}
@@ -349,7 +349,15 @@ export default function AbarcaIAReferidosModule() {
 
 // ─── Panel de detalle ─────────────────────────────────────────────────────────
 
-function ReferidoDetailPanel({ ref: referido, open, saving, onClose, onStageChange, onNotesChange }) {
+/**
+ * Panel de detalle de un referido.
+ *
+ * La prop se llama `referido`, NO `ref` (renombrada el 02/08/2026). `ref` es un
+ * nombre RESERVADO de React: usarlo para pasar datos choca con el mecanismo de
+ * referencias, y el linter marcaba 18 errores creyendo que se accedía a refs
+ * durante el render. No eran refs — pero el nombre era un campo de minas.
+ */
+function ReferidoDetailPanel({ referido, open, saving, onClose, onStageChange, onNotesChange }) {
   const [notes, setNotes] = useState("");
   const [notesDirty, setNotesDirty] = useState(false);
 

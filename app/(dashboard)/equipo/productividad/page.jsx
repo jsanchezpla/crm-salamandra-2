@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
 
@@ -44,7 +44,11 @@ export default function ProductividadPage() {
   // que llegue tarde no debe pisar la del mes seleccionado (ni machacar las
   // horas que el admin esté editando).
   const seq = useRef(0);
-  const load = () => {
+  // useCallback con [period] para poder declararlo como dependencia del efecto:
+  // `load` solo lee `period` (va en la URL); lo demás son setters y un ref, que
+  // son estables. Antes se silenciaba el aviso con un comentario mal colocado que
+  // no silenciaba nada.
+  const load = useCallback(() => {
     const mySeq = ++seq.current;
     setLoading(true);
     setErrorMsg(null);
@@ -63,8 +67,8 @@ export default function ProductividadPage() {
       })
       .catch((e) => { if (mySeq === seq.current) setErrorMsg(e.message); })
       .finally(() => { if (mySeq === seq.current) setLoading(false); });
-  };
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [period]);
+  }, [period]);
+  useEffect(() => { load(); }, [load]);
 
   const rows = data?.rows ?? [];
   const totals = data?.totals ?? {};

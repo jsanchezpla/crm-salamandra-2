@@ -56,7 +56,8 @@ function addDaysStr(iso, n) {
 function buildPreviewEvents(weekEvents, moves) {
   const moveById = new Map((moves || []).map((m) => [m.taskId, m]));
   return (weekEvents || []).map((ev) => {
-    const { color, backgroundColor, borderColor, ...rest } = ev; // eslint-disable-line no-unused-vars
+    // Se descartan los colores del evento original: los recalcula el bloque de abajo.
+    const { color, backgroundColor, borderColor, ...rest } = ev;
     const m = moveById.get(ev.id);
     if (!m) {
       return { ...rest, backgroundColor: "#E5E7EB", borderColor: "#E5E7EB", textColor: "#4B5563" };

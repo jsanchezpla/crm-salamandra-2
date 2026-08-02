@@ -132,7 +132,7 @@ export default function IncentiveTiersEditor({ onSaved }) {
               <button onClick={addRow} className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">+ Añadir tramo</button>
 
               <p className="text-[10px] text-neutral-400 leading-snug">
-                Cada tramo aplica desde su puntuación (incluida) hasta la del siguiente. Siempre debe existir un tramo base "Desde 0".
+                Cada tramo aplica desde su puntuación (incluida) hasta la del siguiente. Siempre debe existir un tramo base «Desde 0».
               </p>
 
               {msg && <div className="text-[11px] text-neutral-600 bg-neutral-50 border border-neutral-100 rounded-lg px-3 py-2">{msg}</div>}

@@ -148,7 +148,7 @@ export default function SupportConfig({ categorias, onCategoriasChange }) {
                   </button>
                 </div>
                 <p className="text-[11px] text-gray-400 mt-1.5">
-                  Enlaza esta URL desde tu web ("Soporte" en el pie, por ejemplo). Cada ticket genera además su enlace privado de seguimiento.
+                  Enlaza esta URL desde tu web («Soporte» en el pie, por ejemplo). Cada ticket genera además su enlace privado de seguimiento.
                 </p>
                 <div className="mt-3">
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">Texto de bienvenida del portal</label>
