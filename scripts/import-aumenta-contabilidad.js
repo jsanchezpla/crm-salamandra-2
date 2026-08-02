@@ -312,16 +312,26 @@ async function main() {
       const imp = c.find((x) => /€/.test(String(x)));
       filas.push({ f, hora: hora || null, cent: imp ? cent(imp) : 0 });
     }
-    // Idempotencia por (día, hora, descuadre): ya no hay único que lo impida.
-    const yaCierres = new Set(
-      (await m.CashClose.findAll({ attributes: ["closeDate", "closedAt", "difference"], where: { cashPointId: caja.id }, transaction: t }))
-        .map((c) => `${c.closeDate}|${new Date(c.closedAt).toISOString().slice(11, 16)}|${Number(c.difference).toFixed(2)}`)
-    );
+    // Idempotencia CONTANDO repeticiones de (día, descuadre), no por hora.
+    //
+    // El primer intento usaba la hora, y duplicó los 812 cierres enteros: se
+    // escribe la hora en horario local (15:07) y al releerla para comparar salía
+    // en UTC (13:07), así que la clave NUNCA coincidía. Quitando la hora de la
+    // clave el problema desaparece de raíz, y contar repeticiones respeta que
+    // un mismo día pueda tener varios cierres con el mismo importe.
+    const yaCierres = new Map();
+    for (const c of await m.CashClose.findAll({ attributes: ["closeDate", "difference"], where: { cashPointId: caja.id }, transaction: t })) {
+      const k = `${c.closeDate}|${Number(c.difference).toFixed(2)}`;
+      yaCierres.set(k, (yaCierres.get(k) ?? 0) + 1);
+    }
+    const vistosCierre = new Map();
+
     for (const r of filas) {
       const hhmm = (r.hora ?? "00:00").padStart(5, "0");
-      const clave = `${r.f}|${hhmm}|${(r.cent / 100).toFixed(2)}`;
-      if (yaCierres.has(clave)) continue;
-      yaCierres.add(clave);
+      const clave = `${r.f}|${(r.cent / 100).toFixed(2)}`;
+      const iEste = (vistosCierre.get(clave) ?? 0) + 1;
+      vistosCierre.set(clave, iEste);
+      if (iEste <= (yaCierres.get(clave) ?? 0)) continue;
       await m.CashClose.create({
         cashPointId: caja.id,
         closeDate: r.f,
