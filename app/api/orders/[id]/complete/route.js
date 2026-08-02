@@ -1,18 +1,34 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, notFound, error, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../../lib/billing/calculateInvoice.js";
+import { moverStock, stockDeVarios } from "../../../../../lib/inventory/stock.js";
+import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 /**
  * POST /api/orders/[id]/complete
  *
- * Marca el pedido como `completed` y genera una factura en estado
- * `draft` con las líneas del pedido + una línea de transporte. La
- * factura queda visible en Facturación → Cobros. NO se emite
- * automáticamente (sin número correlativo, sin descuento de stock,
- * sin envío a Verifactu). La emisión y el descuento FIFO de stock
- * ocurren cuando Laura pulsa "Emitir" desde Facturación.
+ * Marca el pedido como `completed`, **descuenta el stock** y genera una factura
+ * en estado `draft` con las líneas del pedido + una línea de transporte. La
+ * factura queda visible en Facturación → Cobros. NO se emite automáticamente
+ * (sin número correlativo, sin envío a Verifactu): eso ocurre al pulsar "Emitir".
+ *
+ * ── El descuento de stock (arreglado el 02/08/2026) ─────────────────────────
+ *
+ * Hasta hoy este endpoint NO tocaba el almacén, y estaba escrito como pendiente
+ * en este mismo comentario. Se podían vender 500 libros teniendo 3 y el
+ * inventario ni se enteraba: el fallo más grave del módulo.
+ *
+ * Ahora, dentro de la MISMA transacción que marca el pedido como completado:
+ *
+ *   · Se comprueba que hay stock suficiente de cada línea ANTES de tocar nada.
+ *     Si falta de algo, no se completa el pedido y se dice de qué falta y
+ *     cuánto hay. Completar a medias sería peor que no completar.
+ *   · Se genera un movimiento negativo por línea, de tipo `pedido`.
+ *
+ * Las líneas SIN producto del almacén (`productId` nulo) no descuentan nada: son
+ * conceptos sueltos escritos a mano, y en Aumenta además son la mayoría.
  */
 export const POST = withTenant(async (request, { params }, { tenantModels, hasModule, tenantSequelize }) => {
   if (!hasModule("orders")) return forbidden("Módulo orders no activo");
@@ -50,7 +66,7 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
     quantity: Number(l.quantity),
     unitPrice: Number(l.unitPrice),
     vatRate: defaultVat,
-    outboundProductId: l.outboundProductId || null,
+    productId: l.productId || null,
   }));
 
   // Línea de transporte (kind: "shipping") si hay importe
@@ -73,6 +89,39 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
   })();
 
   const calc = calculateInvoice({ lines: invoiceLines });
+
+  // ── Comprobación de stock ANTES de abrir la transacción ────────────────────
+  // Se acumula por producto: dos líneas del mismo producto tienen que sumar, o
+  // un pedido con 2 líneas de 3 unidades pasaría teniendo 4 en el almacén.
+  const conProducto = (order.lines ?? []).filter((l) => l.productId);
+  let faltantes = [];
+  if (conProducto.length && hasModule("inventory")) {
+    const pedidoPorProducto = {};
+    for (const l of conProducto) {
+      pedidoPorProducto[l.productId] = (pedidoPorProducto[l.productId] ?? 0) + Number(l.quantity || 0);
+    }
+    const ids = Object.keys(pedidoPorProducto);
+    const stocks = await stockDeVarios(tenantModels, ids);
+    const { Product } = tenantModels;
+    const productos = await Product.findAll({ where: { id: ids }, attributes: ["id", "name", "unit"] });
+    const porId = Object.fromEntries(productos.map((p) => [p.id, p]));
+    faltantes = ids
+      .filter((id) => (stocks[id] ?? 0) < pedidoPorProducto[id])
+      .map((id) => ({
+        producto: porId[id]?.name ?? "(producto retirado)",
+        unidad: porId[id]?.unit ?? "ud",
+        piden: pedidoPorProducto[id],
+        hay: stocks[id] ?? 0,
+      }));
+  }
+  if (faltantes.length) {
+    const detalle = faltantes
+      .map((f) => `${f.producto}: piden ${f.piden} ${f.unidad} y hay ${f.hay}`)
+      .join(" · ");
+    return error(`No hay stock suficiente. ${detalle}`, 409, { faltantes });
+  }
+
+  const teamMemberId = await resolveCurrentTeamMemberId(request, tenantModels);
 
   try {
     const result = await tenantSequelize.transaction(async (t) => {
@@ -98,6 +147,25 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
         },
         { transaction: t }
       );
+
+      // Salidas de almacén, en la MISMA transacción: o se completa el pedido y
+      // se descuenta, o no pasa ninguna de las dos cosas.
+      if (hasModule("inventory")) {
+        for (const l of conProducto) {
+          await moverStock(
+            tenantModels,
+            {
+              productId: l.productId,
+              quantity: -Math.abs(Number(l.quantity || 0)),
+              type: "pedido",
+              reason: `Pedido #${order.id.slice(0, 8)}`,
+              orderId: order.id,
+              teamMemberId,
+            },
+            t
+          );
+        }
+      }
 
       await order.update(
         {

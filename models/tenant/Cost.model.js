@@ -75,6 +75,15 @@ export function defineCost(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // A quién se le pagó (Rodrigo, 02/08/2026). Antes solo había `category` y
+      // texto libre, así que no se podía responder «cuánto llevamos gastado con
+      // este proveedor». Nullable: hay gastos sin proveedor (una tasa, un
+      // recibo suelto) y obligarlo llevaría a inventar fichas para poder
+      // registrar un gasto.
+      supplierId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       // Columna histórica. Apuntaba al viejo modelo InventoryProduct (retirado
       // con el rework de Inventario). Sin asociación Sequelize: se decidirá si
       // eliminar o re-apuntar a OutboundProduct en un sprint posterior.

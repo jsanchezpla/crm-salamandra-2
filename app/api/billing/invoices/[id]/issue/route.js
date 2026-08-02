@@ -80,17 +80,13 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
       if (dueDateAtIssue && !invoice.dueDate) updates.dueDate = dueDateAtIssue;
       await invoice.update(updates, { transaction: t });
 
-      // Descuenta stock automáticamente para las líneas con outboundProductId.
-      // Si el módulo inventory no está activo en el tenant, no se hace nada.
-      // Usamos tenantHasModule (no hasModule) porque es un gate sobre el tenant,
-      // no sobre el moduleAccess del usuario que emite la factura.
+      // El stock YA NO se descuenta aquí: se mueve en Pedidos (rework
+      // 02/08/2026). Esto solo avisa si la factura lleva productos del almacén
+      // sin venir de un pedido, para que nadie descubra el desvío meses después.
+      // Se usa tenantHasModule (no hasModule) porque es un gate sobre el tenant,
+      // no sobre el moduleAccess de quien emite la factura.
       if (tenantHasModule("inventory")) {
-        const warns = await applyStockMovementsForInvoice({
-          invoice,
-          models: tenantModels,
-          transaction: t,
-        });
-        inventoryWarnings.push(...warns);
+        inventoryWarnings.push(...(await applyStockMovementsForInvoice({ invoice })));
       }
       return num;
     });

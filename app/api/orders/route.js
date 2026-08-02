@@ -73,7 +73,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule, 
     const quantity = Number(l.quantity || 0);
     const unitPrice = Number(l.unitPrice || 0);
     return {
-      outboundProductId: l.outboundProductId || null,
+      productId: l.productId || null,
       productName: (l.productName || "").trim() || "(sin nombre)",
       quantity: quantity.toFixed(3),
       unitPrice: unitPrice.toFixed(2),

@@ -13,6 +13,10 @@ const PILLARS = [
       { href: "/facturacion/cobros", label: "Cobros" },
       { href: "/facturacion/recurrentes", label: "Recurrentes" },
       { href: "/facturacion/costes", label: "Gastos" },
+      // Proveedores va pegado a Gastos porque es donde se usa: al registrar un
+      // gasto eliges proveedor. No es una pantalla de configuración.
+      { href: "/facturacion/proveedores", label: "Proveedores" },
+      { href: "/facturacion/arqueo", label: "Arqueo" },
     ],
   },
   {

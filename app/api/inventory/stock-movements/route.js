@@ -1,91 +1,102 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, forbidden, notFound, error } from "../../../../lib/utils/apiResponse.js";
+import { moverStock, stockDe } from "../../../../lib/inventory/stock.js";
+import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
+import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { Op } from "sequelize";
 
+/**
+ * Movimientos de stock — el libro mayor del almacén (rework 02/08/2026).
+ *
+ * GET lista el histórico de un producto. POST solo sirve para **ajustes
+ * manuales**: las entradas se registran en `/api/inventory/entries` y las
+ * salidas por venta las genera Pedidos al completarse. Dejar que cualquiera
+ * escriba un movimiento de tipo «entrada» por aquí permitiría inflar el stock
+ * sin dejar constancia de qué entrega lo justifica.
+ */
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("inventory")) return forbidden();
 
-  const { StockMovement, InboundBatch, InboundProduct, OutboundProduct, Client } = tenantModels;
+  const { StockMovement, Product, TeamMember } = tenantModels;
   const { searchParams } = new URL(request.url);
 
   const where = {};
-  const inboundBatchId = searchParams.get("inboundBatchId");
-  const outboundProductId = searchParams.get("outboundProductId");
-  const clientId = searchParams.get("clientId");
-  const reason = searchParams.get("reason");
-  const dateFrom = searchParams.get("dateFrom");
-  const dateTo = searchParams.get("dateTo");
-  if (inboundBatchId) where.inboundBatchId = inboundBatchId;
-  if (outboundProductId) where.outboundProductId = outboundProductId;
-  if (clientId) where.clientId = clientId;
-  if (reason) where.reason = reason;
-  if (dateFrom || dateTo) {
+  if (searchParams.get("productId")) where.productId = searchParams.get("productId");
+  if (searchParams.get("type")) where.type = searchParams.get("type");
+  const desde = searchParams.get("desde");
+  const hasta = searchParams.get("hasta");
+  if (desde || hasta) {
     where.movedAt = {};
-    if (dateFrom) where.movedAt[Op.gte] = dateFrom;
-    if (dateTo) where.movedAt[Op.lte] = dateTo;
+    if (desde) where.movedAt[Op.gte] = desde;
+    if (hasta) where.movedAt[Op.lte] = hasta;
   }
 
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "100"), 500);
-  const offset = (page - 1) * limit;
 
   const { rows, count } = await StockMovement.findAndCountAll({
     where,
-    limit,
-    offset,
     order: [["movedAt", "DESC"]],
+    limit,
+    offset: (page - 1) * limit,
     include: [
-      {
-        model: InboundBatch,
-        as: "batch",
-        attributes: ["id", "supplier", "lot"],
-        include: [{ model: InboundProduct, as: "product", attributes: ["id", "name"] }],
-      },
-      { model: OutboundProduct, as: "outboundProduct", attributes: ["id", "name"] },
-      { model: Client, as: "client", attributes: ["id", "name"] },
+      { model: Product, as: "product", attributes: ["id", "name", "unit"] },
+      { model: TeamMember, as: "teamMember", attributes: ["id", "name"] },
     ],
   });
 
   return ok({ movements: rows, total: count, page, pages: Math.ceil(count / limit) });
 });
 
-export const POST = withTenant(async (request, _ctx, { tenantModels, tenantSequelize, hasModule }) => {
+/** Ajuste manual. Ver cabecera: solo ajustes. */
+export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("inventory")) return forbidden();
 
-  const { StockMovement, InboundBatch } = tenantModels;
+  const { Product } = tenantModels;
   const body = await request.json();
 
-  if (!body.inboundBatchId) return error("inboundBatchId es obligatorio", 422);
-  const kg = Number(body.kg);
-  if (!isFinite(kg) || kg === 0) return error("kg debe ser distinto de 0", 422);
-
-  const batch = await InboundBatch.findByPk(body.inboundBatchId);
-  if (!batch) return notFound("Lote no encontrado");
-
-  const newRemaining = Number(batch.kgRemaining) + kg;
-  if (newRemaining < 0) {
-    return error(`Stock insuficiente: el lote tiene ${batch.kgRemaining} kg disponibles`, 422);
+  if (!body.productId) return error("Falta el producto", 422);
+  const cantidad = Number(body.quantity);
+  if (!Number.isFinite(cantidad) || cantidad === 0) {
+    return error("La cantidad del ajuste no puede ser cero", 422);
+  }
+  // Obligatorio a propósito: un «faltan 12» sin explicación no vale de nada
+  // dentro de seis meses, que es justo cuando alguien lo va a mirar.
+  if (!body.reason?.trim()) {
+    return error("Explica el motivo del ajuste (rotura, caducado, recuento…)", 422);
   }
 
-  // Transacción: mover stock + crear movement
-  const result = await tenantSequelize.transaction(async (t) => {
-    await batch.update({ kgRemaining: newRemaining }, { transaction: t });
-    return StockMovement.create(
-      {
-        inboundBatchId: body.inboundBatchId,
-        kg,
-        reason: body.reason || "manual",
-        invoiceId: body.invoiceId || null,
-        invoiceLineId: body.invoiceLineId || null,
-        outboundProductId: body.outboundProductId || null,
-        clientId: body.clientId || null,
-        userId: null,
-        movedAt: body.movedAt || new Date(),
-        notes: body.notes?.trim() || null,
-      },
-      { transaction: t }
+  const product = await Product.findByPk(body.productId);
+  if (!product) return notFound("Producto no encontrado");
+
+  // Un ajuste no puede dejar el stock en negativo: sería un almacén imposible y
+  // encima silencioso. Si de verdad falta más de lo que hay, el dato malo es
+  // otro y hay que mirarlo, no taparlo con otro ajuste.
+  const actual = await stockDe(tenantModels, body.productId);
+  if (actual + cantidad < 0) {
+    return error(
+      `El ajuste dejaría el stock en negativo: hay ${actual} ${product.unit} y quitas ${Math.abs(cantidad)}`,
+      422
     );
+  }
+
+  const teamMemberId = await resolveCurrentTeamMemberId(request, tenantModels);
+  const mov = await moverStock(tenantModels, {
+    productId: body.productId,
+    quantity: cantidad,
+    type: "ajuste",
+    reason: body.reason.trim().slice(0, 255),
+    teamMemberId,
   });
 
-  return created(result);
+  await auditar({
+    tenantId: tenant.id,
+    ...datosPeticion(request),
+    action: "inventory.stock.adjusted",
+    entity: "StockMovement",
+    entityId: mov.id,
+    after: { productId: body.productId, quantity: cantidad, reason: mov.reason, stockDespues: actual + cantidad },
+  });
+
+  return created({ ...mov.toJSON(), stockDespues: actual + cantidad });
 });

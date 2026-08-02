@@ -4,199 +4,153 @@
 > `CLAUDE.md` (sección "Módulos del CRM"). Si encuentras una discrepancia entre
 > este documento y el código, **prevalece el código**: actualiza este fichero.
 
+> **Rehecho entero el 02/08/2026.** Lo anterior (productos entrantes/salientes,
+> recetas y alias por cliente) está descrito al final, en «Lo que había antes»,
+> porque explica las cicatrices que quedan en la BD.
+
 ## Visión general
 
-El módulo modela el flujo entrada → transformación → salida de materiales:
+Un almacén normal: cosas que **entran** de un proveedor, están en **stock** y
+**salen** vendiéndose por Pedidos o consumiéndose.
 
-- **Producto entrante** (`InboundProduct`): catálogo de materias primas. Un
-  mismo producto puede comprarse a varios proveedores y en varios lotes.
-- **Lote** (`InboundBatch`): cada compra concreta a un proveedor con su fecha,
-  lote, kg recibidos, kg que aún quedan y precio. El stock real de un
-  producto entrante es la suma de `kgRemaining` de sus lotes.
-- **Producto saliente** (`OutboundProduct`): lo que se factura al cliente.
-- **Receta** (`Formula`): qué productos entrantes y en qué proporción forman
-  un producto saliente. Puede ser global (sin cliente) o específica por
-  cliente. Al aplicar la receta, prevalece la del cliente si existe.
-- **Alias por cliente** (`ClientOutboundAlias`): un mismo producto saliente
-  puede venderse con otro nombre comercial (y precio) a un cliente concreto.
-- **Movimiento de stock** (`StockMovement`): histórico auditable de cada
-  variación de stock. Lo escriben tanto el alta manual como el descuento
-  automático que dispara la emisión de facturas.
+El principio de diseño es que sirva igual a un **centro clínico** y a una
+**librería**. Los dos compran material, lo guardan y lo gastan; ninguno fabrica
+nada.
 
-Es un módulo opcional por tenant. Todos los endpoints validan
-`hasModule("inventory")` antes de operar.
+- **Producto** (`Product`): una sola lista para lo que entra y lo que sale.
+  Lo importante es `unit`: `ud` · `kg` · `g` · `l` · `ml` · `caja` · `paquete`.
+  Guantes y folios se cuentan en unidades o cajas; el gel, en litros.
+- **Entrada** (`StockEntry`): una recepción de mercancía, con proveedor
+  (desplegable, no texto), cantidad, coste unitario y, si hace falta, lote y
+  caducidad. Puede apuntar al **gasto que la pagó** (`costId` → `Cost`).
+- **Movimiento** (`StockMovement`): el libro mayor. Toda variación pasa por aquí,
+  con signo: positivo entra, negativo sale.
 
-## Lo que NO hace (por ahora)
+### El stock NO es una columna
 
-- **Reposición automática** cuando el stock baja de un umbral.
-- **Reservas** (apartar stock asociado a un presupuesto antes de facturar).
-- **Devolución de stock al cancelar/rectificar una factura**. Hoy `cancel` y
-  `rectify` no revierten los `StockMovement` que generó el `issue`. Si hace
-  falta, se ajusta a mano vía POST a `/api/inventory/stock-movements` con
-  kg positivos y `reason = "adjust"`.
-- **Unidades distintas de kg**. Toda la receta y el stock se modelan en
-  kilogramos. No hay conversiones unidad ↔ kg ni porcentajes.
-- **Alertas de stock insuficiente al editar el borrador**. Las alertas solo
-  se devuelven cuando se ejecuta el descuento real (al emitir la factura).
+```
+stock(producto) = SUM(stock_movements.quantity WHERE product_id = …)
+```
 
-## Modelos
+Deliberado. Una columna de saldo se desincroniza en cuanto una operación falla a
+medias, y desde ese momento nadie sabe cuál de los dos números es la verdad.
+Sumar filas indexadas por producto es barato.
 
-Las definiciones viven en `models/tenant/`. Aquí solo se documenta lo no obvio.
+El cálculo vive en `lib/inventory/stock.js` y **es el único sitio** donde se
+mueve stock (`moverStock`): escribir en `stock_movements` desde fuera se salta la
+validación.
 
-### `InboundProduct` (`inbound_products`)
+### La unidad va SIEMPRE pegada a la cifra
 
-- `id` (UUID), `name` (string), `tags` (array de strings), `notes`.
-- Sin FK directa a Client: la asociación a clientes se hace vía las recetas y
-  los aliases (los clientes "consumen" productos entrantes indirectamente).
-- Convención de nombre duplicado: si dos proveedores venden la misma sustancia
-  pero el cliente la llama igual, se mantiene **un solo** `InboundProduct`.
-  La distinción visual entre proveedores se renderiza en la UI como
-  `Enzima X (Proveedor A — lote 2024-01)` a partir del campo `supplier` y
-  `lot` del `InboundBatch`.
+En la UI, nunca «400» a secas: «400 unidades». Era el fallo de fondo del módulo
+anterior, donde los kilos estaban **cableados en los nombres de columna**
+(`kg`, `kgRemaining`) y el esquema no sabía expresar otra cosa que peso.
 
-### `InboundBatch` (`inbound_batches`)
+## Cómo se mueve el stock
 
-- `inboundProductId`, `supplier` (NOT NULL), `lot`, `entryDate`, `kg`,
-  `kgRemaining`, `packaging`, `purchasePrice`, `notes`.
-- `kg` es el total recibido. `kgRemaining` arranca igual y se decrementa
-  con cada movimiento de salida. Nunca puede pasar a negativo (la UI ni la
-  API permiten cantidades mayores al disponible salvo `StockMovement` con
-  `kg` negativo de mayor magnitud que `kgRemaining`, que devuelve 422).
-- `legacyInventoryProductId` apunta a la fila vieja de `inventory_products`
-  de la que se migró. Permite ejecutar el script de migración varias veces
-  sin duplicar batches. Si alguna vez se borra la tabla legacy, esta FK
-  queda colgada pero no rompe nada.
+| Qué pasa | Movimiento | Dónde |
+| --- | --- | --- |
+| Llega mercancía | `+cantidad`, tipo `entrada` | `POST /api/inventory/entries` (crea entrada **y** movimiento en la misma transacción) |
+| Se completa un pedido | `−cantidad`, tipo `pedido` | `POST /api/orders/[id]/complete` |
+| Rotura, caducado, recuento | `±cantidad`, tipo `ajuste` | `POST /api/inventory/stock-movements` |
 
-### `OutboundProduct` (`outbound_products`)
+**El ajuste exige motivo** y no deja dejar el stock en negativo: si falta más de
+lo que hay, el dato malo es otro y hay que mirarlo, no taparlo con otro ajuste.
 
-- `id`, `name`, `tags`, `defaultSalePrice` (€/kg), `notes`.
-- El precio puede sobreescribirse por cliente vía `ClientOutboundAlias.customSalePrice`.
+### Pedidos descuenta; Facturación NO
 
-### `Formula` (`formulas`)
+Es la regla que evita el doble descuento. Completar un pedido ya baja el stock
+**y** genera su factura en borrador; si al emitir esa factura se descontara otra
+vez, cada venta por el camino normal restaría el doble.
 
-- `outboundProductId`, `inboundProductId`, `qtyKgPerOutputKg`, `clientId`
-  (nullable), `notes`.
-- `qtyKgPerOutputKg` = kg de entrada por cada kg de salida producido.
-  Ejemplo: receta "Tomate" con qty=0.6 sobre InboundProduct "Enzima A"
-  significa que cada kg de Tomate consume 0.6 kg de Enzima A.
-- `clientId NULL` = receta global. `clientId X` = receta específica del
-  cliente X. El UNIQUE `(outboundProductId, inboundProductId, COALESCE(clientId, sentinel))`
-  garantiza una sola receta por combinación.
-  - Este UNIQUE vive en la migración SQL (`migrate-inventory-rework.js`)
-    con `COALESCE` porque PostgreSQL permite múltiples NULL en columnas
-    UNIQUE por defecto. El modelo Sequelize lleva un comentario aclarando
-    que el unique no está declarado allí.
+`lib/inventory/applyStockMovementsForInvoice.js` ya no descuenta: solo **avisa**
+si una factura lleva productos del almacén y no viene de un pedido, para que el
+desvío no pase inadvertido. No bloquea la emisión.
 
-### `ClientOutboundAlias` (`client_outbound_aliases`)
-
-- `outboundProductId`, `clientId`, `aliasName`, `customSalePrice`.
-- UNIQUE `(outboundProductId, clientId)`.
-
-### `StockMovement` (`stock_movements`)
-
-- `inboundBatchId`, `kg` (negativo = salida, positivo = reposición/ajuste),
-  `reason` (`sale | manual | adjust | historical`), `invoiceId`,
-  `invoiceLineId`, `outboundProductId`, `clientId`, `userId`, `movedAt`, `notes`.
-- `reason = "historical"` se reserva para los movimientos creados durante la
-  migración desde `inventory_products` (un solo descuento por cada salida
-  registrada en el modelo viejo). En adelante, la emisión de facturas usa
-  `reason = "sale"` y los manuales `reason = "manual"`.
+Antes de completar un pedido se comprueba que hay stock de todas sus líneas,
+**acumulando por producto** (dos líneas de 3 del mismo producto son 6). Si falta
+de algo, no se completa y se dice de qué y cuánto hay: completar a medias sería
+peor que no completar.
 
 ## Endpoints
 
-Todos viven bajo `/api/inventory/` y requieren `hasModule("inventory")`.
+| Método | Ruta | Qué hace |
+| --- | --- | --- |
+| GET | `/api/inventory/products` | Lista con stock calculado, aviso de bajo mínimo y categorías |
+| POST | `/api/inventory/products` | Alta |
+| GET/PUT/DELETE | `/api/inventory/products/[id]` | Ficha con entradas · edición · retirada |
+| GET/POST | `/api/inventory/entries` | Entradas de mercancía |
+| GET/POST | `/api/inventory/stock-movements` | Histórico · ajuste manual |
 
-| Método | Ruta                                                  | Función                                              |
-| ------ | ----------------------------------------------------- | ---------------------------------------------------- |
-| GET    | `/inbound`                                            | Lista entrantes con stockKg agregado y proveedores   |
-| POST   | `/inbound`                                            | Crea un InboundProduct (+ opcional primer lote)      |
-| GET    | `/inbound/[id]`                                       | Detalle con batches, recetas que lo usan             |
-| PUT    | `/inbound/[id]`                                       | Actualiza name/tags/notes                            |
-| DELETE | `/inbound/[id]`                                       | 409 si tiene batches o recetas asociadas             |
-| GET    | `/inbound/[id]/batches`                               | Lista de lotes del producto entrante                 |
-| POST   | `/inbound/[id]/batches`                               | Añade un lote (proveedor + kg + lote + fecha)        |
-| PUT    | `/inbound/[id]/batches/[batchId]`                     | Edita un lote                                        |
-| DELETE | `/inbound/[id]/batches/[batchId]`                     | 409 si tiene movimientos de stock                    |
-| GET    | `/outbound`                                           | Lista salientes con recetas y aliases                |
-| POST   | `/outbound`                                           | Crea un OutboundProduct                              |
-| GET    | `/outbound/[id]`                                      | Detalle con receta y aliases                         |
-| PUT    | `/outbound/[id]`                                      | Actualiza name/tags/precio/notes                     |
-| DELETE | `/outbound/[id]`                                      | 409 si tiene recetas, aliases o movimientos          |
-| GET    | `/formulas?outboundProductId&inboundProductId&clientId` | Lista recetas filtradas (clientId=`null` para global) |
-| POST   | `/formulas`                                           | Crea receta (409 si rompe UNIQUE)                    |
-| PUT    | `/formulas/[id]`                                      | Edita cantidad/notas                                 |
-| DELETE | `/formulas/[id]`                                      | Elimina la línea                                     |
-| GET    | `/aliases?outboundProductId&clientId`                 | Lista aliases                                        |
-| POST   | `/aliases`                                            | Crea alias (409 si ya existe para ese par)           |
-| PUT    | `/aliases/[id]`                                       | Edita aliasName/customSalePrice                      |
-| DELETE | `/aliases/[id]`                                       | Elimina el alias                                     |
-| GET    | `/stock-movements`                                    | Histórico con filtros (batch, outbound, cliente…)    |
-| POST   | `/stock-movements`                                    | Movimiento manual atómico (actualiza kgRemaining)    |
-| GET    | `/stats-v2`                                           | KPIs sobre los modelos nuevos                        |
+**Cambiar la unidad de un producto con movimientos está bloqueado** (409):
+reinterpretaría el histórico, convirtiendo 400 «unidades» en 400 «kilos».
 
-Los endpoints legacy `/api/inventory` (lista, `[id]`, `stats`, `export`)
-y el modelo Sequelize `InventoryProduct` se eliminaron en esta misma
-iteración. La tabla `inventory_products` permanece en BD como respaldo
-hasta que se valide la migración en producción; al no haber asociación
-Sequelize ya no se accede a ella desde el código.
+**Retirar un producto** con movimientos lo desactiva (`active = false`) en vez de
+borrarlo: el histórico apunta ahí y borrarlo lo dejaría sin nombre.
 
-## Flujo de descuento al emitir factura
+## Pantalla
 
-1. La UI de facturación permite asociar cada `InvoiceLine` a un
-   `OutboundProduct` vía un selector (catálogo cargado desde
-   `/api/inventory/outbound` si el módulo está activo). Una línea marcada
-   como **Transporte** (`kind = "shipping"`) no consume stock.
-2. Al pulsar **Emitir** (`POST /api/billing/invoices/[id]/issue`), dentro
-   de la misma transacción que asigna número correlativo, se llama a
-   `applyStockMovementsForInvoice` (en `lib/inventory/`).
-3. Para cada línea con `outboundProductId`:
-   - Se buscan recetas por `(outboundProductId, clientId)`. Si no hay, se
-     usa la receta global `(outboundProductId, clientId = NULL)`. Si tampoco
-     hay, se emite un **warning** y se sigue.
-   - Para cada componente de la receta:
-     - `kgNeeded = lineQuantity × qtyKgPerOutputKg`
-     - Se buscan los `InboundBatch` del componente ordenados por `entryDate`
-       (FIFO) y se descuenta `kgRemaining` lote a lote.
-     - Por cada batch tocado se inserta un `StockMovement` con `reason = "sale"`.
-   - Si al final no había stock suficiente para cubrir `kgNeeded`, se emite
-     un **warning** con los kg que faltan. La emisión **no se bloquea**.
-4. La respuesta del endpoint `issue` añade un campo `inventoryWarnings: [...]`
-   si hubo alguno. La UI lo muestra al usuario.
+`/inventario` — lista con stock y unidad, filtro por categoría y por bajo
+mínimo, ficha con el histórico de movimientos, alta de entrada con proveedor de
+desplegable, y ajuste con motivo obligatorio.
 
-Cancelar o rectificar una factura **no devuelve** el stock — la corrección
-es manual hasta que se decida la política.
+Los proveedores se dan de alta en **Facturación → Proveedores** (`Supplier`),
+que es una entidad compartida: el mismo proveedor te factura (gasto) y te
+entrega mercancía (entrada de stock).
 
-## Migración desde el modelo legacy
+## Pedidos
 
-El script `scripts/migrate-inventory-rework.js` (también `npm run db:migrate:inventory-rework`)
-transforma cada fila de `inventory_products` en:
+`OrderLine.productId` apunta a `Product` (antes `outboundProductId`). La línea
+**hereda el precio de venta del producto y es editable**: precio por defecto, no
+precio impuesto — así se pacta un precio con un cliente concreto sin necesidad de
+alias.
 
-- 1 `InboundProduct` (dedupe por nombre dentro del schema).
-- 1 `InboundBatch` con el `legacyInventoryProductId` rellenado.
-- Si la fila tenía datos de salida: 1 `OutboundProduct` (dedupe por nombre),
-  1 `Formula` con `qtyKgPerOutputKg = kg / outputKg`, y 1 `StockMovement`
-  con `reason = "historical"`.
+`productName` y `unitPrice` son **foto del momento**: si mañana sube el precio,
+un pedido de hace un año no puede cambiar de importe.
 
-Es idempotente (se puede ejecutar varias veces; la segunda vez salta lo ya
-migrado). La tabla `inventory_products` **no se borra**: queda como
-respaldo hasta validar en producción.
+## Migración y semilla
+
+- `scripts/migrate-inventario-rework.js` — crea las tablas nuevas, borra las
+  viejas y renombra `order_lines.outbound_product_id` → `product_id`.
+  **Cuenta las filas antes de borrar y se planta** si encuentra datos en un
+  schema que no sea `crm_demo` (`--forzar` para saltárselo, `--dry-run` para ver
+  qué haría).
+- `scripts/seed-inventario-demo.js` — llena el almacén de la demo con material
+  de centro clínico, con varias unidades y algún producto bajo mínimo.
+
+⚠️ `scripts/migrate-inventory-rework.js` (sin la «a») es el rework de ABRIL y
+está en `ONE_OFF`: **no se ejecuta**. Creaba justo las tablas que el nuevo
+elimina, así que ejecutarlo devolvería el esquema viejo.
 
 ## Personalización por tenant
 
 Hoy ningún tenant tiene override de UI para este módulo. El override de
 `spain_enzymes` (`modules/overrides/spain-enzymes/`) toca solo Leads.
 
-## Skip list rápido si algo no cuadra
+## Si algo no cuadra
 
-- **Stock no se descuenta al emitir**: el módulo `inventory` debe estar
-  activo en el tenant; la línea debe llevar `outboundProductId`. Línea de
-  texto libre o `kind = "shipping"` no consume stock.
-- **Receta no encontrada**: revisa que haya receta para el cliente actual o
-  una receta global como fallback. La UI del producto saliente las muestra
-  separadas.
-- **Stock insuficiente**: aparece en `inventoryWarnings` de la respuesta del
-  endpoint `issue`. Añade un lote nuevo o ajusta con un `StockMovement`
-  manual positivo.
-- **UNIQUE rota al crear receta**: significa que ya existe una receta para
-  el mismo `(outboundProductId, inboundProductId, clientId)`. Edita la
-  existente en vez de crear otra.
+- **El stock no baja al vender**: comprueba que la línea del pedido tiene
+  producto (`productId`) y no es de tipo `shipping`. Las líneas de texto libre no
+  consumen stock a propósito.
+- **«No hay stock suficiente» y crees que sí hay**: mira si el pedido tiene
+  varias líneas del mismo producto — se acumulan.
+- **La factura avisa de que no se ha descontado**: es correcto si la factura no
+  viene de un pedido. Descuenta desde Pedidos o con un ajuste manual.
+- **No deja cambiar la unidad**: el producto ya tiene movimientos. Ajusta el
+  stock a cero o crea un producto nuevo con la unidad correcta.
+
+## Lo que había antes (hasta el 02/08/2026)
+
+Un esquema pensado para comprar materia prima y **fabricar** otra cosa:
+`InboundProduct` (materia prima) + `InboundBatch` (lotes con `kgRemaining`) +
+`OutboundProduct` (lo que se vende) + `Formula` (la receta) +
+`ClientOutboundAlias` (vender lo mismo con otro nombre y precio por cliente).
+
+Se retiró porque **nadie lo usaba así**: lo pidió un cliente que al final no
+contrató el módulo. Los cinco modelos y sus endpoints ya no existen.
+
+Rastros que quedan en la BD y conviene conocer:
+
+- `inventory_products` — tabla del esquema *anterior al anterior*. Se conserva
+  como respaldo.
+- `costs.inventory_product_id` — columna histórica sin asociación Sequelize.

@@ -6,6 +6,7 @@ import { useCitasPortalSession } from "../_components/useCitasPortalSession.js";
 import MisDocumentos from "../_components/MisDocumentos.jsx";
 import ContratoGate from "../_components/ContratoGate.jsx";
 import ComunicacionesGate from "../_components/ComunicacionesGate.jsx";
+import ConsentimientoImagenGate from "../_components/ConsentimientoImagenGate.jsx";
 
 function fmtLong(iso) {
   if (!iso) return "—";
@@ -165,6 +166,10 @@ export default function MiPerfilPage() {
   // bloquea —se puede pasar sin marcar nada— pero se pregunta una vez.
   const [comunicaciones, setComunicaciones] = useState(null);
   const [comunicacionesVistas, setComunicacionesVistas] = useState(false);
+
+  // Permiso de imágenes: se pregunta una vez por sesión. El componente se
+  // esconde solo si ya han contestado por todos sus hijos.
+  const [imagenVista, setImagenVista] = useState(false);
 
   // Info del tenant (branding / header / loginUrl).
   useEffect(() => {
@@ -328,8 +333,27 @@ export default function MiPerfilPage() {
     );
   }
 
+  // Tercer paso: el permiso de imágenes de cada niño. Va el ÚLTIMO porque es el
+  // único de los tres que se puede saltar sin consecuencias: el contrato es el
+  // acuerdo de servicio y los canales son operativos, pero esto es opcional de
+  // verdad. El propio componente se esconde solo si no queda nadie por contestar.
+  // OJO: se pinta ENCIMA del portal (es `fixed inset-0`), no en su lugar. Al
+  // principio lo puse como los otros dos, con un `return` que sustituía la
+  // página — y eso dejaba el portal EN BLANCO en cada visita mientras se
+  // consultaba si quedaba alguien por contestar, incluso en centros donde esta
+  // pantalla ni aplica. Ahora la familia ve su portal desde el primer momento y
+  // el aviso aparece encima solo si hay algo que preguntar.
+
   return (
     <div className="min-h-screen" style={brandStyle}>
+      {!imagenVista && (
+        <ConsentimientoImagenGate
+          authFetch={authFetch}
+          profesional={info?.name}
+          onTerminado={() => setImagenVista(true)}
+          onMasTarde={() => setImagenVista(true)}
+        />
+      )}
       <header className="px-6 lg:px-10 py-6 border-b border-[var(--widget-border)] bg-[var(--widget-card)]">
         <div className="max-w-3xl mx-auto flex items-center gap-4">
           {info?.brand?.logoUrl ? (

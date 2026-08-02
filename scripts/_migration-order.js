@@ -39,6 +39,27 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  * alguien se acuerde.
  */
 export const EXTRA_EDGES = [
+  // ── Rework de Inventario / Arqueo / Proveedores (02/08/2026) ──────────────
+  // Las tres deciden por EXISTENCIA de tabla (`if (!tableExists(costs)) return`),
+  // así que el analizador no ve un SQL que las ate a nada y las colocaba al
+  // principio. En un tenant NUEVO eso significaba saltárselas en silencio: el
+  // arqueo salía 2º, antes de que billing-rework creara `costs`, y se iba sin
+  // crear cash_points ni cash_closes. Un no-op silencioso es peor que un error.
+  {
+    before: "migrate-billing-rework",
+    after: "migrate-arqueo",
+    why: "arqueo se salta el schema si no existe `costs`, y `costs` la crea billing-rework. Sin esta arista, un tenant nuevo se quedaba sin las tablas del arqueo y nadie se enteraba.",
+  },
+  {
+    before: "migrate-billing-rework",
+    after: "migrate-suppliers",
+    why: "suppliers añade `costs.supplier_id` y se salta el schema si no hay `costs`.",
+  },
+  {
+    before: "migrate-suppliers",
+    after: "migrate-inventario-rework",
+    why: "stock_entries.supplier_id apunta a `suppliers`. Si el rework va antes, la FK no se crea (solo deja un aviso) y el desplegable de proveedores del almacén queda sin integridad.",
+  },
   {
     before: "migrate-citas-sprint-1",
     after: "migrate-booking-pending",

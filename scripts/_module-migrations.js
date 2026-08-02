@@ -52,6 +52,8 @@ export const ONE_OFF = {
   "migrate-documents-avanzado": "MASTER, no toca schemas de tenant: reparte el módulo Documentos en básico/avanzado y da el avanzado a quien ya tenía Documentos, para que nadie pierda el archivo por el cambio de nomenclatura. Se corre a mano una vez, idempotente",
   "migrate-audit-logs-index": "índice en el schema MASTER (audit_logs), no por-tenant; idempotente, se corre a mano una vez",
   "migrate-clients-avanzado": "MASTER, no toca schemas de tenant: saca la lista de espera de admisión de `clients` a `clients_avanzado` y se la da solo a quien admite por cola (aumenta, demo). Se corre a mano una vez, idempotente",
+  "migrate-inventory-rework":
+    "SUPERADA (02/08/2026). Es el rework de abril: creaba inbound_products, outbound_products, formulas y client_outbound_aliases, que son exactamente las tablas que `migrate-inventario-rework` (con «a») elimina. Ejecutarla en un tenant nuevo le devolvería el esquema viejo. Se conserva como histórico, NO se ejecuta.",
   "migrate-usuario-backoffice": "MASTER, no toca schemas de tenant: añade `solo_backoffice` a `master.users` para separar las cuentas del panel interno de las del CRM. Se corre a mano con `npm run db:migrate:backoffice`; aditiva, con default false, idempotente",
 };
 
@@ -182,6 +184,12 @@ export const MODULES = {
   ],
 
   billing: [
+    // Proveedores como entidad (02/08/2026). Va en billing y no en inventory
+    // porque crea el enlace desde `costs`; Inventario lo usará cuando se rehaga.
+    "migrate-suppliers",
+    // Arqueo de caja (02/08/2026): lo único de Contabilidad de Organízate que
+    // nuestro módulo de Facturación no cubría.
+    "migrate-arqueo",
     "migrate-billing-rework",
     "migrate-billing-fix-kind-enum",
     "migrate-billing-quotes",
@@ -204,7 +212,18 @@ export const MODULES = {
     "migrate-course-registrations",
   ],
 
-  inventory: ["migrate-inventory-rework"],
+  inventory: [
+    // Rework completo del 02/08/2026: Product/StockEntry sustituyen a
+    // Inbound/Outbound/Formula. Va DESPUÉS de migrate-suppliers, que crea la
+    // tabla a la que apunta stock_entries.supplier_id.
+    //
+    // ⚠️ Ya NO se declara `migrate-inventory-rework` (el de 2026-04, sin la «a»).
+    // Creaba inbound_products / outbound_products / formulas, que son justo las
+    // tablas que el rework nuevo elimina: dejarlo aquí hacía que un tenant
+    // recién dado de alta se las volviera a encontrar. El fichero se conserva
+    // como histórico de lo que se hizo entonces, pero no se ejecuta.
+    "migrate-inventario-rework",
+  ],
   documents: ["migrate-documents-sprint-1", "migrate-documents-client-link", "migrate-documents-transversal", "migrate-documents-patient-link", "migrate-documents-client-portal"],
 
   // Documentos AVANZADO (01/08/2026): mismas tablas que el básico —el archivo

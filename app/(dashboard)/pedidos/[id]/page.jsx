@@ -82,7 +82,7 @@ export default function PedidoDetallePage() {
         if (transportAmount === 0) setTransportAmount(Number(j.data.transportPrice || 0));
       }
     });
-    fetch("/api/inventory/outbound").then((r) => r.json()).then((j) => {
+    fetch("/api/inventory/products").then((r) => r.json()).then((j) => {
       if (j.ok) setProducts(j.data?.products ?? []);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -99,7 +99,7 @@ export default function PedidoDetallePage() {
       ...prev,
       {
         id: `tmp-${Date.now()}`,
-        outboundProductId: null,
+        productId: null,
         productName: "",
         quantity: 1,
         unitPrice: 0,
@@ -118,16 +118,18 @@ export default function PedidoDetallePage() {
 
   function fillLineWithProduct(idx, p) {
     updateLine(idx, {
-      outboundProductId: p.id,
+      productId: p.id,
       productName: p.name,
-      unitPrice: p.defaultSalePrice != null ? Number(p.defaultSalePrice) : 0,
+      // La línea HEREDA el precio del producto, pero queda editable: así se
+      // pacta un precio con un cliente concreto sin necesidad de alias.
+      unitPrice: p.salePrice != null ? Number(p.salePrice) : 0,
     });
   }
 
   function pickProduct(idx, productId) {
     const p = products.find((x) => x.id === productId);
     if (!p) {
-      updateLine(idx, { outboundProductId: null });
+      updateLine(idx, { productId: null });
       return;
     }
     fillLineWithProduct(idx, p);
@@ -141,12 +143,12 @@ export default function PedidoDetallePage() {
     setCreatingProduct(true);
     setProductError(null);
     try {
-      const res = await fetch("/api/inventory/outbound", {
+      const res = await fetch("/api/inventory/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newProduct.name.trim(),
-          defaultSalePrice: newProduct.defaultSalePrice !== "" ? newProduct.defaultSalePrice : null,
+          salePrice: newProduct.defaultSalePrice !== "" ? newProduct.defaultSalePrice : null,
         }),
       });
       const j = await res.json();
@@ -174,7 +176,7 @@ export default function PedidoDetallePage() {
         scheduledDate: scheduledDate || null,
         notes: notes?.trim() || null,
         lines: lines.map((l) => ({
-          outboundProductId: l.outboundProductId,
+          productId: l.productId,
           productName: l.productName,
           quantity: Number(l.quantity || 0),
           unitPrice: Number(l.unitPrice || 0),
@@ -372,7 +374,7 @@ export default function PedidoDetallePage() {
                     <tr key={l.id || idx} className="border-b border-neutral-100 last:border-0 align-middle">
                       <td className="px-4 py-2">
                         <Select
-                          value={l.outboundProductId || ""}
+                          value={l.productId || ""}
                           searchable
                           onChange={(v) => {
                             if (v === "__add_new__") {
@@ -506,7 +508,7 @@ export default function PedidoDetallePage() {
         )}
       </div>
 
-      {/* Modal: crear producto de catálogo (se guarda en Inventario / productos salientes) */}
+      {/* Modal: crear producto de catálogo (se guarda en Inventario) */}
       {addProductFor != null && (
         <div
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
@@ -551,7 +553,7 @@ export default function PedidoDetallePage() {
                 />
               </div>
               <p className="text-[11px] text-neutral-400">
-                Se guarda en el catálogo de Inventario (productos salientes) del tenant.
+                Se guarda en el catálogo de Inventario. Se contará en unidades; si va en kilos o litros, cámbialo luego desde Inventario.
               </p>
               {productError && <p className="text-xs text-red-600">{productError}</p>}
             </div>

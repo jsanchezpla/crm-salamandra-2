@@ -1,8 +1,12 @@
 import { DataTypes } from "sequelize";
 
-// Línea de un pedido. `outboundProductId` es referencia opcional al
-// catálogo de inventario. `productName` es snapshot del nombre al
-// momento de crear la línea (sobrevive a renombrados/borrados).
+// Línea de un pedido. `productId` es referencia opcional al catálogo del
+// almacén (`Product`). `productName` y `unitPrice` son FOTO del momento en que
+// se creó la línea: sobreviven a que el producto se renombre, cambie de precio
+// o se retire, para que un pedido de hace un año no cambie de importe solo.
+//
+// Renombrado el 02/08/2026 (era `outboundProductId`) con el rework de
+// Inventario: el catálogo de productos «de salida» se fusionó en `Product`.
 export function defineOrderLine(sequelize) {
   return sequelize.define(
     "OrderLine",
@@ -16,7 +20,7 @@ export function defineOrderLine(sequelize) {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      outboundProductId: {
+      productId: {
         type: DataTypes.UUID,
         allowNull: true,
       },
@@ -48,7 +52,7 @@ export function defineOrderLine(sequelize) {
       tableName: "order_lines",
       indexes: [
         { fields: ["order_id"] },
-        { fields: ["outbound_product_id"] },
+        { fields: ["product_id"] },
       ],
     }
   );

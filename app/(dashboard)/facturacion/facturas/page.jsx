@@ -10,7 +10,7 @@ import Select from "@/components/ui/Select.jsx";
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
 
-const EMPTY_LINE = { description: "", quantity: 1, unitPrice: 0, discountPct: 0, vatRate: 21, outboundProductId: "", kind: "" };
+const EMPTY_LINE = { description: "", quantity: 1, unitPrice: 0, discountPct: 0, vatRate: 21, productId: "", kind: "" };
 
 function addDaysIso(isoDate, days) {
   if (!isoDate || !Number.isFinite(days) || days <= 0) return "";
@@ -93,9 +93,9 @@ export default function FacturasPage() {
     fetch("/api/team?status=all&limit=200", { cache: "no-store" }).then((r) => r.json()).then((j) => setEmployees(j.data?.members ?? [])).catch(() => {});
     fetch("/api/billing/series", { cache: "no-store" }).then((r) => r.json()).then((j) => setSeries(j.data ?? [])).catch(() => {});
     fetch("/api/billing/settings", { cache: "no-store" }).then((r) => r.json()).then((j) => setSettings(j.data)).catch(() => {});
-    // Catálogo de productos salientes para vincular líneas de factura al inventario.
+    // Catálogo del almacén para vincular líneas de factura al inventario.
     // Si el tenant no tiene el módulo activo, el endpoint responde 403 y dejamos vacío.
-    fetch("/api/inventory/outbound?limit=500", { cache: "no-store" })
+    fetch("/api/inventory/products?limit=500", { cache: "no-store" })
       .then((r) => r.ok ? r.json() : null)
       .then((j) => { if (j?.ok) setOutboundCatalog(j.data?.products ?? []); })
       .catch(() => {});
@@ -185,7 +185,7 @@ export default function FacturasPage() {
         unitPrice: l.unitPrice ?? 0,
         discountPct: l.discountPct ?? 0,
         vatRate: l.vatRate ?? settings?.defaultVatRate ?? 21,
-        outboundProductId: l.outboundProductId ?? "",
+        productId: l.productId ?? "",
         kind: l.kind ?? "",
       })),
     });
@@ -246,7 +246,7 @@ export default function FacturasPage() {
           unitPrice: Number(l.unitPrice),
           discountPct: Number(l.discountPct),
           vatRate: Number(l.vatRate),
-          outboundProductId: l.outboundProductId || null,
+          productId: l.productId || null,
           kind: l.kind || null,
         })),
       };
@@ -644,14 +644,14 @@ export default function FacturasPage() {
                             {outboundCatalog.length > 0 && (
                               <div className="flex items-center gap-2">
                                 <Select
-                                  value={l.kind === "shipping" ? "" : (l.outboundProductId || "")}
+                                  value={l.kind === "shipping" ? "" : (l.productId || "")}
                                   disabled={l.kind === "shipping"}
                                   onChange={(v) => {
                                     const productId = v;
                                     const product = outboundCatalog.find((p) => p.id === productId);
                                     setForm((f) => {
                                       const lines = [...f.lines];
-                                      const next = { ...lines[idx], outboundProductId: productId };
+                                      const next = { ...lines[idx], productId: productId };
                                       if (product) {
                                         if (!lines[idx].description?.trim()) next.description = product.name;
                                         if (product.defaultSalePrice && (!lines[idx].unitPrice || Number(lines[idx].unitPrice) === 0)) {
@@ -677,7 +677,7 @@ export default function FacturasPage() {
                                       setForm((f) => {
                                         const lines = [...f.lines];
                                         lines[idx] = checked
-                                          ? { ...lines[idx], kind: "shipping", outboundProductId: "" }
+                                          ? { ...lines[idx], kind: "shipping", productId: "" }
                                           : { ...lines[idx], kind: "" };
                                         return { ...f, lines };
                                       });

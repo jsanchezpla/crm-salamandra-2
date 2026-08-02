@@ -55,7 +55,7 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
           const unitPrice = Number(l.unitPrice || 0);
           return {
             orderId: id,
-            outboundProductId: l.outboundProductId || null,
+            productId: l.productId || null,
             productName: (l.productName || "").trim() || "(sin nombre)",
             quantity: quantity.toFixed(3),
             unitPrice: unitPrice.toFixed(2),
