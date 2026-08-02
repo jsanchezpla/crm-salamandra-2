@@ -71,6 +71,18 @@ export function defineCoordination(sequelize) {
         type: DataTypes.STRING(200),
         allowNull: true,
       },
+      // Con QUIÉN se coordinó, apuntando a la agenda de contactos externos del
+      // paciente (`external_contacts`) en vez de a un nombre reescrito a mano en
+      // cada acta (Rodrigo, 02/08/2026).
+      //
+      // Nullable y sin sustituir a `participants`: las actas anteriores no
+      // tienen a quién apuntar, y una reunión puede tener varios asistentes de
+      // los que solo uno sea el contacto de referencia. `participants` sigue
+      // siendo la lista de quién estuvo; esto es a quién pertenece la relación.
+      externalContactId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       aiTranscription: {
         type: DataTypes.TEXT,
         allowNull: true,

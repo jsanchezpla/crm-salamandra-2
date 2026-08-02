@@ -8,6 +8,7 @@ import PatientBillingSection from "@/components/billing/PatientBillingSection.js
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 import NuevaCoordinacionModal from "../../../../components/clinica/NuevaCoordinacionModal.jsx";
 import PatientDocumentsSection from "@/components/clinica/PatientDocumentsSection.jsx";
+import PatientExternalContactsSection from "@/components/clinica/PatientExternalContactsSection.jsx";
 import InterventionPlanSection from "@/components/clinica/InterventionPlanSection.jsx";
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
 import { REPORT_TYPES, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
@@ -679,6 +680,10 @@ export default function PacienteFichaPage() {
 
         {activeTab === "coordinaciones" && (
           <div className="space-y-3">
+            {/* La agenda va ARRIBA, antes de las actas: primero se apunta con
+                quién se habla y luego se registra la reunión. Al revés obliga a
+                salir a media acta a dar de alta al contacto. */}
+            <PatientExternalContactsSection patientId={id} />
             <div className="flex justify-end">
               <button
                 onClick={() => setNuevaCoordinacion(true)}

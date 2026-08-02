@@ -30,6 +30,9 @@ const VACIO = {
   coordinationType: "school",
   scope: "external",
   externalEntity: "",
+  // Contacto de la agenda del paciente con el que se coordina. Vacío = sin
+  // especificar; el enlace es opcional.
+  externalContactId: "",
   coordinationDate: new Date().toISOString().slice(0, 10),
   relatedPatientId: "",
   participants: "",
@@ -41,6 +44,7 @@ const VACIO = {
 export default function NuevaCoordinacionModal({ patientId = null, patientName = null, onClose, onCreada }) {
   const [form, setForm] = useState({ ...VACIO, relatedPatientId: patientId ?? "" });
   const [pacientes, setPacientes] = useState([]);
+  const [contactos, setContactos] = useState([]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
 
@@ -52,6 +56,20 @@ export default function NuevaCoordinacionModal({ patientId = null, patientName =
       .then((j) => setPacientes(j?.data?.patients ?? []))
       .catch(() => {});
   }, [patientId]);
+
+  // Agenda de contactos externos DEL PACIENTE elegido. Se recarga al cambiar de
+  // paciente: enseñar la agenda de otro niño sería, además de inútil, una fuga
+  // de datos entre familias.
+  const pacienteElegido = form.relatedPatientId;
+  useEffect(() => {
+    setContactos([]);
+    set("externalContactId", "");
+    if (!pacienteElegido) return;
+    fetch(`/api/pacientes/${pacienteElegido}/contactos`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setContactos(j?.data?.contactos ?? []))
+      .catch(() => {});
+  }, [pacienteElegido]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -67,6 +85,8 @@ export default function NuevaCoordinacionModal({ patientId = null, patientName =
           ...form,
           relatedPatientId: form.relatedPatientId || null,
           externalEntity: form.scope === "external" ? form.externalEntity : null,
+          // En una coordinación interna no hay contacto externo que valga.
+          externalContactId: form.scope === "external" ? form.externalContactId || null : null,
         }),
       });
       const j = await r.json().catch(() => ({}));
@@ -134,6 +154,26 @@ export default function NuevaCoordinacionModal({ patientId = null, patientName =
                 </div>
               )}
             </div>
+
+            {/* Contacto de la agenda del paciente. Solo aparece si ese paciente
+                tiene contactos dados de alta: un desplegable vacío en mitad del
+                formulario solo genera la duda de qué falta rellenar. */}
+            {form.scope === "external" && contactos.length > 0 && (
+              <div>
+                <label className={label}>Contacto de referencia</label>
+                <select className={input} value={form.externalContactId} onChange={(e) => set("externalContactId", e.target.value)}>
+                  <option value="">Sin especificar</option>
+                  {contactos.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}{c.role ? ` · ${c.role}` : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-neutral-400 mt-1">
+                  De la agenda de contactos externos del paciente. Se gestiona en su ficha.
+                </p>
+              </div>
+            )}
 
             <div>
               <label className={label}>Participantes (separados por comas)</label>
