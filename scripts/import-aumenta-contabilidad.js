@@ -66,18 +66,19 @@ const fecha = (s) => {
  *   Clinica 1207 · Banco 338 · Material 68 · AUTONOMOS 59 · Seg. Social 50
  *   IRPF/IVA (varios modelos) 80 · IBI 6 · Tasa residuos 2
  *
- * ⚠️ Nuestro enum NO tiene categoría de IMPUESTOS, y son 88 gastos entre IRPF,
- * IVA, IBI y tasas. Van a `other` con el grupo original conservado en la
- * descripción para no perderlo, pero merece la pena añadir «impuestos» al
- * enum: hoy quedan mezclados con lo demás. Anotado para Rodrigo.
+ * Los impuestos (IRPF, IVA, IBI, tasas) van a `tax`, el tipo que se añadió el
+ * 02/08/2026 a petición de Rodrigo: antes caían en `other` mezclados con la
+ * compra de folios y no había forma de ver cuánto se lleva Hacienda.
  *
  * Que «Clinica» se lleve el 67 % no es un fallo del cruce: es que ese grupo es
  * el cajón de sastre de Aumenta en Organízate.
  */
 function tipoGasto(grupo) {
   const g = norm(grupo);
-  if (/SEGURIDAD SOCIAL|AUTONOMOS|IRPF EMPLEADOS|NOMINA|SALARIO|PERSONAL/.test(g)) return "salary";
-  if (/IRPF ARRENDAMIENTOS|ALQUILER|RENTA|IBI/.test(g)) return "rent";
+  // Los impuestos van PRIMERO: "IRPF EMPLEADOS" es un impuesto, no una nómina.
+  if (/IRPF|IVA |IVA$|MOD\.|IBI|TASA/.test(g)) return "tax";
+  if (/SEGURIDAD SOCIAL|AUTONOMOS|NOMINA|SALARIO|PERSONAL/.test(g)) return "salary";
+  if (/ALQUILER|RENTA/.test(g)) return "rent";
   if (/SOFTWARE|INFORMATIC|WEB|DOMINIO|HOSTING/.test(g)) return "software";
   if (/MATERIAL|SUMINISTRO|LIMPIEZA|OFICINA/.test(g)) return "material";
   if (/COMISION/.test(g)) return "commission";
@@ -86,7 +87,7 @@ function tipoGasto(grupo) {
 
 /** Fijo lo que se paga sí o sí cada mes; variable el resto. */
 function categoriaGasto(tipo) {
-  return tipo === "salary" || tipo === "rent" ? "fixed" : "variable";
+  return tipo === "salary" || tipo === "rent" || tipo === "tax" ? "fixed" : "variable";
 }
 
 function leer(nombre) {
@@ -299,36 +300,35 @@ async function main() {
     let caja = await m.CashPoint.findOne({ where: { name: "Recepción" }, transaction: t });
     if (!caja) caja = await m.CashPoint.create({ name: "Recepción", notes: "Importada de Organízate" }, { transaction: t });
 
-    // En Organízate cerraban la caja VARIAS VECES al día (cada fila lleva su
-    // hora), y nuestro modelo admite un cierre por caja y día. Al quedarnos con
-    // el primero de cada fecha se perdían 282 filas — y con ellas 7 de los 12
-    // descuadres, que es justo lo único que ese histórico aporta.
-    //
-    // Se agrupa por día SUMANDO los descuadres: el resultado es el descuadre
-    // NETO de la jornada, que es la cifra que de verdad se mira.
-    const porDia = new Map();
+    // Un cierre por FILA. Al principio se agrupaban por día porque el modelo
+    // tenía un único (caja, día); Rodrigo pidió poder arquear varias veces al
+    // día —que es lo que ya hacían en Organízate— y ese único se quitó. Así
+    // entran los 828 tal cual, cada uno con su hora.
+    const filas = [];
     for (const c of cierres) {
       const f = fecha(c.find((x) => /^\d{2}\/\d{2}\/\d{2,4}$/.test(String(x))));
       if (!f) continue;
+      const hora = c.find((x) => /^\d{1,2}:\d{2}$/.test(String(x)));
       const imp = c.find((x) => /€/.test(String(x)));
-      const d = porDia.get(f) ?? { cent: 0, n: 0 };
-      d.cent += imp ? cent(imp) : 0;
-      d.n++;
-      porDia.set(f, d);
+      filas.push({ f, hora: hora || null, cent: imp ? cent(imp) : 0 });
     }
-    // Mismo motivo: el índice único (caja, día) reventaría en la segunda pasada.
+    // Idempotencia por (día, hora, descuadre): ya no hay único que lo impida.
     const yaCierres = new Set(
-      (await m.CashClose.findAll({ attributes: ["closeDate"], where: { cashPointId: caja.id }, transaction: t }))
-        .map((c) => String(c.closeDate))
+      (await m.CashClose.findAll({ attributes: ["closeDate", "closedAt", "difference"], where: { cashPointId: caja.id }, transaction: t }))
+        .map((c) => `${c.closeDate}|${new Date(c.closedAt).toISOString().slice(11, 16)}|${Number(c.difference).toFixed(2)}`)
     );
-    for (const [f, d] of porDia) {
-      if (yaCierres.has(f)) continue;
+    for (const r of filas) {
+      const hhmm = (r.hora ?? "00:00").padStart(5, "0");
+      const clave = `${r.f}|${hhmm}|${(r.cent / 100).toFixed(2)}`;
+      if (yaCierres.has(clave)) continue;
+      yaCierres.add(clave);
       await m.CashClose.create({
         cashPointId: caja.id,
-        closeDate: f,
+        closeDate: r.f,
+        closedAt: new Date(`${r.f}T${hhmm}:00`),
         openingAmount: 0, expectedAmount: 0, countedAmount: 0,
-        difference: d.cent / 100,
-        notes: `Importado de Organízate: solo constan la fecha y el descuadre.${d.n > 1 ? ` Ese día se cerró ${d.n} veces; el descuadre es la suma.` : ""}`,
+        difference: r.cent / 100,
+        notes: "Importado de Organízate: solo constan la fecha, la hora y el descuadre.",
       }, { transaction: t });
       n.cierres++;
     }

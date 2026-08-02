@@ -31,7 +31,7 @@ export default function IvaPage() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="eyebrow">Finanzas · Fiscalidad</div>
-          <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1">Libro IVA y Modelo 303</h1>
+          <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1">Impuestos</h1>
           <p className="text-xs text-neutral-400 mt-1">{from} → {to}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -51,7 +51,8 @@ export default function IvaPage() {
 
       {data && (
         <>
-          {/* Modelo 303 resumen */}
+          {/* IVA — Modelo 303 */}
+          <div className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 font-semibold">IVA · Modelo 303</div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Kpi label="IVA Repercutido" value={fmtMoney(data.model303.outputVat)} sub="Ventas" variant="dark" />
             <Kpi label="IVA Soportado" value={fmtMoney(data.model303.deductibleInputVat)} sub="Compras deducibles" variant="white" />
@@ -62,6 +63,31 @@ export default function IvaPage() {
               variant={data.model303.difference >= 0 ? "amber" : "emerald"}
             />
           </div>
+
+          {/* IRPF y lo pagado a Hacienda. Antes había que salir del CRM para
+              cuadrar estas dos cifras. */}
+          <div className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 font-semibold pt-2">IRPF e impuestos pagados</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Kpi
+              label="IRPF retenido en tus facturas"
+              value={fmtMoney(data.irpf?.retenidoEnFacturas ?? 0)}
+              sub={`${data.irpf?.facturasConRetencion ?? 0} factura(s) con retención · lo ingresa el cliente por ti`}
+              variant="white"
+            />
+            <Kpi
+              label="Impuestos pagados en el periodo"
+              value={fmtMoney(data.impuestosPagados?.total ?? 0)}
+              sub={`${data.impuestosPagados?.numero ?? 0} gasto(s): IRPF, IVA, IBI y tasas`}
+              variant="white"
+            />
+          </div>
+
+          {(data.impuestosPagados?.numero ?? 0) === 0 && (
+            <div className="bg-neutral-50 border border-neutral-200 rounded-lg px-4 py-3 text-xs text-neutral-500">
+              No hay gastos marcados como <strong>Impuestos</strong> en este periodo. Al registrar un
+              pago de IRPF, IVA, IBI o una tasa, elige ese tipo de gasto y aparecerá aquí.
+            </div>
+          )}
 
           <div className="bg-amber-50 border border-amber-100 rounded-lg px-4 py-3 text-xs text-amber-800">
             Este resumen es <strong>orientativo</strong>: revísalo con tu asesoría antes de presentarlo a Hacienda.

@@ -12,7 +12,10 @@ const inputCls =
 
 const TYPE_LABELS = {
   salary: "Salario", rent: "Alquiler", software: "Software",
-  material: "Material", commission: "Comisión", other: "Otro",
+  material: "Material", commission: "Comisión",
+  // 'tax' (02/08/2026): IRPF, IVA, IBI y tasas. Lo que se marque aquí es lo que
+  // suma la pantalla de Impuestos; antes caía en "Otro" y no se veía.
+  tax: "Impuestos", other: "Otro",
 };
 const CATEGORY_LABELS = { fixed: "Fijo", variable: "Variable", capex: "CAPEX", opex: "OPEX" };
 

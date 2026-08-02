@@ -26,7 +26,7 @@ const PILLARS = [
       { href: "/facturacion/analitica/socios", label: "Por socio" },
       { href: "/facturacion/analitica/clientes", label: "Por cliente" },
       { href: "/facturacion/analitica/empleados", label: "Por empleado" },
-      { href: "/facturacion/analitica/iva", label: "Libro IVA" },
+      { href: "/facturacion/analitica/iva", label: "Impuestos" },
       { href: "/facturacion/cumplimiento", label: "Cumplimiento" },
     ],
   },

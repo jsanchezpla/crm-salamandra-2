@@ -11,7 +11,10 @@ export function defineCost(sequelize) {
       },
       // Tipo de gasto y categoría contable
       type: {
-        type: DataTypes.ENUM("salary", "rent", "software", "material", "commission", "other"),
+        // 'tax' añadido el 02/08/2026: IRPF, IVA, IBI y tasas acababan en
+        // "other", mezclados con la compra de folios. Cualquier negocio paga
+        // impuestos, así que es universal, no un capricho de Aumenta.
+        type: DataTypes.ENUM("salary", "rent", "software", "material", "commission", "tax", "other"),
         allowNull: false,
       },
       // 'opex' añadido al enum en la migración (rework billing)

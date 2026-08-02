@@ -80,9 +80,12 @@ export function defineCashClose(sequelize) {
     {
       tableName: "cash_closes",
       indexes: [
-        // Un solo cierre por caja y día: cerrar dos veces el mismo día sería
-        // un error de uso, y sin esto quedarían dos verdades distintas.
-        { unique: true, fields: ["cash_point_id", "close_date"], name: "cash_closes_point_date_unique" },
+        // NO es único (cambiado el 02/08/2026). Al principio se puso un único
+        // por (caja, día) pensando que cerrar dos veces sería un error de uso.
+        // Al importar Aumenta se vio que cierran VARIAS veces al día —cada
+        // cierre con su hora— y Rodrigo confirmó que quiere seguir así: es lo
+        // normal en un mostrador con varios turnos. La hora está en `closedAt`.
+        { fields: ["cash_point_id", "close_date"], name: "cash_closes_point_date_idx" },
         { fields: ["close_date"], name: "cash_closes_date_idx" },
       ],
     }
