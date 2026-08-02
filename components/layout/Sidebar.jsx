@@ -147,6 +147,10 @@ const navigation = [
         // citas). Visible para todos (no adminOnly): cada uno gestiona el suyo.
         children: [
           { key: "citas-mi-horario", label: "Mi horario", href: "/mi-horario" },
+          // Citas reservadas a las que les falta profesional (02/08/2026).
+          // adminOnly: asignar a una compañera es cosa de dirección/recepción,
+          // no de cada terapeuta.
+          { key: "citas-sin-profesional", label: "Sin profesional", href: "/citas/sin-profesional", adminOnly: true },
         ],
       },
     ],
