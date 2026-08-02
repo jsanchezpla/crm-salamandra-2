@@ -414,11 +414,26 @@ export default function CitasModule() {
 
   function showAllEventTypes() { setVisibleEtIds(null); }
 
+  /**
+   * Elegir a una profesional deja SOLO sus citas (Rodrigo, 02/08/2026).
+   *
+   * Antes esto funcionaba al revés: se partía de «todas visibles» y cada clic
+   * OCULTABA a una. Para ver la agenda de Araceli había que ir tachando a las
+   * otras catorce, una a una, cada vez. Con quince profesionales eso no es un
+   * filtro, es un castigo.
+   *
+   * Ahora: el primer clic selecciona a esa sola; los siguientes añaden o quitan;
+   * y si te quedas sin ninguna, vuelve a verse todo (que es lo mismo que no
+   * filtrar, y evita dejar el calendario en blanco sin saber por qué).
+   */
   function toggleTeamMember(id) {
     setVisibleTmIds((prev) => {
-      const current = prev ?? teamMembers.map((m) => m.id);
-      if (current.includes(id)) return current.filter((x) => x !== id);
-      return [...current, id];
+      if (prev === null) return [id];
+      if (prev.includes(id)) {
+        const resto = prev.filter((x) => x !== id);
+        return resto.length ? resto : null;
+      }
+      return [...prev, id];
     });
   }
 
