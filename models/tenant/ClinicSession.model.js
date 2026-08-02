@@ -24,7 +24,12 @@ export function defineClinicSession(sequelize) {
       },
       therapistId: {
         type: DataTypes.UUID,
-        allowNull: false,
+        // Opcional desde el 02/08/2026. Para una sesión que se registra hoy lo
+        // firma quien la da, pero al importar cuatro años de Aumenta salieron
+        // 4.045 escritas por gente que ya no está en el centro. Tirar esas notas
+        // clínicas, o atribuírselas a otra persona, son peores opciones que una
+        // nota sin firma: sigue siendo el registro de lo que se hizo.
+        allowNull: true,
       },
       sessionDate: {
         type: DataTypes.DATE,
