@@ -60,15 +60,30 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const specialty = sp.get("specialty");
   if (specialty && SPECIALTY_KEYS.includes(specialty)) where.specialties = { [Op.contains]: [specialty] };
 
-  const rows = await Patient.findAll({
+  // Paginación (02/08/2026). Antes pedía 300 fijos y devolvía como `total` el
+  // tamaño de la página, así que con los 1.174 pacientes de Aumenta la pantalla
+  // decía "300" y no había forma de llegar al resto.
+  //
+  // El límite por defecto sigue siendo 300 A PROPÓSITO: la pantalla actual
+  // filtra y calcula sus indicadores sobre TODO lo que recibe, así que bajarlo
+  // aquí le rompería el buscador. Lo que sí se arregla ya es el `total`, que
+  // ahora es el de verdad. Quien quiera páginas pequeñas manda `limit`.
+  const page = Math.max(1, parseInt(sp.get("page") ?? "1"));
+  const limit = Math.min(parseInt(sp.get("limit") ?? "300"), 300);
+
+  const { rows, count } = await Patient.findAndCountAll({
     where,
     include: [{ model: TeamMember, as: "mainTherapist", attributes: ["id", "displayName", "position", "avatarColor"] }],
     order: [["lastName", "ASC"], ["firstName", "ASC"]],
-    limit: 300,
+    limit,
+    offset: (page - 1) * limit,
+    // Con include + findAndCountAll, Sequelize cuenta filas del JOIN si no se
+    // le dice esto, y el total saldría inflado.
+    distinct: true,
   });
   const agg = await sessionAgg(ClinicSession, rows.map((r) => r.id));
   const patients = rows.map((p) => serializePatient(p, agg[p.id] ?? { sessionsCount: 0, lastSession: null }));
-  return ok({ patients, total: patients.length });
+  return ok({ patients, total: count, page, pages: Math.ceil(count / limit) });
 });
 
 export const POST = withTenant(async (request, _rc, ctx) => {

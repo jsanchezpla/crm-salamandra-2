@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import SyncWebButton from "../../../components/clients/SyncWebButton.jsx";
 import PacientesDelAlta from "../../../components/clients/PacientesDelAlta.jsx";
 import { camposCliente, PERFIL_COMERCIAL } from "../../../lib/clients/formularioAlta.js";
+import Paginador from "@/components/ui/Paginador.jsx";
 
 function useMounted() {
   const [m, setM] = useState(false);
@@ -51,6 +52,12 @@ export default function ClientesClient({ perfil = PERFIL_COMERCIAL, conPacientes
   const mounted = useMounted();
   const [clients, setClients] = useState([]);
   const [total, setTotal] = useState(0);
+  // Paginación: hasta hoy la lista pedía 200 fijos y no mandaba página, así que
+  // con 1.110 clientes solo se veían los primeros 200 y no había forma de
+  // llegar al resto. La API ya paginaba; lo que faltaba era usarlo.
+  const POR_PAGINA = 50;
+  const [pagina, setPagina] = useState(1);
+  const [paginas, setPaginas] = useState(1);
   const [loading, setLoading] = useState(true);
   const [activeStatus, setActiveStatus] = useState("all");
   const [search, setSearch] = useState("");
@@ -74,7 +81,7 @@ export default function ClientesClient({ perfil = PERFIL_COMERCIAL, conPacientes
 
   const fetchClients = useCallback(() => {
     setLoading(true);
-    const params = new URLSearchParams({ limit: "200" });
+    const params = new URLSearchParams({ limit: String(POR_PAGINA), page: String(pagina) });
     if (activeStatus !== "all") params.set("status", activeStatus);
     if (search.trim()) params.set("search", search.trim());
     fetch(`/api/clients?${params}`)
@@ -83,10 +90,16 @@ export default function ClientesClient({ perfil = PERFIL_COMERCIAL, conPacientes
         if (data.ok) {
           setClients(data.data.clients);
           setTotal(data.data.total ?? data.data.clients.length);
+          setPaginas(data.data.pages ?? 1);
         }
       })
       .finally(() => setLoading(false));
-  }, [activeStatus, search]);
+  }, [activeStatus, search, pagina]);
+
+  // Al buscar o cambiar de estado se vuelve a la primera página: quedarse en la
+  // 7 tras una búsqueda que devuelve 12 resultados deja la lista vacía sin
+  // explicar por qué.
+  useEffect(() => { setPagina(1); }, [activeStatus, search]);
 
   useEffect(() => {
     const t = setTimeout(fetchClients, search ? 300 : 0);
@@ -464,6 +477,11 @@ export default function ClientesClient({ perfil = PERFIL_COMERCIAL, conPacientes
               </table>
             </div>
           )}
+
+          <Paginador
+            pagina={pagina} paginas={paginas} total={total}
+            porPagina={POR_PAGINA} cargando={loading} onCambio={setPagina}
+          />
         </div>
       </div>
 

@@ -68,7 +68,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       offset,
     });
 
-    return ok({ invoices: withEffectiveStatusList(rows), total: count, page, limit });
+    return ok({ invoices: withEffectiveStatusList(rows), total: count, page, limit, pages: Math.ceil(count / limit) });
   } catch (err) {
     return serverError(err);
   }
