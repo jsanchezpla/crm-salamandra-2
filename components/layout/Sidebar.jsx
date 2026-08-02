@@ -236,6 +236,10 @@ const navigation = [
           // punto 7): módulo propio con listado general, además del botón que
           // hay en la ficha del paciente.
           { key: "clinica-coordinaciones", label: "Coordinaciones", href: "/clinica/coordinaciones" },
+          // Talleres (02/08/2026): actividades de grupo a las que se apunta
+          // quien quiere. NO son especialidades — Habilidades Sociales venía de
+          // Organízate marcada como tal y son 4.287 citas.
+          { key: "clinica-talleres", label: "Talleres", href: "/clinica/talleres" },
           // Estadísticas del centro (sprint 2026-07, punto 10). adminOnly: son
           // datos agregados de TODO el equipo, y el endpoint también lo exige.
           { key: "clinica-estadisticas", label: "Estadísticas", href: "/clinica/estadisticas", adminOnly: true },

@@ -162,6 +162,9 @@ export const MODULES = {
     // Agenda de profesionales externos del paciente + enlace desde las actas
     // de coordinación (02/08/2026).
     "migrate-external-contacts",
+    // Talleres: actividades de grupo (02/08/2026). Necesita `patients`, que la
+    // crea migrate-pacientes-sprint-1; el orden lo resuelve el analizador.
+    "migrate-talleres",
     "migrate-clinica-module",
     "migrate-clinica-client-link",
     "migrate-patients-care-type",
