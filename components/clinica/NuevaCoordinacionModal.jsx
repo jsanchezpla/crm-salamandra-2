@@ -63,7 +63,11 @@ export default function NuevaCoordinacionModal({ patientId = null, patientName =
   const pacienteElegido = form.relatedPatientId;
   useEffect(() => {
     setContactos([]);
-    set("externalContactId", "");
+    // `setForm` directo y no el helper `set`: ese se declara MÁS ABAJO, y
+    // aunque en la práctica funcione (el efecto corre después del render, con
+    // `set` ya asignado), depender de ese orden es una trampa para el próximo
+    // que mueva las líneas.
+    setForm((f) => ({ ...f, externalContactId: "" }));
     if (!pacienteElegido) return;
     fetch(`/api/pacientes/${pacienteElegido}/contactos`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))

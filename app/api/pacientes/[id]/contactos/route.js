@@ -42,11 +42,22 @@ export const GET = withTenant(async (request, routeContext, ctx) => {
   const { ExternalContact } = ctx.tenantModels;
   if (!ExternalContact) return ok({ contactos: [] });
 
-  const filas = await ExternalContact.findAll({
-    where: { patientId: id },
-    order: [["name", "ASC"]],
-    limit: 200,
-  });
+  // La tabla puede no existir todavía: entre desplegar el código y correr
+  // `migrate-external-contacts` hay una ventana en la que el modelo está
+  // registrado pero `external_contacts` no está creada en ese schema. Sin este
+  // guard, la ficha del paciente entera respondería 500 en esa ventana — y el
+  // mismo criterio que usa `lib/clients/listaEspera.js` para su cola.
+  let filas;
+  try {
+    filas = await ExternalContact.findAll({
+      where: { patientId: id },
+      order: [["name", "ASC"]],
+      limit: 200,
+    });
+  } catch (err) {
+    if (/does not exist|no existe/i.test(err?.message ?? "")) return ok({ contactos: [] });
+    throw err;
+  }
   return ok({ contactos: filas.map(serializar) });
 });
 

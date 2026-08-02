@@ -68,11 +68,18 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const idsTerapeutas = [...new Set(rows.map((r) => r.assignedTherapistId).filter(Boolean))];
     const nombres = new Map();
     if (TeamMember && idsTerapeutas.length) {
-      const miembros = await TeamMember.findAll({
-        where: { id: idsTerapeutas },
-        attributes: ["id", "displayName"],
-      });
-      for (const m of miembros) nombres.set(m.id, m.displayName);
+      // Un tenant puede tener la cola de admisión y NO el módulo de equipo, en
+      // cuyo caso `team_members` no existe en su schema. Que falte el nombre del
+      // profesional no puede tumbar la lista de espera entera.
+      try {
+        const miembros = await TeamMember.findAll({
+          where: { id: idsTerapeutas },
+          attributes: ["id", "displayName"],
+        });
+        for (const m of miembros) nombres.set(m.id, m.displayName);
+      } catch {
+        /* sin equipo: las filas salen sin nombre, que es justo lo que hay */
+      }
     }
 
     return ok({
