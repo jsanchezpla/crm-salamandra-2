@@ -50,6 +50,28 @@ async function constraintExists(s, schema, name) {
   );
   return rows.length > 0;
 }
+/**
+ * Añade una FK y, si el schema no la admite, sigue adelante avisando.
+ *
+ * Solo se traga el error concreto de "la tabla referenciada no tiene una
+ * restricción única" (código 42830), que es el de los schemas-foto tipo
+ * `crm_demo_golden`. Cualquier otro error se propaga: una FK que falla por otro
+ * motivo es un problema de verdad y no se puede esconder.
+ */
+async function intentarFk(s, schema, nombre, sql) {
+  try {
+    await s.query(sql);
+  } catch (err) {
+    const msg = err?.parent?.message ?? err?.message ?? "";
+    const code = err?.parent?.code;
+    if (code === "42830" || /no unique constraint matching/i.test(msg)) {
+      log(`⚠ ${schema}: sin FK ${nombre} (la tabla referenciada no tiene clave primaria; schema de copia)`);
+      return;
+    }
+    throw err;
+  }
+}
+
 async function ensureUuidFn(s) {
   try { await s.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`); } catch { /* sin permiso */ }
   try { await s.query(`SELECT gen_random_uuid()`); return true; } catch { return false; }
@@ -82,13 +104,22 @@ async function processSchema(s, schema, uuidDefault) {
     log(`✓ ${schema}: tabla external_contacts creada`);
 
     // Si se borra el paciente, su agenda de externos deja de tener sentido.
-    await s.query(`
+    //
+    // Las FK van en `intentarFk` porque hay schemas que NO las admiten:
+    // `crm_demo_golden` es una FOTO del escaparate hecha copiando tablas, y sus
+    // copias no llevan clave primaria. PostgreSQL responde "there is no unique
+    // constraint matching given keys". Ahí la tabla se crea igual y se queda sin
+    // la FK: es un schema de respaldo del que nadie borra pacientes a mano.
+    //
+    // Sin esto, el schema de una copia tumbaba la migración a media lista y
+    // dejaba a los tenants siguientes sin procesar.
+    await intentarFk(s, schema, "external_contacts_patient_fk", `
       ALTER TABLE "${schema}"."external_contacts"
         ADD CONSTRAINT external_contacts_patient_fk
         FOREIGN KEY (patient_id) REFERENCES "${schema}"."patients"(id) ON DELETE CASCADE
     `);
     if (await tableExists(s, schema, "clients")) {
-      await s.query(`
+      await intentarFk(s, schema, "external_contacts_client_fk", `
         ALTER TABLE "${schema}"."external_contacts"
           ADD CONSTRAINT external_contacts_client_fk
           FOREIGN KEY (client_id) REFERENCES "${schema}"."clients"(id) ON DELETE SET NULL
@@ -110,13 +141,12 @@ async function processSchema(s, schema, uuidDefault) {
     if (!(await constraintExists(s, schema, "coordinations_external_contact_fk"))) {
       // SET NULL y no CASCADE: borrar un contacto NO puede llevarse por delante
       // un acta clínica. El acta se queda, sin contacto asociado.
-      await s.query(`
+      await intentarFk(s, schema, "coordinations_external_contact_fk", `
         ALTER TABLE "${schema}"."coordinations"
           ADD CONSTRAINT coordinations_external_contact_fk
           FOREIGN KEY (external_contact_id)
           REFERENCES "${schema}"."external_contacts"(id) ON DELETE SET NULL
       `);
-      log(`✓ ${schema}: FK coordinations → external_contacts (ON DELETE SET NULL)`);
     }
     await s.query(`CREATE INDEX IF NOT EXISTS "coordinations_external_contact_idx" ON "${schema}"."coordinations" (external_contact_id)`);
   }
