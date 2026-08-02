@@ -141,6 +141,10 @@ export const MODULES = {
     // (visto en local el 31/07). El script se salta solo los schemas sin las
     // tablas de pagos, así que es inofensivo para quien no cobre online.
     "migrate-booking-authorization",
+    // El correo de la cita deja de ser obligatorio (02/08/2026): una cita que
+    // apunta recepción por teléfono, o que llega importada, puede no tenerlo.
+    // SIN ESTO la importación de una agenda revienta a mitad.
+    "migrate-booking-email-opcional",
     // Horario propio del profesional (team_member_hours): lo usa la generación
     // de huecos de citas, pero su tabla base es team_members (por eso está
     // también en `team`).
@@ -162,10 +166,19 @@ export const MODULES = {
     // Agenda de profesionales externos del paciente + enlace desde las actas
     // de coordinación (02/08/2026).
     "migrate-external-contacts",
+    // Un contacto externo puede constar solo por su papel («Tutora») o solo por
+    // su nombre («Blanca»): así vienen escritos en las actas (02/08/2026).
+    "migrate-contactos-externos-nombre-opcional",
     // Talleres: actividades de grupo (02/08/2026). Necesita `patients`, que la
     // crea migrate-pacientes-sprint-1; el orden lo resuelve el analizador.
     "migrate-talleres",
     "migrate-clinica-module",
+    // El autor del acta puede no estar en la plantilla (02/08/2026): campo de
+    // texto libre y created_by_id opcional.
+    "migrate-coordinaciones-autor-libre",
+    // El terapeuta de una sesión deja de ser obligatorio (02/08/2026): en un
+    // histórico importado hay sesiones firmadas por quien ya no está.
+    "migrate-sesion-terapeuta-opcional",
     "migrate-clinica-client-link",
     "migrate-patients-care-type",
     "migrate-patients-specialties",
@@ -193,6 +206,9 @@ export const MODULES = {
     // Arqueo de caja (02/08/2026): lo único de Contabilidad de Organízate que
     // nuestro módulo de Facturación no cubría.
     "migrate-arqueo",
+    // Impuestos como tipo de gasto propio + varios arqueos por día
+    // (02/08/2026, Rodrigo). Universal, no solo de Aumenta.
+    "migrate-impuestos-y-arqueo",
     "migrate-billing-rework",
     "migrate-billing-fix-kind-enum",
     "migrate-billing-quotes",

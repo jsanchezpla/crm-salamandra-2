@@ -301,15 +301,51 @@ Tabla: `coordinations`. Acta de una reunión de coordinación.
 | Campo | Tipo | Notas |
 | --- | --- | --- |
 | `coordinationType` | ENUM | `family`, `school`, `psychiatrist`, `neuropediatrician`, `other_therapist`, `orientator`, `other`. |
-| `participants` | JSONB DEFAULT `[]` | Lista de asistentes (nombre + rol). |
+| `participants` | JSONB DEFAULT `[]` | Asistentes. **Dos formas conviven** (ver abajo). |
 | `coordinationDate` | TIMESTAMPTZ NOT NULL | Fecha. |
 | `topics` | JSONB DEFAULT `[]` | Temas tratados. |
 | `agreements` | JSONB DEFAULT `[]` | Acuerdos alcanzados. |
 | `nextActions` | JSONB DEFAULT `[]` | Próximas actuaciones con responsable. |
 | `relatedPatientId` | UUID nullable | FK a `patients` (ON DELETE SET NULL). |
-| `aiTranscription` | TEXT | Vacío en Sprint 1. |
+| `aiTranscription` | TEXT | Vacío en Sprint 1. En las actas importadas, el texto original entero. |
 | `aiActaGenerated` | TEXT | Acta IA (vacía en Sprint 1). |
-| `createdById` | UUID NOT NULL | FK a `team_members`. |
+| `createdById` | UUID **nullable** | FK a `team_members`. Quién la registró. |
+| `createdByName` | VARCHAR(200) nullable | Su nombre, cuando no hay ficha a la que apuntar. |
+
+#### Quién firma el acta (02/08/2026)
+
+`createdById` era NOT NULL. Dejó de serlo al traer las 700 actas de Organízate:
+171 las firma gente que ya no está en el centro, o cuentas que no son personas
+(«NADIE», «FISIO»). Las dos salidas que había eran malas —tirar actas de
+reuniones reales, o atribuírselas a otro—, así que Rodrigo pidió una tercera: el
+nombre en texto libre.
+
+- Si hay ficha de equipo, **manda la ficha**. `createdByName` es el resto.
+- El serializer expone `createdByLabel` ya resuelto: nadie debe repetir esa
+  precedencia en una pantalla.
+- La ficha de coordinaciones lo pinta al pie: «Firmado por X».
+- Migración: `migrate-coordinaciones-autor-libre.js`.
+
+⚠️ La firma es **quien escribió el acta**, NO el terapeuta actual del paciente.
+De las 171 sin ficha, 61 son de niños que hoy sí tienen terapeuta: los
+reasignaron cuando esas profesionales se fueron. Poner al terapeuta de hoy
+falsearía quién estuvo en aquella reunión.
+
+#### Asistentes: dos listas, y dos formatos
+
+Un asistente puede ser **del centro** o **de fuera**, y no da igual: el del
+centro se conecta con la plantilla, el de fuera con la agenda de contactos
+externos del paciente (`external_contacts`).
+
+`participants` guarda hoy objetos
+`{ kind, name, role, teamMemberId, externalContactId }`, pero el alta manual
+sigue escribiendo texto suelto (`["Marga", "Paloma"]`) y las actas antiguas
+también lo tienen así. Un texto suelto **no dice de qué lado está esa persona**,
+así que el serializer lo devuelve con `kind: null` en vez de repartirlo a ojo, y
+la pantalla cae a la línea «Participantes: …» de siempre.
+
+Campos del serializer: `participants` (cadena legible),
+`participantsInternal`, `participantsExternal`.
 
 ### ClinicalReport
 

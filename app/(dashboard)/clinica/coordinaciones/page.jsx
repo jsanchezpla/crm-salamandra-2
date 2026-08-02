@@ -120,10 +120,26 @@ export default function CoordinacionesPage() {
                     {c.patientName || "Ver paciente"}
                   </Link>
                 )}
-                {c.createdBy?.name && <span className="text-[10px] text-neutral-400">· {c.createdBy.name}</span>}
+                {/* La firma NO va aquí arriba: va al pie del acta, que es donde
+                    se firma. Ver el bloque «Firmado por» al final de la tarjeta. */}
               </div>
               {c.externalEntity && <div className="text-[11px] text-neutral-600 mb-1">Con: {c.externalEntity}</div>}
-              <div className="text-[11px] text-neutral-500 mb-1">Participantes: {c.participants || "—"}</div>
+              {/* Quién estuvo, separando el centro de la gente de fuera. Las
+                  actas antiguas guardan los asistentes como texto suelto y no
+                  dicen de qué lado está cada uno: esas caen a la línea de
+                  siempre en vez de repartirse a ojo. */}
+              {(c.participantsInternal?.length > 0 || c.participantsExternal?.length > 0) ? (
+                <div className="text-[11px] text-neutral-500 mb-1 space-y-0.5">
+                  {c.participantsInternal?.length > 0 && (
+                    <div>Del centro: {c.participantsInternal.map((p) => [p.name, p.role].filter(Boolean).join(" · ")).join(", ")}</div>
+                  )}
+                  {c.participantsExternal?.length > 0 && (
+                    <div>De fuera: {c.participantsExternal.map((p) => [p.name, p.role].filter(Boolean).join(" · ")).join(", ")}</div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-[11px] text-neutral-500 mb-1">Participantes: {c.participants || "—"}</div>
+              )}
               <p className="text-xs text-neutral-700 leading-relaxed">{c.topics || "—"}</p>
               {c.agreements?.length > 0 && (
                 <div className="mt-2">
@@ -139,6 +155,15 @@ export default function CoordinacionesPage() {
                   <ul className="list-disc list-outside ml-4 text-xs text-neutral-700 space-y-0.5">
                     {c.nextActions.map((a, i) => <li key={i}>{a}</li>)}
                   </ul>
+                </div>
+              )}
+              {/* La firma, al pie y en todas: un acta la escribe alguien y eso
+                  no se pierde aunque esa persona ya no trabaje en el centro
+                  (Rodrigo, 02/08/2026). `createdByLabel` resuelve el orden en el
+                  servidor — ficha de equipo primero, nombre suelto si no la hay. */}
+              {c.createdByLabel && (
+                <div className="mt-3 pt-2 border-t border-neutral-100 text-[10px] text-neutral-400">
+                  Firmado por {c.createdByLabel}
                 </div>
               )}
             </div>

@@ -91,9 +91,24 @@ export function defineCoordination(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // Quién la registró, como ficha de equipo.
+      //
+      // ⚠️ Pasó a OPCIONAL el 02/08/2026, al traer las 700 actas de Organízate:
+      // 171 están firmadas por gente que ya no trabaja en el centro o por
+      // cuentas que no son una persona («NADIE», «FISIO»). Con el campo
+      // obligatorio la única salida era atribuirle el acta a otro, que es peor
+      // que dejarlo en blanco: falsea quién estuvo en esa reunión.
       createdById: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
+      },
+      // El nombre tal cual, para cuando no hay ficha de equipo a la que apuntar
+      // (decisión de Rodrigo, 02/08/2026: «que figure al menos el nombre aunque
+      // no esté vinculado a nada»). Nunca sustituye a `createdById`: si hay
+      // ficha, manda la ficha; esto es el resto de los casos.
+      createdByName: {
+        type: DataTypes.STRING(200),
+        allowNull: true,
       },
       // Cliente/pagador (2026-07-23). Foto del paciente relacionado. El
       // created_by_id ya dice quién del equipo la registró.

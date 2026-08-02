@@ -36,6 +36,7 @@ import path from "node:path";
 import { getTenantDb } from "../lib/db/tenantDb.js";
 import validator from "validator";
 import { normalizeGuardians } from "../lib/clients/guardians.js";
+import { CORRECCIONES_EMAIL } from "./_correcciones-email-aumenta.js";
 
 const args = process.argv.slice(2);
 const CONFIRM = args.includes("--confirm");
@@ -49,9 +50,10 @@ const cap = (s) => String(s ?? "").trim();
  * Correo válido, o null.
  *
  * En Organízate hay 5 mal tecleados: «no facilitado», un espacio en medio del
- * nombre, un dominio duplicado… Se DESCARTAN en vez de arreglarlos a ojo:
- * adivinar dónde iba el espacio de «silvia casco garcia@gmail.com» es inventarse
- * la dirección de una familia. Se listan al final para corregirlos a mano.
+ * nombre, un dominio duplicado… Los que no están en `CORRECCIONES_EMAIL` se
+ * DESCARTAN en vez de arreglarlos a ojo: adivinar dónde iba el espacio de
+ * «silvia casco garcia@gmail.com» es inventarse la dirección de una familia.
+ * Se listan al final para corregirlos a mano.
  */
 const emailsMalos = [];
 function emailValido(v, quien) {
@@ -59,6 +61,8 @@ function emailValido(v, quien) {
   // una manera. No es adivinar, es limpiar.
   const e = cap(v).replace(/\.+$/, "");
   if (!e) return null;
+  const corregido = CORRECCIONES_EMAIL[cap(v)]?.email;
+  if (corregido) return corregido;
   // Se usa el MISMO validador que Sequelize (`isEmail` de validator.js). Con un
   // regex propio, más laxo, el script daba por bueno un correo que el modelo
   // rechazaba después y abortaba la transacción entera a mitad de importación.
@@ -111,6 +115,77 @@ const DOBLES = {
 };
 const SEPARADOS = new Set([371]);          // el único caso con evidencia de separación
 const ES_EMPRESA = /FUNDACION ADECCO|FUNDACIÓN ADECCO/i;
+
+/**
+ * NIF en su forma canónica: solo letras y números, en mayúsculas.
+ *
+ * ⚠️ AÑADIDO el 02/08/2026 tras la auditoría. En Organízate el mismo documento
+ * está tecleado de varias maneras —«49.005.048-Y», «49005048Y», «G 28423275»—
+ * y el NIF es la CLAVE con la que se agrupa a una familia. Sin normalizar, dos
+ * hermanos cuyas fichas escribían el DNI de la madre distinto acababan en DOS
+ * familias diferentes: 26 familias partidas en dos, con sus pacientes y sus
+ * facturas repartidos entre las dos mitades y el correo del portal duplicado.
+ *
+ * Se normaliza también lo que se GUARDA, no solo la clave: son el mismo
+ * documento, y en la ficha debe verse uno solo.
+ */
+const nifCanon = (s) => String(s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "") || null;
+
+/**
+ * Pagadores con DOS documentos distintos en Organízate.
+ *
+ * Normalizar el NIF junta a las familias cuyo documento solo cambiaba de
+ * formato, pero no a esta: Raquel tiene un hijo cuya ficha la identifica por el
+ * DNI y una hija cuya ficha la identifica por el NIE, así que salían dos
+ * familias con un hermano cada una. Confirmado por Rodrigo el 02/08/2026: es la
+ * misma persona, y el apellido correcto es «Quiñones».
+ *
+ * Los DOS documentos se conservan —también lo pidió él—: el que manda va en el
+ * NIF de la ficha y el otro en `customFields.documentosAdicionales`, porque un
+ * cambio de NIE a DNI no borra las facturas emitidas con el anterior.
+ *
+ * Se indexa por los dos documentos, para que la familia se encuentre se entre
+ * por donde se entre.
+ */
+const UNIFICADOS = {
+  RAQUEL: {
+    // El DNI manda: aparece en la ficha del hijo MENOR (2020) y el NIE en la de
+    // la mayor (2012), que es el orden de un NIE que se convierte en DNI.
+    nif: "60629450R",
+    nombre: "Raquel Quiñones Vega",
+    otros: ["Y0566459Y"],
+    documentos: ["60629450R", "Y0566459Y"],
+    // Su nombre está escrito de tres formas entre las dos fichas («RAQUEL
+    // QUIÑONEZ VEGA», «RAQUEL QUIÑONEZ», «RAQUEL QUIÑONES VEGA»). Sin esto
+    // saldría como dos tutoras distintas dentro de su propia familia, porque el
+    // fusionador de tutores compara por palabras y «QUIÑONEZ» no es «QUIÑONES».
+    // La L de «Raquel» es opcional: en una de las fichas pone «RAQUE».
+    variantes: /^RAQUEL?\s+QUI[ÑN]ONE[ZS]\b/i,
+  },
+};
+const PAGADORES_UNIFICADOS = Object.fromEntries(
+  Object.values(UNIFICADOS).flatMap((u) => u.documentos.map((d) => [d, u]))
+);
+
+/** Nombre de tutor con las variantes conocidas ya corregidas. */
+function nombreTutorCanon(nombre) {
+  const n = cap(nombre);
+  if (!n) return n;
+  for (const u of Object.values(UNIFICADOS)) {
+    if (u.variantes?.test(norm(n))) return u.nombre;
+  }
+  return n;
+}
+
+/**
+ * Con qué se agrupa a una familia: su NIF canónico, y si no lo hay, el nombre.
+ * En una función y no repetida en dos sitios: si las dos copias se separasen,
+ * la familia se crearía con una clave y se buscaría con otra.
+ */
+const claveFamilia = (pagador) => {
+  const n = nifCanon(pagador?.cifnif);
+  return (n ? (PAGADORES_UNIFICADOS[n]?.nif ?? n) : null) ?? norm(pagador?.nombre);
+};
 
 const ESP = [
   [/H\.?H\.?\.?S\.?S|HABILIDADES SOCIALES/, "taller_hhss"],
@@ -186,7 +261,10 @@ function mismaPersona(a, b) {
 
 /** Añade un tutor a la lista, fusionando si ya está con el nombre corto. */
 function addTutor(lista, { name, relationship, phone, dni, email }) {
-  const n = cap(name);
+  // Único sitio por el que entran TODOS los tutores (los estructurados, el
+  // pagador y los de las fichas dobles), así que es aquí donde se corrigen los
+  // nombres con variantes conocidas.
+  const n = nombreTutorCanon(name);
   if (!n) return;
   const i = lista.findIndex((x) => mismaPersona(x.name, n));
   if (i === -1) {
@@ -226,15 +304,36 @@ function tutoresDe(ficha, pagador) {
     for (const g of estructurados) {
       if (!cap(g.nombre)) continue;
       t.push({
-        name: cap(g.nombre),
+        // Estos NO pasan por `addTutor`, así que la corrección de nombre se
+        // aplica también aquí. Si se olvidara, la misma persona entraría dos
+        // veces en su propia familia con las dos grafías.
+        name: nombreTutorCanon(g.nombre),
         relationship: g.relationship || null,
         phone: cap(g.telefono) || null,
-        dni: cap(g.dni) || null,
+        // Canónico igual que el de la familia: en Organízate vienen con puntos,
+        // con guiones y hasta con un espacio delante (« Y0207871B»).
+        dni: nifCanon(g.dni),
         email: emailValido(g.email, cap(g.nombre)),
       });
     }
     // El pagador también es tutor si no estaba ya en la lista.
     if (pagador?.nombre) addTutor(t, { name: pagador.nombre, relationship: null, phone: null });
+
+    // Un correo corregido puede ser de OTRO tutor de la misma ficha (ver
+    // CORRECCIONES_EMAIL). Se mueve después de meter al pagador, porque el
+    // dueño de la dirección puede ser precisamente él y no estar entre los
+    // tutores que trae la ficha.
+    for (const g of estructurados) {
+      const c = CORRECCIONES_EMAIL[cap(g.email)];
+      if (!c?.de) continue;
+      // Mismo nombre corregido que se usó al meterlos: comparando contra el
+      // original no se encontrarían los que se hayan reescrito.
+      const origen = t.find((x) => mismaPersona(x.name, nombreTutorCanon(g.nombre)));
+      const destino = t.find((x) => mismaPersona(x.name, c.de));
+      if (origen && origen !== destino) origen.email = null;
+      if (destino) destino.email = c.email;
+    }
+
     if (t.length) return t;
   }
 
@@ -282,15 +381,21 @@ async function main() {
     const familiar = pagadores.find((p) => !ES_EMPRESA.test(p.nombre)) ?? null;
     for (const p of pagadores.filter((p) => ES_EMPRESA.test(p.nombre))) {
       const k = norm(p.nombre);
-      if (!empresas.has(k)) empresas.set(k, { nombre: cap(p.nombre), nif: p.cifnif || null, pacientes: [] });
+      if (!empresas.has(k)) empresas.set(k, { nombre: cap(p.nombre), nif: nifCanon(p.cifnif), pacientes: [] });
       empresas.get(k).pacientes.push(idp);
     }
     if (!familiar) { sinPagador.push(idp); continue; }
 
-    const clave = norm(familiar.cifnif || familiar.nombre);
+    const clave = claveFamilia(familiar);
+    // Si es un pagador unificado, mandan SU nombre y SU documento, venga la
+    // ficha del hijo que venga: si no, la familia se llamaría según cuál de los
+    // dos hermanos se procesara primero.
+    const unificado = PAGADORES_UNIFICADOS[nifCanon(familiar.cifnif)] ?? null;
     if (!familias.has(clave)) {
       familias.set(clave, {
-        nombre: cap(familiar.nombre), nif: familiar.cifnif || null,
+        nombre: unificado?.nombre ?? cap(familiar.nombre),
+        nif: unificado?.nif ?? nifCanon(familiar.cifnif),
+        otrosDocumentos: unificado?.otros ?? null,
         direccion: familiar.direccion || f.direccion || null,
         localidad: familiar.localidad || f.localidad || null,
         separada: dobles.some((d) => SEPARADOS.has(idp) || SEPARADOS.has(d)) || SEPARADOS.has(idp),
@@ -394,7 +499,7 @@ async function main() {
     // ── Clientes ─────────────────────────────────────────────────────────
     const clienteDe = new Map();   // clave de familia → id de Client
 
-    const crearCliente = async ({ nombre, nif, direccion, localidad, tipo, tutores, separada, activo }) => {
+    const crearCliente = async ({ nombre, nif, otrosDocumentos, direccion, localidad, tipo, tutores, separada, activo }) => {
       // El correo y el teléfono del CLIENTE salen del tutor que paga (o del
       // primero que los tenga). Sin correo la familia NO puede entrar al portal:
       // el acceso se resuelve por email. Es lo que faltaba en la primera pasada.
@@ -423,7 +528,13 @@ async function main() {
         }))),
         // De dónde viene cada ficha: sin esto, dentro de un año nadie sabría
         // qué se importó y qué se dio de alta a mano.
-        customFields: { origen: "organizate", importadoEl: hoy },
+        customFields: {
+          origen: "organizate",
+          importadoEl: hoy,
+          // El otro documento de la misma persona, cuando lo hay. No se tira:
+          // hay facturas emitidas con él y un cambio de NIE a DNI no las borra.
+          ...(otrosDocumentos?.length ? { documentosAdicionales: otrosDocumentos } : {}),
+        },
       }, { transaction: t });
       cuenta.clientesNuevos++;
       return c.id;
@@ -436,7 +547,8 @@ async function main() {
     }
     for (const [clave, f] of familias) {
       clienteDe.set(clave, await crearCliente({
-        nombre: f.nombre, nif: f.nif, direccion: f.direccion, localidad: f.localidad,
+        nombre: f.nombre, nif: f.nif, otrosDocumentos: f.otrosDocumentos,
+        direccion: f.direccion, localidad: f.localidad,
         tipo: "individual", tutores: f.tutores, separada: f.separada,
       }));
     }
@@ -470,14 +582,14 @@ async function main() {
       let clientId;
       let inactivo = false;
       if (familiar) {
-        clientId = clienteDe.get(norm(familiar.cifnif || familiar.nombre));
+        clientId = clienteDe.get(claveFamilia(familiar));
       } else {
         inactivo = true;
         const propio = `${cap(f.nombre)} ${cap(f.apellidos)}`.trim();
         const clave = `PROPIO:${norm(propio)}`;
         if (!clienteDe.has(clave)) {
           clienteDe.set(clave, await crearCliente({
-            nombre: propio, nif: f.cifnif || null,
+            nombre: propio, nif: nifCanon(f.cifnif),
             direccion: f.direccion, localidad: f.localidad,
             tipo: "individual", activo: false,
             tutores: [f.ref_t3, f.ref_t4].filter(Boolean).length
@@ -495,7 +607,7 @@ async function main() {
 
       // Idempotencia: por DNI si lo hay, y si no por nombre + nacimiento.
       const yaEsta = await m.Patient.findOne({
-        where: f.cifnif ? { dni: f.cifnif } : { firstName: nombre, lastName: apellidos, birthDate: nac },
+        where: nifCanon(f.cifnif) ? { dni: nifCanon(f.cifnif) } : { firstName: nombre, lastName: apellidos, birthDate: nac },
         transaction: t,
       });
       if (yaEsta) { cuenta.pacientesYa++; continue; }
@@ -508,7 +620,7 @@ async function main() {
         firstName: nombre,
         lastName: apellidos,
         birthDate: nac,
-        dni: f.cifnif || null,
+        dni: nifCanon(f.cifnif),
         address: f.direccion || null,
         specialties: a.especialidades ?? [],
         mainTherapistId: terapeutaId,

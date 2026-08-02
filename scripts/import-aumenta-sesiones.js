@@ -36,6 +36,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { getTenantDb } from "../lib/db/tenantDb.js";
+import { etiquetaDe } from "./_organizate-historial.js";
 
 const args = process.argv.slice(2);
 const CONFIRM = args.includes("--confirm");
@@ -73,21 +74,42 @@ const EMPLEADOS = [
 
 const DOBLES = { 122: 121, 250: 249, 372: 371, 167: 166 };
 
-/** Parte el texto de la sesión en sus dos bloques. Ver cabecera. */
+/** El tercer bloque, el que se me pasó en la primera pasada. Ver `partir`. */
+const RE_TAREA = /Observaciones\s*\/\s*Tareas?\s*pendientes?/i;
+
+/**
+ * Parte el texto de la sesión en sus bloques. Ver cabecera.
+ *
+ * ⚠️ Hay TRES marcadores, no dos (visto el 02/08/2026 al auditar). Además de
+ * «Objetivo + Actividad» y «Desempeño» existe **«Observaciones / Tarea
+ * pendiente»**, y 520 sesiones usan ese y solo ese. Al no conocerlo, esas
+ * sesiones se guardaban con los dos campos vacíos: en la ficha del niño salían
+ * EN BLANCO aunque el texto ocupara tres mil caracteres.
+ *
+ * Ese bloque va a `observations.homeworkTasks`, que es literalmente el campo de
+ * «tareas para casa» del modelo. No a `activities`: son cosas distintas y la
+ * ficha las enseña por separado.
+ */
 function partir(txt) {
   const iObj = txt.search(/Objetivo\s*\+\s*Actividad/i);
   const iDes = txt.search(/Desempe[ñn]o/i);
-  let actividades = null, desempeno = null;
+  const iTar = txt.search(RE_TAREA);
 
-  if (iObj >= 0) {
-    const desde = iObj + txt.slice(iObj).match(/Objetivo\s*\+\s*Actividad/i)[0].length;
-    actividades = cap(iDes > iObj ? txt.slice(desde, iDes) : txt.slice(desde));
-  }
-  if (iDes >= 0) {
-    const desde = iDes + txt.slice(iDes).match(/Desempe[ñn]o/i)[0].length;
-    desempeno = cap(txt.slice(desde));
-  }
-  return { actividades: actividades || null, desempeno: desempeno || null };
+  // Cada bloque llega hasta el siguiente marcador que aparezca DESPUÉS.
+  const siguiente = (desde) =>
+    [iObj, iDes, iTar].filter((i) => i > desde).sort((a, b) => a - b)[0] ?? txt.length;
+
+  const trozo = (i, re) => {
+    if (i < 0) return null;
+    const largo = txt.slice(i).match(re)[0].length;
+    return cap(txt.slice(i + largo, siguiente(i))) || null;
+  };
+
+  return {
+    actividades: trozo(iObj, /Objetivo\s*\+\s*Actividad/i),
+    desempeno: trozo(iDes, /Desempe[ñn]o/i),
+    tareas: trozo(iTar, RE_TAREA),
+  };
 }
 
 async function main() {
@@ -111,14 +133,17 @@ async function main() {
   const equipoPorNombre = new Map(equipo.map((e) => [norm(e.displayName), e.id]));
 
   const listas = [];
-  const n = { total: 0, sinFecha: 0, sinPaciente: 0, sinTerapeuta: 0, conDesempeno: 0, sinTexto: 0 };
+  const n = { total: 0, sinFecha: 0, sinPaciente: 0, sinTerapeuta: 0, conDesempeno: 0, conTareas: 0, sinTexto: 0 };
 
   for (const h of historiales) {
     const src = srcPorId.get(DOBLES[Number(h.id_pac)] ?? Number(h.id_pac));
     const paciente = src ? porNombre.get(norm(`${src.nombre} ${src.apellidos}`)) : null;
 
     for (const e of h.entradas ?? []) {
-      if (!/\bSesi[óo]n\b/i.test(e.txt)) continue;
+      // Por ETIQUETA, no por «que salga la palabra sesión». Ver la cabecera de
+      // `_organizate-historial.js`: el filtro por palabra metía aquí 752 actas
+      // de coordinación, citas y adjuntos, que quedaban como sesiones en blanco.
+      if (etiquetaDe(e.txt) !== "Sesión") continue;
       n.total++;
       if (!paciente) { n.sinPaciente++; continue; }
 
@@ -141,11 +166,12 @@ async function main() {
       const therapistId = destino ? (equipoPorNombre.get(norm(destino)) ?? null) : null;
       if (!therapistId) n.sinTerapeuta++;
 
-      const { actividades, desempeno } = partir(e.txt);
+      const { actividades, desempeno, tareas } = partir(e.txt);
       if (desempeno) n.conDesempeno++;
-      if (!actividades && !desempeno) n.sinTexto++;
+      if (tareas) n.conTareas++;
+      if (!actividades && !desempeno && !tareas) n.sinTexto++;
 
-      listas.push({ paciente, therapistId, fecha, hora: fm[3] ?? null, actividades, desempeno, original: e.txt });
+      listas.push({ paciente, therapistId, fecha, hora: fm[3] ?? null, actividades, desempeno, tareas, original: e.txt });
     }
   }
 
@@ -156,6 +182,7 @@ async function main() {
   console.log(`  Sin fecha reconocible    ${String(n.sinFecha).padStart(6)}`);
   console.log(`  Sin terapeuta            ${String(n.sinTerapeuta).padStart(6)}   baja o cuenta que no es persona`);
   console.log(`  Con bloque «Desempeño»   ${String(n.conDesempeno).padStart(6)}`);
+  console.log(`  Con «Tarea pendiente»    ${String(n.conTareas).padStart(6)}   va a tareas para casa`);
   console.log(`  Sin texto aprovechable   ${String(n.sinTexto).padStart(6)}   se guarda igual el original\n`);
   if (listas.length) {
     const f = listas.map((x) => x.fecha).sort();
@@ -173,15 +200,20 @@ async function main() {
   let creadas = 0, yaEstaban = 0;
 
   await sequelize.transaction(async (t) => {
-    // Idempotencia por (paciente, fecha, primeros caracteres del texto): una
+    // Idempotencia por (paciente, fecha, principio del TEXTO ORIGINAL): una
     // terapeuta puede escribir DOS sesiones el mismo día para el mismo niño.
+    //
+    // La clave usa el original y no `activities` a propósito: con `activities`,
+    // dos sesiones del mismo día cuyo texto no llevaba ese bloque daban las dos
+    // la misma clave («paciente|fecha|») y la segunda se descartaba como
+    // repetida. Se perdían 27 sesiones que no eran repetidas de nada.
     const yaHay = new Set(
-      (await m.ClinicSession.findAll({ attributes: ["patientId", "sessionDate", "activities"], transaction: t }))
-        .map((s) => `${s.patientId}|${s.sessionDate}|${String(s.activities ?? "").slice(0, 40)}`)
+      (await m.ClinicSession.findAll({ attributes: ["patientId", "sessionDate", "observations"], transaction: t }))
+        .map((s) => `${s.patientId}|${s.sessionDate}|${String(s.observations?.textoOriginal ?? "").slice(0, 80)}`)
     );
 
     for (const s of listas) {
-      const clave = `${s.paciente.id}|${s.fecha}|${String(s.actividades ?? "").slice(0, 40)}`;
+      const clave = `${s.paciente.id}|${s.fecha}|${String(s.original ?? "").slice(0, 80)}`;
       if (yaHay.has(clave)) { yaEstaban++; continue; }
       yaHay.add(clave);
 
@@ -200,6 +232,9 @@ async function main() {
         activities: s.actividades,
         performance: s.desempeno,
         observations: {
+          // «Observaciones / Tarea pendiente» de Organízate. Es el campo de
+          // tareas para casa del modelo, y la ficha ya lo pinta.
+          homeworkTasks: s.tareas ?? "",
           origen: "organizate",
           importadoEl: new Date().toISOString().slice(0, 10),
           // El original entero, para que nada dependa de que el parseo sea

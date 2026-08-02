@@ -49,10 +49,18 @@ export function defineExternalContact(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
-      // Lo único obligatorio. Un contacto sin nombre no sirve para nada.
+      // ⚠️ Dejó de ser obligatorio el 02/08/2026, al traer las actas de
+      // Organízate. Allí los asistentes se escribían a mano y muchas veces solo
+      // consta uno de los dos datos: «Orientadora Lidia», pero también «Tutora»
+      // a secas o «Blanca» a secas.
+      //
+      // Rodrigo lo decidió así: entra igual, con el hueco que falte en blanco.
+      // Saber que en esa reunión estuvo la tutora del cole vale, aunque nadie
+      // apuntara su nombre, y alguien puede completarlo después. Lo que NO se
+      // admite es un contacto sin nombre Y sin papel: eso no es nadie.
       name: {
         type: DataTypes.STRING(200),
-        allowNull: false,
+        allowNull: true,
       },
       // Texto libre: «Psicóloga del cole», «Orientadora instituto», «PT»…
       role: {

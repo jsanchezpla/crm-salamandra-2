@@ -11,7 +11,9 @@
  * busca después: «¿qué hablamos con el colegio de este niño?».
  *
  * `createdById` no se manda: lo resuelve el servidor con el usuario de la
- * sesión. La pantalla no tiene por qué saber ids de fichas de equipo.
+ * sesión. La pantalla no tiene por qué saber ids de fichas de equipo. Sí hay un
+ * campo de NOMBRE libre («La registró»), para la reunión que llevó alguien sin
+ * ficha de equipo; si se deja vacío manda el usuario de la sesión.
  */
 
 import { useEffect, useState } from "react";
@@ -39,6 +41,8 @@ const VACIO = {
   topics: "",
   agreements: "",
   nextActions: "",
+  // Vacío = lo registra quien está usando el CRM. Ver el campo en el formulario.
+  createdByName: "",
 };
 
 export default function NuevaCoordinacionModal({ patientId = null, patientName = null, onClose, onCreada }) {
@@ -194,6 +198,19 @@ export default function NuevaCoordinacionModal({ patientId = null, patientName =
             <div>
               <label className={label}>Próximos pasos</label>
               <textarea rows={2} className={input} value={form.nextActions} onChange={(e) => set("nextActions", e.target.value)} />
+            </div>
+            {/* Quién la registró, en texto libre. Normalmente NO hace falta: el
+                servidor pone al usuario de la sesión. Está para la reunión que
+                llevó alguien sin ficha de equipo —un sustituto, un profesional
+                de fuera— y para las actas traídas de otro programa. */}
+            <div>
+              <label className={label}>La registró (opcional)</label>
+              <input
+                className={input}
+                placeholder="Se pone tu nombre si lo dejas vacío"
+                value={form.createdByName}
+                onChange={(e) => set("createdByName", e.target.value)}
+              />
             </div>
           </div>
 

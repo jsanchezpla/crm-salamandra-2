@@ -75,8 +75,14 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   // no tiene por qué saber el id de TeamMember de quien está usando el CRM. Si no
   // viene, se resuelve del usuario de la sesión.
   const createdById = body.createdById || (await resolveCurrentTeamMemberId(request, ctx.tenantModels));
-  if (!createdById) {
-    return error("No sabemos quién registra la coordinación: tu usuario no está enlazado a una ficha de equipo", 422);
+  // Nombre suelto para cuando no hay ficha de equipo a la que apuntar: alguien
+  // que ya no está, un profesional de fuera, o un acta traída de otro programa.
+  // Antes esto era un 422 y no se podía registrar la reunión de ninguna manera.
+  const createdByName = typeof body.createdByName === "string" && body.createdByName.trim()
+    ? body.createdByName.trim().slice(0, 200)
+    : null;
+  if (!createdById && !createdByName) {
+    return error("Falta quién registra la coordinación: elige a alguien del equipo o escribe su nombre", 422);
   }
   const payload = {
     coordinationType: body.coordinationType,
@@ -86,7 +92,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     agreements: toArr(body.agreements),
     nextActions: toArr(body.nextActions),
     relatedPatientId: body.relatedPatientId || null,
-    createdById,
+    createdById: createdById || null,
+    createdByName,
     // Interna (entre el propio equipo) o externa (colegio, psiquiatra…). Con
     // externa, `externalEntity` dice con quién: es lo que se busca luego.
     scope: SCOPES.includes(body.scope) ? body.scope : null,
