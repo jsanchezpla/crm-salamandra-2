@@ -34,6 +34,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { getTenantDb } from "../lib/db/tenantDb.js";
+import validator from "validator";
 import { normalizeGuardians } from "../lib/clients/guardians.js";
 
 const args = process.argv.slice(2);
@@ -43,6 +44,28 @@ const DATOS = (args.includes("--datos") ? args[args.indexOf("--datos") + 1] : nu
 
 const norm = (s) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toUpperCase();
 const cap = (s) => String(s ?? "").trim();
+
+/**
+ * Correo válido, o null.
+ *
+ * En Organízate hay 5 mal tecleados: «no facilitado», un espacio en medio del
+ * nombre, un dominio duplicado… Se DESCARTAN en vez de arreglarlos a ojo:
+ * adivinar dónde iba el espacio de «silvia casco garcia@gmail.com» es inventarse
+ * la dirección de una familia. Se listan al final para corregirlos a mano.
+ */
+const emailsMalos = [];
+function emailValido(v, quien) {
+  // Un punto FINAL sí se quita: «bonacasa13@gmail.com.» solo se puede leer de
+  // una manera. No es adivinar, es limpiar.
+  const e = cap(v).replace(/\.+$/, "");
+  if (!e) return null;
+  // Se usa el MISMO validador que Sequelize (`isEmail` de validator.js). Con un
+  // regex propio, más laxo, el script daba por bueno un correo que el modelo
+  // rechazaba después y abortaba la transacción entera a mitad de importación.
+  if (validator.isEmail(e)) return e;
+  emailsMalos.push(`${quien}: ${cap(v)}`);
+  return null;
+}
 
 /**
  * Organízate → plantilla real del CRM. A mano y no por parecido, porque los
@@ -128,12 +151,18 @@ function analizarHistorial(historiales) {
       for (const [re, k] of ESP) if (re.test(cola)) { esps.add(k); break; }
       porTera[mejor] = (porTera[mejor] ?? 0) + 1;
     }
+    // ¿Tiene el contrato del centro firmado? En Organízate consta como un
+    // FICHERO en el historial ("Contrato AARON RODRÍGUEZ (firmado…)").
+    const contrato = (h.entradas ?? []).some((e) =>
+      /CONTRATO|PRESTACION DE SERVICIOS|PRESTACIÓN DE SERVICIOS/i.test(e.txt)
+    );
     const orden = Object.entries(porTera).sort((a, b) => b[1] - a[1]);
     salida.set(h.id_pac, {
       terapeutaOrg: orden[0]?.[0] ?? null,
       citas: orden[0]?.[1] ?? 0,
       especialidades: [...esps].filter((x) => x !== "taller_hhss"),
       taller: esps.has("taller_hhss"),
+      contrato,
     });
   }
   return salida;
@@ -156,20 +185,59 @@ function mismaPersona(a, b) {
 }
 
 /** Añade un tutor a la lista, fusionando si ya está con el nombre corto. */
-function addTutor(lista, { name, relationship, phone }) {
+function addTutor(lista, { name, relationship, phone, dni, email }) {
   const n = cap(name);
   if (!n) return;
   const i = lista.findIndex((x) => mismaPersona(x.name, n));
-  if (i === -1) { lista.push({ name: n, relationship: relationship || null, phone: phone || null }); return; }
+  if (i === -1) {
+    lista.push({ name: n, relationship: relationship || null, phone: phone || null, dni: dni || null, email: email || null });
+    return;
+  }
   // Ya está: nos quedamos con el nombre MÁS LARGO y rellenamos lo que falte.
   const ya = lista[i];
   if (norm(n).length > norm(ya.name).length) ya.name = n;
   ya.relationship = ya.relationship || relationship || null;
   ya.phone = ya.phone || phone || null;
+  ya.dni = ya.dni || dni || null;
+  ya.email = ya.email || email || null;
 }
 
-/** Tutores de una ficha: los teléfonos con su parentesco, más el pagador. */
+/**
+ * Tutores de una ficha.
+ *
+ * ⚠️ CORREGIDO el 02/08/2026. Al principio esto reconstruía los tutores a partir
+ * del campo de contacto suelto (`ref_t3`/`tlf3`) y del nombre del pagador,
+ * IGNORANDO que la extracción del sprint 1 ya traía `ficha.guardians` bien
+ * estructurado: nombre, DNI, teléfono, email y parentesco, con las mismas claves
+ * que usa el CRM.
+ *
+ * El resultado de ese error: 1.121 tutores en vez de 1.897, solo 126 familias
+ * con dos progenitores en vez de 887, y CERO emails — que en la práctica
+ * significa que ninguna familia podía entrar al portal, porque el portal
+ * identifica por correo. También explica los tutores duplicados que hubo que
+ * "arreglar": no era un problema de los datos, era leer el campo equivocado.
+ *
+ * Ahora se usa `ficha.guardians` y solo se cae al método viejo si no lo trae.
+ */
 function tutoresDe(ficha, pagador) {
+  const estructurados = Array.isArray(ficha.guardians) ? ficha.guardians : [];
+  if (estructurados.length) {
+    const t = [];
+    for (const g of estructurados) {
+      if (!cap(g.nombre)) continue;
+      t.push({
+        name: cap(g.nombre),
+        relationship: g.relationship || null,
+        phone: cap(g.telefono) || null,
+        dni: cap(g.dni) || null,
+        email: emailValido(g.email, cap(g.nombre)),
+      });
+    }
+    // El pagador también es tutor si no estaba ya en la lista.
+    if (pagador?.nombre) addTutor(t, { name: pagador.nombre, relationship: null, phone: null });
+    if (t.length) return t;
+  }
+
   const t = [];
   const add = (name, relationship, phone) => addTutor(t, { name, relationship, phone });
   // El pagador es quien firma y recibe las facturas: va el primero.
@@ -327,6 +395,12 @@ async function main() {
     const clienteDe = new Map();   // clave de familia → id de Client
 
     const crearCliente = async ({ nombre, nif, direccion, localidad, tipo, tutores, separada, activo }) => {
+      // El correo y el teléfono del CLIENTE salen del tutor que paga (o del
+      // primero que los tenga). Sin correo la familia NO puede entrar al portal:
+      // el acceso se resuelve por email. Es lo que faltaba en la primera pasada.
+      const conContacto = (tutores ?? []).find((x) => mismaPersona(x.name, nombre) && (x.email || x.phone))
+        ?? (tutores ?? []).find((x) => x.email || x.phone)
+        ?? null;
       const where = nif ? { taxId: nif } : { name: nombre };
       let c = await m.Client.findOne({ where, transaction: t });
       if (c) { cuenta.clientesYa++; return c.id; }
@@ -336,10 +410,16 @@ async function main() {
         taxId: nif || null,
         fiscalAddress: direccion || null,
         fiscalCity: localidad || null,
+        // Se revalida aquí aunque los tutores ya vengan filtrados: el correo del
+        // cliente puede llegar por otra vía (el pagador, el método antiguo) y un
+        // solo correo torcido aborta la transacción entera.
+        email: emailValido(conContacto?.email, nombre),
+        phone: conContacto?.phone || null,
         status: activo === false ? "inactive" : "active",
         separated: separada ? true : null,
         guardians: normalizeGuardians((tutores ?? []).map((x) => ({
           name: x.name, relationship: rel(x.relationship), phone: x.phone,
+          dni: x.dni, email: x.email,
         }))),
         // De dónde viene cada ficha: sin esto, dentro de un año nadie sabría
         // qué se importó y qué se dio de alta a mano.
@@ -376,6 +456,9 @@ async function main() {
       if (DOBLES[idp]) continue;
 
       const a = analisis.get(idp) ?? {};
+      // Fecha de alta = su primera visita en Organízate.
+      const primera = /^\d{2}\/\d{2}\/\d{4}$/.test(f._primera_visita || "")
+        ? f._primera_visita.split("/").reverse().join("-") : null;
       const pag = pagadorDe.get(idp) ?? null;
       const dobles = Object.entries(DOBLES).filter(([, b]) => b === idp).map(([d]) => Number(d));
       const pagadores = [pag, ...dobles.map((d) => pagadorDe.get(d))].filter((p) => p?.nombre);
@@ -429,6 +512,11 @@ async function main() {
         address: f.direccion || null,
         specialties: a.especialidades ?? [],
         mainTherapistId: terapeutaId,
+        enrollmentDate: primera,
+        // Contrato firmado en PAPEL, que consta como fichero en su historial de
+        // Organízate. No tenemos el PDF —solo la constancia— así que se marca la
+        // casilla y no se inventa un documento que nadie podría abrir.
+        contractSigned: !!a.contrato,
         status: inactivo ? "paused" : "active",
         notes: inactivo ? "Importado de Organízate sin pagador ni actividad. Revisar." : null,
       }, { transaction: t });
@@ -443,6 +531,12 @@ async function main() {
       }
     }
   });
+
+  if (emailsMalos.length) {
+    console.log(`⚠ ${emailsMalos.length} correo(s) mal tecleados en Organízate, NO importados:`);
+    for (const e of emailsMalos) console.log(`    · ${e}`);
+    console.log("  Hay que corregirlos a mano en la ficha de la familia.\n");
+  }
 
   console.log("── ESCRITO ───────────────────────────────────────────────────\n");
   console.log(`  Clientes creados         ${String(cuenta.clientesNuevos).padStart(6)}   (${cuenta.clientesYa} ya existían)`);
