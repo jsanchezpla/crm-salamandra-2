@@ -49,14 +49,22 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   const where = { teamMemberId: null };
   if (!incluirPasadas) where.scheduledAt = { [Op.gte]: new Date() };
 
+  // El include de `patient` SOLO si el tenant tiene ese módulo y el modelo
+  // existe. En tenants de schema parcial —nutri_laura, sin ir más lejos— la
+  // tabla `patients` no existe, y unir contra una relación inexistente no
+  // devuelve vacío: revienta con 500 y tumba la pantalla entera. Es el mismo
+  // cuidado que ya tiene `bookingIncludes` en bookings/[id]/route.js.
+  const conPacientes = (hasModule("pacientes") || hasModule("clinica")) && !!Patient;
+  const includes = [{ model: EventType, as: "eventType", attributes: ["id", "name"] }];
+  if (conPacientes) {
+    includes.push({ model: Patient, as: "patient", attributes: ["id", "firstName", "lastName"] });
+  }
+
   const citas = await Booking.findAll({
     where,
     order: [["scheduledAt", "ASC"]],
     limit: Math.min(parseInt(searchParams.get("limit") ?? "200"), 500),
-    include: [
-      { model: EventType, as: "eventType", attributes: ["id", "name"] },
-      { model: Patient, as: "patient", attributes: ["id", "firstName", "lastName"] },
-    ],
+    include: includes,
   });
 
   const filas = citas.map((b) => {
