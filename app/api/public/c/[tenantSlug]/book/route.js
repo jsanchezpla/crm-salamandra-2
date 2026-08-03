@@ -2,8 +2,14 @@ import { Op } from "sequelize";
 import { puntuarSpam } from "../../../../../../lib/formularios/antispam.js";
 import { withPublicTenant } from "../../../../../../lib/tenant/publicTenantContext.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
-import { created, error, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
-import { sendEmail } from "../../../../../../lib/email/resendClient.js";
+import {
+  created,
+  error,
+  errorConDatos,
+  notFound,
+  serverError,
+} from "../../../../../../lib/utils/apiResponse.js";
+import { sendEmail, envioRealizado } from "../../../../../../lib/email/resendClient.js";
 import { bookingReceivedTemplate } from "../../../../../../lib/email/templates/citas/bookingReceived.js";
 import { bookingConfirmedTemplate } from "../../../../../../lib/email/templates/citas/bookingConfirmed.js";
 import {
@@ -33,6 +39,12 @@ import { pruebaDeConsentimiento } from "../../../../../../lib/citas/consentimien
 // de seguridad, así que se usa el que ya existe.
 import { getClientIp } from "../../../../../../lib/utils/rateLimit.js";
 import { meetUrlInicial } from "../../../../../../lib/citas/videollamada.js";
+import {
+  exigeFormularioAceptado,
+  urlDelFormulario,
+  estadoDeAdmision,
+  mensajeDePuerta,
+} from "../../../../../../lib/citas/puertaFormulario.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
 import {
   getMadridDayOfWeek,
@@ -150,17 +162,40 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     // otro email y la cita aparece luego en su "Mis citas". Sin bearer válido →
     // flujo público normal (email del body).
     let clientEmail = normalizeEmail(body.clientEmail);
+    // `identificado` = el email viene de una sesión verificada del portal, no
+    // de lo que alguien haya tecleado. La puerta de admisión lo necesita para
+    // decidir cuánto puede contar sin convertirse en un buscador de pacientes.
+    let identificado = false;
     try {
       const bearer = readBearer(request);
       if (bearer) {
         const session = await verifyPortalSession(bearer, slug);
-        if (session?.email) clientEmail = normalizeEmail(session.email);
+        if (session?.email) {
+          clientEmail = normalizeEmail(session.email);
+          identificado = true;
+        }
       }
     } catch {
       // bearer inválido/caducado → seguimos con el email del body (no rompemos
       // la reserva pública); se valida justo debajo.
     }
     if (!clientEmail || !isValidEmail(clientEmail)) return error("clientEmail inválido", 422);
+
+    // Puerta de admisión: sin formulario aceptado no hay cita. Va ANTES de
+    // mirar huecos, festivos o tarjetas — lo primero, porque es lo que decide
+    // si esta persona pinta algo en la agenda. Se comprueba también el módulo:
+    // encender la puerta sin bandeja de formularios dejaría fuera a todos.
+    if (exigeFormularioAceptado(tenant) && hasModule("formularios")) {
+      const estado = await estadoDeAdmision(tenantModels.FormSubmission, clientEmail);
+      if (estado !== "aceptada") {
+        const aviso = mensajeDePuerta(estado, { identificado, nombre: tenant.name });
+        return errorConDatos(aviso.texto, 403, {
+          codigo: aviso.codigo,
+          titulo: aviso.titulo,
+          urlFormulario: aviso.mostrarEnlace ? urlDelFormulario(tenant) : null,
+        });
+      }
+    }
 
     const clientPhone = normalizeString(body.clientPhone);
     if (!clientPhone) return error("clientPhone es obligatorio", 422);
@@ -596,7 +631,7 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
       // BYOK: el correo de "cita recibida" sale de la cuenta del propio
       // negocio, no de la de Salamandra.
       const cfgResend = getTenantResendConfig({ tenant });
-      await sendEmail({
+      const envio = await sendEmail({
         to: row.clientEmail,
         subject: tpl.subject,
         html: tpl.html,
@@ -605,6 +640,7 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
         replyTo: cfgResend.replyTo || undefined,
         apiKey: cfgResend.apiKey || undefined,
       });
+      envioRealizado(envio, `citas:book ${row.id}`);
     } catch (mailErr) {
       process.stderr.write(`[citas:book] email fail (autoConfirm=${autoConfirm}): ${mailErr.message}\n`);
     }

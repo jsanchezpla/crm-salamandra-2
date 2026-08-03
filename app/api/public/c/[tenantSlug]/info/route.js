@@ -1,5 +1,9 @@
 import { withPublicTenant } from "../../../../../../lib/tenant/publicTenantContext.js";
 import { ok, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
+import {
+  exigeFormularioAceptado,
+  urlDelFormulario,
+} from "../../../../../../lib/citas/puertaFormulario.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/info
@@ -24,9 +28,19 @@ export const GET = withPublicTenant(async (_request, _ctx, { tenant, brand, hasM
         }
       : { required: false };
 
+    // Puerta de admisión (ver lib/citas/puertaFormulario.js). Se anuncia por
+    // delante para que la persona vea el aviso ANTES de elegir hueco y rellenar
+    // sus datos, en vez de chocarse al enviar. Aquí solo va que la puerta
+    // existe y a dónde manda: nunca el estado de nadie —este endpoint es
+    // público y anónimo—, que se resuelve por email al reservar.
+    const admision = exigeFormularioAceptado(tenant)
+      ? { requerida: true, urlFormulario: urlDelFormulario(tenant) }
+      : { requerida: false };
+
     return ok({
       name: tenant.name,
       slug: tenant.slug,
+      admision,
       brand: {
         primaryColor: brand.primaryColor,
         secondaryColor: brand.secondaryColor,

@@ -58,6 +58,9 @@ export default function WidgetBookPage() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
+  // Respuesta de la puerta de admisión cuando esta persona todavía no puede
+  // reservar (ver lib/citas/puertaFormulario.js).
+  const [puerta, setPuerta] = useState(null);
   const [success, setSuccess] = useState(null);
   // Paso de tarjeta: cuando está puesto, se pinta el formulario de Stripe en
   // lugar del formulario de datos. Ya no se sale del iframe a ninguna parte.
@@ -158,6 +161,14 @@ export default function WidgetBookPage() {
         // Tiene precio pero el profesional no ha terminado de configurar el cobro.
         throw new Error(j?.error || "El pago online no está disponible ahora mismo.");
       }
+      // Puerta de admisión: no ha pasado por el formulario, o está sin revisar.
+      // No es un error suyo, así que no se pinta en rojo con el resto: se le
+      // enseña qué le falta y por dónde. Sus datos siguen en el formulario por
+      // si vuelve.
+      if (res.status === 403 && j?.codigo) {
+        setPuerta({ titulo: j.titulo, texto: j.error, urlFormulario: j.urlFormulario ?? null });
+        return;
+      }
       if (!res.ok || !j.ok) {
         throw new Error(j?.error || "No se pudo confirmar la cita");
       }
@@ -255,6 +266,52 @@ export default function WidgetBookPage() {
       );
     }
     if (!auth.allowed) return <AuthGateScreen info={info} />;
+  }
+
+  // ── Puerta de admisión ───────────────────────────────────────────────────
+  // Todavía no puede reservar: le falta el formulario, o está sin revisar. Se
+  // le enseña qué hacer, no un error. «Volver» conserva lo que había escrito.
+  if (puerta) {
+    return (
+      <div className="min-h-screen bg-[var(--widget-bg)] px-4 py-10" style={brandStyle}>
+        <div className="max-w-md mx-auto">
+          <div className="rounded-lg border border-[var(--widget-border)] bg-[var(--widget-card)] p-6">
+            <p className="text-[11px] tracking-[0.14em] uppercase text-[var(--widget-text-faint)] mb-2">
+              Un paso antes
+            </p>
+            <h1
+              className="text-[26px] leading-tight text-[var(--widget-text)] mb-3"
+              style={{ fontFamily: "var(--widget-font-display)", fontWeight: 500 }}
+            >
+              {puerta.titulo}
+            </h1>
+            <p className="text-[13px] leading-relaxed text-[var(--widget-text-muted)] mb-6">
+              {puerta.texto}
+            </p>
+
+            {puerta.urlFormulario && (
+              <a
+                href={puerta.urlFormulario}
+                target="_top"
+                rel="noopener"
+                className="inline-flex w-full items-center justify-center gap-2 px-5 py-3 text-sm font-semibold rounded-lg text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
+              >
+                Ir al formulario
+                <span aria-hidden="true">→</span>
+              </a>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setPuerta(null)}
+              className="mt-3 w-full px-5 py-3 text-sm rounded-lg border border-[var(--widget-border)] text-[var(--widget-text-muted)] hover:text-[var(--widget-text)] transition"
+            >
+              Volver
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // ── Solicitud enviada (con tarjeta retenida) ─────────────────────────────
@@ -548,6 +605,29 @@ export default function WidgetBookPage() {
             {submitError && (
               <div className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
                 {submitError}
+              </div>
+            )}
+
+            {/* Aviso por delante de la puerta de admisión: se dice AQUÍ, junto
+                al email, y no solo al enviar, para que quien no haya pasado por
+                el formulario no rellene la reserva entera para nada. */}
+            {info?.admision?.requerida && (
+              <div className="text-xs leading-relaxed text-[var(--widget-text-muted)] bg-[var(--widget-bg)] border border-[var(--widget-border)] rounded-md px-3 py-2.5">
+                Para dar cita hace falta haber completado antes el formulario de primer contacto
+                con el mismo correo que pongas aquí.
+                {info.admision.urlFormulario && (
+                  <>
+                    {" "}
+                    <a
+                      href={info.admision.urlFormulario}
+                      target="_top"
+                      rel="noopener"
+                      className="font-semibold text-[var(--brand-primary,var(--widget-button))] hover:underline"
+                    >
+                      Completar el formulario
+                    </a>
+                  </>
+                )}
               </div>
             )}
 
