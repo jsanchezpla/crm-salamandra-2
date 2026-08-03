@@ -135,9 +135,7 @@ export default function CitasTiposPage() {
     if (form.modalities.includes("phone") && !form.phoneNumber.trim()) {
       setFormError("Teléfono obligatorio si aceptas modalidad telefónica"); return;
     }
-    if (form.modalities.includes("online") && !form.meetUrl.trim()) {
-      setFormError("URL de reunión obligatoria si aceptas modalidad online"); return;
-    }
+    // La sala fija NO se exige: ver el motivo en validateModalityFields.
 
     const payload = {
       name: form.name.trim(),
@@ -490,7 +488,9 @@ export default function CitasTiposPage() {
               )}
               {form.modalities.includes("online") && (
                 <div>
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">URL de reunión</label>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">
+                    Sala fija de videollamada <span className="text-neutral-400">(opcional)</span>
+                  </label>
                   <input
                     type="url"
                     value={form.meetUrl}
@@ -498,6 +498,11 @@ export default function CitasTiposPage() {
                     placeholder="https://meet.google.com/..."
                     className={inputCls}
                   />
+                  <p className="text-[10px] text-neutral-400 mt-1 leading-snug">
+                    Solo si tienes una sala permanente (Meet, Zoom…) y quieres que las citas online la
+                    hereden solas. Déjalo vacío para pegar un enlace distinto en cada cita, que es lo
+                    normal. Se usa únicamente con el modo automático de Configuración → Citas.
+                  </p>
                 </div>
               )}
 
