@@ -10,7 +10,152 @@ sin auth + endpoints admin bajo `/api/citas/*`.
 Tenants que lo usan hoy: `nutri_laura` (única con flujo activo en
 producción tras Fase 1).
 
+---
 
+## Puerta de admisión: quién puede reservar (2026-08-03)
+
+La agenda pública no miraba la bandeja de solicitudes: **cualquiera con el
+enlace del widget reservaba**, hubiera pasado o no por el formulario de primer
+contacto. Con retención de tarjeta de por medio es peor, porque se le bloquea
+dinero a alguien a quien la profesional no ha admitido.
+
+`lib/citas/puertaFormulario.js` decide, y lo comparten `/book` (que corta) y
+`/info` (que lo anuncia por delante, para que nadie rellene la reserva entera
+para nada).
+
+| Ajuste | Dónde | Por defecto |
+| --- | --- | --- |
+| `settings.citas.formularioObligatorio` | Configuración → Citas | `false` |
+| `settings.citas.formularioUrl` | ídem (el formulario vive en la web del cliente) | — |
+
+Reglas, decididas por el usuario: se aplica **a todos** —también a quien ya era
+paciente, que está avisado— y **a todos los tipos de cita**. No es una puerta
+cerrada: se enseña el aviso con el enlace.
+
+Estados que devuelve `estadoDeAdmision`: `aceptada` (pasa), `pendiente`,
+`descartada`, `sin_enviar` y `sin_bandeja`. Detalles que se rompen solos y por
+eso están fijados en `_smoke-puerta-formulario.mjs`:
+
+- **Una aceptada manda sobre el resto.** Quien fue admitido y luego manda otra
+  solicitud no vuelve a la cola.
+- **El correo se cruza con `iLike`**: nadie escribe su email dos veces igual.
+- **A un anónimo no se le dice si un correo está pendiente o no existe.** Sería
+  un buscador de pacientes de la consulta. La diferencia solo se cuenta a quien
+  llega con sesión verificada del portal.
+- **Tener el módulo no garantiza tener la tabla** (en local `nutri_laura` tenía
+  `formularios` sin `form_submissions`). Si no se puede consultar la bandeja se
+  cierra, no se abre, y lo canta `scripts/comprobar-citas.js`.
+- El enlace viaja en el **cuerpo** de la respuesta, no en `details`, que
+  `apiResponse.error()` borra en producción. Para eso está `errorConDatos`.
+
+⚠️ Con la puerta encendida en local, **todas las demás smokes de citas fallan a
+la vez**: reservan con correos de prueba que nunca han pasado por el formulario.
+
+---
+
+## Decirle algo al cliente: las tres vías (2026-08-03)
+
+El CRM sabía avisar de lo que le pasa a **una cita**, y solo de algunas cosas.
+Repaso de qué había y qué falta ya no:
+
+| Qué pasa | Correo | En el portal |
+| --- | --- | --- |
+| Se **cancela** la cita | ✅ ya existía | ✅ el estado pasa a «Cancelada» |
+| Se **mueve** de día u hora | ➕ **nuevo** (`bookingRescheduled`) | ✅ la ficha enseña la fecha nueva |
+| Cualquier **aviso** («tráete los análisis») | ➕ **nuevo** (`avisoCliente`) | ➕ **nuevo**: sección «Avisos» |
+
+### El cambio de hora no avisaba a nadie
+
+Era el hueco más silencioso: cancelar sí escribía, cambiar la hora no. La cita
+aparecía otro día en el portal y el paciente solo se enteraba si entraba a
+mirar. **La gente se presenta el día que le dijeron, no el que pone en una
+pantalla que no ha abierto.** El correo enseña las DOS fechas, porque decir solo
+la nueva obliga a recordar cuál era la anterior. Admite `motivoCambio` opcional.
+
+### Avisos del centro (`client_notices`)
+
+Para todo lo que no es un cambio de la cita. Un aviso hace dos cosas: **sale por
+correo Y queda publicado en el portal**. Lo segundo importa más de lo que
+parece — el correo se pierde entre otros cincuenta y el portal sigue ahí en
+enero.
+
+- **La clave es el EMAIL, no `clientId`.** Es como identifica el portal (sesión
+  SSO de WordPress), igual que `citas-portal/bookings`. Colgarlo de la ficha lo
+  haría invisible para quien reserva por la web sin tener ficha, y los
+  `client_id` son nullable y a menudo están vacíos.
+- **Se guarda aunque el correo no salga.** `emailStatus` registra qué pasó
+  (`enviado` / `sin_configurar` / `sin_consentimiento` / `error`) y el panel se
+  lo dice a quien lo escribió: «publicado en su área privada, pero NO ha salido
+  por email». El aviso vale igual, porque el portal lo enseña.
+- **El portal solo devuelve lo suyo**: el `where` va siempre atado al email del
+  token, nunca a un id que venga del cliente. Marcar el aviso de otro no hace
+  nada aunque se sepa su id, y no se re-marca lo ya leído.
+- Respeta las preferencias de comunicación de la familia (`citaPuedeAvisar`).
+- Auditado con **resumen**, nunca el texto: lo que se le escribe a un paciente
+  puede llevar datos de salud y `master.audit_log` lo comparten todos los
+  clientes.
+
+---
+
+## «Guardar y enviar» no puede mentir (2026-08-03)
+
+`sendEmail` devuelve `{ok: true, dryRun: true}` cuando no hay clave de Resend:
+no lanza excepción **a propósito**, para que en desarrollo no se caiga media
+aplicación por una clave que falta. El efecto secundario es que un
+`await sendEmail(...)` a secas parece haber funcionado siempre.
+
+Con eso, el panel decía **«✓ Enlace enviado por email al cliente»** con el buzón
+del paciente vacío — y como en producción no hay ninguna clave de Resend
+configurada, eso es lo que habría pasado el primer día. El mensaje alternativo
+además sugería una causa falsa: «revisa que la cita sea online y no esté
+cancelada».
+
+`envioRealizado(resultado, etiqueta)` en `lib/email/resendClient.js` interpreta
+la respuesta y devuelve `{salio, motivo}` (`ok` | `sin_configurar` | `error`),
+además de dejar una línea en el log cuando no sale. Lo usan los seis envíos de
+citas; el del enlace de videollamada devuelve además `emailMotivo` al panel,
+que ya distingue entre *falta configurar el correo*, *el cliente no quiere
+avisos* y *el envío falló*.
+
+**El enlace se guarda siempre**, salga el correo o no: son dos cosas distintas y
+la que importa es que quede en la cita.
+
+---
+
+## La sala fija es opcional (2026-08-03)
+
+`validateModalityFields` exigía `meetUrl` para cualquier tipo de cita con
+modalidad online. Contradecía al propio módulo: el modo por defecto —y el
+recomendado— es el **manual**, en el que el enlace se crea cuando toca y se pega
+en esa cita. Pedir por adelantado una sala permanente que casi nadie tiene solo
+conseguía que se escribiera cualquier cosa para poder guardar: así aparecieron
+en `nutri_laura` dos enlaces de mentira que habrían llegado a pacientes reales
+el día que alguien pasara a modo automático.
+
+**Un campo obligatorio que el sistema después ignora no protege de nada:
+fabrica datos falsos.** `location` (presencial) y `phoneNumber` (teléfono)
+siguen siendo obligatorios, porque ahí no hay un segundo momento para darlos —
+quien reserva presencial necesita saber adónde ir desde ya.
+
+---
+
+## ¿Le funcionan las citas a este cliente? (`scripts/comprobar-citas.js`)
+
+Solo lectura. Que las citas funcionen depende de ocho cosas repartidas entre BD,
+ajustes y claves de terceros, y **casi todas fallan en silencio**: sin clave de
+Resend el CRM no da error, se pone en dry-run; sin `price` no se pide tarjeta;
+con el modo de videollamada en automático y un enlace de ejemplo, el paciente
+recibe una sala que no existe. El script pregunta por todo a la vez y dice qué
+falta y **quién lo pone** (clave del cliente o cosa nuestra).
+
+```bash
+docker exec crm-salamandra-app-1 node scripts/comprobar-citas.js nutri_laura
+```
+
+Sin slug recorre todos los tenants activos con el módulo. Devuelve código 1 si
+algo falta, así que sirve de comprobación tras cada despliegue que toque citas.
+
+---
 
 ## Informe de ocupación y ausencias (2026-07-27)
 
