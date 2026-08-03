@@ -14,9 +14,10 @@ import { logCitasAudit } from "../../../../../lib/citas/audit.js";
 import { findBookingOverlap } from "../../../../../lib/citas/booking.js";
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 import { veTodaLaAgenda } from "../../../../../lib/citas/visibilidad.js";
-import { sendEmail } from "../../../../../lib/email/resendClient.js";
+import { sendEmail, envioRealizado } from "../../../../../lib/email/resendClient.js";
 import { bookingMeetLinkTemplate } from "../../../../../lib/email/templates/citas/bookingMeetLink.js";
 import { bookingCancelledTemplate } from "../../../../../lib/email/templates/citas/bookingCancelled.js";
+import { bookingRescheduledTemplate } from "../../../../../lib/email/templates/citas/bookingRescheduled.js";
 import { getTenantResendConfig } from "../../../../../lib/outreach/resendConfig.js";
 import { reembolsarCitaSiProcede } from "../../../../../lib/citas/reembolsoCita.js";
 import { tieneRetencionPendiente } from "../../../../../lib/citas/cobroCita.js";
@@ -50,7 +51,7 @@ async function sendCancellationEmail({ tenant, tenantModels, booking, reason }) 
       reason: reason ?? null,
     });
     const resend = getTenantResendConfig({ tenant });
-    await sendEmail({
+    const envio = await sendEmail({
       to: booking.clientEmail,
       subject: tpl.subject,
       html: tpl.html,
@@ -60,8 +61,58 @@ async function sendCancellationEmail({ tenant, tenantModels, booking, reason }) 
       replyTo: resend.replyTo || undefined,
       apiKey: resend.apiKey || undefined,
     });
+    // Nadie ve esta respuesta, pero un aviso de cancelación que no sale tiene
+    // que dejar rastro en el log en vez de perderse.
+    envioRealizado(envio, `citas:cancelled ${booking.id}`);
   } catch (mailErr) {
     process.stderr.write(`[citas:cancelled] email fail: ${mailErr.message}\n`);
+  }
+}
+
+/**
+ * Aviso de que la cita se ha movido de día u hora.
+ *
+ * Mismas reglas que la cancelación: best-effort, solo con email, y solo hacia
+ * el FUTURO. Aquí «futuro» se mira sobre la fecha NUEVA: mover una cita vieja a
+ * la semana que viene sí hay que contarlo, y mover una futura al pasado
+ * (corregir un dato del histórico) no.
+ *
+ * Respeta además lo que la familia haya dicho sobre recibir correos, igual que
+ * el aviso del enlace de videollamada.
+ */
+async function sendRescheduledEmail({ tenant, tenantModels, booking, scheduledAtAnterior, reason }) {
+  try {
+    if (!booking.clientEmail) return;
+    if (new Date(booking.scheduledAt).getTime() <= Date.now()) return;
+    if (!(await citaPuedeAvisar(tenantModels, booking, "citasEmail"))) {
+      process.stdout.write(`[citas:reprogramada] ${booking.id}: la familia no quiere avisos por email\n`);
+      return;
+    }
+
+    const { EventType } = tenantModels;
+    const et = await EventType.findByPk(booking.eventTypeId, { attributes: ["name"] });
+    const tpl = bookingRescheduledTemplate({
+      tenantName: tenant.name,
+      brand: tenant.settings?.brand,
+      clientName: booking.clientName,
+      eventTypeName: et?.name ?? "tu cita",
+      scheduledAtAnterior,
+      scheduledAt: booking.scheduledAt,
+      reason: reason ?? null,
+    });
+    const resend = getTenantResendConfig({ tenant });
+    const envio = await sendEmail({
+      to: booking.clientEmail,
+      subject: tpl.subject,
+      html: tpl.html,
+      text: tpl.text,
+      from: resend.fromEmail || undefined,
+      replyTo: resend.replyTo || undefined,
+      apiKey: resend.apiKey || undefined,
+    });
+    envioRealizado(envio, `citas:reprogramada ${booking.id}`);
+  } catch (mailErr) {
+    process.stderr.write(`[citas:reprogramada] email fail: ${mailErr.message}\n`);
   }
 }
 
@@ -402,6 +453,25 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       }
     }
 
+    // Cambio de fecha/hora → avisar al paciente (03/08/2026).
+    //
+    // Antes no salía NADA: la cita cambiaba de día en el portal en silencio y el
+    // paciente solo se enteraba si entraba a mirar. La gente se presenta el día
+    // que le dijeron, no el que pone en una pantalla que no ha abierto.
+    //
+    // Solo si sigue en pie y no se ha cancelado en la misma llamada: una cita
+    // cancelada ya manda su propio correo, y dos avisos contradictorios son
+    // peor que ninguno.
+    if (cambiaHora && row.status !== "cancelled" && row.status !== "no_show") {
+      await sendRescheduledEmail({
+        tenant,
+        tenantModels,
+        booking: row,
+        scheduledAtAnterior: before.scheduledAt,
+        reason: typeof body.motivoCambio === "string" ? body.motivoCambio.trim() || null : null,
+      });
+    }
+
     // Transición meetUrl null→valor en cita CONFIRMADA + ONLINE: AuditLog +
     // email al cliente. Se exige 'confirmed' + 'online' para casar con el gate
     // del portal (clientBookingSerializer sólo revela el enlace en ese caso) y
@@ -421,6 +491,9 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
         ? row.status !== "cancelled" // reenviar sí, pero no de una cita anulada
         : (before.meetUrl == null || before.meetUrl === "") && row.status === "confirmed");
     let emailEnviado = false;
+    // Por qué no salió, para que la pantalla no invente la causa:
+    // "sin_configurar" | "sin_consentimiento" | "error" | null
+    let emailMotivo = null;
     let whatsappEnviado = false;
     let whatsappMotivo = null;
     if (meetLinkFilled) {
@@ -451,7 +524,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
         // Con las credenciales del tenant, como el resto de emails de citas
         // (antes este envío concreto usaba siempre las globales del CRM).
         const resendCfg = getTenantResendConfig({ tenant });
-        await sendEmail({
+        const envio = await sendEmail({
           to: row.clientEmail,
           subject: tpl.subject,
           html: tpl.html,
@@ -460,11 +533,18 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
           replyTo: resendCfg.replyTo || undefined,
           apiKey: resendCfg.apiKey || undefined,
         });
-        emailEnviado = true;
+        // Sin esto el panel decía "enviado" también cuando no había clave de
+        // correo y el envío se quedaba en simulacro: Laura pegaba el enlace,
+        // leía "✓ enviado" y el paciente no recibía nada.
+        const { salio, motivo } = envioRealizado(envio, `citas:meet-link ${row.id}`);
+        emailEnviado = salio;
+        if (!salio) emailMotivo = motivo;
       } catch (mailErr) {
         if (mailErr.message === "SIN_CONSENTIMIENTO_EMAIL") {
+          emailMotivo = "sin_consentimiento";
           process.stdout.write(`[citas:meet-link] ${row.id}: sin correo, la familia no quiere avisos por email\n`);
         } else {
+          emailMotivo = "error";
           process.stderr.write(`[citas:meet-link] email fail: ${mailErr.message}\n`);
         }
       }
@@ -481,8 +561,9 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     // Respuesta con eventType (para que el modal no pierda 'Servicio'/dirección)
     // y el profesional asignado (si el tenant tiene módulo team).
     await row.reload({ include: bookingIncludes(tenantModels, hasModule) });
-    // `emailEnviado` permite que el panel confirme "enviado" en vez de callar.
-    return ok({ ...row.toJSON(), emailEnviado, whatsappEnviado, whatsappMotivo });
+    // `emailEnviado` permite que el panel confirme "enviado" en vez de callar,
+    // y `emailMotivo` que diga POR QUÉ no salió cuando no salió.
+    return ok({ ...row.toJSON(), emailEnviado, emailMotivo, whatsappEnviado, whatsappMotivo });
   } catch (err) {
     return serverError(err);
   }

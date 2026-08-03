@@ -152,6 +152,10 @@ export const MODULES = {
     // de huecos de citas, pero su tabla base es team_members (por eso está
     // también en `team`).
     "migrate-team-member-hours",
+    // Avisos del centro al cliente (03/08/2026): salen por correo y quedan
+    // publicados en el portal. Cuelga de `citas` porque el portal donde se leen
+    // ES el de citas y la sesión que los autoriza es la suya.
+    "migrate-avisos-cliente",
   ],
 
   calendar: ["migrate-calendar-citas-fks"],

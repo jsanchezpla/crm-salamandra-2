@@ -148,6 +148,7 @@ export default function MiPerfilPage() {
   const { status, authFetch } = useCitasPortalSession(tenantSlug);
 
   const [data, setData] = useState(null); // { upcoming, history }
+  const [avisos, setAvisos] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
   const [dataError, setDataError] = useState(null);
 
@@ -198,6 +199,38 @@ export default function MiPerfilPage() {
     }
   }, [authFetch]);
 
+  /**
+   * Avisos del centro. Best-effort a propósito: si esto falla, el portal tiene
+   * que seguir enseñando las citas — es una sección más, no la pantalla.
+   */
+  const loadAvisos = useCallback(async () => {
+    try {
+      const res = await authFetch("/citas-portal/avisos", { cache: "no-store" });
+      if (!res.ok) return;
+      const j = await res.json();
+      setAvisos(j.data?.avisos ?? []);
+    } catch {
+      /* sin avisos que enseñar, el resto del portal sigue igual */
+    }
+  }, [authFetch]);
+
+  /** «Entendido»: se marca leído en el servidor y se pinta al momento. */
+  const marcarLeido = useCallback(
+    async (id) => {
+      setAvisos((prev) => prev.map((a) => (a.id === id ? { ...a, leido: true } : a)));
+      try {
+        await authFetch("/citas-portal/avisos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: [id] }),
+        });
+      } catch {
+        /* si no se pudo marcar, volverá a salir la próxima vez: es lo correcto */
+      }
+    },
+    [authFetch]
+  );
+
   const loadContrato = useCallback(async () => {
     try {
       const res = await authFetch("/citas-portal/contract", { cache: "no-store" });
@@ -223,10 +256,11 @@ export default function MiPerfilPage() {
   useEffect(() => {
     if (status === "ready") {
       loadBookings();
+      loadAvisos();
       loadContrato();
       loadComunicaciones();
     }
-  }, [status, loadBookings, loadContrato, loadComunicaciones]);
+  }, [status, loadBookings, loadAvisos, loadContrato, loadComunicaciones]);
 
   const brandStyle = useMemo(() => {
     if (!info?.brand) return {};
@@ -414,6 +448,58 @@ export default function MiPerfilPage() {
         )}
 
         <div className="space-y-10">
+          {/* ── Avisos del centro ──────────────────────────────────────────
+              Van los PRIMEROS y solo aparecen si hay alguno: una sección vacía
+              permanente enseña a no mirarla. Los no leídos van destacados y
+              arriba; los ya leídos se quedan debajo, apagados, porque poder
+              volver a un aviso de hace un mes es justo lo que el correo no
+              permite. */}
+          {avisos.length > 0 && (
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-3">
+                Avisos de {info?.name ?? "tu profesional"}
+              </div>
+              <div className="flex flex-col gap-3">
+                {[...avisos].sort((a, b) => Number(a.leido) - Number(b.leido)).map((a) => (
+                  <div
+                    key={a.id}
+                    className={`rounded-xl border p-4 ${
+                      a.leido
+                        ? "border-[var(--widget-border)] bg-[var(--widget-card)]"
+                        : "border-[var(--brand-primary,var(--widget-button))] bg-[var(--widget-card)] shadow-sm"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="min-w-0">
+                        <div className="text-[14px] font-medium text-[var(--widget-text)]">{a.titulo}</div>
+                        <div className="text-[11px] text-[var(--widget-text-faint)] mt-0.5">
+                          {fmtLong(a.creado)}
+                        </div>
+                      </div>
+                      {!a.leido && (
+                        <span className="shrink-0 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full text-white bg-[var(--brand-primary,var(--widget-button))]">
+                          Nuevo
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[13px] leading-relaxed text-[var(--widget-text-muted)] mt-2 whitespace-pre-line">
+                      {a.cuerpo}
+                    </p>
+                    {!a.leido && (
+                      <button
+                        type="button"
+                        onClick={() => marcarLeido(a.id)}
+                        className="mt-3 text-[12px] font-medium text-[var(--brand-primary,var(--widget-button))] hover:underline"
+                      >
+                        Entendido
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* ── Mis citas ── */}
           <div>
             <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-3">

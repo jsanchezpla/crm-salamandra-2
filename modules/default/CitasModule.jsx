@@ -231,6 +231,12 @@ export default function CitasModule() {
   const [detailMeet, setDetailMeet] = useState("");
   // Aviso efímero tras "Guardar y enviar" (enviado / solo guardado).
   const [meetAviso, setMeetAviso] = useState(null);
+  // Aviso libre al cliente (03/08): lo que no encaja en «se cambió tu cita».
+  const [avisoAbierto, setAvisoAbierto] = useState(false);
+  const [avisoTitulo, setAvisoTitulo] = useState("");
+  const [avisoCuerpo, setAvisoCuerpo] = useState("");
+  const [enviandoAviso, setEnviandoAviso] = useState(false);
+  const [avisoResultado, setAvisoResultado] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
   const [visibleTmIds, setVisibleTmIds] = useState(null); // null = todos los profesionales
@@ -554,10 +560,59 @@ export default function CitasModule() {
     const url = detailMeet.trim() || null;
     const res = await patchBooking({ meetUrl: url, ...(enviar ? { enviarEmail: true } : {}) });
     if (enviar) {
-      setMeetAviso(res?.emailEnviado ? "enviado" : "guardado");
-      setTimeout(() => setMeetAviso(null), 4000);
+      // `emailMotivo` dice POR QUÉ no salió. Antes solo había "enviado" o
+      // "guardado", y "guardado" sugería una causa (cita no online, cancelada)
+      // que casi nunca era la real.
+      setMeetAviso(res?.emailEnviado ? "enviado" : (res?.emailMotivo ?? "guardado"));
+      setTimeout(() => setMeetAviso(null), 8000);
     }
   }
+  /**
+   * Manda el aviso. Se guarda SIEMPRE (queda en el portal del cliente) aunque
+   * el correo no salga, así que el resultado distingue las dos cosas: si solo
+   * ha quedado publicado, hay que decirlo o ella creerá que le ha escrito.
+   */
+  async function enviarAviso() {
+    if (!openBooking?.clientEmail) return;
+    setEnviandoAviso(true);
+    setAvisoResultado(null);
+    try {
+      const r = await fetch("/api/citas/avisos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: openBooking.clientEmail,
+          clientId: openBooking.clientId ?? null,
+          bookingId: openBooking.id,
+          nombre: openBooking.clientName ?? null,
+          titulo: avisoTitulo.trim(),
+          cuerpo: avisoCuerpo.trim(),
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error || "No se pudo mandar el aviso");
+
+      setAvisoAbierto(false);
+      setAvisoTitulo("");
+      setAvisoCuerpo("");
+      setAvisoResultado(
+        j.data?.enviadoPorCorreo
+          ? { ok: true, texto: "✓ Aviso enviado por email y publicado en su área privada." }
+          : {
+              ok: false,
+              texto:
+                j.data?.correo === "sin_consentimiento"
+                  ? "Aviso publicado en su área privada. Por email no se le manda: ha pedido no recibir correos."
+                  : "Aviso publicado en su área privada, pero NO ha salido por email (falta configurar el correo en Configuración).",
+            }
+      );
+    } catch (err) {
+      setAvisoResultado({ ok: false, texto: err.message });
+    } finally {
+      setEnviandoAviso(false);
+    }
+  }
+
   async function assignTeamMember(v) { await patchBooking({ teamMemberId: v || null }); }
   async function assignPatient(v) { await patchBooking({ patientId: v || null }); }
   async function deleteBooking() {
@@ -1266,12 +1321,22 @@ export default function CitasModule() {
                     className={inputCls}
                   />
                   <div className="flex items-center justify-between gap-2 mt-1.5 flex-wrap">
-                    <span className="text-[11px] text-neutral-400">
+                    <span
+                      className={`text-[11px] ${
+                        meetAviso && meetAviso !== "enviado" ? "text-amber-700" : "text-neutral-400"
+                      }`}
+                    >
                       {meetAviso === "enviado"
                         ? "✓ Enlace enviado por email al cliente."
-                        : meetAviso === "guardado"
-                          ? "Enlace guardado (no se envió: revisa que la cita sea online y no esté cancelada)."
-                          : "«Guardar y enviar» manda el enlace por email, aunque ya lo hubieras guardado antes."}
+                        : meetAviso === "sin_configurar"
+                          ? "Enlace guardado, pero NO se ha enviado: falta configurar el correo en Configuración → Correo. Mándaselo tú mientras tanto."
+                          : meetAviso === "sin_consentimiento"
+                            ? "Enlace guardado. No se envía porque este cliente ha pedido no recibir avisos por email."
+                            : meetAviso === "error"
+                              ? "Enlace guardado, pero el envío del email ha fallado. Mándaselo tú y avisa a soporte."
+                              : meetAviso === "guardado"
+                                ? "Enlace guardado (no se envió: revisa que la cita sea online y no esté cancelada)."
+                                : "«Guardar y enviar» manda el enlace por email, aunque ya lo hubieras guardado antes."}
                     </span>
                     <div className="flex gap-1.5 shrink-0">
                       <button
@@ -1291,6 +1356,74 @@ export default function CitasModule() {
                       </button>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* ── Avisar al cliente ────────────────────────────────────────
+                  Para todo lo que no es un cambio de la cita: «tráete los
+                  análisis», «cierro en agosto», «te llamo mañana». Sale por
+                  correo Y queda publicado en su área privada, que es donde
+                  puede volver a mirarlo en enero. */}
+              {openBooking.clientEmail && (
+                <div className="pt-3 border-t border-neutral-100">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="text-[11px] uppercase tracking-wider text-neutral-400">
+                      Avisar al cliente
+                    </div>
+                    {!avisoAbierto && (
+                      <button
+                        onClick={() => { setAvisoAbierto(true); setAvisoResultado(null); }}
+                        className="text-[11px] px-2.5 py-1 rounded border border-neutral-200 text-neutral-600 hover:bg-neutral-50"
+                      >
+                        Escribir un aviso
+                      </button>
+                    )}
+                  </div>
+
+                  {avisoResultado && (
+                    <div
+                      className={`mt-2 text-[11px] ${
+                        avisoResultado.ok ? "text-emerald-700" : "text-amber-700"
+                      }`}
+                    >
+                      {avisoResultado.texto}
+                    </div>
+                  )}
+
+                  {avisoAbierto && (
+                    <div className="mt-2 space-y-2">
+                      <input
+                        value={avisoTitulo}
+                        onChange={(e) => setAvisoTitulo(e.target.value)}
+                        placeholder="Asunto (p. ej. «Trae los análisis a la próxima»)"
+                        maxLength={160}
+                        className={inputCls}
+                      />
+                      <textarea
+                        value={avisoCuerpo}
+                        onChange={(e) => setAvisoCuerpo(e.target.value)}
+                        placeholder="Lo que quieras contarle. Lo verá en su área privada y le llegará por email."
+                        maxLength={4000}
+                        className={`${inputCls} min-h-[80px]`}
+                      />
+                      <div className="flex justify-end gap-1.5">
+                        <button
+                          onClick={() => { setAvisoAbierto(false); setAvisoTitulo(""); setAvisoCuerpo(""); }}
+                          className="text-[11px] px-2.5 py-1 rounded border border-neutral-200 text-neutral-500 hover:bg-neutral-50"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={enviarAviso}
+                          disabled={enviandoAviso || !avisoTitulo.trim() || !avisoCuerpo.trim()}
+                          className="text-[11px] px-2.5 py-1 rounded font-semibold text-white disabled:opacity-50"
+                          style={{ background: "var(--color-primary, #1B3A2D)" }}
+                        >
+                          {enviandoAviso ? "Enviando…" : "Enviar aviso"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
