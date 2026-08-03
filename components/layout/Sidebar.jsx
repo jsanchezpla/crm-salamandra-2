@@ -49,6 +49,11 @@ const navigation = [
         // centro de nutrición no admite por cola (01/08/2026).
         children: [
           { key: "clients-waitlist", label: "Lista de espera", href: "/clientes/lista-espera", moduleKey: "clients_avanzado" },
+          // Huecos de datos de las fichas (03/08/2026). Va con `clients` a
+          // secas: cualquier cliente puede tener la ficha a medias, no hace
+          // falta el avanzado. La pantalla se enseña vacía y en verde cuando no
+          // queda nada, que es la señal de que está todo hecho.
+          { key: "clients-urgentes", label: "Fichas a completar", href: "/clientes/urgentes" },
         ],
         badge: null,
         icon: (

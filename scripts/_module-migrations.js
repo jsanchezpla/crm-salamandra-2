@@ -107,6 +107,9 @@ export const MODULES = {
   analytics: ["migrate-web-visits-daily"],
 
   clients: [
+    // «Ya lo he mirado y está bien»: sin esto, la pantalla de fichas a
+    // completar no llega a cero nunca (03/08/2026).
+    "migrate-data-reviews",
     "migrate-client-attachments-and-notes",
     "migrate-patients-clients-phase1",
     "migrate-client-module-assignments",
