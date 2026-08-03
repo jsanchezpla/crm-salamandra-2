@@ -134,6 +134,8 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("citas.agendaCompartida", antes?.citas?.agendaCompartida, despues?.citas?.agendaCompartida);
   anota("citas.portalBloqueoImpago", antes?.citas?.portalBloqueoImpago, despues?.citas?.portalBloqueoImpago);
   anota("citas.avisosWhatsapp", antes?.citas?.avisosWhatsapp, despues?.citas?.avisosWhatsapp);
+  anota("citas.formularioObligatorio", antes?.citas?.formularioObligatorio, despues?.citas?.formularioObligatorio);
+  anota("citas.formularioUrl", antes?.citas?.formularioUrl, despues?.citas?.formularioUrl);
 
   const huboSecretos = Object.keys(secretos).length > 0;
   const huboAbiertos = Object.keys(after).length > 0;
@@ -161,6 +163,29 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
   const brand = t.settings?.brand ?? {};
   const integ = t.settings?.integrations ?? {};
 
+  // Las salas fijas que HEREDARÍAN las citas online al pasar a modo automático.
+  // Se enseñan en la tarjeta de videollamada porque el modo automático no
+  // valida nada: si el enlace guardado es de ejemplo —a nutri_laura le quedaron
+  // dos de un seed— el paciente recibe una sala que no existe, y nadie se entera
+  // hasta que se planta delante de ella. Verlos antes de cambiar el modo
+  // convierte eso en una decisión informada.
+  let salasVideollamada = [];
+  try {
+    if (ctx.hasModule("citas") && ctx.tenantModels?.EventType) {
+      const tipos = await ctx.tenantModels.EventType.findAll({
+        where: { active: true },
+        attributes: ["name", "modalities", "meetUrl"],
+        order: [["order", "ASC"]],
+      });
+      salasVideollamada = tipos
+        .filter((e) => (e.modalities ?? []).includes("online"))
+        .map((e) => ({ nombre: e.name, url: e.meetUrl || null }));
+    }
+  } catch {
+    // Tener el módulo no garantiza tener la tabla. Sin salas que enseñar, la
+    // tarjeta se pinta igual: esto es información de apoyo, no la pantalla.
+  }
+
   // En la demo pública NO se filtra la pista de la clave (últimos 4 chars de una
   // credencial real): solo si está configurada o no.
   const demo = isDemoTenant(ctx);
@@ -179,6 +204,7 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // Cómo consigue su enlace una cita online: a mano (por defecto) o
     // heredado del tipo de cita (tenant con sala de videollamada contratada).
     meetModo: t.settings?.citas?.meetModo === "automatico" ? "automatico" : "manual",
+    salasVideollamada,
     // Recordatorio automático la víspera de la cita. Apagado por defecto:
     // encenderlo empieza a mandar correos a pacientes reales.
     recordatoriosCitas: t.settings?.citas?.recordatorios === true,
@@ -187,6 +213,9 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     portalBloqueoImpago: t.settings?.citas?.portalBloqueoImpago === true,
     // Avisos de cita también por WhatsApp (01/08). Apagado por defecto.
     avisosWhatsapp: t.settings?.citas?.avisosWhatsapp === true,
+    // Puerta de admisión: solo reserva quien tiene el formulario aceptado.
+    formularioObligatorio: t.settings?.citas?.formularioObligatorio === true,
+    formularioUrl: t.settings?.citas?.formularioUrl ?? "",
     brand: {
       primaryColor: brand.primaryColor ?? null,
       secondaryColor: brand.secondaryColor ?? null,
@@ -384,6 +413,23 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   // pacientes reales (y Meta cobra por conversación).
   if (typeof body.avisosWhatsapp === "boolean") {
     settings.citas = { ...(settings.citas ?? {}), avisosWhatsapp: body.avisosWhatsapp };
+  }
+
+  // Puerta de admisión: exigir formulario aceptado para poder reservar.
+  // APAGADA por defecto. El enlace se guarda aparte porque el formulario vive
+  // en la web del cliente (WordPress), no en el CRM: sin él la persona ve el
+  // aviso pero no tiene a dónde ir.
+  if (typeof body.formularioObligatorio === "boolean") {
+    settings.citas = { ...(settings.citas ?? {}), formularioObligatorio: body.formularioObligatorio };
+  }
+  if (typeof body.formularioUrl === "string") {
+    const url = body.formularioUrl.trim();
+    // Solo http(s) y solo absoluta: esta URL se le sirve a un tercero en un
+    // enlace, así que un `javascript:` aquí sería un XSS de regalo.
+    if (url && !/^https?:\/\/\S+$/i.test(url)) {
+      throw new ValidationError("La dirección del formulario tiene que empezar por http:// o https://");
+    }
+    settings.citas = { ...(settings.citas ?? {}), formularioUrl: url || null };
   }
 
   // Candado de la IA para empleados (no es un secreto): lista cerrada.

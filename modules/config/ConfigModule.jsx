@@ -181,6 +181,10 @@ export default function ConfigModule() {
     setCfg((c) => ({ ...c, integrations: { ...c.integrations, resend: { ...c.integrations?.resend, [k]: v } } }));
   }
 
+  function setStripeField(k, v) {
+    setCfg((c) => ({ ...c, integrations: { ...c.integrations, stripe: { ...c.integrations?.stripe, [k]: v } } }));
+  }
+
   async function patchTenant(payload, successMsg) {
     setErrorMsg(null);
     try {
@@ -472,13 +476,67 @@ export default function ConfigModule() {
             extra={<UrlWebhook slug={cfg.slug} />}
           />
 
+          {/* La clave PUBLICABLE. No es un secreto —viaja al navegador de cada
+              paciente— y por eso va en un campo normal y a la vista, no en una
+              tarjeta de secreto enmascarada.
+
+              Faltaba (03/08/2026): el endpoint la aceptaba y el widget la
+              necesita para pintar el formulario de tarjeta, pero no había dónde
+              escribirla. Al pasar de claves de prueba a claves reales había que
+              cambiarla por SSH, que es justo lo que estas tarjetas venían a
+              quitar. */}
+          <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
+            <h3 className="font-display text-lg text-[var(--ink-900)]">Clave publicable de Stripe</h3>
+            <p className="text-xs text-neutral-500 mt-1">
+              La que empieza por <code>pk_</code>. Sin ella el paciente no llega a ver el formulario de
+              tarjeta. Tiene que ser del mismo entorno que la clave secreta: las dos de prueba
+              (<code>pk_test_</code> + <code>sk_test_</code>) o las dos reales
+              (<code>pk_live_</code> + <code>sk_live_</code>).
+            </p>
+            <div className="mt-4">
+              <Field label="Clave publicable (pk_…)">
+                <input
+                  disabled={!isAdmin}
+                  value={cfg.integrations?.stripe?.publishableKey ?? ""}
+                  onChange={(e) => setStripeField("publishableKey", e.target.value)}
+                  placeholder="pk_live_..."
+                  className={inputCls}
+                />
+              </Field>
+            </div>
+            {isAdmin && (
+              <div className="flex justify-end mt-3">
+                <PrimaryButton
+                  onClick={() =>
+                    patchTenant(
+                      { stripePublishableKey: cfg.integrations?.stripe?.publishableKey ?? "" },
+                      "Clave publicable guardada"
+                    )
+                  }
+                >
+                  Guardar clave publicable
+                </PrimaryButton>
+              </div>
+            )}
+          </div>
+
           {/* Remitente + reply-to del correo de captación (no son secretos). */}
           <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-            <h3 className="font-display text-lg text-[var(--ink-900)]">Remitente del correo de captación</h3>
+            <h3 className="font-display text-lg text-[var(--ink-900)]">Remitente del correo</h3>
             <p className="text-xs text-neutral-500 mt-1">
-              De qué dirección salen los correos en frío y a dónde llegan las respuestas. El remitente debe ser de un
-              dominio verificado en tu cuenta de Resend. Déjalo vacío para usar el valor por defecto del sistema.
+              De qué dirección salen <strong>todos</strong> los correos que manda el CRM en tu nombre
+              —confirmaciones y recordatorios de cita, enlaces de videollamada, captación— y a dónde
+              llegan las respuestas. Tiene que ser de un dominio verificado en tu cuenta de Resend.
             </p>
+            {/* Se llamaba «Remitente del correo de captación», y por eso se
+                quedaba vacío: quien no usa Outreach daba por hecho que no le
+                tocaba. De aquí salen TODOS los correos del cliente. */}
+            {cfg.integrations?.resend?.configured && !(cfg.integrations?.resend?.fromEmail ?? "").trim() && (
+              <p className="text-[11px] font-medium text-amber-700 mt-2">
+                Tienes la clave de Resend puesta pero no hay remitente: sin una dirección desde la que
+                enviar, <strong>el CRM no manda ningún correo</strong>. Rellena el campo de abajo.
+              </p>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
               <Field label="Remitente (from)">
                 <input
@@ -563,11 +621,30 @@ export default function ConfigModule() {
             />
           )}
 
+          {isAdmin && (
+            <PuertaAdmisionCard
+              key={cfg.formularioUrl ?? ""}
+              activo={!!cfg.formularioObligatorio}
+              url={cfg.formularioUrl ?? ""}
+              readOnly={!!cfg.readOnly}
+              onChange={(v) =>
+                patchTenant(
+                  { formularioObligatorio: v },
+                  v
+                    ? "Ahora solo puede reservar quien tenga la solicitud aceptada"
+                    : "Vuelve a poder reservar cualquiera con el enlace de la agenda"
+                )
+              }
+              onGuardarUrl={(v) => patchTenant({ formularioUrl: v }, "Dirección del formulario guardada")}
+            />
+          )}
+
           {isAdmin && <DerivacionesCard />}
 
           {isAdmin && (
             <VideollamadaCard
               meetModo={cfg.meetModo}
+              salas={cfg.salasVideollamada ?? []}
               readOnly={!!cfg.readOnly}
               onChange={(v) => patchTenant({ meetModo: v }, v === "automatico" ? "Las citas online heredarán el enlace del tipo de cita" : "El enlace de videollamada se pondrá a mano en cada cita")}
             />
@@ -1003,6 +1080,75 @@ function AvisosWhatsappCard({ activo, readOnly, configurado, onChange }) {
   );
 }
 
+/**
+ * Puerta de admisión: solo reserva quien ha pasado por el formulario y ha sido
+ * aceptado en la bandeja. El enlace es obligatorio en la práctica —sin él, a
+ * quien no ha pasado se le dice que le falta algo pero no a dónde ir—, así que
+ * la tarjeta avisa en ámbar cuando está encendida y vacía.
+ */
+function PuertaAdmisionCard({ activo, url, readOnly, onChange, onGuardarUrl }) {
+  // El borrador arranca del valor guardado. Cuando ese valor cambia, la
+  // tarjeta se vuelve a montar (`key` en quien la pinta) en vez de
+  // resincronizarse con un efecto.
+  const [borrador, setBorrador] = useState(url ?? "");
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-neutral-800">Formulario obligatorio para pedir cita</div>
+          <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+            Solo pueden reservar las personas cuya solicitud del formulario esté aceptada en la
+            bandeja. Al resto se les enseña el aviso con el enlace al formulario, no un error.
+            Afecta a todos los tipos de cita y a todo el mundo, también a quien ya era paciente.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange(!activo)}
+          className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 ${activo ? "bg-[var(--color-primary,#1B3A2D)]" : "bg-neutral-300"}`}
+          aria-label={activo ? "Quitar el formulario obligatorio" : "Exigir formulario para reservar"}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${activo ? "translate-x-6" : "translate-x-1"}`} />
+        </button>
+      </div>
+
+      <div className="mt-1 text-[11px] font-medium">
+        {activo && !(url ?? "").trim() ? (
+          <span className="text-amber-700">
+            Falta la dirección del formulario: sin ella el aviso no lleva a ningún sitio.
+          </span>
+        ) : activo ? (
+          <span className="text-emerald-700">Activa: sin solicitud aceptada no se puede reservar.</span>
+        ) : (
+          <span className="text-neutral-400">Apagada: cualquiera con el enlace de la agenda puede reservar.</span>
+        )}
+      </div>
+
+      <div className="mt-3">
+        <label className="block text-[11px] text-neutral-500 mb-1">
+          Dirección del formulario (en tu web)
+        </label>
+        <div className="flex gap-2 flex-wrap">
+          <input
+            type="url"
+            inputMode="url"
+            value={borrador}
+            disabled={readOnly}
+            onChange={(e) => setBorrador(e.target.value)}
+            placeholder="https://tuweb.com/primer-contacto"
+            className="flex-1 min-w-[220px] text-sm border border-neutral-200 rounded-lg px-3 py-2 disabled:bg-neutral-50"
+          />
+          {!readOnly && (
+            <PrimaryButton onClick={() => onGuardarUrl(borrador.trim())}>Guardar</PrimaryButton>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BloqueoImpagoCard({ activo, readOnly, onChange }) {
   return (
     <div className="bg-white border border-neutral-200 rounded-xl p-5">
@@ -1073,7 +1219,7 @@ function RecordatoriosCard({ activo, readOnly, onChange }) {
   );
 }
 
-function VideollamadaCard({ meetModo, readOnly, onChange }) {
+function VideollamadaCard({ meetModo, salas = [], readOnly, onChange }) {
   const auto = meetModo === "automatico";
   const opciones = [
     {
@@ -1120,6 +1266,38 @@ function VideollamadaCard({ meetModo, readOnly, onChange }) {
           );
         })}
       </div>
+      {/* Lo que HEREDARÍAN las citas online si se pasa a automático. Se enseña
+          siempre, no solo en automático: el momento en que hace falta verlo es
+          justo ANTES de cambiar el modo. */}
+      {salas.length > 0 && (
+        <div className="mt-3 border-t border-neutral-100 pt-3">
+          <div className="text-[11px] font-medium text-neutral-500 mb-1.5">
+            Salas que se usarían en modo automático
+          </div>
+          <ul className="space-y-1">
+            {salas.map((s) => (
+              <li key={s.nombre} className="text-[11px] flex flex-wrap gap-x-2 gap-y-0.5">
+                <span className="text-neutral-700">{s.nombre}</span>
+                {s.url ? (
+                  <span className="text-neutral-400 break-all">{s.url}</span>
+                ) : (
+                  <span className="text-amber-700">sin enlace</span>
+                )}
+              </li>
+            ))}
+          </ul>
+          {auto && salas.some((s) => !s.url) && (
+            <p className="text-[11px] text-amber-700 mt-1.5">
+              Las citas online de los tipos sin enlace se crearán igualmente sin él.
+            </p>
+          )}
+          <p className="text-[10px] text-neutral-400 mt-1.5">
+            Nadie comprueba que estos enlaces funcionen: si alguno es de ejemplo, el paciente
+            recibirá una sala que no existe. Se cambian en cada tipo de cita.
+          </p>
+        </div>
+      )}
+
       <p className="text-[10px] text-neutral-400 mt-3">
         El modo automático reutiliza el enlace de sala fija del tipo de cita. Crear salas nuevas en Google
         automáticamente requiere conectar Google Calendar, que todavía no está disponible.
