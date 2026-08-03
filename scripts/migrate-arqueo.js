@@ -117,9 +117,18 @@ async function processSchema(s, schema, uuidDefault) {
     log(`· ${schema}: cash_closes ya existía`);
   }
 
-  // Un solo cierre por caja y día.
+  // ⚠️ AQUÍ HABÍA UN ÍNDICE ÚNICO (cash_point_id, close_date), «un solo cierre
+  // por caja y día». Se quitó el 02/08/2026 a petición de Rodrigo: en Aumenta
+  // arquean varias veces al día, y así lo hacían ya en Organízate (828 cierres
+  // históricos, varios el mismo día).
+  //
+  // No basta con que `migrate-impuestos-y-arqueo` lo borre después: esta
+  // migración se vuelve a ejecutar entera cada vez que alguien pone al día un
+  // tenant, y al recrearlo REVENTABA contra los datos reales —«Validation
+  // error» en `ensure-tenant-schema aumenta`, 03/08/2026—. Una migración que
+  // deshace lo que hizo la siguiente es una trampa para el que venga.
   await s.query(
-    `CREATE UNIQUE INDEX IF NOT EXISTS "cash_closes_point_date_unique" ON "${schema}"."cash_closes" (cash_point_id, close_date)`
+    `CREATE INDEX IF NOT EXISTS "cash_closes_point_date_idx" ON "${schema}"."cash_closes" (cash_point_id, close_date)`
   );
   await s.query(`CREATE INDEX IF NOT EXISTS "cash_closes_date_idx" ON "${schema}"."cash_closes" (close_date)`);
 
