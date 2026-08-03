@@ -61,8 +61,14 @@ ok "permisos actuales del env: $(stat -c '%a' "$ENV")"
 
 # ── 1. Contraseña nueva ──────────────────────────────────────────────────────
 # Sin caracteres que compliquen la URL de conexión ni el escapado del shell.
-NUEVA="$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 40)"
-[ ${#NUEVA} -eq 40 ] || { mal "No se pudo generar la contraseña"; exit 1; }
+#
+# OJO con la forma de generarla: lo natural sería `tr -dc ... < /dev/urandom |
+# head -c 40`, pero `head` cierra la tubería en cuanto tiene sus 40 bytes, `tr`
+# recibe SIGPIPE y con `set -o pipefail` el script se muere ahí (exit 141). Se
+# lee una cantidad ACOTADA primero, así ningún proceso de la tubería muere por
+# escribir en un extremo cerrado.
+NUEVA="$(head -c 500 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c1-40)"
+[ ${#NUEVA} -eq 40 ] || { mal "No se pudo generar la contraseña (salieron ${#NUEVA} caracteres)"; exit 1; }
 paso "Contraseña nueva generada (40 caracteres, no se muestra)"
 
 if [ "$SIMULAR" = true ]; then
