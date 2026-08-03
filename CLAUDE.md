@@ -411,6 +411,17 @@ a todos sus tenants. Detalle en `docs/sprint-aumenta-2026-07.md`.
 | Lista de espera de admisión | `/clientes/lista-espera` | `clients_avanzado` |
 | Contrato, tutores y meses del portal | ficha de cliente | `clients` |
 | Morosidad | dentro de `/facturacion/cobros` | `billing` |
+| Fichas a completar (huecos de datos por carpetas) | `/clientes/urgentes` | `clients` |
+
+⚠️ **«Fichas a completar»** (03/08/2026, tras migrar Aumenta) sale de
+`lib/clients/urgentes.js`, que define las CARPETAS y sus consultas en un solo
+sitio: el total de la carpeta y las filas que se ven al abrirla TIENEN que salir
+de la misma fuente, o nadie se fía del número. Dos bloques —lo que bloquea el
+trabajo (decenas) y la ficha incompleta (miles)— porque una lista que no se
+puede terminar deja de mirarse. Las filas se archivan con `data_reviews`
+(«esto ya lo he mirado y está bien»): sin eso no llega a cero nunca, porque hay
+huecos correctos —un paciente en lista de espera no tiene terapeuta—. Las
+carpetas no se solapan a propósito.
 
 ### El alta de clientes se adapta al cliente (01/08/2026)
 `lib/clients/formularioAlta.js` decide QUÉ se pregunta, y lo comparten la
