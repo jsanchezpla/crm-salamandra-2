@@ -2,7 +2,7 @@ import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { logCitasAudit } from "../../../../../../lib/citas/audit.js";
 import { normalizeString } from "../../../../../../lib/citas/validation.js";
-import { sendEmail } from "../../../../../../lib/email/resendClient.js";
+import { sendEmail, envioRealizado } from "../../../../../../lib/email/resendClient.js";
 import { bookingRejectedTemplate } from "../../../../../../lib/email/templates/citas/bookingRejected.js";
 import { reembolsarCitaSiProcede } from "../../../../../../lib/citas/reembolsoCita.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
@@ -101,7 +101,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       // BYOK: cada cliente manda desde SU cuenta de Resend y su dominio
       // (mejor entrega, y su consumo no gasta el cupo de los demás).
       const cfgResend = getTenantResendConfig({ tenant });
-      await sendEmail({
+      const envio = await sendEmail({
         to: row.clientEmail,
         subject,
         html,
@@ -110,6 +110,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
         replyTo: cfgResend.replyTo || undefined,
         apiKey: cfgResend.apiKey || undefined,
       });
+      envioRealizado(envio, `citas:reject ${row.id}`);
     } catch (mailErr) {
       process.stderr.write(`[citas:reject] email-rejected fail: ${mailErr.message}\n`);
     }
