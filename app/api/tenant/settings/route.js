@@ -136,6 +136,7 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("citas.avisosWhatsapp", antes?.citas?.avisosWhatsapp, despues?.citas?.avisosWhatsapp);
   anota("citas.formularioObligatorio", antes?.citas?.formularioObligatorio, despues?.citas?.formularioObligatorio);
   anota("citas.formularioUrl", antes?.citas?.formularioUrl, despues?.citas?.formularioUrl);
+  anota("citas.portalUrl", antes?.citas?.portalUrl, despues?.citas?.portalUrl);
 
   const huboSecretos = Object.keys(secretos).length > 0;
   const huboAbiertos = Object.keys(after).length > 0;
@@ -216,6 +217,8 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // Puerta de admisión: solo reserva quien tiene el formulario aceptado.
     formularioObligatorio: t.settings?.citas?.formularioObligatorio === true,
     formularioUrl: t.settings?.citas?.formularioUrl ?? "",
+    // Página de la web del cliente donde está incrustado el portal.
+    portalUrl: t.settings?.citas?.portalUrl ?? "",
     brand: {
       primaryColor: brand.primaryColor ?? null,
       secondaryColor: brand.secondaryColor ?? null,
@@ -430,6 +433,18 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
       throw new ValidationError("La dirección del formulario tiene que empezar por http:// o https://");
     }
     settings.citas = { ...(settings.citas ?? {}), formularioUrl: url || null };
+  }
+
+  // Dirección del ÁREA PRIVADA en la web del cliente: la página donde está
+  // incrustado el portal. El CRM no puede deducirla —el portal vive dentro de
+  // un iframe en su WordPress, no en un sitio nuestro— y sin ella lo único que
+  // se le puede ofrecer a alguien para cancelar es el enlace con el token.
+  if (typeof body.portalUrl === "string") {
+    const url = body.portalUrl.trim();
+    if (url && !/^https?:\/\/\S+$/i.test(url)) {
+      throw new ValidationError("La dirección del área privada tiene que empezar por http:// o https://");
+    }
+    settings.citas = { ...(settings.citas ?? {}), portalUrl: url || null };
   }
 
   // Candado de la IA para empleados (no es un secreto): lista cerrada.
