@@ -14,6 +14,7 @@ import { meetUrlInicial } from "../../../../lib/citas/videollamada.js";
 import { veTodaLaAgenda } from "../../../../lib/citas/visibilidad.js";
 import { cargarFestivos, esFestivo } from "../../../../lib/citas/festivos.js";
 import { getMadridParts } from "../../../../lib/citas/slots.js";
+import { asignarSesion } from "../../../../lib/citas/packs.js";
 
 const NADIE = "00000000-0000-0000-0000-000000000000";
 
@@ -129,7 +130,12 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
 
     // teamMember solo si el tenant tiene módulo team (si no, la tabla
     // team_members no existe y el JOIN daría 500 — p.ej. nutri_laura).
-    const include = [{ model: EventType, as: "eventType", attributes: ["id", "name", "slug", "color"] }];
+    // `sessionsCount` para poder decir «sesión 3 de 10» en la lista de sesiones
+    // de la ficha. Sequelize solo trae los atributos pedidos: sin él, el total
+    // llegaría como `undefined` y la etiqueta saldría a medias.
+    const include = [
+      { model: EventType, as: "eventType", attributes: ["id", "name", "slug", "color", "sessionsCount"] },
+    ];
     if (hasModule("team")) {
       include.push({ model: TeamMember, as: "teamMember", attributes: ["id", "displayName"] });
     }
@@ -266,6 +272,14 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const patRes = await resolvePatientId(body, tenantModels, hasModule);
     if (patRes.err) return error(patRes.err);
 
+    // Si esta persona tiene bono con sesiones libres para este tipo de cita, la
+    // cita se engancha y se numera. La agenda del CRM no cobra —lo apunta la
+    // profesional a mano—, así que aquí solo importa la numeración. Sin correo
+    // no hay a quién buscarle el bono: el correo es opcional desde el 02/08.
+    const enBono = clientEmail
+      ? await asignarSesion(tenantModels, { email: clientEmail, eventTypeId })
+      : null;
+
     const row = await Booking.create({
       eventTypeId,
       clientName,
@@ -281,6 +295,8 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       teamMemberId,
       patientId: patRes.patientId,
       clientId,
+      packId: enBono?.packId ?? null,
+      sessionNumber: enBono?.sessionNumber ?? null,
     });
 
     await logCitasAudit({

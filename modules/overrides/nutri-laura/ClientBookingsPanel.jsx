@@ -263,6 +263,33 @@ export default function ClientBookingsPanel({ clientId, clientEmail, userRole })
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-700">
                           {b.eventType?.name ?? "Cita"}
+                          {/* Número de sesión dentro del bono (04/08/2026). */}
+                          {b.sessionNumber > 0 && (
+                            <div className="text-[11px] text-[var(--color-primary)] mt-0.5">
+                              Sesión {b.sessionNumber}
+                              {Number(b.eventType?.sessionsCount) > 1 ? ` de ${b.eventType.sessionsCount}` : ""}
+                            </div>
+                          )}
+                          {/* Respuestas del formulario de la cita, si lo tenía. */}
+                          {Array.isArray(b.formAnswers?.answers) && b.formAnswers.answers.length > 0 && (
+                            <details className="mt-1">
+                              <summary className="text-[11px] text-gray-500 cursor-pointer hover:text-gray-800">
+                                {b.formAnswers.formTitle || "Formulario"}
+                              </summary>
+                              <div className="mt-1 space-y-1.5 pl-1 border-l-2 border-gray-100">
+                                {b.formAnswers.answers.map((r) => (
+                                  <div key={r.key} className="pl-2">
+                                    <div className="text-[10px] uppercase tracking-wider text-gray-400">
+                                      {r.label}
+                                    </div>
+                                    <div className="text-[11px] text-gray-700 whitespace-pre-wrap">
+                                      {r.value === true ? "Sí" : r.value === false ? "No" : (r.value ?? "—") || "—"}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${meta.cls}`}>

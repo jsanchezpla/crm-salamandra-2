@@ -5,6 +5,7 @@ import { ok, noContent, forbidden, notFound, error } from "../../../../lib/utils
 import { getClientDir } from "../../../../lib/clients/attachmentStorage.js";
 import { entradaDeCliente } from "../../../../lib/clients/listaEspera.js";
 import { fechaONull } from "../../../../lib/clients/formularioAlta.js";
+import { bonosDeCliente } from "../../../../lib/citas/packs.js";
 import {
   normalizeContactValue,
   validateContactValue,
@@ -54,12 +55,16 @@ export const GET = withTenant(async (_request, { params }, { tenant, tenantModel
       const json = client.toJSON();
       json.interactions = [];
       json.listaEspera = listaEspera;
+      json.bonos = await bonosDeCliente(tenantModels, client);
       return ok(json);
     }
   }
 
   if (!client) return notFound("Cliente no encontrado");
-  return ok({ ...client.toJSON(), listaEspera });
+  // Bonos de sesiones y lo que le queda de cada uno (04/08/2026). Devuelve []
+  // en cuanto falte algo: la ficha no se cae por una sección de más.
+  const bonos = await bonosDeCliente(tenantModels, client);
+  return ok({ ...client.toJSON(), listaEspera, bonos });
 });
 
 export const PUT = withTenant(async (request, { params }, { tenant, tenantModels, tenantSequelize, hasModule }) => {

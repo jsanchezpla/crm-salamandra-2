@@ -48,7 +48,11 @@ export default function CitasDisponibilidadPage() {
   }, [selectedEt]);
 
   useEffect(() => {
-    fetch("/api/citas/event-types", { cache: "no-store" })
+    // `active=true`: un tipo de cita eliminado seguía saliendo aquí, y sin
+    // marca de ningún tipo (04/08/2026). Ponerle horario a algo que ya no se
+    // puede reservar no sirve de nada, y encima hacía dudar de si estaba
+    // borrado o no.
+    fetch("/api/citas/event-types?active=true", { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (j.ok) setEventTypes(j.data); });
   }, []);

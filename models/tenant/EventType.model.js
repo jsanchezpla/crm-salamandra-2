@@ -98,10 +98,61 @@ export function defineEventType(sequelize) {
       // Precio EN CÉNTIMOS (ver lib/payments/money.js). null o 0 = cita gratuita:
       // el flujo de reserva no pide pago, que es como siguen funcionando los
       // tenants que no cobran online.
+      //
+      // Con `sessionsCount > 1` este es el precio del PACK ENTERO pagado de una
+      // vez, no el de una sesión suelta.
       price: {
         type: DataTypes.INTEGER,
         allowNull: true,
         validate: { min: 0 },
+      },
+      /**
+       * Cuántas sesiones incluye contratar esto (04/08/2026).
+       *
+       * 1 = una cita suelta, que es como ha funcionado siempre. Más de 1 es un
+       * PACK: se paga una vez y da derecho a N citas, que se van reservando por
+       * separado y llevan su número («3 de 10»).
+       */
+      sessionsCount: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+        validate: { min: 1, max: 200 },
+      },
+      /**
+       * Precio del pago FRACCIONADO, en céntimos y POR MES.
+       *
+       * Es un precio independiente, no `price` dividido: financiar cuesta más y
+       * 3 × 130 € = 390 € frente a 360 € de golpe (ejemplo de Rodrigo). Se
+       * guarda la cuota mensual y no el total porque la cuota es lo que la
+       * profesional decide y lo que la paciente ve anunciado.
+       *
+       * null = este tipo de cita no se puede fraccionar.
+       */
+      instalmentPrice: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: { min: 0 },
+      },
+      /** En cuántos meses se fracciona. El total es cuota × meses. */
+      instalmentMonths: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: { min: 2, max: 36 },
+      },
+      /**
+       * Formulario que hay que rellenar DESPUÉS de elegir fecha y hora
+       * (04/08/2026). Apunta a un `Form`, el mismo constructor que ya usa la
+       * bandeja de solicitudes. null = este tipo de cita no pide nada.
+       *
+       * ⚠️ NO confundir con la PUERTA DE ADMISIÓN (`lib/citas/puertaFormulario.js`):
+       * aquella exige un formulario ACEPTADO antes de dejar reservar, es de todo
+       * el centro y va de «¿te admito como paciente?». Esto es un paso más de la
+       * reserva de UN tipo de cita concreto.
+       */
+      formId: {
+        type: DataTypes.UUID,
+        allowNull: true,
       },
       active: {
         type: DataTypes.BOOLEAN,

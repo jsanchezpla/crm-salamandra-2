@@ -82,7 +82,11 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
       }
     }
 
-    const include = [{ model: EventType, as: "eventType", attributes: ["id", "name", "color"] }];
+    // `sessionsCount` para poder pintar «3/10»: el número de sesión lo lleva la
+    // cita, pero el total es del tipo de cita.
+    const include = [
+      { model: EventType, as: "eventType", attributes: ["id", "name", "color", "sessionsCount"] },
+    ];
     if (teamOn) {
       include.push({ model: TeamMember, as: "teamMember", attributes: ["id", "displayName", "avatarColor"] });
     }
@@ -101,9 +105,16 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
       const color = STATUS_COLOR_DIM[b.status] || baseColor;
       // Solo las citas ACTIVAS se pueden arrastrar para reprogramar.
       const arrastrable = b.status !== "cancelled" && b.status !== "no_show" && b.status !== "completed";
+      // Bono: «3/10» delante del nombre. Va en el TÍTULO y no solo en el
+      // detalle porque el sentido de esto es verlo de un vistazo en la rejilla,
+      // sin abrir cita por cita, para saber por dónde va cada persona.
+      const total = Number(b.eventType?.sessionsCount) || 0;
+      const numero = Number(b.sessionNumber) || 0;
+      const sesion = numero > 0 ? (total > 1 ? `${numero}/${total}` : `${numero}`) : null;
+
       return {
         id: b.id,
-        title: b.clientName,
+        title: sesion ? `${sesion} · ${b.clientName}` : b.clientName,
         start: startIso.toISOString(),
         end: endIso.toISOString(),
         backgroundColor: color,
@@ -119,6 +130,13 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
           duration: b.duration,
           teamMemberId: b.teamMemberId ?? null,
           teamMemberName: teamOn ? (b.teamMember?.displayName ?? null) : null,
+          // El nombre del cliente SIN el «3/10» delante, para quien lo necesite
+          // limpio (el panel de detalle, un buscador).
+          clientName: b.clientName,
+          packId: b.packId ?? null,
+          sessionNumber: numero || null,
+          sessionsTotal: total > 1 ? total : null,
+          sessionLabel: sesion,
         },
       };
     });

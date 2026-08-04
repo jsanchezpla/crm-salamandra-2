@@ -414,6 +414,8 @@ function InfoTab({
         infoAdicional={infoAdicional}
       />
 
+      <BonosSection bonos={client.bonos} />
+
       <ClientModulesSection clientId={client.id} />
 
       {!confirmDelete ? (
@@ -449,6 +451,59 @@ function InfoTab({
 }
 
 // ── PatientCard ──────────────────────────────────────────────────────────────
+
+/**
+ * Bonos de sesiones de la paciente (04/08/2026).
+ *
+ * Lo que Laura necesita ver de un vistazo es CUÁNTAS LE QUEDAN, así que ese
+ * número va primero y grande. Las reservadas se dicen aparte porque no son lo
+ * mismo que las gastadas: están puestas en la agenda pero todavía se pueden
+ * cancelar a tiempo.
+ *
+ * Si no hay bonos la sección no se pinta: la mayoría de las pacientes vienen
+ * por sesiones sueltas y un recuadro vacío solo estorba.
+ */
+function BonosSection({ bonos }) {
+  const lista = Array.isArray(bonos) ? bonos.filter((b) => b.estado !== "anulado") : [];
+  if (lista.length === 0) return null;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100">
+        <span className="text-sm font-semibold text-gray-700">Bonos de sesiones</span>
+      </div>
+      <div className="p-5 space-y-4">
+        {lista.map((b) => (
+          <div key={b.id}>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-sm text-gray-800">{b.nombre}</span>
+              <span
+                className={`text-sm font-semibold ${b.restantes > 0 ? "text-[var(--color-primary)]" : "text-gray-400"}`}
+              >
+                {b.restantes > 0 ? `Le quedan ${b.restantes}` : "Agotado"}
+              </span>
+            </div>
+            <div className="text-[11px] text-gray-500 mt-0.5">
+              {b.resumen}
+              {b.modoPago === "instalment" && " · pago fraccionado"}
+            </div>
+            {/* Barra de progreso: gastadas + reservadas sobre el total. */}
+            <div className="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden flex">
+              <div
+                className="bg-[var(--color-primary)]"
+                style={{ width: `${b.total ? (b.gastadas / b.total) * 100 : 0}%` }}
+              />
+              <div
+                className="bg-[var(--color-primary)] opacity-40"
+                style={{ width: `${b.total ? (b.reservadas / b.total) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function PatientCard({
   client,

@@ -138,6 +138,48 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
         updates.price = v === 0 ? null : v;
       }
     }
+    // Bono de sesiones, pago a plazos y formulario propio (04/08/2026).
+    if ("sessionsCount" in body) {
+      const v = Number(body.sessionsCount);
+      if (!Number.isInteger(v) || v < 1 || v > 200) return error("sessionsCount debe ser un entero entre 1 y 200");
+      updates.sessionsCount = v;
+    }
+    // La cuota y los meses van SIEMPRE juntos: una cuota sin meses no se puede
+    // cobrar y unos meses sin cuota tampoco. Se validan con el estado final,
+    // porque puede llegar solo uno de los dos en un PATCH parcial.
+    if ("instalmentPrice" in body || "instalmentMonths" in body) {
+      const cuotaBruta = "instalmentPrice" in body ? body.instalmentPrice : row.instalmentPrice;
+      const mesesBrutos = "instalmentMonths" in body ? body.instalmentMonths : row.instalmentMonths;
+
+      const vacio = (v) => v === null || v === "" || v === undefined;
+      if (vacio(cuotaBruta) && vacio(mesesBrutos)) {
+        updates.instalmentPrice = null;
+        updates.instalmentMonths = null;
+      } else {
+        const cuota = Number(cuotaBruta);
+        const meses = Number(mesesBrutos);
+        if (!Number.isInteger(cuota) || cuota <= 0) {
+          return error("instalmentPrice debe ser un número entero de céntimos mayor que 0");
+        }
+        if (!Number.isInteger(meses) || meses < 2 || meses > 36) {
+          return error("instalmentMonths debe ser un entero entre 2 y 36");
+        }
+        updates.instalmentPrice = cuota;
+        updates.instalmentMonths = meses;
+      }
+    }
+    if ("formId" in body) {
+      const v = normalizeString(body.formId);
+      if (!v) {
+        updates.formId = null;
+      } else {
+        // Que exista y sea de ESTE cliente: el id llega del navegador.
+        const { Form } = tenantModels;
+        const formulario = Form ? await Form.findByPk(v) : null;
+        if (!formulario) return error("Ese formulario no existe", 422);
+        updates.formId = v;
+      }
+    }
     if ("active" in body) updates.active = Boolean(body.active);
     if ("order" in body) {
       const v = Number(body.order);

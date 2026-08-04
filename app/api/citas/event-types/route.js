@@ -111,6 +111,37 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // UNA sola forma de decirlo y nadie tenga que acordarse de comprobar las dos.
     if (price === 0) price = null;
 
+    // Bono de sesiones: 1 = cita suelta (lo de siempre), N = bono de N citas.
+    const sessionsCount = body.sessionsCount == null ? 1 : Number(body.sessionsCount);
+    if (!Number.isInteger(sessionsCount) || sessionsCount < 1 || sessionsCount > 200) {
+      return error("sessionsCount debe ser un entero entre 1 y 200");
+    }
+
+    // Pago a plazos: precio INDEPENDIENTE del de arriba (financiar cuesta más).
+    // La cuota y los meses van juntos o no va ninguno.
+    const vacio = (v) => v == null || v === "";
+    let instalmentPrice = null;
+    let instalmentMonths = null;
+    if (!vacio(body.instalmentPrice) || !vacio(body.instalmentMonths)) {
+      instalmentPrice = Number(body.instalmentPrice);
+      instalmentMonths = Number(body.instalmentMonths);
+      if (!Number.isInteger(instalmentPrice) || instalmentPrice <= 0) {
+        return error("instalmentPrice debe ser un número entero de céntimos mayor que 0");
+      }
+      if (!Number.isInteger(instalmentMonths) || instalmentMonths < 2 || instalmentMonths > 36) {
+        return error("instalmentMonths debe ser un entero entre 2 y 36");
+      }
+    }
+
+    // Formulario a rellenar tras elegir fecha y hora. Se comprueba que exista:
+    // el id llega del navegador.
+    const formId = normalizeString(body.formId) || null;
+    if (formId) {
+      const { Form } = tenantModels;
+      const formulario = Form ? await Form.findByPk(formId) : null;
+      if (!formulario) return error("Ese formulario no existe", 422);
+    }
+
     // Unicidad de slug
     const dup = await EventType.findOne({ where: { slug } });
     if (dup) return error("Ya existe un tipo de cita con ese slug", 409);
@@ -132,6 +163,10 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       minNoticeHours,
       maxAdvanceDays,
       price,
+      sessionsCount,
+      instalmentPrice,
+      instalmentMonths,
+      formId,
       active,
       order,
     });

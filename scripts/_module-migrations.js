@@ -166,6 +166,10 @@ export const MODULES = {
     // publicados en el portal. Cuelga de `citas` porque el portal donde se leen
     // ES el de citas y la sesión que los autoriza es la suya.
     "migrate-avisos-cliente",
+    // Bonos de sesiones, precio fraccionado y formulario por tipo de cita
+    // (04/08/2026). Un tipo de cita pasa a poder valer por N sesiones, con su
+    // numeración («3 de 10») visible en el calendario.
+    "migrate-packs-sesiones",
   ],
 
   calendar: ["migrate-calendar-citas-fks"],

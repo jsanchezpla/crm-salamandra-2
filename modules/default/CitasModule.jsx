@@ -1438,6 +1438,42 @@ export default function CitasModule() {
                 </div>
               )}
 
+              {/* Respuestas del formulario del tipo de cita (04/08/2026). Se
+                  enseña el ENUNCIADO guardado con la respuesta, no el de la
+                  pregunta actual: si la profesional reformuló la pregunta
+                  después, lo que se leyó ese día fue lo otro. */}
+              {Array.isArray(openBooking.formAnswers?.answers) &&
+                openBooking.formAnswers.answers.length > 0 && (
+                  <div className="pt-3 border-t border-neutral-100">
+                    <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-1.5">
+                      {openBooking.formAnswers.formTitle || "Formulario de la cita"}
+                    </div>
+                    <div className="space-y-2">
+                      {openBooking.formAnswers.answers.map((r) => (
+                        <div key={r.key}>
+                          <div className="text-[11px] text-neutral-500">{r.label}</div>
+                          <div className="text-[13px] text-neutral-800 whitespace-pre-wrap">
+                            {r.value === true ? "Sí" : r.value === false ? "No" : (r.value ?? "—") || "—"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              {/* Bono de sesiones: por dónde va esta persona. */}
+              {openBooking.sessionNumber > 0 && (
+                <div className="pt-3 border-t border-neutral-100">
+                  <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-1">Bono</div>
+                  <div className="text-[13px] text-neutral-800">
+                    Sesión {openBooking.sessionNumber}
+                    {Number(openBooking.eventType?.sessionsCount) > 1
+                      ? ` de ${openBooking.eventType.sessionsCount}`
+                      : ""}
+                  </div>
+                </div>
+              )}
+
               <div className="pt-3 border-t border-neutral-100">
                 <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-1">Notas internas</div>
                 <textarea

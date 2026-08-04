@@ -216,6 +216,36 @@ export function defineBooking(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      /**
+       * Bono al que pertenece esta cita, si viene de un pack (04/08/2026).
+       * null = cita suelta, que es como han funcionado todas hasta ahora.
+       */
+      packId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      /**
+       * Qué número de sesión es dentro de su bono: 1, 2, 3… Se enseña en el
+       * calendario («3/10») para saber por dónde va cada persona sin abrir nada.
+       *
+       * Se asigna al crear la cita y NO se recalcula después: si se recalculara
+       * al vuelo, cancelar la segunda sesión renumeraría la tercera y la cuarta,
+       * y lo que la profesional apuntó como «sesión 3» dejaría de existir.
+       */
+      sessionNumber: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+      /**
+       * Respuestas del formulario del tipo de cita, si lo tiene (04/08/2026).
+       * `{ formId, formTitle, answers: {...}, submittedAt }`. Van con la cita y
+       * no a la bandeja de solicitudes: la bandeja es para admitir pacientes
+       * nuevos, y esto es información de UNA cita concreta.
+       */
+      formAnswers: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+      },
       // Notas internas (no visibles al cliente)
       notes: {
         type: DataTypes.TEXT,
@@ -229,6 +259,7 @@ export function defineBooking(sequelize) {
         { fields: ["client_email"], name: "bookings_client_email_idx" },
         { fields: ["team_member_id"], name: "bookings_team_member_idx" },
         { fields: ["patient_id"], name: "bookings_patient_idx" },
+        { fields: ["pack_id"], name: "bookings_pack_idx" },
       ],
     }
   );

@@ -69,6 +69,11 @@ export default function WidgetBookPage() {
   // que leyó que se le va a retener dinero, y una casilla premarcada no prueba
   // nada.
   const [aceptaRetencion, setAceptaRetencion] = useState(false);
+  // Cómo quiere pagar el bono: de una vez o a plazos. Por defecto, de una vez
+  // (es lo más barato para ella).
+  const [pricingMode, setPricingMode] = useState("upfront");
+  // Respuestas del formulario propio del tipo de cita, si lo tiene.
+  const [formAnswers, setFormAnswers] = useState({});
   // Tarjeta ya validada y dinero retenido. NO es "cita confirmada": la solicitud
   // queda esperando a que la profesional decida, y decirle otra cosa al paciente
   // sería mentirle.
@@ -127,7 +132,10 @@ export default function WidgetBookPage() {
       return;
     }
 
-    if (precio != null && !aceptaRetencion) {
+    // La casilla de la retención no aplica a un bono: ahí no se retiene nada,
+    // se paga. Sin esta salvedad el botón se quedaba bloqueado para siempre,
+    // porque la casilla ni siquiera se pinta.
+    if (precio != null && !esBono && !aceptaRetencion) {
       setSubmitError("Tienes que aceptar las condiciones de la reserva para continuar");
       return;
     }
@@ -147,8 +155,15 @@ export default function WidgetBookPage() {
           clientPhone: form.clientPhone.trim(),
           additionalData: form.additionalData.trim() || null,
           // Solo se manda si hay precio; el servidor lo exige en ese caso y
-          // archiva la prueba con la sesión de pago.
-          ...(precio != null ? { aceptaRetencion } : {}),
+          // archiva la prueba con la sesión de pago. En un bono no hay
+          // retención que aceptar: se paga entero.
+          ...(precio != null && !esBono ? { aceptaRetencion } : {}),
+          // Cómo quiere pagar el bono. El IMPORTE no viaja: lo pone el servidor
+          // desde lo que configuró la profesional.
+          ...(esBono ? { pricingMode } : {}),
+          // Respuestas del formulario del tipo de cita. El servidor las valida
+          // con las MISMAS reglas del módulo Formularios.
+          ...(preguntas.length ? { formAnswers } : {}),
         }),
       });
       const j = await res.json();
@@ -181,6 +196,16 @@ export default function WidgetBookPage() {
       //
       // Al pasar a este paso NO hay dinero retenido todavía, y la cita aún no
       // existe para nadie: eso pasa cuando confirme la tarjeta.
+      // ── Compra de un BONO ───────────────────────────────────────────────
+      // Un bono no se retiene, se paga entero, y el pago fraccionado solo
+      // existe en la pantalla de Stripe (Klarna no admite retenciones). Aquí sí
+      // se sale del iframe, y a propósito: la alternativa sería pedirle los
+      // datos de una financiación dentro de una web de terceros.
+      if (j.data?.paymentRequired && j.data?.checkoutUrl) {
+        window.location.href = j.data.checkoutUrl;
+        return;
+      }
+
       if (j.data?.paymentRequired && j.data?.clientSecret) {
         setPago({
           clientSecret: j.data.clientSecret,
@@ -223,6 +248,24 @@ export default function WidgetBookPage() {
   // Precio EN CÉNTIMOS del tipo de cita. null = gratuita, y entonces todo el
   // flujo es el de siempre: ni se menciona el pago ni se pasa por Stripe.
   const precio = Number.isInteger(eventType?.price) && eventType.price > 0 ? eventType.price : null;
+
+  // ── Bono de sesiones (04/08/2026) ─────────────────────────────────────────
+  // Con `sessionsCount` a 1 —todo lo de hoy— nada de esto se pinta y el flujo
+  // es exactamente el de siempre.
+  // Preguntas propias de este tipo de cita (04/08/2026). Vacío = ninguna, que
+  // es como se comportan todos los de hoy.
+  const preguntas = Array.isArray(eventType?.form?.fields) ? eventType.form.fields : [];
+
+  const sesiones = Number(eventType?.sessionsCount) || 1;
+  const esBono = sesiones > 1;
+  const fraccionado =
+    esBono && Number(eventType?.instalmentPrice) > 0 && Number(eventType?.instalmentMonths) > 1
+      ? {
+          cuota: Number(eventType.instalmentPrice),
+          meses: Number(eventType.instalmentMonths),
+          total: Number(eventType.instalmentPrice) * Number(eventType.instalmentMonths),
+        }
+      : null;
 
   const inputCls =
     "w-full rounded-lg px-3 py-2 text-sm text-[var(--widget-text)] bg-[var(--widget-card)] border border-[var(--widget-border)] focus:outline-none focus:border-[var(--brand-primary,var(--widget-button))] focus:ring-2 focus:ring-[var(--widget-focus)] transition placeholder:text-[var(--widget-text-faint)]/80";
@@ -709,9 +752,141 @@ export default function WidgetBookPage() {
               />
             </Field>
 
+            {/* ── Preguntas del tipo de cita (04/08/2026) ────────────────────
+                Van AQUÍ, después de haber elegido fecha y hora, que es lo que
+                se pidió: una supervisión profesional necesita saber de qué caso
+                se va a hablar antes de que llegue el día. Las preguntas las
+                define la profesional en el constructor de formularios; esto solo
+                las pinta. */}
+            {preguntas.length > 0 && (
+              <fieldset className="rounded-md border border-[var(--widget-border)] bg-[var(--widget-bg)] p-3 space-y-3">
+                <legend className="px-1 text-[12px] font-medium text-[var(--widget-text)]">
+                  {eventType.form.title}
+                </legend>
+                {eventType.form.introText && (
+                  <p className="text-[12px] text-[var(--widget-text-muted)] leading-relaxed">
+                    {eventType.form.introText}
+                  </p>
+                )}
+                {preguntas.map((p) => {
+                  const valor = formAnswers[p.key] ?? "";
+                  const set = (v) => setFormAnswers((prev) => ({ ...prev, [p.key]: v }));
+
+                  // «consent» es una casilla, pero lo que vale es el texto que
+                  // acepta: por eso el enunciado va al lado y no de placeholder.
+                  if (p.type === "consent" || p.type === "checkbox") {
+                    return (
+                      <label key={p.key} className="flex gap-2.5 items-start cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={valor === true}
+                          onChange={(e) => set(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--brand-primary,var(--widget-button))]"
+                        />
+                        <span className="text-[12px] leading-relaxed text-[var(--widget-text-muted)]">
+                          {p.label}
+                          {p.linkUrl && (
+                            <>
+                              {" "}
+                              <a
+                                href={p.linkUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="underline underline-offset-2"
+                              >
+                                {p.linkLabel || "Más información"}
+                              </a>
+                            </>
+                          )}
+                        </span>
+                      </label>
+                    );
+                  }
+
+                  return (
+                    <Field key={p.key} label={p.label} required={p.required} help={p.help}>
+                      {p.type === "textarea" ? (
+                        <textarea
+                          value={valor}
+                          onChange={(e) => set(e.target.value)}
+                          rows={3}
+                          maxLength={p.maxLength || undefined}
+                          placeholder={p.placeholder || undefined}
+                          className={`${inputCls} min-h-[72px]`}
+                        />
+                      ) : p.type === "select" ? (
+                        <select value={valor} onChange={(e) => set(e.target.value)} className={inputCls}>
+                          <option value="">Selecciona…</option>
+                          {(p.options ?? []).map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type={p.type === "number" ? "number" : p.type === "date" ? "date" : p.type === "email" ? "email" : p.type === "tel" ? "tel" : "text"}
+                          value={valor}
+                          onChange={(e) => set(e.target.value)}
+                          maxLength={p.type === "number" ? undefined : p.maxLength || undefined}
+                          min={p.min ?? undefined}
+                          max={p.max ?? undefined}
+                          placeholder={p.placeholder || undefined}
+                          className={inputCls}
+                        />
+                      )}
+                    </Field>
+                  );
+                })}
+              </fieldset>
+            )}
+
+            {/* ── Cómo quiere pagar el bono ──────────────────────────────────
+                La elección va AQUÍ y no en la pantalla de Stripe porque los dos
+                importes son distintos (360 € de una vez frente a 3 × 130 = 390),
+                y Stripe enseña todos los métodos con UN solo importe ya fijado.
+                Se dice el total del fraccionado sin adornos: que financiar cuesta
+                más se ve antes de elegir, no después. */}
+            {esBono && fraccionado && (
+              <fieldset className="rounded-md border border-[var(--widget-border)] bg-[var(--widget-bg)] p-3">
+                <legend className="px-1 text-[12px] font-medium text-[var(--widget-text)]">
+                  ¿Cómo prefieres pagar las {sesiones} sesiones?
+                </legend>
+                <div className="flex flex-col gap-2 mt-1">
+                  {[
+                    {
+                      key: "upfront",
+                      titulo: `Pago único: ${formatMoney(precio)}`,
+                      pie: "Un solo cargo hoy.",
+                    },
+                    {
+                      key: "instalment",
+                      titulo: `${formatMoney(fraccionado.cuota)} al mes durante ${fraccionado.meses} meses`,
+                      pie: `${formatMoney(fraccionado.total)} en total, financiado con Klarna.`,
+                    },
+                  ].map((opcion) => (
+                    <label key={opcion.key} className="flex gap-2.5 items-start cursor-pointer">
+                      <input
+                        type="radio"
+                        name="pricingMode"
+                        checked={pricingMode === opcion.key}
+                        onChange={() => setPricingMode(opcion.key)}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--brand-primary,var(--widget-button))]"
+                      />
+                      <span className="text-[12px] leading-relaxed">
+                        <span className="text-[var(--widget-text)]">{opcion.titulo}</span>
+                        <span className="block text-[var(--widget-text-faint)]">{opcion.pie}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+
             {/* Condiciones de la retención. Solo aparecen si la cita se cobra, y
-                la casilla NO viene marcada: es la prueba de que lo ha leído. */}
-            {precio != null && (
+                la casilla NO viene marcada: es la prueba de que lo ha leído. Un
+                BONO no se retiene, se paga entero: ahí no hay nada que aceptar. */}
+            {precio != null && !esBono && (
               <label className="flex gap-2.5 items-start rounded-md border border-[var(--widget-border)] bg-[var(--widget-bg)] p-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -732,7 +907,7 @@ export default function WidgetBookPage() {
             <div className="pt-2">
               <button
                 type="submit"
-                disabled={submitting || (precio != null && !aceptaRetencion)}
+                disabled={submitting || (precio != null && !esBono && !aceptaRetencion)}
                 className="w-full px-4 py-2.5 text-sm font-medium rounded-md text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)] focus:ring-offset-2 focus:ring-offset-[var(--widget-bg)]"
               >
                 {submitting
@@ -743,7 +918,9 @@ export default function WidgetBookPage() {
               </button>
               {precio != null && !submitting && (
                 <p className="text-[11px] text-[var(--widget-text-faint)] text-center mt-2">
-                  El siguiente paso son los datos de tu tarjeta. No se te cobrará nada todavía.
+                  {esBono
+                    ? "Te llevamos a la pantalla de pago para completar la compra."
+                    : "El siguiente paso son los datos de tu tarjeta. No se te cobrará nada todavía."}
                 </p>
               )}
             </div>
@@ -754,7 +931,7 @@ export default function WidgetBookPage() {
   );
 }
 
-function Field({ label, required, children }) {
+function Field({ label, required, children, help }) {
   return (
     <label className="block">
       <div className="text-[11px] font-medium text-[var(--widget-text-muted)] mb-1">
@@ -762,6 +939,8 @@ function Field({ label, required, children }) {
         {required && <span className="text-red-500 ml-0.5">*</span>}
       </div>
       {children}
+      {/* Ayuda de la pregunta, cuando la profesional la escribió (04/08/2026). */}
+      {help && <div className="text-[11px] text-[var(--widget-text-faint)] mt-1">{help}</div>}
     </label>
   );
 }

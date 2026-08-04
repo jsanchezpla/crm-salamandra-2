@@ -28,6 +28,12 @@ const EMPTY_FORM = {
   maxAdvanceDays: 60,
   // En EUROS mientras se edita; se convierte a céntimos al guardar. Vacío = gratis.
   price: "",
+  // Bono de sesiones y pago a plazos (04/08/2026). 1 sesión = cita suelta.
+  sessionsCount: 1,
+  instalmentPrice: "",
+  instalmentMonths: "",
+  // Formulario a rellenar tras elegir fecha y hora. "" = ninguno.
+  formId: "",
   active: true,
   order: 0,
 };
@@ -50,6 +56,21 @@ export default function CitasTiposPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  /**
+   * Los eliminados NO se listan (04/08/2026, Rodrigo: «los tipos de cita
+   * eliminados se siguen viendo»).
+   *
+   * Borrar un tipo que ya tiene citas no lo puede borrar de verdad —se llevaría
+   * por delante el histórico—, así que se desactiva. Pero para quien pulsó
+   * «Eliminar» eso es un borrado, y verlo seguir en la lista es un fallo. Se
+   * esconden detrás de este interruptor, que además es la única manera de
+   * recuperarlos.
+   */
+  const [verEliminados, setVerEliminados] = useState(false);
+  // Formularios del centro, para poder engancharle uno a un tipo de cita. Si el
+  // cliente no tiene el módulo, el endpoint responde 403 y el desplegable se
+  // queda con «Ninguno»: no es un error, es que no aplica.
+  const [formularios, setFormularios] = useState([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,7 +83,26 @@ export default function CitasTiposPage() {
     } finally { setLoading(false); }
   }, []);
 
+  const visibles = verEliminados ? items : items.filter((it) => it.active);
+  const eliminados = items.filter((it) => !it.active).length;
+
   useEffect(() => { load(); }, [load]);
+
+  // Los formularios del centro. `limit=1` porque de aquí solo interesa la lista
+  // `forms`, no la bandeja de solicitudes que devuelve el mismo endpoint.
+  useEffect(() => {
+    fetch("/api/formularios?limit=1", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setFormularios(j?.data?.forms?.filter((f) => f.active) ?? []))
+      .catch(() => {}); // sin módulo `formularios` no hay nada que ofrecer
+  }, []);
+
+  // Lo que va a ver la paciente si se fracciona. Se calcula aquí para que quien
+  // configura vea el total y no se lleve la sorpresa de que 3 × 130 no son 360.
+  const totalFraccionado =
+    Number(form.instalmentPrice) > 0 && Number(form.instalmentMonths) > 1
+      ? (Number(form.instalmentPrice) * Number(form.instalmentMonths)).toFixed(2)
+      : null;
 
   function openCreate() {
     setForm(EMPTY_FORM);
@@ -96,6 +136,10 @@ export default function CitasTiposPage() {
         minNoticeHours: data.minNoticeHours ?? 3,
         maxAdvanceDays: data.maxAdvanceDays ?? 60,
         price: data.price != null ? centsToEuros(data.price) : "",
+        sessionsCount: data.sessionsCount ?? 1,
+        instalmentPrice: data.instalmentPrice != null ? centsToEuros(data.instalmentPrice) : "",
+        instalmentMonths: data.instalmentMonths ?? "",
+        formId: data.formId ?? "",
         active: !!data.active,
         order: data.order ?? 0,
         _bookingCount: data.bookingCount ?? 0,
@@ -109,6 +153,7 @@ export default function CitasTiposPage() {
         ...EMPTY_FORM,
         ...item,
         price: item?.price != null ? centsToEuros(item.price) : "",
+        instalmentPrice: item?.instalmentPrice != null ? centsToEuros(item.instalmentPrice) : "",
       });
     }
   }
@@ -155,6 +200,12 @@ export default function CitasTiposPage() {
       maxAdvanceDays: Number(form.maxAdvanceDays),
       // La API trabaja en CÉNTIMOS; el formulario, en euros. Vacío → null (gratis).
       price: eurosToCents(form.price),
+      sessionsCount: Number(form.sessionsCount) || 1,
+      // Los dos van juntos o no va ninguno: una cuota sin meses no se puede
+      // cobrar, y unos meses sin cuota tampoco.
+      instalmentPrice: form.instalmentMonths ? eurosToCents(form.instalmentPrice) : null,
+      instalmentMonths: form.instalmentPrice ? Number(form.instalmentMonths) || null : null,
+      formId: form.formId || null,
       active: !!form.active,
       order: Number(form.order),
     };
@@ -230,11 +281,27 @@ export default function CitasTiposPage() {
 
       {/* Tabla */}
       <div className="flex-1 overflow-auto px-6 lg:px-10 py-6">
+        {/* Los eliminados no se listan: se recuperan desde aquí. */}
+        {eliminados > 0 && (
+          <div className="mb-3 flex items-center justify-end">
+            <button
+              onClick={() => setVerEliminados((v) => !v)}
+              className="text-xs text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
+            >
+              {verEliminados
+                ? "Ocultar los eliminados"
+                : `Ver ${eliminados} eliminado${eliminados === 1 ? "" : "s"}`}
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <div className="text-sm text-neutral-400">Cargando...</div>
-        ) : items.length === 0 ? (
+        ) : visibles.length === 0 ? (
           <div className="text-sm text-neutral-400">
-            No hay tipos de cita aún. Crea el primero para empezar.
+            {items.length === 0
+              ? "No hay tipos de cita aún. Crea el primero para empezar."
+              : "No queda ningún tipo de cita activo."}
           </div>
         ) : (
           <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
@@ -251,7 +318,7 @@ export default function CitasTiposPage() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((it) => (
+                {visibles.map((it) => (
                   <tr
                     key={it.id}
                     onClick={() => openEdit(it)}
@@ -398,9 +465,88 @@ export default function CitasTiposPage() {
                     className={inputCls}
                   />
                   <p className="text-[10px] text-neutral-400 mt-1">
-                    Vacío = sin cobro. Con precio, se cobra al reservar.
+                    {Number(form.sessionsCount) > 1
+                      ? "Precio del bono ENTERO pagado de una vez."
+                      : "Vacío = sin cobro. Con precio, se cobra al reservar."}
                   </p>
                 </div>
+              </div>
+
+              {/* Bono de sesiones (04/08/2026). Con 1 se comporta como siempre. */}
+              <div>
+                <label className="block text-[11px] font-medium text-neutral-500 mb-1">
+                  Sesiones que incluye
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={form.sessionsCount}
+                  onChange={(e) => updateForm("sessionsCount", e.target.value)}
+                  className={inputCls}
+                />
+                <p className="text-[10px] text-neutral-400 mt-1">
+                  1 = una cita suelta. Más de 1 es un bono: se paga una vez y da derecho a esas citas, que se
+                  reservan por separado y se numeran («3 de 10»).
+                </p>
+              </div>
+
+              {/* El fraccionado es un precio APARTE, no el de arriba dividido. */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">
+                    Pago a plazos: cuota al mes (€)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="No se fracciona"
+                    value={form.instalmentPrice}
+                    onChange={(e) => updateForm("instalmentPrice", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Durante (meses)</label>
+                  <input
+                    type="number"
+                    min={2}
+                    max={36}
+                    placeholder="—"
+                    value={form.instalmentMonths}
+                    onChange={(e) => updateForm("instalmentMonths", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+              <p className="text-[10px] text-neutral-400 -mt-1">
+                {totalFraccionado
+                  ? `La paciente elegirá entre pagar ${form.price || 0} € de una vez o ${form.instalmentPrice} € al mes durante ${form.instalmentMonths} meses (${totalFraccionado} € en total).`
+                  : "Déjalo vacío si esto solo se paga de una vez. Es un precio independiente del de arriba: financiar suele costar más."}
+              </p>
+
+              {/* Formulario propio de este tipo de cita (04/08/2026). */}
+              <div>
+                <label className="block text-[11px] font-medium text-neutral-500 mb-1">
+                  Formulario al reservar
+                </label>
+                <select
+                  value={form.formId}
+                  onChange={(e) => updateForm("formId", e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="">Ninguno</option>
+                  {formularios.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.title}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-neutral-400 mt-1">
+                  Si eliges uno, se rellena DESPUÉS de escoger fecha y hora y las respuestas quedan con la cita.
+                  {formularios.length === 0 && " Todavía no has creado ningún formulario."}
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-2">

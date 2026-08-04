@@ -54,6 +54,15 @@ import {
   timeStrToMinutes,
 } from "../../../../../../lib/citas/slots.js";
 import { cargarFestivos, esFestivo } from "../../../../../../lib/citas/festivos.js";
+import {
+  asignarSesion,
+  esPack,
+  precioDeCompra,
+  PAGO_UNICO,
+  PAGO_FRACCIONADO,
+} from "../../../../../../lib/citas/packs.js";
+import { createCheckoutSession } from "../../../../../../lib/payments/checkout.js";
+import { validarRespuestas } from "../../../../../../lib/formularios/fields.js";
 
 /**
  * Recupera el formulario de tarjeta de quien ya tenía una reserva a medias.
@@ -320,7 +329,74 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     // ── ¿Esta cita se cobra? ────────────────────────────────────────────────
     // Solo si su tipo tiene precio. Sin precio (null o 0) el flujo es el de
     // siempre, así que los tenants que no cobran no notan absolutamente nada.
-    const precio = Number.isInteger(eventType.price) && eventType.price > 0 ? eventType.price : null;
+    const precioTarifa = Number.isInteger(eventType.price) && eventType.price > 0 ? eventType.price : null;
+
+    // Origen público desde el que se ha cargado el widget. Se deduce de la
+    // propia petición (nginx pone las cabeceras `x-forwarded-*`) y no de una
+    // variable de entorno: cada centro entra por su dominio, y una URL fija
+    // devolvería a la paciente al sitio equivocado tras pagar.
+    const origenPublico = (req) => {
+      const proto = req.headers.get("x-forwarded-proto") || "https";
+      const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
+      return host ? `${proto}://${host}` : "";
+    };
+
+    // ── ¿Le queda bono? ─────────────────────────────────────────────────────
+    // Si esta persona ya tiene un bono con sesiones libres para este tipo de
+    // cita, la reserva se engancha a él, se numera («3 de 10») y NO SE COBRA:
+    // ya lo pagó al comprarlo. Si no lo tiene, la cita sigue el camino de
+    // siempre y se cobra; el bono nace cuando el pago se confirma, no aquí
+    // (quien abandona el formulario de la tarjeta no puede quedarse con diez
+    // sesiones sin pagar). Ver lib/citas/packs.js.
+    const enBono = await asignarSesion(tenantModels, { email: clientEmail, eventTypeId: eventType.id });
+
+    // Es un bono y no tiene uno activo → esta reserva COMPRA el bono. El modo
+    // de pago lo elige quien reserva; el importe NO viene del cliente, sale de
+    // lo que la profesional configuró (ver la nota de seguridad de
+    // lib/payments/autorizacion.js).
+    const compraDeBono =
+      !enBono && esPack(eventType)
+        ? precioDeCompra(eventType, body.pricingMode === PAGO_FRACCIONADO ? PAGO_FRACCIONADO : PAGO_UNICO)
+        : null;
+
+    if (!enBono && esPack(eventType) && !compraDeBono) {
+      // Pidió fraccionado y no está configurado, o el bono no tiene precio.
+      // Mejor decirlo que cobrar un importe que nadie ha puesto.
+      return error("Esta forma de pago no está disponible para este programa", 422);
+    }
+
+    const precio = enBono ? null : (compraDeBono ? compraDeBono.amount : precioTarifa);
+
+    // ── Formulario propio del tipo de cita (04/08/2026) ─────────────────────
+    // Si lo tiene, hay que haberlo respondido: se pregunta después de elegir
+    // fecha y hora, en el mismo formulario de datos. Se valida con el MISMO
+    // `validarRespuestas` del módulo Formularios, para que las reglas de cada
+    // pregunta (obligatoria, longitud, opciones) sean las mismas se responda
+    // desde donde se responda.
+    //
+    // ⚠️ NO confundir con la PUERTA DE ADMISIÓN (`puertaFormulario.js`): aquella
+    // exige un formulario ACEPTADO antes de dejar reservar y es de todo el
+    // centro. Esto son las preguntas de UNA cita concreta.
+    let respuestasFormulario = null;
+    if (eventType.formId) {
+      const { Form } = tenantModels;
+      const formulario = Form ? await Form.findByPk(eventType.formId) : null;
+      if (formulario?.active) {
+        const val = validarRespuestas(formulario, body.formAnswers ?? {});
+        if (!val.ok) {
+          return error(val.errores?.[0]?.mensaje || "Faltan respuestas del formulario", 422);
+        }
+        respuestasFormulario = {
+          formId: formulario.id,
+          formTitle: formulario.title,
+          answers: val.answers,
+          submittedAt: new Date().toISOString(),
+        };
+      }
+      // Formulario borrado o desactivado después de configurarlo: se reserva
+      // igual. Dejar a la gente sin poder pedir cita por una pregunta que ya no
+      // existe sería peor que perder esas respuestas.
+    }
 
     // ── Consentimiento de la retención ──────────────────────────────────────
     // Se exige ANTES de crear nada. El paciente tiene que haber leído que su
@@ -465,6 +541,12 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
             amount: precio,
             holdExpiresAt: precio ? holdCaducaEn : null,
             clientId,
+            // Bono: a cuál pertenece y qué número de sesión es. null en las
+            // citas sueltas, que son todas las de hoy.
+            packId: enBono?.packId ?? null,
+            sessionNumber: enBono?.sessionNumber ?? null,
+            // Respuestas del formulario del tipo de cita, si lo tiene.
+            formAnswers: respuestasFormulario,
           },
           { transaction: t }
         );
@@ -546,6 +628,62 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     // ningún correo ni se da la solicitud por buena: eso lo hace el webhook
     // cuando la retención existe de verdad. Prometerle algo al paciente antes
     // sería prometerle una cita que puede no llegar a tener.
+    // ── Comprar un BONO va por CHECKOUT, no por retención ───────────────────
+    // La retención de tarjeta (autorizar sin cobrar) es para UNA cita: se
+    // bloquea el importe y la profesional decide. Un bono es una compra: se
+    // paga entero y da derecho a N sesiones. Además Klarna NO admite
+    // retenciones —`autorizacion.js` fuerza tarjeta a propósito—, así que el
+    // pago fraccionado solo puede existir por esta vía.
+    if (precio && compraDeBono) {
+      let checkout;
+      try {
+        checkout = await createCheckoutSession(tenantContext, {
+          entityType: "booking",
+          entityId: row.id,
+          amount: compraDeBono.amount,
+          description: `${eventType.name} — ${tenant.name}`,
+          customerEmail: row.clientEmail,
+          // Fraccionado → SOLO Klarna: el importe cobrado es el del
+          // fraccionado, y dejar la tarjeta permitiría pagar el precio caro
+          // de golpe teniendo la opción barata.
+          paymentMethodTypes: compraDeBono.metodos,
+          successUrl: `${origenPublico(request)}/widget/c/${tenant.slug}/mi-perfil`,
+          cancelUrl: `${origenPublico(request)}/widget/c/${tenant.slug}`,
+          metadata: {
+            bookingId: row.id,
+            // Lo lee el webhook para crear el bono con el modo correcto.
+            pricingMode: compraDeBono.mode,
+            instalmentAmount: compraDeBono.instalmentAmount,
+            instalmentMonths: compraDeBono.instalmentMonths,
+          },
+        });
+        await row.update({ paymentSessionId: checkout.paymentSession.id });
+      } catch (err) {
+        await row.destroy().catch(() => {});
+        process.stderr.write(`[citas:book] checkout del bono falló: ${err.message}\n`);
+        return error("No se pudo iniciar el pago. Inténtalo de nuevo en un momento.", 502);
+      }
+
+      return created({
+        booking: {
+          id: row.id,
+          scheduledAt: row.scheduledAt.toISOString(),
+          duration: row.duration,
+          eventTypeName: eventType.name,
+          eventTypeColor: eventType.color,
+          clientEmail: row.clientEmail,
+        },
+        paymentRequired: true,
+        amount: compraDeBono.amount,
+        // El bono se paga en la pantalla de Stripe, no con un formulario de
+        // tarjeta embebido: el widget solo tiene que llevarle allí.
+        checkoutUrl: checkout.checkoutUrl,
+        pricingMode: compraDeBono.mode,
+        sessionsCount: Number(eventType.sessionsCount) || 1,
+        expiresAt: row.holdExpiresAt?.toISOString() ?? null,
+      });
+    }
+
     if (precio) {
       let datosPago;
       try {

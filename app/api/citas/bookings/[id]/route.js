@@ -133,6 +133,11 @@ function bookingIncludes({ EventType, TeamMember, Patient }, hasModule) {
   if ((hasModule("clinica") || hasModule("pacientes")) && Patient) {
     inc.push({ model: Patient, as: "patient", attributes: ["id", "firstName", "lastName"] });
   }
+  // ⚠️ El BONO no se incluye a propósito. El total de sesiones ya viaja en
+  // `eventType.sessionsCount`, y un JOIN a `session_packs` reventaría con un
+  // 500 al abrir CUALQUIER cita en un cliente que aún no haya corrido la
+  // migración del 04/08 — el mismo motivo por el que `patient` y `teamMember`
+  // van condicionados aquí arriba.
   return inc;
 }
 
