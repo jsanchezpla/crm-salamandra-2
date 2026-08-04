@@ -47,6 +47,22 @@ const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const urlDe = (id) => `https://app.harbiz.io/cdn/storage/Images/${id}/${TAMANO}/${id}`;
 
+/**
+ * Qué es la imagen DE VERDAD, mirando sus primeros bytes.
+ *
+ * No se puede confiar en el `content-type` de Harbiz: sirve WEBP declarándolo
+ * como `image/jpeg`. Se descubrió porque nuestro validador —que compara los
+ * bytes con el tipo declarado— rechazó una foto, y tenía razón. La respuesta no
+ * es relajar el validador, es averiguar el tipo bien antes de preguntarle.
+ */
+function tipoReal(buf) {
+  if (buf.length < 12) return null;
+  if (buf[0] === 0xff && buf[1] === 0xd8) return "image/jpeg";
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "image/png";
+  if (buf.slice(0, 4).toString("latin1") === "RIFF" && buf.slice(8, 12).toString("latin1") === "WEBP") return "image/webp";
+  return null;
+}
+
 async function main() {
   console.log(`\n${"═".repeat(64)}`);
   console.log(` FOTOS DE LAS RECETAS DE HARBIZ → tenant "${SLUG}"`);
@@ -98,9 +114,11 @@ async function main() {
       const buf = Buffer.from(await res.arrayBuffer());
       if (buf.length > MAX_PHOTO_SIZE_BYTES) throw new Error(`pesa ${Math.round(buf.length / 1024)} KB, más del máximo`);
 
-      // El tipo se comprueba por los BYTES, no por lo que diga la cabecera:
-      // es la misma validación que aplica la subida manual desde la ficha.
-      const mime = res.headers.get("content-type")?.split(";")[0] ?? "image/png";
+      // El tipo sale de los BYTES, no de la cabecera (Harbiz sirve WEBP
+      // diciendo que es JPEG). Y aun así se pasa por el mismo validador que la
+      // subida manual desde la ficha: aquí se averigua el tipo, no se confía.
+      const mime = tipoReal(buf);
+      if (!mime) throw new Error("no es JPEG, PNG ni WEBP");
       if (!validatePhotoMagicBytes(buf, mime)) throw new Error(`no parece ${mime} de verdad`);
 
       const photoId = crypto.randomUUID();
