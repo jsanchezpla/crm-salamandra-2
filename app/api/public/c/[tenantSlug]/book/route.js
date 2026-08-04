@@ -45,6 +45,13 @@ import {
   estadoDeAdmision,
   mensajeDePuerta,
 } from "../../../../../../lib/citas/puertaFormulario.js";
+import {
+  exigeContratoFirmado,
+  esCitaDeValoracion,
+  estadoDeContratos,
+  dejaReservar,
+  mensajeDeContrato,
+} from "../../../../../../lib/citas/puertaContrato.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
 import {
   getMadridDayOfWeek,
@@ -202,6 +209,32 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
           codigo: aviso.codigo,
           titulo: aviso.titulo,
           urlFormulario: aviso.mostrarEnlace ? urlDelFormulario(tenant) : null,
+        });
+      }
+    }
+
+    // Puerta de contratos (04/08/2026): el orden de la consulta es firmar →
+    // pedir cita → pagar, y hasta hoy nadie lo comprobaba fuera del portal.
+    // LA VALORACIÓN INICIAL SE LA SALTA: es la primera visita y sin esa
+    // excepción esto sería un muro, porque para firmar hay que ser ya paciente.
+    if (exigeContratoFirmado(tenant) && !esCitaDeValoracion(eventType)) {
+      const estado = await estadoDeContratos(tenantModels, clientEmail);
+      if (!dejaReservar(estado)) {
+        // El nombre de la valoración se busca aquí y no antes para no gastar
+        // una consulta en las reservas que pasan de largo, que son casi todas.
+        const valoracion = await EventType.findOne({
+          where: { isInitialAssessment: true, active: true },
+          attributes: ["name"],
+        }).catch(() => null);
+        const aviso = mensajeDeContrato(estado, {
+          identificado,
+          nombre: tenant.name,
+          valoracion: valoracion?.name ?? null,
+        });
+        return errorConDatos(aviso.texto, 403, {
+          codigo: aviso.codigo,
+          titulo: aviso.titulo,
+          irAlPortal: aviso.irAlPortal,
         });
       }
     }

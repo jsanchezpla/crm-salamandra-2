@@ -180,11 +180,29 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
         updates.formId = v;
       }
     }
+    // «Esta es la valoración inicial» (04/08/2026). Como mucho una por cliente:
+    // al marcar una se desmarca la anterior, porque el portal tiene que poder
+    // preguntar «¿entras a una valoración inicial?» y saber a cuál se refiere.
+    // La BD lo garantiza con un índice único parcial; aquí se desmarca ANTES
+    // para que el centro no tenga que acordarse de hacerlo a mano.
+    let desmarcarOtras = false;
+    if ("isInitialAssessment" in body) {
+      const marcar = Boolean(body.isInitialAssessment);
+      updates.isInitialAssessment = marcar;
+      desmarcarOtras = marcar && !row.isInitialAssessment;
+    }
     if ("active" in body) updates.active = Boolean(body.active);
     if ("order" in body) {
       const v = Number(body.order);
       if (!Number.isInteger(v)) return error("order inválido");
       updates.order = v;
+    }
+
+    if (desmarcarOtras) {
+      await EventType.update(
+        { isInitialAssessment: false },
+        { where: { isInitialAssessment: true, id: { [Op.ne]: row.id } } }
+      );
     }
 
     await row.update(updates);

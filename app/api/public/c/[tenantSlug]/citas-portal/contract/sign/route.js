@@ -84,7 +84,11 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
       // alguien los ha puesto a mano en la petición. El DNI que se imprime en
       // el contrato tiene que ser el de la ficha, no el que se teclee aquí.
       const campos = camposDe(plantillaFila);
-      const dat = validarDatos(plantillaFila, { ...body?.datos, ...datosDeFicha(campos, client) });
+      const dat = validarDatos(
+        plantillaFila,
+        { ...body?.datos, ...datosDeFicha(campos, client) },
+        client
+      );
       if (dat.error) return error(dat.error, 422);
 
       const acc = validarAceptaciones(plantillaFila, body?.aceptaciones);

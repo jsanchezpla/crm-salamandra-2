@@ -640,6 +640,21 @@ export default function ConfigModule() {
           )}
 
           {isAdmin && (
+            <PuertaContratoCard
+              activo={!!cfg.contratoObligatorio}
+              readOnly={!!cfg.readOnly}
+              onChange={(v) =>
+                patchTenant(
+                  { contratoObligatorio: v },
+                  v
+                    ? "Ahora hace falta tener los contratos firmados para reservar"
+                    : "Vuelve a poderse reservar sin haber firmado nada"
+                )
+              }
+            />
+          )}
+
+          {isAdmin && (
             <AreaPrivadaCard
               key={cfg.portalUrl ?? ""}
               url={cfg.portalUrl ?? ""}
@@ -1095,6 +1110,51 @@ function AvisosWhatsappCard({ activo, readOnly, configurado, onChange }) {
  * quien no ha pasado se le dice que le falta algo pero no a dónde ir—, así que
  * la tarjeta avisa en ámbar cuando está encendida y vacía.
  */
+/**
+ * Puerta de CONTRATOS (04/08/2026). Hermana de la de admisión, pero mira otra
+ * cosa: aquella pregunta «¿te admito?» y esta «¿has firmado?». Sin URL que
+ * configurar — el sitio donde se firma es el área privada, que ya se sabe.
+ */
+function PuertaContratoCard({ activo, readOnly, onChange }) {
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-neutral-800">Contratos firmados para pedir cita</div>
+          <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+            Solo puede reservar quien tenga firmados los documentos del centro. Al resto se les
+            enseña el aviso con el enlace a su área privada, no un error.{" "}
+            <strong className="text-neutral-500">La valoración inicial se salta esta puerta</strong>{" "}
+            —es la primera visita y todavía no hay nada que firmar—, y quien firmó en papel cuenta
+            como firmado.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange(!activo)}
+          className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 ${activo ? "bg-[var(--color-primary,#1B3A2D)]" : "bg-neutral-300"}`}
+          aria-label={activo ? "Quitar los contratos obligatorios" : "Exigir contratos firmados para reservar"}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${activo ? "translate-x-6" : "translate-x-1"}`} />
+        </button>
+      </div>
+
+      <div className="mt-1 text-[11px] font-medium">
+        {activo ? (
+          <span className="text-emerald-700">
+            Activa: sin los documentos firmados solo se puede pedir la valoración inicial.
+          </span>
+        ) : (
+          <span className="text-neutral-400">
+            Apagada: se puede reservar y dejar la tarjeta sin haber firmado nada.
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PuertaAdmisionCard({ activo, url, readOnly, onChange, onGuardarUrl }) {
   // El borrador arranca del valor guardado. Cuando ese valor cambia, la
   // tarjeta se vuelve a montar (`key` en quien la pinta) en vez de

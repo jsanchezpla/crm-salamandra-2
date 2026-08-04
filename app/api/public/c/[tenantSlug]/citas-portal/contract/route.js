@@ -31,6 +31,7 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
       siguienteDocumento,
       documentosPendientes,
       datosPendientes,
+      datosPosteriores,
       estructurado,
     } = await estadoContrato(tenantModels, client, guardian);
 
@@ -49,8 +50,13 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
       estructurado,
       plantilla: siguienteDocumento,
       documentosPendientes,
-      // Lo que hay que preguntarle ANTES de enseñarle nada que firmar.
+      // Lo que hay que preguntarle ANTES de enseñarle nada que firmar (hoy
+      // solo la fecha de nacimiento, que decide si hace falta el
+      // consentimiento del tutor).
       datosPendientes,
+      // Y lo que se le pide DESPUÉS de firmarlo todo: domicilio y datos de
+      // facturación (04/08/2026).
+      datosPosteriores,
       ...situacion,
     });
   } catch (err) {

@@ -146,6 +146,14 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const dup = await EventType.findOne({ where: { slug } });
     if (dup) return error("Ya existe un tipo de cita con ese slug", 409);
 
+    // «Esta es la valoración inicial»: como mucho una por cliente. Si se crea
+    // marcada, la que lo estuviera deja de estarlo (la BD lo impone además con
+    // un índice único parcial).
+    const isInitialAssessment = Boolean(body.isInitialAssessment);
+    if (isInitialAssessment) {
+      await EventType.update({ isInitialAssessment: false }, { where: { isInitialAssessment: true } });
+    }
+
     const row = await EventType.create({
       name,
       description: normalizeString(body.description),
@@ -167,6 +175,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       instalmentPrice,
       instalmentMonths,
       formId,
+      isInitialAssessment,
       active,
       order,
     });

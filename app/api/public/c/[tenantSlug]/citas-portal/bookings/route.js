@@ -44,7 +44,16 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
         // persona. Enseñársela como "próxima" sería mentirle.
         ...noEsCarritoAbandonado(),
       },
-      include: [{ model: EventType, as: "eventType", attributes: ["id", "name", "color"] }],
+      // `isInitialAssessment` viaja para que el portal sepa si esta persona YA
+      // tiene su valoración inicial cogida: en ese caso no se le vuelve a
+      // preguntar y entra directo a su perfil (04/08/2026).
+      include: [
+        {
+          model: EventType,
+          as: "eventType",
+          attributes: ["id", "name", "color", "isInitialAssessment"],
+        },
+      ],
       order: [["scheduledAt", "ASC"]],
     });
 

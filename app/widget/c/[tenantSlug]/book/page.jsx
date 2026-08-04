@@ -181,7 +181,14 @@ export default function WidgetBookPage() {
       // enseña qué le falta y por dónde. Sus datos siguen en el formulario por
       // si vuelve.
       if (res.status === 403 && j?.codigo) {
-        setPuerta({ titulo: j.titulo, texto: j.error, urlFormulario: j.urlFormulario ?? null });
+        // `irAlPortal` lo manda la puerta de CONTRATOS (04/08/2026): allí no
+        // hay un formulario al que ir, sino el área privada donde se firma.
+        setPuerta({
+          titulo: j.titulo,
+          texto: j.error,
+          urlFormulario: j.urlFormulario ?? null,
+          irAlPortal: j.irAlPortal ?? false,
+        });
         return;
       }
       if (!res.ok || !j.ok) {
@@ -340,6 +347,18 @@ export default function WidgetBookPage() {
                 className="inline-flex w-full items-center justify-center gap-2 px-5 py-3 text-sm font-semibold rounded-lg text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
               >
                 Ir al formulario
+                <span aria-hidden="true">→</span>
+              </a>
+            )}
+
+            {puerta.irAlPortal && (
+              <a
+                href={`/widget/c/${tenantSlug}/mi-perfil`}
+                target="_top"
+                rel="noopener"
+                className="inline-flex w-full items-center justify-center gap-2 px-5 py-3 text-sm font-semibold rounded-lg text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
+              >
+                Ir a mi área privada
                 <span aria-hidden="true">→</span>
               </a>
             )}
@@ -587,7 +606,12 @@ export default function WidgetBookPage() {
   return (
     <div className="min-h-screen" style={brandStyle}>
       <header className="px-6 lg:px-10 py-6 border-b border-[var(--widget-border)] bg-[var(--widget-card)]">
-        <div className="max-w-3xl mx-auto flex items-center gap-4">
+        {/* max-w-6xl, igual que la pantalla de la que se viene (04/08/2026,
+            Rodrigo: «parece de móvil, hay que scrollear»). Estaba en 3xl —la
+            mitad de ancho— con el MISMO grid de tres columnas dentro, así que
+            el calendario salía encajonado y en vertical según por dónde
+            hubieras entrado. */}
+        <div className="max-w-6xl mx-auto flex items-center gap-4">
           <button
             onClick={() => router.push(`/widget/c/${tenantSlug}`)}
             className="text-[var(--widget-text-muted)] hover:text-[var(--widget-text)] p-1.5 rounded-md hover:bg-[var(--widget-bg)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
@@ -619,7 +643,7 @@ export default function WidgetBookPage() {
         </div>
       </header>
 
-      <div className="max-w-3xl mx-auto px-4 lg:px-10 py-6 lg:py-10">
+      <div className="max-w-6xl mx-auto px-4 lg:px-10 py-6 lg:py-10">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Resumen */}
           <aside className="lg:col-span-1">

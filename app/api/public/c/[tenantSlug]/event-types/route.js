@@ -57,6 +57,9 @@ export const GET = withPublicTenant(async (_request, _ctx, { tenantModels, hasMo
         // Preguntas que hay que responder al reservar ESTE tipo de cita. null =
         // ninguna, que es como se comportan todos los de hoy.
         form: r.formId ? (formularios.get(r.formId) ?? null) : null,
+        // La primera visita: se entra sin firmar contratos (04/08/2026). El
+        // portal la necesita para ofrecerla ANTES de la pantalla de firma.
+        isInitialAssessment: Boolean(r.isInitialAssessment),
         order: r.order,
       }));
 

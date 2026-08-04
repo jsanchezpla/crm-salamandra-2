@@ -34,6 +34,8 @@ const EMPTY_FORM = {
   instalmentMonths: "",
   // Formulario a rellenar tras elegir fecha y hora. "" = ninguno.
   formId: "",
+  // La primera visita: se entra sin firmar contratos. Solo una por cliente.
+  isInitialAssessment: false,
   active: true,
   order: 0,
 };
@@ -140,6 +142,7 @@ export default function CitasTiposPage() {
         instalmentPrice: data.instalmentPrice != null ? centsToEuros(data.instalmentPrice) : "",
         instalmentMonths: data.instalmentMonths ?? "",
         formId: data.formId ?? "",
+        isInitialAssessment: !!data.isInitialAssessment,
         active: !!data.active,
         order: data.order ?? 0,
         _bookingCount: data.bookingCount ?? 0,
@@ -206,6 +209,7 @@ export default function CitasTiposPage() {
       instalmentPrice: form.instalmentMonths ? eurosToCents(form.instalmentPrice) : null,
       instalmentMonths: form.instalmentPrice ? Number(form.instalmentMonths) || null : null,
       formId: form.formId || null,
+      isInitialAssessment: !!form.isInitialAssessment,
       active: !!form.active,
       order: Number(form.order),
     };
@@ -548,6 +552,23 @@ export default function CitasTiposPage() {
                   {formularios.length === 0 && " Todavía no has creado ningún formulario."}
                 </p>
               </div>
+
+              {/* La primera visita (04/08/2026, Rodrigo): se entra sin firmar. */}
+              <label className="flex items-start gap-2.5 p-3 rounded-lg border border-neutral-200 bg-neutral-50/60 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.isInitialAssessment}
+                  onChange={(e) => updateForm("isInitialAssessment", e.target.checked)}
+                  className="mt-0.5 rounded border-neutral-300 accent-[var(--color-primary)]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[12px] text-neutral-700">Esta es la valoración inicial</span>
+                  <span className="block text-[10px] text-neutral-400 leading-snug">
+                    A esta cita se entra SIN firmar los contratos: es la primera visita y todavía no
+                    hay nada decidido. Solo puede haber una; si marcas esta, la anterior se desmarca.
+                  </span>
+                </span>
+              </label>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>

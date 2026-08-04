@@ -170,6 +170,9 @@ export const MODULES = {
     // (04/08/2026). Un tipo de cita pasa a poder valer por N sesiones, con su
     // numeración («3 de 10») visible en el calendario.
     "migrate-packs-sesiones",
+    // «Esta es la valoración inicial» (04/08/2026): la marca del tipo de cita
+    // al que se entra SIN firmar contratos, porque es la primera visita.
+    "migrate-valoracion-inicial",
   ],
 
   calendar: ["migrate-calendar-citas-fks"],

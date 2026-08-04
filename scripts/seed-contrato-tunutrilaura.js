@@ -293,13 +293,58 @@ const PLANTILLAS = [
     // acto de firmar, no de la persona.
     fields: [
       { key: "nombre", label: "Nombre y apellidos", type: "text", required: true, ficha: "cliente.name" },
-      { key: "dni", label: "DNI / NIE", type: "dni", required: true, ficha: "cliente.taxId" },
+      {
+        key: "dni",
+        label: "DNI / NIE",
+        type: "dni",
+        required: true,
+        // Por debajo de los 14 no hay obligación legal de tenerlo (04/08/2026,
+        // Rodrigo), así que se sigue pidiendo pero deja de bloquear la firma.
+        // Ver `campoEsObligatorio` en lib/clients/datosFicha.js.
+        requiredDesdeEdad: 14,
+        ficha: "cliente.taxId",
+      },
+      // ── Datos de facturación ──────────────────────────────────────────────
+      // Antes esto era un «Domicilio» suelto (04/08/2026, Rodrigo: «deberían ser
+      // todos los datos de facturación»). Van a `customFields`, que es donde el
+      // alta del mostrador guarda ya el código postal y la ciudad: si fueran a
+      // las columnas fiscales, la misma familia tendría dos direcciones
+      // distintas en la ficha y nadie sabría cuál mirar.
       {
         key: "domicilio",
         label: "Domicilio",
         type: "text",
         required: true,
+        group: "Datos de facturación",
+        placeholder: "C/ Mallorca 210, 3º 2ª",
         ficha: "cliente.customFields.domicilio",
+      },
+      {
+        key: "codigoPostal",
+        label: "Código postal",
+        type: "text",
+        required: true,
+        group: "Datos de facturación",
+        placeholder: "08008",
+        ficha: "cliente.customFields.postalCode",
+      },
+      {
+        key: "ciudad",
+        label: "Ciudad",
+        type: "text",
+        required: true,
+        group: "Datos de facturación",
+        placeholder: "Barcelona",
+        ficha: "cliente.customFields.city",
+      },
+      {
+        key: "provincia",
+        label: "Provincia",
+        type: "text",
+        required: true,
+        group: "Datos de facturación",
+        placeholder: "Barcelona",
+        ficha: "cliente.customFields.province",
       },
       { key: "email", label: "Correo electrónico", type: "email", required: true, ficha: "cliente.email" },
       { key: "telefono", label: "Teléfono", type: "tel", required: true, ficha: "cliente.phone" },
@@ -309,6 +354,9 @@ const PLANTILLAS = [
         type: "date",
         required: true,
         // La que decide si además hace falta el consentimiento del tutor legal.
+        // Por eso es el ÚNICO dato que se sigue pidiendo ANTES de firmar: sin
+        // saberla, el consentimiento parental aparecía a mitad de la firma.
+        previo: true,
         ficha: "cliente.birthDate",
       },
       {

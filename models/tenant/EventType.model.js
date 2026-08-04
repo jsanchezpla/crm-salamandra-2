@@ -154,6 +154,27 @@ export function defineEventType(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      /**
+       * «Esta es la valoración inicial» (04/08/2026, Rodrigo).
+       *
+       * A la valoración inicial se entra SIN firmar nada: es la primera visita,
+       * cuando la persona todavía no ha decidido si empieza. Exigirle el
+       * contrato del centro para conocer a la nutricionista espantaba gente en
+       * la puerta.
+       *
+       * Es una MARCA del tipo de cita y no el nombre «Valoración inicial»
+       * escrito en el código: cada centro llama a su primera visita como
+       * quiere, y un rótulo que alguien renombre un martes no puede decidir
+       * quién se salta un contrato.
+       *
+       * Solo debería estar marcado UNO por tenant; el endpoint desmarca el
+       * anterior al marcar otro.
+       */
+      isInitialAssessment: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
       active: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

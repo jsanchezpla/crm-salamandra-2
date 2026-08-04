@@ -51,7 +51,9 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
     // solo se exige lo que falta: pedirle a alguien la localidad de la firma en
     // esta pantalla sería preguntarle por un dato que aún no ha ocurrido.
     const soloFaltan = campos.filter((c) => faltan.some((f) => f.key === c.key));
-    const dat = validarDatos({ fields: soloFaltan }, body?.datos);
+    // `client` va para que la edad decida los obligatorios: el DNI no lo es
+    // por debajo de los 14 (ver `campoEsObligatorio`).
+    const dat = validarDatos({ fields: soloFaltan }, body?.datos, client);
     if (dat.error) return error(dat.error, 422);
 
     const update = actualizacionDeFicha(campos, client, dat.datos);
@@ -77,6 +79,7 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
     // consentimiento parental, y `plantilla` ya trae el documento que toca.
     return ok({
       datosPendientes: despues.datosPendientes ?? [],
+      datosPosteriores: despues.datosPosteriores ?? [],
       plantilla: despues.siguienteDocumento ?? null,
       documentosPendientes: despues.documentosPendientes ?? 0,
       quedanDocumentos: despues.documentosPendientes ?? 0,

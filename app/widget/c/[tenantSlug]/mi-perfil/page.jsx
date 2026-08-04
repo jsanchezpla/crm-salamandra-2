@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useCitasPortalSession } from "../_components/useCitasPortalSession.js";
 import MisDocumentos from "../_components/MisDocumentos.jsx";
+import BienvenidaGate from "../_components/BienvenidaGate.jsx";
 import ContratoGate from "../_components/ContratoGate.jsx";
+import DatosGate from "../_components/DatosGate.jsx";
 import ComunicacionesGate from "../_components/ComunicacionesGate.jsx";
 import ConsentimientoImagenGate from "../_components/ConsentimientoImagenGate.jsx";
 
@@ -172,6 +174,22 @@ export default function MiPerfilPage() {
   // esconde solo si ya han contestado por todos sus hijos.
   const [imagenVista, setImagenVista] = useState(false);
 
+  // «¿A qué entras?» (04/08/2026, Rodrigo). Va ANTES del contrato: quien viene
+  // a una primera visita no tiene por qué firmar el acuerdo de servicio para
+  // pedirla. `valoracion` es el tipo de cita que el centro haya marcado como
+  // valoración inicial; sin ninguno marcado, esta pregunta no existe.
+  const [valoracion, setValoracion] = useState(null);
+  const [eligioPerfil, setEligioPerfil] = useState(false);
+
+  // «Completa tus datos», ahora DESPUÉS de firmar (04/08/2026, Rodrigo). Antes
+  // iba delante del contrato y era un peaje en la puerta; lo único que se sigue
+  // pidiendo antes es la fecha de nacimiento, porque decide si hace falta el
+  // consentimiento del tutor. `datosAplazados` es el «más tarde»: deja pasar
+  // hasta que cierre la pestaña, igual que el contrato.
+  const [datosAplazados, setDatosAplazados] = useState(false);
+  const [guardandoDatos, setGuardandoDatos] = useState(false);
+  const [errorDatos, setErrorDatos] = useState(null);
+
   // Info del tenant (branding / header / loginUrl).
   useEffect(() => {
     if (!tenantSlug) return;
@@ -179,6 +197,22 @@ export default function MiPerfilPage() {
     fetch(`/api/public/c/${tenantSlug}/info`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => { if (!cancelled && j?.data) setInfo(j.data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [tenantSlug]);
+
+  // ¿Cuál es la valoración inicial de este centro? Es público (los tipos de
+  // cita ya lo son), así que no gasta la sesión del portal. Si falla, el portal
+  // se comporta como toda la vida: derecho al contrato.
+  useEffect(() => {
+    if (!tenantSlug) return;
+    let cancelled = false;
+    fetch(`/api/public/c/${tenantSlug}/event-types`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelled) return;
+        setValoracion((j?.data ?? []).find((t) => t.isInitialAssessment) ?? null);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [tenantSlug]);
@@ -328,6 +362,52 @@ export default function MiPerfilPage() {
   const history = data?.history ?? [];
   const isEmpty = !loadingData && !dataError && upcoming.length === 0 && history.length === 0;
 
+  // ── «¿A qué entras?» ──────────────────────────────────────────────────────
+  // Va DELANTE del contrato (04/08/2026): a la primera visita se entra sin
+  // firmar nada. Se salta sola —sin preguntar— cuando la persona YA tiene su
+  // valoración cogida, sea próxima o pasada: quien ya la reservó no vuelve a la
+  // casilla de salida cada vez que abre el portal.
+  //
+  // Se espera a que carguen las citas (`loadingData`) a propósito: preguntar
+  // antes de saberlo se la enseñaría un instante a quien no le tocaba.
+  const yaTieneValoracion = [...upcoming, ...history].some((b) => b.esValoracionInicial);
+  if (valoracion && !yaTieneValoracion && !eligioPerfil && !loadingData && !dataError) {
+    return (
+      <div style={brandStyle}>
+        <BienvenidaGate
+          profesional={info?.name}
+          valoracion={valoracion}
+          hrefValoracion={`/widget/c/${tenantSlug}/book?eventTypeId=${encodeURIComponent(valoracion.id)}`}
+          onEntrarPerfil={() => setEligioPerfil(true)}
+        />
+      </div>
+    );
+  }
+
+  // Guarda en la ficha los datos que se piden tras firmar. Mismo endpoint que
+  // usa ContratoGate para los previos: la ficha es la misma.
+  async function guardarMisDatos(datos) {
+    if (guardandoDatos) return;
+    setGuardandoDatos(true);
+    setErrorDatos(null);
+    try {
+      const res = await authFetch("/citas-portal/mis-datos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ datos }),
+      });
+      if (res.status === 401) return;
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.ok) throw new Error(j?.error || "No pudimos guardar tus datos");
+      setContrato((c) => ({ ...c, ...j.data }));
+      loadContrato();
+    } catch (err) {
+      setErrorDatos(err.message);
+    } finally {
+      setGuardandoDatos(false);
+    }
+  }
+
   // La pantalla del contrato va DELANTE de todo lo demás.
   if (contrato?.requiereFirma && !aplazado) {
     return (
@@ -346,6 +426,24 @@ export default function MiPerfilPage() {
             loadContrato();
           }}
           onMasTarde={() => setAplazado(true)}
+        />
+      </div>
+    );
+  }
+
+  // Ya está firmado: AHORA se le piden el domicilio y los datos de facturación
+  // (04/08/2026). Se puede aplazar: tener la ficha completa es cosa del centro,
+  // no un requisito para ver tus propias citas.
+  if ((contrato?.datosPosteriores?.length ?? 0) > 0 && !datosAplazados) {
+    return (
+      <div style={brandStyle}>
+        <DatosGate
+          campos={contrato.datosPosteriores}
+          profesional={info?.name}
+          enviando={guardandoDatos}
+          error={errorDatos}
+          onGuardar={guardarMisDatos}
+          onMasTarde={() => setDatosAplazados(true)}
         />
       </div>
     );

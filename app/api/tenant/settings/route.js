@@ -135,6 +135,7 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("citas.portalBloqueoImpago", antes?.citas?.portalBloqueoImpago, despues?.citas?.portalBloqueoImpago);
   anota("citas.avisosWhatsapp", antes?.citas?.avisosWhatsapp, despues?.citas?.avisosWhatsapp);
   anota("citas.formularioObligatorio", antes?.citas?.formularioObligatorio, despues?.citas?.formularioObligatorio);
+  anota("citas.contratoObligatorio", antes?.citas?.contratoObligatorio, despues?.citas?.contratoObligatorio);
   anota("citas.formularioUrl", antes?.citas?.formularioUrl, despues?.citas?.formularioUrl);
   anota("citas.portalUrl", antes?.citas?.portalUrl, despues?.citas?.portalUrl);
 
@@ -216,6 +217,9 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     avisosWhatsapp: t.settings?.citas?.avisosWhatsapp === true,
     // Puerta de admisión: solo reserva quien tiene el formulario aceptado.
     formularioObligatorio: t.settings?.citas?.formularioObligatorio === true,
+    // Puerta de contratos (04/08/2026): sin firmar no se reserva, salvo la
+    // valoración inicial. Ver lib/citas/puertaContrato.js.
+    contratoObligatorio: t.settings?.citas?.contratoObligatorio === true,
     formularioUrl: t.settings?.citas?.formularioUrl ?? "",
     // Página de la web del cliente donde está incrustado el portal.
     portalUrl: t.settings?.citas?.portalUrl ?? "",
@@ -424,6 +428,9 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   // aviso pero no tiene a dónde ir.
   if (typeof body.formularioObligatorio === "boolean") {
     settings.citas = { ...(settings.citas ?? {}), formularioObligatorio: body.formularioObligatorio };
+  }
+  if (typeof body.contratoObligatorio === "boolean") {
+    settings.citas = { ...(settings.citas ?? {}), contratoObligatorio: body.contratoObligatorio };
   }
   if (typeof body.formularioUrl === "string") {
     const url = body.formularioUrl.trim();
