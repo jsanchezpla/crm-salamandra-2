@@ -43,8 +43,6 @@ const SLUG = args.includes("--tenant") ? args[args.indexOf("--tenant") + 1] : "n
 const DATOS = (args.includes("--datos") ? args[args.indexOf("--datos") + 1] : null) || "C:/Claude Code/migracion-harbiz";
 const TAMANO = args.includes("--tamano") ? args[args.indexOf("--tamano") + 1] : "original";
 
-const norm = (s) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-  .toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const urlDe = (id) => `https://app.harbiz.io/cdn/storage/Images/${id}/${TAMANO}/${id}`;
@@ -59,14 +57,18 @@ async function main() {
   const conFoto = recetas.filter((r) => r.imagen);
 
   const { models: m } = getTenantDb(SLUG);
-  const enCrm = await m.Recipe.findAll({ attributes: ["id", "name", "photoPath"] });
-  const porNombre = new Map();
-  for (const r of enCrm) if (!porNombre.has(norm(r.name))) porNombre.set(norm(r.name), r);
+  const enCrm = await m.Recipe.findAll({ attributes: ["id", "name", "photoPath", "externalId"] });
+  // Por el ID de Harbiz, NUNCA por el nombre: hay 59 nombres repetidos que son
+  // recetas distintas, y cruzar por nombre le colgaría la foto de una a la otra
+  // dejando a la segunda sin ninguna. Es el mismo fallo que ya se coló una vez
+  // en el importador de recetas.
+  const porId = new Map();
+  for (const r of enCrm) if (r.externalId) porId.set(r.externalId, r);
 
   const trabajo = [];
   let sinReceta = 0, yaTienen = 0;
   for (const r of conFoto) {
-    const receta = porNombre.get(norm(r.nombre));
+    const receta = porId.get(r.id);
     if (!receta) { sinReceta++; continue; }
     if (receta.photoPath) { yaTienen++; continue; }
     trabajo.push({ receta, imagen: r.imagen, nombre: r.nombre });
