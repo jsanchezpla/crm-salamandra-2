@@ -155,6 +155,20 @@ export function defineEventType(sequelize) {
         allowNull: true,
       },
       /**
+       * Preguntas que se contestan al reservar ESTE tipo de cita (04/08/2026).
+       *
+       * Sustituyen a `formId`: las preguntas viven aquí y no en un formulario
+       * del módulo Formularios, que obligaba a salir de esta pantalla y a tener
+       * ese módulo contratado para pedir un dato. Cuatro clases —número, escala
+       * de círculos, texto corto y texto largo—; el contrato está en
+       * `lib/citas/preguntasCita.js`.
+       */
+      formQuestions: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
+      /**
        * «Esta es la valoración inicial» (04/08/2026, Rodrigo).
        *
        * A la valoración inicial se entra SIN firmar nada: es la primera visita,

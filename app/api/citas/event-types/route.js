@@ -10,6 +10,7 @@ import {
   validateModalityFields,
 } from "../../../../lib/citas/validation.js";
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
+import { normalizarPreguntas } from "../../../../lib/citas/preguntasCita.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -175,6 +176,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       instalmentPrice,
       instalmentMonths,
       formId,
+      formQuestions: normalizarPreguntas(body.formQuestions),
       isInitialAssessment,
       active,
       order,

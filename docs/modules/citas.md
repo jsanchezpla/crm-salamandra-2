@@ -53,6 +53,67 @@ la vez**: reservan con correos de prueba que nunca han pasado por el formulario.
 
 ---
 
+## Puerta de contratos y valoración inicial (2026-08-04)
+
+Hermana de la de arriba, pero mira otra cosa: aquella pregunta «¿te admito como
+paciente?» y esta «¿has firmado lo que hay que firmar?». Nace de que el orden
+que quiere la consulta es **firmar → pedir cita → pagar**, y no se comprobaba en
+ningún sitio: el contrato tapaba el PORTAL, pero la agenda pública iba por otra
+puerta y estaba abierta. Cualquiera con el enlace elegía hora y dejaba la
+tarjeta retenida sin haber firmado nada.
+
+`lib/citas/puertaContrato.js` decide; la aplica `/book` antes de mirar huecos.
+Apagada por defecto (`settings.citas.contratoObligatorio`), se enciende en
+Configuración → Citas.
+
+**La VALORACIÓN INICIAL se la salta.** Es el tipo de cita marcado con
+`event_types.is_initial_assessment` (casilla en Citas → Tipos de cita; índice
+único parcial en BD para que solo haya una). Sin esa excepción la puerta sería
+un muro: para firmar hay que ser ya paciente. El nombre «Valoración inicial»
+NO está escrito en el código — cada centro llama a su primera visita como
+quiere, y un rótulo que alguien renombre un martes no puede decidir quién se
+salta un contrato.
+
+⚠️ **Ante un fallo al comprobar (tabla ausente, BD caída) esta puerta ABRE**, al
+revés que la de admisión. Aquella impide que entre gente sin admitir; esta solo
+ordena el papeleo de quien ya es paciente, y dejar a la consulta sin poder dar
+citas por un fallo técnico es mucho peor que una firma que llega tarde. Quien
+firmó **en papel** cuenta como firmado.
+
+⚠️ **El orden de encendido importa**: marcar primero la valoración inicial y
+encender la puerta después. Al revés, nadie nuevo puede reservar nada.
+
+Fijado en `_smoke-puerta-contrato.mjs` (interruptor, excepción, quién pasa y el
+texto del aviso).
+
+---
+
+## Preguntas propias del tipo de cita (2026-08-04)
+
+Se contestan al reservar, DESPUÉS de elegir fecha y hora, y quedan guardadas en
+`bookings.form_answers`. Se definen en el propio tipo de cita
+(`event_types.form_questions`), con el constructor que hay en Citas → Tipos de
+cita.
+
+Cuatro clases y a propósito no hay más (`lib/citas/preguntasCita.js`):
+`numero`, `escala` (círculos del 1 al N, 5 por defecto), `corto` y `largo`.
+Cada clase que se añada hay que pintarla en el widget, validarla en el servidor
+y enseñarla en la ficha.
+
+⚠️ **Esto sustituyó a `event_types.form_id`**, que durante unas horas del mismo
+día enganchaba un formulario del módulo Formularios. Obligaba a salir de la
+pantalla, crear un formulario entero con su página pública y volver a
+engancharlo para acabar preguntando dos cosas — y sin ese módulo contratado no
+había forma de pedir un dato al reservar. La columna `form_id` se conserva
+vacía y sin uso (no había ni un tipo de cita usándola en producción).
+
+**El enunciado se guarda JUNTO a la respuesta**, no solo su id: si la
+profesional reescribe la pregunta el mes que viene, lo que se contestó tiene que
+seguir leyéndose como se preguntó entonces. Fijado en
+`_smoke-preguntas-cita.mjs`.
+
+---
+
 ## Decirle algo al cliente: las tres vías (2026-08-03)
 
 El CRM sabía avisar de lo que le pasa a **una cita**, y solo de algunas cosas.
@@ -356,8 +417,16 @@ migración). Otros tenants conservan el comportamiento histórico.
 
 ## Contrato del Centro en el portal (sprint Aumenta 2026-07, 2.1 y 2.2)
 
-Al entrar al portal, lo PRIMERO es el contrato: si falta la firma de quien
-entra, `ContratoGate.jsx` tapa la pantalla entera. Hay un «Lo firmo más tarde»
+Al entrar al portal, lo primero es el contrato: si falta la firma de quien
+entra, `ContratoGate.jsx` tapa la pantalla entera.
+
+⚠️ **Desde el 04/08/2026 hay algo ANTES**: `BienvenidaGate.jsx` pregunta «¿A qué
+entras hoy?» y ofrece ir a la valoración inicial sin firmar nada. Se salta sola
+si el centro no ha marcado ninguna valoración o si esta persona ya la tiene
+cogida —próxima o pasada—, así que para casi todo el mundo el contrato sigue
+siendo lo primero. Y los datos de la ficha se piden DESPUÉS de firmar, no antes
+(solo la fecha de nacimiento va delante: decide si hace falta el consentimiento
+del tutor). Hay un «Lo firmo más tarde»
 que deja pasar a ver las citas, pero **«Mis documentos» sigue cerrado** —ni
 consultar ni subir— hasta que firmen todos (decisión de Rodrigo, 31/07). El
 aplazamiento dura lo que la pestaña: al volver a entrar, el contrato vuelve a

@@ -261,7 +261,9 @@ export default function WidgetBookPage() {
   // es exactamente el de siempre.
   // Preguntas propias de este tipo de cita (04/08/2026). Vacío = ninguna, que
   // es como se comportan todos los de hoy.
-  const preguntas = Array.isArray(eventType?.form?.fields) ? eventType.form.fields : [];
+  // Las preguntas viven en el tipo de cita desde el 04/08/2026 (antes se
+  // enganchaba un formulario del módulo Formularios).
+  const preguntas = Array.isArray(eventType?.preguntas) ? eventType.preguntas : [];
 
   const sesiones = Number(eventType?.sessionsCount) || 1;
   const esBono = sesiones > 1;
@@ -779,83 +781,76 @@ export default function WidgetBookPage() {
             {/* ── Preguntas del tipo de cita (04/08/2026) ────────────────────
                 Van AQUÍ, después de haber elegido fecha y hora, que es lo que
                 se pidió: una supervisión profesional necesita saber de qué caso
-                se va a hablar antes de que llegue el día. Las preguntas las
-                define la profesional en el constructor de formularios; esto solo
-                las pinta. */}
+                se va a hablar antes de que llegue el día.
+
+                Las define la profesional en el propio tipo de cita (Citas →
+                Tipos de cita). Cuatro clases: número, escala de círculos, texto
+                corto y texto largo — ver lib/citas/preguntasCita.js. */}
             {preguntas.length > 0 && (
               <fieldset className="rounded-md border border-[var(--widget-border)] bg-[var(--widget-bg)] p-3 space-y-3">
                 <legend className="px-1 text-[12px] font-medium text-[var(--widget-text)]">
-                  {eventType.form.title}
+                  Antes de tu cita
                 </legend>
-                {eventType.form.introText && (
-                  <p className="text-[12px] text-[var(--widget-text-muted)] leading-relaxed">
-                    {eventType.form.introText}
-                  </p>
-                )}
                 {preguntas.map((p) => {
-                  const valor = formAnswers[p.key] ?? "";
-                  const set = (v) => setFormAnswers((prev) => ({ ...prev, [p.key]: v }));
+                  const valor = formAnswers[p.id] ?? "";
+                  const set = (v) => setFormAnswers((prev) => ({ ...prev, [p.id]: v }));
 
-                  // «consent» es una casilla, pero lo que vale es el texto que
-                  // acepta: por eso el enunciado va al lado y no de placeholder.
-                  if (p.type === "consent" || p.type === "checkbox") {
+                  // Escala: círculos para tocar con el pulgar, no un desplegable.
+                  // Es lo que se contesta de un toque en el móvil, que es donde
+                  // se reserva casi siempre.
+                  if (p.type === "escala") {
+                    const tope = p.max ?? 5;
                     return (
-                      <label key={p.key} className="flex gap-2.5 items-start cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={valor === true}
-                          onChange={(e) => set(e.target.checked)}
-                          className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--brand-primary,var(--widget-button))]"
-                        />
-                        <span className="text-[12px] leading-relaxed text-[var(--widget-text-muted)]">
+                      <div key={p.id}>
+                        <div className="text-[12px] text-[var(--widget-text)] mb-1.5">
                           {p.label}
-                          {p.linkUrl && (
-                            <>
-                              {" "}
-                              <a
-                                href={p.linkUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="underline underline-offset-2"
+                          {p.required && <span className="text-[var(--widget-text-faint)]"> *</span>}
+                        </div>
+                        {p.help && (
+                          <p className="text-[11px] text-[var(--widget-text-faint)] mb-1.5">{p.help}</p>
+                        )}
+                        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={p.label}>
+                          {Array.from({ length: tope }, (_, k) => k + 1).map((n) => {
+                            const elegido = Number(valor) === n;
+                            return (
+                              <button
+                                key={n}
+                                type="button"
+                                role="radio"
+                                aria-checked={elegido}
+                                onClick={() => set(n)}
+                                className={`h-9 w-9 rounded-full text-[13px] font-medium border transition focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)] ${
+                                  elegido
+                                    ? "bg-[var(--brand-primary,var(--widget-button))] text-white border-transparent"
+                                    : "bg-[var(--widget-card)] text-[var(--widget-text-muted)] border-[var(--widget-border)] hover:border-[var(--widget-text-faint)]"
+                                }`}
                               >
-                                {p.linkLabel || "Más información"}
-                              </a>
-                            </>
-                          )}
-                        </span>
-                      </label>
+                                {n}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     );
                   }
 
                   return (
-                    <Field key={p.key} label={p.label} required={p.required} help={p.help}>
-                      {p.type === "textarea" ? (
+                    <Field key={p.id} label={p.label} required={p.required} help={p.help}>
+                      {p.type === "largo" ? (
                         <textarea
                           value={valor}
                           onChange={(e) => set(e.target.value)}
                           rows={3}
-                          maxLength={p.maxLength || undefined}
-                          placeholder={p.placeholder || undefined}
+                          maxLength={2000}
                           className={`${inputCls} min-h-[72px]`}
                         />
-                      ) : p.type === "select" ? (
-                        <select value={valor} onChange={(e) => set(e.target.value)} className={inputCls}>
-                          <option value="">Selecciona…</option>
-                          {(p.options ?? []).map((o) => (
-                            <option key={o} value={o}>
-                              {o}
-                            </option>
-                          ))}
-                        </select>
                       ) : (
                         <input
-                          type={p.type === "number" ? "number" : p.type === "date" ? "date" : p.type === "email" ? "email" : p.type === "tel" ? "tel" : "text"}
+                          type={p.type === "numero" ? "number" : "text"}
+                          inputMode={p.type === "numero" ? "decimal" : undefined}
                           value={valor}
                           onChange={(e) => set(e.target.value)}
-                          maxLength={p.type === "number" ? undefined : p.maxLength || undefined}
-                          min={p.min ?? undefined}
-                          max={p.max ?? undefined}
-                          placeholder={p.placeholder || undefined}
+                          maxLength={p.type === "numero" ? undefined : 200}
                           className={inputCls}
                         />
                       )}

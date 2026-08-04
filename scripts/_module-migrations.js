@@ -173,6 +173,9 @@ export const MODULES = {
     // «Esta es la valoración inicial» (04/08/2026): la marca del tipo de cita
     // al que se entra SIN firmar contratos, porque es la primera visita.
     "migrate-valoracion-inicial",
+    // Preguntas propias del tipo de cita (04/08/2026), en vez de enganchar un
+    // formulario del módulo Formularios.
+    "migrate-preguntas-cita",
   ],
 
   calendar: ["migrate-calendar-citas-fks"],

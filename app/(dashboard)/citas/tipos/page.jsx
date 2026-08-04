@@ -3,6 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { eurosToCents, centsToEuros, formatMoney } from "../../../../lib/payments/money.js";
+import {
+  TIPOS as TIPOS_PREGUNTA,
+  ETIQUETA_TIPO,
+  ESCALA_POR_DEFECTO,
+  MAX_PREGUNTAS,
+} from "../../../../lib/citas/preguntasCita.js";
 
 const MODALITY_LABELS = { presencial: "Presencial", phone: "Teléfono", online: "Online" };
 const ALL_MODALITIES = ["presencial", "phone", "online"];
@@ -32,8 +38,8 @@ const EMPTY_FORM = {
   sessionsCount: 1,
   instalmentPrice: "",
   instalmentMonths: "",
-  // Formulario a rellenar tras elegir fecha y hora. "" = ninguno.
-  formId: "",
+  // Preguntas que se contestan al reservar. [] = no pregunta nada.
+  formQuestions: [],
   // La primera visita: se entra sin firmar contratos. Solo una por cliente.
   isInitialAssessment: false,
   active: true,
@@ -48,6 +54,113 @@ function slugify(name) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 64);
+}
+
+/**
+ * ConstructorPreguntas — las preguntas que se contestan al reservar esta cita.
+ *
+ * Cuatro clases y no más (`lib/citas/preguntasCita.js`): número, escala de
+ * círculos, texto corto y texto largo. Cada clase que se añade hay que
+ * pintarla en el widget, validarla en el servidor y enseñarla en la ficha.
+ */
+function ConstructorPreguntas({ preguntas, onChange }) {
+  const lista = Array.isArray(preguntas) ? preguntas : [];
+
+  const cambiar = (i, campo, valor) =>
+    onChange(lista.map((p, j) => (j === i ? { ...p, [campo]: valor } : p)));
+  const quitar = (i) => onChange(lista.filter((_, j) => j !== i));
+  const mover = (i, delta) => {
+    const j = i + delta;
+    if (j < 0 || j >= lista.length) return;
+    const copia = [...lista];
+    [copia[i], copia[j]] = [copia[j], copia[i]];
+    onChange(copia);
+  };
+  const anadir = () =>
+    onChange([...lista, { id: `p${Date.now()}`, label: "", type: "corto", required: false }]);
+
+  return (
+    <div className="border border-neutral-200 rounded-lg p-3">
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <label className="block text-[11px] font-medium text-neutral-500">Preguntas al reservar</label>
+        <span className="text-[10px] text-neutral-400">
+          {lista.length === 0 ? "ninguna" : `${lista.length} de ${MAX_PREGUNTAS}`}
+        </span>
+      </div>
+      <p className="text-[10px] text-neutral-400 mb-3">
+        Se contestan DESPUÉS de escoger fecha y hora, y las respuestas quedan guardadas con la cita.
+        Déjalo vacío si esta cita no necesita preguntar nada.
+      </p>
+
+      <div className="space-y-2">
+        {lista.map((p, i) => (
+          <div key={p.id ?? i} className="rounded-md border border-neutral-200 bg-neutral-50/60 p-2.5">
+            <div className="flex items-start gap-2">
+              <input
+                type="text"
+                value={p.label ?? ""}
+                onChange={(e) => cambiar(i, "label", e.target.value)}
+                placeholder="¿Qué le preguntas? Ej. ¿Cómo has dormido esta semana?"
+                className="flex-1 rounded-md px-2.5 py-1.5 text-sm bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 placeholder-neutral-300"
+              />
+              <div className="flex items-center gap-0.5 shrink-0">
+                <button type="button" onClick={() => mover(i, -1)} disabled={i === 0}
+                  className="p-1 text-neutral-400 hover:text-neutral-700 disabled:opacity-30" title="Subir">↑</button>
+                <button type="button" onClick={() => mover(i, 1)} disabled={i === lista.length - 1}
+                  className="p-1 text-neutral-400 hover:text-neutral-700 disabled:opacity-30" title="Bajar">↓</button>
+                <button type="button" onClick={() => quitar(i)}
+                  className="p-1 text-neutral-400 hover:text-red-600" title="Quitar">✕</button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 mt-2 flex-wrap">
+              <select
+                value={p.type ?? "corto"}
+                onChange={(e) => cambiar(i, "type", e.target.value)}
+                className="rounded-md px-2 py-1 text-[12px] bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
+              >
+                {TIPOS_PREGUNTA.map((t) => (
+                  <option key={t} value={t}>{ETIQUETA_TIPO[t]}</option>
+                ))}
+              </select>
+
+              {p.type === "escala" && (
+                <label className="flex items-center gap-1.5 text-[11px] text-neutral-500">
+                  del 1 al
+                  <input
+                    type="number" min={2} max={10}
+                    value={p.max ?? ESCALA_POR_DEFECTO}
+                    onChange={(e) => cambiar(i, "max", Number(e.target.value))}
+                    className="w-14 rounded-md px-2 py-1 text-[12px] bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
+                  />
+                </label>
+              )}
+
+              <label className="flex items-center gap-1.5 text-[11px] text-neutral-500 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={p.required === true}
+                  onChange={(e) => cambiar(i, "required", e.target.checked)}
+                  className="rounded border-neutral-300 accent-[var(--color-primary)]"
+                />
+                Obligatoria
+              </label>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {lista.length < MAX_PREGUNTAS && (
+        <button
+          type="button"
+          onClick={anadir}
+          className="mt-2 w-full py-2 text-[12px] font-medium rounded-md border border-dashed border-neutral-300 text-neutral-500 hover:border-neutral-400 hover:text-neutral-700 transition"
+        >
+          + Añadir pregunta
+        </button>
+      )}
+    </div>
+  );
 }
 
 export default function CitasTiposPage() {
@@ -69,11 +182,6 @@ export default function CitasTiposPage() {
    * recuperarlos.
    */
   const [verEliminados, setVerEliminados] = useState(false);
-  // Formularios del centro, para poder engancharle uno a un tipo de cita. Si el
-  // cliente no tiene el módulo, el endpoint responde 403 y el desplegable se
-  // queda con «Ninguno»: no es un error, es que no aplica.
-  const [formularios, setFormularios] = useState([]);
-
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -89,15 +197,6 @@ export default function CitasTiposPage() {
   const eliminados = items.filter((it) => !it.active).length;
 
   useEffect(() => { load(); }, [load]);
-
-  // Los formularios del centro. `limit=1` porque de aquí solo interesa la lista
-  // `forms`, no la bandeja de solicitudes que devuelve el mismo endpoint.
-  useEffect(() => {
-    fetch("/api/formularios?limit=1", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => setFormularios(j?.data?.forms?.filter((f) => f.active) ?? []))
-      .catch(() => {}); // sin módulo `formularios` no hay nada que ofrecer
-  }, []);
 
   // Lo que va a ver la paciente si se fracciona. Se calcula aquí para que quien
   // configura vea el total y no se lleve la sorpresa de que 3 × 130 no son 360.
@@ -141,7 +240,7 @@ export default function CitasTiposPage() {
         sessionsCount: data.sessionsCount ?? 1,
         instalmentPrice: data.instalmentPrice != null ? centsToEuros(data.instalmentPrice) : "",
         instalmentMonths: data.instalmentMonths ?? "",
-        formId: data.formId ?? "",
+        formQuestions: Array.isArray(data.formQuestions) ? data.formQuestions : [],
         isInitialAssessment: !!data.isInitialAssessment,
         active: !!data.active,
         order: data.order ?? 0,
@@ -208,7 +307,7 @@ export default function CitasTiposPage() {
       // cobrar, y unos meses sin cuota tampoco.
       instalmentPrice: form.instalmentMonths ? eurosToCents(form.instalmentPrice) : null,
       instalmentMonths: form.instalmentPrice ? Number(form.instalmentMonths) || null : null,
-      formId: form.formId || null,
+      formQuestions: form.formQuestions ?? [],
       isInitialAssessment: !!form.isInitialAssessment,
       active: !!form.active,
       order: Number(form.order),
@@ -530,28 +629,15 @@ export default function CitasTiposPage() {
                   : "Déjalo vacío si esto solo se paga de una vez. Es un precio independiente del de arriba: financiar suele costar más."}
               </p>
 
-              {/* Formulario propio de este tipo de cita (04/08/2026). */}
-              <div>
-                <label className="block text-[11px] font-medium text-neutral-500 mb-1">
-                  Formulario al reservar
-                </label>
-                <select
-                  value={form.formId}
-                  onChange={(e) => updateForm("formId", e.target.value)}
-                  className={inputCls}
-                >
-                  <option value="">Ninguno</option>
-                  {formularios.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.title}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-neutral-400 mt-1">
-                  Si eliges uno, se rellena DESPUÉS de escoger fecha y hora y las respuestas quedan con la cita.
-                  {formularios.length === 0 && " Todavía no has creado ningún formulario."}
-                </p>
-              </div>
+              {/* Preguntas propias de este tipo de cita (04/08/2026, Rodrigo).
+                  Antes esto era un desplegable con los formularios del módulo
+                  Formularios: obligaba a salir de aquí, crear un formulario
+                  entero con su página pública y volver a engancharlo para
+                  acabar preguntando dos cosas. */}
+              <ConstructorPreguntas
+                preguntas={form.formQuestions}
+                onChange={(v) => updateForm("formQuestions", v)}
+              />
 
               {/* La primera visita (04/08/2026, Rodrigo): se entra sin firmar. */}
               <label className="flex items-start gap-2.5 p-3 rounded-lg border border-neutral-200 bg-neutral-50/60 cursor-pointer">

@@ -1,6 +1,5 @@
 import { withPublicTenant } from "../../../../../../lib/tenant/publicTenantContext.js";
 import { ok, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
-import { formPublico } from "../../../../../../lib/formularios/fields.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/event-types
@@ -12,26 +11,11 @@ export const GET = withPublicTenant(async (_request, _ctx, { tenantModels, hasMo
   try {
     if (!hasModule("citas")) return notFound("Módulo no disponible");
 
-    const { EventType, Form } = tenantModels;
+    const { EventType } = tenantModels;
     const rows = await EventType.findAll({
       where: { active: true },
       order: [["order", "ASC"], ["createdAt", "ASC"]],
     });
-
-    // Formulario propio del tipo de cita (04/08/2026): se rellena tras elegir
-    // fecha y hora. Se cargan de una vez los que hagan falta en lugar de uno
-    // por tipo de cita. Sin módulo `formularios` (o sin la migración) el mapa
-    // queda vacío y el widget no pinta nada: no es un error, es que no aplica.
-    const formIds = [...new Set(rows.map((r) => r.formId).filter(Boolean))];
-    const formularios = new Map();
-    if (formIds.length && Form) {
-      try {
-        const filas = await Form.findAll({ where: { id: formIds, active: true } });
-        for (const f of filas) formularios.set(f.id, formPublico(f));
-      } catch {
-        // Tabla ausente: la agenda se enseña igual, solo que sin formularios.
-      }
-    }
 
     const data = rows
       .filter((r) => Array.isArray(r.modalities) && r.modalities.includes("online"))
@@ -54,9 +38,11 @@ export const GET = withPublicTenant(async (_request, _ctx, { tenantModels, hasMo
         sessionsCount: r.sessionsCount ?? 1,
         instalmentPrice: r.instalmentPrice ?? null,
         instalmentMonths: r.instalmentMonths ?? null,
-        // Preguntas que hay que responder al reservar ESTE tipo de cita. null =
-        // ninguna, que es como se comportan todos los de hoy.
-        form: r.formId ? (formularios.get(r.formId) ?? null) : null,
+        // Preguntas que hay que responder al reservar ESTE tipo de cita. Viven
+        // en el propio tipo desde el 04/08/2026 (antes se enganchaba un
+        // formulario del módulo Formularios, ver lib/citas/preguntasCita.js).
+        // Array vacío = no pregunta nada, que es como están todas hoy.
+        preguntas: normalizarPreguntas(r.formQuestions),
         // La primera visita: se entra sin firmar contratos (04/08/2026). El
         // portal la necesita para ofrecerla ANTES de la pantalla de firma.
         isInitialAssessment: Boolean(r.isInitialAssessment),

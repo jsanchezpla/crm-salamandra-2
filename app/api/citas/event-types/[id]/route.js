@@ -9,6 +9,7 @@ import {
   validateModalityFields,
 } from "../../../../../lib/citas/validation.js";
 import { logCitasAudit } from "../../../../../lib/citas/audit.js";
+import { normalizarPreguntas } from "../../../../../lib/citas/preguntasCita.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -167,6 +168,11 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
         updates.instalmentPrice = cuota;
         updates.instalmentMonths = meses;
       }
+    }
+    // Preguntas propias de este tipo de cita (04/08/2026). Se normalizan en el
+    // servidor: lo que llegue mal formado se descarta en vez de guardarse roto.
+    if ("formQuestions" in body) {
+      updates.formQuestions = normalizarPreguntas(body.formQuestions);
     }
     if ("formId" in body) {
       const v = normalizeString(body.formId);

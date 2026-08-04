@@ -1442,18 +1442,18 @@ export default function CitasModule() {
                   enseña el ENUNCIADO guardado con la respuesta, no el de la
                   pregunta actual: si la profesional reformuló la pregunta
                   después, lo que se leyó ese día fue lo otro. */}
-              {Array.isArray(openBooking.formAnswers?.answers) &&
-                openBooking.formAnswers.answers.length > 0 && (
+              {Array.isArray(openBooking.formAnswers?.respuestas) &&
+                openBooking.formAnswers.respuestas.length > 0 && (
                   <div className="pt-3 border-t border-neutral-100">
                     <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-1.5">
-                      {openBooking.formAnswers.formTitle || "Formulario de la cita"}
+                      Antes de la cita
                     </div>
                     <div className="space-y-2">
-                      {openBooking.formAnswers.answers.map((r) => (
-                        <div key={r.key}>
+                      {openBooking.formAnswers.respuestas.map((r) => (
+                        <div key={r.id}>
                           <div className="text-[11px] text-neutral-500">{r.label}</div>
                           <div className="text-[13px] text-neutral-800 whitespace-pre-wrap">
-                            {r.value === true ? "Sí" : r.value === false ? "No" : (r.value ?? "—") || "—"}
+                            {r.valor === "" || r.valor == null ? "—" : String(r.valor)}
                           </div>
                         </div>
                       ))}

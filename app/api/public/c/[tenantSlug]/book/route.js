@@ -69,7 +69,7 @@ import {
   PAGO_FRACCIONADO,
 } from "../../../../../../lib/citas/packs.js";
 import { createCheckoutSession } from "../../../../../../lib/payments/checkout.js";
-import { validarRespuestas } from "../../../../../../lib/formularios/fields.js";
+import { paquetePreguntas } from "../../../../../../lib/citas/preguntasCita.js";
 
 /**
  * Recupera el formulario de tarjeta de quien ya tenía una reserva a medias.
@@ -400,36 +400,18 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
 
     const precio = enBono ? null : (compraDeBono ? compraDeBono.amount : precioTarifa);
 
-    // ── Formulario propio del tipo de cita (04/08/2026) ─────────────────────
-    // Si lo tiene, hay que haberlo respondido: se pregunta después de elegir
-    // fecha y hora, en el mismo formulario de datos. Se valida con el MISMO
-    // `validarRespuestas` del módulo Formularios, para que las reglas de cada
-    // pregunta (obligatoria, longitud, opciones) sean las mismas se responda
-    // desde donde se responda.
+    // ── Preguntas propias del tipo de cita (04/08/2026) ─────────────────────
+    // Si las tiene, hay que haberlas contestado: se preguntan después de elegir
+    // fecha y hora, en el mismo formulario de datos. Viven en el propio tipo de
+    // cita (`lib/citas/preguntasCita.js`); durante unas horas fueron un
+    // formulario del módulo Formularios y Rodrigo lo revisó el mismo día.
     //
     // ⚠️ NO confundir con la PUERTA DE ADMISIÓN (`puertaFormulario.js`): aquella
     // exige un formulario ACEPTADO antes de dejar reservar y es de todo el
     // centro. Esto son las preguntas de UNA cita concreta.
-    let respuestasFormulario = null;
-    if (eventType.formId) {
-      const { Form } = tenantModels;
-      const formulario = Form ? await Form.findByPk(eventType.formId) : null;
-      if (formulario?.active) {
-        const val = validarRespuestas(formulario, body.formAnswers ?? {});
-        if (!val.ok) {
-          return error(val.errores?.[0]?.mensaje || "Faltan respuestas del formulario", 422);
-        }
-        respuestasFormulario = {
-          formId: formulario.id,
-          formTitle: formulario.title,
-          answers: val.answers,
-          submittedAt: new Date().toISOString(),
-        };
-      }
-      // Formulario borrado o desactivado después de configurarlo: se reserva
-      // igual. Dejar a la gente sin poder pedir cita por una pregunta que ya no
-      // existe sería peor que perder esas respuestas.
-    }
+    const paquete = paquetePreguntas(eventType.formQuestions, body.formAnswers ?? {});
+    if (!paquete.ok) return error(paquete.error, 422);
+    const respuestasFormulario = paquete.paquete;
 
     // ── Consentimiento de la retención ──────────────────────────────────────
     // Se exige ANTES de crear nada. El paciente tiene que haber leído que su

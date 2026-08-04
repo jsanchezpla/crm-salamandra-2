@@ -271,19 +271,19 @@ export default function ClientBookingsPanel({ clientId, clientEmail, userRole })
                             </div>
                           )}
                           {/* Respuestas del formulario de la cita, si lo tenía. */}
-                          {Array.isArray(b.formAnswers?.answers) && b.formAnswers.answers.length > 0 && (
+                          {Array.isArray(b.formAnswers?.respuestas) && b.formAnswers.respuestas.length > 0 && (
                             <details className="mt-1">
                               <summary className="text-[11px] text-gray-500 cursor-pointer hover:text-gray-800">
-                                {b.formAnswers.formTitle || "Formulario"}
+                                Lo que contestó antes de la cita
                               </summary>
                               <div className="mt-1 space-y-1.5 pl-1 border-l-2 border-gray-100">
-                                {b.formAnswers.answers.map((r) => (
-                                  <div key={r.key} className="pl-2">
+                                {b.formAnswers.respuestas.map((r) => (
+                                  <div key={r.id} className="pl-2">
                                     <div className="text-[10px] uppercase tracking-wider text-gray-400">
                                       {r.label}
                                     </div>
                                     <div className="text-[11px] text-gray-700 whitespace-pre-wrap">
-                                      {r.value === true ? "Sí" : r.value === false ? "No" : (r.value ?? "—") || "—"}
+                                      {r.valor === "" || r.valor == null ? "—" : String(r.valor)}
                                     </div>
                                   </div>
                                 ))}
