@@ -39,6 +39,38 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     if (!includeArchived) where.isArchived = false;
     if (q) where.name = { [Op.iLike]: `%${q}%` };
 
+    // ── Filtros del recetario (04/08/2026) ────────────────────────────────
+    //
+    // Con 1.084 recetas, buscar por nombre no basta: hay que poder decir «un
+    // desayuno vegano sin lactosa de menos de 15 minutos».
+    //
+    // Los alérgenos se filtran por EXCLUSIÓN, no por inclusión, porque es como
+    // se usan de verdad: a nadie le interesa «recetas CON gluten», le interesa
+    // que no salgan.
+    const y = [];
+    const lista = (p) => (searchParams.get(p) ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const comoArray = (vals) => `ARRAY[${vals.map((v) => Recipe.sequelize.escape(v)).join(",")}]::text[]`;
+
+    const tipo = (searchParams.get("tipo") ?? "").trim();
+    if (tipo) where.recipeType = tipo;
+
+    const sinAlergeno = lista("sinAlergeno");
+    if (sinAlergeno.length) y.push(Recipe.sequelize.literal(`NOT (allergens && ${comoArray(sinAlergeno)})`));
+
+    const preferencia = lista("preferencia");
+    if (preferencia.length) y.push(Recipe.sequelize.literal(`dietary_preferences && ${comoArray(preferencia)}`));
+
+    const etiqueta = lista("etiqueta");
+    if (etiqueta.length) y.push(Recipe.sequelize.literal(`tags && ${comoArray(etiqueta)}`));
+
+    const maxMinutos = parseInt(searchParams.get("maxMinutos") ?? "", 10);
+    // `IS NOT NULL` explícito: sin él, las recetas sin duración se colarían en
+    // «menos de 15 minutos», que es justo lo que no ha pedido nadie.
+    if (Number.isInteger(maxMinutos) && maxMinutos > 0) {
+      where.durationMinutes = { [Op.and]: [{ [Op.ne]: null }, { [Op.lte]: maxMinutos }] };
+    }
+    if (y.length) where[Op.and] = y;
+
     const { rows, count } = await Recipe.findAndCountAll({
       where,
       include: recipeInclude(tenantModels),

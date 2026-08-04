@@ -14,32 +14,82 @@ function fmt(v) {
   return v === null || v === undefined ? "—" : Math.round(v * 10) / 10;
 }
 
+const POR_PAGINA = 48;
+/** Atajos de tiempo. Son los que pide una consulta real, no una escala. */
+const TIEMPOS = [
+  { min: 10, label: "≤ 10 min" },
+  { min: 20, label: "≤ 20 min" },
+  { min: 30, label: "≤ 30 min" },
+];
+
 export default function NutricionRecetasModule() {
   const [items, setItems] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [pagina, setPagina] = useState(1);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState(null); // recipe | "new" | null
   const [toast, setToast] = useState(null);
   const timer = useRef(null);
 
-  const load = useCallback(async (query) => {
+  // Filtros. `sinAlergeno` va por EXCLUSIÓN: es como se usa de verdad —nadie
+  // busca recetas CON gluten, se busca que no salgan—.
+  const [facetas, setFacetas] = useState(null);
+  const [tipo, setTipo] = useState("");
+  const [sinAlergeno, setSinAlergeno] = useState([]);
+  const [preferencia, setPreferencia] = useState([]);
+  const [etiqueta, setEtiqueta] = useState([]);
+  const [maxMinutos, setMaxMinutos] = useState(null);
+
+  const load = useCallback(async (query, pag, f) => {
     setLoading(true);
     try {
-      const r = await fetch(`/api/nutricion/recipes?q=${encodeURIComponent(query ?? "")}&limit=100`);
+      const p = new URLSearchParams({ q: query ?? "", page: String(pag), limit: String(POR_PAGINA) });
+      if (f.tipo) p.set("tipo", f.tipo);
+      if (f.sinAlergeno.length) p.set("sinAlergeno", f.sinAlergeno.join(","));
+      if (f.preferencia.length) p.set("preferencia", f.preferencia.join(","));
+      if (f.etiqueta.length) p.set("etiqueta", f.etiqueta.join(","));
+      if (f.maxMinutos) p.set("maxMinutos", String(f.maxMinutos));
+      const r = await fetch(`/api/nutricion/recipes?${p}`);
       const j = await r.json();
       setItems(j.items ?? []);
+      setTotal(j.total ?? 0);
     } catch {
-      setItems([]);
+      setItems([]); setTotal(0);
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Las facetas se piden UNA vez: no cambian al teclear en el buscador.
+  useEffect(() => {
+    fetch("/api/nutricion/recipes/facetas")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => j?.ok && setFacetas(j))
+      .catch(() => {});
+  }, []);
+
+  const filtros = { tipo, sinAlergeno, preferencia, etiqueta, maxMinutos };
+  const claveFiltros = JSON.stringify(filtros);
+
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => load(q), 300);
+    timer.current = setTimeout(() => load(q, pagina, JSON.parse(claveFiltros)), 300);
     return () => timer.current && clearTimeout(timer.current);
-  }, [q, load]);
+  }, [q, pagina, claveFiltros, load]);
+
+  // Cambiar un filtro vuelve a la página 1: quedarse en la 7 de un listado que
+  // ahora tiene 2 páginas enseña un vacío que parece un error.
+  useEffect(() => { setPagina(1); }, [claveFiltros, q]);
+
+  const alternar = (valor, lista, set) =>
+    set(lista.includes(valor) ? lista.filter((x) => x !== valor) : [...lista, valor]);
+
+  const hayFiltros = tipo || sinAlergeno.length || preferencia.length || etiqueta.length || maxMinutos;
+  function limpiar() {
+    setTipo(""); setSinAlergeno([]); setPreferencia([]); setEtiqueta([]); setMaxMinutos(null);
+  }
+  const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
 
   async function archive(recipe) {
     if (!confirm(`¿Archivar la receta "${recipe.name}"?`)) return;
@@ -50,13 +100,13 @@ export default function NutricionRecetasModule() {
       return;
     }
     setToast("Receta archivada");
-    load(q);
+    load(q, pagina, filtros);
   }
 
   function onSaved() {
     setEditing(null);
     setToast("Receta guardada");
-    load(q);
+    load(q, pagina, filtros);
   }
 
   return (
@@ -79,22 +129,79 @@ export default function NutricionRecetasModule() {
         </button>
       </div>
 
-      <div className="px-4 lg:px-8 pb-3">
-        <input
-          type="text"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar receta…"
-          className="w-full sm:max-w-sm px-3 py-2 text-sm rounded-md border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
-        />
+      <div className="px-4 lg:px-8 pb-3 space-y-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar receta…"
+            className="flex-1 sm:flex-none sm:w-72 px-3 py-2 text-sm rounded-md border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+          />
+          {(facetas?.tipos?.length ?? 0) > 0 && (
+            <select
+              value={tipo}
+              onChange={(e) => setTipo(e.target.value)}
+              className="px-3 py-2 text-sm rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+            >
+              <option value="">Cualquier momento del día</option>
+              {facetas.tipos.map((t) => <option key={t.clave} value={t.clave}>{t.etiqueta} ({t.n})</option>)}
+            </select>
+          )}
+          {TIEMPOS.map((t) => (
+            <Chip key={t.min} activo={maxMinutos === t.min} onClick={() => setMaxMinutos(maxMinutos === t.min ? null : t.min)}>
+              {t.label}
+            </Chip>
+          ))}
+          {facetas?.preferencias?.map((p) => (
+            <Chip key={p.clave} activo={preferencia.includes(p.clave)} onClick={() => alternar(p.clave, preferencia, setPreferencia)}>
+              {p.etiqueta} ({p.n})
+            </Chip>
+          ))}
+          {hayFiltros && (
+            <button onClick={limpiar} className="text-xs text-gray-500 hover:text-gray-800 underline px-1">
+              Quitar filtros
+            </button>
+          )}
+        </div>
+
+        {/* Alérgenos por EXCLUSIÓN: se marca lo que la paciente NO puede tomar. */}
+        {(facetas?.alergenos?.length ?? 0) > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-gray-400 mr-0.5">Sin:</span>
+            {facetas.alergenos.map((a) => (
+              <Chip key={a.clave} pequeno activo={sinAlergeno.includes(a.clave)} onClick={() => alternar(a.clave, sinAlergeno, setSinAlergeno)}>
+                {a.etiqueta}
+              </Chip>
+            ))}
+          </div>
+        )}
+
+        {(facetas?.etiquetas?.length ?? 0) > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-gray-400 mr-0.5">Etiquetas:</span>
+            {/* Solo las 14 más usadas: con 110, enseñarlas todas es una pared. */}
+            {facetas.etiquetas.slice(0, 14).map((t) => (
+              <Chip key={t.clave} pequeno activo={etiqueta.includes(t.clave)} onClick={() => alternar(t.clave, etiqueta, setEtiqueta)}>
+                {t.clave} ({t.n})
+              </Chip>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-auto px-4 lg:px-8 pb-8">
+        {!loading && total > 0 && (
+          <div className="text-[11px] text-gray-400 pb-2">
+            {total} receta{total === 1 ? "" : "s"}
+            {paginas > 1 && <> · página {pagina} de {paginas}</>}
+          </div>
+        )}
         {loading ? (
           <div className="py-16 text-center text-sm text-gray-400">Cargando…</div>
         ) : items.length === 0 ? (
           <div className="py-16 text-center text-sm text-gray-400">
-            {q ? "No hay recetas que coincidan." : "Aún no hay recetas. Crea la primera."}
+            {q || hayFiltros ? "No hay recetas que coincidan." : "Aún no hay recetas. Crea la primera."}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -149,6 +256,26 @@ export default function NutricionRecetasModule() {
             ))}
           </div>
         )}
+
+        {paginas > 1 && !loading && (
+          <div className="flex items-center justify-center gap-2 pt-6">
+            <button
+              onClick={() => setPagina((p) => Math.max(1, p - 1))}
+              disabled={pagina === 1}
+              className="px-3 py-1.5 text-xs rounded-md border border-gray-200 bg-white disabled:opacity-40 hover:bg-gray-50"
+            >
+              ← Anterior
+            </button>
+            <span className="text-xs text-gray-500 tabular">{pagina} / {paginas}</span>
+            <button
+              onClick={() => setPagina((p) => Math.min(paginas, p + 1))}
+              disabled={pagina >= paginas}
+              className="px-3 py-1.5 text-xs rounded-md border border-gray-200 bg-white disabled:opacity-40 hover:bg-gray-50"
+            >
+              Siguiente →
+            </button>
+          </div>
+        )}
       </div>
 
       {editing && (
@@ -161,6 +288,24 @@ export default function NutricionRecetasModule() {
 
       {toast && <Toast msg={toast} onDone={() => setToast(null)} />}
     </div>
+  );
+}
+
+/** Botón de filtro. Encendido = está filtrando por eso. */
+function Chip({ activo, onClick, pequeno, children }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={activo}
+      className={`rounded-full border transition ${pequeno ? "text-[11px] px-2 py-0.5" : "text-xs px-2.5 py-1.5"} ${
+        activo
+          ? "text-white border-transparent"
+          : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+      }`}
+      style={activo ? { background: "var(--color-primary)" } : undefined}
+    >
+      {children}
+    </button>
   );
 }
 

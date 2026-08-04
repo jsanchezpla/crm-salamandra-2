@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import SyncWebButton from "../../../components/clients/SyncWebButton.jsx";
 import PacientesDelAlta from "../../../components/clients/PacientesDelAlta.jsx";
-import { camposCliente, PERFIL_COMERCIAL } from "../../../lib/clients/formularioAlta.js";
+import { camposCliente, PERFIL_COMERCIAL, PERFIL_SALUD } from "../../../lib/clients/formularioAlta.js";
 import { VOCABULARIO_CLIENTE } from "../../../lib/clients/vocabulario.js";
 import Paginador from "@/components/ui/Paginador.jsx";
 
@@ -68,6 +68,16 @@ export default function ClientesClient({
   const [loading, setLoading] = useState(true);
   const [activeStatus, setActiveStatus] = useState("all");
   const [search, setSearch] = useState("");
+  // Ordenación por columna (04/08/2026). Va al servidor, no se ordena lo que
+  // hay pintado: con 1.110 fichas y 50 por página, ordenar la página actual
+  // solo ordenaría 50 y daría la falsa sensación de haber ordenado la lista.
+  const [orden, setOrden] = useState("alta");
+  const [dir, setDir] = useState("desc");
+  // El embudo comercial (Nuevo → Contactado → Convertido) no significa nada en
+  // una consulta de nutrición: allí todos son pacientes. Se esconde la columna
+  // y las tarjetas de recuento (Rodrigo, 04/08/2026), igual que ya se quitaron
+  // «Tema» y «Producto de interés» del alta para el mismo perfil.
+  const conEmbudo = perfil !== PERFIL_SALUD;
   const [selected, setSelected] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [editForm, setEditForm] = useState({});
@@ -88,7 +98,7 @@ export default function ClientesClient({
 
   const fetchClients = useCallback(() => {
     setLoading(true);
-    const params = new URLSearchParams({ limit: String(POR_PAGINA), page: String(pagina) });
+    const params = new URLSearchParams({ limit: String(POR_PAGINA), page: String(pagina), orden, dir });
     if (activeStatus !== "all") params.set("status", activeStatus);
     if (search.trim()) params.set("search", search.trim());
     fetch(`/api/clients?${params}`)
@@ -101,7 +111,14 @@ export default function ClientesClient({
         }
       })
       .finally(() => setLoading(false));
-  }, [activeStatus, search, pagina]);
+  }, [activeStatus, search, pagina, orden, dir]);
+
+  /** Pulsar una cabecera ordena por ella; pulsarla otra vez le da la vuelta. */
+  function ordenarPor(clave) {
+    if (orden === clave) setDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setOrden(clave); setDir("asc"); }
+    setPagina(1);   // ordenar y quedarse en la página 7 no enseña lo que se busca
+  }
 
   // Al buscar o cambiar de estado se vuelve a la primera página: quedarse en la
   // 7 tras una búsqueda que devuelve 12 resultados deja la lista vacía sin
@@ -331,7 +348,9 @@ export default function ClientesClient({
             </div>
           </div>
 
-          {/* Status cards */}
+          {/* Recuento por estado del embudo comercial. Fuera en el perfil de
+              salud: ahí no hay embudo, son pacientes. */}
+          {conEmbudo && (
           <div className="grid grid-cols-3 lg:grid-cols-5 gap-2 lg:gap-3 mb-5">
             {STATUSES.map((s) => (
               <div
@@ -349,6 +368,7 @@ export default function ClientesClient({
               </div>
             ))}
           </div>
+          )}
 
           {/* Search */}
           <div className="flex items-center gap-2 mb-2">
@@ -405,11 +425,13 @@ export default function ClientesClient({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
-                    <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Nombre / Empresa</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider hidden md:table-cell">Email</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider hidden lg:table-cell">Teléfono</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Estado</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider hidden sm:table-cell">Alta</th>
+                    <Cabecera clave="nombre" orden={orden} dir={dir} onClick={ordenarPor}>Nombre / Empresa</Cabecera>
+                    <Cabecera clave="email" orden={orden} dir={dir} onClick={ordenarPor} className="hidden md:table-cell">Email</Cabecera>
+                    <Cabecera clave="telefono" orden={orden} dir={dir} onClick={ordenarPor} className="hidden lg:table-cell">Teléfono</Cabecera>
+                    {conEmbudo && (
+                      <Cabecera clave="estado" orden={orden} dir={dir} onClick={ordenarPor}>Estado</Cabecera>
+                    )}
+                    <Cabecera clave="alta" orden={orden} dir={dir} onClick={ordenarPor} className="hidden sm:table-cell">Alta</Cabecera>
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
@@ -442,6 +464,7 @@ export default function ClientesClient({
                         <td className="px-4 py-3 hidden lg:table-cell">
                           <span className="text-gray-600">{client.phone || "—"}</span>
                         </td>
+                        {conEmbudo && (
                         <td className="px-4 py-3">
                           {(() => {
                             const current = client.customFields?.seStatus || "new";
@@ -465,6 +488,7 @@ export default function ClientesClient({
                             );
                           })()}
                         </td>
+                        )}
                         <td className="px-4 py-3 hidden sm:table-cell">
                           <span className="text-gray-500 text-xs">{formatDate(client.createdAt)}</span>
                         </td>
@@ -701,5 +725,36 @@ export default function ClientesClient({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Cabecera de columna que ordena al pulsarla.
+ *
+ * La flecha solo sale en la columna por la que se está ordenando: marcarlas
+ * todas con una flechita gris hace que no se sepa cuál manda. `aria-sort` es lo
+ * que se lo cuenta a un lector de pantalla.
+ */
+function Cabecera({ clave, orden, dir, onClick, className = "", children }) {
+  const activa = orden === clave;
+  return (
+    <th
+      scope="col"
+      aria-sort={activa ? (dir === "asc" ? "ascending" : "descending") : "none"}
+      className={`text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider ${className} ${
+        activa ? "text-gray-700" : "text-gray-400"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => onClick(clave)}
+        className="inline-flex items-center gap-1 hover:text-gray-700 transition uppercase tracking-wider"
+      >
+        {children}
+        <span className={activa ? "opacity-100" : "opacity-0"} aria-hidden="true">
+          {dir === "asc" ? "▲" : "▼"}
+        </span>
+      </button>
+    </th>
   );
 }

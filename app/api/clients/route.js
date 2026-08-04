@@ -1,7 +1,7 @@
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { auditar, datosPeticion, resumen } from "../../../lib/utils/auditoria.js";
 import { ok, created, forbidden, error } from "../../../lib/utils/apiResponse.js";
-import { Op } from "sequelize";
+import { Op, Sequelize } from "sequelize";
 import {
   normalizeContactValue,
   setPrimaryContactValue,
@@ -41,7 +41,25 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     ];
   }
 
-  const queryOpts = { where, limit, offset, order: [["createdAt", "DESC"]] };
+  // ── Ordenación (04/08/2026) ───────────────────────────────────────────────
+  //
+  // Antes solo ordenaba por fecha de alta, así que buscar «los García» en una
+  // lista de 1.110 obligaba a pasar 22 páginas. Ahora la pantalla puede ordenar
+  // por cualquier columna.
+  //
+  // Lista blanca deliberada: `order` acaba en el SQL, y aceptar un nombre de
+  // columna del cliente es cómo se cuelan cosas raras. Lo que no esté aquí, se
+  // ignora y manda el orden por defecto.
+  const ORDENABLES = { nombre: "name", email: "email", telefono: "phone", alta: "createdAt", estado: "customFields" };
+  const pedido = ORDENABLES[searchParams.get("orden") ?? ""] ?? "createdAt";
+  const dir = (searchParams.get("dir") ?? "").toLowerCase() === "asc" ? "ASC" : "DESC";
+  // NULLS LAST siempre: una lista ordenada por teléfono que empieza con
+  // trescientas filas vacías no está ordenada por teléfono, para quien la mira.
+  const order = pedido === "customFields"
+    ? [[Sequelize.literal(`custom_fields->>'seStatus' ${dir} NULLS LAST`)]]
+    : [[pedido, `${dir} NULLS LAST`]];
+
+  const queryOpts = { where, limit, offset, order };
   if (assignedTo) {
     const { ClientModuleAssignment } = tenantModels;
     queryOpts.include = [
