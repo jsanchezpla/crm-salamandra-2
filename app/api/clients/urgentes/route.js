@@ -1,5 +1,6 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden } from "../../../../lib/utils/apiResponse.js";
+import { MODULE_KEYS } from "../../../../lib/tenant/moduleKeys.js";
 import { carpetasCon, marcarRevisado, ES_CARPETA } from "../../../../lib/clients/urgentes.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 
@@ -8,12 +9,26 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /**
  * Fichas a completar: los huecos de datos, por carpetas.
  *
- * Cuelga de `clients`, no de un módulo nuevo: es la propia ficha de cliente la
- * que está a medias. Quien no tenga `pacientes` verá solo las carpetas de
- * familias, porque las de pacientes salen vacías por sí solas.
+ * Gatea por `clients_avanzado`, no por `clients` (Rodrigo, 04/08/2026). Nació
+ * con `clients` a secas —cualquiera puede tener la ficha a medias— y por eso le
+ * apareció a TODOS los clientes con fichas, incluido nutri_laura. Pero esta
+ * pantalla resuelve el problema de un centro que importó 1.083 familias y
+ * arrastra miles de huecos, no el de una consulta de una persona que conoce a
+ * sus pacientes por el nombre.
+ *
+ * El gate va en el endpoint y no solo en el menú: esconder la entrada del
+ * sidebar no impide que alguien con la URL —o con la pestaña guardada— siga
+ * sacando el listado completo de fichas incompletas.
  */
+function gate(ctx) {
+  return ctx.hasModule(MODULE_KEYS.CLIENTS_AVANZADO)
+    ? null
+    : forbidden("Módulo clients_avanzado no activo");
+}
+
 export const GET = withTenant(async (_request, _rc, ctx) => {
-  if (!ctx.hasModule("clients")) return forbidden("Módulo Clientes no activo");
+  const cerrado = gate(ctx);
+  if (cerrado) return cerrado;
   const { tenantSequelize, tenant, tenantModels } = ctx;
   const esquema = `crm_${tenant.slug}`;
 
@@ -31,7 +46,8 @@ export const GET = withTenant(async (_request, _rc, ctx) => {
 
 /** Archiva (o desarchiva) una fila: «ya lo he mirado y está bien así». */
 export const POST = withTenant(async (request, _rc, ctx) => {
-  if (!ctx.hasModule("clients")) return forbidden("Módulo Clientes no activo");
+  const cerrado = gate(ctx);
+  if (cerrado) return cerrado;
   const { DataReview } = ctx.tenantModels;
   if (!DataReview) return error("Falta la migración de data_reviews", 503);
 

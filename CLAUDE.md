@@ -411,7 +411,7 @@ a todos sus tenants. Detalle en `docs/sprint-aumenta-2026-07.md`.
 | Lista de espera de admisión | `/clientes/lista-espera` | `clients_avanzado` |
 | Contrato, tutores y meses del portal | ficha de cliente | `clients` |
 | Morosidad | dentro de `/facturacion/cobros` | `billing` |
-| Fichas a completar (huecos de datos por carpetas) | `/clientes/urgentes` | `clients` |
+| Fichas a completar (huecos de datos por carpetas) | `/clientes/urgentes` | `clients_avanzado` |
 
 ⚠️ **«Fichas a completar»** (03/08/2026, tras migrar Aumenta) sale de
 `lib/clients/urgentes.js`, que define las CARPETAS y sus consultas en un solo
@@ -422,6 +422,15 @@ puede terminar deja de mirarse. Las filas se archivan con `data_reviews`
 («esto ya lo he mirado y está bien»): sin eso no llega a cero nunca, porque hay
 huecos correctos —un paciente en lista de espera no tiene terapeuta—. Las
 carpetas no se solapan a propósito.
+
+⚠️ **Cuelga de `clients_avanzado`, no de `clients`** (Rodrigo, 04/08/2026).
+Nació con `clients` a secas y por eso le salió a TODOS los clientes con fichas,
+incluido nutri_laura, que no lo había pedido. La pantalla resuelve el problema
+de un centro que importó 1.083 familias y arrastra miles de huecos, no el de
+una consulta de una persona que conoce a sus pacientes por el nombre. Gatean
+las TRES puertas: el menú (`Sidebar.jsx`), la página —server component que hace
+`notFound()`, como Lista de espera— y el endpoint. Solo el menú no basta: con
+la URL guardada se seguiría sacando el listado entero.
 
 ### El alta de clientes se adapta al cliente (01/08/2026)
 `lib/clients/formularioAlta.js` decide QUÉ se pregunta, y lo comparten la
