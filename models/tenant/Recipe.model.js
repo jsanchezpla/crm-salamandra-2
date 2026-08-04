@@ -71,6 +71,15 @@ export function defineRecipe(sequelize) {
       // STRING y no ENUM a propósito: una nutricionista puede querer «cena» o
       // «postre» mañana, y ampliar un ENUM obliga a migrar. Los valores válidos
       // viven en lib/nutricion/recipes.js, que es donde se traducen a español.
+      // Id en el sistema del que vino, si vino de alguno (Harbiz). Es lo que
+      // hace idempotente la importación: el NOMBRE no identifica una receta
+      // —Laura tiene 59 nombres repetidos que son recetas distintas— y usarlo
+      // como clave dejó fuera 74 en la primera pasada.
+      externalId: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
+        field: "external_id",
+      },
       recipeType: {
         type: DataTypes.STRING(40),
         allowNull: true,

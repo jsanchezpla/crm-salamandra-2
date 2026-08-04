@@ -43,6 +43,12 @@ async function tableExists(s, schema, table) {
 }
 
 const COLUMNAS = [
+  // De dónde salió la receta, si vino de fuera. Se añadió el 04/08/2026 tras
+  // tropezar: el importador de Harbiz deduplicaba por NOMBRE y se dejó 74
+  // recetas fuera, porque Laura tiene 59 nombres repetidos que NO son
+  // duplicados —«Huevos rellenos» existe dos veces, una escrita a mano y otra
+  // con 10 ingredientes—. El nombre no identifica una receta; su id de origen sí.
+  ["external_id", "VARCHAR(120)"],
   ["recipe_type", "VARCHAR(40)"],
   ["tags", "TEXT[] NOT NULL DEFAULT '{}'"],
   ["allergens", "TEXT[] NOT NULL DEFAULT '{}'"],
@@ -67,7 +73,12 @@ async function processSchema(s, schema) {
   // btree. Con mil recetas y varias etiquetas cada una, se nota.
   await s.query(`CREATE INDEX IF NOT EXISTS "recipes_tags_idx" ON "${schema}"."recipes" USING GIN (tags)`);
   await s.query(`CREATE INDEX IF NOT EXISTS "recipes_allergens_idx" ON "${schema}"."recipes" USING GIN (allergens)`);
-  log(`✓ ${schema}: recetas clasificables (6 columnas + 3 índices)`);
+  // Único PARCIAL: dos recetas escritas a mano tienen las dos external_id NULL
+  // y eso debe seguir permitido; lo que no puede repetirse es un id de origen.
+  await s.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS "recipes_external_id_unique" ON "${schema}"."recipes" (external_id) WHERE external_id IS NOT NULL`
+  );
+  log(`✓ ${schema}: recetas clasificables (7 columnas + 4 índices)`);
 }
 
 async function main() {

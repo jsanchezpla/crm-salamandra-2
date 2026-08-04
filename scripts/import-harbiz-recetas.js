@@ -41,6 +41,7 @@
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { Op } from "sequelize";
 import { getTenantDb } from "../lib/db/tenantDb.js";
 
 const args = process.argv.slice(2);
@@ -146,8 +147,15 @@ async function main() {
   const conMarca = aCrear.filter((g) => / - /.test(g.nombre));
 
   // ── 4. Recuento antes de tocar nada ─────────────────────────────────────
+  // Idempotencia por el ID DE HARBIZ, no por el nombre.
+  //
+  // ⚠️ La primera versión deduplicaba por nombre y se dejó 74 recetas fuera:
+  // Laura tiene 59 nombres repetidos que NO son duplicados —«Huevos rellenos»
+  // aparece dos veces, una escrita a mano y otra con 10 ingredientes y sus
+  // macros—. Dos recetas pueden llamarse igual; lo que no se repite es su id.
   const yaImportadas = new Set(
-    (await m.Recipe.findAll({ attributes: ["name"] })).map((r) => norm(r.name))
+    (await m.Recipe.findAll({ attributes: ["externalId"], where: { externalId: { [Op.ne]: null } } }))
+      .map((r) => r.externalId)
   );
   const lineasTotales = recetas.reduce((a, r) => a + (r.ingredientes?.length ?? 0), 0);
 
@@ -159,7 +167,7 @@ async function main() {
 
   console.log("── RECETAS ───────────────────────────────────────────────────\n");
   console.log(`  A importar                         ${String(recetas.length).padStart(5)}`);
-  console.log(`  …con un nombre que ya existe       ${String(recetas.filter((r) => yaImportadas.has(norm(r.nombre))).length).padStart(5)}   se saltan`);
+  console.log(`  …ya importadas antes               ${String(recetas.filter((r) => yaImportadas.has(r.id)).length).padStart(5)}   se saltan`);
   console.log(`  Líneas de ingrediente              ${String(lineasTotales).padStart(5)}`);
   console.log(`  Con foto en Harbiz                 ${String(recetas.filter((r) => r.imagen).length).padStart(5)}   las trae el script de fotos`);
   console.log(`  Con duración                       ${String(recetas.filter((r) => minutos(r.duracion)).length).padStart(5)}`);
@@ -206,10 +214,11 @@ async function main() {
 
     // 5.2 Recetas.
     for (const r of recetas) {
-      if (yaImportadas.has(norm(r.nombre))) { saltadas++; continue; }
-      yaImportadas.add(norm(r.nombre));
+      if (yaImportadas.has(r.id)) { saltadas++; continue; }
+      yaImportadas.add(r.id);
 
       const receta = await m.Recipe.create({
+        externalId: r.id,
         name: cap(r.nombre).slice(0, 255),
         description: r.descripcion || null,
         steps: [],
