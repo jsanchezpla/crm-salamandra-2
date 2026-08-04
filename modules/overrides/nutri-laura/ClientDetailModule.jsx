@@ -249,7 +249,6 @@ export default function NutriLauraClientDetailModule() {
   const edadDerivada = edadDesde(client.birthDate);
   const edad = edadDerivada != null ? `${edadDerivada} años` : client.customFields?.edad;
   const dni = client.taxId;
-  const domicilio = client.customFields?.domicilio;
   const motivo = client.customFields?.motivo;
   const infoAdicional = client.customFields?.info_adicional;
   // leadId puede venir como client.leadId (modelo) o como customFields.leadId
@@ -456,6 +455,12 @@ function PatientCard({
   motivo,
   infoAdicional,
 }) {
+  // Se deriva de `client`, que ya llega por props, y NO de una variable del
+  // componente de arriba: esto es otro componente y allí no existe. Un
+  // `domicilio` suelto aquí compila igual y revienta la ficha entera al pintar
+  // (04/08/2026) — el build y ESLint no lo ven venir.
+  const domicilio = client?.customFields?.domicilio;
+
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
@@ -502,7 +507,7 @@ function PatientCard({
             { label: "Domicilio", key: "domicilio", type: "text" },
             // «Edad» a mano solo mientras no haya fecha de nacimiento: con las
             // dos a la vez, una de ellas acaba mintiendo.
-            ...(editForm.birthDate ? [] : [{ label: "Edad", key: "edad", type: "text" }]),
+            ...(editForm?.birthDate ? [] : [{ label: "Edad", key: "edad", type: "text" }]),
           ].map(({ label, key, type }) => (
             <div key={key}>
               <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
