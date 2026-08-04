@@ -19,7 +19,11 @@ const BRAND = {
   accentColor: "#F7F1EB",    // Fondo CRM
   inkColor: "#A97873",       // Texto general del CRM
   cardColor: "#FFFDFC",      // Fondo cards CRM
-  logoUrl: null,
+  // La galleta de tunutrilaura (el favicon del theme). Sin ella, la cabecera del
+  // widget de reserva pinta la inicial del nombre dentro de un circulo: la
+  // paciente veia una "T" donde deberia estar el logo. La sirve el propio
+  // WordPress del cliente, que es donde vive la imagen de marca.
+  logoUrl: "https://tunutrilaura.com/wp-content/themes/nutrilaura/assets/img/favicon-512.png",
 };
 
 async function main() {
