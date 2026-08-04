@@ -646,7 +646,11 @@ export default function WidgetBookPage() {
       </header>
 
       <div className="max-w-6xl mx-auto px-4 lg:px-10 py-6 lg:py-10">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* md y no lg (04/08/2026, Rodrigo): el widget se incrusta en la web
+            de la profesional dentro de una caja de ~940px, y con el corte en
+            1024 se apilaba en vertical justo ahi —donde entra casi todo el
+            mundo— mientras que abierto a pantalla completa se veia bien. */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Resumen */}
           <aside className="lg:col-span-1">
             <div className="bg-[var(--widget-card)] rounded-lg border border-[var(--widget-border)] p-4 text-[13px]">
