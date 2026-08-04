@@ -1,5 +1,6 @@
 import { withPublicTenant } from "../../../../../../lib/tenant/publicTenantContext.js";
 import { ok, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
+import { normalizarPreguntas } from "../../../../../../lib/citas/preguntasCita.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/event-types
