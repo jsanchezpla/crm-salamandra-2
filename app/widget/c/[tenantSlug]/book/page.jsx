@@ -496,17 +496,44 @@ export default function WidgetBookPage() {
               </a>
             </div>
 
-            <details className="mt-6 pt-5 border-t border-[var(--widget-border)]/60 text-[13px]">
-              <summary className="cursor-pointer text-[var(--widget-text-muted)] hover:text-[var(--widget-text)]">
-                ¿Necesitas cancelar?
-              </summary>
-              <div className="mt-2 text-[var(--widget-text-muted)] space-y-2">
-                <div>Guarda este enlace para cancelar la cita si lo necesitas:</div>
-                <code className="block bg-[var(--widget-bg)] border border-[var(--widget-border)] rounded-md px-2.5 py-1.5 text-[12px] break-all text-[var(--widget-text)]">
-                  {cancelUrl}
-                </code>
-              </div>
-            </details>
+            {/* ── ¿Necesitas cancelar? ────────────────────────────────────────
+                Con área privada se le manda allí: puede ver sus citas, los
+                avisos y cancelar cuando quiera. Pedirle que se guarde una URL
+                con un identificador dentro es pedirle que haga de archivador,
+                y esa nota se pierde el mismo día.
+
+                Sin área privada configurada se mantiene el enlace directo,
+                porque entonces es lo ÚNICO que tiene para cancelar. Va como
+                enlace normal, no como bloque de código a copiar. */}
+            <div className="mt-6 pt-5 border-t border-[var(--widget-border)]/60 text-[13px] text-[var(--widget-text-muted)]">
+              {info?.portalUrl ? (
+                <>
+                  ¿Necesitas cancelar o cambiar la cita? Puedes hacerlo desde{" "}
+                  <a
+                    href={info.portalUrl}
+                    target="_top"
+                    rel="noopener"
+                    className="font-medium text-[var(--brand-primary,var(--widget-button))] hover:underline"
+                  >
+                    tu área privada
+                  </a>
+                  , con el mismo correo con el que has reservado.
+                </>
+              ) : (
+                <>
+                  ¿No puedes asistir?{" "}
+                  <a
+                    href={cancelUrl}
+                    target="_top"
+                    rel="noopener"
+                    className="font-medium text-[var(--brand-primary,var(--widget-button))] hover:underline"
+                  >
+                    Cancela la cita aquí
+                  </a>
+                  . También tienes este enlace en el correo de confirmación.
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

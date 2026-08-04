@@ -37,10 +37,16 @@ export const GET = withPublicTenant(async (_request, _ctx, { tenant, brand, hasM
       ? { requerida: true, urlFormulario: urlDelFormulario(tenant) }
       : { requerida: false };
 
+    // Página de la web del cliente donde vive el portal. Con ella, a quien
+    // acaba de reservar se le manda a su área privada en vez de pedirle que se
+    // guarde un enlace con un identificador dentro.
+    const portalUrl = tenant.settings?.citas?.portalUrl;
+
     return ok({
       name: tenant.name,
       slug: tenant.slug,
       admision,
+      portalUrl: typeof portalUrl === "string" && portalUrl.trim() ? portalUrl.trim() : null,
       brand: {
         primaryColor: brand.primaryColor,
         secondaryColor: brand.secondaryColor,
