@@ -32,7 +32,7 @@
  */
 
 import { Sequelize } from "sequelize";
-import { byModule, byTable } from "./_schema-targets.js";
+import { byModule, byTable, tableExists } from "./_schema-targets.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -64,6 +64,45 @@ async function crearPlantillas(s, schema, t) {
        ON "${schema}"."${PLANTILLAS}" (key)`,
     { transaction: t }
   );
+}
+
+/**
+ * Crea `contract_signatures` donde falte.
+ *
+ * La creaba `migrate-sprint-aumenta-2026-07`, pero **solo en tenants con tabla
+ * `patients`** — y el contrato dejó de colgar del paciente para colgar del
+ * CLIENTE hace tiempo. Resultado: `nutri_laura` y `healim`, que tienen portal y
+ * clientes pero no módulo de pacientes, se quedaron sin la tabla; cargarles el
+ * clausulado sin esto les pondría la pantalla de firma y reventaría con un 500
+ * a la primera paciente que la rellenara. Es el mismo fallo que ya se arregló
+ * una capa más arriba con la subida del contrato (ver `lib/documents/contratoServicios.js`).
+ */
+async function crearFirmas(s, schema, t) {
+  if (!(await tableExists(s, schema, "clients"))) return false;
+  if (await tableExists(s, schema, FIRMAS)) return false;
+
+  await s.query(
+    `CREATE TABLE "${schema}"."${FIRMAS}" (
+       id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+       client_id              UUID NOT NULL REFERENCES "${schema}"."clients"(id) ON DELETE CASCADE,
+       guardian_id            UUID NOT NULL,
+       template_key           VARCHAR(50) NOT NULL DEFAULT 'simple',
+       template_version       INTEGER,
+       signer_name            VARCHAR(200) NOT NULL,
+       signer_data            JSONB NOT NULL DEFAULT '{}'::jsonb,
+       acceptances            JSONB NOT NULL DEFAULT '[]'::jsonb,
+       signature_path         VARCHAR(500) NOT NULL,
+       second_signature_path  VARCHAR(500),
+       document_id            UUID,
+       signed_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+       ip                     VARCHAR(64),
+       user_agent             VARCHAR(255),
+       created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+       updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+     )`,
+    { transaction: t }
+  );
+  return true;
 }
 
 async function ampliarFirmas(s, schema, t) {
@@ -135,13 +174,21 @@ async function main() {
   process.stdout.write(" Contrato del portal: datos, anexos y consentimiento\n");
   process.stdout.write("══════════════════════════════════════════════════\n");
 
-  header("Pasada 1 — schemas con el módulo `citas` activo (crear plantillas)");
+  header("Pasada 1 — schemas con el módulo `citas` activo (crear tablas)");
   const { schemas: conModulo } = await byModule(s, "citas");
   if (conModulo.length === 0) log("· Ninguno todavía. Se creará cuando algún tenant tenga citas.");
   for (const schema of conModulo) {
     try {
-      await s.transaction(async (t) => { await crearPlantillas(s, schema, t); });
-      log(`✓ ${schema}: tabla de plantillas creada o ya existente`);
+      let firmasNuevas = false;
+      await s.transaction(async (t) => {
+        await crearPlantillas(s, schema, t);
+        firmasNuevas = await crearFirmas(s, schema, t);
+      });
+      log(
+        firmasNuevas
+          ? `✓ ${schema}: plantillas al día + ${FIRMAS} CREADA (no la tenía: sin módulo pacientes)`
+          : `✓ ${schema}: tabla de plantillas creada o ya existente`
+      );
     } catch (err) {
       log(`✗ ${schema}: ${err.message} — se salta, sigue con el resto`);
     }
