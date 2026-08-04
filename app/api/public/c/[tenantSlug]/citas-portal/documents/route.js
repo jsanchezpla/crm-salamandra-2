@@ -46,7 +46,9 @@ function gate(tenant, hasModule) {
 // Solo lo que este paciente puede ver: compartido con él o subido por él.
 // `informe` entra desde el sprint 2026-07 (punto 3.2): al pulsar «Enviar al
 // paciente» el informe clínico se publica aquí como PDF.
-const FUENTES_VISIBLES = ["ficha", "informe"];
+// `contrato_firmado` entra el 2026-08-04: es SU copia del contrato que acaba de
+// firmar, con los datos, el clausulado y la firma dentro.
+const FUENTES_VISIBLES = ["ficha", "informe", "contrato_firmado"];
 
 function wherePaciente(clientId) {
   return {

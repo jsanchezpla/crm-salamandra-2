@@ -12,10 +12,18 @@
  * La firma se dibuja con el dedo sobre un canvas y se manda como PNG. Lo que
  * tiene valor no es el dibujo sino lo que se guarda con él: quién, cuándo,
  * desde qué IP y con qué navegador.
+ *
+ * Desde el 04/08/2026 hay DOS formas de firmar y este componente decide cuál:
+ *   - Con plantilla estructurada (tunutrilaura): formulario con datos, anexos y
+ *     una casilla por documento → `ContratoFormulario`.
+ *   - Sin ella (Aumenta): el PDF del centro y una firma, como estaba.
+ * El reparto se hace aquí y no en la página para que quien monta el portal no
+ * tenga que saber qué contrato usa cada cliente.
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import SignaturePad from "./SignaturePad.jsx";
+import ContratoFormulario from "./ContratoFormulario.jsx";
 
 const headingStyle = { fontFamily: "var(--widget-font-display)", fontWeight: 500 };
 
@@ -47,15 +55,16 @@ export default function ContratoGate({ estado, authFetch, tenantSlug, profesiona
     }
   }
 
-  async function firmar() {
-    if (!firma || enviando) return;
+  /** Manda la firma. `payload` lo arma quien llama según el tipo de contrato. */
+  async function enviarFirma(payload) {
+    if (enviando) return;
     setEnviando(true);
     setError(null);
     try {
       const res = await authFetch("/citas-portal/contract/sign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signature: firma }),
+        body: JSON.stringify(payload),
       });
       if (res.status === 401) return;
       const j = await res.json().catch(() => ({}));
@@ -66,6 +75,24 @@ export default function ContratoGate({ estado, authFetch, tenantSlug, profesiona
     } finally {
       setEnviando(false);
     }
+  }
+
+  // Contrato estructurado: datos + anexos + firma, cada documento por separado.
+  if (estado?.estructurado && estado?.plantilla) {
+    return (
+      <ContratoFormulario
+        // Al pasar del contrato al consentimiento parental hay que RESETEAR el
+        // formulario entero: sin esto React reutiliza el estado y el segundo
+        // documento sale con las casillas del primero ya marcadas.
+        key={estado.plantilla.key}
+        plantilla={estado.plantilla}
+        quedan={estado.documentosPendientes ?? 1}
+        enviando={enviando}
+        error={error}
+        onFirmar={enviarFirma}
+        onMasTarde={onMasTarde}
+      />
+    );
   }
 
   const faltanOtros = (estado?.pendientes?.length ?? 0) > 1;
@@ -113,7 +140,7 @@ export default function ContratoGate({ estado, authFetch, tenantSlug, profesiona
           <div className="mt-5 flex flex-col gap-2">
             <button
               type="button"
-              onClick={firmar}
+              onClick={() => firma && enviarFirma({ signature: firma })}
               disabled={!firma || enviando}
               className="w-full px-5 py-3 text-sm font-semibold rounded-xl text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
             >

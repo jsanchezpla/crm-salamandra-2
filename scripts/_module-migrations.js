@@ -96,6 +96,12 @@ export const CORE = [
   // de arriba —que es quien crea `waitlist_entries`—: decide por existencia de
   // tabla, así que en un tenant sin `clients_avanzado` es un no-op.
   "migrate-waitlist-therapist",
+  // Contrato del portal con datos y anexos (04/08/2026). CORE porque AMPLÍA
+  // `contract_signatures`, que la crea `migrate-sprint-aumenta-2026-07` para
+  // todos los tenants: sin esta, un cliente nuevo nace con la tabla vieja y la
+  // primera firma revienta pidiendo `template_key`. La tabla de plantillas sí
+  // se crea solo donde hay `citas` (lo decide el propio script).
+  "migrate-contrato-estructurado",
 ];
 
 export const MODULES = {

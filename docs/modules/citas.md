@@ -350,8 +350,8 @@ migración). Otros tenants conservan el comportamiento histórico.
 | `/api/public/c/[tenantSlug]/citas-portal/cancel/[id]` | POST | Cancelar su cita |
 | `/api/public/c/[tenantSlug]/citas-portal/documents` | GET/POST | «Mis documentos» (cerrado si falta firmar el contrato) |
 | `/api/public/c/[tenantSlug]/citas-portal/documents/[id]` | GET | Descarga de un documento suyo |
-| `/api/public/c/[tenantSlug]/citas-portal/contract` | GET | Estado del Contrato del Centro (ver abajo) |
-| `/api/public/c/[tenantSlug]/citas-portal/contract/sign` | POST | Firma dibujada `{ signature: dataURL PNG }` |
+| `/api/public/c/[tenantSlug]/citas-portal/contract` | GET | Estado del contrato + la plantilla que toca firmar (ver abajo) |
+| `/api/public/c/[tenantSlug]/citas-portal/contract/sign` | POST | Firma: `{ signature }` (simple) o `{ templateKey, datos, aceptaciones, signature }` (estructurado) |
 | `/api/public/c/[tenantSlug]/citas-portal/contract/documento` | GET | PDF del contrato, para leerlo antes de firmar |
 
 ## Contrato del Centro en el portal (sprint Aumenta 2026-07, 2.1 y 2.2)
@@ -363,11 +363,12 @@ consultar ni subir— hasta que firmen todos (decisión de Rodrigo, 31/07). El
 aplazamiento dura lo que la pestaña: al volver a entrar, el contrato vuelve a
 salir.
 
-- **Sin Contrato del Centro subido no se pide nada**: si el tenant no tiene
-  documento `contract_template`, no hay pantalla ni bloqueo. Subirlo es la
-  señal de que el centro quiere exigir la firma. (Arreglo del 31/07: sin esta
-  condición, el cerrojo se activaba con solo tener el portal encendido y a los
-  pacientes de nutri_laura —el único tenant con portal— les apareció una
+- **Sin Contrato del Centro subido —ni plantilla activa— no se pide nada**: si
+  el tenant no tiene documento `contract_template` ni ninguna fila activa en
+  `contract_templates`, no hay pantalla ni bloqueo. Cualquiera de las dos cosas
+  es la señal de que el centro quiere exigir la firma. (Arreglo del 31/07: sin
+  esta condición, el cerrojo se activaba con solo tener el portal encendido y a
+  los pacientes de nutri_laura —el único tenant con portal— les apareció una
   pantalla pidiendo firmar un documento que no existe.)
 - **Quién firma**: los tutores marcados como firmantes en la ficha
   (`Client.guardians`). Si la ficha no tiene tutores, firma el **titular** —
@@ -386,6 +387,51 @@ salir.
   solo en el listado: si no, un enlace guardado seguiría abriendo el PDF.
 - Lógica compartida en `lib/citas/portalContract.js` (los ficheros de rutas de
   Next solo deben exportar manejadores HTTP).
+
+### Contrato ESTRUCTURADO: datos y anexos (sprint tunutrilaura 2026-08-04)
+
+Lo de arriba es el contrato de Aumenta: un PDF y un garabato, **sin pedir ni un
+dato**. El contrato de tunutrilaura pide ocho (nombre, DNI/NIE, domicilio,
+correo, teléfono, fecha de nacimiento, localidad y fecha de la firma) y sus tres
+anexos dicen literalmente que «se firman de forma independiente al documento
+principal». Una sola casilla para todo el paquete no acredita ninguno — y el
+Anexo I es el que renuncia a la devolución del importe.
+
+- **Dónde vive el clausulado**: tabla `contract_templates`, **por tenant**. En
+  el código no puede estar: el módulo lo comparten Aumenta y Laura, y el
+  clausulado de TCA le saldría a Aumenta en su portal. Además cambiar una
+  cláusula (la colaboradora del Anexo II, un plazo) no puede exigir un
+  despliegue. Se carga con `scripts/seed-contrato-tunutrilaura.js`.
+- **Forma**: `fields` (qué se pide: `{key,label,type,required,group}`, tipos
+  text/dni/email/tel/date/select/textarea) y `blocks` (qué se lee y se acepta:
+  `{id,title,body,acceptLabel}`, uno por documento). El texto se enseña
+  desplegable en pantalla y se imprime ENTERO en el PDF firmado: quien firma
+  tiene derecho a una copia de lo que aceptó, no de un resumen.
+- **Dos documentos encadenados**: `paciente` (contrato + Anexos I, II y III) y
+  `parental` (consentimiento del tutor). El segundo lleva `only_minors` y solo
+  aparece si la **fecha de nacimiento declarada** en el primero dice que es
+  menor — no una casilla, que se desmarca. Al firmar el primero, la pantalla
+  encadena el segundo sin soltar al usuario.
+- **Índice único ampliado** a `(client_id, guardian_id, template_key)`: el viejo
+  era `(client_id, guardian_id)` y el consentimiento parental chocaba con el
+  contrato. `template_key` es NOT NULL con default `'simple'` precisamente para
+  eso: en Postgres dos NULL no colisionan y el índice dejaría colar duplicados.
+- **Qué se guarda además**: `signer_data` (foto de lo declarado — NO se vuelca
+  sobre la ficha, que el centro puede corregir), `acceptances` (id, título y
+  hora de CADA documento aceptado) y `document_id` (el PDF generado).
+- **El PDF firmado** (`lib/documents/contratoFirmadoPdf.js`, pdfkit + Poppins)
+  se archiva en la ficha con `source='contrato_firmado'` y `clientVisible`, y la
+  paciente lo tiene en «Mis documentos». **No** se archiva como `'contrato'`:
+  ese source significa «firmado en papel» y desactivaría la firma web, con lo
+  que firmar el contrato cancelaría el consentimiento parental de detrás.
+- **La validación del DNI no bloquea a nadie de fuera**: si el valor tiene forma
+  de DNI o NIE se comprueba la letra (ahí están las erratas); si no la tiene
+  —pasaporte, documento extranjero— se acepta tal cual.
+- Qué documento le toca a quién vive en `lib/clients/contratoFirma.js`
+  (`situacionDocumentos`), no en `portalContract.js`: no depende de HTTP ni de
+  la sesión, y así se prueba sin levantar el servidor
+  (`scripts/_smoke-contrato-estructurado.mjs`).
+- Migración: `scripts/migrate-contrato-estructurado.js`.
 
 ## Bloqueo mensual por impago (sprint Aumenta 2026-07, 2.3)
 

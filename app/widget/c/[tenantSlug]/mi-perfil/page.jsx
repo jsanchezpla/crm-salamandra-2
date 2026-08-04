@@ -337,7 +337,14 @@ export default function MiPerfilPage() {
           authFetch={authFetch}
           tenantSlug={tenantSlug}
           profesional={info?.name}
-          onFirmado={(nuevo) => { setContrato((c) => ({ ...c, ...nuevo, requiereFirma: false, yaFirme: true })); loadContrato(); }}
+          onFirmado={(nuevo) => {
+            // Con el consentimiento parental detrás del contrato la firma NO ha
+            // terminado: se encadena el siguiente documento sin soltar la
+            // pantalla (`nuevo.plantilla` ya trae el que toca).
+            const quedan = nuevo?.quedanDocumentos ?? 0;
+            setContrato((c) => ({ ...c, ...nuevo, requiereFirma: quedan > 0, yaFirme: quedan === 0 }));
+            loadContrato();
+          }}
           onMasTarde={() => setAplazado(true)}
         />
       </div>
