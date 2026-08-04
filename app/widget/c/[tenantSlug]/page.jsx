@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { AuthGateScreen, useWidgetAuth } from "./_components/AuthGate.jsx";
 import { useCitasPortalSession } from "./_components/useCitasPortalSession.js";
 import { formatMoney } from "../../../../lib/payments/money.js";
@@ -44,6 +44,26 @@ export default function WidgetSelectionPage() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [selectedDatetime, setSelectedDatetime] = useState(null);
 
+  /*
+   * Enlace directo a UN tipo de cita (04/08/2026, Rodrigo): «poder enviar un
+   * link de cita solo de un tipo de cita».
+   *
+   *   /widget/c/{tenant}?tipo=valoracion-inicial
+   *
+   * Va por el SLUG del tipo de cita y no por su id: el enlace se manda por
+   * WhatsApp y se lee en voz alta, y un UUID de 36 caracteres no se puede ni
+   * dictar ni comprobar de un vistazo. El slug ya existía y es único.
+   *
+   * Con el parámetro puesto se preselecciona ese tipo y la lista deja de
+   * pintarse: quien recibe el enlace ve directamente el calendario. Sin él, la
+   * pantalla se comporta como siempre. Si el slug no existe (renombrado, cita
+   * desactivada) NO se rompe: se enseña la lista entera, que es lo que había
+   * antes de que existiera esto.
+   */
+  const searchParams = useSearchParams();
+  const tipoDelEnlace = searchParams.get("tipo");
+  const [soloUnTipo, setSoloUnTipo] = useState(false);
+
   // ── Carga inicial: info + event-types ─────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
@@ -59,7 +79,17 @@ export default function WidgetSelectionPage() {
         const typesJson = await typesRes.json();
         if (cancelled) return;
         setInfo(infoJson.data);
-        setEventTypes(typesJson.data ?? []);
+        const tipos = typesJson.data ?? [];
+        setEventTypes(tipos);
+
+        // El enlace manda: si trae un tipo que existe, se elige solo.
+        const delEnlace = tipoDelEnlace
+          ? tipos.find((t) => t.slug === tipoDelEnlace) ?? null
+          : null;
+        if (delEnlace) {
+          setSelectedEventTypeId(delEnlace.id);
+          setSoloUnTipo(true);
+        }
       } catch (err) {
         if (cancelled) return;
         setLoadError(err.message);
@@ -69,7 +99,7 @@ export default function WidgetSelectionPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [tenantSlug]);
+  }, [tenantSlug, tipoDelEnlace]);
 
   // ── Carga de días disponibles del mes según EventType y mes ───────────────
   useEffect(() => {
@@ -250,9 +280,42 @@ export default function WidgetSelectionPage() {
           {/* Col 1 — cards de EventType */}
           <section>
             <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-3">
-              Tipo de cita
+              {soloUnTipo ? "Tu cita" : "Tipo de cita"}
             </div>
-            {eventTypes.length === 0 ? (
+            {soloUnTipo && selectedEventType ? (
+              /* Enlace directo: no hay nada que elegir, así que en vez de una
+                 lista de un solo elemento se enseña lo que ha reservado y ya.
+                 El enlace para verlas todas se deja a mano: quien llega aquí
+                 por WhatsApp puede haberse equivocado de cita. */
+              <div className="bg-[var(--widget-card)] rounded-lg border border-[var(--brand-primary,var(--widget-button))] p-4">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="inline-block w-2.5 h-2.5 rounded-full mt-1.5 shrink-0"
+                    style={{ background: selectedEventType.color || "var(--widget-button)" }}
+                  />
+                  <div className="min-w-0">
+                    <div className="text-[15px] text-[var(--widget-text)]">{selectedEventType.name}</div>
+                    <div className="text-[12px] text-[var(--widget-text-muted)] mt-0.5">
+                      {selectedEventType.duration} min
+                    </div>
+                    {selectedEventType.description && (
+                      <p className="text-[12px] text-[var(--widget-text-muted)] mt-1.5 leading-relaxed">
+                        {selectedEventType.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {eventTypes.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setSoloUnTipo(false)}
+                    className="mt-3 text-[12px] text-[var(--widget-text-faint)] hover:text-[var(--widget-text)] underline underline-offset-2"
+                  >
+                    Ver el resto de citas
+                  </button>
+                )}
+              </div>
+            ) : eventTypes.length === 0 ? (
               <div className="text-sm text-[var(--widget-text-muted)] bg-[var(--widget-card)] rounded-lg border border-[var(--widget-border)] p-4">
                 No hay tipos de cita disponibles online en este momento.
               </div>

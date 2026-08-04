@@ -63,6 +63,55 @@ function slugify(name) {
  * círculos, texto corto y texto largo. Cada clase que se añade hay que
  * pintarla en el widget, validarla en el servidor y enseñarla en la ficha.
  */
+/**
+ * CopiarEnlace — el enlace para mandar SOLO esta cita (04/08/2026, Rodrigo).
+ *
+ * Va por el slug del tipo de cita y no por su id: esto se manda por WhatsApp y
+ * a veces se dicta, y un UUID de 36 caracteres no se puede ni leer en voz alta
+ * ni comprobar de un vistazo.
+ *
+ * El origen se lee del navegador, no de una variable de entorno: la agenda
+ * pública se sirve del mismo sitio que el CRM, así que el enlace que se copia
+ * es siempre el bueno esté donde esté desplegado.
+ */
+function CopiarEnlace({ slug, tenantSlug }) {
+  const [copiado, setCopiado] = useState(false);
+  if (!tenantSlug) return null;
+
+  const url =
+    typeof window === "undefined"
+      ? ""
+      : `${window.location.origin}/widget/c/${tenantSlug}?tipo=${encodeURIComponent(slug)}`;
+
+  async function copiar(e) {
+    e.stopPropagation(); // la fila entera abre la edición
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Sin permiso de portapapeles (http, navegador viejo): se enseña el
+      // enlace para copiarlo a mano en vez de dejar el botón mudo.
+      window.prompt("Copia el enlace:", url);
+    }
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 2000);
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copiar}
+      title={url}
+      className={`text-[11px] px-1.5 py-0.5 rounded border transition ${
+        copiado
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-neutral-200 text-neutral-500 hover:border-neutral-300 hover:text-neutral-700"
+      }`}
+    >
+      {copiado ? "copiado" : "copiar enlace"}
+    </button>
+  );
+}
+
 function ConstructorPreguntas({ preguntas, onChange }) {
   const lista = Array.isArray(preguntas) ? preguntas : [];
 
@@ -182,6 +231,15 @@ export default function CitasTiposPage() {
    * recuperarlos.
    */
   const [verEliminados, setVerEliminados] = useState(false);
+  /*
+   * El slug del cliente, para poder armar el enlace público de cada cita. Se
+   * pide a /api/tenant/settings, que ya lo devuelve y es el mismo sitio del que
+   * lo saca Configuración para la URL del webhook de Stripe. Si falla, los
+   * botones de «copiar enlace» simplemente no se pintan: es una comodidad, no
+   * puede tumbar la pantalla.
+   */
+  const [tenantSlug, setTenantSlug] = useState(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -197,6 +255,13 @@ export default function CitasTiposPage() {
   const eliminados = items.filter((it) => !it.active).length;
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    fetch("/api/tenant/settings", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setTenantSlug(j?.data?.slug ?? null))
+      .catch(() => {});
+  }, []);
 
   // Lo que va a ver la paciente si se fracciona. Se calcula aquí para que quien
   // configura vea el total y no se lleve la sorpresa de que 3 × 130 no son 360.
@@ -429,7 +494,10 @@ export default function CitasTiposPage() {
                   >
                     <td className="px-4 py-3">
                       <div className="font-medium text-neutral-800">{it.name}</div>
-                      <div className="text-[11px] text-neutral-400">{it.slug}</div>
+                      <div className="text-[11px] text-neutral-400 flex items-center gap-2">
+                        {it.slug}
+                        {it.active && <CopiarEnlace slug={it.slug} tenantSlug={tenantSlug} />}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-neutral-700">{it.duration} min</td>
                     <td className="px-4 py-3">
