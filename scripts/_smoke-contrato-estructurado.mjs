@@ -34,7 +34,14 @@ import {
   letraDocumentoCorrecta,
   situacionDocumentos,
   serializarPlantilla,
+  camposDe,
 } from "../lib/clients/contratoFirma.js";
+import {
+  camposQueFaltan,
+  actualizacionDeFicha,
+  datosDeFicha,
+  tutorDeclarado,
+} from "../lib/clients/datosFicha.js";
 import { effectiveSigners } from "../lib/clients/clientContract.js";
 import { buildContratoFirmadoPdf } from "../lib/documents/contratoFirmadoPdf.js";
 
@@ -173,40 +180,138 @@ async function main() {
     // Lo mismo que hace `estadoContrato` en el portal, sin levantar servidor:
     // lee las plantillas y las firmas y pregunta qué toca ahora.
     const estado = async () => {
+      await cliente.reload();
       const plantillas = await ContractTemplate.findAll({
         where: { active: true },
         order: [["onlyMinors", "ASC"], ["createdAt", "ASC"]],
       });
       const firmas = await ContractSignature.findAll({ where: { clientId: cliente.id } });
       const firmantes = effectiveSigners(cliente);
-      return situacionDocumentos({ plantillas, firmas, firmantes, firmante: firmantes[0] });
+      return situacionDocumentos({ plantillas, firmas, firmantes, firmante: firmantes[0], client: cliente });
     };
 
     const estado0 = await estado();
     esperar(estado0.siguiente?.key === "paciente", "lo primero es el contrato");
     esperar(estado0.completo === false, "hasta firmarlo, el portal se queda tapado");
-    const visto0 = serializarPlantilla(estado0.siguiente);
+    const visto0 = serializarPlantilla(estado0.siguiente, cliente);
     esperar(visto0.fields.length === 8 && visto0.blocks.length === 4, "y viaja con sus 8 campos y sus 4 documentos");
 
-    // Firma el contrato declarando una fecha de nacimiento de MENOR.
+    // ── Los datos van a la FICHA, antes de firmar ────────────────────────────
+    paso("«Completa tus datos»: a la ficha, y solo los huecos");
+
+    const camposPaciente = camposDe(estado0.siguiente);
+    const faltanAntes = camposQueFaltan(camposPaciente, cliente);
+    esperar(
+      faltanAntes.some((c) => c.key === "dni") && faltanAntes.some((c) => c.key === "fechaNacimiento"),
+      `se le piden los huecos de la ficha (${faltanAntes.map((c) => c.key).join(", ")})`
+    );
+    esperar(
+      !faltanAntes.some((c) => c.key === "lugarFirma"),
+      "la localidad de la firma NO: es del acto de firmar, no de la persona"
+    );
+    esperar(
+      !faltanAntes.some((c) => c.key === "email"),
+      "ni el correo, que la ficha ya tiene: lo que hay no se vuelve a preguntar"
+    );
+
+    // Guarda lo declarado en la ficha, con un correo DISTINTO del que ya tiene.
+    const declarado = { ...DATOS_OK, fechaNacimiento: "2012-03-02", email: "otro-correo@example.com" };
+    const update = actualizacionDeFicha(camposPaciente, cliente, declarado);
+    await cliente.update(update);
+    await cliente.reload();
+
+    esperar(cliente.taxId === DATOS_OK.dni, "el DNI entra en la ficha (columna taxId)");
+    esperar(String(cliente.birthDate).slice(0, 10) === "2012-03-02", "la fecha de nacimiento también");
+    esperar(cliente.customFields?.domicilio === DATOS_OK.domicilio, "y el domicilio, en customFields");
+    esperar(cliente.email === EMAIL, "el correo que YA tenía la ficha NO se ha pisado");
+
+    const faltanDespues = camposQueFaltan(camposPaciente, cliente);
+    esperar(faltanDespues.length === 0, "ya no falta nada por rellenar");
+
+    // ── El contrato lee de la ficha ──────────────────────────────────────────
+    paso("El contrato ya no pregunta: lee la ficha");
+    const visto1 = serializarPlantilla(estado0.siguiente, cliente);
+    const deFicha = visto1.fields.filter((f) => f.desdeFicha);
+    esperar(deFicha.length === 6, `seis datos llegan resueltos de la ficha (${deFicha.length})`);
+    esperar(
+      visto1.fields.filter((f) => !f.desdeFicha).every((f) => /Firma/i.test(f.label) || /localidad/i.test(f.label)),
+      "y lo único que se sigue preguntando es la localidad y la fecha de la firma"
+    );
+    esperar(
+      datosDeFicha(camposPaciente, cliente).dni === DATOS_OK.dni,
+      "el DNI que se imprimirá sale de la ficha, no de lo que llegue del navegador"
+    );
+
+    // Con la fecha ya en la ficha, la minoría de edad se sabe ANTES de firmar.
+    const estadoAntesDeFirmar = await estado();
+    esperar(
+      estadoAntesDeFirmar.aplican.some((p) => p.key === "parental"),
+      "y como la ficha dice que es menor, el consentimiento parental ya está previsto"
+    );
+
+    // Firma el contrato. Los datos ya no vienen del formulario: son los de la
+    // ficha, que es lo que se imprimirá en el PDF.
     await ContractSignature.create({
       clientId: cliente.id,
       guardianId: cliente.id, // sin tutores en la ficha firma el titular
       templateKey: "paciente",
       templateVersion: plantilla.version,
-      signerName: "Menor De Prueba",
-      signerData: { ...bien.datos, fechaNacimiento: "2012-03-02" },
+      signerName: cliente.name,
+      signerData: { ...datosDeFicha(camposPaciente, cliente), lugarFirma: "Barcelona", fechaFirma: "2026-08-04" },
       acceptances: todas.aceptaciones,
       signaturePath: `${SLUG}/signatures/${cliente.id}/smoke.png`,
       signedAt: new Date(),
     });
 
     const estado1 = await estado();
-    esperar(estado1.siguiente?.key === "parental", "declarada menor, toca el consentimiento parental");
+    esperar(estado1.siguiente?.key === "parental", "firmado el contrato, toca el consentimiento parental");
     esperar(estado1.completo === false, "y el contrato todavía NO está completo");
     esperar(
       String(estado1.siguiente?.secondSignatureLabel).includes("menor"),
       "el consentimiento trae la segunda firma opcional de la menor"
+    );
+
+    // En el parental, los datos de la MENOR salen ya rellenos de la ficha y los
+    // del TUTOR se preguntan, porque son de otra persona.
+    const vistoParental = serializarPlantilla(estado1.siguiente, cliente);
+    const menorResuelto = vistoParental.fields.filter((f) => f.desdeFicha).map((f) => f.key);
+    esperar(
+      menorResuelto.includes("menorNombre") && menorResuelto.includes("menorFechaNacimiento"),
+      "los datos de la menor vienen de su ficha"
+    );
+    esperar(
+      !menorResuelto.includes("nombre") && !menorResuelto.includes("dni"),
+      "los del tutor NO: es otra persona y hay que preguntárselos"
+    );
+
+    // ── El tutor entra en la ficha ───────────────────────────────────────────
+    paso("El tutor que firma queda en la ficha de la menor");
+    const camposParental = camposDe(estado1.siguiente);
+    const datosTutor = {
+      nombre: "Carmen Ruiz Soler",
+      dni: "12345678Z",
+      relacion: "Madre",
+      domicilio: "Carrer de Mallorca 210, Barcelona",
+      telefono: "600999888",
+      email: "carmen.ruiz@example.com",
+    };
+    const tutor = tutorDeclarado(camposParental, cliente, datosTutor, crypto.randomUUID());
+    esperar(tutor?.name === "Carmen Ruiz Soler" && tutor?.relationship === "madre", "se traduce a la forma de la ficha");
+    esperar(
+      tutor?.signer === false,
+      "y NO como firmante: si no, cambiaría quién debe firmar y pediría de nuevo lo ya firmado"
+    );
+
+    await cliente.update({ guardians: [tutor] });
+    await cliente.reload();
+    esperar(cliente.guardians?.[0]?.dni === "12345678Z", "queda guardado en la ficha");
+    esperar(
+      tutorDeclarado(camposParental, cliente, datosTutor, crypto.randomUUID()) === null,
+      "y firmar otra vez no lo duplica"
+    );
+    esperar(
+      effectiveSigners(cliente)[0]?.titular === true,
+      "quien debe firmar sigue siendo la titular, no el tutor recién añadido"
     );
 
     // El mismo firmante firma el SEGUNDO documento: es justo lo que el índice
@@ -216,8 +321,8 @@ async function main() {
       guardianId: cliente.id,
       templateKey: "parental",
       templateVersion: parental.version,
-      signerName: "Tutora De Prueba",
-      signerData: { nombre: "Tutora De Prueba", relacion: "Madre" },
+      signerName: datosTutor.nombre,
+      signerData: datosTutor,
       acceptances: [{ id: "parental", title: "Consentimiento parental", acceptedAt: new Date().toISOString() }],
       signaturePath: `${SLUG}/signatures/${cliente.id}/smoke2.png`,
       signedAt: new Date(),
@@ -228,16 +333,18 @@ async function main() {
     esperar(estado2.siguiente === null, "ya no queda nada por firmar");
     esperar(estado2.completo === true, "el contrato queda completo y el portal se abre");
 
-    // Control: con fecha de ADULTA el consentimiento parental no aparece.
+    // Control: con fecha de ADULTA en la ficha, el parental no aparece.
     paso("Control: una adulta no ve el consentimiento parental");
     await ContractSignature.destroy({ where: { clientId: cliente.id } });
+    await cliente.update({ birthDate: "1990-05-14" });
+    await cliente.reload();
     await ContractSignature.create({
       clientId: cliente.id,
       guardianId: cliente.id,
       templateKey: "paciente",
       templateVersion: plantilla.version,
-      signerName: DATOS_OK.nombre,
-      signerData: bien.datos, // nacida en 1990
+      signerName: cliente.name,
+      signerData: datosDeFicha(camposPaciente, cliente),
       acceptances: todas.aceptaciones,
       signaturePath: `${SLUG}/signatures/${cliente.id}/smoke3.png`,
       signedAt: new Date(),

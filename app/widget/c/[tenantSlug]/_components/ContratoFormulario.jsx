@@ -41,13 +41,27 @@ function hoyISO() {
 // inútil el useMemo de los grupos.
 const VACIO = [];
 
-/** Valores de partida: la fecha de la firma es hoy, que es lo que va a poner. */
+/**
+ * Valores de partida: lo que ya está en la ficha viene resuelto del servidor, y
+ * la fecha de la firma es hoy, que es lo que va a poner.
+ */
 function valoresIniciales(campos) {
   const base = {};
   for (const c of campos) {
-    base[c.key] = c.type === "date" && /fechaFirma/i.test(c.key) ? hoyISO() : "";
+    if (c.valor) base[c.key] = c.valor;
+    else base[c.key] = c.type === "date" && /fechaFirma/i.test(c.key) ? hoyISO() : "";
   }
   return base;
+}
+
+/** Fecha en cristiano para el resumen de datos. */
+function fmtFecha(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) return iso;
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("es-ES", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function CampoTexto({ campo, valor, onChange, disabled }) {
@@ -127,7 +141,15 @@ function Bloque({ bloque, aceptado, onToggle, disabled }) {
   );
 }
 
-export default function ContratoFormulario({ plantilla, quedan, enviando, error, onFirmar, onMasTarde }) {
+export default function ContratoFormulario({
+  plantilla,
+  quedan,
+  enviando,
+  error,
+  onFirmar,
+  onMasTarde,
+  profesional,
+}) {
   const campos = plantilla.fields ?? VACIO;
   const bloques = plantilla.blocks ?? VACIO;
 
@@ -138,20 +160,27 @@ export default function ContratoFormulario({ plantilla, quedan, enviando, error,
   const [firma, setFirma] = useState(null);
   const [firmaSecundaria, setFirmaSecundaria] = useState(null);
 
+  // Lo que YA está en la ficha se enseña, no se vuelve a preguntar: se rellenó
+  // en la pantalla anterior o lo tenía puesto la nutricionista. Lo que se sigue
+  // preguntando aquí es lo del acto de firmar (la localidad, la fecha) y, en el
+  // consentimiento parental, los datos del tutor, que no están en la ficha.
+  const yaSabidos = useMemo(() => campos.filter((c) => c.desdeFicha && c.valor), [campos]);
+  const porPedir = useMemo(() => campos.filter((c) => !(c.desdeFicha && c.valor)), [campos]);
+
   // Los campos se pintan agrupados («Datos del tutor», «de la persona menor»),
   // que es como los separa el propio consentimiento parental.
   const grupos = useMemo(() => {
     const out = [];
-    for (const campo of campos) {
+    for (const campo of porPedir) {
       const titulo = campo.group ?? null;
       const ultimo = out[out.length - 1];
       if (ultimo && ultimo.titulo === titulo) ultimo.campos.push(campo);
       else out.push({ titulo, campos: [campo] });
     }
     return out;
-  }, [campos]);
+  }, [porPedir]);
 
-  const faltanDatos = campos.filter((c) => c.required && !String(datos[c.key] ?? "").trim());
+  const faltanDatos = porPedir.filter((c) => c.required && !String(datos[c.key] ?? "").trim());
   const faltanBloques = bloques.filter((b) => b.required && !aceptados[b.id]);
   const listo = !faltanDatos.length && !faltanBloques.length && !!firma;
 
@@ -198,6 +227,31 @@ export default function ContratoFormulario({ plantilla, quedan, enviando, error,
           {/* 1 · Datos */}
           <section className="mb-7">
             <h2 className="text-[13px] font-semibold text-[var(--widget-text)] mb-3">1 · Tus datos</h2>
+
+            {/* Lo que ya consta. Se enseña porque va a salir impreso en el
+                documento que firma: tiene derecho a verlo antes, y a avisar si
+                algo no cuadra. */}
+            {yaSabidos.length > 0 && (
+              <div className="mb-5 rounded-xl border border-[var(--widget-border)] bg-[var(--widget-bg)] px-4 py-3">
+                <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
+                  {yaSabidos.map((c) => (
+                    <div key={c.key}>
+                      <dt className="text-[11px] uppercase tracking-[0.1em] text-[var(--widget-text-faint)]">
+                        {c.label}
+                      </dt>
+                      <dd className="text-[14px] text-[var(--widget-text)]">
+                        {c.type === "date" ? fmtFecha(c.valor) : c.valor}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="mt-2.5 text-[11px] text-[var(--widget-text-faint)] leading-relaxed">
+                  Son los datos que constan en tu ficha y los que aparecerán en el documento. Si algo no
+                  está bien, díselo a {profesional || "tu profesional"} antes de firmar.
+                </p>
+              </div>
+            )}
+
             {grupos.map((grupo, i) => (
               <div key={grupo.titulo ?? i} className={i > 0 ? "mt-5" : ""}>
                 {grupo.titulo && (

@@ -55,6 +55,22 @@ export function defineClient(sequelize) {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      /**
+       * Fecha de nacimiento (04/08/2026). No existía: la tenía `Patient`, y en
+       * un centro de nutrición el paciente ES el cliente, así que no había
+       * dónde guardarla.
+       *
+       * DATEONLY y no DATE a propósito: una fecha de nacimiento no tiene hora,
+       * y con zona horaria de por medio un 1 de enero se convierte en 31 de
+       * diciembre en cuanto el servidor no está en Madrid.
+       *
+       * Es además lo que decide si una paciente necesita el consentimiento de
+       * su tutor legal, así que se pide en la ficha y no solo al firmar.
+       */
+      birthDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+      },
       address: {
         type: DataTypes.JSONB,
         defaultValue: {},

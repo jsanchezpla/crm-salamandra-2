@@ -122,6 +122,10 @@ export const MODULES = {
     // Consentimiento de comunicaciones de la familia (01/08/2026): aditiva,
     // una columna JSONB en clients.
     "migrate-client-communication-prefs",
+    // Fecha de nacimiento del cliente (04/08/2026): en un centro de nutrición
+    // el paciente ES el cliente, y es lo que decide si al firmar el contrato
+    // hace falta además el consentimiento de su tutor legal.
+    "migrate-client-birthdate",
     "migrate-interactions-notes-team",
     "migrate-documents-transversal",
     // El archivo central (documents) se crea para cualquier tenant con clients;

@@ -22,8 +22,17 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
     // quien ni siquiera está dado de alta (mismo criterio que documentos).
     if (!client) return ok({ requiereFirma: false, bloqueado: false, motivo: "sin-ficha" });
 
-    const { situacion, firmante, miFirma, documento, bloqueado, siguienteDocumento, documentosPendientes, estructurado } =
-      await estadoContrato(tenantModels, client, guardian);
+    const {
+      situacion,
+      firmante,
+      miFirma,
+      documento,
+      bloqueado,
+      siguienteDocumento,
+      documentosPendientes,
+      datosPendientes,
+      estructurado,
+    } = await estadoContrato(tenantModels, client, guardian);
 
     return ok({
       bloqueado,
@@ -40,6 +49,8 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
       estructurado,
       plantilla: siguienteDocumento,
       documentosPendientes,
+      // Lo que hay que preguntarle ANTES de enseñarle nada que firmar.
+      datosPendientes,
       ...situacion,
     });
   } catch (err) {

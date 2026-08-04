@@ -14,8 +14,9 @@
  * desde qué IP y con qué navegador.
  *
  * Desde el 04/08/2026 hay DOS formas de firmar y este componente decide cuál:
- *   - Con plantilla estructurada (tunutrilaura): formulario con datos, anexos y
- *     una casilla por documento → `ContratoFormulario`.
+ *   - Con plantilla estructurada (tunutrilaura): primero «Completa tus datos»
+ *     si le falta algo en la ficha, y después el documento con sus anexos y una
+ *     casilla por cada uno → `DatosGate` + `ContratoFormulario`.
  *   - Sin ella (Aumenta): el PDF del centro y una firma, como estaba.
  * El reparto se hace aquí y no en la página para que quien monta el portal no
  * tenga que saber qué contrato usa cada cliente.
@@ -24,6 +25,7 @@
 import { useState } from "react";
 import SignaturePad from "./SignaturePad.jsx";
 import ContratoFormulario from "./ContratoFormulario.jsx";
+import DatosGate from "./DatosGate.jsx";
 
 const headingStyle = { fontFamily: "var(--widget-font-display)", fontWeight: 500 };
 
@@ -77,6 +79,43 @@ export default function ContratoGate({ estado, authFetch, tenantSlug, profesiona
     }
   }
 
+  /** Guarda en la FICHA los datos que faltaban. Va antes de firmar nada. */
+  async function guardarDatos(datos) {
+    if (enviando) return;
+    setEnviando(true);
+    setError(null);
+    try {
+      const res = await authFetch("/citas-portal/mis-datos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ datos }),
+      });
+      if (res.status === 401) return;
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.ok) throw new Error(j?.error || "No pudimos guardar tus datos");
+      onFirmado(j.data); // mismo camino: refresca el estado y sigue el flujo
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  // Primero los datos que falten en la ficha: sin ellos no se enseña nada que
+  // firmar, porque el documento se rellena con lo que hay en la ficha.
+  if (estado?.estructurado && (estado?.datosPendientes?.length ?? 0) > 0) {
+    return (
+      <DatosGate
+        campos={estado.datosPendientes}
+        profesional={profesional}
+        enviando={enviando}
+        error={error}
+        onGuardar={guardarDatos}
+        onMasTarde={onMasTarde}
+      />
+    );
+  }
+
   // Contrato estructurado: datos + anexos + firma, cada documento por separado.
   if (estado?.estructurado && estado?.plantilla) {
     return (
@@ -87,6 +126,7 @@ export default function ContratoGate({ estado, authFetch, tenantSlug, profesiona
         key={estado.plantilla.key}
         plantilla={estado.plantilla}
         quedan={estado.documentosPendientes ?? 1}
+        profesional={profesional}
         enviando={enviando}
         error={error}
         onFirmar={enviarFirma}

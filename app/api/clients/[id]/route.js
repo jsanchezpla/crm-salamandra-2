@@ -4,6 +4,7 @@ import { auditar, datosPeticion, resumen } from "../../../../lib/utils/auditoria
 import { ok, noContent, forbidden, notFound, error } from "../../../../lib/utils/apiResponse.js";
 import { getClientDir } from "../../../../lib/clients/attachmentStorage.js";
 import { entradaDeCliente } from "../../../../lib/clients/listaEspera.js";
+import { fechaONull } from "../../../../lib/clients/formularioAlta.js";
 import {
   normalizeContactValue,
   validateContactValue,
@@ -89,6 +90,8 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
     country: body.country?.trim() ?? base.country ?? null,
     city: body.city?.trim() ?? base.city ?? null,
     postalCode: body.postalCode?.trim() ?? base.postalCode ?? null,
+    // Domicilio (04/08/2026): línea de texto, no `Client.address` (JSONB).
+    domicilio: body.domicilio?.trim() ?? base.domicilio ?? null,
     origin: body.origin ?? base.origin ?? "manual",
     leadId: body.leadId ?? base.leadId ?? null,
     seStatus: body.status ?? base.seStatus ?? "new",
@@ -118,6 +121,9 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
     customFields,
     ...fiscalUpdates,
   };
+  // Fecha de nacimiento (04/08/2026). Solo si viene explícita, como los datos
+  // fiscales: un PUT parcial de otra sección no puede borrarla por omisión.
+  if ("birthDate" in body) baseUpdate.birthDate = fechaONull(body.birthDate);
   // Flag "padres separados" (tutor). Sólo se toca si viene explícito en el body
   // (permite un PUT parcial { separated } sin arrastrar el resto de campos).
   if ("separated" in body) baseUpdate.separated = body.separated == null ? null : !!body.separated;

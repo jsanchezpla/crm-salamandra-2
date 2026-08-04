@@ -43,6 +43,7 @@ import ClientAttachmentsPanel from "./ClientAttachmentsPanel.jsx";
 import ClientBookingsPanel from "./ClientBookingsPanel.jsx";
 import ClientPlansPanel from "./ClientPlansPanel.jsx";
 import ClientModulesSection from "../../../components/clients/ClientModulesSection.jsx";
+import { edadDesde } from "../../../lib/clients/formularioAlta.js";
 
 const TABS = [
   { key: "info", label: "Información" },
@@ -134,8 +135,12 @@ export default function NutriLauraClientDetailModule() {
     if (!client) return;
     setEditForm({
       name: client.name || "",
+      taxId: client.taxId || "",
+      // DATEONLY llega como "YYYY-MM-DD"; el input date no admite otra cosa.
+      birthDate: client.birthDate ? String(client.birthDate).slice(0, 10) : "",
       email: client.email || "",
       phone: client.phone || "",
+      domicilio: client.customFields?.domicilio || "",
       notes: client.notes || "",
       status: client.customFields?.seStatus || "new",
       edad: client.customFields?.edad || "",
@@ -237,7 +242,14 @@ export default function NutriLauraClientDetailModule() {
 
   const status = client.customFields?.seStatus || "new";
   const st = STATUS_STYLE[status] ?? STATUS_STYLE.new;
-  const edad = client.customFields?.edad;
+  // La edad DERIVADA de la fecha de nacimiento manda sobre la que se escribió a
+  // mano (04/08/2026): guardar las dos es garantizar que dentro de un año una de
+  // ellas mienta. La escrita a mano se sigue enseñando mientras no haya fecha,
+  // que es lo que tienen las fichas antiguas.
+  const edadDerivada = edadDesde(client.birthDate);
+  const edad = edadDerivada != null ? `${edadDerivada} años` : client.customFields?.edad;
+  const dni = client.taxId;
+  const domicilio = client.customFields?.domicilio;
   const motivo = client.customFields?.motivo;
   const infoAdicional = client.customFields?.info_adicional;
   // leadId puede venir como client.leadId (modelo) o como customFields.leadId
@@ -266,6 +278,7 @@ export default function NutriLauraClientDetailModule() {
         </div>
         <div className="ml-7 flex flex-wrap gap-3 text-xs text-gray-500">
           {edad && <span>Edad: <strong className="text-gray-700">{edad}</strong></span>}
+          {dni && <span>DNI/NIE: <strong className="text-gray-700">{dni}</strong></span>}
           {client.email && (
             <a href={`mailto:${client.email}`} className="hover:text-[var(--color-primary)]">
               {client.email}
@@ -482,9 +495,14 @@ function PatientCard({
           )}
           {[
             { label: "Nombre", key: "name", type: "text" },
+            { label: "DNI / NIE", key: "taxId", type: "text" },
+            { label: "Fecha de nacimiento", key: "birthDate", type: "date" },
             { label: "Email", key: "email", type: "email" },
             { label: "Teléfono", key: "phone", type: "tel" },
-            { label: "Edad", key: "edad", type: "text" },
+            { label: "Domicilio", key: "domicilio", type: "text" },
+            // «Edad» a mano solo mientras no haya fecha de nacimiento: con las
+            // dos a la vez, una de ellas acaba mintiendo.
+            ...(editForm.birthDate ? [] : [{ label: "Edad", key: "edad", type: "text" }]),
           ].map(({ label, key, type }) => (
             <div key={key}>
               <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
@@ -558,6 +576,14 @@ function PatientCard({
                 Info adicional
               </div>
               <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">{infoAdicional}</div>
+            </div>
+          )}
+          {domicilio && (
+            <div>
+              <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                Domicilio
+              </div>
+              <div className="text-gray-700 leading-relaxed">{domicilio}</div>
             </div>
           )}
           {client.notes && (

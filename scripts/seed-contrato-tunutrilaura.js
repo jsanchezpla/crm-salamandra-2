@@ -282,18 +282,35 @@ const PLANTILLAS = [
     key: "paciente",
     title: "Contrato de prestación de servicios de nutrición y consentimiento informado",
     intro:
-      "Antes de empezar necesitamos tus datos y tu firma. Puedes leer el contrato y cada anexo desplegándolos aquí mismo; al firmar te dejamos una copia en PDF en «Mis documentos».",
+      "Puedes leer el contrato y cada anexo desplegándolos aquí mismo antes de aceptarlos. Al firmar te dejamos una copia en PDF en «Mis documentos».",
     version: 1,
     onlyMinors: false,
     secondSignatureLabel: null,
     footer: PIE,
+    // `ficha` dice DÓNDE vive cada dato en el CRM. Los que la llevan se piden
+    // ANTES de firmar («Completa tus datos») y se guardan en la ficha de la
+    // paciente; al firmar ya no se preguntan, se enseñan. Sin `ficha` = son del
+    // acto de firmar, no de la persona.
     fields: [
-      { key: "nombre", label: "Nombre y apellidos", type: "text", required: true },
-      { key: "dni", label: "DNI / NIE", type: "dni", required: true },
-      { key: "domicilio", label: "Domicilio", type: "text", required: true },
-      { key: "email", label: "Correo electrónico", type: "email", required: true },
-      { key: "telefono", label: "Teléfono", type: "tel", required: true },
-      { key: "fechaNacimiento", label: "Fecha de nacimiento", type: "date", required: true },
+      { key: "nombre", label: "Nombre y apellidos", type: "text", required: true, ficha: "cliente.name" },
+      { key: "dni", label: "DNI / NIE", type: "dni", required: true, ficha: "cliente.taxId" },
+      {
+        key: "domicilio",
+        label: "Domicilio",
+        type: "text",
+        required: true,
+        ficha: "cliente.customFields.domicilio",
+      },
+      { key: "email", label: "Correo electrónico", type: "email", required: true, ficha: "cliente.email" },
+      { key: "telefono", label: "Teléfono", type: "tel", required: true, ficha: "cliente.phone" },
+      {
+        key: "fechaNacimiento",
+        label: "Fecha de nacimiento",
+        type: "date",
+        required: true,
+        // La que decide si además hace falta el consentimiento del tutor legal.
+        ficha: "cliente.birthDate",
+      },
       {
         key: "lugarFirma",
         label: "¿Desde qué localidad firmas?",
@@ -352,6 +369,9 @@ const PLANTILLAS = [
     onlyMinors: true,
     secondSignatureLabel: "Asentimiento de la persona menor (opcional, según edad y madurez)",
     footer: PIE,
+    // Los datos del TUTOR no están en la ficha (es otra persona): se piden aquí
+    // y al firmar entran como tutor de la ficha de la menor. Los de la MENOR sí
+    // están —es la propia paciente—, así que se enseñan ya rellenos.
     fields: [
       {
         key: "nombre",
@@ -359,8 +379,16 @@ const PLANTILLAS = [
         type: "text",
         required: true,
         group: "Identificación del tutor o tutora legal",
+        ficha: "tutor.name",
       },
-      { key: "dni", label: "DNI / NIE", type: "dni", required: true, group: "Identificación del tutor o tutora legal" },
+      {
+        key: "dni",
+        label: "DNI / NIE",
+        type: "dni",
+        required: true,
+        group: "Identificación del tutor o tutora legal",
+        ficha: "tutor.dni",
+      },
       {
         key: "relacion",
         label: "Relación con la persona menor",
@@ -368,10 +396,32 @@ const PLANTILLAS = [
         required: true,
         options: ["Padre", "Madre", "Tutor/a legal"],
         group: "Identificación del tutor o tutora legal",
+        ficha: "tutor.relationship",
       },
-      { key: "domicilio", label: "Domicilio", type: "text", required: true, group: "Identificación del tutor o tutora legal" },
-      { key: "telefono", label: "Teléfono", type: "tel", required: true, group: "Identificación del tutor o tutora legal" },
-      { key: "email", label: "Correo electrónico", type: "email", required: true, group: "Identificación del tutor o tutora legal" },
+      {
+        key: "domicilio",
+        label: "Domicilio",
+        type: "text",
+        required: true,
+        group: "Identificación del tutor o tutora legal",
+        ficha: "tutor.domicilio",
+      },
+      {
+        key: "telefono",
+        label: "Teléfono",
+        type: "tel",
+        required: true,
+        group: "Identificación del tutor o tutora legal",
+        ficha: "tutor.phone",
+      },
+      {
+        key: "email",
+        label: "Correo electrónico",
+        type: "email",
+        required: true,
+        group: "Identificación del tutor o tutora legal",
+        ficha: "tutor.email",
+      },
 
       {
         key: "menorNombre",
@@ -379,6 +429,7 @@ const PLANTILLAS = [
         type: "text",
         required: true,
         group: "Identificación de la persona menor de edad",
+        ficha: "cliente.name",
       },
       {
         key: "menorFechaNacimiento",
@@ -386,6 +437,7 @@ const PLANTILLAS = [
         type: "date",
         required: true,
         group: "Identificación de la persona menor de edad",
+        ficha: "cliente.birthDate",
       },
       {
         key: "menorDni",
@@ -394,6 +446,7 @@ const PLANTILLAS = [
         required: false,
         help: "Solo si dispone de él.",
         group: "Identificación de la persona menor de edad",
+        ficha: "cliente.taxId",
       },
 
       {

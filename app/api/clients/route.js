@@ -8,7 +8,7 @@ import {
   isMissingTable,
 } from "../../../lib/clients/contactMethods.js";
 import { applyAutoAssignments } from "../../../lib/clients/moduleAssignments.js";
-import { normalizarPacientes, tipoPorDefecto, perfilDeAlta } from "../../../lib/clients/formularioAlta.js";
+import { normalizarPacientes, tipoPorDefecto, perfilDeAlta, fechaONull } from "../../../lib/clients/formularioAlta.js";
 import { entrarEnListaEspera } from "../../../lib/clients/listaEspera.js";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
@@ -95,6 +95,9 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
     // Código postal (01/08/2026). Va a `customFields` con ciudad y país, y no a
     // `fiscalZip`: recepción apunta dónde vive la familia, no dónde factura.
     postalCode: body.postalCode?.trim() || null,
+    // Domicilio (04/08/2026): una línea de texto, la que pide el contrato. Va
+    // aquí y NO a `Client.address`, que es JSONB — ver formularioAlta.js.
+    domicilio: body.domicilio?.trim() || null,
     origin: body.origin || "manual",
     leadId: body.leadId || null,
     seStatus: body.status || "new",
@@ -123,6 +126,10 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
     type: type === "individual" || type === "company" ? type : tipoPorDefecto(perfil),
     email: emailN,
     phone: phoneN,
+    // Fecha de nacimiento (04/08/2026): en un centro de nutrición el paciente
+    // ES el cliente. Se guarda como columna, no en customFields, porque decide
+    // si hace falta el consentimiento del tutor legal.
+    birthDate: fechaONull(body.birthDate),
     notes: notes?.trim() || null,
     // Datos fiscales opcionales — necesarios para emitir facturas a este
     // cliente, pero permitidos como null en el alta para no bloquear la

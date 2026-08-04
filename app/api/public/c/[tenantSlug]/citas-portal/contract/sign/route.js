@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { withPublicTenant } from "../../../../../../../../lib/tenant/publicTenantContext.js";
 import { ok, created, error, serverError } from "../../../../../../../../lib/utils/apiResponse.js";
 import { auditar } from "../../../../../../../../lib/utils/auditoria.js";
 import { gatePortal, resolvePortalContractSession, estadoContrato } from "../../../../../../../../lib/citas/portalContract.js";
 import { bufferFromDataUrl, writeSignature } from "../../../../../../../../lib/clients/signatureStorage.js";
-import { validarDatos, validarAceptaciones } from "../../../../../../../../lib/clients/contratoFirma.js";
+import { validarDatos, validarAceptaciones, camposDe } from "../../../../../../../../lib/clients/contratoFirma.js";
+import { datosDeFicha, actualizacionDeFicha, tutorDeclarado } from "../../../../../../../../lib/clients/datosFicha.js";
 import { archivarContratoFirmado } from "../../../../../../../../lib/documents/contratoFirmadoArchivo.js";
 
 /**
@@ -77,7 +79,12 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
       plantillaFila = await cargarPlantilla(tenantModels, siguienteDocumento.key);
       if (!plantillaFila) return error("El documento ya no está disponible. Recarga la página, por favor.", 409);
 
-      const dat = validarDatos(plantillaFila, body?.datos);
+      // Lo que hay en la FICHA manda sobre lo que llegue del navegador: esos
+      // campos ya no se preguntan en pantalla, así que si llegan es porque
+      // alguien los ha puesto a mano en la petición. El DNI que se imprime en
+      // el contrato tiene que ser el de la ficha, no el que se teclee aquí.
+      const campos = camposDe(plantillaFila);
+      const dat = validarDatos(plantillaFila, { ...body?.datos, ...datosDeFicha(campos, client) });
       if (dat.error) return error(dat.error, 422);
 
       const acc = validarAceptaciones(plantillaFila, body?.aceptaciones);
@@ -129,6 +136,22 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
         return ok({ yaFirmado: true, firmadoEl: estado.miFirma?.signedAt ?? null, ...estado.situacion });
       }
       throw err;
+    }
+
+    // Lo declarado que la ficha aún no tenía se guarda EN LA FICHA (04/08/2026):
+    // el DNI de una menor «si dispone de él», el tutor del consentimiento
+    // parental. Solo huecos, nunca pisando lo que el centro ya tiene puesto.
+    if (plantillaFila) {
+      const campos = camposDe(plantillaFila);
+      const update = actualizacionDeFicha(campos, client, signerData) ?? {};
+
+      const tutor = tutorDeclarado(campos, client, signerData, randomUUID());
+      if (tutor) update.guardians = [...(Array.isArray(client.guardians) ? client.guardians : []), tutor];
+
+      // Best-effort: la firma ya está guardada y es válida. Si esto fallara,
+      // perder el volcado a la ficha es mucho menos grave que devolver un error
+      // a quien acaba de firmar y hacerle creer que no ha firmado.
+      if (Object.keys(update).length) await client.update(update).catch(() => {});
     }
 
     // El PDF va DESPUÉS de guardar la firma y no dentro de ella: si falla al

@@ -409,9 +409,52 @@ Anexo I es el que renuncia a la devolución del importe.
   tiene derecho a una copia de lo que aceptó, no de un resumen.
 - **Dos documentos encadenados**: `paciente` (contrato + Anexos I, II y III) y
   `parental` (consentimiento del tutor). El segundo lleva `only_minors` y solo
-  aparece si la **fecha de nacimiento declarada** en el primero dice que es
-  menor — no una casilla, que se desmarca. Al firmar el primero, la pantalla
-  encadena el segundo sin soltar al usuario.
+  aparece si la **fecha de nacimiento de la ficha** dice que es menor — no una
+  casilla, que se desmarca. Al firmar el primero, la pantalla encadena el
+  segundo sin soltar al usuario.
+
+### Los datos van a la FICHA, y antes de firmar (04/08/2026)
+
+El contrato nació pidiendo sus ocho datos DENTRO de la pantalla de firma, y eso
+tenía dos consecuencias malas: los datos se quedaban enterrados en la firma —la
+ficha seguía con los mismos huecos, la nutricionista no veía el DNI— y la fecha
+de nacimiento solo se sabía a MITAD de firmar, así que el consentimiento
+parental aparecía cuando ya se había empezado.
+
+Ahora el orden es: **completar datos → contrato → (si es menor) consentimiento
+parental**.
+
+- **Cada campo declara dónde vive** en su propiedad `ficha`: `cliente.taxId`,
+  `cliente.birthDate`, `cliente.customFields.domicilio`, `tutor.dni`… Sin
+  `ficha` = pertenece al acto de firmar (la localidad, la fecha) y no a la
+  persona. Se declara en la PLANTILLA y no en una tabla del código porque el
+  mismo campo `nombre` es la paciente en el contrato y su tutor en el
+  consentimiento parental. Lo interpreta `lib/clients/datosFicha.js`.
+- **Solo se rellenan huecos** (Rodrigo, 04/08). Lo que la ficha ya tiene ni se
+  pregunta ni se sobrescribe: puede ser una corrección que hizo el centro a
+  mano. La pantalla «Completa tus datos» (`DatosGate.jsx` +
+  `citas-portal/mis-datos`) enseña ÚNICAMENTE lo que falta; quien tenga la ficha
+  completa no la ve nunca.
+- **Al firmar, la ficha manda**: el endpoint sobrescribe con los valores de la
+  ficha lo que llegue en el cuerpo, porque esos campos ya no se preguntan en
+  pantalla. El DNI que se imprime es el de la ficha, no el que alguien teclee en
+  la petición.
+- **El tutor del consentimiento parental entra en `Client.guardians`** con
+  `signer: false`. Lo de `false` NO es un descuido: `effectiveSigners()` da
+  prioridad a los tutores marcados como firmantes, así que marcarlo cambiaría
+  quién debe firmar —de la titular al tutor—, ninguna firma existente casaría y
+  el portal le pediría eternamente que firmara lo que acaba de firmar.
+- Campos nuevos en la ficha: `clients.birth_date` (migración
+  `migrate-client-birthdate.js`), `taxId` —que ya existía sin usarse— y
+  `customFields.domicilio`. Los tres entran en el perfil SALUD de
+  `camposCliente()`, así que aparecen también en Aumenta y demo.
+
+⚠️ **`lib/citas/portalClient.js` carga la ficha con una lista de columnas fija**
+(`ATRIBUTOS`). Sequelize devuelve `undefined` para lo que no esté, sin error: la
+pantalla no se rompe, miente. Ya ha mordido tres veces (`contractDocumentId`,
+`communicationPrefs` y ahora `taxId`/`birthDate`/`phone`/`customFields`, que
+hacían que «Completa tus datos» volviera a pedir lo recién guardado). **Si una
+plantilla apunta a una columna nueva del cliente, hay que añadirla ahí.**
 - **Índice único ampliado** a `(client_id, guardian_id, template_key)`: el viejo
   era `(client_id, guardian_id)` y el consentimiento parental chocaba con el
   contrato. `template_key` es NOT NULL con default `'simple'` precisamente para
