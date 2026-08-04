@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 
+import { vocabularioCliente } from "../../lib/clients/vocabulario.js";
+
 const navigation = [
   // Áreas reorganizadas 2026-07-27 (pedido del socio): Inicio suelto arriba y
   // luego Comercial / Tareas / Gestión / Salud / Educación / Operaciones.
@@ -267,11 +269,16 @@ const navigation = [
         href: "/nutricion/alimentos",
         // Sub-entradas plegables debajo de Nutrición. Se muestran auto-
         // expandidas cuando la ruta empieza por /nutricion/.
+        // «Recetario» y «Pautas» (04/08/2026, Rodrigo): en una consulta de
+        // nutrición el menú de Clientes ya se llama «Pacientes», así que este
+        // hijo no podía llamarse igual — eran dos «Pacientes» en el mismo
+        // sidebar. Y lo que hay detrás no son pacientes, sino las PAUTAS que
+        // tienen asignadas. Las rutas y las claves no se mueven.
         children: [
           { key: "nutricion-alimentos", label: "Alimentos", href: "/nutricion/alimentos" },
-          { key: "nutricion-recetas", label: "Recetas", href: "/nutricion/recetas" },
+          { key: "nutricion-recetas", label: "Recetario", href: "/nutricion/recetas" },
           { key: "nutricion-plantillas", label: "Menús", href: "/nutricion/plantillas" },
-          { key: "nutricion-asignados", label: "Pacientes", href: "/nutricion/asignados" },
+          { key: "nutricion-asignados", label: "Pautas", href: "/nutricion/asignados" },
         ],
         icon: (
           // lucide-react Salad — combina con el tono terracota de nutri-laura
@@ -342,7 +349,6 @@ const TENANT_LABEL_OVERRIDES = {
 export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClose }) {
   const pathname = usePathname();
   const router = useRouter();
-  const labelOverrides = TENANT_LABEL_OVERRIDES[tenant?.slug] ?? {};
 
   // Cierra el menú al navegar en móvil
   useEffect(() => {
@@ -352,6 +358,16 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
   const primaryColor = tenant?.settings?.brand?.primaryColor ?? "#1B3A2D";
 
   const enabledModules = new Set(modules.filter((m) => m.enabled).map((m) => m.moduleKey));
+
+  // «Clientes» pasa a «Pacientes» donde el cliente ES el paciente (consulta de
+  // nutrición, 04/08/2026). Por MÓDULOS y no por slug —ver
+  // lib/clients/vocabulario.js—, y desde el mismo sitio que lo dice la
+  // pantalla, para que menú y pantalla no puedan discrepar. El override por
+  // tenant sigue mandando encima, que es su razón de ser.
+  const labelOverrides = {
+    clients: vocabularioCliente((k) => enabledModules.has(k)).plural,
+    ...(TENANT_LABEL_OVERRIDES[tenant?.slug] ?? {}),
+  };
 
   // ── Filtro por USUARIO (además del filtro por tenant) ─────────────────────
   // Espejo de la lógica de hasModule() en lib/tenant/tenantResolver.js: el menú

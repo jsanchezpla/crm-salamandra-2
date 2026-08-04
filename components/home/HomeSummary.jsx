@@ -1,7 +1,10 @@
 // Resumen "Tu día" de la portada. Server component puro: recibe `blocks` (el
-// mapa que devuelve lib/home/summary.js) y `admin` (para las magnitudes
-// sensibles de finanzas) y pinta una tarjeta por bloque presente. Sin estado ni
-// interactividad — cada tarjeta enlaza a su módulo.
+// mapa que devuelve lib/home/summary.js), `admin` (para las magnitudes
+// sensibles de finanzas) y `vocab` (cómo llama este centro a sus clientes) y
+// pinta una tarjeta por bloque presente. Sin estado ni interactividad — cada
+// tarjeta enlaza a su módulo.
+
+import { VOCABULARIO_CLIENTE } from "../../lib/clients/vocabulario.js";
 
 const ORDER = [
   "agenda",
@@ -211,11 +214,11 @@ function FinanceCard({ d, admin }) {
   );
 }
 
-function ClientesCard({ d }) {
+function ClientesCard({ d, vocab }) {
   return (
-    <CardShell href="/clientes" eyebrow="Clientes">
+    <CardShell href="/clientes" eyebrow={vocab.plural}>
       <MetricRow>
-        <Metric value={d.total} label="clientes" />
+        <Metric value={d.total} label={vocab.plural.toLowerCase()} />
         <Metric value={d.companies} label="empresas" tone="muted" />
         <Metric value={d.individuals} label="particulares" tone="muted" />
       </MetricRow>
@@ -342,7 +345,7 @@ const CARDS = {
   tareas: (d) => <TareasCard d={d} />,
   salud: (d) => <SaludCard d={d} />,
   finance: (d, admin) => <FinanceCard d={d} admin={admin} />,
-  clientes: (d) => <ClientesCard d={d} />,
+  clientes: (d, admin, vocab) => <ClientesCard d={d} vocab={vocab} />,
   leads: (d) => <LeadsCard d={d} />,
   outreach: (d) => <OutreachCard d={d} />,
   nutricion: (d) => <NutricionCard d={d} />,
@@ -350,7 +353,7 @@ const CARDS = {
   pedidos: (d) => <PedidosCard d={d} />,
 };
 
-export default function HomeSummary({ blocks, admin }) {
+export default function HomeSummary({ blocks, admin, vocab = VOCABULARIO_CLIENTE }) {
   const present = ORDER.filter((k) => blocks && blocks[k]);
   if (present.length === 0) return null;
 
@@ -361,7 +364,7 @@ export default function HomeSummary({ blocks, admin }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
           {present.map((k) => (
             <div key={k} className="fade-up">
-              {CARDS[k](blocks[k], admin)}
+              {CARDS[k](blocks[k], admin, vocab)}
             </div>
           ))}
         </div>

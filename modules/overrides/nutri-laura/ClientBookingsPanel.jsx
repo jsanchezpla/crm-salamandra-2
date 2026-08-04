@@ -183,7 +183,7 @@ export default function ClientBookingsPanel({ clientId, clientEmail, userRole })
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden max-w-4xl">
       <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-semibold text-gray-700">Citas del paciente</div>
+          <div className="text-sm font-semibold text-gray-700">Sesiones del paciente</div>
           <div className="text-[11px] text-gray-400 mt-0.5">
             {clientId
               ? <>Citas enlazadas a esta ficha{clientEmail ? <> y a <span className="font-mono">{clientEmail}</span></> : null}</>

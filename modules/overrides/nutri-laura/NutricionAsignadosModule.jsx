@@ -157,11 +157,14 @@ export default function NutricionAsignadosModule() {
             <div className="text-[11px] uppercase tracking-[0.18em] text-gray-400 mb-1">
               Nutrición · Recetario
             </div>
+            {/* «Pautas», no «Pacientes» (04/08/2026, Rodrigo): el menú de
+                Clientes ya se llama «Pacientes» en una consulta de nutrición, y
+                lo que se lista aquí son las pautas asignadas, no la gente. */}
             <h1 className="text-2xl lg:text-3xl font-semibold text-gray-900 leading-tight">
-              Pacientes
+              Pautas
             </h1>
             <p className="text-xs text-gray-500 mt-1">
-              {total} {total === 1 ? "plan" : "planes"} asignados a pacientes.
+              {total} {total === 1 ? "pauta asignada" : "pautas asignadas"} a pacientes.
             </p>
           </div>
           <button

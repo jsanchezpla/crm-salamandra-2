@@ -7,7 +7,7 @@ const UI_OVERRIDES = {
   nutri_laura: NutriLauraRecetasModule,
 };
 
-export const metadata = { title: "Recetas" };
+export const metadata = { title: "Recetario" };
 
 export default async function NutricionRecetasPage() {
   const headersList = await headers();

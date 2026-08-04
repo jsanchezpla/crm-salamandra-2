@@ -7,7 +7,7 @@ const UI_OVERRIDES = {
   nutri_laura: NutriLauraAsignadosModule,
 };
 
-export const metadata = { title: "Pacientes" };
+export const metadata = { title: "Pautas" };
 
 export default async function NutricionAsignadosPage() {
   const headersList = await headers();

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import SyncWebButton from "../../../components/clients/SyncWebButton.jsx";
 import PacientesDelAlta from "../../../components/clients/PacientesDelAlta.jsx";
 import { camposCliente, PERFIL_COMERCIAL } from "../../../lib/clients/formularioAlta.js";
+import { VOCABULARIO_CLIENTE } from "../../../lib/clients/vocabulario.js";
 import Paginador from "@/components/ui/Paginador.jsx";
 
 function useMounted() {
@@ -45,9 +46,15 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-// `perfil` y `conPacientes` los resuelve el server component hermano: qué
-// campos se preguntan depende de lo que el cliente tenga contratado.
-export default function ClientesClient({ perfil = PERFIL_COMERCIAL, conPacientes = false, conListaEspera = false }) {
+// `perfil`, `conPacientes` y `vocab` los resuelve el server component hermano:
+// qué campos se preguntan —y cómo se llama aquí la gente— depende de lo que el
+// cliente tenga contratado. En una consulta de nutrición son «pacientes».
+export default function ClientesClient({
+  perfil = PERFIL_COMERCIAL,
+  conPacientes = false,
+  conListaEspera = false,
+  vocab = VOCABULARIO_CLIENTE,
+}) {
   const router = useRouter();
   const mounted = useMounted();
   const [clients, setClients] = useState([]);
@@ -209,7 +216,7 @@ export default function ClientesClient({ perfil = PERFIL_COMERCIAL, conPacientes
   }
 
   async function handleDelete(clientId) {
-    if (!confirm("¿Eliminar este cliente?")) return;
+    if (!confirm(`¿Eliminar este ${vocab.singular}?`)) return;
     await fetch(`/api/clients/${clientId}`, { method: "DELETE" });
     setClients((prev) => prev.filter((c) => c.id !== clientId));
     setTotal((prev) => prev - 1);
@@ -275,7 +282,7 @@ export default function ClientesClient({ perfil = PERFIL_COMERCIAL, conPacientes
         setNuevosPacientes([]);
         setAltaEnListaEspera(false);
       } else {
-        setNewClientError(data.error || `Error al crear cliente (HTTP ${res.status})`);
+        setNewClientError(data.error || `Error al crear el ${vocab.singular} (HTTP ${res.status})`);
       }
     } catch (err) {
       setNewClientError(err?.message || "Error de red");
@@ -291,9 +298,9 @@ export default function ClientesClient({ perfil = PERFIL_COMERCIAL, conPacientes
         <div className="px-4 lg:px-10 pt-5 lg:pt-12 pb-0">
           <div className="flex items-end justify-between mb-5 lg:mb-7 gap-4 flex-wrap">
             <div>
-              <div className="eyebrow mb-1.5 lg:mb-2">Cuentas · Clientes</div>
+              <div className="eyebrow mb-1.5 lg:mb-2">{vocab.area} · {vocab.plural}</div>
               <h1 className="font-display text-[26px] lg:text-[40px] leading-[1.05] text-[var(--ink-900)] tracking-tight">
-                Clientes <span className="font-display-italic text-[var(--ink-400)]">— {total} {total === 1 ? "cuenta" : "cuentas"}</span>
+                {vocab.plural} <span className="font-display-italic text-[var(--ink-400)]">— {total} {total === 1 ? vocab.unidad : vocab.unidades}</span>
               </h1>
             </div>
             <div className="flex items-center gap-2">
@@ -319,7 +326,7 @@ export default function ClientesClient({ perfil = PERFIL_COMERCIAL, conPacientes
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                 </svg>
-                Nuevo cliente
+                Nuevo {vocab.singular}
               </button>
             </div>
           </div>
@@ -391,7 +398,7 @@ export default function ClientesClient({ perfil = PERFIL_COMERCIAL, conPacientes
             </div>
           ) : clients.length === 0 ? (
             <div className="text-center py-20 text-gray-400 text-sm">
-              No hay clientes{activeStatus !== "all" ? " con este estado" : ""}
+              No hay {vocab.plural.toLowerCase()}{activeStatus !== "all" ? " con este estado" : ""}
             </div>
           ) : (
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
@@ -616,7 +623,7 @@ export default function ClientesClient({ perfil = PERFIL_COMERCIAL, conPacientes
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="font-semibold text-gray-900">Nuevo cliente</h2>
+              <h2 className="font-semibold text-gray-900">Nuevo {vocab.singular}</h2>
               <button
                 onClick={() => { setNewClientOpen(false); setNewClientError(null); }}
                 className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
@@ -681,7 +688,7 @@ export default function ClientesClient({ perfil = PERFIL_COMERCIAL, conPacientes
                 disabled={!newClientForm.name.trim() || creatingClient}
                 className="flex-1 bg-[var(--color-primary)] hover:opacity-90 text-white text-sm font-medium py-2 rounded-lg transition-opacity disabled:opacity-40"
               >
-                {creatingClient ? "Creando…" : "Crear cliente"}
+                {creatingClient ? "Creando…" : `Crear ${vocab.singular}`}
               </button>
               <button
                 onClick={() => { setNewClientOpen(false); setNewClientError(null); }}

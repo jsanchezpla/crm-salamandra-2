@@ -63,8 +63,11 @@ export default function NutricionRecetasModule() {
     <div className="flex flex-col h-full">
       <div className="px-4 lg:px-8 pt-6 pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Nutrición · Recetario</div>
-          <h1 className="text-xl font-semibold text-gray-900">Recetas</h1>
+          {/* «Recetario» sube al título (04/08/2026, Rodrigo): la pantalla se
+              llama así en el menú, y el rótulo de encima se queda con el módulo
+              a secas para no decir «Recetario» dos veces seguidas. */}
+          <div className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Nutrición</div>
+          <h1 className="text-xl font-semibold text-gray-900">Recetario</h1>
         </div>
         <button
           onClick={() => setEditing("new")}

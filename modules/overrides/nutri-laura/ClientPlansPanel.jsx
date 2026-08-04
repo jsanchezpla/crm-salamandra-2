@@ -294,8 +294,11 @@ function EmptyState() {
       <div className="text-base text-gray-700 font-medium">Sin plan asignado</div>
       <p className="text-xs text-gray-500 mt-1 leading-relaxed">
         Asigna un menú desde{" "}
+        {/* El camino del menú se dice tal cual está escrito en el sidebar; si
+            no, manda a buscar una entrada que no existe (04/08/2026: este
+            submenú pasó de llamarse «Pacientes» a «Pautas»). */}
         <Link href="/nutricion/asignados" className="text-[var(--color-primary)] hover:underline">
-          Nutrición &gt; Pacientes &gt; + Nueva asignación
+          Nutrición &gt; Pautas &gt; + Nueva asignación
         </Link>
         .
       </p>

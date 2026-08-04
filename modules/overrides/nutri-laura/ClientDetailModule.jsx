@@ -4,12 +4,13 @@
  * ClientDetailModule (override nutri_laura) — ficha de paciente con tabs.
  *
  * Tabs:
- *   1. Información — PatientCard editable inline + historial legacy collapsible.
+ *   1. Datos — PatientCard editable inline + historial legacy collapsible.
  *   2. Historia clínica — timeline interno (ClientNotesPanel). Se llamaba
  *      "Notas"; renombrada en la UI de nutri_laura (la clave y la tabla siguen
  *      siendo `notes` / `client_notes`).
- *   3. Adjuntos — PDFs del paciente (ClientAttachmentsPanel).
- *   4. Citas — bookings del paciente con confirm/reject (ClientBookingsPanel).
+ *   3. Documentos — PDFs del paciente (ClientAttachmentsPanel).
+ *   4. Sesiones — bookings del paciente con confirm/reject (ClientBookingsPanel).
+ *   5. Pautas — planes de menú asignados (ClientPlansPanel).
  *
  * Decisiones clave:
  *   - editMode + editForm viven en este componente padre, NO en PatientCard.
@@ -45,18 +46,25 @@ import ClientPlansPanel from "./ClientPlansPanel.jsx";
 import ClientModulesSection from "../../../components/clients/ClientModulesSection.jsx";
 import { edadDesde } from "../../../lib/clients/formularioAlta.js";
 
+// Rótulos revisados el 04/08/2026 (Rodrigo): Datos · Historia clínica ·
+// Documentos · Sesiones · Pautas. SOLO cambian los nombres visibles — las
+// claves, los paneles, las tablas y los endpoints siguen siendo los mismos
+// (`attachments` sigue leyendo adjuntos y `bookings`, citas).
 const TABS = [
-  { key: "info", label: "Información" },
+  { key: "info", label: "Datos" },
   // "Historia clínica" (antes "Notas"): para Laura estas anotaciones SON el
   // seguimiento clínico de la paciente, no notas sueltas. La clave interna
   // sigue siendo `notes` (misma tabla client_notes y mismos endpoints): solo
   // cambia el nombre visible, y SOLO en nutri_laura (el resto de tenants usa
   // modules/default/ClientDetailModule.jsx, donde siguen siendo "Notas").
   { key: "notes", label: "Historia clínica" },
-  { key: "attachments", label: "Adjuntos" },
-  { key: "bookings", label: "Citas" },
-  // Tab "Plan" añadida en Sprint Recetario C4. Solo visible en nutri_laura.
-  { key: "plan", label: "Plan" },
+  { key: "attachments", label: "Documentos" },
+  // "Sesiones", no "Citas": en la consulta cada cita ES una sesión de
+  // seguimiento. Sigue siendo la agenda del módulo `citas` por debajo.
+  { key: "bookings", label: "Sesiones" },
+  // Tab "Plan" añadida en Sprint Recetario C4 y renombrada a "Pautas". Solo
+  // visible en nutri_laura.
+  { key: "plan", label: "Pautas" },
 ];
 
 const ROLES_WITH_ACCESS = new Set(["admin", "superadmin", "employee"]);

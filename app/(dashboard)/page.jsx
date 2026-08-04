@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { getTenantContext } from "../../lib/tenant/tenantResolver.js";
 import { buildHomeSummary } from "../../lib/home/summary.js";
 import HomeSummary from "../../components/home/HomeSummary.jsx";
+import { vocabularioCliente, VOCABULARIO_CLIENTE } from "../../lib/clients/vocabulario.js";
 
 const QUICK_LINKS = [
   { moduleKey: "clients",   href: "/clientes",    eyebrow: "Cuentas",      title: "Clientes",    hint: "Gestionar tu cartera" },
@@ -39,14 +40,20 @@ async function loadHome() {
     // Accesos rápidos gateados por hasModule (módulo del tenant ∩ acceso del
     // usuario), igual que los widgets. `admin` viene del agregador (fuente única).
     const enabled = new Set(QUICK_LINKS.filter((l) => ctx.hasModule(l.moduleKey)).map((l) => l.moduleKey));
-    return { blocks, enabled, admin };
+    // En una consulta de nutrición el módulo Clientes se llama «Pacientes»; la
+    // home tiene que decirlo igual que el menú (lib/clients/vocabulario.js).
+    // `tenantHasModule` y no `hasModule`: cómo se llaman las cosas depende del
+    // CENTRO, no de a qué módulos llegue quien mira. Si no, una recepcionista
+    // sin acceso a Nutrición vería «Clientes» en la home y «Pacientes» en el
+    // menú, que sí va por el tenant.
+    return { blocks, enabled, admin, vocab: vocabularioCliente(ctx.tenantHasModule) };
   } catch (err) {
     // Fallo catastrófico (p.ej. master DB caída): degradar a solo el hero. NO se
     // reintenta contra la misma DB dentro del catch (volvería a fallar y tumbaría
     // la home con un 500). enabled vacío = sin accesos rápidos ni widgets, pero
     // la home NUNCA da 500.
     console.error("[home] resumen no disponible:", err?.message || err);
-    return { blocks: {}, enabled: new Set(), admin: false };
+    return { blocks: {}, enabled: new Set(), admin: false, vocab: VOCABULARIO_CLIENTE };
   }
 }
 
@@ -58,8 +65,12 @@ export default async function HomePage() {
     year: "numeric",
   });
 
-  const { blocks, enabled, admin } = await loadHome();
-  const visibleLinks = QUICK_LINKS.filter((l) => enabled.has(l.moduleKey));
+  const { blocks, enabled, admin, vocab } = await loadHome();
+  const visibleLinks = QUICK_LINKS.filter((l) => enabled.has(l.moduleKey)).map((l) =>
+    l.moduleKey === "clients"
+      ? { ...l, eyebrow: vocab.area, title: vocab.plural, hint: vocab.pistaHome }
+      : l
+  );
 
   return (
     <div className="min-h-full bg-[var(--color-accent)]">
@@ -84,7 +95,7 @@ export default async function HomePage() {
       </section>
 
       {/* Resumen "Tu día" — widgets de datos por módulo activo */}
-      <HomeSummary blocks={blocks} admin={admin} />
+      <HomeSummary blocks={blocks} admin={admin} vocab={vocab} />
 
       {/* Bloque de accesos rápidos */}
       {visibleLinks.length > 0 && (

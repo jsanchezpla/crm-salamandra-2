@@ -230,16 +230,31 @@ OR
 
 ## 4. Rutas frontend
 
-| Ruta | Componente (override nutri_laura) | Descripción |
-| ---- | -------------------------------- | ----------- |
-| `/nutricion/alimentos` | `NutricionFoodsModule.jsx` | Catálogo paginado, edit inline macros, buscar online OFF, papelera (C1) |
-| `/nutricion/plantillas` | `NutricionPlantillasModule.jsx` | Grid de cards con preview de comidas + contador de asignaciones, CRUD, duplicar (C3) |
-| `/nutricion/asignados` | `NutricionAsignadosModule.jsx` | Tabla lg / cards mobile + filtro por plantilla origen + botón "+ Nueva asignación" (C3+C4) |
-| `/clientes/[id]` (tab "Plan") | `ClientPlansPanel.jsx` dentro de `ClientDetailModule.jsx` | Plan activo + histórico colapsable + acciones (C4) |
+| Ruta | Se llama | Componente (override nutri_laura) | Descripción |
+| ---- | -------- | -------------------------------- | ----------- |
+| `/nutricion/alimentos` | Alimentos | `NutricionFoodsModule.jsx` | Catálogo paginado, edit inline macros, buscar online OFF, papelera (C1) |
+| `/nutricion/recetas` | **Recetario** | `NutricionRecetasModule.jsx` | Catálogo de recetas con foto y pasos (8.2) |
+| `/nutricion/plantillas` | Menús | `NutricionPlantillasModule.jsx` | Grid de cards con preview de comidas + contador de asignaciones, CRUD, duplicar (C3) |
+| `/nutricion/asignados` | **Pautas** | `NutricionAsignadosModule.jsx` | Tabla lg / cards mobile + filtro por plantilla origen + botón "+ Nueva asignación" (C3+C4) |
+| `/clientes/[id]` (tab "Pautas") | — | `ClientPlansPanel.jsx` dentro de `ClientDetailModule.jsx` | Plan activo + histórico colapsable + acciones (C4) |
 
 El sidebar (`components/layout/Sidebar.jsx`) tiene una entrada
-"Nutrición" plegable con las 3 sub-rutas; se auto-expande cuando
+"Nutrición" plegable con las 4 sub-rutas; se auto-expande cuando
 `pathname.startsWith("/nutricion/")`.
+
+⚠️ **Nombres del menú revisados el 04/08/2026** (Rodrigo): «Recetas» pasó a
+**Recetario** y «Pacientes» a **Pautas**. Lo segundo era obligado: en una
+consulta de nutrición el módulo Clientes ya se llama «Pacientes»
+(`lib/clients/vocabulario.js`), y había dos entradas con el mismo nombre en el
+mismo sidebar que además no eran lo mismo. Lo que cuelga de `/asignados` son
+las PAUTAS asignadas, no la gente. **Rutas, claves y endpoints intactos**, y
+el cambio viaja a todo tenant con `nutricion` — hoy `nutri_laura` y `demo`—,
+como cualquier cambio de módulo. En `demo` además deshace la ambigüedad de
+tener «Pacientes» en Clínica y en Nutrición a la vez.
+
+Por dentro, las pantallas siguen hablando de «plan» y «menú» (el PDF y el
+email que recibe la paciente incluidos): solo se han renombrado los rótulos
+de navegación.
 
 Modales reutilizados desde varias rutas:
 

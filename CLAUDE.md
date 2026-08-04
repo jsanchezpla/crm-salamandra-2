@@ -467,6 +467,26 @@ sacaría de la cola el mismo día. Por eso la lista ofrece «Ya tiene plaza» en
 de «Convertir en cliente» a quien ya tiene ficha. La ficha enseña «En lista de
 espera desde el …» en su cabecera.
 
+### Clientes se llama «Pacientes» en la consulta de nutrición (04/08/2026)
+`lib/clients/vocabulario.js` decide el rótulo del módulo `clients` y lo dicen
+igual el sidebar, la pantalla `/clientes`, la portada y el `<title>` del
+navegador: **Pacientes** donde el cliente ES el paciente (tiene `nutricion` y
+NO tiene `pacientes` ni `clinica`), **Clientes** en el resto. Por MÓDULOS, no
+por slug, igual que el formulario de alta.
+
+⚠️ La condición negativa es lo importante: en un centro clínico el cliente es
+la familia que paga y los pacientes son los hijos, que ya tienen su tabla y su
+propia entrada de menú. Sin ella, Aumenta y demo tendrían **dos «Pacientes»
+distintos en el mismo sidebar**. Hoy solo cumple `nutri_laura`.
+
+De ahí salen dos renombrados más en el módulo Nutrición (y por tanto en
+`nutri_laura` **y** `demo`): «Recetas» → **Recetario** y «Pacientes» →
+**Pautas** (el submenú de `/nutricion/asignados`, que ya no podía llamarse
+igual que el módulo de arriba). Y las pestañas de la ficha de nutri_laura
+pasan a **Datos · Historia clínica · Documentos · Sesiones · Pautas**. Todo
+son rótulos: ni rutas, ni claves, ni endpoints, ni tablas se han movido, y por
+dentro las pantallas de nutrición siguen hablando de «plan» y «menú».
+
 ### Leads: dos orígenes, un solo grupo (01/08/2026)
 `leads` y `formularios` son **submódulos de Leads** y se nombran por su origen:
 

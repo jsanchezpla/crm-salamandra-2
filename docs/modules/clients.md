@@ -11,6 +11,19 @@ Tenants que lo usan hoy: `spain_enzymes` (B2B), `nutri_laura` (B2C,
 "pacientes"), `demo`, `retorika` (cuentas mínimas para asociar con
 training).
 
+### Cómo se llama el módulo en cada centro (04/08/2026)
+
+`lib/clients/vocabulario.js` decide si esto se llama **Clientes** o
+**Pacientes**, y lo dicen igual el sidebar, la pantalla `/clientes`, la
+portada y el `<title>` del navegador. Se llama Pacientes donde el cliente ES
+el paciente: **tiene `nutricion` y NO tiene `pacientes` ni `clinica`**.
+
+Por MÓDULOS y no por slug, igual que `formularioAlta.js`. Y `pacientes` /
+`clinica` mandan sobre `nutricion` a propósito: en un centro clínico el
+cliente es la familia que paga y los pacientes son los hijos, que ya tienen
+su tabla y su entrada de menú. Sin esa condición, Aumenta y demo tendrían dos
+«Pacientes» distintos en el mismo sidebar. Hoy cumple solo `nutri_laura`.
+
 ## Modelo `Client`
 
 Ver `models/tenant/Client.model.js` para la definición canónica de
@@ -287,14 +300,18 @@ historial de interacciones, sección de facturación.
 ### Override nutri_laura
 
 `modules/overrides/nutri-laura/ClientDetailModule.jsx` — ficha de paciente
-con **4 tabs** (rediseño Checkpoint 3, junio 2026):
+con **5 tabs** (rediseño Checkpoint 3, junio 2026; nombres revisados el
+04/08/2026 por Rodrigo). Los rótulos son lo ÚNICO que cambió en esa revisión:
+claves, paneles, tablas y endpoints siguen siendo los de siempre —
+`attachments` sigue leyendo adjuntos y `bookings`, citas—.
 
 | Tab | Componente | Endpoints leídos | Notas |
 |---|---|---|---|
-| Información | `PatientCard` + delete inline | `GET/PUT/DELETE /api/clients/:id` | Edición inline; `editMode`/`editForm` viven en el padre para sobrevivir cambios de tab |
-| Notas | `ClientNotesPanel.jsx` | `GET/POST /api/clients/:id/notes`, `DELETE /api/clients/:id/notes/:noteId` | Paginación incremental "Cargar más" (limit 50). Sin restricción de borrado por autor (Laura es única usuaria) |
-| Adjuntos | `ClientAttachmentsPanel.jsx` | `GET/POST /api/clients/:id/attachments`, `DELETE`, `GET .../download` | Drop zone + validación frontend (PDF, ≤10MB, ≤50 archivos) |
-| Citas | `ClientBookingsPanel.jsx` | `GET /api/citas/bookings?clientEmail=`, `PATCH .../confirm`, `PATCH .../reject` | Cruce por email (Booking no tiene FK a Client). Confirm/Reject inline para `pending` con mini-modal opcional para motivo |
+| Datos (antes "Información") | `PatientCard` + delete inline | `GET/PUT/DELETE /api/clients/:id` | Edición inline; `editMode`/`editForm` viven en el padre para sobrevivir cambios de tab |
+| Historia clínica (antes "Notas") | `ClientNotesPanel.jsx` | `GET/POST /api/clients/:id/notes`, `DELETE /api/clients/:id/notes/:noteId` | Paginación incremental "Cargar más" (limit 50). Sin restricción de borrado por autor (Laura es única usuaria) |
+| Documentos (antes "Adjuntos") | `ClientAttachmentsPanel.jsx` | `GET/POST /api/clients/:id/attachments`, `DELETE`, `GET .../download` | Drop zone + validación frontend (PDF, ≤10MB, ≤50 archivos) |
+| Sesiones (antes "Citas") | `ClientBookingsPanel.jsx` | `GET /api/citas/bookings?clientId=&clientEmail=`, `PATCH .../confirm`, `PATCH .../reject` | En la consulta cada cita ES una sesión de seguimiento. Confirm/Reject inline para `pending` con mini-modal opcional para motivo |
+| Pautas (antes "Plan") | `ClientPlansPanel.jsx` | `GET /api/clients/:id/plans`, `POST /api/nutricion/plans/:id/reapply-template` | Plan activo + histórico archivado (Recetario C4) |
 
 **Permisos**: el detalle hace gate por `me.role ∈ {admin, superadmin, employee}`
 fetcheando `/api/auth/me` al montar. Sin rol válido → "Sin acceso".

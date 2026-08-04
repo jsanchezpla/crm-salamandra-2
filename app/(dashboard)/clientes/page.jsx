@@ -1,45 +1,58 @@
+import { cache } from "react";
 import { headers } from "next/headers";
 
 import ClientesClient from "./ClientesClient.jsx";
 import { getMasterModels } from "../../../lib/db/masterDb.js";
-import { perfilDeAlta, PERFIL_COMERCIAL } from "../../../lib/clients/formularioAlta.js";
-
-export const metadata = { title: "Clientes" };
+import { perfilDeAlta } from "../../../lib/clients/formularioAlta.js";
+import { vocabularioCliente } from "../../../lib/clients/vocabulario.js";
 
 /**
  * El formulario de alta se adapta a lo que el cliente tiene contratado
  * (01/08/2026): un centro de salud no pregunta «producto de interés», y en
- * cambio da de alta pacientes en el mismo mostrador.
+ * cambio da de alta pacientes en el mismo mostrador. Desde el 04/08/2026 de lo
+ * mismo sale CÓMO SE LLAMA la pantalla: en una consulta de nutrición son
+ * pacientes, no clientes (`lib/clients/vocabulario.js`).
  *
  * Se resuelve aquí, en el servidor, por lo mismo que en Documentos: la pantalla
  * es un componente de cliente y no puede preguntar por los módulos del tenant
  * sin exponérselos al navegador.
+ *
+ * `cache` de React resuelve los módulos UNA sola vez por petición, aunque los
+ * pidan tanto el <title> de la pestaña como la propia página.
  */
-export default async function ClientesPage() {
-  const headersList = await headers();
-  const slug = headersList.get("x-tenant");
-
-  let perfil = PERFIL_COMERCIAL;
-  let conPacientes = false;
-  let conListaEspera = false;
+const modulosActivos = cache(async (slug) => {
+  if (!slug) return new Set();
   try {
     const { Tenant, TenantModule } = getMasterModels();
-    const tenant = slug ? await Tenant.findOne({ where: { slug } }) : null;
-    if (tenant) {
-      const filas = await TenantModule.findAll({ where: { tenantId: tenant.id } });
-      const activos = new Set(filas.filter((f) => f.enabled).map((f) => f.moduleKey));
-      perfil = perfilDeAlta((k) => activos.has(k));
-      conPacientes = activos.has("pacientes");
-      conListaEspera = activos.has("clients_avanzado");
-    }
+    const tenant = await Tenant.findOne({ where: { slug } });
+    if (!tenant) return new Set();
+    const filas = await TenantModule.findAll({ where: { tenantId: tenant.id } });
+    return new Set(filas.filter((f) => f.enabled).map((f) => f.moduleKey));
   } catch {
     // Ante la duda, el formulario de siempre: preguntar de más en el mostrador
     // se arregla ignorando un campo; preguntar de menos, volviendo a llamar a
     // la familia.
-    perfil = PERFIL_COMERCIAL;
-    conPacientes = false;
-    conListaEspera = false;
+    return new Set();
   }
+});
 
-  return <ClientesClient perfil={perfil} conPacientes={conPacientes} conListaEspera={conListaEspera} />;
+export async function generateMetadata() {
+  const headersList = await headers();
+  const activos = await modulosActivos(headersList.get("x-tenant"));
+  return { title: vocabularioCliente((k) => activos.has(k)).plural };
+}
+
+export default async function ClientesPage() {
+  const headersList = await headers();
+  const activos = await modulosActivos(headersList.get("x-tenant"));
+  const tieneModulo = (k) => activos.has(k);
+
+  return (
+    <ClientesClient
+      perfil={perfilDeAlta(tieneModulo)}
+      conPacientes={activos.has("pacientes")}
+      conListaEspera={activos.has("clients_avanzado")}
+      vocab={vocabularioCliente(tieneModulo)}
+    />
+  );
 }
