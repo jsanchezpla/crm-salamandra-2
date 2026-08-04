@@ -66,18 +66,46 @@ async function main() {
   await eventType.update({ price: PRECIO });
   const intents = [];
 
-  /** Reserva + tarjeta retenida + webhook, dejando la cita lista para decidir. */
+  /** Huecos ya gastados en esta pasada, para que las tres citas no se pisen. */
+  const huecosUsados = new Set();
+
+  /**
+   * Reserva + tarjeta retenida + webhook, dejando la cita lista para decidir.
+   *
+   * BUSCA HACIA DELANTE desde el día que se le pide, y REVIENTA si no encuentra
+   * hueco. Antes devolvía `null` en silencio, y quien la llamaba hacía `if (b)`:
+   * el 04/08/2026 el día +5 caía en sábado, la agenda de nutri_laura no abre, y
+   * los apartados 3, 4 y 5 —«sin sesión de admin no se cobra», «si el cobro
+   * falla la cita NO se confirma» y «confirmar sin cobrar»— dejaron de
+   * ejecutarse. La prueba seguía diciendo «TODO CORRECTO» con tres casos sin
+   * mirar, que es peor que fallar: una prueba que se salta lo que no puede
+   * montar miente sobre lo que cubre.
+   */
   async function solicitudConTarjetaRetenida(dias) {
-    const dia = new Date(Date.now() + dias * 86400000).toISOString().slice(0, 10);
-    const r = await fetch(`${BASE}/api/public/c/${SLUG}/availability?date=${dia}&eventTypeId=${eventType.id}`);
-    const j = await r.json();
-    const huecos = j?.data?.slots ?? j?.data ?? [];
-    if (!Array.isArray(huecos) || !huecos.length) return null;
+    let hora = null;
+    for (let d = dias; d < dias + 21 && !hora; d++) {
+      const dia = new Date(Date.now() + d * 86400000).toISOString().slice(0, 10);
+      const r = await fetch(`${BASE}/api/public/c/${SLUG}/availability?date=${dia}&eventTypeId=${eventType.id}`);
+      const j = await r.json();
+      const huecos = j?.data?.slots ?? j?.data ?? [];
+      if (!Array.isArray(huecos)) continue;
+      for (let i = huecos.length - 1; i >= 0; i--) {
+        const cuando = horaDelHueco(huecos[i]);
+        if (cuando && !huecosUsados.has(cuando)) { hora = cuando; break; }
+      }
+    }
+    if (!hora) {
+      throw new Error(
+        `sin huecos libres entre el día +${dias} y el +${dias + 21}: no se puede montar el caso. ` +
+        `Revisa los horarios de ${SLUG} antes de fiarte de esta prueba.`
+      );
+    }
+    huecosUsados.add(hora);
 
     const rb = await fetch(`${BASE}/api/public/c/${SLUG}/book`, {
       method: "POST", headers: { "Content-Type": "application/json", "x-real-ip": IP_PRUEBA },
       body: JSON.stringify({
-        eventTypeId: eventType.id, scheduledAt: horaDelHueco(huecos[huecos.length - 1]),
+        eventTypeId: eventType.id, scheduledAt: hora,
         clientName: "Smoke Cobro", clientEmail: MARCA, clientPhone: "+34600555666",
         // Obligatorio desde que /book exige el consentimiento de la retención.
         aceptaRetencion: true,
@@ -85,7 +113,9 @@ async function main() {
     });
     const jb = await rb.json();
     const bookingId = jb?.data?.booking?.id;
-    if (!bookingId) return null;
+    if (!bookingId) {
+      throw new Error(`no se pudo reservar el ${hora} (HTTP ${rb.status}): ${jb?.error ?? "sin motivo"}`);
+    }
 
     const cita = await Booking.findByPk(bookingId);
     const ps = await PaymentSession.findByPk(cita.paymentSessionId);
