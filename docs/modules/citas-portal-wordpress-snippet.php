@@ -86,11 +86,32 @@ function crm_render_iframe($path, $extra_query, $title) {
         $query = $extra_query . '&' . $query;
     }
     $src = CRM_BASE_URL . '/widget/c/' . CRM_TENANT . $path . '?' . $query;
-    return '<div style="position:relative;width:100%;max-width:1200px;margin:0 auto">'
+
+    /*
+     * Ancho (05/08/2026, Rodrigo: «se puede poner más ancho y que ocupe toda
+     * la página»).
+     *
+     * El widget salía encajonado en una franja de ~950px con media pantalla en
+     * blanco a los lados, y no era culpa del iframe —que ya iba a width:100%—
+     * sino del contenedor de contenido del theme, que limita el ancho de
+     * CUALQUIER página.
+     *
+     * El div de fuera se sale de ese contenedor (truco «full-bleed»: ocupar el
+     * ancho de la ventana y compensar con un margen negativo calculado), y el
+     * de dentro vuelve a poner un tope sensato de 1440px centrado. Ese 1440 es
+     * el MISMO que el del widget: con uno más grande solo se ganan franjas
+     * vacías, porque el contenido no pasa de ahí.
+     *
+     * `overflow-x:hidden` en el de fuera por si el navegador cuenta la barra de
+     * scroll dentro de 100vw: sin él aparecerían unos píxeles de scroll lateral
+     * en toda la página.
+     */
+    return '<div style="width:100vw;max-width:100vw;margin-left:calc(50% - 50vw);overflow-x:hidden">'
+        . '<div style="max-width:1440px;margin:0 auto;padding:0 16px">'
         . '<iframe src="' . esc_url($src) . '" '
         . 'style="width:100%;min-height:820px;border:0;display:block" '
         . 'title="' . esc_attr($title) . '" loading="lazy"></iframe>'
-        . '</div>';
+        . '</div></div>';
 }
 
 /* ── Shortcodes ────────────────────────────────────────────────────────── */

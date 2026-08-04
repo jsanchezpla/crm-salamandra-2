@@ -250,7 +250,7 @@ export default function WidgetSelectionPage() {
     <div className="min-h-screen" style={brandStyle}>
       {/* Header */}
       <header className="px-6 lg:px-10 py-6 border-b border-[var(--widget-border)] bg-[var(--widget-card)]">
-        <div className="max-w-6xl mx-auto flex items-center gap-4">
+        <div className="max-w-[1440px] mx-auto flex items-center gap-4">
           {info?.brand?.logoUrl ? (
             <img src={info.brand.logoUrl} alt="" className="h-10 w-auto" />
           ) : (
@@ -275,7 +275,7 @@ export default function WidgetSelectionPage() {
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 lg:px-10 py-6 lg:py-10">
+      <div className="max-w-[1440px] mx-auto px-4 lg:px-10 py-6 lg:py-10">
         {/* Columnas que se reparten solas, SIN punto de corte (04/08/2026).
             Primero fue `lg` (1024) y se apilaba dentro de la web de la
             profesional; luego `md` (768) y seguía apilándose, porque con el

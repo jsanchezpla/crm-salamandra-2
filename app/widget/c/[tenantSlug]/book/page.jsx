@@ -613,7 +613,7 @@ export default function WidgetBookPage() {
             mitad de ancho— con el MISMO grid de tres columnas dentro, así que
             el calendario salía encajonado y en vertical según por dónde
             hubieras entrado. */}
-        <div className="max-w-6xl mx-auto flex items-center gap-4">
+        <div className="max-w-[1440px] mx-auto flex items-center gap-4">
           <button
             onClick={() => router.push(`/widget/c/${tenantSlug}`)}
             className="text-[var(--widget-text-muted)] hover:text-[var(--widget-text)] p-1.5 rounded-md hover:bg-[var(--widget-bg)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
@@ -645,7 +645,7 @@ export default function WidgetBookPage() {
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 lg:px-10 py-6 lg:py-10">
+      <div className="max-w-[1440px] mx-auto px-4 lg:px-10 py-6 lg:py-10">
         {/* Columnas que se reparten solas, SIN punto de corte (04/08/2026).
             Primero fue `lg` (1024) y se apilaba dentro de la web de la
             profesional; luego `md` (768) y seguía apilándose, porque con el
