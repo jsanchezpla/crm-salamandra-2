@@ -57,13 +57,22 @@ const sinPlural = (s) => norm(s).split(" ")
 
 const cap = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
 
-/** «15:30» → 15 · «:50» → 0 · «00:00» → null (Harbiz guarda mm:ss). */
+/**
+ * Duración de Harbiz → minutos.
+ *
+ * El formato es **HH:MM**, no MM:SS. Se comprobó contra la propia pantalla de
+ * Harbiz: la receta con `"00:15"` muestra «15min». Leerlo como mm:ss dejaba
+ * 1.048 recetas de 1.053 sin duración, porque el valor típico («00:30») se
+ * interpretaba como cero minutos y treinta segundos.
+ *
+ * «:10» (sin horas) también aparece. «00:00» es que no consta.
+ */
 function minutos(d) {
   if (!d || typeof d !== "string") return null;
-  const m = d.match(/^(\d*):(\d{2})$/);
+  const m = d.match(/^(\d*):(\d{1,2})$/);
   if (!m) return null;
-  const min = Number(m[1] || 0);
-  return min > 0 ? min : null;
+  const total = Number(m[1] || 0) * 60 + Number(m[2] || 0);
+  return total > 0 ? total : null;
 }
 
 /** Redondea a 2 decimales o null. Las macros de Harbiz vienen por 100 g. */
@@ -108,8 +117,12 @@ async function main() {
       if (!porFicha.has(k)) porFicha.set(k, { ...v, usos: 0 });
       porFicha.get(k).usos++;
     }
+    // Manda la MÁS USADA… salvo que esa venga con todo a cero y otra sí traiga
+    // macros: un alimento a 0 kcal y 0 de todo no es una medición, es un hueco.
+    // Pasa con la pimienta negra (88 usos a 0 kcal, 60 usos a 255).
     const orden = [...porFicha.values()].sort((a, b) => b.usos - a.usos);
-    g.elegida = orden[0];
+    const vacia = (o) => !o.por100 || Object.values(o.por100).every((v) => !v);
+    g.elegida = vacia(orden[0]) ? (orden.find((o) => !vacia(o)) ?? orden[0]) : orden[0];
     g.usos = g.variantes.length;
     if (orden.length > 1) {
       const firmas = new Set(orden.map((o) => JSON.stringify(o.por100)));
