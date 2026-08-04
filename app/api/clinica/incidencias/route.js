@@ -10,6 +10,8 @@ import {
   isValidPriority,
   responsablesDe,
   sincronizarResponsables,
+  isValidVerification,
+  statusDeVerificacion,
 } from "../../../../lib/clinica/incidencias.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -137,7 +139,15 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     clientId = p?.clientId ?? null;
   }
 
-  const reportedById = await resolveCurrentTeamMemberId(request, M);
+  // Quién la registra: por defecto quien está usando el CRM, pero recepción
+  // apunta incidencias que le cuenta otra persona, así que se puede cambiar.
+  let reportedById = await resolveCurrentTeamMemberId(request, M);
+  if (body.reportedById !== undefined) {
+    reportedById = body.reportedById && UUID_RE.test(body.reportedById) ? body.reportedById : null;
+  }
+
+  // La verificación manda sobre el estado: ver lib/clinica/incidencias.js.
+  const verification = isValidVerification(body.verification) ? body.verification : null;
 
   const created = await Incidencia.create({
     incidenceDate: date,
@@ -146,7 +156,10 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     category: body.category,
     subcategory: body.subcategory ? String(body.subcategory).slice(0, 120) : null,
     priority,
-    status: "pending",
+    status: statusDeVerificacion(verification),
+    verification,
+    resolution: body.resolution ? String(body.resolution).slice(0, 5000) : null,
+    resolvedAt: verification === "resuelta" ? new Date() : null,
     patientId,
     clientId,
     assignedToId,

@@ -191,6 +191,7 @@ export const MODULES = {
     "migrate-patients-specialties",
     "migrate-documents-patient-link",
     "migrate-incidencias-module",
+    "migrate-incidencias-verificacion",
     "migrate-incentive-items",
     // Desempeño por roles: role_key + area_scores en performance_metrics.
     "migrate-clinica-performance-roles",

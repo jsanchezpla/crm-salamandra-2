@@ -87,9 +87,18 @@ export function defineIncidencia(sequelize) {
         allowNull: false,
         defaultValue: [],
       },
+      // Acción realizada para resolverla. Existía desde el principio pero no
+      // había forma de escribirla: el formulario no la enseñaba (04/08/2026).
       resolution: {
         type: DataTypes.TEXT,
         allowNull: true,
+      },
+      // Verificación del resultado (Aumenta, 04/08/2026). NULL = nadie lo ha
+      // comprobado todavía. Gobierna `status`: ver lib/clinica/incidencias.js.
+      verification: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        validate: { isIn: [["resuelta", "parcial", "no_resuelta"]] },
       },
       resolvedAt: {
         type: DataTypes.DATE,

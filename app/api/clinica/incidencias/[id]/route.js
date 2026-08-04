@@ -8,6 +8,8 @@ import {
   isValidPriority,
   responsablesDe,
   sincronizarResponsables,
+  isValidVerification,
+  statusDeVerificacion,
 } from "../../../../../lib/clinica/incidencias.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -96,15 +98,36 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
     }
   }
 
-  if (body.status !== undefined) {
+  // La acción realizada se puede escribir en cualquier momento, no solo al
+  // cerrar: se apunta cuando se hace, que es cuando se recuerda.
+  if (body.resolution !== undefined) {
+    changes.resolution = body.resolution ? String(body.resolution).slice(0, 5000) : null;
+  }
+
+  // VERIFICACIÓN → arrastra el estado. Es el control que ve el usuario.
+  if (body.verification !== undefined) {
+    const v = body.verification === null || body.verification === "" ? null : body.verification;
+    if (v !== null && !isValidVerification(v)) return error("Verificación inválida");
+    changes.verification = v;
+    changes.status = statusDeVerificacion(v);
+    changes.resolvedAt = v === "resuelta" ? new Date() : null;
+  } else if (body.status !== undefined) {
+    // Compatibilidad: quien siga mandando `status` a pelo (o un cliente viejo)
+    // sigue funcionando, y la verificación se mantiene coherente con él.
     if (!isValidStatus(body.status)) return error("Estado inválido");
     changes.status = body.status;
     if (body.status === "resolved") {
       changes.resolvedAt = new Date();
+      changes.verification = row.verification ?? "resuelta";
       if (body.resolution !== undefined) changes.resolution = body.resolution ? String(body.resolution).slice(0, 5000) : null;
     } else {
       changes.resolvedAt = null;
+      if (row.verification === "resuelta") changes.verification = null;
     }
+  }
+
+  if (body.reportedById !== undefined) {
+    changes.reportedById = body.reportedById && UUID_RE.test(body.reportedById) ? body.reportedById : null;
   }
 
   let commentEntry = null;

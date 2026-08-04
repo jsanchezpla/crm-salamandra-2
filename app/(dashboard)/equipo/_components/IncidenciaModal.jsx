@@ -2,12 +2,21 @@
 
 import { useState } from "react";
 import Select from "@/components/ui/Select.jsx";
-import { INCIDENCIA_CATEGORIES, INCIDENCIA_PRIORITY } from "@/lib/clinica/incidencias.js";
+import { INCIDENCIA_CATEGORIES, INCIDENCIA_PRIORITY, INCIDENCIA_VERIFICATIONS } from "@/lib/clinica/incidencias.js";
 
-const STATUS_BTN = [
-  { key: "pending", label: "Pendiente", on: "bg-amber-500 text-white", off: "bg-amber-50 text-amber-700" },
-  { key: "in_progress", label: "En proceso", on: "bg-blue-500 text-white", off: "bg-blue-50 text-blue-700" },
-  { key: "resolved", label: "Resuelta", on: "bg-emerald-500 text-white", off: "bg-emerald-50 text-emerald-700" },
+/**
+ * Un solo control para el resultado: la VERIFICACIÓN, que arrastra el estado
+ * (Aumenta, 04/08/2026). Antes había tres botones de estado sin sitio para «a
+ * medias», que es el resultado más común de una incidencia organizativa.
+ */
+const VERIF_BTN = [
+  { key: "", label: "Sin verificar", on: "bg-neutral-500 text-white", off: "bg-neutral-100 text-neutral-600" },
+  ...INCIDENCIA_VERIFICATIONS.map((v) => ({
+    key: v.key,
+    label: v.label,
+    on: v.level === "green" ? "bg-emerald-500 text-white" : v.level === "amber" ? "bg-amber-500 text-white" : "bg-rose-500 text-white",
+    off: v.level === "green" ? "bg-emerald-50 text-emerald-700" : v.level === "amber" ? "bg-amber-50 text-amber-700" : "bg-rose-50 text-rose-700",
+  })),
 ];
 const fmt = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 const fmtDT = (d) => (d ? new Date(d).toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
@@ -36,6 +45,9 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
   const toggleAssignee = (id) =>
     setAssigneeIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const [description, setDescription] = useState(inc?.description ?? "");
+  const [resolution, setResolution] = useState(inc?.resolution ?? "");
+  const [verification, setVerification] = useState(inc?.verification ?? "");
+  const [reportedById, setReportedById] = useState(inc?.reportedById ?? "");
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -70,7 +82,13 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
       title: title.trim(), category, subcategory: subcategory || null, priority,
       incidenceDate: date, patientId: patientId || null, assigneeIds,
       description: description || null,
+      resolution: resolution || null,
+      verification: verification || null,
     };
+    // Vacío = «lo registro yo»: el servidor resuelve al usuario logueado. Si se
+    // mandara `null` se perdería ese automático y la incidencia quedaría sin
+    // autor, que es justo el dato que Aumenta quiere ver.
+    if (reportedById) fields.reportedById = reportedById;
     if (isNew) {
       setBusy(true);
       try {
@@ -134,21 +152,9 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
         </div>
 
         <div className="p-5 space-y-4">
-          {/* Estado (solo existentes) */}
-          {!isNew && (
-            <div className="flex items-center gap-2">
-              {STATUS_BTN.map((s) => (
-                <button key={s.key} disabled={busy} onClick={() => patch({ status: s.key })}
-                  className={`text-[11px] font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${inc?.status === s.key ? s.on : s.off}`}>
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          )}
-
           <div>
-            <label className="text-[10px] uppercase tracking-wider text-neutral-400">Título</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} className={`mt-1 ${inputCls}`} placeholder="Resumen breve de la incidencia" />
+            <label className="text-[10px] uppercase tracking-wider text-neutral-400">Incidencia <span className="normal-case tracking-normal text-neutral-300">· descripción breve</span></label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} className={`mt-1 ${inputCls}`} placeholder="Qué ha pasado, en una línea" />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -218,16 +224,57 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
             </div>
           </div>
 
-          <div>
-            <label className="text-[10px] uppercase tracking-wider text-neutral-400">Paciente (opcional)</label>
-            <Select value={patientId} onChange={setPatientId}
-              options={[{ value: "", label: "Ninguno" }, ...patients.map((p) => ({ value: p.id, label: p.name }))]}
-              className={`mt-1 ${inputCls} bg-white`} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-neutral-400">Paciente (si procede)</label>
+              <Select value={patientId} onChange={setPatientId}
+                options={[{ value: "", label: "Ninguno" }, ...patients.map((p) => ({ value: p.id, label: p.name }))]}
+                className={`mt-1 ${inputCls} bg-white`} />
+            </div>
+            <div>
+              {/* Quién la registra sale relleno con quien está usando el CRM,
+                  pero recepción apunta cosas que le cuenta otra persona. */}
+              <label className="text-[10px] uppercase tracking-wider text-neutral-400">Quién la registra</label>
+              <Select value={reportedById} onChange={setReportedById}
+                options={[{ value: "", label: inc?.reportedBy?.name ?? "Yo" }, ...therapists.map((t) => ({ value: t.id, label: t.name }))]}
+                className={`mt-1 ${inputCls} bg-white`} />
+            </div>
           </div>
 
           <div>
-            <label className="text-[10px] uppercase tracking-wider text-neutral-400">Descripción</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={`mt-1 ${inputCls} resize-none`} placeholder="Detalle de la incidencia…" />
+            {/* La columna existía desde el principio; el formulario no la
+                enseñaba, así que no había forma de escribirla (04/08/2026). */}
+            <label className="text-[10px] uppercase tracking-wider text-neutral-400">Acción realizada</label>
+            <textarea value={resolution} onChange={(e) => setResolution(e.target.value)} rows={2} className={`mt-1 ${inputCls} resize-none`} placeholder="Qué se ha hecho para resolverla…" />
+          </div>
+
+          {/* Verificación: en las existentes se guarda al pulsar (es lo que se
+              toca a diario); en una nueva viaja con el resto del formulario. */}
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-neutral-400">Verificación</label>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {VERIF_BTN.map((v) => {
+                const actual = (isNew ? verification : (inc?.verification ?? "")) === v.key;
+                return (
+                  <button key={v.key || "sin"} type="button" disabled={busy}
+                    onClick={() => {
+                      setVerification(v.key);
+                      if (!isNew) patch({ verification: v.key || null });
+                    }}
+                    className={`text-[11px] font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${actual ? v.on : v.off}`}>
+                    {v.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-neutral-400 mt-1.5">
+              Mueve sola el estado: resuelta la cierra, parcial y no resuelta la dejan en proceso.
+            </p>
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-neutral-400">Observaciones</label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={`mt-1 ${inputCls} resize-none`} placeholder="Contexto, detalle, lo que haga falta recordar…" />
           </div>
 
           {/* Comentarios (solo existentes) */}

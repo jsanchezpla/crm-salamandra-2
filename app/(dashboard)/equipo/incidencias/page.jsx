@@ -16,6 +16,9 @@ const STATUS_PILL = {
   amber: "bg-amber-50 text-amber-700",
   blue: "bg-blue-50 text-blue-700",
   green: "bg-emerald-50 text-emerald-700",
+  // La verificación «no resuelta» tiene su propio color: en la lista, «En
+  // proceso» no distingue entre «va a medias» y «se intentó y no funcionó».
+  red: "bg-rose-50 text-rose-700",
   gray: "bg-neutral-100 text-neutral-500",
 };
 const PRIORITY_DOT = { high: "bg-red-500", medium: "bg-amber-400", low: "bg-neutral-300" };
@@ -126,7 +129,9 @@ export default function IncidenciasPage() {
                         : " · sin asignar"}
                     </div>
                   </div>
-                  <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full ${STATUS_PILL[r.statusLevel] ?? STATUS_PILL.gray}`}>{r.statusLabel}</span>
+                  <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full ${STATUS_PILL[r.verificationLevel ?? r.statusLevel] ?? STATUS_PILL.gray}`}>
+                    {r.verificationLabel ?? r.statusLabel}
+                  </span>
                 </button>
               </li>
             ))}
