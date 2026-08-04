@@ -1,10 +1,14 @@
 "use client";
 
 /**
- * NutricionAsignadosModule — listado de planes asignados a pacientes
+ * NutricionAsignadosModule — listado de pautas asignadas a pacientes
  * (vista admin). Sprint nutri-laura Recetario C3.
  *
- *   - Tabla en lg+ (paciente · plan · plantilla origen · asignado · acciones).
+ * Vocabulario (04/08/2026, Rodrigo): la plantilla reutilizable es un MENÚ y la
+ * copia que recibe una paciente concreta es su PAUTA. Por debajo las dos son
+ * `plans` con `type` template/assigned — el modelo no se ha tocado.
+ *
+ *   - Tabla en lg+ (paciente · pauta · menú origen · asignado · acciones).
  *   - Cards apiladas en <lg.
  *   - Buscador por paciente + filtro por plantilla origen.
  *   - Click en fila / botón Editar abre el PlanEditorModal sobre el plan
@@ -84,11 +88,11 @@ export default function NutricionAsignadosModule() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Envía el menú (PDF adjunto) al email del paciente. El backend valida que
+  // Envía la pauta (PDF adjunto) al email del paciente. El backend valida que
   // el plan sea asignado y que el paciente tenga email; aquí solo confirmamos
   // y mostramos el resultado.
   const sendMenu = useCallback(async (plan) => {
-    if (!confirm(`¿Enviar el menú por email a ${plan.clientName || "el paciente"}?`)) return;
+    if (!confirm(`¿Enviar la pauta por email a ${plan.clientName || "el paciente"}?`)) return;
     setSendingId(plan.id);
     try {
       const r = await fetch(`/api/nutricion/plans/${plan.id}/send-email`, { method: "POST" });
@@ -98,38 +102,38 @@ export default function NutricionAsignadosModule() {
         // RESEND_API_KEY). No es un envío real → no lo pintamos como éxito.
         setToast({ kind: "err", text: "Simulado (sin RESEND_API_KEY): el email NO se ha enviado de verdad." });
       } else if (r.ok && j.ok) {
-        setToast({ kind: "ok", text: `Menú enviado a ${j.data?.sentTo || "el paciente"}` });
+        setToast({ kind: "ok", text: `Pauta enviada a ${j.data?.sentTo || "el paciente"}` });
       } else {
-        setToast({ kind: "err", text: j.error || "No se pudo enviar el menú" });
+        setToast({ kind: "err", text: j.error || "No se pudo enviar la pauta" });
       }
     } catch {
-      setToast({ kind: "err", text: "No se pudo enviar el menú" });
+      setToast({ kind: "err", text: "No se pudo enviar la pauta" });
     } finally {
       setSendingId(null);
     }
   }, []);
 
-  // Desasignar: archiva el menú del paciente (soft). No se borra — sigue
+  // Desasignar: archiva la pauta del paciente (soft). No se borra — sigue
   // consultable en el histórico de su ficha — pero deja de estar vigente y el
-  // paciente queda libre para recibir otro menú.
+  // paciente queda libre para recibir otra pauta.
   const unassign = useCallback(async (plan) => {
     const who = plan.clientName || "el paciente";
     if (!confirm(
-      `¿Quitar el menú "${plan.name}" de ${who}?\n\n` +
-      `El menú deja de estar activo, pero queda guardado en el histórico del paciente.`
+      `¿Quitar la pauta "${plan.name}" de ${who}?\n\n` +
+      `La pauta deja de estar activa, pero queda guardada en el histórico del paciente.`
     )) return;
     setUnassigningId(plan.id);
     try {
       const r = await fetch(`/api/nutricion/plans/${plan.id}`, { method: "DELETE" });
       if (r.status === 204 || r.ok) {
-        setToast({ kind: "ok", text: `Menú retirado de ${who}` });
+        setToast({ kind: "ok", text: `Pauta retirada de ${who}` });
         load();
       } else {
         const j = await r.json().catch(() => ({}));
-        setToast({ kind: "err", text: j.error || "No se pudo quitar el menú" });
+        setToast({ kind: "err", text: j.error || "No se pudo quitar la pauta" });
       }
     } catch {
-      setToast({ kind: "err", text: "No se pudo quitar el menú" });
+      setToast({ kind: "err", text: "No se pudo quitar la pauta" });
     } finally {
       setUnassigningId(null);
     }
@@ -191,7 +195,7 @@ export default function NutricionAsignadosModule() {
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por paciente o nombre del plan…"
+              placeholder="Buscar por paciente o nombre de la pauta…"
               className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
             />
           </div>
@@ -199,7 +203,7 @@ export default function NutricionAsignadosModule() {
             value={templateFilter}
             onChange={(v) => setTemplateFilter(v)}
             options={[
-              { value: "", label: "Todas las plantillas origen" },
+              { value: "", label: "Todos los menús origen" },
               ...templates.map((t) => ({ value: t.id, label: t.name })),
             ]}
             className="px-3 py-2 text-sm rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
@@ -237,7 +241,7 @@ export default function NutricionAsignadosModule() {
                   <thead>
                     <tr className="bg-gray-50 text-left text-[11px] uppercase tracking-wider text-gray-500">
                       <th className="px-4 py-2.5 font-semibold">Paciente</th>
-                      <th className="px-4 py-2.5 font-semibold">Plan</th>
+                      <th className="px-4 py-2.5 font-semibold">Pauta</th>
                       <th className="px-4 py-2.5 font-semibold">Menú origen</th>
                       <th className="px-4 py-2.5 font-semibold">Asignado</th>
                       <th className="px-4 py-2.5 font-semibold text-right">Acciones</th>
@@ -255,7 +259,7 @@ export default function NutricionAsignadosModule() {
                         </td>
                         <td className="px-4 py-2.5 text-gray-700">{p.name}</td>
                         <td className="px-4 py-2.5 text-gray-500 text-xs">
-                          {p.templateName || <span className="italic">Plantilla eliminada</span>}
+                          {p.templateName || <span className="italic">Menú eliminado</span>}
                         </td>
                         <td className="px-4 py-2.5 text-gray-500 text-xs">{fmtDate(p.assignedAt)}</td>
                         <td className="px-4 py-2.5 text-right">
@@ -285,7 +289,7 @@ export default function NutricionAsignadosModule() {
                             <button
                               onClick={() => unassign(p)}
                               disabled={unassigningId === p.id}
-                              title="Quitar este menú del paciente (queda en su histórico)"
+                              title="Quitar esta pauta del paciente (queda en su histórico)"
                               className="text-xs text-gray-400 hover:text-red-600 hover:underline disabled:opacity-50"
                             >
                               {unassigningId === p.id ? "Quitando…" : "Quitar"}
@@ -315,8 +319,8 @@ export default function NutricionAsignadosModule() {
           onClose={() => setAssignOpen(false)}
           onAssigned={(newPlan) => {
             setAssignOpen(false);
-            setToast({ kind: "ok", text: "Plan asignado correctamente" });
-            // Abrir el editor del plan recién asignado para que Laura ajuste
+            setToast({ kind: "ok", text: "Pauta asignada correctamente" });
+            // Abrir el editor de la pauta recién asignada para que Laura ajuste
             // gramos / opciones específicas para el paciente.
             if (newPlan?.id) setEditingId(newPlan.id);
             load();
@@ -350,7 +354,7 @@ function AssignedCard({ plan, onEdit, onSend, sending, onUnassign, unassigning }
           </h3>
           <p className="text-xs text-gray-700 mt-0.5 truncate">{plan.name}</p>
           <p className="text-[11px] text-gray-500 mt-1">
-            Plantilla: {plan.templateName || <em>Eliminada</em>}
+            Menú origen: {plan.templateName || <em>Eliminado</em>}
           </p>
         </div>
         <span className="text-[11px] text-gray-400 shrink-0">{fmtDate(plan.assignedAt)}</span>
@@ -397,11 +401,11 @@ function EmptyState({ hasAny }) {
         </>
       ) : (
         <>
-          <div className="text-base text-gray-700 font-medium">Aún no hay pacientes con menú asignado</div>
+          <div className="text-base text-gray-700 font-medium">Aún no hay pacientes con pauta asignada</div>
           <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
-            Ve a la ficha del paciente y selecciona una plantilla para asignar.
-            La asignación crea una copia independiente que podrás editar sin
-            modificar la plantilla origen.
+            Ve a la ficha del paciente y elige un menú para asignar. La
+            asignación crea una pauta independiente que podrás editar sin
+            modificar el menú origen.
           </p>
         </>
       )}

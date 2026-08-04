@@ -38,16 +38,16 @@ export const POST = withTenant(async (request, ctx, tenantCtx) => {
     // (Se devuelve 403 en vez de lanzar: este handler tiene su propio catch,
     // que convertiría cualquier excepción en un 500 genérico.)
     if (isDemoTenant(tenantCtx)) {
-      return forbidden("El envío del menú por correo está desactivado en la demo: usa datos de ejemplo.");
+      return forbidden("El envío de la pauta por correo está desactivado en la demo: usa datos de ejemplo.");
     }
     const { id } = await ctx.params;
     if (!UUID_RE.test(id)) return error("id inválido");
 
     const { Plan, Client } = tenantModels;
     const tree = await loadPlanTree(Plan, tenantModels, id);
-    if (!tree || tree.archivedAt) return notFound("Plan no encontrado");
+    if (!tree || tree.archivedAt) return notFound("No encontrado");
     if (tree.type !== "assigned") {
-      return error("Solo se puede enviar un plan asignado a un paciente");
+      return error("Solo se puede enviar una pauta asignada a un paciente");
     }
     // No enviar un menú vacío. OJO: desde Nutrinotas todo plan nace con las 5
     // comidas estándar, así que contar comidas ya no sirve — hay que comprobar
@@ -57,13 +57,13 @@ export const POST = withTenant(async (request, ctx, tenantCtx) => {
       (m.options || []).some((o) => (o.foods || []).length > 0 || (o.recipes || []).length > 0)
     );
     if (!hasContent) {
-      return error("El plan no tiene contenido todavía. Añade alimentos o recetas antes de enviarlo.");
+      return error("La pauta no tiene contenido todavía. Añade alimentos o recetas antes de enviarla.");
     }
 
     const client = tree.clientId
       ? await Client.findByPk(tree.clientId, { attributes: ["id", "name", "email"] })
       : null;
-    if (!client) return error("El plan no tiene paciente asociado");
+    if (!client) return error("La pauta no tiene paciente asociado");
     if (!client.email) {
       return error("El paciente no tiene email en su ficha. Añádelo en Clientes y vuelve a intentarlo.");
     }
@@ -73,7 +73,7 @@ export const POST = withTenant(async (request, ctx, tenantCtx) => {
     for (const [k, t] of lastSentByPlan) if (now - t > THROTTLE_MS) lastSentByPlan.delete(k);
     const prev = lastSentByPlan.get(id);
     if (prev && now - prev < THROTTLE_MS) {
-      return error("Este menú se acaba de enviar. Espera unos segundos antes de reenviarlo.", 429);
+      return error("Esta pauta se acaba de enviar. Espera unos segundos antes de reenviarla.", 429);
     }
     lastSentByPlan.set(id, now);
 

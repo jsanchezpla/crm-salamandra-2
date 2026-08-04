@@ -50,9 +50,9 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
     if (!client) return notFound("Cliente no encontrado");
 
     const template = await Plan.findByPk(id, { include: planTreeInclude(tenantModels) });
-    if (!template || template.archivedAt) return notFound("Plantilla no encontrada");
+    if (!template || template.archivedAt) return notFound("Menú no encontrado");
     if (template.type !== "template") {
-      return error("Solo se pueden asignar plantillas", 422);
+      return error("Solo se pueden asignar menús", 422);
     }
 
     // UN PACIENTE, UN MENÚ ACTIVO (2026-07-22). Antes el antiduplicado miraba el

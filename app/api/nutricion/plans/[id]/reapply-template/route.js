@@ -55,13 +55,13 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
     // ── Validaciones del plan asignado ───────────────────────────────────────
     const assigned = await Plan.findByPk(id);
     if (!assigned || assigned.archivedAt) {
-      return notFound("Plan no encontrado");
+      return notFound("No encontrado");
     }
     if (assigned.type !== "assigned") {
-      return error("Solo se puede re-aplicar sobre planes asignados", 400);
+      return error("Solo se puede re-aplicar sobre pautas asignadas", 400);
     }
     if (!assigned.templateId) {
-      return error("Este plan asignado no tiene plantilla origen registrada", 400);
+      return error("Esta pauta no tiene menú origen registrado", 400);
     }
 
     // ── Validaciones de la plantilla origen ──────────────────────────────────
@@ -71,11 +71,11 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
     if (!template || template.archivedAt) {
       // 409 porque el conflicto es de estado (plantilla archivada), no de
       // recurso ausente.
-      return error("La plantilla origen está archivada o no existe", 409);
+      return error("El menú origen está archivado o no existe", 409);
     }
     if (template.type !== "template") {
       // Defensivo: si por alguna razón el templateId apunta a otra cosa.
-      return error("La plantilla origen no es de tipo 'template'", 409);
+      return error("El menú origen no es de tipo 'template'", 409);
     }
 
     const clientId = assigned.clientId;

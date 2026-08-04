@@ -252,9 +252,25 @@ el cambio viaja a todo tenant con `nutricion` — hoy `nutri_laura` y `demo`—,
 como cualquier cambio de módulo. En `demo` además deshace la ambigüedad de
 tener «Pacientes» en Clínica y en Nutrición a la vez.
 
-Por dentro, las pantallas siguen hablando de «plan» y «menú» (el PDF y el
-email que recibe la paciente incluidos): solo se han renombrado los rótulos
-de navegación.
+⚠️ **Vocabulario de TODO el módulo, cerrado el 04/08/2026** (Rodrigo). Las dos
+palabras que se usaban indistintamente pasan a significar cosas distintas, y
+así se dice en toda la UI:
+
+| Concepto | Se llama | En BD |
+| --- | --- | --- |
+| El modelo reutilizable que Laura prepara una vez | **menú** (antes también «plantilla») | `plans` con `type='template'` |
+| La copia que recibe una paciente concreta | **pauta** (antes «plan» o «menú») | `plans` con `type='assigned'` |
+
+Se lee natural: «asignas un menú y se convierte en la pauta de Ana». Alcanza
+el PDF (incluido su nombre de fichero, `pauta-*.pdf`), el asunto y el cuerpo
+del email a la paciente, los mensajes de error de `/api/nutricion/*` y las
+frases de auditoría inequívocas de `lib/actividad/etiquetas.js` (assigned,
+reapplied, menu_emailed; las que valen para los dos casos se quedan en
+«menú»).
+
+**Nada de esto toca el modelo**: siguen siendo `plans` con su `type`, las
+claves de auditoría no se han renombrado (romperían el histórico) y el
+`PlanEditorModal` decide el rótulo en caliente con `plan.type`.
 
 Modales reutilizados desde varias rutas:
 

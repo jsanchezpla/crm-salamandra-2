@@ -125,7 +125,7 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
       const r = await fetch(`/api/nutricion/plans/${planId}`);
       const j = await r.json();
       if (!j.ok) {
-        setError(j.error || "No se pudo cargar el plan");
+        setError(j.error || "No se ha podido cargar");
         return;
       }
       setPlan(j.data);
@@ -700,22 +700,22 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
   // ── Cargar plantilla (reemplaza contenido) ────────────────────────────────
   async function loadFromTemplate(templateId) {
     if (templateId === plan.id) return;
-    if (!window.confirm("¿Cargar plantilla? Esto reemplazará TODO el contenido actual del plan.")) {
+    if (!window.confirm("¿Cargar menú? Esto reemplazará TODO el contenido actual.")) {
       return;
     }
-    setToast({ kind: "ok", text: "Cargando plantilla…" });
+    setToast({ kind: "ok", text: "Cargando menú…" });
     // 1. Cargar el árbol completo de la plantilla origen.
     let src;
     try {
       const r = await fetch(`/api/nutricion/plans/${templateId}`);
       const j = await r.json();
       if (!j.ok) {
-        setToast({ kind: "err", text: j.error || "No se pudo cargar la plantilla" });
+        setToast({ kind: "err", text: j.error || "No se pudo cargar el menú" });
         return;
       }
       src = j.data;
     } catch {
-      setToast({ kind: "err", text: "Error al cargar plantilla" });
+      setToast({ kind: "err", text: "Error al cargar el menú" });
       return;
     }
 
@@ -773,7 +773,7 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
     }
     setTemplatesOpen(false);
     await loadPlan();
-    setToast({ kind: "ok", text: "Plantilla cargada" });
+    setToast({ kind: "ok", text: "Menú cargado" });
   }
 
   // ── Macros calculados (memo) ──────────────────────────────────────────────
@@ -783,14 +783,14 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
   if (loading) {
     return (
       <ModalShell onClose={handleClose}>
-        <div className="p-10 text-center text-sm text-gray-400">Cargando plan…</div>
+        <div className="p-10 text-center text-sm text-gray-400">Cargando…</div>
       </ModalShell>
     );
   }
   if (error || !plan) {
     return (
       <ModalShell onClose={handleClose}>
-        <div className="p-10 text-center text-sm text-red-600">{error || "Plan no encontrado"}</div>
+        <div className="p-10 text-center text-sm text-red-600">{error || "No se ha encontrado"}</div>
       </ModalShell>
     );
   }
@@ -801,13 +801,20 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
   const dayMeals = meals.filter((m) => (m.weekday ?? 0) === day);
   const hasLegacyMeals = meals.some((m) => m.weekday == null);
 
+  // Este mismo editor abre las dos cosas, y no se llaman igual (04/08/2026,
+  // Rodrigo): la plantilla reutilizable es un MENÚ y lo que acaba en manos de
+  // una paciente concreta es su PAUTA. El texto se dice desde aquí para que no
+  // haya que acordarse en cada rótulo.
+  const esPauta = plan.type === "assigned";
+  const ESTO = esPauta ? "la pauta" : "el menú";
+
   return (
     <ModalShell onClose={handleClose}>
       {/* Header sticky */}
       <header className="sticky top-0 z-20 bg-white border-b border-gray-100 px-5 lg:px-7 py-3.5 flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-0">
           <div className="text-[10px] uppercase tracking-[0.18em] text-gray-400 mb-0.5">
-            {plan.type === "template" ? "Plantilla" : "Plan asignado"}
+            {plan.type === "template" ? "Menú" : "Pauta asignada"}
           </div>
           <input
             type="text"
@@ -815,7 +822,7 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
             onChange={(e) => setNameDraft(e.target.value)}
             onBlur={commitName}
             onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
-            placeholder="Nombre del plan"
+            placeholder={`Nombre de ${ESTO}`}
             className="text-lg lg:text-xl font-semibold text-gray-900 leading-tight w-full bg-transparent border-0 focus:outline-none focus:bg-gray-50 px-1 -mx-1 rounded"
           />
         </div>
@@ -850,10 +857,10 @@ export default function PlanEditorModal({ planId, onClose, onSaved, initialAssig
             <path strokeLinecap="round" d="M12 8v5M12 16h.01" />
           </svg>
           <div className="leading-tight">
-            Esta plantilla tiene <strong>{activeAssignmentsCount} {activeAssignmentsCount === 1 ? "asignación activa" : "asignaciones activas"}</strong>.
-            Los cambios que hagas aquí <strong>no se aplican automáticamente</strong> a los planes ya
-            asignados. Para actualizar a un paciente concreto, ve a su ficha y usa
-            &ldquo;Re-aplicar plantilla origen&rdquo; (disponible en C4).
+            Este menú tiene <strong>{activeAssignmentsCount} {activeAssignmentsCount === 1 ? "asignación activa" : "asignaciones activas"}</strong>.
+            Los cambios que hagas aquí <strong>no se aplican automáticamente</strong> a las pautas ya
+            asignadas. Para actualizar a un paciente concreto, ve a su ficha y usa
+            &ldquo;Re-aplicar menú origen&rdquo;.
           </div>
         </div>
       )}
@@ -1897,7 +1904,7 @@ function Field({ label, value, suffix }) {
 function TemplateSidePanel({ plan }) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-2">
-      <div className="text-[10px] uppercase tracking-[0.18em] text-gray-400">Plantilla</div>
+      <div className="text-[10px] uppercase tracking-[0.18em] text-gray-400">Menú</div>
       <div className="font-semibold text-gray-900 text-base leading-tight">{plan.name}</div>
       <dl className="text-xs space-y-1 pt-1">
         <Field label="Creada" value={fmtDate(plan.createdAt)} />
@@ -1960,7 +1967,7 @@ function TemplateAssignPanel({ plan }) {
       const j = await r.json();
       if (r.status === 409) throw new Error("Ese paciente ya tiene este menú asignado");
       if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo asignar");
-      setMsg({ kind: "ok", text: "Menú asignado (copia independiente)" });
+      setMsg({ kind: "ok", text: "Pauta creada a partir de este menú (copia independiente)" });
       setPickedClientId("");
       loadAssignments();
     } catch (e) {
@@ -2013,7 +2020,7 @@ function TemplateAssignPanel({ plan }) {
       </div>
       <p className="text-[10px] text-gray-400">
         La asignación crea una copia independiente: los cambios posteriores del menú no
-        alteran los planes ya asignados (usa «Re-aplicar» en la ficha del paciente).
+        alteran las pautas ya asignadas (usa «Re-aplicar» en la ficha del paciente).
       </p>
       {msg && (
         <p className={`text-[11px] ${msg.kind === "ok" ? "text-emerald-600" : "text-rose-600"}`}>{msg.text}</p>
@@ -2288,7 +2295,7 @@ function WeekTabs({ activeDay, onSelect, meals, showLegacyTab }) {
         <button
           type="button"
           onClick={() => onSelect(0)}
-          title="Comidas de este menú que aún no tienen día asignado"
+          title="Comidas que aún no tienen día asignado"
           className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium border transition ${
             activeDay === 0
               ? "bg-amber-500 text-white border-amber-500"
@@ -2361,7 +2368,7 @@ function WeekGrid({ meals, onPickMeal }) {
       </div>
       {legacy.length > 0 && (
         <div className="mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
-          Este menú tiene {legacy.length} comida{legacy.length === 1 ? "" : "s"} sin día asignado (pestaña “Sin día”).
+          Hay {legacy.length} comida{legacy.length === 1 ? "" : "s"} sin día asignado (pestaña “Sin día”).
           Ábrelas y asígnales un día para que aparezcan en la semana.
         </div>
       )}
@@ -2383,7 +2390,7 @@ function MacrosSummary({ macros }) {
   }
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4">
-      <div className="text-[10px] uppercase tracking-[0.18em] text-gray-400 mb-2">Total del plan</div>
+      <div className="text-[10px] uppercase tracking-[0.18em] text-gray-400 mb-2">Total</div>
       <div className="space-y-1.5">
         <MacroBar label="Proteínas" value={m.protein} pct={pct(m.protein)} color="emerald" />
         <MacroBar label="Carbohidratos" value={m.carbs} pct={pct(m.carbs)} color="amber" />
@@ -2444,9 +2451,9 @@ function TemplatesDropdown({ open, onOpen, onClose, onSelect, excludeId }) {
       <button
         onClick={() => (open ? onClose() : onOpen())}
         className="text-xs px-2.5 py-1 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 transition flex items-center gap-1"
-        title="Cargar contenido desde otra plantilla"
+        title="Cargar contenido desde otro menú"
       >
-        Plantillas ▾
+        Menús ▾
       </button>
       {open && (
         <>
@@ -2454,7 +2461,7 @@ function TemplatesDropdown({ open, onOpen, onClose, onSelect, excludeId }) {
           <div className="absolute right-0 top-full mt-1 z-20 w-72 bg-white border border-gray-200 rounded-md shadow-lg py-1 max-h-80 overflow-y-auto">
             {loading && <div className="px-3 py-2 text-xs text-gray-400">Cargando…</div>}
             {!loading && items && items.length === 0 && (
-              <div className="px-3 py-2 text-xs text-gray-400">No hay plantillas.</div>
+              <div className="px-3 py-2 text-xs text-gray-400">No hay menús.</div>
             )}
             {(items || [])
               .filter((p) => p.id !== excludeId)

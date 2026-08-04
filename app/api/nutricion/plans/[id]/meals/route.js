@@ -19,7 +19,7 @@ export const POST = withTenant(async (request, ctx, { tenantModels, hasModule })
 
     const { Plan, PlanMeal } = tenantModels;
     const plan = await Plan.findByPk(planId);
-    if (!plan || plan.archivedAt) return notFound("Plan no encontrado");
+    if (!plan || plan.archivedAt) return notFound("No encontrado");
 
     let body;
     try { body = await request.json(); } catch { return error("Body inválido"); }

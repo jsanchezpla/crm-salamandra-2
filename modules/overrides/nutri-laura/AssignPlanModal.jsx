@@ -170,7 +170,7 @@ export default function AssignPlanModal({ onClose, onAssigned }) {
 function Header({ step, client, onClose, onBack }) {
   const titleByStep = {
     1: "Selecciona un paciente",
-    2: `Elige plantilla para ${client?.name ?? "…"}`,
+    2: `Elige menú para ${client?.name ?? "…"}`,
     3: "Confirmar asignación",
   };
   return (
@@ -186,7 +186,7 @@ function Header({ step, client, onClose, onBack }) {
       <div className="flex items-center gap-1.5 flex-wrap">
         <Step n={1} label="Paciente" active={step === 1} done={step > 1} />
         <span className="text-gray-300 text-xs">›</span>
-        <Step n={2} label="Plantilla" active={step === 2} done={step > 2} />
+        <Step n={2} label="Menú" active={step === 2} done={step > 2} />
         <span className="text-gray-300 text-xs">›</span>
         <Step n={3} label="Confirmar" active={step === 3} done={false} />
       </div>
@@ -338,16 +338,16 @@ function StepTemplate({ client, templates, activeAssignmentsForClient, selectedT
 
   if (templates === null) {
     return (
-      <div className="py-10 text-center text-sm text-gray-400">Cargando plantillas…</div>
+      <div className="py-10 text-center text-sm text-gray-400">Cargando menús…</div>
     );
   }
 
   return (
     <div className="space-y-3">
       <p className="text-xs text-gray-500">
-        Selecciona la plantilla que servirá de base para el plan de{" "}
-        <strong className="text-gray-700">{client?.name}</strong>. El plan asignado
-        es una <strong>copia independiente</strong>: editarlo no modifica la plantilla.
+        Selecciona el menú que servirá de base para la pauta de{" "}
+        <strong className="text-gray-700">{client?.name}</strong>. La pauta es una{" "}
+        <strong>copia independiente</strong>: editarla no modifica el menú.
       </p>
 
       {error && (
@@ -358,13 +358,13 @@ function StepTemplate({ client, templates, activeAssignmentsForClient, selectedT
 
       {templates.length === 0 && (
         <div className="py-10 text-center text-sm text-gray-400 border border-dashed border-gray-200 rounded-md">
-          No hay plantillas todavía. Crea una en Nutrición &gt; Plantillas.
+          No hay menús todavía. Crea uno en Nutrición &gt; Menús.
         </div>
       )}
 
       {hasActive && (
         <div className="px-3 py-2 bg-amber-50 border border-amber-100 rounded-md text-xs text-amber-800">
-          {client?.name} ya tiene un menú activo. Al asignar este, el anterior se
+          {client?.name} ya tiene una pauta activa. Al asignar esta, la anterior se
           archivará automáticamente y quedará en su histórico.
         </div>
       )}
@@ -441,7 +441,7 @@ function StepConfirm({ client, template, onBack, onConfirm, submitting, error })
         )}
       </SummaryBlock>
 
-      <SummaryBlock label="Plantilla">
+      <SummaryBlock label="Menú">
         <div className="font-medium text-sm text-gray-900">{template?.name}</div>
         {template?.description && (
           <div className="text-[12px] text-gray-500 mt-0.5 line-clamp-3">
@@ -459,8 +459,8 @@ function StepConfirm({ client, template, onBack, onConfirm, submitting, error })
       </SummaryBlock>
 
       <p className="text-xs text-gray-500 leading-relaxed">
-        Al confirmar, se creará un plan asignado a partir de esta plantilla.
-        Podrás editarlo después sin afectar a la plantilla original.
+        Al confirmar, se creará una pauta a partir de este menú. Podrás editarla
+        después sin afectar al menú original.
       </p>
 
       {error && (

@@ -39,9 +39,9 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
     const ip = request.headers.get("x-forwarded-for") ?? null;
 
     const src = await Plan.findByPk(id, { include: planTreeInclude(tenantModels) });
-    if (!src || src.archivedAt) return notFound("Plantilla no encontrada");
+    if (!src || src.archivedAt) return notFound("Menú no encontrado");
     if (src.type !== "template") {
-      return error("Solo se pueden duplicar plantillas", 422);
+      return error("Solo se pueden duplicar menús", 422);
     }
 
     let body = {};

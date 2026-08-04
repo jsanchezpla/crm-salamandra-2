@@ -35,8 +35,8 @@ export const GET = withTenant(async (_request, ctx, { tenantModels, hasModule })
 
     const { Plan } = tenantModels;
     const tree = await loadPlanTree(Plan, tenantModels, id);
-    if (!tree) return notFound("Plan no encontrado");
-    if (tree.archivedAt) return notFound("Plan no encontrado");
+    if (!tree) return notFound("No encontrado");
+    if (tree.archivedAt) return notFound("No encontrado");
 
     return ok(tree);
   } catch (err) {
@@ -58,7 +58,7 @@ export const PATCH = withTenant(async (request, ctx, { tenant, tenantModels, has
     const ip = request.headers.get("x-forwarded-for") ?? null;
 
     const row = await Plan.findByPk(id);
-    if (!row || row.archivedAt) return notFound("Plan no encontrado");
+    if (!row || row.archivedAt) return notFound("No encontrado");
 
     let body;
     try { body = await request.json(); } catch { return error("Body inválido"); }
@@ -158,7 +158,7 @@ export const DELETE = withTenant(async (request, ctx, { tenant, tenantModels, ha
     const ip = request.headers.get("x-forwarded-for") ?? null;
 
     const row = await Plan.findByPk(id);
-    if (!row || row.archivedAt) return notFound("Plan no encontrado");
+    if (!row || row.archivedAt) return notFound("No encontrado");
 
     const before = row.toJSON();
     await row.update({ archivedAt: new Date() });

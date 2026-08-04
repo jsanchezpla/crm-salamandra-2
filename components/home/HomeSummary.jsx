@@ -281,13 +281,13 @@ function NutricionCard({ d }) {
   return (
     <CardShell href="/nutricion/asignados" eyebrow="Nutrición">
       <MetricRow>
-        <Metric value={d.assigned} label="planes asignados" />
-        <Metric value={d.templates} label="menús plantilla" tone="muted" />
+        <Metric value={d.assigned} label="pautas asignadas" />
+        <Metric value={d.templates} label="menús" tone="muted" />
       </MetricRow>
       {d.recent.length > 0 && (
         <MiniList>
           {d.recent.slice(0, 4).map((p) => (
-            <Row key={p.id} left={p.name} right={p.type === "template" ? "Menú" : "Asignado"} />
+            <Row key={p.id} left={p.name} right={p.type === "template" ? "Menú" : "Pauta"} />
           ))}
         </MiniList>
       )}

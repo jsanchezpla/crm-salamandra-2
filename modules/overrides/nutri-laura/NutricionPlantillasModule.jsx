@@ -105,8 +105,8 @@ export default function NutricionPlantillasModule() {
     if (plan.activeAssignmentsCount > 0) {
       const cont = window.confirm(
         `Este menú tiene ${plan.activeAssignmentsCount} asignaciones activas. ` +
-        `Archivarla NO afecta a los planes ya asignados (siguen vivos), pero la ` +
-        `plantilla dejará de aparecer en el listado. ¿Continuar?`
+        `Archivarlo NO afecta a las pautas ya asignadas (siguen vivas), pero el ` +
+        `menú dejará de aparecer en el listado. ¿Continuar?`
       );
       if (!cont) return;
     } else if (!window.confirm(`¿Archivar el menú "${plan.name}"?`)) {
@@ -364,14 +364,14 @@ function EmptyState({ onCreate }) {
     <div className="py-16 text-center bg-white border border-gray-200 rounded-xl max-w-xl mx-auto">
       <div className="text-base text-gray-700 font-medium">Aún no hay menús</div>
       <p className="text-xs text-gray-400 mt-1">
-        Crea una plantilla reutilizable y úsala como base para tus pacientes.
+        Crea un menú reutilizable y úsalo como base para las pautas de tus pacientes.
       </p>
       <div className="mt-5">
         <button
           onClick={onCreate}
           className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--color-primary)] text-white hover:opacity-90 transition"
         >
-          Crea tu primera plantilla
+          Crea tu primer menú
         </button>
       </div>
     </div>

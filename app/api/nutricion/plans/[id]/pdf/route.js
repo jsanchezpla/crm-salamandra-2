@@ -16,7 +16,7 @@ export const GET = withTenant(async (_request, ctx, { tenant, tenantModels, hasM
 
     const { Plan, Client } = tenantModels;
     const tree = await loadPlanTree(Plan, tenantModels, id);
-    if (!tree || tree.archivedAt) return notFound("Plan no encontrado");
+    if (!tree || tree.archivedAt) return notFound("No encontrado");
 
     let client = null;
     if (tree.clientId) {

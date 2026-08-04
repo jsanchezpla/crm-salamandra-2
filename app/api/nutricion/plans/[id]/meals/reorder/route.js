@@ -47,7 +47,7 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
     const ip = request.headers.get("x-forwarded-for") ?? null;
 
     const plan = await Plan.findByPk(planId);
-    if (!plan || plan.archivedAt) return notFound("Plan no encontrado");
+    if (!plan || plan.archivedAt) return notFound("No encontrado");
 
     let body;
     try { body = await request.json(); } catch { return error("Body inválido"); }
@@ -101,7 +101,7 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
     });
     if (meals.length !== N) {
       return error(
-        `El array debe contener TODAS las comidas del plan (${meals.length} en BD, ${N} en el body)`
+        `El array debe contener TODAS las comidas (${meals.length} en BD, ${N} en el body)`
       );
     }
     const mealIds = new Set(meals.map((m) => m.id));

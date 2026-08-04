@@ -1,26 +1,30 @@
 "use client";
 
 /**
- * ClientPlansPanel — tab "Plan" en la ficha de paciente nutri_laura.
+ * ClientPlansPanel — tab "Pautas" en la ficha de paciente nutri_laura.
  *
  * Sprint nutri-laura Recetario C4.
  *
+ * Vocabulario (04/08/2026, Rodrigo): el modelo reutilizable es un MENÚ y la
+ * copia que recibe esta paciente es su PAUTA. Por debajo las dos son `plans`
+ * con `type` template/assigned — el modelo no se ha tocado.
+ *
  * Vista:
- *   - Plan ACTIVO (archived_at IS NULL): card destacada con plantilla origen,
- *     fecha de asignación, count de comidas, botones [Editar plan] y
- *     [Re-aplicar plantilla origen].
- *   - Histórico (archived_at IS NOT NULL): colapsable bajo el activo. Cada
- *     fila → [Ver] que abre el mismo PlanEditorModal (editable, ya que el
- *     plan archivado puede consultarse y, si Laura lo decide, retomarlo
+ *   - Pauta ACTIVA (archived_at IS NULL): card destacada con el menú origen,
+ *     fecha de asignación, count de comidas, botones [Editar pauta] y
+ *     [Re-aplicar menú origen].
+ *   - Histórico (archived_at IS NOT NULL): colapsable bajo la activa. Cada
+ *     fila → [Ver] que abre el mismo PlanEditorModal (editable, ya que la
+ *     pauta archivada puede consultarse y, si Laura lo decide, retomarla
  *     manualmente).
  *
  * Estados:
- *   - Sin plan activo NI histórico → empty state que apunta a /asignados.
- *   - Sólo histórico, sin activo → mensaje "Sin plan activo" + histórico
+ *   - Sin pauta activa NI histórico → empty state que apunta a /asignados.
+ *   - Sólo histórico, sin activa → mensaje "Sin pauta activa" + histórico
  *     expandido por defecto.
  *
- * No incluye botón "Asignar nueva plantilla" por decisión Jorge: la
- * asignación SOLO se inicia desde /nutricion/asignados.
+ * No incluye botón "Asignar nuevo menú" por decisión Jorge: la asignación
+ * SOLO se inicia desde /nutricion/asignados.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -82,7 +86,7 @@ export default function ClientPlansPanel({ clientId }) {
   async function handleReapply(plan) {
     if (!plan) return;
     if (!window.confirm(
-      "Esto archivará el plan actual y creará uno nuevo desde la plantilla origen. ¿Continuar?"
+      "Esto archivará la pauta actual y creará una nueva desde el menú origen. ¿Continuar?"
     )) return;
     setReapplying(true);
     try {
@@ -91,12 +95,12 @@ export default function ClientPlansPanel({ clientId }) {
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) {
-        setToast({ kind: "err", text: j.error || "No se pudo re-aplicar la plantilla" });
+        setToast({ kind: "err", text: j.error || "No se pudo re-aplicar el menú" });
         return;
       }
-      setToast({ kind: "ok", text: "Plantilla re-aplicada" });
+      setToast({ kind: "ok", text: "Menú re-aplicado" });
       await load();
-      // Abrir el nuevo plan para confirmar / ajustar
+      // Abrir la nueva pauta para confirmar / ajustar
       if (j.data?.id) setEditingId(j.data.id);
     } finally {
       setReapplying(false);
@@ -106,13 +110,13 @@ export default function ClientPlansPanel({ clientId }) {
   // ── Estados de carga ──────────────────────────────────────────────────────
   if (items === null) {
     return (
-      <div className="py-10 text-center text-sm text-gray-400">Cargando plan…</div>
+      <div className="py-10 text-center text-sm text-gray-400">Cargando pauta…</div>
     );
   }
   if (error) {
     return (
       <div className="py-8 text-center">
-        <p className="text-sm text-red-600">No se pudo cargar el plan: {error}</p>
+        <p className="text-sm text-red-600">No se pudo cargar la pauta: {error}</p>
         <button
           onClick={load}
           className="mt-3 text-xs px-3 py-1.5 rounded border border-gray-200 hover:bg-gray-50"
@@ -140,7 +144,7 @@ export default function ClientPlansPanel({ clientId }) {
         />
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500">
-          Este paciente no tiene plan activo. Histórico abajo.
+          Este paciente no tiene pauta activa. Histórico abajo.
         </div>
       )}
 
@@ -154,7 +158,7 @@ export default function ClientPlansPanel({ clientId }) {
             <span className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
               Histórico
               <span className="ml-1.5 text-gray-400 normal-case">
-                ({archived.length} {archived.length === 1 ? "plan archivado" : "planes archivados"})
+                ({archived.length} {archived.length === 1 ? "pauta archivada" : "pautas archivadas"})
               </span>
             </span>
             <svg
@@ -204,16 +208,16 @@ function ActivePlanCard({ plan, onEdit, onReapply, reapplying }) {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0 flex-1">
           <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--color-primary)] mb-1">
-            Plan activo
+            Pauta activa
           </div>
           <h3 className="text-base lg:text-lg font-semibold text-gray-900 leading-tight">
             {plan.name}
           </h3>
           <dl className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600">
-            <Row label="Plantilla origen">
+            <Row label="Menú origen">
               {plan.templateId && plan.templateName ? (
                 plan.templateArchived ? (
-                  <span className="text-gray-500 italic">{plan.templateName} (archivada)</span>
+                  <span className="text-gray-500 italic">{plan.templateName} (archivado)</span>
                 ) : (
                   <Link
                     href={`/nutricion/plantillas`}
@@ -241,16 +245,16 @@ function ActivePlanCard({ plan, onEdit, onReapply, reapplying }) {
           disabled={reapplying || templateDisabled}
           className="px-3 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
           title={templateDisabled
-            ? "Plantilla origen archivada o sin referencia — no se puede re-aplicar"
-            : "Archiva el plan actual y copia la plantilla origen"}
+            ? "Menú origen archivado o sin referencia — no se puede re-aplicar"
+            : "Archiva la pauta actual y copia el menú origen"}
         >
-          {reapplying ? "Re-aplicando…" : "Re-aplicar plantilla origen"}
+          {reapplying ? "Re-aplicando…" : "Re-aplicar menú origen"}
         </button>
         <button
           onClick={onEdit}
           className="px-4 py-1.5 text-xs font-medium rounded-md bg-[var(--color-primary)] text-white hover:opacity-90 transition"
         >
-          Editar plan
+          Editar pauta
         </button>
       </div>
     </article>
@@ -272,9 +276,9 @@ function HistoryItem({ plan, onView }) {
       <div className="min-w-0">
         <div className="font-medium text-sm text-gray-800 truncate">{plan.name}</div>
         <div className="text-[11px] text-gray-500 mt-0.5">
-          Asignado {fmtDate(plan.assignedAt)} · Archivado {fmtDate(plan.archivedAt)}
+          Asignada {fmtDate(plan.assignedAt)} · Archivada {fmtDate(plan.archivedAt)}
           {plan.templateName && (
-            <> · Plantilla: <span className="text-gray-600">{plan.templateName}</span></>
+            <> · Menú: <span className="text-gray-600">{plan.templateName}</span></>
           )}
         </div>
       </div>
@@ -291,7 +295,7 @@ function HistoryItem({ plan, onView }) {
 function EmptyState() {
   return (
     <div className="max-w-md mx-auto py-12 text-center">
-      <div className="text-base text-gray-700 font-medium">Sin plan asignado</div>
+      <div className="text-base text-gray-700 font-medium">Sin pauta asignada</div>
       <p className="text-xs text-gray-500 mt-1 leading-relaxed">
         Asigna un menú desde{" "}
         {/* El camino del menú se dice tal cual está escrito en el sidebar; si
