@@ -277,6 +277,9 @@ export const MODULES = {
     "migrate-nutricion-week-recipe-media",
     "migrate-nutricion-day-comments",
     "migrate-nutricion-show-macros",
+    // Tipo, etiquetas, alérgenos, preferencias, duración y raciones en las
+    // recetas (04/08/2026): con mil recetas, sin filtros no hay recetario.
+    "migrate-recetas-clasificacion",
     "migrate-plan-team",
   ],
 

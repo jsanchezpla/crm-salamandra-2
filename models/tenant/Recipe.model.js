@@ -60,6 +60,54 @@ export function defineRecipe(sequelize) {
         allowNull: false,
         defaultValue: [],
       },
+
+      // ── Clasificación (04/08/2026, al traer las 1.083 recetas de Harbiz) ──
+      //
+      // Con mil recetas, un recetario sin filtros no se puede usar: encontrar
+      // «un desayuno vegano sin lactosa de menos de 15 minutos» a ojo entre
+      // 1.083 tarjetas no es buscar, es rendirse. Estos seis campos son lo que
+      // Laura ya tenía en Harbiz y lo que hace navegable el catálogo.
+      //
+      // STRING y no ENUM a propósito: una nutricionista puede querer «cena» o
+      // «postre» mañana, y ampliar un ENUM obliga a migrar. Los valores válidos
+      // viven en lib/nutricion/recipes.js, que es donde se traducen a español.
+      recipeType: {
+        type: DataTypes.STRING(40),
+        allowNull: true,
+        field: "recipe_type",
+      },
+      // Libres, de la nutricionista: «rápido», «batch cooking», «sin horno».
+      tags: {
+        type: DataTypes.ARRAY(DataTypes.TEXT),
+        allowNull: false,
+        defaultValue: [],
+      },
+      // Los 14 alérgenos de declaración obligatoria (Reglamento UE 1169/2011).
+      // Aquí NO es decoración: sirve para no mandarle a una celíaca un menú con
+      // gluten, así que se guarda aparte de las etiquetas libres.
+      allergens: {
+        type: DataTypes.ARRAY(DataTypes.TEXT),
+        allowNull: false,
+        defaultValue: [],
+      },
+      // «vegetarian», «vegan»…
+      dietaryPreferences: {
+        type: DataTypes.ARRAY(DataTypes.TEXT),
+        allowNull: false,
+        defaultValue: [],
+        field: "dietary_preferences",
+      },
+      // Minutos de preparación. En Harbiz venía como "MM:SS" y a veces ":50".
+      durationMinutes: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: "duration_minutes",
+      },
+      // Para cuántas personas son las cantidades de los ingredientes.
+      rations: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
     },
     {
       tableName: "recipes",
