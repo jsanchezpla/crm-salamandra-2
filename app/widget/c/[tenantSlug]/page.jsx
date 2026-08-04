@@ -276,11 +276,17 @@ export default function WidgetSelectionPage() {
       </header>
 
       <div className="max-w-6xl mx-auto px-4 lg:px-10 py-6 lg:py-10">
-        {/* md y no lg (04/08/2026, Rodrigo): el widget se incrusta en la web
-            de la profesional dentro de una caja de ~940px, y con el corte en
-            1024 se apilaba en vertical justo ahi —donde entra casi todo el
-            mundo— mientras que abierto a pantalla completa se veia bien. */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Columnas que se reparten solas, SIN punto de corte (04/08/2026).
+            Primero fue `lg` (1024) y se apilaba dentro de la web de la
+            profesional; luego `md` (768) y seguía apilándose, porque con el
+            escalado de Windows al 125% ese hueco de ~940px en pantalla son 752
+            para el navegador. Perseguir el número correcto es perder: depende
+            del zoom, del theme y de la pantalla de cada uno.
+
+            `auto-fit` + `minmax` deja que quepan las que quepan con un ancho
+            digno: tres en cuanto hay sitio, menos si no lo hay, una en el
+            móvil. Nadie tiene que acertar un número nunca más. */}
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-6">
           {/* Col 1 — cards de EventType */}
           <section>
             <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-3">
