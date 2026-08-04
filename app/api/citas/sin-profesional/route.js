@@ -1,6 +1,7 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, error } from "../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
+import { noEsCarritoAbandonado } from "../../../../lib/citas/booking.js";
 import { Op } from "sequelize";
 
 /**
@@ -46,7 +47,19 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   // años no sirve de nada, y son la mayoría del histórico.
   const incluirPasadas = searchParams.get("incluirPasadas") === "1";
 
-  const where = { teamMemberId: null };
+  // Solo citas que alguien tiene que atender. Faltaba filtrar por estado
+  // (03/08/2026): las canceladas y las faltas salían aquí pidiendo que se les
+  // asignara profesional, y en nutri_laura eran LO ÚNICO que salía —cinco
+  // citas canceladas—, con lo que la pantalla no decía nada verdadero.
+  // A una cita cancelada no la atiende nadie.
+  const where = {
+    teamMemberId: null,
+    status: { [Op.notIn]: ["cancelled", "no_show"] },
+    // Y fuera los carritos abandonados: quien empezó a reservar y no llegó a
+    // poner la tarjeta no tiene una cita, tiene un intento. Mismo criterio que
+    // el resto de listados de citas.
+    ...noEsCarritoAbandonado(),
+  };
   if (!incluirPasadas) where.scheduledAt = { [Op.gte]: new Date() };
 
   // El include de `patient` SOLO si el tenant tiene ese módulo y el modelo
