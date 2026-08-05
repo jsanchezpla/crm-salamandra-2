@@ -94,6 +94,19 @@ check(
   true
 );
 
+process.stdout.write("\n▶ La VALORACIÓN INICIAL se salta la puerta de caja\n");
+const VALORACION = { id: "t-valoracion", isHidden: false, isInitialAssessment: true };
+check(
+  "es gratuita y aun así se puede reservar: es la puerta de entrada de todo",
+  puedeReservar(VALORACION, { seCobra: false, exigePago: true }).ok,
+  true
+);
+check(
+  "pero si además está OCULTA, sigue haciendo falta bono",
+  puedeReservar({ ...VALORACION, isHidden: true }, { seCobra: false, exigePago: true }).ok,
+  false
+);
+
 process.stdout.write("\n▶ Con la puerta APAGADA no cambia nada de lo de siempre\n");
 check(
   "cita gratuita de un centro que cobra por fuera (Aumenta) → pasa",

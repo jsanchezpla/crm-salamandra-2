@@ -524,6 +524,17 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     agendaCompartida: settings.citas?.agendaCompartida === true,
     portalBloqueoImpago: settings.citas?.portalBloqueoImpago === true,
     avisosWhatsapp: settings.citas?.avisosWhatsapp === true,
+    // ⚠️ LAS CUATRO PUERTAS TIENEN QUE VOLVER EN ESTA RESPUESTA (05/08/2026).
+    // La pantalla hace `setCfg({...c, ...data})`, así que lo que no vuelva se
+    // queda con el valor viejo: el interruptor se guardaba en la base de datos
+    // pero el botón seguía apagado, y desde fuera parecía que la pantalla no
+    // hacía nada. Rodrigo encendió tres puertas sin enterarse de que estaban
+    // encendidas. Cualquier ajuste nuevo que se añada arriba tiene que
+    // devolverse también aquí.
+    formularioObligatorio: settings.citas?.formularioObligatorio === true,
+    contratoObligatorio: settings.citas?.contratoObligatorio === true,
+    soloConPago: settings.citas?.soloConPago === true,
+    identidadObligatoria: exigeIdentidad({ settings }),
     brand: {
       primaryColor: settings.brand.primaryColor ?? null,
       secondaryColor: settings.brand.secondaryColor ?? null,
