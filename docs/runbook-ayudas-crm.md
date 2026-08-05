@@ -73,9 +73,15 @@ Leyenda: `[x]` hecho · `[-]` mirada, no necesita · `[ ]` pendiente
 - [x] `clientes` — cabecera. Los «?» de los estados se quitaron a propósito
 - [x] `clientes/lista-espera` — qué es, y que NO es la de Citas; los dos botones
 - [x] `clientes/urgentes` — los dos bloques, y «Está bien así»
-- [~] `clientes/[id]` — la ficha. Hecho «Acceso al portal por meses» (que los
-      documentos se abren mes a mes según el cobro de ESE mes, y que abrir a
-      mano no registra cobro). Pendientes: contrato, tutores, módulos
+- [x] `clientes/[id]` — la ficha, entera:
+      · Acceso al portal por meses (se abren según el cobro de ESE mes; abrir a
+        mano no registra cobro)
+      · Contrato (es de la FAMILIA, no de cada paciente)
+      · Padres y tutores (sin ellos nadie puede firmar; con dos, hacen falta las
+        dos firmas)
+      · Módulos asignados (no dan permisos, y se guardan al momento)
+
+**Clientes queda cerrado.**
 
 ### Citas — EMPEZADO (05/08/2026)
 - [x] `citas` — la pestaña Lista de espera (retenido ≠ cobrado)

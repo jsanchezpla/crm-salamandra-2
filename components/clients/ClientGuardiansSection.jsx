@@ -18,6 +18,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import HelpTooltip from "../ui/HelpTooltip.jsx";
 
 const RELACION_LABEL = {
   madre: "Madre",
@@ -105,7 +106,18 @@ export default function ClientGuardiansSection({ clientId }) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6 max-w-5xl">
       <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
-        <span className="text-sm font-semibold text-gray-700">Padres y tutores</span>
+        <span className="text-sm font-semibold text-gray-700 inline-flex items-center gap-1.5">
+          Padres y tutores
+          <HelpTooltip title="Padres y tutores" placement="bottom">
+            Quién puede entrar al área privada de esta familia y quién tiene que firmar. No es
+            decorativo:{" "}
+            <strong className="text-white">sin tutores aquí, nadie puede firmar el contrato desde
+            el portal</strong>, y con él la documentación queda cerrada.
+            {" "}
+            Si pones dos —padres separados, por ejemplo— hacen falta las firmas de los DOS para
+            que se abra.
+          </HelpTooltip>
+        </span>
         {!editando && (
           <button onClick={abrirEdicion} className="text-xs text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 px-3 py-1.5 rounded-lg">
             Editar

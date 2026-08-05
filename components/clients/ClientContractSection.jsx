@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import HelpTooltip from "../ui/HelpTooltip.jsx";
 
 function formatSize(bytes) {
   if (!bytes && bytes !== 0) return "";
@@ -100,7 +101,16 @@ export default function ClientContractSection({ clientId }) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6 max-w-5xl">
       <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
-        <span className="text-sm font-semibold text-gray-700">Contrato</span>
+        <span className="text-sm font-semibold text-gray-700 inline-flex items-center gap-1.5">
+          Contrato
+          <HelpTooltip title="Contrato" placement="bottom">
+            El contrato es <strong className="text-white">de la familia, no de cada paciente</strong>:
+            quien firma y quien paga son los padres, así que dos hermanos comparten uno solo.
+            {" "}
+            Se puede firmar desde el área privada o subirlo escaneado si se firmó en papel. Hasta
+            que esté, la documentación de la familia queda cerrada en el portal.
+          </HelpTooltip>
+        </span>
         {contrato ? (
           <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Subido</span>
         ) : (

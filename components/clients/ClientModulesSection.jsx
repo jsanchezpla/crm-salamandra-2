@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import HelpTooltip from "../ui/HelpTooltip.jsx";
 
 const MODULE_META = {
   nutricion: { label: "Paciente Nutrición", desc: "Pertenece al módulo de Nutrición." },
@@ -85,7 +86,16 @@ export default function ClientModulesSection({ clientId }) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6 max-w-5xl">
       <div className="px-5 py-4 border-b border-gray-100">
-        <span className="text-sm font-semibold text-gray-700">Módulos asignados</span>
+        <span className="text-sm font-semibold text-gray-700 inline-flex items-center gap-1.5">
+          Módulos asignados
+          <HelpTooltip title="Módulos asignados" placement="bottom">
+            En qué servicios del centro está esta persona. No da ni quita permisos: sirve para
+            saber a quién buscar cuando trabajas dentro de un servicio — marcar «Nutrición» la hace
+            aparecer en los listados de Nutrición.
+            {" "}
+            <strong className="text-white">Se guarda al momento</strong>, sin botón de guardar.
+          </HelpTooltip>
+        </span>
       </div>
       <div className="p-5 space-y-3">
         {available.map((k) => {
