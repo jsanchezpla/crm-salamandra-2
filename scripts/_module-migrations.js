@@ -166,6 +166,13 @@ export const MODULES = {
     // publicados en el portal. Cuelga de `citas` porque el portal donde se leen
     // ES el de citas y la sesión que los autoriza es la suya.
     "migrate-avisos-cliente",
+    // Tipos de cita OCULTOS de la agenda pública (`is_hidden`). Estaba escrita
+    // pero sin registrar aquí, así que `ensure-tenant-schema` no la ejecutaba
+    // nunca: el modelo pedía una columna que en un schema nuevo no existe, y
+    // CUALQUIER consulta de tipos de cita reventaba. Es exactamente el agujero
+    // del 2026-07-21 que este mapa existe para cerrar; lo destapó la batería de
+    // pruebas al sincronizar (05/08/2026).
+    "migrate-citas-tipos-ocultos",
     // Bonos de sesiones, precio fraccionado y formulario por tipo de cita
     // (04/08/2026). Un tipo de cita pasa a poder valer por N sesiones, con su
     // numeración («3 de 10») visible en el calendario.
