@@ -91,27 +91,36 @@ function crm_render_iframe($path, $extra_query, $title) {
      * Ancho (05/08/2026, Rodrigo: «se puede poner más ancho y que ocupe toda
      * la página»).
      *
-     * El widget salía encajonado en una franja de ~950px con media pantalla en
+     * El widget salía encajonado en una franja estrecha con media pantalla en
      * blanco a los lados, y no era culpa del iframe —que ya iba a width:100%—
-     * sino del contenedor de contenido del theme, que limita el ancho de
-     * CUALQUIER página.
+     * sino del contenedor de contenido del theme (`.blog-article`, 760px), que
+     * limita el ancho de CUALQUIER página.
      *
-     * El div de fuera se sale de ese contenedor (truco «full-bleed»: ocupar el
-     * ancho de la ventana y compensar con un margen negativo calculado), y el
-     * de dentro vuelve a poner un tope sensato de 1440px centrado. Ese 1440 es
-     * el MISMO que el del widget: con uno más grande solo se ganan franjas
-     * vacías, porque el contenido no pasa de ahí.
+     * ⚠️ El primer intento fue el truco «full-bleed» clásico (`width:100vw` +
+     * `margin-left:calc(50% - 50vw)`) y quedó CORTADO POR LA IZQUIERDA:
+     * `100vw` incluye la barra de scroll, así que descuadra el centrado unos
+     * píxeles, y el `overflow-x:clip` que el theme pone en el body se come lo
+     * que sobresale.
      *
-     * `overflow-x:hidden` en el de fuera por si el navegador cuenta la barra de
-     * scroll dentro de 100vw: sin él aparecerían unos píxeles de scroll lateral
-     * en toda la página.
+     * Lo que sí funciona: el CENTRADO no usa `vw` —`margin-left:50%` lleva el
+     * borde al centro del contenedor y `translateX(-50%)` lo echa atrás la
+     * mitad de su ancho—, y `vw` se queda solo para el TOPE, que sí tiene que
+     * mirar la ventana, con 40px de holgura para la barra.
+     *
+     * Medido en tunutrilaura.com/citas/ con el theme puesto:
+     *   ventana 1900 → 1440px de ancho, 223px de margen a CADA lado
+     *   ventana 1280 → 1240px de ancho,  13px de margen a CADA lado
+     *   sin scroll lateral en ninguno de los dos.
+     *
+     * Ese 1440 es el MISMO tope que usa el widget por dentro: con uno mayor
+     * solo se ganan franjas vacías, porque el contenido no pasa de ahí.
      */
-    return '<div style="width:100vw;max-width:100vw;margin-left:calc(50% - 50vw);overflow-x:hidden">'
-        . '<div style="max-width:1440px;margin:0 auto;padding:0 16px">'
+    return '<div style="width:1440px;max-width:calc(100vw - 40px);'
+        . 'margin-left:50%;transform:translateX(-50%);box-sizing:border-box">'
         . '<iframe src="' . esc_url($src) . '" '
         . 'style="width:100%;min-height:820px;border:0;display:block" '
         . 'title="' . esc_attr($title) . '" loading="lazy"></iframe>'
-        . '</div></div>';
+        . '</div>';
 }
 
 /* ── Shortcodes ────────────────────────────────────────────────────────── */
