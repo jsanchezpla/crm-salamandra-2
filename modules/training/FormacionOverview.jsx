@@ -94,6 +94,62 @@ function MetricCard({ label, value, loading }) {
   );
 }
 
+/**
+ * «Sincronizar con la web» (05/08/2026, Rodrigo).
+ *
+ * Lo del día a día ya va solo: publicar un curso o matricular a alguien avisa al
+ * CRM en el momento. Esto es para PONERSE AL DÍA cuando algo no llegó — que es
+ * lo que pasó en julio, con el puente roto durante días sin que nadie lo notara.
+ *
+ * Tarda: recorre todos los cursos y todas las matrículas de la web. Por eso el
+ * botón dice lo que está haciendo en vez de quedarse mudo.
+ */
+function SincronizarConLaWeb() {
+  const [estado, setEstado] = useState(null); // { ok, mensaje }
+  const [trabajando, setTrabajando] = useState(false);
+
+  async function sincronizar() {
+    setEstado(null);
+    setTrabajando(true);
+    try {
+      const r = await fetch("/api/training/sync", { method: "POST" });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(j?.error || "No se pudo sincronizar");
+      setEstado({ ok: !!j?.data?.ok, mensaje: j?.data?.mensaje || "Hecho." });
+    } catch (e) {
+      setEstado({ ok: false, mensaje: e.message });
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  return (
+    <div className="bg-white border border-neutral-100 rounded-xl p-5 mb-8 flex items-start justify-between gap-4 flex-wrap">
+      <div className="min-w-0">
+        <div className="text-sm font-semibold text-[var(--ink-900)]">Sincronizar con la web</div>
+        <p className="text-xs text-[var(--ink-500)] mt-0.5 max-w-lg leading-relaxed">
+          Trae de golpe todos los cursos y todas las matrículas de tu WordPress. No hace falta para
+          el día a día —al publicar un curso o matricularse una alumna, el CRM se entera solo—, pero
+          viene bien si sospechas que algo no ha llegado. Repetirlo no duplica nada.
+        </p>
+        {estado && (
+          <p className={`text-xs mt-2 ${estado.ok ? "text-emerald-700" : "text-amber-700"}`}>
+            {estado.ok ? "✓" : "⚠"} {estado.mensaje}
+          </p>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={sincronizar}
+        disabled={trabajando}
+        className="shrink-0 bg-[var(--ink-900)] text-white text-xs font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
+      >
+        {trabajando ? "Sincronizando…" : "Sincronizar todo"}
+      </button>
+    </div>
+  );
+}
+
 export default function FormacionOverview() {
   const [stats, setStats] = useState({ companies: null, courses: null, users: null, enrollments: null });
   const [loading, setLoading] = useState(true);
@@ -139,6 +195,8 @@ export default function FormacionOverview() {
           Gestión centralizada de empresas cliente, catálogo de cursos y matrículas de alumnos.
         </p>
       </div>
+
+      <SincronizarConLaWeb />
 
       {/* Métricas */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

@@ -424,6 +424,61 @@ autenticado del tenant.
 No hay `GET /api/training/courses/[id]` individual; el detalle se
 obtiene del listado.
 
+### Un botón y un repaso nocturno (2026-08-05)
+
+Lo de abajo —abrir una URL del wp-admin— sigue existiendo, pero ya no es la
+única forma. Ahora hay dos disparadores más, y los tres hacen **exactamente el
+mismo trabajo** porque comparten los recolectores del theme.
+
+| Disparador | Quién | Cuándo |
+| --- | --- | --- |
+| Botón «Sincronizar todo» | la profesional, en la home de Formación | cuando sospecha que algo no llegó |
+| `scripts/sync-formacion-nocturno.js` | un timer del VPS | cada madrugada |
+| `?…_sync_courses=1` / `_sync_enrollments=1` | quien tenga wp-admin | diagnóstico, con salida en pantalla |
+
+**Por qué hacía falta.** El puente ya avisa solo al publicar un curso y al
+matricularse una alumna. Pero si en ese momento algo falla —web sin red, CRM
+reiniciándose por un despliegue, secreto mal puesto— ese aviso se pierde y
+**nadie se entera**. Pasó en julio y estuvo días roto. Con el repaso nocturno, lo
+peor que pasa es que un dato tarde una noche.
+
+**Por qué antes no podía ser un botón.** Las URLs manuales exigen sesión de
+administrador EN ESA WEB, así que el servidor del CRM no puede llamarlas: solo
+podía enlazarlas. De ahí el endpoint firmado `POST /wp-json/crm/v1/sync` del
+theme, que autoriza por **firma** en vez de por sesión.
+
+⚠️ **El secreto de ese canal es el del WIDGET (`WIDGET_SSO_SECRETS`), no el de
+los webhooks.** Son direcciones distintas: aquel autoriza a WordPress a mandarle
+cosas al CRM, este autoriza al CRM a pedirle cosas a WordPress. Etiqueta propia
+`crm-sync-v1`, para que un token de un canal no valga en el otro.
+
+⚠️ **El registro de «última sincronización» NO lo escribe el botón**: lo escribe
+el webhook `sync-courses` cuando WordPress entrega los cursos, que es quien sabe
+cuántos han entrado de verdad. Dos fuentes para el mismo dato acabarían
+discrepando.
+
+⚠️ **`sin_url` y `sin_soporte` no son fallos.** Son clientes sin web conectada, o
+que todavía no han instalado el theme que trae el endpoint (v1.29.0+). El repaso
+nocturno los cuenta aparte para no marcar el timer en rojo cada noche.
+
+Timer del VPS (systemd, no cron):
+
+```ini
+# /etc/systemd/system/crm-sync-formacion.service
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec crm-salamandra-app-1 node scripts/sync-formacion-nocturno.js
+
+# /etc/systemd/system/crm-sync-formacion.timer
+[Timer]
+OnCalendar=*-*-* 04:30:00
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+---
+
 ### Sincronización con TutorLMS (sprint F3)
 
 El flujo de sync de cursos completo (bulk) lo dispara manualmente
