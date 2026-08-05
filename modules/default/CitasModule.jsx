@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -873,6 +874,16 @@ export default function CitasModule() {
             </span>
           )}
         </button>
+        {/* Fuera del botón: leer qué es no debe obligar a cambiar de pestaña. */}
+        <HelpTooltip title="Lista de espera" placement="bottom">
+          Citas que alguien ha pedido desde la web y esperan tu visto bueno. Si la cita tiene
+          precio, aquí el paciente <strong className="text-white">ya tiene el dinero retenido en
+          su tarjeta, pero todavía no se le ha cobrado</strong>: se le cobra al confirmar, y si la
+          rechazas se le suelta.
+          {" "}
+          No la confundas con la lista de espera de admisión, en Clientes: esa es gente esperando
+          plaza, sin fecha ni hora.
+        </HelpTooltip>
         {viewerIsAdmin && (
           <button
             onClick={() => { setTab("requests"); loadChangeRequests(); }}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import { eurosToCents, centsToEuros, formatMoney } from "../../../../lib/payments/money.js";
 import {
   TIPOS as TIPOS_PREGUNTA,
@@ -422,8 +423,19 @@ export default function CitasTiposPage() {
       <div className="px-6 lg:px-10 pt-8 pb-5 flex items-end justify-between shrink-0 border-b border-[var(--ink-200)] gap-6 flex-wrap">
         <div>
           <div className="eyebrow mb-1.5 lg:mb-2">Tiempo · Configuración</div>
-          <h1 className="font-display text-[24px] lg:text-[34px] leading-[1.05] text-[var(--ink-900)] tracking-tight">
-            Citas <span className="font-display-italic text-[var(--ink-400)]">— tipos de cita</span>
+          <h1 className="font-display text-[24px] lg:text-[34px] leading-[1.05] text-[var(--ink-900)] tracking-tight flex items-center gap-2 flex-wrap">
+            <span>
+              Citas <span className="font-display-italic text-[var(--ink-400)]">— tipos de cita</span>
+            </span>
+            <HelpTooltip title="Tipos de cita" placement="bottom">
+              El catálogo de lo que ofreces: cada tipo es un servicio con su duración, su precio y
+              sus reglas. Es lo que la persona elige en la agenda pública, así que lo que pongas
+              aquí es lo que ve.
+              {" "}
+              <strong className="text-white">Sin precio la cita no cobra nada</strong> y entra
+              directa a tu lista; con precio se le retiene la tarjeta y no se cobra hasta que tú la
+              confirmes.
+            </HelpTooltip>
           </h1>
         </div>
         <div className="flex gap-2 items-center flex-wrap">
