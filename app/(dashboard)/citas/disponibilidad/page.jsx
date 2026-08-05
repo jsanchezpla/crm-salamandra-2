@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Select from "@/components/ui/Select.jsx";
 
 // Días en orden de UI (lunes primero) pero conservando valores JS getDay()
@@ -138,8 +139,18 @@ export default function CitasDisponibilidadPage() {
       <div className="px-6 lg:px-10 pt-8 pb-5 flex items-end justify-between shrink-0 border-b border-[var(--ink-200)] gap-6 flex-wrap">
         <div>
           <div className="eyebrow mb-1.5 lg:mb-2">Tiempo · Configuración</div>
-          <h1 className="font-display text-[24px] lg:text-[34px] leading-[1.05] text-[var(--ink-900)] tracking-tight">
-            Disponibilidad <span className="font-display-italic text-[var(--ink-400)]">— semanal</span>
+          <h1 className="font-display text-[24px] lg:text-[34px] leading-[1.05] text-[var(--ink-900)] tracking-tight flex items-center gap-2 flex-wrap">
+            <span>
+              Disponibilidad <span className="font-display-italic text-[var(--ink-400)]">— semanal</span>
+            </span>
+            <HelpTooltip title="Disponibilidad semanal" placement="bottom">
+              Las franjas en las que se puede reservar. Lo que NO esté aquí no aparece en la agenda
+              pública, por muy libre que esté el hueco.
+              {" "}
+              <strong className="text-white">Ojo: los horarios se ponen en dos sitios.</strong>{" "}
+              Esto es el horario del centro; cada profesional puede tener además el suyo en «Mi
+              horario». Si alguien no ve huecos que crees haber abierto, mira los dos.
+            </HelpTooltip>
           </h1>
         </div>
         <div className="flex gap-2 items-center flex-wrap">

@@ -86,11 +86,17 @@ Leyenda: `[x]` hecho · `[-]` mirada, no necesita · `[ ]` pendiente
 ### Citas — EMPEZADO (05/08/2026)
 - [x] `citas` — la pestaña Lista de espera (retenido ≠ cobrado)
 - [x] `citas/tipos` — cabecera. Los campos ya tienen ayuda en línea
-- [ ] `citas/disponibilidad`
-- [ ] `citas/sin-profesional` — ya tiene subtítulo; comprobar si basta
-- [ ] `mi-horario`
-- [ ] Configuración → Citas: las CUATRO puertas (identidad, admisión, contrato,
-      formulario). Es lo más confuso que hay y no está explicado en ningún sitio
+- [x] `citas/disponibilidad` — la trampa real: los horarios se ponen en DOS
+      sitios (aquí el del centro, y «Mi horario» el de cada profesional)
+- [-] `citas/sin-profesional` — ya tiene subtítulo que lo explica y lo distingue
+      de la lista de espera de admisión. No necesita
+- [-] `mi-horario` — «Horario de trabajo semanal» se explica solo. No necesita
+- [x] Configuración → Citas: las CUATRO puertas. La ayuda del CONJUNTO va en la
+      primera (identidad): el orden en que actúan y que hay que encenderlas de
+      una en una comprobando entre medias. Cada tarjeta ya se explicaba sola;
+      lo que faltaba era cómo se relacionan
+
+**Citas queda cerrado.**
 
 ### Facturación — el más denso, el siguiente
 - [ ] `facturacion` · `facturacion/resumen`

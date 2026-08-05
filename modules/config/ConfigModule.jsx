@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import Link from "next/link";
 import Select from "../../components/ui/Select.jsx";
 import { ANTHROPIC_MODELS } from "../../lib/ai/anthropicModel.js";
@@ -1197,7 +1198,20 @@ function PuertaIdentidadCard({ activo, readOnly, onChange }) {
     <div className="bg-white border border-neutral-200 rounded-xl p-5">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-neutral-800">Pedir cita solo con cuenta</div>
+          <div className="text-sm font-semibold text-neutral-800 flex items-center gap-1.5">
+            Pedir cita solo con cuenta
+            {/* La ayuda del CONJUNTO va aquí, en la primera de las cuatro: cada
+                tarjeta se explica sola, pero nadie dice cómo se relacionan ni
+                en qué orden actúan, que es lo que de verdad despista. */}
+            <HelpTooltip title="Las cuatro puertas de la agenda" placement="bottom">
+              Hay cuatro filtros para reservar y se pueden encender por separado. Actúan en este
+              orden: <strong className="text-white">1) tener cuenta</strong> (esta),
+              {" "}2) estar admitido por el formulario, 3) tener el contrato firmado y 4) pagar.
+              {" "}
+              Todas vienen APAGADAS. Enciende de una en una y comprueba que se puede reservar
+              después de cada una: encender varias de golpe deja gente fuera y no se sabe cuál fue.
+            </HelpTooltip>
+          </div>
           <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
             Para reservar hay que haber iniciado sesión en tu web. Sin esto, cualquiera con el
             enlace de tu agenda pide hora, y esa cita entra <strong className="text-neutral-500">sin
