@@ -15,6 +15,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { campoEsObligatorio } from "../../../../../lib/clients/datosFicha.js";
 
 const headingStyle = { fontFamily: "var(--widget-font-display)", fontWeight: 500 };
 
@@ -41,7 +42,27 @@ export default function DatosGate({ campos, profesional, enviando, error, onGuar
     return out;
   }, [campos]);
 
-  const faltan = campos.filter((c) => !String(datos[c.key] ?? "").trim());
+  /**
+   * Qué es obligatorio depende de la EDAD QUE SE ESTÁ ESCRIBIENDO (05/08/2026).
+   *
+   * Antes esta pantalla exigía TODOS los campos, y funcionaba porque solo pedía
+   * la fecha de nacimiento. Al juntar aquí el DNI y el domicilio —para quitar
+   * una pantalla del recorrido— eso se convertía en una trampa: **los menores
+   * de 14 años no tienen DNI obligatorio**, así que una paciente de 12 se
+   * quedaba con el botón apagado pidiéndole un documento que no existe, sin
+   * poder firmar ni pedir cita.
+   *
+   * Se recalcula con cada tecla: en cuanto escribe una fecha de menor, el DNI
+   * deja de bloquear. El servidor hace exactamente esta misma cuenta con el
+   * mismo dato (`validarDatos` busca la fecha en lo que llega antes que en la
+   * ficha), así que pantalla y servidor no pueden discrepar.
+   */
+  const campoFecha = campos.find((c) => c.ficha === "cliente.birthDate");
+  const fechaNacimiento = campoFecha ? String(datos[campoFecha.key] ?? "").trim() || null : null;
+
+  const esObligatorio = (campo) => campoEsObligatorio(campo, fechaNacimiento);
+
+  const faltan = campos.filter((c) => esObligatorio(c) && !String(datos[c.key] ?? "").trim());
   const listo = faltan.length === 0;
 
   function enviar(e) {
@@ -86,6 +107,14 @@ export default function DatosGate({ campos, profesional, enviando, error, onGuar
                       className="block text-[13px] font-medium text-[var(--widget-text)] mb-1.5"
                     >
                       {campo.label}
+                      {/* Se dice cuál NO hace falta en vez de dejarla adivinando
+                          por qué el botón se ha encendido sin rellenarlo todo.
+                          El caso real es el DNI de una menor de 14. */}
+                      {!esObligatorio(campo) && (
+                        <span className="ml-1.5 font-normal text-[var(--widget-text-faint)]">
+                          (opcional)
+                        </span>
+                      )}
                     </label>
                     {campo.type === "select" ? (
                       <select
