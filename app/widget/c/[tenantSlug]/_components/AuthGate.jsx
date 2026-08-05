@@ -47,7 +47,7 @@ function writeSessionFlag(tenantSlug) {
  * porque no podemos leer sessionStorage hasta tener `window`. Tras el mount,
  * el componente re-renderiza con el valor real.
  */
-export function useWidgetAuth(authConfig) {
+export function useWidgetAuth(authConfig, portal = null) {
   const params = useParams();
   const search = useSearchParams();
   const tenantSlug = params?.tenantSlug;
@@ -65,6 +65,28 @@ export function useWidgetAuth(authConfig) {
   if (!authConfig) return { ready: false, allowed: false };
   if (!authConfig.required) return { ready: true, allowed: true };
   if (!hydrated) return { ready: false, allowed: false };
+
+  // ── La SESIÓN DEL PORTAL manda (05/08/2026) ──────────────────────────────
+  // Es la señal buena: WordPress firma un token con el correo de quien ha
+  // iniciado sesión y el CRM lo canjea por una sesión propia. Es además la
+  // MISMA que exige `/book` en el servidor, así que mirando esto la pantalla y
+  // el servidor dicen lo mismo.
+  //
+  // Se espera a saber si la hay antes de enseñar el cartel: si no, a quien está
+  // perfectamente identificada le parpadea un «inicia sesión» mientras se
+  // canjea el token.
+  //
+  // ⚠️ ESTO ES LO QUE FALLÓ AL ENCENDER LA PUERTA. Antes solo se miraba
+  // `?wpa=1`, un parámetro que pone el WordPress al montar el iframe. La página
+  // de tunutrilaura SÍ pasaba la sesión, pero el cartel ni la miraba: bloqueaba
+  // a pacientes que estaban dentro de su cuenta.
+  if (portal && portal.status === "loading") return { ready: false, allowed: false };
+  if (portal?.sessionToken) return { ready: true, allowed: true };
+
+  // `?wpa=1` se conserva SOLO como apaño de pantalla para webs que lo pasen sin
+  // pasar la sesión. No prueba nada —lo escribe quien abre la URL— y el
+  // servidor no lo acepta: quien llegue solo con esto verá el formulario y se
+  // llevará un corte al reservar. La puerta de verdad está en `/book`.
   return { ready: true, allowed: wpaInUrl || readSessionFlag(tenantSlug) };
 }
 

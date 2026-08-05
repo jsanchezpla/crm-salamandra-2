@@ -191,7 +191,9 @@ export default function WidgetSelectionPage() {
     else { setCalendarMonth((m) => m + 1); }
   }
 
-  const auth = useWidgetAuth(info?.auth);
+  // La sesión del portal decide si está identificada; el `?wpa=1` de la URL ya
+  // no basta (ver la nota en AuthGate.jsx).
+  const auth = useWidgetAuth(info?.auth, portal);
 
   const goContinue = useCallback(() => {
     if (!selectedEventTypeId || !selectedDatetime) return;

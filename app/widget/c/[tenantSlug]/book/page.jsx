@@ -231,13 +231,19 @@ export default function WidgetBookPage() {
     }
   }
 
-  const auth = useWidgetAuth(info?.auth);
-
   // Sesión SSO: si el cliente está logueado en WordPress, su email va
   // pre-rellenado y bloqueado, y se envía el sessionToken en /book para que el
   // backend fuerce ese email (la cita queda ligada a su cuenta → "Mis citas").
-  const { email: sessionEmail, sessionToken } = useCitasPortalSession(tenantSlug);
+  //
+  // Va ANTES del gate a propósito: desde el 05/08/2026 es esta sesión —y no el
+  // `?wpa=1` de la URL— la que decide si está identificada, igual que en el
+  // servidor. Al revés, el cartel de «inicia sesión» bloqueaba a quien sí lo
+  // estaba.
+  const portal = useCitasPortalSession(tenantSlug);
+  const { email: sessionEmail, sessionToken } = portal;
   const emailLocked = !!sessionEmail;
+
+  const auth = useWidgetAuth(info?.auth, portal);
 
   useEffect(() => {
     if (sessionEmail) setForm((prev) => ({ ...prev, clientEmail: sessionEmail }));

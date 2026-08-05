@@ -55,6 +55,34 @@ sola cita.
 CRM tiene `CITAS_PORTAL_SESSION_SECRET`. Sin cualquiera de las dos, nadie podrá
 reservar.
 
+### El día que se encendió bloqueó a las pacientes buenas (05/08/2026)
+
+Se encendió en tunutrilaura y Laura, con su sesión iniciada, se topó con el
+cartel de «inicia sesión para reservar». No fallaba la puerta nueva: fallaba que
+al encenderla **se activaban DOS filtros a la vez** y el viejo sobraba.
+
+- El del servidor (`/book`) miraba la **sesión de portal**. Correcto.
+- El del navegador (`useWidgetAuth`) miraba **solo `?wpa=1`**, el parámetro que
+  el WordPress añade al montar el iframe. Ignoraba por completo la sesión — que
+  la web sí estaba pasando— y por eso cortaba a quien estaba dentro de su cuenta.
+
+Arreglado: `useWidgetAuth` recibe ahora la sesión del portal y **es esa la que
+manda**. Mientras se canjea el token la pantalla espera (`ready:false`) en vez
+de enseñar el cartel un instante. `?wpa=1` se conserva solo como apaño de
+pantalla para webs que lo pasen sin pasar la sesión, y ya no prueba nada: quien
+llegue solo con eso verá el formulario y se llevará el corte en el servidor.
+
+**La lección, que aplica a cualquier puerta nueva:** cuando un filtro vive en
+dos capas, las dos tienen que mirar LO MISMO. Si la de pantalla mira una señal
+más débil, corta de más; si mira una más fuerte, promete de más.
+
+⚠️ **A vigilar en navegadores estrictos.** La sesión se guarda en
+`sessionStorage`, y el widget va en un iframe de otro dominio: Safari y las
+versiones de Chrome sin cookies de terceros pueden bloquear ese almacenamiento.
+Con la puerta encendida, ahí la paciente no podría reservar. No se ha visto
+todavía —el portal se usa a diario—, pero es lo primero que hay que mirar si
+alguien dice que no puede reservar «solo en el móvil» o «solo en Safari».
+
 Fijado en `_smoke-puerta-identidad.mjs`.
 
 ---
