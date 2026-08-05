@@ -81,76 +81,52 @@ function crm_mint_wpsso($email, $ttl_seconds = 300) {
 }
 
 /**
- * Ensancha la caja del theme para que el widget quepa a gusto.
+ * Ensancha la caja del theme y quita el hueco de arriba. SOLO CSS.
  *
- * El widget NO se mueve de su sitio: se queda a `width:100%` dentro de su
- * contenedor. Lo que cambia es el tope de ese contenedor. El porqué, abajo.
+ * ⚠️ AQUÍ NO VA JAVASCRIPT, y no es capricho. La versión anterior lo hacía
+ * con una etiqueta de guion incrustada y el cortafuegos del hosting devolvía
+ * «403» al intentar GUARDAR el snippet: estos filtros bloquean cualquier
+ * formulario que lleve código de navegador dentro. El código no llegaba ni a
+ * entrar, y por eso la página seguía igual por mucho que se pegara.
+ *
+ * Por lo mismo, en este fichero no se escribe esa etiqueta ni entre
+ * comentarios: el filtro mira el texto entero, no solo lo que se ejecuta.
+ *
+ * Se consigue lo mismo con `:has()`, que permite estilar a un elemento por lo
+ * que lleva dentro. Soportado por todos los navegadores desde 2023;
+ * comprobado en el navegador de Rodrigo.
+ *
+ * Qué hace:
+ *   1. ENSANCHA los contenedores que envuelven al widget hasta 1440px. Se
+ *      limita a `main` a propósito: sin eso, `:has()` alcanzaría también a
+ *      `body` y `html` y estrecharía la web entera.
+ *   2. QUITA la cabecera del theme, que al eliminarle el título a la página se
+ *      quedó vacía ocupando 184px de aire.
+ *
+ * Medido en tunutrilaura.com/citas/ con el theme real:
+ *   contenedor 1201px, hueco de arriba 263px → 78px, sin scroll lateral.
+ *
+ * Si algún día el theme renombra `.blog-hero`, lo único que pasa es que vuelve
+ * el hueco: nada se rompe.
  */
 function crm_wrap_ancho($html, $max = null) {
     $max = (int) ($max ?: CRM_WIDGET_MAX_WIDTH);
-    $id  = 'crm-w-' . uniqid();
+    static $css_puesto = false;
 
-    /*
-     * ── POR QUÉ SE ENSANCHA LA CAJA Y NO SE SACA EL WIDGET DE ELLA ──────────
-     *
-     * Dos intentos anteriores sacaban el bloque de su contenedor con márgenes
-     * negativos (`100vw` primero, `translateX(-50%)` después) y los dos
-     * acabaron CORTANDO POR LA IZQUIERDA. El motivo de fondo es el mismo:
-     * cualquier truco de margen negativo necesita que el contenedor esté
-     * exactamente centrado en la ventana, y aquí no lo está —cambia según haya
-     * sesión iniciada o no, y el `overflow-x:clip` del body se come lo que
-     * sobresalga—.
-     *
-     * Al revés sí funciona: el widget se queda quieto a `width:100%` y lo que
-     * se ensancha es LA CAJA. Sin márgenes negativos no hay nada que pueda
-     * salirse ni recortarse.
-     *
-     * El script hace las dos cosas que hacen falta, subiendo por los
-     * contenedores:
-     *   1. ENSANCHA: le levanta el tope al que lo tenga.
-     *   2. SUBE: les quita el espacio de arriba, y a la cabecera del theme —que
-     *      al quitarle el título se quedó VACÍA ocupando 184px de aire— la
-     *      esconde entera.
-     *
-     * Va en JS y no en CSS porque las clases del theme (`.blog-article`,
-     * `.blog-hero`) pueden cambiar con una actualización, y así funciona sin
-     * saber cómo se llaman. Solo toca la rama donde vive el widget: el resto
-     * del sitio se queda igual. Y si el JS no llegara a correr, el widget se
-     * queda estrecho pero ENTERO — el peor caso es feo, no roto.
-     *
-     * Medido en tunutrilaura.com/citas/ con el theme real:
-     *   ventana 1900 → 1368px de ancho, 259px de margen a CADA lado
-     *   ventana 1280 → 1201px de ancho,  32px de margen a CADA lado
-     *   hueco de arriba: 263px → 79px (los que quedan son la barra de
-     *   navegación del sitio, que no se toca)
-     */
-    $script = '<script>(function(){try{'
-        . 'var e=document.getElementById(' . wp_json_encode($id) . ');if(!e)return;'
-        . 'e.style.marginTop="0";'
-        . 'var n=e.parentElement,i=0;'
-        . 'while(n&&i<6&&n!==document.body){'
-        . 'if(getComputedStyle(n).maxWidth!=="none"){n.style.maxWidth=' . wp_json_encode($max . 'px') . ';n.style.width="100%";}'
-        . 'n.style.paddingTop="0";n.style.marginTop="0";'
-        /*
-         * La cabecera del theme va justo encima. Al quitarle el título a la
-         * página se quedó VACÍA pero ocupando 184px de aire (88 arriba + 48
-         * abajo): eso era el hueco. Si no tiene ni texto ni imágenes, es
-         * espacio muerto y se va entera. Si algún día se le vuelve a poner
-         * título, se queda —solo se le recorta el aire de abajo—.
-         */
-        . 'var p=n.previousElementSibling;'
-        . 'if(p){'
-        . 'var vacia=!(p.textContent||"").trim()&&!p.querySelector("img,svg,video");'
-        . 'if(vacia){p.style.display="none";}'
-        . 'else if(parseFloat(getComputedStyle(p).paddingBottom)>16){p.style.paddingBottom="16px";}'
-        . '}'
-        . 'n=n.parentElement;i++;}'
-        . '}catch(err){}})();</script>';
+    $css = '';
+    if (!$css_puesto) {
+        $css_puesto = true;
+        $css = '<style>'
+            . 'main :has(> .crm-widget-wrap),'
+            . 'main :has(> * > .crm-widget-wrap){'
+            . 'max-width:' . $max . 'px !important;width:100% !important;'
+            . 'padding-top:0 !important;margin-top:0 !important}'
+            . 'main:has(.crm-widget-wrap) .blog-hero{display:none !important}'
+            . '.crm-widget-wrap{width:100%;max-width:' . $max . 'px;margin:0 auto}'
+            . '</style>';
+    }
 
-    return '<div id="' . esc_attr($id) . '" style="width:100%;max-width:' . $max . 'px;margin:0 auto">'
-        . $html
-        . '</div>'
-        . $script;
+    return $css . '<div class="crm-widget-wrap">' . $html . '</div>';
 }
 
 /**
