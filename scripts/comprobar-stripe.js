@@ -42,6 +42,13 @@ const EVENTOS = [
   ["checkout.session.async_payment_succeeded", "flujo antiguo de Checkout"],
   ["checkout.session.async_payment_failed", "flujo antiguo de Checkout"],
   ["checkout.session.expired", "flujo antiguo de Checkout"],
+  // Pago a plazos (05/08/2026). La PRIMERA cuota llega como
+  // `checkout.session.completed`, así que sin estos dos la compra parece
+  // funcionar perfectamente y son los meses 2 y 3 los que se cobran a ciegas:
+  // el dinero entra, el CRM no lo apunta y el cerrojo que cancela al llegar al
+  // total nunca corre.
+  ["invoice.paid", "una cuota del pago fraccionado se ha cobrado: SIN ESTE las cuotas siguientes se cobran sin que el CRM se entere"],
+  ["invoice.payment_failed", "una cuota ha sido rechazada por el banco"],
 ];
 
 const w = (s) => process.stdout.write(s);
