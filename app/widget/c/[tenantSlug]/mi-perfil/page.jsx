@@ -377,7 +377,24 @@ export default function MiPerfilPage() {
         <BienvenidaGate
           profesional={info?.name}
           valoracion={valoracion}
-          hrefValoracion={`/widget/c/${tenantSlug}/book?eventTypeId=${encodeURIComponent(valoracion.id)}`}
+          /**
+           * A la agenda con la VALORACIÓN ya elegida y sin el resto de citas a
+           * la vista (05/08/2026, Rodrigo).
+           *
+           * Iba directa a `/book?eventTypeId=…`, que es el formulario de datos
+           * SIN haber elegido día ni hora: la pantalla a la que se llega
+           * después de escoger hueco. Ahora va a la agenda con `?tipo=`, que
+           * preselecciona ese tipo y NO pinta la lista (ver `soloUnTipo` en la
+           * pantalla de selección).
+           *
+           * Por qué importa que no vea el resto: es su primera visita. Si le
+           * enseñas los cuatro tipos, puede coger un acompañamiento mensual de
+           * 360 € antes de haber hablado contigo ni una vez.
+           *
+           * Va por SLUG y no por id: es lo que acepta ese parámetro, y además
+           * el enlace se puede leer y dictar.
+           */
+          hrefValoracion={`/widget/c/${tenantSlug}?tipo=${encodeURIComponent(valoracion.slug)}`}
           onEntrarPerfil={() => setEligioPerfil(true)}
         />
       </div>
