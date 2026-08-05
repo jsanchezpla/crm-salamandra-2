@@ -134,25 +134,39 @@ function crm_wrap_ancho($html, $max = null) {
  *
  * `$con_formulario` = true en la página de reservar. Quien llega ahí sin
  * cuenta no es que se haya despistado: es que todavía no es paciente, y
- * mandarlo a un login que no puede usar es dejarlo sin salida. Debajo del
- * aviso va el formulario de admisión de siempre, que es su camino de verdad.
+ * mandarlo a un login que no puede usar es dejarlo sin salida. Así que lo
+ * primero es el formulario de admisión, que es su camino de verdad, y el
+ * acceso para pacientes va al final, discreto.
+ *
+ * ── POR QUÉ EL FORMULARIO VA A DOS COLUMNAS ─────────────────────────────────
+ * A una columna mide 938px él solo: no cabe en ninguna pantalla y obligaba a
+ * bajar. Repartido en dos se queda en 567px (medido con el ancho real de la
+ * página, 1153px), y entonces sí entra de una vez. Se hace desde aquí y no
+ * tocando el theme para que la página /formularios/ siga como está.
+ *
+ * Y el bloque de «¿Ya eres paciente?» deja de ser un cuadro grande —chocaba
+ * con la cabecera y robaba el sitio al formulario— para ser una línea al pie,
+ * pegada al final del formulario (05/08/2026, Rodrigo).
  */
 function crm_login_gate_html($con_formulario = false) {
     $current = (is_ssl() ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
     $login   = CRM_LOGIN_URL . '?redirect_to=' . rawurlencode($current);
 
-    $aviso = '<div style="padding:1.75rem;font-family:sans-serif;border:1px solid #EADFD9;'
-        . 'border-radius:16px;background:#fff;height:100%;box-sizing:border-box">'
-        . '<h2 style="margin:0 0 .5rem;color:#4B3A36;font-size:1.4rem">¿Ya eres paciente?</h2>'
-        . '<p style="margin:0 0 1.25rem;color:#7A6A65;line-height:1.5">Entra con tu cuenta para '
-        . 'reservar tus citas y consultarlas cuando quieras.</p>'
-        . '<a href="' . esc_url($login) . '" style="display:inline-block;padding:.7rem 1.4rem;'
-        . 'background:#A97873;color:#fff;border-radius:10px;text-decoration:none;font-weight:600">'
-        . 'Iniciar sesión →</a></div>';
+    $boton = '<a href="' . esc_url($login) . '" style="display:inline-block;padding:.6rem 1.2rem;'
+        . 'background:#A97873;color:#fff;border-radius:10px;text-decoration:none;font-weight:600;'
+        . 'white-space:nowrap">Iniciar sesión →</a>';
 
-    // Sin formulario (p. ej. "Mis citas"): el aviso solo, centrado y estrecho.
+    $acceso = '<div class="crm-gate__acceso">'
+        . '<div><strong style="color:#4B3A36">¿Ya eres paciente?</strong>'
+        . '<span style="color:#7A6A65"> Entra con tu cuenta para reservar tus citas y '
+        . 'consultarlas cuando quieras.</span></div>'
+        . $boton
+        . '</div>';
+
+    // Sin formulario (p. ej. "Mis citas"): solo el acceso, centrado.
     if (!$con_formulario) {
-        return '<div style="max-width:520px;margin:0 auto">' . $aviso . '</div>';
+        return '<div class="crm-gate" style="max-width:560px;margin:0 auto">'
+            . crm_gate_css() . $acceso . '</div>';
     }
 
     // El formulario lo pinta el theme. Se comprueba que exista: si el theme
@@ -162,25 +176,37 @@ function crm_login_gate_html($con_formulario = false) {
         : '';
 
     if (!$formulario) {
-        return '<div style="max-width:520px;margin:0 auto">' . $aviso . '</div>';
+        return '<div class="crm-gate" style="max-width:560px;margin:0 auto">'
+            . crm_gate_css() . $acceso . '</div>';
     }
 
-    /*
-     * Los dos caminos LADO A LADO, no uno debajo del otro (05/08/2026,
-     * Rodrigo: «que no hubiera que hacer scroll y que todo ocupara la página»).
-     * Apilados obligaban a bajar para descubrir que había un formulario, que es
-     * justo lo que necesita quien todavía no es paciente — y es la mayoría de
-     * quien llega aquí sin sesión.
-     *
-     * `auto-fit` + `minmax`: dos columnas cuando hay sitio y una sola en el
-     * móvil, sin punto de corte que adivinar. El aviso se queda estrecho
-     * (`0.8fr`) porque es cuatro líneas; el formulario se lleva el resto.
-     */
-    return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));'
-        . 'gap:2rem;align-items:start">'
-        . '<div style="max-width:420px">' . $aviso . '</div>'
-        . '<div style="font-family:sans-serif">' . $formulario . '</div>'
-        . '</div>';
+    return '<div class="crm-gate">' . crm_gate_css() . $formulario . $acceso . '</div>';
+}
+
+/**
+ * Estilos de la pantalla sin sesión. Van dentro de `.crm-gate` para que la
+ * página /formularios/ —que usa el mismo formulario— no se entere de nada.
+ */
+function crm_gate_css() {
+    static $puesto = false;
+    if ($puesto) { return ''; }
+    $puesto = true;
+
+    return '<style>'
+        // Dos columnas. `auto-fit` para que en el móvil se apile solo, sin
+        // punto de corte que adivinar.
+        . '.crm-gate .fq-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));'
+        . 'gap:.6rem 1.5rem;align-items:start}'
+        // Lo que no es un campo ocupa el ancho entero: el consentimiento, el
+        // botón y los avisos no se parten en dos.
+        . '.crm-gate .fq-form>.fq-consent,.crm-gate .fq-form>.fq-submit,'
+        . '.crm-gate .fq-form>.fq-privacidad,.crm-gate .fq-form>.fq-error{grid-column:1/-1}'
+        . '.crm-gate .fq-field{margin:0}'
+        // El acceso de pacientes, pegado al final del formulario.
+        . '.crm-gate__acceso{display:flex;gap:1rem 1.5rem;align-items:center;justify-content:space-between;'
+        . 'flex-wrap:wrap;margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid #EADFD9;'
+        . 'font-family:sans-serif;font-size:.95rem;line-height:1.45}'
+        . '</style>';
 }
 
 /** Renderiza un iframe del CRM con el email del usuario firmado en ?wpsso=. */
