@@ -257,6 +257,32 @@ function crm_gate_css() {
 
 /** Renderiza un iframe del CRM con el email del usuario firmado en ?wpsso=. */
 function crm_render_iframe($path, $extra_query, $title, $gate_con_formulario = false) {
+    /*
+     * ── ESTA PÁGINA NO SE CACHEA. NUNCA. (05/08/2026) ────────────────────────
+     *
+     * Lo que se pinta aquí es DISTINTO para cada persona y caduca en 5 minutos:
+     * o el aviso de «inicia sesión», o un iframe con un token firmado que lleva
+     * DENTRO el correo de quien ha entrado.
+     *
+     * Qué pasaba sin esto (comprobado el 05/08 en tunutrilaura.com): LiteSpeed
+     * había guardado la versión de DESLOGUEADO de /citas/ y se la servía a todo
+     * el mundo. Una paciente con la sesión abierta pulsaba «Reservar cita» y le
+     * salía «inicia sesión»; le daba, WordPress le decía «bienvenida de nuevo»,
+     * y volvía a la misma pantalla. Y en /mi-perfil/ el widget no recibía token,
+     * así que no la reconocía: ni contratos, ni datos, ni ficha.
+     *
+     * Y al revés es PEOR: si se cachea una versión con sesión, el token de una
+     * persona se le entrega a la siguiente que abra la página. Cinco minutos de
+     * ventana para entrar en el área privada de otra, ver sus citas y sus
+     * documentos. Por eso esto no es una optimización, es un cerrojo.
+     *
+     * Se hace desde aquí y no en los ajustes del plugin para que viaje con el
+     * código: quien pegue este snippet en otra web queda protegido sin acordarse
+     * de nada. Si el plugin no está, la llamada no hace nada.
+     */
+    do_action('litespeed_control_set_nocache', 'Portal del CRM: contenido por usuario con token de sesión');
+    nocache_headers();
+
     if (!is_user_logged_in()) {
         // También envuelto: la pantalla de sin sesión necesita el mismo ancho
         // —lleva el formulario al lado— y que le quiten el hueco de arriba.

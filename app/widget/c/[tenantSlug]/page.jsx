@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { AuthGateScreen, useWidgetAuth } from "./_components/AuthGate.jsx";
 import { useCitasPortalSession } from "./_components/useCitasPortalSession.js";
+import { useAdmision } from "./_components/useAdmision.js";
+import PuertaScreen from "./_components/PuertaScreen.jsx";
 import { formatMoney } from "../../../../lib/payments/money.js";
 
 const MONTH_NAMES_ES = [
@@ -195,6 +197,10 @@ export default function WidgetSelectionPage() {
   // no basta (ver la nota en AuthGate.jsx).
   const auth = useWidgetAuth(info?.auth, portal);
 
+  // Su situación con el formulario. Se pregunta con la sesión del portal, así
+  // que solo habla de ELLA: el endpoint no acepta correos por parámetro.
+  const admision = useAdmision(tenantSlug, portal);
+
   const goContinue = useCallback(() => {
     if (!selectedEventTypeId || !selectedDatetime) return;
     const params = new URLSearchParams({
@@ -250,6 +256,31 @@ export default function WidgetSelectionPage() {
       );
     }
     if (!auth.allowed) return <AuthGateScreen info={info} />;
+  }
+
+  // ── ¿Le falta el formulario? (05/08/2026, Rodrigo) ────────────────────────
+  // El aviso salía DESPUÉS de elegir día, hora y rellenar sus datos: quien
+  // acababa de crearse la cuenta veía la agenda entera y solo al final se
+  // enteraba de que antes hacía falta el formulario. Ahora se le dice aquí,
+  // antes de que toque nada.
+  //
+  // Mientras se comprueba no se pinta la agenda: enseñarla medio segundo y
+  // quitarla es peor que esperar.
+  if (admision.cargando) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-[var(--widget-text-muted)]">
+        Cargando…
+      </div>
+    );
+  }
+  if (!admision.admitida) {
+    return (
+      <PuertaScreen
+        aviso={admision.aviso}
+        urlFormulario={admision.urlFormulario}
+        brandStyle={brandStyle}
+      />
+    );
   }
 
   return (

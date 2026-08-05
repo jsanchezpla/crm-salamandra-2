@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useCitasPortalSession } from "../_components/useCitasPortalSession.js";
+import { useAdmision } from "../_components/useAdmision.js";
+import PuertaScreen from "../_components/PuertaScreen.jsx";
 import MisDocumentos from "../_components/MisDocumentos.jsx";
 import BienvenidaGate from "../_components/BienvenidaGate.jsx";
 import ContratoGate from "../_components/ContratoGate.jsx";
@@ -147,7 +149,13 @@ export default function MiPerfilPage() {
   const tenantSlug = params?.tenantSlug;
 
   const [info, setInfo] = useState(null);
-  const { status, authFetch } = useCitasPortalSession(tenantSlug);
+  const portal = useCitasPortalSession(tenantSlug);
+  const { status, authFetch } = portal;
+
+  // Su situación con el formulario (05/08/2026, Rodrigo). El área privada es la
+  // OTRA puerta de entrada, y tiene que contestar lo mismo que la agenda: si
+  // «Reservar cita» te manda al formulario, «Mi perfil» también.
+  const admision = useAdmision(tenantSlug, portal);
 
   const [data, setData] = useState(null); // { upcoming, history }
   const [avisos, setAvisos] = useState([]);
@@ -370,6 +378,30 @@ export default function MiPerfilPage() {
   //
   // Se espera a que carguen las citas (`loadingData`) a propósito: preguntar
   // antes de saberlo se la enseñaría un instante a quien no le tocaba.
+  // ── Antes que nada: ¿ha pasado por el formulario? (05/08/2026, Rodrigo) ───
+  // Va DELANTE de la bienvenida a propósito. Sin solicitud aceptada no hay
+  // ficha, y sin ficha el área privada no puede pedirle ni contratos ni datos:
+  // la dejaba entrar directa a sus documentos como si estuviera todo hecho.
+  //
+  // Mientras se comprueba no se pinta nada: enseñarle la bienvenida y
+  // sustituirla medio segundo después es peor que esperar.
+  if (admision.cargando) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-[var(--widget-text-muted)]">
+        Cargando…
+      </div>
+    );
+  }
+  if (!admision.admitida) {
+    return (
+      <PuertaScreen
+        aviso={admision.aviso}
+        urlFormulario={admision.urlFormulario}
+        brandStyle={brandStyle}
+      />
+    );
+  }
+
   const yaTieneValoracion = [...upcoming, ...history].some((b) => b.esValoracionInicial);
   if (valoracion && !yaTieneValoracion && !eligioPerfil && !loadingData && !dataError) {
     return (
