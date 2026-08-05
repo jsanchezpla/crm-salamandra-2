@@ -1,5 +1,6 @@
 import { withPublicTenant } from "../../../../../../../lib/tenant/publicTenantContext.js";
 import { enforceRateLimit } from "../../../../../../../lib/utils/rateLimit.js";
+import { notifyAdmins } from "../../../../../../../lib/notifications/notifyUsers.js";
 import { ok, created, error, notFound, serverError } from "../../../../../../../lib/utils/apiResponse.js";
 import { validarRespuestas, formPublico } from "../../../../../../../lib/formularios/fields.js";
 import { puntuarSpam, buscarDuplicadoReciente } from "../../../../../../../lib/formularios/antispam.js";
@@ -108,7 +109,7 @@ export const POST = withPublicTenant(
       }
 
       const ajustes = form.settings || {};
-      await FormSubmission.create({
+      const solicitud = await FormSubmission.create({
         formId: form.id,
         formSlug: form.slug,
         formTitle: form.title,
@@ -127,6 +128,25 @@ export const POST = withPublicTenant(
       // El aviso a la nutricionista se dispara aparte y sin bloquear: que no
       // salga un correo no puede impedir que la solicitud quede guardada.
       notificarNuevaSolicitud({ ajustes, form, destinos, tenant }).catch(() => {});
+
+      // Y en la campana del CRM (05/08/2026). El correo de arriba depende de
+      // dos cosas que fallan calladas: que `notifyEmails` esté relleno y que
+      // haya clave de Resend. En nutri_laura estaban las dos mal —el correo
+      // llevaba semanas en simulacro— y se acumularon seis solicitudes sin que
+      // nadie supiera que habían entrado. La campana no depende de terceros:
+      // si la solicitud se guarda, el aviso aparece.
+      //
+      // Sin las respuestas ni el motivo, por lo mismo que el correo: son datos
+      // de salud y aquí solo hace falta saber que hay algo que revisar.
+      notifyAdmins({
+        tenantId: tenant.id,
+        tenantModels,
+        type: "formulario_recibido",
+        title: "Nueva solicitud desde la web",
+        body: `${destinos.name || "Alguien"} ha rellenado «${form.title}». Está en Leads → Comerciales.`,
+        entityType: "FormSubmission",
+        entityId: solicitud.id,
+      }).catch(() => {});
 
       return created({ ok: true, mensaje: form.thankYouMessage || "¡Gracias!" });
     } catch (err) {

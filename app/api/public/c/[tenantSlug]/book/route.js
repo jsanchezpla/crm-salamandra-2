@@ -23,6 +23,7 @@ import {
   noEsCarritoAbandonado,
 } from "../../../../../../lib/citas/booking.js";
 import { logCitasAudit } from "../../../../../../lib/citas/audit.js";
+import { notifyAdmins } from "../../../../../../lib/notifications/notifyUsers.js";
 import { verifyPortalSession, readBearer } from "../../../../../../lib/citas/portalSession.js";
 import {
   autorizarPago,
@@ -798,6 +799,25 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
         expiresAt: row.holdExpiresAt.toISOString(),
       });
     }
+
+    // Campana del CRM (05/08/2026). Este es el camino de las citas SIN cobro:
+    // la reserva ya es firme aquí. Las que llevan tarjeta avisan más tarde, al
+    // quedar retenido el dinero (`lib/payments/entityHooks.js`), porque hasta
+    // entonces no son una solicitud sino un formulario a medias.
+    //
+    // Sin esto, una cita nueva solo se descubría entrando a mirar la agenda.
+    notifyAdmins({
+      tenantId: tenant.id,
+      tenantModels,
+      type: autoConfirm ? "cita_reservada" : "cita_solicitada",
+      title: autoConfirm ? "Nueva cita reservada" : "Nueva solicitud de cita",
+      body: `${row.clientName} · ${eventType.name} · ${new Date(row.scheduledAt).toLocaleString("es-ES", {
+        timeZone: "Europe/Madrid", day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit",
+      })}`,
+      entityType: "Booking",
+      entityId: row.id,
+      dedupe: true,
+    }).catch(() => {});
 
     // Email best-effort según modo del tenant:
     //   - autoConfirm=true  → booking nace confirmed → bookingConfirmed inmediato

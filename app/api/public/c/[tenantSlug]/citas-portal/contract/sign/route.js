@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { withPublicTenant } from "../../../../../../../../lib/tenant/publicTenantContext.js";
+import { notifyAdmins } from "../../../../../../../../lib/notifications/notifyUsers.js";
 import { ok, created, error, serverError } from "../../../../../../../../lib/utils/apiResponse.js";
 import { auditar } from "../../../../../../../../lib/utils/auditoria.js";
 import { gatePortal, resolvePortalContractSession, estadoContrato } from "../../../../../../../../lib/citas/portalContract.js";
@@ -196,6 +197,29 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
         completo: despues.situacion.contratoCompleto,
       },
     });
+
+    // Aviso en la campana (05/08/2026). Firmar el contrato es lo que desbloquea
+    // el portal de esa familia y, con la puerta de contratos encendida, lo que
+    // le permite reservar. Hasta ahora no lo sabía nadie: quedaba en la
+    // auditoría, que no se mira a diario.
+    //
+    // Solo cuando el contrato queda COMPLETO. Si faltan firmas —dos tutores, o
+    // varios anexos— avisar en cada una convierte la campana en ruido y hace
+    // creer que ya está listo cuando todavía no lo está.
+    if (despues.situacion?.contratoCompleto) {
+      notifyAdmins({
+        tenantId: tenant.id,
+        tenantModels,
+        type: "contrato_firmado",
+        title: "Contrato firmado",
+        body: `${client.name ?? "Una familia"} ha firmado el contrato del centro.`,
+        entityType: "Client",
+        entityId: client.id,
+        // Un contrato completo se firma una vez: si el webhook o la pantalla
+        // reintentan, no queremos dos avisos del mismo hecho.
+        dedupe: true,
+      }).catch(() => {});
+    }
 
     return created({
       firmadoEl: fila.signedAt,
