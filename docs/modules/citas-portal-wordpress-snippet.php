@@ -122,7 +122,20 @@ function crm_wrap_ancho($html, $max = null) {
             . 'max-width:' . $max . 'px !important;width:100% !important;'
             . 'padding-top:0 !important;margin-top:0 !important}'
             . 'main:has(.crm-widget-wrap) .blog-hero{display:none !important}'
-            . '.crm-widget-wrap{width:100%;max-width:' . $max . 'px;margin:0 auto}'
+            /*
+             * El bloque, centrado en el hueco bajo la cabecera y con un respiro
+             * arriba (05/08/2026, Rodrigo: «deja un poco de padding, que está
+             * tocando el header»). Al quitar el hueco de 184px de la cabecera
+             * vacía se quitó TODO el aire y se pasó de frenada: quedaba pegado.
+             *
+             * `min-height` = la ventana menos la navegación, y centrado
+             * vertical: si el contenido es más corto que la pantalla queda en
+             * medio en vez de arriba del todo, y si crece, empuja hacia abajo
+             * con normalidad.
+             */
+            . '.crm-widget-wrap{width:100%;max-width:' . $max . 'px;margin:0 auto;'
+            . 'padding:32px 0;box-sizing:border-box;min-height:calc(100vh - 150px);'
+            . 'display:flex;flex-direction:column;justify-content:center}'
             . '</style>';
     }
 
@@ -138,11 +151,11 @@ function crm_wrap_ancho($html, $max = null) {
  * primero es el formulario de admisión, que es su camino de verdad, y el
  * acceso para pacientes va al final, discreto.
  *
- * ── POR QUÉ EL FORMULARIO VA A DOS COLUMNAS ─────────────────────────────────
+ * ── POR QUÉ EL FORMULARIO VA A TRES COLUMNAS ────────────────────────────────
  * A una columna mide 938px él solo: no cabe en ninguna pantalla y obligaba a
- * bajar. Repartido en dos se queda en 567px (medido con el ancho real de la
- * página, 1153px), y entonces sí entra de una vez. Se hace desde aquí y no
- * tocando el theme para que la página /formularios/ siga como está.
+ * bajar. En 3+3 se queda en 522px (medido con el ancho real de la página), y
+ * entonces sí entra de una vez. Se hace desde aquí y no tocando el theme para
+ * que la página /formularios/ siga como está.
  *
  * Y el bloque de «¿Ya eres paciente?» deja de ser un cuadro grande —chocaba
  * con la cabecera y robaba el sitio al formulario— para ser una línea al pie,
