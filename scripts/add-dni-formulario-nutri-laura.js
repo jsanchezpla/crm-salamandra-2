@@ -63,6 +63,17 @@ async function main() {
       continue;
     }
 
+    // Un formulario SIN preguntas no es un formulario público a medio hacer: es
+    // otro flujo, que recoge sus datos por su cuenta y solo usa esta tabla para
+    // dejar constancia de la solicitud. Meterle una pregunta suelta lo
+    // convertiría en un formulario de un solo campo —el DNI y nada más—, que es
+    // peor que no tocarlo. En producción hay uno así, con 49 solicitudes
+    // detrás.
+    if (!campos.length) {
+      process.stdout.write(`  · "${form.slug}" — sin preguntas propias, no es de este tipo: se deja.\n`);
+      continue;
+    }
+
     // El nuevo entra en el hueco 2; todo lo que venía detrás baja un puesto.
     // Se reescribe el `order` de TODOS para no dejar dos campos empatados: dos
     // números iguales ordenan de forma imprevisible y el formulario saldría
