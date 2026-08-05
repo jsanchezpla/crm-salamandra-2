@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 
 const CALENDAR = [
   { date: "2026", label: "Adaptación", done: true },
@@ -43,8 +44,17 @@ export default function CumplimientoPage() {
     <div className="p-4 lg:p-8 max-w-4xl mx-auto space-y-6">
       <div>
         <div className="eyebrow">Finanzas · Cumplimiento</div>
-        <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">
-          Verifactu &amp; Factura-e
+        <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1 flex items-center gap-2 flex-wrap">
+          <span>Verifactu &amp; Factura-e</span>
+          <HelpTooltip title="Verifactu y Factura-e" placement="bottom">
+            Dos obligaciones distintas que suenan parecido. <strong className="text-white">Verifactu</strong>{" "}
+            es que cada factura se registre ante Hacienda al emitirla, con su huella y su QR.{" "}
+            <strong className="text-white">Factura-e</strong> es el formato electrónico para
+            facturar a otras empresas y a la Administración.
+            {" "}
+            Esta pantalla no emite nada: solo dice, serie a serie, si estás listo y para qué fecha
+            te obliga la ley.
+          </HelpTooltip>
         </h1>
         <p className="text-xs text-neutral-400 mt-1">
           Estado de preparación por serie y calendario normativo (RD-ley 15/2025 · RD 238/2026).

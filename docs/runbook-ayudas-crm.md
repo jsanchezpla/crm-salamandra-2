@@ -101,11 +101,14 @@ Leyenda: `[x]` hecho · `[-]` mirada, no necesita · `[ ]` pendiente
 ### Facturación — el más denso, el siguiente
 - [ ] `facturacion` · `facturacion/resumen`
 - [ ] `facturacion/facturas` · `facturacion/recurrentes`
-- [ ] `facturacion/cobros` — la morosidad vive dentro
+- [x] `facturacion/cobros` — emitir no es cobrar, y la morosidad vive DENTRO de
+      esta pantalla (facturas vencidas sin cobro), no en una lista aparte
 - [ ] `facturacion/presupuestos` (+ `[id]`)
 - [ ] `facturacion/costes` · `facturacion/proveedores`
-- [ ] `facturacion/arqueo` — arqueo de caja: la diferencia se guarda calculada
-- [ ] `facturacion/cumplimiento` — Verifactu
+- [x] `facturacion/arqueo` — un cierre es la FOTO de ese día: la diferencia se
+      guarda tal cual y no se recalcula aunque luego corrijas un cobro
+- [x] `facturacion/cumplimiento` — Verifactu y Factura-e son DOS obligaciones
+      distintas que suenan igual; esta pantalla no emite nada, solo informa
 - [ ] `facturacion/analitica` (+ `clientes`, `empleados`, `iva`, `socios`)
 - [ ] `facturacion/configuracion`
 

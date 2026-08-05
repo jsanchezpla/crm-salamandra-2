@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Link from "next/link";
 import StatusBadge from "../_components/StatusBadge.jsx";
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
@@ -200,7 +201,16 @@ export default function CobrosPage() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
         <div>
           <div className="eyebrow">Finanzas · Tesorería</div>
-          <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1">Cobros</h1>
+          <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1 flex items-center gap-2">
+            Cobros
+            <HelpTooltip title="Cobros" placement="bottom">
+              El dinero que ha entrado de verdad, factura a factura. Una factura emitida NO es
+              dinero cobrado: hasta que se registra aquí, sigue debiéndose.
+              {" "}
+              <strong className="text-white">La morosidad está en esta misma pantalla</strong> —
+              son las facturas vencidas sin cobro registrado, no una lista aparte.
+            </HelpTooltip>
+          </h1>
           <p className="text-xs text-neutral-400 mt-1">
             Total cobrado: <span className="font-semibold text-emerald-700 tabular">{fmtMoney(totalCollected)}</span>
           </p>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -152,7 +153,18 @@ export default function ArqueoPage() {
     <div className="p-4 lg:p-8 space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-neutral-800">Arqueo de caja</h1>
+          <h1 className="text-lg font-semibold text-neutral-800 flex items-center gap-2">
+            Arqueo de caja
+            <HelpTooltip title="Arqueo de caja" placement="bottom">
+              Cuentas el dinero que hay en el cajón y el CRM lo compara con lo que debería haber
+              según los cobros en efectivo del día.
+              {" "}
+              <strong className="text-white">Un cierre es la FOTO de ese día</strong>: la
+              diferencia se guarda tal cual y no se recalcula después, aunque luego corrijas un
+              cobro. Por eso un descuadre viejo sigue ahí — es lo que pasó, no lo que debería
+              haber pasado.
+            </HelpTooltip>
+          </h1>
           <p className="text-[12.5px] text-neutral-500 mt-0.5">
             Cuenta el dinero del cajón y compáralo con lo que debería haber. La diferencia queda registrada.
           </p>
