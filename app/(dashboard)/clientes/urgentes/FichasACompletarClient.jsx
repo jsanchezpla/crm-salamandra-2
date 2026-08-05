@@ -22,6 +22,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 
 const fmt = (v) => {
   if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return v || "—";
@@ -56,6 +57,19 @@ function Carpeta({ carpeta, abierta, onToggle, onRevisar, marcando }) {
 
       {abierta && carpeta.filas.length > 0 && (
         <div className="border-t border-neutral-100 overflow-x-auto">
+          {/* Lo que más se pregunta: por qué el número no baja solo. */}
+          <div className="px-4 pt-3 text-[11px] text-neutral-500 flex items-center gap-1.5">
+            <span>Rellena el dato en la ficha, o márcalo con «Está bien así».</span>
+            <HelpTooltip title="«Está bien así»" placement="bottom">
+              Marca esa fila como revisada y la saca de la lista, SIN inventarse el dato. Es para
+              los huecos que son correctos: alguien en lista de espera no tiene terapeuta todavía,
+              y no lo va a tener.
+              {" "}
+              <strong className="text-white">Sin esto la lista no llega a cero nunca</strong>,
+              porque siempre quedarían huecos que en realidad están bien. No cambia nada de la
+              ficha: solo dice «esto ya lo he mirado».
+            </HelpTooltip>
+          </div>
           <table className="w-full text-[12.5px]">
             <tbody>
               {carpeta.filas.map((f) => (
@@ -148,7 +162,17 @@ export default function FichasACompletarClient() {
   return (
     <div className="p-4 lg:p-8 max-w-4xl mx-auto space-y-5">
       <div>
-        <h1 className="text-lg font-semibold text-neutral-800">Fichas a completar</h1>
+        <h1 className="text-lg font-semibold text-neutral-800 flex items-center gap-2">
+          Fichas a completar
+          <HelpTooltip title="Fichas a completar" placement="bottom">
+            Datos que faltan en las fichas, agrupados por carpetas. Al importar cientos de
+            familias quedan miles de huecos, así que esto no está pensado para vaciarse de una
+            sentada: se abre una carpeta, se cierran unas cuantas y se deja.
+            {" "}
+            <strong className="text-white">Las carpetas no se solapan</strong>: cada ficha aparece
+            en una sola, para que no la arregles dos veces.
+          </HelpTooltip>
+        </h1>
         <p className="text-[12.5px] text-neutral-500 mt-0.5">
           Datos que faltan en las fichas. Lo de arriba rompe algo esta semana; lo de abajo
           se puede ir cerrando poco a poco.
@@ -169,7 +193,14 @@ export default function FichasACompletarClient() {
         <>
           <section className="space-y-2">
             <div className="flex items-baseline justify-between">
-              <h2 className="text-[13px] font-medium text-amber-800">Bloquea el trabajo</h2>
+              <h2 className="text-[13px] font-medium text-amber-800 flex items-center gap-1.5">
+                Bloquea el trabajo
+                <HelpTooltip title="Bloquea el trabajo" placement="bottom">
+                  Huecos que impiden hacer algo esta semana: una cita que nadie puede atender, una
+                  familia a la que no se puede facturar. Son pocos y hay que cerrarlos ya. Si esta
+                  parte se llena de cosas que en realidad esperan, deja de mirarse.
+                </HelpTooltip>
+              </h2>
               <span className="text-[11px] text-neutral-400">{datos.totalBloquea} pendiente(s)</span>
             </div>
             {datos.bloquea.map((c) => (
@@ -193,7 +224,14 @@ export default function FichasACompletarClient() {
 
           <section className="space-y-2 pt-2">
             <div className="flex items-baseline justify-between">
-              <h2 className="text-[13px] font-medium text-neutral-700">Ficha incompleta</h2>
+              <h2 className="text-[13px] font-medium text-neutral-700 flex items-center gap-1.5">
+                Ficha incompleta
+                <HelpTooltip title="Ficha incompleta" placement="bottom">
+                  Datos que faltan pero no impiden trabajar hoy: un teléfono, una fecha de
+                  nacimiento. Aquí hay miles y va a seguir habiéndolos — está separado del bloque
+                  de arriba justo para que lo urgente no se pierda entre lo que puede esperar.
+                </HelpTooltip>
+              </h2>
               <span className="text-[11px] text-neutral-400">{datos.totalCompletar} pendiente(s)</span>
             </div>
             {datos.completar.map((c) => (

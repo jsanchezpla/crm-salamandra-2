@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 
 const VACIO = { name: "", phone: "", email: "", notes: "", assignedTherapistId: "" };
 
@@ -136,7 +137,19 @@ export default function ListaEsperaClient() {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <div className="eyebrow">Clientes</div>
-          <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1">Lista de espera de admisión</h1>
+          <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1 flex items-center gap-2">
+            Lista de espera de admisión
+            <HelpTooltip title="Lista de espera de admisión" placement="bottom">
+              Gente esperando PLAZA en el centro, por orden de llegada. Aquí no hay fecha ni hora:
+              son personas a las que todavía no puedes atender.
+              {" "}
+              <strong className="text-white">
+                No la confundas con la lista de espera de Citas
+              </strong>
+              , que son solicitudes de una hora concreta pendientes de que las confirmes. Esa vive
+              en Citas y esta no.
+            </HelpTooltip>
+          </h1>
           <p className="text-xs text-neutral-500 mt-1">
             Quien espera plaza en el centro, por orden de llegada. No son solicitudes de cita: eso
             vive en Citas.
@@ -271,21 +284,34 @@ export default function ListaEsperaClient() {
                       lo que falta no es crearla, es darle la plaza. Ofrecer
                       «convertir» solo servía para que la API respondiera 409. */}
                   {e.clientId ? (
-                    <button
-                      onClick={() => accion(e.id, { status: "converted" }, `¿${e.name} ya tiene plaza?`)}
-                      disabled={busy === e.id}
-                      className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline disabled:opacity-40"
-                    >
-                      Ya tiene plaza
-                    </button>
+                    <span className="inline-flex items-center gap-1">
+                      <button
+                        onClick={() => accion(e.id, { status: "converted" }, `¿${e.name} ya tiene plaza?`)}
+                        disabled={busy === e.id}
+                        className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline disabled:opacity-40"
+                      >
+                        Ya tiene plaza
+                      </button>
+                      <HelpTooltip title="Ya tiene plaza" placement="top">
+                        Esta persona YA tiene ficha —entró por el alta de clientes—, así que no hay
+                        nada que crear: lo único que falta es darle la plaza y sacarla de la cola.
+                      </HelpTooltip>
+                    </span>
                   ) : (
-                    <button
-                      onClick={() => accion(e.id, { convertir: true }, `¿Crear la ficha de cliente de ${e.name}?`)}
-                      disabled={busy === e.id}
-                      className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline disabled:opacity-40"
-                    >
-                      Convertir en cliente
-                    </button>
+                    <span className="inline-flex items-center gap-1">
+                      <button
+                        onClick={() => accion(e.id, { convertir: true }, `¿Crear la ficha de cliente de ${e.name}?`)}
+                        disabled={busy === e.id}
+                        className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline disabled:opacity-40"
+                      >
+                        Convertir en cliente
+                      </button>
+                      <HelpTooltip title="Convertir en cliente" placement="top">
+                        Le crea la ficha de cliente con lo que se apuntó al entrar en la lista, y la
+                        saca de la cola. Es el botón de quien todavía NO tiene ficha; a quien ya la
+                        tiene le sale «Ya tiene plaza» en su lugar.
+                      </HelpTooltip>
+                    </span>
                   )}
                   <button
                     onClick={() => accion(e.id, { status: "removed" }, `¿Sacar a ${e.name} de la lista?`)}
