@@ -3,6 +3,10 @@ import { ok, notFound, serverError } from "../../../../../../lib/utils/apiRespon
 import { normalizarPreguntas } from "../../../../../../lib/citas/preguntasCita.js";
 import { verifyPortalSession, readBearer } from "../../../../../../lib/citas/portalSession.js";
 import { tiposConBonoActivo, filtrarTiposPara } from "../../../../../../lib/citas/tiposVisibles.js";
+import {
+  puedeReservarValoracionInicial,
+  esValoracionInicial,
+} from "../../../../../../lib/citas/valoracionInicial.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/event-types
@@ -46,7 +50,18 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenantModels, 
 
     const conBono = await tiposConBonoActivo(tenantModels, email);
 
+    // La valoración inicial es de una sola vez (ver lib/citas/valoracionInicial.js).
+    // Se pregunta AQUÍ y no se repite la condición en la vista: el cliente ya
+    // detectó que ocultarla en un sitio y no en otro la dejaba accesible.
+    //
+    // Solo se puede filtrar a quien viene identificado: a un anónimo no sabemos
+    // si ya la tuvo, así que se le enseña y lo corta `/book` con su email.
+    const valoracion = email
+      ? await puedeReservarValoracionInicial(tenantModels, email)
+      : { puede: true };
+
     const data = filtrarTiposPara(rows, conBono)
+      .filter((r) => valoracion.puede || !esValoracionInicial(r))
       .filter((r) => Array.isArray(r.modalities) && r.modalities.includes("online"))
       .map((r) => ({
         id: r.id,

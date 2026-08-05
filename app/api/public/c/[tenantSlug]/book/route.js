@@ -71,6 +71,11 @@ import {
 } from "../../../../../../lib/citas/packs.js";
 import { createCheckoutSession } from "../../../../../../lib/payments/checkout.js";
 import { exigePasarela, puedeReservar } from "../../../../../../lib/citas/tiposVisibles.js";
+import {
+  puedeReservarValoracionInicial,
+  esValoracionInicial,
+  mensajeValoracionUsada,
+} from "../../../../../../lib/citas/valoracionInicial.js";
 import { exigeIdentidad, mensajeSinIdentidad } from "../../../../../../lib/citas/puertaIdentidad.js";
 import { paquetePreguntas } from "../../../../../../lib/citas/preguntasCita.js";
 
@@ -229,6 +234,23 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
           codigo: aviso.codigo,
           titulo: aviso.titulo,
           urlFormulario: aviso.mostrarEnlace ? urlDelFormulario(tenant) : null,
+        });
+      }
+    }
+
+    // La valoración inicial, una sola vez en la vida (05/08/2026). Se corta
+    // AQUÍ y no solo escondiendo el botón: el cliente ya encontró dos caminos
+    // alternativos para llegar a ella, y esconder no es impedir.
+    //
+    // Va antes de la puerta de contratos porque la valoración se la salta, y
+    // quien ya la tuvo no debe colarse por esa excepción.
+    if (esValoracionInicial(eventType)) {
+      const { puede } = await puedeReservarValoracionInicial(tenantModels, clientEmail);
+      if (!puede) {
+        const aviso = mensajeValoracionUsada(tenant.name);
+        return errorConDatos(aviso.texto, 409, {
+          codigo: aviso.codigo,
+          titulo: aviso.titulo,
         });
       }
     }
