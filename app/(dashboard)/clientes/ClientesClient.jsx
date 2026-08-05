@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import HelpTooltip from "../../../components/ui/HelpTooltip.jsx";
 import SyncWebButton from "../../../components/clients/SyncWebButton.jsx";
 import PacientesDelAlta from "../../../components/clients/PacientesDelAlta.jsx";
 import { camposCliente, PERFIL_COMERCIAL, PERFIL_SALUD } from "../../../lib/clients/formularioAlta.js";
@@ -16,12 +17,42 @@ function useMounted() {
   return m;
 }
 
+/**
+ * Los estados del embudo, con su ayuda.
+ *
+ * El texto va AQUÍ y no suelto en la pantalla (mismo patrón que `METRIC_HELP`
+ * en Formación): el rótulo y su explicación se leen juntos, así que cuando
+ * alguien renombre un estado tiene delante lo que hay que reescribir.
+ *
+ * Escritos para quien usa el CRM, no para quien lo programa: dicen qué hacer
+ * con cada estado, no qué guarda la columna.
+ */
 const STATUSES = [
-  { key: "new", label: "Nuevo" },
-  { key: "contacted", label: "Contactado" },
-  { key: "following", label: "En seguimiento" },
-  { key: "converted", label: "Convertido" },
-  { key: "discarded", label: "Descartado" },
+  {
+    key: "new",
+    label: "Nuevo",
+    help: "Acaba de entrar y todavía no ha hablado nadie con él. Es la bandeja de entrada: lo que esté aquí mucho tiempo es alguien esperando respuesta.",
+  },
+  {
+    key: "contacted",
+    label: "Contactado",
+    help: "Ya se le ha escrito o llamado, pero aún no hay nada cerrado. Sirve para no llamar dos veces a la misma persona ni olvidarse de quien contestó.",
+  },
+  {
+    key: "following",
+    label: "En seguimiento",
+    help: "Hay conversación abierta: está decidiendo, pidiendo presupuesto o pendiente de una fecha. Es donde vive el trabajo comercial del día a día.",
+  },
+  {
+    key: "converted",
+    label: "Convertido",
+    help: "Ya es cliente: ha contratado o ha empezado. A partir de aquí lo que cuenta es su ficha, no el embudo.",
+  },
+  {
+    key: "discarded",
+    label: "Descartado",
+    help: "No sigue adelante — no le encajaba, no contestó o se fue a otro sitio. No se borra a propósito: saber cuánta gente se cae, y por dónde, es la mitad de la información.",
+  },
 ];
 
 // Flujo principal: new → contacted → following → converted.
@@ -316,8 +347,19 @@ export default function ClientesClient({
           <div className="flex items-end justify-between mb-5 lg:mb-7 gap-4 flex-wrap">
             <div>
               <div className="eyebrow mb-1.5 lg:mb-2">{vocab.area} · {vocab.plural}</div>
-              <h1 className="font-display text-[26px] lg:text-[40px] leading-[1.05] text-[var(--ink-900)] tracking-tight">
-                {vocab.plural} <span className="font-display-italic text-[var(--ink-400)]">— {total} {total === 1 ? vocab.unidad : vocab.unidades}</span>
+              <h1 className="font-display text-[26px] lg:text-[40px] leading-[1.05] text-[var(--ink-900)] tracking-tight flex items-center gap-2 flex-wrap">
+                <span>
+                  {vocab.plural} <span className="font-display-italic text-[var(--ink-400)]">— {total} {total === 1 ? vocab.unidad : vocab.unidades}</span>
+                </span>
+                {/* El vocabulario cambia por cliente (pacientes, familias,
+                    empresas…), así que la ayuda lo usa en vez de decir
+                    «clientes» y contradecir al rótulo de al lado. */}
+                <HelpTooltip title={vocab.plural} placement="bottom">
+                  Aquí está toda la gente que pasa por tu negocio, desde que llega hasta que se
+                  queda. Las pestañas de abajo son las fases: cada {vocab.singular} avanza de una a
+                  otra y así se ve de un vistazo con quién hay trabajo pendiente. Pincha en
+                  cualquier fila para abrir su ficha completa.
+                </HelpTooltip>
               </h1>
             </div>
             <div className="flex items-center gap-2">
@@ -397,15 +439,22 @@ export default function ClientesClient({
               Todos
             </button>
             {STATUSES.map((s) => (
-              <button
-                key={s.key}
-                onClick={() => setActiveStatus(s.key)}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                  activeStatus === s.key ? "bg-[var(--color-primary)] text-white" : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                {s.label}
-              </button>
+              // El «?» va FUERA del botón: dentro, pulsarlo cambiaría de pestaña
+              // además de abrir la ayuda, y leer qué significa un estado no
+              // tiene por qué obligarte a filtrar por él.
+              <span key={s.key} className="inline-flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => setActiveStatus(s.key)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+                    activeStatus === s.key ? "bg-[var(--color-primary)] text-white" : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  {s.label}
+                </button>
+                <HelpTooltip title={s.label} placement="bottom">
+                  {s.help}
+                </HelpTooltip>
+              </span>
             ))}
           </div>
         </div>
