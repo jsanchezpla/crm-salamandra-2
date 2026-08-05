@@ -39,8 +39,17 @@ import { invalidateTenantCache } from "../lib/tenant/tenantResolver.js";
 const SLUG = process.argv[2] || "nutri_laura";
 const BASE = process.env.SMOKE_BASE_URL || "http://localhost:3000";
 const URL_FORM = "https://ejemplo.test/primer-contacto";
-/** IP propia: el límite de /book es POR IP y toda la tanda desde una sola agotaría el cupo. */
-const IP_PRUEBA = "203.0.113.21";
+/**
+ * IP propia: el límite de /book es POR IP y toda la tanda desde una sola
+ * agotaría el cupo.
+ *
+ * Y DISTINTA EN CADA EJECUCIÓN dentro del rango de pruebas (203.0.113.0/24,
+ * reservado para documentación por el RFC 5737, así que no es de nadie). Con
+ * una IP fija, lanzar la prueba dos veces seguidas agotaba el cupo de la
+ * anterior y todo salía 429: fallos que parecían del producto y eran de haber
+ * probado mucho.
+ */
+const IP_PRUEBA = `203.0.113.${20 + Math.floor(Math.random() * 200)}`;
 
 let fallos = 0;
 const ok = (m) => process.stdout.write(`  ✓ ${m}\n`);
@@ -95,8 +104,11 @@ async function main() {
     const limite = Date.now() + 75_000;
     for (;;) {
       const r = await fetch(`${BASE}/api/public/c/${SLUG}/info`);
-      const visto = (await r.json())?.data?.admision?.requerida === true;
-      if (visto === encendida) return;
+      const datos = (await r.json())?.data ?? null;
+      const visto = datos?.admision?.requerida === true;
+      // Devuelve lo que ha visto para que quien llama compruebe sobre ESTO y no
+      // tenga que volver a preguntar (ver el comentario de más abajo).
+      if (datos && visto === encendida) return datos;
       if (Date.now() > limite) {
         throw new Error(`el servidor no ha visto la puerta ${encendida ? "encendida" : "apagada"} en 75 s`);
       }
@@ -214,10 +226,14 @@ async function main() {
     esperar(info?.data?.admision?.requerida === true, "/info anuncia que hay puerta");
     esperar(info?.data?.admision?.urlFormulario === URL_FORM, "/info trae el enlace del formulario");
 
-    await puerta(false);
-    const infoApagada = await (await fetch(`${BASE}/api/public/c/${SLUG}/info`)).json();
+    // Se comprueba con lo que DEVUELVE el sondeo, no con una petición nueva:
+    // entre las del sondeo y las reservas, `/info` se acaba topando por límite
+    // de peticiones y devuelve un cuerpo sin `data`. Con las dos aserciones
+    // usando `?.`, eso salía como «la puerta sigue encendida» —un fallo que no
+    // era del producto sino de haber preguntado una vez de más.
+    const infoApagada = await puerta(false);
     esperar(
-      infoApagada?.data?.admision?.requerida === false,
+      infoApagada?.admision?.requerida === false,
       "y con la puerta apagada dice que no la hay"
     );
     esperar(

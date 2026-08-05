@@ -24,7 +24,10 @@ const SLUG = process.argv[2] || "nutri_laura";
 const BASE = process.env.SMOKE_BASE_URL || "http://localhost:3000";
 const PRECIO = 4500; // 45,00 €
 /** IP propia: el limite de /book es POR IP y la tanda entera desde una sola se agotaria el cupo. */
-const IP_PRUEBA = "203.0.113.10";
+// IP distinta en cada ejecución dentro del rango de documentación (RFC 5737):
+// con una fija, lanzar la prueba dos veces seguidas agotaba el cupo por IP de
+// /book y todo salía 429 — fallos que parecían del producto.
+const IP_PRUEBA = `203.0.113.${20 + Math.floor(Math.random() * 200)}`;
 
 let fallos = 0;
 const ok = (m) => process.stdout.write(`  ✓ ${m}\n`);

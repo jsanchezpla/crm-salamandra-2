@@ -27,7 +27,10 @@ const BASE = process.env.SMOKE_BASE_URL || "http://localhost:3000";
 const PRECIO = 4500;
 const MARCA = "smoke-caducidad@example.com";
 /** IP propia: el limite de /book es POR IP y la tanda entera desde una sola se agotaria el cupo. */
-const IP_PRUEBA = "203.0.113.14";
+// IP distinta en cada ejecución dentro del rango de documentación (RFC 5737):
+// con una fija, lanzar la prueba dos veces seguidas agotaba el cupo por IP de
+// /book y todo salía 429 — fallos que parecían del producto.
+const IP_PRUEBA = `203.0.113.${20 + Math.floor(Math.random() * 200)}`;
 const HORA = 3600_000;
 
 let fallos = 0;

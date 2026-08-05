@@ -26,7 +26,10 @@ const BASE = process.env.SMOKE_BASE_URL || "http://localhost:3000";
 const PRECIO = 4500;
 const MARCA = "smoke-cancelar@example.com";
 /** IP propia: el limite de /book es POR IP y la tanda entera desde una sola se agotaria el cupo. */
-const IP_PRUEBA = "203.0.113.13";
+// IP distinta en cada ejecución dentro del rango de documentación (RFC 5737):
+// con una fija, lanzar la prueba dos veces seguidas agotaba el cupo por IP de
+// /book y todo salía 429 — fallos que parecían del producto.
+const IP_PRUEBA = `203.0.113.${20 + Math.floor(Math.random() * 200)}`;
 
 let fallos = 0;
 const ok = (m) => process.stdout.write(`  ✓ ${m}\n`);
@@ -63,23 +66,50 @@ async function main() {
   await eventType.update({ price: PRECIO });
   const intents = [];
 
-  /** Deja una cita con la tarjeta retenida y esperando decisión. */
+  /** Huecos ya gastados en esta pasada, para que las citas no se pisen. */
+  const huecosUsados = new Set();
+
+  /**
+   * Deja una cita con la tarjeta retenida y esperando decisión.
+   *
+   * BUSCA HACIA DELANTE y REVIENTA si no encuentra hueco, en vez de devolver
+   * `null`. Pedía siempre el día +4, que el 05/08/2026 caía en sábado: la
+   * agenda no abre, no había huecos, y la prueba entera se quedaba sin montar.
+   * Es el mismo fallo que tenía `_smoke-confirmar-cobrar`, donde además se
+   * saltaba tres casos diciendo «TODO CORRECTO».
+   */
   async function conTarjetaRetenida(dias) {
-    const dia = new Date(Date.now() + dias * 86400000).toISOString().slice(0, 10);
-    const r = await fetch(`${BASE}/api/public/c/${SLUG}/availability?date=${dia}&eventTypeId=${eventType.id}`);
-    const huecos = (await r.json())?.data?.slots ?? [];
-    if (!huecos.length) return null;
+    let hora = null;
+    for (let d = dias; d < dias + 21 && !hora; d++) {
+      const dia = new Date(Date.now() + d * 86400000).toISOString().slice(0, 10);
+      const r = await fetch(`${BASE}/api/public/c/${SLUG}/availability?date=${dia}&eventTypeId=${eventType.id}`);
+      const huecos = (await r.json())?.data?.slots ?? [];
+      for (let i = huecos.length - 1; i >= 0; i--) {
+        const cuando = horaDelHueco(huecos[i]);
+        if (cuando && !huecosUsados.has(cuando)) { hora = cuando; break; }
+      }
+    }
+    if (!hora) {
+      throw new Error(
+        `sin huecos libres entre el día +${dias} y el +${dias + 21}: no se puede montar el caso. ` +
+        `Revisa los horarios de ${SLUG} antes de fiarte de esta prueba.`
+      );
+    }
+    huecosUsados.add(hora);
 
     const rb = await fetch(`${BASE}/api/public/c/${SLUG}/book`, {
       method: "POST", headers: { "Content-Type": "application/json", "x-real-ip": IP_PRUEBA },
       body: JSON.stringify({
-        eventTypeId: eventType.id, scheduledAt: horaDelHueco(huecos[huecos.length - 1]),
+        eventTypeId: eventType.id, scheduledAt: hora,
         clientName: "Smoke Cancelar", clientEmail: MARCA, clientPhone: "+34600999000",
         aceptaRetencion: true,
       }),
     });
-    const bookingId = (await rb.json())?.data?.booking?.id;
-    if (!bookingId) return null;
+    const respuesta = await rb.json();
+    const bookingId = respuesta?.data?.booking?.id;
+    if (!bookingId) {
+      throw new Error(`no se pudo reservar el ${hora} (HTTP ${rb.status}): ${respuesta?.error ?? "sin motivo"}`);
+    }
 
     const cita = await Booking.findByPk(bookingId);
     const ps = await PaymentSession.findByPk(cita.paymentSessionId);
