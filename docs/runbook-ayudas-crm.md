@@ -73,7 +73,9 @@ Leyenda: `[x]` hecho · `[-]` mirada, no necesita · `[ ]` pendiente
 - [x] `clientes` — cabecera. Los «?» de los estados se quitaron a propósito
 - [x] `clientes/lista-espera` — qué es, y que NO es la de Citas; los dos botones
 - [x] `clientes/urgentes` — los dos bloques, y «Está bien así»
-- [ ] `clientes/[id]` — la ficha: contrato, tutores, meses del portal, módulos
+- [~] `clientes/[id]` — la ficha. Hecho «Acceso al portal por meses» (que los
+      documentos se abren mes a mes según el cobro de ESE mes, y que abrir a
+      mano no registra cobro). Pendientes: contrato, tutores, módulos
 
 ### Citas — EMPEZADO (05/08/2026)
 - [x] `citas` — la pestaña Lista de espera (retenido ≠ cobrado)

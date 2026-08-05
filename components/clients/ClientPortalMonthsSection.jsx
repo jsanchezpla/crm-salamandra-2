@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import HelpTooltip from "../ui/HelpTooltip.jsx";
 
 function nombreMes(mes) {
   const [a, m] = mes.split("-").map(Number);
@@ -70,7 +71,18 @@ export default function ClientPortalMonthsSection({ clientId }) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6 max-w-5xl">
       <div className="px-5 py-4 border-b border-gray-100">
-        <span className="text-sm font-semibold text-gray-700">Acceso al portal por meses</span>
+        <span className="text-sm font-semibold text-gray-700 inline-flex items-center gap-1.5">
+          Acceso al portal por meses
+          <HelpTooltip title="Acceso al portal por meses" placement="bottom">
+            Esta sección solo aparece si tienes activado el bloqueo por impago. Con él, la familia
+            entra a su área privada siempre, pero{" "}
+            <strong className="text-white">los documentos de cada mes se le abren cuando consta
+            el cobro de ESE mes</strong> — no del total.
+            {" "}
+            Abrir uno a mano no registra ningún cobro: es para becas, acuerdos de pago o dinero que
+            entró por fuera del CRM.
+          </HelpTooltip>
+        </span>
         <p className="text-xs text-gray-500 mt-1">
           La familia ve los documentos de cada mes cuando consta su cobro. Aquí puedes abrir un mes
           a mano si hace falta.
