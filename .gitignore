@@ -59,3 +59,8 @@ cookies.txt
 login.json
 fiscal.json
 *.cookies.txt
+
+# Respaldos de borrado de pacientes (scripts/borrar-rastro-paciente.js).
+# Llevan datos personales y de salud copiados tal cual de la base de datos:
+# fuera del repositorio, siempre.
+rastro-*.json
