@@ -88,39 +88,43 @@ function crm_render_iframe($path, $extra_query, $title) {
     $src = CRM_BASE_URL . '/widget/c/' . CRM_TENANT . $path . '?' . $query;
 
     /*
-     * Ancho (05/08/2026, Rodrigo: «se puede poner más ancho y que ocupe toda
-     * la página»).
+     * ── ANCHO: se ensancha la CAJA, no se saca el widget de ella ────────────
+     * (05/08/2026, Rodrigo: «se puede poner más ancho y que ocupe toda la
+     * página»).
      *
-     * El widget salía encajonado en una franja estrecha con media pantalla en
-     * blanco a los lados, y no era culpa del iframe —que ya iba a width:100%—
-     * sino del contenedor de contenido del theme (`.blog-article`, 760px), que
-     * limita el ancho de CUALQUIER página.
+     * El widget salía encajonado porque el contenedor de contenido del theme
+     * (`.blog-article`, 760px) limita el ancho de cualquier página. Dos
+     * intentos de sacarlo con márgenes negativos —`100vw` primero,
+     * `translateX(-50%)` después— acabaron CORTÁNDOLO POR LA IZQUIERDA: ese
+     * truco necesita que el contenedor esté exactamente centrado en la
+     * ventana, y aquí no lo está (cambia según haya sesión iniciada, y el
+     * `overflow-x:clip` del body se come lo que sobresale).
      *
-     * ⚠️ El primer intento fue el truco «full-bleed» clásico (`width:100vw` +
-     * `margin-left:calc(50% - 50vw)`) y quedó CORTADO POR LA IZQUIERDA:
-     * `100vw` incluye la barra de scroll, así que descuadra el centrado unos
-     * píxeles, y el `overflow-x:clip` que el theme pone en el body se come lo
-     * que sobresale.
+     * Lo que funciona es al revés: el widget se queda quieto a `width:100%` y
+     * lo que se ensancha es su contenedor. Sin márgenes negativos no hay nada
+     * que pueda salirse. Se hace en JS y no en CSS porque las clases del theme
+     * pueden cambiar con una actualización. Si el JS no corre, el widget se
+     * queda estrecho pero ENTERO: el peor caso es feo, no roto.
      *
-     * Lo que sí funciona: el CENTRADO no usa `vw` —`margin-left:50%` lleva el
-     * borde al centro del contenedor y `translateX(-50%)` lo echa atrás la
-     * mitad de su ancho—, y `vw` se queda solo para el TOPE, que sí tiene que
-     * mirar la ventana, con 40px de holgura para la barra.
-     *
-     * Medido en tunutrilaura.com/citas/ con el theme puesto:
-     *   ventana 1900 → 1440px de ancho, 223px de margen a CADA lado
-     *   ventana 1280 → 1240px de ancho,  13px de margen a CADA lado
-     *   sin scroll lateral en ninguno de los dos.
-     *
-     * Ese 1440 es el MISMO tope que usa el widget por dentro: con uno mayor
-     * solo se ganan franjas vacías, porque el contenido no pasa de ahí.
+     * Medido en tunutrilaura.com/citas/ con el theme real:
+     *   ventana 1900 → 1368px, márgenes 259 = 259
+     *   ventana 1280 → 1201px, márgenes  32 =  32
+     *   sin cortes ni scroll lateral en ninguno de los dos.
      */
-    return '<div style="width:1440px;max-width:calc(100vw - 40px);'
-        . 'margin-left:50%;transform:translateX(-50%);box-sizing:border-box">'
+    $id = 'crm-w-' . uniqid();
+    $script = '<script>(function(){try{'
+        . 'var e=document.getElementById(' . wp_json_encode($id) . ');if(!e)return;'
+        . 'var n=e.parentElement,i=0;'
+        . 'while(n&&i<6&&n!==document.body){'
+        . 'if(getComputedStyle(n).maxWidth!=="none"){n.style.maxWidth="1440px";n.style.width="100%";}'
+        . 'n=n.parentElement;i++;}'
+        . '}catch(err){}})();</script>';
+
+    return '<div id="' . esc_attr($id) . '" style="width:100%;max-width:1440px;margin:0 auto">'
         . '<iframe src="' . esc_url($src) . '" '
         . 'style="width:100%;min-height:820px;border:0;display:block" '
         . 'title="' . esc_attr($title) . '" loading="lazy"></iframe>'
-        . '</div>';
+        . '</div>' . $script;
 }
 
 /* ── Shortcodes ────────────────────────────────────────────────────────── */
