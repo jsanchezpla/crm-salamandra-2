@@ -46,6 +46,7 @@ import {
   estadoDeAdmision,
   mensajeDePuerta,
 } from "../../../../../../lib/citas/puertaFormulario.js";
+import { puedePedirValoracion } from "../../../../../../lib/citas/puertaValoracion.js";
 import {
   exigeContratoFirmado,
   esCitaDeValoracion,
@@ -251,6 +252,38 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
         return errorConDatos(aviso.texto, 409, {
           codigo: aviso.codigo,
           titulo: aviso.titulo,
+        });
+      }
+
+      // A la primera visita solo se llega por el formulario (05/08/2026).
+      //
+      // Va aquí y no en la puerta de admisión de arriba porque aquella es para
+      // TODAS las citas: encenderla le cerraría la agenda al paciente de
+      // siempre que solo quiere una revisión. Esta pide el formulario donde
+      // hace falta —delante de quien el centro todavía no conoce— y deja el
+      // seguimiento en paz.
+      //
+      // Es el ÚNICO sitio que protege de verdad. La valoración está eximida a
+      // propósito de contratos y del cobro, así que sin este corte las cuatro
+      // pantallas que la esconden no impiden nada: el tipo de cita viaja en el
+      // cuerpo de la petición y se escribe a mano.
+      const admision = await puedePedirValoracion(tenant, {
+        tieneFormularios: hasModule("formularios"),
+        FormSubmission: tenantModels.FormSubmission,
+        email: clientEmail,
+      });
+      if (!admision.puede) {
+        const aviso = mensajeDePuerta(admision.estado, {
+          identificado,
+          nombre: tenant.name,
+        });
+        // `errorConDatos` y no `error`: el tercer argumento de `error` se borra
+        // en producción, y con él se iría el enlace al formulario — que es lo
+        // único accionable que lleva la respuesta.
+        return errorConDatos(aviso.texto, 403, {
+          codigo: aviso.codigo,
+          titulo: aviso.titulo,
+          urlFormulario: aviso.mostrarEnlace ? urlDelFormulario(tenant) : null,
         });
       }
     }

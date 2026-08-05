@@ -5,6 +5,7 @@ import {
   exigeFormularioAceptado,
   urlDelFormulario,
 } from "../../../../../../lib/citas/puertaFormulario.js";
+import { exigeFormularioParaValoracion } from "../../../../../../lib/citas/puertaValoracion.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/info
@@ -44,6 +45,19 @@ export const GET = withPublicTenant(async (_request, _ctx, { tenant, brand, hasM
       ? { requerida: true, urlFormulario: urlDelFormulario(tenant) }
       : { requerida: false };
 
+    // Lo mismo, pero solo para la PRIMERA visita (05/08/2026). Se anuncia
+    // aparte de `admision` porque son dos puertas distintas: aquella vale para
+    // todas las citas y esta solo para la valoración inicial, que es la que
+    // trae a quien el centro todavía no conoce.
+    //
+    // Sin esto, el botón «vengo a una valoración» del portal no tendría forma
+    // de saber que hay un formulario delante, y llevaría a la persona a elegir
+    // hueco, rellenar sus datos y chocarse con un 403 al final. Va aquí y no
+    // dentro de `admision` para no cambiar lo que ya leen las pantallas.
+    const valoracion = exigeFormularioParaValoracion(tenant)
+      ? { requiereFormulario: true, urlFormulario: urlDelFormulario(tenant) }
+      : { requiereFormulario: false };
+
     // Página de la web del cliente donde vive el portal. Con ella, a quien
     // acaba de reservar se le manda a su área privada en vez de pedirle que se
     // guarde un enlace con un identificador dentro.
@@ -53,6 +67,7 @@ export const GET = withPublicTenant(async (_request, _ctx, { tenant, brand, hasM
       name: tenant.name,
       slug: tenant.slug,
       admision,
+      valoracion,
       portalUrl: typeof portalUrl === "string" && portalUrl.trim() ? portalUrl.trim() : null,
       brand: {
         primaryColor: brand.primaryColor,
