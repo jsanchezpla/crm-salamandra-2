@@ -193,19 +193,52 @@ function crm_gate_css() {
     $puesto = true;
 
     return '<style>'
-        // Dos columnas. `auto-fit` para que en el móvil se apile solo, sin
-        // punto de corte que adivinar.
-        . '.crm-gate .fq-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));'
-        . 'gap:.6rem 1.5rem;align-items:start}'
-        // Lo que no es un campo ocupa el ancho entero: el consentimiento, el
-        // botón y los avisos no se parten en dos.
+        /*
+         * TRES columnas exactas, no `auto-fit` (05/08/2026, Rodrigo: «vamos a
+         * dejarlo en 3 y 3»). Con `auto-fit` el número de columnas dependía del
+         * ancho: en su pantalla salían cuatro arriba y dos abajo, que es
+         * justo lo que se veía descuadrado.
+         */
+        . '.crm-gate .fq-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));'
+        . 'gap:.5rem 1.5rem;align-items:start}'
+        /*
+         * Los cuadros de respuesta arrancan TODOS a la misma altura. Cada
+         * pregunta se convierte en una rejilla de dos filas: el enunciado
+         * ocupa una fila de alto fijo —una línea— y la respuesta la otra. Sin
+         * esto, una pregunta de dos líneas empujaba su cuadro hacia abajo y la
+         * fila entera quedaba en escalera.
+         */
+        . '.crm-gate .fq-field{margin:0;display:grid;grid-template-rows:1.6rem auto;align-content:start}'
+        /*
+         * Sin `nowrap` ni recortes: los enunciados ya caben en una línea
+         * porque se acortaron en el theme. Y en un contenedor flex como este
+         * label, `overflow:hidden` colapsaba la caja a 29px en vez de
+         * recortar el texto — el remedio era peor.
+         */
+        . '.crm-gate .fq-label{margin:0;align-self:center;font-size:.92rem;line-height:1.25}'
+        // Los dos textos largos ya viven dentro del cuadro; si quedara alguno
+        // suelto, fuera: rompería la alineación de la fila.
+        . '.crm-gate .fq-help{display:none}'
+        // Cuadros más bajos: son notas breves, no redacciones.
+        . '.crm-gate .fq-textarea{min-height:64px}'
+        // Lo que no es una pregunta ocupa el ancho entero: partir en tres una
+        // casilla de consentimiento o el botón de enviar no tiene sentido.
         . '.crm-gate .fq-form>.fq-consent,.crm-gate .fq-form>.fq-submit,'
         . '.crm-gate .fq-form>.fq-privacidad,.crm-gate .fq-form>.fq-error{grid-column:1/-1}'
-        . '.crm-gate .fq-field{margin:0}'
+        . '.crm-gate .fq-consent{margin-top:.4rem}'
+        . '.crm-gate .fq-card{padding:1.25rem}'
         // El acceso de pacientes, pegado al final del formulario.
-        . '.crm-gate__acceso{display:flex;gap:1rem 1.5rem;align-items:center;justify-content:space-between;'
-        . 'flex-wrap:wrap;margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid #EADFD9;'
-        . 'font-family:sans-serif;font-size:.95rem;line-height:1.45}'
+        . '.crm-gate__acceso{display:flex;gap:.75rem 1.5rem;align-items:center;'
+        . 'justify-content:space-between;flex-wrap:wrap;margin-top:1rem;padding-top:1rem;'
+        . 'border-top:1px solid #EADFD9;font-family:sans-serif;font-size:.95rem;line-height:1.45}'
+        /*
+         * En pantallas estrechas las tres columnas no caben: se pasa a una y
+         * se sueltan las ataduras de altura, que ahí solo estorban.
+         */
+        . '@media (max-width:900px){'
+        . '.crm-gate .fq-form{grid-template-columns:1fr}'
+        . '.crm-gate .fq-field{display:block}'
+        . '.crm-gate .fq-label{white-space:normal}}'
         . '</style>';
 }
 
