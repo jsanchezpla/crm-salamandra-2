@@ -10,6 +10,7 @@ import { getTenantStripeConfig } from "../../../../lib/payments/stripeConfig.js"
 import { getTenantCloudflareConfig } from "../../../../lib/analytics/cloudflareConfig.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { avisarCambioDeConfiguracion } from "../../../../lib/configuracion/avisoCambio.js";
+import { exigeIdentidad } from "../../../../lib/citas/puertaIdentidad.js";
 
 /**
  * /api/tenant/settings — configuración básica del tenant.
@@ -137,6 +138,7 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("citas.formularioObligatorio", antes?.citas?.formularioObligatorio, despues?.citas?.formularioObligatorio);
   anota("citas.contratoObligatorio", antes?.citas?.contratoObligatorio, despues?.citas?.contratoObligatorio);
   anota("citas.soloConPago", antes?.citas?.soloConPago, despues?.citas?.soloConPago);
+  anota("citas.identidadObligatoria", antes?.citas?.identidadObligatoria, despues?.citas?.identidadObligatoria);
   anota("citas.formularioUrl", antes?.citas?.formularioUrl, despues?.citas?.formularioUrl);
   anota("citas.portalUrl", antes?.citas?.portalUrl, despues?.citas?.portalUrl);
 
@@ -224,6 +226,9 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // Puerta de caja (05/08/2026): desde la agenda pública solo se reserva lo
     // que se cobra —pasarela ahora o bono ya pagado—. Ver tiposVisibles.js.
     soloConPago: t.settings?.citas?.soloConPago === true,
+    // Puerta de identidad (05/08/2026): sin cuenta no se reserva. Se lee con el
+    // helper porque respeta también el interruptor viejo del widget.
+    identidadObligatoria: exigeIdentidad(t),
     formularioUrl: t.settings?.citas?.formularioUrl ?? "",
     // Página de la web del cliente donde está incrustado el portal.
     portalUrl: t.settings?.citas?.portalUrl ?? "",
@@ -444,6 +449,13 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   // poder reservar nada. Ver `lib/citas/tiposVisibles.js`.
   if (typeof body.soloConPago === "boolean") {
     settings.citas = { ...(settings.citas ?? {}), soloConPago: body.soloConPago };
+  }
+  // Cuarta puerta (05/08/2026): sin cuenta no se reserva. Es la más básica de
+  // las cuatro —antes de preguntar si está admitida o si ha firmado, hay que
+  // saber quién es— y la única que hasta ahora era decorativa: el widget
+  // enseñaba el cartel pero el servidor no comprobaba nada.
+  if (typeof body.identidadObligatoria === "boolean") {
+    settings.citas = { ...(settings.citas ?? {}), identidadObligatoria: body.identidadObligatoria };
   }
   if (typeof body.formularioUrl === "string") {
     const url = body.formularioUrl.trim();

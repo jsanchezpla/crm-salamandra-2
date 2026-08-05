@@ -12,6 +12,53 @@ producción tras Fase 1).
 
 ---
 
+## Puerta de identidad: sin cuenta no se reserva (2026-08-05)
+
+La primera de las cuatro puertas, porque es la más básica: antes de preguntar si
+esta persona está admitida o si ha firmado, hay que saber **quién es**.
+
+⚠️ **La que había era MENTIRA.** Existía `settings.widget.auth.required` desde
+hacía meses: el widget pedía `?wpa=1` en la URL y, sin él, enseñaba un cartel de
+«inicia sesión». Pero ese parámetro lo pone quien abre la URL —se saltaba
+escribiéndolo a mano— y, sobre todo, **el servidor no lo miraba en ningún
+sitio**: un POST a `/book` creaba la cita sin sesión de ninguna clase. La página
+`/citas/` de WordPress sí exigía login, pero el widget del CRM es una URL
+pública, así que cualquiera que la conociera reservaba.
+
+Ahora `lib/citas/puertaIdentidad.js` decide y `/book` **corta**. Lo único que
+cuenta como identificarse es una **sesión de portal verificada**: WordPress firma
+un token con el correo de quien ha iniciado sesión (`?wpsso=`, TTL 5 min) y el
+CRM lo canjea por su propia sesión. Es lo único que no se puede fabricar desde el
+navegador, y el correo va firmado dentro, así que tampoco se puede reservar en
+nombre de otra.
+
+| Ajuste | Dónde | Por defecto |
+| --- | --- | --- |
+| `settings.citas.identidadObligatoria` | Configuración → Citas | `false` |
+| `settings.widget.auth.required` (legado) | — | `false` |
+
+Los dos encienden la puerta. El viejo se respeta porque alguien pudo encenderlo
+esperando que sirviera de algo; cuando esto se escribió no lo tenía nadie
+(comprobado en producción).
+
+⚠️ **La VALORACIÓN INICIAL no se salta esta puerta.** Se salta la de CONTRATOS,
+que es otra cosa —a la primera visita se entra sin firmar porque todavía no ha
+decidido empezar—, pero cuenta tiene que tener: sin ella la cita nace huérfana,
+sin ficha a la que enlazarse, y hay que adivinar de quién es.
+
+⚠️ **Apagada por defecto**, como sus hermanas: un centro que reparta el enlace de
+su agenda por WhatsApp sin área privada montada se quedaría sin poder dar una
+sola cita.
+
+⚠️ **Antes de encenderla en un cliente**, comprobar que su WordPress pasa el
+`wpsso` al iframe de reservas (lo hace `crm_render_iframe` del snippet) y que el
+CRM tiene `CITAS_PORTAL_SESSION_SECRET`. Sin cualquiera de las dos, nadie podrá
+reservar.
+
+Fijado en `_smoke-puerta-identidad.mjs`.
+
+---
+
 ## Puerta de admisión: quién puede reservar (2026-08-03)
 
 La agenda pública no miraba la bandeja de solicitudes: **cualquiera con el

@@ -70,6 +70,7 @@ import {
 } from "../../../../../../lib/citas/packs.js";
 import { createCheckoutSession } from "../../../../../../lib/payments/checkout.js";
 import { exigePasarela, puedeReservar } from "../../../../../../lib/citas/tiposVisibles.js";
+import { exigeIdentidad, mensajeSinIdentidad } from "../../../../../../lib/citas/puertaIdentidad.js";
 import { paquetePreguntas } from "../../../../../../lib/citas/preguntasCita.js";
 
 /**
@@ -197,6 +198,23 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
       // la reserva pública); se valida justo debajo.
     }
     if (!clientEmail || !isValidEmail(clientEmail)) return error("clientEmail inválido", 422);
+
+    // ── Puerta de IDENTIDAD: sin cuenta no se reserva (05/08/2026) ──────────
+    // La primera de las tres puertas, porque es la más básica: antes de
+    // preguntar si esta persona está admitida o si ha firmado, hay que saber
+    // QUIÉN es. `identificado` solo es true con una sesión de portal
+    // verificada —el token que firma WordPress con el correo de quien ha
+    // iniciado sesión—, nunca con lo que venga escrito en el cuerpo.
+    //
+    // El `?wpa=1` que el widget usaba para esto NO vale y nunca valió: lo pone
+    // quien abre la URL y el servidor no lo miraba. Ver lib/citas/puertaIdentidad.js.
+    //
+    // La VALORACIÓN INICIAL tampoco se la salta: se salta la de contratos, que
+    // es otra cosa. Sin cuenta, esa cita nace huérfana y hay que adivinar de
+    // quién es.
+    if (exigeIdentidad(tenant) && !identificado) {
+      return error(mensajeSinIdentidad(tenant), 401);
+    }
 
     // Puerta de admisión: sin formulario aceptado no hay cita. Va ANTES de
     // mirar huecos, festivos o tarjetas — lo primero, porque es lo que decide

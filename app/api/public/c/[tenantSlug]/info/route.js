@@ -1,5 +1,6 @@
 import { withPublicTenant } from "../../../../../../lib/tenant/publicTenantContext.js";
 import { ok, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
+import { exigeIdentidad, urlDeAcceso } from "../../../../../../lib/citas/puertaIdentidad.js";
 import {
   exigeFormularioAceptado,
   urlDelFormulario,
@@ -19,12 +20,18 @@ export const GET = withPublicTenant(async (_request, _ctx, { tenant, brand, hasM
     // settings.widget.auth.required = true, el widget pedirá ?wpa=1 en la URL
     // (lo añade WP cuando el usuario está logueado). loginUrl/registerUrl se
     // usan para los CTAs del aviso.
+    // ⚠️ Desde el 05/08/2026 esto YA NO es solo cosmético. Antes el widget
+    // enseñaba un cartel de «inicia sesión» que se saltaba escribiendo `?wpa=1`
+    // en la URL, y el servidor no comprobaba nada. Ahora `/book` exige una
+    // sesión de portal verificada cuando la puerta está encendida — lo que se
+    // anuncia aquí y lo que se aplica allí es la MISMA decisión
+    // (`lib/citas/puertaIdentidad.js`).
     const widgetAuth = tenant.settings?.widget?.auth || null;
-    const auth = widgetAuth?.required
+    const auth = exigeIdentidad(tenant)
       ? {
           required: true,
-          loginUrl: widgetAuth.loginUrl ?? null,
-          registerUrl: widgetAuth.registerUrl ?? null,
+          loginUrl: urlDeAcceso(tenant),
+          registerUrl: widgetAuth?.registerUrl ?? null,
         }
       : { required: false };
 

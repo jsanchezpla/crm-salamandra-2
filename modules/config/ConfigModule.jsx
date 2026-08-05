@@ -655,6 +655,21 @@ export default function ConfigModule() {
           )}
 
           {isAdmin && (
+            <PuertaIdentidadCard
+              activo={!!cfg.identidadObligatoria}
+              readOnly={!!cfg.readOnly}
+              onChange={(v) =>
+                patchTenant(
+                  { identidadObligatoria: v },
+                  v
+                    ? "Ahora hay que tener cuenta en tu web para poder pedir cita"
+                    : "Vuelve a poderse reservar sin cuenta"
+                )
+              }
+            />
+          )}
+
+          {isAdmin && (
             <PuertaCajaCard
               activo={!!cfg.soloConPago}
               readOnly={!!cfg.readOnly}
@@ -1163,6 +1178,53 @@ function PuertaContratoCard({ activo, readOnly, onChange }) {
         ) : (
           <span className="text-neutral-400">
             Apagada: se puede reservar y dejar la tarjeta sin haber firmado nada.
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Puerta de identidad (05/08/2026): sin cuenta en la web no se reserva.
+ *
+ * Es la más básica de las cuatro y la única que hasta hoy era MENTIRA: el
+ * widget enseñaba un cartel de «inicia sesión» que se saltaba escribiendo
+ * `?wpa=1` en la URL, y el servidor no comprobaba nada.
+ */
+function PuertaIdentidadCard({ activo, readOnly, onChange }) {
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-neutral-800">Pedir cita solo con cuenta</div>
+          <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+            Para reservar hay que haber iniciado sesión en tu web. Sin esto, cualquiera con el
+            enlace de tu agenda pide hora, y esa cita entra <strong className="text-neutral-500">sin
+            paciente detrás</strong>: no hay ficha a la que enlazarla y hay que adivinar de quién es.{" "}
+            <strong className="text-neutral-500">La valoración inicial tampoco se libra</strong> — se
+            salta los contratos, que es otra cosa, pero cuenta tiene que tener.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange(!activo)}
+          className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 ${activo ? "bg-[var(--color-primary,#1B3A2D)]" : "bg-neutral-300"}`}
+          aria-label={activo ? "Permitir reservar sin cuenta" : "Exigir cuenta para reservar"}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${activo ? "translate-x-6" : "translate-x-1"}`} />
+        </button>
+      </div>
+
+      <div className="mt-1 text-[11px] font-medium">
+        {activo ? (
+          <span className="text-emerald-700">
+            Activa: quien no haya iniciado sesión en tu web no puede reservar.
+          </span>
+        ) : (
+          <span className="text-neutral-400">
+            Apagada: cualquiera con el enlace del widget puede reservar sin identificarse.
           </span>
         )}
       </div>
