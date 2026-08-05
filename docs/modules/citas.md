@@ -350,6 +350,50 @@ seguir leyéndose como se preguntó entonces. Fijado en
 
 ---
 
+## La campana avisa de lo que hay que atender (2026-08-05)
+
+A `nutri_laura` le llegaba **una sola cosa** a la campana: las cancelaciones.
+Lo que más necesita saber no avisaba de ninguna forma dentro del CRM. Añadidos
+tres tipos, con `notifyAdmins` (nuevo en `lib/notifications/notifyUsers.js`,
+resuelve los admin del tenant en un sitio en vez de repetir la consulta):
+
+| Tipo | Cuándo | Dónde se dispara |
+| --- | --- | --- |
+| `cita_solicitada` | entra una solicitud en la lista de espera | `/book` (gratis) y **`entityHooks.js`** (con tarjeta) |
+| `formulario_recibido` | llega una solicitud de la web | `formularios/[formSlug]/route.js` |
+| `contrato_firmado` | una familia completa el contrato | `citas-portal/contract/sign/route.js` |
+
+Tres decisiones que no son obvias:
+
+- **La cita con tarjeta avisa cuando el dinero queda RETENIDO, no al reservar.**
+  Antes de eso es un formulario a medias: avisar en `/book` llenaría la campana
+  de gente que se echó atrás al ver el importe.
+- **El contrato avisa solo cuando queda COMPLETO.** Con dos tutores o varios
+  anexos, un aviso por firma es ruido y hace creer que ya está listo.
+- Todo con `dedupe`: **Stripe reintenta los webhooks**.
+- Sin respuestas ni motivo de consulta: son datos de salud, y para saber que hay
+  algo que revisar no hacen falta.
+
+> ⚠️ **Rodrigo**: esto toca **seis líneas de `lib/payments/entityHooks.js`**,
+> dentro del `postCommit` de `citaPagada`, justo al lado del correo de
+> «solicitud recibida» que ya se enviaba ahí. Es aditivo y best-effort (un fallo
+> de campana no puede tumbar un cobro), pero es tu zona y quería que lo supieras
+> antes de que te lo encuentres en un merge. Si prefieres moverlo a otro punto
+> del ciclo de pago, adelante: lo único que importa es que sea **el momento en
+> que la cita se convierte en solicitud de verdad**, no antes.
+
+**Por qué hacía falta**, aunque el formulario ya avisara por correo: ese aviso
+va a `forms.settings.notifyEmails` y sale con la clave de Resend del tenant. En
+producción faltaban las dos cosas —el envío llevaba semanas en dry-run— y se
+acumularon **seis solicitudes sin que nadie supiera que existían**. La campana
+no depende de terceros: si la solicitud se guarda, el aviso aparece.
+
+Fijado en `scripts/_smoke-campana.mjs`: llegan a los admin y solo a ellos, el
+`dedupe` aguanta un reintento, nacen sin leer, y si la campana falla no se lleva
+por delante la operación.
+
+---
+
 ## Decirle algo al cliente: las tres vías (2026-08-03)
 
 El CRM sabía avisar de lo que le pasa a **una cita**, y solo de algunas cosas.
