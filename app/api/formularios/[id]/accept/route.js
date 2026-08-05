@@ -10,6 +10,27 @@ import {
 import { crearUsuarioPortal } from "../../../../../lib/formularios/portalUser.js";
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 import { applyAutoAssignments } from "../../../../../lib/clients/moduleAssignments.js";
+import { sendEmail, envioRealizado } from "../../../../../lib/email/resendClient.js";
+import { solicitudAceptadaTemplate } from "../../../../../lib/email/templates/citas/solicitudAceptada.js";
+import { getTenantResendConfig } from "../../../../../lib/outreach/resendConfig.js";
+
+/**
+ * A dónde se le manda a reservar. Se prefiere el ÁREA PRIVADA del cliente
+ * (Configuración → Citas), porque es donde su web tiene puesta la agenda y
+ * donde su sesión de WordPress vale; el `loginUrl` es el respaldo. Sin ninguna
+ * de las dos se devuelve null y el correo no promete un botón que no lleva a
+ * ningún sitio.
+ */
+function urlParaReservar(tenant) {
+  const candidatos = [
+    tenant?.settings?.citas?.portalUrl,
+    tenant?.settings?.widget?.auth?.loginUrl,
+  ];
+  for (const url of candidatos) {
+    if (typeof url === "string" && /^https?:\/\/\S+$/i.test(url.trim())) return url.trim();
+  }
+  return null;
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -105,11 +126,48 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
       });
     } catch { /* la auditoría no puede tumbar la operación */ }
 
+    // «Ya puedes pedir cita» (05/08/2026). La puerta de admisión exige el
+    // formulario ACEPTADO, no solo enviado, así que entre rellenar y reservar
+    // hay una persona decidiendo. Hasta hoy esa espera era a ciegas: se le
+    // creaba la ficha y el acceso, y no se le decía nada — se quedaba sin saber
+    // que ya podía pedir cita.
+    //
+    // Best-effort y FUERA de todo lo anterior: que no salga el correo no puede
+    // deshacer una aceptación que ya creó ficha y acceso.
+    let avisoAlPaciente = "no_procede";
+    if (client.email) {
+      try {
+        const cfg = getTenantResendConfig({ tenant });
+        const tpl = solicitudAceptadaTemplate({
+          tenantName: tenant.name,
+          brand: tenant.settings?.brand,
+          clientName: client.name,
+          urlReserva: urlParaReservar(tenant),
+        });
+        const envio = await sendEmail({
+          to: client.email,
+          subject: tpl.subject,
+          html: tpl.html,
+          text: tpl.text,
+          from: cfg.fromEmail || undefined,
+          replyTo: cfg.replyTo || undefined,
+          apiKey: cfg.apiKey || undefined,
+        });
+        avisoAlPaciente = envioRealizado(envio, `formularios:aceptada ${client.id}`).motivo;
+      } catch (err) {
+        process.stderr.write(`[formularios:aceptada] email fail: ${err.message}\n`);
+        avisoAlPaciente = "error";
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       yaEstaba,
       creado,
       acceso,
+      // Para que la bandeja pueda decir si al paciente le ha llegado el aviso,
+      // en vez de dar por hecho que sí.
+      avisoAlPaciente,
       client: {
         id: client.id,
         name: client.name,
