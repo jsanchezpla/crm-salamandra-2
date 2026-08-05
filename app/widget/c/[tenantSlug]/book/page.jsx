@@ -262,6 +262,27 @@ export default function WidgetBookPage() {
   // flujo es el de siempre: ni se menciona el pago ni se pasa por Stripe.
   const precio = Number.isInteger(eventType?.price) && eventType.price > 0 ? eventType.price : null;
 
+  // ── ¿Hay un formulario delante de ESTA cita? (05/08/2026) ─────────────────
+  //
+  // Dos puertas distintas pueden pedirlo, y por eso se resuelven en un solo
+  // sitio en vez de repetir la condición donde se pinta:
+  //   · la global, que lo exige para TODAS las citas;
+  //   · la de la primera visita, que solo lo exige para la valoración inicial.
+  //
+  // Importa cuál sea, porque el texto cambia: decirle «hace falta el
+  // formulario» a quien está pidiendo un seguimiento —cuando la puerta que
+  // aplica es la de la primera visita— sería mentirle y hacer que lo rellene
+  // para nada.
+  //
+  // Esto NO protege: el servidor corta igual y devuelve el mismo aviso con su
+  // enlace. Está para que nadie elija hueco y escriba sus datos antes de
+  // enterarse.
+  const puertaPrevia = info?.admision?.requerida
+    ? { activa: true, url: info.admision.urlFormulario, soloPrimeraVisita: false }
+    : info?.valoracion?.requiereFormulario && eventType?.isInitialAssessment
+      ? { activa: true, url: info.valoracion.urlFormulario, soloPrimeraVisita: true }
+      : { activa: false, url: null, soloPrimeraVisita: false };
+
   // ── Bono de sesiones (04/08/2026) ─────────────────────────────────────────
   // Con `sessionsCount` a 1 —todo lo de hoy— nada de esto se pinta y el flujo
   // es exactamente el de siempre.
@@ -723,15 +744,16 @@ export default function WidgetBookPage() {
             {/* Aviso por delante de la puerta de admisión: se dice AQUÍ, junto
                 al email, y no solo al enviar, para que quien no haya pasado por
                 el formulario no rellene la reserva entera para nada. */}
-            {info?.admision?.requerida && (
+            {puertaPrevia.activa && (
               <div className="text-xs leading-relaxed text-[var(--widget-text-muted)] bg-[var(--widget-bg)] border border-[var(--widget-border)] rounded-md px-3 py-2.5">
-                Para dar cita hace falta haber completado antes el formulario de primer contacto
-                con el mismo correo que pongas aquí.
-                {info.admision.urlFormulario && (
+                {puertaPrevia.soloPrimeraVisita
+                  ? "Para la primera visita hace falta haber completado antes el formulario de primer contacto con el mismo correo que pongas aquí."
+                  : "Para dar cita hace falta haber completado antes el formulario de primer contacto con el mismo correo que pongas aquí."}
+                {puertaPrevia.url && (
                   <>
                     {" "}
                     <a
-                      href={info.admision.urlFormulario}
+                      href={puertaPrevia.url}
                       target="_top"
                       rel="noopener"
                       className="font-semibold text-[var(--brand-primary,var(--widget-button))] hover:underline"
