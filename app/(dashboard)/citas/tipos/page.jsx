@@ -42,6 +42,8 @@ const EMPTY_FORM = {
   formQuestions: [],
   // La primera visita: se entra sin firmar contratos. Solo una por cliente.
   isInitialAssessment: false,
+  // Fuera de la agenda pública: solo lo ve quien tenga bono activo de este tipo.
+  isHidden: false,
   active: true,
   order: 0,
 };
@@ -307,6 +309,7 @@ export default function CitasTiposPage() {
         instalmentMonths: data.instalmentMonths ?? "",
         formQuestions: Array.isArray(data.formQuestions) ? data.formQuestions : [],
         isInitialAssessment: !!data.isInitialAssessment,
+        isHidden: !!data.isHidden,
         active: !!data.active,
         order: data.order ?? 0,
         _bookingCount: data.bookingCount ?? 0,
@@ -374,6 +377,7 @@ export default function CitasTiposPage() {
       instalmentMonths: form.instalmentPrice ? Number(form.instalmentMonths) || null : null,
       formQuestions: form.formQuestions ?? [],
       isInitialAssessment: !!form.isInitialAssessment,
+      isHidden: !!form.isHidden,
       active: !!form.active,
       order: Number(form.order),
     };
@@ -720,6 +724,28 @@ export default function CitasTiposPage() {
                   <span className="block text-[10px] text-neutral-400 leading-snug">
                     A esta cita se entra SIN firmar los contratos: es la primera visita y todavía no
                     hay nada decidido. Solo puede haber una; si marcas esta, la anterior se desmarca.
+                  </span>
+                </span>
+              </label>
+
+              {/* Oculto y asignado a dedo (05/08/2026, Rodrigo). Para quien paga
+                  por fuera de la pasarela (transferencia del extranjero, Bizum):
+                  su cita entra como gratuita porque el dinero ya está cobrado, y
+                  a la vista sería una puerta abierta. */}
+              <label className="flex items-start gap-2.5 p-3 rounded-lg border border-neutral-200 bg-neutral-50/60 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.isHidden}
+                  onChange={(e) => updateForm("isHidden", e.target.checked)}
+                  className="mt-0.5 rounded border-neutral-300 accent-[var(--color-primary)]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[12px] text-neutral-700">Oculto: solo para quien se lo asignes</span>
+                  <span className="block text-[10px] text-neutral-400 leading-snug">
+                    No aparece en la agenda pública para nadie. Lo ve —y lo puede reservar— solo quien
+                    tenga un bono activo de este tipo, que le das tú desde su ficha cuando te pague por
+                    transferencia o Bizum. No es lo mismo que desactivarlo: desactivado no lo reserva
+                    nadie, tampoco quien ya lo tiene pagado.
                   </span>
                 </span>
               </label>

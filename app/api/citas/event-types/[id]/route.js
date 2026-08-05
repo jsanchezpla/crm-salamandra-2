@@ -198,6 +198,9 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       desmarcarOtras = marcar && !row.isInitialAssessment;
     }
     if ("active" in body) updates.active = Boolean(body.active);
+    // Oculto: fuera de la agenda pública, visible solo para quien tenga bono
+    // activo de este tipo (`lib/citas/tiposVisibles.js`).
+    if ("isHidden" in body) updates.isHidden = Boolean(body.isHidden);
     if ("order" in body) {
       const v = Number(body.order);
       if (!Number.isInteger(v)) return error("order inválido");

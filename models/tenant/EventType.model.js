@@ -189,6 +189,27 @@ export function defineEventType(sequelize) {
         allowNull: false,
         defaultValue: false,
       },
+      /**
+       * Oculto en la agenda pública (05/08/2026, Rodrigo).
+       *
+       * `active` dice si el tipo de cita SIRVE; esto dice QUIÉN lo ve. Un tipo
+       * oculto no sale en el widget para nadie: solo lo ve —y solo lo puede
+       * reservar— quien tenga un BONO ACTIVO suyo, que se le da a dedo desde su
+       * ficha (`lib/citas/tiposVisibles.js`).
+       *
+       * Para qué: hay pacientes que pagan por fuera de la pasarela (transferencia
+       * desde el extranjero, Bizum) y su cita figura como gratuita en el sistema
+       * porque el dinero ya entró. Si ese tipo estuviera a la vista, cualquiera
+       * podría colarse y no se notaría hasta la quinta sesión sin pagar.
+       *
+       * NO se usa `active: false` para esto: un tipo desactivado no lo puede
+       * reservar nadie, tampoco la persona a la que sí le corresponde.
+       */
+      isHidden: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
       active: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

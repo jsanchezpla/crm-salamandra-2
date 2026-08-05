@@ -82,6 +82,29 @@ export function defineSessionPack(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      /**
+       * De dónde salió el bono (05/08/2026).
+       *
+       * 'online' — lo creó el webhook de Stripe al confirmarse el pago. Era el
+       *            único camino que existía.
+       * 'manual' — lo dio de alta la profesional porque cobró por fuera de la
+       *            pasarela: transferencia desde el extranjero, Bizum, PayPal.
+       *
+       * Se guarda porque son dos cosas muy distintas cuando algo va mal. Un bono
+       * `online` tiene un cobro detrás que se puede mirar en Stripe; uno
+       * `manual` solo tiene la palabra de quien lo creó, y por eso se audita y
+       * se queda con su nombre en `createdBy`.
+       */
+      origin: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: "online",
+      },
+      /** Quién lo dio de alta a mano. Vacío en los que vienen de un pago online. */
+      createdBy: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
       purchasedAt: {
         type: DataTypes.DATE,
         allowNull: false,

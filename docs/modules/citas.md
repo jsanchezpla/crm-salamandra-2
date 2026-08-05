@@ -88,6 +88,89 @@ texto del aviso).
 
 ---
 
+## Tipos de cita ocultos y asignados a dedo (2026-08-05)
+
+Nace de los cobros que **no pasan por la pasarela**: transferencia desde el
+extranjero, Bizum a un móvil, PayPal. Ese trato se cierra por WhatsApp —Bizum va
+a un teléfono y la transferencia a una cuenta, mientras que la pasarela ingresa
+en Stripe— y la cita entra en el sistema **como gratuita**, porque el dinero ya
+está cobrado. Sin nada más, esa persona tenía que pedir hora por WhatsApp cada
+vez, para siempre.
+
+Dos piezas, en `lib/citas/tiposVisibles.js`:
+
+| Pieza | Dónde | Qué hace |
+| --- | --- | --- |
+| `event_types.is_hidden` | Citas → Tipos de cita | El tipo no sale en la agenda pública **para nadie** |
+| Bono dado a mano | Ficha de la paciente → Bonos | Le abre ese tipo a ELLA, con su contador |
+
+Quien tiene un bono activo de un tipo oculto lo ve en el widget (marcado «tu
+programa»), ve su contador («3 de 6») y **reserva sola**. Nadie más lo ve. Se le
+puede dar a cien personas si hace falta, pero siempre una a una.
+
+**No se usa `active: false` para esto**: un tipo desactivado no lo reserva nadie,
+tampoco la persona a la que sí le corresponde.
+
+⚠️ **El filtro del listado NO es la seguridad.** `GET /event-types` solo quita la
+tentación; el `eventTypeId` viaja en el cuerpo de `/book` y cualquiera puede
+mandarlo. La comprobación que cierra la puerta es `puedeReservar()` dentro de
+`/book`, y es la que hay que tocar si algún día cambia la regla. Los dos motivos
+de rechazo dicen lo MISMO a propósito («no está disponible»): distinguir «existe
+pero no es para ti» de «no existe» convertiría el endpoint en un buscador.
+
+⚠️ **La lista depende de quién mira, así que el widget espera al SSO.** El
+endpoint acepta `Authorization: Bearer` (sesión del portal) de forma OPCIONAL y
+solo entonces añade los ocultos con bono; sin cabecera responde lo de siempre.
+Un bearer caducado se trata como anónimo en vez de devolver 401 — es la agenda
+pública y no puede caerse porque a alguien se le pase la sesión. En el widget,
+la carga de tipos espera a que `useCitasPortalSession` termine: pedirlos antes
+devolvía la lista de una anónima y la paciente no veía su programa hasta
+recargar.
+
+⚠️ **Un bono agotado deja de destapar el tipo.** Quien gastó sus 6 sesiones
+vuelve a no ver nada hasta que le den otro bono. Es lo que impide que un acuerdo
+de 6 sesiones se convierta en barra libre.
+
+### Dar un bono a mano
+
+`POST /api/citas/packs` (solo admin). Era la pieza que faltaba: hasta hoy un
+bono **solo** podía nacer del webhook de Stripe.
+
+Es la única puerta del CRM que abre derecho a citas sin un cobro detrás que
+mirar, así que queda marcado `session_packs.origin = 'manual'` con el nombre de
+quien lo creó (`created_by`) y se audita (`citas.pack_manual_created`). Un bono
+`online` tiene su pago en Stripe; uno `manual` solo tiene la palabra de quien lo
+dio.
+
+El importe es opcional y **no** se valida contra el precio del tipo de cita: un
+acuerdo cerrado por WhatsApp puede ser otro, y bloquear el alta por un descuadre
+obligaría a mentir en el formulario. Se avisa, no se corta, en dos casos: dar
+más de una sesión sobre un tipo que no es pack, y dar un bono de un tipo que
+está a la vista de todos.
+
+Los bonos no se borran, se anulan (`PATCH /api/citas/packs/[id]`): las citas ya
+dadas conservan su número. `agotado` no se puede poner a mano — lo dice el
+recuento de las citas, no una persona.
+
+### Tercera puerta: `settings.citas.soloConPago`
+
+Con ella encendida, desde la agenda pública solo se reserva lo que pasa por
+caja: **o lo cobra la pasarela ahora, o lo pagó un bono antes**. Las citas
+gratuitas de verdad solo las crea el centro a mano desde su agenda.
+
+⚠️ **Apagada por defecto, y tiene que seguir así.** Aumenta tiene 62 tipos de
+cita en producción y **ninguno tiene precio** —cobran cuotas mensuales fuera del
+CRM—. Encenderla para todo el módulo les dejaría la agenda muerta el día que
+enciendan su portal. Mismo patrón que las otras dos puertas: interruptor por
+cliente en Configuración → Citas.
+
+Fijado en `_smoke-tipos-ocultos.mjs` (el interruptor, quién ve qué, quién puede
+reservar y que los dos rechazos no chiven de más).
+
+Migración: `scripts/migrate-citas-tipos-ocultos.js` (aditiva e idempotente).
+
+---
+
 ## Preguntas propias del tipo de cita (2026-08-04)
 
 Se contestan al reservar, DESPUÉS de elegir fecha y hora, y quedan guardadas en

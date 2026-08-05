@@ -99,6 +99,11 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     if (!Number.isInteger(maxAdvanceDays) || maxAdvanceDays <= 0) return error("maxAdvanceDays inválido");
 
     const active = body.active == null ? true : Boolean(body.active);
+    // Oculto: no sale en la agenda pública para nadie. Solo lo ve quien tenga un
+    // bono activo suyo, que se le da a dedo desde su ficha. Ver
+    // `lib/citas/tiposVisibles.js`. No confundir con `active: false`, que lo
+    // desactiva para todos, también para quien sí le corresponde.
+    const isHidden = Boolean(body.isHidden);
     const order = body.order == null ? 0 : Number(body.order);
     if (!Number.isInteger(order)) return error("order inválido");
 
@@ -178,6 +183,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       formId,
       formQuestions: normalizarPreguntas(body.formQuestions),
       isInitialAssessment,
+      isHidden,
       active,
       order,
     });

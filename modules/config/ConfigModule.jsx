@@ -655,6 +655,21 @@ export default function ConfigModule() {
           )}
 
           {isAdmin && (
+            <PuertaCajaCard
+              activo={!!cfg.soloConPago}
+              readOnly={!!cfg.readOnly}
+              onChange={(v) =>
+                patchTenant(
+                  { soloConPago: v },
+                  v
+                    ? "Desde la agenda pública ya solo se puede reservar pagando"
+                    : "Vuelven a poderse reservar online las citas sin precio"
+                )
+              }
+            />
+          )}
+
+          {isAdmin && (
             <AreaPrivadaCard
               key={cfg.portalUrl ?? ""}
               url={cfg.portalUrl ?? ""}
@@ -1148,6 +1163,52 @@ function PuertaContratoCard({ activo, readOnly, onChange }) {
         ) : (
           <span className="text-neutral-400">
             Apagada: se puede reservar y dejar la tarjeta sin haber firmado nada.
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Puerta de caja (05/08/2026): desde la agenda pública solo se reserva lo que
+ * se cobra. Apagada por defecto — hay centros cuyos tipos de cita no tienen
+ * precio porque cobran cuotas por fuera, y encenderla para todos los dejaría
+ * sin poder reservar nada.
+ */
+function PuertaCajaCard({ activo, readOnly, onChange }) {
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-neutral-800">Reservar online solo pagando</div>
+          <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+            Desde la agenda pública solo se puede reservar lo que pasa por caja: o lo cobra la
+            pasarela en ese momento, o ya lo pagó un bono.{" "}
+            <strong className="text-neutral-500">Las citas gratuitas las creas tú a mano</strong>{" "}
+            desde tu agenda. Enciéndelo si cobras por fuera (transferencia, Bizum) y no quieres que
+            nadie se cuele reservando una cita sin pagar.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange(!activo)}
+          className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 ${activo ? "bg-[var(--color-primary,#1B3A2D)]" : "bg-neutral-300"}`}
+          aria-label={activo ? "Permitir reservar citas sin pago" : "Exigir pago para reservar online"}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${activo ? "translate-x-6" : "translate-x-1"}`} />
+        </button>
+      </div>
+
+      <div className="mt-1 text-[11px] font-medium">
+        {activo ? (
+          <span className="text-emerald-700">
+            Activa: una cita sin precio y sin bono no se puede reservar desde la web.
+          </span>
+        ) : (
+          <span className="text-neutral-400">
+            Apagada: se puede reservar cualquier tipo de cita, tenga precio o no.
           </span>
         )}
       </div>

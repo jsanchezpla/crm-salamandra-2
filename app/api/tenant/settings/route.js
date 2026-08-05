@@ -136,6 +136,7 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("citas.avisosWhatsapp", antes?.citas?.avisosWhatsapp, despues?.citas?.avisosWhatsapp);
   anota("citas.formularioObligatorio", antes?.citas?.formularioObligatorio, despues?.citas?.formularioObligatorio);
   anota("citas.contratoObligatorio", antes?.citas?.contratoObligatorio, despues?.citas?.contratoObligatorio);
+  anota("citas.soloConPago", antes?.citas?.soloConPago, despues?.citas?.soloConPago);
   anota("citas.formularioUrl", antes?.citas?.formularioUrl, despues?.citas?.formularioUrl);
   anota("citas.portalUrl", antes?.citas?.portalUrl, despues?.citas?.portalUrl);
 
@@ -220,6 +221,9 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // Puerta de contratos (04/08/2026): sin firmar no se reserva, salvo la
     // valoración inicial. Ver lib/citas/puertaContrato.js.
     contratoObligatorio: t.settings?.citas?.contratoObligatorio === true,
+    // Puerta de caja (05/08/2026): desde la agenda pública solo se reserva lo
+    // que se cobra —pasarela ahora o bono ya pagado—. Ver tiposVisibles.js.
+    soloConPago: t.settings?.citas?.soloConPago === true,
     formularioUrl: t.settings?.citas?.formularioUrl ?? "",
     // Página de la web del cliente donde está incrustado el portal.
     portalUrl: t.settings?.citas?.portalUrl ?? "",
@@ -431,6 +435,15 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   }
   if (typeof body.contratoObligatorio === "boolean") {
     settings.citas = { ...(settings.citas ?? {}), contratoObligatorio: body.contratoObligatorio };
+  }
+  // Tercera puerta (05/08/2026): desde la agenda pública solo se reserva lo que
+  // pasa por caja —o lo paga la pasarela ahora, o lo pagó un bono antes—. Las
+  // citas gratuitas de verdad las crea el centro a mano desde su agenda.
+  // APAGADA por defecto: hay centros cuyos tipos de cita no tienen precio
+  // porque cobran cuotas por fuera, y encenderla para todos los dejaría sin
+  // poder reservar nada. Ver `lib/citas/tiposVisibles.js`.
+  if (typeof body.soloConPago === "boolean") {
+    settings.citas = { ...(settings.citas ?? {}), soloConPago: body.soloConPago };
   }
   if (typeof body.formularioUrl === "string") {
     const url = body.formularioUrl.trim();

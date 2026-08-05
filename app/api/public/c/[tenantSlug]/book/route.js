@@ -69,6 +69,7 @@ import {
   PAGO_FRACCIONADO,
 } from "../../../../../../lib/citas/packs.js";
 import { createCheckoutSession } from "../../../../../../lib/payments/checkout.js";
+import { exigePasarela, puedeReservar } from "../../../../../../lib/citas/tiposVisibles.js";
 import { paquetePreguntas } from "../../../../../../lib/citas/preguntasCita.js";
 
 /**
@@ -399,6 +400,27 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     }
 
     const precio = enBono ? null : (compraDeBono ? compraDeBono.amount : precioTarifa);
+
+    // ── ¿Puede reservar ESTO esta persona? (05/08/2026) ─────────────────────
+    // Dos cosas a la vez, las dos en `lib/citas/tiposVisibles.js`:
+    //
+    //   · Tipo OCULTO → solo pasa quien tenga bono activo suyo. El listado ya
+    //     no se lo enseña a nadie más, pero el filtro del listado NO es la
+    //     seguridad: el `eventTypeId` viaja en este cuerpo y cualquiera puede
+    //     mandarlo. Esta es la comprobación que cierra la puerta de verdad.
+    //
+    //   · `soloConPago` encendido → desde la agenda pública no se reserva nada
+    //     que no pase por caja: o lo cobra la pasarela ahora, o lo pagó un bono
+    //     antes. Las citas gratuitas de verdad las crea el centro a mano.
+    //     Apagado por defecto: hay centros cuyos tipos de cita NO tienen precio
+    //     porque cobran cuotas por fuera, y encenderlo para todos les dejaría
+    //     la agenda muerta.
+    const permiso = puedeReservar(eventType, {
+      tieneBono: !!enBono,
+      seCobra: Number.isInteger(precio) && precio > 0,
+      exigePago: exigePasarela(tenant),
+    });
+    if (!permiso.ok) return error(permiso.motivo, 422);
 
     // ── Preguntas propias del tipo de cita (04/08/2026) ─────────────────────
     // Si las tiene, hay que haberlas contestado: se preguntan después de elegir

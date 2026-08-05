@@ -64,14 +64,23 @@ export default function WidgetSelectionPage() {
   const tipoDelEnlace = searchParams.get("tipo");
   const [soloUnTipo, setSoloUnTipo] = useState(false);
 
+  // Sesión del portal (SSO de WordPress). Se canjea aquí arriba, ANTES de pedir
+  // los tipos de cita, porque desde el 05/08/2026 la lista depende de quién
+  // mira: los tipos ocultos solo se le enseñan a quien tiene bono. Además
+  // pre-rellena y bloquea su email en /book, que es para lo que nació.
+  const portal = useCitasPortalSession(tenantSlug);
+
   // ── Carga inicial: info + event-types ─────────────────────────────────────
   useEffect(() => {
+    // Se espera a saber si hay sesión: pedir la lista antes devolvería la de
+    // una anónima y la paciente no vería su programa hasta recargar.
+    if (portal.status === "loading") return;
     let cancelled = false;
     async function load() {
       try {
         const [infoRes, typesRes] = await Promise.all([
           fetch(`/api/public/c/${tenantSlug}/info`, { cache: "no-store" }),
-          fetch(`/api/public/c/${tenantSlug}/event-types`, { cache: "no-store" }),
+          portal.authFetch("/event-types", { cache: "no-store" }),
         ]);
         if (!infoRes.ok) throw new Error("Profesional no encontrado");
         if (!typesRes.ok) throw new Error("No hay tipos de cita disponibles");
@@ -99,7 +108,7 @@ export default function WidgetSelectionPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [tenantSlug, tipoDelEnlace]);
+  }, [tenantSlug, tipoDelEnlace, portal.status, portal.authFetch]);
 
   // ── Carga de días disponibles del mes según EventType y mes ───────────────
   useEffect(() => {
@@ -183,11 +192,6 @@ export default function WidgetSelectionPage() {
   }
 
   const auth = useWidgetAuth(info?.auth);
-
-  // Canjea el token SSO de WordPress (si viene en ?wpsso=) por una sesión de
-  // portal, para que el formulario de /book pueda pre-rellenar y bloquear el
-  // email del cliente logueado. No afecta al gate de reserva (sigue con ?wpa=1).
-  useCitasPortalSession(tenantSlug);
 
   const goContinue = useCallback(() => {
     if (!selectedEventTypeId || !selectedDatetime) return;
@@ -368,6 +372,14 @@ export default function WidgetSelectionPage() {
                           )}
                           <div className="text-[11px] text-[var(--widget-text-faint)] mt-1.5">
                             {et.duration} min · Online
+                            {/* Tipo oculto que se está viendo porque tiene bono
+                                (05/08/2026). Se dice para que no parezca una
+                                oferta más: es SU programa, ya pagado. */}
+                            {et.soloParaTi && (
+                              <span className="ml-1.5 text-[var(--brand-primary,var(--widget-button))]">
+                                · tu programa
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
