@@ -165,6 +165,38 @@ WordPress de serie.
 
 Lado WordPress: `nutrilaura-portal-user.php` en el tema.
 
+### También desde la ficha, a un botón (2026-08-05)
+
+`POST /api/clients/[id]/portal-user` (solo admin) hace ese MISMO paso para una
+paciente que ya tiene ficha. Quien llega por el formulario sale con cuenta sin
+que nadie haga nada; quien escribe **por Instagram**, o a quien se da de alta a
+mano, se quedaba solo con la ficha: sin acceso a su área privada, y por tanto
+sin poder ver sus citas ni usar un bono. El botón está en la ficha, en «Acceso
+a la web».
+
+No es una segunda implementación: llama a `crearUsuarioPortal`, así que si
+cambia la forma de dar de alta cambia para los dos caminos.
+
+⚠️ **De dónde sale la URL de WordPress.** Vivía —y sigue viviendo— en los
+ajustes DEL FORMULARIO (`forms.settings.wordpressUrl`), porque hasta ahora solo
+hacía falta al aceptar una solicitud. Desde la ficha no hay formulario de por
+medio, así que `resolverUrlWordpress()` la busca en tres sitios, del más
+explícito al más circunstancial:
+
+1. `tenant.settings.wordpressUrl` — donde debería estar.
+2. El origen de `tenant.settings.citas.portalUrl` (Configuración → Área privada).
+3. Cualquier formulario que la tenga puesta.
+
+Hoy tunutrilaura solo cumple el tercero, y por eso funciona sin configurar nada.
+Si algún día se borra ese formulario, el botón deja de saber a qué web llamar y
+lo dice en vez de fallar en silencio.
+
+Un fallo de WordPress **no** devuelve 500: la respuesta es 200 con el motivo en
+cristiano («no respondió a tiempo», «ya tenía usuario»), porque no es un error
+del CRM y la pantalla tiene que poder contarlo. Se audita el intento salga bien
+o mal: es un alta en un sistema de fuera que además dispara un correo a una
+paciente.
+
 ---
 
 ## Puesta en marcha de un tenant

@@ -1,3 +1,4 @@
+import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
@@ -45,6 +46,40 @@ async function quienLoCrea(request, tenantModels) {
     // el id, que al menos permite rastrearlo con el log de auditoría.
   }
   return userId ?? null;
+}
+
+/**
+ * ¿Le consta este correo al CRM? (05/08/2026)
+ *
+ * El bono va atado al CORREO, que es como la identifica el portal. Si ese
+ * correo no es el que ella usa en la web, el bono queda creado, se ve en su
+ * ficha, y ella no ve absolutamente nada — un fallo mudo que solo aparece
+ * cuando escribe diciendo que no le sale.
+ *
+ * El CRM no puede preguntarle a WordPress si ese correo tiene cuenta, así que
+ * esto es lo más cerca que se puede estar: ¿hemos visto este correo alguna vez,
+ * en una cita o en una solicitud? Si no, o es alguien nuevo —y entonces hay que
+ * crearle la cuenta— o hay una letra cambiada.
+ *
+ * Es un AVISO, nunca un corte: dar de alta a alguien que llegó por Instagram y
+ * no ha reservado nunca es un caso legítimo y frecuente.
+ */
+async function constaElCorreo(tenantModels, email) {
+  const { Booking, FormSubmission } = tenantModels ?? {};
+  const donde = { [Op.iLike]: String(email).trim() };
+
+  try {
+    if (Booking && (await Booking.count({ where: { clientEmail: donde } })) > 0) return true;
+  } catch {
+    // Sin tabla de citas: no se puede saber, y no se avisa por las dudas.
+    return true;
+  }
+  try {
+    if (FormSubmission && (await FormSubmission.count({ where: { email: donde } })) > 0) return true;
+  } catch {
+    // El tenant puede no tener el módulo de formularios: no es un error.
+  }
+  return false;
 }
 
 export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
@@ -116,6 +151,11 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     if (!eventType.isHidden) {
       avisos.push(
         `«${eventType.name}» está a la vista de todo el mundo en la agenda pública. Si este bono es de un acuerdo privado, márcalo como oculto en Citas → Tipos de cita.`
+      );
+    }
+    if (!(await constaElCorreo(tenantModels, clientEmail))) {
+      avisos.push(
+        `A ${clientEmail} no le consta ninguna cita ni solicitud previa. Comprueba que es el correo con el que entra en la web: el bono va atado a ese correo, y si no coincide ella no verá nada. Si es nueva, créale la cuenta desde su ficha.`
       );
     }
 

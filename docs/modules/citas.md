@@ -219,6 +219,17 @@ Los bonos no se borran, se anulan (`PATCH /api/citas/packs/[id]`): las citas ya
 dadas conservan su número. `agotado` no se puede poner a mano — lo dice el
 recuento de las citas, no una persona.
 
+⚠️ **El bono va atado al CORREO, y ese es el fallo mudo de esta pantalla.** Es
+como la identifica el portal. Si el correo de la ficha no es el que ella usa
+para entrar en la web, el bono queda creado, se ve en su ficha y **ella no ve
+nada** — y eso solo se descubre cuando escribe diciendo que no le sale. El CRM
+no puede preguntarle a WordPress si ese correo tiene cuenta, así que se avisa
+con lo más cerca que se puede estar: si el correo **no aparece en ninguna cita
+ni solicitud previa**, el alta lo dice. Es un aviso, no un corte — dar de alta a
+alguien que llegó por Instagram y nunca ha reservado es un caso legítimo, y para
+ese está el botón «Crear cuenta en la web» de su ficha (ver
+`docs/modules/formularios.md`).
+
 ### Tercera puerta: `settings.citas.soloConPago`
 
 Con ella encendida, desde la agenda pública solo se reserva lo que pasa por

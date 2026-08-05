@@ -417,6 +417,8 @@ function InfoTab({
         infoAdicional={infoAdicional}
       />
 
+      <CuentaWebSection client={client} />
+
       <BonosSection bonos={client.bonos} client={client} onCambio={onRecargar} />
 
       <ClientModulesSection clientId={client.id} />
@@ -525,6 +527,69 @@ function BonosSection({ bonos, client, onCambio }) {
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Crearle la cuenta de la web (05/08/2026, Rodrigo).
+ *
+ * Quien llega por el formulario de la web ya sale con cuenta: al aceptar su
+ * solicitud, el CRM crea la ficha Y el usuario de WordPress. Pero quien escribe
+ * por Instagram, o a quien Laura da de alta a mano, se quedaba solo con la
+ * ficha — sin poder entrar a su área privada, y por tanto sin ver sus citas ni
+ * poder usar un bono. Esto es ese mismo paso, a un botón.
+ *
+ * No viaja ninguna contraseña: WordPress le manda a ELLA un enlace con
+ * caducidad para que elija la suya.
+ */
+function CuentaWebSection({ client }) {
+  const [estado, setEstado] = useState(null); // { ok, mensaje }
+  const [creando, setCreando] = useState(false);
+  const correo = client?.portalEmail || client?.email || "";
+
+  async function crear() {
+    setEstado(null);
+    setCreando(true);
+    try {
+      const res = await fetch(`/api/clients/${client.id}/portal-user`, { method: "POST" });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(j?.error || "No se pudo crear la cuenta");
+      setEstado({ ok: !!j?.data?.ok, mensaje: j?.data?.mensaje || "Hecho." });
+    } catch (e) {
+      setEstado({ ok: false, mensaje: e.message });
+    } finally {
+      setCreando(false);
+    }
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100">
+        <span className="text-sm font-semibold text-gray-700">Acceso a la web</span>
+      </div>
+      <div className="p-5 space-y-3">
+        <p className="text-[11px] text-gray-500 leading-relaxed">
+          Con cuenta en la web puede entrar a su área privada, ver sus citas y reservar sola. Se le
+          creará con el correo <strong className="text-gray-700">{correo || "—"}</strong> y recibirá
+          un enlace para elegir su contraseña. Si ya tenía cuenta, no se crea otra.
+        </p>
+
+        <button
+          type="button"
+          onClick={crear}
+          disabled={creando || !correo}
+          className="w-full bg-white border border-[var(--color-primary)] text-[var(--color-primary)] text-xs font-semibold py-2 rounded-md disabled:opacity-40 hover:bg-gray-50"
+        >
+          {creando ? "Creando…" : "Crear cuenta en la web"}
+        </button>
+
+        {estado && (
+          <p className={`text-[11px] ${estado.ok ? "text-emerald-700" : "text-amber-700"}`}>
+            {estado.ok ? "✓" : "⚠"} {estado.mensaje}
+          </p>
+        )}
       </div>
     </div>
   );
