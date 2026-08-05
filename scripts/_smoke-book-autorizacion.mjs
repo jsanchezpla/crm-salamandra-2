@@ -19,6 +19,7 @@
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
 import { getTenantDb } from "../lib/db/tenantDb.js";
 import { getStripe } from "../lib/payments/stripeConfig.js";
+import { signPortalSession } from "../lib/citas/portalSession.js";
 
 const SLUG = process.argv[2] || "nutri_laura";
 const BASE = process.env.SMOKE_BASE_URL || "http://localhost:3000";
@@ -93,7 +94,21 @@ async function main() {
       // El servidor lo exige cuando la cita tiene precio.
       aceptaRetencion: true,
     };
-    const cabeceras = { "Content-Type": "application/json", "x-real-ip": IP_PRUEBA };
+    /**
+     * Cabeceras CON sesión de portal firmada para ESE correo.
+     *
+     * Desde que `/book` exige identidad (05/08/2026) una reserva anónima recibe
+     * 401 y esta batería entera fallaba en bloque: 16 comprobaciones sobre la
+     * retención de tarjeta midiendo, en realidad, la puerta de identidad. Va por
+     * correo y no una sola vez porque la sesión identifica a UNA persona, y aquí
+     * se reserva con dos.
+     */
+    const cabecerasDe = async (email) => ({
+      "Content-Type": "application/json",
+      "x-real-ip": IP_PRUEBA,
+      Authorization: `Bearer ${await signPortalSession({ email, tenant: SLUG })}`,
+    });
+    const cabeceras = await cabecerasDe(cuerpo.clientEmail);
 
     // ── Reservar ───────────────────────────────────────────────────────────
     paso("2. POST /book de una cita con precio");
@@ -142,7 +157,7 @@ async function main() {
 
     paso("2c. Sin aceptar las condiciones NO se puede reservar");
     const rSin = await json(`${BASE}/api/public/c/${SLUG}/book`, {
-      method: "POST", headers: cabeceras,
+      method: "POST", headers: await cabecerasDe("smoke-book-sin@example.com"),
       body: JSON.stringify({
         ...cuerpo,
         clientEmail: "smoke-book-sin@example.com",

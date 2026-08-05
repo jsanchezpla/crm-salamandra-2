@@ -35,6 +35,7 @@ import { Op } from "sequelize";
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
 import { getTenantDb } from "../lib/db/tenantDb.js";
 import { invalidateTenantCache } from "../lib/tenant/tenantResolver.js";
+import { signPortalSession } from "../lib/citas/portalSession.js";
 
 const SLUG = process.argv[2] || "nutri_laura";
 const BASE = process.env.SMOKE_BASE_URL || "http://localhost:3000";
@@ -127,10 +128,22 @@ async function main() {
     throw new Error("sin huecos en las próximas 3 semanas");
   }
 
+  /**
+   * Reserva CON sesión de portal firmada.
+   *
+   * Desde que `/book` exige identidad (puertaIdentidad, 05/08/2026) una reserva
+   * anónima recibe 401 y esta prueba entera fallaba en bloque midiendo esa
+   * puerta en vez de la suya. El sitio de comprobar la identidad es su propia
+   * smoke; aquí se entra ya identificado para poder mirar lo que toca.
+   */
   async function reservar(email, hora) {
     const r = await fetch(`${BASE}/api/public/c/${SLUG}/book`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-real-ip": IP_PRUEBA },
+      headers: {
+        "Content-Type": "application/json",
+        "x-real-ip": IP_PRUEBA,
+        Authorization: `Bearer ${await signPortalSession({ email, tenant: SLUG })}`,
+      },
       body: JSON.stringify({
         eventTypeId: eventType.id,
         scheduledAt: hora,
@@ -192,8 +205,29 @@ async function main() {
     const pendiente = await reservar(correo("pendiente"), await buscarHueco());
     esperar(pendiente.status === 403, `una solicitud sin revisar no abre la puerta (HTTP ${pendiente.status})`);
     esperar(
-      pendiente.cuerpo?.codigo === "ADMISION_REQUERIDA",
-      "y a un anónimo NO se le confirma que ese correo esté en la bandeja"
+      pendiente.cuerpo?.codigo === "ADMISION_PENDIENTE",
+      "a quien ha entrado con su sesión SÍ se le dice que está en revisión"
+    );
+
+    // La otra mitad de lo mismo: a quien NO ha entrado no se le contesta nada
+    // sobre ese correo. Antes esto se medía pidiendo que un pendiente y un
+    // desconocido fueran indistinguibles; hoy lo tapa la puerta de identidad,
+    // que corta ANTES de mirar la bandeja. Se afirma explícitamente porque es
+    // lo que sostiene que el mensaje de arriba no sea una fuga.
+    const fisgon = await fetch(`${BASE}/api/public/c/${SLUG}/book`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": IP_PRUEBA },
+      body: JSON.stringify({
+        eventTypeId: eventType.id,
+        scheduledAt: await buscarHueco(),
+        clientName: "Fisgón",
+        clientEmail: correo("pendiente"),
+        clientPhone: "+34600111222",
+      }),
+    });
+    esperar(
+      fisgon.status === 401,
+      `sin sesión no se contesta nada sobre ese correo (HTTP ${fisgon.status})`
     );
 
     await solicitud(correo("descartado"), "rejected");
