@@ -88,6 +88,73 @@ texto del aviso).
 
 ---
 
+## Pago a plazos: lo cobra Stripe, no una financiera (2026-08-05)
+
+Antes, «pagar a plazos» era **Klarna**: adelantaba el dinero, financiaba a la
+paciente y se llevaba su comisión. Es justo el intermediario que se quería
+quitar. Ahora es una **suscripción de Stripe** de N cargos mensuales que se
+cancela sola.
+
+```
+/book  →  Checkout (mode: subscription)  →  1ª cuota cobrada + tarjeta guardada
+       →  webhook checkout.session.completed  →  nace el bono ENTERO
+                                             →  se le pone tope al plan
+       →  webhook invoice.paid (×N-1)        →  se apunta cada cuota
+```
+
+**El bono nace entero con la primera cuota**: da derecho a sus N sesiones desde
+el primer día, no se van liberando. Es una decisión de negocio, no un descuido —
+si la paciente deja de pagar, hay una conversación que tener, no unas sesiones
+que retirarle automáticamente.
+
+⚠️ **`amount` es lo que se cobra HOY, no el total.** En un fraccionado es la
+PRIMERA CUOTA (130 €); el compromiso total (390 €) va en `total` y, en el bono,
+en `session_packs.amount`. Con Klarna eran lo mismo y por eso el campo se leía
+sin pensar. Confundirlos ahora es cobrarle 390 € de una vez a quien pidió pagar
+a plazos. Fijado en `_smoke-fraccionado.mjs`.
+
+⚠️ **El fraccionado va SOLO con tarjeta.** Es lo único domiciliable: ni Bizum ni
+las transferencias admiten cargos recurrentes, y ofrecerlos sería prometer una
+domiciliación imposible.
+
+### El tope de cuotas, y por qué hay dos cerrojos
+
+`lib/payments/fraccionado.js`. Checkout no sabe de topes: crea una suscripción
+que renovaría **para siempre**. El tope se pone al confirmarse el primer pago,
+colgándole un `subscription_schedule` con `end_behavior: 'cancel'` y una segunda
+fase de N-1 iteraciones (la primera ya se cobró).
+
+⚠️ **No se crea el calendario directamente**, que sería más limpio: la primera
+factura de un schedule **no se finaliza al momento** —nace en borrador y Stripe
+la cierra ~1 h después—, así que la paciente terminaría de reservar sin que
+nadie sepa en una hora si ha pagado, con el hueco ya soltado.
+
+Cobrar de más es el fallo catastrófico aquí, así que hay **dos frenos
+independientes**:
+
+| Freno | Dónde vive | Para qué |
+| --- | --- | --- |
+| El calendario | En Stripe | Aunque el CRM esté caído un mes, deja de cobrar en la cuota N |
+| El recuento | `frenarSiYaEstaPagado`, en cada `invoice.paid` | Si el calendario no llegó a crearse (la llamada falló), cuenta las facturas pagadas y cancela al llegar al total |
+
+El segundo existe porque el primero se pone en una llamada de red que puede
+fallar. Sin él, un fallo de 200 ms deja a alguien pagando 130 €/mes sin fin.
+
+### ⚠️ Al desplegar: los eventos nuevos hay que darlos de alta en Stripe
+
+El webhook escucha ahora `invoice.paid` e `invoice.payment_failed`. Si el
+endpoint del tenant está configurado con una lista explícita de eventos (y no
+con «todos»), **esos dos no llegarán** y las cuotas 2ª en adelante se cobrarán
+sin que el CRM se entere: el dinero entra, pero no se apunta y el cerrojo de
+seguridad nunca corre. Hay que añadirlos en el panel de Stripe del cliente.
+
+Una cuota rechazada **no toca el bono**: Stripe reintenta él solo y quitarle las
+sesiones a alguien por una tarjeta caducada sería tratar un problema de banco
+como un impago. Queda el rastro en `PaymentSession.metadata` y un aviso en el
+log.
+
+---
+
 ## Tipos de cita ocultos y asignados a dedo (2026-08-05)
 
 Nace de los cobros que **no pasan por la pasarela**: transferencia desde el

@@ -668,22 +668,28 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     // ── Comprar un BONO va por CHECKOUT, no por retención ───────────────────
     // La retención de tarjeta (autorizar sin cobrar) es para UNA cita: se
     // bloquea el importe y la profesional decide. Un bono es una compra: se
-    // paga entero y da derecho a N sesiones. Además Klarna NO admite
-    // retenciones —`autorizacion.js` fuerza tarjeta a propósito—, así que el
-    // pago fraccionado solo puede existir por esta vía.
+    // paga y da derecho a N sesiones.
+    //
+    // Y desde el 05/08/2026 el FRACCIONADO es una suscripción de Stripe: se
+    // cobra la primera cuota aquí y Stripe repite el cargo cada mes hasta
+    // completar el total, cancelándose sola. Antes esto se delegaba en Klarna,
+    // que es justo el intermediario financiero que se quería quitar.
     if (precio && compraDeBono) {
       let checkout;
       try {
         checkout = await createCheckoutSession(tenantContext, {
           entityType: "booking",
           entityId: row.id,
+          // OJO: en fraccionado esto es la PRIMERA CUOTA, no el total.
           amount: compraDeBono.amount,
-          description: `${eventType.name} — ${tenant.name}`,
+          description: compraDeBono.recurrente
+            ? `${eventType.name} (${compraDeBono.instalmentMonths} meses) — ${tenant.name}`
+            : `${eventType.name} — ${tenant.name}`,
           customerEmail: row.clientEmail,
-          // Fraccionado → SOLO Klarna: el importe cobrado es el del
-          // fraccionado, y dejar la tarjeta permitiría pagar el precio caro
-          // de golpe teniendo la opción barata.
+          // Fraccionado → tarjeta: es lo único que se puede domiciliar.
           paymentMethodTypes: compraDeBono.metodos,
+          // Presente solo en el fraccionado: convierte el cobro en suscripción.
+          recurring: compraDeBono.recurrente,
           successUrl: `${origenPublico(request)}/widget/c/${tenant.slug}/mi-perfil`,
           cancelUrl: `${origenPublico(request)}/widget/c/${tenant.slug}`,
           metadata: {
@@ -692,6 +698,9 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
             pricingMode: compraDeBono.mode,
             instalmentAmount: compraDeBono.instalmentAmount,
             instalmentMonths: compraDeBono.instalmentMonths,
+            // El total comprometido, para no tener que multiplicar en tres
+            // sitios distintos y arriesgarse a que uno lo haga mal.
+            totalComprometido: compraDeBono.total,
           },
         });
         await row.update({ paymentSessionId: checkout.paymentSession.id });

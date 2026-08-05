@@ -11,6 +11,7 @@ import {
   onEntityRefunded,
 } from "../../../../../lib/payments/entityHooks.js";
 import { leerCaducidadAutorizacion } from "../../../../../lib/payments/autorizacion.js";
+import { sesionDeFactura, suscripcionDeFactura } from "../../../../../lib/payments/fraccionado.js";
 
 /**
  * POST /api/webhooks/stripe/[tenantSlug]
@@ -349,12 +350,48 @@ async function procesar(ctx, { PaymentSession, event, t, caducaEn = null }) {
         };
       }
 
+      // ── ¿Era un pago FRACCIONADO? ─────────────────────────────────────────
+      // En `mode: 'subscription'` lo que se acaba de cobrar es la PRIMERA
+      // cuota; el `payment_intent` viene vacío porque vive en la factura. Se
+      // guarda la suscripción para poder seguirle la pista y poner el tope.
+      const suscripcion = typeof obj.subscription === "string" ? obj.subscription : (obj.subscription?.id ?? null);
+      const cuotas = Number(ps.metadata?.instalmentMonths) || null;
+
       await ps.update({
         status: "paid",
         paidAt: new Date(),
         stripePaymentIntentId: typeof obj.payment_intent === "string" ? obj.payment_intent : null,
+        ...(suscripcion
+          ? { metadata: { ...(ps.metadata ?? {}), stripeSubscriptionId: suscripcion, cuotasPagadas: 1 } }
+          : {}),
       }, { transaction: t });
-      return await onEntityPaid(ctx, ps, t);
+
+      const resultado = await onEntityPaid(ctx, ps, t);
+      if (!suscripcion) return resultado;
+
+      // El TOPE de cuotas se pone fuera de la transacción: son dos llamadas a
+      // Stripe y meterlas dentro alargaría un bloqueo que toca la agenda.
+      //
+      // ⚠️ Si esto falla, la suscripción renovaría para siempre. Por eso no se
+      // silencia (se registra bien visible) y por eso existe el segundo cerrojo
+      // en `invoice.paid`, que cuenta las cuotas cobradas y cancela al llegar
+      // al total aunque este calendario no llegara a crearse.
+      const previo = typeof resultado === "string" ? null : (resultado?.postCommit ?? null);
+      const texto = typeof resultado === "string" ? resultado : (resultado?.outcome ?? "ok");
+      return {
+        outcome: `${texto} · fraccionado en ${cuotas ?? "?"} cuotas`,
+        postCommit: async () => {
+          if (previo) await previo();
+          try {
+            const { ponerTopeDeCuotas } = await import("../../../../../lib/payments/fraccionado.js");
+            await ponerTopeDeCuotas(ctx, { subscriptionId: suscripcion, cuotas });
+          } catch (err) {
+            process.stderr.write(
+              `[stripe:webhook] TOPE DE CUOTAS NO PUESTO ${ctx.slug} sub=${suscripcion}: ${err.message}. La suscripción renovaría sin fin; el cerrojo de invoice.paid la parará, pero conviene revisarla en Stripe.\n`
+            );
+          }
+        },
+      };
     }
 
     // El cobro diferido acabó fallando: ni dinero, ni cita. Se libera el hueco.
@@ -449,6 +486,81 @@ async function procesar(ctx, { PaymentSession, event, t, caducaEn = null }) {
         return `reembolso parcial (${devuelto}/${ps.amount}) — la cita sigue pagada`;
       }
       return await onEntityRefunded(ctx, ps, t);
+    }
+
+    // ── CUOTAS DEL PAGO FRACCIONADO (05/08/2026) ─────────────────────────────
+    // De la segunda en adelante. La primera no pasa por aquí: entra como
+    // `checkout.session.completed`, que es donde nace el bono.
+    //
+    // `billing_reason: 'subscription_create'` ES la primera, así que se ignora
+    // para no contarla dos veces.
+    case "invoice.paid": {
+      if (obj?.billing_reason === "subscription_create") return "primera cuota, ya contada en el checkout";
+
+      const psId = sesionDeFactura(obj);
+      const suscripcion = suscripcionDeFactura(obj);
+      if (!psId) return "factura sin PaymentSession — no es de un fraccionado nuestro";
+
+      const ps = await PaymentSession.findByPk(psId, { transaction: t });
+      if (!ps) return "sin PaymentSession";
+
+      const total = Number(ps.metadata?.instalmentMonths) || null;
+      const pagadas = (Number(ps.metadata?.cuotasPagadas) || 1) + 1;
+
+      // El bono NO se toca: ya se creó entero con la primera cuota y da derecho
+      // a sus N sesiones desde el primer día. Esto es solo el rastro del cobro
+      // — que es lo que hay que poder enseñar cuando alguien pregunte por qué
+      // le han cargado 130 € otra vez.
+      await ps.update(
+        { metadata: { ...(ps.metadata ?? {}), cuotasPagadas: pagadas, ultimaCuotaAt: new Date().toISOString() } },
+        { transaction: t }
+      );
+
+      return {
+        outcome: `cuota ${pagadas}${total ? ` de ${total}` : ""} cobrada`,
+        // Cerrojo de seguridad, fuera de la transacción: si el calendario no se
+        // llegó a poner, esto corta la suscripción al llegar al total.
+        postCommit: async () => {
+          try {
+            const { frenarSiYaEstaPagado } = await import("../../../../../lib/payments/fraccionado.js");
+            await frenarSiYaEstaPagado(ctx, { subscriptionId: suscripcion, cuotas: total });
+          } catch (err) {
+            process.stderr.write(
+              `[stripe:webhook] ${ctx.slug}: no se pudo comprobar el fin del plan (sub=${suscripcion}): ${err.message}\n`
+            );
+          }
+        },
+      };
+    }
+
+    // Una cuota que el banco rechazó. Stripe reintenta él solo (Smart Retries)
+    // y avisa a la paciente si el centro lo tiene configurado; aquí solo se
+    // deja el rastro para que se pueda ver desde el CRM.
+    //
+    // NO se toca el bono: quitarle las sesiones a alguien por una tarjeta
+    // caducada, antes de que Stripe haya terminado de reintentar, sería tratar
+    // un problema de banco como un impago.
+    case "invoice.payment_failed": {
+      const psId = sesionDeFactura(obj);
+      if (!psId) return "factura sin PaymentSession";
+      const ps = await PaymentSession.findByPk(psId, { transaction: t });
+      if (!ps) return "sin PaymentSession";
+
+      await ps.update(
+        {
+          metadata: {
+            ...(ps.metadata ?? {}),
+            cuotaFallidaAt: new Date().toISOString(),
+            cuotaFallidaMotivo: String(obj?.last_finalization_error?.message ?? "rechazada por el banco").slice(0, 300),
+          },
+        },
+        { transaction: t }
+      );
+
+      process.stderr.write(
+        `[stripe:webhook] CUOTA RECHAZADA ${ctx.slug} ps=${ps.id} (factura ${obj?.id}). Stripe reintentará; si no entra, hay que hablar con la paciente.\n`
+      );
+      return "cuota rechazada — Stripe reintentará";
     }
 
     default:

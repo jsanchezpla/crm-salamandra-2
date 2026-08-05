@@ -75,13 +75,23 @@ const unico = precioDeCompra(TIPO, "upfront");
 esperar(unico.amount === 36000, "de una vez se le cobran 360 €");
 esperar(unico.metodos === null, "y se le ofrecen todos los métodos que tenga activados");
 
+// ⚠️ CAMBIÓ EL 05/08/2026. Antes el fraccionado se delegaba en Klarna, que
+// adelantaba los 390 € de golpe, así que `amount` era el TOTAL. Ahora lo cobra
+// Stripe mes a mes, así que `amount` es lo que se cobra HOY: la primera cuota.
+// Confundirlos es cobrar 390 € de una vez a quien pidió pagar a plazos.
 const plazos = precioDeCompra(TIPO, "instalment");
-esperar(plazos.amount === 39000, "a plazos se le cobran 390 €, no 360");
+esperar(plazos.amount === 13000, "a plazos se cobra HOY una cuota de 130 €, no el total");
+esperar(plazos.total === 39000, "y el compromiso total sigue siendo 390 €, NO 360: financiar cuesta más");
 esperar(plazos.instalmentAmount === 13000 && plazos.instalmentMonths === 3, "en 3 cuotas de 130 €");
 esperar(
-  Array.isArray(plazos.metodos) && plazos.metodos.length === 1 && plazos.metodos[0] === "klarna",
-  "y SOLO por Klarna: con la tarjeta a la vista podría pagar 390 € teniendo la opción de 360"
+  Array.isArray(plazos.metodos) && plazos.metodos.length === 1 && plazos.metodos[0] === "card",
+  "y SOLO con tarjeta: es lo único domiciliable (ni Bizum ni transferencia admiten cargos recurrentes)"
 );
+esperar(
+  plazos.recurrente?.iterations === 3 && plazos.recurrente?.intervalo === "month",
+  "y se pide a Stripe una suscripción de 3 cargos mensuales, no un cobro suelto"
+);
+esperar(unico.recurrente === null, "el pago único NO crea ninguna suscripción");
 
 esperar(
   precioDeCompra({ price: 36000, sessionsCount: 10 }, "instalment") === null,
