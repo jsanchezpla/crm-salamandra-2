@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import HelpTooltip from "../../../components/ui/HelpTooltip.jsx";
-import SyncWebButton from "../../../components/clients/SyncWebButton.jsx";
 import PacientesDelAlta from "../../../components/clients/PacientesDelAlta.jsx";
 import { camposCliente, PERFIL_COMERCIAL, PERFIL_SALUD } from "../../../lib/clients/formularioAlta.js";
 import { VOCABULARIO_CLIENTE } from "../../../lib/clients/vocabulario.js";
@@ -335,7 +334,6 @@ export default function ClientesClient({
               </h1>
             </div>
             <div className="flex items-center gap-2">
-              <SyncWebButton />
               <button
                 onClick={handleExport}
                 disabled={exporting}
