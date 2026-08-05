@@ -197,6 +197,48 @@ del CRM y la pantalla tiene que poder contarlo. Se audita el intento salga bien
 o mal: es un alta en un sistema de fuera que además dispara un correo a una
 paciente.
 
+### El correo tiene que ser el mismo en los dos sitios (2026-08-05)
+
+El bono, las citas y el portal se atan al **correo**. Si el de la ficha no es el
+de su cuenta en la web, todo «funciona» y nada sirve: el bono existe pero ella
+no lo ve, y sus citas no se enlazan con su ficha. Es el fallo más silencioso del
+sistema.
+
+Forzar que coincidan no se puede —son dos sistemas con su propio campo— así que
+se ataca por los dos lados:
+
+**1. Comprobarlo y enseñarlo.** `GET /api/clients/[id]/portal-user` le pregunta
+a WordPress si existe cuenta con ese correo exacto
+(`POST /wp-json/crm/v1/portal-user/existe`, misma firma y antirreplay que el
+alta) y la ficha lo pinta: **✓ tiene cuenta** / **sin cuenta**.
+
+⚠️ **Son TRES estados, no dos.** «No la tiene» es accionable; «no se ha podido
+preguntar» —la web no responde, o su theme todavía no trae la consulta— no lo
+es, y pintarlos igual sería mentir en rojo. El motivo `sin_soporte` (404) es el
+caso normal hasta que el cliente suba el theme nuevo.
+
+**2. Cazar a quien entra con otro correo.** En el canje del SSO
+(`/citas-portal/session`) el CRM ve el correo real con el que la paciente entra
+en la web — y hasta hoy lo tiraba. Ahora, si no hay ficha con ese correo, deja
+una solicitud en la bandeja («Entró en su área privada y no hay ficha con este
+correo»). Va sin esperarla: entrar en el área privada no puede depender de esto.
+
+La lógica de esa solicitud es `asegurarSolicitudDeAlta`, compartida con
+`registro-web`: mismas guardas de idempotencia (ya es cliente / ya hay una
+pendiente), así que un portal que se abre veinte veces al día no llena la
+bandeja.
+
+⚠️ Al aceptar esa solicitud, **enlazarla con la ficha que ya existe** en vez de
+crear una nueva, o quedarán dos fichas de la misma persona. La bandeja ya ofrece
+esa opción (`buscarClienteExistente`).
+
+⚠️ **Se descartó sincronizar los correos automáticamente** (que el CRM cambie el
+de WordPress al cambiar el de la ficha): le estaría cambiando a alguien el
+correo con el que inicia sesión sin que se entere, y un dedazo la dejaría fuera
+de su cuenta sin forma de volver a entrar.
+
+Lado WordPress de la consulta: `nutrilaura-portal-user.php`, theme v1.29.0.
+
 ---
 
 ## Puesta en marcha de un tenant

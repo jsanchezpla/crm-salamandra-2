@@ -3,6 +3,7 @@ import { ok, error, unauthorized, forbidden, notFound, serverError } from "../..
 import { verifyWpSsoToken } from "../../../../../../../lib/citas/ssoToken.js";
 import { signPortalSession, SESSION_TTL_SECONDS } from "../../../../../../../lib/citas/portalSession.js";
 import { normalizeEmail } from "../../../../../../../lib/citas/validation.js";
+import { asegurarSolicitudDeAlta } from "../../../../../../../lib/formularios/registroWeb.js";
 
 /**
  * POST /api/public/c/[tenantSlug]/citas-portal/session
@@ -20,7 +21,7 @@ import { normalizeEmail } from "../../../../../../../lib/citas/validation.js";
  * Rate limit estricto (borde de confianza): 10 req/min por IP.
  */
 export const POST = withPublicTenant(
-  async (request, _ctx, { slug, tenant, hasModule }) => {
+  async (request, _ctx, { slug, tenant, tenantModels, hasModule }) => {
     try {
       if (!hasModule("citas")) return notFound("Módulo no disponible");
       if (tenant.settings?.widget?.sso?.enabled !== true) {
@@ -48,6 +49,25 @@ export const POST = withPublicTenant(
       if (!email) return unauthorized("Enlace de acceso inválido o caducado");
 
       const sessionToken = await signPortalSession({ email, tenant: slug });
+
+      // ── ¿Sabemos quién es? (05/08/2026) ──────────────────────────────────
+      // Este es el ÚNICO momento en que el CRM ve el correo con el que una
+      // paciente entra de verdad en la web, y hasta hoy lo tiraba. Si no hay
+      // ficha con ese correo, se deja una solicitud en la bandeja.
+      //
+      // No es un caso raro: pasa siempre que la ficha tiene un correo distinto
+      // del de su cuenta. Y no avisa de nada por sí solo — simplemente su bono
+      // no le funciona y sus citas no se enlazan con nadie, en silencio.
+      //
+      // Va DESPUÉS de firmar la sesión y sin esperarla: entrar en el área
+      // privada no puede depender de esto, ni tardar más por ello.
+      if (hasModule("formularios")) {
+        asegurarSolicitudDeAlta(tenantModels, {
+          email,
+          origen: "Entró en su área privada y no hay ficha con este correo",
+        }).catch(() => {});
+      }
+
       return ok({ sessionToken, expiresInSeconds: SESSION_TTL_SECONDS });
     } catch (err) {
       return serverError(err);

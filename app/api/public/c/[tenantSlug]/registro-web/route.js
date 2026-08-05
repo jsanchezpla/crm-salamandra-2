@@ -1,14 +1,11 @@
-import { Op } from "sequelize";
 import { withPublicTenant } from "../../../../../../lib/tenant/publicTenantContext.js";
 import { ok, created, error, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { enforceRateLimit } from "../../../../../../lib/utils/rateLimit.js";
 import { MODULE_KEYS } from "../../../../../../lib/tenant/moduleKeys.js";
 import {
   verificarFirmaRegistro,
-  asegurarFormularioRegistro,
+  asegurarSolicitudDeAlta,
   VENTANA_SEGUNDOS,
-  FORM_SLUG,
-  FORM_TITULO,
 } from "../../../../../../lib/formularios/registroWeb.js";
 
 /**
@@ -76,51 +73,19 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenantModels,
     const nombre = String(datos?.nombre || "").trim().slice(0, 200);
     const wpUserId = Number(datos?.wp_user_id) || null;
 
-    const { Client, Form, FormSubmission } = tenantModels;
-
-    // ── Guardas de idempotencia ───────────────────────────────────────────
-    // 1) Ya tiene ficha: el círculo ya está cerrado, no hay nada que decidir.
-    const yaCliente = await Client.findOne({
-      where: { email: { [Op.iLike]: email } },
-      attributes: ["id"],
-    });
-    if (yaCliente) {
-      return ok({ creada: false, motivo: "ya_es_cliente" });
-    }
-
-    // 2) Ya hay una solicitud esperando de esa persona (de cualquier
-    //    formulario): no se duplica trabajo en la bandeja.
-    const yaPendiente = await FormSubmission.findOne({
-      where: { email: { [Op.iLike]: email }, status: "pending" },
-      attributes: ["id"],
-    });
-    if (yaPendiente) {
-      return ok({ creada: false, motivo: "ya_pendiente" });
-    }
-
-    const form = await asegurarFormularioRegistro(Form);
-
-    const submission = await FormSubmission.create({
-      formId: form.id,
-      formSlug: FORM_SLUG,
-      formTitle: FORM_TITULO,
-      name: nombre || null,
+    // Las guardas de idempotencia y el alta viven en `asegurarSolicitudDeAlta`
+    // (lib/formularios/registroWeb.js) desde el 05/08/2026: las comparte con el
+    // canje del SSO, que hace exactamente lo mismo cuando alguien ENTRA en su
+    // área privada y no tenemos ficha suya.
+    const res = await asegurarSolicitudDeAlta(tenantModels, {
       email,
-      phone: null,
-      // Se guarda el enunciado junto al valor, como el resto de solicitudes: así
-      // la bandeja lo pinta sola y el histórico se sigue entendiendo.
-      answers: [
-        { key: "origen", label: "Origen", type: "text", value: "Registro en la web" },
-        { key: "nombre", label: "Nombre", type: "text", value: nombre || "—" },
-        { key: "email", label: "Email", type: "email", value: email },
-        ...(wpUserId
-          ? [{ key: "wp_user_id", label: "Usuario de WordPress (id)", type: "text", value: String(wpUserId) }]
-          : []),
-      ],
-      status: "pending",
+      nombre,
+      origen: "Registro en la web",
+      wpUserId,
     });
 
-    return created({ creada: true, id: submission.id });
+    if (!res.creada) return ok({ creada: false, motivo: res.motivo });
+    return created({ creada: true, id: res.id });
   } catch (err) {
     return serverError(err);
   }

@@ -1,6 +1,10 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
-import { crearUsuarioPortal, resolverUrlWordpress } from "../../../../../lib/formularios/portalUser.js";
+import {
+  crearUsuarioPortal,
+  consultarUsuarioPortal,
+  resolverUrlWordpress,
+} from "../../../../../lib/formularios/portalUser.js";
 import { assertNotDemoPaidCall } from "../../../../../lib/demo/isDemo.js";
 import { auditar, datosPeticion } from "../../../../../lib/utils/auditoria.js";
 
@@ -26,6 +30,44 @@ import { auditar, datosPeticion } from "../../../../../lib/utils/auditoria.js";
  */
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
+
+/**
+ * GET /api/clients/[id]/portal-user — ¿tiene cuenta en la web con ESTE correo?
+ * (05/08/2026)
+ *
+ * Lo pinta la ficha como un distintivo. Es la única forma de que un correo mal
+ * escrito se vea ANTES de darle un bono, en vez de descubrirlo cuando la
+ * paciente escribe diciendo que no ve nada.
+ *
+ * Distingue tres estados y la pantalla tiene que respetarlos:
+ *   · `existe: true`         → tiene cuenta con este correo.
+ *   · `existe: false`        → NO la tiene. Se le puede crear con el botón.
+ *   · `ok: false`            → no se ha podido preguntar (la web no responde, o
+ *     todavía tiene un theme sin esta consulta). NO es lo mismo que «no tiene»
+ *     y no debe pintarse en rojo.
+ */
+export const GET = withTenant(async (request, ctx, { tenant, tenantModels }) => {
+  try {
+    const userRole = request.headers.get("x-user-role") ?? "user";
+    if (!ADMIN_ROLES.has(userRole)) return forbidden("Sin acceso");
+
+    const { Client } = tenantModels;
+    const { id } = (await ctx?.params) ?? {};
+    const client = Client ? await Client.findByPk(id) : null;
+    if (!client) return notFound("Ficha no encontrada");
+
+    const email = (client.portalEmail || client.email || "").trim();
+    if (!email) return ok({ ok: false, motivo: "sin_email", email: "" });
+
+    const wordpressUrl = await resolverUrlWordpress(tenant, tenantModels);
+    if (!wordpressUrl) return ok({ ok: false, motivo: "sin_url", email });
+
+    const res = await consultarUsuarioPortal({ tenantSlug: tenant.slug, wordpressUrl, email });
+    return ok({ ...res, email });
+  } catch (err) {
+    return serverError(err);
+  }
+});
 
 export const POST = withTenant(async (request, ctx, tenantContext) => {
   try {

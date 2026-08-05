@@ -533,6 +533,34 @@ function BonosSection({ bonos, client, onCambio }) {
 }
 
 /**
+ * El distintivo de «¿tiene cuenta con este correo?».
+ *
+ * TRES estados, no dos, y la diferencia importa: «no la tiene» es un aviso
+ * accionable; «no he podido preguntar» —la web no responde, o todavía tiene un
+ * theme sin la consulta— no lo es, y pintarlo igual sería mentir en rojo.
+ */
+function EstadoCuentaWeb({ estado }) {
+  if (estado === null) {
+    return <span className="text-[10px] text-gray-400">comprobando…</span>;
+  }
+  if (!estado.ok) {
+    const texto = estado.motivo === "sin_soporte"
+      ? "la web aún no responde a esta consulta"
+      : "no se ha podido comprobar";
+    return <span className="text-[10px] text-gray-400" title={estado.motivo}>{texto}</span>;
+  }
+  return estado.existe ? (
+    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+      ✓ tiene cuenta
+    </span>
+  ) : (
+    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+      sin cuenta
+    </span>
+  );
+}
+
+/**
  * Crearle la cuenta de la web (05/08/2026, Rodrigo).
  *
  * Quien llega por el formulario de la web ya sale con cuenta: al aceptar su
@@ -547,7 +575,23 @@ function BonosSection({ bonos, client, onCambio }) {
 function CuentaWebSection({ client }) {
   const [estado, setEstado] = useState(null); // { ok, mensaje }
   const [creando, setCreando] = useState(false);
+  // null = todavía preguntando. Después: { ok, existe, motivo }
+  const [tieneCuenta, setTieneCuenta] = useState(null);
   const correo = client?.portalEmail || client?.email || "";
+
+  // ¿El correo de la ficha es REALMENTE el de su cuenta en la web? Se pregunta
+  // a WordPress al abrir la ficha. Es lo que convierte un correo mal escrito en
+  // algo que se ve, en vez de un fallo mudo que aparece semanas después.
+  const comprobar = useCallback(() => {
+    if (!client?.id) return;
+    setTieneCuenta(null);
+    fetch(`/api/clients/${client.id}/portal-user`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setTieneCuenta(j?.data ?? { ok: false, motivo: "red" }))
+      .catch(() => setTieneCuenta({ ok: false, motivo: "red" }));
+  }, [client?.id]);
+
+  useEffect(() => { comprobar(); }, [comprobar]);
 
   async function crear() {
     setEstado(null);
@@ -557,6 +601,7 @@ function CuentaWebSection({ client }) {
       const j = await res.json().catch(() => null);
       if (!res.ok) throw new Error(j?.error || "No se pudo crear la cuenta");
       setEstado({ ok: !!j?.data?.ok, mensaje: j?.data?.mensaje || "Hecho." });
+      comprobar(); // el distintivo tiene que reflejar lo que acaba de pasar
     } catch (e) {
       setEstado({ ok: false, mensaje: e.message });
     } finally {
@@ -566,15 +611,24 @@ function CuentaWebSection({ client }) {
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
         <span className="text-sm font-semibold text-gray-700">Acceso a la web</span>
+        <EstadoCuentaWeb estado={tieneCuenta} />
       </div>
       <div className="p-5 space-y-3">
         <p className="text-[11px] text-gray-500 leading-relaxed">
-          Con cuenta en la web puede entrar a su área privada, ver sus citas y reservar sola. Se le
-          creará con el correo <strong className="text-gray-700">{correo || "—"}</strong> y recibirá
-          un enlace para elegir su contraseña. Si ya tenía cuenta, no se crea otra.
+          Con cuenta en la web puede entrar a su área privada, ver sus citas y reservar sola. Se
+          comprueba con el correo <strong className="text-gray-700">{correo || "—"}</strong>, que es
+          el que tienes en su ficha: si ella entra en la web con otro distinto, su bono no le
+          funcionará y sus citas no se enlazarán con esta ficha.
         </p>
+
+        {tieneCuenta?.ok && tieneCuenta.existe === false && (
+          <p className="text-[11px] text-amber-700">
+            ⚠ No hay ninguna cuenta con este correo. O es nueva y hay que creársela, o el correo de
+            la ficha no es el que ella usa.
+          </p>
+        )}
 
         <button
           type="button"
