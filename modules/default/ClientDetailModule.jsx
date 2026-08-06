@@ -146,7 +146,14 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL }) {
   }
 
   async function handleDelete() {
-    if (!confirm("¿Eliminar este cliente y todas sus interacciones?")) return;
+    // Mismo aviso que en el listado: desde el 06/08/2026 el borrado se lleva
+    // también los documentos y las citas que aún no han ocurrido.
+    const aviso =
+      "¿Eliminar este cliente y todas sus interacciones?\n\n" +
+      "Se borrarán también sus documentos y las citas que todavía no han ocurrido. " +
+      "Las citas pasadas se conservan como constancia del trabajo hecho.\n\n" +
+      "No se puede deshacer.";
+    if (!confirm(aviso)) return;
     await fetch(`/api/clients/${id}`, { method: "DELETE" });
     router.push("/clientes");
   }

@@ -235,7 +235,15 @@ export default function ClientesClient({
   }
 
   async function handleDelete(clientId) {
-    if (!confirm(`¿Eliminar este ${vocab.singular}?`)) return;
+    // Se dice QUÉ se lleva por delante (06/08/2026): desde hoy el borrado
+    // arrastra los documentos y las citas que aún no han ocurrido, y eso no se
+    // puede deshacer. Preguntar «¿eliminar?» a secas ya no describe lo que pasa.
+    const aviso =
+      `¿Eliminar este ${vocab.singular}?\n\n` +
+      "Se borrarán también sus documentos y las citas que todavía no han ocurrido. " +
+      "Las citas pasadas se conservan como constancia del trabajo hecho.\n\n" +
+      "No se puede deshacer.";
+    if (!confirm(aviso)) return;
     await fetch(`/api/clients/${clientId}`, { method: "DELETE" });
     setClients((prev) => prev.filter((c) => c.id !== clientId));
     setTotal((prev) => prev - 1);

@@ -3,6 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { auditar, datosPeticion, resumen } from "../../../../lib/utils/auditoria.js";
 import { ok, noContent, forbidden, notFound, error } from "../../../../lib/utils/apiResponse.js";
 import { getClientDir } from "../../../../lib/clients/attachmentStorage.js";
+import { borrarRastroDelCliente } from "../../../../lib/clients/borrarRastro.js";
 import { entradaDeCliente } from "../../../../lib/clients/listaEspera.js";
 import { fechaONull } from "../../../../lib/clients/formularioAlta.js";
 import { bonosDeCliente } from "../../../../lib/citas/packs.js";
@@ -199,6 +200,16 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
   // tiene que quedar constancia de quién lo hizo.
   const antesBorrar = resumen(client, ["name", "email", "phone", "type", "status"]);
   const idBorrado = client.id;
+
+  // ANTES de destruir la ficha, no después: al borrarla, los documentos y las
+  // citas se quedan con la FK a NULL y ya no hay forma de saber de quién eran.
+  const rastro = await borrarRastroDelCliente({
+    tenantModels,
+    tenantSlug: tenant.slug,
+    clientId: client.id,
+    clientEmail: client.email,
+  });
+
   await client.destroy();
 
   // GC del directorio físico de adjuntos. El CASCADE ya borró client_attachments
@@ -220,6 +231,10 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
     entity: "Client",
     entityId: idBorrado,
     before: antesBorrar,
+    // Cuánto se llevó por delante. Sin esto, un borrado que se lleva 14
+    // documentos y 3 citas queda en el registro igual que uno que no se lleva
+    // nada, y luego no hay forma de reconstruir qué pasó.
+    after: { documentosBorrados: rastro.documentos, citasFuturasBorradas: rastro.citasFuturas },
   });
   return noContent();
 });
