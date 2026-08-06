@@ -3,7 +3,6 @@ import { ok, error, unauthorized, forbidden, notFound, serverError } from "../..
 import { verifyWpSsoToken } from "../../../../../../../lib/citas/ssoToken.js";
 import { signPortalSession, SESSION_TTL_SECONDS } from "../../../../../../../lib/citas/portalSession.js";
 import { normalizeEmail } from "../../../../../../../lib/citas/validation.js";
-import { asegurarSolicitudDeAlta } from "../../../../../../../lib/formularios/registroWeb.js";
 
 /**
  * POST /api/public/c/[tenantSlug]/citas-portal/session
@@ -21,7 +20,7 @@ import { asegurarSolicitudDeAlta } from "../../../../../../../lib/formularios/re
  * Rate limit estricto (borde de confianza): 10 req/min por IP.
  */
 export const POST = withPublicTenant(
-  async (request, _ctx, { slug, tenant, tenantModels, hasModule }) => {
+  async (request, _ctx, { slug, tenant, hasModule }) => {
     try {
       if (!hasModule("citas")) return notFound("Módulo no disponible");
       if (tenant.settings?.widget?.sso?.enabled !== true) {
@@ -50,23 +49,28 @@ export const POST = withPublicTenant(
 
       const sessionToken = await signPortalSession({ email, tenant: slug });
 
-      // ── ¿Sabemos quién es? (05/08/2026) ──────────────────────────────────
-      // Este es el ÚNICO momento en que el CRM ve el correo con el que una
-      // paciente entra de verdad en la web, y hasta hoy lo tiraba. Si no hay
-      // ficha con ese correo, se deja una solicitud en la bandeja.
-      //
-      // No es un caso raro: pasa siempre que la ficha tiene un correo distinto
-      // del de su cuenta. Y no avisa de nada por sí solo — simplemente su bono
-      // no le funciona y sus citas no se enlazan con nadie, en silencio.
-      //
-      // Va DESPUÉS de firmar la sesión y sin esperarla: entrar en el área
-      // privada no puede depender de esto, ni tardar más por ello.
-      if (hasModule("formularios")) {
-        asegurarSolicitudDeAlta(tenantModels, {
-          email,
-          origen: "Entró en su área privada y no hay ficha con este correo",
-        }).catch(() => {});
-      }
+      /*
+       * ⚠️ AQUÍ NO SE CREA NINGUNA SOLICITUD (retirado el 05/08/2026, el mismo
+       * día que se puso).
+       *
+       * La idea era buena y la ejecución mala: como el CRM ve aquí el correo
+       * real con el que entra la paciente, se dejaba una solicitud en la bandeja
+       * cuando no había ficha con ese correo, para cazar los desajustes.
+       *
+       * El problema es lo que significa una solicitud: «quiero ser paciente».
+       * Y entrar en el área privada NO es pedir cita — se entra también para
+       * comprar un curso. Así que se llenaba Leads Comerciales de gente que no
+       * había pedido nada y, peor, la puerta de admisión les leía esa solicitud
+       * como «pendiente» y les decía «tu solicitud está en revisión» sin que
+       * hubieran rellenado un formulario en su vida. Un callejón sin salida.
+       *
+       * LA REGLA, de Rodrigo: **una solicitud la crea SOLO el formulario de
+       * /formularios**. Registrarse en la web no es pedir cita.
+       *
+       * El desajuste de correos se sigue detectando donde no hace daño: en la
+       * ficha, con el distintivo de «¿tiene cuenta con este correo?»
+       * (`GET /api/clients/[id]/portal-user`).
+       */
 
       return ok({ sessionToken, expiresInSeconds: SESSION_TTL_SECONDS });
     } catch (err) {

@@ -70,22 +70,31 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenantModels,
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
       return error("Email no válido", 422);
     }
-    const nombre = String(datos?.nombre || "").trim().slice(0, 200);
-    const wpUserId = Number(datos?.wp_user_id) || null;
-
-    // Las guardas de idempotencia y el alta viven en `asegurarSolicitudDeAlta`
-    // (lib/formularios/registroWeb.js) desde el 05/08/2026: las comparte con el
-    // canje del SSO, que hace exactamente lo mismo cuando alguien ENTRA en su
-    // área privada y no tenemos ficha suya.
-    const res = await asegurarSolicitudDeAlta(tenantModels, {
-      email,
-      nombre,
-      origen: "Registro en la web",
-      wpUserId,
-    });
-
-    if (!res.creada) return ok({ creada: false, motivo: res.motivo });
-    return created({ creada: true, id: res.id });
+    /*
+     * ⚠️ REGISTRARSE EN LA WEB YA NO CREA UNA SOLICITUD (05/08/2026, Rodrigo).
+     *
+     * En esta web hay DOS registros distintos y este endpoint no puede
+     * distinguirlos, porque los dos crean un usuario de WordPress:
+     *   · el botón REGISTRO, para comprar cursos — la mayoría;
+     *   · el formulario de /formularios, que sí es «quiero ser paciente».
+     *
+     * Tratar el primero como una solicitud llenaba Leads Comerciales de gente
+     * que no había pedido nada: 46 rechazadas a mano en tres semanas. Y desde
+     * que existe la puerta de admisión hacía daño de verdad, porque a esa
+     * persona el portal le decía «tu solicitud está en revisión» sin haber
+     * rellenado ningún formulario — un callejón sin salida, con el aviso
+     * equivocado y sin enlace al que ir.
+     *
+     * LA REGLA: **una solicitud la crea SOLO el formulario de /formularios.**
+     *
+     * El endpoint se conserva respondiendo 200 para que el WordPress que hoy lo
+     * llama no empiece a registrar errores en cada alta. El aviso se retira del
+     * theme en la próxima versión (`nutrilaura-registro-crm.php`) y entonces
+     * esta ruta se puede borrar entera.
+     */
+    void nombre;
+    void wpUserId;
+    return ok({ creada: false, motivo: "registro_no_es_solicitud" });
   } catch (err) {
     return serverError(err);
   }
