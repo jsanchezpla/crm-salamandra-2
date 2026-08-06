@@ -113,6 +113,9 @@ export const MODULES = {
   analytics: ["migrate-web-visits-daily"],
 
   clients: [
+    // Cada paciente con SU profesional (06/08/2026): la agenda pública le
+    // enseña solo los huecos de quien lleva su seguimiento.
+    "migrate-nutricionista-asignada",
     // «Ya lo he mirado y está bien»: sin esto, la pantalla de fichas a
     // completar no llega a cero nunca (03/08/2026).
     "migrate-data-reviews",

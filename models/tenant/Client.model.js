@@ -118,6 +118,22 @@ export function defineClient(sequelize) {
         allowNull: false,
         defaultValue: [],
       },
+      /**
+       * Su profesional: con quién lleva el seguimiento (06/08/2026, Rodrigo).
+       *
+       * Se decide al ACEPTAR su solicitud en la bandeja, que es el momento en
+       * que alguien mira el caso y dice «esta va contigo». A partir de ahí, la
+       * agenda pública le enseña SOLO los huecos de esa persona: en un centro
+       * con equipo, ver los de otra es ofrecerle una cita que no le toca.
+       *
+       * `null` = sin asignar, y entonces ve la agenda de siempre. Es el estado
+       * de todo lo anterior a esto y el de cualquier consulta de una sola
+       * profesional: nadie tiene que asignar nada para que siga funcionando.
+       */
+      assignedTeamMemberId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       // Contrato del Centro subido al inscribir al cliente (FK lógica a
       // documents; el flujo de firma vive en ContractSignature).
       contractDocumentId: {
