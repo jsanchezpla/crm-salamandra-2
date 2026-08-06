@@ -141,6 +141,7 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("citas.identidadObligatoria", antes?.citas?.identidadObligatoria, despues?.citas?.identidadObligatoria);
   anota("citas.formularioUrl", antes?.citas?.formularioUrl, despues?.citas?.formularioUrl);
   anota("citas.portalUrl", antes?.citas?.portalUrl, despues?.citas?.portalUrl);
+  anota("citas.reservaUrl", antes?.citas?.reservaUrl, despues?.citas?.reservaUrl);
 
   const huboSecretos = Object.keys(secretos).length > 0;
   const huboAbiertos = Object.keys(after).length > 0;
@@ -232,6 +233,7 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     formularioUrl: t.settings?.citas?.formularioUrl ?? "",
     // Página de la web del cliente donde está incrustado el portal.
     portalUrl: t.settings?.citas?.portalUrl ?? "",
+    reservaUrl: t.settings?.citas?.reservaUrl ?? "",
     brand: {
       primaryColor: brand.primaryColor ?? null,
       secondaryColor: brand.secondaryColor ?? null,
@@ -477,6 +479,23 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
       throw new ValidationError("La dirección del área privada tiene que empezar por http:// o https://");
     }
     settings.citas = { ...(settings.citas ?? {}), portalUrl: url || null };
+  }
+
+  /*
+   * Dirección de la página de RESERVAS en la web del cliente (06/08/2026,
+   * Rodrigo). Es la hermana de `portalUrl`, y resuelve el enlace de cita única:
+   * el botón de copiar daba la dirección del CRM, y esa dirección abierta desde
+   * un WhatsApp cae fuera de la web del centro —sin sesión— y solo puede
+   * enseñar el cartel de «inicia sesión para reservar». Con esta puesta, el
+   * enlace que se copia es el de SU web, donde quien lo abra ya está
+   * identificado (o puede identificarse) y el iframe recibe su sesión.
+   */
+  if (typeof body.reservaUrl === "string") {
+    const url = body.reservaUrl.trim();
+    if (url && !/^https?:\/\/\S+$/i.test(url)) {
+      throw new ValidationError("La dirección de la página de reservas tiene que empezar por http:// o https://");
+    }
+    settings.citas = { ...(settings.citas ?? {}), reservaUrl: url || null };
   }
 
   // Candado de la IA para empleados (no es un secreto): lista cerrada.

@@ -94,10 +94,45 @@ export function useWidgetAuth(authConfig, portal = null) {
  * Pantalla bloqueante que se muestra cuando el tenant exige login del padre
  * (WordPress, etc.) y todavía no se ha confirmado.
  */
-export function AuthGateScreen({ info }) {
+export function AuthGateScreen({ info, reservaUrl = null, tipo = null }) {
   const auth = info?.auth ?? {};
   const loginUrl = auth.loginUrl;
   const registerUrl = auth.registerUrl;
+
+  /*
+   * ── UN ENLACE DE CITA ABIERTO FUERA DE LA WEB DEL CENTRO ───────────────────
+   * (06/08/2026, Rodrigo: «cuando mandamos un link de cita único, se buguea y
+   * manda a la pantalla de iniciar sesión»).
+   *
+   * El widget vive dentro de un iframe en la web del cliente, que es quien
+   * firma la sesión. Abierto SUELTO —el enlace pegado en un WhatsApp— no hay
+   * ninguna sesión que valga, aunque esa persona esté perfectamente
+   * identificada en la web del centro: son dos dominios distintos. Este cartel
+   * era, ahí, un callejón sin salida.
+   *
+   * Si el centro tiene puesta su página de reservas (Configuración → Citas), se
+   * la manda allí con el mismo tipo de cita: entra por donde entra siempre.
+   *
+   * SOLO desde la ventana principal. Dentro del iframe no se redirige jamás: la
+   * página de reservas volvería a montar el iframe y se entraría en un bucle.
+   */
+  useEffect(() => {
+    if (!reservaUrl) return;
+    if (typeof window === "undefined" || window.top !== window.self) return;
+    const destino = new URL(reservaUrl);
+    if (tipo) destino.searchParams.set("tipo", tipo);
+    window.location.replace(destino.toString());
+  }, [reservaUrl, tipo]);
+
+  // Mientras se va, no se enseña el cartel: sería un parpadeo diciendo lo que
+  // no es.
+  if (reservaUrl && typeof window !== "undefined" && window.top === window.self) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-[var(--widget-text-muted)]">
+        Llevándote a la página de reservas…
+      </div>
+    );
+  }
 
   const brandStyle = {};
   if (info?.brand?.primaryColor) brandStyle["--brand-primary"] = info.brand.primaryColor;

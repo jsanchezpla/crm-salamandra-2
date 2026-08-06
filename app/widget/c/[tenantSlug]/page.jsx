@@ -354,7 +354,7 @@ export default function WidgetSelectionPage() {
         </div>
       );
     }
-    if (!auth.allowed) return <AuthGateScreen info={info} />;
+    if (!auth.allowed) return <AuthGateScreen info={info} reservaUrl={info?.reservaUrl} tipo={tipoDelEnlace} />;
   }
 
   // ── ¿Le falta el formulario? (05/08/2026, Rodrigo) ────────────────────────

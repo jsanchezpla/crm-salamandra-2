@@ -73,18 +73,40 @@ function slugify(name) {
  * a veces se dicta, y un UUID de 36 caracteres no se puede ni leer en voz alta
  * ni comprobar de un vistazo.
  *
- * El origen se lee del navegador, no de una variable de entorno: la agenda
- * pública se sirve del mismo sitio que el CRM, así que el enlace que se copia
- * es siempre el bueno esté donde esté desplegado.
+ * ── APUNTA A LA WEB DEL CENTRO, NO AL CRM (06/08/2026, Rodrigo) ────────────
+ * Daba la dirección del CRM, y ese enlace abierto desde un WhatsApp cae FUERA
+ * de la web del centro: allí no hay sesión de WordPress que valga, así que el
+ * widget solo podía enseñar «Inicia sesión para reservar» —aunque la paciente
+ * estuviera perfectamente identificada en la web—. Un enlace que no se puede
+ * abrir no sirve para nada.
+ *
+ * Con la página de reservas puesta en Configuración, el enlace es el de SU web
+ * con `?tipo=`: quien lo abre entra por donde entra siempre. Sin ponerla se
+ * conserva el enlace de antes, que al menos funciona en los centros que no
+ * exigen identificarse.
  */
 function CopiarEnlace({ slug, tenantSlug }) {
   const [copiado, setCopiado] = useState(false);
+  const [reservaUrl, setReservaUrl] = useState(null);
+
+  useEffect(() => {
+    if (!tenantSlug) return;
+    let vivo = true;
+    fetch(`/api/public/c/${tenantSlug}/info`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo) setReservaUrl(j?.data?.reservaUrl ?? null); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [tenantSlug]);
+
   if (!tenantSlug) return null;
 
-  const url =
-    typeof window === "undefined"
+  const base = reservaUrl
+    ? reservaUrl.replace(/\/+$/, "") + "/"
+    : typeof window === "undefined"
       ? ""
-      : `${window.location.origin}/widget/c/${tenantSlug}?tipo=${encodeURIComponent(slug)}`;
+      : `${window.location.origin}/widget/c/${tenantSlug}`;
+  const url = base ? `${base}${base.includes("?") ? "&" : "?"}tipo=${encodeURIComponent(slug)}` : "";
 
   async function copiar(e) {
     e.stopPropagation(); // la fila entera abre la edición

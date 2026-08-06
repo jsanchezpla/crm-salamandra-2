@@ -694,6 +694,15 @@ export default function ConfigModule() {
             />
           )}
 
+          {isAdmin && (
+            <PaginaReservasCard
+              key={cfg.reservaUrl ?? ""}
+              url={cfg.reservaUrl ?? ""}
+              readOnly={!!cfg.readOnly}
+              onGuardar={(v) => patchTenant({ reservaUrl: v }, "Dirección de la página de reservas guardada")}
+            />
+          )}
+
           {isAdmin && <DerivacionesCard />}
 
           {isAdmin && (
@@ -1397,6 +1406,56 @@ function AreaPrivadaCard({ url, readOnly, onGuardar }) {
             disabled={readOnly}
             onChange={(e) => setBorrador(e.target.value)}
             placeholder="https://tuweb.com/area-privada"
+            className="flex-1 min-w-[220px] text-sm border border-neutral-200 rounded-lg px-3 py-2 disabled:bg-neutral-50"
+          />
+          {!readOnly && (
+            <PrimaryButton onClick={() => onGuardar(borrador.trim())}>Guardar</PrimaryButton>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * PaginaReservasCard — dónde vive la agenda dentro de la web del cliente
+ * (06/08/2026, Rodrigo).
+ *
+ * Sin esto, el botón de «copiar enlace» de cada tipo de cita daba la dirección
+ * del CRM. Ese enlace, abierto desde un WhatsApp, cae fuera de la web del centro
+ * —donde no hay sesión— y lo único que puede enseñar es «inicia sesión para
+ * reservar». Con la página puesta, el enlace que se copia es el de SU web.
+ */
+function PaginaReservasCard({ url, readOnly, onGuardar }) {
+  const [borrador, setBorrador] = useState(url ?? "");
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="text-sm font-semibold text-neutral-800">Página de reservas de tu web</div>
+      <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+        La página donde tienes puesta la agenda. Se usa para los enlaces de cita única que copias
+        en Tipos de cita: así quien los abra entra por tu web, con su sesión, en vez de encontrarse
+        una pantalla pidiéndole que inicie sesión.
+      </p>
+
+      <div className="mt-1 text-[11px] font-medium">
+        {(url ?? "").trim() ? (
+          <span className="text-emerald-700">Puesta: los enlaces de cita apuntan a tu web.</span>
+        ) : (
+          <span className="text-neutral-400">Sin poner: los enlaces apuntan al CRM y pedirán iniciar sesión.</span>
+        )}
+      </div>
+
+      <div className="mt-3">
+        <label className="block text-[11px] text-neutral-500 mb-1">Dirección de la página de reservas</label>
+        <div className="flex gap-2 flex-wrap">
+          <input
+            type="url"
+            inputMode="url"
+            value={borrador}
+            disabled={readOnly}
+            onChange={(e) => setBorrador(e.target.value)}
+            placeholder="https://tuweb.com/citas"
             className="flex-1 min-w-[220px] text-sm border border-neutral-200 rounded-lg px-3 py-2 disabled:bg-neutral-50"
           />
           {!readOnly && (

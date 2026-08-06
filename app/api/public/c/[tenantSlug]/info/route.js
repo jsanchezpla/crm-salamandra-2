@@ -62,6 +62,9 @@ export const GET = withPublicTenant(async (_request, _ctx, { tenant, brand, hasM
     // acaba de reservar se le manda a su área privada en vez de pedirle que se
     // guarde un enlace con un identificador dentro.
     const portalUrl = tenant.settings?.citas?.portalUrl;
+    // Página de reservas de su web: a donde mandar a quien abra un enlace de
+    // cita única fuera del sitio del centro (ver el widget).
+    const reservaUrl = tenant.settings?.citas?.reservaUrl;
 
     return ok({
       name: tenant.name,
@@ -69,6 +72,7 @@ export const GET = withPublicTenant(async (_request, _ctx, { tenant, brand, hasM
       admision,
       valoracion,
       portalUrl: typeof portalUrl === "string" && portalUrl.trim() ? portalUrl.trim() : null,
+      reservaUrl: typeof reservaUrl === "string" && reservaUrl.trim() ? reservaUrl.trim() : null,
       brand: {
         primaryColor: brand.primaryColor,
         secondaryColor: brand.secondaryColor,
