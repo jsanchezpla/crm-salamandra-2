@@ -717,22 +717,20 @@ export default function MiPerfilPage() {
               Mis citas
             </div>
 
+            {/*
+              SIN botón de reservar (06/08/2026, Rodrigo). Aquí había un
+              «Reservar una cita» que sacaba a la paciente del área privada
+              (`target="_top"`) hacia la agenda, y ese salto se llevaba por
+              delante la sesión del portal más de una vez: quien salía de su
+              propio perfil acababa en «Inicia sesión para reservar».
+
+              Para reservar está el botón del menú de la web, que hace el mismo
+              recorrido pero desde WordPress, que es quien tiene la sesión y
+              firma el acceso. Aquí solo se cuenta lo que hay.
+            */}
             {isEmpty && (
-              <div className="bg-[var(--widget-card)] rounded-xl border border-[var(--widget-border)] p-8 text-center">
-                <h2 className="text-[20px] text-[var(--widget-text)] tracking-tight mb-2" style={headingStyle}>
-                  Todavía no tienes citas
-                </h2>
-                <p className="text-sm text-[var(--widget-text-muted)] mb-5">
-                  Cuando reserves una cita, aparecerá aquí.
-                </p>
-                <a
-                  href={`/widget/c/${tenantSlug}`}
-                  target="_top"
-                  rel="noopener"
-                  className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md text-white bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
-                >
-                  Reservar una cita
-                </a>
+              <div className="text-[13px] text-[var(--widget-text-muted)] bg-[var(--widget-card)] rounded-lg border border-[var(--widget-border)] p-4">
+                No tienes citas próximas.
               </div>
             )}
 
