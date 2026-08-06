@@ -108,11 +108,23 @@ paciente, que está avisado— y **a todos los tipos de cita**. No es una puerta
 cerrada: se enseña el aviso con el enlace.
 
 Estados que devuelve `estadoDeAdmision`: `aceptada` (pasa), `pendiente`,
-`descartada`, `sin_enviar` y `sin_bandeja`. Detalles que se rompen solos y por
-eso están fijados en `_smoke-puerta-formulario.mjs`:
+`descartada`, `sin_ficha`, `sin_enviar` y `sin_bandeja`. Detalles que se rompen
+solos y por eso están fijados en `_smoke-puerta-formulario.mjs` y en
+`_smoke-paciente-borrado.mjs`:
 
 - **Una aceptada manda sobre el resto.** Quien fue admitido y luego manda otra
   solicitud no vuelve a la cola.
+- **Pero hace falta FICHA, no solo solicitud** (06/08/2026, Rodrigo: «si elimino
+  a un paciente, debería volver al paso cero»). La solicitud aceptada sobrevive
+  al borrado de la ficha —la FK se queda a NULL—, así que quien acababa de ser
+  dado de baja seguía entrando a su área privada y pidiendo cita. Aceptar SIEMPRE
+  crea ficha (lo garantiza `PATCH /api/formularios/[id]`, que prohíbe devolver
+  una aceptada a pendiente por ese mismo motivo), así que «aceptada sin ficha»
+  solo puede significar que la borraron: se devuelve `sin_ficha`, que enseña el
+  mensaje de primera visita con el enlace al formulario. La comprobación solo
+  DEGRADA el `aceptada`; si hay una solicitud nueva esperando, manda esa
+  (`pendiente`). Al borrar la ficha, `contract_signatures` cae con ella
+  (CASCADE), así que si vuelve, vuelve a firmar.
 - **El correo se cruza con `iLike`**: nadie escribe su email dos veces igual.
 - **A un anónimo no se le dice si un correo está pendiente o no existe.** Sería
   un buscador de pacientes de la consulta. La diferencia solo se cuenta a quien

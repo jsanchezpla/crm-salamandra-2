@@ -228,7 +228,7 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     // si esta persona pinta algo en la agenda. Se comprueba también el módulo:
     // encender la puerta sin bandeja de formularios dejaría fuera a todos.
     if (exigeFormularioAceptado(tenant) && hasModule("formularios")) {
-      const estado = await estadoDeAdmision(tenantModels.FormSubmission, clientEmail);
+      const estado = await estadoDeAdmision(tenantModels, clientEmail);
       if (estado !== "aceptada") {
         const aviso = mensajeDePuerta(estado, { identificado, nombre: tenant.name });
         return errorConDatos(aviso.texto, 403, {
@@ -269,7 +269,7 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
       // cuerpo de la petición y se escribe a mano.
       const admision = await puedePedirValoracion(tenant, {
         tieneFormularios: hasModule("formularios"),
-        FormSubmission: tenantModels.FormSubmission,
+        tenantModels,
         email: clientEmail,
       });
       if (!admision.puede) {

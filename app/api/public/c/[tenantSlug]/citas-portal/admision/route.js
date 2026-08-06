@@ -49,7 +49,7 @@ export const GET = withPublicTenant(
       }
 
       const estado = hasModule("formularios")
-        ? await estadoDeAdmision(tenantModels.FormSubmission, email)
+        ? await estadoDeAdmision(tenantModels, email)
         : "sin_bandeja";
 
       if (estado === "aceptada") {
