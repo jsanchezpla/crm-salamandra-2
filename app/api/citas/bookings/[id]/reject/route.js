@@ -97,6 +97,8 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
         eventTypeName: row.eventType?.name ?? "la cita solicitada",
         scheduledAt: row.scheduledAt,
         reason,
+        // Para que el correo diga que su programa sigue en pie.
+        esBono: !!row.packId,
       });
       // BYOK: cada cliente manda desde SU cuenta de Resend y su dominio
       // (mejor entrega, y su consumo no gasta el cupo de los demás).

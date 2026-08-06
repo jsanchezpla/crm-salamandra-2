@@ -1043,7 +1043,11 @@ export default function WidgetBookPage() {
                     {
                       key: "instalment",
                       titulo: `${formatMoney(fraccionado.cuota)} al mes durante ${fraccionado.meses} meses`,
-                      pie: `${formatMoney(fraccionado.total)} en total, financiado con Klarna.`,
+                      // Sin «financiado con Klarna» (06/08/2026, Rodrigo): el
+                      // fraccionado lo cobra la propia consulta con Stripe, mes
+                      // a mes. No hay ninguna financiera de por medio, y
+                      // nombrarla hacía pensar en un crédito con un tercero.
+                      pie: `${formatMoney(fraccionado.total)} en total.`,
                     },
                   ].map((opcion) => (
                     <label key={opcion.key} className="flex gap-2.5 items-start cursor-pointer">
