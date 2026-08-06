@@ -2028,13 +2028,10 @@ function Waitlist({ refreshKey, esAdmin, onCountChange, onActioned }) {
                         confirmar: el servidor lo rechaza, pero un botón activo
                         que devuelve un error es una trampa. Se apaga y se dice
                         por qué. */}
-                    {/* Rechazar y apuntar citas lo hace cualquiera del equipo
-                        desde el 06/08/2026; CONFIRMAR no, porque puede cobrarle
-                        la tarjeta a alguien. Se oculta en vez de dejarlo en
-                        gris: por lo de arriba, un botón que devuelve un error
-                        es una trampa. */}
-                    {esAdmin && (
-                    <>
+                    {/* Apuntar, rechazar y CONFIRMAR: cualquiera del equipo
+                        desde el 06/08/2026. Confirmar se abrió después que los
+                        otros dos, con Rodrigo revisándolo, porque puede cobrar
+                        la tarjeta retenida. */}
                     <button
                       onClick={() => confirm(b.id)}
                       disabled={busyId === b.id || b.paymentStatus === "authorizing"}
@@ -2055,14 +2052,21 @@ function Waitlist({ refreshKey, esAdmin, onCountChange, onActioned }) {
                         es rechazarla: es aceptarla y cobrarle en consulta. */}
                     {(b.paymentStatus === "void" || b.paymentStatus === "failed") && (
                       <>
-                        <button
-                          onClick={() => pedirTarjeta(b.id)}
-                          disabled={busyId === b.id}
-                          className="bg-white hover:bg-neutral-50 text-neutral-700 border border-neutral-300 text-xs font-medium py-2 rounded-md transition-colors disabled:opacity-50"
-                          title="Le enviamos un correo con un enlace para que meta otra tarjeta. La cita se le guarda mientras tanto."
-                        >
-                          Pedirle otra tarjeta
-                        </button>
+                        {/* Esta sí sigue siendo de admin: manda a la paciente
+                            un correo con un enlace de pago, y no se pidió
+                            abrirla. Quien no lo sea tiene al lado la salida
+                            buena para este caso —confirmar sin cobrar y cobrar
+                            en consulta—, así que no se queda atascado. */}
+                        {esAdmin && (
+                          <button
+                            onClick={() => pedirTarjeta(b.id)}
+                            disabled={busyId === b.id}
+                            className="bg-white hover:bg-neutral-50 text-neutral-700 border border-neutral-300 text-xs font-medium py-2 rounded-md transition-colors disabled:opacity-50"
+                            title="Le enviamos un correo con un enlace para que meta otra tarjeta. La cita se le guarda mientras tanto."
+                          >
+                            Pedirle otra tarjeta
+                          </button>
+                        )}
                         <button
                           onClick={() => confirm(b.id, { sinCobrar: true })}
                           disabled={busyId === b.id}
@@ -2072,8 +2076,6 @@ function Waitlist({ refreshKey, esAdmin, onCountChange, onActioned }) {
                           Confirmar sin cobrar
                         </button>
                       </>
-                    )}
-                    </>
                     )}
 
                     <button onClick={() => setRejectFor(b.id)} disabled={busyId === b.id} className="bg-white hover:bg-red-50 text-red-600 border border-red-200 text-xs font-medium py-2 rounded-md transition-colors disabled:opacity-50">

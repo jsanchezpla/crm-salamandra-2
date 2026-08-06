@@ -15,7 +15,6 @@ import { citaPuedeAvisar } from "../../../../../../lib/clients/comunicaciones.js
 import { bookingConfirmedTemplate } from "../../../../../../lib/email/templates/citas/bookingConfirmed.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
 
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 /**
  * PATCH /api/citas/bookings/[id]/confirm
@@ -63,7 +62,18 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     const userRole = request.headers.get("x-user-role") ?? "user";
     const userId = request.headers.get("x-user-id");
     const ip = request.headers.get("x-forwarded-for") ?? null;
-    if (!ADMIN_ROLES.has(userRole)) return forbidden("Solo admin puede confirmar citas");
+    /*
+     * Confirmar lo hace CUALQUIERA del equipo (06/08/2026, Rodrigo), igual que
+     * apuntar y rechazar. Lo dejé en admin al abrir los otros dos porque esto
+     * puede cobrar la tarjeta retenida; Rodrigo lo revisó y decidió abrirlo:
+     * quien atiende la lista de espera es quien la resuelve, y partirla en «tú
+     * puedes decir que no pero no que sí» no es una lista de espera.
+     *
+     * Sigue haciendo falta sesión y módulo de citas. Y todo lo que protege el
+     * cobro no se ha tocado: la regla de oro de arriba —si no hay dinero, la
+     * cita no se confirma—, la transacción con lock y la auditoría, que ya
+     * apunta QUIÉN confirma cada una.
+     */
 
     const { id } = await params;
     const { Booking, EventType } = tenantModels;
