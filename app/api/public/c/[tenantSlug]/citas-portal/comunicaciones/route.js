@@ -2,6 +2,7 @@ import { withPublicTenant } from "../../../../../../../lib/tenant/publicTenantCo
 import { ok, error, serverError } from "../../../../../../../lib/utils/apiResponse.js";
 import { auditar } from "../../../../../../../lib/utils/auditoria.js";
 import { gatePortal, resolvePortalContractSession } from "../../../../../../../lib/citas/portalContract.js";
+import { CUPO_PORTAL } from "../../../../../../../lib/citas/portalRateLimit.js";
 import {
   CANALES,
   CANAL_LABEL,
@@ -50,7 +51,7 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
   } catch (err) {
     return serverError(err);
   }
-});
+}, { rateLimit: CUPO_PORTAL });
 
 export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenantModels, hasModule }) => {
   try {
@@ -111,4 +112,4 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
   } catch (err) {
     return serverError(err);
   }
-});
+}, { rateLimit: CUPO_PORTAL });

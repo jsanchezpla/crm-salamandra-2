@@ -45,6 +45,7 @@ import ClientAttachmentsPanel from "./ClientAttachmentsPanel.jsx";
 import ClientBookingsPanel from "./ClientBookingsPanel.jsx";
 import ClientPlansPanel from "./ClientPlansPanel.jsx";
 import ClientModulesSection from "../../../components/clients/ClientModulesSection.jsx";
+import ClientCitasSection from "../../../components/clients/ClientCitasSection.jsx";
 import { edadDesde } from "../../../lib/clients/formularioAlta.js";
 
 // Rótulos revisados el 04/08/2026 (Rodrigo): Datos · Historia clínica ·
@@ -351,11 +352,17 @@ export default function NutriLauraClientDetailModule() {
         {tab === "attachments" && <ClientAttachmentsPanel clientId={id} />}
 
         {tab === "bookings" && (
-          <ClientBookingsPanel
-            clientId={id}
-            clientEmail={client.email}
-            userRole={me.role}
-          />
+          <>
+            <ClientBookingsPanel
+              clientId={id}
+              clientEmail={client.email}
+              userRole={me.role}
+            />
+            {/* El interruptor va DENTRO de esta pestaña y no en «Datos»: quien
+                se cansa de confirmar las citas de alguien está mirando
+                justamente esta lista (06/08/2026, Rodrigo). */}
+            <ClientCitasSection clientId={id} />
+          </>
         )}
 
         {tab === "plan" && <ClientPlansPanel clientId={id} />}

@@ -8,6 +8,7 @@ import { bufferFromDataUrl, writeSignature } from "../../../../../../../../lib/c
 import { validarDatos, validarAceptaciones, camposDe, esMenor } from "../../../../../../../../lib/clients/contratoFirma.js";
 import { datosDeFicha, actualizacionDeFicha, tutorDeclarado } from "../../../../../../../../lib/clients/datosFicha.js";
 import { archivarContratoFirmado } from "../../../../../../../../lib/documents/contratoFirmadoArchivo.js";
+import { CUPO_PORTAL_FIRMA } from "../../../../../../../../lib/citas/portalRateLimit.js";
 
 /**
  * POST — firma web del contrato del centro (sprint Aumenta 2026-07, punto 2.1;
@@ -255,7 +256,7 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
   } catch (err) {
     return serverError(err);
   }
-});
+}, { rateLimit: CUPO_PORTAL_FIRMA });
 
 /** La fila real de la plantilla (el estado solo devuelve la vista pública). */
 async function cargarPlantilla(tenantModels, key) {

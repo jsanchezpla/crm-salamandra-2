@@ -18,6 +18,7 @@ import ClientContractSection from "../../components/clients/ClientContractSectio
 import ClientGuardiansSection from "../../components/clients/ClientGuardiansSection.jsx";
 import ClientPortalMonthsSection from "../../components/clients/ClientPortalMonthsSection.jsx";
 import ClientComunicacionesSection from "../../components/clients/ClientComunicacionesSection.jsx";
+import ClientCitasSection from "../../components/clients/ClientCitasSection.jsx";
 import ClientPatientsSection from "../../components/clients/ClientPatientsSection.jsx";
 
 const STATUSES = [
@@ -455,6 +456,9 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL }) {
 
         {/* Por dónde acepta la familia que se le escriba (01/08). */}
         <ClientComunicacionesSection clientId={id} />
+
+        {/* Sus citas, ¿entran confirmadas o pasan por la bandeja? (06/08). */}
+        <ClientCitasSection clientId={id} />
 
         {/* Solo se pinta si el centro tiene el bloqueo por impago encendido. */}
         <ClientPortalMonthsSection clientId={id} />

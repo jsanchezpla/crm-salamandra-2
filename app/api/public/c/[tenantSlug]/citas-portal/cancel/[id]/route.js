@@ -2,6 +2,7 @@ import { withPublicTenant } from "../../../../../../../../lib/tenant/publicTenan
 import { ok, error, unauthorized, forbidden, notFound, serverError } from "../../../../../../../../lib/utils/apiResponse.js";
 import { verifyPortalSession, readBearer } from "../../../../../../../../lib/citas/portalSession.js";
 import { cancelBookingRow } from "../../../../../../../../lib/citas/cancelBooking.js";
+import { CUPO_PORTAL_CANCELAR } from "../../../../../../../../lib/citas/portalRateLimit.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -71,4 +72,4 @@ export const POST = withPublicTenant(async (request, { params }, ctx) => {
   } catch (err) {
     return serverError(err);
   }
-});
+}, { rateLimit: CUPO_PORTAL_CANCELAR });

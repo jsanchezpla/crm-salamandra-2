@@ -560,6 +560,19 @@ export default function WidgetBookPage() {
 
   // ── Estado SUCCESS ────────────────────────────────────────────────────────
   if (success) {
+    /*
+     * ── «CITA CONFIRMADA» SOLO SI LO ESTÁ (06/08/2026, Rodrigo) ──────────────
+     *
+     * Esta pantalla decía «Cita confirmada» siempre, también cuando la reserva
+     * nacía PENDIENTE del visto bueno de la profesional —que es como nacen en
+     * un centro que revisa sus citas—. La paciente se iba convencida de que
+     * tenía hora y podía presentarse a una cita que nadie le había dado.
+     *
+     * El estado lo dice el servidor en la respuesta; aquí solo se elige el
+     * texto. Sin estado (respuestas viejas en una pestaña abierta) se asume
+     * confirmada, que es como se comportaba hasta hoy.
+     */
+    const pendienteDeVistoBueno = success.status === "pending";
     const cancelPath = `/widget/c/${tenantSlug}/cancel/${success.cancellationToken}`;
     const cancelUrl = typeof window !== "undefined" ? `${window.location.origin}${cancelPath}` : cancelPath;
     const gcalUrl = googleCalendarUrl({
@@ -584,7 +597,9 @@ export default function WidgetBookPage() {
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)]">Cita confirmada</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)]">
+                {pendienteDeVistoBueno ? "Solicitud recibida" : "Cita confirmada"}
+              </div>
               <h1
                 className="text-[22px] lg:text-[26px] leading-tight text-[var(--widget-text)] truncate tracking-tight"
                 style={{ fontFamily: "var(--widget-font-display)", fontWeight: 500 }}
@@ -602,18 +617,30 @@ export default function WidgetBookPage() {
                 className="w-9 h-9 rounded-full flex items-center justify-center text-white"
                 style={{ backgroundColor: "var(--brand-primary, var(--widget-button))" }}
               >
-                <svg viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                  <path fillRule="evenodd" d="M16.704 5.296a1 1 0 010 1.414l-7.5 7.5a1 1 0 01-1.414 0l-3.5-3.5a1 1 0 011.414-1.414L8.5 12.086l6.793-6.79a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
+                {/* Un tic verde en algo que todavía no está dado es la mitad
+                    del engaño: pendiente lleva reloj, confirmada lleva tic. */}
+                {pendienteDeVistoBueno ? (
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.5 2.5a1 1 0 001.414-1.414L11 9.586V6z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                    <path fillRule="evenodd" d="M16.704 5.296a1 1 0 010 1.414l-7.5 7.5a1 1 0 01-1.414 0l-3.5-3.5a1 1 0 011.414-1.414L8.5 12.086l6.793-6.79a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                )}
               </div>
               <div>
                 <h2
                   className="text-[26px] leading-tight text-[var(--widget-text)] tracking-tight"
                   style={{ fontFamily: "var(--widget-font-display)", fontWeight: 500 }}
                 >
-                  Cita confirmada
+                  {pendienteDeVistoBueno ? "Hemos recibido tu cita" : "Cita confirmada"}
                 </h2>
-                <div className="text-[13px] text-[var(--widget-text-muted)]">Hemos guardado tu reserva.</div>
+                <div className="text-[13px] text-[var(--widget-text-muted)]">
+                  {pendienteDeVistoBueno
+                    ? `Queda pendiente de que ${info?.name ?? "la profesional"} la confirme. Te avisamos por correo en cuanto lo haga.`
+                    : "Hemos guardado tu reserva."}
+                </div>
               </div>
             </div>
 
@@ -640,16 +667,22 @@ export default function WidgetBookPage() {
 
             <div className="mt-5 pt-5 border-t border-[var(--widget-border)]/60 space-y-3 text-[13px]">
               <div className="text-[var(--widget-text-muted)]">
-                Hemos enviado los detalles de tu reserva a <b className="text-[var(--widget-text)]">{success.clientEmail}</b>.
+                {pendienteDeVistoBueno ? "Te hemos escrito a " : "Hemos enviado los detalles de tu reserva a "}
+                <b className="text-[var(--widget-text)]">{success.clientEmail}</b>.
               </div>
-              <a
-                href={gcalUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-[var(--widget-text-muted)] hover:text-[var(--widget-text)] underline focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)] rounded-sm"
-              >
-                Añadir a Google Calendar
-              </a>
+              {/* Sin «añadir al calendario» mientras está pendiente: apuntar en
+                  la agenda una hora que aún no es suya es pedirle que se
+                  presente a una cita que puede no existir. */}
+              {!pendienteDeVistoBueno && (
+                <a
+                  href={gcalUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 text-[var(--widget-text-muted)] hover:text-[var(--widget-text)] underline focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)] rounded-sm"
+                >
+                  Añadir a Google Calendar
+                </a>
+              )}
             </div>
 
             {/* ── ¿Necesitas cancelar? ────────────────────────────────────────

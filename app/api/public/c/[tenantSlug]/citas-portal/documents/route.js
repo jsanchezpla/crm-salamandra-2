@@ -7,6 +7,7 @@ import { resolvePortalClient } from "../../../../../../../lib/citas/portalClient
 import { estadoContrato } from "../../../../../../../lib/citas/portalContract.js";
 import { bloqueoImpagoActivo, mesesAbiertos, filtrarPorMes } from "../../../../../../../lib/citas/portalMeses.js";
 import { wherePaciente } from "../../../../../../../lib/citas/portalDocumentos.js";
+import { CUPO_PORTAL } from "../../../../../../../lib/citas/portalRateLimit.js";
 import {
   MAX_FILE_SIZE_BYTES,
   TENANT_QUOTA_BYTES,
@@ -147,7 +148,7 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
   } catch (err) {
     return serverError(err);
   }
-});
+}, { rateLimit: CUPO_PORTAL });
 
 export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenantModels, hasModule }) => {
   try {
@@ -236,4 +237,4 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
   } catch (err) {
     return serverError(err);
   }
-});
+}, { rateLimit: CUPO_PORTAL });

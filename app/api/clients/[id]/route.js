@@ -133,6 +133,10 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
   // Flag "padres separados" (tutor). Sólo se toca si viene explícito en el body
   // (permite un PUT parcial { separated } sin arrastrar el resto de campos).
   if ("separated" in body) baseUpdate.separated = body.separated == null ? null : !!body.separated;
+  // Citas autoconfirmadas para ESTA persona (06/08/2026, Rodrigo). Igual que
+  // arriba: solo si viene explícito, para que un guardado de otra sección de la
+  // ficha no lo apague sin querer.
+  if ("autoConfirmBookings" in body) baseUpdate.autoConfirmBookings = !!body.autoConfirmBookings;
 
   // Transacción: datos base + upsert del principal (email/phone) → espejo en
   // Client.email/phone. Si el tenant aún no tiene client_contact_methods (42P01),

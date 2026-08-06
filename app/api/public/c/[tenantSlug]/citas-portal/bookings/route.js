@@ -5,6 +5,7 @@ import { verifyPortalSession, readBearer } from "../../../../../../../lib/citas/
 import { splitBookings } from "../../../../../../../lib/citas/clientBookingSerializer.js";
 import { normalizeEmail } from "../../../../../../../lib/citas/validation.js";
 import { noEsCarritoAbandonado } from "../../../../../../../lib/citas/booking.js";
+import { CUPO_PORTAL } from "../../../../../../../lib/citas/portalRateLimit.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/citas-portal/bookings
@@ -61,4 +62,4 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
   } catch (err) {
     return serverError(err);
   }
-});
+}, { rateLimit: CUPO_PORTAL });

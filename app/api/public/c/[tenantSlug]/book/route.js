@@ -422,10 +422,27 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
       if (Client && clientEmail) {
         const ficha = await Client.findOne({
           where: { email: { [Op.iLike]: clientEmail } },
-          attributes: ["id"],
+          attributes: ["id", "autoConfirmBookings"],
           order: [["createdAt", "ASC"]],
         });
-        if (ficha) clientId = ficha.id;
+        if (ficha) {
+          clientId = ficha.id;
+          /*
+           * ESTA PACIENTE TIENE LAS CITAS AUTOCONFIRMADAS (06/08/2026, Rodrigo).
+           *
+           * El interruptor de su ficha la exime de la bandeja de confirmación
+           * del centro. Nace de la paciente de siempre, la que viene los martes
+           * a la misma hora: darle el visto bueno a cada cita suya es trabajo
+           * que no decide nada.
+           *
+           * Solo EXIME, nunca al revés: si el centro ya confirma solo, esto no
+           * cambia nada. Y no se salta ninguna otra puerta —formulario,
+           * contrato, identidad— ni el cobro: con precio, la cita sigue naciendo
+           * pendiente hasta que la tarjeta responde (ver el `status` de más
+           * abajo, donde el precio manda sobre esto).
+           */
+          if (ficha.autoConfirmBookings === true) autoConfirm = true;
+        }
       }
     } catch (err) {
       const code = err?.parent?.code || err?.original?.code;
@@ -932,6 +949,12 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
         meetUrl: row.meetUrl,
         cancellationToken: row.cancellationToken,
         clientEmail: row.clientEmail,
+        // Que la pantalla sepa si esto es una cita CONFIRMADA o una solicitud
+        // esperando visto bueno (06/08/2026, Rodrigo). Sin esto decía «Cita
+        // confirmada» siempre, también cuando la cita estaba pendiente de que
+        // la profesional la aceptara: la paciente se presentaba a una cita que
+        // nadie le había dado.
+        status: row.status,
       },
     });
   } catch (err) {

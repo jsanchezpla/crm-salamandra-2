@@ -7,6 +7,7 @@ import { readDocumentStream } from "../../../../../../../../lib/documents/docume
 import { estadoContrato } from "../../../../../../../../lib/citas/portalContract.js";
 import { wherePaciente } from "../../../../../../../../lib/citas/portalDocumentos.js";
 import { bloqueoImpagoActivo, mesesAbiertos, mesDe } from "../../../../../../../../lib/citas/portalMeses.js";
+import { CUPO_PORTAL } from "../../../../../../../../lib/citas/portalRateLimit.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -84,4 +85,4 @@ export const GET = withPublicTenant(async (request, ctx, { slug, tenant, tenantM
   } catch (err) {
     return serverError(err);
   }
-});
+}, { rateLimit: CUPO_PORTAL });

@@ -3,6 +3,7 @@ import { withPublicTenant } from "../../../../../../../lib/tenant/publicTenantCo
 import { ok, error, unauthorized, forbidden, notFound, serverError } from "../../../../../../../lib/utils/apiResponse.js";
 import { verifyPortalSession, readBearer } from "../../../../../../../lib/citas/portalSession.js";
 import { normalizeEmail } from "../../../../../../../lib/citas/validation.js";
+import { CUPO_PORTAL } from "../../../../../../../lib/citas/portalRateLimit.js";
 
 /**
  * Avisos del centro, en el área privada del cliente.
@@ -72,7 +73,7 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
   } catch (err) {
     return serverError(err);
   }
-});
+}, { rateLimit: CUPO_PORTAL });
 
 /**
  * POST — marcar avisos como leídos.
@@ -112,4 +113,4 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
   } catch (err) {
     return serverError(err);
   }
-});
+}, { rateLimit: CUPO_PORTAL });

@@ -3,6 +3,7 @@ import { withPublicTenant } from "../../../../../../../../lib/tenant/publicTenan
 import { notFound, serverError } from "../../../../../../../../lib/utils/apiResponse.js";
 import { readDocumentStream } from "../../../../../../../../lib/documents/documentStorage.js";
 import { gatePortal, resolvePortalContractSession, estadoContrato } from "../../../../../../../../lib/citas/portalContract.js";
+import { CUPO_PORTAL } from "../../../../../../../../lib/citas/portalRateLimit.js";
 
 /**
  * GET — el PDF del contrato que la familia va a firmar.
@@ -47,4 +48,4 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
   } catch (err) {
     return serverError(err);
   }
-});
+}, { rateLimit: CUPO_PORTAL });

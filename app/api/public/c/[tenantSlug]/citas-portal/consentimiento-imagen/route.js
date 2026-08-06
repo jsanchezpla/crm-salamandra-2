@@ -4,6 +4,7 @@ import { auditar } from "../../../../../../../lib/utils/auditoria.js";
 import { gatePortal, resolvePortalContractSession } from "../../../../../../../lib/citas/portalContract.js";
 import { bufferFromDataUrl, writeSignature } from "../../../../../../../lib/clients/signatureStorage.js";
 import { registrarImagenPortal, yaRespondido } from "../../../../../../../lib/clinica/consents.js";
+import { CUPO_PORTAL } from "../../../../../../../lib/citas/portalRateLimit.js";
 
 /**
  * Consentimiento de IMAGEN, firmado por la familia desde el portal
@@ -76,7 +77,7 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
   } catch (err) {
     return serverError(err);
   }
-});
+}, { rateLimit: CUPO_PORTAL });
 
 /** Respuesta. Body: { patientId, acepto: bool, signature?: dataURL } */
 export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenantModels, hasModule }) => {
@@ -149,4 +150,4 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
   } catch (err) {
     return serverError(err);
   }
-});
+}, { rateLimit: CUPO_PORTAL });

@@ -124,6 +124,26 @@ export function defineClient(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      /**
+       * Sus citas del portal entran YA CONFIRMADAS, sin pasar por la bandeja
+       * (06/08/2026, Rodrigo).
+       *
+       * El centro puede pedir que toda reserva pública espere su visto bueno
+       * (`autoConfirmPublicBookings` del módulo citas). Eso está bien para quien
+       * llega de nuevas, y sobra para la paciente de siempre que viene los
+       * martes a la misma hora: confirmarle a mano cada cita es trabajo que no
+       * decide nada. Este interruptor la exime, una a una y a criterio de la
+       * profesional.
+       *
+       * Apagado por defecto: exime, nunca al revés. Encenderlo no salta ninguna
+       * otra puerta —formulario, contrato, identidad— ni el cobro: una cita con
+       * precio sigue naciendo pendiente hasta que se retiene la tarjeta.
+       */
+      autoConfirmBookings: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
       // Consentimiento de COMUNICACIONES de la familia (01/08/2026): por qué
       // canales quiere que se le escriba y si acepta novedades del centro, con
       // la traza de cuándo y desde dónde lo dijo (lib/clients/comunicaciones.js).

@@ -1,6 +1,7 @@
 import { withPublicTenant } from "../../../../../../../lib/tenant/publicTenantContext.js";
 import { ok, serverError } from "../../../../../../../lib/utils/apiResponse.js";
 import { gatePortal, resolvePortalContractSession, estadoContrato } from "../../../../../../../lib/citas/portalContract.js";
+import { CUPO_PORTAL } from "../../../../../../../lib/citas/portalRateLimit.js";
 
 /**
  * GET — estado del Contrato del Centro para la familia que ha entrado al portal.
@@ -62,4 +63,4 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
   } catch (err) {
     return serverError(err);
   }
-});
+}, { rateLimit: CUPO_PORTAL });

@@ -6,6 +6,7 @@ import { camposDe, validarDatos } from "../../../../../../../lib/clients/contrat
 import { camposQueFaltan, actualizacionDeFicha } from "../../../../../../../lib/clients/datosFicha.js";
 import { desajusteDeEdad } from "../../../../../../../lib/formularios/edadDeclarada.js";
 import { notifyAdmins } from "../../../../../../../lib/notifications/notifyUsers.js";
+import { CUPO_PORTAL } from "../../../../../../../lib/citas/portalRateLimit.js";
 
 /**
  * POST — «Completa tus datos», el paso previo a firmar (04/08/2026).
@@ -62,7 +63,7 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
   } catch (err) {
     return serverError(err);
   }
-});
+}, { rateLimit: CUPO_PORTAL });
 
 export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenantModels, hasModule }) => {
   try {
@@ -158,4 +159,4 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
   } catch (err) {
     return serverError(err);
   }
-});
+}, { rateLimit: CUPO_PORTAL });
