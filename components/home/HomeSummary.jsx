@@ -100,11 +100,28 @@ function MiniList({ children }) {
   return <div className="mt-4 pt-4 border-t border-[var(--ink-150)] space-y-2">{children}</div>;
 }
 
+// El lado derecho es la columna "corta" (una hora, un estado, un importe) y por
+// eso no encoge. Pero algunos bloques meten ahí texto libre y largo — el nombre
+// de un curso en Formación — que al no encoger se salía de la tarjeta y además
+// aplastaba el lado izquierdo hasta 0px. Se le pone tope al 55% del ancho y
+// puntos suspensivos: lo corto sigue entero, lo largo se corta.
 function Row({ left, right, muted }) {
   return (
     <div className="flex items-baseline justify-between gap-3 text-[13px]">
-      <span className={`truncate ${muted ? "text-[var(--ink-400)]" : "text-[var(--ink-700)]"}`}>{left}</span>
-      {right != null && <span className="shrink-0 text-[12px] text-[var(--ink-400)]">{right}</span>}
+      <span
+        title={typeof left === "string" ? left : undefined}
+        className={`min-w-0 truncate ${muted ? "text-[var(--ink-400)]" : "text-[var(--ink-700)]"}`}
+      >
+        {left}
+      </span>
+      {right != null && (
+        <span
+          title={typeof right === "string" ? right : undefined}
+          className="shrink-0 max-w-[55%] truncate text-[12px] text-[var(--ink-400)]"
+        >
+          {right}
+        </span>
+      )}
     </div>
   );
 }
