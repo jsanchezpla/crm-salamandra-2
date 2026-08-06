@@ -147,11 +147,35 @@ cliente. No presuponer nunca forma jurídica, tamaño ni cómo tributa quien lee
       pantallas llamadas «Configuración», y cambiar una serie provoca un 422 que
       no se anuncia en ningún sitio
 
-### Equipo
-- [ ] `equipo` · `equipo/bandeja` · `equipo/actividad`
-- [ ] `equipo/desempeno-config` · `equipo/mi-desempeno`
-- [ ] `equipo/direccion` · `equipo/productividad` · `equipo/ocupacion`
-- [ ] `equipo/incidencias`
+### Equipo — HECHO (06/08/2026)
+
+**8 ayudas en 9 pantallas: exactamente una por pantalla, y salió así a la
+primera**, sin pasada de poda. Es la prueba de que el problema de Facturación no
+era el módulo sino empezar sin criterio: aquí se dio calibrado en el encargo.
+
+Lo propio de este módulo: mide a personas con nombre y apellidos. La regla que
+funcionó fue decir QUÉ cuenta cada número y qué deja fuera, y prohibir
+expresamente interpretarlo («si baja del 70% conviene revisar»). El CRM enseña
+datos; valorar a alguien es de quien dirige.
+
+- [x] `equipo` — marcar «Inactivo» y guardar BORRA el usuario del CRM, no es un
+      cambio de etiqueta. El botón «Desactivar» sí avisaba; este otro camino al
+      mismo sitio, no
+- [-] `equipo/bandeja` — se explica sola, cada contador lleva su frase debajo
+- [x] `equipo/actividad` — solo se registra lo que CAMBIA algo: consultar una
+      ficha o leer un informe no dejan rastro, así que un día vacío no significa
+      que esa persona no trabajara
+- [x] `equipo/desempeno-config` — el efecto de guardar es asimétrico: los pesos
+      cuentan de aquí en adelante, pero los umbrales del semáforo son
+      retroactivos y repintan meses ya evaluados
+- [x] `equipo/mi-desempeno` · `equipo/direccion` · `equipo/productividad` ·
+      `equipo/ocupacion` · `equipo/incidencias`
+
+⚠️ **Fallo encontrado de paso, sin arreglar** (no es una ayuda, es un bug): la
+cabecera «{total} miembros · {inactivos} inactivos» de `equipo` cuenta sobre la
+página ya filtrada, y como el filtro por defecto excluye a los inactivos,
+imprime «0 inactivos» siempre. El endpoint ya devuelve el total bueno y la
+pantalla lo ignora.
 
 ### Clínica y Pacientes — HECHO (06/08/2026)
 
