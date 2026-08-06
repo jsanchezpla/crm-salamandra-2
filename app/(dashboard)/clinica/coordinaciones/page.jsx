@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import NuevaCoordinacionModal from "../../../../components/clinica/NuevaCoordinacionModal.jsx";
 
 const TIPOS = [
@@ -91,7 +92,18 @@ export default function CoordinacionesPage() {
           <option value="external">Solo externas</option>
           <option value="internal">Solo internas</option>
         </select>
-        {!loading && <span className="text-[11px] text-neutral-400">{rows.length} registradas</span>}
+        {!loading && (
+          <span className="text-[11px] text-neutral-400">
+            {rows.length} registradas
+            <HelpTooltip title="Cuántas hay" className="ml-1">
+              Cuenta las que se ven ahora, con los filtros puestos, y esta lista trae como mucho{" "}
+              <strong className="text-white">las 300 más recientes</strong>: las más antiguas pueden
+              faltar. El recuadro «Coordinaciones» de Área clínica cuenta todas las del centro, por
+              eso a veces da un número mayor. Para buscar una antigua de un paciente, su ficha las
+              tiene.
+            </HelpTooltip>
+          </span>
+        )}
       </div>
 
       {error && <div className="px-4 py-3 rounded-lg bg-rose-50 border border-rose-100 text-xs text-rose-700">{error}</div>}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import Select from "@/components/ui/Select.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import PatientBillingSection from "@/components/billing/PatientBillingSection.jsx";
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 import NuevaCoordinacionModal from "../../../../components/clinica/NuevaCoordinacionModal.jsx";
@@ -493,13 +494,29 @@ export default function PacienteFichaPage() {
               <div className="text-[10px] text-neutral-400 mt-3">Derivado por: {patient.referredBy || "—"}</div>
             </div>
             <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-              <div className="eyebrow mb-2">Objetivos terapéuticos actuales</div>
+              <div className="eyebrow mb-2 flex items-center gap-1.5">
+                Objetivos terapéuticos actuales
+                <HelpTooltip title="Objetivos" placement="bottom" className="tracking-normal">
+                  Hay tres listas de objetivos y no se copian entre sí: esta (se cambia en
+                  «Editar ficha»), la de la pestaña Plan y la que se marca en cada sesión.
+                  {" "}
+                  <strong className="text-white">Al redactar un informe a partir de sesiones,
+                  los que salen son los de las sesiones.</strong>
+                </HelpTooltip>
+              </div>
               {patient.objectives?.length ? (
                 <div className="flex flex-wrap gap-1.5">{patient.objectives.map((o) => <span key={o} className="text-[11px] bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded-full">{o}</span>)}</div>
               ) : <p className="text-[11px] text-neutral-400">Sin objetivos definidos.</p>}
             </div>
             <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-              <div className="eyebrow mb-3">Citas del paciente</div>
+              <div className="eyebrow mb-3 flex items-center gap-1.5">
+                Citas del paciente
+                <HelpTooltip title="Citas del paciente" placement="bottom" className="tracking-normal">
+                  Solo salen las citas que tengan asignado a este paciente. Las que se reservan
+                  por internet llegan sin paciente y aquí no se ven hasta que se le asigna,
+                  abriendo la cita en la Agenda.
+                </HelpTooltip>
+              </div>
               {citas.length ? (
                 <div className="space-y-2">
                   {[...citas]

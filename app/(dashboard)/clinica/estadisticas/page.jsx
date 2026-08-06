@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 
 /**
  * 'AAAA-MM-DD' EN LOCAL. Con `toISOString()` (UTC) el 1 de julio a las 00:00
@@ -120,7 +121,16 @@ export default function EstadisticasPage() {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <div className="eyebrow">Clínica</div>
-          <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1">Estadísticas del centro</h1>
+          <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1 flex items-center gap-2">
+            Estadísticas del centro
+            <HelpTooltip title="El periodo no manda sobre todo">
+              Las fechas mandan sobre lo que ocurre: sesiones, informes, citas, altas y bajas,
+              leads y clientes nuevos. En cambio «Pacientes activos», «en pausa», el reparto por
+              especialidad y «En lista de espera»{" "}
+              <strong className="text-white">son la foto de hoy</strong>: siguen igual aunque
+              elijas un curso pasado, y así salen también en el Excel y en el PDF.
+            </HelpTooltip>
+          </h1>
           <p className="text-xs text-neutral-500 mt-1">
             Actividad, agenda y captación del periodo. Los números de dinero están en Facturación.
           </p>

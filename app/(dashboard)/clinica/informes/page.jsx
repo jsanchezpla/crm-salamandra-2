@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import PreviewBanner from "../_components/PreviewBanner.jsx";
 import InformeDrawer from "@/components/clinica/InformeDrawer.jsx";
 import { REPORT_TYPES, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
@@ -183,7 +184,15 @@ export default function InformesPage() {
                 <th className="px-4 py-3 font-medium">Terapeuta</th>
                 <th className="px-4 py-3 font-medium">Tipo</th>
                 <th className="px-4 py-3 font-medium">Fecha</th>
-                <th className="px-4 py-3 font-medium">Entrega</th>
+                <th className="px-4 py-3 font-medium">
+                  Entrega
+                  <HelpTooltip title="Entrega" className="ml-1">
+                    Es la fecha en la que toca entregar el informe, no el día en que se envió.
+                    Y es opcional: un informe sin ella no cuenta nunca como{" "}
+                    <strong className="text-white">entrega vencida</strong>, por antiguo que sea.
+                    Si quieres que te avise, ponla al crear el informe.
+                  </HelpTooltip>
+                </th>
                 <th className="px-4 py-3 font-medium">Estado</th>
                 <th className="px-4 py-3 font-medium text-right">Acciones</th>
               </tr>

@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -152,7 +153,16 @@ export default function TalleresPage() {
     <div className="p-4 lg:p-8 space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-neutral-800">Talleres</h1>
+          <h1 className="text-lg font-semibold text-neutral-800 flex items-center gap-2">
+            Talleres
+            <HelpTooltip title="Retirar un taller" placement="bottom">
+              Es para el taller que ya no se da: sale de la lista y deja de admitir gente. Si
+              nunca se apuntó nadie, se borra; si pasó gente, se conserva su historial y lo sigues
+              viendo con «Ver también los retirados».{" "}
+              <strong className="text-white">No se puede volver a activar</strong> y su nombre se
+              queda ocupado.
+            </HelpTooltip>
+          </h1>
           <p className="text-[12.5px] text-neutral-500 mt-0.5">
             Actividades de grupo a las que se apunta quien quiere. No son especialidades:
             un paciente puede estar en varios, en ninguno, o entrar y salir cada curso.

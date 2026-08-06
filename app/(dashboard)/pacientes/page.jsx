@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Paginador from "@/components/ui/Paginador.jsx";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 import PreviewBanner from "../clinica/_components/PreviewBanner.jsx";
 
@@ -137,7 +138,17 @@ export default function PacientesPage() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="eyebrow">Clínica</div>
-          <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">Pacientes</h1>
+          <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1 flex items-center gap-2">
+            Pacientes
+            <HelpTooltip title="Paciente y cliente">
+              Aquí está a quien se atiende. Quien paga —con sus teléfonos, su contrato y sus
+              facturas— es un cliente y vive en Clientes; por eso esta lista no enseña ni contacto
+              ni dinero.
+              {" "}
+              <strong className="text-white">«Nuevo paciente» crea la ficha suelta</strong>, sin
+              cliente detrás: para que quede unida al suyo, créalo desde la ficha del cliente.
+            </HelpTooltip>
+          </h1>
           <p className="text-xs text-neutral-400 mt-1">Pacientes del centro · {patients.length} en seguimiento</p>
         </div>
         <button

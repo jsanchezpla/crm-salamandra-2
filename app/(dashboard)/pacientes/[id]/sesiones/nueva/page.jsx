@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 const STATE = { IDLE: "idle", UPLOADED: "uploaded", PROCESSING: "processing", STRUCTURED: "structured" };
 
@@ -285,7 +286,14 @@ export default function NuevaSesionPage() {
           <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-3">
             {/* Transcripción */}
             <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-              <div className="eyebrow mb-2">Audio</div>
+              <div className="eyebrow mb-2">
+                Audio
+                <HelpTooltip title="El audio no se guarda" className="ml-1.5 tracking-normal normal-case">
+                  Sirve para sacar el texto y se descarta. En la sesión quedan la transcripción y la
+                  duración, no la grabación: si quieres conservarla, guárdala tú. Lo que adjuntes en
+                  «Preparación», en cambio, sí se queda con la sesión.
+                </HelpTooltip>
+              </div>
               <p className="text-[10px] text-neutral-400 mb-4">{file?.name} · {fmtSize(file?.size)}{result.audioDurationSec != null ? ` · ${fmtDur(result.audioDurationSec)}` : ""}</p>
               <div className="eyebrow mb-2">Transcripción literal</div>
               <p className="text-xs text-neutral-600 leading-relaxed italic">«{result.transcription}»</p>

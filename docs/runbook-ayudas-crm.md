@@ -153,10 +153,30 @@ cliente. No presuponer nunca forma jurídica, tamaño ni cómo tributa quien lee
 - [ ] `equipo/direccion` · `equipo/productividad` · `equipo/ocupacion`
 - [ ] `equipo/incidencias`
 
-### Clínica y Pacientes
-- [ ] `clinica` · `clinica/informes` · `clinica/talleres`
-- [ ] `clinica/coordinaciones` · `clinica/estadisticas`
-- [ ] `pacientes` · `pacientes/[id]` · `pacientes/[id]/sesiones/nueva`
+### Clínica y Pacientes — HECHO (06/08/2026)
+
+**8 ayudas en 7 pantallas.** Salieron 10 y se quitaron 2: bastante mejor que
+Facturación (44 → 20) porque el criterio se dio calibrado de entrada, con el
+listón puesto en NO escribir. Lo que más ayudó: decirle a cada agente que «esta
+pantalla no necesita ninguna» es la respuesta correcta la mayoría de las veces.
+
+Se repitió el error de la percha, así que vigílalo en los módulos que quedan: un
+«?» se plantó en un `<th>` vacío, el de la columna de botones. Un interrogante
+sin palabra al lado no se cuelga de un rótulo, **se convierte** en el rótulo —
+es la misma falta que la barra gris inventada de Facturación. Reparado y movido
+al h1.
+
+- [x] `clinica` — SIN ayuda a propósito: la que había era un cajón de sastre
+      colgado del título explicando tres indicadores a la vez
+- [x] `clinica/informes` — «Entrega» es la fecha COMPROMETIDA, no la del envío,
+      y es opcional: sin ella un informe no cuenta nunca como vencido, por
+      antiguo que sea
+- [x] `clinica/talleres` — «Retirar» es irreversible y hace dos cosas distintas:
+      borra si no se apuntó nadie, oculta si hay historial. Y el nombre se queda
+      ocupado, así que el taller de septiembre no se puede volver a crear
+- [x] `clinica/coordinaciones` · `clinica/estadisticas`
+- [x] `pacientes` · `pacientes/[id]` (2: la ficha es la más densa del módulo) ·
+      `pacientes/[id]/sesiones/nueva`
 
 ### Nutrición
 - [ ] `nutricion/alimentos` · `nutricion/recetas`
