@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useCitasPortalSession } from "../_components/useCitasPortalSession.js";
 import { useAdmision } from "../_components/useAdmision.js";
 import PuertaScreen from "../_components/PuertaScreen.jsx";
@@ -187,7 +187,11 @@ export default function MiPerfilPage() {
   // pedirla. `valoracion` es el tipo de cita que el centro haya marcado como
   // valoración inicial; sin ninguno marcado, esta pregunta no existe.
   const [valoracion, setValoracion] = useState(null);
-  const [eligioPerfil, setEligioPerfil] = useState(false);
+  // `?perfil=1` = ya contestó a «¿a qué entras hoy?» en la agenda y eligió el
+  // perfil. Sin esto se le preguntaría dos veces seguidas lo mismo, una en cada
+  // pantalla, y la segunda vez parecería que el botón no ha hecho nada.
+  const searchParams = useSearchParams();
+  const [eligioPerfil, setEligioPerfil] = useState(searchParams.get("perfil") === "1");
 
   // «Completa tus datos», ahora DESPUÉS de firmar (04/08/2026, Rodrigo). Antes
   // iba delante del contrato y era un peaje en la puerta; lo único que se sigue

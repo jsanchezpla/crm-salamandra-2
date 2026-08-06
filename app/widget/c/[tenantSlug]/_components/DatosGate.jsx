@@ -16,6 +16,7 @@
 
 import { useMemo, useState } from "react";
 import { campoEsObligatorio } from "../../../../../lib/clients/datosFicha.js";
+import { edadDesde } from "../../../../../lib/clients/formularioAlta.js";
 
 const headingStyle = { fontFamily: "var(--widget-font-display)", fontWeight: 500 };
 
@@ -61,6 +62,22 @@ export default function DatosGate({ campos, profesional, enviando, error, onGuar
   const fechaNacimiento = campoFecha ? String(datos[campoFecha.key] ?? "").trim() || null : null;
 
   const esObligatorio = (campo) => campoEsObligatorio(campo, fechaNacimiento);
+
+  /*
+   * AVISO DEL CONSENTIMIENTO PARENTAL, EN EL MOMENTO EN QUE SE ESCRIBE LA FECHA
+   * (06/08/2026, Rodrigo).
+   *
+   * Hasta ahora el consentimiento del tutor aparecía sin avisar, ya dentro de la
+   * firma. Quien lo descubría allí eran dos personas distintas y las dos mal:
+   * la menor, que no había avisado a nadie y se quedaba encallada; y su madre o
+   * su padre, a quien le llegaba de golpe un documento legal que hay que firmar
+   * sin haber visto nada de lo anterior.
+   *
+   * Diciéndolo aquí —debajo de la fecha, en cuanto la escribe— las dos van sobre
+   * aviso y llegan a la firma sabiendo lo que van a firmar.
+   */
+  const edad = edadDesde(fechaNacimiento);
+  const avisoTutor = edad != null && edad < 18;
 
   const faltan = campos.filter((c) => esObligatorio(c) && !String(datos[c.key] ?? "").trim());
   const listo = faltan.length === 0;
@@ -144,6 +161,15 @@ export default function DatosGate({ campos, profesional, enviando, error, onGuar
                     )}
                     {campo.help && (
                       <p className="mt-1 text-[12px] text-[var(--widget-text-faint)]">{campo.help}</p>
+                    )}
+                    {/* Justo debajo de la fecha, no al final del formulario: el
+                        aviso tiene que salir pegado al dato que lo provoca. */}
+                    {campo.ficha === "cliente.birthDate" && avisoTutor && (
+                      <p className="mt-2 text-[12px] leading-relaxed text-[var(--widget-text-muted)] bg-[var(--widget-bg)] border border-[var(--widget-border)] rounded-lg px-3 py-2">
+                        Con {edad} años, más adelante te pediremos el <strong>consentimiento de tu madre, padre
+                        o tutor legal</strong>: tendrán que rellenar sus datos y firmar. Puedes avisarles ya para
+                        que estén contigo cuando llegue ese paso.
+                      </p>
                     )}
                   </div>
                 ))}

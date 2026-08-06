@@ -6,6 +6,7 @@ import { AuthGateScreen, useWidgetAuth } from "./_components/AuthGate.jsx";
 import { useCitasPortalSession } from "./_components/useCitasPortalSession.js";
 import { useAdmision } from "./_components/useAdmision.js";
 import PuertaScreen from "./_components/PuertaScreen.jsx";
+import BienvenidaGate from "./_components/BienvenidaGate.jsx";
 import { formatMoney } from "../../../../lib/payments/money.js";
 
 const MONTH_NAMES_ES = [
@@ -64,6 +65,8 @@ export default function WidgetSelectionPage() {
    */
   const searchParams = useSearchParams();
   const tipoDelEnlace = searchParams.get("tipo");
+  // Sin setter en la UI: un enlace de un solo tipo NO se puede abrir al resto
+  // del catálogo desde la pantalla (ver el bloque "Tu cita" más abajo).
   const [soloUnTipo, setSoloUnTipo] = useState(false);
 
   // Sesión del portal (SSO de WordPress). Se canjea aquí arriba, ANTES de pedir
@@ -201,6 +204,50 @@ export default function WidgetSelectionPage() {
   // que solo habla de ELLA: el endpoint no acepta correos por parámetro.
   const admision = useAdmision(tenantSlug, portal);
 
+  /*
+   * «¿A qué entras hoy?» TAMBIÉN aquí (06/08/2026, Rodrigo).
+   *
+   * La bifurcación existía solo en el área privada, y por eso no se veía: quien
+   * pulsa RESERVAR CITA en la web no pasa por el perfil, entra directo a la
+   * agenda. Se plantaba delante del catálogo entero de la consulta en su primera
+   * visita —incluido el acompañamiento mensual— sin que nadie le hubiera
+   * explicado que lo suyo es empezar por la valoración.
+   *
+   * NO se pregunta cuando:
+   *   · el enlace ya trae un tipo (`?tipo=`): alguien decidió por ella a
+   *     propósito, y esa decisión manda;
+   *   · el centro no ha marcado ninguna valoración inicial;
+   *   · ya tiene su valoración, próxima o pasada. Quien ya la reservó no vuelve
+   *     a la casilla de salida cada vez que entra.
+   */
+  const valoracion = useMemo(
+    () => eventTypes.find((t) => t.isInitialAssessment) ?? null,
+    [eventTypes]
+  );
+  const [preguntarBienvenida, setPreguntarBienvenida] = useState(null); // null = aún no se sabe
+
+  useEffect(() => {
+    if (loading) return;
+    if (!valoracion || tipoDelEnlace || !portal.sessionToken) {
+      setPreguntarBienvenida(false);
+      return;
+    }
+    let cancelado = false;
+    portal
+      .authFetch("/citas-portal/bookings", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelado) return;
+        const d = j?.data ?? {};
+        const todas = [...(d.upcoming ?? []), ...(d.history ?? [])];
+        setPreguntarBienvenida(!todas.some((b) => b.esValoracionInicial));
+      })
+      // Si no se pueden leer sus citas, no se pregunta: la agenda es lo que
+      // había antes de existir esta pantalla, y es mejor que un muro.
+      .catch(() => { if (!cancelado) setPreguntarBienvenida(false); });
+    return () => { cancelado = true; };
+  }, [loading, valoracion, tipoDelEnlace, portal.sessionToken, portal.authFetch]);
+
   const goContinue = useCallback(() => {
     if (!selectedEventTypeId || !selectedDatetime) return;
     const params = new URLSearchParams({
@@ -283,6 +330,31 @@ export default function WidgetSelectionPage() {
     );
   }
 
+  // «¿A qué entras hoy?» — va DESPUÉS de la admisión (primero el formulario) y
+  // ANTES de la agenda. `null` es «todavía no se sabe»: se espera, igual que con
+  // la admisión, para no pintar el catálogo y quitarlo medio segundo después.
+  if (preguntarBienvenida === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-[var(--widget-text-muted)]">
+        Cargando…
+      </div>
+    );
+  }
+  if (preguntarBienvenida && valoracion) {
+    return (
+      <div style={brandStyle}>
+        <BienvenidaGate
+          profesional={info?.name}
+          valoracion={valoracion}
+          hrefValoracion={`/widget/c/${tenantSlug}?tipo=${encodeURIComponent(valoracion.slug)}`}
+          // Al perfil con la elección hecha: `?perfil=1` para que allí no le
+          // vuelvan a preguntar lo mismo nada más llegar.
+          onEntrarPerfil={() => router.push(`/widget/c/${tenantSlug}/mi-perfil?perfil=1`)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen" style={brandStyle}>
       {/* Header */}
@@ -332,8 +404,13 @@ export default function WidgetSelectionPage() {
             {soloUnTipo && selectedEventType ? (
               /* Enlace directo: no hay nada que elegir, así que en vez de una
                  lista de un solo elemento se enseña lo que ha reservado y ya.
-                 El enlace para verlas todas se deja a mano: quien llega aquí
-                 por WhatsApp puede haberse equivocado de cita. */
+                 ⚠️ SIN salida al resto del catálogo (06/08/2026, Rodrigo). Hubo
+                 un «Ver el resto de citas» y era justo lo contrario de para lo
+                 que existe un enlace de un solo tipo: se manda para que esa
+                 persona vea ESA cita y ninguna otra —una valoración inicial
+                 gratuita, un tipo oculto asignado a dedo—. Enseñarle el catálogo
+                 entero de la consulta con un clic vacía la decisión de quien
+                 preparó el enlace. */
               <div className="bg-[var(--widget-card)] rounded-lg border border-[var(--brand-primary,var(--widget-button))] p-4">
                 <div className="flex items-start gap-3">
                   <span
@@ -352,15 +429,6 @@ export default function WidgetSelectionPage() {
                     )}
                   </div>
                 </div>
-                {eventTypes.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setSoloUnTipo(false)}
-                    className="mt-3 text-[12px] text-[var(--widget-text-faint)] hover:text-[var(--widget-text)] underline underline-offset-2"
-                  >
-                    Ver el resto de citas
-                  </button>
-                )}
               </div>
             ) : eventTypes.length === 0 ? (
               <div className="text-sm text-[var(--widget-text-muted)] bg-[var(--widget-card)] rounded-lg border border-[var(--widget-border)] p-4">

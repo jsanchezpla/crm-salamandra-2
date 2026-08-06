@@ -84,10 +84,24 @@ export function defineContractSignature(sequelize) {
         allowNull: false,
         defaultValue: [],
       },
-      // Ruta en disco de la imagen PNG de la firma dibujada.
+      /**
+       * Ruta en disco de la imagen PNG de la firma dibujada.
+       *
+       * NULL = firmado SIN garabato, que solo se admite en un caso: una persona
+       * MENOR de edad en su propio contrato (06/08/2026, Rodrigo). Su firma
+       * depende de su edad y su madurez —una niña de 8 años no firma nada— y
+       * quien autoriza de verdad es su tutor legal, que firma el consentimiento
+       * parental a continuación. Antes esto se resolvía con una segunda firma
+       * «de asentimiento» DENTRO del consentimiento parental, y era redundante:
+       * la misma menor firmaba dos veces el mismo acto.
+       *
+       * El documento sigue siendo válido sin el dibujo: lo que sostiene una
+       * firma electrónica simple es la traza (quién, cuándo, desde dónde, qué
+       * clausulado y qué versión), no el garabato.
+       */
       signaturePath: {
         type: DataTypes.STRING(500),
-        allowNull: false,
+        allowNull: true,
       },
       /**
        * Segunda firma opcional del mismo documento: el asentimiento de la

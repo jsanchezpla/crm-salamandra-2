@@ -4,6 +4,8 @@ import { auditar } from "../../../../../../../lib/utils/auditoria.js";
 import { gatePortal, resolvePortalContractSession, estadoContrato } from "../../../../../../../lib/citas/portalContract.js";
 import { camposDe, validarDatos } from "../../../../../../../lib/clients/contratoFirma.js";
 import { camposQueFaltan, actualizacionDeFicha } from "../../../../../../../lib/clients/datosFicha.js";
+import { desajusteDeEdad } from "../../../../../../../lib/formularios/edadDeclarada.js";
+import { notifyAdmins } from "../../../../../../../lib/notifications/notifyUsers.js";
 
 /**
  * POST — «Completa tus datos», el paso previo a firmar (04/08/2026).
@@ -58,6 +60,35 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
 
     const update = actualizacionDeFicha(campos, client, dat.datos);
     if (update) await client.update(update);
+
+    /*
+     * ¿La fecha de nacimiento cuadra con la edad que declaró en el formulario?
+     * (06/08/2026, Rodrigo). Si no cuadra —y no se explica por un cumpleaños de
+     * por medio— le salta el aviso a la profesional en la campana. No bloquea:
+     * la paciente sigue su camino y quien decide qué hacer es la consulta.
+     */
+    if (hasModule("formularios") && update?.birthDate) {
+      const desajuste = await desajusteDeEdad({
+        FormSubmission: tenantModels.FormSubmission,
+        email: client.email,
+        birthDate: update.birthDate,
+      });
+      if (desajuste) {
+        await notifyAdmins({
+          tenantId: tenant.id,
+          tenantModels,
+          type: "cliente.edad_no_cuadra",
+          title: "La edad no cuadra con el formulario",
+          body:
+            `${client.name || "Una paciente"} declaró ${desajuste.declarada} años en el formulario y ` +
+            `la fecha de nacimiento de su ficha da ${desajuste.real}. Conviene comprobarlo antes de la primera cita: ` +
+            `de la edad dependen el consentimiento del tutor y el DNI.`,
+          entityType: "Client",
+          entityId: client.id,
+          dedupe: true,
+        });
+      }
+    }
 
     const despues = await estadoContrato(tenantModels, client, guardian);
 

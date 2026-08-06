@@ -1,4 +1,3 @@
-import { Op } from "sequelize";
 import { withPublicTenant } from "../../../../../../../../lib/tenant/publicTenantContext.js";
 import { unauthorized, forbidden, notFound, serverError } from "../../../../../../../../lib/utils/apiResponse.js";
 import { verifyPortalSession, readBearer } from "../../../../../../../../lib/citas/portalSession.js";
@@ -6,6 +5,7 @@ import { normalizeEmail } from "../../../../../../../../lib/citas/validation.js"
 import { resolvePortalClient } from "../../../../../../../../lib/citas/portalClient.js";
 import { readDocumentStream } from "../../../../../../../../lib/documents/documentStorage.js";
 import { estadoContrato } from "../../../../../../../../lib/citas/portalContract.js";
+import { wherePaciente } from "../../../../../../../../lib/citas/portalDocumentos.js";
 import { bloqueoImpagoActivo, mesesAbiertos, mesDe } from "../../../../../../../../lib/citas/portalMeses.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -45,15 +45,11 @@ export const GET = withPublicTenant(async (request, ctx, { slug, tenant, tenantM
     if (contrato.bloqueado) return forbidden("Falta firmar el contrato del centro");
 
     const { Document } = tenantModels;
+    // La MISMA condición que el listado, de la misma fuente. Cuando eran dos
+    // listas escritas a mano se desincronizaron: el contrato firmado y los
+    // consentimientos salían en el portal y al pulsarlos daban 404.
     const row = await Document.findOne({
-      where: {
-        id,
-        clientId: client.id,
-        // Mismas fuentes que el listado: la ficha y los informes clínicos
-        // entregados (sprint 2026-07, punto 3.2).
-        source: { [Op.in]: ["ficha", "informe"] },
-        [Op.or]: [{ clientVisible: true }, { uploadedByClient: true }],
-      },
+      where: { ...wherePaciente(client.id), id },
     });
     if (!row) return notFound("Documento no encontrado");
 

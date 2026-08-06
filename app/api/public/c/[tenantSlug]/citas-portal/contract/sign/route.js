@@ -5,7 +5,7 @@ import { ok, created, error, serverError } from "../../../../../../../../lib/uti
 import { auditar } from "../../../../../../../../lib/utils/auditoria.js";
 import { gatePortal, resolvePortalContractSession, estadoContrato } from "../../../../../../../../lib/citas/portalContract.js";
 import { bufferFromDataUrl, writeSignature } from "../../../../../../../../lib/clients/signatureStorage.js";
-import { validarDatos, validarAceptaciones, camposDe } from "../../../../../../../../lib/clients/contratoFirma.js";
+import { validarDatos, validarAceptaciones, camposDe, esMenor } from "../../../../../../../../lib/clients/contratoFirma.js";
 import { datosDeFicha, actualizacionDeFicha, tutorDeclarado } from "../../../../../../../../lib/clients/datosFicha.js";
 import { archivarContratoFirmado } from "../../../../../../../../lib/documents/contratoFirmadoArchivo.js";
 
@@ -56,7 +56,28 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
     }
 
     const buffer = bufferFromDataUrl(body?.signature);
-    if (!buffer) return error("La firma no ha llegado bien. Vuelve a dibujarla, por favor.", 422);
+
+    /*
+     * SIN GARABATO SOLO SI ES MENOR Y ES SU PROPIO CONTRATO (06/08/2026, Rodrigo).
+     *
+     * Firmar depende de la edad y de la madurez: a una niña de 8 años no se le
+     * puede pedir una firma, y quien autoriza es su tutor legal en el
+     * consentimiento parental que viene a continuación. Antes esto se resolvía
+     * al revés —firma obligatoria aquí y ADEMÁS una segunda firma de
+     * «asentimiento» dentro del consentimiento parental—, que es la misma
+     * persona firmando dos veces el mismo acto.
+     *
+     * El permiso es estrecho a propósito:
+     *   · solo en documentos que NO son el consentimiento parental (ese lo firma
+     *     el tutor, y ahí la firma no se perdona nunca);
+     *   · solo si la FICHA dice que es menor. La edad sale del servidor, no de
+     *     lo que mande el navegador.
+     */
+    const menorDeEdad = esMenor(client?.birthDate);
+    const firmaOpcional = estructurado && menorDeEdad && !siguienteDocumento?.onlyMinors;
+    if (!buffer && !firmaOpcional) {
+      return error("La firma no ha llegado bien. Vuelve a dibujarla, por favor.", 422);
+    }
 
     // ── Contrato estructurado: datos + aceptación documento a documento ──────
     let templateKey = "simple";
@@ -106,7 +127,7 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
       acceptances = acc.aceptaciones;
     }
 
-    const signaturePath = await writeSignature(tenant.slug, client.id, buffer);
+    const signaturePath = buffer ? await writeSignature(tenant.slug, client.id, buffer) : null;
     const secondSignaturePath = bufferSecundario
       ? await writeSignature(tenant.slug, client.id, bufferSecundario)
       : null;

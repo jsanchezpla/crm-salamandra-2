@@ -298,10 +298,16 @@ const PLANTILLAS = [
         label: "DNI / NIE",
         type: "dni",
         required: true,
-        // Por debajo de los 14 no hay obligación legal de tenerlo (04/08/2026,
-        // Rodrigo), así que se sigue pidiendo pero deja de bloquear la firma.
-        // Ver `campoEsObligatorio` en lib/clients/datosFicha.js.
-        requiredDesdeEdad: 14,
+        /*
+         * No bloquea a NINGÚN menor de edad (06/08/2026, Rodrigo). Empezó en 14
+         * —la edad a la que existe el deber de tenerlo— y seguía dejando fuera a
+         * la mitad de las pacientes: muchas de 15 o 16 años no lo han sacado
+         * todavía, y sin DNI no podían terminar de firmar. A quien autoriza el
+         * tratamiento sí se le pide: el tutor lo declara, obligatorio, en el
+         * consentimiento parental. Ver `campoEsObligatorio` en
+         * lib/clients/datosFicha.js.
+         */
+        requiredDesdeEdad: 18,
         ficha: "cliente.taxId",
       },
       // ── Datos de facturación ──────────────────────────────────────────────
@@ -415,7 +421,17 @@ const PLANTILLAS = [
       "La fecha de nacimiento que has indicado corresponde a una persona menor de edad, así que necesitamos también la autorización de quien tenga su patria potestad o guarda legal.",
     version: 1,
     onlyMinors: true,
-    secondSignatureLabel: "Asentimiento de la persona menor (opcional, según edad y madurez)",
+    /*
+     * SIN segunda firma (06/08/2026, Rodrigo). Aquí había un «Asentimiento de la
+     * persona menor (opcional, según edad y madurez)» y era redundante: la menor
+     * ya ha aceptado su contrato en el documento anterior, que es donde le
+     * corresponde. Firmar dos veces el mismo acto —y la segunda debajo de la
+     * autorización de su tutor— no añade nada y confunde a quien lo lee.
+     *
+     * Lo que sí cambió a la vez: en ESE documento anterior, si es menor, ni el
+     * DNI ni la firma le bloquean el paso.
+     */
+    secondSignatureLabel: null,
     footer: PIE,
     // Los datos del TUTOR no están en la ficha (es otra persona): se piden aquí
     // y al firmar entran como tutor de la ficha de la menor. Los de la MENOR sí

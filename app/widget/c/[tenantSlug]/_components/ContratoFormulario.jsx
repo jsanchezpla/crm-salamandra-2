@@ -20,6 +20,7 @@
 
 import { useMemo, useState } from "react";
 import SignaturePad from "./SignaturePad.jsx";
+import { edadDesde } from "../../../../../lib/clients/formularioAlta.js";
 
 const headingStyle = { fontFamily: "var(--widget-font-display)", fontWeight: 500 };
 
@@ -182,7 +183,26 @@ export default function ContratoFormulario({
 
   const faltanDatos = porPedir.filter((c) => c.required && !String(datos[c.key] ?? "").trim());
   const faltanBloques = bloques.filter((b) => b.required && !aceptados[b.id]);
-  const listo = !faltanDatos.length && !faltanBloques.length && !!firma;
+
+  /*
+   * FIRMAR ES OPCIONAL SI ES MENOR Y ES SU PROPIO CONTRATO (06/08/2026, Rodrigo).
+   *
+   * Depende de su edad y de su madurez, y quien autoriza de verdad es su tutor
+   * legal en el consentimiento parental que viene justo después. Se le ofrece
+   * firmar —a los 16 muchas quieren, y está bien que lo hagan— pero no se le
+   * exige: exigirlo dejaba encallada a una familia con una niña de 8 años.
+   *
+   * En el consentimiento parental NO aplica: ese lo firma el tutor y ahí la
+   * firma no se perdona. El servidor comprueba lo mismo con la fecha de la
+   * FICHA, así que esto es comodidad de pantalla, no la puerta.
+   */
+  const campoNacimiento = campos.find((c) => c.ficha === "cliente.birthDate");
+  const nacimiento =
+    String(datos[campoNacimiento?.key] ?? "").trim() || String(campoNacimiento?.valor ?? "").trim() || null;
+  const edad = edadDesde(nacimiento);
+  const firmaOpcional = !plantilla.onlyMinors && edad != null && edad < 18;
+
+  const listo = !faltanDatos.length && !faltanBloques.length && (!!firma || firmaOpcional);
 
   function cambiar(key, valor) {
     setDatos((d) => ({ ...d, [key]: valor }));
@@ -285,7 +305,19 @@ export default function ContratoFormulario({
 
           {/* 3 · Firma */}
           <section className="mb-2">
-            <h2 className="text-[13px] font-semibold text-[var(--widget-text)] mb-3">3 · Tu firma</h2>
+            <h2 className="text-[13px] font-semibold text-[var(--widget-text)] mb-3">
+              3 · Tu firma
+              {firmaOpcional && (
+                <span className="ml-1.5 font-normal text-[var(--widget-text-faint)]">(opcional)</span>
+              )}
+            </h2>
+            {firmaOpcional && (
+              <p className="text-[12.5px] text-[var(--widget-text-muted)] leading-relaxed mb-3">
+                Como todavía eres menor de edad, puedes firmar si quieres, pero no hace falta: quien autoriza
+                es tu madre, padre o tutor legal, y lo hará en el documento siguiente. Puedes continuar sin
+                firmar.
+              </p>
+            )}
             <SignaturePad onChange={setFirma} disabled={enviando} />
 
             {plantilla.secondSignatureLabel && (
@@ -318,6 +350,14 @@ export default function ContratoFormulario({
                   : "Solo falta tu firma en el recuadro."}
             </p>
           )}
+          {/* La firma opcional necesita su propia frase: con la de arriba, quien
+              no va a firmar no entiende por qué el botón ya está encendido. */}
+          {listo && firmaOpcional && !firma && !error && (
+            <p className="mt-4 text-[12px] text-[var(--widget-text-faint)] leading-relaxed">
+              Puedes continuar sin firmar. Tu madre, padre o tutor legal firmará el consentimiento en el
+              siguiente paso.
+            </p>
+          )}
 
           <div className="mt-5 flex flex-col gap-2">
             <button
@@ -325,7 +365,7 @@ export default function ContratoFormulario({
               disabled={!listo || enviando}
               className="w-full px-5 py-3 text-sm font-semibold rounded-xl text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
             >
-              {enviando ? "Guardando tu firma…" : "Firmar"}
+              {enviando ? "Guardando tu firma…" : firmaOpcional && !firma ? "Continuar sin firmar" : "Firmar"}
             </button>
             {onMasTarde && (
               <button

@@ -1,4 +1,3 @@
-import { Op } from "sequelize";
 import { randomUUID } from "node:crypto";
 import { withPublicTenant } from "../../../../../../../lib/tenant/publicTenantContext.js";
 import { ok, created, error, unauthorized, forbidden, notFound, serverError } from "../../../../../../../lib/utils/apiResponse.js";
@@ -7,6 +6,7 @@ import { normalizeEmail } from "../../../../../../../lib/citas/validation.js";
 import { resolvePortalClient } from "../../../../../../../lib/citas/portalClient.js";
 import { estadoContrato } from "../../../../../../../lib/citas/portalContract.js";
 import { bloqueoImpagoActivo, mesesAbiertos, filtrarPorMes } from "../../../../../../../lib/citas/portalMeses.js";
+import { wherePaciente } from "../../../../../../../lib/citas/portalDocumentos.js";
 import {
   MAX_FILE_SIZE_BYTES,
   TENANT_QUOTA_BYTES,
@@ -43,20 +43,9 @@ function gate(tenant, hasModule) {
   return null;
 }
 
-// Solo lo que este paciente puede ver: compartido con él o subido por él.
-// `informe` entra desde el sprint 2026-07 (punto 3.2): al pulsar «Enviar al
-// paciente» el informe clínico se publica aquí como PDF.
-// `contrato_firmado` entra el 2026-08-04: es SU copia del contrato que acaba de
-// firmar, con los datos, el clausulado y la firma dentro.
-const FUENTES_VISIBLES = ["ficha", "informe", "contrato_firmado"];
-
-function wherePaciente(clientId) {
-  return {
-    clientId,
-    source: { [Op.in]: FUENTES_VISIBLES },
-    [Op.or]: [{ clientVisible: true }, { uploadedByClient: true }],
-  };
-}
+// Qué puede ver: una sola definición, compartida con la ruta de descarga
+// (`lib/citas/portalDocumentos.js`). Estaba escrita aquí y allí, y se
+// desincronizaron: el contrato firmado se listaba y no se dejaba abrir.
 
 function serialize(doc) {
   return {

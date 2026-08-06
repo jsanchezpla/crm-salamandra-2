@@ -71,7 +71,13 @@ export function useCitasPortalSession(slug) {
             body: JSON.stringify({ wpsso }),
           });
         } catch {
-          if (!cancelled) setStatus("error");
+          // La red se cayó al canjear: si hay sesión guardada, se sigue con
+          // ella (mismo motivo que el bloque de abajo).
+          if (!cancelled) {
+            const guardado = readStored(slug);
+            if (guardado) { setSessionToken(guardado); setStatus("ready"); }
+            else setStatus("error");
+          }
           return;
         } finally {
           // Quitar el token de la URL siempre (no dejar rastro en historial/referrer).
@@ -89,9 +95,30 @@ export function useCitasPortalSession(slug) {
             setStatus("ready");
             return;
           }
-          setStatus("error");
+        }
+
+        /*
+         * El wpsso no valió. ANTES DE DAR LA SESIÓN POR PERDIDA, se mira si ya
+         * hay una del CRM guardada (06/08/2026, Rodrigo).
+         *
+         * El wpsso lo firma WordPress y dura 5 minutos. Si la página se sirve
+         * de la caché, o se vuelve atrás con el botón del navegador, o
+         * sencillamente se tarda un rato en pulsar, el iframe se monta con un
+         * token ya caducado. Hasta hoy eso TIRABA una sesión del portal
+         * perfectamente válida (dura 60 minutos) y le plantaba a la paciente el
+         * cartel de «Inicia sesión para reservar» estando dentro de su cuenta.
+         *
+         * El token guardado lo verifica igual el servidor en cada llamada: si
+         * también hubiera caducado, la primera petición devolverá 401 y el hook
+         * pasará a "expired". Aquí no se está confiando en nada nuevo.
+         */
+        const guardado = readStored(slug);
+        if (guardado) {
+          setSessionToken(guardado);
+          setStatus("ready");
           return;
         }
+
         if (res.status === 401) { setStatus("invalid"); return; }
         setStatus("error"); // 403 / 404 / 429 / 500
         return;
