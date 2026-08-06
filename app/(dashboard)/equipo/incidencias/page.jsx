@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import IncidenciaModal from "../_components/IncidenciaModal.jsx";
 import { INCIDENCIA_CATEGORIES } from "@/lib/clinica/incidencias.js";
 
@@ -68,7 +69,13 @@ export default function IncidenciasPage() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="eyebrow">Equipo · Incidencias</div>
-          <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">Incidencias</h1>
+          <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">
+            Incidencias
+            <HelpTooltip title="Pestañas" className="ml-2">
+              Agrupan por estado, y la etiqueta de la derecha de cada línea dice cómo acabó.
+              «Parcial» y «No resuelta» están dentro de «En proceso»: no tienen pestaña propia.
+            </HelpTooltip>
+          </h1>
           <p className="text-xs text-neutral-400 mt-1">Registro y seguimiento de incidencias del equipo.</p>
         </div>
         <button

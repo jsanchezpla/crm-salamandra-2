@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 const MONTHS = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
@@ -156,7 +157,19 @@ export default function ProductividadPage() {
                 <th className="px-4 py-2 font-medium">Profesional</th>
                 <th className="px-4 py-2 font-medium tabular text-right">Horas directas</th>
                 <th className="px-4 py-2 font-medium tabular text-right">Disponibles</th>
-                <th className="px-4 py-2 font-medium tabular text-right">Productividad</th>
+                <th className="px-4 py-2 font-medium tabular text-right">
+                  Productividad
+                  <HelpTooltip title="Productividad" className="ml-1">
+                    En el mes en curso también cuentan las citas ya agendadas que aún no se han
+                    dado.{" "}
+                    <strong className="text-white">
+                      Y las horas disponibles son todos los lunes a viernes del mes: no se
+                      descuentan festivos, vacaciones ni bajas.
+                    </strong>{" "}
+                    Un mes con puente o con vacaciones sale más bajo sin que nadie haya trabajado
+                    menos.
+                  </HelpTooltip>
+                </th>
                 <th className="px-4 py-2 font-medium tabular text-right">Horas/semana</th>
               </tr>
             </thead>

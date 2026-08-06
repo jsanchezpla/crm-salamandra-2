@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 /**
  * Equipo → Ocupación — el informe de agenda que pide quien dirige un centro:
@@ -81,6 +82,13 @@ export default function OcupacionPage() {
         <div className="eyebrow mb-1.5">Equipo · Agenda</div>
         <h1 className="font-display text-[26px] lg:text-[34px] leading-[1.05] text-[var(--ink-900)] tracking-tight">
           Ocupación y ausencias
+          <HelpTooltip title="Ocupación" className="ml-2">
+            Cuenta las citas del mes y las horas de las que ya se atendieron.{" "}
+            <strong className="text-white">No se compara con la jornada de nadie</strong>: no hay
+            horas de contrato ni huecos libres de la agenda, así que quien libre medio mes sale
+            simplemente con menos citas. El «Ocupación %» de Desempeño es otro número: sale de
+            Productividad, que sí mide las horas contra el objetivo semanal de cada persona.
+          </HelpTooltip>
         </h1>
         <p className="text-xs text-neutral-400 mt-2">
           Cómo se ha llenado la agenda y cuánta se ha perdido. Solo lo ven los administradores.

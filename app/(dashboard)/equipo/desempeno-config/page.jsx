@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import { ALLOWED_ICONS, slugifyAreaKey } from "@/lib/clinica/performanceConfig.js";
 import { AreaIcon } from "../_components/performanceIcons.jsx";
 
@@ -259,7 +260,16 @@ export default function DesempenoConfigPage() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="eyebrow">Equipo · Desempeño</div>
-          <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">Configuración de desempeño</h1>
+          <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">
+            Configuración de desempeño
+            <HelpTooltip title="Qué pasa con los meses ya evaluados" className="ml-2">
+              Los pesos cuentan de aquí en adelante: cada evaluación guardó su puntuación con los
+              pesos de ese momento y no se recalcula sola (solo cambia si vuelves a guardar ese
+              mes). Los umbrales del semáforo sí son retroactivos:{" "}
+              <strong className="text-white">un mes ya evaluado puede cambiar de color</strong>{" "}
+              sin que su puntuación se haya movido.
+            </HelpTooltip>
+          </h1>
           <p className="text-xs text-neutral-400 mt-1">Define roles de evaluación (terapeuta, administración, ventas…) y, para cada uno, sus áreas con peso y meta.</p>
         </div>
         <button

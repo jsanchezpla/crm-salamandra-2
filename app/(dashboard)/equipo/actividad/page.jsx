@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 /**
  * Equipo → Actividad — registro legible de lo que ha hecho cada usuario.
@@ -109,6 +110,14 @@ export default function ActividadPage() {
         <div className="eyebrow mb-1.5">Equipo · Registro</div>
         <h1 className="font-display text-[26px] lg:text-[34px] leading-[1.05] text-[var(--ink-900)] tracking-tight">
           Actividad del equipo
+          <HelpTooltip title="Qué se registra aquí" className="ml-2">
+            Se apunta lo que cambia algo: dar de alta, editar, borrar, cobrar, enviar… y las
+            entradas al CRM. Consultar una ficha, mirar la agenda o leer un informe no dejan
+            rastro aquí.{" "}
+            <strong className="text-white">
+              Que alguien no aparezca no quiere decir que no haya trabajado.
+            </strong>
+          </HelpTooltip>
         </h1>
         <p className="text-xs text-neutral-400 mt-2">
           Qué ha hecho cada persona en el CRM, cuándo y en qué módulo. Solo lo ven los administradores.

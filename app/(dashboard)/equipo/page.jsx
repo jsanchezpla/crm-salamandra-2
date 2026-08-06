@@ -8,6 +8,7 @@ import TeamHoursEditor from "@/components/team/TeamHoursEditor.jsx";
 import MiEquipo from "@/components/team/MiEquipo.jsx";
 import AccessSection, { moduleLabel, suggestUsername } from "@/components/team/AccessSection.jsx";
 import CredentialsModal from "@/components/team/CredentialsModal.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 const STATUS_LABELS = { active: "Activo", inactive: "Inactivo", on_leave: "De baja" };
 const STATUS_FILTER_OPTIONS = [
@@ -636,7 +637,23 @@ export default function EquipoPage() {
                       </p>
                     </div>
                   )}
-                  <FormRow label="Estado">
+                  <FormRow
+                    label={
+                      openMember ? (
+                        <>
+                          Estado
+                          <HelpTooltip title="Inactivo" className="ml-1 normal-case tracking-normal">
+                            Marcar «Inactivo» es dar de baja: al guardar, esa persona deja de poder
+                            entrar al CRM y su usuario se borra. Su ficha y su histórico se
+                            conservan, pero si vuelve hay que crearle un usuario nuevo, con otra
+                            contraseña. Las cuentas de administración no se tocan desde aquí.
+                          </HelpTooltip>
+                        </>
+                      ) : (
+                        "Estado"
+                      )
+                    }
+                  >
                     <Select value={form.status}
                       onChange={(v) => setForm((f) => ({ ...f, status: v }))}
                       options={[

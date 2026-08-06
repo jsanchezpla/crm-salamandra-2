@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import IncentiveTiersEditor from "../_components/IncentiveTiersEditor.jsx";
 import IncentiveItemsEditor from "../_components/IncentiveItemsEditor.jsx";
 import PerformanceEditor from "../_components/PerformanceEditor.jsx";
@@ -165,7 +166,16 @@ export default function DireccionPage() {
         <div>
           <div className="eyebrow">Equipo · Dirección</div>
           <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">Panel de dirección</h1>
-          <p className="text-xs text-neutral-400 mt-1">Visión global del equipo · Periodo de {data?.period ? `${["","Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][data.period.month]} ${data.period.year}` : "—"}</p>
+          <p className="text-xs text-neutral-400 mt-1">
+            Visión global del equipo · Periodo de {data?.period ? `${["","Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][data.period.month]} ${data.period.year}` : "—"}
+            <HelpTooltip title="Periodo" className="ml-1">
+              Es el último mes con evaluaciones guardadas, no siempre el mes en curso. Manda en el
+              ranking, en la puntuación media y en los incentivos.{" "}
+              <strong className="text-white">No manda en productividad ni en incidencias</strong>:
+              esas tarjetas van por el mes actual. Y «Entregas en plazo» no mira ningún periodo:
+              son todos los informes entregados hasta hoy.
+            </HelpTooltip>
+          </p>
         </div>
         <Link
           href="/equipo/desempeno-config"

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import { AreaIcon } from "../_components/performanceIcons.jsx";
 
 const SEMAFORO = {
@@ -171,7 +172,16 @@ export default function MiDesempenoPage() {
             <div className="rounded-xl p-5 flex items-center gap-4" style={{ background: "var(--color-primary, #1B3A2D)" }}>
               <ScoreCircle value={m.totalScore} />
               <div className="flex-1 min-w-0">
-                <div className="text-white/60 eyebrow mb-1">Puntuación total</div>
+                <div className="text-white/60 eyebrow mb-1">
+                  Puntuación total
+                  <HelpTooltip title="Puntuación total" className="ml-1.5" label="Cómo sale la puntuación total">
+                    Media de las áreas de abajo, cada una con su peso.{" "}
+                    <strong className="text-white">Un área sin puntuar no baja el total</strong>: no entra
+                    en la media, así que una evaluación a medias sale igual de alta que una completa.
+                    La media del equipo cuenta solo a quien ya tenga evaluación de ese mes, con el puesto
+                    que tenga; si no hay nadie más, se compara con su propia puntuación.
+                  </HelpTooltip>
+                </div>
                 <div className="text-white text-sm leading-snug">
                   {avg != null ? (m.totalScore >= avg ? `Por encima de la media del equipo (${avg}).` : `Por debajo de la media del equipo (${avg}).`) : "Puntuación del periodo."}
                 </div>
