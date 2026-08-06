@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
+
 /**
  * Bandeja del módulo Formularios.
  *
@@ -190,7 +192,16 @@ export default function FormulariosModule() {
         <div className="text-[10px] uppercase tracking-[0.18em] text-gray-400 mb-1">
           Solicitudes desde la web
         </div>
-        <h1 className="text-gray-900 text-xl font-semibold">Leads Comerciales</h1>
+        <h1 className="text-gray-900 text-xl font-semibold">
+          Leads Comerciales
+          <HelpTooltip title="Aceptar o descartar" className="ml-2">
+            Aceptar no solo crea la ficha: también le manda un correo a la persona
+            diciéndole que ya puede pedir cita, y{" "}
+            <strong className="text-white">no tiene vuelta atrás</strong> — una solicitud
+            aceptada ya no puede volver a Pendientes. Descartar no le avisa de nada y sí
+            se puede rectificar.
+          </HelpTooltip>
+        </h1>
         {datos.forms?.length > 0 && (
           <p className="text-sm text-gray-500 mt-1">
             {datos.forms.filter((f) => f.active).map((f) => f.title).join(" · ")}

@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 function fechaISO(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -152,7 +153,19 @@ export default function LeadsEstadisticasPage() {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <div className="eyebrow">Captación</div>
-          <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1">Estadísticas de Leads</h1>
+          <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1">
+            Estadísticas de Leads
+            {/* Solo hay ayuda si hay DOS puertas: sin Leads Comerciales no hay
+                nada que distinguir y el globo sobraría. */}
+            {c && (
+              <HelpTooltip title="Qué cuenta cada cifra" className="ml-2">
+                Entradas y el gráfico por mes suman las dos puertas. Las otras tres cifras de
+                arriba, el embudo y De dónde vienen son{" "}
+                <strong className="text-white">solo de Leads Profesionales</strong>. Aceptar un
+                Lead Comercial también crea ficha, pero suma en su bloque de abajo, no aquí.
+              </HelpTooltip>
+            )}
+          </h1>
           <p className="text-xs text-neutral-500 mt-1">
             Cuánta gente entra, por qué puerta y en qué acaba.
           </p>

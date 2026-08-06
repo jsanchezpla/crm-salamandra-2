@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Select from "../../components/ui/Select.jsx";
+import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import SECTORES from "./sectores.json";
 import SectorPicker from "./SectorPicker.jsx";
 import { scoreBand, analysisFor, SOURCES, sourceLabel } from "./scores.js";
@@ -539,7 +540,20 @@ export default function OutreachModule() {
             onClick={(e) => e.stopPropagation()}
           >
             <header className="px-5 py-4 border-b border-neutral-200 flex items-center justify-between">
-              <h2 className="font-[Fraunces] text-xl text-neutral-800">Buscar nuevos</h2>
+              <h2 className="font-[Fraunces] text-xl text-neutral-800">
+                Buscar nuevos
+                {/* Repetir la búsqueda BORRA y vuelve a crear las empresas aún
+                    sin analizar (lib/outreach/persistLeads.js), y sus contactos
+                    caen por CASCADE. Desde fuera parece que solo "no duplica". */}
+                <HelpTooltip title="Repetir una búsqueda" className="ml-2">
+                  Lo que ya has analizado y lo que ya es cliente no se toca.{" "}
+                  <strong className="text-white">
+                    Una empresa captada y aún sin analizar se rehace desde cero
+                  </strong>{" "}
+                  con lo que venga de la fuente: si le habías escrito contactos o notas a mano, se
+                  pierden. Analízala antes si quieres conservarlos.
+                </HelpTooltip>
+              </h2>
               <button
                 onClick={() => setShowSearch(false)}
                 className="text-neutral-400 hover:text-neutral-600 text-xl"

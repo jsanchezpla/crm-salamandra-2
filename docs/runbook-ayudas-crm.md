@@ -229,10 +229,40 @@ cantidad mal puesta NO le llega a quien ya tiene la pauta —ni con «Re-aplicar
 menú origen», que recopia los snapshots viejos—, y reescribir los pasos sí le
 reescribe pautas de hace meses. Merece una decisión de producto, no un globo.
 
-### Comercial
-- [ ] `leads` · `leads/estadisticas` · `comercial/leads`
-- [ ] `formularios` · `outreach` (+ `[id]`, `configuracion`)
-- [ ] `analiticas` · `referidos`
+### Comercial — HECHO (06/08/2026)
+
+**7 ayudas en 9 pantallas**, y dos pantallas se quedaron a cero por motivos que
+merecen leerse.
+
+- [-] `leads` — SIN ayuda, y no por poco: el fichero de la ruta es un server
+      component de 57 líneas que reparte a OCHO overrides por tenant, sin un
+      solo rótulo donde colgar nada. Y el módulo base `modules/leads` hoy no lo
+      renderiza NADIE: los ocho tenants con `leads` están todos en el mapa de
+      overrides. Escribir ahí es escribir para cero usuarios.
+- [x] `leads/estadisticas` — la fila de cifras de arriba MEZCLA los dos
+      orígenes: «Entradas» suma profesionales y comerciales, pero las otras
+      tres solo cuentan profesionales. La ayuda se renderiza solo si el tenant
+      tiene las dos puertas: sin la segunda no hay nada que distinguir
+- [-] `comercial/leads` — CÓDIGO HUÉRFANO (ver abajo)
+- [x] `formularios` · `outreach` (+ `[id]`, `configuracion`)
+- [x] `analiticas` · `referidos`
+
+⚠️ **Tres cosas encontradas de paso, ninguna arreglada** (son bugs o limpieza,
+no globos, y taparlas con una ayuda sería justo lo contrario de lo que toca):
+
+1. **Los contadores de etapa del embudo mienten** en el override de aumenta y
+   sandbox. El total sale del servidor, pero el desglose por etapa se calcula
+   sobre las 200 filas traídas; y al pulsar una etapa se re-consulta filtrando,
+   con lo que las demás tarjetas caen a cero.
+2. **`/comercial/leads` no se puede alcanzar.** Ningún enlace del repo apunta
+   ahí; el único enlace a `/comercial` va a una ruta que no existe (404), y el
+   moduleKey `sales` solo lo siembra el tenant de pruebas — la reconstrucción
+   de la demo lo excluye a propósito por «duplicar a leads». Dentro tiene los
+   textos de una campaña de Retorika escritos a mano y firmados. Es un resto de
+   algo terminado: se borra, no se documenta.
+3. **Las etiquetas de etapa se contradicen**: `modules/leads/LeadsModule.jsx`
+   dice «Cualificado / Ganado / Perdido» donde `lib/leads/stages.js`, que es la
+   fuente única, dice «En seguimiento / Convertido / Descartado».
 
 ### Formación — YA LA TIENE
 - [-] `formacion` y sus hijas: de aquí salió el patrón

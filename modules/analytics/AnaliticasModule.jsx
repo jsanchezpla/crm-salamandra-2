@@ -44,16 +44,11 @@ function fechaCorta(iso) {
 
 // ── Piezas pequeñas ─────────────────────────────────────────────────────────
 
-function Kpi({ etiqueta, valor, pie, ayuda, cargando }) {
+function Kpi({ etiqueta, valor, pie, cargando }) {
   return (
     <div className="bg-white border border-neutral-100 rounded-xl p-5">
       <div className="flex items-center gap-1.5 mb-2">
         <p className="text-[11px] font-medium text-neutral-400 uppercase tracking-widest">{etiqueta}</p>
-        {ayuda && (
-          <HelpTooltip title={etiqueta} placement="bottom">
-            {ayuda}
-          </HelpTooltip>
-        )}
       </div>
       {cargando ? (
         <div className="h-8 w-20 bg-neutral-100 rounded animate-pulse" />
@@ -432,12 +427,6 @@ export default function AnaliticasModule({ esAdmin = false }) {
               <span>
                 Analíticas <span className="font-display-italic text-[var(--ink-400)]">— de dónde vienen tus visitas</span>
               </span>
-              <HelpTooltip title="Módulo de Analíticas" placement="bottom">
-                Mide el tráfico de tu web: cuántas visitas llegan, desde qué países, a qué páginas y desde
-                dónde vienen. La medición es anónima y sin cookies, así que verás cuántas visitas hay de cada
-                país, pero nunca quién es cada visitante. Para saber quién, necesitas que rellene el
-                formulario: eso llega a Leads.
-              </HelpTooltip>
             </h1>
             <p className="text-sm text-[var(--ink-500)] max-w-xl leading-relaxed">
               Tráfico de la web medido sin cookies. Los datos se actualizan cada pocos minutos.
@@ -508,30 +497,14 @@ export default function AnaliticasModule({ esAdmin = false }) {
         <>
           {/* KPIs */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <Kpi
-              etiqueta="Visitas"
-              valor={fmt(totalVisitas)}
-              cargando={cargando}
-              ayuda="Sesiones: una persona que entra, mira varias páginas y se va cuenta como una visita."
-            />
-            <Kpi
-              etiqueta="Páginas vistas"
-              valor={fmt(datos?.totales?.vistas)}
-              cargando={cargando}
-              ayuda="Total de páginas cargadas. Siempre es igual o mayor que el número de visitas."
-            />
-            <Kpi
-              etiqueta="Países"
-              valor={fmt(paises.length)}
-              cargando={cargando}
-              ayuda="Países distintos desde los que ha entrado al menos una visita en el periodo."
-            />
+            <Kpi etiqueta="Visitas" valor={fmt(totalVisitas)} cargando={cargando} />
+            <Kpi etiqueta="Páginas vistas" valor={fmt(datos?.totales?.vistas)} cargando={cargando} />
+            <Kpi etiqueta="Países" valor={fmt(paises.length)} cargando={cargando} />
             <Kpi
               etiqueta="País principal"
               valor={paisTop ? NOMBRE_PAIS(paisTop.codigo) : "—"}
               pie={cuotaTop !== null ? `${cuotaTop}% de las visitas` : null}
               cargando={cargando}
-              ayuda="El país que más visitas aporta en el periodo seleccionado."
             />
           </div>
 
@@ -554,10 +527,7 @@ export default function AnaliticasModule({ esAdmin = false }) {
               {/* Mapa + ranking */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
                 <div className="lg:col-span-2">
-                  <Panel
-                    titulo="Visitas por país"
-                    ayuda="Cuanto más intenso el color, más visitas. Pasa el ratón por encima de un país para ver el detalle."
-                  >
+                  <Panel titulo="Visitas por país">
                     <MapaVisitas paises={paises} leadsPorPais={leadsPorPais} />
                   </Panel>
                 </div>
@@ -567,7 +537,7 @@ export default function AnaliticasModule({ esAdmin = false }) {
                   ayuda={
                     leadsPorPais
                       ? "Visitas medidas por Cloudflare y, al lado, los leads que llegaron por el formulario en el mismo periodo. El país del lead es el que la persona elige en el formulario, así que son dos mediciones distintas: sirven para comparar, no para cuadrar."
-                      : "Países ordenados por número de visitas en el periodo."
+                      : null
                   }
                 >
                   <div className="max-h-[420px] overflow-y-auto pr-1">
@@ -607,20 +577,14 @@ export default function AnaliticasModule({ esAdmin = false }) {
 
               {/* Evolución */}
               <div className="mb-4">
-                <Panel
-                  titulo="Evolución de las visitas"
-                  ayuda="Visitas por día en el periodo. Pasa el ratón por la línea para ver el dato de cada jornada."
-                >
+                <Panel titulo="Evolución de las visitas">
                   <SerieVisitas serie={datos?.serie ?? []} />
                 </Panel>
               </div>
 
               {/* Páginas y fuentes */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                <Panel
-                  titulo="Páginas más vistas"
-                  ayuda="Las direcciones concretas de tu web que más se han cargado. Útil para saber qué contenido tira."
-                >
+                <Panel titulo="Páginas más vistas">
                   <ListaBarras
                     sufijo="vistas"
                     items={(datos?.paginas ?? []).slice(0, 10).map((p) => ({
@@ -631,10 +595,7 @@ export default function AnaliticasModule({ esAdmin = false }) {
                   />
                 </Panel>
 
-                <Panel
-                  titulo="De dónde llegan"
-                  ayuda="La web desde la que se hizo clic para llegar a la tuya. «Directo» es quien escribe la dirección o entra desde un marcador o un correo."
-                >
+                <Panel titulo="De dónde llegan">
                   <ListaBarras
                     items={(datos?.referrers ?? []).slice(0, 10).map((r) => ({
                       clave: r.clave || "(directo)",
@@ -647,7 +608,7 @@ export default function AnaliticasModule({ esAdmin = false }) {
 
               {/* Dispositivos y navegadores */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <Panel titulo="Dispositivos" ayuda="Con qué tipo de aparato entran: ordenador, móvil o tableta.">
+                <Panel titulo="Dispositivos">
                   <ListaBarras
                     items={(datos?.dispositivos ?? []).map((d) => ({
                       clave: d.clave || "desconocido",
@@ -656,7 +617,7 @@ export default function AnaliticasModule({ esAdmin = false }) {
                     }))}
                   />
                 </Panel>
-                <Panel titulo="Navegadores" ayuda="Qué navegador usan quienes entran en la web.">
+                <Panel titulo="Navegadores">
                   <ListaBarras
                     items={(datos?.navegadores ?? []).slice(0, 8).map((n) => ({
                       clave: n.clave || "desconocido",

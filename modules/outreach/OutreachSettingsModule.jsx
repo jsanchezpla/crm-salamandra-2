@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Select from "../../components/ui/Select.jsx";
+import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -313,7 +314,18 @@ export default function OutreachSettingsModule() {
       </Link>
 
       <header className="mt-3 mb-6">
-        <h1 className="font-[Fraunces] text-3xl lg:text-4xl text-neutral-800">Configuración de Captación</h1>
+        <h1 className="font-[Fraunces] text-3xl lg:text-4xl text-neutral-800">
+          Configuración de Captación
+          <HelpTooltip title="A quién afectan estos cambios" className="ml-2">
+            Solo a los análisis que hagas a partir de ahora.{" "}
+            <strong className="text-white">
+              Las empresas ya analizadas conservan la nota y el correo que salieron con los
+              criterios antiguos
+            </strong>
+            , aunque cambies las líneas, las señales o los textos. Para actualizarlas hay que
+            abrir cada una y pulsar «Re-analizar».
+          </HelpTooltip>
+        </h1>
         <p className="text-sm text-neutral-500 mt-1">
           Define contra qué se puntúa cada empresa captada y con qué modelo se analiza.
         </p>

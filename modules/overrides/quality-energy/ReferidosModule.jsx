@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 // ─── Configuración ────────────────────────────────────────────────────────────
 
@@ -404,6 +405,11 @@ function ReferidoDetailPanel({ referido, open, saving, onClose, onStageChange, o
         <div className="bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-100 rounded-xl p-4 text-center">
           <p className="text-[10px] font-semibold text-cyan-600 uppercase tracking-widest mb-1.5">
             Código de referido
+            <HelpTooltip title="De dónde sale este código" className="ml-1.5">
+              Lo escribe la persona en el formulario y se guarda tal cual.{" "}
+              <strong className="text-white">Nadie comprueba de quién es</strong>: si viene mal
+              escrito o inventado, aparece aquí igual.
+            </HelpTooltip>
           </p>
           {codigo ? (
             <p className="text-2xl font-black text-cyan-700 tracking-[0.2em] font-mono">{codigo}</p>

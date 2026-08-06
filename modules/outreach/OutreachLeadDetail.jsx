@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Select from "../../components/ui/Select.jsx";
+import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import SECTORES from "./sectores.json";
 import { scoreBand, analysisFor, sourceLabel, formatDate } from "./scores.js";
 import { useIntegrations } from "./useIntegrations.js";
@@ -536,7 +537,16 @@ export default function OutreachLeadDetail({ leadId }) {
             </div>
           ) : (
             <>
-              <h1 className="font-[Fraunces] text-3xl lg:text-4xl text-neutral-800">{lead.name}</h1>
+              <h1 className="font-[Fraunces] text-3xl lg:text-4xl text-neutral-800">
+                {lead.name}
+                <HelpTooltip title="Analizar con IA" className="ml-2">
+                  Cada vez que lo pulsas se paga una consulta a la IA con la clave que tengas
+                  puesta en Configuración. Y no suma:{" "}
+                  <strong className="text-white">reescribe el análisis anterior</strong>{" "}
+                  —puntuación, motivos y correo modelo— de las líneas que analices. Las que dejes
+                  sin marcar se quedan como estaban.
+                </HelpTooltip>
+              </h1>
               <p className="text-sm text-neutral-500 mt-1">
                 {[lead.sector, lead.location].filter(Boolean).join(" · ") || "Sin sector ni ubicación"}
               </p>
