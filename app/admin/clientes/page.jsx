@@ -48,6 +48,107 @@ function Campo({ etiqueta, pista, children }) {
  *  · Suspender echa a sus usuarios en el acto. No es un ajuste, es cortarle el
  *    servicio a un negocio.
  */
+/**
+ * Confirmación antes de tocar los módulos de un cliente REAL.
+ *
+ * Marcar una casilla y pulsar «Guardar» era demasiado poco para lo que pasa
+ * después: activar prepara tablas en la base de datos de ese cliente y tarda
+ * unos veinte segundos, y quitar hace desaparecer un módulo entero del menú de
+ * gente que está trabajando en ese momento. Los dos avisos existían, pero
+ * estaban en la misma pantalla donde se marca la casilla — se leen una vez y se
+ * dejan de ver.
+ *
+ * Lo que hace este paso es OBLIGAR A MIRAR la lista concreta de lo que se va a
+ * activar y de lo que se va a quitar, con el nombre del cliente delante. No pide
+ * teclear nada: la fricción útil aquí es leer, no copiar; un cuadro que exige
+ * escribir el nombre se rellena en automático a la tercera vez y deja de
+ * proteger.
+ *
+ * El botón de confirmar nace DESHABILITADO durante un segundo y medio, que es lo
+ * único que evita de verdad el doble clic con el que se salta cualquier
+ * confirmación sin haberla leído.
+ */
+function ConfirmarModulos({ cliente, nuevos, quitados, nombres, onConfirmar, onCancelar }) {
+  const [listo, setListo] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setListo(true), 1500);
+    return () => clearTimeout(t);
+  }, []);
+
+  const nombreDe = (key) => nombres[key] ?? key;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ background: "rgba(15,23,42,0.55)" }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirmar-modulos-titulo"
+    >
+      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl p-6 space-y-5">
+        <div>
+          <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">
+            Vas a cambiar los módulos de
+          </div>
+          <h2 id="confirmar-modulos-titulo" className="text-xl font-semibold text-neutral-900 mt-1">
+            {cliente.nombre}
+          </h2>
+        </div>
+
+        {nuevos.length > 0 && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <div className="text-[11px] font-semibold text-emerald-900 uppercase tracking-wide mb-1.5">
+              Se activan {nuevos.length}
+            </div>
+            <ul className="text-sm text-emerald-900 space-y-0.5">
+              {nuevos.map((k) => <li key={k}>· {nombreDe(k)}</li>)}
+            </ul>
+            <p className="text-[11px] text-emerald-800 mt-2 leading-relaxed">
+              Se preparan sus tablas en la base de datos de este cliente. Tarda unos 20 segundos y no
+              se puede interrumpir a medias: no cierres la página.
+            </p>
+          </div>
+        )}
+
+        {quitados.length > 0 && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+            <div className="text-[11px] font-semibold text-amber-900 uppercase tracking-wide mb-1.5">
+              Se quitan {quitados.length}
+            </div>
+            <ul className="text-sm text-amber-900 space-y-0.5">
+              {quitados.map((k) => <li key={k}>· {nombreDe(k)}</li>)}
+            </ul>
+            <p className="text-[11px] text-amber-800 mt-2 leading-relaxed">
+              Desaparecen del menú de quien esté trabajando ahora mismo. Sus datos se conservan y
+              vuelven si los reactivas.
+            </p>
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-3 pt-1">
+          <button
+            type="button"
+            onClick={onCancelar}
+            className="px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wide text-neutral-600 hover:bg-neutral-100"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirmar}
+            disabled={!listo}
+            className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-40"
+            style={{ background: "var(--color-primary, #1B3A2D)" }}
+          >
+            {listo ? "Sí, cambiar los módulos" : "Lee lo de arriba…"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
   const [f, setF] = useState({
     nombre: cliente.nombre,
@@ -55,10 +156,21 @@ function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
     modulos: [...cliente.modulos],
   });
 
+  const [confirmando, setConfirmando] = useState(false);
+
   const nuevos = f.modulos.filter((m) => !cliente.modulos.includes(m));
   const quitados = cliente.modulos.filter((m) => !f.modulos.includes(m));
   const hayCambios =
     f.nombre !== cliente.nombre || f.plan !== cliente.plan || nuevos.length > 0 || quitados.length > 0;
+
+  // La confirmación enseña nombres, no claves: quien decide si un cliente tiene
+  // «Documentos avanzado» no tiene por qué saber que por dentro se llama
+  // `documents_avanzado`.
+  const nombresDeModulo = useMemo(() => {
+    const m = {};
+    for (const g of catalogo ?? []) for (const mod of g.modulos ?? []) m[mod.key] = mod.nombre;
+    return m;
+  }, [catalogo]);
 
   function alternar(key) {
     setF((p) => ({
@@ -134,13 +246,33 @@ function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
           }`}>
           {cliente.estado === "suspended" ? "Reactivar cliente" : "Suspender cliente"}
         </button>
+        {/* Cambiar el nombre o el plan se guarda directo; tocar los módulos pasa
+            por la confirmación, que es lo que mueve tablas y menús. */}
         <button type="button" disabled={!hayCambios || guardando}
-          onClick={() => onGuardar(cliente.slug, { nombre: f.nombre, plan: f.plan, modulos: f.modulos })}
+          onClick={() => {
+            const tocaModulos = nuevos.length > 0 || quitados.length > 0;
+            if (tocaModulos) setConfirmando(true);
+            else onGuardar(cliente.slug, { nombre: f.nombre, plan: f.plan, modulos: f.modulos });
+          }}
           className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-40"
           style={{ background: "var(--color-primary, #1B3A2D)" }}>
           {guardando ? (nuevos.length ? "Preparando la base de datos…" : "Guardando…") : "Guardar cambios"}
         </button>
       </div>
+
+      {confirmando && (
+        <ConfirmarModulos
+          cliente={cliente}
+          nuevos={nuevos}
+          quitados={quitados}
+          nombres={nombresDeModulo}
+          onCancelar={() => setConfirmando(false)}
+          onConfirmar={() => {
+            setConfirmando(false);
+            onGuardar(cliente.slug, { nombre: f.nombre, plan: f.plan, modulos: f.modulos });
+          }}
+        />
+      )}
     </div>
   );
 }

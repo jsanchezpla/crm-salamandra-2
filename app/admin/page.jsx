@@ -3,9 +3,15 @@
 /**
  * Custodia de configuraciones — la vista de todos los clientes a la vez.
  *
- * Es una MATRIZ, no una lista de tarjetas: clientes en filas, credenciales en
- * columnas. El objetivo de la pantalla es responder de un vistazo a "¿qué falta
- * y qué está mal?" en los nueve clientes, no navegar cliente a cliente.
+ * UNA TARJETA POR CLIENTE (06/08/2026, propuesta de Rodrigo). Antes era una
+ * matriz de puntos de color —clientes en filas, credenciales en columnas— que
+ * respondía bien a «¿qué falta en todos?» pero exigía contar posiciones para
+ * saber QUÉ falta: los rótulos iban girados 90° y el estado era un punto.
+ *
+ * Ahora cada cliente dice sus servicios con palabras y lleva su acción al lado,
+ * que es como se trabaja de verdad: se mira un cliente y se le pide lo que le
+ * falta. Lo que se pierde es la comparación de un vistazo entre todos; si vuelve
+ * a hacer falta, el sitio es un resumen arriba, no volver a la matriz.
  *
  * Lo que NO hace, y es lo importante: no enseña ni un carácter de ninguna
  * credencial. El endpoint no las descifra (ver app/api/admin/configuraciones),
@@ -51,6 +57,32 @@ function Pip({ puesta, cifrada, titulo }) {
   );
 }
 
+/**
+ * Nombre corto para la cabecera de columna.
+ *
+ * Los nombres largos («Stripe — clave secreta», «Transcripción (OpenAI)») venían
+ * girados 90° para caber en columnas de 34 px, y girado no se lee: había que
+ * ladear la cabeza o ir pasando el ratón uno por uno. Se prefiere acortar el
+ * texto y ensanchar la columna — el nombre completo sigue estando en el `title`
+ * y en el detalle que se abre al pulsar la fila.
+ *
+ * La regla sale de cómo están escritos hoy en el endpoint: lo que va entre
+ * paréntesis es la marca («Correo (Resend)» → Resend), y lo que va tras la raya
+ * distingue dos credenciales de la misma marca («Stripe — webhook»).
+ */
+function etiquetaCorta(nombre) {
+  const enParentesis = nombre.match(/\(([^)]+)\)/);
+  if (enParentesis) return enParentesis[1];
+
+  const partes = nombre.split("—").map((p) => p.trim());
+  if (partes.length > 1) {
+    // «Stripe — clave secreta» → «Stripe clave»: la marca y la primera palabra
+    // que la distingue de su hermana.
+    return `${partes[0]} ${partes[1].split(" ")[0]}`;
+  }
+  return nombre;
+}
+
 function tamaño(bytes) {
   if (!bytes) return "—";
   const mb = bytes / 1024 / 1024;
@@ -94,6 +126,11 @@ export default function CustodiaPage() {
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState(null);
   const [abierto, setAbierto] = useState(null);
+  // Cliente al que se le va a pedir la configuración. El envío del correo NO
+  // está hecho a propósito (06/08/2026): escribir a un cliente pidiéndole
+  // credenciales necesita el texto aprobado antes de existir, así que de momento
+  // el botón enseña lo que se le pediría y nada sale de aquí.
+  const [pidiendo, setPidiendo] = useState(null);
 
   useEffect(() => {
     fetch("/api/admin/configuraciones", { cache: "no-store" })
@@ -107,7 +144,6 @@ export default function CustodiaPage() {
   }, []);
 
   const clientes = datos?.clientes ?? [];
-  const columnas = clientes[0]?.credenciales ?? [];
   const enClaroTotal = useMemo(
     () => clientes.reduce((n, c) => n + (c.enClaro ?? 0), 0),
     [clientes]
@@ -181,76 +217,103 @@ export default function CustodiaPage() {
         className="rounded-lg overflow-hidden"
         style={{ background: "var(--panel)", border: "1px solid var(--line)" }}
       >
-        {/* Cabecera de columnas */}
-        <div
-          className="hidden lg:grid items-end gap-px px-5 pt-5 pb-3"
-          style={{ gridTemplateColumns: `minmax(0,1fr) repeat(${columnas.length}, 34px) 78px` }}
-        >
-          <Etiqueta>cliente</Etiqueta>
-          {columnas.map((c) => (
-            <div key={c.clave} className="flex justify-center">
-              <span
-                className="text-[10px] whitespace-nowrap"
-                style={{
-                  color: "var(--tenue)",
-                  writingMode: "vertical-rl",
-                  transform: "rotate(180deg)",
-                  letterSpacing: "0.08em",
-                }}
-                title={c.nombre}
-              >
-                {c.nombre.replace(/^.*— /, "")}
-              </span>
-            </div>
-          ))}
-          <div className="text-right">
-            <Etiqueta>mód · propio · bd</Etiqueta>
-          </div>
+        {/* Sin cabecera de columnas: ya no hay columnas. Cada tarjeta dice sus
+            servicios con palabras, que era el objetivo del cambio. */}
+        <div className="px-5 pt-5 pb-1">
+          <Etiqueta>{clientes.length === 1 ? "1 cliente" : `${clientes.length} clientes`}</Etiqueta>
         </div>
 
         {clientes.map((c, i) => {
           const activo = abierto === c.slug;
+          const puestas = c.credenciales.filter((cr) => cr.puesta);
+          const faltan = c.credenciales.filter((cr) => !cr.puesta);
+          const sinCifrar = puestas.filter((cr) => cr.cifrada === false);
+
           return (
-            <button
+            <div
               key={c.slug}
-              onClick={() => setAbierto(activo ? null : c.slug)}
-              className="w-full text-left px-5 py-3.5 grid items-center gap-px transition-colors"
+              className="px-5 py-4 transition-colors"
               style={{
-                gridTemplateColumns: `minmax(0,1fr) repeat(${columnas.length}, 34px) 78px`,
                 borderTop: "1px solid var(--line-suave)",
                 background: activo ? "var(--panel-alto)" : "transparent",
                 animation: `aparecer 420ms ease-out both`,
                 animationDelay: `${i * 45}ms`,
               }}
             >
-              <div className="min-w-0 pr-4">
-                <div className="flex items-baseline gap-2.5">
-                  <span className="text-[14px] truncate">{c.nombre}</span>
-                  {c.estado !== "active" && (
-                    <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--alerta)" }}>
-                      {c.estado}
+              <div className="flex items-start gap-4">
+                {/* Izquierda: nombre arriba, servicios abajo separados por guiones */}
+                <button
+                  onClick={() => setAbierto(activo ? null : c.slug)}
+                  className="flex-1 min-w-0 text-left"
+                >
+                  <div className="flex items-baseline gap-2.5 flex-wrap">
+                    <span className="text-[15px] font-semibold">{c.nombre}</span>
+                    <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
+                      {c.slug} · {c.plan} · {c.modulos.length} módulos
+                      {c.bd?.existe ? ` · ${tamaño(c.bd.bytes)}` : " · sin base de datos"}
                     </span>
+                    {c.estado !== "active" && (
+                      <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--alerta)" }}>
+                        {c.estado}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Los servicios CON clave, en palabras. Antes eran ocho puntos
+                      de color en columnas: para saber cuál era cuál había que
+                      contar posiciones o ir pasando el ratón. */}
+                  <div className="mt-1.5 text-[12px] leading-relaxed">
+                    {puestas.length === 0 ? (
+                      <span style={{ color: "var(--alerta)" }}>Sin ninguna clave configurada</span>
+                    ) : (
+                      <span style={{ color: "var(--dim)" }}>
+                        {puestas.map((cr, n) => (
+                          <span key={cr.clave}>
+                            {n > 0 && <span style={{ color: "var(--apagado)" }}> — </span>}
+                            <span
+                              title={cr.cifrada === false ? `${cr.nombre}: PUESTA SIN CIFRAR` : cr.nombre}
+                              style={{
+                                color: cr.cifrada === false ? "var(--alerta)" : "var(--ok)",
+                                fontWeight: cr.cifrada === false ? 600 : 400,
+                              }}
+                            >
+                              {etiquetaCorta(cr.nombre)}
+                              {cr.cifrada === false && " ⚠"}
+                            </span>
+                          </span>
+                        ))}
+                      </span>
+                    )}
+                  </div>
+
+                  {faltan.length > 0 && (
+                    <div className="mt-1 text-[11px]" style={{ color: "var(--tenue)" }}>
+                      Le faltan: {faltan.map((cr) => etiquetaCorta(cr.nombre)).join(" — ")}
+                    </div>
                   )}
-                </div>
-                <div className="text-[11px] mt-0.5" style={{ color: "var(--tenue)" }}>
-                  {c.slug} · {c.plan}
-                </div>
+                </button>
+
+                {/* Derecha: la acción. Todavía NO manda nada — ver el aviso. */}
+                <button
+                  type="button"
+                  onClick={() => setPidiendo(c)}
+                  className="shrink-0 px-3.5 py-2 rounded-lg text-[11px] font-semibold uppercase tracking-wide transition-colors"
+                  style={{ border: "1px solid var(--line)", color: "var(--ok)" }}
+                >
+                  Solicitar configuración
+                </button>
               </div>
 
-              {c.credenciales.map((cr) => (
-                <div key={cr.clave} className="flex justify-center">
-                  <Pip puesta={cr.puesta} cifrada={cr.cifrada} titulo={cr.nombre} />
+              {sinCifrar.length > 0 && (
+                <div
+                  className="mt-2.5 text-[11px] rounded px-2.5 py-1.5"
+                  style={{ color: "var(--alerta)", background: "color-mix(in srgb, var(--alerta) 8%, transparent)" }}
+                >
+                  {sinCifrar.length === 1 ? "Un secreto legible" : `${sinCifrar.length} secretos legibles`} en la base
+                  de datos: {sinCifrar.map((cr) => etiquetaCorta(cr.nombre)).join(", ")}.
                 </div>
-              ))}
-
-              <div className="text-right text-[11px] tabular-nums whitespace-nowrap" style={{ color: "var(--dim)" }}>
-                {c.modulos.length}
-                <span style={{ color: c.personalizados ? "var(--ok)" : "var(--apagado)" }}> · {c.personalizados}</span>
-                <span style={{ color: c.bd?.existe ? "var(--tenue)" : "var(--alerta)" }}>
-                  {" · "}{c.bd?.existe ? tamaño(c.bd.bytes) : "sin bd"}
-                </span>
-              </div>
-            </button>
+              )}
+            </div>
           );
         })}
       </section>
@@ -267,6 +330,58 @@ export default function CustodiaPage() {
           <Pip puesta={false} titulo="" /> sin configurar
         </span>
       </div>
+
+      {/* ── Solicitar configuración: enseña QUÉ se pediría, sin mandar nada ─ */}
+      {pidiendo && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ background: "rgba(15,23,42,0.55)" }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl p-6 space-y-4 text-neutral-800">
+            <div>
+              <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">
+                Pedir configuración a
+              </div>
+              <h2 className="text-xl font-semibold mt-1">{pidiendo.nombre}</h2>
+            </div>
+
+            <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3">
+              <div className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
+                Se le pediría
+              </div>
+              {pidiendo.credenciales.filter((c) => !c.puesta).length === 0 ? (
+                <p className="text-sm text-neutral-600">
+                  Ya tiene todas las claves puestas. No hay nada que pedirle.
+                </p>
+              ) : (
+                <ul className="text-sm text-neutral-700 space-y-0.5">
+                  {pidiendo.credenciales.filter((c) => !c.puesta).map((c) => (
+                    <li key={c.clave}>· {c.nombre}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] text-amber-900 leading-relaxed">
+              <b>Todavía no se envía nada.</b> Falta acordar a qué dirección va el correo y qué dice
+              exactamente. Pedirle credenciales a un cliente es de lo más delicado que se le escribe:
+              cuando el texto esté aprobado, este botón lo manda.
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPidiendo(null)}
+                className="px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wide text-neutral-600 hover:bg-neutral-100"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Detalle del cliente ──────────────────────────────────────────── */}
       {detalle && (

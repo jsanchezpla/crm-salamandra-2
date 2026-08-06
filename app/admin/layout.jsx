@@ -1,25 +1,32 @@
 /**
  * Back-office interno de Salamandra.
  *
- * Deliberadamente NO comparte el aspecto del CRM de clientes. El CRM es cálido y
- * de cara al cliente; esto es la sala de máquinas: oscuro, denso y de lectura
- * rápida. Que se distingan de un vistazo es una medida de seguridad barata —
- * saber en qué pantalla estás antes de tocar nada.
+ * MISMA TIPOGRAFÍA Y MISMOS COLORES QUE EL CRM (06/08/2026, a petición de
+ * Jorge). Antes era una sala de máquinas oscura, distinta a propósito para que
+ * se notara de un vistazo en qué pantalla estabas. Se cambia porque mantener dos
+ * lenguajes visuales cuesta el doble y envejece mal: cada arreglo del CRM había
+ * que traducirlo aquí a mano.
+ *
+ * PERO la propiedad que aquella decisión protegía sigue haciendo falta: este
+ * panel toca la configuración de TODOS los clientes a la vez, y confundirlo con
+ * el CRM de uno solo es exactamente el error caro. Ahora eso lo dice la franja
+ * superior —«panel interno», con el nombre delante— en vez del color de fondo.
+ * Si algún día se quita esa franja, hay que poner otra señal en su sitio.
  *
  * Solo se sirve desde ADMIN_HOST (ver middleware.js); en el host de los clientes
  * estas rutas dan 404.
  */
-import { Instrument_Serif, IBM_Plex_Mono } from "next/font/google";
+import { Fraunces, Poppins } from "next/font/google";
 
-const serif = Instrument_Serif({
+const display = Fraunces({
   subsets: ["latin"],
-  weight: ["400"],
+  weight: ["400", "600"],
   style: ["normal", "italic"],
   variable: "--admin-display",
   display: "swap",
 });
 
-const mono = IBM_Plex_Mono({
+const texto = Poppins({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600"],
   variable: "--admin-mono",
@@ -39,40 +46,40 @@ const SECCIONES = [
 export default function AdminLayout({ children }) {
   return (
     <div
-      className={`${serif.variable} ${mono.variable} min-h-screen`}
+      className={`${display.variable} ${texto.variable} min-h-screen`}
       style={{
-        // Negro CÁLIDO, no el gris azulado de siempre.
-        "--bg": "#0C0B0A",
-        "--panel": "#131110",
-        "--panel-alto": "#191614",
-        "--line": "#272220",
-        "--line-suave": "#1C1917",
-        "--text": "#E9E4DC",
-        "--dim": "#8A8078",
-        "--tenue": "#5A534D",
-        // Verde salvia: guiña al verde de Salamandra sin usarlo como relleno.
-        "--ok": "#7BA98D",
-        // Ámbar: el único color que grita. Se reserva para "sin cifrar".
-        "--alerta": "#D08A3C",
-        "--apagado": "#332E2B",
+        // Los mismos tonos del CRM (app/globals.css). Se mapean a los nombres
+        // que ya usaban estas pantallas para no reescribirlas enteras.
+        "--bg": "#FAF8F5",
+        "--panel": "#FFFFFF",
+        "--panel-alto": "#F4F0EA",
+        "--line": "#E0DACE",
+        "--line-suave": "#ECE7DE",
+        "--text": "#15140F",
+        "--dim": "#4F4942",
+        "--tenue": "#6E665B",
+        // El verde de Salamandra, el mismo que el CRM usa como primario.
+        "--ok": "#1B3A2D",
+        // El único color que grita. Se reserva para "sin cifrar".
+        "--alerta": "#B45309",
+        "--apagado": "#C5BDAE",
         background: "var(--bg)",
         color: "var(--text)",
-        fontFamily: "var(--admin-mono), ui-monospace, monospace",
-        // Retícula finísima de fondo: textura de panel, no decoración.
-        backgroundImage:
-          "linear-gradient(var(--line-suave) 1px, transparent 1px), linear-gradient(90deg, var(--line-suave) 1px, transparent 1px)",
-        backgroundSize: "56px 56px",
+        fontFamily: "var(--admin-mono), ui-sans-serif, system-ui, sans-serif",
       }}
     >
       <nav
         className="flex items-center gap-1 px-6 lg:px-12 h-12"
-        style={{ borderBottom: "1px solid var(--line)", background: "color-mix(in srgb, var(--bg) 80%, transparent)" }}
+        style={{ borderBottom: "1px solid var(--line)", background: "var(--panel)" }}
       >
+        {/* La señal de "no estás en el CRM de un cliente". Antes lo decía el
+            fondo negro; ahora lo dice esto, y por eso va en color pleno y no
+            como un rótulo más de la barra. */}
         <span
-          className="text-[11px] uppercase tracking-[0.2em] mr-5"
-          style={{ color: "var(--ok)" }}
+          className="text-[11px] uppercase tracking-[0.16em] mr-5 px-2.5 py-1 rounded font-semibold text-white"
+          style={{ background: "var(--ok)" }}
         >
-          Salamandra
+          Salamandra · panel interno
         </span>
         {SECCIONES.map((s) => (
           <a
