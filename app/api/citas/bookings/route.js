@@ -19,7 +19,6 @@ import { asignarSesion } from "../../../../lib/citas/packs.js";
 
 const NADIE = "00000000-0000-0000-0000-000000000000";
 
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["pending", "confirmed", "completed", "cancelled", "no_show"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -180,7 +179,17 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const userRole = request.headers.get("x-user-role") ?? "user";
     const userId = request.headers.get("x-user-id");
     const ip = request.headers.get("x-forwarded-for") ?? null;
-    if (!ADMIN_ROLES.has(userRole)) return forbidden("Solo admin puede crear citas manuales");
+    /*
+     * Apuntar una cita a mano lo puede hacer CUALQUIERA del equipo (06/08/2026,
+     * Rodrigo; universal, no solo nutri_laura). Era solo admin y no tenía
+     * sentido: quien coge el teléfono en recepción es justo quien la apunta, y
+     * tener que pedírselo a la dirección para cada llamada convertía la agenda
+     * en un cuello de botella.
+     *
+     * Sigue haciendo falta tener el módulo de citas y una sesión: la puerta no
+     * desaparece, se abre al equipo. Lo que mueve DINERO —confirmar y cobrar,
+     * pedir la tarjeta— se queda en admin.
+     */
 
     const { Booking, EventType, TeamMember } = tenantModels;
 

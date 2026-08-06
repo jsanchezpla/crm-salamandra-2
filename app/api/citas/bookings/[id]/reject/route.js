@@ -7,7 +7,6 @@ import { bookingRejectedTemplate } from "../../../../../../lib/email/templates/c
 import { reembolsarCitaSiProcede } from "../../../../../../lib/citas/reembolsoCita.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
 
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 /**
  * PATCH /api/citas/bookings/[id]/reject
@@ -30,7 +29,14 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     const userRole = request.headers.get("x-user-role") ?? "user";
     const userId = request.headers.get("x-user-id");
     const ip = request.headers.get("x-forwarded-for") ?? null;
-    if (!ADMIN_ROLES.has(userRole)) return forbidden("Solo admin puede rechazar citas");
+    /*
+     * Rechazar una solicitud lo puede hacer cualquiera del equipo (06/08/2026,
+     * Rodrigo), por lo mismo que apuntarla: quien atiende la lista de espera es
+     * quien sabe que ese hueco no vale.
+     *
+     * No mueve dinero: rechazar solo pasa la solicitud a cancelada, no cobra
+     * nada. Lo que sí cobra —confirmar, pedir la tarjeta— se queda en admin.
+     */
 
     const { id } = await params;
     const { Booking, EventType } = tenantModels;

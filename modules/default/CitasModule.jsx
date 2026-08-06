@@ -946,6 +946,7 @@ export default function CitasModule() {
         <div className="flex-1 overflow-auto min-h-0">
           <Waitlist
             refreshKey={waitlistKey}
+            esAdmin={viewerIsAdmin}
             onCountChange={setPendingCount}
             onActioned={() => { loadPendingCount(); calendarRef.current?.getApi().refetchEvents(); }}
           />
@@ -1845,7 +1846,7 @@ export default function CitasModule() {
 // ─── Lista de espera ────────────────────────────────────────────────────────
 // Las reservas en estado 'pending': solicitudes de la web que la persona ya
 // eligió con fecha y hora y esperan que se confirmen o rechacen.
-function Waitlist({ refreshKey, onCountChange, onActioned }) {
+function Waitlist({ refreshKey, esAdmin, onCountChange, onActioned }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
@@ -2027,6 +2028,13 @@ function Waitlist({ refreshKey, onCountChange, onActioned }) {
                         confirmar: el servidor lo rechaza, pero un botón activo
                         que devuelve un error es una trampa. Se apaga y se dice
                         por qué. */}
+                    {/* Rechazar y apuntar citas lo hace cualquiera del equipo
+                        desde el 06/08/2026; CONFIRMAR no, porque puede cobrarle
+                        la tarjeta a alguien. Se oculta en vez de dejarlo en
+                        gris: por lo de arriba, un botón que devuelve un error
+                        es una trampa. */}
+                    {esAdmin && (
+                    <>
                     <button
                       onClick={() => confirm(b.id)}
                       disabled={busyId === b.id || b.paymentStatus === "authorizing"}
@@ -2064,6 +2072,8 @@ function Waitlist({ refreshKey, onCountChange, onActioned }) {
                           Confirmar sin cobrar
                         </button>
                       </>
+                    )}
+                    </>
                     )}
 
                     <button onClick={() => setRejectFor(b.id)} disabled={busyId === b.id} className="bg-white hover:bg-red-50 text-red-600 border border-red-200 text-xs font-medium py-2 rounded-md transition-colors disabled:opacity-50">

@@ -477,7 +477,40 @@ function InfoTab({
  */
 function BonosSection({ bonos, client, onCambio }) {
   const [abierto, setAbierto] = useState(false);
+  const [quitando, setQuitando] = useState(null);
+  const [falloQuitar, setFalloQuitar] = useState(null);
   const lista = Array.isArray(bonos) ? bonos.filter((b) => b.estado !== "anulado") : [];
+
+  /*
+   * Quitarle el bono (06/08/2026, Rodrigo). Por dentro se ANULA, no se borra:
+   * la fila se queda con lo que se cobró, quién lo dio y cuándo, y las sesiones
+   * que ya se dieron conservan su número. Borrarla dejaría sesiones numeradas
+   * colgando de un bono que nadie recuerda.
+   *
+   * De cara a la nutricionista da igual: deja de contar, desaparece de aquí y
+   * la paciente vuelve a dejar de ver ese tipo de cita en la agenda.
+   */
+  async function quitar(b) {
+    const quedan = b.restantes > 0 ? ` Le quedan ${b.restantes} sesión(es) sin usar.` : "";
+    if (!window.confirm(`¿Quitarle el bono «${b.nombre}»?${quedan}
+
+Dejará de poder reservar con él. Las citas que ya tenga puestas no se tocan.`)) return;
+    setQuitando(b.id);
+    setFalloQuitar(null);
+    try {
+      const res = await fetch(`/api/citas/packs/${b.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "anulado" }),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(j?.error || "No se ha podido quitar el bono");
+      onCambio?.();
+    } catch (e) {
+      setFalloQuitar(e.message);
+    }
+    setQuitando(null);
+  }
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
@@ -506,6 +539,10 @@ function BonosSection({ bonos, client, onCambio }) {
         </p>
       )}
 
+      {falloQuitar && (
+        <p className="px-5 pt-3 text-[11px] text-red-600">{falloQuitar}</p>
+      )}
+
       <div className={lista.length ? "p-5 space-y-4" : "hidden"}>
         {lista.map((b) => (
           <div key={b.id}>
@@ -517,9 +554,20 @@ function BonosSection({ bonos, client, onCambio }) {
                 {b.restantes > 0 ? `Le quedan ${b.restantes}` : "Agotado"}
               </span>
             </div>
-            <div className="text-[11px] text-gray-500 mt-0.5">
-              {b.resumen}
-              {b.modoPago === "instalment" && " · pago fraccionado"}
+            <div className="text-[11px] text-gray-500 mt-0.5 flex items-baseline justify-between gap-3">
+              <span>
+                {b.resumen}
+                {b.modoPago === "instalment" && " · pago fraccionado"}
+              </span>
+              <button
+                type="button"
+                onClick={() => quitar(b)}
+                disabled={quitando === b.id}
+                title="Deja de contar y la paciente deja de ver ese tipo de cita. Queda registrado que se le dio."
+                className="text-[11px] text-gray-400 hover:text-red-600 hover:underline shrink-0 disabled:opacity-50"
+              >
+                {quitando === b.id ? "Quitando…" : "Quitar bono"}
+              </button>
             </div>
             {/* Barra de progreso: gastadas + reservadas sobre el total. */}
             <div className="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden flex">

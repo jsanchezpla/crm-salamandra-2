@@ -2,7 +2,7 @@ import { withPublicTenant } from "../../../../../../lib/tenant/publicTenantConte
 import { ok, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { normalizarPreguntas } from "../../../../../../lib/citas/preguntasCita.js";
 import { verifyPortalSession, readBearer } from "../../../../../../lib/citas/portalSession.js";
-import { tiposConBonoActivo, filtrarTiposPara } from "../../../../../../lib/citas/tiposVisibles.js";
+import { tiposConBonoActivo, filtrarTiposPara, soloSuPrograma } from "../../../../../../lib/citas/tiposVisibles.js";
 import {
   puedeReservarValoracionInicial,
   esValoracionInicial,
@@ -60,7 +60,11 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenantModels, 
       ? await puedeReservarValoracionInicial(tenantModels, email)
       : { puede: true };
 
-    const data = filtrarTiposPara(rows, conBono)
+    // Con un programa en marcha se ve SOLO ese (06/08/2026, Rodrigo). Va
+    // después de `filtrarTiposPara` —que es quien destapa el tipo oculto— y
+    // antes de todo lo demás: si se estrecha a su programa, lo de la valoración
+    // ya no pinta nada.
+    const data = soloSuPrograma(filtrarTiposPara(rows, conBono), conBono)
       .filter((r) => valoracion.puede || !esValoracionInicial(r))
       .filter((r) => Array.isArray(r.modalities) && r.modalities.includes("online"))
       .map((r) => ({
