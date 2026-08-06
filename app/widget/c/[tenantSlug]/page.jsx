@@ -7,6 +7,7 @@ import { useCitasPortalSession } from "./_components/useCitasPortalSession.js";
 import { useAdmision } from "./_components/useAdmision.js";
 import PuertaScreen from "./_components/PuertaScreen.jsx";
 import BienvenidaGate from "./_components/BienvenidaGate.jsx";
+import { debePreguntarBienvenida } from "../../../../lib/citas/bienvenida.js";
 import { formatMoney } from "../../../../lib/payments/money.js";
 
 const MONTH_NAMES_ES = [
@@ -233,16 +234,24 @@ export default function WidgetSelectionPage() {
       return;
     }
     let cancelado = false;
-    portal
-      .authFetch("/citas-portal/bookings", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
+    // Sus citas Y su contrato: la decisión también se toma firmando, no solo
+    // reservando (ver `lib/citas/bienvenida.js`).
+    Promise.all([
+      portal.authFetch("/citas-portal/bookings", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+      portal.authFetch("/citas-portal/contract", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([citasRes, contratoRes]) => {
         if (cancelado) return;
-        const d = j?.data ?? {};
-        const todas = [...(d.upcoming ?? []), ...(d.history ?? [])];
-        setPreguntarBienvenida(!todas.some((b) => b.esValoracionInicial));
+        const d = citasRes?.data ?? {};
+        setPreguntarBienvenida(
+          debePreguntarBienvenida({
+            valoracion,
+            citas: [...(d.upcoming ?? []), ...(d.history ?? [])],
+            contrato: contratoRes?.data ?? null,
+          })
+        );
       })
-      // Si no se pueden leer sus citas, no se pregunta: la agenda es lo que
+      // Si no se puede leer su situación, no se pregunta: la agenda es lo que
       // había antes de existir esta pantalla, y es mejor que un muro.
       .catch(() => { if (!cancelado) setPreguntarBienvenida(false); });
     return () => { cancelado = true; };

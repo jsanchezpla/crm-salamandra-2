@@ -12,6 +12,7 @@ import DatosGate from "../_components/DatosGate.jsx";
 import ComunicacionesGate from "../_components/ComunicacionesGate.jsx";
 import ConsentimientoImagenGate from "../_components/ConsentimientoImagenGate.jsx";
 import { googleCalendarUrl } from "../../../../../lib/citas/googleCalendar.js";
+import { debePreguntarBienvenida } from "../../../../../lib/citas/bienvenida.js";
 
 function fmtLong(iso) {
   if (!iso) return "—";
@@ -438,8 +439,19 @@ export default function MiPerfilPage() {
     );
   }
 
-  const yaTieneValoracion = [...upcoming, ...history].some((b) => b.esValoracionInicial);
-  if (valoracion && !yaTieneValoracion && !eligioPerfil && !loadingData && !dataError) {
+  /*
+   * La regla de cuándo se pregunta vive en `lib/citas/bienvenida.js`, compartida
+   * con la agenda (06/08/2026). Antes se miraba solo si tenía reservada una
+   * VALORACIÓN, y por eso a quien acababa de firmar todos sus documentos —o ya
+   * tenía cita de otro tipo— se le volvía a preguntar «¿a qué entras hoy?» cada
+   * vez que entraba: la decisión ya estaba tomada y la pantalla no se enteraba.
+   */
+  const preguntarBienvenida = debePreguntarBienvenida({
+    valoracion,
+    citas: [...upcoming, ...history],
+    contrato,
+  });
+  if (preguntarBienvenida && !eligioPerfil && !loadingData && !dataError) {
     return (
       <div style={brandStyle}>
         <BienvenidaGate

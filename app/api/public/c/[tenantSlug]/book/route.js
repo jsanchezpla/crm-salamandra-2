@@ -247,9 +247,9 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     // Va antes de la puerta de contratos porque la valoración se la salta, y
     // quien ya la tuvo no debe colarse por esa excepción.
     if (esValoracionInicial(eventType)) {
-      const { puede } = await puedeReservarValoracionInicial(tenantModels, clientEmail);
+      const { puede, motivo } = await puedeReservarValoracionInicial(tenantModels, clientEmail);
       if (!puede) {
-        const aviso = mensajeValoracionUsada(tenant.name);
+        const aviso = mensajeValoracionUsada(tenant.name, motivo);
         return errorConDatos(aviso.texto, 409, {
           codigo: aviso.codigo,
           titulo: aviso.titulo,
