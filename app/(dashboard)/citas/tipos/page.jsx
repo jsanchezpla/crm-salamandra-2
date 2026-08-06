@@ -264,6 +264,14 @@ export default function CitasTiposPage() {
    * puede tumbar la pantalla.
    */
   const [tenantSlug, setTenantSlug] = useState(null);
+  /*
+   * El PRECIO solo lo ve dirección (06/08/2026, Rodrigo). En una consulta con
+   * equipo, lo que cobra cada servicio no es asunto de quien pasa consulta: la
+   * nutricionista necesita el catálogo para saber qué ofrece y cuánto dura, no
+   * la tarifa. `null` mientras se resuelve —se esconde por defecto—: enseñarlo
+   * y quitarlo medio segundo después sería enseñarlo igual.
+   */
+  const [esAdmin, setEsAdmin] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -280,6 +288,13 @@ export default function CitasTiposPage() {
   const eliminados = items.filter((it) => !it.active).length;
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setEsAdmin(["admin", "superadmin"].includes(j?.data?.role)))
+      .catch(() => setEsAdmin(false));   // ante la duda, no se enseña
+  }, []);
 
   useEffect(() => {
     fetch("/api/tenant/settings", { cache: "no-store" })
@@ -516,7 +531,7 @@ export default function CitasTiposPage() {
                 <tr className="bg-neutral-50 border-b border-neutral-200">
                   <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Nombre</th>
                   <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Duración</th>
-                  <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Precio</th>
+                  {esAdmin && <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Precio</th>}
                   <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Modalidades</th>
                   <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Color</th>
                   <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Estado</th>
@@ -538,13 +553,15 @@ export default function CitasTiposPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-neutral-700">{it.duration} min</td>
-                    <td className="px-4 py-3">
-                      {it.price != null && it.price > 0 ? (
-                        <span className="font-medium text-neutral-800">{formatMoney(it.price)}</span>
-                      ) : (
-                        <span className="text-neutral-400">Gratis</span>
-                      )}
-                    </td>
+                    {esAdmin && (
+                      <td className="px-4 py-3">
+                        {it.price != null && it.price > 0 ? (
+                          <span className="font-medium text-neutral-800">{formatMoney(it.price)}</span>
+                        ) : (
+                          <span className="text-neutral-400">Gratis</span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
                         {it.modalities?.map((m) => (
@@ -662,23 +679,25 @@ export default function CitasTiposPage() {
                     className={inputCls}
                   />
                 </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Precio (€)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="Gratis"
-                    value={form.price}
-                    onChange={(e) => updateForm("price", e.target.value)}
-                    className={inputCls}
-                  />
-                  <p className="text-[10px] text-neutral-400 mt-1">
-                    {Number(form.sessionsCount) > 1
-                      ? "Precio del bono ENTERO pagado de una vez."
-                      : "Vacío = sin cobro. Con precio, se cobra al reservar."}
-                  </p>
-                </div>
+                {esAdmin && (
+                  <div>
+                    <label className="block text-[11px] font-medium text-neutral-500 mb-1">Precio (€)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="Gratis"
+                      value={form.price}
+                      onChange={(e) => updateForm("price", e.target.value)}
+                      className={inputCls}
+                    />
+                    <p className="text-[10px] text-neutral-400 mt-1">
+                      {Number(form.sessionsCount) > 1
+                        ? "Precio del bono ENTERO pagado de una vez."
+                        : "Vacío = sin cobro. Con precio, se cobra al reservar."}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Bono de sesiones (04/08/2026). Con 1 se comporta como siempre. */}

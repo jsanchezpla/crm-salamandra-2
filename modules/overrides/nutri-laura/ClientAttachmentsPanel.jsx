@@ -171,7 +171,10 @@ export default function ClientAttachmentsPanel({ clientId }) {
   const limitReached = items.length >= MAX_FILES;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden max-w-3xl">
+    <div className="space-y-4 max-w-3xl">
+    <FirmasPendientes clientId={clientId} />
+
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       {/* Cabecera */}
       <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-2">
         <div>
@@ -412,5 +415,94 @@ export default function ClientAttachmentsPanel({ clientId }) {
         </div>
       )}
     </div>
+    </div>
   );
+}
+
+/**
+ * FirmasPendientes — qué documentos ha firmado esta paciente y cuáles no
+ * (06/08/2026, Rodrigo).
+ *
+ * La ficha decía «1 de 2 firmas» y poco más: con el contrato, sus tres anexos
+ * y el consentimiento parental, ese recuento no dice a quién hay que
+ * perseguir ni por qué papel. Aquí va documento a documento, con quién falta
+ * por cada uno.
+ *
+ * Vive en la pestaña de Documentos porque es donde se viene a mirar el
+ * papeleo. No se pinta nada si el centro no usa contrato: sin documentos que
+ * firmar, una sección vacía solo estorba.
+ */
+function FirmasPendientes({ clientId }) {
+  const [estado, setEstado] = useState(null);
+
+  useEffect(() => {
+    let vivo = true;
+    fetch(`/api/clients/${clientId}/contract`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo) setEstado(j?.data ?? null); })
+      .catch(() => {});   // es informativo: si falla, la pestaña sigue sirviendo
+    return () => { vivo = false; };
+  }, [clientId]);
+
+  const docs = estado?.documentos ?? [];
+  if (docs.length === 0) return null;
+
+  const completos = docs.filter((d) => d.completo).length;
+  const todoFirmado = completos === docs.length;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-2">
+        <div className="text-sm font-semibold text-gray-700">Firmas</div>
+        <span
+          className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+            todoFirmado
+              ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+              : "bg-amber-50 text-amber-800 border border-amber-100"
+          }`}
+        >
+          {todoFirmado ? "Todo firmado" : `${completos} de ${docs.length}`}
+        </span>
+      </div>
+
+      <ul className="divide-y divide-gray-50">
+        {docs.map((d) => (
+          <li key={d.key} className="px-5 py-2.5 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[13px] text-gray-800">{d.titulo}</div>
+              {d.completo ? (
+                <div className="text-[11px] text-gray-400 mt-0.5">
+                  Firmado{d.firmadoPor.length ? ` por ${d.firmadoPor.join(" y ")}` : ""}
+                  {d.firmadoEl ? ` · ${fmtFecha(d.firmadoEl)}` : ""}
+                </div>
+              ) : (
+                <div className="text-[11px] text-amber-700 mt-0.5">
+                  Falta la firma de {d.faltaPor.join(" y ") || "la paciente"}
+                </div>
+              )}
+            </div>
+            <span
+              className={`shrink-0 mt-0.5 text-[11px] font-medium ${
+                d.completo ? "text-emerald-600" : "text-amber-600"
+              }`}
+            >
+              {d.completo ? "✓" : "Pendiente"}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {estado?.viaPapel && (
+        <div className="px-5 py-2 border-t border-gray-50 text-[11px] text-gray-500">
+          Hay un contrato firmado en papel subido a la ficha: cuenta como firmado.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function fmtFecha(iso) {
+  try {
+    return new Date(iso).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
+  } catch { return ""; }
 }

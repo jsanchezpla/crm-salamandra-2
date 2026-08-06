@@ -11,7 +11,14 @@ import {
   sanitizeFileName,
   validateMimeMagicBytes,
 } from "../../../../../lib/documents/documentStorage.js";
-import { CONTRACT_SOURCE, findClientContract, serializeContract, signatureStatus } from "../../../../../lib/clients/clientContract.js";
+import {
+  CONTRACT_SOURCE,
+  findClientContract,
+  serializeContract,
+  signatureStatus,
+  effectiveSigners,
+} from "../../../../../lib/clients/clientContract.js";
+import { documentosQueAplican } from "../../../../../lib/clients/contratoFirma.js";
 
 /**
  * /api/clients/[id]/contract — Contrato del Centro de una FAMILIA
@@ -52,13 +59,74 @@ async function estadoFirma(ctx, cliente, contratoEnPapel = false) {
     try {
       firmas = await ContractSignature.findAll({
         where: { clientId: cliente.id },
-        attributes: ["guardianId", "signerName", "signedAt"],
+        // `templateKey` hace falta para saber QUÉ documento firmó cada uno.
+        attributes: ["guardianId", "signerName", "signedAt", "templateKey"],
       });
     } catch (err) {
       if (err?.parent?.code !== "42P01" && err?.original?.code !== "42P01") throw err;
     }
   }
-  return signatureStatus(cliente, firmas, contratoEnPapel);
+  return {
+    ...signatureStatus(cliente, firmas, contratoEnPapel),
+    documentos: await desgloseDocumentos(ctx, cliente, firmas, contratoEnPapel),
+  };
+}
+
+/**
+ * Qué documentos le tocan a esta ficha y quién ha firmado cada uno
+ * (06/08/2026, Rodrigo: «en la ficha tiene que salir qué le falta por firmar y
+ * si ha firmado»).
+ *
+ * El recuento de `signatureStatus` decía CUÁNTOS faltaban, no CUÁLES: con el
+ * contrato, sus tres anexos y el consentimiento parental, «1 de 2 firmas» no
+ * le dice a nadie a quién hay que perseguir ni por qué papel.
+ *
+ * Devuelve `[]` —no un error— si el centro no usa contrato estructurado o si
+ * la tabla no existe todavía: es una sección informativa de la ficha y no
+ * puede tumbarla.
+ */
+async function desgloseDocumentos(ctx, cliente, firmas, contratoEnPapel) {
+  const { ContractTemplate } = ctx.tenantModels;
+  if (!ContractTemplate) return [];
+
+  let plantillas = [];
+  try {
+    plantillas = await ContractTemplate.findAll({
+      where: { active: true },
+      order: [["createdAt", "ASC"]],
+    });
+  } catch (err) {
+    if (!esTablaAusente(err)) throw err;
+    return [];
+  }
+  if (plantillas.length === 0) return [];
+
+  const aplican = documentosQueAplican(plantillas, firmas, cliente);
+  const firmantes = effectiveSigners(cliente);
+
+  return aplican.map((plantilla) => {
+    const deEste = (firmas ?? []).filter(
+      (f) => (f.templateKey ?? f.template_key) === plantilla.key
+    );
+    const firmadoPor = new Set(
+      deEste.map((f) => String(f.guardianId ?? f.guardian_id).toLowerCase())
+    );
+    const quienesFirmaron = firmantes.filter((g) => firmadoPor.has(g.id.toLowerCase()));
+    const quienesFaltan = firmantes.filter((g) => !firmadoPor.has(g.id.toLowerCase()));
+    // La fecha que se enseña es la de la ÚLTIMA firma: es cuando el documento
+    // quedó completo, que es lo que se busca al mirar la ficha.
+    const fechas = deEste.map((f) => f.signedAt ?? f.signed_at).filter(Boolean).sort();
+
+    return {
+      key: plantilla.key,
+      titulo: plantilla.title || plantilla.key,
+      firmadoPor: quienesFirmaron.map((g) => g.name),
+      faltaPor: quienesFaltan.map((g) => g.name),
+      // En papel cuenta como firmado: la familia ya firmó, aunque no aquí.
+      completo: contratoEnPapel || (firmantes.length > 0 && quienesFaltan.length === 0),
+      firmadoEl: fechas.length ? fechas[fechas.length - 1] : null,
+    };
+  });
 }
 
 export const GET = withTenant(async (_request, rc, ctx) => {
