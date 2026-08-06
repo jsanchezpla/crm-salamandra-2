@@ -532,7 +532,21 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     // banco le va a enseñar un cargo pendiente que no es un cobro; si no, la
     // primera reacción al verlo es una reclamación. La prueba se archiva con la
     // sesión de pago (ver lib/citas/consentimientoRetencion.js).
-    if (precio && body.aceptaRetencion !== true) {
+    /*
+     * ⚠️ UN BONO NO TIENE RETENCIÓN: SE PAGA ENTERO (06/08/2026, Rodrigo).
+     *
+     * Esta comprobación miraba solo el precio, y la pantalla —con razón— no
+     * pinta la casilla de condiciones cuando lo que se compra es un bono: ahí no
+     * se retiene nada, se cobra. Así que en un bono la casilla no existía, el
+     * navegador no mandaba el consentimiento y el servidor respondía «hay que
+     * aceptar las condiciones de la reserva»: un error imposible de resolver,
+     * porque no había ninguna casilla que marcar en toda la página.
+     *
+     * La condición pasa a ser la MISMA que la de la pantalla. Y sigue siendo el
+     * servidor quien manda: en una cita normal con precio, sin consentimiento no
+     * se reserva.
+     */
+    if (precio && !esPack(eventType) && body.aceptaRetencion !== true) {
       return error("Hay que aceptar las condiciones de la reserva para continuar", 422);
     }
 

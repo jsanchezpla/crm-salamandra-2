@@ -6,6 +6,7 @@ import { textoConsentimiento } from "../../../../../lib/citas/consentimientoRete
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AuthGateScreen, useWidgetAuth } from "../_components/AuthGate.jsx";
 import { useCitasPortalSession } from "../_components/useCitasPortalSession.js";
+import { useAdmision } from "../_components/useAdmision.js";
 import { formatMoney } from "../../../../../lib/payments/money.js";
 import { googleCalendarUrl } from "../../../../../lib/citas/googleCalendar.js";
 
@@ -296,11 +297,28 @@ export default function WidgetBookPage() {
   // Esto NO protege: el servidor corta igual y devuelve el mismo aviso con su
   // enlace. Está para que nadie elija hueco y escriba sus datos antes de
   // enterarse.
-  const puertaPrevia = info?.admision?.requerida
-    ? { activa: true, url: info.admision.urlFormulario, soloPrimeraVisita: false }
-    : info?.valoracion?.requiereFormulario && eventType?.isInitialAssessment
-      ? { activa: true, url: info.valoracion.urlFormulario, soloPrimeraVisita: true }
-      : { activa: false, url: null, soloPrimeraVisita: false };
+  /*
+   * ⚠️ Y NO SE LE DICE A QUIEN YA LO HIZO (06/08/2026, Rodrigo). `info` es
+   * público y anónimo: dice que la puerta EXISTE, no si esta persona ha pasado
+   * por ella. Así que el aviso salía SIEMPRE, también a quien acababa de
+   * rellenar el formulario, firmar los contratos y entrar con su cuenta. Puesto
+   * encima del botón de pagar y en amarillo, no se lee como un recordatorio: se
+   * lee como el motivo por el que no le dejan seguir.
+   *
+   * Con la sesión del portal sí se sabe (`useAdmision`), así que a quien está
+   * admitida se le calla. Sin sesión —una reserva pública anónima— se sigue
+   * avisando, que es a quien va dirigido.
+   */
+  const admision = useAdmision(tenantSlug, portal);
+  const yaAdmitida = !admision.cargando && admision.admitida && !!sessionToken;
+
+  const puertaPrevia = yaAdmitida
+    ? { activa: false, url: null, soloPrimeraVisita: false }
+    : info?.admision?.requerida
+      ? { activa: true, url: info.admision.urlFormulario, soloPrimeraVisita: false }
+      : info?.valoracion?.requiereFormulario && eventType?.isInitialAssessment
+        ? { activa: true, url: info.valoracion.urlFormulario, soloPrimeraVisita: true }
+        : { activa: false, url: null, soloPrimeraVisita: false };
 
   // ── Bono de sesiones (04/08/2026) ─────────────────────────────────────────
   // Con `sessionsCount` a 1 —todo lo de hoy— nada de esto se pinta y el flujo
