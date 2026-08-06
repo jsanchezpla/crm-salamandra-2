@@ -480,6 +480,48 @@ function FirmasPendientes({ clientId }) {
                   Falta la firma de {d.faltaPor.join(" y ") || "la paciente"}
                 </div>
               )}
+
+              {/*
+                El PDF de cada firma (06/08/2026, Rodrigo): «no le salen los
+                contratos en la ficha para visualizar o descargar, solo la
+                notificación». Se lista UNA copia por firmante porque cada una
+                lleva su propia firma dentro; con dos progenitores, las dos
+                importan. Si una firma se guardó sin PDF —se genera después y
+                no se deja tumbar la firma si falla— se dice, en vez de dejar un
+                enlace roto.
+              */}
+              {(d.copias ?? []).length > 0 && (
+                <ul className="mt-1 space-y-0.5">
+                  {d.copias.map((c) => (
+                    <li key={c.firmaId} className="text-[11px] text-gray-500">
+                      {c.documentoId ? (
+                        <>
+                          <a
+                            href={`/api/clients/${clientId}/contract/firmado/${c.documentoId}?ver=1`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[var(--color-primary,#1B3A2D)] hover:underline"
+                          >
+                            Ver
+                          </a>
+                          <span className="mx-1 text-gray-300">·</span>
+                          <a
+                            href={`/api/clients/${clientId}/contract/firmado/${c.documentoId}`}
+                            className="text-[var(--color-primary,#1B3A2D)] hover:underline"
+                          >
+                            Descargar
+                          </a>
+                          <span className="text-gray-400"> · copia de {c.nombre}</span>
+                        </>
+                      ) : (
+                        <span className="text-gray-400">
+                          Copia de {c.nombre}: firmada, sin PDF archivado
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             <span
               className={`shrink-0 mt-0.5 text-[11px] font-medium ${

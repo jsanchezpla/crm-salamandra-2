@@ -204,6 +204,53 @@ export default function ClientContractSection({ clientId }) {
           </div>
         )}
 
+        {/*
+          Las COPIAS FIRMADAS, para verlas o descargarlas (06/08/2026, Rodrigo:
+          «no le salen los contratos en la ficha, solo la notificación»).
+
+          Una por firmante y documento: cada copia lleva su propia firma dentro,
+          así que con dos progenitores hay dos PDF del mismo contrato y los dos
+          importan. Sin PDF archivado se dice; la firma vale igual —lo que la
+          sostiene es la traza, no el fichero— pero no hay nada que abrir.
+        */}
+        {(estado?.documentos ?? []).some((d) => (d.copias ?? []).length > 0) && (
+          <div className="pt-2 border-t border-gray-50">
+            <div className="text-xs font-medium text-gray-600 mb-1">Documentos firmados</div>
+            <ul className="space-y-1">
+              {(estado.documentos ?? []).flatMap((d) =>
+                (d.copias ?? []).map((c) => (
+                  <li key={c.firmaId} className="text-xs text-gray-500">
+                    <span className="text-gray-700">{d.titulo}</span>
+                    <span className="text-gray-400"> · {c.nombre}</span>
+                    {c.documentoId ? (
+                      <>
+                        {" — "}
+                        <a
+                          href={`/api/clients/${clientId}/contract/firmado/${c.documentoId}?ver=1`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[var(--color-primary,#1B3A2D)] hover:underline"
+                        >
+                          Ver
+                        </a>
+                        <span className="mx-1 text-gray-300">·</span>
+                        <a
+                          href={`/api/clients/${clientId}/contract/firmado/${c.documentoId}`}
+                          className="text-[var(--color-primary,#1B3A2D)] hover:underline"
+                        >
+                          Descargar
+                        </a>
+                      </>
+                    ) : (
+                      <span className="text-gray-400"> — sin PDF archivado</span>
+                    )}
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+        )}
+
         {error && <div className="text-xs text-rose-600">{error}</div>}
       </div>
     </div>

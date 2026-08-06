@@ -59,8 +59,12 @@ async function estadoFirma(ctx, cliente, contratoEnPapel = false) {
     try {
       firmas = await ContractSignature.findAll({
         where: { clientId: cliente.id },
-        // `templateKey` hace falta para saber QUÉ documento firmó cada uno.
-        attributes: ["guardianId", "signerName", "signedAt", "templateKey"],
+        // `templateKey` hace falta para saber QUÉ documento firmó cada uno, y
+        // `documentId` para poder ABRIRLO desde la ficha (06/08/2026, Rodrigo):
+        // hasta ahora el CRM decía quién había firmado y qué faltaba, pero el
+        // PDF con el clausulado y la firma dentro no se podía ni ver ni
+        // descargar — estaba archivado y era invisible desde aquí.
+        attributes: ["id", "guardianId", "signerName", "signedAt", "templateKey", "documentId"],
       });
     } catch (err) {
       if (err?.parent?.code !== "42P01" && err?.original?.code !== "42P01") throw err;
@@ -125,6 +129,24 @@ async function desgloseDocumentos(ctx, cliente, firmas, contratoEnPapel) {
       // En papel cuenta como firmado: la familia ya firmó, aunque no aquí.
       completo: contratoEnPapel || (firmantes.length > 0 && quienesFaltan.length === 0),
       firmadoEl: fechas.length ? fechas[fechas.length - 1] : null,
+      /*
+       * El PDF de CADA firma (06/08/2026, Rodrigo). Uno por firmante: cada
+       * copia lleva su propia firma dentro, así que con dos progenitores hay
+       * dos documentos del mismo contrato y los dos importan.
+       *
+       * Puede venir sin `documentoId`: el PDF se genera DESPUÉS de guardar la
+       * firma y a propósito no la tumba si falla (la firma vale por los datos y
+       * la traza, no por el fichero). La pantalla enseña la firma igual y
+       * simplemente no ofrece descarga.
+       */
+      copias: deEste
+        .map((f) => ({
+          firmaId: f.id,
+          nombre: f.signerName || "Firmante",
+          firmadoEl: f.signedAt ?? f.signed_at ?? null,
+          documentoId: f.documentId ?? f.document_id ?? null,
+        }))
+        .sort((a, b) => String(a.firmadoEl).localeCompare(String(b.firmadoEl))),
     };
   });
 }
