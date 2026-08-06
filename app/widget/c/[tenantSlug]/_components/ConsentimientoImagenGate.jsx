@@ -21,10 +21,15 @@
 
 import { useEffect, useState } from "react";
 import SignaturePad from "./SignaturePad.jsx";
+import { useEnfriamiento } from "./useEnfriamiento.js";
 
 const headingStyle = { fontFamily: "var(--widget-font-display)", fontWeight: 500 };
 
 export default function ConsentimientoImagenGate({ authFetch, profesional, onTerminado, onMasTarde }) {
+  // Medio segundo sin poder pulsar: el rebote de un doble clic en la
+  // pantalla anterior no puede saltarse esta (ver useEnfriamiento.js).
+  const enfriado = useEnfriamiento();
+
   const [pendientes, setPendientes] = useState([]);
   const [idx, setIdx] = useState(0);
   const [firma, setFirma] = useState(null);
@@ -123,7 +128,7 @@ export default function ConsentimientoImagenGate({ authFetch, profesional, onTer
             <button
               type="button"
               onClick={() => responder(true)}
-              disabled={enviando}
+              disabled={enviando || !enfriado}
               className="flex-1 px-5 py-3 text-sm font-semibold rounded-xl text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
             >
               {enviando ? "Guardando…" : "Sí, lo autorizo"}
@@ -131,7 +136,7 @@ export default function ConsentimientoImagenGate({ authFetch, profesional, onTer
             <button
               type="button"
               onClick={() => responder(false)}
-              disabled={enviando}
+              disabled={enviando || !enfriado}
               className="flex-1 px-5 py-3 text-sm font-semibold rounded-xl border border-[var(--widget-border)] text-[var(--widget-text)] hover:bg-[var(--widget-bg)] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
             >
               No lo autorizo

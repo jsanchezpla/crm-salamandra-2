@@ -26,11 +26,16 @@ import { useState } from "react";
 import SignaturePad from "./SignaturePad.jsx";
 import ContratoFormulario from "./ContratoFormulario.jsx";
 import DatosGate from "./DatosGate.jsx";
+import { useEnfriamiento } from "./useEnfriamiento.js";
 
 const headingStyle = { fontFamily: "var(--widget-font-display)", fontWeight: 500 };
 
 
 export default function ContratoGate({ estado, authFetch, tenantSlug, profesional, onFirmado, onMasTarde }) {
+  // Medio segundo sin poder pulsar: el rebote de un doble clic en la
+  // pantalla anterior no puede saltarse esta (ver useEnfriamiento.js).
+  const enfriado = useEnfriamiento();
+
   const [firma, setFirma] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState(null);
@@ -181,7 +186,7 @@ export default function ContratoGate({ estado, authFetch, tenantSlug, profesiona
             <button
               type="button"
               onClick={() => firma && enviarFirma({ signature: firma })}
-              disabled={!firma || enviando}
+              disabled={!firma || enviando || !enfriado}
               className="w-full px-5 py-3 text-sm font-semibold rounded-xl text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
             >
               {enviando ? "Guardando tu firma…" : "Firmar y entrar"}

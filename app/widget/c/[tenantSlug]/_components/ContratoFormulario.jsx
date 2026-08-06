@@ -22,6 +22,7 @@ import { useMemo, useState } from "react";
 import SignaturePad from "./SignaturePad.jsx";
 import { edadDesde } from "../../../../../lib/clients/formularioAlta.js";
 import { campoEsObligatorio } from "../../../../../lib/clients/datosFicha.js";
+import { useEnfriamiento } from "./useEnfriamiento.js";
 
 const headingStyle = { fontFamily: "var(--widget-font-display)", fontWeight: 500 };
 
@@ -152,6 +153,10 @@ export default function ContratoFormulario({
   onMasTarde,
   profesional,
 }) {
+  // Medio segundo sin poder pulsar: el rebote de un doble clic en la
+  // pantalla anterior no puede saltarse esta (ver useEnfriamiento.js).
+  const enfriado = useEnfriamiento();
+
   const campos = plantilla.fields ?? VACIO;
   const bloques = plantilla.blocks ?? VACIO;
 
@@ -397,7 +402,7 @@ export default function ContratoFormulario({
           <div className="mt-5 flex flex-col gap-2">
             <button
               type="submit"
-              disabled={!listo || enviando}
+              disabled={!listo || enviando || !enfriado}
               className="w-full px-5 py-3 text-sm font-semibold rounded-xl text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
             >
               {enviando ? "Guardando tu firma…" : firmaOpcional && !firma ? "Continuar sin firmar" : "Firmar"}

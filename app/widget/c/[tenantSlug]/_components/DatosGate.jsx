@@ -17,6 +17,7 @@
 import { useMemo, useState } from "react";
 import { campoEsObligatorio } from "../../../../../lib/clients/datosFicha.js";
 import { edadDesde } from "../../../../../lib/clients/formularioAlta.js";
+import { useEnfriamiento } from "./useEnfriamiento.js";
 
 const headingStyle = { fontFamily: "var(--widget-font-display)", fontWeight: 500 };
 
@@ -30,6 +31,10 @@ const INPUT =
 const HTML_TYPE = { email: "email", tel: "tel", date: "date", dni: "text", text: "text" };
 
 export default function DatosGate({ campos, profesional, enviando, error, onGuardar, onMasTarde }) {
+  // Medio segundo sin poder pulsar: el rebote de un doble clic en la
+  // pantalla anterior no puede saltarse esta (ver useEnfriamiento.js).
+  const enfriado = useEnfriamiento();
+
   const [datos, setDatos] = useState(() => Object.fromEntries(campos.map((c) => [c.key, ""])));
 
   const grupos = useMemo(() => {
@@ -198,7 +203,7 @@ export default function DatosGate({ campos, profesional, enviando, error, onGuar
           <div className="mt-6 flex flex-col gap-2">
             <button
               type="submit"
-              disabled={!listo || enviando}
+              disabled={!listo || enviando || !enfriado}
               className="w-full px-5 py-3 text-sm font-semibold rounded-xl text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
             >
               {enviando ? "Guardando…" : "Continuar"}
