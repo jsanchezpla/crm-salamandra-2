@@ -401,7 +401,41 @@ export default function CitasModule() {
       const res = await fetch(`/api/citas/bookings/calendar?${params}`, { cache: "no-store" });
       const j = await res.json();
       if (!j.ok) throw new Error(j.error || "Error cargando citas");
-      success(j.data ?? []);
+
+      /*
+       * «Vacaciones» (06/08/2026): los tramos bloqueados se pintan de fondo,
+       * no como citas. Si no se vieran, recepción solo se enteraría al chocar
+       * con el aviso al guardar, que llega tarde y desconcierta.
+       *
+       * Best-effort: si la lista falla, se enseña la agenda sin sombrear. Los
+       * bloqueos son un aviso visual; quien de verdad los hace cumplir es el
+       * servidor al crear la cita.
+       */
+      let fondos = [];
+      try {
+        const rb = await fetch(
+          `/api/citas/bloqueos?from=${info.startStr}&to=${info.endStr}`,
+          { cache: "no-store" }
+        );
+        const jb = await rb.json();
+        if (jb.ok) {
+          fondos = (jb.data.bloqueos ?? [])
+            // Si el jefe está filtrando por profesional, los bloqueos de quien
+            // no se está mirando sobran. Los del centro (sin persona) se quedan.
+            .filter((b) => !b.teamMemberId || !visibleTmIds || visibleTmIds.includes(b.teamMemberId))
+            .map((b) => ({
+              id: `bloqueo-${b.id}`,
+              title: `${b.label}${b.teamMemberName ? ` · ${b.teamMemberName}` : ""}`,
+              start: b.startAt,
+              end: b.endAt,
+              display: "background",
+              color: "#f3d9d9",
+              extendedProps: { esBloqueo: true },
+            }));
+        }
+      } catch { /* la agenda se ve igual, sin sombrear */ }
+
+      success([...(j.data ?? []), ...fondos]);
     } catch (err) {
       failure(err);
     }
@@ -447,6 +481,9 @@ export default function CitasModule() {
   function showAllTeamMembers() { setVisibleTmIds(null); }
 
   async function handleEventClick(info) {
+    // Los bloqueos de vacaciones son fondo, no citas: no hay ficha que abrir y
+    // pedirla daría un 404. Se quitan desde Tipos de cita.
+    if (info.event.extendedProps?.esBloqueo) return;
     const id = info.event.id;
     const res = await fetch(`/api/citas/bookings/${id}`, { cache: "no-store" });
     const j = await res.json();
@@ -702,6 +739,7 @@ export default function CitasModule() {
   // canceladas/completadas no son arrastrables (startEditable=false desde el
   // endpoint del calendario).
   async function handleEventDrop(info) {
+    if (info.event.extendedProps?.esBloqueo) { info.revert(); return; }
     const nuevoIso = info.event.start ? info.event.start.toISOString() : null;
     if (!nuevoIso) { info.revert(); return; }
     try {

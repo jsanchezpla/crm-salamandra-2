@@ -10,6 +10,7 @@ import {
 } from "../../../../../../../lib/citas/slots.js";
 import { ocupaHuecoWhere } from "../../../../../../../lib/citas/booking.js";
 import { cargarFestivos } from "../../../../../../../lib/citas/festivos.js";
+import { cargarAusencias, restarAusencias } from "../../../../../../../lib/citas/ausencias.js";
 import { profesionalDeQuienPregunta, recortarSiTieneProfesional } from "../../../../../../../lib/citas/quienPregunta.js";
 
 /**
@@ -80,6 +81,15 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenantModels, 
      */
     const suya = await profesionalDeQuienPregunta(tenantModels, request, slug);
 
+    // Las «Vacaciones» que pisan este mes, de una sola consulta para los 31
+    // días. La ventana se abre un día por cada lado para no perder el bloqueo
+    // que arranca la noche anterior.
+    const bloqueos = await cargarAusencias(tenantModels, {
+      desde: new Date(monthStart.getTime() - 24 * 60 * 60 * 1000),
+      hasta: new Date(monthEnd.getTime() + 24 * 60 * 60 * 1000),
+      profesionalId: suya,
+    });
+
     const availableDays = [];
     for (let day = 1; day <= daysInMonth; day++) {
       const dayStart = buildMadridDate(year, month, day, 0, 0);
@@ -87,11 +97,15 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenantModels, 
       if (dayStart > maxBoundary) continue;
 
       const dayOfWeek = getMadridDayOfWeek(dayStart);
-      const applicable = await recortarSiTieneProfesional(
-        tenantModels,
-        pickAvailabilitiesForEventType(allAvailabilitiesJson, eventType.id, dayOfWeek),
-        suya,
-        dayOfWeek
+      const applicable = restarAusencias(
+        await recortarSiTieneProfesional(
+          tenantModels,
+          pickAvailabilitiesForEventType(allAvailabilitiesJson, eventType.id, dayOfWeek),
+          suya,
+          dayOfWeek
+        ),
+        bloqueos,
+        { year, month, day }
       );
       if (applicable.length === 0) continue;
 

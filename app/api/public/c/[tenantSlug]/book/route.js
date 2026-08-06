@@ -64,6 +64,8 @@ import {
   timeStrToMinutes,
 } from "../../../../../../lib/citas/slots.js";
 import { cargarFestivos, esFestivo } from "../../../../../../lib/citas/festivos.js";
+import { cargarAusencias, minutosOcupados } from "../../../../../../lib/citas/ausencias.js";
+import { profesionalDeQuienPregunta } from "../../../../../../lib/citas/quienPregunta.js";
 import {
   asignarSesion,
   esPack,
@@ -366,6 +368,27 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     const { hour: hMadrid, minute: mMadrid } = getMadridParts(scheduledAt);
     const scheduledMin = hMadrid * 60 + mMadrid;
     const endMin = scheduledMin + eventType.duration;
+
+    /*
+     * «Vacaciones» (06/08/2026). Se comprueba aquí igual que el festivo y por
+     * el mismo motivo: los huecos que enseña la pantalla son un filtro visual,
+     * y quien manda el POST a mano —o desde una pestaña abierta desde antes de
+     * meter las vacaciones— se lo salta.
+     */
+    const partes = getMadridParts(scheduledAt);
+    const bloqueos = await cargarAusencias(tenantModels, {
+      desde: new Date(scheduledAt.getTime() - 24 * 60 * 60 * 1000),
+      hasta: new Date(scheduledAt.getTime() + 24 * 60 * 60 * 1000),
+      profesionalId: await profesionalDeQuienPregunta(tenantModels, request, slug),
+    });
+    for (const b of bloqueos) {
+      const t = minutosOcupados(b, partes);
+      // Se pisan si la cita empieza antes de que acabe el bloqueo y acaba
+      // después de que empiece.
+      if (t && scheduledMin < t.fin && endMin > t.inicio) {
+        return error("Ese hueco ya no está disponible. Elige otra fecha.", 422);
+      }
+    }
 
     let withinSlot = false;
     for (const av of applicable) {
@@ -796,8 +819,21 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
           paymentMethodTypes: compraDeBono.metodos,
           // Presente solo en el fraccionado: convierte el cobro en suscripción.
           recurring: compraDeBono.recurrente,
-          successUrl: `${origenPublico(request)}/widget/c/${tenant.slug}/mi-perfil`,
-          cancelUrl: `${origenPublico(request)}/widget/c/${tenant.slug}`,
+          /*
+           * A DÓNDE VUELVE DESPUÉS DE PAGAR (06/08/2026).
+           *
+           * Ahora se sale del iframe para ir a Stripe —la pasarela no se deja
+           * enmarcar—, así que Stripe devuelve la PESTAÑA ENTERA a estas
+           * direcciones. Si apuntan al widget pelado, la paciente acaba fuera de
+           * la web de su nutricionista, sin cabecera y sin sesión, mirando un
+           * portal que le pide identificarse justo después de pagar.
+           *
+           * Por eso se prefieren las páginas de SU web (Configuración → Citas),
+           * que es de donde salió. El widget queda como respaldo para los
+           * centros que aún no las tengan puestas.
+           */
+          successUrl: tenant.settings?.citas?.portalUrl || `${origenPublico(request)}/widget/c/${tenant.slug}/mi-perfil`,
+          cancelUrl: tenant.settings?.citas?.reservaUrl || `${origenPublico(request)}/widget/c/${tenant.slug}`,
           metadata: {
             bookingId: row.id,
             // Lo lee el webhook para crear el bono con el modo correcto.

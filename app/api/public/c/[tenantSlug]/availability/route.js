@@ -12,6 +12,7 @@ import {
   toMadridISOString,
 } from "../../../../../../lib/citas/slots.js";
 import { cargarFestivos } from "../../../../../../lib/citas/festivos.js";
+import { cargarAusencias, restarAusencias } from "../../../../../../lib/citas/ausencias.js";
 import { profesionalDeQuienPregunta, recortarSiTieneProfesional } from "../../../../../../lib/citas/quienPregunta.js";
 
 /**
@@ -88,6 +89,18 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenantModels, 
      */
     const suya = await profesionalDeQuienPregunta(tenantModels, request, slug);
     applicable = await recortarSiTieneProfesional(tenantModels, applicable, suya, dayOfWeek);
+
+    /*
+     * «Vacaciones» (06/08/2026): los tramos en que su profesional no está —o en
+     * que no está nadie— se restan de lo que queda. Va DESPUÉS de recortar al
+     * horario: primero cuándo trabaja, luego cuándo falta.
+     */
+    const bloqueos = await cargarAusencias(tenantModels, {
+      desde: new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day - 1)),
+      hasta: new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day + 2)),
+      profesionalId: suya,
+    });
+    applicable = restarAusencias(applicable, bloqueos, parsed);
 
     if (applicable.length === 0) {
       return ok({ slots: [], reason: "no_availability" });

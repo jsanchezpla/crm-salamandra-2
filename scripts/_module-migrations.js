@@ -143,6 +143,10 @@ export const MODULES = {
   ],
 
   citas: [
+    // «Vacaciones» (06/08/2026): tramos con hora en los que alguien no pasa
+    // consulta. Los festivos cierran el centro un día entero; esto es por
+    // persona y con hora, que es lo que pasa de verdad en un equipo.
+    "migrate-vacaciones",
     "migrate-citas-sprint-1",
     "migrate-calendar-citas-fks",
     "migrate-booking-pending",

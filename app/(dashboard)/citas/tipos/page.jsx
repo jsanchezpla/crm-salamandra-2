@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
+import PanelVacaciones from "../../../../components/citas/PanelVacaciones.jsx";
 import { eurosToCents, centsToEuros, formatMoney } from "../../../../lib/payments/money.js";
 import {
   TIPOS as TIPOS_PREGUNTA,
@@ -601,6 +602,13 @@ export default function CitasTiposPage() {
             </table>
           </div>
         )}
+
+        {/*
+         * «Vacaciones» (06/08/2026, Rodrigo). Va aquí, debajo del catálogo,
+         * porque él lo pidió como «un tipo de cita especial»: es donde lo va a
+         * buscar. Solo admin, y el endpoint lo comprueba también.
+         */}
+        <PanelVacaciones esAdmin={esAdmin === true} />
       </div>
 
       {/* Drawer */}

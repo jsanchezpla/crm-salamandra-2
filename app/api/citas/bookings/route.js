@@ -13,6 +13,7 @@ import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMemb
 import { meetUrlInicial } from "../../../../lib/citas/videollamada.js";
 import { veTodaLaAgenda } from "../../../../lib/citas/visibilidad.js";
 import { cargarFestivos, esFestivo } from "../../../../lib/citas/festivos.js";
+import { cargarAusencias, minutosOcupados } from "../../../../lib/citas/ausencias.js";
 import { getMadridParts } from "../../../../lib/citas/slots.js";
 import { asignarSesion } from "../../../../lib/citas/packs.js";
 
@@ -260,6 +261,35 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
         if (!tm) return error("teamMemberId no existe");
       }
       teamMemberId = tmId;
+    }
+
+    /*
+     * «Vacaciones» (06/08/2026): esa persona no está ese día. Igual que el
+     * festivo, se AVISA pero no se impone —quien manda es el centro, y a veces
+     * se atiende una urgencia a la vuelta—; se reenvía con `permitirBloqueo`.
+     *
+     * Va después de resolver `teamMemberId` porque el bloqueo es POR PERSONA:
+     * antes no se sabría de quién mirar las vacaciones.
+     */
+    if (body.permitirBloqueo !== true) {
+      const bloqueos = await cargarAusencias(tenantModels, {
+        desde: new Date(scheduledAt.getTime() - 24 * 60 * 60 * 1000),
+        hasta: new Date(scheduledAt.getTime() + 24 * 60 * 60 * 1000),
+        profesionalId: teamMemberId,
+      });
+      const partes = getMadridParts(scheduledAt);
+      const inicio = partes.hour * 60 + partes.minute;
+      const fin = inicio + duration;
+      const choca = bloqueos.find((b) => {
+        const t = minutosOcupados(b, partes);
+        return t && inicio < t.fin && fin > t.inicio;
+      });
+      if (choca) {
+        return error(
+          `Ese tramo está bloqueado (${choca.label}). Vuelve a enviarlo confirmando si quieres crearla igualmente.`,
+          409
+        );
+      }
     }
 
     // Solapamiento (solo con citas del MISMO profesional, o sin asignar).
