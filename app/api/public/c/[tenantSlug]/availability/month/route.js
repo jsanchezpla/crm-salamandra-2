@@ -10,6 +10,7 @@ import {
 } from "../../../../../../../lib/citas/slots.js";
 import { ocupaHuecoWhere } from "../../../../../../../lib/citas/booking.js";
 import { cargarFestivos } from "../../../../../../../lib/citas/festivos.js";
+import { profesionalDeQuienPregunta, recortarSiTieneProfesional } from "../../../../../../../lib/citas/quienPregunta.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/availability/month?eventTypeId=X&year=2026&month=5
@@ -19,7 +20,7 @@ import { cargarFestivos } from "../../../../../../../lib/citas/festivos.js";
  *
  * Respuesta: { year, month, availableDays: [2, 3, 5, ...] }
  */
-export const GET = withPublicTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+export const GET = withPublicTenant(async (request, _ctx, { slug, tenantModels, hasModule }) => {
   try {
     if (!hasModule("citas")) return notFound("Módulo no disponible");
 
@@ -70,6 +71,15 @@ export const GET = withPublicTenant(async (request, _ctx, { tenantModels, hasMod
     // Festivos del centro: el widget no puede ofrecer hueco un día cerrado.
     const festivos = await cargarFestivos(tenantModels);
 
+    /*
+     * Si quien mira tiene profesional asignada, el mes se pinta con SUS días
+     * (06/08/2026). Sin esto, el calendario marcaría en verde un día que al
+     * abrirlo aparece sin un solo hueco: peor que no marcarlo.
+     *
+     * Se resuelve UNA vez para el mes entero, no día a día: son 28-31 vueltas.
+     */
+    const suya = await profesionalDeQuienPregunta(tenantModels, request, slug);
+
     const availableDays = [];
     for (let day = 1; day <= daysInMonth; day++) {
       const dayStart = buildMadridDate(year, month, day, 0, 0);
@@ -77,9 +87,10 @@ export const GET = withPublicTenant(async (request, _ctx, { tenantModels, hasMod
       if (dayStart > maxBoundary) continue;
 
       const dayOfWeek = getMadridDayOfWeek(dayStart);
-      const applicable = pickAvailabilitiesForEventType(
-        allAvailabilitiesJson,
-        eventType.id,
+      const applicable = await recortarSiTieneProfesional(
+        tenantModels,
+        pickAvailabilitiesForEventType(allAvailabilitiesJson, eventType.id, dayOfWeek),
+        suya,
         dayOfWeek
       );
       if (applicable.length === 0) continue;

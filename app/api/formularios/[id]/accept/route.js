@@ -81,6 +81,9 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
       clientIdExistente: body.clientId && UUID_RE.test(body.clientId) ? body.clientId : null,
       handledBy,
       handledByTeamId,
+      // Con quién va la paciente. Llega del desplegable de la bandeja; se
+      // valida el formato aquí porque el id viene del navegador.
+      asignarA: body.asignarA && UUID_RE.test(body.asignarA) ? body.asignarA : null,
     });
 
     if (!client) return error("No se ha podido crear la ficha", 500);

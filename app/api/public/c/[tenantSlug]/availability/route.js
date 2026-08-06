@@ -12,6 +12,7 @@ import {
   toMadridISOString,
 } from "../../../../../../lib/citas/slots.js";
 import { cargarFestivos } from "../../../../../../lib/citas/festivos.js";
+import { profesionalDeQuienPregunta, recortarSiTieneProfesional } from "../../../../../../lib/citas/quienPregunta.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/availability?eventTypeId=X&date=YYYY-MM-DD
@@ -22,7 +23,7 @@ import { cargarFestivos } from "../../../../../../lib/citas/festivos.js";
  *   { slots: [{ time: "09:00", datetime: "2026-05-30T09:00:00+02:00" }, ...] }
  *   { slots: [], reason: "past" | "too_far" | "no_availability" }
  */
-export const GET = withPublicTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+export const GET = withPublicTenant(async (request, _ctx, { slug, tenantModels, hasModule }) => {
   try {
     if (!hasModule("citas")) return notFound("Módulo no disponible");
 
@@ -65,11 +66,28 @@ export const GET = withPublicTenant(async (request, _ctx, { tenantModels, hasMod
     const allDayAvailabilities = await Availability.findAll({
       where: { dayOfWeek },
     });
-    const applicable = pickAvailabilitiesForEventType(
+    let applicable = pickAvailabilitiesForEventType(
       allDayAvailabilities.map((a) => a.toJSON()),
       eventType.id,
       dayOfWeek
     );
+
+    /*
+     * Los huecos de SU profesional (06/08/2026, Rodrigo). Si quien pregunta
+     * tiene una asignada en su ficha, el horario del centro se recorta al
+     * suyo: en un centro con equipo, ofrecerle los de otra es ofrecerle una
+     * cita que no le corresponde.
+     *
+     * Se identifica por el email que ya trae la petición del portal. Sin email
+     * —agenda anónima— no hay a quién mirar y se enseña la del centro, que es
+     * como ha funcionado siempre.
+     *
+     * Best-effort a propósito: si algo falla aquí, se sirven los huecos del
+     * centro. Una paciente sin poder pedir cita es mucho peor que una que ve
+     * algún hueco de más y se lo reajustan por teléfono.
+     */
+    const suya = await profesionalDeQuienPregunta(tenantModels, request, slug);
+    applicable = await recortarSiTieneProfesional(tenantModels, applicable, suya, dayOfWeek);
 
     if (applicable.length === 0) {
       return ok({ slots: [], reason: "no_availability" });

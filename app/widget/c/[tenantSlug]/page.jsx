@@ -121,8 +121,10 @@ export default function WidgetSelectionPage() {
     if (!selectedEventTypeId) { setAvailableDays([]); return; }
     let cancelled = false;
     setLoadingMonth(true);
-    fetch(
-      `/api/public/c/${tenantSlug}/availability/month?eventTypeId=${selectedEventTypeId}&year=${calendarYear}&month=${calendarMonth}`,
+    // Con el token si lo hay, igual que los huecos del día: el calendario tiene
+    // que marcar los días de SU profesional, no los del centro.
+    portal.authFetch(
+      `/availability/month?eventTypeId=${selectedEventTypeId}&year=${calendarYear}&month=${calendarMonth}`,
       { cache: "no-store" }
     )
       .then((r) => r.json())
@@ -134,15 +136,24 @@ export default function WidgetSelectionPage() {
       .catch(() => { if (!cancelled) setAvailableDays([]); })
       .finally(() => { if (!cancelled) setLoadingMonth(false); });
     return () => { cancelled = true; };
-  }, [tenantSlug, selectedEventTypeId, calendarYear, calendarMonth]);
+  }, [selectedEventTypeId, calendarYear, calendarMonth, portal.authFetch]);
 
   // ── Carga de slots del día seleccionado ───────────────────────────────────
   useEffect(() => {
     if (!selectedEventTypeId || !selectedDate) { setSlots([]); return; }
     let cancelled = false;
     setLoadingSlots(true);
-    fetch(
-      `/api/public/c/${tenantSlug}/availability?eventTypeId=${selectedEventTypeId}&date=${selectedDate}`,
+    /*
+     * Con el token de la sesión si lo hay (06/08/2026): así el servidor sabe
+     * QUIÉN pregunta y, si tiene profesional asignada, le enseña solo los
+     * huecos de esa persona. El email va firmado dentro del token, nunca en la
+     * URL — es un dato personal y ahí acabaría en registros e historiales.
+     *
+     * Sin sesión, `authFetch` hace una petición normal y se sirve la agenda
+     * del centro, como siempre.
+     */
+    portal.authFetch(
+      `/availability?eventTypeId=${selectedEventTypeId}&date=${selectedDate}`,
       { cache: "no-store" }
     )
       .then((r) => r.json())
@@ -154,7 +165,11 @@ export default function WidgetSelectionPage() {
       .catch(() => { if (!cancelled) setSlots([]); })
       .finally(() => { if (!cancelled) setLoadingSlots(false); });
     return () => { cancelled = true; };
-  }, [tenantSlug, selectedEventTypeId, selectedDate]);
+    // `portal.authFetch` entra en las dependencias: al terminar de resolverse
+    // la sesión cambia, y con ella cambia QUIÉN pregunta. Sin esto, quien abre
+    // la agenda antes de que cargue su sesión se quedaría con los huecos del
+    // centro hasta recargar.
+  }, [selectedEventTypeId, selectedDate, portal.authFetch]);
 
   // Reset cascada al cambiar EventType
   function handleSelectEventType(id) {

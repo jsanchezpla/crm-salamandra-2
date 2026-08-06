@@ -52,6 +52,25 @@ export default function FormulariosModule() {
   const [descartando, setDescartando] = useState(null);
   const [motivoDescarte, setMotivoDescarte] = useState("");
   const [duplicados, setDuplicados] = useState({});
+  const [equipo, setEquipo] = useState([]);
+
+  /*
+   * El equipo, para poder asignar la paciente al aceptarla (06/08/2026,
+   * Rodrigo): «hay que asignar el paciente a una nutricionista y así ve solo
+   * los horarios de esa».
+   *
+   * Si el cliente no tiene el módulo de equipo, esto responde 403 y la lista se
+   * queda vacía: entonces no se enseña el desplegable y aceptar funciona como
+   * siempre. Una bandeja que ya funciona no se rompe por no poder asignar.
+   */
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/team?status=active&limit=200", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo && j?.data?.members) setEquipo(j.data.members); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
 
   const cargar = useCallback(async (estado) => {
     setCargando(true);
@@ -90,14 +109,17 @@ export default function FormulariosModule() {
     return () => { vivo = false; };
   }, [tab, datos.submissions]);
 
-  async function aceptar(submission, clientId = null) {
+  async function aceptar(submission, clientId = null, asignarA = null) {
     setTrabajando(submission.id);
     setAviso(null);
     try {
       const res = await fetch(`/api/formularios/${submission.id}/accept`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(clientId ? { clientId } : {}),
+        body: JSON.stringify({
+          ...(clientId ? { clientId } : {}),
+          ...(asignarA ? { asignarA } : {}),
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "No se ha podido aceptar");
@@ -265,7 +287,8 @@ export default function FormulariosModule() {
             descartando={descartando === s.id}
             motivoDescarte={motivoDescarte}
             onMotivo={setMotivoDescarte}
-            onAceptar={(clientId) => aceptar(s, clientId)}
+            equipo={equipo}
+            onAceptar={(clientId, asignarA) => aceptar(s, clientId, asignarA)}
             onPedirDescarte={() => { setDescartando(s.id); setMotivoDescarte(""); }}
             onCancelarDescarte={() => setDescartando(null)}
             onDescartar={() => cambiarEstado(s, "rejected", motivoDescarte || null)}
@@ -279,7 +302,7 @@ export default function FormulariosModule() {
 }
 
 function Tarjeta({
-  submission, duplicado, ocupada, descartando, motivoDescarte,
+  submission, duplicado, ocupada, descartando, motivoDescarte, equipo,
   onMotivo, onAceptar, onPedirDescarte, onCancelarDescarte, onDescartar, onRecuperar, onEliminar,
 }) {
   const s = submission;
@@ -297,6 +320,11 @@ function Tarjeta({
   // vistazo y se decide a quién abrir.
   const [abierta, setAbierta] = useState(false);
   const alternar = () => setAbierta((v) => !v);
+
+  // A quién se le asigna. Vacío = sin asignar, que es lo que pasaba hasta hoy
+  // y sigue siendo válido: entonces ve la agenda del centro entera.
+  const [asignarA, setAsignarA] = useState("");
+  const hayEquipo = (equipo ?? []).length > 0;
 
   return (
     <article className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
@@ -398,7 +426,7 @@ function Tarjeta({
             Hay un cliente con el mismo teléfono o email: <strong>{duplicado.name}</strong>.
           </p>
           <button
-            onClick={() => onAceptar(duplicado.id)}
+            onClick={() => onAceptar(duplicado.id, asignarA || null)}
             disabled={ocupada}
             className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
           >
@@ -412,8 +440,26 @@ function Tarjeta({
         <div className="border-t border-gray-100 px-4 lg:px-5 py-3 bg-gray-50/60">
           {!descartando ? (
             <div className="flex items-center gap-2 flex-wrap">
+              {hayEquipo && (
+                <label className="flex items-center gap-2 text-sm text-gray-600">
+                  <span className="font-medium">Con</span>
+                  <select
+                    value={asignarA}
+                    onChange={(e) => setAsignarA(e.target.value)}
+                    disabled={ocupada}
+                    className="border border-gray-200 rounded-lg px-2.5 py-2 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 disabled:opacity-50"
+                  >
+                    <option value="">Sin asignar</option>
+                    {equipo.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.displayName || m.email}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <button
-                onClick={() => onAceptar(null)}
+                onClick={() => onAceptar(null, asignarA || null)}
                 disabled={ocupada}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
               >
