@@ -389,7 +389,9 @@ export default function WidgetSelectionPage() {
         <BienvenidaGate
           profesional={info?.name}
           valoracion={valoracion}
-          hrefValoracion={`/widget/c/${tenantSlug}?tipo=${encodeURIComponent(valoracion.slug)}`}
+          // Con `wpa=1`: quien ve esta pantalla ya está identificado, y sin la
+          // marca la agenda podía recibirla como anónima (ver mi-perfil).
+          hrefValoracion={`/widget/c/${tenantSlug}?tipo=${encodeURIComponent(valoracion.slug)}&wpa=1`}
           // Al perfil con la elección hecha: `?perfil=1` para que allí no le
           // vuelvan a preguntar lo mismo nada más llegar.
           onEntrarPerfil={() => router.push(`/widget/c/${tenantSlug}/mi-perfil?perfil=1`)}

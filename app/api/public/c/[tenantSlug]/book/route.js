@@ -47,6 +47,7 @@ import {
   mensajeDePuerta,
 } from "../../../../../../lib/citas/puertaFormulario.js";
 import { puedePedirValoracion } from "../../../../../../lib/citas/puertaValoracion.js";
+import { citaPuedeAvisar } from "../../../../../../lib/clients/comunicaciones.js";
 import {
   exigeContratoFirmado,
   esCitaDeValoracion,
@@ -891,11 +892,27 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
       dedupe: true,
     }).catch(() => {});
 
+    /*
+     * ¿SE LE PUEDE ESCRIBIR? (06/08/2026, Rodrigo)
+     *
+     * Quien dijo que NO quiere correos de citas no recibe este —el resto del
+     * CRM ya lo respetaba (confirmar, cambiar, recordar, WhatsApp); reservar era
+     * el único sitio que escribía igual—. Y lo que se le enseña en pantalla
+     * tiene que decir lo mismo: prometerle un correo que nadie le va a mandar es
+     * peor que no prometer nada.
+     *
+     * Por defecto SÍ: mientras no haya contestado, se le avisa. Sin ficha
+     * todavía —una reserva pública de quien aún no es paciente— también, o se
+     * quedaría sin su confirmación.
+     */
+    const avisarPorEmail = await citaPuedeAvisar(tenantModels, row, "citasEmail");
+
     // Email best-effort según modo del tenant:
     //   - autoConfirm=true  → booking nace confirmed → bookingConfirmed inmediato
     //   - autoConfirm=false → booking nace pending   → bookingReceived (Laura
     //     confirma luego desde /confirm que dispara bookingConfirmed)
     try {
+      if (!avisarPorEmail) throw new Error("SIN_CONSENTIMIENTO_EMAIL");
       let tpl;
       if (autoConfirm) {
         const cancelUrl = row.cancellationToken
@@ -936,7 +953,11 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
       });
       envioRealizado(envio, `citas:book ${row.id}`);
     } catch (mailErr) {
-      process.stderr.write(`[citas:book] email fail (autoConfirm=${autoConfirm}): ${mailErr.message}\n`);
+      if (mailErr.message === "SIN_CONSENTIMIENTO_EMAIL") {
+        process.stdout.write(`[citas:book] sin correo: no acepta avisos por email (booking=${row.id})\n`);
+      } else {
+        process.stderr.write(`[citas:book] email fail (autoConfirm=${autoConfirm}): ${mailErr.message}\n`);
+      }
     }
 
     return created({
@@ -955,6 +976,10 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
         // la profesional la aceptara: la paciente se presentaba a una cita que
         // nadie le había dado.
         status: row.status,
+        // Y si NO se le ha escrito, la pantalla no puede decir que sí. La
+        // decisión es del servidor —depende de lo que la familia haya
+        // contestado sobre sus comunicaciones—, así que viaja resuelta.
+        avisadoPorEmail: avisarPorEmail,
       },
     });
   } catch (err) {

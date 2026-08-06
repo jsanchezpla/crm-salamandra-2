@@ -625,7 +625,11 @@ export default function WidgetBookPage() {
                 </h2>
                 <div className="text-[13px] text-[var(--widget-text-muted)]">
                   {pendienteDeVistoBueno
-                    ? `Queda pendiente de que ${info?.name ?? "la profesional"} la confirme. Te avisamos por correo en cuanto lo haga.`
+                    ? `Queda pendiente de que ${info?.name ?? "la profesional"} la confirme.${
+                        success.avisadoPorEmail === false
+                          ? " Podrás verlo aquí, en tu área privada."
+                          : " Te avisamos por correo en cuanto lo haga."
+                      }`
                     : "Hemos guardado tu reserva."}
                 </div>
               </div>
@@ -653,10 +657,16 @@ export default function WidgetBookPage() {
             )}
 
             <div className="mt-5 pt-5 border-t border-[var(--widget-border)]/60 space-y-3 text-[13px]">
-              <div className="text-[var(--widget-text-muted)]">
-                {pendienteDeVistoBueno ? "Te hemos escrito a " : "Hemos enviado los detalles de tu reserva a "}
-                <b className="text-[var(--widget-text)]">{success.clientEmail}</b>.
-              </div>
+              {/* Solo si de verdad se le ha escrito (06/08/2026, Rodrigo).
+                  Quien dijo que no quiere correos de citas no recibe ninguno, y
+                  prometerle uno que nadie va a mandar es peor que callarse. Lo
+                  decide el servidor: `avisadoPorEmail`. */}
+              {success.avisadoPorEmail !== false && (
+                <div className="text-[var(--widget-text-muted)]">
+                  {pendienteDeVistoBueno ? "Te hemos escrito a " : "Hemos enviado los detalles de tu reserva a "}
+                  <b className="text-[var(--widget-text)]">{success.clientEmail}</b>.
+                </div>
+              )}
               {/* Sin «añadir al calendario» mientras está pendiente: apuntar en
                   la agenda una hora que aún no es suya es pedirle que se
                   presente a una cita que puede no existir. */}

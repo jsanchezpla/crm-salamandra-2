@@ -462,7 +462,16 @@ export default function MiPerfilPage() {
            * Va por SLUG y no por id: es lo que acepta ese parámetro, y además
            * el enlace se puede leer y dictar.
            */
-          hrefValoracion={`/widget/c/${tenantSlug}?tipo=${encodeURIComponent(valoracion.slug)}`}
+          /*
+           * `wpa=1` viaja con ella (06/08/2026). Este enlace sale del área
+           * privada, o sea de alguien YA identificado, y llevaba a la agenda sin
+           * ninguna marca de identidad en la URL. Si por lo que sea la sesión
+           * guardada no está disponible al llegar —caducó, otra pestaña, el
+           * navegador con el almacenamiento bloqueado—, la agenda le plantaba
+           * «Inicia sesión para reservar» a quien acababa de salir de su propio
+           * perfil. Es la misma marca que ya propaga el botón de continuar.
+           */
+          hrefValoracion={`/widget/c/${tenantSlug}?tipo=${encodeURIComponent(valoracion.slug)}&wpa=1`}
           onEntrarPerfil={() => setEligioPerfil(true)}
         />
       </div>
