@@ -7,6 +7,7 @@ import PeriodPicker, { computeRange } from "../../_components/PeriodPicker.jsx";
 import { fmtMoney, fmtPct } from "../../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../../_components/tableSort.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 export default function AnaliticaEmpleadosPage() {
   const sp = useSearchParams();
@@ -63,7 +64,18 @@ export default function AnaliticaEmpleadosPage() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="eyebrow">Finanzas · Analítica</div>
-          <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1">Por empleado</h1>
+          <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1 flex items-center gap-2">
+            Por empleado
+            <HelpTooltip title="Por empleado" placement="bottom">
+              Lo que ha facturado cada persona del equipo en estas fechas y lo que ha costado su
+              nómina.
+              {" "}
+              <strong className="text-white">Solo salen las personas con facturas a su nombre</strong>:
+              quien no tenga ninguna en el periodo no aparece, aunque haya trabajado. El reparto sale
+              de a quién está asignada cada factura, no de quién hizo el trabajo; una factura sin
+              nadie asignado no cuenta para nadie.
+            </HelpTooltip>
+          </h1>
           <p className="text-xs text-neutral-400 mt-1">{from} → {to} · {rows.length} empleados</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -98,7 +110,26 @@ export default function AnaliticaEmpleadosPage() {
                 <SortableTh k="invoiceCount" label="Facturas" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
                 <SortableTh k="averageTicket" label="Ticket medio" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
                 <SortableTh k="salaryCost" label="Coste salarial" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
-                {isAdmin && <SortableTh k="projectedSalaryCost" label="Salario proyect." sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />}
+                {isAdmin && (
+                  <SortableTh
+                    k="projectedSalaryCost"
+                    label="Salario proyect."
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onClick={toggleSort}
+                    align="right"
+                    after={
+                      <HelpTooltip title="Salario proyectado" placement="bottom">
+                        Su sueldo mensual de la ficha de equipo multiplicado por los meses del
+                        periodo. Es una estimación, no un gasto real:
+                        {" "}
+                        <strong className="text-white">no entra en el margen</strong>, que siempre
+                        usa el coste salarial de la columna anterior. Si las dos cifras no se
+                        parecen, es que faltan nóminas por apuntar en Gastos.
+                      </HelpTooltip>
+                    }
+                  />
+                )}
                 <SortableTh k="margin" label="Margen" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
                 <SortableTh k="cancelledCount" label="Cancelaciones" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
               </tr>

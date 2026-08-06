@@ -98,19 +98,54 @@ Leyenda: `[x]` hecho · `[-]` mirada, no necesita · `[ ]` pendiente
 
 **Citas queda cerrado.**
 
-### Facturación — el más denso, el siguiente
-- [ ] `facturacion` · `facturacion/resumen`
-- [ ] `facturacion/facturas` · `facturacion/recurrentes`
+### Facturación — HECHO (06/08/2026)
+
+**20 ayudas en 17 pantallas**, ninguna con más de dos. Salieron 44 en la primera
+pasada y se quitaron 24: el error no fue el contenido —varias están verificadas
+contra el endpoint— sino el volumen. Con tres o cuatro globos en una pantalla se
+dejan de abrir todos, incluido el bueno. Lo que más se repitió: «los importes van
+sin IVA», escrito SIETE veces, y «un cobro sin factura no suma aquí», CUATRO.
+Cada una tenía razón en su pantalla; la densidad solo se ve mirando el módulo
+entero, así que conviene contar los `<HelpTooltip>` del módulo antes de darlo por
+cerrado.
+
+Dos cosas que NO se pueden repetir en los módulos que quedan: una tarjeta que era
+un `<Link>` se convirtió en `<div>` con un ancla encima para hacerle hueco a un
+globo, y en otra pantalla se inventó una barra gris que no era ni filtro ni
+leyenda, solo percha. **Si hay que tocar el marcado para colocar una ayuda, la
+ayuda va en otro sitio o no va.**
+
+Y una de tono: una ayuda decía «mientras no haya sociedad, cada socio factura por
+su cuenta». Eso es la situación de Salamandra escrita dentro del producto de un
+cliente. No presuponer nunca forma jurídica, tamaño ni cómo tributa quien lee.
+
+- [x] `facturacion` — el periodo solo mueve Facturado y Cobrado; los presupuestos
+      y «Acción requerida» son la foto de hoy, y por eso la conversión del embudo
+      se lee como pésima sin serlo
+- [x] `facturacion/resumen` — «Cobrado» va por fecha de EMISIÓN de la factura, así
+      que nunca cuadra con el total de la pantalla Cobros
+- [x] `facturacion/facturas` — emitida no es cobrada, «Vencida» se pone sola, y al
+      emitir se consume número de serie y ya no hay marcha atrás
+- [x] `facturacion/recurrentes` — sin globo: lo suyo (que la fecha de próxima
+      emisión NO avanza al facturar) se dijo dentro de la banda ámbar que ya
+      estaba, que es donde la gente mira
 - [x] `facturacion/cobros` — emitir no es cobrar, y la morosidad vive DENTRO de
       esta pantalla (facturas vencidas sin cobro), no en una lista aparte
-- [ ] `facturacion/presupuestos` (+ `[id]`)
-- [ ] `facturacion/costes` · `facturacion/proveedores`
+- [x] `facturacion/presupuestos` (+ `[id]`) — «Convertir en factura» crea un
+      BORRADOR que hay que emitir aparte, y al convertirlo el presupuesto queda
+      bloqueado
+- [x] `facturacion/costes` · `facturacion/proveedores` — proveedor es la MISMA
+      ficha para Gastos y para el almacén, y darlo de baja lo borra de verdad si
+      no tiene gastos
 - [x] `facturacion/arqueo` — un cierre es la FOTO de ese día: la diferencia se
       guarda tal cual y no se recalcula aunque luego corrijas un cobro
 - [x] `facturacion/cumplimiento` — Verifactu y Factura-e son DOS obligaciones
       distintas que suenan igual; esta pantalla no emite nada, solo informa
-- [ ] `facturacion/analitica` (+ `clientes`, `empleados`, `iva`, `socios`)
-- [ ] `facturacion/configuracion`
+- [x] `facturacion/analitica` (+ `clientes`, `empleados`, `iva`, `socios`) — el
+      trimestre del IVA es el EN CURSO, no el cerrado: no es lo que se declara
+- [x] `facturacion/configuracion` — los datos fiscales se escriben desde DOS
+      pantallas llamadas «Configuración», y cambiar una serie provoca un 422 que
+      no se anuncia en ningún sitio
 
 ### Equipo
 - [ ] `equipo` · `equipo/bandeja` · `equipo/actividad`

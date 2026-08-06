@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Select from "../../../../components/ui/Select.jsx";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
 
 const STATUS = {
@@ -221,8 +222,15 @@ export default function PresupuestosPage() {
         {!loading && quotes.length > 0 && (
           <div className="flex items-center justify-between px-4 py-2.5 border-t border-neutral-200 bg-neutral-50 text-[12px] text-neutral-500">
             <span>{quotes.length} presupuestos</span>
-            <span className="font-display text-[var(--ink-900)]">
+            <span className="font-display text-[var(--ink-900)] inline-flex items-center gap-1.5">
               Aceptado sin facturar: {fmtMoney(totalAceptado)}
+              <HelpTooltip title="Aceptado sin facturar" placement="top">
+                Lo que ya han dicho que sí y todavía no se ha convertido en factura, con IVA.
+                {" "}
+                <strong className="text-white">Suma solo los presupuestos que se ven ahora en la
+                lista</strong>: al cambiar de pestaña o buscar, el total cambia con ella. No es el
+                total de todo el año.
+              </HelpTooltip>
             </span>
           </div>
         )}

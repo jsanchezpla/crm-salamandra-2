@@ -7,6 +7,7 @@ import PeriodPicker, { computeRange } from "../../_components/PeriodPicker.jsx";
 import { fmtMoney, fmtPct } from "../../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../../_components/tableSort.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 export default function AnaliticaClientesPage() {
   const sp = useSearchParams();
@@ -58,7 +59,17 @@ export default function AnaliticaClientesPage() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="eyebrow">Finanzas · Analítica</div>
-          <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1">Por cliente</h1>
+          <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1 flex items-center gap-2">
+            Por cliente
+            <HelpTooltip title="Por cliente" placement="bottom">
+              Lo que ha facturado cada cliente en las fechas de arriba.{" "}
+              <strong className="text-white">Los importes van sin IVA</strong>, así que no cuadran
+              con el total de sus facturas: el IVA pasa por la empresa pero no es suyo. No cuentan
+              los borradores ni las anuladas, y solo aparece quien tenga alguna factura en esas
+              fechas. El margen solo descuenta los gastos que se apuntaron a ese cliente al
+              registrarlos, así que quien no tenga ninguno sale al 100%.
+            </HelpTooltip>
+          </h1>
           <p className="text-xs text-neutral-400 mt-1">{from} → {to} · {rows.length} clientes</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

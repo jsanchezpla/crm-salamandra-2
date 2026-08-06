@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PeriodPicker, { computeRange } from "../../_components/PeriodPicker.jsx";
 import Kpi, { fmtMoney, fmtDate } from "../../_components/Kpi.jsx";
+import HelpTooltip from "../../../../../components/ui/HelpTooltip.jsx";
 
 export default function IvaPage() {
   const sp = useSearchParams();
@@ -31,7 +32,18 @@ export default function IvaPage() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="eyebrow">Finanzas · Fiscalidad</div>
-          <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1">Impuestos</h1>
+          <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1 flex items-center gap-2 flex-wrap">
+            <span>Impuestos</span>
+            <HelpTooltip title="Impuestos" placement="bottom">
+              Lo que llevas de IVA e IRPF en el periodo que elijas aquí debajo.
+              {" "}
+              <strong className="text-white">Cuenta por la fecha de la factura, no por cuándo te pagan</strong>:
+              una factura de marzo que aún no has cobrado ya suma IVA aquí. Los borradores no cuentan.
+              {" "}
+              Y al entrar se abre el <strong className="text-white">trimestre en curso</strong>, que
+              todavía no ha terminado — no el último cerrado.
+            </HelpTooltip>
+          </h1>
           <p className="text-xs text-neutral-400 mt-1">{from} → {to}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -56,12 +68,7 @@ export default function IvaPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Kpi label="IVA Repercutido" value={fmtMoney(data.model303.outputVat)} sub="Ventas" variant="dark" />
             <Kpi label="IVA Soportado" value={fmtMoney(data.model303.deductibleInputVat)} sub="Compras deducibles" variant="white" />
-            <Kpi
-              label={data.model303.difference >= 0 ? "A pagar" : "A devolver"}
-              value={fmtMoney(Math.abs(data.model303.difference))}
-              sub="Diferencia (estimación)"
-              variant={data.model303.difference >= 0 ? "amber" : "emerald"}
-            />
+            <Kpi label={data.model303.difference >= 0 ? "A pagar" : "A devolver"} value={fmtMoney(Math.abs(data.model303.difference))} sub="Diferencia (estimación)" variant={data.model303.difference >= 0 ? "amber" : "emerald"} />
           </div>
 
           {/* IRPF y lo pagado a Hacienda. Antes había que salir del CRM para

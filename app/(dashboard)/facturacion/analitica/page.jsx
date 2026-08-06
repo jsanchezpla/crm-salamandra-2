@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 
 const SECTIONS = [
   { href: "/facturacion/analitica/iva", label: "Libro IVA · Modelo 303", desc: "Ventas, compras deducibles, diferencia, exportación a Excel" },
@@ -14,7 +15,15 @@ export default function AnaliticaIndex() {
       <div className="flex items-end justify-between gap-3 mb-6">
         <div>
           <div className="eyebrow">Finanzas · Analítica</div>
-          <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1">Analítica</h1>
+          <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1 flex items-center gap-2">
+            <span>Analítica</span>
+            <HelpTooltip title="Qué cuentan estos informes" placement="bottom">
+              Los importes van <strong className="text-white">sin IVA</strong>, así que no cuadran
+              con los totales que ves en Facturas. Cada factura cuenta en la fecha en que se emitió,
+              aunque el dinero entre más tarde: para verlo por la fecha en que llegó, mira Cobros.
+              No entran los borradores ni las facturas anuladas o rectificadas.
+            </HelpTooltip>
+          </h1>
         </div>
         <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
       </div>

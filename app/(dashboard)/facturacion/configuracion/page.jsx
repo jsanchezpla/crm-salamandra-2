@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Select from "@/components/ui/Select.jsx";
 
 const inputCls =
@@ -85,7 +86,17 @@ export default function ConfiguracionPage() {
       <div className="flex items-end justify-between gap-3">
         <div>
           <div className="eyebrow">Finanzas · Configuración</div>
-          <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1">Configuración</h1>
+          <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1 flex items-center gap-2">
+            Configuración
+            <HelpTooltip title="Configuración de facturación" placement="bottom">
+              Los datos con los que facturas tú. La razón social, el NIF y la dirección son
+              {" "}
+              <strong className="text-white">los mismos</strong> que salen en el engranaje de
+              Configuración, abajo del todo: es un solo dato con dos puertas, y cambiarlo aquí
+              lo cambia allí. El régimen fiscal (empresa o autónomo) y la exención de IVA solo
+              se tocan allí.
+            </HelpTooltip>
+          </h1>
           <p className="text-xs text-neutral-400 mt-1">Datos fiscales, series, tipos de IVA</p>
         </div>
         <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
@@ -166,7 +177,19 @@ export default function ConfiguracionPage() {
       </Section>
 
       {/* Series */}
-      <Section title="Series de facturación">
+      <Section
+        title="Series de facturación"
+        help={
+          <HelpTooltip title="Series y numeración" placement="top">
+            Cada serie lleva su propia numeración. El contador sube{" "}
+            <strong className="text-white">solo al emitir</strong>: un borrador no gasta número,
+            y al cambiar de año vuelve a empezar por el 1. Dentro de una serie los números van
+            en orden de fecha, así que no podrás emitir una factura con fecha anterior a la
+            última que ya emitiste en ella. Las series se dejan preparadas al poner en marcha la
+            facturación; aquí solo se consultan.
+          </HelpTooltip>
+        }
+      >
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[480px]">
             <thead>
@@ -204,10 +227,13 @@ export default function ConfiguracionPage() {
   );
 }
 
-function Section({ title, children }) {
+function Section({ title, help, children }) {
   return (
     <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-      <h2 className="eyebrow mb-3">{title}</h2>
+      <h2 className="eyebrow mb-3 flex items-center gap-1.5">
+        {title}
+        {help}
+      </h2>
       {children}
     </div>
   );

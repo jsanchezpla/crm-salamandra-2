@@ -90,8 +90,13 @@ function getPath(obj, path) {
 /**
  * Cabecera de columna con indicador de orden.
  * Si onClick no se pasa, queda como cabecera no ordenable.
+ *
+ * `after` es un adorno opcional a la derecha de la flecha (típicamente un
+ * HelpTooltip). Va dentro del <th> pero con el clic detenido, así que pulsarlo
+ * NO reordena la tabla y la columna se sigue ordenando desde toda la celda,
+ * igual que las demás.
  */
-export function SortableTh({ k, label, sortKey, sortDir, onClick, align = "left", className = "" }) {
+export function SortableTh({ k, label, sortKey, sortDir, onClick, align = "left", className = "", after = null }) {
   const active = sortKey === k;
   const sortable = typeof onClick === "function";
   const alignCls = align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
@@ -108,6 +113,11 @@ export function SortableTh({ k, label, sortKey, sortDir, onClick, align = "left"
         {sortable && (
           <span className={`text-[8px] ${active ? "opacity-100" : "opacity-30"}`}>
             {active ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
+          </span>
+        )}
+        {after && (
+          <span className="inline-flex cursor-default" onClick={(e) => e.stopPropagation()}>
+            {after}
           </span>
         )}
       </span>

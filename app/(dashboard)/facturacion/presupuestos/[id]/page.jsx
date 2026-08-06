@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import HelpTooltip from "../../../../../components/ui/HelpTooltip.jsx";
 
 const STATUS = {
   draft: { label: "Borrador", cls: "bg-neutral-100 text-neutral-600" },
@@ -150,6 +151,16 @@ export default function PresupuestoDetallePage() {
         <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] tracking-tight mt-1 flex items-center gap-3">
           {quote.number}
           <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${st.cls}`}>{st.label}</span>
+          <HelpTooltip title="Presupuesto" placement="bottom">
+            Guarda antes de marcar un estado: lo que hayas tocado en las líneas y no hayas
+            guardado se pierde al pulsar los botones de estado.
+            {" "}
+            «Convertir en factura» crea una{" "}
+            <strong className="text-white">factura en borrador</strong>: falta emitirla desde
+            Facturas para que tenga número bueno y cuente, y el presupuesto queda bloqueado —ya
+            no se puede editar ni borrar—. Si facturas con IRPF, la factura sale con la retención
+            restada y su total no coincidirá con el de aquí.
+          </HelpTooltip>
         </h1>
       </div>
 

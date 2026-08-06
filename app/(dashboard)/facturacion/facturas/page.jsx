@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import StatusBadge, { INVOICE_STATUS_LABELS } from "../_components/StatusBadge.jsx";
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
@@ -353,7 +354,17 @@ export default function FacturasPage() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
         <div>
           <div className="eyebrow">Finanzas · Documentos</div>
-          <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1">Facturas</h1>
+          <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1 flex items-center gap-2">
+            Facturas
+            <HelpTooltip title="Facturas" placement="bottom">
+              Emitir una factura no es cobrarla: <strong className="text-white">Emitida</strong> y{" "}
+              <strong className="text-white">Enviada</strong> solo dicen que el documento existe y
+              que salió. El dinero se apunta en Cobros y vuelve aquí, en la columna Cobrado.
+              {" "}
+              <strong className="text-white">Vencida</strong> no la marca nadie: aparece sola en
+              cuanto pasa la fecha de vencimiento y sigue quedando dinero por cobrar.
+            </HelpTooltip>
+          </h1>
           <p className="text-xs text-neutral-400 mt-1">{total} {total === 1 ? "factura" : "facturas"}</p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -916,6 +927,15 @@ function DetailView({ invoice, isAdmin, onAction, onEdit, onOpenLinked, saving }
         const cantIssue = invoice.status === "draft" && fiscalMissing.length > 0;
         return (
         <div className="space-y-3 pt-4 border-t border-neutral-100">
+          <h3 className="eyebrow flex items-center gap-1.5">
+            Acciones
+            <HelpTooltip title="Emitir no tiene vuelta atrás" placement="top">
+              Mientras es <strong className="text-white">borrador</strong> no tiene número y se
+              puede cambiar o borrar. Al emitirla se le pone el número de la serie y ya no se toca:
+              lo que esté mal se arregla con una rectificativa. Ojo con la fecha, tampoco puede ser
+              anterior a la de la última factura emitida de esa serie.
+            </HelpTooltip>
+          </h3>
           {cantIssue && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
               <strong>No se puede emitir:</strong> el cliente no tiene {fiscalMissing.join(" ni ")}.{" "}

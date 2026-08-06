@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
@@ -181,9 +182,19 @@ export default function CostesPage() {
         <div>
           <div className="eyebrow">Finanzas · Operativa</div>
           <h1 className="font-display text-2xl text-[var(--ink-900)] mt-1">Costes</h1>
-          <p className="text-xs text-neutral-400 mt-1">
-            Total filtrado: <span className="font-semibold text-neutral-700 tabular">{fmtMoney(totalBase)}</span>
-            <span className="text-neutral-300"> · IVA {fmtMoney(totalVat)} · Total {fmtMoney(totalAll)}</span>
+          <p className="text-xs text-neutral-400 mt-1 flex flex-wrap items-center gap-x-1.5">
+            <span>
+              Total filtrado: <span className="font-semibold text-neutral-700 tabular">{fmtMoney(totalBase)}</span>
+              <span className="text-neutral-300"> · IVA {fmtMoney(totalVat)} · Total {fmtMoney(totalAll)}</span>
+            </span>
+            <HelpTooltip title="Total filtrado" placement="bottom">
+              Hay dos «totales» y no son lo mismo. El de la izquierda, en negrita, es la{" "}
+              <strong className="text-white">base: el gasto sin IVA</strong>. Lo que de verdad salió
+              del banco es el <strong className="text-white">Total</strong> del final.
+              {" "}
+              Las tres cifras suman solo los gastos que estás viendo ahora: cambian con los filtros
+              y con la búsqueda.
+            </HelpTooltip>
           </p>
           <p className="text-[11px] text-emerald-700 mt-0.5">
             Ahorro IRPF de estos gastos ({IRPF_MIN}–{IRPF_MAX}%): {fmtMoney(irpfSaving(totalBase).min)} – {fmtMoney(irpfSaving(totalBase).max)}

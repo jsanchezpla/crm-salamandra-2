@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import PeriodPicker, { computeRange } from "../../_components/PeriodPicker.jsx";
 import { fmtMoney } from "../../_components/Kpi.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 export default function PorSocioPage() {
   const sp = useSearchParams();
@@ -61,7 +62,16 @@ export default function PorSocioPage() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="eyebrow">Finanzas · Informes</div>
-          <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">Por socio</h1>
+          <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1 flex items-center gap-2 flex-wrap">
+            <span>Por socio</span>
+            <HelpTooltip title="Por socio" placement="bottom">
+              Cada socio aparece en su fila y abajo, en «Conjunto», la suma de todos.
+              {" "}
+              <strong className="text-white">Son cifras de lo EMITIDO en el periodo, no del dinero
+              que ha entrado</strong>: una factura sin cobrar cuenta igual que una pagada. Lo que se
+              ha cobrado de verdad está en Cobros.
+            </HelpTooltip>
+          </h1>
           <p className="text-xs text-neutral-400 mt-1">
             Lo que ha ganado cada socio y el conjunto. {from} → {to}
           </p>
@@ -85,7 +95,15 @@ export default function PorSocioPage() {
               <span className="text-right">IRPF retenido</span>
               <span className="text-right">Gastos</span>
               <span className="text-right">IRPF que ahorra</span>
-              <span className="text-right">Neto</span>
+              <span className="flex items-center justify-end gap-1">
+                Neto
+                <HelpTooltip title="Neto" placement="bottom">
+                  Facturado menos Gastos, las dos cifras sin IVA, y nada más: no se resta el IRPF
+                  retenido, que va en su columna, ni los impuestos que toque pagar después por ese
+                  beneficio. <strong className="text-white">No es el dinero que queda</strong>, y
+                  cuenta lo emitido, no lo cobrado.
+                </HelpTooltip>
+              </span>
             </div>
             {data.partners.length === 0 ? (
               <div className="px-4 py-8 text-sm text-neutral-400 text-center">Sin datos en el periodo.</div>

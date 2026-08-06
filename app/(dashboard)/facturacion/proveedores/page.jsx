@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -132,7 +133,16 @@ export default function ProveedoresPage() {
     <div className="p-4 lg:p-8 space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-neutral-800">Proveedores</h1>
+          <h1 className="text-lg font-semibold text-neutral-800 flex items-center gap-2">
+            Proveedores
+            <HelpTooltip title="Dar de baja un proveedor" placement="bottom">
+              No siempre hace lo mismo. Si le has registrado algún gasto, el proveedor solo se
+              oculta de las listas: el histórico conserva su nombre y puedes reactivarlo.
+              {" "}
+              <strong className="text-white">Si no tiene ningún gasto se borra del todo</strong>,
+              sin vuelta atrás — aunque te haya entregado mercancía en el almacén.
+            </HelpTooltip>
+          </h1>
           <p className="text-[12.5px] text-neutral-500 mt-0.5">
             A quién le compras. Se elige al registrar un gasto y al recibir mercancía en el almacén.
           </p>

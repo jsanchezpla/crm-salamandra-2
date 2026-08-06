@@ -125,7 +125,9 @@ export default function RecurrentesPage() {
             Aquí defines plantillas de recurrencia (cliente, frecuencia, próxima fecha), pero el motor de
             emisión automática <strong>aún no está implementado</strong>. La fecha de «próxima emisión» es
             <strong> orientativa</strong>: tendrás que ir a <a href="/facturacion/facturas" className="underline font-semibold">Facturas</a> y
-            crear cada factura manualmente cuando llegue su fecha. La emisión vía n8n se hará en una iteración futura.
+            crear cada factura manualmente cuando llegue su fecha. Y <strong>esa fecha no avanza al
+            facturar</strong>: se queda igual aunque ya la hayas emitido, y aquí no queda constancia de
+            lo ya facturado — eso se ve en Facturas. La emisión vía n8n se hará en una iteración futura.
           </div>
         </div>
       </div>

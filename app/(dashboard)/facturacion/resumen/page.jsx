@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import PeriodPicker, { computeRange } from "../_components/PeriodPicker.jsx";
 import Kpi, { fmtMoney, fmtPct } from "../_components/Kpi.jsx";
 
@@ -80,9 +81,7 @@ export default function FacturacionResumen() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="eyebrow">Finanzas · Resumen</div>
-          <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">
-            Resumen ejecutivo
-          </h1>
+          <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">Resumen ejecutivo</h1>
           <p className="text-xs text-neutral-400 mt-1">{from && to ? `${from} → ${to}` : "Cargando periodo..."}</p>
         </div>
         <PeriodPicker />
@@ -99,7 +98,25 @@ export default function FacturacionResumen() {
         {data && (
           <>
             <Kpi label="Facturado" value={fmtMoney(income.billedBase)} sub="Base imponible · sin IVA" variant="dark" />
-            <Kpi label="Cobrado" value={fmtMoney(income.collectedBase)} sub={`${fmtPct(income.collectedPct)} del facturado · base`} variant="primary" />
+            <Kpi
+              label={
+                <span className="inline-flex items-center gap-1">
+                  Cobrado
+                  <HelpTooltip title="Cobrado" placement="bottom">
+                    Lo pagado de las facturas <strong className="text-white">de este periodo</strong>,
+                    aunque el dinero entrara después: si en marzo cobras una factura de enero, sube
+                    el cobrado de enero, no el de marzo.
+                    {" "}
+                    Por eso no cuadra con el total de la pantalla Cobros, que va por el día en que
+                    entró el dinero. Y un cobro registrado sin factura —la cuota del mes— no entra
+                    en esta cifra.
+                  </HelpTooltip>
+                </span>
+              }
+              value={fmtMoney(income.collectedBase)}
+              sub={`${fmtPct(income.collectedPct)} del facturado · base`}
+              variant="primary"
+            />
             <Kpi label="Pendiente" value={fmtMoney(income.pendingCollection)} sub={`${income.pendingInvoiceCount} factura${income.pendingInvoiceCount === 1 ? "" : "s"} · ${income.pendingClientCount} cliente${income.pendingClientCount === 1 ? "" : "s"}`} variant={income.pendingCollection > 0 ? "amber" : "white"} />
             <Kpi label="Ticket medio" value={fmtMoney(income.averageTicket)} sub="Base imponible / nº facturas" variant="white" />
           </>

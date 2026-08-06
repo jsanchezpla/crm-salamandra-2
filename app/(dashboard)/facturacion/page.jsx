@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import HelpTooltip from "../../../components/ui/HelpTooltip.jsx";
 import PeriodPicker, { computeRange } from "./_components/PeriodPicker.jsx";
 import { fmtMoney } from "./_components/Kpi.jsx";
 
@@ -20,7 +21,7 @@ function FunnelStep({ i, label, value, caption }) {
         borderBottomRightRadius: i === 3 ? 12 : 0,
       }}
     >
-      <div className="text-[10px] uppercase tracking-wide font-semibold opacity-80">{label}</div>
+      <span className="text-[10px] uppercase tracking-wide font-semibold opacity-80">{label}</span>
       <div className="font-display text-lg lg:text-2xl mt-1 truncate">{value}</div>
       <div className="text-[11px] opacity-80 mt-0.5 truncate">{caption}</div>
       {i < 3 && (
@@ -78,8 +79,15 @@ export default function PanelOperativo() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="eyebrow">Operativa · Ventas y documentos</div>
-          <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1">
-            Panel operativo
+          <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1 flex items-center gap-2 flex-wrap">
+            <span>Panel operativo</span>
+            <HelpTooltip title="Panel operativo" placement="bottom">
+              Las fechas de la derecha solo mueven los dos últimos escalones del embudo,{" "}
+              <strong className="text-white">Facturado y Cobrado</strong>. Presupuestos, Aceptados
+              y Acción requerida son la foto de HOY: no cambian elijas el periodo que elijas. Y el
+              embudo mezcla presupuestos con IVA y facturas sin IVA, así que ese escalón baja sin
+              haberse perdido un euro.
+            </HelpTooltip>
           </h1>
           <p className="text-xs text-neutral-400 mt-1">El día a día del ciclo comercial y de cobro.</p>
         </div>
@@ -97,7 +105,12 @@ export default function PanelOperativo() {
         <div className="flex gap-0 items-stretch">
           <FunnelStep i={0} label="Presupuestos" value={fmtMoney(f.presupuestos.amount)} caption={`${f.presupuestos.count} abiertos`} />
           <FunnelStep i={1} label="Aceptados" value={fmtMoney(f.aceptados.amount)} caption={`${f.aceptados.count} · por facturar`} />
-          <FunnelStep i={2} label="Facturado" value={fmtMoney(f.facturado.amount)} caption={`${f.facturado.count} factura${f.facturado.count === 1 ? "" : "s"}`} />
+          <FunnelStep
+            i={2}
+            label="Facturado"
+            value={fmtMoney(f.facturado.amount)}
+            caption={`${f.facturado.count} factura${f.facturado.count === 1 ? "" : "s"}`}
+          />
           <FunnelStep i={3} label="Cobrado" value={fmtMoney(f.cobrado.amount)} caption={`${f.cobrado.pct}%`} />
         </div>
       ) : null}
