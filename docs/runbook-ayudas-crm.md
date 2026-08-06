@@ -290,7 +290,68 @@ Nota de método que se confirmó aquí: cuando el fichero de la ruta es un
 envoltorio sin rótulos (soporte, documentos), la ayuda va al componente que
 pinta de verdad la pantalla, no se inventa marcado en el envoltorio.
 
-### Overrides — al final
-- [ ] `nutri-laura/LeadsModule` — embudo nutricional, diverge
-- [ ] `aumenta/LeadsModule` — «Interesados», diverge
-- [ ] El resto: comprobar que heredan y no tocar
+### Overrides — HECHO (06/08/2026). **RUNBOOK COMPLETO.**
+
+- [x] `nutri-laura/LeadsModule` — «Convertir a paciente» crea la ficha y cambia
+      la etapa en dos pasos; si el segundo falla no avisa de nada y la ficha ya
+      está creada, así que volver a pulsar la duplica
+- [x] `aumenta/LeadsModule` — la lista enseña 200 y no hay forma de seguir
+      bajando: al interesado nº 201 solo se llega buscándolo
+- [x] `abarcaia/ReferidosModule` — el único del resto que divergía de verdad
+- [-] Los demás heredan: son la misma tabla con otros rótulos
+
+---
+
+## Cierre — qué salió de todo esto (06/08/2026)
+
+**53 ayudas en unas 76 pantallas.** Módulo a módulo: Facturación 20 (de 44 —
+hubo que quitar 24), Clínica y Pacientes 8, Equipo 8, Comercial 7, Resto 7,
+Nutrición 2, Overrides 6, más las de Clientes y Citas del día anterior.
+
+**Lo que hizo la diferencia** fue poner el listón en NO escribir. Facturación se
+hizo sin criterio y salió al triple de densidad; en cuanto se dijo por delante
+que «esta pantalla no necesita ninguna» es la respuesta correcta la mayoría de
+las veces, la cosa se ordenó sola: Equipo salió a una por pantalla y a la
+primera, sin poda.
+
+**El fallo que se repitió tres veces** fue la percha: cambiar el marcado para
+hacerle hueco a un globo. Un `<Link>` degradado a `<div>`, una barra gris
+inventada que no era ni filtro ni leyenda, y un «?» plantado en una cabecera
+vacía — que no se cuelga de un rótulo, SE CONVIERTE en el rótulo. Si vuelve a
+hacerse este trabajo en otro sitio, esa es la regla que hay que dar primero.
+
+**Y lo que ningún agente ve solo**: la densidad y la repetición. En Nutrición
+las tres ayudas contestaban a la misma pregunta y dos se contradecían en
+apariencia; en Facturación «los importes van sin IVA» llegó a estar escrito
+siete veces. Hace falta alguien que mire el módulo entero al final.
+
+### Bugs encontrados de paso, NINGUNO arreglado
+
+Salieron de leer endpoints para escribir las ayudas. Están sin tocar a propósito
+— son de producto, no de documentación:
+
+1. `equipo` — la cabecera cuenta los inactivos sobre la página ya filtrada, y
+   como el filtro por defecto los excluye, **siempre dice «0 inactivos»**.
+2. **Contadores por etapa del embudo**, en los tres overrides (aumenta,
+   nutri-laura, sandbox): se calculan sobre las 200 filas traídas, no sobre el
+   total. Y al filtrar por una etapa, las demás caen a cero — en aumenta hasta
+   el «X en total» de la cabecera se contagia.
+3. `nutri-laura` — «Convertir a paciente» son dos peticiones sin transacción:
+   si la segunda falla, la ficha queda creada, el lead sin vincular y **no se
+   dice nada**. El guard de idempotencia no protege ese caso. Además la primera
+   no exige rol admin y la segunda sí, así que un usuario normal crea fichas y
+   se come un 403 en silencio en cada intento.
+4. `nutri-laura` — marcar «Colaboración activa» a mano esconde el botón de
+   convertir sin haber creado ficha: esa persona se queda sin ficha y sin forma
+   de crearla desde ahí.
+5. `nutri-laura` — la columna «Empresa» sale vacía siempre (nadie escribe ese
+   campo) y «Propuesta» enseña la respuesta a otra pregunta.
+6. `/comercial/leads` es **código al que no se llega**: ningún enlace apunta
+   ahí, el único enlace a `/comercial` da 404 y nadie tiene el moduleKey. Lleva
+   dentro los textos de una campaña de Retorika escritos a mano.
+7. Las etiquetas de etapa del módulo base **contradicen** a `lib/leads/stages.js`,
+   que es la fuente única.
+8. **Receta partida** (nutrición): al asignarla se congelan nombre e
+   ingredientes pero los pasos y la foto se leen en vivo. Corregir una cantidad
+   no llega a quien ya tiene la pauta — ni con «Re-aplicar menú origen» — y
+   reescribir los pasos sí le cambia pautas de hace meses.

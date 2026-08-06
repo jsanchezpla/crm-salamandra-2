@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Select from "@/components/ui/Select.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 // ─── Configuración QEC ────────────────────────────────────────────────────────
 
@@ -373,7 +374,18 @@ export default function QECLeadsModule() {
         <div className="px-4 lg:px-8 pt-6 lg:pt-8 pb-0">
           <div className="flex items-center justify-between mb-5">
             <div>
-              <h1 className="text-gray-900 text-xl font-semibold">Leads Profesionales</h1>
+              <h1 className="text-gray-900 text-xl font-semibold">
+                Leads Profesionales
+                <HelpTooltip title="Prioridad" className="ml-2">
+                  La calcula el CRM con la fecha de la demo: hasta 3 días —o si la demo ya
+                  pasó— Alta, hasta 6 días Media, y más lejos Baja.{" "}
+                  <strong className="text-white">
+                    Solo se rehace al importar y al guardar la ficha
+                  </strong>
+                  , así que no sube sola conforme se acerca el día. Si eliges una a mano manda
+                  la tuya, pero «Sin prioridad» no la deja vacía mientras haya fecha de demo.
+                </HelpTooltip>
+              </h1>
               <p className="text-gray-500 text-sm mt-0.5">
                 {total} candidato{total !== 1 ? "s" : ""} en total
               </p>

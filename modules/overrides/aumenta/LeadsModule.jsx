@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Select from "@/components/ui/Select.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 // ─── Aumenta brand ────────────────────────────────────────────────────────────
 
@@ -164,7 +165,15 @@ export default function AumentaLeadsModule() {
         <div className="px-6 lg:px-8 pt-8 pb-0">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
-              <h1 className="text-gray-900 text-2xl font-bold">Interesados</h1>
+              <h1 className="text-gray-900 text-2xl font-bold flex items-center gap-2">
+                Interesados
+                <HelpTooltip title="La lista enseña 200 como mucho" placement="bottom">
+                  Se cargan siempre los 200 interesados más recientes, y no hay forma de seguir
+                  bajando a partir de ahí.{" "}
+                  <strong className="text-white">Los anteriores no se han borrado</strong>: para
+                  llegar a uno hay que buscarlo por nombre, email o teléfono, o acotar por motivo.
+                </HelpTooltip>
+              </h1>
               <p className="text-gray-500 text-sm mt-0.5">
                 Usuarios que han pedido información desde la web.{" "}
                 <span className="font-semibold" style={{ color: PRIMARY }}>

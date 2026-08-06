@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
+
 // ─── Configuración nutri-laura ────────────────────────────────────────────────
 
 // Embudo de PROFESIONALES (marcas y nutricionistas que quieren trabajar con
@@ -411,7 +413,18 @@ export default function NutriLauraLeadsModule() {
         <div className="px-4 lg:px-8 pt-6 lg:pt-8 pb-0">
           <div className="flex items-center justify-between mb-5">
             <div>
-              <h1 className="text-gray-900 text-xl font-semibold">Leads Profesionales</h1>
+              <h1 className="text-gray-900 text-xl font-semibold">
+                Leads Profesionales
+                <HelpTooltip title="Convertir a paciente" className="ml-2">
+                  El botón está dentro de la ficha de cada lead: crea una ficha NUEVA en
+                  Pacientes y pasa el lead a «Colaboración activa» (el lead no se borra).{" "}
+                  <strong className="text-white">
+                    Solo ha entrado si sale el aviso verde «Convertido a paciente»
+                  </strong>
+                  ; si no sale, búscalo en Pacientes antes de volver a pulsar, porque la
+                  ficha puede estar creada ya y saldría repetida.
+                </HelpTooltip>
+              </h1>
               <p className="text-gray-500 text-sm mt-0.5">
                 {total} lead{total !== 1 ? "s" : ""} en total
               </p>
