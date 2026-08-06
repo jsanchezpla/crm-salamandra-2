@@ -200,7 +200,32 @@ export default function WidgetBookPage() {
       // se sale del iframe, y a propósito: la alternativa sería pedirle los
       // datos de una financiación dentro de una web de terceros.
       if (j.data?.paymentRequired && j.data?.checkoutUrl) {
-        window.location.href = j.data.checkoutUrl;
+        /*
+         * ── HAY QUE SALIR DEL IFRAME, NO NAVEGARLO ────────────────────────────
+         * (06/08/2026, Rodrigo: «Stripe se queda pillado en el pago».)
+         *
+         * `window.location` mueve SOLO este iframe, y la pantalla de pago de
+         * Stripe se niega a mostrarse dentro de uno (lo prohíbe con sus
+         * cabeceras, y hace bien: es la defensa contra que alguien enmarque una
+         * pasarela dentro de su propia web). El resultado era el peor posible:
+         * el armazón gris de Stripe cargando para siempre, sin ningún error en
+         * la consola, ni aquí ni en la web de arriba. Imposible de diagnosticar
+         * desde fuera y, para quien iba a pagar, una pantalla muerta.
+         *
+         * `window.top.location` mueve la pestaña entera, que es lo que este
+         * código creía estar haciendo desde el principio (lo dice su propio
+         * comentario). Se permite porque venimos de un clic: sin gesto de la
+         * persona, el navegador no deja que un iframe mueva la página de arriba.
+         *
+         * El catch no sobra: si algún día el iframe llega con `sandbox` sin
+         * `allow-top-navigation`, la asignación lanza y entonces se abre en otra
+         * pestaña. Peor experiencia, pero se puede pagar.
+         */
+        try {
+          window.top.location.href = j.data.checkoutUrl;
+        } catch {
+          window.open(j.data.checkoutUrl, "_blank", "noopener");
+        }
         return;
       }
 
