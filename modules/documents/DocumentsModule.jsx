@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import ContratoServiciosCard from "@/components/documents/ContratoServiciosCard.jsx";
 import FileTypeIcon from "@/components/documents/FileTypeIcon.jsx";
 import UploadDropzone from "@/components/documents/UploadDropzone.jsx";
@@ -179,7 +180,19 @@ export default function DocumentsModule({ avanzado = true }) {
       <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
         <div>
           <div className="eyebrow">Empresa · Documentos</div>
-          <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1">Documentos</h1>
+          <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1">
+            Documentos
+            {avanzado && (
+              <HelpTooltip title="Qué hay en Compartidos" className="ml-2">
+                Aquí no está solo lo que sube el equipo en esta pantalla: también aparecen los
+                archivos que se adjuntan en las fichas y los que llegan desde el área privada.{" "}
+                <strong className="text-white">
+                  Si borras uno, desaparece a la vez de su ficha y del área privada, y no hay
+                  papelera.
+                </strong>
+              </HelpTooltip>
+            )}
+          </h1>
           <p className="text-xs text-neutral-400 mt-1">
             {avanzado
               ? "Tus documentos privados y las carpetas compartidas del equipo."

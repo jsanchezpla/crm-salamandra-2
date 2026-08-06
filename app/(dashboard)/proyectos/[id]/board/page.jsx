@@ -83,7 +83,8 @@ export default function ProyectoBoardPage() {
             {project?.name ?? "..."}
           </h1>
           <div className="flex items-center gap-2 shrink-0">
-            {/* Toggle Kanban | Lista — misma página, dos vistas de las mismas tareas. */}
+            {/* Toggle Kanban | Lista — dos vistas del proyecto: el Kanban solo llega a las
+                tareas con columna; la Lista las trae todas. */}
             <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5" role="tablist" aria-label="Vista del tablero">
               {[
                 { key: "kanban", label: "Kanban" },
@@ -155,7 +156,9 @@ export default function ProyectoBoardPage() {
         </Link>
       </div>
 
-      {/* Vista activa: Kanban o Lista (mismas tareas, mismos filtros) */}
+      {/* Vista activa: Kanban o Lista. Mismos filtros, pero NO el mismo conjunto:
+          el Kanban sale de /board (tareas colgadas de una columna) y la Lista de
+          /tasks (todas, incluidas las que no tienen columna). */}
       <div className="flex-1 overflow-hidden px-4 lg:px-8 py-4">
         {view === "kanban" ? (
           <KanbanBoard projectId={id} filters={effective} teamMembers={teamMembers} />

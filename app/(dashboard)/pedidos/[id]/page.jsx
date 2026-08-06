@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import Select from "@/components/ui/Select.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 const STATUSES = [
   { key: "draft", label: "Borrador" },
@@ -309,7 +310,16 @@ export default function PedidoDetallePage() {
         {/* Cabecera */}
         <div className="bg-white border border-neutral-200 rounded-xl p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-[11px] font-medium text-neutral-500 mb-1">Estado</label>
+            <label className="block text-[11px] font-medium text-neutral-500 mb-1">
+              Estado
+              <HelpTooltip title="Estado" className="ml-1">
+                Cambiar el estado aquí solo mueve la etiqueta del pedido:{" "}
+                <strong className="text-white">poner «Completado» no crea la factura ni descuenta el stock</strong>.
+                Eso lo hace únicamente el botón «Completar y facturar». Y al guardar como Completado
+                o Cancelado el pedido se cierra: desde esta pantalla ya no se puede editar ni volver
+                atrás.
+              </HelpTooltip>
+            </label>
             <Select
               value={status}
               onChange={(v) => setStatus(v)}

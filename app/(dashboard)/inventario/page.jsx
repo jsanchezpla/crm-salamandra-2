@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -221,6 +222,15 @@ export default function InventarioPage() {
         {productos.length > 0 && (
           <span className="ml-auto text-[12.5px] text-neutral-500">
             {productos.length} producto{productos.length === 1 ? "" : "s"} · valorado en {fmtMoney(totalValorado)}
+            <HelpTooltip title="Valorado en" placement="top" className="ml-1.5">
+              Lo que costaría reponer lo que hay ahora, al precio de compra de cada ficha: ni lo
+              que pagaste en cada entrega, ni lo que vale vendido.{" "}
+              <strong className="text-white">
+                Lo que no tenga precio de compra puesto suma cero
+              </strong>
+              , así que la cifra se queda corta sin avisar. Y cuenta solo los productos que estás
+              viendo: cambia con la búsqueda y con los filtros.
+            </HelpTooltip>
           </span>
         )}
       </div>

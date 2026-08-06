@@ -255,7 +255,20 @@ export default function ConfigModule() {
     <div className="p-4 lg:p-8 max-w-4xl mx-auto space-y-5">
       <div>
         <div className="eyebrow">Cuenta · Configuración</div>
-        <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1">Configuración</h1>
+        <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1">
+          Configuración
+          {/* El recibo por correo (lib/configuracion/avisoCambio.js) es lo único
+              de esta pantalla que pasa sin verse: se guarda un ajuste y sale un
+              correo a gente que no está delante. Va en el h1 porque afecta a
+              todas las tarjetas, no a una. */}
+          <HelpTooltip title="Cada cambio se avisa por correo" className="ml-2">
+            Al guardar una clave, un interruptor o una dirección de aquí, les llega un correo a{" "}
+            <strong className="text-white">todos los administradores</strong> con qué cambió y
+            quién lo hizo. De las claves solo se dice si se puso, se cambió o se borró: el valor
+            nunca viaja en ese correo. Si recibes uno que no has hecho tú, alguien más ha tocado tu
+            configuración — nosotros incluidos.
+          </HelpTooltip>
+        </h1>
         <p className="text-xs text-neutral-400 mt-1">Empresa, facturación e inteligencia artificial</p>
       </div>
 

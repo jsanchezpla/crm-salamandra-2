@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Select from "@/components/ui/Select.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 const STATUSES = [
   { key: "draft", label: "Borrador" },
@@ -170,7 +171,15 @@ export default function PedidosPage() {
                 <tr className="bg-neutral-50 border-b border-neutral-200">
                   <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Cliente</th>
                   <th className="text-left font-medium text-neutral-500 px-4 py-2.5 hidden md:table-cell">Líneas</th>
-                  <th className="text-right font-medium text-neutral-500 px-4 py-2.5">Total</th>
+                  <th className="text-right font-medium text-neutral-500 px-4 py-2.5">
+                    Total
+                    <HelpTooltip title="Total del pedido" className="ml-1">
+                      Es la suma de las líneas más el transporte,{" "}
+                      <strong className="text-white">sin IVA</strong>. Al completar un pedido se
+                      crea su factura, y el IVA se añade ahí: la factura siempre saldrá por más
+                      dinero que esta columna.
+                    </HelpTooltip>
+                  </th>
                   <th className="text-left font-medium text-neutral-500 px-4 py-2.5">Estado</th>
                   <th className="text-left font-medium text-neutral-500 px-4 py-2.5 hidden sm:table-cell">Creado</th>
                   <th className="text-left font-medium text-neutral-500 px-4 py-2.5 hidden lg:table-cell">Programado</th>

@@ -267,11 +267,28 @@ no globos, y taparlas con una ayuda sería justo lo contrario de lo que toca):
 ### Formación — YA LA TIENE
 - [-] `formacion` y sus hijas: de aquí salió el patrón
 
-### Resto
-- [ ] `documentos` · `soporte` · `inventario` · `calendario`
-- [ ] `pedidos` (+ `[id]`, `configuracion`)
-- [ ] `proyectos` (+ `[id]`, `[id]/board`)
-- [ ] `cuestionarios` · `configuracion`
+### Resto — HECHO (06/08/2026)
+
+**7 ayudas en 12 pantallas.** Las mejores salieron de leer endpoints, no
+pantallas:
+
+- [x] `documentos` — «Compartidos» no es lo que sube el equipo aquí: es el
+      archivo central del CRM. Ahí caen también los adjuntos de las fichas y lo
+      que suben las familias desde el portal, y borrar uno lo borra de su ficha
+      y del portal a la vez, sin papelera
+- [x] `soporte` — el aviso de SLA vencido cuenta TODOS los tickets abiertos,
+      ignorando la pestaña y los filtros; y el reloj no se para mientras esperas
+      al cliente, así que un ticket ya contestado acaba sumando ahí
+- [x] `inventario` — «valorado en» es lo que costaría reponer al precio de
+      compra: lo que no tenga precio puesto suma cero, y solo cuenta lo que
+      estás viendo
+- [x] `calendario` · `pedidos` (+ `[id]`, `configuracion`) ·
+      `proyectos` (+ `[id]`, `[id]/board`)
+- [-] `cuestionarios` · `configuracion` — ya tenían las suyas de antes
+
+Nota de método que se confirmó aquí: cuando el fichero de la ruta es un
+envoltorio sin rótulos (soporte, documentos), la ayuda va al componente que
+pinta de verdad la pantalla, no se inventa marcado en el envoltorio.
 
 ### Overrides — al final
 - [ ] `nutri-laura/LeadsModule` — embudo nutricional, diverge

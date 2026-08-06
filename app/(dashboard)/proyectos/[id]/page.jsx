@@ -7,6 +7,7 @@ import StatusBadge, { STATUS_OPTIONS } from "../../../../components/projects/Sta
 import PriorityBadge, { PRIORITY_OPTIONS } from "../../../../components/projects/PriorityBadge.jsx";
 import AiEditModal from "../../../../components/projects/AiEditModal.jsx";
 import Select from "@/components/ui/Select.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 const TABS = [
   { key: "overview",  label: "Resumen" },
@@ -363,7 +364,17 @@ function TeamTab({ projectId, members, teamMembers, onChange }) {
 
   return (
     <Card
-      title="Equipo del proyecto"
+      title={
+        <>
+          Equipo del proyecto
+          <HelpTooltip title="Lead, Miembro y Observador" className="ml-1.5">
+            <strong className="text-white">Solo el Lead puede cambiar el proyecto</strong>: sus
+            datos y fechas, las fases, las columnas del tablero y las tareas. Los administradores
+            también. Miembro y Observador son informativos: no dejan cambiar nada. Y quien no esté
+            en esta lista puede abrir el proyecto igual.
+          </HelpTooltip>
+        </>
+      }
       action={
         <button
           onClick={() => setShowAdd((v) => !v)}

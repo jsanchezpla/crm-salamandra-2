@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import TicketDetail from "./TicketDetail.jsx";
 import NewTicketModal from "./NewTicketModal.jsx";
 import SupportReports from "./SupportReports.jsx";
@@ -157,6 +158,13 @@ export default function SupportModule() {
                 <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
                 <span>
                   <strong>{datos.slaVencidos}</strong> {datos.slaVencidos === 1 ? "ticket con SLA vencido" : "tickets con SLA vencido"} — sin primera respuesta o fuera de plazo de resolución.
+                  <HelpTooltip title="SLA vencido" className="ml-1.5">
+                    Cuenta todos los tickets que siguen abiertos: no cambia con la pestaña ni con
+                    los filtros que tengas puestos. Y{" "}
+                    <strong className="text-white">el reloj no se para mientras esperas al cliente</strong>,
+                    así que un ticket ya contestado que no te responden acaba sumando aquí. Deja de
+                    contar cuando lo marcas como resuelto.
+                  </HelpTooltip>
                 </span>
               </div>
             </div>

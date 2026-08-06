@@ -7,6 +7,7 @@ import StatusBadge, { STATUS_OPTIONS } from "../../../components/projects/Status
 import PriorityBadge, { PRIORITY_OPTIONS } from "../../../components/projects/PriorityBadge.jsx";
 import AiProjectModal from "../../../components/projects/AiProjectModal.jsx";
 import Select from "../../../components/ui/Select.jsx";
+import HelpTooltip from "../../../components/ui/HelpTooltip.jsx";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -223,7 +224,17 @@ export default function ProyectosPage() {
                 <th className="px-4 py-3 font-medium">Cliente</th>
                 <th className="px-4 py-3 font-medium">Estado</th>
                 <th className="px-4 py-3 font-medium">Prioridad</th>
-                <th className="px-4 py-3 font-medium">Lead(s)</th>
+                <th className="px-4 py-3 font-medium">
+                  Lead(s)
+                  <HelpTooltip title="Lead(s)" className="ml-1">
+                    Aquí «lead» es quien lleva el proyecto, no un lead comercial. Solo salen las
+                    personas marcadas como responsables: el resto del equipo asignado al proyecto
+                    no aparece en esta columna.{" "}
+                    <strong className="text-white">
+                      Un guion significa que nadie está al mando, no que nadie esté trabajando.
+                    </strong>
+                  </HelpTooltip>
+                </th>
                 <th className="px-4 py-3 font-medium">Fecha límite</th>
                 {isAdmin && <th className="px-4 py-3 font-medium text-right">Presupuesto</th>}
               </tr>
