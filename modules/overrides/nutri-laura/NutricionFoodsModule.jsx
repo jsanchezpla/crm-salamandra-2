@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import Select from "@/components/ui/Select.jsx";
 import FoodEditModal from "./FoodEditModal.jsx";
 import { useFoodSections } from "./foodSections.js";
@@ -134,6 +135,15 @@ export default function NutricionFoodsModule() {
             </div>
             <h1 className="text-2xl lg:text-3xl font-semibold text-gray-900 leading-tight">
               Catálogo de alimentos
+              <HelpTooltip title="Si corriges un valor" className="ml-2">
+                Estos números no se copian a ninguna parte: las recetas, los menús y
+                las pautas los leen de aquí cada vez.{" "}
+                <strong className="text-white">
+                  Al corregir un alimento cambian también las pautas que ya has
+                  entregado
+                </strong>
+                , y el siguiente PDF saldrá con los valores nuevos.
+              </HelpTooltip>
             </h1>
             <p className="text-xs text-gray-500 mt-1">
               {total} {total === 1 ? "alimento" : "alimentos"} en tu catálogo local.

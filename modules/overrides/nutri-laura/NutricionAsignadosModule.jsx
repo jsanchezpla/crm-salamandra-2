@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import PlanEditorModal from "./PlanEditorModal.jsx";
 import AssignPlanModal from "./AssignPlanModal.jsx";
 import Select from "@/components/ui/Select.jsx";
+import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -166,6 +167,14 @@ export default function NutricionAsignadosModule() {
                 lo que se lista aquí son las pautas asignadas, no la gente. */}
             <h1 className="text-2xl lg:text-3xl font-semibold text-gray-900 leading-tight">
               Pautas
+              <HelpTooltip title="Pauta y menú origen" className="ml-2">
+                La pauta es una copia del menú, hecha el día que marca «Asignado».{" "}
+                <strong className="text-white">
+                  Cambiar el menú más tarde no cambia las pautas ya entregadas.
+                </strong>{" "}
+                Para pasarle los cambios a alguien, abre su ficha, pestaña Pautas, y
+                pulsa «Re-aplicar menú origen».
+              </HelpTooltip>
             </h1>
             <p className="text-xs text-gray-500 mt-1">
               {total} {total === 1 ? "pauta asignada" : "pautas asignadas"} a pacientes.

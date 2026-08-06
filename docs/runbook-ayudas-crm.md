@@ -202,9 +202,32 @@ al h1.
 - [x] `pacientes` · `pacientes/[id]` (2: la ficha es la más densa del módulo) ·
       `pacientes/[id]/sesiones/nueva`
 
-### Nutrición
-- [ ] `nutricion/alimentos` · `nutricion/recetas`
-- [ ] `nutricion/plantillas` · `nutricion/asignados`
+### Nutrición — HECHO (06/08/2026)
+
+**2 ayudas en 4 pantallas.** Cada agente acertó por separado —una por pantalla,
+ninguna en Menús— pero las TRES contestaban a la misma pregunta: «lo que edito
+aquí, ¿llega a lo ya entregado?». Nadie podía verlo desde su pantalla; lo vio el
+crítico. Es el arranque exacto del fallo de Facturación, cazado a tiempo.
+
+Se quitó la del Recetario porque además CHOCABA con la de Alimentos: una decía
+que los ingredientes se copian a la pauta y la otra que los números se leen en
+vivo. Las dos son ciertas —se congela la cantidad, no las macros/100 g— y justo
+por eso juntas confunden más de lo que aclaran.
+
+- [x] `nutricion/alimentos` — corregir un valor cambia las pautas YA entregadas
+      y el PDF que se descargue después: es el único eslabón que no se congela
+- [-] `nutricion/recetas` — la tenía, se quitó por repetir y por chocar
+- [-] `nutricion/plantillas` — asignar COPIA, no enlaza, así que el peligro que
+      se sospechaba no existe; y lo que sí sorprende ya está escrito en tres
+      avisos visibles de la propia pantalla
+- [x] `nutricion/asignados` (Pautas)
+
+⚠️ **Para el producto, no para el runbook**: el comportamiento de una receta está
+PARTIDO y no se adivina. Al añadirla a una pauta se congelan nombre e
+ingredientes, pero los pasos y la foto se leen siempre en vivo. Corregir una
+cantidad mal puesta NO le llega a quien ya tiene la pauta —ni con «Re-aplicar
+menú origen», que recopia los snapshots viejos—, y reescribir los pasos sí le
+reescribe pautas de hace meses. Merece una decisión de producto, no un globo.
 
 ### Comercial
 - [ ] `leads` · `leads/estadisticas` · `comercial/leads`
