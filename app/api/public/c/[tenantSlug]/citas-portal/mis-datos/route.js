@@ -1,9 +1,15 @@
 import { withPublicTenant } from "../../../../../../../lib/tenant/publicTenantContext.js";
 import { ok, error, serverError } from "../../../../../../../lib/utils/apiResponse.js";
 import { auditar } from "../../../../../../../lib/utils/auditoria.js";
-import { gatePortal, resolvePortalContractSession, estadoContrato } from "../../../../../../../lib/citas/portalContract.js";
-import { camposDe, validarDatos } from "../../../../../../../lib/clients/contratoFirma.js";
-import { camposQueFaltan, actualizacionDeFicha } from "../../../../../../../lib/clients/datosFicha.js";
+import {
+  gatePortal,
+  resolvePortalContractSession,
+  estadoContrato,
+  plantillasActivas,
+  huecosDeFicha,
+} from "../../../../../../../lib/citas/portalContract.js";
+import { validarDatos } from "../../../../../../../lib/clients/contratoFirma.js";
+import { actualizacionDeFicha } from "../../../../../../../lib/clients/datosFicha.js";
 import { desajusteDeEdad } from "../../../../../../../lib/formularios/edadDeclarada.js";
 import { notifyAdmins } from "../../../../../../../lib/notifications/notifyUsers.js";
 import { CUPO_PORTAL } from "../../../../../../../lib/citas/portalRateLimit.js";
@@ -79,9 +85,22 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
       return ok({ completo: true, faltan: [] });
     }
 
-    const campos = camposDe(siguienteDocumento);
-    const faltan = camposQueFaltan(campos, client);
-    if (faltan.length === 0) return ok({ completo: true, faltan: [] });
+    /*
+     * EXACTAMENTE LOS MISMOS CAMPOS QUE SE LE ENSEÑARON (06/08/2026, Rodrigo).
+     *
+     * Antes esto se calculaba aquí sobre la plantilla que toca firmar, mientras
+     * que la pantalla los recibía calculados sobre TODAS. Los dos universos se
+     * separaron el día que el consentimiento parental pasó a ir primero, y el
+     * servidor empezó a exigir un DNI que la pantalla no preguntaba: el botón
+     * «Continuar» no se dejaba pulsar y no había casilla donde arreglarlo.
+     *
+     * Ahora sale de la misma función (`huecosDeFicha`) y se valida SOLO lo
+     * previo, que es lo que esta pantalla pide. El resto (domicilio,
+     * facturación) se pide después de firmar, en su momento.
+     */
+    const plantillas = await plantillasActivas(tenantModels);
+    const { previos } = huecosDeFicha(plantillas, client);
+    if (previos.length === 0) return ok({ completo: true, faltan: [] });
 
     let body;
     try {
@@ -90,16 +109,13 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
       return error("Body inválido", 400);
     }
 
-    // Se valida contra la plantilla ENTERA (mismos formatos que al firmar) pero
-    // solo se exige lo que falta: pedirle a alguien la localidad de la firma en
-    // esta pantalla sería preguntarle por un dato que aún no ha ocurrido.
-    const soloFaltan = campos.filter((c) => faltan.some((f) => f.key === c.key));
-    // `client` va para que la edad decida los obligatorios: el DNI no lo es
-    // por debajo de los 14 (ver `campoEsObligatorio`).
-    const dat = validarDatos({ fields: soloFaltan }, body?.datos, client);
+    // `client` va para que la edad decida los obligatorios (el DNI no lo es
+    // mientras sea menor, ver `campoEsObligatorio`), y para que la fecha que
+    // acaba de escribir cuente antes que la que hubiera en la ficha.
+    const dat = validarDatos({ fields: previos }, body?.datos, client);
     if (dat.error) return error(dat.error, 422);
 
-    const update = actualizacionDeFicha(campos, client, dat.datos);
+    const update = actualizacionDeFicha(previos, client, dat.datos);
     if (update) await client.update(update);
 
     /*

@@ -11,6 +11,7 @@ import ContratoGate from "../_components/ContratoGate.jsx";
 import DatosGate from "../_components/DatosGate.jsx";
 import ComunicacionesGate from "../_components/ComunicacionesGate.jsx";
 import ConsentimientoImagenGate from "../_components/ConsentimientoImagenGate.jsx";
+import { googleCalendarUrl } from "../../../../../lib/citas/googleCalendar.js";
 
 function fmtLong(iso) {
   if (!iso) return "—";
@@ -47,7 +48,28 @@ function StatusBadge({ status }) {
   );
 }
 
-function BookingCard({ booking, muted, onCancel }) {
+function BookingCard({ booking, muted, onCancel, profesional }) {
+  /*
+   * «Añadir a Google Calendar», SOLO en las confirmadas y que no han pasado
+   * (06/08/2026, Rodrigo). Este enlace existía únicamente en la pantalla del
+   * momento de reservar, y ahí ya no se pinta cuando la cita nace pendiente del
+   * visto bueno: a quien se la confirmaban después no le quedaba ninguna forma
+   * de llevársela a su calendario. Aquí es donde vuelve a mirarla.
+   *
+   * En una cita pendiente no sale a propósito: apuntar una hora que todavía no
+   * es suya es pedirle que se presente a algo que puede no existir.
+   */
+  const gcal =
+    !muted && booking.status === "confirmed"
+      ? googleCalendarUrl({
+          name: booking.eventTypeName ?? "Cita",
+          description: profesional ? `Cita con ${profesional}` : "",
+          start: booking.scheduledAt,
+          durationMinutes: booking.duration,
+          location: booking.meetUrl || "",
+        })
+      : null;
+
   return (
     <div
       className={`bg-[var(--widget-card)] rounded-lg border border-[var(--widget-border)] p-4 ${muted ? "opacity-70" : ""}`}
@@ -72,8 +94,8 @@ function BookingCard({ booking, muted, onCancel }) {
         {booking.duration} min · {MODALITY_ES[booking.modality] ?? booking.modality} · Hora de Madrid
       </div>
 
-      {(booking.meetUrl || booking.cancellable) && (
-        <div className="mt-3 flex flex-wrap gap-2">
+      {(booking.meetUrl || booking.cancellable || gcal) && (
+        <div className="mt-3 flex flex-wrap gap-2 items-center">
           {booking.meetUrl && (
             <a
               href={booking.meetUrl}
@@ -91,6 +113,16 @@ function BookingCard({ booking, muted, onCancel }) {
             >
               Cancelar
             </button>
+          )}
+          {gcal && (
+            <a
+              href={gcal}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center text-[13px] text-[var(--widget-text-muted)] hover:text-[var(--widget-text)] underline underline-offset-2 focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)] rounded-sm"
+            >
+              Añadir a Google Calendar
+            </a>
           )}
         </div>
       )}
@@ -694,7 +726,7 @@ export default function MiPerfilPage() {
                   ) : (
                     <div className="flex flex-col gap-3">
                       {upcoming.map((b) => (
-                        <BookingCard key={b.id} booking={b} onCancel={openCancel} />
+                        <BookingCard key={b.id} booking={b} onCancel={openCancel} profesional={info?.name} />
                       ))}
                     </div>
                   )}

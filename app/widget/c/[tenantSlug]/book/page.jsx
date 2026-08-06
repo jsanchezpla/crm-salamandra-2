@@ -7,6 +7,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AuthGateScreen, useWidgetAuth } from "../_components/AuthGate.jsx";
 import { useCitasPortalSession } from "../_components/useCitasPortalSession.js";
 import { formatMoney } from "../../../../../lib/payments/money.js";
+import { googleCalendarUrl } from "../../../../../lib/citas/googleCalendar.js";
 
 function fmtLong(iso) {
   if (!iso) return "—";
@@ -22,20 +23,6 @@ function fmtLong(iso) {
   });
 }
 
-function googleCalendarUrl({ name, description, start, durationMinutes, location }) {
-  const startDate = new Date(start);
-  const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000);
-  const fmt = (d) =>
-    d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
-  const params = new URLSearchParams({
-    action: "TEMPLATE",
-    text: name,
-    dates: `${fmt(startDate)}/${fmt(endDate)}`,
-    details: description ?? "",
-    location: location ?? "",
-  });
-  return `https://calendar.google.com/calendar/render?${params.toString()}`;
-}
 
 export default function WidgetBookPage() {
   const router = useRouter();
