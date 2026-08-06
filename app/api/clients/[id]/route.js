@@ -205,7 +205,7 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
   // citas se quedan con la FK a NULL y ya no hay forma de saber de quién eran.
   const rastro = await borrarRastroDelCliente({
     tenantModels,
-    tenantSlug: tenant.slug,
+    tenant,
     clientId: client.id,
     clientEmail: client.email,
   });
@@ -234,7 +234,11 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
     // Cuánto se llevó por delante. Sin esto, un borrado que se lleva 14
     // documentos y 3 citas queda en el registro igual que uno que no se lleva
     // nada, y luego no hay forma de reconstruir qué pasó.
-    after: { documentosBorrados: rastro.documentos, citasFuturasBorradas: rastro.citasFuturas },
+    after: {
+      documentosBorrados: rastro.documentos,
+      citasFuturasBorradas: rastro.citasFuturas,
+      citasAvisadas: rastro.avisadas,
+    },
   });
   return noContent();
 });

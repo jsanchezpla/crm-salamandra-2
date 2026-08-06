@@ -27,6 +27,19 @@
  * perfil sigue exigiéndolo igual que antes.
  */
 
+/*
+ * ── POR QUÉ ARRIBA Y NO CENTRADO (06/08/2026, Rodrigo: «parece que lleve una
+ * cabecera invisible») ──────────────────────────────────────────────────────
+ * Estas pantallas viven dentro de un iframe de 820 px de alto incrustado en la
+ * web. Centrarlas verticalmente las centra en ESOS 820 px, no en la pantalla:
+ * como el iframe empieza por debajo de la cabecera del sitio y termina por
+ * debajo del borde inferior, la tarjeta salía hundida y cortada, con un vacío
+ * enorme encima que parecía una cabecera en blanco.
+ *
+ * Arriba y con aire (`items-start` + padding) se ve entera y sin scroll en
+ * cualquier alto de pantalla. Es lo que ya hacían la pantalla de la puerta y la
+ * del contrato; ahora lo hacen todas igual.
+ */
 const headingStyle = { fontFamily: "var(--widget-font-display)", fontWeight: 500 };
 
 export default function BienvenidaGate({ profesional, valoracion, hrefValoracion, onEntrarPerfil }) {
@@ -34,7 +47,7 @@ export default function BienvenidaGate({ profesional, valoracion, hrefValoracion
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--widget-bg)]">
-      <div className="min-h-full flex items-start sm:items-center justify-center px-4 py-8">
+      <div className="min-h-full flex items-start justify-center px-4 py-8 sm:py-10">
         <div className="w-full max-w-lg bg-[var(--widget-card)] rounded-2xl border border-[var(--widget-border)] p-6 lg:p-8 shadow-sm">
           <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-2">
             Hola

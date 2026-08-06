@@ -417,8 +417,10 @@ const PLANTILLAS = [
   {
     key: "parental",
     title: "Consentimiento parental y autorización del tutor o tutora legal",
+    // Va DELANTE del contrato desde el 06/08/2026, así que el texto ya no puede
+    // decir «también»: es lo primero que se firma.
     intro:
-      "La fecha de nacimiento que has indicado corresponde a una persona menor de edad, así que necesitamos también la autorización de quien tenga su patria potestad o guarda legal.",
+      "La fecha de nacimiento que has indicado corresponde a una persona menor de edad, así que lo primero es la autorización de quien tenga su patria potestad o guarda legal. Después viene el contrato del servicio.",
     version: 1,
     onlyMinors: true,
     /*

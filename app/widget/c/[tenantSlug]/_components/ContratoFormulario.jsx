@@ -21,6 +21,7 @@
 import { useMemo, useState } from "react";
 import SignaturePad from "./SignaturePad.jsx";
 import { edadDesde } from "../../../../../lib/clients/formularioAlta.js";
+import { campoEsObligatorio } from "../../../../../lib/clients/datosFicha.js";
 
 const headingStyle = { fontFamily: "var(--widget-font-display)", fontWeight: 500 };
 
@@ -161,12 +162,45 @@ export default function ContratoFormulario({
   const [firma, setFirma] = useState(null);
   const [firmaSecundaria, setFirmaSecundaria] = useState(null);
 
+  /*
+   * La EDAD manda en casi todo lo de esta pantalla, así que se resuelve lo
+   * primero. Sale de la fecha de nacimiento, que ya está en la ficha desde
+   * «Completa tus datos» (por eso viene como `valor`); se mira también lo que se
+   * esté escribiendo por si algún día se pidiera aquí.
+   */
+  const campoNacimiento = campos.find((c) => c.ficha === "cliente.birthDate");
+  const nacimiento =
+    String(datos[campoNacimiento?.key] ?? "").trim() || String(campoNacimiento?.valor ?? "").trim() || null;
+  const edad = edadDesde(nacimiento);
+  const esMenorDeEdad = edad != null && edad < 18;
+
   // Lo que YA está en la ficha se enseña, no se vuelve a preguntar: se rellenó
   // en la pantalla anterior o lo tenía puesto la nutricionista. Lo que se sigue
   // preguntando aquí es lo del acto de firmar (la localidad, la fecha) y, en el
   // consentimiento parental, los datos del tutor, que no están en la ficha.
   const yaSabidos = useMemo(() => campos.filter((c) => c.desdeFicha && c.valor), [campos]);
-  const porPedir = useMemo(() => campos.filter((c) => !(c.desdeFicha && c.valor)), [campos]);
+
+  /*
+   * ── A UNA MENOR NO SE LE PIDE EL DNI. PUNTO. (06/08/2026, Rodrigo) ─────────
+   *
+   * El contrato le volvía a pedir el DNI como obligatorio a alguien que
+   * probablemente no lo tiene, después de que la pantalla anterior se lo hubiera
+   * perdonado. Quien firma de verdad por ella es su tutor legal, y su DNI ya
+   * está declarado —obligatorio— en el consentimiento parental, que desde hoy va
+   * DELANTE de este documento. Así que aquí la casilla directamente desaparece y
+   * lo único que queda por rellenar es dónde y cuándo se firma.
+   *
+   * Se detecta por `requiredDesdeEdad`, que es lo que marca «esto solo se le
+   * exige a partir de tal edad», y no por la clave `dni`: el mismo campo se
+   * llama igual en el consentimiento parental, donde es del TUTOR y no se puede
+   * perdonar nunca. Ahí `esMenorDeEdad` no aplica porque los campos del tutor no
+   * lo llevan.
+   */
+  const porPedir = campos.filter((c) => {
+    if (c.desdeFicha && c.valor) return false;
+    if (esMenorDeEdad && c.requiredDesdeEdad != null && edad < c.requiredDesdeEdad) return false;
+    return true;
+  });
 
   // Los campos se pintan agrupados («Datos del tutor», «de la persona menor»),
   // que es como los separa el propio consentimiento parental.
@@ -181,26 +215,28 @@ export default function ContratoFormulario({
     return out;
   }, [porPedir]);
 
-  const faltanDatos = porPedir.filter((c) => c.required && !String(datos[c.key] ?? "").trim());
+  // Obligatorio PARA ESTA PERSONA: la misma cuenta que hace el servidor y que
+  // «Completa tus datos». Con `c.required` a secas, el DNI volvía a bloquear a
+  // una menor aquí después de habérselo perdonado en la pantalla anterior.
+  const faltanDatos = porPedir.filter(
+    (c) => campoEsObligatorio(c, nacimiento) && !String(datos[c.key] ?? "").trim()
+  );
   const faltanBloques = bloques.filter((b) => b.required && !aceptados[b.id]);
 
   /*
    * FIRMAR ES OPCIONAL SI ES MENOR Y ES SU PROPIO CONTRATO (06/08/2026, Rodrigo).
    *
    * Depende de su edad y de su madurez, y quien autoriza de verdad es su tutor
-   * legal en el consentimiento parental que viene justo después. Se le ofrece
-   * firmar —a los 16 muchas quieren, y está bien que lo hagan— pero no se le
-   * exige: exigirlo dejaba encallada a una familia con una niña de 8 años.
+   * legal, que ya ha firmado el consentimiento parental —va DELANTE de este
+   * documento—. Se le ofrece firmar —a los 16 muchas quieren, y está bien que lo
+   * hagan— pero no se le exige: exigirlo dejaba encallada a una familia con una
+   * niña de 8 años.
    *
    * En el consentimiento parental NO aplica: ese lo firma el tutor y ahí la
    * firma no se perdona. El servidor comprueba lo mismo con la fecha de la
    * FICHA, así que esto es comodidad de pantalla, no la puerta.
    */
-  const campoNacimiento = campos.find((c) => c.ficha === "cliente.birthDate");
-  const nacimiento =
-    String(datos[campoNacimiento?.key] ?? "").trim() || String(campoNacimiento?.valor ?? "").trim() || null;
-  const edad = edadDesde(nacimiento);
-  const firmaOpcional = !plantilla.onlyMinors && edad != null && edad < 18;
+  const firmaOpcional = !plantilla.onlyMinors && esMenorDeEdad;
 
   const listo = !faltanDatos.length && !faltanBloques.length && (!!firma || firmaOpcional);
 
@@ -314,8 +350,7 @@ export default function ContratoFormulario({
             {firmaOpcional && (
               <p className="text-[12.5px] text-[var(--widget-text-muted)] leading-relaxed mb-3">
                 Como todavía eres menor de edad, puedes firmar si quieres, pero no hace falta: quien autoriza
-                es tu madre, padre o tutor legal, y lo hará en el documento siguiente. Puedes continuar sin
-                firmar.
+                es tu madre, padre o tutor legal, y ya lo ha hecho. Puedes continuar sin firmar.
               </p>
             )}
             <SignaturePad onChange={setFirma} disabled={enviando} />
@@ -354,8 +389,8 @@ export default function ContratoFormulario({
               no va a firmar no entiende por qué el botón ya está encendido. */}
           {listo && firmaOpcional && !firma && !error && (
             <p className="mt-4 text-[12px] text-[var(--widget-text-faint)] leading-relaxed">
-              Puedes continuar sin firmar. Tu madre, padre o tutor legal firmará el consentimiento en el
-              siguiente paso.
+              Puedes continuar sin firmar: el consentimiento de tu madre, padre o tutor legal ya está
+              firmado.
             </p>
           )}
 

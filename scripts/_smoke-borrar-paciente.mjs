@@ -13,6 +13,9 @@
  *     alguien le faltara un historial;
  *   · las citas se buscan por ficha Y por correo (la valoración inicial se pide
  *     antes de que exista la ficha);
+ *   · a quien tenía cita se le avisa ANTES de borrarla —después no hay a quién
+ *     escribir—, salvo si ya estaba cancelada, si no hay correo, o si es la demo
+ *     pública, que daría un relé de correo a cualquiera;
  *   · si algo falla, no se rompe el borrado: devuelve el recuento igual.
  */
 
@@ -26,9 +29,15 @@ function check(etiqueta, real, esperado) {
   if (!ok) process.stdout.write(`    esperado ${JSON.stringify(esperado)}, salió ${JSON.stringify(real)}\n`);
 }
 
+const futuro = new Date(Date.now() + 86_400_000);
+
 // Modelos de mentira que apuntan lo que se les pide.
-function modelos({ documentos = [], fallaDocumentos = false } = {}) {
+function modelos({ documentos = [], citas = null, fallaDocumentos = false } = {}) {
   const visto = { documentDestroy: null, bookingDestroy: null };
+  const filas = citas ?? [
+    { id: "b1", clientEmail: "paciente@ejemplo.com", clientName: "Paciente", status: "confirmed", scheduledAt: futuro, eventTypeId: "et-1" },
+    { id: "b2", clientEmail: "paciente@ejemplo.com", clientName: "Paciente", status: "confirmed", scheduledAt: futuro, eventTypeId: "et-1" },
+  ];
   return {
     visto,
     tenantModels: {
@@ -43,14 +52,22 @@ function modelos({ documentos = [], fallaDocumentos = false } = {}) {
         },
       },
       Booking: {
+        findAll: async () => filas,
         destroy: async ({ where }) => {
           visto.bookingDestroy = where;
-          return 2;
+          return filas.length;
         },
       },
+      // Lo pide el correo de cancelación para poner el nombre del tipo de cita.
+      EventType: { findByPk: async () => ({ name: "Seguimiento" }) },
     },
   };
 }
+
+// Tenant sin credenciales de envío: el correo se intenta y se queda en el
+// registro, que es justo lo que hay que comprobar sin mandar nada de verdad.
+const TENANT = { id: "t-1", slug: "nutri_laura", name: "tunutrilaura", settings: {} };
+const DEMO = { ...TENANT, slug: "demo" };
 
 const simbolos = (obj) => Object.getOwnPropertySymbols(obj);
 
@@ -63,12 +80,13 @@ process.stdout.write("\n▶ Lo que borra\n");
   const m = modelos({ documentos: [{ id: "d1", storagePath: ruta }, { id: "d2", storagePath: null }] });
   const cuenta = await borrarRastroDelCliente({
     tenantModels: m.tenantModels,
-    tenantSlug: "nutri_laura",
+    tenant: TENANT,
     clientId: "cli-1",
     clientEmail: "paciente@ejemplo.com",
   });
   check("cuenta los documentos borrados", cuenta.documentos, 2);
   check("y las citas futuras", cuenta.citasFuturas, 2);
+  check("avisa a las dos citas antes de borrarlas", cuenta.avisadas, 2);
   check("los documentos, solo los de su ficha", m.visto.documentDestroy, { clientId: "cli-1" });
 
   const where = m.visto.bookingDestroy ?? {};
@@ -88,7 +106,7 @@ process.stdout.write("\n▶ Sin correo (ficha sin email)\n");
   const m = modelos({ documentos: [] });
   await borrarRastroDelCliente({
     tenantModels: m.tenantModels,
-    tenantSlug: "nutri_laura",
+    tenant: TENANT,
     clientId: "cli-2",
     clientEmail: null,
   });
@@ -103,7 +121,7 @@ process.stdout.write("\n▶ Si algo falla, el borrado sigue\n");
   const m = modelos({ fallaDocumentos: true });
   const cuenta = await borrarRastroDelCliente({
     tenantModels: m.tenantModels,
-    tenantSlug: "nutri_laura",
+    tenant: TENANT,
     clientId: "cli-3",
     clientEmail: "otra@ejemplo.com",
   });
@@ -111,11 +129,43 @@ process.stdout.write("\n▶ Si algo falla, el borrado sigue\n");
   check("y las citas se borran igual", cuenta.citasFuturas, 2);
 }
 
+process.stdout.write("\n▶ A quién NO se avisa\n");
+{
+  // Una ya cancelada (ya lo sabe) y otra sin correo (no hay a dónde escribir).
+  const m = modelos({
+    citas: [
+      { id: "b1", clientEmail: "x@ejemplo.com", clientName: "X", status: "cancelled", scheduledAt: futuro, eventTypeId: "et-1" },
+      { id: "b2", clientEmail: null, clientName: "Sin correo", status: "confirmed", scheduledAt: futuro, eventTypeId: "et-1" },
+    ],
+  });
+  const cuenta = await borrarRastroDelCliente({
+    tenantModels: m.tenantModels,
+    tenant: TENANT,
+    clientId: "cli-4",
+    clientEmail: "x@ejemplo.com",
+  });
+  check("no se avisa a ninguna de las dos", cuenta.avisadas, 0);
+  check("pero las dos se borran igual", cuenta.citasFuturas, 2);
+}
+
+process.stdout.write("\n▶ Desde la demo pública no sale ningún correo\n");
+{
+  const m = modelos({});
+  const cuenta = await borrarRastroDelCliente({
+    tenantModels: m.tenantModels,
+    tenant: DEMO,
+    clientId: "cli-5",
+    clientEmail: "paciente@ejemplo.com",
+  });
+  check("cero avisos", cuenta.avisadas, 0);
+  check("y las citas se borran igual", cuenta.citasFuturas, 2);
+}
+
 process.stdout.write("\n▶ Sin ficha no hace nada\n");
 {
   const m = modelos({});
-  const cuenta = await borrarRastroDelCliente({ tenantModels: m.tenantModels, tenantSlug: "x", clientId: null });
-  check("recuento a cero", cuenta, { documentos: 0, citasFuturas: 0 });
+  const cuenta = await borrarRastroDelCliente({ tenantModels: m.tenantModels, tenant: TENANT, clientId: null });
+  check("recuento a cero", cuenta, { documentos: 0, citasFuturas: 0, avisadas: 0 });
   check("y no toca las citas", m.visto.bookingDestroy, null);
 }
 

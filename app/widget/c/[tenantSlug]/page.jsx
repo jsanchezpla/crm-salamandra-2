@@ -248,6 +248,45 @@ export default function WidgetSelectionPage() {
     return () => { cancelado = true; };
   }, [loading, valoracion, tipoDelEnlace, portal.sessionToken, portal.authFetch]);
 
+  /*
+   * ── SIN PANTALLA DE DATOS CUANDO NO HAY NADA QUE PREGUNTAR ─────────────────
+   * (06/08/2026, Rodrigo: «esta pantalla ya no tiene sentido porque tenemos
+   * todos sus datos».)
+   *
+   * Después de elegir día y hora venía un formulario pidiendo nombre, correo y
+   * teléfono. A una paciente identificada eso es pedirle tres datos que la
+   * consulta ya tiene apuntados desde el formulario de admisión —por el que
+   * ahora pasa TODO el mundo antes de poder llegar aquí—, y encima le da la
+   * oportunidad de escribirlos distintos.
+   *
+   * Se salta solo cuando de verdad no queda nada que preguntar ni que cobrar:
+   *   · su ficha tiene nombre, correo y teléfono (lo dice el servidor);
+   *   · la cita es gratuita y de una sesión —con precio o bono hay que pasar
+   *     por la tarjeta, y ahí sí hay pantalla—;
+   *   · el tipo de cita no lleva preguntas propias ni exige información
+   *     adicional.
+   * En cualquier otro caso, el recorrido es el de siempre.
+   */
+  const [misDatos, setMisDatos] = useState(null);
+  useEffect(() => {
+    if (!portal.sessionToken) { setMisDatos(null); return; }
+    let cancelado = false;
+    portal
+      .authFetch("/citas-portal/mis-datos", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!cancelado) setMisDatos(j?.data ?? null); })
+      .catch(() => { if (!cancelado) setMisDatos(null); });
+    return () => { cancelado = true; };
+  }, [portal.sessionToken, portal.authFetch]);
+
+  const reservaDirecta =
+    !!misDatos?.completo &&
+    !!selectedEventType &&
+    !(Number.isInteger(selectedEventType.price) && selectedEventType.price > 0) &&
+    (Number(selectedEventType.sessionsCount) || 1) <= 1 &&
+    !(selectedEventType.preguntas ?? []).length &&
+    !selectedEventType.additionalDataRequired;
+
   const goContinue = useCallback(() => {
     if (!selectedEventTypeId || !selectedDatetime) return;
     const params = new URLSearchParams({
@@ -257,8 +296,12 @@ export default function WidgetSelectionPage() {
     // Si el padre WP nos dio ?wpa=1, propágalo a /book para que el gate
     // siga aceptando aunque sessionStorage no esté disponible.
     if (info?.auth?.required && auth.allowed) params.set("wpa", "1");
+    // `confirmar=1` = este botón ya decía «Confirmar reserva», así que al llegar
+    // se reserva sin volver a preguntar. Va en la URL y no implícito para que
+    // abrir /book a pelo NUNCA reserve nada por su cuenta.
+    if (reservaDirecta) params.set("confirmar", "1");
     router.push(`/widget/c/${tenantSlug}/book?${params.toString()}`);
-  }, [router, tenantSlug, selectedEventTypeId, selectedDatetime, info, auth.allowed]);
+  }, [router, tenantSlug, selectedEventTypeId, selectedDatetime, info, auth.allowed, reservaDirecta]);
 
   // CSS vars del brand (sobreescribe el botón si el tenant tiene primaryColor)
   const brandStyle = useMemo(() => {
@@ -606,7 +649,7 @@ export default function WidgetSelectionPage() {
                   onClick={goContinue}
                   className="w-full px-4 py-2.5 text-sm font-medium rounded-md text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)] focus:ring-offset-2 focus:ring-offset-[var(--widget-bg)]"
                 >
-                  Continuar →
+                  {reservaDirecta ? "Confirmar reserva" : "Continuar →"}
                 </button>
               </div>
             )}

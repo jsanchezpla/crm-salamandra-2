@@ -90,7 +90,7 @@ export default function DatosGate({ campos, profesional, enviando, error, onGuar
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--widget-bg)]">
-      <div className="min-h-full flex items-start sm:items-center justify-center px-4 py-8">
+      <div className="min-h-full flex items-start justify-center px-4 py-8 sm:py-10">
         <form
           onSubmit={enviar}
           className="w-full max-w-lg bg-[var(--widget-card)] rounded-2xl border border-[var(--widget-border)] p-6 lg:p-8 shadow-sm"
@@ -124,14 +124,26 @@ export default function DatosGate({ campos, profesional, enviando, error, onGuar
                       className="block text-[13px] font-medium text-[var(--widget-text)] mb-1.5"
                     >
                       {campo.label}
-                      {/* Se dice cuál NO hace falta en vez de dejarla adivinando
-                          por qué el botón se ha encendido sin rellenarlo todo.
-                          El caso real es el DNI de una menor de 14. */}
-                      {!esObligatorio(campo) && (
+                      {/*
+                        Se dice cuál NO hace falta en vez de dejarla adivinando
+                        por qué el botón se ha encendido sin rellenarlo todo.
+
+                        El DNI —lo único que hoy depende de la edad— lo avisa
+                        SIEMPRE, escriba lo que escriba (06/08/2026, Rodrigo).
+                        Antes el «(opcional)» aparecía solo después de teclear
+                        una fecha de menor: hasta ese momento, una familia sin
+                        DNI veía un campo obligatorio y se paraba ahí, sin llegar
+                        nunca a la fecha que se lo habría desbloqueado.
+                      */}
+                      {campo.requiredDesdeEdad != null ? (
+                        <span className="ml-1.5 font-normal text-[var(--widget-text-faint)]">
+                          (opcional si es menor)
+                        </span>
+                      ) : !esObligatorio(campo) ? (
                         <span className="ml-1.5 font-normal text-[var(--widget-text-faint)]">
                           (opcional)
                         </span>
-                      )}
+                      ) : null}
                     </label>
                     {campo.type === "select" ? (
                       <select

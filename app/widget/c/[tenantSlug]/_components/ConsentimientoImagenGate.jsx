@@ -85,7 +85,7 @@ export default function ConsentimientoImagenGate({ authFetch, profesional, onTer
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--widget-bg)]">
-      <div className="min-h-full flex items-start sm:items-center justify-center px-4 py-8">
+      <div className="min-h-full flex items-start justify-center px-4 py-8 sm:py-10">
         <div className="w-full max-w-lg bg-[var(--widget-card)] rounded-2xl border border-[var(--widget-border)] p-6 lg:p-8 shadow-sm">
           <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-2">
             {pendientes.length > 1 ? `${idx + 1} de ${pendientes.length}` : "Un permiso opcional"}

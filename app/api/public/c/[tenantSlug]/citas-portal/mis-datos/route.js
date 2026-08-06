@@ -24,6 +24,46 @@ import { notifyAdmins } from "../../../../../../../lib/notifications/notifyUsers
  *
  * Body: { datos: { clave: valor } }
  */
+/**
+ * GET — los datos de contacto que el CRM YA tiene de ella (06/08/2026, Rodrigo).
+ *
+ * Nace de quitar una pantalla: al pedir cita se le pedían nombre, correo y
+ * teléfono que la consulta ya tenía apuntados desde el formulario de admisión.
+ * Con esto, la reserva se confirma en el mismo botón de elegir la hora.
+ *
+ * Devuelve SOLO lo de quien entra —la ficha se resuelve desde su sesión
+ * firmada, no desde ningún parámetro— y solo estos tres campos: es lo que hace
+ * falta para reservar. Nada de DNI, domicilio ni fecha de nacimiento, que no
+ * pintan nada en una agenda y no tienen por qué salir a un endpoint público.
+ *
+ *   200 → { nombre, email, telefono, completo }
+ */
+export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenantModels, hasModule }) => {
+  try {
+    const blocked = gatePortal(tenant, hasModule);
+    if (blocked) return blocked;
+
+    const { response, client } = await resolvePortalContractSession(request, slug, tenantModels);
+    if (response) return response;
+
+    const nombre = String(client?.name ?? "").trim();
+    const email = String(client?.email ?? "").trim();
+    const telefono = String(client?.phone ?? "").trim();
+
+    return ok({
+      nombre: nombre || null,
+      email: email || null,
+      telefono: telefono || null,
+      // `completo` = con esto se puede reservar sin preguntarle nada más. Lo
+      // decide el servidor para que la pantalla no tenga que saber qué exige
+      // una reserva.
+      completo: !!(nombre && email && telefono),
+    });
+  } catch (err) {
+    return serverError(err);
+  }
+});
+
 export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenantModels, hasModule }) => {
   try {
     const blocked = gatePortal(tenant, hasModule);

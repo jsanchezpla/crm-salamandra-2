@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PasoTarjeta from "../_components/PasoTarjeta.jsx";
 import { textoConsentimiento } from "../../../../../lib/citas/consentimientoRetencion.js";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -78,6 +78,9 @@ export default function WidgetBookPage() {
   // queda esperando a que la profesional decida, y decirle otra cosa al paciente
   // sería mentirle.
   const [solicitudEnviada, setSolicitudEnviada] = useState(null);
+  // Cerrojo de la reserva automática: una sola, pase lo que pase con los
+  // re-renders (ver `puedeAutoConfirmar` más abajo).
+  const autoEnviado = useRef(false);
 
   useEffect(() => {
     if (!eventTypeId || !datetime) {
@@ -249,6 +252,35 @@ export default function WidgetBookPage() {
     if (sessionEmail) setForm((prev) => ({ ...prev, clientEmail: sessionEmail }));
   }, [sessionEmail]);
 
+  /*
+   * ── LO QUE EL CRM YA SABE DE ELLA NO SE LE VUELVE A PREGUNTAR ──────────────
+   * (06/08/2026, Rodrigo.)
+   *
+   * Su nombre y su teléfono están en la ficha desde el formulario de admisión,
+   * por el que ahora pasa todo el mundo antes de poder llegar aquí. Se traen y
+   * se rellenan; solo se pisa lo que esté vacío, por si ha escrito algo.
+   */
+  const [misDatos, setMisDatos] = useState(null);
+  useEffect(() => {
+    if (!sessionToken) return;
+    let cancelado = false;
+    portal
+      .authFetch("/citas-portal/mis-datos", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelado || !j?.data) return;
+        setMisDatos(j.data);
+        setForm((prev) => ({
+          ...prev,
+          clientName: prev.clientName || j.data.nombre || "",
+          clientPhone: prev.clientPhone || j.data.telefono || "",
+        }));
+      })
+      .catch(() => {});
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionToken]);
+
   const brandStyle = useMemo(() => {
     if (!info?.brand) return {};
     const out = {};
@@ -305,6 +337,39 @@ export default function WidgetBookPage() {
 
   const inputCls =
     "w-full rounded-lg px-3 py-2 text-sm text-[var(--widget-text)] bg-[var(--widget-card)] border border-[var(--widget-border)] focus:outline-none focus:border-[var(--brand-primary,var(--widget-button))] focus:ring-2 focus:ring-[var(--widget-focus)] transition placeholder:text-[var(--widget-text-faint)]/80";
+
+  /*
+   * ── RESERVA SIN PANTALLA DE DATOS (06/08/2026, Rodrigo) ────────────────────
+   *
+   * Llega con `?confirmar=1` desde el botón que ya decía «Confirmar reserva»:
+   * ese clic ES la confirmación, así que aquí no hay nada que enseñarle. Se
+   * reserva y aparece directamente el resguardo de la cita.
+   *
+   * Las condiciones se vuelven a comprobar AQUÍ y no se dan por buenas por venir
+   * en la URL: si el tipo de cita tiene precio, bono, preguntas o exige
+   * información adicional, se le pinta el formulario de siempre. Un parámetro
+   * de la URL no puede saltarse un cobro.
+   *
+   * El cerrojo `autoEnviado` es imprescindible: sin él, el doble montaje de
+   * React en desarrollo —o cualquier re-render mientras vuela la petición—
+   * mandaría dos reservas del mismo hueco.
+   */
+  const sinNadaQuePreguntar =
+    precio == null && !esBono && !preguntas.length && !eventType?.additionalDataRequired;
+  const puedeAutoConfirmar =
+    search.get("confirmar") === "1" &&
+    sinNadaQuePreguntar &&
+    !!misDatos?.completo &&
+    !!form.clientName.trim() &&
+    !!form.clientEmail.trim() &&
+    !!form.clientPhone.trim();
+
+  useEffect(() => {
+    if (!puedeAutoConfirmar || autoEnviado.current) return;
+    autoEnviado.current = true;
+    submit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [puedeAutoConfirmar]);
 
   if (!eventTypeId || !datetime) return null;
   if (loading) {
@@ -627,6 +692,17 @@ export default function WidgetBookPage() {
             </div>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // Reservando sola: ni un parpadeo del formulario que no hace falta. Si algo
+  // sale mal (`submitError`), esto deja de cumplirse y cae al formulario de
+  // siempre con el error escrito, que es de donde puede salir por su pie.
+  if (puedeAutoConfirmar && !submitError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-[var(--widget-text-muted)]">
+        Confirmando tu cita…
       </div>
     );
   }
