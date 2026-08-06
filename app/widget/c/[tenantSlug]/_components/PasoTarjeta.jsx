@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { textoConsentimiento } from "../../../../../lib/citas/consentimientoRetencion.js";
@@ -104,11 +104,47 @@ function Formulario({ importe, onListo, onError, nombreServicio }) {
     setEnviando(false);
   }
 
+  /*
+   * Red de seguridad por tiempo: hay bloqueadores que no fallan, simplemente
+   * dejan la petición colgada, y entonces `onLoadError` no llega nunca.
+   */
+  useEffect(() => {
+    if (listoElemento) return;
+    const t = setTimeout(() => {
+      setError((actual) =>
+        actual ||
+        "El formulario de pago está tardando más de la cuenta. Recarga la página; si vuelve a pasar, prueba con otro navegador o desactiva el bloqueador de anuncios."
+      );
+    }, 12_000);
+    return () => clearTimeout(t);
+  }, [listoElemento]);
+
   return (
     <form onSubmit={enviar} className="space-y-5">
       <div className="rounded-md border border-[var(--widget-border)] bg-[var(--widget-card)] p-4">
         <PaymentElement
           onReady={() => setListoElemento(true)}
+          /*
+           * ── UN FORMULARIO DE PAGO QUE NO CARGA TIENE QUE DECIRLO ───────────
+           * (06/08/2026, Rodrigo: «Stripe se queda pillado en el pago».)
+           *
+           * Si Stripe no consigue montar el formulario —un bloqueador de
+           * anuncios o de rastreadores que corta js.stripe.com, una red que no
+           * le deja salir, un problema suyo—, el recuadro se queda en gris para
+           * siempre: sin error, sin botón y sin ninguna pista de qué ha pasado.
+           * Quien está intentando pagar se queda mirando una pantalla muerta y
+           * lo normal es que se vaya.
+           *
+           * El error de Stripe se enseña tal cual (lo escribe él, en español y
+           * para quien lo lee), y si no llega ninguno pero tampoco carga, a los
+           * 12 segundos se le dice qué puede hacer.
+           */
+          onLoadError={(e) =>
+            setError(
+              e?.error?.message ||
+                "No hemos podido cargar el formulario de pago. Si usas un bloqueador de anuncios, desactívalo en esta página o prueba con otro navegador."
+            )
+          }
           options={{ layout: "tabs", fields: { billingDetails: { address: "never" } } }}
         />
       </div>
