@@ -4,7 +4,6 @@ import { ok, created, error, forbidden, serverError } from "../../../../lib/util
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { buildMadridDate } from "../../../../lib/citas/slots.js";
 
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -101,7 +100,16 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   try {
     const veto = gate(ctx);
     if (veto) return veto;
-    if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo admin puede bloquear días");
+    /*
+     * Lo bloquea CUALQUIERA del equipo (07/08/2026, Rodrigo). Nació en admin
+     * pensando que era cosa de dirección; en una consulta de dos personas eso
+     * significa que quien se va de vacaciones tiene que pedirle a otra que lo
+     * apunte, y entonces no se apunta.
+     *
+     * Sigue haciendo falta sesión y módulo de citas, y cada bloqueo queda en la
+     * auditoría con su autor — que es la respuesta cuando alguien pregunte por
+     * qué su agenda apareció cerrada un martes.
+     */
     const { TeamBlock, TeamMember, Booking } = ctx.tenantModels;
     if (!TeamBlock) return error("Los bloqueos no están disponibles en este cliente", 503);
 
@@ -185,7 +193,9 @@ export const DELETE = withTenant(async (request, _rc, ctx) => {
   try {
     const veto = gate(ctx);
     if (veto) return veto;
-    if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo admin puede quitar bloqueos");
+    // Quitarlo, igual que ponerlo: si uno lo puede cerrar, tiene que poder
+    // abrirlo. Queda auditado quién lo quita.
+
     const { TeamBlock } = ctx.tenantModels;
     if (!TeamBlock) return error("Los bloqueos no están disponibles en este cliente", 503);
 

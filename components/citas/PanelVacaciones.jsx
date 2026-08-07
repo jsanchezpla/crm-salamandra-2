@@ -10,8 +10,14 @@ import { useCallback, useEffect, useState } from "react";
  * en la pantalla de Tipos de cita porque es donde va a buscarlo, aunque por
  * dentro no sea una cita (el porqué, en `models/tenant/TeamBlock.model.js`).
  *
- * Solo lo ve y lo toca ADMIN: bloquear la agenda de otra persona es una
- * decisión de dirección. El endpoint lo comprueba también, no solo la pantalla.
+ * LO USA TODO EL EQUIPO (07/08/2026, Rodrigo). Nació solo para admin, pensando
+ * que bloquear la agenda era cosa de dirección, y en una consulta de dos
+ * personas eso significaba que quien se va de vacaciones no puede apuntarlo:
+ * tiene que pedírselo a otra. Mismo criterio que apuntar, rechazar y confirmar
+ * citas, que se abrieron al equipo el 06/08.
+ *
+ * Todo bloqueo queda en la auditoría con quién lo puso, que es la respuesta
+ * cuando alguien pregunte por qué su agenda apareció cerrada un martes.
  */
 
 /*
@@ -40,7 +46,7 @@ function bonito(valor) {
 
 const HOY = () => new Date().toISOString().slice(0, 10);
 
-export default function PanelVacaciones({ esAdmin }) {
+export default function PanelVacaciones() {
   const [bloqueos, setBloqueos] = useState([]);
   const [equipo, setEquipo] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -129,8 +135,6 @@ export default function PanelVacaciones({ esAdmin }) {
       setFallo(e.message);
     }
   }
-
-  if (!esAdmin) return null;
 
   return (
     <section className="mt-8 border border-[var(--ink-200)] rounded-xl overflow-hidden">

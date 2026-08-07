@@ -606,9 +606,10 @@ export default function CitasTiposPage() {
         {/*
          * «Vacaciones» (06/08/2026, Rodrigo). Va aquí, debajo del catálogo,
          * porque él lo pidió como «un tipo de cita especial»: es donde lo va a
-         * buscar. Solo admin, y el endpoint lo comprueba también.
+         * buscar. Lo usa todo el equipo desde el 07/08 — quien se va de
+         * vacaciones tiene que poder apuntarlo sin pedírselo a nadie.
          */}
-        <PanelVacaciones esAdmin={esAdmin === true} />
+        <PanelVacaciones />
       </div>
 
       {/* Drawer */}
