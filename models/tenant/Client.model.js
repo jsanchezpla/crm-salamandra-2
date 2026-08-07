@@ -130,6 +130,35 @@ export function defineClient(sequelize) {
        * de todo lo anterior a esto y el de cualquier consulta de una sola
        * profesional: nadie tiene que asignar nada para que siga funcionando.
        */
+      /**
+       * «Consulta externa» (07/08/2026, Rodrigo): paciente que se atiende por
+       * un acuerdo con una empresa, no por la consulta.
+       *
+       * Su historia clínica y sus documentos se guardan aquí como los de
+       * cualquiera —Laura no quiere dos archivos— pero NO lleva cuenta en la
+       * web: ni portal, ni documentos compartidos, ni contratos que firmar.
+       *
+       * Solo lo ven admin y la profesional que lo tenga asignado
+       * (`lib/clients/consultaExterna.js`).
+       *
+       * `false` por defecto y NOT NULL: el listado filtra por «no es externa»,
+       * y dejarlo a NULL haría desaparecer del CRM todas las fichas que ya
+       * existen hasta que alguien las guardara una a una.
+       */
+      esConsultaExterna: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      /**
+       * La empresa con la que hay acuerdo. Texto libre a propósito: la lista de
+       * empresas vive en los ajustes del tenant y se edita en Configuración, y
+       * quitar una de esa lista no debe dejar huérfanos a sus pacientes.
+       */
+      categoriaExterna: {
+        type: DataTypes.STRING(80),
+        allowNull: true,
+      },
       assignedTeamMemberId: {
         type: DataTypes.UUID,
         allowNull: true,

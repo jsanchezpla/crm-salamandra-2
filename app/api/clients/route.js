@@ -10,12 +10,27 @@ import {
 import { applyAutoAssignments } from "../../../lib/clients/moduleAssignments.js";
 import { normalizarPacientes, tipoPorDefecto, perfilDeAlta, fechaONull } from "../../../lib/clients/formularioAlta.js";
 import { entrarEnListaEspera } from "../../../lib/clients/listaEspera.js";
+import { filtroDeVisibilidad, normalizarCategoria, veTodasLasExternas } from "../../../lib/clients/consultaExterna.js";
+import { resolveCurrentTeamMemberId } from "../../../lib/team/currentTeamMember.js";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
 
   const { Client } = tenantModels;
   const { searchParams } = new URL(request.url);
+
+  /*
+   * «Consultas externas» (07/08/2026, Rodrigo): los pacientes que Laura atiende
+   * por un acuerdo con una empresa solo los ven admin y la profesional que los
+   * lleve. El porqué de esa regla, en `lib/clients/consultaExterna.js`.
+   *
+   * Se resuelve ANTES de montar el `where` para que el filtro entre en la MISMA
+   * consulta: aplicarlo después, sobre las filas ya traídas, descuadraría el
+   * total y la paginación —la página 1 saldría con 47 de 50—.
+   */
+  const rolQuienMira = request.headers.get("x-user-role") ?? "user";
+  const soyDelEquipo = hasModule("team") ? await resolveCurrentTeamMemberId(request, tenantModels) : null;
+  const filtroExternas = filtroDeVisibilidad(rolQuienMira, soyDelEquipo);
 
   const search = searchParams.get("search");
   const status = searchParams.get("status");
@@ -59,7 +74,13 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     ? [[Sequelize.literal(`custom_fields->>'seStatus' ${dir} NULLS LAST`)]]
     : [[pedido, `${dir} NULLS LAST`]];
 
-  const queryOpts = { where, limit, offset, order };
+  /*
+   * El filtro se combina con `Op.and` y NO se mete en el `where` de arriba: ese
+   * ya usa `Op.or` para el buscador, y dos `Op.or` en el mismo objeto se pisan
+   * —el segundo gana en silencio— y dejarían el listado sin filtrar.
+   */
+  const whereFinal = filtroExternas ? { [Op.and]: [where, filtroExternas] } : where;
+  const queryOpts = { where: whereFinal, limit, offset, order };
   if (assignedTo) {
     const { ClientModuleAssignment } = tenantModels;
     queryOpts.include = [
@@ -135,7 +156,23 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
     : { pacientes: [] };
   if (errorPacientes) return error(errorPacientes, 422);
 
+  /*
+   * «Consulta externa» ya desde el alta (07/08/2026, Rodrigo): así el paciente
+   * de un acuerdo con una empresa nace ya marcado, sin pasar por un momento en
+   * que es visible para todo el equipo.
+   *
+   * ⚠️ Solo admin puede marcarlo — es lo que decide quién lo ve. A quien no lo
+   * sea se le ignora la marca en silencio en vez de rechazarle el alta: perder
+   * un paciente recién tecleado por un campo que ni siquiera se le enseña sería
+   * peor, y sin la marca el paciente queda visible, que es el estado seguro
+   * (nadie pierde de vista a nadie) y se corrige desde la ficha.
+   */
+  const rolQuienCrea = request.headers.get("x-user-role") ?? "user";
+  const esExterna = veTodasLasExternas(rolQuienCrea) && body.esConsultaExterna === true;
+
   const clientPayload = {
+    esConsultaExterna: esExterna,
+    categoriaExterna: normalizarCategoria(body.categoriaExterna),
     name: name.trim(),
     // En un centro de salud el cliente es una FAMILIA, no una empresa. El alta
     // manual creaba `company` siempre, mientras la lista de espera y los

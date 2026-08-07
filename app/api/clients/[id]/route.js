@@ -2,6 +2,8 @@ import { promises as fs } from "node:fs";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { auditar, datosPeticion, resumen } from "../../../../lib/utils/auditoria.js";
 import { ok, noContent, forbidden, notFound, error } from "../../../../lib/utils/apiResponse.js";
+import { puedeVerFicha, normalizarCategoria, veTodasLasExternas } from "../../../../lib/clients/consultaExterna.js";
+import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { getClientDir } from "../../../../lib/clients/attachmentStorage.js";
 import { borrarRastroDelCliente } from "../../../../lib/clients/borrarRastro.js";
 import { entradaDeCliente } from "../../../../lib/clients/listaEspera.js";
@@ -14,7 +16,7 @@ import {
   isMissingTable,
 } from "../../../../lib/clients/contactMethods.js";
 
-export const GET = withTenant(async (_request, { params }, { tenant, tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
 
   const { Client, Interaction, WaitlistEntry } = tenantModels;
@@ -62,6 +64,19 @@ export const GET = withTenant(async (_request, { params }, { tenant, tenantModel
   }
 
   if (!client) return notFound("Cliente no encontrado");
+
+  /*
+   * «Consulta externa»: solo admin y quien la tenga asignada (07/08/2026). Se
+   * comprueba AQUÍ y no solo en el listado porque esto se pide por id: filtrar
+   * la lista sin cerrar el detalle deja la ficha accesible con la URL a mano.
+   *
+   * Se devuelve 404 y no 403: decir «existe pero no es para ti» ya cuenta algo
+   * de un paciente que no le corresponde a quien pregunta.
+   */
+  const rolQuienMira = request.headers.get("x-user-role") ?? "user";
+  const soyDelEquipo = hasModule("team") ? await resolveCurrentTeamMemberId(request, tenantModels) : null;
+  if (!puedeVerFicha(client, rolQuienMira, soyDelEquipo)) return notFound("Cliente no encontrado");
+
   // Bonos de sesiones y lo que le queda de cada uno (04/08/2026). Devuelve []
   // en cuanto falte algo: la ficha no se cae por una sección de más.
   const bonos = await bonosDeCliente(tenantModels, client);
@@ -137,6 +152,26 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
   // arriba: solo si viene explícito, para que un guardado de otra sección de la
   // ficha no lo apague sin querer.
   if ("autoConfirmBookings" in body) baseUpdate.autoConfirmBookings = !!body.autoConfirmBookings;
+
+  /*
+   * «Consulta externa» y su empresa (07/08/2026, Rodrigo). Solo si vienen
+   * explícitos, como el resto: un guardado de otra sección de la ficha no puede
+   * desmarcarlo sin querer — y desmarcarlo significa que el paciente aparece de
+   * golpe para todo el equipo.
+   *
+   * ⚠️ SOLO ADMIN PUEDE MARCARLO O QUITARLO. Es lo que decide quién ve a esa
+   * persona; si lo pudiera cambiar cualquiera, la regla de visibilidad no
+   * valdría nada. La categoría sí la puede tocar quien ya ve la ficha: es una
+   * etiqueta, no un permiso.
+   */
+  const rolQuienEdita = request.headers.get("x-user-role") ?? "user";
+  if ("esConsultaExterna" in body) {
+    if (!veTodasLasExternas(rolQuienEdita)) {
+      return error("Solo un administrador puede marcar una consulta externa", 403);
+    }
+    baseUpdate.esConsultaExterna = !!body.esConsultaExterna;
+  }
+  if ("categoriaExterna" in body) baseUpdate.categoriaExterna = normalizarCategoria(body.categoriaExterna);
 
   // Transacción: datos base + upsert del principal (email/phone) → espejo en
   // Client.email/phone. Si el tenant aún no tiene client_contact_methods (42P01),
