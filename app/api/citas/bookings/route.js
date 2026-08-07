@@ -15,6 +15,10 @@ import { meetUrlInicial } from "../../../../lib/citas/videollamada.js";
 import { veTodaLaAgenda } from "../../../../lib/citas/visibilidad.js";
 import { cargarFestivos, esFestivo } from "../../../../lib/citas/festivos.js";
 import { duracionDeContacto } from "../../../../lib/citas/slots.js";
+import { citaPuedeAvisar } from "../../../../lib/clients/comunicaciones.js";
+import { sendEmail, envioRealizado } from "../../../../lib/email/resendClient.js";
+import { getTenantResendConfig } from "../../../../lib/outreach/resendConfig.js";
+import { bookingConfirmedTemplate } from "../../../../lib/email/templates/citas/bookingConfirmed.js";
 import { cargarAusencias, minutosOcupados } from "../../../../lib/citas/ausencias.js";
 import { getMadridParts } from "../../../../lib/citas/slots.js";
 import { asignarSesion } from "../../../../lib/citas/packs.js";
@@ -361,7 +365,64 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       ip,
     });
 
-    return created(row.toJSON());
+    /*
+     * ⚠️ AVISAR AL PACIENTE. Faltaba entero (07/08/2026, Rodrigo): «cuando se
+     * crea una cita para un paciente manualmente no le llega al correo».
+     *
+     * La cita nace CONFIRMADA, así que para el paciente es una cita en firme —
+     * y hasta hoy no se enteraba por ningún sitio. Quien la apunta por teléfono
+     * se lo dice de viva voz, y ahí acababa todo: sin correo no hay nada que
+     * mirar el día antes, ni enlace de cancelación, ni la hora por escrito.
+     *
+     * Best-effort, como el resto de correos de citas: un fallo de envío NO
+     * deshace la cita. Pero SÍ se devuelve si salió y por qué no, para que la
+     * pantalla lo diga en vez de callarse — que es el fallo que ya nos comimos
+     * con el enlace de videollamada.
+     */
+    let emailEnviado = false;
+    let emailMotivo = null;
+    try {
+      if (!row.clientEmail) throw new Error("SIN_EMAIL");
+      if (!(await citaPuedeAvisar(tenantModels, row, "citasEmail"))) throw new Error("SIN_CONSENTIMIENTO");
+      const cancelUrl = row.cancellationToken
+        ? `/widget/c/${tenant.slug}/cancel/${row.cancellationToken}`
+        : null;
+      const tpl = bookingConfirmedTemplate({
+        tenantName: tenant.name,
+        brand: tenant.settings?.brand,
+        clientName: row.clientName,
+        eventTypeName: eventType.name,
+        scheduledAt: row.scheduledAt,
+        duration: row.duration,
+        modality: row.modality,
+        meetUrl: row.meetUrl,
+        cancelUrl,
+        location: eventType.location ?? null,
+      });
+      const resend = getTenantResendConfig({ tenant });
+      const envio = await sendEmail({
+        to: row.clientEmail,
+        subject: tpl.subject,
+        html: tpl.html,
+        text: tpl.text,
+        from: resend.fromEmail || undefined,
+        replyTo: resend.replyTo || undefined,
+        apiKey: resend.apiKey || undefined,
+      });
+      const { salio, motivo } = envioRealizado(envio, `citas:manual ${row.id}`);
+      emailEnviado = salio;
+      if (!salio) emailMotivo = motivo;
+    } catch (mailErr) {
+      if (mailErr.message === "SIN_EMAIL") emailMotivo = "sin_email";
+      else if (mailErr.message === "SIN_CONSENTIMIENTO") emailMotivo = "sin_consentimiento";
+      else {
+        emailMotivo = "error";
+        process.stderr.write(`[citas:manual] email fail ${row.id}: ${mailErr.message}
+`);
+      }
+    }
+
+    return created({ ...row.toJSON(), emailEnviado, emailMotivo });
   } catch (err) {
     return serverError(err);
   }

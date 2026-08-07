@@ -111,7 +111,8 @@ async function sendRescheduledEmail({ tenant, tenantModels, booking, scheduledAt
       replyTo: resend.replyTo || undefined,
       apiKey: resend.apiKey || undefined,
     });
-    envioRealizado(envio, `citas:reprogramada ${booking.id}`);
+    const { salio, motivo } = envioRealizado(envio, `citas:reprogramada ${booking.id}`);
+    return { enviado: salio, motivo: salio ? null : motivo };
   } catch (mailErr) {
     process.stderr.write(`[citas:reprogramada] email fail: ${mailErr.message}\n`);
   }
@@ -502,8 +503,17 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     // Solo si sigue en pie y no se ha cancelado en la misma llamada: una cita
     // cancelada ya manda su propio correo, y dos avisos contradictorios son
     // peor que ninguno.
+    /*
+     * Qué pasó con el aviso, para DECÍRSELO a quien movió la cita (07/08/2026,
+     * Rodrigo). Antes se mandaba y nadie sabía si había salido: el mismo agujero
+     * que ya nos comimos con el enlace de videollamada, donde la pantalla ponía
+     * «enviado» sin clave de correo y el paciente no recibía nada.
+     *
+     * `null` = no se ha tocado la hora, así que no hay nada que contar.
+     */
+    let avisoCambioHora = null;
     if (cambiaHora && row.status !== "cancelled" && row.status !== "no_show") {
-      await sendRescheduledEmail({
+      avisoCambioHora = await sendRescheduledEmail({
         tenant,
         tenantModels,
         booking: row,
@@ -603,7 +613,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     await row.reload({ include: bookingIncludes(tenantModels, hasModule) });
     // `emailEnviado` permite que el panel confirme "enviado" en vez de callar,
     // y `emailMotivo` que diga POR QUÉ no salió cuando no salió.
-    return ok({ ...row.toJSON(), emailEnviado, emailMotivo, whatsappEnviado, whatsappMotivo });
+    return ok({ ...row.toJSON(), emailEnviado, emailMotivo, whatsappEnviado, whatsappMotivo, avisoCambioHora });
   } catch (err) {
     return serverError(err);
   }

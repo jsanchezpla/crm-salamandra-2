@@ -232,6 +232,7 @@ export default function CitasModule() {
   // Fecha y hora editables desde la propia tarjeta (07/08/2026, Rodrigo):
   // arrastrar en el calendario está bien para mover media hora, pero no para
   // pasar una cita a otro mes ni para ajustar a las 10:05.
+  const [avisoHora, setAvisoHora] = useState(null);
   const [detailFecha, setDetailFecha] = useState("");
   const [detailHora, setDetailHora] = useState("");
   const [detailMeet, setDetailMeet] = useState("");
@@ -553,6 +554,7 @@ export default function CitasModule() {
     if (j.ok) {
       setOpenBooking(j.data);
       setDetailNotes(j.data.notes ?? "");
+      setAvisoHora(null);
       setDetailFecha(fechaMadrid(j.data.scheduledAt));
       setDetailHora(horaMadrid(j.data.scheduledAt));
       setDetailMeet(j.data.meetUrl ?? "");
@@ -590,6 +592,15 @@ export default function CitasModule() {
    */
   async function guardarFechaHora() {
     if (!detailFecha || !detailHora) { setFormError("Pon la fecha y la hora"); return; }
+    /*
+     * El motivo viaja al correo del paciente (07/08/2026, Rodrigo). Opcional:
+     * cancelar el diálogo no cancela el cambio de hora — a veces solo hay que
+     * mover una cita y no hay nada que explicar.
+     */
+    const motivo = window.prompt(
+      "¿Por qué se cambia? Se lo contamos en el correo.\n\nDéjalo vacío si no quieres explicar nada.",
+      ""
+    );
     const [y, m, d] = detailFecha.split("-").map(Number);
     const [hh, mm] = detailHora.split(":").map(Number);
     // El offset de Madrid en esa fecha, resuelto por el propio navegador.
@@ -598,7 +609,27 @@ export default function CitasModule() {
     const enUtc = new Date(tanteo.toLocaleString("en-US", { timeZone: "UTC" }));
     const offsetMin = Math.round((enMadrid - enUtc) / 60000);
     const instante = new Date(tanteo.getTime() - offsetMin * 60000);
-    await patchBooking({ scheduledAt: instante.toISOString() });
+    const res = await patchBooking({
+      scheduledAt: instante.toISOString(),
+      ...(motivo && motivo.trim() ? { motivoCambio: motivo.trim() } : {}),
+    });
+    // Si salió el correo se dice, y si no, POR QUÉ. Callarse es lo que hace que
+    // alguien dé por avisado a un paciente que no lo está.
+    setAvisoHora(mensajeDelAviso(res?.avisoCambioHora));
+  }
+
+  /** El aviso del cambio de hora, en cristiano. */
+  function mensajeDelAviso(aviso) {
+    if (!aviso) return null;
+    if (aviso.enviado) return { tono: "ok", texto: "Hora cambiada y avisada por correo." };
+    const porQue = {
+      sin_email: "no tiene correo en su ficha",
+      sin_consentimiento: "ha pedido no recibir correos",
+      ya_pasada: "la cita ya había pasado",
+      sin_configurar: "este cliente no tiene el correo configurado",
+      error: "falló el envío",
+    }[aviso.motivo] ?? "no se pudo enviar";
+    return { tono: "warn", texto: `Hora cambiada, pero SIN avisar: ${porQue}. Díselo tú.` };
   }
 
   async function patchBooking(payload) {
@@ -915,6 +946,25 @@ export default function CitasModule() {
         j = await res.json();
       }
       if (!j.ok) throw new Error(j.error || "Error creando cita");
+      /*
+       * Si el paciente NO ha recibido el correo, se dice aquí y ahora
+       * (07/08/2026, Rodrigo). Antes esta cita no mandaba ningún correo; ahora
+       * lo manda, pero callarse cuando falla sería peor que no mandarlo: quien
+       * la apunta se iría creyendo que el paciente ya lo sabe.
+       *
+       * Solo se avisa cuando NO sale. Si sale, no hay nada que contar.
+       */
+      if (j.data && j.data.emailEnviado === false) {
+        const porQue = {
+          sin_email: "no tiene correo en su ficha",
+          sin_consentimiento: "ha pedido no recibir correos",
+          sin_configurar: "este cliente no tiene el correo configurado",
+          error: "falló el envío",
+        }[j.data.emailMotivo] ?? "no se pudo enviar";
+        alert(`Cita creada, pero al paciente NO le ha llegado el correo: ${porQue}.
+
+Avísale tú.`);
+      }
       calendarRef.current?.getApi().refetchEvents();
       setOpenCreate(false);
       setCreateForm(EMPTY_BOOKING_FORM);
@@ -1674,6 +1724,11 @@ export default function CitasModule() {
                   </button>
                 </div>
                 <p className="text-[10px] text-neutral-400 mt-1">Hora de Madrid, como en el calendario.</p>
+                {avisoHora && (
+                  <p className={`text-[11px] mt-1 ${avisoHora.tono === "ok" ? "text-emerald-700" : "text-amber-700"}`}>
+                    {avisoHora.texto}
+                  </p>
+                )}
               </div>
 
               <div className="pt-3 border-t border-neutral-100">
