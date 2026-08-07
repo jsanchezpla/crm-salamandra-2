@@ -8,7 +8,6 @@ import { useAdmision } from "./_components/useAdmision.js";
 import PuertaScreen from "./_components/PuertaScreen.jsx";
 import BienvenidaGate from "./_components/BienvenidaGate.jsx";
 import { debePreguntarBienvenida } from "../../../../lib/citas/bienvenida.js";
-import { formatMoney } from "../../../../lib/payments/money.js";
 
 const MONTH_NAMES_ES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -527,13 +526,20 @@ export default function WidgetSelectionPage() {
                             <div className="text-sm font-medium text-[var(--widget-text)] flex-1 min-w-0">
                               {et.name}
                             </div>
-                            {/* El precio se ve ANTES de elegir: nadie debe descubrir
-                                que la cita se paga al final del formulario. */}
-                            {Number.isInteger(et.price) && et.price > 0 && (
-                              <span className="text-[13px] text-[var(--widget-text)] shrink-0 tabular-nums">
-                                {formatMoney(et.price)}
-                              </span>
-                            )}
+                            {/*
+                              SIN PRECIO EN EL CATÁLOGO (07/08/2026, Rodrigo).
+                              Aquí se enseñaba el importe de cada tipo de cita y
+                              la agenda parecía una tienda: la persona comparaba
+                              tarifas en vez de elegir lo que necesita.
+
+                              ⚠️ El importe NO desaparece del recorrido. Sigue
+                              dicho —y en grande— en la casilla que hay que
+                              marcar antes de reservar («tu banco retendrá X en
+                              tu tarjeta»), que va sin marcar a propósito y es la
+                              prueba de que se ha leído. Retenerle la tarjeta a
+                              alguien sin haberle dicho nunca cuánto no es
+                              quitar el precio: es cobrar a ciegas.
+                            */}
                           </div>
                           {et.description && (
                             <div className="text-[12px] text-[var(--widget-text-muted)] mt-0.5 line-clamp-2">

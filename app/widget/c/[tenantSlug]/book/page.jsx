@@ -855,17 +855,10 @@ export default function WidgetBookPage() {
                   literalmente falso y contradecía al aviso de dos centímetros
                   más abajo ("no es un cobro"): la contradicción no la resuelve
                   el paciente, la sufre. */}
-              {precio != null && (
-                <div className="mt-3 pt-3 border-t border-[var(--widget-border)]/60 flex items-baseline justify-between">
-                  <span className="text-[12px] text-[var(--widget-text-muted)]">Precio de la sesión</span>
-                  <span
-                    className="text-[17px] text-[var(--widget-text)] tracking-tight"
-                    style={{ fontFamily: "var(--widget-font-display)", fontWeight: 500 }}
-                  >
-                    {formatMoney(precio)}
-                  </span>
-                </div>
-              )}
+              {/* «Precio de la sesión» fuera (07/08/2026, Rodrigo), igual que
+                  en el catálogo. El importe se dice donde de verdad hace falta:
+                  en la casilla de consentimiento de aquí abajo, que hay que
+                  marcar para poder reservar. */}
 
               <div className="text-[12px] text-[var(--widget-text-muted)] mt-3 pt-3 border-t border-[var(--widget-border)]/60">
                 {precio != null
@@ -873,10 +866,21 @@ export default function WidgetBookPage() {
                   : "Reunión online · enviaremos el enlace al confirmar."}
               </div>
 
-              {precio != null && (
+              {/* ⚠️ Un BONO no se devuelve. Es la misma promesa falsa que se
+                  quitó del área privada el 07/08/2026: al cancelar una sesión de
+                  un programa la sesión vuelve al bono y hay que darle otra
+                  fecha, pero el dinero no se mueve — y aquí se le estaba
+                  diciendo que sí. */}
+              {precio != null && !esBono && (
                 <div className="text-[11px] text-[var(--widget-text-faint)] mt-2 leading-relaxed">
                   Una vez confirmada, cancelando con 24 h o más de antelación se te devuelve el
                   importe íntegro.
+                </div>
+              )}
+              {esBono && (
+                <div className="text-[11px] text-[var(--widget-text-faint)] mt-2 leading-relaxed">
+                  Las sesiones son tuyas desde que compras el programa. Si cancelas una, vuelve a
+                  quedarte libre y le das otra fecha cuando quieras.
                 </div>
               )}
             </div>
