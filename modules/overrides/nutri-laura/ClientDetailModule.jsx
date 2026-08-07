@@ -436,6 +436,15 @@ function InfoTab({
         infoAdicional={infoAdicional}
       />
 
+      {/* Lo que ES la paciente: quién es, qué tiene contratado y en qué
+          programas está. Se lee de arriba abajo. */}
+      <BonosSection bonos={client.bonos} client={client} onCambio={onRecargar} />
+
+      <ClientModulesSection clientId={client.id} />
+
+      {/* Borrar va al FINAL de todo y no en medio de la columna: es lo último
+          que se hace con una ficha, y tenerlo entre dos tarjetas invita a
+          pulsarlo mientras se busca otra cosa. */}
       {!confirmDelete ? (
         <button
           onClick={() => setConfirmDelete(true)}
@@ -466,14 +475,14 @@ function InfoTab({
       )}
     </div>
 
-    {/* La columna de la derecha: lo que se consulta y se cambia de vez en
-        cuando, no lo que se lee entero cada vez que se abre la ficha. */}
+    {/* La DERECHA: cómo se relaciona con el centro por fuera de la consulta —
+        si entra a la web, cómo funcionan sus citas y si viene de una empresa.
+        Se consulta y se cambia de vez en cuando; no se lee entero cada vez que
+        se abre la ficha. (07/08/2026, Rodrigo: reparto pedido por él.) */}
     <div className="space-y-6 min-w-0">
-      <ClientConsultaExternaSection clientId={client.id} />
-      <ClientCitasSection clientId={client.id} />
       <CuentaWebSection client={client} />
-      <BonosSection bonos={client.bonos} client={client} onCambio={onRecargar} />
-      <ClientModulesSection clientId={client.id} />
+      <ClientCitasSection clientId={client.id} />
+      <ClientConsultaExternaSection clientId={client.id} />
     </div>
     </div>
   );
