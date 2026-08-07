@@ -441,6 +441,9 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     // tiene módulo de clientes, la cita se crea igual sin enlazar. Reservar
     // NUNCA puede fallar por esto.
     let clientId = null;
+    // ¿La exime SU FICHA, o es el modo del centro? Hace falta distinguirlo: las
+    // sesiones de bono esperan en la lista salvo que la exención sea suya.
+    let eximidaPorFicha = false;
     try {
       const { Client } = tenantModels;
       if (Client && clientEmail) {
@@ -465,7 +468,10 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
            * pendiente hasta que la tarjeta responde (ver el `status` de más
            * abajo, donde el precio manda sobre esto).
            */
-          if (ficha.autoConfirmBookings === true) autoConfirm = true;
+          if (ficha.autoConfirmBookings === true) {
+            autoConfirm = true;
+            eximidaPorFicha = true;
+          }
         }
       }
     } catch (err) {
@@ -515,6 +521,32 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     }
 
     const precio = enBono ? null : (compraDeBono ? compraDeBono.amount : precioTarifa);
+
+    /*
+     * ¿ESTA CITA ESPERA EN LA LISTA? (07/08/2026, Rodrigo)
+     *
+     * Dos motivos para esperar, y ninguno tiene que ver con el modo del centro:
+     *
+     *   · TIENE PRECIO — se queda pendiente hasta que la profesional decida; el
+     *     dinero está solo retenido, no cobrado.
+     *   · GASTA SESIÓN DE UN BONO — «se ha confirmado automáticamente una cita
+     *     tras haber pagado; debería quedarse en lista de espera aunque pague».
+     *     Una sesión de bono no lleva precio (ya está pagada), así que caía en
+     *     la rama de auto-confirmar y se colaba en la agenda sin que nadie la
+     *     mirase. Justo al revés de lo que hace falta: quien tiene bono es
+     *     quien MÁS sesiones va a pedir.
+     *
+     *     Dejarla esperando no le cuesta nada: si se rechaza, la sesión vuelve
+     *     al bono y se le da otra fecha. No es dinero retenido, es un hueco.
+     *
+     * ⚠️ SALVO QUE SU FICHA LA EXIMA. El interruptor «citas autoconfirmadas» de
+     * la ficha (06/08/2026) es una decisión explícita sobre ESA paciente —la de
+     * siempre, la que viene los martes a la misma hora— y gana sobre la regla
+     * general; si no, el interruptor no serviría justo para quien tiene
+     * programa, que es casi todo el mundo. Lo que NO exime nunca es el precio:
+     * con tarjeta de por medio manda el cobro.
+     */
+    const debeEsperar = Boolean(precio) || Boolean(enBono && !eximidaPorFicha);
 
     // ── ¿Puede reservar ESTO esta persona? (05/08/2026) ─────────────────────
     // Dos cosas a la vez, las dos en `lib/citas/tiposVisibles.js`:
@@ -696,10 +728,23 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
             duration: eventType.duration,
             modality: "online",
             meetUrl: meetUrlInicial(tenant, eventType, "online"),
-            // Con pago la cita nace 'pending' y AHÍ SE QUEDA hasta que la
-            // profesional decida: ese es todo el sentido del flujo nuevo. Ya no
-            // se confirma sola al cobrar, porque ya no se cobra al reservar.
-            status: precio ? "pending" : autoConfirm ? "confirmed" : "pending",
+            /*
+             * Con pago la cita nace 'pending' y AHÍ SE QUEDA hasta que la
+             * profesional decida: ese es todo el sentido del flujo nuevo. Ya no
+             * se confirma sola al cobrar, porque ya no se cobra al reservar.
+             *
+             * ⚠️ Y LA SESIÓN DE UN BONO, TAMBIÉN (07/08/2026, Rodrigo). Una
+             * sesión que sale de un bono NO lleva precio —ya está pagada— así
+             * que caía en la rama de auto-confirmar y se colaba en la agenda
+             * sin pasar por la lista de espera. Justo al revés de lo que hace
+             * falta: es quien MÁS sesiones va a pedir, y la nutricionista tiene
+             * que poder decidir cada una.
+             *
+             * Rechazarla no le cuesta nada a la paciente: la sesión vuelve al
+             * bono y se le da otra fecha (`lib/citas/reembolsoCita.js`). Por eso
+             * dejarla esperando es seguro — no es dinero retenido, es un hueco.
+             */
+            status: debeEsperar ? "pending" : autoConfirm ? "confirmed" : "pending",
             // 'authorizing' = está a punto de meter la tarjeta. Bloquea el hueco
             // solo durante esa ventana corta; si abandona el formulario, la hora
             // se libera sola al consultarse (ocupaHuecoWhere), sin cron.
@@ -932,8 +977,10 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     notifyAdmins({
       tenantId: tenant.id,
       tenantModels,
-      type: autoConfirm ? "cita_reservada" : "cita_solicitada",
-      title: autoConfirm ? "Nueva cita reservada" : "Nueva solicitud de cita",
+      // Por el estado REAL, no por el modo del centro: una cita que espera en
+      // la lista avisada como «reservada» hace que nadie vaya a confirmarla.
+      type: row.status === "confirmed" ? "cita_reservada" : "cita_solicitada",
+      title: row.status === "confirmed" ? "Nueva cita reservada" : "Nueva solicitud de cita",
       body: `${row.clientName} · ${eventType.name} · ${new Date(row.scheduledAt).toLocaleString("es-ES", {
         timeZone: "Europe/Madrid", day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit",
       })}`,
@@ -957,14 +1004,23 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
      */
     const avisarPorEmail = await citaPuedeAvisar(tenantModels, row, "citasEmail");
 
-    // Email best-effort según modo del tenant:
-    //   - autoConfirm=true  → booking nace confirmed → bookingConfirmed inmediato
-    //   - autoConfirm=false → booking nace pending   → bookingReceived (Laura
-    //     confirma luego desde /confirm que dispara bookingConfirmed)
+    /*
+     * Email best-effort SEGÚN CÓMO HA NACIDO LA CITA, no según el flag:
+     *   - confirmed → bookingConfirmed inmediato
+     *   - pending   → bookingReceived (se confirma luego desde /confirm, que
+     *     dispara el de confirmada)
+     *
+     * ⚠️ Antes miraba `autoConfirm` a secas y eso ya no basta (07/08/2026): hay
+     * citas que nacen pendientes con el flag encendido —las que se pagan y,
+     * desde hoy, las que gastan sesión de un bono—. Mirando el flag se le
+     * mandaba «tu cita está confirmada» a alguien cuya cita está esperando en
+     * la lista, y se presenta en la consulta un día que nadie le ha dado.
+     */
+    const nacioConfirmada = row.status === "confirmed";
     try {
       if (!avisarPorEmail) throw new Error("SIN_CONSENTIMIENTO_EMAIL");
       let tpl;
-      if (autoConfirm) {
+      if (nacioConfirmada) {
         const cancelUrl = row.cancellationToken
           ? `/widget/c/${tenant.slug}/cancel/${row.cancellationToken}`
           : null;

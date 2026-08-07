@@ -464,10 +464,23 @@ function Tarjeta({
                     {equipo.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.displayName || m.email}
+                        {m.tieneHorario === false ? " (sin horario)" : ""}
                       </option>
                     ))}
                   </select>
                 </label>
+              )}
+              {/*
+                Sin horario propio, su paciente no ve NI UN HUECO (07/08/2026).
+                Se avisa aquí, en el momento de asignar, porque después el
+                síntoma es una paciente diciendo que la agenda le sale vacía y
+                nadie relaciona una cosa con la otra.
+              */}
+              {asignarA && equipo.find((m) => m.id === asignarA)?.tieneHorario === false && (
+                <span className="w-full text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Esta persona no tiene su horario puesto, así que quien se le asigne no verá
+                  ningún hueco al pedir cita. Rellénalo en Equipo → su ficha → horario.
+                </span>
               )}
               <button
                 onClick={() => onAceptar(null, asignarA || null)}

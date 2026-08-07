@@ -24,9 +24,12 @@ const tramos = (r) => r.map((x) => `${x.startTime}-${x.endTime}`);
 
 const centro = [{ dayOfWeek: L, startTime: "09:00", endTime: "18:00", eventTypeId: "x" }];
 
-process.stdout.write("\n▶ Sin horario propio NO se recorta (o la dejaríamos sin citas)\n");
-check("sin filas suyas", tramos(recortarAlHorario(centro, [], L)), ["09:00-18:00"]);
-check("con horario de OTRO día", tramos(recortarAlHorario(centro, [{ dayOfWeek: 3, startTime: "09:00", endTime: "12:00" }], L)), ["09:00-18:00"]);
+process.stdout.write("\n▶ Sin horario propio NO hay huecos (07/08/2026: antes era al revés)\n");
+check("sin filas suyas → nada", recortarAlHorario(centro, [], L).length, 0);
+check("solo trabaja OTRO día → ese lunes, nada", recortarAlHorario(centro, [{ dayOfWeek: 3, startTime: "09:00", endTime: "12:00" }], L).length, 0);
+check("el día que SÍ trabaja sí sale",
+  tramos(recortarAlHorario([{ dayOfWeek: 3, startTime: "09:00", endTime: "18:00" }], [{ dayOfWeek: 3, startTime: "09:00", endTime: "12:00" }], 3)), ["09:00-12:00"]);
+
 
 process.stdout.write("\n▶ Con horario propio, la intersección\n");
 check("ella de 10 a 14 → 10:00-14:00",

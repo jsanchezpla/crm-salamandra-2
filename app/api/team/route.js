@@ -123,8 +123,31 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
       .filter(Boolean)
       .sort();
 
+    /*
+     * ¿Quién tiene horario propio puesto? (07/08/2026, Rodrigo)
+     *
+     * Desde hoy, una paciente asignada a alguien SIN horario no ve ni un hueco
+     * —antes veía la agenda del centro entera, y con ella las horas de otra
+     * compañera—. Es lo correcto, pero deja de serlo si nadie se entera: quien
+     * asigna tiene que ver a quién le falta el horario ANTES de asignar, no
+     * cuando la paciente llame diciendo que no le sale nada.
+     *
+     * Best-effort: si la tabla no está o falla, sale la lista sin la marca.
+     */
+    const conHorario = new Set();
+    try {
+      const { TeamMemberHours } = tenantModels;
+      if (TeamMemberHours) {
+        const filas = await TeamMemberHours.findAll({ attributes: ["teamMemberId"] });
+        for (const f of filas) conHorario.add(String(f.teamMemberId));
+      }
+    } catch { /* la lista se sirve igual, sin la marca */ }
+
     return ok({
-      members: rows.map((m) => serializeTeamMember(m, { isAdmin })),
+      members: rows.map((m) => ({
+        ...serializeTeamMember(m, { isAdmin }),
+        tieneHorario: conHorario.has(String(m.id)),
+      })),
       total: count,
       limit,
       offset,
