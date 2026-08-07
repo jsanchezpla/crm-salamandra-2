@@ -873,8 +873,8 @@ export default function WidgetBookPage() {
                   diciendo que sí. */}
               {precio != null && !esBono && (
                 <div className="text-[11px] text-[var(--widget-text-faint)] mt-2 leading-relaxed">
-                  Una vez confirmada, cancelando con 24 h o más de antelación se te devuelve el
-                  importe íntegro.
+                  Si luego no te viene bien, escríbenos y te damos otra fecha: lo que se cancela es
+                  la sesión, no lo que has pagado.
                 </div>
               )}
               {esBono && (

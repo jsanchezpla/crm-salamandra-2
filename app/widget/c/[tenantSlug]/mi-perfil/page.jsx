@@ -899,8 +899,11 @@ export default function MiPerfilPage() {
  * aquí solo se pinta: si la pantalla hiciera su propia cuenta acabaría
  * prometiendo devoluciones que la política real no da.
  *
- * El caso que hay que decir SÍ O SÍ es "se_pierde": cancelar con menos de 24
- * horas no devuelve nada, y enterarse después es enterarse tarde.
+ * Lo que hay que decir SÍ O SÍ es que cancelar NO devuelve el dinero
+ * (07/08/2026): enterarse después es enterarse tarde, y alguien que cancela
+ * creyendo que recupera 60 € y no los recupera acaba llamando enfadado. Lo que
+ * se cancela es la sesión, no lo contratado — y eso también hay que decirlo, o
+ * el aviso solo da malas noticias y esconde la buena.
  */
 export function AvisoDinero({ siCancela }) {
   // El bono no lleva importe (no se devuelve nada) pero SÍ hay que avisar, así
@@ -928,21 +931,15 @@ export function AvisoDinero({ siCancela }) {
     );
   }
 
-  if (siCancela.tipo === "se_pierde") {
-    return (
-      <span className="block rounded-md border border-red-200 bg-red-50 px-3 py-2 text-red-800">
-        Quedan menos de 24 horas para la cita, así que <b>no se te devolverán los {importe}</b> que
-        ya has pagado.
-      </span>
-    );
-  }
-  if (siCancela.tipo === "se_devuelve") {
+  if (siCancela.tipo === "no_se_devuelve") {
     return (
       <span className="block rounded-md border border-[var(--widget-border)] bg-[var(--widget-bg)] px-3 py-2 text-[var(--widget-text-muted)]">
-        Se te devolverán los {importe} íntegros.
+        Los {importe} que ya has pagado <b>no se devuelven al cancelar</b>: lo que se cancela es
+        esta sesión, no lo que tienes contratado. Escríbenos y te damos otra fecha.
       </span>
     );
   }
+
   if (siCancela.tipo === "se_libera") {
     return (
       <span className="block rounded-md border border-[var(--widget-border)] bg-[var(--widget-bg)] px-3 py-2 text-[var(--widget-text-muted)]">
