@@ -117,7 +117,6 @@ async function sendRescheduledEmail({ tenant, tenantModels, booking, scheduledAt
   }
 }
 
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["pending", "confirmed", "completed", "cancelled", "no_show"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -175,6 +174,37 @@ export const GET = withTenant(async (request, { params }, { tenant, tenantModels
   }
 });
 
+
+/**
+ * ¿Puede esta persona TOCAR esta cita? (07/08/2026, Rodrigo)
+ *
+ * «En la card de cada cita solo el admin puede poner como completada, no
+ * asistió, etc. Y no le deja mover citas. Cualquier persona puede mover o
+ * administrar las citas según convenga.»
+ *
+ * Editar y cancelar exigían admin, y eso dejaba a la profesional sin poder
+ * cerrar sus propias sesiones: marcar «vino» o «no vino» y mover una hora es
+ * literalmente su trabajo del día, no una decisión de dirección.
+ *
+ * No se abre a lo bruto: se aplica la MISMA regla que ya usaba el GET de aquí
+ * al lado (`lib/citas/visibilidad.js`). Quien ve toda la agenda —admin, o
+ * cualquiera si el centro la comparte— toca cualquier cita; quien no, solo las
+ * suyas. Así un centro que deliberadamente NO comparte agenda no se encuentra
+ * con que su equipo puede moverse las citas entre sí, y donde sí se comparte
+ * —nutri_laura y aumenta hoy— todo el mundo puede con todas, que es lo pedido.
+ *
+ * Devuelve un 404 (no un 403) por lo mismo que el GET: no revelar que existe.
+ */
+async function noPuedeTocarla(request, ctx, row) {
+  const { tenant, tenantModels, hasModule } = ctx;
+  if (!hasModule("team")) return null;
+  const role = request.headers.get("x-user-role") ?? "user";
+  if (veTodaLaAgenda({ tenant, role })) return null;
+  const myId = await resolveCurrentTeamMemberId(request, tenantModels);
+  if (!myId || row.teamMemberId !== myId) return notFound("Cita no encontrada");
+  return null;
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // PATCH /api/citas/bookings/[id]
 // ───────────────────────────────────────────────────────────────────────────
@@ -185,12 +215,13 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     const userRole = request.headers.get("x-user-role") ?? "user";
     const userId = request.headers.get("x-user-id");
     const ip = request.headers.get("x-forwarded-for") ?? null;
-    if (!ADMIN_ROLES.has(userRole)) return forbidden("Solo admin puede editar citas");
-
     const { id } = await params;
     const { Booking, EventType, TeamMember } = tenantModels;
     const row = await Booking.findByPk(id);
     if (!row) return notFound("Cita no encontrada");
+    // Editar y mover: ver `noPuedeTocarla` justo arriba.
+    const veto = await noPuedeTocarla(request, ctx, row);
+    if (veto) return veto;
 
     let body;
     try { body = await request.json(); } catch { return error("Body inválido"); }
@@ -588,12 +619,13 @@ export const DELETE = withTenant(async (request, { params }, ctx) => {
     const userRole = request.headers.get("x-user-role") ?? "user";
     const userId = request.headers.get("x-user-id");
     const ip = request.headers.get("x-forwarded-for") ?? null;
-    if (!ADMIN_ROLES.has(userRole)) return forbidden("Solo admin puede cancelar citas");
-
     const { id } = await params;
     const { Booking } = tenantModels;
     const row = await Booking.findByPk(id);
     if (!row) return notFound("Cita no encontrada");
+    // Cancelar, igual que editar: ver `noPuedeTocarla`.
+    const vetoDelete = await noPuedeTocarla(request, ctx, row);
+    if (vetoDelete) return vetoDelete;
 
     // Permitir pasar ?reason=... en query string para registrar el motivo
     const { searchParams } = new URL(request.url);

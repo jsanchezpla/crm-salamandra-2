@@ -229,6 +229,11 @@ export default function CitasModule() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
   const [detailNotes, setDetailNotes] = useState("");
+  // Fecha y hora editables desde la propia tarjeta (07/08/2026, Rodrigo):
+  // arrastrar en el calendario está bien para mover media hora, pero no para
+  // pasar una cita a otro mes ni para ajustar a las 10:05.
+  const [detailFecha, setDetailFecha] = useState("");
+  const [detailHora, setDetailHora] = useState("");
   const [detailMeet, setDetailMeet] = useState("");
   // Aviso efímero tras "Guardar y enviar" (enviado / solo guardado).
   const [meetAviso, setMeetAviso] = useState(null);
@@ -504,10 +509,52 @@ export default function CitasModule() {
     if (j.ok) {
       setOpenBooking(j.data);
       setDetailNotes(j.data.notes ?? "");
+      setDetailFecha(fechaMadrid(j.data.scheduledAt));
+      setDetailHora(horaMadrid(j.data.scheduledAt));
       setDetailMeet(j.data.meetUrl ?? "");
       setSuggestOpen(false); setSuggestions([]); // reset del panel de propuestas al abrir otra cita
       setFormError(null); // no arrastrar un error del drawer de creación / PATCH previo
     }
+  }
+
+  /*
+   * Fecha y hora de una cita, EN HORA DE MADRID, para meterlas en los <input>.
+   *
+   * No se usa `toISOString().slice(...)`: eso da UTC, y en verano pintaría una
+   * cita de las 10:00 como las 08:00. El CRM trabaja en hora de Madrid y la
+   * tarjeta tiene que enseñar lo mismo que el calendario.
+   */
+  function fechaMadrid(iso) {
+    const p = new Date(iso);
+    if (Number.isNaN(p.getTime())) return "";
+    const [d, m, y] = p.toLocaleDateString("es-ES", { timeZone: "Europe/Madrid" }).split("/");
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  function horaMadrid(iso) {
+    const p = new Date(iso);
+    if (Number.isNaN(p.getTime())) return "";
+    return p.toLocaleTimeString("es-ES", { timeZone: "Europe/Madrid", hour: "2-digit", minute: "2-digit", hour12: false });
+  }
+
+  /*
+   * Guardar la fecha y la hora tecleadas.
+   *
+   * Se manda un ISO CON OFFSET (…+02:00) construido con el desfase real de
+   * Madrid en ESA fecha, no una cadena suelta: el servidor va en UTC y una
+   * fecha sin zona se guardaría dos horas tarde — que es el fallo que ya se
+   * comió las vacaciones el 07/08/2026.
+   */
+  async function guardarFechaHora() {
+    if (!detailFecha || !detailHora) { setFormError("Pon la fecha y la hora"); return; }
+    const [y, m, d] = detailFecha.split("-").map(Number);
+    const [hh, mm] = detailHora.split(":").map(Number);
+    // El offset de Madrid en esa fecha, resuelto por el propio navegador.
+    const tanteo = new Date(Date.UTC(y, m - 1, d, hh, mm));
+    const enMadrid = new Date(tanteo.toLocaleString("en-US", { timeZone: "Europe/Madrid" }));
+    const enUtc = new Date(tanteo.toLocaleString("en-US", { timeZone: "UTC" }));
+    const offsetMin = Math.round((enMadrid - enUtc) / 60000);
+    const instante = new Date(tanteo.getTime() - offsetMin * 60000);
+    await patchBooking({ scheduledAt: instante.toISOString() });
   }
 
   async function patchBooking(payload) {
@@ -1543,6 +1590,46 @@ export default function CitasModule() {
                   </div>
                 </div>
               )}
+
+              {/*
+                Fecha y hora a mano (07/08/2026, Rodrigo): «me gustaría poder
+                editar la hora exacta y fecha de una cita en su card, no solo
+                poder moverlas físicamente en el calendario».
+
+                Arrastrar sirve para correr media hora dentro de la semana que
+                se está viendo; para pasarla a otro mes hay que ir buscándola, y
+                para dejarla a las 10:05 no hay forma. Es el mismo guardado que
+                el arrastre, así que respeta igual los solapes y los bloqueos.
+              */}
+              <div className="pt-3 border-t border-neutral-100">
+                <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-1.5">Fecha y hora</div>
+                <div className="flex gap-2 items-center flex-wrap">
+                  <input
+                    type="date"
+                    value={detailFecha}
+                    onChange={(e) => setDetailFecha(e.target.value)}
+                    className={`${inputCls} flex-1 min-w-[9rem]`}
+                  />
+                  <input
+                    type="time"
+                    value={detailHora}
+                    onChange={(e) => setDetailHora(e.target.value)}
+                    className={`${inputCls} w-28`}
+                  />
+                  <button
+                    onClick={guardarFechaHora}
+                    disabled={
+                      saving ||
+                      (detailFecha === fechaMadrid(openBooking.scheduledAt) &&
+                        detailHora === horaMadrid(openBooking.scheduledAt))
+                    }
+                    className="text-[11px] px-2.5 py-1.5 rounded border border-neutral-300 text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 shrink-0"
+                  >
+                    {saving ? "Guardando…" : "Cambiar hora"}
+                  </button>
+                </div>
+                <p className="text-[10px] text-neutral-400 mt-1">Hora de Madrid, como en el calendario.</p>
+              </div>
 
               <div className="pt-3 border-t border-neutral-100">
                 <div className="text-[11px] uppercase tracking-wider text-neutral-400 mb-1">Notas internas</div>
