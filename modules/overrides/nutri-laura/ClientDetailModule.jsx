@@ -46,6 +46,7 @@ import ClientBookingsPanel from "./ClientBookingsPanel.jsx";
 import ClientPlansPanel from "./ClientPlansPanel.jsx";
 import ClientModulesSection from "../../../components/clients/ClientModulesSection.jsx";
 import ClientCitasSection from "../../../components/clients/ClientCitasSection.jsx";
+import ClientConsultaExternaSection from "../../../components/clients/ClientConsultaExternaSection.jsx";
 import { edadDesde } from "../../../lib/clients/formularioAlta.js";
 
 // Rótulos revisados el 04/08/2026 (Rodrigo): Datos · Historia clínica ·
@@ -361,6 +362,7 @@ export default function NutriLauraClientDetailModule() {
             {/* El interruptor va DENTRO de esta pestaña y no en «Datos»: quien
                 se cansa de confirmar las citas de alguien está mirando
                 justamente esta lista (06/08/2026, Rodrigo). */}
+            <ClientConsultaExternaSection clientId={id} />
             <ClientCitasSection clientId={id} />
           </>
         )}

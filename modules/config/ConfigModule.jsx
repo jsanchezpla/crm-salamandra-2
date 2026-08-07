@@ -599,6 +599,14 @@ export default function ConfigModule() {
           )}
 
           {isAdmin && (
+            <CategoriasExternasCard
+              categorias={cfg.categoriasExternas}
+              readOnly={!!cfg.readOnly}
+              onChange={(lista) => patchTenant({ categoriasExternas: lista }, "Empresas actualizadas")}
+            />
+          )}
+
+          {isAdmin && (
             <AgendaCompartidaCard
               activo={!!cfg.agendaCompartida}
               readOnly={!!cfg.readOnly}
@@ -1011,6 +1019,89 @@ function CloudflareIdsField({ accountId, siteTag, ready, isAdmin, onSaveAccount,
  * encenderlo empiezan a salir correos hacia pacientes reales, y esa decisión
  * es del cliente, no del CRM.
  */
+/**
+ * Las empresas con las que hay acuerdo, para clasificar las consultas externas
+ * (07/08/2026, Rodrigo).
+ *
+ * Va en Configuración y no en una pantalla propia porque es una lista de
+ * nombres y nada más; y se enseña a TODOS los clientes, usen o no las consultas
+ * externas, porque la Configuración es universal (regla 14).
+ *
+ * Quitar una empresa de aquí NO se la quita a los pacientes que ya la tenían:
+ * su ficha conserva el texto. Es una lista para teclear más rápido, no un
+ * catálogo cerrado — y se dice en pantalla, para que nadie borre pensando que
+ * está limpiando fichas.
+ */
+function CategoriasExternasCard({ categorias, readOnly, onChange }) {
+  const [nueva, setNueva] = useState("");
+  const lista = Array.isArray(categorias) ? categorias : [];
+
+  function anadir() {
+    const t = nueva.trim();
+    if (!t) return;
+    // Se compara sin mayúsculas: «Empresa A» y «empresa a» son la misma.
+    if (lista.some((c) => c.toLocaleLowerCase("es") === t.toLocaleLowerCase("es"))) {
+      setNueva("");
+      return;
+    }
+    onChange([...lista, t]);
+    setNueva("");
+  }
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="text-sm font-semibold text-neutral-800">Empresas con acuerdo</div>
+      <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+        Para clasificar las consultas externas: pacientes que atiendes por un acuerdo con una
+        empresa. Aparecen como desplegable en su ficha. Quitar una de aquí no se la quita a los
+        pacientes que ya la tienen puesta.
+      </p>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {lista.length === 0 && (
+          <span className="text-xs text-neutral-400">Todavía no has añadido ninguna.</span>
+        )}
+        {lista.map((c) => (
+          <span key={c} className="inline-flex items-center gap-1.5 text-xs bg-neutral-100 text-neutral-700 rounded-lg pl-2.5 pr-1.5 py-1">
+            {c}
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => onChange(lista.filter((x) => x !== c))}
+                className="text-neutral-400 hover:text-red-600"
+                aria-label={`Quitar ${c}`}
+              >
+                ✕
+              </button>
+            )}
+          </span>
+        ))}
+      </div>
+
+      {!readOnly && (
+        <div className="mt-3 flex gap-2">
+          <input
+            value={nueva}
+            onChange={(e) => setNueva(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); anadir(); } }}
+            placeholder="Nombre de la empresa"
+            maxLength={80}
+            className="flex-1 border border-neutral-200 rounded-md px-2.5 py-1.5 text-sm"
+          />
+          <button
+            type="button"
+            onClick={anadir}
+            disabled={!nueva.trim()}
+            className="text-xs px-3 py-1.5 rounded-md bg-[#0F0F0F] text-white hover:bg-[#222] disabled:opacity-40 shrink-0"
+          >
+            Añadir
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AgendaCompartidaCard({ activo, readOnly, onChange }) {
   return (
     <div className="bg-white border border-neutral-200 rounded-xl p-5">

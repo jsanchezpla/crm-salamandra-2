@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { llevaCuentaEnLaWeb } from "../../../../../lib/clients/consultaExterna.js";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
@@ -95,7 +96,10 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
 
     // ── Alta en el WordPress del tenant (best-effort) ────────────────────────
     let acceso = { intentado: false };
-    if (body.crearAcceso !== false && creado && client.email) {
+    // Una consulta externa no lleva cuenta en la web: ver `consultaExterna.js`.
+    // Aquí no puede llegar marcada —se marca después, desde la ficha— pero se
+    // comprueba igual: el día que se pueda marcar al aceptar, esto ya está.
+    if (body.crearAcceso !== false && creado && client.email && llevaCuentaEnLaWeb(client)) {
       const resultado = await crearUsuarioPortal({
         tenantSlug: tenant.slug,
         wordpressUrl: form.settings?.wordpressUrl || null,

@@ -1,5 +1,6 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
+import { llevaCuentaEnLaWeb } from "../../../../../lib/clients/consultaExterna.js";
 import {
   crearUsuarioPortal,
   consultarUsuarioPortal,
@@ -86,6 +87,23 @@ export const POST = withTenant(async (request, ctx, tenantContext) => {
     const { id } = (await ctx?.params) ?? {};
     const client = Client ? await Client.findByPk(id) : null;
     if (!client) return notFound("Ficha no encontrada");
+
+    /*
+     * ⚠️ UNA CONSULTA EXTERNA NO LLEVA CUENTA EN LA WEB (07/08/2026, Rodrigo).
+     * Es la razón de ser de la marca: Laura guarda aquí la historia clínica y
+     * los documentos de un paciente que viene por un acuerdo con una empresa,
+     * pero ese paciente no entra en su área privada ni recibe documentos.
+     *
+     * Se corta AQUÍ, en el servidor, y no solo escondiendo el botón: crear la
+     * cuenta le manda a esa persona un correo de bienvenida a un sitio que no
+     * le corresponde, y eso no se deshace.
+     */
+    if (!llevaCuentaEnLaWeb(client)) {
+      return error(
+        "Es una consulta externa: no se le crea cuenta en la web. Si tiene que entrar al área privada, quítale antes esa marca en su ficha.",
+        422
+      );
+    }
 
     // El correo del portal manda si está puesto: es con el que ella entra. Si
     // no, el de contacto, que es lo que hay en todas las fichas de hoy.

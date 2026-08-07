@@ -1,4 +1,5 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
+import { categoriasDe } from "../../../../lib/clients/consultaExterna.js";
 import { ok } from "../../../../lib/utils/apiResponse.js";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../../../../lib/utils/errors.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
@@ -138,6 +139,7 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("citas.formularioObligatorio", antes?.citas?.formularioObligatorio, despues?.citas?.formularioObligatorio);
   anota("citas.contratoObligatorio", antes?.citas?.contratoObligatorio, despues?.citas?.contratoObligatorio);
   anota("citas.soloConPago", antes?.citas?.soloConPago, despues?.citas?.soloConPago);
+  anota("clientes.categoriasExternas", antes?.clientes?.categoriasExternas, despues?.clientes?.categoriasExternas);
   anota("citas.identidadObligatoria", antes?.citas?.identidadObligatoria, despues?.citas?.identidadObligatoria);
   anota("citas.formularioUrl", antes?.citas?.formularioUrl, despues?.citas?.formularioUrl);
   anota("citas.portalUrl", antes?.citas?.portalUrl, despues?.citas?.portalUrl);
@@ -230,6 +232,13 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // Puerta de identidad (05/08/2026): sin cuenta no se reserva. Se lee con el
     // helper porque respeta también el interruptor viejo del widget.
     identidadObligatoria: exigeIdentidad(t),
+    /*
+     * Las empresas con las que hay acuerdo, para clasificar las consultas
+     * externas (07/08/2026, Rodrigo). Se devuelven SIEMPRE, tenga o no el
+     * cliente el módulo: la Configuración es universal (regla 14) y quien
+     * mañana quiera usarlo tiene que poder rellenarlo solo.
+     */
+    categoriasExternas: categoriasDe(t),
     formularioUrl: t.settings?.citas?.formularioUrl ?? "",
     // Página de la web del cliente donde está incrustado el portal.
     portalUrl: t.settings?.citas?.portalUrl ?? "",
@@ -410,6 +419,23 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   // Modo de videollamada del módulo Citas. Lista cerrada.
   if (body.meetModo === "manual" || body.meetModo === "automatico") {
     settings.citas = { ...(settings.citas ?? {}), meetModo: body.meetModo };
+
+  /*
+   * La lista de empresas de las consultas externas. Se guarda LIMPIA —sin
+   * espacios sueltos, sin vacías y sin repetidas mirando mayúsculas— por el
+   * mismo helper que la lee: si entrara sucia, el desplegable tendría «Empresa
+   * A» y «empresa a» como dos cosas distintas y nadie sabría cuál elegir.
+   *
+   * Quitar una empresa de aquí NO toca a los pacientes que ya la tenían: su
+   * ficha conserva el texto. Es una lista para teclear más rápido, no un
+   * catálogo cerrado.
+   */
+  if (Array.isArray(body.categoriasExternas)) {
+    settings.clientes = {
+      ...(settings.clientes ?? {}),
+      categoriasExternas: categoriasDe({ settings: { clientes: { categoriasExternas: body.categoriasExternas } } }),
+    };
+  }
   }
   if (typeof body.recordatoriosCitas === "boolean") {
     settings.citas = { ...(settings.citas ?? {}), recordatorios: body.recordatoriosCitas };
