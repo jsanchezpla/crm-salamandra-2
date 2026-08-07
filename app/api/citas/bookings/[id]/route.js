@@ -4,6 +4,7 @@ import { citaPuedeAvisar } from "../../../../../lib/clients/comunicaciones.js";
 import { notifyUsers } from "../../../../../lib/notifications/notifyUsers.js";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, noContent, serverError } from "../../../../../lib/utils/apiResponse.js";
+import { citaSegunRol } from "../../../../../lib/citas/dinero.js";
 import {
   normalizeString,
   normalizeEmail,
@@ -165,7 +166,10 @@ export const GET = withTenant(async (request, { params }, { tenant, tenantModels
         if (!myId || row.teamMemberId !== myId) return notFound("Cita no encontrada");
       }
     }
-    return ok(row.toJSON());
+    // Fuga doble si no se filtra: el importe de la cita Y la tarifa completa del
+    // tipo, que viaja anidada en `eventType` (el include no restringe atributos).
+    const rolQuienMira = request.headers.get("x-user-role");
+    return ok(citaSegunRol(row.toJSON(), rolQuienMira));
   } catch (err) {
     return serverError(err);
   }

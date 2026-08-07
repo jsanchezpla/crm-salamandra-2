@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, noContent, serverError } from "../../../../../lib/utils/apiResponse.js";
+import { tipoSinDinero } from "../../../../../lib/citas/dinero.js";
 import {
   normalizeString,
   isValidSlug,
@@ -16,7 +17,7 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 // ───────────────────────────────────────────────────────────────────────────
 // GET /api/citas/event-types/[id]
 // ───────────────────────────────────────────────────────────────────────────
-export const GET = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
   try {
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
     const { id } = await params;
@@ -25,7 +26,9 @@ export const GET = withTenant(async (_request, { params }, { tenantModels, hasMo
     if (!row) return notFound("Tipo de cita no encontrado");
 
     const bookingCount = await Booking.count({ where: { eventTypeId: id } });
-    return ok({ ...row.toJSON(), bookingCount });
+    // Sin la tarifa si no es dirección. Es la puerta de atrás del listado:
+    // tapar solo aquel dejaría sacar el precio de uno en uno por este.
+    return ok({ ...tipoSinDinero(row.toJSON()), bookingCount });
   } catch (err) {
     return serverError(err);
   }

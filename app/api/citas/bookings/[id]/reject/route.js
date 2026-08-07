@@ -1,5 +1,6 @@
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
+import { citaSegunRol } from "../../../../../../lib/citas/dinero.js";
 import { logCitasAudit } from "../../../../../../lib/citas/audit.js";
 import { normalizeString } from "../../../../../../lib/citas/validation.js";
 import { sendEmail, envioRealizado } from "../../../../../../lib/email/resendClient.js";
@@ -54,7 +55,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
 
     if (row.status === "cancelled") {
       process.stdout.write(`[citas:reject] booking=${row.id} noop (ya cancelled)\n`);
-      return ok(row.toJSON());
+      return ok(citaSegunRol(row.toJSON(), request.headers.get("x-user-role")));
     }
 
     if (row.status !== "pending") {
@@ -123,7 +124,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       process.stderr.write(`[citas:reject] email-rejected fail: ${mailErr.message}\n`);
     }
 
-    return ok(row.toJSON());
+    return ok(citaSegunRol(row.toJSON(), request.headers.get("x-user-role")));
   } catch (err) {
     return serverError(err);
   }

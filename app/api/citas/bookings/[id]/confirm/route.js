@@ -1,5 +1,6 @@
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
+import { citaSegunRol } from "../../../../../../lib/citas/dinero.js";
 import { logCitasAudit } from "../../../../../../lib/citas/audit.js";
 import { findBookingOverlap, lockBookingSlot } from "../../../../../../lib/citas/booking.js";
 import {
@@ -186,7 +187,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     const { row, yaEstaba, estadoAnterior, hayQueCobrar, hayQueSoltar } = resultado;
     if (yaEstaba) {
       process.stdout.write(`[citas:confirm] booking=${row.id} noop (ya confirmed)\n`);
-      return ok(row.toJSON());
+      return ok(citaSegunRol(row.toJSON(), request.headers.get("x-user-role")));
     }
 
     // ── El cobro, fuera del lock ─────────────────────────────────────────────
@@ -349,7 +350,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       eventTypeName: row.eventType?.name,
     });
 
-    return ok(row.toJSON());
+    return ok(citaSegunRol(row.toJSON(), request.headers.get("x-user-role")));
   } catch (err) {
     return serverError(err);
   }

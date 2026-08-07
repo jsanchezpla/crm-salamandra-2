@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
+import { filtrarCitas } from "../../../../lib/citas/dinero.js";
 import {
   normalizeString,
   normalizeEmail,
@@ -156,7 +157,10 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
     });
 
     return ok({
-      bookings: rows.map((r) => r.toJSON()),
+      // Sin importes ni estado de cobro si no es dirección (07/08/2026). Este
+      // es el endpoint de la LISTA DE ESPERA, donde más se ve el dinero: es de
+      // donde salía el «No se pudo cobrar · 360,00 €» que vio la empleada.
+      bookings: filtrarCitas(rows.map((r) => r.toJSON()), request.headers.get("x-user-role")),
       total: count,
       page,
       limit,

@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
+import { filtrarTipos, tipoSinDinero } from "../../../../lib/citas/dinero.js";
 import {
   normalizeString,
   slugify,
@@ -34,7 +35,12 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       order: [["order", "ASC"], ["createdAt", "ASC"]],
     });
 
-    return ok(eventTypes.map((e) => e.toJSON()));
+    // La tarifa solo la ve dirección (07/08/2026). La pantalla ya escondía la
+    // columna «Precio» desde el 06/08, pero el JSON la seguía trayendo entera:
+    // se veía desde el inspector del navegador. No se devuelve 403 porque el
+    // catálogo hace falta para trabajar —nombre, duración, modalidades— y sin él
+    // se rompen el alta de citas y la pantalla de disponibilidad.
+    return ok(filtrarTipos(eventTypes.map((e) => e.toJSON()), request.headers.get("x-user-role")));
   } catch (err) {
     return serverError(err);
   }
