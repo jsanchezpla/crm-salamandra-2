@@ -834,8 +834,40 @@ export default function CitasTiposPage() {
                   />
                 </div>
               </div>
+              {/*
+                El margen se RESTA de la cita, no se suma por fuera (07/08/2026,
+                Rodrigo): el hueco en la agenda sigue durando lo que pone arriba
+                y la sesión dura menos. Se enseña la cuenta ya hecha, con la hora
+                de ejemplo, porque «60 con 10 después» y «60 con 10 antes» dan
+                sesiones iguales de 50 minutos pero empiezan a horas distintas —
+                y eso, dicho con palabras, no se entiende hasta que se ve.
+              */}
               <p className="text-[11px] text-neutral-400 -mt-1">
-                Minutos que bloqueamos en la agenda para preparación o descanso entre citas.
+                El margen se resta de la cita: el hueco sigue durando {form.duration || 0} min y la
+                sesión dura menos.
+                {(() => {
+                  const total = Number(form.duration) || 0;
+                  const antes = Math.max(0, Number(form.bufferBefore) || 0);
+                  const despues = Math.max(0, Number(form.bufferAfter) || 0);
+                  if (!total) return null;
+                  if (antes + despues >= total) {
+                    return (
+                      <span className="block text-amber-700 mt-0.5">
+                        Los márgenes suman {antes + despues} min y la cita dura {total}: así no cabe
+                        nada, y se ignorarán hasta que lo ajustes.
+                      </span>
+                    );
+                  }
+                  const inicio = `17:${String(antes).padStart(2, "0")}`;
+                  const fin = 17 * 60 + antes + (total - antes - despues);
+                  const finTxt = `${String(Math.floor(fin / 60)).padStart(2, "0")}:${String(fin % 60).padStart(2, "0")}`;
+                  return (
+                    <span className="block text-neutral-500 mt-0.5">
+                      La sesión durará <b>{total - antes - despues} min</b>. Un hueco de las 17:00
+                      sería de {inicio} a {finTxt}.
+                    </span>
+                  );
+                })()}
               </p>
 
               <div>

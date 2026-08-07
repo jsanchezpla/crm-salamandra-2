@@ -1,6 +1,7 @@
 import { withPublicTenant } from "../../../../../../lib/tenant/publicTenantContext.js";
 import { ok, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { normalizarPreguntas } from "../../../../../../lib/citas/preguntasCita.js";
+import { duracionDeContacto } from "../../../../../../lib/citas/slots.js";
 import { verifyPortalSession, readBearer } from "../../../../../../lib/citas/portalSession.js";
 import { tiposConBonoActivo, filtrarTiposPara, soloSuPrograma } from "../../../../../../lib/citas/tiposVisibles.js";
 import {
@@ -72,7 +73,18 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenantModels, 
         slug: r.slug,
         name: r.name,
         description: r.description,
-        duration: r.duration,
+        /*
+         * ⚠️ LO QUE DURA LA SESIÓN, NO EL BLOQUE (07/08/2026, Rodrigo).
+         *
+         * `r.duration` es el hueco que ocupa en la agenda; los descansos previo
+         * y posterior se restan por dentro (ver `lib/citas/slots.js`). Con «60
+         * minutos y 10 de margen después», la paciente está 50 minutos en
+         * consulta —y eso es lo que tiene que leer antes de reservar—.
+         *
+         * Se enseñaba el bloque: la web decía 60 y la sesión eran 50. Aquí no
+         * es un detalle de pantalla, es lo que se le está ofreciendo.
+         */
+        duration: duracionDeContacto(r),
         color: r.color,
         additionalDataLabel: r.additionalDataLabel,
         additionalDataRequired: r.additionalDataRequired,
