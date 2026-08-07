@@ -6,6 +6,7 @@ import { splitBookings } from "../../../../../../../lib/citas/clientBookingSeria
 import { normalizeEmail } from "../../../../../../../lib/citas/validation.js";
 import { noEsCarritoAbandonado } from "../../../../../../../lib/citas/booking.js";
 import { CUPO_PORTAL } from "../../../../../../../lib/citas/portalRateLimit.js";
+import { estadoPack } from "../../../../../../../lib/citas/packs.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/citas-portal/bookings
@@ -58,7 +59,36 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
       order: [["scheduledAt", "ASC"]],
     });
 
-    return ok(splitBookings(rows, new Date()));
+    /*
+     * Cuántas sesiones le quedan de cada bono (07/08/2026, Rodrigo): al cancelar
+     * hay que decirle «la sesión vuelve a tu bono, te quedan N», no prometerle
+     * una devolución que nunca llega.
+     *
+     * Se cuenta desde las citas que YA se han leído arriba —las sesiones
+     * gastadas no son un contador, salen de las propias citas— así que lo único
+     * que falta de la BD es el total de cada bono.
+     */
+    const bonos = new Map();
+    const { SessionPack } = tenantModels;
+    const idsDeBono = [...new Set(rows.map((r) => r.packId).filter(Boolean))];
+    if (SessionPack && idsDeBono.length) {
+      try {
+        const packs = await SessionPack.findAll({
+          where: { id: { [Op.in]: idsDeBono } },
+          attributes: ["id", "totalSessions"],
+        });
+        const ahora = new Date();
+        for (const pack of packs) {
+          const suyas = rows.filter((r) => r.packId === pack.id);
+          bonos.set(pack.id, estadoPack(pack, suyas, ahora).restantes);
+        }
+      } catch {
+        // Sin la tabla o con un tropiezo, el aviso sale sin el número: sigue
+        // diciendo lo importante, que es que NO se devuelve el dinero.
+      }
+    }
+
+    return ok(splitBookings(rows, new Date(), bonos));
   } catch (err) {
     return serverError(err);
   }

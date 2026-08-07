@@ -14,6 +14,15 @@ import { useCallback, useEffect, useState } from "react";
  * decisión de dirección. El endpoint lo comprueba también, no solo la pantalla.
  */
 
+/*
+ * La hora se manda PARTIDA (fecha + hora) y la interpreta el servidor como hora
+ * de Madrid. Antes se mandaba "2026-08-17T07:00:00" de una pieza y sin zona:
+ * el servidor de producción va en UTC, así que «de 7 a 9» se guardaba como «de
+ * 9 a 11» de Madrid. En local no se veía, porque aquí el reloj ya es de Madrid.
+ *
+ * Se sigue mandando también el ISO suelto por si una versión vieja de la
+ * pantalla se queda abierta; el servidor prefiere la forma partida.
+ */
 function iso(fecha, hora) {
   if (!fecha) return null;
   return `${fecha}T${hora || "00:00"}:00`;
@@ -72,8 +81,9 @@ export default function PanelVacaciones({ esAdmin }) {
   async function crear() {
     setFallo(null);
     setAviso(null);
+    const fechaFin = form.fechaFin || form.fechaIni;
     const startAt = iso(form.fechaIni, form.horaIni);
-    const endAt = iso(form.fechaFin || form.fechaIni, form.horaFin);
+    const endAt = iso(fechaFin, form.horaFin);
     if (!startAt || !endAt) { setFallo("Pon al menos la fecha de inicio"); return; }
     if (new Date(endAt) <= new Date(startAt)) { setFallo("El final tiene que ser posterior al inicio"); return; }
 
@@ -85,6 +95,10 @@ export default function PanelVacaciones({ esAdmin }) {
         body: JSON.stringify({
           teamMemberId: form.teamMemberId || null,
           label: form.label || "Vacaciones",
+          startDate: form.fechaIni,
+          startTime: form.horaIni || "00:00",
+          endDate: fechaFin,
+          endTime: form.horaFin || "23:59",
           startAt, endAt,
         }),
       });

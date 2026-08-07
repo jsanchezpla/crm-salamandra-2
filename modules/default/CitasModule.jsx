@@ -428,8 +428,22 @@ export default function CitasModule() {
               title: `${b.label}${b.teamMemberName ? ` · ${b.teamMemberName}` : ""}`,
               start: b.startAt,
               end: b.endAt,
-              display: "background",
-              color: "#f3d9d9",
+              /*
+               * Negro con letra blanca (07/08/2026, Rodrigo): «para que quede
+               * claro». En rosa claro se confundía con un hueco libre y alguien
+               * ponía una cita encima sin darse cuenta.
+               *
+               * `block` y no `background`: los eventos de fondo de FullCalendar
+               * NO pintan su título, así que no se leía de quién eran ni por
+               * qué. Como bloque se ve la etiqueta y el nombre.
+               */
+              display: "block",
+              backgroundColor: "#0F0F0F",
+              borderColor: "#0F0F0F",
+              textColor: "#FFFFFF",
+              // No se arrastra ni se cambia de hora tirando de él: se quita y
+              // se vuelve a poner desde Tipos de cita.
+              editable: false,
               extendedProps: { esBloqueo: true },
             }));
         }
@@ -771,7 +785,7 @@ export default function CitasModule() {
     setSaving(true);
     try {
       const scheduledAt = new Date(`${createForm.date}T${createForm.time}`).toISOString();
-      const enviar = (permitirFestivo) =>
+      const enviar = (insistir) =>
         fetch("/api/citas/bookings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -787,14 +801,20 @@ export default function CitasModule() {
             notes: createForm.notes.trim() || null,
             patientId: createForm.patientId || null,
             teamMemberId: createForm.teamMemberId || null,
-            ...(permitirFestivo ? { permitirFestivo: true } : {}),
+            /*
+             * Las DOS puertas que avisan pero no imponen: el festivo del centro
+             * y el tramo de vacaciones (07/08/2026). Antes solo se reenviaba
+             * `permitirFestivo`, así que al chocar con unas vacaciones el aviso
+             * volvía a salir una y otra vez y la cita no se llegaba a crear.
+             */
+            ...(insistir ? { permitirFestivo: true, permitirBloqueo: true } : {}),
           }),
         });
 
       let res = await enviar(false);
       let j = await res.json();
-      // 409 = el día está marcado como cerrado. No se impone: se pregunta, y
-      // si el admin insiste (una urgencia en el puente) se reenvía confirmando.
+      // 409 = el día está cerrado, o alguien está de vacaciones. No se impone:
+      // se pregunta, y si insiste (una urgencia en el puente) se reenvía.
       if (res.status === 409 && !j.ok) {
         if (!confirm(`${j.error}\n\n¿Crear la cita igualmente?`)) {
           setSaving(false);

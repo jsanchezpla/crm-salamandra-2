@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
+import { buildMadridDate } from "../../../../lib/citas/slots.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -24,6 +25,30 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * centro (avisar, reubicar, cobrar o no), igual que con los festivos. La
  * respuesta dice cuántas hay para que la pantalla pueda avisar.
  */
+
+const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
+const HORA_RE = /^(\d{1,2}):(\d{2})$/;
+
+/**
+ * "2026-08-17" + "07:00" → el instante en que en MADRID son las 7 de la mañana.
+ *
+ * `respaldo` es un ISO completo, para no romper a quien llame al endpoint a la
+ * vieja usanza (o a una pestaña abierta desde antes de este arreglo). Ahí sí se
+ * respeta la zona que traiga la cadena, porque un ISO con zona no es ambiguo.
+ */
+function instanteDeMadrid(fecha, hora, respaldo) {
+  if (FECHA_RE.test(String(fecha ?? "")) && HORA_RE.test(String(hora ?? ""))) {
+    const [y, m, d] = String(fecha).split("-").map(Number);
+    const [hh, mm] = HORA_RE.exec(String(hora)).slice(1).map(Number);
+    if (hh > 23 || mm > 59) return null;
+    return buildMadridDate(y, m, d, hh, mm);
+  }
+  if (respaldo) {
+    const t = new Date(respaldo);
+    return Number.isNaN(t.getTime()) ? null : t;
+  }
+  return null;
+}
 
 function gate(ctx) {
   if (!ctx.hasModule("citas")) return forbidden("Módulo citas no activo");
@@ -83,10 +108,25 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     let body;
     try { body = await request.json(); } catch { return error("Body inválido"); }
 
-    const startAt = new Date(body.startAt);
-    const endAt = new Date(body.endAt);
-    if (Number.isNaN(startAt.getTime())) return error("startAt inválido", 422);
-    if (Number.isNaN(endAt.getTime())) return error("endAt inválido", 422);
+    /*
+     * ⚠️ LA HORA VIENE PARTIDA (fecha + hora), NO COMO UN INSTANTE. Corrige el
+     * fallo del 07/08/2026 que reportó Rodrigo: metía «de 7 a 9» y salía «de 9
+     * a 11».
+     *
+     * La pantalla mandaba "2026-08-17T07:00:00", sin zona. `new Date()` de una
+     * cadena así la interpreta en la hora LOCAL DE QUIEN LA LEE, y el
+     * contenedor de producción va en UTC: las 7 se guardaban como las 7 UTC, o
+     * sea las 9 de Madrid. En local no se veía porque mi reloj ya es de Madrid
+     * — el fallo solo aparecía en el servidor.
+     *
+     * Con `buildMadridDate` la hora que se teclea es la hora de Madrid siempre,
+     * la lea quien la lea y esté el servidor donde esté; y resuelve solo el
+     * cambio de hora (+02:00 en verano, +01:00 en invierno).
+     */
+    const startAt = instanteDeMadrid(body.startDate, body.startTime, body.startAt);
+    const endAt = instanteDeMadrid(body.endDate, body.endTime, body.endAt);
+    if (!startAt) return error("La fecha u hora de inicio no es válida", 422);
+    if (!endAt) return error("La fecha u hora de fin no es válida", 422);
     if (endAt <= startAt) return error("La fecha de fin tiene que ser posterior a la de inicio", 422);
 
     let teamMemberId = null;

@@ -232,6 +232,19 @@ export default function MiPerfilPage() {
   // consentimiento del tutor. `datosAplazados` es el «más tarde»: deja pasar
   // hasta que cierre la pestaña, igual que el contrato.
   const [datosAplazados, setDatosAplazados] = useState(false);
+
+  /*
+   * «Ya puedes pedir tu primera cita» (07/08/2026, Rodrigo): quien acaba de
+   * rellenar su documentación aterriza en un perfil vacío y no sabe que ya
+   * puede reservar — se queda esperando a que le llamen.
+   *
+   * Se enciende al terminar CUALQUIER paso de la documentación y el aviso se
+   * pinta cuando ya no queda ninguno tapando la pantalla, que es justo el
+   * momento en que ha acabado. Solo en esta visita: no se guarda en ninguna
+   * parte, así que no vuelve a salir cuando entre mañana.
+   */
+  const [acabaDeCompletar, setAcabaDeCompletar] = useState(false);
+  const [avisoCerrado, setAvisoCerrado] = useState(false);
   const [guardandoDatos, setGuardandoDatos] = useState(false);
   const [errorDatos, setErrorDatos] = useState(null);
 
@@ -506,6 +519,7 @@ export default function MiPerfilPage() {
       const j = await res.json().catch(() => ({}));
       if (!res.ok || !j.ok) throw new Error(j?.error || "No pudimos guardar tus datos");
       setContrato((c) => ({ ...c, ...j.data }));
+      setAcabaDeCompletar(true);
       loadContrato();
     } catch (err) {
       setErrorDatos(err.message);
@@ -529,6 +543,7 @@ export default function MiPerfilPage() {
             // pantalla (`nuevo.plantilla` ya trae el que toca).
             const quedan = nuevo?.quedanDocumentos ?? 0;
             setContrato((c) => ({ ...c, ...nuevo, requiereFirma: quedan > 0, yaFirme: quedan === 0 }));
+            if (quedan === 0) setAcabaDeCompletar(true);
             loadContrato();
           }}
           onMasTarde={() => setAplazado(true)}
@@ -711,6 +726,40 @@ export default function MiPerfilPage() {
             </div>
           )}
 
+          {/*
+            El aviso de «ya puedes pedir cita». Va aquí, dentro del perfil, y no
+            como una pantalla más: la documentación ya se ha terminado y
+            plantarle otro paso a pantalla completa parecería que aún falta algo.
+
+            SIN enlace a propósito. Aquí hubo un botón «Reservar una cita» que
+            sacaba a la paciente del área privada y se llevaba por delante la
+            sesión del portal (ver la nota de abajo). El aviso señala el botón
+            del menú de la web, que es el recorrido que sí funciona.
+          */}
+          {acabaDeCompletar && !avisoCerrado && (
+            <div className="rounded-xl border-2 p-4 mb-6" style={{ borderColor: "var(--widget-accent, #1B3A2D)" }}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[15px] font-semibold text-[var(--widget-text)]">
+                    ¡Listo! {isEmpty ? "Ya puedes pedir tu primera cita." : "Ya puedes pedir cita."}
+                  </p>
+                  <p className="text-[13px] text-[var(--widget-text-muted)] mt-1">
+                    Tienes la documentación completa. Reserva la sesión que quieras desde el botón
+                    de <b>Reservar cita</b> del menú de arriba.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAvisoCerrado(true)}
+                  aria-label="Cerrar aviso"
+                  className="text-[var(--widget-text-faint)] hover:text-[var(--widget-text)] shrink-0 px-1"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ── Mis citas ── */}
           <div>
             <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-3">
@@ -854,11 +903,30 @@ export default function MiPerfilPage() {
  * horas no devuelve nada, y enterarse después es enterarse tarde.
  */
 export function AvisoDinero({ siCancela }) {
-  if (!siCancela || siCancela.tipo === "nada" || !siCancela.importe) return null;
+  // El bono no lleva importe (no se devuelve nada) pero SÍ hay que avisar, así
+  // que sale del guard antes de exigir un importe.
+  if (!siCancela || siCancela.tipo === "nada") return null;
+  if (siCancela.tipo !== "vuelve_al_bono" && !siCancela.importe) return null;
   const importe = (siCancela.importe / 100).toLocaleString("es-ES", {
     style: "currency",
     currency: "EUR",
   });
+
+  if (siCancela.tipo === "vuelve_al_bono") {
+    const quedan = siCancela.sesionesRestantes;
+    return (
+      <span className="block rounded-md border border-[var(--widget-border)] bg-[var(--widget-bg)] px-3 py-2 text-[var(--widget-text-muted)]">
+        No se te devuelve dinero: <b>tu programa sigue contratado</b> y esta sesión vuelve a
+        quedarte libre. Solo se cancela la cita, así que tendrás que volver a pedir hora.
+        {Number.isInteger(quedan) && (
+          <>
+            {" "}
+            Te quedarían <b>{quedan} {quedan === 1 ? "sesión" : "sesiones"}</b> por usar.
+          </>
+        )}
+      </span>
+    );
+  }
 
   if (siCancela.tipo === "se_pierde") {
     return (
