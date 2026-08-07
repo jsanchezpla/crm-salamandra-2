@@ -29,8 +29,16 @@ const mal = (m) => { fallos++; process.stderr.write(`  ✗ ${m}\n`); };
 const paso = (m) => process.stdout.write(`\n▶ ${m}\n`);
 const esperar = (c, m) => (c ? ok(m) : mal(m));
 
-/** Campos que NO pueden llegarle a quien no es dirección. */
-const PROHIBIDOS_CITA = ["amount", "paymentStatus", "holdExpiresAt", "authorizationExpiresAt", "paymentSessionId"];
+/**
+ * Los IMPORTES no pueden llegarle a quien no es dirección.
+ *
+ * `paymentStatus` NO está aquí a propósito: el estado de cobro sí lo ve todo el
+ * equipo (decisión de Laura del 07/08). Lo que se prohíbe son las cifras. Se
+ * comprueba abajo, aparte, que ese estado SÍ siga llegando — si un día alguien
+ * lo mete en esta lista "por si acaso", recepción se queda sin saber si una
+ * sesión está cobrada y esa comprobación lo cazará.
+ */
+const PROHIBIDOS_CITA = ["amount", "paymentSessionId"];
 const PROHIBIDOS_TIPO = ["price", "instalmentPrice", "instalmentMonths"];
 
 const sinNinguno = (obj, campos) => campos.every((c) => obj?.[c] === undefined);
@@ -104,11 +112,14 @@ async function main() {
   if (citasEquipo.length) {
     const sucias = citasEquipo.filter((c) => conAlguno(c, PROHIBIDOS_CITA).length > 0);
     esperar(sucias.length === 0,
-      `ninguna de las ${citasEquipo.length} lleva importe ni estado de cobro${
+      `ninguna de las ${citasEquipo.length} lleva importes${
         sucias.length ? ` — ${sucias.length} SÍ lo llevan` : ""
       }`);
     esperar(citasEquipo.every((c) => c.clientName !== undefined && c.scheduledAt !== undefined),
       "y siguen llegando con nombre y hora: la agenda no se queda coja");
+    // La otra mitad de la raya: el ESTADO sí se ve.
+    esperar(citasEquipo.some((c) => c.paymentStatus !== undefined),
+      "el equipo SÍ ve el estado de cobro: sin cifras, pero sabe si está resuelta");
   } else {
     mal("no hay ninguna cita: la prueba no ha probado nada");
   }
@@ -125,7 +136,9 @@ async function main() {
       const c = detEquipo.cuerpo?.data ?? {};
       const sucios = conAlguno(c, PROHIBIDOS_CITA);
       esperar(sucios.length === 0,
-        `sin importe ni estado de cobro${sucios.length ? ` — SE COLARON: ${sucios.join(", ")}` : ""}`);
+        `sin importe${sucios.length ? ` — SE COLARON: ${sucios.join(", ")}` : ""}`);
+      esperar(c.paymentStatus !== undefined,
+        "pero con el estado de cobro, que sí puede ver");
       // La fuga doble: la tarifa viajaba anidada dentro del tipo de cita.
       const sucioTipo = conAlguno(c.eventType, PROHIBIDOS_TIPO);
       esperar(sucioTipo.length === 0,
