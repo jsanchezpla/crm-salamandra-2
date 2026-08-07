@@ -31,6 +31,8 @@ export default function ClientConsultaExternaSection({ clientId }) {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
   const [aviso, setAviso] = useState(null);
+  const [anadiendo, setAnadiendo] = useState(false);
+  const [empresaNueva, setEmpresaNueva] = useState("");
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -71,6 +73,56 @@ export default function ClientConsultaExternaSection({ clientId }) {
     } catch (e) {
       setError(e.message);
       cargar(); // deshace el cambio optimista de la pantalla
+    }
+    setGuardando(false);
+  }
+
+  /*
+   * Añadir una empresa desde aquí (07/08/2026, Rodrigo): «para no tener que ir
+   * hasta Configuración para hacerlo». Se añade a la lista del cliente —la
+   * misma que se edita allí, no una copia— y de paso se le pone a esta ficha,
+   * que es para lo que se estaba añadiendo.
+   *
+   * Se manda la lista ENTERA, no solo la nueva: el endpoint de ajustes guarda
+   * el array completo. Por eso se parte de `categorias`, que es lo que se leyó
+   * al abrir; si alguien añadió otra desde Configuración mientras tanto, esa se
+   * perdería — pero recargar aquí obligaría a pedir los ajustes en cada tecla,
+   * y el caso es raro frente al coste.
+   */
+  async function anadirEmpresa() {
+    const t = empresaNueva.trim();
+    if (!t) return;
+    const yaEsta = categorias.find((c) => c.toLocaleLowerCase("es") === t.toLocaleLowerCase("es"));
+    if (yaEsta) {
+      // Ya existía con otras mayúsculas: se usa la que hay, sin duplicarla.
+      setCategoria(yaEsta);
+      setEmpresaNueva("");
+      setAnadiendo(false);
+      guardar({ categoriaExterna: yaEsta }, `Guardada: ${yaEsta}`);
+      return;
+    }
+    setGuardando(true);
+    setError(null);
+    try {
+      // PATCH, no PUT: el endpoint de ajustes del cliente solo expone GET y
+      // PATCH, y un PUT se va en un 405 mudo (sin cuerpo) que en pantalla
+      // aparecía como «no se ha podido añadir» sin más.
+      const res = await fetch("/api/tenant/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoriasExternas: [...categorias, t] }),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(j?.error || "No se ha podido añadir la empresa");
+      setCategorias([...categorias, t]);
+      setCategoria(t);
+      setEmpresaNueva("");
+      setAnadiendo(false);
+      setGuardando(false);
+      await guardar({ categoriaExterna: t }, `Empresa «${t}» creada y asignada.`);
+      return;
+    } catch (e) {
+      setError(e.message);
     }
     setGuardando(false);
   }
@@ -139,11 +191,49 @@ export default function ClientConsultaExternaSection({ clientId }) {
               )}
             </select>
           </div>
-          {categorias.length === 0 && (
-            <p className="text-[11px] text-gray-400 mt-1">
-              No hay empresas configuradas. Se añaden en Configuración → Empresas con acuerdo.
-            </p>
+          {!anadiendo ? (
+            <button
+              type="button"
+              onClick={() => setAnadiendo(true)}
+              className="text-[11px] text-[var(--color-primary)] hover:underline mt-1.5"
+            >
+              + Añadir una empresa nueva
+            </button>
+          ) : (
+            <div className="mt-2 flex gap-2">
+              <input
+                autoFocus
+                value={empresaNueva}
+                onChange={(e) => setEmpresaNueva(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); anadirEmpresa(); }
+                  if (e.key === "Escape") { setAnadiendo(false); setEmpresaNueva(""); }
+                }}
+                placeholder="Nombre de la empresa"
+                maxLength={80}
+                className="flex-1 border border-gray-200 rounded-md px-2.5 py-1.5 text-sm"
+              />
+              <button
+                type="button"
+                onClick={anadirEmpresa}
+                disabled={guardando || !empresaNueva.trim()}
+                className="text-xs px-3 py-1.5 rounded-md bg-[#0F0F0F] text-white hover:bg-[#222] disabled:opacity-40 shrink-0"
+              >
+                Añadir
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAnadiendo(false); setEmpresaNueva(""); }}
+                className="text-xs px-2 py-1.5 text-gray-500 hover:text-gray-800 shrink-0"
+              >
+                Cancelar
+              </button>
+            </div>
           )}
+          <p className="text-[11px] text-gray-400 mt-1">
+            Las empresas que añadas aquí quedan disponibles para el resto de fichas, igual que si
+            las pusieras en Configuración.
+          </p>
         </div>
 
         {aviso && <p className="text-[11px] text-emerald-700">{aviso}</p>}

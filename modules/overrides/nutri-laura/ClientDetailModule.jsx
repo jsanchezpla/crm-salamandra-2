@@ -359,11 +359,6 @@ export default function NutriLauraClientDetailModule() {
               clientEmail={client.email}
               userRole={me.role}
             />
-            {/* El interruptor va DENTRO de esta pestaña y no en «Datos»: quien
-                se cansa de confirmar las citas de alguien está mirando
-                justamente esta lista (06/08/2026, Rodrigo). */}
-            <ClientConsultaExternaSection clientId={id} />
-            <ClientCitasSection clientId={id} />
           </>
         )}
 
@@ -410,8 +405,23 @@ function InfoTab({
   onDelete,
   onRecargar,
 }) {
+  /*
+   * DOS COLUMNAS (07/08/2026, Rodrigo): «como hay tantas filas ya, vamos a
+   * dividir la zona de datos en dos, que la parte derecha está completamente
+   * vacía». Los datos del paciente son largos y todo lo demás son tarjetas
+   * pequeñas que obligaban a bajar hasta el final para verlas.
+   *
+   * A la IZQUIERDA lo que se lee de arriba abajo —la ficha y su historia—, a la
+   * DERECHA los interruptores y lo que cuelga de ella. Hasta `lg` va todo en
+   * una columna: en un móvil dos columnas serían dos tiras estrechas.
+   *
+   * `items-start` para que las dos columnas se estiren por su cuenta; sin él,
+   * la más corta se alarga hasta igualar a la otra y quedan huecos en blanco
+   * dentro de las tarjetas.
+   */
   return (
-    <div className="max-w-lg space-y-6">
+    <div className="grid gap-6 lg:grid-cols-2 items-start">
+    <div className="space-y-6 min-w-0">
       <PatientCard
         client={client}
         editMode={editMode}
@@ -425,12 +435,6 @@ function InfoTab({
         motivo={motivo}
         infoAdicional={infoAdicional}
       />
-
-      <CuentaWebSection client={client} />
-
-      <BonosSection bonos={client.bonos} client={client} onCambio={onRecargar} />
-
-      <ClientModulesSection clientId={client.id} />
 
       {!confirmDelete ? (
         <button
@@ -460,6 +464,17 @@ function InfoTab({
           </div>
         </div>
       )}
+    </div>
+
+    {/* La columna de la derecha: lo que se consulta y se cambia de vez en
+        cuando, no lo que se lee entero cada vez que se abre la ficha. */}
+    <div className="space-y-6 min-w-0">
+      <ClientConsultaExternaSection clientId={client.id} />
+      <ClientCitasSection clientId={client.id} />
+      <CuentaWebSection client={client} />
+      <BonosSection bonos={client.bonos} client={client} onCambio={onRecargar} />
+      <ClientModulesSection clientId={client.id} />
+    </div>
     </div>
   );
 }

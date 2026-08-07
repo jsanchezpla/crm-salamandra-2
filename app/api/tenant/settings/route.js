@@ -419,6 +419,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   // Modo de videollamada del módulo Citas. Lista cerrada.
   if (body.meetModo === "manual" || body.meetModo === "automatico") {
     settings.citas = { ...(settings.citas ?? {}), meetModo: body.meetModo };
+  }
 
   /*
    * La lista de empresas de las consultas externas. Se guarda LIMPIA —sin
@@ -435,7 +436,6 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
       ...(settings.clientes ?? {}),
       categoriasExternas: categoriasDe({ settings: { clientes: { categoriasExternas: body.categoriasExternas } } }),
     };
-  }
   }
   if (typeof body.recordatoriosCitas === "boolean") {
     settings.citas = { ...(settings.citas ?? {}), recordatorios: body.recordatoriosCitas };

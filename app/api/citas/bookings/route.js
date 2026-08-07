@@ -214,26 +214,56 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const clientName = normalizeString(body.clientName);
     if (!clientName) return error("clientName es obligatorio");
 
-    const clientEmail = normalizeEmail(body.clientEmail);
-    if (!clientEmail || !isValidEmail(clientEmail)) return error("clientEmail inválido");
-
-    const clientPhone = normalizeString(body.clientPhone);
-    if (!clientPhone) return error("clientPhone es obligatorio");
-
-    // Enlace con la ficha de cliente (2026-07-22). Opcional: una cita para
-    // alguien que todavía no es cliente es válida. Si viene, se comprueba que
-    // la ficha existe DE VERDAD en este tenant antes de guardarla — si no,
-    // una FK rota tumbaría el insert con un error feo.
+    /*
+     * La ficha se resuelve ANTES de exigir el correo: hace falta saber si es una
+     * consulta externa para decidir si el correo es obligatorio (ver abajo).
+     *
+     * Enlace con la ficha de cliente (2026-07-22). Opcional: una cita para
+     * alguien que todavía no es cliente es válida. Si viene, se comprueba que
+     * la ficha existe DE VERDAD en este tenant antes de guardarla — si no,
+     * una FK rota tumbaría el insert con un error feo.
+     */
     let clientId = null;
+    let fichaExterna = false;
     if (body.clientId != null && body.clientId !== "") {
       if (typeof body.clientId !== "string" || !UUID_RE.test(body.clientId)) {
         return error("clientId inválido");
       }
       const { Client } = tenantModels;
-      const ficha = Client ? await Client.findByPk(body.clientId, { attributes: ["id"] }) : null;
+      const ficha = Client
+        ? await Client.findByPk(body.clientId, { attributes: ["id", "esConsultaExterna"] })
+        : null;
       if (!ficha) return error("La ficha de cliente indicada no existe", 422);
       clientId = ficha.id;
+      fichaExterna = !!ficha.esConsultaExterna;
     }
+
+    /*
+     * ⚠️ EL CORREO ES OBLIGATORIO... SALVO EN UNA CONSULTA EXTERNA (07/08/2026,
+     * Rodrigo).
+     *
+     * Para una paciente normal se sigue exigiendo, y a propósito: la cita nace
+     * confirmada y sin correo no hay confirmación, ni recordatorio, ni enlace
+     * para cancelar — se queda sin nada por escrito.
+     *
+     * Una consulta externa es otra cosa: viene por un acuerdo con una empresa,
+     * no tiene cuenta en la web, y muchas veces lo único que hay de ella es un
+     * teléfono. Exigirle un correo obligaba a inventarse uno, que es peor que
+     * no tenerlo: acaba habiendo citas apuntadas a direcciones falsas.
+     *
+     * Si lo tiene, se valida igual y se le avisa como a cualquiera.
+     */
+    const clientEmail = normalizeEmail(body.clientEmail);
+    if (clientEmail && !isValidEmail(clientEmail)) return error("clientEmail inválido");
+    if (!clientEmail && !fichaExterna) {
+      return error(
+        "Falta el correo del paciente. Solo se puede dejar vacío en las consultas externas.",
+        422
+      );
+    }
+
+    const clientPhone = normalizeString(body.clientPhone);
+    if (!clientPhone) return error("clientPhone es obligatorio");
 
     const additionalData = body.additionalData != null ? String(body.additionalData) : null;
     if (eventType.additionalDataRequired && (!additionalData || additionalData.trim() === "")) {
