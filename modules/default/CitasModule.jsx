@@ -326,15 +326,37 @@ export default function CitasModule() {
       .catch(() => {});
   }, []);
 
+  /*
+   * Las fechas se ESCRIBEN y se LEEN en DD-MM-AAAA (07/08/2026, Rodrigo), que
+   * es como se escriben aquí. Por dentro y en la API siguen viajando en
+   * AAAA-MM-DD, que es lo que entiende la base de datos y lo único que ordena
+   * bien: cambiar el formato de la pantalla no puede cambiar el de los datos.
+   */
+  const aBonita = useCallback((ymd) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd ?? ""));
+    return m ? `${m[3]}-${m[2]}-${m[1]}` : String(ymd ?? "");
+  }, []);
+  /** "11-08-2026" → "2026-08-11". Traga barras y un AAAA-MM-DD ya hecho. */
+  const aIso = useCallback((texto) => {
+    const t = String(texto ?? "").trim().replace(/\//g, "-");
+    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+    const m = /^(\d{1,2})-(\d{1,2})-(\d{4})$/.exec(t);
+    if (!m) return null;
+    const d = m[1].padStart(2, "0");
+    const mes = m[2].padStart(2, "0");
+    if (Number(d) < 1 || Number(d) > 31 || Number(mes) < 1 || Number(mes) > 12) return null;
+    return `${m[3]}-${mes}-${d}`;
+  }, []);
+
   const alternarFestivo = useCallback(async (fecha) => {
     const existente = festivos.get(fecha);
     try {
       if (existente) {
-        if (!confirm(`¿Quitar el cierre del ${fecha}? Volverán a ofrecerse huecos ese día.`)) return;
+        if (!confirm(`¿Quitar el cierre del ${aBonita(fecha)}? Volverán a ofrecerse huecos ese día.`)) return;
         const r = await fetch(`/api/citas/blocked-days?date=${fecha}`, { method: "DELETE" });
         if (!r.ok) throw new Error((await r.json()).error || "No se pudo quitar");
       } else {
-        const label = prompt(`Marcar el ${fecha} como festivo o cierre del centro.\n\nMotivo (opcional):`, "Festivo");
+        const label = prompt(`Marcar el ${aBonita(fecha)} como festivo o cierre del centro.\n\nMotivo (opcional):`, "Festivo");
         if (label === null) return; // canceló
         const r = await fetch("/api/citas/blocked-days", {
           method: "POST",
@@ -355,7 +377,29 @@ export default function CitasModule() {
     } catch (e) {
       alert(e.message);
     }
-  }, [festivos, cargarFestivos, ymdLocal]);
+  }, [festivos, cargarFestivos, ymdLocal, aBonita]);
+
+  /*
+   * ⚠️ QUITAR UN FESTIVO DEJABA EL NOMBRE PUESTO (07/08/2026, Rodrigo).
+   *
+   * `dayCellContent` y `dayCellClassNames` son funciones que FullCalendar llama
+   * UNA VEZ por celda y cachea. Leen `festivos`, que es estado de React, pero
+   * FullCalendar no se entera de que ese estado ha cambiado: la fila se borraba
+   * de la base de datos, la lista se recargaba bien, y la celda seguía pintada
+   * en rojo con «Festivo» encima. Parecía que el borrado no había funcionado.
+   *
+   * Se le pide repintar cuando cambia el CONTENIDO de la lista. La dependencia
+   * es una FIRMA de texto, no el Map: un Map nuevo con los mismos días no debe
+   * disparar nada, o `render()` → `datesSet` → recarga → Map nuevo → `render()`
+   * se convierte en un bucle infinito.
+   */
+  const firmaFestivos = useMemo(
+    () => [...festivos.entries()].map(([f, v]) => `${f}:${v?.label ?? ""}`).sort().join("|"),
+    [festivos]
+  );
+  useEffect(() => {
+    calendarRef.current?.getApi()?.render();
+  }, [firmaFestivos]);
 
   // Equipo para asignar profesional a la cita y para el filtro del calendario
   // (si el tenant no tiene team, /api/team da 403 y la lista queda vacía: ok).
@@ -1167,10 +1211,11 @@ export default function CitasModule() {
                 type="button"
                 onClick={() => {
                   const hoy = ymdLocal(new Date());
-                  const f = prompt("Marcar o quitar un día cerrado (festivo, puente, formación).\n\nFecha en formato AAAA-MM-DD:", hoy);
+                  const f = prompt("Marcar o quitar un día cerrado (festivo, puente, formación).\n\nFecha (DD-MM-AAAA):", aBonita(hoy));
                   if (!f) return;
-                  if (!/^\d{4}-\d{2}-\d{2}$/.test(f.trim())) { alert("La fecha debe ser AAAA-MM-DD."); return; }
-                  alternarFestivo(f.trim());
+                  const iso = aIso(f);
+                  if (!iso) { alert("La fecha debe ser DD-MM-AAAA. Por ejemplo: 24-12-2026"); return; }
+                  alternarFestivo(iso);
                 }}
                 className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-neutral-200 text-neutral-600 hover:bg-neutral-50 transition-colors"
               >

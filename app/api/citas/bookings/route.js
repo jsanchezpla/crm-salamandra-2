@@ -14,6 +14,7 @@ import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMemb
 import { meetUrlInicial } from "../../../../lib/citas/videollamada.js";
 import { veTodaLaAgenda } from "../../../../lib/citas/visibilidad.js";
 import { cargarFestivos, esFestivo } from "../../../../lib/citas/festivos.js";
+import { duracionDeContacto } from "../../../../lib/citas/slots.js";
 import { cargarAusencias, minutosOcupados } from "../../../../lib/citas/ausencias.js";
 import { getMadridParts } from "../../../../lib/citas/slots.js";
 import { asignarSesion } from "../../../../lib/citas/packs.js";
@@ -253,7 +254,14 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       return error(`modality '${modality}' no está permitida para este tipo de cita`);
     }
 
-    const duration = eventType.duration; // snapshot
+    /*
+     * La duración que se guarda es el TIEMPO DE CONSULTA, ya sin los descansos
+     * (07/08/2026, Rodrigo): con «60 min y 10 de previo», la cita dura 50 y el
+     * bloque sigue siendo de 60. Aquí no se desplaza la hora —quien la apunta a
+     * mano pone la hora que quiere—, pero sí se respeta lo que ocupa de verdad,
+     * o la agenda diría 60 minutos donde hay 50 y los solapes saldrían mal.
+     */
+    const duration = duracionDeContacto(eventType); // snapshot
     // El enlace solo se hereda del tipo de cita si el tenant tiene el modo
     // "automatico" (Configuración → Citas). Por defecto la cita nace sin
     // enlace y se pega a mano con «Guardar y enviar».

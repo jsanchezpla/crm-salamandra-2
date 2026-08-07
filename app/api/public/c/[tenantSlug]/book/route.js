@@ -62,6 +62,8 @@ import {
   getMadridTodayMidnight,
   pickAvailabilitiesForEventType,
   timeStrToMinutes,
+  desfaseDeInicio,
+  duracionDeContacto,
 } from "../../../../../../lib/citas/slots.js";
 import { cargarFestivos, esFestivo } from "../../../../../../lib/citas/festivos.js";
 import { cargarAusencias, minutosOcupados } from "../../../../../../lib/citas/ausencias.js";
@@ -367,7 +369,21 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
 
     const { hour: hMadrid, minute: mMadrid } = getMadridParts(scheduledAt);
     const scheduledMin = hMadrid * 60 + mMadrid;
-    const endMin = scheduledMin + eventType.duration;
+    /*
+     * Los descansos se restan por dentro (07/08/2026, Rodrigo): con «60 min y
+     * 10 de previo», el hueco de las 5:10 pertenece al bloque 5:00-6:00 y la
+     * cita dura 50. Hay que medir las dos cosas:
+     *   · `endMin` — cuándo acaba LA CITA, para solapes y bloqueos;
+     *   · `bloqueIni`/`bloqueFin` — el bloque entero, que es lo que tiene que
+     *     caber dentro de la disponibilidad del centro.
+     * Sin lo segundo, una cita de 5:10 a 6:00 con el centro abriendo a las 5:00
+     * se aceptaría aunque su bloque empiece antes de abrir.
+     */
+    const contacto = duracionDeContacto(eventType);
+    const desfase = desfaseDeInicio(eventType);
+    const endMin = scheduledMin + contacto;
+    const bloqueIni = scheduledMin - desfase;
+    const bloqueFin = bloqueIni + eventType.duration;
 
     /*
      * «Vacaciones» (06/08/2026). Se comprueba aquí igual que el festivo y por
@@ -395,7 +411,7 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
       const s = timeStrToMinutes(av.startTime);
       const e = timeStrToMinutes(av.endTime);
       if (s == null || e == null) continue;
-      if (scheduledMin >= s && endMin <= e) {
+      if (bloqueIni >= s && bloqueFin <= e) {
         withinSlot = true;
         break;
       }
@@ -637,7 +653,7 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
 
         const overlap = await findBookingOverlap(Booking, {
           scheduledAt,
-          duration: eventType.duration,
+          duration: contacto,
           transaction: t,
         });
         if (overlap) {
@@ -725,7 +741,7 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
             clientPhone,
             additionalData,
             scheduledAt,
-            duration: eventType.duration,
+            duration: contacto,
             modality: "online",
             meetUrl: meetUrlInicial(tenant, eventType, "online"),
             /*
@@ -796,7 +812,7 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
             booking: {
               id: err.duplicado.id,
               scheduledAt: scheduledAt.toISOString(),
-              duration: eventType.duration,
+              duration: contacto,
               eventTypeName: eventType.name,
               eventTypeColor: eventType.color,
               clientEmail,
