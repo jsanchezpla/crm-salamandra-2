@@ -49,7 +49,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       order: [["createdAt", "DESC"]],
       limit: Math.min(parseInt(searchParams.get("limit") ?? "50", 10) || 50, 200),
       include: TeamMember
-        ? [{ model: TeamMember, as: "autor", attributes: ["id", "firstName", "lastName"], required: false }]
+        ? [{ model: TeamMember, as: "autor", attributes: ["id", "displayName"], required: false }]
         : [],
     });
 
@@ -64,7 +64,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
           leido: j.readAt,
           correo: j.emailStatus,
           bookingId: j.bookingId,
-          autor: j.autor ? `${j.autor.firstName} ${j.autor.lastName}`.trim() : null,
+          autor: j.autor?.displayName ?? null,
         };
       }),
     });

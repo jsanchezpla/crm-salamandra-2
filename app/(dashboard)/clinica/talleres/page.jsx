@@ -219,7 +219,7 @@ export default function TalleresPage() {
                     {t.description && <div className="text-[11.5px] text-neutral-400 mt-0.5">{t.description}</div>}
                   </td>
                   <td className="px-3 py-2 text-neutral-500">{t.schedule || "—"}</td>
-                  <td className="px-3 py-2 text-neutral-500">{t.responsable?.name || "—"}</td>
+                  <td className="px-3 py-2 text-neutral-500">{t.responsable?.displayName || "—"}</td>
                   <td className="px-3 py-2 text-right font-medium">{t.apuntados}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     <button onClick={() => abrirTaller(t)} className="text-neutral-500 hover:text-neutral-800 px-2">Editar</button>
@@ -244,7 +244,7 @@ export default function TalleresPage() {
                 <h2 className="text-base font-semibold text-neutral-800">{detalle.name}</h2>
                 <p className="text-[12px] text-neutral-500 mt-0.5">
                   {detalle.schedule || "Sin horario indicado"}
-                  {detalle.responsable?.name ? ` · ${detalle.responsable.name}` : ""}
+                  {detalle.responsable?.displayName ? ` · ${detalle.responsable.displayName}` : ""}
                 </p>
               </div>
               <button onClick={() => setDetalle(null)} className="text-neutral-400 hover:text-neutral-700 text-[12.5px]">Cerrar</button>
@@ -346,7 +346,7 @@ export default function TalleresPage() {
               <span className="text-[12px] text-neutral-500">Lo lleva</span>
               <select value={form.teamMemberId} onChange={(e) => setForm({ ...form, teamMemberId: e.target.value })} className={inputCls}>
                 <option value="">— Sin asignar —</option>
-                {equipo.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                {equipo.map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
               </select>
             </label>
             <label className="block">

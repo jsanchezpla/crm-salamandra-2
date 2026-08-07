@@ -324,7 +324,7 @@ export default function InventarioPage() {
                       <td className={`px-2 py-1.5 text-right font-medium ${Number(m.quantity) < 0 ? "text-red-600" : "text-emerald-700"}`}>
                         {Number(m.quantity) > 0 ? "+" : ""}<Cantidad valor={m.quantity} unidad={detalle.unit} />
                       </td>
-                      <td className="px-2 py-1.5 text-neutral-500">{m.teamMember?.name || "—"}</td>
+                      <td className="px-2 py-1.5 text-neutral-500">{m.teamMember?.displayName || "—"}</td>
                     </tr>
                   ))}
                 </tbody>

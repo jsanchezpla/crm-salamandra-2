@@ -268,7 +268,7 @@ export default function ArqueoPage() {
                       <td className={`px-3 py-2 text-right font-medium ${d < 0 ? "text-red-600" : d > 0 ? "text-amber-600" : "text-neutral-400"}`}>
                         {d === 0 ? "cuadra" : fmt(d)}
                       </td>
-                      <td className="px-3 py-2 text-neutral-500">{c.closedBy?.name || "—"}</td>
+                      <td className="px-3 py-2 text-neutral-500">{c.closedBy?.displayName || "—"}</td>
                       <td className="px-3 py-2 text-neutral-500">{c.notes || "—"}</td>
                     </tr>
                   );

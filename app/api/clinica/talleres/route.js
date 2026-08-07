@@ -24,7 +24,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const talleres = await Taller.findAll({
       where: verInactivos ? {} : { active: true },
       order: [["name", "ASC"]],
-      include: [{ model: TeamMember, as: "responsable", attributes: ["id", "name"] }],
+      include: [{ model: TeamMember, as: "responsable", attributes: ["id", "displayName"] }],
     });
 
     // Apuntados AHORA, de una sola consulta: con un include por taller esto

@@ -11,7 +11,7 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
   const { id } = await params;
 
   const taller = await Taller.findByPk(id, {
-    include: [{ model: TeamMember, as: "responsable", attributes: ["id", "name"] }],
+    include: [{ model: TeamMember, as: "responsable", attributes: ["id", "displayName"] }],
   });
   if (!taller) return notFound("Taller no encontrado");
 

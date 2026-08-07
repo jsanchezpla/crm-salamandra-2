@@ -41,7 +41,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     offset: (page - 1) * limit,
     include: [
       { model: Product, as: "product", attributes: ["id", "name", "unit"] },
-      { model: TeamMember, as: "teamMember", attributes: ["id", "name"] },
+      { model: TeamMember, as: "teamMember", attributes: ["id", "displayName"] },
     ],
   });
 

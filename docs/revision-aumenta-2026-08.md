@@ -432,12 +432,30 @@ Todas **VERIFICADAS**:
    la pantalla blanca de «Application error». Entró con `3333bec` del 31/07 y ese
    mismo día se desplegó. Arreglo: incluir `sourceSessionIds: []` y
    `referralSpecialty: ""` en los dos resets.
-2. **Talleres devuelve 500 siempre.**
+2. **Talleres devuelve 500 siempre.** ✅ **ARREGLADO el 07/08/2026.**
    `app/api/clinica/talleres/route.js:27` y `talleres/[id]/route.js:14` incluyen
    `TeamMember` con `attributes: ["id", "name"]`, y **TeamMember no tiene `name`**
    (tiene `displayName`) → PostgreSQL 42703. El try/catch solo contempla 42P01
    (tabla ausente). Mismo copy-paste en `app/api/arqueo/cierres/route.js:76` y
    `app/api/inventory/stock-movements/route.js:44`.
+
+   Al arreglarlo aparecieron **dos sitios más** que el barrido de esta revisión no
+   había cogido, porque no son includes de Sequelize:
+   - `app/api/citas/avisos/route.js:52` pedía `["id", "firstName", "lastName"]`
+     sobre `TeamMember`, que **tampoco tiene esos dos campos** → el mismo 42703, y
+     ahí el `catch` devuelve `serverError`, así que el historial de avisos de un
+     cliente estaba caído en producción igual que Talleres.
+   - `app/(dashboard)/clinica/talleres/page.jsx:349` pintaba `{m.name}` sobre los
+     miembros de `/api/team` (que devuelve `displayName`): el desplegable «Lo
+     lleva» del alta salía con **todas las opciones en blanco**. Este no daba
+     error, solo hacía imposible saber a quién asignabas.
+
+   Se ha unificado a `displayName` de punta a punta (endpoint y pantalla) en vez de
+   aliasar con `[["displayName","name"]]`: el resto del CRM —proyectos, pacientes,
+   calendario, tarifas— ya consume `displayName`, y tener dos nombres para el mismo
+   campo es justo lo que produjo estos cinco copia-pega. El `catch` de Talleres se
+   deja como está, contemplando **solo** 42P01: tragarse un 42703 como «pantalla
+   vacía» habría escondido este fallo en vez de destaparlo.
 3. **Datos personales de menores en el schema compartido.**
    `app/api/pacientes/[id]/route.js:89` y `:148-149` auditan `p.toJSON()` completo
    como `before`/`after` — DNI, dirección, motivo de derivación, notas internas,

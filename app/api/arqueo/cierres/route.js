@@ -73,7 +73,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     order: [["closeDate", "DESC"]],
     include: [
       { model: CashPoint, as: "cashPoint", attributes: ["id", "name"] },
-      { model: TeamMember, as: "closedBy", attributes: ["id", "name"] },
+      { model: TeamMember, as: "closedBy", attributes: ["id", "displayName"] },
     ],
   });
 
