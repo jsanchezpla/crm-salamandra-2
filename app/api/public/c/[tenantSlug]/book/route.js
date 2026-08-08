@@ -12,6 +12,7 @@ import {
 import { sendEmail, envioRealizado } from "../../../../../../lib/email/resendClient.js";
 import { bookingReceivedTemplate } from "../../../../../../lib/email/templates/citas/bookingReceived.js";
 import { bookingConfirmedTemplate } from "../../../../../../lib/email/templates/citas/bookingConfirmed.js";
+import { enlaceCancelacion } from "../../../../../../lib/citas/cancelacion.js";
 import {
   normalizeString,
   normalizeEmail,
@@ -1037,9 +1038,8 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
       if (!avisarPorEmail) throw new Error("SIN_CONSENTIMIENTO_EMAIL");
       let tpl;
       if (nacioConfirmada) {
-        const cancelUrl = row.cancellationToken
-          ? `/widget/c/${tenant.slug}/cancel/${row.cancellationToken}`
-          : null;
+        // null si el centro no deja anular a la familia (08/08/2026).
+        const cancelUrl = enlaceCancelacion(tenant, { slug: tenant.slug, token: row.cancellationToken });
         tpl = bookingConfirmedTemplate({
           tenantName: tenant.name,
           brand: tenant.settings?.brand,

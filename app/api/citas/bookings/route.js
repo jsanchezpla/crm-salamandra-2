@@ -9,6 +9,7 @@ import {
   VALID_MODALITIES,
 } from "../../../../lib/citas/validation.js";
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
+import { enlaceCancelacion } from "../../../../lib/citas/cancelacion.js";
 import { findBookingOverlap, noEsCarritoAbandonado } from "../../../../lib/citas/booking.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { meetUrlInicial } from "../../../../lib/citas/videollamada.js";
@@ -414,9 +415,10 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     try {
       if (!row.clientEmail) throw new Error("SIN_EMAIL");
       if (!(await citaPuedeAvisar(tenantModels, row, "citasEmail"))) throw new Error("SIN_CONSENTIMIENTO");
-      const cancelUrl = row.cancellationToken
-        ? `/widget/c/${tenant.slug}/cancel/${row.cancellationToken}`
-        : null;
+      // Devuelve null si el centro no deja anular a la familia, y entonces la
+      // plantilla no pinta el «Cancela aquí». Es el caso de un centro que
+      // gestiona sus citas por teléfono (08/08/2026).
+      const cancelUrl = enlaceCancelacion(tenant, { slug: tenant.slug, token: row.cancellationToken });
       const tpl = bookingConfirmedTemplate({
         tenantName: tenant.name,
         brand: tenant.settings?.brand,

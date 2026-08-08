@@ -630,6 +630,21 @@ export default function ConfigModule() {
           )}
 
           {isAdmin && (
+            <CancelacionCard
+              activo={!!cfg.cancelacionBloqueada}
+              readOnly={!!cfg.readOnly}
+              onChange={(v) =>
+                patchTenant(
+                  { cancelacionBloqueada: v },
+                  v
+                    ? "Las citas se anularán solo desde el centro"
+                    : "Las familias vuelven a poder anular sus citas"
+                )
+              }
+            />
+          )}
+
+          {isAdmin && (
             <AvisosWhatsappCard
               activo={!!cfg.avisosWhatsapp}
               readOnly={!!cfg.readOnly}
@@ -1601,6 +1616,48 @@ function BloqueoImpagoCard({ activo, readOnly, onChange }) {
       <p className="text-[10px] text-neutral-400 mt-2">
         Ojo: si el centro no registra los cobros con su <strong>mes</strong>, al encenderlo
         desaparece de golpe la documentación de todas las familias.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * El centro decide si la familia puede anular sus citas sola (08/08/2026).
+ *
+ * La tarjeta explica las DOS cosas que se apagan a la vez —el botón del área
+ * privada y el enlace de los correos— porque apagar solo una es el error que se
+ * comete: el «Cancela aquí» del correo cancela sin iniciar sesión y no caduca.
+ */
+function CancelacionCard({ activo, readOnly, onChange }) {
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-neutral-800">Las citas se anulan solo desde el centro</div>
+          <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+            Para centros que gestionan su agenda por teléfono. Al activarlo, la familia deja de
+            tener el botón de anular en su área privada y los correos de cita dejan de llevar el
+            enlace de «Cancela aquí». El equipo sigue pudiendo anular con normalidad desde el CRM.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange(!activo)}
+          className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 ${activo ? "bg-[var(--color-primary,#1B3A2D)]" : "bg-neutral-300"}`}
+          aria-label={activo ? "Permitir que la familia anule sus citas" : "Impedir que la familia anule sus citas"}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${activo ? "translate-x-6" : "translate-x-1"}`} />
+        </button>
+      </div>
+      <div className="mt-1 text-[11px] font-medium">
+        {activo
+          ? <span className="text-emerald-700">Activo: para cambiar una cita, la familia llama al centro.</span>
+          : <span className="text-neutral-400">Apagado: la familia puede anular sus citas ella misma.</span>}
+      </div>
+      <p className="text-[10px] text-neutral-400 mt-2">
+        Al activarlo dejan de funcionar también los enlaces de cancelar de los correos
+        <strong> ya enviados</strong>, que hasta ahora no caducaban nunca.
       </p>
     </div>
   );

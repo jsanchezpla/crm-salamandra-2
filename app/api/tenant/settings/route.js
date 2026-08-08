@@ -135,6 +135,7 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("citas.recordatorios", antes?.citas?.recordatorios, despues?.citas?.recordatorios);
   anota("citas.agendaCompartida", antes?.citas?.agendaCompartida, despues?.citas?.agendaCompartida);
   anota("citas.portalBloqueoImpago", antes?.citas?.portalBloqueoImpago, despues?.citas?.portalBloqueoImpago);
+  anota("citas.cancelacionBloqueada", antes?.citas?.cancelacionBloqueada, despues?.citas?.cancelacionBloqueada);
   anota("citas.avisosWhatsapp", antes?.citas?.avisosWhatsapp, despues?.citas?.avisosWhatsapp);
   anota("citas.formularioObligatorio", antes?.citas?.formularioObligatorio, despues?.citas?.formularioObligatorio);
   anota("citas.contratoObligatorio", antes?.citas?.contratoObligatorio, despues?.citas?.contratoObligatorio);
@@ -219,6 +220,8 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     agendaCompartida: t.settings?.citas?.agendaCompartida === true,
     // Bloqueo del área privada mes a mes hasta que consta el cobro de ese mes.
     portalBloqueoImpago: t.settings?.citas?.portalBloqueoImpago === true,
+    // ¿El centro impide que la familia anule sus citas? (lib/citas/cancelacion.js)
+    cancelacionBloqueada: t.settings?.citas?.cancelacionBloqueada === true,
     // Avisos de cita también por WhatsApp (01/08). Apagado por defecto.
     avisosWhatsapp: t.settings?.citas?.avisosWhatsapp === true,
     // Puerta de admisión: solo reserva quien tiene el formulario aceptado.
@@ -452,6 +455,15 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   if (typeof body.portalBloqueoImpago === "boolean") {
     settings.citas = { ...(settings.citas ?? {}), portalBloqueoImpago: body.portalBloqueoImpago };
   }
+  // Anulación por la familia. APAGADO por defecto (o sea: SÍ se puede anular),
+  // que es como se ha comportado siempre. El nombre va en negativo para que
+  // se lea con `=== true` como sus hermanos: en positivo habría que leerlo
+  // con `!== false` y sería la única excepción de la familia — la clase de
+  // detalle que alguien «arregla» un martes y deja a otro centro sin poder
+  // anular, en silencio.
+  if (typeof body.cancelacionBloqueada === "boolean") {
+    settings.citas = { ...(settings.citas ?? {}), cancelacionBloqueada: body.cancelacionBloqueada };
+  }
   // Avisos de cita por WhatsApp. APAGADO por defecto: encenderlo sin las
   // credenciales de Meta no manda nada, y con ellas empieza a escribir a
   // pacientes reales (y Meta cobra por conversación).
@@ -568,6 +580,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     recordatoriosCitas: settings.citas?.recordatorios === true,
     agendaCompartida: settings.citas?.agendaCompartida === true,
     portalBloqueoImpago: settings.citas?.portalBloqueoImpago === true,
+    cancelacionBloqueada: settings.citas?.cancelacionBloqueada === true,
     avisosWhatsapp: settings.citas?.avisosWhatsapp === true,
     // ⚠️ LAS CUATRO PUERTAS TIENEN QUE VOLVER EN ESTA RESPUESTA (05/08/2026).
     // La pantalla hace `setCfg({...c, ...data})`, así que lo que no vuelva se

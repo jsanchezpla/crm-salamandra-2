@@ -2,6 +2,7 @@ import { withPublicTenant } from "../../../../../../../../lib/tenant/publicTenan
 import { ok, error, unauthorized, forbidden, notFound, serverError } from "../../../../../../../../lib/utils/apiResponse.js";
 import { verifyPortalSession, readBearer } from "../../../../../../../../lib/citas/portalSession.js";
 import { cancelBookingRow } from "../../../../../../../../lib/citas/cancelBooking.js";
+import { cancelacionBloqueada, mensajeCancelacionBloqueada } from "../../../../../../../../lib/citas/cancelacion.js";
 import { CUPO_PORTAL_CANCELAR } from "../../../../../../../../lib/citas/portalRateLimit.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -26,6 +27,11 @@ export const POST = withPublicTenant(async (request, { params }, ctx) => {
     const { slug, tenant, tenantModels, hasModule } = ctx;
     if (!hasModule("citas")) return notFound("Módulo no disponible");
     if (tenant.settings?.widget?.sso?.enabled !== true) return forbidden("Portal de citas no habilitado");
+    // El centro puede tener la anulación por la familia bloqueada (08/08/2026).
+    // Se comprueba AQUÍ y no solo al pintar el botón: el serializer decide qué
+    // se ve, este endpoint decide qué se puede hacer, y una petición a mano no
+    // pasa por el primero.
+    if (cancelacionBloqueada(tenant)) return forbidden(mensajeCancelacionBloqueada(tenant));
 
     let email;
     try {

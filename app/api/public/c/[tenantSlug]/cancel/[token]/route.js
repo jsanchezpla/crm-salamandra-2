@@ -1,6 +1,7 @@
 import { withPublicTenant } from "../../../../../../../lib/tenant/publicTenantContext.js";
 import { ok, error, notFound, serverError } from "../../../../../../../lib/utils/apiResponse.js";
 import { cancelBookingRow } from "../../../../../../../lib/citas/cancelBooking.js";
+import { cancelacionBloqueada, mensajeCancelacionBloqueada } from "../../../../../../../lib/citas/cancelacion.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -19,6 +20,20 @@ export const POST = withPublicTenant(async (request, { params }, ctx) => {
   try {
     const { tenant, tenantModels, hasModule } = ctx;
     if (!hasModule("citas")) return notFound("Módulo no disponible");
+    /*
+     * El centro puede tener bloqueada la anulación por la familia (08/08/2026).
+     *
+     * Esta es la puerta IMPORTANTE de las dos: el token viaja en el correo de
+     * cada cita, no caduca nunca y cancela sin sesión —quien tenga el enlace,
+     * cancela—. Dejar de meterlo en los correos futuros no sirve de nada por sí
+     * solo: los correos ya enviados siguen en la bandeja de entrada de las
+     * familias y sus enlaces seguirían valiendo. Por eso se cierra aquí.
+     *
+     * 410 y no 403 a propósito: la pantalla del enlace ya sabe pintar el 410
+     * como «esta cita ya no se puede cancelar» con el texto que le demos, así
+     * que la familia ve un mensaje que le dice qué hacer en vez de un error.
+     */
+    if (cancelacionBloqueada(tenant)) return error(mensajeCancelacionBloqueada(tenant), 410);
     const ip = request.headers.get("x-forwarded-for") ?? null;
 
     const { token } = await params;

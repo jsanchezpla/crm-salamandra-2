@@ -88,7 +88,9 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
       }
     }
 
-    return ok(splitBookings(rows, new Date(), bonos));
+    // El tenant va porque de él depende que la cita salga como anulable: un
+    // centro que gestiona sus citas por teléfono no enseña el botón.
+    return ok(splitBookings(rows, new Date(), bonos, tenant));
   } catch (err) {
     return serverError(err);
   }

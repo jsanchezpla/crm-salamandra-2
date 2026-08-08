@@ -1,5 +1,6 @@
 import { withPublicTenant } from "../../../../../../../lib/tenant/publicTenantContext.js";
 import { ok, error, notFound, serverError } from "../../../../../../../lib/utils/apiResponse.js";
+import { cancelacionBloqueada, mensajeCancelacionBloqueada } from "../../../../../../../lib/citas/cancelacion.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -15,9 +16,14 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  *   - 410 si scheduledAt ya pasó.
  *   - 404 si el token no existe.
  */
-export const GET = withPublicTenant(async (_request, { params }, { tenantModels, hasModule }) => {
+export const GET = withPublicTenant(async (_request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("citas")) return notFound("Módulo no disponible");
+    // Antes de contar nada de la cita: si el centro no deja anular, esta
+    // pantalla no tiene nada que hacer (08/08/2026). Se corta AQUÍ y no solo en
+    // el POST porque si no, la familia ve la cita, pulsa «Sí, cancelar» y se
+    // come un error — peor que decírselo de entrada.
+    if (cancelacionBloqueada(tenant)) return error(mensajeCancelacionBloqueada(tenant), 410);
 
     const { token } = await params;
     if (!token || !UUID_RE.test(token)) return notFound("Token no encontrado");

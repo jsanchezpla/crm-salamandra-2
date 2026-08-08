@@ -2,6 +2,7 @@ import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { citaSegunRol } from "../../../../../../lib/citas/dinero.js";
 import { logCitasAudit } from "../../../../../../lib/citas/audit.js";
+import { enlaceCancelacion } from "../../../../../../lib/citas/cancelacion.js";
 import { findBookingOverlap, lockBookingSlot } from "../../../../../../lib/citas/booking.js";
 import {
   cobrarCitaAlConfirmar,
@@ -303,9 +304,9 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     // desmarcó esa casilla no recibe correos de citas, sin excepciones.
     try {
       if (!(await citaPuedeAvisar(tenantModels, row, "citasEmail"))) throw new Error("SIN_CONSENTIMIENTO_EMAIL");
-      const cancelUrl = row.cancellationToken
-        ? `/widget/c/${tenant.slug}/cancel/${row.cancellationToken}`
-        : null;
+      // null si el centro no deja anular a la familia: la plantilla ya sabe no
+      // pintar el enlace (08/08/2026).
+      const cancelUrl = enlaceCancelacion(tenant, { slug: tenant.slug, token: row.cancellationToken });
       const { subject, html, text } = bookingConfirmedTemplate({
         tenantName: tenant.name,
         brand: tenant.settings?.brand,
