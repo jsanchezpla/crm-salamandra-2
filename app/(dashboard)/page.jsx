@@ -4,16 +4,41 @@ import { buildHomeSummary } from "../../lib/home/summary.js";
 import HomeSummary from "../../components/home/HomeSummary.jsx";
 import { vocabularioCliente, VOCABULARIO_CLIENTE } from "../../lib/clients/vocabulario.js";
 
+/**
+ * Los atajos de la portada.
+ *
+ * ⚠️ ESTA LISTA SE QUEDA VIEJA SOLA. Es un array paralelo al sidebar: cada
+ * módulo nuevo hay que acordarse de añadirlo AQUÍ además de allí, y no hay nada
+ * que avise. Se notó el 08/08/2026 con Aumenta —un centro de psicología con 18
+ * módulos y quince personas— que abría el CRM cada mañana y NO tenía atajo a
+ * Pacientes ni a Clínica, que es todo su trabajo, mientras sí veía uno a
+ * «Inventario · Materia prima y producto».
+ *
+ * El orden importa: se pintan los que el cliente tenga, en este orden, así que
+ * arriba va el trabajo del día y abajo lo de apoyo.
+ */
 const QUICK_LINKS = [
-  { moduleKey: "clients",   href: "/clientes",    eyebrow: "Cuentas",      title: "Clientes",    hint: "Gestionar tu cartera" },
-  { moduleKey: "leads",     href: "/leads",       eyebrow: "Comercial",    title: "Leads",       hint: "Oportunidades activas" },
-  { moduleKey: "sales",     href: "/comercial",   eyebrow: "Comercial",    title: "Comercial",   hint: "Pipeline y conversión" },
-  { moduleKey: "citas",     href: "/citas",       eyebrow: "Agenda",       title: "Citas",       hint: "Reservas y consultas" },
-  { moduleKey: "inventory", href: "/inventario",  eyebrow: "Operaciones",  title: "Inventario",  hint: "Materia prima y producto" },
-  { moduleKey: "billing",   href: "/facturacion", eyebrow: "Finanzas",     title: "Facturación", hint: "Cobros y costes" },
-  { moduleKey: "training",  href: "/formacion",   eyebrow: "Conocimiento", title: "Formación",   hint: "Cursos y alumnos" },
-  { moduleKey: "calendar",  href: "/calendario",  eyebrow: "Tiempo",       title: "Calendario",  hint: "Agenda del equipo" },
-  { moduleKey: "referidos", href: "/referidos",   eyebrow: "Crecimiento",  title: "Referidos",   hint: "Programa de referidos" },
+  // El día a día de una consulta o un centro clínico.
+  { moduleKey: "citas",       href: "/citas",       eyebrow: "Agenda",       title: "Citas",       hint: "Reservas y consultas" },
+  { moduleKey: "pacientes",   href: "/pacientes",   eyebrow: "Clínico",      title: "Pacientes",   hint: "Fichas e historial" },
+  { moduleKey: "clinica",     href: "/clinica",     eyebrow: "Clínico",      title: "Clínica",     hint: "Sesiones, informes y coordinaciones" },
+  { moduleKey: "clients",     href: "/clientes",    eyebrow: "Cuentas",      title: "Clientes",    hint: "Gestionar tu cartera" },
+  { moduleKey: "nutricion",   href: "/nutricion/recetas", eyebrow: "Nutrición", title: "Recetario", hint: "Recetas, menús y pautas" },
+  // Quien entra y quién lo atiende.
+  { moduleKey: "leads",       href: "/leads",       eyebrow: "Comercial",    title: "Leads",       hint: "Oportunidades activas" },
+  { moduleKey: "formularios", href: "/formularios", eyebrow: "Comercial",    title: "Solicitudes", hint: "Lo que llega desde la web" },
+  { moduleKey: "team",        href: "/equipo",      eyebrow: "Equipo",       title: "Equipo",      hint: "Plantilla y accesos" },
+  // Apoyo.
+  { moduleKey: "billing",     href: "/facturacion", eyebrow: "Finanzas",     title: "Facturación", hint: "Cobros y costes" },
+  { moduleKey: "documents",   href: "/documentos",  eyebrow: "Archivo",      title: "Documentos",  hint: "Contratos y ficheros" },
+  { moduleKey: "support",     href: "/soporte",     eyebrow: "Atención",     title: "Soporte",     hint: "Lo que preguntan tus clientes" },
+  { moduleKey: "training",    href: "/formacion",   eyebrow: "Conocimiento", title: "Formación",   hint: "Cursos y alumnos" },
+  { moduleKey: "inventory",   href: "/inventario",  eyebrow: "Operaciones",  title: "Inventario",  hint: "Productos y existencias" },
+  { moduleKey: "calendar",    href: "/calendario",  eyebrow: "Tiempo",       title: "Calendario",  hint: "Agenda del equipo" },
+  { moduleKey: "referidos",   href: "/referidos",   eyebrow: "Crecimiento",  title: "Referidos",   hint: "Programa de referidos" },
+  // `sales` se cae de la lista: apuntaba a /comercial, que NO EXISTE como
+  // página —da 404— y su único contenido real vive en /leads. Ver el runbook de
+  // ayudas, donde quedó anotado como código al que no se llega.
 ];
 
 function greeting() {
