@@ -102,6 +102,13 @@ export const CORE = [
   // primera firma revienta pidiendo `template_key`. La tabla de plantillas sí
   // se crea solo donde hay `citas` (lo decide el propio script).
   "migrate-contrato-estructurado",
+  // NIF/CIF de facturación (08/08/2026): a nombre de quién se emite la factura,
+  // que no siempre es el titular de la ficha. CORE y no dentro de `billing`
+  // porque la columna vive en `clients` y el MODELO Client la declara para
+  // todos los tenants: Sequelize hace SELECT de todos los atributos, así que un
+  // cliente sin la columna vería su /clientes caerse entero con 42703 aunque no
+  // tenga facturación. Decide por existencia de tabla `clients`.
+  "migrate-client-fiscal-taxid",
 ];
 
 export const MODULES = {

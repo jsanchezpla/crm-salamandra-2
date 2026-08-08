@@ -13,6 +13,7 @@ import Link from "next/link";
 import ClientBillingSection from "../../components/billing/ClientBillingSection.jsx";
 import ClientModulesSection from "../../components/clients/ClientModulesSection.jsx";
 import ClientContactMethodsSection from "../../components/clients/ClientContactMethodsSection.jsx";
+import ClientFiscalSection from "../../components/clients/ClientFiscalSection.jsx";
 import { camposCliente, PERFIL_COMERCIAL } from "../../lib/clients/formularioAlta.js";
 import ClientContractSection from "../../components/clients/ClientContractSection.jsx";
 import ClientGuardiansSection from "../../components/clients/ClientGuardiansSection.jsx";
@@ -57,6 +58,68 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+/**
+ * Fecha de nacimiento, que llega como "2019-04-07" (DATEONLY) y NO como un
+ * instante: se parte a mano en vez de dejársela a `new Date`, que la
+ * interpretaría en UTC y en España la enseñaría un día antes.
+ */
+function fmtFechaCorta(valor) {
+  const s = String(valor ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const [a, m, d] = s.split("-");
+  return `${d}/${m}/${a}`;
+}
+
+/**
+ * Un campo del formulario de la ficha, del tipo que declare `camposCliente`.
+ * Gemelo de `CampoAlta` en la pantalla de Clientes: la ficha edita exactamente
+ * lo que se pregunta en el mostrador, así que tiene que saber pintar lo mismo.
+ */
+function CampoFicha({ tipo, valor, opciones, placeholder, onChange }) {
+  const cls =
+    "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]";
+
+  if (tipo === "textarea") {
+    return (
+      <textarea
+        rows={3}
+        value={valor}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${cls} resize-none`}
+      />
+    );
+  }
+
+  if (tipo === "select") {
+    return (
+      <select value={valor} onChange={(e) => onChange(e.target.value)} className={cls}>
+        {(opciones ?? []).map((o) => (
+          <option key={o.valor} value={o.valor}>{o.label}</option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <input
+      type={tipo}
+      value={valor}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      className={cls}
+    />
+  );
+}
+
+/** Cómo se lee el parentesco del titular, que se guarda como clave corta. */
+const PARENTESCO_LABEL = {
+  madre: "Madre",
+  padre: "Padre",
+  tutor: "Tutor/a legal",
+  otro: "Otro familiar",
+};
+
 /** "1 de agosto de 2026" — la fecha se lee, no se descifra. */
 function fechaLarga(iso) {
   if (!iso) return "—";
@@ -66,7 +129,7 @@ function fechaLarga(iso) {
     : d.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
 }
 
-export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL }) {
+export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL, conPacientes = false, conFacturacion = false }) {
   const { id } = useParams();
   const router = useRouter();
   const [client, setClient] = useState(null);
@@ -98,14 +161,24 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL }) {
     // email/phone NO se editan aquí: los gestiona la sección "Contactos"
     // (client_contact_methods). Incluirlos aquí reenviaría un valor obsoleto en
     // el PUT y pisaría el contacto principal.
+    // ⚠️ Lo que NO se siembra aquí sale vacío al abrir «Editar» y se guarda
+    // vacío al pulsar «Guardar»: el DNI, la fecha de nacimiento y el domicilio
+    // llevaban desde el 04/08 en el formulario del mostrador y no en este, así
+    // que editar una ficha para corregir la ciudad podía borrar el DNI que
+    // recepción acababa de teclear.
     setEditForm({
       name: client.name || "",
+      taxId: client.taxId || "",
+      birthDate: client.birthDate ? String(client.birthDate).slice(0, 10) : "",
+      domicilio: client.customFields?.domicilio || "",
       postalCode: client.customFields?.postalCode || "",
       notes: client.notes || "",
       status: client.customFields?.seStatus || "new",
       company: client.customFields?.company || "",
       country: client.customFields?.country || "",
       city: client.customFields?.city || "",
+      motivo: client.customFields?.motivo || "",
+      parentescoTitular: client.customFields?.parentescoTitular || "",
     });
     setEditMode(true);
   }
@@ -181,7 +254,7 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL }) {
 
   // La ficha edita lo mismo que se pregunta en el mostrador, menos email y
   // teléfono: esos los gestiona la sección "Contactos", que admite varios.
-  const CAMPOS_FICHA = camposCliente(perfil).filter((c) => c.key !== "email" && c.key !== "phone");
+  const CAMPOS_FICHA = camposCliente(perfil, { conPacientes }).filter((c) => c.key !== "email" && c.key !== "phone");
 
   const status = client.customFields?.seStatus || "new";
   const st = STATUS_STYLE[status] ?? STATUS_STYLE.new;
@@ -271,14 +344,20 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL }) {
 
             {editMode ? (
               <div className="p-5 space-y-4">
-                {CAMPOS_FICHA.map(({ label, key, type }) => (
+                {/* El tipo de cada campo lo declara `camposCliente`, y desde el
+                    08/08/2026 los hay que no son `<input>`: el motivo de
+                    consulta es un párrafo y el parentesco un desplegable. Con
+                    un `<input type={type}>` a secas, `textarea` sale como una
+                    caja de UNA línea y `select` como un desplegable vacío. */}
+                {CAMPOS_FICHA.map(({ label, key, type, opciones, placeholder }) => (
                   <div key={key}>
                     <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
-                    <input
-                      type={type}
-                      value={editForm[key] || ""}
-                      onChange={(e) => setEditForm((f) => ({ ...f, [key]: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)]"
+                    <CampoFicha
+                      tipo={type}
+                      valor={editForm[key] || ""}
+                      opciones={opciones}
+                      placeholder={placeholder}
+                      onChange={(v) => setEditForm((f) => ({ ...f, [key]: v }))}
                     />
                   </div>
                 ))}
@@ -323,10 +402,20 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL }) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
                   {/* Email/Teléfono ya no se muestran aquí: los presenta la
                       sección "Contactos" (múltiples, con principal). */}
+                  {/* ⚠️ Todo lo que se pregunta en el mostrador tiene que salir
+                      aquí. El DNI, la fecha de nacimiento y el domicilio se
+                      pedían desde el 04/08 y no se pintaban en ninguna parte:
+                      recepción los tecleaba y luego no había forma de leerlos
+                      sin abrir «Editar». Las filas se filtran por `!!value`,
+                      así que a quien no tenga el dato no le aparece nada. */}
                   {[
-                    { label: "País", value: client.customFields?.country },
-                    { label: "Ciudad", value: client.customFields?.city },
+                    { label: "DNI / NIE", value: client.taxId },
+                    { label: "Fecha de nacimiento", value: fmtFechaCorta(client.birthDate) },
+                    { label: "Parentesco con el paciente", value: PARENTESCO_LABEL[client.customFields?.parentescoTitular] },
+                    { label: "Domicilio", value: client.customFields?.domicilio },
                     { label: "Código postal", value: client.customFields?.postalCode },
+                    { label: "Ciudad", value: client.customFields?.city },
+                    { label: "País", value: client.customFields?.country },
                     { label: "Empresa", value: client.customFields?.company },
                     { label: "Origen", value: client.customFields?.origin },
                   ]
@@ -347,6 +436,35 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL }) {
                       </div>
                     ))}
                 </div>
+                {/*
+                  El motivo de consulta y lo que escribió la familia en el
+                  formulario de la web se guardaban desde siempre y no se
+                  pintaban en ninguna parte: una solicitud aceptada creaba una
+                  ficha en la que no se leía nada de lo que esa persona había
+                  contado. `whitespace-pre-wrap` no es opcional aquí:
+                  `info_adicional` viene como «Pregunta:\nRespuesta» y sin él
+                  sale todo en un churro.
+                */}
+                {client.customFields?.motivo && (
+                  <div>
+                    <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                      Motivo de consulta
+                    </div>
+                    <div className="text-[13px] text-gray-700 whitespace-pre-wrap leading-relaxed">
+                      {client.customFields.motivo}
+                    </div>
+                  </div>
+                )}
+                {client.customFields?.info_adicional && (
+                  <div>
+                    <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                      Lo que nos contó
+                    </div>
+                    <div className="text-[13px] text-gray-600 whitespace-pre-wrap leading-relaxed">
+                      {client.customFields.info_adicional}
+                    </div>
+                  </div>
+                )}
                 {client.notes && (
                   <div>
                     <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Notas</div>
@@ -444,6 +562,10 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL }) {
         </div>
 
         <ClientContactMethodsSection clientId={id} />
+
+        {/* A nombre de quién se factura. Solo donde se factura: al resto le
+            sobraría una tarjeta de datos fiscales que nadie va a usar. */}
+        {conFacturacion && <ClientFiscalSection clientId={id} />}
 
         <ClientModulesSection clientId={id} />
 

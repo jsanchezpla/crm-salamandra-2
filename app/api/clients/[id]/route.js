@@ -113,14 +113,30 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
     postalCode: body.postalCode?.trim() ?? base.postalCode ?? null,
     // Domicilio (04/08/2026): línea de texto, no `Client.address` (JSONB).
     domicilio: body.domicilio?.trim() ?? base.domicilio ?? null,
-    origin: body.origin ?? base.origin ?? "manual",
+    // Motivo de consulta (08/08/2026): la ficha ya lo pinta, así que también
+    // tiene que poder corregirlo. Va en plano igual que el domicilio.
+    motivo: body.motivo?.trim().slice(0, 2000) ?? base.motivo ?? null,
+    // Qué es el titular del paciente (madre, padre, tutor…).
+    parentescoTitular: body.parentescoTitular?.trim().slice(0, 20) ?? base.parentescoTitular ?? null,
+    // ⚠️ `origin` YA NO se inventa (08/08/2026). El `?? "manual"` solo alcanzaba
+    // a las fichas que NO lo traían, que son exactamente las nacidas de una
+    // solicitud web: la primera vez que alguien las editaba, una familia que
+    // había llegado por el formulario quedaba registrada como alta a mano. El
+    // alta manual sí lo estampa al crear (app/api/clients/route.js), así que
+    // aquí no hace falta ningún valor por defecto.
+    origin: body.origin ?? base.origin ?? null,
     leadId: body.leadId ?? base.leadId ?? null,
     seStatus: body.status ?? base.seStatus ?? "new",
   };
 
-  // Datos fiscales (solo si vienen explícitos en el body)
+  // Datos fiscales (solo si vienen explícitos en el body).
+  //
+  // ⚠️ `fiscalTaxId` TIENE que estar en esta lista (08/08/2026). Sin él, la
+  // sección de facturación de la ficha manda el CIF, la pantalla dice
+  // «guardado» y el servidor lo tira en silencio: el mismo fallo que se acaba
+  // de arreglar para el motivo de consulta, reintroducido en otro campo.
   const fiscalUpdates = {};
-  for (const k of ["fiscalName", "fiscalAddress", "fiscalCity", "fiscalZip", "fiscalCountry", "taxId"]) {
+  for (const k of ["fiscalName", "fiscalTaxId", "fiscalAddress", "fiscalCity", "fiscalZip", "fiscalCountry", "taxId"]) {
     if (k in body) {
       const v = body[k];
       fiscalUpdates[k] = typeof v === "string" ? (v.trim() || null) : v;

@@ -8,6 +8,7 @@ import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 import Select from "@/components/ui/Select.jsx";
 
+import { nifDeCliente } from "../../../../lib/billing/nifCliente.js";
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
 
@@ -529,7 +530,7 @@ export default function FacturasPage() {
                     if (!sel) return null;
                     const missing = [];
                     if (!sel.fiscalName) missing.push("razón social");
-                    if (!sel.taxId) missing.push("NIF/CIF");
+                    if (!nifDeCliente(sel)) missing.push("NIF/CIF");
                     if (missing.length === 0) return null;
                     return (
                       <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900 flex items-start gap-2">
@@ -559,7 +560,7 @@ export default function FacturasPage() {
                             onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
                             options={[
                               { value: "", label: "Selecciona..." },
-                              ...clients.map((c) => ({ value: c.id, label: `${c.fiscalName || c.name}${!c.taxId ? "  ⚠" : ""}` })),
+                              ...clients.map((c) => ({ value: c.id, label: `${c.fiscalName || c.name}${!nifDeCliente(c) ? "  ⚠" : ""}` })),
                             ]}
                             className={inputCls}
                           />
@@ -923,7 +924,10 @@ function DetailView({ invoice, isAdmin, onAction, onEdit, onOpenLinked, saving }
       {isAdmin && (() => {
         const fiscalMissing = [];
         if (!invoice.client?.fiscalName) fiscalMissing.push("razón social");
-        if (!invoice.client?.taxId) fiscalMissing.push("NIF/CIF");
+        // El mismo criterio que el candado del servidor: con dos columnas
+        // en juego, si la pantalla mira una y el servidor la otra, el botón
+        // sale deshabilitado en facturas que el servidor sí dejaría emitir.
+        if (!nifDeCliente(invoice.client)) fiscalMissing.push("NIF/CIF");
         const cantIssue = invoice.status === "draft" && fiscalMissing.length > 0;
         return (
         <div className="space-y-3 pt-4 border-t border-neutral-100">

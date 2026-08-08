@@ -5,7 +5,9 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import HelpTooltip from "../../../components/ui/HelpTooltip.jsx";
-import PacientesDelAlta from "../../../components/clients/PacientesDelAlta.jsx";
+import PacientesDelAlta, { PACIENTE_VACIO } from "../../../components/clients/PacientesDelAlta.jsx";
+import ProgenitoresDelAlta, { PROGENITOR_VACIO } from "../../../components/clients/ProgenitoresDelAlta.jsx";
+import FacturacionDelAlta from "../../../components/clients/FacturacionDelAlta.jsx";
 import { camposCliente, PERFIL_COMERCIAL, PERFIL_SALUD } from "../../../lib/clients/formularioAlta.js";
 import { VOCABULARIO_CLIENTE } from "../../../lib/clients/vocabulario.js";
 import Paginador from "@/components/ui/Paginador.jsx";
@@ -55,6 +57,7 @@ export default function ClientesClient({
   perfil = PERFIL_COMERCIAL,
   conPacientes = false,
   conListaEspera = false,
+  conFacturacion = false,
   vocab = VOCABULARIO_CLIENTE,
 }) {
   const router = useRouter();
@@ -87,13 +90,25 @@ export default function ClientesClient({
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [newClientOpen, setNewClientOpen] = useState(false);
-  const CAMPOS_ALTA = camposCliente(perfil);
+  const CAMPOS_ALTA = camposCliente(perfil, { conPacientes });
   const ALTA_VACIA = Object.fromEntries(CAMPOS_ALTA.map((c) => [c.key, ""]));
   // La ficha edita lo mismo que se pregunta en el alta: si no, el código
   // postal que acaba de teclear recepción no se podría corregir nunca.
   const CAMPOS_EDICION = CAMPOS_ALTA.map((c) => ({ ...c, label: c.label.replace(" *", "") }));
   const [newClientForm, setNewClientForm] = useState(ALTA_VACIA);
-  const [nuevosPacientes, setNuevosPacientes] = useState([]);
+  /*
+   * Un bloque de paciente y uno de progenitor PINTADOS de entrada donde hay
+   * módulo `pacientes` (08/08/2026). Antes las dos listas arrancaban vacías y
+   * solo salía un botón «Añadir paciente»: el nombre del peque y su fecha de
+   * nacimiento —lo primero que pidió el centro— no aparecían en pantalla hasta
+   * que alguien pulsaba, así que en la práctica no se rellenaban. Un bloque en
+   * blanco de más no molesta: `normalizarPacientes` y `normalizarProgenitores`
+   * descartan en silencio la fila que se quede sin tocar.
+   */
+  const [nuevosPacientes, setNuevosPacientes] = useState(conPacientes ? [{ ...PACIENTE_VACIO }] : []);
+  const [nuevosProgenitores, setNuevosProgenitores] = useState(conPacientes ? [{ ...PROGENITOR_VACIO }] : []);
+  const FACTURACION_VACIA = { fiscalName: "", fiscalTaxId: "" };
+  const [datosFactura, setDatosFactura] = useState(FACTURACION_VACIA);
   const [altaEnListaEspera, setAltaEnListaEspera] = useState(false);
   const [creatingClient, setCreatingClient] = useState(false);
   const [newClientError, setNewClientError] = useState(null);
@@ -283,6 +298,27 @@ export default function ClientesClient({
     return null;
   }
 
+  /*
+   * Cerrar el alta VACÍA el formulario, siempre (arreglo 2026-08-08).
+   *
+   * Hasta hoy la X y «Cancelar» solo escondían el modal: lo tecleado sobrevivía
+   * y aparecía prerrellenado la siguiente vez que se abría. Con el alta de
+   * antes eran nombre y teléfono; ahora son también los datos de dos
+   * progenitores y el motivo de consulta de un menor. En un centro donde 15
+   * personas dan altas, encontrarse el motivo de consulta del niño anterior en
+   * la ficha de otra familia no es una molestia: es una fuga de un dato de
+   * salud de una persona a la ficha de otra.
+   */
+  function cerrarAlta() {
+    setNewClientOpen(false);
+    setNewClientError(null);
+    setNewClientForm(ALTA_VACIA);
+    setNuevosPacientes(conPacientes ? [{ ...PACIENTE_VACIO }] : []);
+    setNuevosProgenitores(conPacientes ? [{ ...PROGENITOR_VACIO }] : []);
+    setDatosFactura(FACTURACION_VACIA);
+    setAltaEnListaEspera(false);
+  }
+
   async function handleCreateClient() {
     const validationError = validateNewClient(newClientForm);
     if (validationError) {
@@ -298,17 +334,19 @@ export default function ClientesClient({
         body: JSON.stringify({
           ...newClientForm,
           pacientes: conPacientes ? nuevosPacientes : [],
+          progenitores: conPacientes ? nuevosProgenitores : [],
+          ...(conFacturacion ? datosFactura : {}),
           listaEspera: conListaEspera && altaEnListaEspera,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (data.ok) {
         fetchClients();
-        setNewClientOpen(false);
-        setNewClientForm(ALTA_VACIA);
-        setNuevosPacientes([]);
-        setAltaEnListaEspera(false);
+        cerrarAlta();
       } else {
+        // Lo tecleado NO se pierde: un 422 después de escribir la familia, dos
+        // progenitores y un paciente, con la familia de pie delante, no puede
+        // costar volver a empezar.
         setNewClientError(data.error || `Error al crear el ${vocab.singular} (HTTP ${res.status})`);
       }
     } catch (err) {
@@ -582,18 +620,18 @@ export default function ClientesClient({
                   {editError}
                 </div>
               )}
-              {CAMPOS_EDICION.map(({ label, key, type, placeholder }) => (
+              {CAMPOS_EDICION.map(({ label, key, type, placeholder, opciones }) => (
                 <div key={key}>
                   <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
-                  <input
-                    type={type}
-                    value={editForm[key] || ""}
-                    onChange={(e) => {
-                      setEditForm((f) => ({ ...f, [key]: e.target.value }));
+                  <CampoAlta
+                    tipo={type}
+                    valor={editForm[key] || ""}
+                    opciones={opciones}
+                    placeholder={placeholder}
+                    onChange={(v) => {
+                      setEditForm((f) => ({ ...f, [key]: v }));
                       if (editError) setEditError(null);
                     }}
-                    placeholder={placeholder}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] placeholder:text-gray-300"
                   />
                 </div>
               ))}
@@ -665,11 +703,11 @@ export default function ClientesClient({
       {/* New client modal */}
       {newClientOpen && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col">
+          <div className={`bg-white rounded-2xl shadow-2xl w-full ${conPacientes ? "max-w-lg" : "max-w-md"} max-h-[90vh] flex flex-col`}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="font-semibold text-gray-900">Nuevo {vocab.singular}</h2>
               <button
-                onClick={() => { setNewClientOpen(false); setNewClientError(null); }}
+                onClick={cerrarAlta}
                 className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
@@ -683,19 +721,20 @@ export default function ClientesClient({
                   {newClientError}
                 </div>
               )}
-              {CAMPOS_ALTA.map(({ label, key, type, placeholder }) => (
+              {CAMPOS_ALTA.map(({ label, key, type, placeholder, opciones, ayuda }) => (
                 <div key={key}>
                   <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
-                  <input
-                    type={type}
-                    value={newClientForm[key] || ""}
-                    onChange={(e) => {
-                      setNewClientForm((f) => ({ ...f, [key]: e.target.value }));
+                  <CampoAlta
+                    tipo={type}
+                    valor={newClientForm[key] || ""}
+                    opciones={opciones}
+                    placeholder={placeholder}
+                    onChange={(v) => {
+                      setNewClientForm((f) => ({ ...f, [key]: v }));
                       if (newClientError) setNewClientError(null);
                     }}
-                    placeholder={placeholder}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] placeholder:text-gray-300"
                   />
+                  {ayuda && <p className="text-[11px] text-gray-400 mt-1">{ayuda}</p>}
                 </div>
               ))}
               {conListaEspera && (
@@ -716,6 +755,16 @@ export default function ClientesClient({
                 </label>
               )}
               {conPacientes && (
+                <ProgenitoresDelAlta
+                  progenitores={nuevosProgenitores}
+                  onChange={(lista) => {
+                    setNuevosProgenitores(lista);
+                    if (newClientError) setNewClientError(null);
+                  }}
+                  parentescoTitular={newClientForm.parentescoTitular}
+                />
+              )}
+              {conPacientes && (
                 <PacientesDelAlta
                   pacientes={nuevosPacientes}
                   onChange={(lista) => {
@@ -725,26 +774,94 @@ export default function ClientesClient({
                   nombreCliente={newClientForm.name}
                 />
               )}
+              {conFacturacion && (
+                <FacturacionDelAlta
+                  valores={datosFactura}
+                  onChange={(v) => setDatosFactura((d) => ({ ...d, ...v }))}
+                  titular={{ name: newClientForm.name, taxId: newClientForm.taxId }}
+                  progenitores={conPacientes ? nuevosProgenitores : []}
+                />
+              )}
             </div>
-            <div className="px-6 py-4 border-t border-gray-100 flex gap-2">
-              <button
-                onClick={handleCreateClient}
-                disabled={!newClientForm.name.trim() || creatingClient}
-                className="flex-1 bg-[var(--color-primary)] hover:opacity-90 text-white text-sm font-medium py-2 rounded-lg transition-opacity disabled:opacity-40"
-              >
-                {creatingClient ? "Creando…" : `Crear ${vocab.singular}`}
-              </button>
-              <button
-                onClick={() => { setNewClientOpen(false); setNewClientError(null); }}
-                className="px-4 py-2 text-sm text-gray-500 border border-gray-200 rounded-lg"
-              >
-                Cancelar
-              </button>
+            <div className="px-6 py-4 border-t border-gray-100 space-y-2">
+              {/*
+                El error, OTRA VEZ, aquí abajo. El de arriba vive dentro del área
+                con scroll y el botón «Crear» está en este pie fijo: con el alta
+                de un centro clínico —familia, dos progenitores y un paciente—
+                hay varias pantallas de por medio, así que quien pulsa «Crear»
+                ve el botón y no ve el aviso, y para esa persona «el botón no
+                hace nada».
+              */}
+              {newClientError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
+                  {newClientError}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCreateClient}
+                  disabled={!newClientForm.name.trim() || creatingClient}
+                  className="flex-1 bg-[var(--color-primary)] hover:opacity-90 text-white text-sm font-medium py-2 rounded-lg transition-opacity disabled:opacity-40"
+                >
+                  {creatingClient ? "Creando…" : `Crear ${vocab.singular}`}
+                </button>
+                <button
+                  onClick={cerrarAlta}
+                  className="px-4 py-2 text-sm text-gray-500 border border-gray-200 rounded-lg"
+                >
+                  Cancelar
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Un campo del alta o de la edición, del tipo que declare `camposCliente`.
+ *
+ * Antes esto era un `<input type={type}>` a secas, y con `type="textarea"` el
+ * navegador pinta una caja de UNA línea: el motivo de consulta —que es un
+ * párrafo— no se podía escribir. Con `type="select"` era peor: un desplegable
+ * sin ninguna opción.
+ */
+function CampoAlta({ tipo, valor, opciones, placeholder, onChange }) {
+  const cls =
+    "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] placeholder:text-gray-300";
+
+  if (tipo === "textarea") {
+    return (
+      <textarea
+        rows={3}
+        value={valor}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${cls} resize-none`}
+      />
+    );
+  }
+
+  if (tipo === "select") {
+    return (
+      <select value={valor} onChange={(e) => onChange(e.target.value)} className={cls}>
+        {(opciones ?? []).map((o) => (
+          <option key={o.valor} value={o.valor}>{o.label}</option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <input
+      type={tipo}
+      value={valor}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      className={cls}
+    />
   );
 }
 

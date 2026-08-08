@@ -31,18 +31,29 @@
  *     web pero NO en su definición del CRM, así que hoy se envían y se tiran
  *     sin dejar rastro. Aquí van declarados, que es lo único que hace que se
  *     guarden.
- *   · La edad del peque NO sube a la ficha (`mapTo: null`). El campo `age` de
- *     la ficha es de la persona titular —la madre o el padre—, y meter ahí los
- *     años del niño sería un dato falso en la ficha de un adulto.
+ *   · La edad del peque NO sube al campo `age` de la ficha. Ese es el de la
+ *     persona titular —la madre o el padre—, y meter ahí los años del niño
+ *     sería un dato falso en la ficha de un adulto. Va a `patientAge`, que es
+ *     del paciente.
  *
- * ⚠️ `mapTo` solo admite seis valores: name, email, phone, age, reason y taxId.
- * Cualquier otro (colegio, cp, parentesco…) hace que la respuesta se caiga de
- * los DOS sitios: no sube a la ficha y tampoco entra en el bloque de
- * «información adicional», que excluye a todo campo que tenga un mapTo puesto.
- * O es uno de los seis, o va a null.
+ * ── LOS TRES DESTINOS NUEVOS (08/08/2026) ──────────────────────────────────
+ * `mapTo` admitía seis valores, todos de la ficha del cliente, así que el
+ * parentesco, el nombre del peque y su edad se quedaban en null y aceptar la
+ * solicitud creaba una ficha sin paciente y sin tutor: había que teclearlos
+ * otra vez a mano. Ahora hay tres destinos más —`relationship`, `patientName`
+ * y `patientAge`— que el aceptar convierte en el tutor y el paciente, y solo
+ * en clientes con el módulo `pacientes`.
+ *
+ * ⚠️ Donde NO hay módulo `pacientes` no se pierde nada: los tres siguen
+ * apareciendo en «lo que nos contó» (ver `infoAdicional` en
+ * lib/formularios/fields.js, que excluye solo los destinos de FICHA).
+ *
+ * ⚠️ Cualquier valor de `mapTo` fuera de la lista de `DESTINOS` hace que la
+ * respuesta se caiga de los dos sitios. O está declarado allí, o va a null.
  */
 
 import { getTenantDb, closeAllConnections } from "../lib/db/tenantDb.js";
+import { RELACION_ES_EL_PACIENTE } from "../lib/formularios/fields.js";
 
 const SLUG_TENANT = process.argv[2];
 const SLUG_FORM = "familias";
@@ -71,8 +82,11 @@ const CAMPOS = [
     type: "select",
     required: true,
     order: 2,
-    options: ["Madre", "Padre", "Tutor o tutora legal", "Soy yo quien necesita ayuda", "Otro"],
-    mapTo: null,
+    options: ["Madre", "Padre", "Tutor o tutora legal", RELACION_ES_EL_PACIENTE, "Otro"],
+    // Se convierte en el TUTOR de la ficha al aceptar. La opción
+    // RELACION_ES_EL_PACIENTE significa que no hay ningún menor y corta la
+    // creación tanto del tutor como del paciente.
+    mapTo: "relationship",
   },
   {
     key: "nombrePeque",
@@ -80,10 +94,10 @@ const CAMPOS = [
     type: "text",
     required: false,
     order: 3,
-    placeholder: "Su nombre",
+    placeholder: "Nombre y apellidos",
     help: "Si vienes para ti, puedes dejarlo en blanco.",
     maxLength: 120,
-    mapTo: null,
+    mapTo: "patientName",
   },
   {
     key: "edadPeque",
@@ -94,7 +108,7 @@ const CAMPOS = [
     placeholder: "Por ejemplo, 6",
     min: 0,
     max: 99,
-    mapTo: null,
+    mapTo: "patientAge",
   },
   {
     key: "motivo",

@@ -4,6 +4,7 @@ import { forbidden, serverError } from "@/lib/utils/apiResponse.js";
 import { parseSortOrder } from "@/lib/billing/parseSort.js";
 import { xlsxResponse, MONEY_FMT, fmtDateEs } from "@/lib/billing/exportXlsx.js";
 
+import { ATRIBUTOS_CLIENTE_FACTURA } from "../../../../../lib/billing/nifCliente.js";
 const STATUS = {
   draft: "Borrador", sent: "Enviado", viewed: "Visto", accepted: "Aceptado",
   rejected: "Rechazado", expired: "Caducado", converted: "Facturado",
@@ -33,7 +34,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenant, hasM
     const rows = await Quote.findAll({
       where,
       include: [
-        { model: Client, as: "client", attributes: ["id", "name", "fiscalName", "taxId"] },
+        { model: Client, as: "client", attributes: ATRIBUTOS_CLIENTE_FACTURA },
         { model: TeamMember, as: "employee", attributes: ["id", "displayName"] },
       ],
       order: parseSortOrder(searchParams.get("sortBy"), searchParams.get("sortDir"), SORT, [["issueDate", "DESC"], ["number", "DESC"]]),

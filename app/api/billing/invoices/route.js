@@ -7,6 +7,7 @@ import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
 import { withEffectiveStatusList } from "../../../../lib/billing/invoiceStatus.js";
 import { resolveInvoicePatientId, invoicePatientInclude } from "../../../../lib/billing/patientLink.js";
 
+import { ATRIBUTOS_CLIENTE_FACTURA } from "../../../../lib/billing/nifCliente.js";
 // GET /api/billing/invoices — listado paginado con filtros
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
@@ -59,7 +60,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const { count, rows } = await Invoice.findAndCountAll({
       where,
       include: [
-        { model: Client, as: "client", attributes: ["id", "name", "fiscalName", "taxId"] },
+        { model: Client, as: "client", attributes: ATRIBUTOS_CLIENTE_FACTURA },
         { model: TeamMember, as: "employee", attributes: ["id", "displayName"] },
         ...invoicePatientInclude(tenantModels, hasModule),
       ],

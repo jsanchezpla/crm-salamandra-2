@@ -3,6 +3,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { activeInvoiceScope } from "../../../../../lib/billing/invoiceScope.js";
 
+import { ATRIBUTOS_CLIENTE_FACTURA, nifDeCliente } from "../../../../../lib/billing/nifCliente.js";
 /**
  * GET /api/billing/analytics/clients?from=&to=
  *
@@ -54,7 +55,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const clientIds = invRows.map((r) => r.clientId);
     const clients = await Client.findAll({
       where: { id: clientIds },
-      attributes: ["id", "name", "fiscalName", "taxId"],
+      attributes: ATRIBUTOS_CLIENTE_FACTURA,
     });
     const cMap = new Map(clients.map((c) => [c.id, c]));
 
@@ -72,7 +73,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       return {
         clientId: row.clientId,
         clientName: client?.fiscalName || client?.name || "Desconocido",
-        taxId: client?.taxId ?? null,
+        taxId: nifDeCliente(client),
         billedBase,
         billedTotal,        // con IVA, informativo
         collectedBase,      // EN BASE

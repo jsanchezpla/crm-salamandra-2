@@ -52,6 +52,8 @@ export default async function ClientesPage() {
       perfil={perfilDeAlta(tieneModulo)}
       conPacientes={activos.has("pacientes")}
       conListaEspera={activos.has("clients_avanzado")}
+      // A nombre de quién se factura: solo tiene sentido donde se factura.
+      conFacturacion={activos.has("billing")}
       vocab={vocabularioCliente(tieneModulo)}
     />
   );

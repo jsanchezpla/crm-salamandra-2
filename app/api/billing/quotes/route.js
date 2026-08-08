@@ -6,6 +6,7 @@ import { calculateInvoice } from "../../../../lib/billing/calculateInvoice.js";
 import { assignQuoteNumber } from "../../../../lib/billing/generateQuoteNumber.js";
 import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
 
+import { ATRIBUTOS_CLIENTE_FACTURA } from "../../../../lib/billing/nifCliente.js";
 // GET /api/billing/quotes — listado paginado con filtros
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
@@ -50,7 +51,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const { count, rows } = await Quote.findAndCountAll({
       where,
       include: [
-        { model: Client, as: "client", attributes: ["id", "name", "fiscalName", "taxId"] },
+        { model: Client, as: "client", attributes: ATRIBUTOS_CLIENTE_FACTURA },
         { model: TeamMember, as: "employee", attributes: ["id", "displayName"] },
       ],
       order,

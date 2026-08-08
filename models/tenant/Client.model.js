@@ -25,8 +25,20 @@ export function defineClient(sequelize) {
       // ── Datos fiscales para facturación (relleno bajo demanda) ──────────
       // No se migran automáticamente desde customFields/address; se piden
       // al editar la ficha o al emitir la primera factura para el cliente.
+      //
+      // ⚠️ `taxId` (arriba) y `fiscalTaxId` (abajo) NO son lo mismo, aunque
+      // coincidan casi siempre. `taxId` es el documento de la PERSONA de la
+      // ficha —el que sale en el contrato que firma en el área privada—;
+      // `fiscalTaxId` es a nombre de quién se emite la FACTURA, que puede ser
+      // el otro progenitor o una empresa con CIF. Todo el módulo de facturación
+      // los resuelve con `nifDeCliente()` (lib/billing/nifCliente.js), nunca
+      // leyendo la columna a pelo.
       fiscalName: {
         type: DataTypes.STRING,
+        allowNull: true,
+      },
+      fiscalTaxId: {
+        type: DataTypes.STRING(50),
         allowNull: true,
       },
       fiscalAddress: {

@@ -81,7 +81,20 @@ export default function FormulariosModule() {
       const res = await fetch(`/api/formularios?status=${estado}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "No se han podido cargar las solicitudes");
-      setDatos(json.data || json);
+      const datosNuevos = json.data || json;
+      // Cuántos días lleva esperando cada solicitud. Se calcula AQUÍ, al
+      // recibir los datos, y no al pintar la tarjeta: `Date.now()` durante el
+      // render es impuro y devuelve algo distinto en cada repintado.
+      if (Array.isArray(datosNuevos?.submissions)) {
+        const ahora = Date.now();
+        datosNuevos.submissions = datosNuevos.submissions.map((s) => ({
+          ...s,
+          diasEsperando: s.createdAt
+            ? Math.max(0, Math.floor((ahora - new Date(s.createdAt).getTime()) / 86_400_000))
+            : 0,
+        }));
+      }
+      setDatos(datosNuevos);
     } catch (e) {
       setFallo(e.message);
     } finally {
@@ -111,7 +124,7 @@ export default function FormulariosModule() {
     return () => { vivo = false; };
   }, [tab, datos.submissions]);
 
-  async function aceptar(submission, clientId = null, asignarA = null) {
+  async function aceptar(submission, clientId = null, asignarA = null, { avisar = true } = {}) {
     setTrabajando(submission.id);
     setAviso(null);
     try {
@@ -121,6 +134,7 @@ export default function FormulariosModule() {
         body: JSON.stringify({
           ...(clientId ? { clientId } : {}),
           ...(asignarA ? { asignarA } : {}),
+          ...(avisar ? {} : { avisar: false }),
         }),
       });
       const json = await res.json();
@@ -132,8 +146,15 @@ export default function FormulariosModule() {
       } else if (json.acceso?.motivo === "sin_email") {
         partes.push(json.acceso.mensaje);
       }
+      // Qué más se ha creado (contactos, paciente) y qué no, y por qué. Lo
+      // manda el servidor ya redactado: la bandeja no interpreta códigos.
+      if (Array.isArray(json.parte)) partes.push(...json.parte);
+      if (json.avisoAlPaciente === "silenciado") partes.push("No se le ha mandado ningún correo.");
+      // «Hay que añadirlo a mano» es un aviso, no un parte de buenas noticias:
+      // en verde nadie lo lee.
+      const hayPendiente = (json.parte ?? []).some((f) => f.includes("a mano"));
       setAviso({
-        tipo: json.acceso?.intentado && !json.acceso.ok ? "warn" : "ok",
+        tipo: (json.acceso?.intentado && !json.acceso.ok) || hayPendiente ? "warn" : "ok",
         texto: partes.join(". "),
         clientId: json.client?.id,
       });
@@ -299,7 +320,7 @@ export default function FormulariosModule() {
             motivoDescarte={motivoDescarte}
             onMotivo={setMotivoDescarte}
             equipo={equipo}
-            onAceptar={(clientId, asignarA) => aceptar(s, clientId, asignarA)}
+            onAceptar={(clientId, asignarA, opciones) => aceptar(s, clientId, asignarA, opciones)}
             onPedirDescarte={() => { setDescartando(s.id); setMotivoDescarte(""); }}
             onCancelarDescarte={() => setDescartando(null)}
             onDescartar={() => cambiarEstado(s, "rejected", motivoDescarte || null)}
@@ -335,6 +356,20 @@ function Tarjeta({
   // A quién se le asigna. Vacío = sin asignar, que es lo que pasaba hasta hoy
   // y sigue siendo válido: entonces ve la agenda del centro entera.
   const [asignarA, setAsignarA] = useState("");
+
+  /*
+   * ¿Se le escribe? (08/08/2026)
+   *
+   * Aceptar manda un correo de «ya puedes pedir cita», y hasta hoy no había
+   * forma de no mandarlo. Eso convierte poner al día una bandeja vieja en una
+   * tanda de correos a gente que escribió hace meses y que ya fue atendida por
+   * teléfono. Así que la casilla nace DESMARCADA en las solicitudes de más de
+   * un mes: el caso corriente es el que va marcado por defecto, y el raro se
+   * marca a mano.
+   */
+  const diasDesdeQueEscribio = s.diasEsperando ?? 0;
+  const esVieja = diasDesdeQueEscribio > 30;
+  const [avisar, setAvisar] = useState(!esVieja);
   const hayEquipo = (equipo ?? []).length > 0;
 
   return (
@@ -437,7 +472,7 @@ function Tarjeta({
             Hay un cliente con el mismo teléfono o email: <strong>{duplicado.name}</strong>.
           </p>
           <button
-            onClick={() => onAceptar(duplicado.id, asignarA || null)}
+            onClick={() => onAceptar(duplicado.id, asignarA || null, { avisar })}
             disabled={ocupada}
             className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
           >
@@ -482,8 +517,28 @@ function Tarjeta({
                   ningún hueco al pedir cita. Rellénalo en Equipo → su ficha → horario.
                 </span>
               )}
+              {s.email && (
+                <label className="w-full flex items-start gap-2 text-xs text-gray-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={avisar}
+                    onChange={(e) => setAvisar(e.target.checked)}
+                    disabled={ocupada}
+                    className="mt-0.5 rounded border-gray-300 accent-[var(--color-primary)]"
+                  />
+                  <span className="min-w-0">
+                    Avisarle por correo de que ya puede pedir cita
+                    {esVieja && (
+                      <span className="block text-[11px] text-amber-700">
+                        Escribió hace {diasDesdeQueEscribio} días. Va sin marcar por si ya se le
+                        atendió: márcalo solo si de verdad quieres escribirle ahora.
+                      </span>
+                    )}
+                  </span>
+                </label>
+              )}
               <button
-                onClick={() => onAceptar(null, asignarA || null)}
+                onClick={() => onAceptar(null, asignarA || null, { avisar })}
                 disabled={ocupada}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
               >

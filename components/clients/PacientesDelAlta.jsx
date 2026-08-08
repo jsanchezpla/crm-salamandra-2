@@ -15,19 +15,22 @@
  * adivinar por detrás cómo se parte un nombre en nombre y apellidos.
  */
 
-import { CAMPOS_PACIENTE, PARENTESCOS, PARENTESCO_ES_EL_CLIENTE, edadDesde } from "../../lib/clients/formularioAlta.js";
+import {
+  CAMPOS_PACIENTE,
+  PARENTESCOS,
+  PARENTESCO_ES_EL_CLIENTE,
+  edadDesde,
+  partirNombre,
+} from "../../lib/clients/formularioAlta.js";
 
-const VACIO = { firstName: "", lastName: "", birthDate: "", educationCenter: "", educationLevel: "", relationship: "" };
+export const PACIENTE_VACIO = {
+  firstName: "", lastName: "", birthDate: "", educationCenter: "", educationLevel: "",
+  relationship: "", referralReason: "",
+};
+const VACIO = PACIENTE_VACIO;
 
 const inputCls =
   "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] placeholder:text-gray-300";
-
-/** Parte "Ana Ruiz Pérez" en nombre + apellidos. Recepción lo corrige si falla. */
-function partirNombre(completo) {
-  const trozos = String(completo || "").trim().split(/\s+/).filter(Boolean);
-  if (trozos.length === 0) return { firstName: "", lastName: "" };
-  return { firstName: trozos[0], lastName: trozos.slice(1).join(" ") };
-}
 
 export default function PacientesDelAlta({ pacientes, onChange, nombreCliente }) {
   const actualizar = (i, campos) =>

@@ -8,7 +8,14 @@ import {
   isMissingTable,
 } from "../../../lib/clients/contactMethods.js";
 import { applyAutoAssignments } from "../../../lib/clients/moduleAssignments.js";
-import { normalizarPacientes, tipoPorDefecto, perfilDeAlta, fechaONull } from "../../../lib/clients/formularioAlta.js";
+import {
+  normalizarPacientes,
+  normalizarProgenitores,
+  tipoPorDefecto,
+  perfilDeAlta,
+  fechaONull,
+} from "../../../lib/clients/formularioAlta.js";
+import { normalizeGuardians } from "../../../lib/clients/guardians.js";
 import { entrarEnListaEspera } from "../../../lib/clients/listaEspera.js";
 import { filtroDeVisibilidad, normalizarCategoria, veTodasLasExternas } from "../../../lib/clients/consultaExterna.js";
 import { resolveCurrentTeamMemberId } from "../../../lib/team/currentTeamMember.js";
@@ -124,19 +131,47 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
   // Merge: campos explícitos (spain-enzymes-style) + customFields libres
   // que la ruta acepta tal cual (p.ej. nutri-laura usa edad/motivo/info_adicional).
   // El spread va primero para que los campos explícitos siempre ganen al merge.
+  //
+  // ⚠️ ARREGLO 2026-08-08: ganar NO puede significar «borrar». Estas claves se
+  // escribían con `body.x?.trim() || null`, así que una petición que NO mandaba
+  // el campo en plano lo ponía a null POR ENCIMA del valor que venía anidado en
+  // `customFields`. Y el camino principal de nutri_laura —convertir un lead en
+  // paciente— manda justo eso: `customFields: { edad, motivo, info_adicional }`
+  // y ningún `body.motivo` (modules/overrides/nutri-laura/LeadsModule.jsx:224).
+  // Resultado: cada paciente convertida desde el embudo perdía el motivo de
+  // consulta que había escrito ella misma, y la pantalla decía «guardado».
   const extraCustom =
     body.customFields && typeof body.customFields === "object" ? body.customFields : {};
+  /** "" y null significan «no me lo has mandado», no «bórralo». */
+  const texto = (v, max = 2000) => {
+    if (v == null) return undefined;
+    const s = String(v).trim();
+    return s === "" ? undefined : s.slice(0, max);
+  };
+  const propioOHeredado = (propio, heredado, max) => texto(propio, max) ?? texto(heredado, max) ?? null;
   const customFields = {
     ...extraCustom,
-    company: body.company?.trim() || null,
-    country: body.country?.trim() || null,
-    city: body.city?.trim() || null,
+    company: propioOHeredado(body.company, extraCustom.company),
+    country: propioOHeredado(body.country, extraCustom.country),
+    city: propioOHeredado(body.city, extraCustom.city),
     // Código postal (01/08/2026). Va a `customFields` con ciudad y país, y no a
     // `fiscalZip`: recepción apunta dónde vive la familia, no dónde factura.
-    postalCode: body.postalCode?.trim() || null,
+    postalCode: propioOHeredado(body.postalCode, extraCustom.postalCode),
     // Domicilio (04/08/2026): una línea de texto, la que pide el contrato. Va
     // aquí y NO a `Client.address`, que es JSONB — ver formularioAlta.js.
-    domicilio: body.domicilio?.trim() || null,
+    domicilio: propioOHeredado(body.domicilio, extraCustom.domicilio),
+    // Motivo de consulta (08/08/2026, petición del Centro Aumenta). Se acepta
+    // también en PLANO —hasta hoy solo llegaba anidado— porque es lo que manda
+    // el formulario de alta. Donde hay módulo `pacientes` el motivo fino va por
+    // hijo en `Patient.referralReason`; este es el de la familia, el que cuenta
+    // por teléfono quien llama pidiendo información.
+    motivo: propioOHeredado(body.motivo, extraCustom.motivo),
+    // Qué es el titular del paciente (madre, padre, tutor…). Con esto la ficha
+    // ya sabe que esta persona es uno de los progenitores, sin duplicar su
+    // nombre, su DNI y su teléfono dentro de `guardians`.
+    parentescoTitular: propioOHeredado(body.parentescoTitular, extraCustom.parentescoTitular, 20),
+    edad: propioOHeredado(body.edad, extraCustom.edad, 40),
+    info_adicional: propioOHeredado(body.info_adicional, extraCustom.info_adicional, 5000),
     origin: body.origin || "manual",
     leadId: body.leadId || null,
     seStatus: body.status || "new",
@@ -155,6 +190,61 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
     ? normalizarPacientes(body.pacientes)
     : { pacientes: [] };
   if (errorPacientes) return error(errorPacientes, 422);
+
+  /*
+   * El otro progenitor o tutor (08/08/2026, petición del Centro Aumenta).
+   *
+   * ⚠️ La puerta es el módulo `pacientes` y NO el perfil `salud`. El perfil
+   * incluye también `nutricion`, y por ahí el bloque le saldría a una consulta
+   * donde el paciente ES el cliente —no hay ningún menor ni ningún segundo
+   * progenitor que apuntar—. Es además la consulta que tiene el área privada
+   * encendida con pacientes reales: el correo de un tutor es una LLAVE de esa
+   * área (lib/citas/portalClient.js), así que ahí no se toca nada.
+   */
+  const { progenitores, error: errorProgenitores } = hasModule("pacientes")
+    ? normalizarProgenitores(body.progenitores)
+    : { progenitores: [] };
+  if (errorProgenitores) return error(errorProgenitores, 422);
+
+  /*
+   * Un correo no puede abrir dos casas.
+   *
+   * El área privada resuelve a QUÉ familia entra alguien buscando su correo en
+   * `clients.email` y, si no lo encuentra, dentro de los tutores de cualquier
+   * ficha, con un `findOne` sin orden. Un correo repetido en dos fichas hace
+   * que a esa persona le salga una u otra según le toque, y un correo tecleado
+   * mal —el genérico del centro, el de la vecina— le abre a alguien la
+   * documentación clínica de un menor que no es suyo.
+   *
+   * Validar solo «que no se repitan entre sí» no cubre nada de eso: hay que
+   * mirar las fichas que ya existen. Se hace ANTES de abrir la transacción.
+   */
+  const correosDeTutores = progenitores.map((g) => g.email).filter(Boolean);
+  if (correosDeTutores.length) {
+    const chocan = await Client.findAll({
+      attributes: ["id", "name"],
+      where: {
+        [Op.or]: [
+          { email: { [Op.in]: correosDeTutores } },
+          Sequelize.literal(
+            `jsonb_typeof(guardians) = 'array' AND EXISTS (
+               SELECT 1 FROM jsonb_array_elements(guardians) AS g
+               WHERE lower(g->>'email') IN (${correosDeTutores.map((c) => Client.sequelize.escape(c)).join(",")})
+             )`
+          ),
+        ],
+      },
+      limit: 3,
+    });
+    if (chocan.length) {
+      const nombres = chocan.map((c) => c.name).join(", ");
+      return error(
+        `Ese correo ya está en la ficha de ${nombres}. El correo de un progenitor da acceso al área privada de SU familia, ` +
+        `así que no puede repetirse en dos fichas. Comprueba si es la misma familia o si hay una errata.`,
+        422
+      );
+    }
+  }
 
   /*
    * «Consulta externa» ya desde el alta (07/08/2026, Rodrigo): así el paciente
@@ -185,6 +275,10 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
     // ES el cliente. Se guarda como columna, no en customFields, porque decide
     // si hace falta el consentimiento del tutor legal.
     birthDate: fechaONull(body.birthDate),
+    // Los tutores entran en el MISMO INSERT que la ficha: `guardians` es una
+    // columna JSONB del cliente, no una tabla aparte, así que no hace falta ni
+    // una escritura más ni un paso que pueda quedarse a medias.
+    ...(progenitores.length ? { guardians: normalizeGuardians(progenitores) } : {}),
     notes: notes?.trim() || null,
     // Datos fiscales opcionales — necesarios para emitir facturas a este
     // cliente, pero permitidos como null en el alta para no bloquear la
@@ -236,7 +330,14 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
       action: "client.created",
       entity: "Client",
       entityId: client.id,
-      after: resumen(client, ["name", "email", "phone", "type", "status"]),
+      // Solo RECUENTOS de los tutores y pacientes: sus nombres, DNIs y
+      // teléfonos son datos personales de menores y de terceros, y
+      // `master.audit_log` es un schema compartido por todos los clientes.
+      after: {
+        ...resumen(client, ["name", "email", "phone", "type", "status"]),
+        tutores: progenitores.length,
+        pacientes: pacientes.length,
+      },
     });
     return created(client);
   } catch (err) {

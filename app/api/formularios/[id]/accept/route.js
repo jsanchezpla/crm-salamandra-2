@@ -7,6 +7,7 @@ import { MODULE_KEYS } from "../../../../../lib/tenant/moduleKeys.js";
 import {
   aceptarSolicitud,
   buscarClienteExistente,
+  frasesDelParte,
 } from "../../../../../lib/formularios/accept.js";
 import { crearUsuarioPortal } from "../../../../../lib/formularios/portalUser.js";
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
@@ -42,14 +43,24 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * Body opcional:
  *   { clientId }        → enlazar con una ficha que YA existe en vez de crear otra
  *   { crearAcceso }     → false para NO dar de alta el usuario en WordPress
+ *   { avisar }          → false para NO mandarle el correo «ya puedes pedir cita»
  *
  * Qué pasa, en orden y con criterio:
  *   1. Se crea (o se reutiliza) la ficha de cliente y se marca la solicitud.
- *      Esto va en UNA transacción: es lo indivisible.
+ *      Esto va en UNA transacción: es lo indivisible. Desde el 08/08/2026 ahí
+ *      dentro entran también los métodos de contacto y, donde hay módulo
+ *      `pacientes`, la ficha del peque.
  *   2. Fuera de la transacción, y sin poder tumbarla: alta en el WordPress del
  *      tenant para que la paciente pueda entrar al portal y reservar citas.
  *      Si falla, la ficha YA está creada y se informa del fallo; no se deshace
  *      nada, porque deshacerlo sería peor.
+ *   3. El correo de aviso, que también es best-effort.
+ *
+ * ⚠️ `crearAcceso: false` NO silencia el correo, solo el alta en WordPress. Son
+ * dos bloques independientes y hasta hoy no había forma de aceptar sin escribir
+ * a la persona: poner al día una bandeja con solicitudes viejas significaba
+ * mandarle un «ya puedes pedir cita» a gente que escribió hace meses. Para eso
+ * está `avisar: false`.
  */
 export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tenantSequelize, hasModule, tenantHasModule, user }) => {
   try {
@@ -74,7 +85,7 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
     const handledBy = request.headers.get("x-user-email") || null;
     const handledByTeamId = await resolveCurrentTeamMemberId(request, tenantModels);
 
-    const { client, creado, yaEstaba } = await aceptarSolicitud({
+    const { client, creado, yaEstaba, parte } = await aceptarSolicitud({
       sequelize: tenantSequelize,
       Client,
       FormSubmission,
@@ -86,6 +97,19 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
       // Con quién va la paciente. Llega del desplegable de la bandeja; se
       // valida el formato aquí porque el id viene del navegador.
       asignarA: body.asignarA && UUID_RE.test(body.asignarA) ? body.asignarA : null,
+      // Los métodos de contacto son transversales: la tabla está en el bloque
+      // CORE de migraciones, así que existe en todo cliente con fichas.
+      ClientContactMethod: tenantModels.ClientContactMethod ?? null,
+      /*
+       * ⚠️ La puerta del paciente se comprueba AQUÍ, antes de abrir la
+       * transacción, y no dentro. El modelo `Patient` está registrado en todos
+       * los clientes pero la TABLA solo existe donde está el módulo
+       * `pacientes`: intentar el INSERT en un cliente sin ella lanza 42P01,
+       * hace rollback y se pierde la aceptación entera, dejando la solicitud
+       * pendiente y a la familia sin ficha. Con la puerta aquí, un cliente sin
+       * el módulo simplemente no crea paciente y se le dice.
+       */
+      Patient: hasModule(MODULE_KEYS.PACIENTES) ? (tenantModels.Patient ?? null) : null,
     });
 
     if (!client) return error("No se ha podido crear la ficha", 500);
@@ -143,7 +167,13 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
     // Best-effort y FUERA de todo lo anterior: que no salga el correo no puede
     // deshacer una aceptación que ya creó ficha y acceso.
     let avisoAlPaciente = "no_procede";
-    if (client.email) {
+    // `avisar: false` (08/08/2026) para poder poner al día una bandeja con
+    // solicitudes viejas sin escribirle a nadie. Aceptar 20 solicitudes de hace
+    // meses no puede significar 20 correos de «ya puedes pedir cita» saliendo
+    // del dominio verificado del centro a familias que ya no lo esperan.
+    if (body.avisar === false) {
+      avisoAlPaciente = "silenciado";
+    } else if (client.email) {
       try {
         const cfg = getTenantResendConfig({ tenant });
         const tpl = solicitudAceptadaTemplate({
@@ -180,6 +210,11 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
       // Para que la bandeja pueda decir si al paciente le ha llegado el aviso,
       // en vez de dar por hecho que sí.
       avisoAlPaciente,
+      // Qué ha hecho el aceptar además de crear la ficha, en frases. Aceptar
+      // pasó de una cosa a cuatro, y algunas no ocurren por motivos legítimos:
+      // se dicen en el momento en vez de dejar que se descubran el día que
+      // alguien va a citar a un peque que nunca se creó.
+      parte: frasesDelParte(parte),
       client: {
         id: client.id,
         name: client.name,

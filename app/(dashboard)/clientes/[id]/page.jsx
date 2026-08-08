@@ -25,8 +25,11 @@ export default async function ClienteDetailPage() {
   const Component = (tenantSlug && UI_OVERRIDES[tenantSlug]) || DefaultClientDetailModule;
 
   // El mismo perfil que el alta: la ficha tiene que poder editar lo que
-  // recepción acaba de teclear, ni más ni menos.
+  // recepción acaba de teclear, ni más ni menos. Y con él, si el cliente lleva
+  // pacientes: de eso depende que se pregunte el parentesco del titular.
   let perfil = PERFIL_COMERCIAL;
+  let conPacientes = false;
+  let conFacturacion = false;
   try {
     const { Tenant, TenantModule } = getMasterModels();
     const tenant = tenantSlug ? await Tenant.findOne({ where: { slug: tenantSlug } }) : null;
@@ -34,6 +37,8 @@ export default async function ClienteDetailPage() {
       const filas = await TenantModule.findAll({ where: { tenantId: tenant.id } });
       const activos = new Set(filas.filter((f) => f.enabled).map((f) => f.moduleKey));
       perfil = perfilDeAlta((k) => activos.has(k));
+      conPacientes = activos.has("pacientes");
+      conFacturacion = activos.has("billing");
     }
   } catch {
     perfil = PERFIL_COMERCIAL;
@@ -44,5 +49,5 @@ export default async function ClienteDetailPage() {
   // identidad es estable, y además esto es un componente de SERVIDOR: se
   // renderiza una vez por petición, no hay remontaje posible.
   // eslint-disable-next-line react-hooks/static-components
-  return <Component perfil={perfil} />;
+  return <Component perfil={perfil} conPacientes={conPacientes} conFacturacion={conFacturacion} />;
 }

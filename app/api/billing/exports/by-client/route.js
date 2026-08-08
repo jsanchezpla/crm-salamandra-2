@@ -3,6 +3,7 @@ import { withTenant } from "@/lib/tenant/withTenant.js";
 import { error, forbidden, serverError } from "@/lib/utils/apiResponse.js";
 import { xlsxResponse, MONEY_FMT, PCT_FMT, INT_FMT } from "@/lib/billing/exportXlsx.js";
 
+import { ATRIBUTOS_CLIENTE_FACTURA, nifDeCliente } from "../../../../../lib/billing/nifCliente.js";
 const round2 = (n) => Math.round(Number(n) * 100) / 100;
 
 /** GET /api/billing/exports/by-client?from&to — Analítica por cliente a XLSX. */
@@ -34,7 +35,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenant, hasM
       raw: true,
     });
     const costMap = new Map(costRows.map((r) => [r.clientId, round2(Number(r.imputedCosts || 0))]));
-    const clients = await Client.findAll({ where: { id: invRows.map((r) => r.clientId) }, attributes: ["id", "name", "fiscalName", "taxId"] });
+    const clients = await Client.findAll({ where: { id: invRows.map((r) => r.clientId) }, attributes: ATRIBUTOS_CLIENTE_FACTURA });
     const cMap = new Map(clients.map((c) => [c.id, c]));
 
     const result = invRows.map((row) => {
@@ -47,7 +48,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenant, hasM
       const margin = round2(billedBase - imputedCosts);
       return {
         clientName: client?.fiscalName || client?.name || "Desconocido",
-        taxId: client?.taxId ?? null,
+        taxId: nifDeCliente(client),
         billedBase, collectedBase, pendingCollection, invoiceCount, imputedCosts, margin,
         marginPct: billedBase > 0 ? round2((margin / billedBase) * 100) : 0,
       };

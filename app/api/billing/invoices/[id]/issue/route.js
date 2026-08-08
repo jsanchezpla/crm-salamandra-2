@@ -5,6 +5,7 @@ import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { withEffectiveStatus } from "../../../../../../lib/billing/invoiceStatus.js";
 import { applyStockMovementsForInvoice } from "../../../../../../lib/inventory/applyStockMovementsForInvoice.js";
 
+import { nifDeCliente } from "../../../../../../lib/billing/nifCliente.js";
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 /**
@@ -40,12 +41,16 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
     if (Number(invoice.total) <= 0) {
       return error("La factura no tiene importe", 400);
     }
-    // Bloqueo fiscal: cliente debe tener al menos fiscalName y taxId.
+    // Bloqueo fiscal: cliente debe tener al menos razón social y NIF/CIF.
     // Sin esos datos la factura no es legalmente válida.
+    //
+    // El NIF sale de `nifDeCliente`, que prefiere el de FACTURACIÓN (a nombre
+    // de quién se emite) y cae al de la ficha. Sin ese respaldo, los clientes
+    // que son empresas —cuyo `taxId` YA es su CIF— dejarían de poder emitir.
     const c = invoice.client;
     const missing = [];
     if (!c?.fiscalName && !c?.name) missing.push("razón social");
-    if (!c?.taxId) missing.push("NIF/CIF");
+    if (!nifDeCliente(c)) missing.push("NIF/CIF");
     if (missing.length > 0) {
       return error(
         `El cliente no tiene datos fiscales completos: falta ${missing.join(" y ")}. Edita la ficha del cliente antes de emitir.`,
