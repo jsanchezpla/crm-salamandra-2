@@ -46,9 +46,10 @@ async function main() {
   process.stdout.write("══════════════════════════════════════════════════════════\n\n");
 
   const master = await getMasterDb();
-  const [tenants] = await master.query(
-    "SELECT slug FROM master.tenants WHERE status <> 'deleted' ORDER BY slug"
-  );
+  // Sin filtrar por `status`: el enum solo admite active/inactive/suspended, y
+  // un cliente suspendido tiene sus datos igual de vivos. Si no tiene tabla
+  // `clients`, el bucle lo salta solo.
+  const [tenants] = await master.query("SELECT slug FROM master.tenants ORDER BY slug");
 
   let totalTocadas = 0;
 
@@ -104,11 +105,19 @@ async function main() {
     process.stdout.write("\n");
   }
 
-  await closeAllConnections();
+  await cerrarTodo(master);
+  // `closeAllConnections()` cierra el pool de los TENANTS, pero no la conexión
+  // al schema maestro, que es un singleton. Sin cerrarla a mano el proceso se
+  // queda colgado para siempre después de imprimir el resultado.
+  process.exit(0);
+}
+
+async function cerrarTodo(master) {
+  try { await closeAllConnections(); } catch { /* ya nos vamos */ }
+  try { await master?.close(); } catch { /* ídem */ }
 }
 
 main().catch(async (err) => {
   process.stderr.write(`\n✗ Error: ${err.message}\n${err.stack}\n`);
-  try { await closeAllConnections(); } catch { /* ya nos vamos */ }
   process.exit(1);
 });
