@@ -10,6 +10,8 @@
  *   --apagar              apaga el portal en vez de encenderlo
  *   --sin-cancelacion     además, impide que la familia anule sus citas
  *   --con-cancelacion     además, se lo vuelve a permitir
+ *   --sin-reserva         además, cierra la agenda pública de reserva
+ *   --con-reserva         además, la vuelve a abrir
  *   --dry-run             enseña qué haría y no toca nada
  *
  * Ejemplos:
@@ -20,14 +22,18 @@
  *   node --env-file=.env.production scripts/configure-portal-citas.js aumenta --dry-run
  *
  * ── DÓNDE SE EJECUTA EN EL VPS ──────────────────────────────────────────────
- * En el HOST, no dentro del contenedor:
+ * DENTRO del contenedor:
  *
- *   node --env-file=.env.production scripts/configure-portal-citas.js aumenta
+ *   docker compose exec -T app node scripts/configure-portal-citas.js aumenta
  *
- * El Dockerfile HORNEA la carpeta `scripts/` dentro de la imagen, así que un
- * script nuevo no existe dentro del contenedor hasta reconstruirla — o sea,
- * hasta otro despliegue y otro corte, para poner un booleano. En el host están
- * el repo y `node_modules` del despliegue anterior, y funciona sin cortar nada.
+ * ⚠️ En el host NO funciona, aunque ahí estén el repo y `node_modules`: la base
+ * de datos se llama `db` —el nombre del servicio de Docker— y ese nombre solo
+ * se resuelve desde la red de Docker. Fuera devuelve `ENOTFOUND db`.
+ *
+ * Y como el Dockerfile hornea `scripts/` dentro de la imagen, un script nuevo
+ * no existe en el contenedor hasta reconstruirla. La forma de no pagar un
+ * despliegue extra por eso es COMMITEARLO ANTES del despliegue en el que se va
+ * a usar: entra solo, con el resto del código.
  *
  * ── EL FLAG NO ES EL SECRETO ────────────────────────────────────────────────
  * Encender esto NO abre el portal por sí solo. Hacen falta además dos secretos
@@ -58,17 +64,23 @@ const apagar = tiene("--apagar");
 const dryRun = tiene("--dry-run");
 const sinCancelacion = tiene("--sin-cancelacion");
 const conCancelacion = tiene("--con-cancelacion");
+const sinReserva = tiene("--sin-reserva");
+const conReserva = tiene("--con-reserva");
 
 function salirConAyuda(motivo) {
   process.stderr.write(`\n✗ ${motivo}\n\n`);
   process.stderr.write("  Uso: node scripts/configure-portal-citas.js <slug> [--apagar]\n");
-  process.stderr.write("       [--sin-cancelacion | --con-cancelacion] [--dry-run]\n\n");
+  process.stderr.write("       [--sin-cancelacion | --con-cancelacion]\n");
+  process.stderr.write("       [--sin-reserva | --con-reserva] [--dry-run]\n\n");
   process.exit(1);
 }
 
 if (!slug) salirConAyuda("Falta el slug del cliente.");
 if (sinCancelacion && conCancelacion) {
   salirConAyuda("--sin-cancelacion y --con-cancelacion se contradicen: elige uno.");
+}
+if (sinReserva && conReserva) {
+  salirConAyuda("--sin-reserva y --con-reserva se contradicen: elige uno.");
 }
 
 async function main() {
@@ -86,6 +98,7 @@ async function main() {
 
   const antesPortal = tenant.settings?.widget?.sso?.enabled === true;
   const antesBloqueo = tenant.settings?.citas?.cancelacionBloqueada === true;
+  const antesReserva = tenant.settings?.citas?.reservaOnlineCerrada === true;
 
   // Merge en profundidad a mano: `widget` guarda además la rama `auth` (el
   // candado del widget de reserva) y `citas` tiene una docena de ajustes.
@@ -98,19 +111,20 @@ async function main() {
     },
   };
 
-  if (sinCancelacion || conCancelacion) {
-    settings.citas = {
-      ...(tenant.settings?.citas || {}),
-      cancelacionBloqueada: sinCancelacion,
-    };
+  if (sinCancelacion || conCancelacion || sinReserva || conReserva) {
+    settings.citas = { ...(tenant.settings?.citas || {}) };
+    if (sinCancelacion || conCancelacion) settings.citas.cancelacionBloqueada = sinCancelacion;
+    if (sinReserva || conReserva) settings.citas.reservaOnlineCerrada = sinReserva;
   }
 
   const despuesPortal = !apagar;
   const despuesBloqueo = sinCancelacion || conCancelacion ? sinCancelacion : antesBloqueo;
+  const despuesReserva = sinReserva || conReserva ? sinReserva : antesReserva;
 
   const flecha = (a, b) => (a === b ? `${a} (sin cambio)` : `${a} → ${b}`);
   process.stdout.write(`  Portal (widget.sso.enabled) ....... ${flecha(antesPortal, despuesPortal)}\n`);
-  process.stdout.write(`  Anulación bloqueada ............... ${flecha(antesBloqueo, despuesBloqueo)}\n\n`);
+  process.stdout.write(`  Anulación bloqueada ............... ${flecha(antesBloqueo, despuesBloqueo)}\n`);
+  process.stdout.write(`  Agenda pública cerrada ............ ${flecha(antesReserva, despuesReserva)}\n\n`);
 
   if (dryRun) {
     process.stdout.write("  · Simulacro: no se ha escrito nada.\n\n");
