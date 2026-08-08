@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import { puntuarSpam } from "../../../../../../lib/formularios/antispam.js";
 import { withPublicTenant } from "../../../../../../lib/tenant/publicTenantContext.js";
+import { reservaOnlineCerrada } from "../../../../../../lib/citas/puertaReserva.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import {
   created,
@@ -160,6 +161,10 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
   try {
     const { slug, tenant, tenantModels, hasModule } = tenantContext;
     if (!hasModule("citas")) return notFound("Módulo no disponible");
+    // El centro puede no dar cita por internet (08/08/2026). Va JUSTO debajo
+    // del módulo y devuelve lo mismo que él —un 404— para no distinguir «no
+    // contratado» de «cerrado» desde fuera. Ver lib/citas/puertaReserva.js.
+    if (reservaOnlineCerrada(tenant)) return notFound("Módulo no disponible");
     const ip = request.headers.get("x-forwarded-for") ?? null;
 
     const { EventType, Availability, Booking } = tenantModels;

@@ -16,7 +16,16 @@
  * paso y hay que decirle cuál y por dónde.
  */
 
-export default function PuertaScreen({ aviso, urlFormulario, hrefPortal, brandStyle }) {
+/**
+ * @param enlace Opcional, `{ href, texto }`. Un botón con el texto que le
+ *               convenga a quien la usa. Los otros dos lo llevan fijo porque
+ *               siempre dicen lo mismo; este nació para el centro que no da
+ *               cita por internet (08/08/2026), donde lo que toca decir es «ir
+ *               a la web del centro» y no «ir al formulario».
+ *               Se añade un prop en vez de una cuarta pantalla casi idéntica
+ *               justo por lo que dice la cabecera de arriba.
+ */
+export default function PuertaScreen({ aviso, urlFormulario, hrefPortal, enlace, brandStyle }) {
   if (!aviso) return null;
 
   return (
@@ -58,6 +67,18 @@ export default function PuertaScreen({ aviso, urlFormulario, hrefPortal, brandSt
               className="inline-flex w-full items-center justify-center gap-2 px-5 py-3 text-sm font-semibold rounded-lg text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
             >
               Ir a mi área privada
+              <span aria-hidden="true">→</span>
+            </a>
+          )}
+
+          {enlace?.href && enlace?.texto && (
+            <a
+              href={enlace.href}
+              target="_top"
+              rel="noopener"
+              className="inline-flex w-full items-center justify-center gap-2 px-5 py-3 text-sm font-semibold rounded-lg text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
+            >
+              {enlace.texto}
               <span aria-hidden="true">→</span>
             </a>
           )}

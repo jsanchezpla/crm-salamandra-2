@@ -6,6 +6,11 @@ import {
   urlDelFormulario,
 } from "../../../../../../lib/citas/puertaFormulario.js";
 import { exigeFormularioParaValoracion } from "../../../../../../lib/citas/puertaValoracion.js";
+import {
+  reservaOnlineCerrada,
+  mensajeReservaCerrada,
+  urlDeContacto,
+} from "../../../../../../lib/citas/puertaReserva.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/info
@@ -71,6 +76,23 @@ export const GET = withPublicTenant(async (_request, _ctx, { tenant, brand, hasM
       slug: tenant.slug,
       admision,
       valoracion,
+      /*
+       * Centro que no da cita por internet (08/08/2026).
+       *
+       * Se anuncia AQUÍ porque la agenda es una pantalla de navegador y no
+       * puede consultar la base de datos por su cuenta: `/info` es lo primero
+       * que pide, así que es lo único que le permite cortarse ANTES de pedir
+       * el catálogo y el calendario. Los cuatro endpoints lo comprueban de
+       * todos modos por su cuenta; esto es para que la persona vea un mensaje
+       * en vez de una agenda vacía.
+       */
+      reserva: reservaOnlineCerrada(tenant)
+        ? {
+            cerrada: true,
+            mensaje: mensajeReservaCerrada(tenant),
+            urlContacto: urlDeContacto(tenant),
+          }
+        : { cerrada: false },
       portalUrl: typeof portalUrl === "string" && portalUrl.trim() ? portalUrl.trim() : null,
       reservaUrl: typeof reservaUrl === "string" && reservaUrl.trim() ? reservaUrl.trim() : null,
       brand: {

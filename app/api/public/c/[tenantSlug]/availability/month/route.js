@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import { withPublicTenant } from "../../../../../../../lib/tenant/publicTenantContext.js";
+import { reservaOnlineCerrada } from "../../../../../../../lib/citas/puertaReserva.js";
 import { ok, error, notFound, serverError } from "../../../../../../../lib/utils/apiResponse.js";
 import {
   buildMadridDate,
@@ -21,9 +22,13 @@ import { profesionalDeQuienPregunta, recortarSiTieneProfesional } from "../../..
  *
  * Respuesta: { year, month, availableDays: [2, 3, 5, ...] }
  */
-export const GET = withPublicTenant(async (request, _ctx, { slug, tenantModels, hasModule }) => {
+export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("citas")) return notFound("Módulo no disponible");
+    // El centro puede no dar cita por internet (08/08/2026). Va JUSTO debajo
+    // del módulo y devuelve lo mismo que él —un 404— para no distinguir «no
+    // contratado» de «cerrado» desde fuera. Ver lib/citas/puertaReserva.js.
+    if (reservaOnlineCerrada(tenant)) return notFound("Módulo no disponible");
 
     const { searchParams } = new URL(request.url);
     const eventTypeId = searchParams.get("eventTypeId");

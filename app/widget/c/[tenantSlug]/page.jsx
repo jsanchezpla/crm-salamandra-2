@@ -344,6 +344,32 @@ export default function WidgetSelectionPage() {
       </div>
     );
   }
+  /*
+   * ── El centro no da cita por internet (08/08/2026) ──────────────────────
+   *
+   * Va lo PRIMERO, antes incluso del error de carga, y a propósito: con la
+   * agenda cerrada el catálogo devuelve 404, así que sin este corte la persona
+   * vería «No se puede cargar la reserva» —un fallo técnico— cuando lo que
+   * pasa es que ese centro da las citas por teléfono.
+   *
+   * Y NO se usa `notFound()`: el widget vive dentro de un recuadro incrustado
+   * en la web del centro, y como el CRM no tiene página de 404 propia, ahí se
+   * vería el 404 pelado de Next: una pantalla rota, sin marca y sin salida.
+   */
+  if (info?.reserva?.cerrada) {
+    return (
+      <PuertaScreen
+        aviso={{ titulo: "Las citas se piden en el centro", texto: info.reserva.mensaje }}
+        enlace={
+          info.reserva.urlContacto
+            ? { href: info.reserva.urlContacto, texto: "Ir a la web del centro" }
+            : null
+        }
+        brandStyle={brandStyle}
+      />
+    );
+  }
+
   if (loadError) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">

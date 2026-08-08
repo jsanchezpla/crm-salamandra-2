@@ -136,6 +136,7 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("citas.agendaCompartida", antes?.citas?.agendaCompartida, despues?.citas?.agendaCompartida);
   anota("citas.portalBloqueoImpago", antes?.citas?.portalBloqueoImpago, despues?.citas?.portalBloqueoImpago);
   anota("citas.cancelacionBloqueada", antes?.citas?.cancelacionBloqueada, despues?.citas?.cancelacionBloqueada);
+  anota("citas.reservaOnlineCerrada", antes?.citas?.reservaOnlineCerrada, despues?.citas?.reservaOnlineCerrada);
   anota("citas.avisosWhatsapp", antes?.citas?.avisosWhatsapp, despues?.citas?.avisosWhatsapp);
   anota("citas.formularioObligatorio", antes?.citas?.formularioObligatorio, despues?.citas?.formularioObligatorio);
   anota("citas.contratoObligatorio", antes?.citas?.contratoObligatorio, despues?.citas?.contratoObligatorio);
@@ -222,6 +223,8 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     portalBloqueoImpago: t.settings?.citas?.portalBloqueoImpago === true,
     // ¿El centro impide que la familia anule sus citas? (lib/citas/cancelacion.js)
     cancelacionBloqueada: t.settings?.citas?.cancelacionBloqueada === true,
+    // ¿El centro no da cita por internet? (lib/citas/puertaReserva.js)
+    reservaOnlineCerrada: t.settings?.citas?.reservaOnlineCerrada === true,
     // Avisos de cita también por WhatsApp (01/08). Apagado por defecto.
     avisosWhatsapp: t.settings?.citas?.avisosWhatsapp === true,
     // Puerta de admisión: solo reserva quien tiene el formulario aceptado.
@@ -464,6 +467,12 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   if (typeof body.cancelacionBloqueada === "boolean") {
     settings.citas = { ...(settings.citas ?? {}), cancelacionBloqueada: body.cancelacionBloqueada };
   }
+  // Agenda pública cerrada. APAGADO por defecto (o sea: SÍ se reserva online),
+  // que es como se ha comportado siempre. Nombre en negativo por lo mismo que
+  // su hermano de arriba: para que todos se lean con `=== true`.
+  if (typeof body.reservaOnlineCerrada === "boolean") {
+    settings.citas = { ...(settings.citas ?? {}), reservaOnlineCerrada: body.reservaOnlineCerrada };
+  }
   // Avisos de cita por WhatsApp. APAGADO por defecto: encenderlo sin las
   // credenciales de Meta no manda nada, y con ellas empieza a escribir a
   // pacientes reales (y Meta cobra por conversación).
@@ -581,6 +590,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     agendaCompartida: settings.citas?.agendaCompartida === true,
     portalBloqueoImpago: settings.citas?.portalBloqueoImpago === true,
     cancelacionBloqueada: settings.citas?.cancelacionBloqueada === true,
+    reservaOnlineCerrada: settings.citas?.reservaOnlineCerrada === true,
     avisosWhatsapp: settings.citas?.avisosWhatsapp === true,
     // ⚠️ LAS CUATRO PUERTAS TIENEN QUE VOLVER EN ESTA RESPUESTA (05/08/2026).
     // La pantalla hace `setCfg({...c, ...data})`, así que lo que no vuelva se

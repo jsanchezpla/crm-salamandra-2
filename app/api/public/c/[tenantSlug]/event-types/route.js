@@ -1,4 +1,5 @@
 import { withPublicTenant } from "../../../../../../lib/tenant/publicTenantContext.js";
+import { reservaOnlineCerrada } from "../../../../../../lib/citas/puertaReserva.js";
 import { ok, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { normalizarPreguntas } from "../../../../../../lib/citas/preguntasCita.js";
 import { duracionDeContacto } from "../../../../../../lib/citas/slots.js";
@@ -25,9 +26,13 @@ import {
  * públicos— en vez de devolver 401: esta pantalla es la agenda pública y no
  * puede caerse porque a alguien se le haya pasado la sesión.
  */
-export const GET = withPublicTenant(async (request, _ctx, { slug, tenantModels, hasModule }) => {
+export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("citas")) return notFound("Módulo no disponible");
+    // El centro puede no dar cita por internet (08/08/2026). Va JUSTO debajo
+    // del módulo y devuelve lo mismo que él —un 404— para no distinguir «no
+    // contratado» de «cerrado» desde fuera. Ver lib/citas/puertaReserva.js.
+    if (reservaOnlineCerrada(tenant)) return notFound("Módulo no disponible");
 
     const { EventType } = tenantModels;
     const rows = await EventType.findAll({

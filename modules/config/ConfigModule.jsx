@@ -630,6 +630,21 @@ export default function ConfigModule() {
           )}
 
           {isAdmin && (
+            <ReservaOnlineCard
+              activo={!!cfg.reservaOnlineCerrada}
+              readOnly={!!cfg.readOnly}
+              onChange={(v) =>
+                patchTenant(
+                  { reservaOnlineCerrada: v },
+                  v
+                    ? "La agenda pública queda cerrada"
+                    : "Vuelve a poder pedirse cita por internet"
+                )
+              }
+            />
+          )}
+
+          {isAdmin && (
             <CancelacionCard
               activo={!!cfg.cancelacionBloqueada}
               readOnly={!!cfg.readOnly}
@@ -1628,6 +1643,48 @@ function BloqueoImpagoCard({ activo, readOnly, onChange }) {
  * privada y el enlace de los correos— porque apagar solo una es el error que se
  * comete: el «Cancela aquí» del correo cancela sin iniciar sesión y no caduca.
  */
+/**
+ * El centro no da cita por internet (08/08/2026).
+ *
+ * La tarjeta insiste en que esto NO es esconder el enlace: la agenda respondía
+ * a cualquiera que conociera la dirección aunque no estuviera enlazada en
+ * ningún sitio, entregando el catálogo entero de tipos de cita.
+ */
+function ReservaOnlineCard({ activo, readOnly, onChange }) {
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-neutral-800">Las citas se piden solo en el centro</div>
+          <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+            Cierra la agenda pública: nadie puede pedir cita por internet ni ver el catálogo de
+            tipos de cita, aunque conozca la dirección. Quien entre verá un aviso con la marca del
+            centro y un enlace a vuestra web. El área privada de las familias sigue funcionando.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange(!activo)}
+          className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 ${activo ? "bg-[var(--color-primary,#1B3A2D)]" : "bg-neutral-300"}`}
+          aria-label={activo ? "Abrir la agenda pública" : "Cerrar la agenda pública"}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${activo ? "translate-x-6" : "translate-x-1"}`} />
+        </button>
+      </div>
+      <div className="mt-1 text-[11px] font-medium">
+        {activo
+          ? <span className="text-emerald-700">Activo: la agenda pública está cerrada.</span>
+          : <span className="text-neutral-400">Apagado: cualquiera con el enlace puede pedir cita.</span>}
+      </div>
+      <p className="text-[10px] text-neutral-400 mt-2">
+        No basta con no enlazar la agenda desde vuestra web: sin esto, la dirección responde
+        igual y enseña <strong>todos</strong> vuestros tipos de cita.
+      </p>
+    </div>
+  );
+}
+
 function CancelacionCard({ activo, readOnly, onChange }) {
   return (
     <div className="bg-white border border-neutral-200 rounded-xl p-5">
