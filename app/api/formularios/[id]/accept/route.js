@@ -14,6 +14,7 @@ import { applyAutoAssignments } from "../../../../../lib/clients/moduleAssignmen
 import { sendEmail, envioRealizado } from "../../../../../lib/email/resendClient.js";
 import { solicitudAceptadaTemplate } from "../../../../../lib/email/templates/citas/solicitudAceptada.js";
 import { getTenantResendConfig } from "../../../../../lib/outreach/resendConfig.js";
+import { reservaOnlineCerrada } from "../../../../../lib/citas/puertaReserva.js";
 
 /**
  * A dónde se le manda a reservar. Se prefiere el ÁREA PRIVADA del cliente
@@ -150,6 +151,10 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
           brand: tenant.settings?.brand,
           clientName: client.name,
           urlReserva: urlParaReservar(tenant),
+          // En un centro que no da cita por internet, el correo cambia de
+          // texto: le dice que le llamarán en vez de mandarla a una agenda
+          // que no existe (08/08/2026).
+          reservaCerrada: reservaOnlineCerrada(tenant),
         });
         const envio = await sendEmail({
           to: client.email,
