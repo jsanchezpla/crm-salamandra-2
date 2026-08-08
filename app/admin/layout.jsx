@@ -40,6 +40,7 @@ export const metadata = {
 
 const SECCIONES = [
   { href: "/admin", texto: "Custodia" },
+  { href: "/admin/modulos", texto: "Módulos" },
   { href: "/admin/clientes", texto: "Alta de clientes" },
 ];
 
