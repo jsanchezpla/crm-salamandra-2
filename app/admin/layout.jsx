@@ -43,6 +43,9 @@ const SECCIONES = [
   { href: "/admin/tablero", texto: "Tablero" },
   { href: "/admin", texto: "Custodia" },
   { href: "/admin/modulos", texto: "Módulos" },
+  // Va pegada a Módulos porque son la misma pregunta en dos pasos: qué tiene
+  // cada cliente, y qué se hablan entre sí las cosas que tiene.
+  { href: "/admin/integraciones", texto: "Integraciones" },
   { href: "/admin/clientes", texto: "Alta de clientes" },
 ];
 
