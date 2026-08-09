@@ -27,6 +27,11 @@ COPY --chown=nextjs:nodejs lib ./lib
 COPY --chown=nextjs:nodejs models ./models
 COPY --chown=nextjs:nodejs scripts ./scripts
 
+# El tablero del back-office lee estos dos ficheros en caliente. Solo estos: el
+# resto de `docs/` es documentación interna que no pinta nada en la aplicación y
+# no tiene por qué viajar a producción.
+COPY --chown=nextjs:nodejs docs/backlog.md docs/resuelto.md ./docs/
+
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000

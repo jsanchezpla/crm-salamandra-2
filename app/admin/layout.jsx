@@ -39,6 +39,8 @@ export const metadata = {
 };
 
 const SECCIONES = [
+  // El tablero va primero: es lo que se mira al empezar el día.
+  { href: "/admin/tablero", texto: "Tablero" },
   { href: "/admin", texto: "Custodia" },
   { href: "/admin/modulos", texto: "Módulos" },
   { href: "/admin/clientes", texto: "Alta de clientes" },
