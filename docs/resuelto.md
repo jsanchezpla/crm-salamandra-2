@@ -28,6 +28,17 @@ Lo más reciente arriba.
 
 ## 08/08/2026
 
+### El cobro con tarjeta funciona de verdad · `nutri_laura`
+
+Estaba pendiente desde que se montó: el código llevaba semanas escrito y probado
+en local y contra Stripe de pruebas, pero ninguna tarjeta real había recorrido
+el flujo entero. Ya lo ha hecho.
+
+*Cómo se comprobó*: en producción, dos pagos completados el 07/08 — la prueba de
+1 € de Rodrigo a las 10:19 y, cuarenta minutos después, **130 € cobrados de
+verdad a una paciente**. Las dos citas quedaron `confirmed` y `paid`, con su
+sesión de pago en `paid` y su fecha de cobro.
+
 ### El equipo ya no ve el dinero de las citas · `nutri_laura` (y todos con `citas`)
 
 Laura se quejó de que su empleada veía en la agenda el chip «No se pudo cobrar ·
