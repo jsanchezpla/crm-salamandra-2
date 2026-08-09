@@ -33,9 +33,13 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * Un cliente con el módulo de origen y sin el de destino tiene la integración a
  * medias. A veces es deliberado (Quality Energy tiene leads y no quiere fichas
  * de cliente) y a veces es un olvido. La pantalla lo enseña como un aviso, nunca
- * como un error, y solo para los tipos donde la falta se NOTA — una conversión
- * que no tiene a dónde ir, un enlace que se queda sin la otra punta. Un `gating`
- * o una agregación sin destino simplemente no aparece, que es lo correcto.
+ * como un error.
+ *
+ * Y solo avisa de las que se NOTAN, que se comprobaron una a una: si sin el
+ * módulo de destino el botón ni se pinta —que es lo normal, y lo correcto— no
+ * sale nada. La primera versión lo deducía del tipo de integración y daba 33
+ * avisos de los que la mayoría eran falsos; el detalle está en
+ * `lib/provisioning/integraciones.js`.
  *
  * Mismos tres candados que el resto del back-office.
  */
@@ -86,7 +90,7 @@ export const GET = withTenant(async (_request, _ctx, ctx) => {
         const conOrigen = tiene.has(i.desde);
         const conDestino = tiene.has(i.hacia);
         if (conOrigen && conDestino) vivas.push(slug);
-        else if (conOrigen && necesitaDestino(i.tipo)) aMedias.push(slug);
+        else if (conOrigen && necesitaDestino(i)) aMedias.push(slug);
       }
 
       return { ...i, vivas, aMedias };

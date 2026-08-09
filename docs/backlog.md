@@ -106,6 +106,53 @@ desde Instagram. Cualquiera puede reservarlo.
 
 ## P1 — esta semana
 
+### Botones que llevan a un módulo que el cliente no ha comprado · `quality_energy`, `abarcaia`, `healim`, `nutri_laura`
+
+Tres sitios pintan una entrada sin mirar si el cliente tiene el módulo al que
+lleva, y la página de destino es un componente de cliente sin `notFound()`, así
+que se monta entera y lo único que llega es la banda roja del endpoint. Se ve el
+botón, se pulsa, y no lleva a ninguna parte:
+
+- **«Convertir a cliente»** en el panel del lead — lo ven Quality Energy (129
+  leads) y Abarcaia (84), que no tienen Clientes. Es el peor de los tres: está
+  en mitad de su trabajo diario.
+- **«Sin profesional»**, hijo del menú de Citas, sin ningún módulo exigido —
+  Healim, que no tiene Equipo.
+- **«Incidencias» y «Bandeja de trabajo»**, las dos tarjetas fijas de «Mi
+  espacio», que no comprueban nada — cualquier usuario no admin de una consulta
+  sin Clínica, hoy nutri_laura.
+
+Es el mismo patrón las tres veces, y el mismo que ya mordió con los módulos: no
+basta con esconderlo del menú.
+
+*Se comprueba*: entrar con esos clientes y que la entrada no exista, o que la
+página responda 404 en vez de montarse y enseñar el error.
+*Dónde*: `modules/overrides/{nutri-laura,spain-enzymes}/LeadsModule.jsx`,
+`components/layout/Sidebar.jsx` (hijo «Sin profesional»),
+`components/team/MiEquipo.jsx:182-191`.
+*Comprobado en producción*: 09/08/2026 — los cuatro clientes tienen el módulo de
+origen y no el de destino.
+
+### Laura ve un bloque de Facturación que no ha comprado · `nutri_laura`
+
+Al abrir la ficha de cualquiera de su equipo sale «Facturación» con *Facturado
+0,00 € · Coste salarial 0,00 € · Ticket medio 0,00 €*. No tiene el módulo.
+
+La causa es una condición mal puesta: el endpoint corta con
+`!hasModule("team") && !hasModule("billing")` —una **Y** donde debería mirar el
+módulo de destino—, así que con Equipo encendido pasa de largo y responde 200.
+Y responde con datos, no con error, porque el alta de cliente hace `sync()` de
+todos los modelos: las tablas de facturas y gastos existen en todos los schemas
+y suman cero. El componente solo se esconde si le llega un 403, que nunca llega.
+
+El vecino de al lado está bien hecho y sirve de patrón: `/api/team/[id]/projects`
+sí gatea por el módulo de destino.
+
+*Se comprueba*: con Laura, la ficha de un miembro del equipo no enseña
+Facturación.
+*Dónde*: `app/api/team/[id]/billing-summary/route.js:15`.
+*Comprobado en producción*: 09/08/2026 — nutri_laura tiene `team` y no `billing`.
+
 ### Dos clientes no ven un módulo que tienen contratado · `retorika`, `spain_enzymes`
 
 No son usuarios normales: son los **administradores** de su propio CRM, que es
@@ -270,6 +317,21 @@ ninguno que mire tablas.
 ---
 
 ## P3 — deuda
+
+### Dos textos prometen cosas que en ese cliente no pueden pasar · `retorika`, `spain_enzymes`, `quality_energy`, `abarcaia`
+
+Salieron del repaso de integraciones y son cosméticos, pero se leen:
+
+- Al borrar una ficha, un cliente **sin agenda** lee «se borrarán también sus
+  documentos y las citas que todavía no han ocurrido». No tiene citas. El texto
+  está escrito a pelo en los dos sitios de borrado, sin mirar el módulo.
+- En Estadísticas de Leads, el KPI **«Con ficha creada — leads que ya son
+  cliente»** se pinta siempre y marca 0 para siempre en quien no tiene Clientes,
+  porque ahí ningún lead puede llegar a serlo.
+
+*Se comprueba*: ninguno de los dos aparece en un cliente sin el módulo.
+*Comprobado en producción*: 09/08/2026 — retorika y spain_enzymes tienen fichas
+sin agenda; quality_energy y abarcaia, leads sin fichas.
 
 ### El secreto global de webhooks tiene 31 caracteres · `retorika`
 
