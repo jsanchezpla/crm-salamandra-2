@@ -102,6 +102,14 @@ export const CORE = [
   // primera firma revienta pidiendo `template_key`. La tabla de plantillas sí
   // se crea solo donde hay `citas` (lo decide el propio script).
   "migrate-contrato-estructurado",
+  // Una persona MENOR firma su contrato SIN dibujar la firma (06/08/2026): quita
+  // el NOT NULL de `contract_signatures.signature_path`. CORE por lo mismo que la
+  // de arriba, y pegada a ella a propósito: las dos AMPLÍAN la misma tabla, que
+  // se crea para todos los tenants. Dejarla en `citas` partiría el estado de esa
+  // tabla en dos —schemas con el contrato estructurado pero con la columna aún
+  // NOT NULL—, y el modelo ContractSignature ya la declara nullable: la primera
+  // firma de una menor reventaría con 23502.
+  "migrate-firma-opcional-menores",
   // NIF/CIF de facturación (08/08/2026): a nombre de quién se emite la factura,
   // que no siempre es el titular de la ficha. CORE y no dentro de `billing`
   // porque la columna vive en `clients` y el MODELO Client la declara para
@@ -109,6 +117,17 @@ export const CORE = [
   // cliente sin la columna vería su /clientes caerse entero con 42703 aunque no
   // tenga facturación. Decide por existencia de tabla `clients`.
   "migrate-client-fiscal-taxid",
+  // Citas autoconfirmadas paciente a paciente (06/08/2026): la profesional exime
+  // de la bandeja de confirmación a la de siempre, desde su ficha. Mismo caso que
+  // la de arriba: suena a `citas`, pero la columna vive en `clients` y el MODELO
+  // Client declara `autoConfirmBookings` para todos los tenants, así que sin ella
+  // CUALQUIER lectura de una ficha se cae con 42703, tenga citas o no.
+  // Y tampoco vale con apuntarla solo en `clients`: `citas` NO requiere `clients`
+  // en el catálogo de alta, y quien compre solo Citas se quedaría sin la exención
+  // en silencio — la reserva pública se traga el 42703 a propósito (para que
+  // reservar nunca falle por esto) y trata a todo el mundo como no eximido.
+  // Aditiva y por existencia de tabla `clients`.
+  "migrate-citas-autoconfirmadas-por-paciente",
 ];
 
 export const MODULES = {
