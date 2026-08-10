@@ -71,6 +71,7 @@
     "db:check-access": "node --env-file=.env.local scripts/check-module-access.js",
     "db:check-links": "node --env-file=.env.local scripts/check-links.js",
     "db:check-links:prod": "node --env-file=.env.production scripts/check-links.js",
+    "db:check-tables": "node --env-file=.env.local scripts/check-module-tables.js",
     "db:migrate:links": "node --env-file=.env.local scripts/migrate-documents-client-link.js && node --env-file=.env.local scripts/migrate-clinica-client-link.js && node --env-file=.env.local scripts/migrate-plan-team.js && node --env-file=.env.local scripts/migrate-interactions-notes-team.js && node --env-file=.env.local scripts/migrate-formsubmission-team.js",
     "db:migrate:formularios": "node --env-file=.env.local scripts/migrate-formularios-module.js",
     "db:migrate:formularios:prod": "node --env-file=.env.production scripts/migrate-formularios-module.js",

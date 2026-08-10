@@ -265,23 +265,34 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 > en esta tabla y en el resto de documentación nueva se listan los
 > slugs **tal cual están en BD** (con underscore).
 
-| Slug             | Entorno         | Módulos activos                                              | Notas                                                                                           |
-| ---------------- | --------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `demo`           | local + prod    | clients, leads, calendar, inventory, billing, team, training, support\* | Tenant de desarrollo y pruebas; show-room. \* = `support` activado solo en LOCAL (2026-07-27, con seed y foto dorada); en prod se activará al desplegar el módulo |
-| `retorika`       | solo producción | training, clients                                            | Academia online (WordPress + TutorLMS)                                                          |
-| `quality_energy` | local + prod    | leads                                                        | Empresa energética. Tuvo `referidos` en su día (limpiado por `remove-abarcaia-from-quality.js`) |
-| `aumenta`        | local + prod    | leads\*, training\*, clients, calendar, citas, clinica, pacientes, projects, billing, inventory, orders, team, documents (13) | Centro de psicología y formación. \* = override UI: `aumenta/LeadsModule` y `aumenta/FormacionOverview`. Label sidebar "Leads" → "Interesados". **CRM en uso REAL desde 2026-07-24**: datos de ejemplo borrados (`reset-aumenta-real-data.js`; los LEADS eran reales y se conservaron) y equipo real de 15 personas dado de alta (`seed-aumenta-equipo-real.js`: 13 logins tipo `nombre_aumenta` con rol `user`; dirección usa admin@aumenta.es). Desempeño/Dirección/Productividad son SOLO admin. NO wipear/sembrar sin permiso. **Agenda compartida ENCENDIDA el 01/08/2026** a petición de Rodrigo: todo el equipo ve la agenda completa (y con ella los datos de contacto del paciente). |
-| `abarcaia`       | solo producción | leads, referidos                                             | Programa de referidos vía formulario público                                                    |
-| `spain_enzymes`  | local + prod    | **prod: leads, analytics** · local: leads, clients, inventory, billing, orders | **Corregido 2026-07-31**: ya NO es "solo local". Está EN PRODUCCIÓN y es un cliente real (admin `admin@spain-enzymes.salamandra`); acabó contratando **solo leads**, así que la lista larga de módulos es la del entorno local, no la suya. Verificado contra el endpoint público: `x-tenant: spain_enzymes` resuelve y `leads` está activo. La web (spainenzymes.com, WordPress) manda los leads del formulario a `/api/public/leads`. `analytics` se le añade en el sprint del 2026-07-31 |
-| `nutri_laura`    | local + prod    | citas, leads, clients, training, nutricion, formularios, team | Nutricionista (Laura). Override leads (embudo nutricional) + conversión lead→paciente + override overview formación (B2C, sin TutorLMS aún). Subido a prod 2026-06-23 con sprint Recetario C1. **Módulo `team` activado 2026-07-24** (`add-team-module-nutri-laura.js`): Laura es el 1er miembro (nutricionista); va a fichar más. NO tiene clinica/pacientes: sus "pacientes" son Clients con plan de menú. |
+> ⚠️ **AQUÍ YA NO SE LISTAN LOS MÓDULOS DE CADA CLIENTE** (10/08/2026).
+> Había una columna con ellos y **mentía en 5 de los 8 clientes**, además de
+> faltarle dos enteros. Decía que Aumenta tenía 13 cuando tiene 20, y que la
+> demo tenía `support` «solo en local» cuando lo tiene en producción. De esa
+> tabla salieron dos tareas falsas del backlog en el mismo día.
+>
+> No es que nadie la actualizara: es que una lista copiada a mano de algo que
+> cambia cada semana **siempre** acaba mintiendo, y aquí miente en silencio.
+> La verdad está en `master.tenant_modules` y se mira en:
+>
+> - **`/admin/modulos`** en el back-office — quién tiene qué y qué lleva a medida.
+> - **`/admin/integraciones`** — por dónde se tocan esos módulos entre sí.
+> - `scripts/inspect-tenant-modules.js <slug>` (solo lectura) desde la terminal.
+>
+> Lo que queda abajo es lo que la base de datos NO sabe: quién es cada cliente,
+> qué no se le puede tocar y por qué. Eso sí vive aquí.
 
-Datos verificados contra `master.tenants` y `master.tenant_modules` el
-2026-04-30 (entorno local), salvo `aumenta`, re-verificado en
-**producción** el 2026-07-07 (12 módulos activos). Los tenants `retorika`
-y `abarcaia` solo existen en producción; sus módulos provienen de los
-seeds correspondientes. El resto de filas puede haber divergido respecto
-a producción — re-verificar con `scripts/inspect-tenant-modules.js <slug>`
-(solo lectura) antes de fiarse.
+| Slug             | Entorno         | Quién es y qué hay que saber |
+| ---------------- | --------------- | ---------------------------- |
+| `demo`           | local + prod    | Tenant de desarrollo y show-room. Datos FALSOS a propósito: tiene casi todos los módulos para poder enseñarlos juntos. **Es pública y da sesión de admin a cualquiera**, así que todo endpoint que mande correo, gaste IA o escriba en master necesita su guard de `lib/demo/isDemo.js`. |
+| `retorika`       | solo producción | Academia online (WordPress + TutorLMS). |
+| `quality_energy` | local + prod    | Empresa energética. Tuvo `referidos` en su día (limpiado por `remove-abarcaia-from-quality.js`). |
+| `aumenta`        | local + prod    | Centro de psicología y formación, y **el cliente que más usa el CRM**: 12.030 citas, 15 personas y 88 de las 99 integraciones vivas. Overrides de UI: `aumenta/LeadsModule` y `aumenta/FormacionOverview`; el sidebar dice "Interesados" en vez de "Leads". **CRM en uso REAL desde 2026-07-24**: datos de ejemplo borrados (`reset-aumenta-real-data.js`; los LEADS eran reales y se conservaron) y equipo real dado de alta (`seed-aumenta-equipo-real.js`: 13 logins tipo `nombre_aumenta` con rol `user`; dirección usa admin@aumenta.es). Desempeño/Dirección/Productividad son SOLO admin. **NO wipear ni sembrar sin permiso.** **Agenda compartida ENCENDIDA el 01/08/2026** a petición de Rodrigo: todo el equipo ve la agenda completa, y con ella los datos de contacto del paciente. |
+| `abarcaia`       | solo producción | Programa de referidos vía formulario público. |
+| `spain_enzymes`  | local + prod    | Cliente real en producción (admin `admin@spain-enzymes.salamandra`). Su web (spainenzymes.com, WordPress) manda los leads del formulario a `/api/public/leads`. **Ojo**: en local tiene módulos que en producción NO ha contratado; no dar por buena la lista de local. |
+| `nutri_laura`    | local + prod    | Nutricionista (Laura). Override de leads (embudo nutricional) + conversión lead→paciente + override del overview de formación (B2C, sin TutorLMS aún). Subida a prod el 2026-06-23 con el sprint Recetario C1. **NO tiene `clinica` ni `pacientes`**: sus "pacientes" son `Client` con plan de menú, y por eso el módulo `clients` se le rotula «Pacientes» (ver `lib/clients/vocabulario.js`). |
+| `healim`         | solo producción | Cliente de solo Citas. **No estaba en esta tabla hasta el 10/08/2026** y llevaba meses en producción. |
+| `salamandra_solutions` | solo producción | **Somos nosotros.** Es el único con el módulo `provisioning`, que es lo que abre el back-office (`/admin`). No es un cliente: no cuenta en los recuentos de las pantallas internas. |
 
 Cada tenant puede tener override de UI en `modules/overrides/{slug}/`
 (carpeta con guión) y seed propio en `scripts/seed-{slug}.js` cuando

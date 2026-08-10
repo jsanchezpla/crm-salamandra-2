@@ -159,7 +159,16 @@ const navigation = [
           // Citas reservadas a las que les falta profesional (02/08/2026).
           // adminOnly: asignar a una compañera es cosa de dirección/recepción,
           // no de cada terapeuta.
-          { key: "citas-sin-profesional", label: "Sin profesional", href: "/citas/sin-profesional", adminOnly: true },
+          // `moduleKey: "team"` (10/08/2026): esta entrada no exigía NINGÚN
+          // módulo, y aquí "ninguno" quiere decir "para todo el mundo"
+          // —`exigidos.every` sobre un array vacío es true—. A Healim, que
+          // tiene la agenda contratada y el equipo no, le salía en el menú una
+          // pantalla cuyo único botón (asignar la cita a una compañera) se
+          // surte de /api/team, que a ella le responde 403: el desplegable de
+          // profesionales aparecía vacío y desde la pantalla no había manera
+          // de entender por qué. Se exige `team` y no `citas` porque `citas`
+          // ya lo pide el padre, y sin Equipo no hay a quién asignar nada.
+          { key: "citas-sin-profesional", label: "Sin profesional", href: "/citas/sin-profesional", adminOnly: true, moduleKey: "team" },
         ],
       },
     ],

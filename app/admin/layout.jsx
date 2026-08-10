@@ -39,8 +39,12 @@ export const metadata = {
 };
 
 const SECCIONES = [
-  // El tablero va primero: es lo que se mira al empezar el día.
-  { href: "/admin/tablero", texto: "Tablero" },
+  // Va primero: es lo que se mira al empezar el día.
+  //
+  // La RUTA sigue siendo /admin/tablero a propósito (Jorge, 10/08/2026, pidió
+  // cambiar el rótulo). Renombrarla obligaría a tocar enlaces y rompería
+  // cualquier marcador ya guardado, y lo que se lee es esta palabra.
+  { href: "/admin/tablero", texto: "Registro" },
   { href: "/admin", texto: "Custodia" },
   { href: "/admin/modulos", texto: "Módulos" },
   // Va pegada a Módulos porque son la misma pregunta en dos pasos: qué tiene

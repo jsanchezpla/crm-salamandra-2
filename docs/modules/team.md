@@ -117,7 +117,7 @@ Todos validan `hasModule("team")` antes de operar.
 | `GET /api/team/[id]` | Detalle. | Cualquier autenticado del tenant. |
 | `PATCH /api/team/[id]` | Edita; auditoría granular por campo (ver eventos). | Solo admin/superadmin. |
 | `DELETE /api/team/[id]` | **Soft delete**: cambia `status` a `inactive`. NUNCA borrado físico. Idempotente (si ya está inactivo devuelve `204` sin tocar nada). | Solo admin/superadmin. |
-| `GET /api/team/[id]/billing-summary` | Resumen de facturación del empleado (ver módulo Billing). | Cualquier autenticado del tenant; `monthlySalary` y `projectedSalaryCost` solo a admin. |
+| `GET /api/team/[id]/billing-summary` | Resumen de facturación del empleado (ver módulo Billing). | Requiere `hasModule("billing")` (no basta con `team`); cualquier autenticado del tenant, pero `monthlySalary` y `projectedSalaryCost` solo a admin. |
 | `GET /api/team/modules` | Módulos activos del TENANT (para los checkboxes de acceso en el alta). No confundir con `/api/auth/me → enabledModules` (esa es la intersección del usuario actual). | Solo admin (rol fresco de BD). |
 | `GET /api/team/[id]/access` | Estado del login del miembro: `{ hasUser, username, lastLoginAt, managedElsewhere, modules }`. Sin usuario, `modules` propone lo marcado en `team_member_modules`. | Solo admin (rol fresco de BD). |
 | `POST /api/team/[id]/access` | **Crea el usuario de login** en `master.users` (patrón terapeutas de Aumenta): username sin `@` con sufijo `_{slug}` forzado (o email real), rol `user`, `moduleAccess` = módulos marcados (mínimo 1). Devuelve `{ username, password }` UNA única vez. | Solo admin; nunca en demo; 409 si ya tiene usuario o el username existe. |

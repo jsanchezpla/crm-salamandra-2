@@ -37,7 +37,7 @@ function Dato({ label, value, mono }) {
   );
 }
 
-export default function MiEquipo() {
+export default function MiEquipo({ modulos = null }) {
   const [member, setMember] = useState(undefined); // undefined=cargando · null=sin ficha
   const [docs, setDocs] = useState([]);
   const [docsLoading, setDocsLoading] = useState(true);
@@ -93,6 +93,28 @@ export default function MiEquipo() {
       setErr("No se pudo eliminar");
     }
   }
+
+  // Las dos tarjetas del final (Incidencias y Bandeja de trabajo) llevaban a
+  // /equipo/* sin comprobar nada. Quien no tiene Clínica ni Equipo avanzado las
+  // veía igual, pulsaba, y lo único que le llegaba era la banda roja del 403 de
+  // /api/clinica/{incidencias,bandeja}. Lo sufre cualquier usuario no admin de
+  // una consulta sin Clínica —hoy nutri_laura, que tiene Equipo y no Clínica—, y
+  // esta pantalla es justamente la que ven los que no son admin.
+  //
+  // Se pide EXACTAMENTE lo que piden esos dos endpoints (`team_avanzado` y, o
+  // bien `clinica`, o bien `pacientes`) y ni un módulo más. Con eso, la tarjeta
+  // solo se cae donde ya estaba muerta: a quien hoy la usa no se le quita nada.
+  // El sidebar es un pelo más estricto (exige `clinica` a secas) y no se toca:
+  // apretar aquí para igualarlo sí podría quitarle una pantalla a alguien.
+  //
+  // `modulos` viene de /api/auth/me, que es el cruce de los módulos del tenant
+  // con el acceso del usuario — la misma cuenta que hace `hasModule()` en el
+  // servidor. Si algún día alguien monta este componente sin pasarlo, no se
+  // esconde nada: enseñar un enlace de más es menos grave que dejar sin su
+  // trabajo a quien sí lo tiene, y el endpoint sigue siendo la puerta de verdad.
+  const tieneModulo = (clave) => !Array.isArray(modulos) || modulos.includes(clave);
+  const verAccesosDeEquipoAvanzado =
+    tieneModulo("team_avanzado") && (tieneModulo("clinica") || tieneModulo("pacientes"));
 
   return (
     <div className="p-4 lg:p-8 max-w-4xl mx-auto">
@@ -177,7 +199,9 @@ export default function MiEquipo() {
         </div>
       </div>
 
-      {/* Accesos: Incidencias + Bandeja de trabajo */}
+      {/* Accesos: Incidencias + Bandeja de trabajo. Solo donde existen de
+          verdad — el porqué, justo encima del `return`. */}
+      {verAccesosDeEquipoAvanzado && (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
         <Link href="/equipo/incidencias" className="group bg-white border border-neutral-100 rounded-xl p-5 hover:border-[var(--color-primary,#1B3A2D)] hover:shadow-sm transition-all">
           <div className="w-10 h-10 rounded-lg flex items-center justify-center mb-3 text-white" style={{ backgroundColor: "var(--color-primary, #1B3A2D)" }}>
@@ -198,6 +222,7 @@ export default function MiEquipo() {
           <div className="text-xs text-neutral-500 mt-1 leading-relaxed">Lo que tienes pendiente: informes, incidencias y citas de hoy.</div>
         </Link>
       </div>
+      )}
     </div>
   );
 }

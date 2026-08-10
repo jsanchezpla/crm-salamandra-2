@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import EmployeeBillingSection from "../../../components/billing/EmployeeBillingSection.jsx";
 import Select from "@/components/ui/Select.jsx";
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
@@ -18,6 +18,32 @@ const STATUS_FILTER_OPTIONS = [
   { value: "on_leave", label: "De baja" },
   { value: "all", label: "Todos" },
 ];
+
+/*
+ * El texto de la cabecera: cuantos hay y de quien estamos hablando.
+ *
+ * Antes ponia «N miembros · 0 inactivos» y ese cero era mentira SIEMPRE: se
+ * contaba sobre la lista ya filtrada, y el filtro por defecto («Activos + de
+ * baja») no trae inactivos jamas, asi que ni con media plantilla dada de baja
+ * habria salido otro numero. /api/team tampoco devuelve ese recuento —lo unico
+ * que devuelve es `total`, las filas que casan con el filtro de la pantalla—,
+ * asi que en vez de inventarlo la cabecera cuenta lo que esta enseñando y dice
+ * quien es. A los inactivos se les sigue viendo poniendo «Inactivos» en el
+ * desplegable de estado, que ya existia.
+ *
+ * La concordancia va a mano (1 miembro activo / 3 miembros activos) porque una
+ * cabecera que pone «1 miembro inactivos» canta mas que el propio dato.
+ */
+function leyendaDelConteo(total, filterStatus, hayOtrosFiltros) {
+  const plural = total !== 1;
+  const cuantos = `${total} miembro${plural ? "s" : ""}`;
+  if (hayOtrosFiltros) return `${cuantos} ${plural ? "que coinciden" : "que coincide"} con el filtro`;
+  if (filterStatus === "active") return `${cuantos} ${plural ? "activos" : "activo"}`;
+  if (filterStatus === "inactive") return `${cuantos} ${plural ? "inactivos" : "inactivo"}`;
+  if (filterStatus === "on_leave") return `${cuantos} de baja`;
+  if (filterStatus === "all") return `${cuantos} en total, incluidos los inactivos`;
+  return `${cuantos} en plantilla`;
+}
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -68,6 +94,9 @@ export default function EquipoPage() {
   const [members, setMembers] = useState([]);
   const [availableRoles, setAvailableRoles] = useState([]);
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
+  // Cuantos casan con el filtro actual, segun el propio endpoint (`total` de
+  // findAndCountAll): la lista viene recortada por `limit`, el total no.
+  const [totalFiltrado, setTotalFiltrado] = useState(0);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
@@ -113,6 +142,7 @@ export default function EquipoPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
       setMembers(json.data?.members ?? []);
+      setTotalFiltrado(json.data?.total ?? json.data?.members?.length ?? 0);
       setAvailableRoles(json.data?.availableRoles ?? []);
       setViewerIsAdmin(!!json.data?.viewerIsAdmin);
     } catch (e) {
@@ -128,8 +158,9 @@ export default function EquipoPage() {
   const meIsAdmin = me?.role === "admin" || me?.role === "superadmin";
   useEffect(() => { if (meIsAdmin) load(); }, [load, meIsAdmin]);
 
-  const total = members.length;
-  const inactivos = useMemo(() => members.filter((m) => m.status === "inactive").length, [members]);
+  // Con una busqueda o un rol puestos, el numero ya no es «la plantilla»: es lo
+  // que ha casado con el filtro, y hay que decirlo o vuelve a leerse mal.
+  const leyenda = leyendaDelConteo(totalFiltrado, filterStatus, !!(search || filterRole));
 
   function resetForm() {
     setForm(EMPTY_FORM);
@@ -290,8 +321,12 @@ export default function EquipoPage() {
     return <div className="p-4 lg:p-8 max-w-6xl mx-auto"><p className="text-xs text-neutral-400">Cargando…</p></div>;
   }
   // Perfil NO admin (terapeutas): mini-módulo de Equipo (datos + docs + accesos).
+  // Se le pasan los módulos que YA trae /api/auth/me (los del tenant cruzados con
+  // el acceso del usuario) para que sus dos tarjetas de accesos no ofrezcan
+  // pantallas que este cliente no ha comprado. No cuesta una petición más, y aquí
+  // `me` no puede ser null: lo garantiza el return de la línea de arriba.
   if (!meIsAdmin) {
-    return <MiEquipo />;
+    return <MiEquipo modulos={me.enabledModules} />;
   }
 
   return (
@@ -301,7 +336,7 @@ export default function EquipoPage() {
           <div className="eyebrow">Recursos Humanos</div>
           <h1 className="font-display text-2xl text-neutral-900 mt-1">Equipo</h1>
           <p className="text-xs text-neutral-400 mt-1">
-            {total} miembro{total === 1 ? "" : "s"} · {inactivos} inactivo{inactivos === 1 ? "" : "s"}
+            {leyenda}
           </p>
         </div>
         {viewerIsAdmin && (

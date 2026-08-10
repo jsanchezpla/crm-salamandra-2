@@ -697,7 +697,7 @@ admin/superadmin.
 | Método y ruta | Propósito | Restricciones |
 | --- | --- | --- |
 | `GET /api/clients/[id]/billing-summary?from=&to=` | Resumen del cliente (sin periodo → histórico). Usa `getClientBillingSummary`. | Requiere `hasModule("billing")`. |
-| `GET /api/team/[id]/billing-summary?from=&to=` | Resumen del empleado. Filtrado por rol. Usa `getEmployeeBillingSummary`. | Requiere `hasModule("team")` o `hasModule("billing")`. |
+| `GET /api/team/[id]/billing-summary?from=&to=` | Resumen del empleado. Filtrado por rol. Usa `getEmployeeBillingSummary`. | Requiere `hasModule("billing")`: el bloque es de Facturación, así que a quien solo tiene Equipo se le responde 403 y la ficha no lo pinta. |
 
 ### Rates (legacy)
 

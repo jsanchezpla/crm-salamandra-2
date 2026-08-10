@@ -2,16 +2,30 @@
 
 import { useEffect, useState } from "react";
 
-const STAGE_LABELS = {
-  new: "Nuevo",
-  contacted: "Contactado",
-  qualified: "Cualificado",
-  proposal: "Propuesta",
-  negotiation: "Negociación",
-  won: "Ganado",
-  lost: "Perdido",
-};
+import { STAGE_LABELS } from "../../lib/leads/stages.js";
 
+/**
+ * Los rótulos de etapa NO se escriben aquí: salen de `lib/leads/stages.js`,
+ * que es la lista canónica y la que ya usan el PATCH de la ficha, el
+ * importador y el Excel de `/api/leads/export`.
+ *
+ * Este fichero tenía su propia copia y se habían separado sin que nadie lo
+ * viera: decía «Cualificado / Ganado / Perdido» donde la fuente única dice
+ * «En seguimiento / Convertido / Descartado». Hoy no lo ve nadie —todos los
+ * clientes con Leads tienen su override en el mapa de
+ * `app/(dashboard)/leads/page.jsx` y este módulo es solo el fallback—, así
+ * que el fallo estaba esperando al primer cliente nuevo: habría visto la
+ * etapa con un nombre en pantalla y con otro distinto en el Excel del mismo
+ * lead.
+ *
+ * De paso, las etapas extendidas (`in_progress`, `demo_scheduled`,
+ * `consulta_agendada`…) dejan de salir con la clave en crudo: aquí ni
+ * siquiera estaban listadas.
+ *
+ * Los COLORES sí se quedan aquí: son decoración de esta tabla y no pintan
+ * nada en `lib/`, que lo comparten endpoints sin UI. Una etapa sin color
+ * cae al gris del `??` de más abajo, exactamente igual que antes.
+ */
 const STAGE_COLORS = {
   new: "bg-neutral-100 text-neutral-600",
   contacted: "bg-blue-50 text-blue-700",

@@ -196,7 +196,16 @@ export default function LeadsEstadisticasPage() {
             <Kpi label="En marcha" value={p.abiertos} sub="ni ganados ni descartados" />
             <Kpi label="Convertidos" value={p.ganados} sub={p.conversion != null ? `${p.conversion}% de los cerrados` : "aún no hay cerrados"}
               tono={p.conversion != null && p.conversion >= 50 ? "bien" : "neutral"} />
-            <Kpi label="Con ficha creada" value={p.conFicha} sub="leads que ya son cliente" />
+            {/* Solo donde hay fichas que crear. Sin el módulo Clientes un lead
+                no puede convertirse en cliente, así que la cifra sería un 0
+                clavado para siempre, y un cero grande se lee como una avería,
+                no como «esto no lo tienes» — el mismo criterio que ya se sigue
+                con el bloque de Leads Comerciales. Un 0 de verdad (con
+                Clientes, sin haber convertido a nadie todavía) SÍ se sigue
+                viendo: por eso «distinto de null» y no «si es falso». */}
+            {p.conFicha != null && (
+              <Kpi label="Con ficha creada" value={p.conFicha} sub="leads que ya son cliente" />
+            )}
           </div>
 
           <Panel titulo="Entrada por mes" nota="Cada columna es el mes en que entró el lead, no en el que se cerró.">

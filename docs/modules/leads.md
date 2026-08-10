@@ -24,10 +24,12 @@ Confirmado leyendo el código:
 - **Conversión de lead `won` a Cliente o Proyecto**: hoy `won` solo es
   un valor de `stage`. No hay endpoint ni lógica que cree un `Client` o
   un `Project` a partir de un lead ganado.
-- **Email automático al lead** al crearse o cambiar de stage. La página
-  legacy `/comercial/leads` tiene un botón "Aceptar promoción" que abre
-  el cliente de correo del usuario con `mailto:`, pero no hay envío
-  automático desde backend.
+- **Email automático al lead** al crearse o cambiar de stage. No hay
+  envío desde backend: quien quiera avisar a un lead abre su cliente de
+  correo a mano. (Hubo un botón "Aceptar promoción" con `mailto:` en la
+  página legacy `/comercial/leads`, con los textos de una campaña de
+  Retorika escritos a mano; la página se borró el 10/08/2026 porque no
+  la enlazaba nada.)
 - **Pipeline visual tipo Kanban** de stages. La UI es siempre lista o
   tabla; no hay drag-and-drop entre columnas.
 - **Asignación automática a un comercial** según reglas (round-robin,
@@ -155,12 +157,15 @@ que cambia es:
 
 ### Módulo base — `modules/leads/LeadsModule.jsx`
 
-80 líneas. Tabla simple con cuatro columnas (Nombre/Título, Email,
-Teléfono, Estado). Stages: los 7 estándar con `STAGE_LABELS`. Fetch a
-`/api/leads` sin filtros. Sin edición, sin panel, sin import. Sirve
-únicamente como fallback si el slug del tenant no está en
-`UI_OVERRIDES`. Hoy ningún tenant lo usa porque los seis tenants
-activos tienen entrada en el mapa.
+Tabla simple con cuatro columnas (Nombre/Título, Email, Teléfono,
+Estado). Las etiquetas de etapa las importa de `lib/leads/stages.js`,
+la fuente única que ya usan el PATCH, el import y el export (hasta el
+10/08/2026 tenía su propia copia, desincronizada: decía «Cualificado /
+Ganado / Perdido» donde la fuente dice «En seguimiento / Convertido /
+Descartado»). Fetch a `/api/leads` sin filtros. Sin edición, sin panel,
+sin import. Sirve únicamente como fallback si el slug del tenant no
+está en `UI_OVERRIDES`: hoy no lo renderiza nadie, porque todos los
+tenants con `leads` tienen su entrada en el mapa.
 
 ### Override `aumenta` — `modules/overrides/aumenta/LeadsModule.jsx`
 
@@ -310,7 +315,6 @@ quality-energy **ya no** tiene `referidos` activado: el script
 | Ruta | Estado | Función |
 | --- | --- | --- |
 | `/leads` | activa | Lista de leads. Server component que selecciona el override según `x-tenant`. Es la única ruta enlazada desde el sidebar. |
-| `/comercial/leads` | **huérfana** | Página legacy hardcodeada para Retorika (promociones "pack-ia" y "formacion-presencial" con botón "Aceptar promoción" → `mailto:`). No la enlaza ningún componente. Candidata a borrar. |
 | `/referidos` | activa (solo abarcaia) | Lista de referidos de AbarcaIA. Importa `AbarcaIAReferidosModule` directamente, sin selección por tenant. |
 
 ## Endpoints
@@ -532,7 +536,6 @@ Detectado durante la documentación (en orden vagamente sugerido):
   útil para alertas de stage `won` o `closed_yes`).
 - **Asociación Sequelize `Lead.belongsTo(TeamMember, ...)`** para
   filtrar y validar `assignedTo`.
-- **Borrar la ruta huérfana `app/(dashboard)/comercial/leads/page.jsx`**.
 - **Eliminar el override `demo`** o convertirlo en un alias de
   `aumenta` (es prácticamente idéntico).
 - **Mover `ReferidosModule.jsx`** de
@@ -656,12 +659,6 @@ Documentadas como tareas concretas para iteraciones futuras:
   `demo_scheduled`, `demo_done`, `closed_yes`, `closed_no`). UX
   inconsistente: un usuario filtra por "Demo agendada" y solo ve los
   leads importados, no los seedeados. Decisión de negocio.
-
-- **Borrar la ruta huérfana `/comercial/leads`** (248 líneas legacy
-  hardcoded para Retorika con promociones "pack-ia" y
-  "formacion-presencial"). No está enlazada desde el `Sidebar` ni
-  desde ningún otro lado del repo. Reemplazada por `/leads` con
-  override desde hace tiempo.
 
 - **Soft delete o auditoría en DELETE**. Hoy `DELETE /api/leads/[id]`
   ejecuta `lead.destroy()` sin huella. Mínimo: registrar en

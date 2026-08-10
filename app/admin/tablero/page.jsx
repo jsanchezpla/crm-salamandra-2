@@ -1,7 +1,11 @@
 "use client";
 
 /**
- * Tablero — lo que falta y lo que ya está.
+ * Registro — lo que falta y lo que ya está.
+ *
+ * ⚠️ La CARPETA y la ruta siguen llamándose `tablero`: el 10/08/2026 se cambió
+ * solo el rótulo, a petición de Jorge. Si algún día se renombra la ruta, hay que
+ * mover también `/api/admin/tablero`.
  *
  * POR QUÉ EXISTE (09/08/2026)
  * `docs/backlog.md` y `docs/resuelto.md` son la fuente y están bien, pero nadie
@@ -48,7 +52,7 @@ export default function TableroPage() {
   const [pestaña, setPestaña] = useState("pendiente");
   const [filtro, setFiltro] = useState("");
 
-  useEffect(() => { document.title = "Tablero — Salamandra"; }, []);
+  useEffect(() => { document.title = "Registro — Salamandra"; }, []);
 
   useEffect(() => {
     fetch("/api/admin/tablero", { cache: "no-store" })
@@ -99,7 +103,7 @@ export default function TableroPage() {
     return (
       <main className="min-h-screen flex items-center justify-center">
         <span className="text-[12px] tracking-[0.2em] uppercase animate-pulse" style={{ color: "var(--tenue)" }}>
-          Leyendo el tablero
+          Leyendo el registro
         </span>
       </main>
     );
@@ -120,7 +124,7 @@ export default function TableroPage() {
 
         {datos.faltan?.length > 0 && (
           <p className="mt-4 text-[12px]" style={{ color: "var(--alerta)" }}>
-            No se han podido leer: {datos.faltan.join(", ")}. El tablero está incompleto.
+            No se han podido leer: {datos.faltan.join(", ")}. El registro está incompleto.
           </p>
         )}
 

@@ -115,7 +115,7 @@ const PAGO_COLORS = {
 const PAGO_AYUDA = {
   authorized: "El importe está reservado en su tarjeta. Se cobrará al confirmar la cita.",
   capturing: "Se está cobrando ahora mismo.",
-  failed: "El banco rechazó el cobro. Puedes reintentarlo o pedirle otra tarjeta.",
+  // 'failed' NO tiene frase fija aquí: depende de POR QUÉ falló. Ver `ayudaCobroFallido`.
   void: "No hay dinero reservado: se liberó o caducó. Puedes confirmarla y cobrar en consulta.",
 };
 
@@ -131,7 +131,49 @@ export function cuantoQuedaDeRetencion(fecha) {
   return { texto: `caduca en ${Math.round(horas / 24)} días`, urgente: false };
 }
 
-function PagoChip({ estado, amount, caducaEn }) {
+/**
+ * Los motivos que escribe NUESTRO código cuando retira una cita porque el dinero
+ * nunca llegó a moverse (`retirarCitaImpagada`, en `lib/payments/entityHooks.js`).
+ * Se comparan literales a propósito: los escribe el flujo de pagos, no una
+ * persona, así que o casan exactamente o no son de los nuestros.
+ */
+const MOTIVOS_PAGO_SIN_COMPLETAR = new Set([
+  "No se completó el pago a tiempo", // el checkout caducó: carrito abandonado
+  "El pago no se completó", // liquidación diferida (SEPA, Multibanco…) que nunca cuajó
+]);
+
+/**
+ * ¿El cobro se quedó a medias por parte del paciente, en vez de rechazarlo el banco?
+ *
+ * DE DÓNDE SALE (10/08/2026, una clienta de Laura)
+ * `paymentStatus: 'failed'` lo escriben DOS caminos que no se parecen en nada:
+ *   · `lib/citas/cobroCita.js` — el banco rechaza de verdad la captura;
+ *   · `lib/payments/entityHooks.js` — el checkout caducó sin pagarse, o el pago
+ *     diferido nunca liquidó. Ahí el banco no ha rechazado nada: no ha llegado a
+ *     haber cobro que rechazar.
+ * La pantalla enseñaba SIEMPRE el primero, así que se le pudo decir a una
+ * paciente que su banco había fallado siendo falso.
+ *
+ * Solo se afirma lo que consta ESCRITO en la cita. Si el motivo no es uno de los
+ * nuestros —una cancelación a mano de la profesional, o un motivo que se borró al
+ * reactivar la cita (`app/api/citas/bookings/[id]/route.js`)— devuelve `false` y
+ * el texto sale neutro: preferimos decir que no se sabe a acusar al banco sin
+ * pruebas. Aquí no se decide nada del cobro, solo lo que se lee en pantalla.
+ */
+export function pagoQuedoSinCompletar(cancellationReason) {
+  return MOTIVOS_PAGO_SIN_COMPLETAR.has(
+    typeof cancellationReason === "string" ? cancellationReason.trim() : ""
+  );
+}
+
+/** La frase corta del globito cuando el cobro consta fallido. */
+function ayudaCobroFallido(cancellationReason) {
+  return pagoQuedoSinCompletar(cancellationReason)
+    ? "No llegó a completar el pago. No es un rechazo del banco, y no se le ha cobrado nada."
+    : "El cobro no se completó y no se le ha cobrado nada. Puedes reintentarlo o pedirle otra tarjeta.";
+}
+
+function PagoChip({ estado, amount, caducaEn, motivoCancelacion = null }) {
   if (!estado || estado === "none") return null;
   const cls = PAGO_COLORS[estado] ?? "bg-neutral-100 text-neutral-500 border-neutral-200";
   const importe = Number.isInteger(amount) && amount > 0 ? ` · ${formatMoney(amount)}` : "";
@@ -140,7 +182,9 @@ function PagoChip({ estado, amount, caducaEn }) {
     <span className="inline-flex items-center gap-1.5">
       <span
         className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border ${cls}`}
-        title={PAGO_AYUDA[estado] ?? undefined}
+        title={
+          estado === "failed" ? ayudaCobroFallido(motivoCancelacion) : (PAGO_AYUDA[estado] ?? undefined)
+        }
       >
         {PAGO_LABELS[estado] ?? estado}
         {importe}
@@ -1344,6 +1388,7 @@ Avísale tú.`);
                   <StatusChip value={openBooking.status} />
                   <PagoChip
                     estado={openBooking.paymentStatus}
+                    motivoCancelacion={openBooking.cancellationReason}
                     amount={openBooking.amount}
                     caducaEn={openBooking.authorizationExpiresAt}
                   />
@@ -1469,7 +1514,12 @@ Avísale tú.`);
                   <div className="flex">
                     <span className="w-24 text-neutral-400">Cobro</span>
                     <span className="text-neutral-500">
-                      El banco rechazó el cobro y{" "}
+                      {/* Dos historias distintas bajo el mismo 'failed'. El motivo real
+                          ya está escrito en la cita; si no lo reconocemos, texto neutro:
+                          al banco no se le culpa por defecto. */}
+                      {pagoQuedoSinCompletar(openBooking.cancellationReason)
+                        ? "No llegó a completar el pago (no es que se lo rechazara el banco), así que "
+                        : "El cobro no se completó y "}
                       <b className="text-neutral-700">no se le ha cobrado nada</b>. Puedes
                       reintentarlo, pedirle otra tarjeta o confirmar y cobrar en consulta.
                     </span>
@@ -2180,6 +2230,7 @@ function Waitlist({ refreshKey, esAdmin, onCountChange, onActioned }) {
                       idénticas aquí, y se podía confirmar la que nadie ha pagado. */}
                   <PagoChip
                     estado={b.paymentStatus}
+                    motivoCancelacion={b.cancellationReason}
                     amount={b.amount}
                     caducaEn={b.authorizationExpiresAt}
                   />
