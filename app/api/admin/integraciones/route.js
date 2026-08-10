@@ -11,8 +11,11 @@ import {
 import {
   matrizCompleta,
   discrepanciasConCatalogo,
+  textoNecesita,
+  sinEstudiar,
   NIVELES,
 } from "../../../../lib/provisioning/dependencias.js";
+import { whereClientesVisibles } from "../../../../lib/provisioning/clientesVisibles.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -74,7 +77,13 @@ export const GET = withTenant(async (_request, _ctx, ctx) => {
     const { Tenant, TenantModule } = getMasterModels();
 
     const [tenants, modulos] = await Promise.all([
-      Tenant.findAll({ attributes: ["id", "name", "slug", "status"], order: [["name", "ASC"]] }),
+      // Solo clientes en marcha: un suspendido inflaba «la usan N clientes» y
+      // salía como afectado por dependencias que hoy no le afectan a nadie.
+      Tenant.findAll({
+        where: whereClientesVisibles(),
+        attributes: ["id", "name", "slug", "status"],
+        order: [["name", "ASC"]],
+      }),
       TenantModule.findAll({ attributes: ["tenantId", "moduleKey", "enabled"] }),
     ]);
 
@@ -155,7 +164,14 @@ export const GET = withTenant(async (_request, _ctx, ctx) => {
         return { ...dep, incumplen };
       });
 
-      return { ...fila, necesita, loTienen };
+      return {
+        ...fila,
+        necesita,
+        loTienen,
+        // El texto de la columna «Necesita», compuesto aquí con los nombres
+        // comerciales: el navegador no necesita la matriz entera para pintarlo.
+        necesitaTexto: textoNecesita(fila.modulo, (k) => NOMBRES_MODULO[k] || k),
+      };
     });
 
     return ok({
@@ -171,6 +187,9 @@ export const GET = withTenant(async (_request, _ctx, ctx) => {
         // alguien lo arregle el aviso se va solo.
         discrepancias: discrepanciasConCatalogo(),
         rotos,
+        // Debería ser siempre vacío: un módulo del catálogo que nadie ha
+        // repasado es algo que se vende sin saber si funciona solo.
+        sinEstudiar: sinEstudiar(),
       },
       totales: {
         integraciones: integraciones.length,

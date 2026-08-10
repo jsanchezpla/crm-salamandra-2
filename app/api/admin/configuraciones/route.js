@@ -3,6 +3,7 @@ import { ok, forbidden, serverError } from "../../../../lib/utils/apiResponse.js
 import { getMasterDb, getMasterModels } from "../../../../lib/db/masterDb.js";
 import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
 import { isEncrypted } from "../../../../lib/crypto/secretBox.js";
+import { whereClientesVisibles } from "../../../../lib/provisioning/clientesVisibles.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -129,6 +130,10 @@ export const GET = withTenant(async (_request, _rc, ctx) => {
 
     const [tenants, modulos, usuarios, radiografia] = await Promise.all([
       Tenant.findAll({
+        // Solo los clientes en marcha (ver lib/provisioning/clientesVisibles.js):
+        // un suspendido contando en los totales hacía que esta pantalla dijera
+        // seis clientes donde hay cuatro.
+        where: whereClientesVisibles(),
         attributes: ["id", "name", "slug", "plan", "status", "settings", "createdAt"],
         order: [["name", "ASC"]],
       }),

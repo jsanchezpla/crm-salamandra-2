@@ -4,6 +4,7 @@ import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
 import { CATALOGO, RECOMENDADOS, PAQUETES } from "../../../../lib/provisioning/catalogo.js";
 import { altaTenant, slugDesdeNombre } from "../../../../lib/provisioning/altaTenant.js";
+import { whereClientesVisibles, pideSuspendidos } from "../../../../lib/provisioning/clientesVisibles.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -26,16 +27,31 @@ function candado(ctx) {
   return null;
 }
 
-export const GET = withTenant(async (_request, _rc, ctx) => {
+export const GET = withTenant(async (request, _rc, ctx) => {
   try {
     const veto = candado(ctx);
     if (veto) return veto;
 
     const { Tenant, TenantModule } = getMasterModels();
+
+    // ESTA es la única pantalla que sabe reactivar un cliente, así que es la
+    // única que puede pedir los suspendidos — y solo si se lo piden a propósito
+    // (`?incluirSuspendidos=1`, detrás de un interruptor que viene apagado).
+    // Si se escondieran también aquí, no quedaría ninguna forma de reactivar a
+    // nadie sin entrar a la base de datos a mano.
+    const conSuspendidos = pideSuspendidos(request);
+
     const tenants = await Tenant.findAll({
+      where: whereClientesVisibles(conSuspendidos),
       attributes: ["id", "name", "slug", "plan", "status", "createdAt"],
       order: [["createdAt", "DESC"]],
     });
+
+    // Cuántos quedan fuera, para poder ofrecer el interruptor sin mentir («ver
+    // los 2 suspendidos») y para no ofrecerlo cuando no hay ninguno.
+    const suspendidos = conSuspendidos
+      ? tenants.filter((t) => t.status !== "active").length
+      : await Tenant.count({ where: { status: "suspended" } });
     const modulos = await TenantModule.findAll({
       where: { enabled: true },
       attributes: ["tenantId", "moduleKey"],
@@ -59,6 +75,8 @@ export const GET = withTenant(async (_request, _rc, ctx) => {
         alta: t.createdAt,
         modulos: (porTenant.get(t.id) || []).sort(),
       })),
+      suspendidos,
+      incluyeSuspendidos: conSuspendidos,
     });
   } catch (err) {
     return serverError(err);

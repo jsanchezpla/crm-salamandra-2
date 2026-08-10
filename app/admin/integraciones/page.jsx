@@ -24,14 +24,19 @@
  * consultan con el mismo cliente en la cabeza y el filtro de arriba vale para
  * las dos; separarlas obligaría a recordar que la segunda existe.
  *
- * Y AQUÍ SÍ ES UNA TABLA —bueno, una lista comparable por grupos de venta— por
- * el mismo motivo por el que la otra vista no lo es: la pregunta cambia. Allí
- * es relacional («¿qué pasa entre Leads y Clientes?») y hace falta ver la
- * flecha; aquí es comparativa («¿cuáles puedo vender sueltos?») y lo que hace
- * falta es poder recorrer una columna con el dedo.
+ * Y AQUÍ SÍ ES UNA TABLA, por el mismo motivo por el que la otra vista no lo
+ * es: la pregunta cambia. Allí es relacional («¿qué pasa entre Leads y
+ * Clientes?») y hace falta ver la flecha; aquí es comparativa («¿cuáles puedo
+ * vender sueltos?») y lo que hace falta es poder recorrer una columna con el
+ * dedo. Cinco columnas y ni una más: módulo, qué necesita, si le hace falta
+ * para funcionar y qué pasa si no lo tiene.
  *
- * Se agrupa por el grupo del CATÁLOGO DE VENTA y no por gravedad: quien abre
- * esto está armando un presupuesto.
+ * ORDENADA POR GRAVEDAD, no por área de venta. La primera versión iba agrupada
+ * por el grupo del catálogo —Base, Dinero, Salud— pensando en quien arma un
+ * presupuesto, y eso volvía a mezclar lo que no se puede vender solo con lo que
+ * sí: había que leerla entera para encontrar los once que importan. Ahora se lee
+ * de arriba abajo y se para cuando deja de doler. El orden lo fija
+ * `lib/provisioning/dependencias.js`, que es donde está escrito el porqué.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -92,6 +97,50 @@ function Nivel({ nivel }) {
   );
 }
 
+/**
+ * El punto de la primera columna: rojo no se vende solo, ámbar se vende y
+ * pierde algo, verde independiente.
+ *
+ * Punto de color y no emoji porque en el back-office no hay ni un emoji, y uno
+ * suelto en una tabla de veintidós filas canta. Dice exactamente lo mismo.
+ */
+function Punto({ severidad }) {
+  const color =
+    severidad === "rojo" ? "var(--alerta)" : severidad === "ambar" ? "var(--tenue)" : "var(--ok)";
+  const titulo =
+    severidad === "rojo"
+      ? "No se vende solo"
+      : severidad === "ambar"
+        ? "Se vende solo, pierde una utilidad"
+        : "Independiente";
+  return (
+    <span
+      title={titulo}
+      aria-label={titulo}
+      className="inline-block rounded-full"
+      style={{ width: 7, height: 7, background: color }}
+    />
+  );
+}
+
+/**
+ * Los resúmenes de la matriz llevan trozos de código entre acentos graves
+ * (`Invoice.clientId`, `leads`). Sin esto salían los acentos tal cual, que es
+ * peor que no ponerlos. Se parte por pares y lo impar va en <code>.
+ */
+function ConCodigo({ texto }) {
+  if (!texto) return null;
+  return texto.split("`").map((trozo, i) =>
+    i % 2 === 1 ? (
+      <code key={i} style={{ color: "var(--text)" }}>
+        {trozo}
+      </code>
+    ) : (
+      <span key={i}>{trozo}</span>
+    )
+  );
+}
+
 /** Aviso de cabecera. Solo se pinta si hay algo que decir. */
 function Aviso({ tono = "alerta", titulo, children }) {
   const color = tono === "ok" ? "var(--ok)" : "var(--alerta)";
@@ -143,35 +192,31 @@ export default function IntegracionesPage() {
   const rotos = datos?.dependencias?.rotos ?? SIN_NADA;
 
   /**
-   * La matriz, filtrada y agrupada por el grupo del catálogo de venta.
+   * La matriz, filtrada. Lista plana y NO agrupada: ya viene del servidor en el
+   * orden de la tabla —lo que no se puede vender solo arriba— y ese orden es lo
+   * que la hace útil. Agruparla por área de venta la volvía a mezclar.
    *
-   * Se agrupa como se VENDE (Base, Dinero, Salud…) y no por si necesitan cosas
-   * o no: quien abre esto está armando un presupuesto, y ahí los módulos se
-   * miran por bloques. Con un cliente elegido se deja solo lo que tiene, que es
-   * la otra pregunta real: «¿qué le falta a este para que le funcione todo?».
+   * Con un cliente elegido se deja solo lo que tiene, que es la otra pregunta
+   * real: «¿qué le falta a este para que le funcione todo?».
    */
-  const gruposDeps = useMemo(() => {
+  const filasDeps = useMemo(() => {
     const q = filtro.trim().toLowerCase();
-    const m = new Map();
 
-    for (const fila of matriz) {
-      if (cliente && !fila.loTienen.includes(cliente)) continue;
-      if (q) {
-        const casa =
-          fila.modulo.toLowerCase().includes(q) ||
-          (nombres[fila.modulo] ?? "").toLowerCase().includes(q) ||
-          fila.necesita.some(
-            (d) =>
-              d.claves.some((k) => k.toLowerCase().includes(q) || (nombres[k] ?? "").toLowerCase().includes(q)) ||
-              d.porque.toLowerCase().includes(q)
-          );
-        if (!casa) continue;
-      }
-      if (!m.has(fila.grupo)) m.set(fila.grupo, []);
-      m.get(fila.grupo).push(fila);
-    }
-
-    return [...m.entries()].map(([grupo, lista]) => ({ grupo, lista }));
+    return matriz.filter((fila) => {
+      if (cliente && !fila.loTienen.includes(cliente)) return false;
+      if (!q) return true;
+      return (
+        fila.modulo.toLowerCase().includes(q) ||
+        (nombres[fila.modulo] ?? "").toLowerCase().includes(q) ||
+        (fila.resumen ?? "").toLowerCase().includes(q) ||
+        (fila.necesitaTexto ?? "").toLowerCase().includes(q) ||
+        fila.necesita.some(
+          (d) =>
+            d.claves.some((k) => k.toLowerCase().includes(q) || (nombres[k] ?? "").toLowerCase().includes(q)) ||
+            d.porque.toLowerCase().includes(q)
+        )
+      );
+    });
   }, [matriz, filtro, cliente, nombres]);
 
   const visibles = useMemo(() => {
@@ -443,114 +488,141 @@ export default function IntegracionesPage() {
             </Aviso>
           )}
 
-          {gruposDeps.length === 0 && (
+          {filasDeps.length === 0 && (
             <p className="text-[13px]" style={{ color: "var(--tenue)" }}>
               Nada casa con lo que hay filtrado.
             </p>
           )}
 
-          <div className="space-y-9 mt-7">
-            {gruposDeps.map(({ grupo, lista }) => (
-              <section key={grupo}>
-                <div className="flex items-baseline gap-2.5 mb-3">
-                  <Etiqueta>{grupo}</Etiqueta>
-                  <span className="text-[11px] tabular-nums" style={{ color: "var(--tenue)" }}>
-                    {lista.length}
-                  </span>
-                </div>
+          {/* Tabla y no tarjetas: la pregunta es comparativa —«¿cuáles puedo
+              vender sueltos?»— y para eso hace falta poder recorrer una columna
+              con el dedo. El detalle de cada dependencia, con su fichero y su
+              línea, se despliega en la última celda para no ensuciar la lectura
+              rápida. Scroll horizontal propio: la tabla no encoge la página. */}
+          {filasDeps.length > 0 && (
+            <div className="mt-7 overflow-x-auto">
+              <table className="w-full border-collapse text-left" style={{ minWidth: 760 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--line)" }}>
+                    <th className="pb-2 w-4" />
+                    <th className="pb-2 pr-4 text-[10px] uppercase tracking-[0.16em] font-normal" style={{ color: "var(--tenue)" }}>
+                      Módulo
+                    </th>
+                    <th className="pb-2 pr-4 text-[10px] uppercase tracking-[0.16em] font-normal" style={{ color: "var(--tenue)" }}>
+                      Necesita
+                    </th>
+                    <th className="pb-2 pr-4 text-[10px] uppercase tracking-[0.16em] font-normal whitespace-nowrap" style={{ color: "var(--tenue)" }}>
+                      ¿Para funcionar?
+                    </th>
+                    <th className="pb-2 text-[10px] uppercase tracking-[0.16em] font-normal" style={{ color: "var(--tenue)" }}>
+                      Qué pasa si no lo tiene
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filasDeps.map((fila) => {
+                    const rojo = fila.severidad === "rojo";
+                    const leFalta = rotos.filter((r) => r.modulo === fila.modulo);
+                    return (
+                      <tr key={fila.modulo} className="align-top" style={{ borderBottom: "1px solid var(--line)" }}>
+                        <td className="py-3 pr-2">
+                          <Punto severidad={fila.severidad} />
+                        </td>
 
-                <div className="space-y-2.5">
-                  {lista.map((fila) => (
-                    <article
-                      key={fila.modulo}
-                      className="rounded-lg px-4 py-4"
-                      style={{ background: "var(--panel)", border: "1px solid var(--line)" }}
-                    >
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <Modulo clave={fila.modulo} nombre={nombres[fila.modulo]} />
-                        {fila.soloSeVendeSolo ? (
-                          <span className="text-[11px]" style={{ color: "var(--ok)" }}>
-                            se vende solo
-                          </span>
-                        ) : (
-                          <span className="text-[11px]" style={{ color: "var(--alerta)" }}>
-                            no se vende solo
-                          </span>
-                        )}
-                        <span className="text-[11px] ml-auto" style={{ color: "var(--tenue)" }}>
-                          {fila.loTienen.length === 0
-                            ? "no lo tiene nadie"
-                            : `lo tienen ${fila.loTienen.join(", ")}`}
-                        </span>
-                      </div>
-
-                      {fila.necesita.length === 0 && (
-                        <p className="text-[12.5px] leading-relaxed" style={{ color: "var(--dim)" }}>
-                          No necesita ningún otro módulo.
-                        </p>
-                      )}
-
-                      {fila.necesita.map((dep) => (
-                        <div key={dep.claves.join("-")} className="mt-2.5 pt-2.5" style={{ borderTop: "1px solid var(--line)" }}>
-                          <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
-                            <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
-                              necesita
-                            </span>
-                            {dep.claves.map((k, n) => (
-                              <span key={k} className="flex items-center gap-1.5">
-                                {n > 0 && (
-                                  <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
-                                    {dep.cualquiera ? "o" : "y"}
-                                  </span>
-                                )}
-                                <Modulo clave={k} nombre={nombres[k]} />
-                              </span>
-                            ))}
-                            <Nivel nivel={dep.nivel} />
+                        <td className="py-3 pr-4">
+                          <div className="text-[13px] leading-tight whitespace-nowrap">
+                            {nombres[fila.modulo] || fila.modulo}
                           </div>
+                          <div className="text-[10.5px] mt-0.5" style={{ color: "var(--tenue)" }}>
+                            {fila.loTienen.length === 0 ? "nadie lo tiene" : fila.loTienen.join(", ")}
+                          </div>
+                        </td>
 
-                          <p className="text-[12.5px] leading-relaxed" style={{ color: "var(--dim)" }}>
-                            {dep.porque}
-                          </p>
+                        <td
+                          className="py-3 pr-4 text-[12.5px] leading-snug"
+                          style={{ color: fila.necesitaTexto === "—" ? "var(--tenue)" : "var(--text)" }}
+                        >
+                          {fila.necesitaTexto}
+                        </td>
 
-                          {dep.incumplen.length > 0 && (
-                            <p
-                              className="mt-1.5 text-[11.5px]"
-                              style={{ color: dep.nivel === "obligatorio" ? "var(--alerta)" : "var(--tenue)" }}
-                            >
-                              {dep.nivel === "obligatorio" ? "les falta a " : "sin esto en "}
-                              {dep.incumplen.join(", ")}
-                            </p>
+                        <td
+                          className="py-3 pr-4 text-[12.5px] whitespace-nowrap"
+                          style={{ color: rojo ? "var(--alerta)" : "var(--tenue)" }}
+                        >
+                          {fila.paraFuncionar}
+                        </td>
+
+                        <td className="py-3 text-[12.5px] leading-relaxed" style={{ color: "var(--dim)" }}>
+                          <ConCodigo texto={fila.resumen} />
+
+                          {leFalta.length > 0 && (
+                            <div className="mt-1 text-[11.5px]" style={{ color: "var(--alerta)" }}>
+                              le falta a {leFalta.map((r) => r.slug).join(", ")}
+                            </div>
                           )}
 
-                          {dep.donde?.length > 0 && (
+                          {fila.nota && (
+                            <div className="mt-1.5 text-[11.5px] leading-relaxed" style={{ color: "var(--tenue)" }}>
+                              {fila.nota}
+                            </div>
+                          )}
+
+                          {fila.necesita.length > 0 && (
                             <details className="mt-1.5">
                               <summary className="cursor-pointer text-[11px]" style={{ color: "var(--tenue)" }}>
-                                dónde está en el código
+                                por qué, y dónde está en el código
                               </summary>
-                              <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: "var(--tenue)" }}>
-                                {dep.donde.map((d) => (
-                                  <div key={d}>{d}</div>
+                              <div className="mt-2 space-y-2.5">
+                                {fila.necesita.map((dep) => (
+                                  <div key={dep.claves.join("-")}>
+                                    <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                                      {dep.claves.map((k, n) => (
+                                        <span key={k} className="flex items-center gap-1.5">
+                                          {n > 0 && (
+                                            <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
+                                              {dep.cualquiera ? "o" : "y"}
+                                            </span>
+                                          )}
+                                          <Modulo clave={k} nombre={nombres[k]} />
+                                        </span>
+                                      ))}
+                                      <Nivel nivel={dep.nivel} />
+                                    </div>
+                                    <p className="text-[12px] leading-relaxed" style={{ color: "var(--dim)" }}>
+                                      {dep.porque}
+                                    </p>
+                                    <div className="mt-1 text-[11px] leading-relaxed" style={{ color: "var(--tenue)" }}>
+                                      {dep.donde?.map((d) => (
+                                        <div key={d}>{d}</div>
+                                      ))}
+                                    </div>
+                                  </div>
                                 ))}
                               </div>
                             </details>
                           )}
-                        </div>
-                      ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-                      {fila.nota && (
-                        <p
-                          className="mt-2.5 pt-2.5 text-[12px] leading-relaxed"
-                          style={{ borderTop: "1px solid var(--line)", color: "var(--tenue)" }}
-                        >
-                          {fila.nota}
-                        </p>
-                      )}
-                    </article>
-                  ))}
-                </div>
-              </section>
-            ))}
+          <div
+            className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11px]"
+            style={{ color: "var(--tenue)" }}
+          >
+            <span className="flex items-center gap-1.5">
+              <Punto severidad="rojo" /> no se vende solo
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Punto severidad="ambar" /> se vende solo, pierde una utilidad
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Punto severidad="verde" /> independiente
+            </span>
           </div>
         </>
       )}

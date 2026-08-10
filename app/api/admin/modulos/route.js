@@ -2,6 +2,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
+import { whereClientesVisibles } from "../../../../lib/provisioning/clientesVisibles.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -56,6 +57,10 @@ export const GET = withTenant(async (_request, _ctx, ctx) => {
 
     const [tenants, modulos] = await Promise.all([
       Tenant.findAll({
+        // Solo los clientes en marcha: un suspendido no tiene módulos que
+        // gestionar hoy y aquí solo ensuciaba la matriz. Se reactiva desde
+        // /admin/clientes, que sí los sabe pedir.
+        where: whereClientesVisibles(),
         attributes: ["id", "name", "slug", "plan", "status"],
         order: [["name", "ASC"]],
       }),

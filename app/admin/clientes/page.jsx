@@ -318,8 +318,14 @@ export default function AltaClientesPage() {
     zip: "",
   });
 
+  // Los suspendidos NO salen por defecto en ninguna pantalla del back-office
+  // (10/08/2026). Esta es la excepción y la puerta de vuelta: es la única que
+  // sabe reactivar, así que puede pedirlos — pero hay que pedirlo.
+  const [verSuspendidos, setVerSuspendidos] = useState(false);
+
   const cargar = useCallback(() => {
-    fetch("/api/provisioning/clientes", { cache: "no-store" })
+    const url = `/api/provisioning/clientes${verSuspendidos ? "?incluirSuspendidos=1" : ""}`;
+    fetch(url, { cache: "no-store" })
       .then((r) => r.json().then((j) => ({ status: r.status, j })))
       .then(({ status, j }) => {
         if (j.ok) {
@@ -328,7 +334,7 @@ export default function AltaClientesPage() {
         } else setErr(status === 403 ? "Este panel es solo para Salamandra Solutions." : j.error || "Error");
       })
       .catch(() => setErr("No se pudo cargar el panel"));
-  }, []);
+  }, [verSuspendidos]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -604,9 +610,29 @@ export default function AltaClientesPage() {
       {/* Clientes existentes */}
       {datos && (
         <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-neutral-100 flex items-center justify-between">
-            <span className="text-sm font-semibold text-neutral-700">Clientes en el CRM</span>
-            <span className="text-[10px] text-neutral-400 uppercase tracking-widest">{datos.clientes.length}</span>
+          <div className="px-4 py-3 border-b border-neutral-100 flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-sm font-semibold text-neutral-700">
+              Clientes en el CRM
+              {!verSuspendidos && datos.suspendidos > 0 && (
+                <span className="ml-2 font-normal text-[11px] text-neutral-400">
+                  (sin {datos.suspendidos} suspendido{datos.suspendidos === 1 ? "" : "s"})
+                </span>
+              )}
+            </span>
+            <div className="flex items-center gap-3">
+              {/* La puerta de vuelta. Solo se ofrece si hay alguno: un
+                  interruptor que nunca cambia nada estorba. */}
+              {(datos.suspendidos > 0 || verSuspendidos) && (
+                <button
+                  type="button"
+                  onClick={() => setVerSuspendidos((v) => !v)}
+                  className="text-[11px] text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
+                >
+                  {verSuspendidos ? "ocultar suspendidos" : `ver los ${datos.suspendidos} suspendidos`}
+                </button>
+              )}
+              <span className="text-[10px] text-neutral-400 uppercase tracking-widest">{datos.clientes.length}</span>
+            </div>
           </div>
           <ul className="divide-y divide-neutral-100">
             {datos.clientes.map((c) => (

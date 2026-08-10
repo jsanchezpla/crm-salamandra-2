@@ -286,24 +286,28 @@ contenedor; `/api/clinica/reports/[id]/` tiene `desde-sesiones` y `enviar`, y
 ningún paso de IA en medio. Aumenta: 0 informes y 0 sesiones creadas desde la
 importación.
 
-### Los contadores del embudo mienten al filtrar · `quality_energy`, `abarcaia`, `aumenta`
+### Los contadores del embudo mienten al filtrar · `abarcaia`, `aumenta`
 
 Al pulsar una etapa se reconsulta filtrando y el desglose se recalcula sobre lo
 que ha llegado, con lo que las demás etapas caen a cero. En Aumenta hasta el
 «X en total» de la cabecera se contagia.
 
-*Los clientes de esta tarea estaban mal.* Decía `aumenta`, `nutri_laura` y
-`sandbox`: `nutri_laura` no tiene ese código y tiene **0 leads**, y `sandbox`
-**no existe en producción**. Quienes lo sufren de verdad son los que tienen
-embudo lleno: `quality_energy` (129 leads) y `abarcaia` (84). Aumenta lo tiene
-en el código pero con 2 leads no se nota.
+*Los clientes de esta tarea han cambiado dos veces.* Primero decía `aumenta`,
+`nutri_laura` y `sandbox`: `nutri_laura` no tiene ese código y tiene **0 leads**,
+y `sandbox` **no existe en producción**. Después quedó en `quality_energy` (129
+leads) y `abarcaia` (84), que eran los de embudo lleno. Y el **10/08/2026**
+`quality_energy` pasó a **suspendido**, así que hoy no lo sufre: el único que lo
+sufre de verdad es `abarcaia`. Aumenta lo tiene en el código pero con 2 leads no
+se nota. El override de `quality-energy` sigue en el repo y volvería a fallar el
+día que se reactive, así que la tarea no se cierra.
 
 La segunda mitad —el corte a 200 filas— hoy no la toca nadie: nadie llega a 200.
 
-*Se comprueba*: filtrar por una etapa en `quality_energy` no pone las otras a cero.
+*Se comprueba*: filtrar por una etapa en `abarcaia` no pone las otras a cero.
 *Dónde*: `modules/overrides/{quality-energy,abarcaia,aumenta}/LeadsModule.jsx`.
-*Comprobado en producción*: 09/08/2026 — el patrón está en esos tres overrides
-(y en `sandbox`, que no está desplegado).
+*Comprobado en producción*: 10/08/2026 — el patrón sigue en los tres overrides;
+`quality_energy` y `healim` están suspendidos (a propósito) y ya no salen en el
+back-office.
 
 ### Una receta corregida no llega a quien ya tiene la pauta · `nutri_laura`
 
