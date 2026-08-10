@@ -4,7 +4,7 @@ import { ok, created, error, forbidden, serverError } from "../../../../lib/util
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { buildMadridDate } from "../../../../lib/citas/slots.js";
 import { colorDeBloqueo } from "../../../../lib/citas/coloresBloqueo.js";
-import { veTodaLaAgenda } from "../../../../lib/citas/visibilidad.js";
+import { veTodaLaAgenda, agendaCompartida } from "../../../../lib/citas/visibilidad.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -92,7 +92,9 @@ function gate(ctx) {
 async function quienSoy(request, ctx) {
   const esAdmin = ADMIN_ROLES.has(request.headers.get("x-user-role"));
   const teamMemberId = await resolveCurrentTeamMemberId(request, ctx.tenantModels);
-  return { esAdmin, teamMemberId };
+  // Viaja al navegador para que el CALENDARIO sepa si «Todos» significa «todo
+  // el equipo» o «yo y el centro». La API sigue mandando: esto es solo pintar.
+  return { esAdmin, teamMemberId, agendaCompartida: agendaCompartida(ctx.tenant) };
 }
 
 /**

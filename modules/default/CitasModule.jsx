@@ -514,10 +514,33 @@ export default function CitasModule() {
         );
         const jb = await rb.json();
         if (jb.ok) {
+          const quienSoy = jb.data.yo ?? {};
           fondos = (jb.data.bloqueos ?? [])
-            // Si el jefe está filtrando por profesional, los bloqueos de quien
-            // no se está mirando sobran. Los del centro (sin persona) se quedan.
-            .filter((b) => !b.teamMemberId || !visibleTmIds || visibleTmIds.includes(b.teamMemberId))
+            .filter((b) => {
+              // Los cierres del centro (sin persona) los ve todo el mundo:
+              // afectan a todo el mundo.
+              if (!b.teamMemberId) return true;
+              // Si se está filtrando por profesional, manda el filtro.
+              if (visibleTmIds) return visibleTmIds.includes(b.teamMemberId);
+              /*
+               * Y con «Todos» puesto, cada cual ve las SUYAS (10/08/2026).
+               *
+               * Antes salían las de todo el equipo, y en la consulta de Laura
+               * eso le llenaba la semana de bloques negros de Rocío: horas en
+               * las que ELLA sí pasa consulta. Un calendario que enseña como
+               * ocupado lo que tienes libre deja de servir para lo único que
+               * sirve, que es ver dónde te cabe una paciente.
+               *
+               * Con la agenda compartida encendida (Aumenta) se siguen viendo
+               * todas: allí se cubren entre terapeutas y necesitan saberlo.
+               *
+               * Esto es SOLO el calendario. La tabla de «Vacaciones y
+               * ausencias» se las sigue enseñando enteras a dirección, que es
+               * donde se gestionan, y el filtro de profesional de aquí arriba
+               * también las saca si se pide a Rocío expresamente.
+               */
+              return quienSoy.agendaCompartida || b.teamMemberId === quienSoy.teamMemberId;
+            })
             .map((b) => ({
               id: `bloqueo-${b.id}`,
               title: `${b.label}${b.teamMemberName ? ` · ${b.teamMemberName}` : ""}`,
