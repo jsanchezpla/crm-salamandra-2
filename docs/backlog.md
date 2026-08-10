@@ -113,29 +113,13 @@ correos devuelva 201.
 *Dónde*: `lib/citas/puertaFormulario.js:98-105`.
 *Comprobado en producción*: 09/08/2026 — **siguen siendo 8**.
 
-### «Prueba 1 euro» está a la venta, y GRATIS · `nutri_laura`
+### «Prueba 1 euro» está a la venta · `nutri_laura`
 
-Tipo de cita activo y visible en la agenda pública, con tráfico entrando desde
-Instagram. Cualquiera puede reservarlo.
+Tipo de cita activo y visible en la agenda pública, a 3 €, con tráfico entrando
+desde Instagram. Cualquiera puede reservarlo.
 
-⚠️ **Esta tarea decía «a 3 €» y era falso** (corregido 10/08/2026): `price` está
-VACÍO. El 3 es `sessions_count` — son 3 sesiones, no 3 euros. Así que no es que
-se venda barato: es que se regala un bono de tres sesiones, y quien lo lea con
-el dato viejo puede decidir dejarlo por ser calderilla.
-
-En la misma pasada salió su vecino: **«Acompañamiento mensual» (6 sesiones)
-también está sin precio y visible**. Tiene un gemelo oculto «- TRANSFERENCIA»
-para quien paga por fuera de la pasarela, que sí es correcto y deliberado
-(`app/(dashboard)/citas/tipos/page.jsx:793`) — pero la pareja solo tiene sentido
-si el visible COBRA. Si los dos son gratis, el oculto no protege nada. Hay que
-preguntarle a Laura si el de arriba debería llevar precio; de los 9 tipos que
-tiene, el único con precio es «Supervisión profesional» (60 €).
-
-*Se comprueba*: no aparece en `GET /api/public/c/nutri_laura/event-types`, y
-«Acompañamiento mensual» tiene precio o Laura confirma que no debe tenerlo.
-*Dónde*: `crm_nutri_laura.event_types`.
-*Comprobado en producción*: 10/08/2026 — `Prueba 1€` sigue activo, visible y con
-`price` NULL; `Acompañamiento mensual` igual.
+*Se comprueba*: no aparece en `GET /api/public/c/nutri_laura/event-types`.
+*Comprobado en producción*: 09/08/2026 — **sigue activo**.
 
 ---
 
