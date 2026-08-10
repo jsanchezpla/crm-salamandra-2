@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "created_at": "2026-08-07",
+  "updated_at": "2026-08-07",
+  "status": "in_progress",
+  "current_phase": "F1-completa-lista-para-F2",
+  "f1": {
+    "finished_at": "2026-08-07",
+    "entregables": [
+      "docs/base/README.md (indice + tabla de los 20 modulos)",
+      "docs/base/arquitectura.md (con diagrama Mermaid)",
+      "docs/base/routing-overrides.md (LA CRITICA)",
+      "docs/base/tenant-resolver.md",
+      "docs/base/module-access.md",
+      "docs/base/convenciones.md",
+      "docs/base/db-conventions.md",
+      "docs/base/patterns.md (13 patrones)",
+      "docs/base/deploy.md",
+      "docs/base/{20 modulos}.md con inventario exacto de ficheros",
+      "docs/README.md (indice general + diagrama)",
+      "docs/refactor-base-override/metodo-testing.md (probado)"
+    ],
+    "total_documentado": "446 ficheros / 77.098 LOC repartidos en 20 modulos"
+  },
+  "decision": {
+    "taken_at": "2026-08-07",
+    "by": "Jorge",
+    "option": "A",
+    "detail": "Refactor literal del runbook: clonar los 40 pares tenant x modulo. Se acepta el coste (~150k LOC duplicados) y la perdida de propagacion automatica de fixes de base, documentados en f0-diagnostico.md seccion 5."
+  },
+  "phase_notes": "F0 aprobada (opcion A). F1 en curso: documentar la base en docs/base/. El runbook exige aprobacion de Jorge sobre la documentacion antes de pasar a F2.",
+  "base_commit": "030a35e",
+  "current_iteration": 0,
+  "total_iterations": 40,
+  "iterations_completed": [],
+  "current": null,
+  "pending_decision": [
+    "TODAS RESUELTAS. Ver la tabla 'Decisiones tomadas' de plan.md. Resumen: opcion A elegida por Jorge; login por tenant resuelto con signAccessToken; arranque por nutri_laura; sandbox/healim/abarcaia sin sembrar (iteraciones al final); salamandra_solutions fuera; iteracion 4 (nutricion) aplazada por H3."
+  ],
+  "bloqueo_previo_a_F2": {
+    "detectado_at": "2026-08-07",
+    "origen": "docs/auditoria-datos-2026-08.md, seccion 4b",
+    "detalle": "app/api/clients/[id]/route.js lleva TRES candados que no estan en lib/: el candado fiscal que impide borrar un cliente con facturas (lineas 186-201), el GC del directorio de adjuntos (223-229) y la llamada a auditar() (231-246). Clonar el endpoint multiplica esos candados; perder el primero en una copia = borrar una ficha con facturas emitidas.",
+    "accion_requerida": "Extraer puedeBorrarseCliente() y borrarClienteCompleto() a lib/clients/ ANTES de la iteracion 1. lib/ no se clona (regla 1 del runbook), asi que eso lleva el riesgo a cero sin renunciar a la opcion A. Requiere autorizacion de Jorge: toca lib/ (regla 2 de CLAUDE.md) y un endpoint base."
+  },
+  "checkpoints": [
+    { "id": 1, "at": "2026-08-07", "file": "checkpoint-01.md", "resumen": "F0 y F1 completas. 0 iteraciones de F2. 0 codigo tocado, 0 commits." }
+  ],
+  "bugs_blocking": [],
+  "pregunta_abierta_iteracion_1": "El runbook exige clonar el MODULO entero, pero prohibe tocar endpoints base (app/api/**). En 'clients' el mecanismo de override actual solo cubre la ficha /clientes/[id]: ni el listado ni los 26 endpoints. No se puede cumplir la opcion A sin tocar intocables. Necesita decision de Jorge antes de la iteracion 1.",
+  "bugs_backlog": [
+    {
+      "id": "H1",
+      "detected_at": "2026-08-07",
+      "module": "base/mecanismo-overrides",
+      "severity": "media",
+      "description": "tenant_modules.uiOverride no lo lee NUNCA el codigo de la app: el override real es un mapa literal por pagina. BD y codigo ya divergen (nutri_laura training apunta a nutri-laura/FormacionOverview, fichero inexistente)."
+    },
+    {
+      "id": "H2",
+      "detected_at": "2026-08-07",
+      "module": "base/leads",
+      "severity": "menor",
+      "description": "app/(dashboard)/leads/page.jsx:39-47 hace Tenant.findOne + TenantModule.findOne y descarta el resultado. Dos roundtrips a master por render, sin efecto."
+    },
+    {
+      "id": "H3",
+      "detected_at": "2026-08-07",
+      "module": "base/nutricion",
+      "severity": "media",
+      "description": "Las 4 paginas de /nutricion/* usan modules/overrides/nutri-laura/* como fallback POR DEFECTO. No hay base. Un segundo tenant con nutricion heredaria la UI y los textos de Laura."
+    },
+    {
+      "id": "H5",
+      "detected_at": "2026-08-07",
+      "module": "base/tenants",
+      "severity": "menor",
+      "description": "modules/overrides/sandbox y modules/overrides/abarcaia existen en codigo pero ninguno de los dos tenants esta en la BD local. Ademas healim y salamandra_solutions existen en BD y no estan documentados en CLAUDE.md."
+    }
+  ]
+}
