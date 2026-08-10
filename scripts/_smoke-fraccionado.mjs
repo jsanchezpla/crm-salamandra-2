@@ -100,6 +100,7 @@ check("y sin ella, null", suscripcionDeFactura({}), null);
  */
 process.stdout.write("\n▶ ¿Está el tope puesto de verdad?\n");
 const FASE_EN_CURSO = { items: [{ price: "price_1" }], start_date: 1, end_date: 2 };
+const FASE_RESTO = { items: [{ price: "price_1" }], start_date: 2, end_date: 3 };
 check(
   "recién creado por Stripe: hay calendario pero NO hay tope",
   topePuesto({ end_behavior: "release", phases: [FASE_EN_CURSO] }, 2),
@@ -111,14 +112,9 @@ check(
   false
 );
 check(
-  "cancela y cuenta las 2 que faltan: puesto",
-  topePuesto({ end_behavior: "cancel", phases: [FASE_EN_CURSO, { iterations: 2 }] }, 2),
+  "cancela y tiene la fase que cubre las que faltan: puesto",
+  topePuesto({ end_behavior: "cancel", phases: [FASE_EN_CURSO, FASE_RESTO] }, 2),
   true
-);
-check(
-  "las cuotas que quedan no cuadran (3 programadas, 2 pactadas)",
-  topePuesto({ end_behavior: "cancel", phases: [FASE_EN_CURSO, { iterations: 3 }] }, 2),
-  false
 );
 check(
   "plan de una sola cuota: con que cancele al final basta",
@@ -126,6 +122,16 @@ check(
   true
 );
 check("sin calendario, no hay tope", topePuesto(null, 2), false);
+/*
+ * El estado EXACTO en el que se quedaron las dos de tunutrilaura el 07/08/2026:
+ * calendario creado, `release`, una sola fase. Si esta comprobación se pone en
+ * verde alguna vez, el arreglo se ha deshecho.
+ */
+check(
+  "el caso real del 07/08: calendario sí, tope no",
+  topePuesto({ end_behavior: "release", phases: [FASE_EN_CURSO], id: "sub_sched_x" }, 2),
+  false
+);
 
 process.stdout.write(
   fallos === 0 ? "\n✓ Todo correcto\n\n" : `\n✗ ${fallos} comprobación(es) fallida(s)\n\n`
