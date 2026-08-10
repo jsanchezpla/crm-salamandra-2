@@ -1336,7 +1336,9 @@ Avísale tú.`);
             dayCellContent={(arg) => {
               const clave = ymdLocal(arg.date);
               const f = festivos.get(clave);
-              if (!f) return undefined;
+              // `true` = que FullCalendar pinte el número del día como siempre.
+              // Devolver `undefined` NO cae al render por defecto: deja la celda vacía.
+              if (!f) return true;
               return (
                 <div className="flex flex-col items-end">
                   <span>{arg.dayNumberText}</span>
