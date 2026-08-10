@@ -37,6 +37,12 @@
  * sí: había que leerla entera para encontrar los once que importan. Ahora se lee
  * de arriba abajo y se para cuando deja de doler. El orden lo fija
  * `lib/provisioning/dependencias.js`, que es donde está escrito el porqué.
+ *
+ * Y CON EL SEMÁFORO DE VERDAD (10/08/2026, Jorge). Si la tabla está ordenada por
+ * gravedad, el color TIENE que decir dónde está el corte, y los tonos apagados
+ * del panel no lo decían — ver `SEMAFORO` más abajo. La tabla va además sobre
+ * blanco, en su propia tarjeta: sobre el beige de la página, un amarillo lavado
+ * y un fondo lavado son casi el mismo color.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -46,6 +52,56 @@ import { useEffect, useMemo, useState } from "react";
 // useMemo que dependen de él se recalculen siempre.
 const SIN_NADA = [];
 const SIN_NADA_OBJ = {};
+
+/**
+ * El semáforo de la matriz: rojo, amarillo y verde de verdad (10/08/2026).
+ *
+ * Lo que había antes NO era un semáforo. El «rojo» era `--alerta` (#B45309, el
+ * naranja quemado que el back-office reserva para «sin cifrar» en Custodia), el
+ * «ámbar» era `--tenue` —gris— y el verde era el verde oscuro de la marca. Tres
+ * tonos apagados que a tamaño de punto no se distinguen entre sí, y dos de ellos
+ * ya significaban otra cosa en el resto del panel.
+ *
+ * VIVE AQUÍ Y NO EN LA PALETA DEL LAYOUT a propósito: es de esta tabla. Arreglar
+ * el rojo tocando `--alerta` habría movido colores en Custodia y en los avisos,
+ * que no tienen nada que ver con si un módulo se puede vender suelto.
+ *
+ * Cada tono trae su versión oscura para texto (el amarillo puro sobre blanco no
+ * se lee) y su versión lavada para los fondos.
+ */
+const SEMAFORO = {
+  rojo: {
+    punto: "#DC2626",
+    texto: "#991B1B",
+    suave: "#FEF3F2",
+    borde: "#F3B9B4",
+    dice: "No se vende solo",
+  },
+  ambar: {
+    punto: "#EAB308",
+    texto: "#854D0E",
+    suave: "#FEFAEB",
+    borde: "#EBD489",
+    dice: "Se vende solo, pierde una utilidad",
+  },
+  verde: {
+    punto: "#16A34A",
+    texto: "#166534",
+    suave: "#F1FBF4",
+    borde: "#A6DEB9",
+    dice: "Independiente",
+  },
+};
+
+const semaforo = (severidad) => SEMAFORO[severidad] ?? SEMAFORO.verde;
+
+/**
+ * El nivel de UNA dependencia es media fila: si sin ella no funciona, va en
+ * rojo; si funciona y pierde una utilidad, en ámbar. Es el mismo semáforo, un
+ * escalón más abajo — la severidad de la fila sale precisamente de si alguna de
+ * sus dependencias es obligatoria.
+ */
+const semaforoNivel = (nivel) => (nivel === "obligatorio" ? SEMAFORO.rojo : SEMAFORO.ambar);
 
 function Etiqueta({ children, tono = "dim" }) {
   const color = tono === "alerta" ? "var(--alerta)" : tono === "ok" ? "var(--ok)" : "var(--tenue)";
@@ -61,13 +117,29 @@ function plural(n, singular, plural_) {
   return `${n} ${n === 1 ? singular : plural_}`;
 }
 
-/** Una punta del flujo. */
-function Modulo({ clave, nombre }) {
+/**
+ * Una punta del flujo.
+ *
+ * Con `nivel` se pinta del color del semáforo, y es como se usa en la columna
+ * «Necesita» de la matriz: ahí lo que hay que ver de un vistazo no es sólo QUÉ
+ * módulo hace falta, sino si es de los que sin él no arranca nada. Sin `nivel`
+ * —en el mapa de integraciones— se queda neutro, como siempre.
+ */
+function Modulo({ clave, nombre, nivel }) {
+  const t = nivel ? semaforoNivel(nivel) : null;
   return (
     <span
       className="text-[12px] px-2 py-1 rounded whitespace-nowrap"
-      style={{ background: "var(--panel-alto)", border: "1px solid var(--line)" }}
-      title={clave}
+      style={{
+        background: t ? t.suave : "var(--panel-alto)",
+        border: `1px solid ${t ? t.borde : "var(--line)"}`,
+        color: t ? t.texto : "var(--text)",
+      }}
+      title={
+        nivel
+          ? `${clave} — ${nivel === "obligatorio" ? "sin esto no funciona" : "funciona, pero pierde una utilidad"}`
+          : clave
+      }
     >
       {nombre || clave}
     </span>
@@ -77,48 +149,111 @@ function Modulo({ clave, nombre }) {
 /**
  * Obligatorio vs parcial.
  *
- * Solo lo obligatorio se pinta en ámbar. Un `parcial` casi siempre es
- * deliberado —Quality Energy tiene Leads y no quiere fichas— y pintarlo de
- * alerta convertiría la pantalla en un muro de avisos falsos, que es
- * exactamente lo que rompió la primera versión del mapa de integraciones.
+ * El ámbar del semáforo NO es una alerta, y por eso ahora un `parcial` sí se
+ * pinta. Un parcial casi siempre es deliberado —Quality Energy tiene Leads y no
+ * quiere fichas—, así que ponerlo del color de aviso convertiría la pantalla en
+ * un muro de alarmas falsas, que es lo que rompió la primera versión del mapa.
+ * Amarillo dice lo que hay que decir: funciona, y se queda sin algo.
  */
 function Nivel({ nivel }) {
-  const obligatorio = nivel === "obligatorio";
+  const t = semaforoNivel(nivel);
   return (
     <span
       className="text-[9.5px] uppercase tracking-[0.14em] px-1.5 py-0.5 rounded whitespace-nowrap"
-      style={{
-        color: obligatorio ? "var(--alerta)" : "var(--tenue)",
-        border: `1px solid color-mix(in srgb, ${obligatorio ? "var(--alerta)" : "var(--tenue)"} 35%, transparent)`,
-      }}
+      style={{ color: t.texto, background: t.suave, border: `1px solid ${t.borde}` }}
     >
-      {obligatorio ? "obligatorio" : "pierde algo"}
+      {nivel === "obligatorio" ? "obligatorio" : "pierde algo"}
     </span>
   );
 }
 
 /**
- * El punto de la primera columna: rojo no se vende solo, ámbar se vende y
- * pierde algo, verde independiente.
+ * La columna «Necesita», en fichas y no en texto corrido.
+ *
+ * Antes iba el texto ya montado que calcula `textoNecesita()` —«Clientes +
+ * Facturación», «(Clínica o Citas)»—, y para saber si eso era obligatorio había
+ * que abrir el desplegable de la última columna. Ahora cada módulo es una ficha
+ * del color de su nivel, así que la columna se recorre con el dedo: donde hay
+ * rojo, sin eso no arranca.
+ *
+ * UN SOLO SEPARADOR PARA SUMAR: «+». El texto que monta `textoNecesita()` usa
+ * «+» entre dependencias y «y» dentro de una, y las dos cosas significan lo
+ * mismo —«hacen falta las dos»—, así que «Clientes y Leads profesionales +
+ * Pacientes» hay que leerlo dos veces. Aquí todo lo que se suma lleva «+».
+ *
+ * La alternativa —Equipo avanzado vale con Clínica O con Citas— va con «o» y
+ * ENCAJONADA. Sin la caja, «Equipo básico + Clínica o Citas» se puede leer como
+ * si Citas bastara por sí sola. Ese matiz es justo el que hace que el catálogo
+ * no sepa declarar esta dependencia.
+ */
+function Requisitos({ necesita, nombres }) {
+  if (!necesita?.length) {
+    return (
+      <span style={{ color: "var(--apagado)" }} title="No necesita ningún otro módulo">
+        —
+      </span>
+    );
+  }
+
+  const mas = (
+    <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
+      +
+    </span>
+  );
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {necesita.map((dep, i) => {
+        const fichas = dep.claves.map((k, n) => (
+          <span key={k} className="flex items-center gap-1.5">
+            {n > 0 &&
+              (dep.cualquiera ? (
+                <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
+                  o
+                </span>
+              ) : (
+                mas
+              ))}
+            <Modulo clave={k} nombre={nombres[k]} nivel={dep.nivel} />
+          </span>
+        ));
+
+        return (
+          <span key={dep.claves.join("-")} className="flex flex-wrap items-center gap-1.5">
+            {i > 0 && mas}
+            {dep.cualquiera && dep.claves.length > 1 ? (
+              <span
+                className="flex flex-wrap items-center gap-1.5 rounded-md px-1.5 py-1"
+                style={{ border: "1px dashed var(--line)" }}
+                title="Basta con uno de los dos"
+              >
+                {fichas}
+              </span>
+            ) : (
+              fichas
+            )}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * La luz del semáforo: rojo no se vende solo, amarillo se vende y pierde algo,
+ * verde independiente.
  *
  * Punto de color y no emoji porque en el back-office no hay ni un emoji, y uno
  * suelto en una tabla de veintidós filas canta. Dice exactamente lo mismo.
  */
-function Punto({ severidad }) {
-  const color =
-    severidad === "rojo" ? "var(--alerta)" : severidad === "ambar" ? "var(--tenue)" : "var(--ok)";
-  const titulo =
-    severidad === "rojo"
-      ? "No se vende solo"
-      : severidad === "ambar"
-        ? "Se vende solo, pierde una utilidad"
-        : "Independiente";
+function Punto({ severidad, tam = 9 }) {
+  const t = semaforo(severidad);
   return (
     <span
-      title={titulo}
-      aria-label={titulo}
-      className="inline-block rounded-full"
-      style={{ width: 7, height: 7, background: color }}
+      title={t.dice}
+      aria-label={t.dice}
+      className="inline-block rounded-full shrink-0"
+      style={{ width: tam, height: tam, background: t.punto }}
     />
   );
 }
@@ -500,128 +635,139 @@ export default function IntegracionesPage() {
               línea, se despliega en la última celda para no ensuciar la lectura
               rápida. Scroll horizontal propio: la tabla no encoge la página. */}
           {filasDeps.length > 0 && (
-            <div className="mt-7 overflow-x-auto">
-              <table className="w-full border-collapse text-left" style={{ minWidth: 760 }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid var(--line)" }}>
-                    <th className="pb-2 w-4" />
-                    <th className="pb-2 pr-4 text-[10px] uppercase tracking-[0.16em] font-normal" style={{ color: "var(--tenue)" }}>
-                      Módulo
-                    </th>
-                    <th className="pb-2 pr-4 text-[10px] uppercase tracking-[0.16em] font-normal" style={{ color: "var(--tenue)" }}>
-                      Necesita
-                    </th>
-                    <th className="pb-2 pr-4 text-[10px] uppercase tracking-[0.16em] font-normal whitespace-nowrap" style={{ color: "var(--tenue)" }}>
-                      ¿Para funcionar?
-                    </th>
-                    <th className="pb-2 text-[10px] uppercase tracking-[0.16em] font-normal" style={{ color: "var(--tenue)" }}>
-                      Qué pasa si no lo tiene
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filasDeps.map((fila) => {
-                    const rojo = fila.severidad === "rojo";
-                    const leFalta = rotos.filter((r) => r.modulo === fila.modulo);
-                    return (
-                      <tr key={fila.modulo} className="align-top" style={{ borderBottom: "1px solid var(--line)" }}>
-                        <td className="py-3 pr-2">
-                          <Punto severidad={fila.severidad} />
-                        </td>
-
-                        <td className="py-3 pr-4">
-                          <div className="text-[13px] leading-tight whitespace-nowrap">
-                            {nombres[fila.modulo] || fila.modulo}
-                          </div>
-                          <div className="text-[10.5px] mt-0.5" style={{ color: "var(--tenue)" }}>
-                            {fila.loTienen.length === 0 ? "nadie lo tiene" : fila.loTienen.join(", ")}
-                          </div>
-                        </td>
-
-                        <td
-                          className="py-3 pr-4 text-[12.5px] leading-snug"
-                          style={{ color: fila.necesitaTexto === "—" ? "var(--tenue)" : "var(--text)" }}
+            <div
+              className="mt-7 rounded-xl overflow-hidden"
+              style={{ background: "var(--panel)", border: "1px solid var(--line)" }}
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left" style={{ minWidth: 860 }}>
+                  <thead>
+                    <tr style={{ background: "var(--panel-alto)" }}>
+                      {/* La franja de color. Sin rótulo: lo dice la leyenda. */}
+                      <th className="p-0" style={{ width: 4 }} />
+                      <th className="py-2.5 pl-4 pr-4 text-[10px] uppercase tracking-[0.16em] font-normal" style={{ color: "var(--tenue)" }}>
+                        Módulo
+                      </th>
+                      <th className="py-2.5 pr-4 text-[10px] uppercase tracking-[0.16em] font-normal" style={{ color: "var(--tenue)" }}>
+                        Necesita
+                      </th>
+                      <th className="py-2.5 pr-4 text-[10px] uppercase tracking-[0.16em] font-normal whitespace-nowrap" style={{ color: "var(--tenue)" }}>
+                        ¿Para funcionar?
+                      </th>
+                      <th className="py-2.5 pr-4 text-[10px] uppercase tracking-[0.16em] font-normal" style={{ color: "var(--tenue)" }}>
+                        Qué pasa si no lo tiene
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filasDeps.map((fila) => {
+                      const t = semaforo(fila.severidad);
+                      const leFalta = rotos.filter((r) => r.modulo === fila.modulo);
+                      // El hilo entre filas va en las celdas y NO en la fila,
+                      // para que la franja de color baje de un tirón y no salga
+                      // troceada en veintidós pedazos.
+                      const hilo = { borderTop: "1px solid var(--line-suave)" };
+                      return (
+                        <tr
+                          key={fila.modulo}
+                          className="align-top transition-colors hover:bg-[#FBF9F6]"
                         >
-                          {fila.necesitaTexto}
-                        </td>
+                          <td className="p-0" style={{ background: t.punto }} title={t.dice} />
 
-                        <td
-                          className="py-3 pr-4 text-[12.5px] whitespace-nowrap"
-                          style={{ color: rojo ? "var(--alerta)" : "var(--tenue)" }}
-                        >
-                          {fila.paraFuncionar}
-                        </td>
-
-                        <td className="py-3 text-[12.5px] leading-relaxed" style={{ color: "var(--dim)" }}>
-                          <ConCodigo texto={fila.resumen} />
-
-                          {leFalta.length > 0 && (
-                            <div className="mt-1 text-[11.5px]" style={{ color: "var(--alerta)" }}>
-                              le falta a {leFalta.map((r) => r.slug).join(", ")}
+                          <td className="py-3.5 pl-4 pr-4" style={hilo}>
+                            <div className="text-[13px] leading-tight whitespace-nowrap font-medium">
+                              {nombres[fila.modulo] || fila.modulo}
                             </div>
-                          )}
-
-                          {fila.nota && (
-                            <div className="mt-1.5 text-[11.5px] leading-relaxed" style={{ color: "var(--tenue)" }}>
-                              {fila.nota}
+                            <div className="text-[10.5px] mt-0.5" style={{ color: "var(--tenue)" }}>
+                              {fila.loTienen.length === 0 ? "nadie lo tiene" : fila.loTienen.join(", ")}
                             </div>
-                          )}
+                          </td>
 
-                          {fila.necesita.length > 0 && (
-                            <details className="mt-1.5">
-                              <summary className="cursor-pointer text-[11px]" style={{ color: "var(--tenue)" }}>
-                                por qué, y dónde está en el código
-                              </summary>
-                              <div className="mt-2 space-y-2.5">
-                                {fila.necesita.map((dep) => (
-                                  <div key={dep.claves.join("-")}>
-                                    <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                                      {dep.claves.map((k, n) => (
-                                        <span key={k} className="flex items-center gap-1.5">
-                                          {n > 0 && (
-                                            <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
-                                              {dep.cualquiera ? "o" : "y"}
-                                            </span>
-                                          )}
-                                          <Modulo clave={k} nombre={nombres[k]} />
-                                        </span>
-                                      ))}
-                                      <Nivel nivel={dep.nivel} />
-                                    </div>
-                                    <p className="text-[12px] leading-relaxed" style={{ color: "var(--dim)" }}>
-                                      {dep.porque}
-                                    </p>
-                                    <div className="mt-1 text-[11px] leading-relaxed" style={{ color: "var(--tenue)" }}>
-                                      {dep.donde?.map((d) => (
-                                        <div key={d}>{d}</div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
+                          <td className="py-3.5 pr-4" style={hilo}>
+                            <Requisitos necesita={fila.necesita} nombres={nombres} />
+                          </td>
+
+                          <td
+                            className="py-3.5 pr-4 text-[12.5px] whitespace-nowrap font-medium"
+                            style={{ ...hilo, color: t.texto }}
+                          >
+                            <span className="flex items-center gap-2">
+                              <Punto severidad={fila.severidad} tam={8} />
+                              {fila.paraFuncionar}
+                            </span>
+                          </td>
+
+                          <td
+                            className="py-3.5 pr-4 text-[12.5px] leading-relaxed"
+                            style={{ ...hilo, color: "var(--dim)" }}
+                          >
+                            <ConCodigo texto={fila.resumen} />
+
+                            {leFalta.length > 0 && (
+                              <div className="mt-1 text-[11.5px] font-medium" style={{ color: SEMAFORO.rojo.texto }}>
+                                le falta a {leFalta.map((r) => r.slug).join(", ")}
                               </div>
-                            </details>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                            )}
+
+                            {fila.nota && (
+                              <div className="mt-1.5 text-[11.5px] leading-relaxed" style={{ color: "var(--tenue)" }}>
+                                {fila.nota}
+                              </div>
+                            )}
+
+                            {fila.necesita.length > 0 && (
+                              <details className="mt-1.5">
+                                <summary className="cursor-pointer text-[11px]" style={{ color: "var(--tenue)" }}>
+                                  por qué, y dónde está en el código
+                                </summary>
+                                <div className="mt-2 space-y-2.5">
+                                  {fila.necesita.map((dep) => (
+                                    <div key={dep.claves.join("-")}>
+                                      <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                                        {dep.claves.map((k, n) => (
+                                          <span key={k} className="flex items-center gap-1.5">
+                                            {n > 0 && (
+                                              <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
+                                                {dep.cualquiera ? "o" : "+"}
+                                              </span>
+                                            )}
+                                            <Modulo clave={k} nombre={nombres[k]} nivel={dep.nivel} />
+                                          </span>
+                                        ))}
+                                        <Nivel nivel={dep.nivel} />
+                                      </div>
+                                      <p className="text-[12px] leading-relaxed" style={{ color: "var(--dim)" }}>
+                                        {dep.porque}
+                                      </p>
+                                      <div className="mt-1 text-[11px] leading-relaxed" style={{ color: "var(--tenue)" }}>
+                                        {dep.donde?.map((d) => (
+                                          <div key={d}>{d}</div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </details>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
-          <div
-            className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11px]"
-            style={{ color: "var(--tenue)" }}
-          >
-            <span className="flex items-center gap-1.5">
-              <Punto severidad="rojo" /> no se vende solo
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Punto severidad="ambar" /> se vende solo, pierde una utilidad
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Punto severidad="verde" /> independiente
+          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11px]">
+            {["rojo", "ambar", "verde"].map((s) => (
+              <span key={s} className="flex items-center gap-1.5" style={{ color: semaforo(s).texto }}>
+                <Punto severidad={s} /> {semaforo(s).dice.toLowerCase()}
+              </span>
+            ))}
+            <span style={{ color: "var(--tenue)" }}>
+              — el color de la fila sale de sus fichas: basta una roja para que el módulo no se
+              pueda vender suelto.
             </span>
           </div>
         </>
