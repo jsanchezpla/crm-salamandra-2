@@ -42,6 +42,13 @@ campos. Resumen:
   `guardians` JSONB (tutores, ver `lib/clients/guardians.js`),
   `portalUnlockedMonths` JSONB y `contractDocumentId` → contrato firmado
   de la familia (ver «Contrato del Centro» más abajo).
+- `assignedTeamMemberId` (UUID → `team_members`, ON DELETE SET NULL) —
+  su **profesional de referencia**: con quién lleva el seguimiento
+  (06/08/2026). `null` = sin asignar, y entonces la agenda pública le
+  enseña los huecos del centro enteros; asignado, solo los de esa
+  persona (`lib/citas/horarioProfesional.js`). En una consulta externa
+  es además **quién la ve**, junto con los admin
+  (`lib/clients/consultaExterna.js`).
 - `customFields` JSONB libre por tenant.
 
 ## Endpoints
@@ -290,6 +297,29 @@ Notas creadas antes del logout tendrán `createdBy=NULL`.
 ---
 
 ## UI
+
+### Profesional de referencia en la ficha (10/08/2026)
+
+`components/clients/ClientProfesionalSection.jsx` — tarjeta compartida, justo
+debajo de «Consulta externa», en la ficha default **y** en la de nutri_laura.
+Enseña quién lleva el seguimiento y lo cambia en un desplegable
+(`PUT /api/clients/:id` con `assignedTeamMemberId`).
+
+Antes el campo solo se podía poner UNA vez y en un sitio: al aceptar la
+solicitud en la bandeja (`lib/formularios/accept.js`). No había forma de verlo
+ni de corregirlo desde la ficha.
+
+- **No se pinta** sin módulo `team` o sin nadie dado de alta: un desplegable
+  vacío no decide nada. Una consulta de una sola profesional sigue sin asignar
+  a nadie, como siempre.
+- **Quién puede cambiarlo**: quien pueda abrir la ficha, salvo en una consulta
+  externa, donde **solo admin** — ahí elegir profesional es elegir quién ve a
+  esa persona, y el endpoint lo comprueba (403), no solo la pantalla.
+- El endpoint valida que el UUID exista en `team_members` del tenant (422 si
+  no) y solo toca el campo si viene explícito en el body, para que un guardado
+  de otra sección no deje a nadie sin profesional.
+- Avisa si la elegida **no tiene horario propio**: su paciente no vería ni un
+  hueco al pedir cita. Mismo aviso que la bandeja de solicitudes.
 
 ### Default (vanilla)
 

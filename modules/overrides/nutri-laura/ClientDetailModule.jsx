@@ -47,6 +47,7 @@ import ClientPlansPanel from "./ClientPlansPanel.jsx";
 import ClientModulesSection from "../../../components/clients/ClientModulesSection.jsx";
 import ClientCitasSection from "../../../components/clients/ClientCitasSection.jsx";
 import ClientConsultaExternaSection from "../../../components/clients/ClientConsultaExternaSection.jsx";
+import ClientProfesionalSection from "../../../components/clients/ClientProfesionalSection.jsx";
 import { edadDesde } from "../../../lib/clients/formularioAlta.js";
 
 // Rótulos revisados el 04/08/2026 (Rodrigo): Datos · Historia clínica ·
@@ -483,6 +484,10 @@ function InfoTab({
       <CuentaWebSection client={client} />
       <ClientCitasSection clientId={client.id} />
       <ClientConsultaExternaSection clientId={client.id} />
+      {/* Con quién lleva el seguimiento. Va justo debajo de consulta externa
+          (10/08/2026, Rodrigo) porque en una externa las dos cosas se leen
+          juntas: de qué empresa viene y quién la lleva. */}
+      <ClientProfesionalSection clientId={client.id} />
     </div>
     </div>
   );

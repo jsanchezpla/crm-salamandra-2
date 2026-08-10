@@ -21,6 +21,7 @@ import ClientPortalMonthsSection from "../../components/clients/ClientPortalMont
 import ClientComunicacionesSection from "../../components/clients/ClientComunicacionesSection.jsx";
 import ClientCitasSection from "../../components/clients/ClientCitasSection.jsx";
 import ClientConsultaExternaSection from "../../components/clients/ClientConsultaExternaSection.jsx";
+import ClientProfesionalSection from "../../components/clients/ClientProfesionalSection.jsx";
 import ClientPatientsSection from "../../components/clients/ClientPatientsSection.jsx";
 
 const STATUSES = [
@@ -582,6 +583,10 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL, conPacie
 
         {/* Sus citas, ¿entran confirmadas o pasan por la bandeja? (06/08). */}
         <ClientConsultaExternaSection clientId={id} />
+        {/* Con quién lleva el seguimiento (10/08/2026, Rodrigo). Debajo de
+            consulta externa: en una externa, quién la lleva es además quién la
+            ve, y las dos cosas se leen juntas. */}
+        <ClientProfesionalSection clientId={id} />
         <ClientCitasSection clientId={id} />
 
         {/* Solo se pinta si el centro tiene el bloqueo por impago encendido. */}

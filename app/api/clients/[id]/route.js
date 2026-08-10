@@ -16,6 +16,8 @@ import {
   isMissingTable,
 } from "../../../../lib/clients/contactMethods.js";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const GET = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
 
@@ -92,6 +94,20 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
 
   const client = await Client.findByPk(id);
   if (!client) return notFound("Cliente no encontrado");
+
+  /*
+   * La misma puerta que el GET (10/08/2026). No estaba: el detalle cerraba las
+   * consultas externas ajenas al LEERLAS, pero este PUT no, y como responde con
+   * la ficha entera, un PUT vacío contra un id conocido la devolvía completa a
+   * quien no debía verla. Cerrar la lectura y dejar abierta la escritura es no
+   * cerrar nada.
+   *
+   * 404 y no 403, igual que en el GET: decir «existe pero no es para ti» ya
+   * cuenta algo de un paciente que no le corresponde a quien pregunta.
+   */
+  const rolQuienEdita = request.headers.get("x-user-role") ?? "user";
+  const miTeamMemberId = hasModule("team") ? await resolveCurrentTeamMemberId(request, tenantModels) : null;
+  if (!puedeVerFicha(client, rolQuienEdita, miTeamMemberId)) return notFound("Cliente no encontrado");
 
   // ARREGLO 2026-07-22: este bloque solo contemplaba ocho claves con nombre
   // propio, así que un `customFields` enviado por la UI con cualquier otra
@@ -180,7 +196,6 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
    * valdría nada. La categoría sí la puede tocar quien ya ve la ficha: es una
    * etiqueta, no un permiso.
    */
-  const rolQuienEdita = request.headers.get("x-user-role") ?? "user";
   if ("esConsultaExterna" in body) {
     if (!veTodasLasExternas(rolQuienEdita)) {
       return error("Solo un administrador puede marcar una consulta externa", 403);
@@ -188,6 +203,41 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
     baseUpdate.esConsultaExterna = !!body.esConsultaExterna;
   }
   if ("categoriaExterna" in body) baseUpdate.categoriaExterna = normalizarCategoria(body.categoriaExterna);
+
+  /*
+   * Su profesional de referencia (10/08/2026, Rodrigo). El campo se ponía solo
+   * al aceptar la solicitud en la bandeja y ya no se podía tocar; ahora se
+   * cambia desde la ficha, que es donde se mira cuando alguien pregunta «¿esta
+   * con quién va?».
+   *
+   * Solo si viene explícito, como el resto: un guardado de otra sección de la
+   * ficha no puede dejar a nadie sin profesional por omisión.
+   *
+   * ⚠️ EN UNA CONSULTA EXTERNA, SOLO ADMIN. Ahí el profesional asignado no es
+   * un dato: es QUIÉN VE a esa persona (lib/clients/consultaExterna.js). Si lo
+   * pudiera cambiar cualquiera, bastaría con ponerse a uno mismo para abrir una
+   * ficha que no le corresponde. Se mira la marca que va a QUEDAR, no la que
+   * había, por si en el mismo PUT viniera también el interruptor.
+   */
+  if ("assignedTeamMemberId" in body) {
+    const { TeamMember } = tenantModels;
+    if (!hasModule("team") || !TeamMember) {
+      return error("Este centro no tiene el módulo de Equipo: no hay a quién asignar", 422);
+    }
+    const seraExterna = "esConsultaExterna" in body ? !!body.esConsultaExterna : !!client.esConsultaExterna;
+    if (seraExterna && !veTodasLasExternas(rolQuienEdita)) {
+      return error("Solo un administrador puede cambiar el profesional de una consulta externa", 403);
+    }
+    const valor = body.assignedTeamMemberId ? String(body.assignedTeamMemberId).trim() : null;
+    if (valor) {
+      // El formato se comprueba ANTES de preguntar a la base: un id que no es
+      // un UUID revienta la consulta con un 22P02 y saldría como error 500.
+      if (!UUID_RE.test(valor)) return error("Profesional no válido", 422);
+      const miembro = await TeamMember.findByPk(valor, { attributes: ["id"] });
+      if (!miembro) return error("Ese miembro del equipo ya no existe", 422);
+    }
+    baseUpdate.assignedTeamMemberId = valor;
+  }
 
   // Transacción: datos base + upsert del principal (email/phone) → espejo en
   // Client.email/phone. Si el tenant aún no tiene client_contact_methods (42P01),
@@ -214,7 +264,10 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
     action: "client.updated",
     entity: "Client",
     entityId: client.id,
-    after: resumen(client, ["name", "email", "phone", "type", "status"]),
+    // `assignedTeamMemberId` en el resumen (10/08/2026): en una consulta externa
+    // ese id decide quién ve la ficha, así que un cambio de profesional tiene
+    // que dejar rastro de a quién se le pasó.
+    after: resumen(client, ["name", "email", "phone", "type", "status", "assignedTeamMemberId"]),
   });
   return ok(client);
 });
