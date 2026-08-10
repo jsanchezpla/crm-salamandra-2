@@ -5,6 +5,7 @@ import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import Link from "next/link";
 import Select from "../../components/ui/Select.jsx";
 import { ANTHROPIC_MODELS } from "../../lib/ai/anthropicModel.js";
+import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "../../lib/citas/coloresBloqueo.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -611,6 +612,14 @@ export default function ConfigModule() {
               activo={!!cfg.agendaCompartida}
               readOnly={!!cfg.readOnly}
               onChange={(v) => patchTenant({ agendaCompartida: v }, v ? "Todo el equipo verá la agenda completa" : "Cada profesional volverá a ver solo su agenda")}
+            />
+          )}
+
+          {isAdmin && (
+            <ColorBloqueosCard
+              color={cfg.colorBloqueos}
+              readOnly={!!cfg.readOnly}
+              onGuardar={(v) => patchTenant({ colorBloqueos: v }, "Color de los bloqueos guardado")}
             />
           )}
 
@@ -1597,6 +1606,90 @@ function PaginaReservasCard({ url, readOnly, onGuardar }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Color de los tramos bloqueados de la agenda (10/08/2026, Rodrigo).
+ *
+ * Es el del CENTRO. Cada profesional puede pisarlo con el suyo desde su ficha
+ * de equipo, y por eso la tarjeta lo dice: si no, alguien cambia esto, ve que
+ * los bloqueos de una compañera siguen igual y piensa que no se ha guardado.
+ */
+function ColorBloqueosCard({ color, readOnly, onGuardar }) {
+  const [borrador, setBorrador] = useState(color ?? COLOR_BLOQUEO_POR_DEFECTO);
+
+  // Si el color llega más tarde que el primer render (la carga es asíncrona),
+  // el selector tiene que ponerse al día o enseñaría el negro por defecto.
+  useEffect(() => { setBorrador(color ?? COLOR_BLOQUEO_POR_DEFECTO); }, [color]);
+
+  const valido = /^#[0-9a-fA-F]{6}$/.test(borrador.trim());
+  const sinCambios = borrador.trim().toUpperCase() === (color ?? "").toUpperCase();
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="text-sm font-semibold text-neutral-800">Color de los bloqueos</div>
+      <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+        El color con el que se pintan en la agenda las vacaciones, ausencias y cierres del
+        centro. Cada profesional puede tener el suyo propio desde su ficha en Equipo; este es el
+        que se usa cuando no lo tiene.
+      </p>
+
+      <div className="mt-3 flex gap-2 flex-wrap items-end">
+        <div>
+          <label className="block text-[11px] text-neutral-500 mb-1">Color</label>
+          <input
+            type="color"
+            value={valido ? borrador : COLOR_BLOQUEO_POR_DEFECTO}
+            disabled={readOnly}
+            onChange={(e) => setBorrador(e.target.value.toUpperCase())}
+            className="h-10 w-14 border border-neutral-200 rounded-lg p-1 disabled:opacity-40 cursor-pointer"
+            aria-label="Elegir el color de los bloqueos"
+          />
+        </div>
+        <div className="flex-1 min-w-[140px]">
+          <label className="block text-[11px] text-neutral-500 mb-1">Código</label>
+          <input
+            type="text"
+            value={borrador}
+            disabled={readOnly}
+            onChange={(e) => setBorrador(e.target.value)}
+            placeholder={COLOR_BLOQUEO_POR_DEFECTO}
+            className="w-full text-sm border border-neutral-200 rounded-lg px-3 py-2 font-mono disabled:bg-neutral-50"
+          />
+        </div>
+        {!readOnly && (
+          <PrimaryButton onClick={() => valido && onGuardar(borrador.trim().toUpperCase())}>
+            Guardar
+          </PrimaryButton>
+        )}
+      </div>
+
+      {!valido && (
+        <p className="text-[11px] text-rose-600 mt-2">
+          Tiene que ser un código de color tipo <span className="font-mono">#0F0F0F</span>.
+        </p>
+      )}
+
+      {/* Cómo queda. La muestra lleva la MISMA letra que calcula la agenda, o
+          enseñaría algo legible aquí e ilegible allí. */}
+      <div className="mt-3">
+        <div className="text-[11px] text-neutral-500 mb-1">Así se verá en la agenda</div>
+        <div
+          className="rounded px-2 py-1 text-[11px] font-medium inline-block"
+          style={{
+            backgroundColor: valido ? borrador : COLOR_BLOQUEO_POR_DEFECTO,
+            color: colorTextoSobre(valido ? borrador : COLOR_BLOQUEO_POR_DEFECTO),
+          }}
+        >
+          Vacaciones · Laura
+        </div>
+      </div>
+
+      {!readOnly && !sinCambios && valido && (
+        <p className="text-[10px] text-neutral-400 mt-2">Sin guardar todavía.</p>
+      )}
     </div>
   );
 }

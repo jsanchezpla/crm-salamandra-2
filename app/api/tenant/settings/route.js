@@ -12,6 +12,8 @@ import { getTenantCloudflareConfig } from "../../../../lib/analytics/cloudflareC
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { avisarCambioDeConfiguracion } from "../../../../lib/configuracion/avisoCambio.js";
 import { exigeIdentidad } from "../../../../lib/citas/puertaIdentidad.js";
+import { limpiaColorBloqueo, COLOR_BLOQUEO_POR_DEFECTO } from "../../../../lib/citas/coloresBloqueo.js";
+import { isValidHexColor } from "../../../../lib/citas/validation.js";
 
 /**
  * /api/tenant/settings — configuración básica del tenant.
@@ -146,6 +148,7 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("citas.formularioUrl", antes?.citas?.formularioUrl, despues?.citas?.formularioUrl);
   anota("citas.portalUrl", antes?.citas?.portalUrl, despues?.citas?.portalUrl);
   anota("citas.reservaUrl", antes?.citas?.reservaUrl, despues?.citas?.reservaUrl);
+  anota("citas.colorBloqueos", antes?.citas?.colorBloqueos, despues?.citas?.colorBloqueos);
 
   const huboSecretos = Object.keys(secretos).length > 0;
   const huboAbiertos = Object.keys(after).length > 0;
@@ -249,6 +252,9 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // Página de la web del cliente donde está incrustado el portal.
     portalUrl: t.settings?.citas?.portalUrl ?? "",
     reservaUrl: t.settings?.citas?.reservaUrl ?? "",
+    // Color de los tramos bloqueados en la agenda. Se devuelve ya resuelto al
+    // negro de siempre para que el selector nunca arranque en blanco.
+    colorBloqueos: t.settings?.citas?.colorBloqueos ?? COLOR_BLOQUEO_POR_DEFECTO,
     brand: {
       primaryColor: brand.primaryColor ?? null,
       secondaryColor: brand.secondaryColor ?? null,
@@ -545,6 +551,19 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     settings.citas = { ...(settings.citas ?? {}), reservaUrl: url || null };
   }
 
+  /*
+   * Color de los tramos bloqueados en la agenda (10/08/2026, Rodrigo). Es el
+   * del CENTRO: cada profesional puede pisarlo con el suyo desde su ficha de
+   * equipo. Vaciarlo devuelve el negro de siempre, no deja la agenda sin color.
+   */
+  if (typeof body.colorBloqueos === "string") {
+    const color = limpiaColorBloqueo(body.colorBloqueos);
+    if (!isValidHexColor(color)) {
+      throw new ValidationError("El color de los bloqueos tiene que ser un hex tipo #RRGGBB");
+    }
+    settings.citas = { ...(settings.citas ?? {}), colorBloqueos: color };
+  }
+
   // Candado de la IA para empleados (no es un secreto): lista cerrada.
   if (body.aiAccess === "libre" || body.aiAccess === "restringido") {
     settings.aiAccess = body.aiAccess;
@@ -603,6 +622,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     contratoObligatorio: settings.citas?.contratoObligatorio === true,
     soloConPago: settings.citas?.soloConPago === true,
     identidadObligatoria: exigeIdentidad({ settings }),
+    colorBloqueos: settings.citas?.colorBloqueos ?? COLOR_BLOQUEO_POR_DEFECTO,
     brand: {
       primaryColor: settings.brand.primaryColor ?? null,
       secondaryColor: settings.brand.secondaryColor ?? null,

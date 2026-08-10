@@ -6,6 +6,8 @@ import { serializeTeamMember } from "../../../../lib/team/serializeTeamMember.js
 import { normalizeSpecialties } from "../../../../lib/clinica/specialties.js";
 import { revocarAccesoPorBaja } from "../../../../lib/team/access.js";
 import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
+import { limpiaColorBloqueo } from "../../../../lib/citas/coloresBloqueo.js";
+import { isValidHexColor } from "../../../../lib/citas/validation.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["active", "inactive", "on_leave"]);
@@ -164,6 +166,12 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     if ("department" in body) updates.department = normalizeString(body.department);
     if ("phone" in body) updates.phone = normalizeString(body.phone);
     if ("avatarUrl" in body) updates.avatarUrl = normalizeString(body.avatarUrl);
+    // Color de sus bloqueos en la agenda. Vaciarlo vuelve a heredar el general.
+    if ("blockColor" in body) {
+      const c = limpiaColorBloqueo(body.blockColor);
+      if (!isValidHexColor(c)) return error("El color de los bloqueos tiene que ser un hex tipo #RRGGBB");
+      updates.blockColor = c;
+    }
     if ("notes" in body) updates.notes = body.notes != null ? String(body.notes) : null;
     if ("startDate" in body) updates.hiredAt = normalizeString(body.startDate);
     if ("currency" in body) {

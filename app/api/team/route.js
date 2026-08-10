@@ -4,6 +4,8 @@ import { ok, created, error, forbidden, serverError } from "../../../lib/utils/a
 import { getMasterModels } from "../../../lib/db/masterDb.js";
 import { serializeTeamMember } from "../../../lib/team/serializeTeamMember.js";
 import { normalizeSpecialties } from "../../../lib/clinica/specialties.js";
+import { limpiaColorBloqueo } from "../../../lib/citas/coloresBloqueo.js";
+import { isValidHexColor } from "../../../lib/citas/validation.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["active", "inactive", "on_leave"]);
@@ -184,6 +186,9 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const department = normalizeString(body.department);
     const phone = normalizeString(body.phone);
     const avatarUrl = normalizeString(body.avatarUrl);
+    // Color de sus bloqueos en la agenda. Vacío = hereda el general del centro.
+    const blockColor = limpiaColorBloqueo(body.blockColor);
+    if (!isValidHexColor(blockColor)) return error("El color de los bloqueos tiene que ser un hex tipo #RRGGBB");
     const notes = body.notes != null ? String(body.notes) : null;
     const status = body.status ?? "active";
     const linkedUserId = body.userId || null;
@@ -229,6 +234,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       department,
       phone,
       avatarUrl,
+      blockColor,
       hourlyCost,
       hourlyRate,
       annualGross,

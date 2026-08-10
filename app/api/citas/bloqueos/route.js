@@ -3,6 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { buildMadridDate } from "../../../../lib/citas/slots.js";
+import { colorDeBloqueo } from "../../../../lib/citas/coloresBloqueo.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -54,7 +55,12 @@ function gate(ctx) {
   return null;
 }
 
-function serializa(f) {
+/**
+ * `colorGeneral` es el del centro. El color viaja YA RESUELTO (persona →
+ * centro → rosa de siempre) para que la agenda solo tenga que pintarlo: la
+ * regla de quién gana vive en un sitio, no repartida por cada pantalla.
+ */
+function serializa(f, colorGeneral) {
   return {
     id: f.id,
     teamMemberId: f.teamMemberId ?? null,
@@ -63,6 +69,7 @@ function serializa(f) {
     endAt: f.endAt,
     label: f.label,
     notes: f.notes ?? null,
+    color: colorDeBloqueo(f.teamMember?.blockColor, colorGeneral),
   };
 }
 
@@ -86,11 +93,12 @@ export const GET = withTenant(async (request, _rc, ctx) => {
 
     const filas = await TeamBlock.findAll({
       where,
-      include: TeamMember ? [{ model: TeamMember, as: "teamMember", attributes: ["id", "displayName"], required: false }] : [],
+      include: TeamMember ? [{ model: TeamMember, as: "teamMember", attributes: ["id", "displayName", "blockColor"], required: false }] : [],
       order: [["startAt", "ASC"]],
       limit: 500,
     });
-    return ok({ bloqueos: filas.map(serializa) });
+    const colorGeneral = ctx.tenant?.settings?.citas?.colorBloqueos ?? null;
+    return ok({ bloqueos: filas.map((f) => serializa(f, colorGeneral)) });
   } catch (err) {
     return serverError(err);
   }
@@ -138,12 +146,16 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     if (endAt <= startAt) return error("La fecha de fin tiene que ser posterior a la de inicio", 422);
 
     let teamMemberId = null;
+    // Su color se lee de la misma consulta que ya validaba a la persona, para
+    // que la respuesta lleve el color definitivo y la agenda no parpadee.
+    let colorPersona = null;
     const tmId = typeof body.teamMemberId === "string" && body.teamMemberId.trim() ? body.teamMemberId.trim() : null;
     if (tmId) {
       if (!UUID_RE.test(tmId)) return error("teamMemberId inválido", 422);
       if (TeamMember) {
-        const tm = await TeamMember.findByPk(tmId, { attributes: ["id"] });
+        const tm = await TeamMember.findByPk(tmId, { attributes: ["id", "blockColor"] });
         if (!tm) return error("Esa persona no está en el equipo", 422);
+        colorPersona = tm.blockColor ?? null;
       }
       teamMemberId = tmId;
     }
@@ -183,7 +195,12 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       ip: request.headers.get("x-forwarded-for") ?? null,
     });
 
-    return created({ ...serializa(fila), citasDentro });
+    const colorGeneral = ctx.tenant?.settings?.citas?.colorBloqueos ?? null;
+    return created({
+      ...serializa(fila, colorGeneral),
+      color: colorDeBloqueo(colorPersona, colorGeneral),
+      citasDentro,
+    });
   } catch (err) {
     return serverError(err);
   }

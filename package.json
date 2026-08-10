@@ -56,6 +56,8 @@
     "db:migrate:documents:prod": "node --env-file=.env.production scripts/migrate-documents-sprint-1.js",
     "db:migrate:avatar-color": "node --env-file=.env.local scripts/migrate-team-members-avatar-color.js",
     "db:migrate:avatar-color:prod": "node --env-file=.env.production scripts/migrate-team-members-avatar-color.js",
+    "db:migrate:block-color": "node --env-file=.env.local scripts/migrate-team-members-block-color.js",
+    "db:migrate:block-color:prod": "node --env-file=.env.production scripts/migrate-team-members-block-color.js",
     "db:migrate:inventory-rework": "node --env-file=.env.local scripts/migrate-inventory-rework.js",
     "db:migrate:inventory-rework:prod": "node --env-file=.env.production scripts/migrate-inventory-rework.js",
     "db:migrate:citas": "node --env-file=.env.local scripts/migrate-citas-sprint-1.js",

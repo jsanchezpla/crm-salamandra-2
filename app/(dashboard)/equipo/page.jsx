@@ -9,6 +9,7 @@ import MiEquipo from "@/components/team/MiEquipo.jsx";
 import AccessSection, { moduleLabel, suggestUsername } from "@/components/team/AccessSection.jsx";
 import CredentialsModal from "@/components/team/CredentialsModal.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
+import { COLOR_BLOQUEO_POR_DEFECTO } from "@/lib/citas/coloresBloqueo.js";
 
 const STATUS_LABELS = { active: "Activo", inactive: "Inactivo", on_leave: "De baja" };
 const STATUS_FILTER_OPTIONS = [
@@ -63,6 +64,8 @@ const EMPTY_FORM = {
   annualGross: "", paymentPeriods: 12,
   currency: "EUR", startDate: "", notes: "", status: "active",
   specialties: [],
+  // Color de SUS bloqueos en la agenda. Vacío = hereda el general del centro.
+  blockColor: "",
   // Acceso al CRM en el alta (solo modo crear): si crearAcceso, tras crear el
   // empleado se le crea también su usuario de login con estos módulos.
   crearAcceso: false, accessUsername: "", accessModules: [],
@@ -209,6 +212,7 @@ export default function EquipoPage() {
       notes: openMember.notes ?? "",
       status: openMember.status ?? "active",
       specialties: openMember.specialties ?? [],
+      blockColor: openMember.blockColor ?? "",
     });
     setEditing(true);
   }
@@ -518,6 +522,22 @@ export default function EquipoPage() {
                   <DetailRow label="Teléfono" value={openMember.phone} mono />
                   <DetailRow label="Departamento" value={openMember.department} />
                   <DetailRow label="Fecha de incorporación" value={openMember.startDate} />
+                  {/* La muestra de color dice más que el hex, y el texto explica
+                      el hueco: vacío no es un olvido, es «el del centro». */}
+                  <DetailRow
+                    label="Color de sus bloqueos"
+                    value={
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="inline-block w-4 h-4 rounded border border-neutral-200 shrink-0"
+                          style={{ backgroundColor: openMember.blockColor || COLOR_BLOQUEO_POR_DEFECTO }}
+                        />
+                        {openMember.blockColor
+                          ? <span className="font-mono text-xs">{openMember.blockColor}</span>
+                          : <span className="text-neutral-400">El del centro</span>}
+                      </span>
+                    }
+                  />
                   <DetailRow label="Tarifa por hora" value={fmtMoney(openMember.hourlyRate, openMember.currency)} />
                   {viewerIsAdmin && (
                     <DetailRow label="Coste por hora" value={fmtMoney(openMember.hourlyCost, openMember.currency)} />
@@ -616,6 +636,40 @@ export default function EquipoPage() {
                         className={inputCls} />
                     </FormRow>
                   </div>
+                  {/* Color de SUS bloqueos en la agenda. Vacío = el del centro,
+                      así que hay un botón explícito para volver a heredarlo:
+                      un <input type="color"> no tiene forma de quedarse vacío. */}
+                  <FormRow label="Color de sus bloqueos en la agenda">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input
+                        type="color"
+                        value={form.blockColor || COLOR_BLOQUEO_POR_DEFECTO}
+                        onChange={(e) => setForm((f) => ({ ...f, blockColor: e.target.value.toUpperCase() }))}
+                        className="h-9 w-12 border border-neutral-200 rounded-lg p-1 cursor-pointer"
+                        aria-label="Elegir el color de sus bloqueos"
+                      />
+                      <input
+                        value={form.blockColor}
+                        onChange={(e) => setForm((f) => ({ ...f, blockColor: e.target.value }))}
+                        placeholder="Hereda el del centro"
+                        className={`${inputCls} flex-1 min-w-[150px] font-mono`}
+                      />
+                      {form.blockColor && (
+                        <button
+                          type="button"
+                          onClick={() => setForm((f) => ({ ...f, blockColor: "" }))}
+                          className="text-[11px] text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
+                        >
+                          Usar el del centro
+                        </button>
+                      )}
+                    </div>
+                    {form.blockColor && !/^#[0-9a-fA-F]{6}$/.test(form.blockColor.trim()) && (
+                      <p className="text-[11px] text-rose-600 mt-1">
+                        Tiene que ser un código tipo <span className="font-mono">#0F0F0F</span>, o vacío.
+                      </p>
+                    )}
+                  </FormRow>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <FormRow label="Tarifa/h">
                       <input type="number" min="0" step="0.01" value={form.hourlyRate}

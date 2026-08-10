@@ -17,6 +17,7 @@ import interactionPlugin from "@fullcalendar/interaction";
 import Select from "@/components/ui/Select.jsx";
 import BuscadorPaciente from "@/components/citas/BuscadorPaciente.jsx";
 import { formatMoney } from "@/lib/payments/money.js";
+import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "@/lib/citas/coloresBloqueo.js";
 
 const STATUS_LABELS = {
   pending: "Pendiente",
@@ -530,11 +531,17 @@ export default function CitasModule() {
                * `block` y no `background`: los eventos de fondo de FullCalendar
                * NO pintan su título, así que no se leía de quién eran ni por
                * qué. Como bloque se ve la etiqueta y el nombre.
+               *
+               * El negro es ahora el DEFECTO, no una constante (10/08/2026): el
+               * color sale de la ficha de la persona o del ajuste del centro, y
+               * viene ya resuelto del servidor.
                */
               display: "block",
-              backgroundColor: "#0F0F0F",
-              borderColor: "#0F0F0F",
-              textColor: "#FFFFFF",
+              backgroundColor: b.color || COLOR_BLOQUEO_POR_DEFECTO,
+              borderColor: b.color || COLOR_BLOQUEO_POR_DEFECTO,
+              // La letra se calcula contra el fondo elegido: en un color claro
+              // el blanco de antes no se leería.
+              textColor: colorTextoSobre(b.color || COLOR_BLOQUEO_POR_DEFECTO),
               // No se arrastra ni se cambia de hora tirando de él: se quita y
               // se vuelve a poner desde Tipos de cita.
               editable: false,

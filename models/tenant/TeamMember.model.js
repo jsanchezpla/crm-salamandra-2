@@ -59,6 +59,15 @@ export function defineTeamMember(sequelize) {
         field: "avatar_color",
         allowNull: true,
       },
+      // Color hex (`#rrggbb`) de SUS bloqueos de agenda (10/08/2026, Rodrigo).
+      // Vacío = hereda el general del centro. Es un campo aparte de
+      // `avatarColor` a propósito: ese ya pinta sus CITAS, y un bloqueo del
+      // mismo color que una cita no se distingue. Ver lib/citas/coloresBloqueo.js.
+      blockColor: {
+        type: DataTypes.STRING(7),
+        field: "block_color",
+        allowNull: true,
+      },
       hourlyCost: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: true,
