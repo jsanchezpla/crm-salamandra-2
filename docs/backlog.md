@@ -113,14 +113,6 @@ correos devuelva 201.
 *Dónde*: `lib/citas/puertaFormulario.js:98-105`.
 *Comprobado en producción*: 09/08/2026 — **siguen siendo 8**.
 
-### «Prueba 1 euro» está a la venta · `nutri_laura`
-
-Tipo de cita activo y visible en la agenda pública, a 3 €, con tráfico entrando
-desde Instagram. Cualquiera puede reservarlo.
-
-*Se comprueba*: no aparece en `GET /api/public/c/nutri_laura/event-types`.
-*Comprobado en producción*: 09/08/2026 — **sigue activo**.
-
 ---
 
 ## P1 — esta semana
@@ -181,6 +173,33 @@ y las otras once no, lo que sugiere que en algún momento sí se repartió a man
 *Se comprueba*: preguntar a Aumenta y dejar la respuesta escrita aquí.
 *Comprobado en producción*: 09/08/2026 — **son 13, no 11** como decía esta
 tarea antes.
+
+### El filtro de la agenda pinta 72 botones antes del calendario · `aumenta`
+
+Aumenta tiene **57 tipos de cita activos y 15 personas**, y el filtro los pinta
+todos como chips, en dos bandas apiladas encima del calendario. Cada banda se
+parte en varias líneas y empuja la agenda hacia abajo: en un portátil se empieza
+el día haciendo scroll para ver a qué hora es la primera cita. Lo sufre el
+cliente que más usa el CRM y lo sufre cada mañana.
+
+Jorge lo pidió el 10/08: que el filtro de cita sea un **desplegable**, y que los
+dos —tipo y profesional— vayan **en paralelo**, en la misma línea, en vez de en
+dos bandas.
+
+⚠️ Los dos filtros son de selección MÚLTIPLE, y el de profesional tiene además
+una regla que costó escribir: el primer clic aísla a esa persona, los siguientes
+suman, y quedarse sin ninguna vuelve a enseñarlo todo. Su comentario explica por
+qué —con quince profesionales, ir tachando catorce «no es un filtro, es un
+castigo»—. Un `<select>` normal se lleva eso por delante: hace falta un
+desplegable con casillas, o decidir a propósito que se pasa a selección única.
+
+*Se comprueba*: en Aumenta se ve el calendario sin bajar, y se sigue pudiendo
+filtrar por varios tipos a la vez.
+*Dónde*: `modules/default/CitasModule.jsx:1246-1319` son las dos bandas;
+`toggleEventType` y `toggleTeamMember` (`:608`) son la regla que hay que
+respetar.
+*Comprobado en producción*: 10/08/2026 — Aumenta, 57 tipos activos de 57 y 15
+personas en el equipo. No lo sufre nadie más: nutri_laura tiene 6 tipos y demo 2.
 
 ---
 
@@ -359,6 +378,77 @@ de nginx: 3 llamadas suyas en julio, todas 200, la última el 06/07, y ninguna
 en agosto. En ese mismo periodo `tunutrilaura.com` llamó 29 veces, la última
 hoy a las 04:30.
 
+### Una ausencia mal puesta solo se puede borrar y escribir otra vez · `nutri_laura`, producto
+
+`/api/citas/bloqueos` tiene GET, POST y DELETE, y no tiene PATCH. Ni las fechas,
+ni el motivo, ni de quién es una ausencia se pueden cambiar una vez guardada: si
+alguien se equivoca de día, la quita y la vuelve a escribir.
+
+**Eso ya costó un script.** Las seis ausencias que en la consulta de Laura se
+apuntaron sin querer como «Todo el centro» —y que cerraron su agenda seis
+veces— no se pudieron arreglar desde la pantalla: hubo que escribir
+`scripts/reasignar-ausencias-sin-persona.js` para cambiarles el dueño. Con un
+botón de editar eso lo arregla Laura en un minuto y sin que nadie despliegue.
+
+Jorge pidió además (10/08) **un botón para entrar directamente**. Hoy
+«Vacaciones y ausencias» vive dentro de la pantalla de **Tipos de cita** —Rodrigo
+la puso ahí porque «es donde va a buscarlo»— así que para apuntar que te vas una
+semana hay que pasar por la pantalla donde se configuran precios y duraciones.
+No son la misma tarea ni las hace la misma gente: los tipos de cita los toca
+dirección de uvas a peras, las ausencias las toca todo el equipo.
+
+⚠️ El PATCH hereda los permisos del POST y del DELETE, y no se pueden aflojar:
+quien no es admin solo toca las suyas. Cambiar el dueño de una ausencia es
+justo la operación que dejó la agenda de Laura cerrada, así que si se permite
+editar ese campo, tiene que seguir siendo cosa de dirección.
+
+*Se comprueba*: cambiar fecha y motivo de una ausencia desde la pantalla, sin
+borrarla, y que el cambio quede en la auditoría.
+*Dónde*: `app/api/citas/bloqueos/route.js` (los tres métodos que hay, y el que
+falta); `components/citas/PanelVacaciones.jsx:294` es donde solo hay «Quitar»;
+el panel está incrustado en `app/(dashboard)/citas/tipos/page.jsx`.
+*Comprobado en producción*: 10/08/2026 — el bundle desplegado de
+`/api/citas/bloqueos` no contiene ningún PATCH. nutri_laura tiene 6 ausencias
+(5 aún por venir) y ya ninguna quedó a nombre del centro; Aumenta, demo y healim
+no han apuntado ninguna todavía.
+
+### Nadie puede abrirnos una incidencia · producto
+
+No hay ningún camino por el que un cliente nos cuente que algo va mal. Soporte
+va del cliente hacia SUS clientes, no hacia nosotros. Y lo que se llama
+«Incidencias» es otra cosa: es del Programa de Excelencia del módulo Clínica, se
+queda dentro del centro y se asigna a alguien de su propio equipo.
+
+Encima casi nadie la tiene. Exige `team_avanzado` **y** (`clinica` o
+`pacientes`), así que la pueden usar 2 de los 9 clientes —Aumenta y la demo— y
+**ninguno de los dos ha registrado una sola**, ni de prueba.
+
+Jorge lo pidió el 10/08: que **cualquier cliente** pueda mandar una incidencia
+hacia arriba, y que llegue a dos sitios — a su propio administrador y a nosotros.
+
+Son dos trabajos y conviene no mezclarlos:
+
+- **Dentro del centro** ya existe a medias: es abrir la pantalla a quien no
+  tiene el módulo clínico, y decidir qué categorías tienen sentido en un cliente
+  que no es una clínica (la taxonomía de hoy es terapéutica, documental,
+  coordinación…).
+- **Sacarla del tenant hasta nosotros** no existe en absoluto, y es la parte
+  delicada. La tabla `incidencias` vive en el schema del cliente, y lo que hay
+  que decidir ANTES de escribir código es qué viaja: el texto entero o solo un
+  aviso con el cliente y un enlace. Una incidencia puede llevar dentro el nombre
+  de un paciente, y duplicar eso en `master` —que es la base compartida por
+  todos— es la misma regla que ya obliga a que la auditoría guarde un resumen y
+  nunca la fila entera.
+
+*Se comprueba*: desde un cliente sin `clinica` —spain_enzymes, por ejemplo— se
+abre una incidencia y nos llega.
+*Dónde*: `app/api/clinica/incidencias/route.js:19,45` son las dos puertas;
+`components/layout/Sidebar.jsx:215` es el menú; `models/tenant/Incidencia.model.js`
+es la tabla que hoy no sale del cliente.
+*Comprobado en producción*: 10/08/2026 — 2 de 9 clientes pueden usarlas y las
+dos tablas tienen **0 filas**. En los otros siete la tabla `incidencias` ni
+existe.
+
 ---
 
 ## P3 — deuda
@@ -434,6 +524,27 @@ usan, apagarlos.
 *Se comprueba*: no están en sus módulos activos, o nos dicen que sí los quieren.
 *Comprobado en producción*: 09/08/2026 — los tres activos y **con 0 filas cada
 uno** (productos, pedidos, proyectos).
+
+### En Windows el Registro se ve vacío, como si no hubiera nada que hacer · interno
+
+`trocear` parte el fichero por `\n` y luego busca `^##\s+(.+)$`. En JavaScript
+`.` no casa con `\r`, así que en una copia de trabajo con finales de línea de
+Windows **ninguna cabecera casa** y la pantalla queda en blanco con el mensaje
+«Nada por aquí» — que es exactamente lo contrario de lo que pasa.
+
+En producción no se da: `core.autocrlf=true` guarda LF en el repositorio y el
+contenedor no tiene ni un `\r`. Solo lo ve quien desarrolla en Windows, o sea
+Jorge, y solo en local. Es una línea: partir por `/\r?\n/`.
+
+Ojo a que `resuelto.md` en la misma carpeta SÍ tiene LF, así que la pestaña de
+al lado se ve bien y el fallo parece de los datos y no del código.
+
+*Se comprueba*: con el proyecto abierto en Windows, `/admin/tablero` en local
+enseña las tareas.
+*Dónde*: `app/api/admin/tablero/route.js:60-61`.
+*Comprobado en producción*: 10/08/2026 — en el contenedor, `docs/backlog.md`
+tiene 0 caracteres `\r` y la pantalla trocea sus 26 tareas. En local, el mismo
+endpoint devuelve `pendiente: []` con el mismo fichero.
 
 ### El SSO no admite rotar sin corte · producto
 

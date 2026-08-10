@@ -28,6 +28,74 @@ Lo más reciente arriba.
 
 ## 10/08/2026
 
+### Dos pacientes con el pago a plazos sin freno, y el programa sin precio · `nutri_laura`
+
+Entró como «una paciente no puede pagar el Acompañamiento mensual» y acabó
+siendo otra cosa bastante peor.
+
+**Lo que se veía.** El programa (6 sesiones) se había quedado sin precio: la
+auditoría enseña que el 07/08 a las 13:34 se guardó el tipo de cita con los tres
+campos en blanco, y de paso lo mismo en «Sesión de seguimiento» y «Prueba 1€».
+Un bono sin ningún precio no se puede comprar, así que el widget para al final
+del formulario. El mensaje —«Esta forma de pago no está disponible para este
+programa»— hablaba de la forma de pago cuando lo que faltaba era el precio, y
+por eso la paciente entendió que era culpa de su tarjeta. Tampoco le apareció el
+selector de pago: solo se pinta si hay cuota configurada.
+
+**Lo que había detrás.** Las DOS suscripciones a plazos vendidas el 07/08
+estaban vivas en el Stripe real de Laura **sin tope de cuotas**: calendario en
+`end_behavior: release` y una sola fase. Una es de 130 €/mes de una paciente que
+aceptó pagar tres veces.
+
+**La causa real no fue la que parecía.** El primer diagnóstico —un fallo
+pasajero de red al poner el tope— era falso, y también lo era culpar a
+`sesionDeFactura` (se comprobó contra las dos facturas reales: identifica bien).
+La causa salió al ejecutar el arreglo y RELEER de Stripe en vez de dar la
+llamada por buena: `ponerTopeDeCuotas` pedía la segunda fase con `iterations`, y
+la versión de API que tenemos clavada responde «Received unknown parameter:
+phases[iterations]» y rechaza el update entero. Esa llamada **no había
+funcionado nunca**. Y la salida temprana «si ya hay calendario, no hagas nada»
+lo volvía permanente: ningún reintento lo tocaba.
+
+**Qué se hizo.** La fase se mide ahora con `duration`, tomando el intervalo del
+precio de la suscripción y no dando por hecho «mes». El guard comprueba el TOPE
+en vez de la existencia del calendario. Comprar un bono deja de usar el reloj de
+20 min de la retención y pasa a `HOLD_WINDOW_MS` (45), porque la página de
+Stripe acepta el pago 31 y en esa franja el hueco ya estaba libre: quien tardara
+pagaba y se quedaba sin cita y sin bono. Y a las dos suscripciones se les puso
+el tope / se cancelaron.
+
+*Cómo se comprobó*: 10/08/2026, y por tres caminos.
+(1) Objeto crudo de Stripe: `sub_1U1lY0…` con `end_behavior: cancel`, fase 0
+(07/08→07/09) + fase 1 (07/09→07/11), o sea tres cuotas y para; la de prueba de
+1 €, cancelada.
+(2) Compra REAL de 1 € desde el widget (Jorge, cuenta de portal propia): la
+suscripción nueva nació con el tope **sola** —fase 0 + fase 1, `cancel`—, el
+bono de 3 sesiones se creó, la cita quedó como sesión 1 y se cobró 1,00 € y no
+los 3,00 € del total.
+(3) `scripts/_smoke-fraccionado-reloj.mjs` con un reloj de prueba de Stripe:
+cobra las cuotas 2 y 3, y en la 4ª no cobra nada y la suscripción se cancela
+sola.
+*Dónde*: `lib/payments/fraccionado.js`,
+`app/api/public/c/[tenantSlug]/book/route.js:649`,
+`scripts/arreglar-suscripciones-sin-tope.js`. Commits `b760bc7`, `88a6c05`,
+`cc7a40e`, `db389a6`.
+
+### «Prueba 1 euro» está a la venta · `nutri_laura`
+
+Venía del backlog (P0). Tipo de cita visible en la agenda pública, a 3 €, con
+tráfico entrando desde Instagram — y encima sin precio desde el 07/08, así que
+quien lo eligiera se llevaba el mismo error que la paciente del programa.
+
+Se le devolvió su precio (3 € / 1 € × 3) para poder probar el fraccionado con
+tres euros en vez de con una paciente, y se OCULTÓ. Oculto significa que solo lo
+ve quien tenga un bono activo de ese tipo, que es como Laura asigna cosas a
+dedo.
+
+*Cómo se comprobó*: 10/08/2026 —
+`GET /api/public/c/nutri_laura/event-types` devuelve Valoración inicial,
+Acompañamiento mensual y Supervisión profesional, y nada más.
+
 ### Los scripts que borran datos reales ya llevan seguro · producto
 
 Era el P0 del registro y llevaba desde el 07/08 hecho en local y sin desplegar.
