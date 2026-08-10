@@ -40,18 +40,38 @@
  *
  * USO
  *   node --env-file=.env.local scripts/migrate-leads-columnas-proyecto.js
- *   node --env-file=.env.local scripts/migrate-leads-columnas-proyecto.js --aplicar
+ *   node --env-file=.env.local scripts/migrate-leads-columnas-proyecto.js --ensayo
  *
  * En el VPS:
  *   docker exec crm-salamandra-app-1 node scripts/migrate-leads-columnas-proyecto.js
- *   docker exec crm-salamandra-app-1 node scripts/migrate-leads-columnas-proyecto.js --aplicar
+ *   docker exec crm-salamandra-app-1 node scripts/migrate-leads-columnas-proyecto.js --ensayo
  *
- * Sin `--aplicar` NO escribe: enseña lo que haría y se va.
+ * ESCRIBE POR DEFECTO. Con `--ensayo` enseña lo que haría y se va sin tocar nada.
  */
 
 import { getMasterDb } from "../lib/db/masterDb.js";
 
-const APLICAR = process.argv.includes("--aplicar");
+/**
+ * ESCRIBE POR DEFECTO, y el cambio es deliberado (10/08/2026, al registrarla en
+ * el mapa de scripts/_module-migrations.js).
+ *
+ * Nació con el ensayo por defecto, como los backfills de DATOS. Pero esta no es
+ * un backfill: son dos columnas anulables, y desde hoy la ejecuta el disparador
+ * `ensure-tenant-schema.js`, que lanza cada migración con `node <fichero>` y SIN
+ * argumentos (ver su runMigration). Con el ensayo por defecto habría hecho el
+ * simulacro, salido con código 0 y el disparador la habría dado por buena: un ✓
+ * en pantalla y el schema exactamente igual de roto. Un no-op silencioso CON
+ * marca de aprobado es peor que la huérfana que era — la huérfana al menos salía
+ * en el aviso de «sin módulo asignado».
+ *
+ * Es la convención del resto: de los `migrate-*`, los únicos que escriben bajo
+ * bandera son los marcados ONE_OFF, que se corren a mano.
+ *
+ * `--aplicar` se sigue aceptando y no hace nada: era lo que decía esta cabecera
+ * hasta hoy y está escrito en el registro del 10/08.
+ */
+const ENSAYO = process.argv.includes("--ensayo") || process.argv.includes("--dry-run");
+const APLICAR = !ENSAYO;
 
 /**
  * Las dos columnas, con su tipo tal cual las declara el modelo y tal cual las
@@ -85,7 +105,7 @@ process.stdout.write("\n══════════════════�
 process.stdout.write(" Columnas de proyecto en la tabla `leads`\n");
 process.stdout.write("══════════════════════════════════════════════════════\n\n");
 
-if (!APLICAR) log("(ensayo: sin --aplicar no se escribe nada)\n");
+if (!APLICAR) log("(--ensayo: no se escribe nada)\n");
 
 let arreglados = 0;
 let yaEstaban = 0;
@@ -143,7 +163,7 @@ for (const { slug } of clientes) {
 process.stdout.write("\n▶ Resumen\n");
 log(`${yaEstaban} cliente(s) ya las tenían`);
 if (APLICAR) log(`${arreglados} cliente(s) arreglados`);
-else log(`ensayo: vuelve a lanzarlo con --aplicar para escribir`);
+else log(`ensayo: vuelve a lanzarlo SIN --ensayo para escribir`);
 process.stdout.write("\n");
 
 await master.close();

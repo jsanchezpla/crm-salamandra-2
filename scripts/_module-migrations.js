@@ -25,7 +25,15 @@
  *
  * CORE    Migraciones transversales que se ejecutan SIEMPRE, tenga el tenant los
  *         módulos que tenga. Son aditivas y deciden por existencia de tabla, así
- *         que en un schema que no las necesita son un no-op.
+ *         que en un schema que no las necesita son un no-op. (La excepción es
+ *         `migrate-leads-columnas-proyecto`, que decide leyendo el módulo `leads`
+ *         de master en vez de mirar la tabla; el efecto es el mismo, pero está
+ *         dicho para que nadie lo dé por hecho.)
+ *
+ *         El criterio para meter algo aquí y no en su módulo: la columna vive en
+ *         una tabla cuyo MODELO la declara para TODOS los tenants, así que
+ *         Sequelize hace SELECT de ella aunque el tenant no tenga el módulo que
+ *         la estrenó. Ahí, dejarla en el módulo es un 42703 esperando.
  */
 
 import { computeOrder } from "./_migration-order.js";
@@ -128,6 +136,32 @@ export const CORE = [
   // reservar nunca falle por esto) y trata a todo el mundo como no eximido.
   // Aditiva y por existencia de tabla `clients`.
   "migrate-citas-autoconfirmadas-por-paciente",
+  // Las dos columnas de conversión a proyecto que viven en `leads`
+  // (`converted_project_id`, `converted_to_project_at`). CORE y NO dentro de
+  // `projects` porque no son de Proyectos: son de LEADS, y el MODELO Lead las
+  // declara para todos los tenants —`lib/db/tenantDb.js` registra los modelos sin
+  // gatear por módulo—, así que Sequelize hace SELECT de ellas en CUALQUIER
+  // consulta de leads. Mientras solo las creaba `migrate-projects-sprint-1`, que
+  // filtra por el módulo `projects` y hace bien, los tenants con `leads` y sin
+  // `projects` se quedaron sin ellas: `abarcaia` estuvo del 05/05 al 10/08/2026
+  // sin registrar UN SOLO lead de su formulario público, porque `Lead.create`
+  // moría con 42703 antes de guardar nada.
+  // No choca con `migrate-projects-sprint-1`: aquella añade estas dos con
+  // `addColumnIfNotExists`, así que corra antes o después, la segunda es un no-op
+  // (y el analizador de orden no las ata entre sí porque `leads` no la crea
+  // ninguna migración: nace de los modelos vía db:sync).
+  "migrate-leads-columnas-proyecto",
+  // Color de los bloqueos por profesional (`team_members.block_color`,
+  // 10/08/2026). CORE y NO junto a su hermana `migrate-team-members-avatar-color`
+  // en `team`, aunque la columna viva en la misma tabla: quien la LEE es CITAS
+  // —`app/api/citas/bloqueos/route.js` la pide en el include de TeamMember—, y
+  // `citas` NO requiere `team` en el catálogo de alta (`lib/provisioning/catalogo.js`).
+  // Dejarla en `team` haría que un tenant de solo Citas con tabla `team_members`
+  // se quedara sin la columna y la agenda de bloqueos cayera con 42703. Es el
+  // mismo caso que `migrate-citas-autoconfirmadas-por-paciente`, aquí arriba.
+  // Decide por existencia de `team_members`: donde no está —healim, que solo
+  // tiene Citas— es un no-op.
+  "migrate-team-members-block-color",
 ];
 
 export const MODULES = {
