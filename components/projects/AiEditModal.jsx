@@ -13,7 +13,9 @@ import { useState } from "react";
  *   en rojo y con checkbox para excluirlas individualmente (por defecto todas
  *   marcadas). "Aplicar cambios"
  *   → POST /api/projects/[id]/ai/apply { operations } → { applied, skipped }
- *   → callback onApplied() del padre para refrescar.
+ * Paso 3 (hecho): cuántos cambios entraron y cuántos se descartaron.
+ *   → el callback onApplied() del padre se dispara AL CERRAR, no al aplicar
+ *     (el porqué, en `cerrar`).
  *
  * Reglas:
  *   - top-14 lg:top-0 (regla #13: respeta la barra móvil).
@@ -95,12 +97,30 @@ export default function AiEditModal({ projectId, onClose, onApplied }) {
       if (!r.ok) throw new Error(j?.error || "Error aplicando cambios");
       setResult(j?.data ?? { applied: selected.length, skipped: 0 });
       setStep("done");
-      onApplied?.();
+      // OJO: el refresco del padre NO va aquí, va al cerrar (ver `cerrar`).
     } catch (e) {
       setError(e.message);
     } finally {
       setApplying(false);
     }
+  };
+
+  /**
+   * Cerrar, y AL CERRAR refrescar al padre.
+   *
+   * El refresco iba pegado al «Aplicar cambios», y con eso la pantalla de
+   * confirmación no se llegaba a ver: `onApplied` es el `fetchAll` de la página
+   * del proyecto, que mientras recarga pinta «Cargando proyecto...» EN LUGAR de
+   * la página — y con la página se va este drawer, que vuelve a montarse en el
+   * paso 1. Los cambios sí se habían aplicado, pero quien lo pulsaba veía el
+   * formulario vacío otra vez, que se lee como que ha fallado.
+   *
+   * Aplazarlo al cierre arregla las dos cosas: la confirmación se queda a la
+   * vista y el proyecto se recarga igual, cuando ya no hay nada que tapar.
+   */
+  const cerrar = () => {
+    if (result) onApplied?.();
+    onClose();
   };
 
   const toggleExcluded = (idx) => {
@@ -114,7 +134,7 @@ export default function AiEditModal({ projectId, onClose, onApplied }) {
 
   return (
     <>
-      <div onClick={onClose} className="fixed inset-0 bg-black/40 z-40" aria-hidden="true" />
+      <div onClick={cerrar} className="fixed inset-0 bg-black/40 z-40" aria-hidden="true" />
       <aside
         className="fixed top-14 lg:top-0 right-0 bottom-0 w-full sm:w-[520px] lg:w-[600px] bg-white border-l border-neutral-200 shadow-2xl z-50 flex flex-col"
         role="dialog"
@@ -125,7 +145,7 @@ export default function AiEditModal({ projectId, onClose, onApplied }) {
             <span aria-hidden="true">✦</span> Reorganizar con IA
           </h2>
           <button
-            onClick={onClose}
+            onClick={cerrar}
             className="text-neutral-400 hover:text-neutral-600 text-xl leading-none w-8 h-8 flex items-center justify-center"
             aria-label="Cerrar"
           >
@@ -263,7 +283,7 @@ export default function AiEditModal({ projectId, onClose, onApplied }) {
               </button>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={cerrar}
                 className="px-4 py-2 rounded-lg border border-neutral-200 text-sm text-neutral-600 hover:bg-neutral-50"
               >
                 Cancelar
@@ -295,7 +315,7 @@ export default function AiEditModal({ projectId, onClose, onApplied }) {
           {step === "done" && (
             <button
               type="button"
-              onClick={onClose}
+              onClick={cerrar}
               className="flex-1 px-4 py-2 rounded-lg bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-700 transition"
             >
               Cerrar
