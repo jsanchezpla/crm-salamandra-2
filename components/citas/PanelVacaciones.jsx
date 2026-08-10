@@ -16,8 +16,23 @@ import { useCallback, useEffect, useState } from "react";
  * tiene que pedírselo a otra. Mismo criterio que apuntar, rechazar y confirmar
  * citas, que se abrieron al equipo el 06/08.
  *
- * Todo bloqueo queda en la auditoría con quién lo puso, que es la respuesta
- * cuando alguien pregunte por qué su agenda apareció cerrada un martes.
+ * ── CADA UNA LAS SUYAS (10/08/2026, aviso de la consulta de Laura) ──────────
+ * Se podía apuntar una ausencia A NOMBRE DE CUALQUIERA, y el desplegable venía
+ * en «Todo el centro». Resultado: las SEIS ausencias que tenían apuntadas
+ * cerraban la agenda entera, incluida la de Laura, cuando eran todas de Rocío.
+ * Nadie lo vio venir porque el efecto —un hueco que no se ofrece— se ve igual.
+ *
+ *   · el desplegable arranca en UNO MISMO; cerrar el centro es una elección.
+ *   · quien no es admin no ve desplegable: solo puede ponerse las suyas.
+ *   · cada cual ve las suyas y las del centro, salvo con la agenda compartida
+ *     encendida (Aumenta), donde se siguen viendo todas.
+ *
+ * El servidor impone las tres cosas por su cuenta: aquí solo se evita enseñar
+ * puertas que están cerradas.
+ *
+ * Todo bloqueo queda en la auditoría con quién lo puso, y la tabla enseña
+ * «lo apuntó Fulana» — que es la respuesta cuando alguien pregunte por qué su
+ * agenda apareció cerrada un martes. En el CALENDARIO no sale (Jorge, 10/08).
  */
 
 /*
@@ -54,6 +69,8 @@ export default function PanelVacaciones() {
   const [guardando, setGuardando] = useState(false);
   const [fallo, setFallo] = useState(null);
   const [aviso, setAviso] = useState(null);
+  /** Quién soy, según el servidor: `{ esAdmin, teamMemberId }`. */
+  const [yo, setYo] = useState(null);
 
   const [form, setForm] = useState({
     teamMemberId: "", label: "Vacaciones",
@@ -68,7 +85,23 @@ export default function PanelVacaciones() {
       const hasta = new Date(Date.now() + 400 * 24 * 60 * 60 * 1000).toISOString();
       const res = await fetch(`/api/citas/bloqueos?from=${desde}&to=${hasta}`, { cache: "no-store" });
       const json = await res.json();
-      if (json.ok) setBloqueos(json.data.bloqueos ?? []);
+      if (json.ok) {
+        setBloqueos(json.data.bloqueos ?? []);
+        const quien = json.data.yo ?? null;
+        setYo(quien);
+        /*
+         * El desplegable arranca en UNO MISMO, no en «Todo el centro».
+         *
+         * Al revés es como se cerró seis veces la agenda entera de la consulta
+         * de Laura: se apuntaba una ausencia propia, no se tocaba el
+         * desplegable, y el valor por defecto cerraba el centro. El caso raro
+         * (cerrar de verdad todo el centro) tiene que costar un clic; el de
+         * todos los días, ninguno.
+         *
+         * Solo la primera vez: si ya hay algo elegido no se pisa.
+         */
+        setForm((f) => (f.teamMemberId || !quien?.teamMemberId ? f : { ...f, teamMemberId: quien.teamMemberId }));
+      }
     } catch { /* la lista se queda como estaba */ }
     setCargando(false);
   }, []);
@@ -159,16 +192,27 @@ export default function PanelVacaciones() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="text-xs">
               <span className="block text-neutral-500 mb-1">Quién</span>
-              <select
-                value={form.teamMemberId}
-                onChange={(e) => setForm((f) => ({ ...f, teamMemberId: e.target.value }))}
-                className="w-full border border-neutral-200 rounded-md px-2 py-1.5 text-sm bg-white"
-              >
-                <option value="">Todo el centro</option>
-                {equipo.map((m) => (
-                  <option key={m.id} value={m.id}>{m.displayName || m.email}</option>
-                ))}
-              </select>
+              {yo?.esAdmin ? (
+                <select
+                  value={form.teamMemberId}
+                  onChange={(e) => setForm((f) => ({ ...f, teamMemberId: e.target.value }))}
+                  className="w-full border border-neutral-200 rounded-md px-2 py-1.5 text-sm bg-white"
+                >
+                  {equipo.map((m) => (
+                    <option key={m.id} value={m.id}>{m.displayName || m.email}</option>
+                  ))}
+                  {/* Al final y con su nombre completo: cerrar el centro entero
+                      es la excepción, no lo primero que se encuentra la mano. */}
+                  <option value="">Todo el centro (cierra a todo el mundo)</option>
+                </select>
+              ) : (
+                /* Quien no es dirección solo se pone ausencias a sí mismo, así
+                   que no hay nada que elegir. El servidor lo impone igual: esto
+                   es solo no enseñar una puerta que está cerrada. */
+                <p className="w-full border border-neutral-200 rounded-md px-2 py-1.5 text-sm bg-neutral-50 text-neutral-600 truncate">
+                  {equipo.find((m) => m.id === yo?.teamMemberId)?.displayName || "Tus ausencias"}
+                </p>
+              )}
             </label>
             <label className="text-xs">
               <span className="block text-neutral-500 mb-1">Motivo</span>
@@ -240,14 +284,21 @@ export default function PanelVacaciones() {
               </p>
               <p className="text-xs text-neutral-500">
                 {bonito(b.startAt)} → {bonito(b.endAt)}
+                {/* Quién lo APUNTÓ, que no siempre es de quién es. Solo aquí:
+                    en el calendario no pinta nada (Jorge, 10/08). */}
+                {b.createdByName && (
+                  <span className="text-neutral-400">{" · lo apuntó "}{b.createdByName}</span>
+                )}
               </p>
             </div>
-            <button
-              onClick={() => quitar(b.id)}
-              className="text-xs px-2.5 py-1 rounded-md border border-red-200 text-red-600 hover:bg-red-50 shrink-0"
-            >
-              Quitar
-            </button>
+            {(yo?.esAdmin || (b.teamMemberId && b.teamMemberId === yo?.teamMemberId)) && (
+              <button
+                onClick={() => quitar(b.id)}
+                className="text-xs px-2.5 py-1 rounded-md border border-red-200 text-red-600 hover:bg-red-50 shrink-0"
+              >
+                Quitar
+              </button>
+            )}
           </div>
         ))}
       </div>
