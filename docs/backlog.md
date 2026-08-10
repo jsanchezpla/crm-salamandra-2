@@ -77,6 +77,27 @@ comprobarlo resulta que sigue pasando, se queda y se actualiza el sello.
 
 ## P0 — hoy
 
+### Los scripts que borran datos de clientes reales no llevan seguro · producto
+
+En el contenedor de producción **no existe `scripts/_guard-datos-reales.js`** y
+los scripts peligrosos están sin él: comprobados `clear-aumenta-leads`,
+`clear-quality-leads`, `clear-abarcaia-leads`, `seed-aumenta` y `seed-abarcaia`,
+los cinco sin seguro. Cualquiera que lance uno dentro del contenedor —creyendo
+que está en local, que es como pasa siempre— se lleva por delante datos reales
+de Aumenta o de Abarcaia.
+
+Está **hecho en local y sin commitear** (los ficheros sueltos que hay en el
+disco: el guard, los doce scripts modificados y `docs/blindaje-datos-2026-08.md`).
+Falta commitearlo y desplegarlo. Lo lleva Jorge en otra ventana.
+
+La copia de seguridad automática, en cambio, **sí funciona**: `crm-backup.timer`
+corre a las 03:15 y hay copias diarias en `/root/backups`. Eso es la red por
+debajo; el seguro es para no tener que usarla.
+
+*Se comprueba*: `docker exec crm-salamandra-app-1 ls scripts/_guard-datos-reales.js`
+y que los `clear-*` y `seed-*` lo importen.
+*Comprobado en producción*: 10/08/2026 — no está.
+
 ### Ocho familias admitidas no pueden pedir cita · `nutri_laura`
 
 La puerta del formulario está encendida y exige, además de la solicitud
@@ -106,81 +127,6 @@ desde Instagram. Cualquiera puede reservarlo.
 
 ## P1 — esta semana
 
-### Botones que llevan a un módulo que el cliente no ha comprado · `quality_energy`, `abarcaia`, `healim`, `nutri_laura`
-
-Tres sitios pintan una entrada sin mirar si el cliente tiene el módulo al que
-lleva, y la página de destino es un componente de cliente sin `notFound()`, así
-que se monta entera y lo único que llega es la banda roja del endpoint. Se ve el
-botón, se pulsa, y no lleva a ninguna parte:
-
-- **«Convertir a cliente»** en el panel del lead — lo ven Quality Energy (129
-  leads) y Abarcaia (84), que no tienen Clientes. Es el peor de los tres: está
-  en mitad de su trabajo diario.
-- **«Sin profesional»**, hijo del menú de Citas, sin ningún módulo exigido —
-  Healim, que no tiene Equipo.
-- **«Incidencias» y «Bandeja de trabajo»**, las dos tarjetas fijas de «Mi
-  espacio», que no comprueban nada — cualquier usuario no admin de una consulta
-  sin Clínica, hoy nutri_laura.
-
-Es el mismo patrón las tres veces, y el mismo que ya mordió con los módulos: no
-basta con esconderlo del menú.
-
-*Se comprueba*: entrar con esos clientes y que la entrada no exista, o que la
-página responda 404 en vez de montarse y enseñar el error.
-*Dónde*: `modules/overrides/{nutri-laura,spain-enzymes}/LeadsModule.jsx`,
-`components/layout/Sidebar.jsx` (hijo «Sin profesional»),
-`components/team/MiEquipo.jsx:182-191`.
-*Comprobado en producción*: 09/08/2026 — los cuatro clientes tienen el módulo de
-origen y no el de destino.
-
-### Laura ve un bloque de Facturación que no ha comprado · `nutri_laura`
-
-Al abrir la ficha de cualquiera de su equipo sale «Facturación» con *Facturado
-0,00 € · Coste salarial 0,00 € · Ticket medio 0,00 €*. No tiene el módulo.
-
-La causa es una condición mal puesta: el endpoint corta con
-`!hasModule("team") && !hasModule("billing")` —una **Y** donde debería mirar el
-módulo de destino—, así que con Equipo encendido pasa de largo y responde 200.
-Y responde con datos, no con error, porque el alta de cliente hace `sync()` de
-todos los modelos: las tablas de facturas y gastos existen en todos los schemas
-y suman cero. El componente solo se esconde si le llega un 403, que nunca llega.
-
-El vecino de al lado está bien hecho y sirve de patrón: `/api/team/[id]/projects`
-sí gatea por el módulo de destino.
-
-*Se comprueba*: con Laura, la ficha de un miembro del equipo no enseña
-Facturación.
-*Dónde*: `app/api/team/[id]/billing-summary/route.js:15`.
-*Comprobado en producción*: 09/08/2026 — nutri_laura tiene `team` y no `billing`.
-
-### Dos clientes no ven un módulo que tienen contratado · `retorika`, `spain_enzymes`
-
-No son usuarios normales: son los **administradores** de su propio CRM, que es
-quien tiene que verlo todo. A `admin@retorika.es` le falta `leads` y a
-`admin@spain-enzymes.salamandra` le falta `clients`, y los dos módulos están
-activos y facturados. Es el fallo de las dos puertas otra vez: el cliente lo
-tiene contratado en `tenant_modules` y su `module_access` no lo lista.
-
-Se arregla en un comando por cliente. Lo caro es que nadie lo haya visto: son
-módulos por los que pagan y que no pueden abrir.
-
-*Se comprueba*: `docker exec crm-salamandra-app-1 node scripts/check-module-access.js`
-no marca ningún ADMIN con ✗.
-*Comprobado en producción*: 09/08/2026 — **los dos ✗ siguen ahí**.
-
-### El CRM dice que el banco rechazó un cobro que nunca llegó al banco · todos
-
-`paymentStatus: 'failed'` mezcla dos cosas: que el banco rechazara, y que la
-persona no completara el pago a tiempo. La pantalla elige siempre la primera y
-dice «El banco rechazó el cobro». Pasó con una clienta de Laura: se le pudo
-decir que su banco falló siendo falso. El motivo real ya está guardado en
-`cancellationReason`.
-
-*Se comprueba*: una cita caducada sin pago no dice «el banco rechazó».
-*Dónde*: `modules/default/CitasModule.jsx:118` y `:1310`.
-*Comprobado en producción*: 09/08/2026 — el texto está en el código que se
-sirve hoy (`.next/server/chunks/ssr/modules_default_CitasModule_*`).
-
 ### «Pedirle otra tarjeta» no lleva a ninguna parte · todos
 
 El aviso recomienda pedir otra tarjeta y el botón se pinta, pero el endpoint
@@ -197,17 +143,6 @@ lista, es que el botón sepa distinguir.
 `lib/citas/cobroCita.js:37`.
 *Comprobado en producción*: 09/08/2026 — `failed` sigue en la lista.
 
-### El motivo de cancelación viaja al cliente sin escapar · todos
-
-Lo que escribe la profesional en «motivo» se mete tal cual en el correo. El
-resto de campos sí se escapan. Es jerga interna que se le puede colar a una
-familia, y HTML que se puede inyectar.
-
-*Se comprueba*: un motivo con `<b>` llega como texto.
-*Dónde*: `lib/email/templates/citas/bookingCancelled.js:68` y `bookingRejected.js`.
-*Comprobado en producción*: 09/08/2026 — `${ctx.reason.trim()}` sin escapar en
-el `lib/` que corre en el contenedor.
-
 ### Trece personas de Aumenta no ven módulos que el centro tiene · `aumenta`
 
 Los usuarios normales no tienen acceso a `clients`, `documents`, `formularios`,
@@ -221,29 +156,6 @@ y las otras once no, lo que sugiere que en algún momento sí se repartió a man
 *Se comprueba*: preguntar a Aumenta y dejar la respuesta escrita aquí.
 *Comprobado en producción*: 09/08/2026 — **son 13, no 11** como decía esta
 tarea antes.
-
-### La tabla de tenants de CLAUDE.md no se parece a producción · documentación
-
-No es solo lo de Aumenta. De los ocho clientes de producción, **cinco tienen la
-lista de módulos mal y dos no aparecen**:
-
-- `aumenta` — dice 13 módulos; tiene **20**.
-- `demo` — dice 8 y que `support` es «solo local»; tiene **21**, `support` incluido.
-- `nutri_laura` — dice 7; tiene **8** (le falta `documents`).
-- `retorika` — dice training y clients; tiene además **`leads`**.
-- `spain_enzymes` — dice leads y analytics; tiene además **`clients`**.
-- `healim` — no aparece; existe, con `citas`.
-- `salamandra_solutions` — no aparece; existe, con 7 módulos.
-
-Correctos: `abarcaia` y `quality_energy`.
-
-Es la base de lo que se le factura a cada uno, y es de donde salieron dos de las
-tareas mal escritas de este mismo fichero. La pantalla `/admin/modulos` ya dice
-la verdad; CLAUDE.md debería remitir a ella en vez de repetir la lista.
-
-*Se comprueba*: la tabla de CLAUDE.md y `/admin/modulos` dicen lo mismo, o
-CLAUDE.md deja de tener tabla.
-*Comprobado en producción*: 09/08/2026 — contra `master.tenant_modules`.
 
 ---
 
@@ -291,47 +203,54 @@ que hacerles están en `docs/revision-aumenta-2026-08.md`.
 *Se comprueba*: existe y Aumenta lo usa.
 *Comprobado en producción*: 09/08/2026 — no hay nada de fichaje en el código.
 
-### `analytics` no se puede vender · producto
-
-Tiene página y endpoint, pero no está en `lib/provisioning/catalogo.js`, así que
-no se puede activar desde el alta ni ofrecer como línea. A Aumenta le serviría:
-desde el 01/08 tiene formularios y su embudo empieza en una visita que nadie
-mide.
-
-*Se comprueba*: `analytics` aparece en el alta de clientes.
-*Comprobado en producción*: 09/08/2026 — cero apariciones en el `catalogo.js`
-del contenedor.
-
-### Nada comprueba que un módulo activo tenga sus tablas · producto
-
-Los cuatro chequeos que hay —`check-links`, `check-module-access`,
-`check-migration-order`, `comprobar-citas`— miran accesos, registros huérfanos y
-el orden de las migraciones. Ninguno mira si las tablas que un módulo necesita
-existen en ese schema. Es el fallo que ya mordió: un modelo con columnas nuevas
-sin migración es un 500 en producción.
-
-*Se comprueba*: existe un chequeo que lo diga y sale en verde.
-*Comprobado en producción*: 09/08/2026 — `ls scripts/ | grep check` no tiene
-ninguno que mire tablas.
-
 ---
 
 ## P3 — deuda
 
-### Dos textos prometen cosas que en ese cliente no pueden pasar · `retorika`, `spain_enzymes`, `quality_energy`, `abarcaia`
+### Al borrar una ficha se promete cancelar citas a quien no tiene agenda · `retorika`, `spain_enzymes`
 
-Salieron del repaso de integraciones y son cosméticos, pero se leen:
+El aviso de borrado dice «se borrarán también sus documentos y las citas que
+todavía no han ocurrido». En un cliente sin el módulo Citas esa frase no es
+falsa: está **vacía**. Es cosmético.
 
-- Al borrar una ficha, un cliente **sin agenda** lee «se borrarán también sus
-  documentos y las citas que todavía no han ocurrido». No tiene citas. El texto
-  está escrito a pelo en los dos sitios de borrado, sin mirar el módulo.
-- En Estadísticas de Leads, el KPI **«Con ficha creada — leads que ya son
-  cliente»** se pinta siempre y marca 0 para siempre en quien no tiene Clientes,
-  porque ahí ningún lead puede llegar a serlo.
+Se intentó arreglar el 10/08 y **se retiró a propósito**, que es lo que hay que
+saber si alguien lo retoma: son 5 ficheros, uno nuevo en `/lib` y una prop nueva
+atravesando dos componentes de servidor y dos de cliente, uno de ellos la ficha
+que usan todos los clientes menos nutri_laura. Aplicado a medias dejaba
+`conCitas` sin declarar dentro de `handleDelete` — y sin TypeScript eso compila,
+así que el fallo sale EN CALIENTE: un ReferenceError al pulsar «Eliminar» en
+Aumenta, con quince personas trabajando.
 
-*Se comprueba*: ninguno de los dos aparece en un cliente sin el módulo.
-*Comprobado en producción*: 09/08/2026 — retorika y spain_enzymes tienen fichas
-sin agenda; quality_energy y abarcaia, leads sin fichas.
+**La forma segura**, si se hace: primero el fichero de `/lib` y las props, sin
+tocar los textos y con todo funcionando igual, commit y build; y en un SEGUNDO
+commit cambiar los avisos. Nunca los dos en el mismo despliegue. Ojo además a
+que `app/(dashboard)/clientes/[id]/page.jsx` tiene un `catch` que deja las
+banderas a `false`: con el valor por defecto mal elegido, un fallo al leer
+`master` haría que Aumenta borrase una ficha SIN que se le avise de que se
+cancelan sus citas futuras. El error tiene que caer del lado inocuo.
+
+*Se comprueba*: la frase no sale en un cliente sin `citas`, y sí sale en Aumenta.
+*Comprobado en producción*: 10/08/2026 — retorika y spain_enzymes tienen fichas
+y no tienen agenda.
+
+### El moduleKey `sales` sigue vivo en trece endpoints · producto
+
+`/comercial/leads` ya se ha borrado, pero la clave `sales` sigue en el patrón
+`hasModule("leads") || hasModule("sales")` de trece endpoints —todo
+`/api/leads/*`, `/api/referidos/*`, `/api/public/leads`, `/api/public/referidos`
+y `/api/analiticas`—, más `lib/home/summary.js`, la etiqueta de
+`AccessSection.jsx` y dos seeds. Es la inconsistencia de nomenclatura que
+CLAUDE.md tiene apuntada desde hace meses.
+
+**Quitar esos OR es un cambio de AUTORIZACIÓN, no limpieza.** Si algún schema
+tiene la fila `sales` activada y `leads` no, ese cliente se queda con 403 en su
+módulo comercial entero el mismo día del despliegue. El orden correcto: primero
+un script de solo lectura que confirme contra `master.tenant_modules` de
+PRODUCCIÓN que ninguna fila `sales` está `enabled`; después quitar los OR.
+
+*Se comprueba*: `sales` no aparece en ningún endpoint y ningún cliente lo tiene.
+*Comprobado en producción*: 10/08/2026 — ningún cliente tiene `sales`, pero los
+trece OR siguen en el código.
 
 ### El secreto global de webhooks tiene 31 caracteres · `retorika`
 
@@ -348,41 +267,6 @@ propia.
 caracteres, y el global deja de usarse.
 *Comprobado en producción*: 09/08/2026 — solo `nutri_laura` (64) tiene entrada
 propia; el global sigue en 31.
-
-### La cabecera de Equipo siempre dice «0 inactivos» · todos
-
-Cuenta sobre la página ya filtrada, y el filtro por defecto excluye a los
-inactivos. El endpoint devuelve el total bueno y la pantalla lo ignora.
-
-**Hoy no lo ve nadie**: en los diez schemas de producción no hay un solo miembro
-de equipo que no esté activo, así que el contador acierta por casualidad. Por eso
-baja a P3: es un fallo real que muerde el primer día que alguien dé de baja a
-alguien — y ese día será justo cuando se mire el número.
-
-*Se comprueba*: con alguien inactivo, la cabecera no dice 0.
-*Dónde*: `app/(dashboard)/equipo/page.jsx:132`.
-*Comprobado en producción*: 09/08/2026 — código presente, **0 inactivos en los
-10 schemas**.
-
-### `/comercial/leads` es código al que no se llega · producto
-
-Ningún enlace apunta ahí, el único enlace a `/comercial` da 404 y el moduleKey
-`sales` no lo tiene ningún cliente de producción. Dentro tiene los textos de una
-campaña de Retorika escritos a mano. Se borra.
-
-*Se comprueba*: la carpeta no existe.
-*Comprobado en producción*: 09/08/2026 — la página está compilada y servida en
-`.next/server/app/(dashboard)/comercial/leads/`, y ningún tenant tiene `sales`.
-
-### Las etiquetas de etapa se contradicen · producto
-
-`modules/leads/LeadsModule.jsx` dice «Cualificado / Ganado / Perdido» donde
-`lib/leads/stages.js`, que es la fuente única, dice «En seguimiento / Convertido
-/ Descartado». Ese módulo base hoy no lo renderiza nadie —los ocho clientes con
-leads tienen override propio—, así que es limpieza.
-
-*Se comprueba*: solo queda un juego de etiquetas.
-*Comprobado en producción*: 09/08/2026 — «Cualificado» sigue en el bundle.
 
 ### Aumenta tiene módulos encendidos que no usa · `aumenta`
 

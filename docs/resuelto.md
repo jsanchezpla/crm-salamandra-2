@@ -26,6 +26,157 @@ Lo más reciente arriba.
 
 ---
 
+## 10/08/2026
+
+### Abarcaia llevaba desde mayo sin poder registrar un solo lead · `abarcaia`, `quality_energy`, `retorika`
+
+Lo encontró `check-module-tables.js` **a los cinco minutos de desplegarse**, que
+es justo para lo que se hizo.
+
+El sprint de Proyectos (05/05/2026) añadió `converted_project_id` y
+`converted_to_project_at` al modelo `Lead`, que es único para todos los
+clientes. Las columnas las creaba la migración de Proyectos, que filtra a
+propósito por quien tiene ese módulo —para no reventar los CREATE TABLE con FK a
+`projects.id`—. La decisión era correcta para las tablas de proyectos, pero se
+llevó por delante dos columnas que son de LEADS y que Sequelize lee en toda
+consulta de leads, tenga o no ese cliente Proyectos.
+
+Abarcaia es un programa de referidos con formulario público que hace
+`Lead.create()`. Su último lead es del **20/04**, quince días antes de que el
+modelo cambiara: **todo lo que entró por ese formulario en tres meses se perdió**
+sin que saltara nada.
+
+Se arregló con un script propio y no con la migración de Proyectos, que en estos
+clientes habría creado cinco tablas y hecho DROP+ADD sobre `tasks` para alguien
+que no ha comprado el módulo. Dos columnas anulables, sin FK —esa FK es justo lo
+que abrió el agujero—, transacción por cliente e idempotente.
+
+*Cómo se comprobó*: antes, `Lead.count()` en los tres moría con «column
+converted_project_id does not exist». Después, los tres leen: abarcaia 84 leads,
+quality_energy 129, retorika 1. Y `check-module-tables.js` pasa de 3 fallos a 0.
+*Commit*: `86801ad`.
+
+### Nada comprobaba que un módulo activo tuviera sus tablas · producto
+
+Era el chequeo que faltaba, y el primero que encontró algo de verdad (la entrada
+de arriba). Los cuatro que había miran accesos, registros huérfanos y el orden
+de las migraciones; ninguno miraba si las tablas que un módulo NECESITA existen
+en el schema de quien lo tiene encendido, que es el fallo que ya había mordido.
+
+`npm run db:check-tables`, solo lectura. Lee los clientes de `master.tenants` y
+además se audita a sí mismo: comprueba que su mapa cubre los 101 modelos de
+`models/tenant/` y todas las tablas que crean las migraciones.
+
+Separa fallo de aviso: si el código atrapa el 42P01 y sigue —como hace la ficha
+de cliente con `interactions`— es aviso, no error. Sin esa distinción,
+nutri_laura salía en rojo estando perfecta.
+
+*Cómo se comprobó*: lanzado en producción. Encontró 3 fallos reales en 3
+clientes y 10 avisos de pantallas secundarias.
+*Commit*: `af0992d`.
+
+### Los correos de citas ya no llevan texto sin escapar · todos
+
+El motivo de cancelación lo teclea la profesional y salía crudo dentro del HTML
+que se le manda al paciente. Igual el nombre del servicio, el enlace de
+videollamada y la ubicación de la consulta, algunos **dentro de un `href`**,
+donde unas comillas se salen del atributo y lo que venga detrás ya es marcado.
+Cinco plantillas.
+
+Las versiones de TEXTO PLANO se quedan sin escapar a propósito: ahí no hay HTML
+que romper y un `&amp;` se leería con las letras.
+
+*Cómo se comprobó*: `escapeHtml` presente en las cinco plantillas del `lib/` que
+corre en el contenedor.
+*Commit*: `af0992d`.
+
+### El CRM ya no acusa al banco de un cobro que nunca llegó al banco · todos
+
+`paymentStatus: 'failed'` lo escriben dos caminos que no se parecen en nada: el
+banco rechaza de verdad la captura, o el checkout caducó sin pagarse. La
+pantalla elegía siempre el primero, y a una clienta de Laura se le pudo decir
+que su banco había fallado siendo falso.
+
+Ahora lee el motivo que ya estaba guardado en la cita y compara con los literales
+exactos que escribe nuestro propio código. Si no lo reconoce, texto neutro: al
+banco no se le culpa por defecto.
+
+*Cómo se comprobó*: los dos literales existen tal cual en
+`lib/payments/entityHooks.js:116` y `:137`. Desplegado.
+*Commit*: `af0992d`.
+
+### Laura deja de ver un bloque de Facturación que no ha comprado · `nutri_laura`
+
+En la ficha de cualquiera de su equipo salía «Facturación · 0,00 €». El endpoint
+cortaba con `!hasModule("team") && !hasModule("billing")` —una **Y** que con
+Equipo encendido no cortaba nunca— y respondía 200 con ceros, porque el alta de
+un cliente hace `sync()` de todos los modelos y las tablas de facturas existen
+vacías en cualquier schema. El componente solo se escondía con un 403 que nunca
+llegaba.
+
+Ahora gatea por el módulo de destino, como su vecino `/api/team/[id]/projects`,
+que ya estaba bien hecho.
+
+*Cómo se comprobó*: el texto «Módulo billing no activo» está en el código
+servido y el AND viejo ya no aparece en ningún chunk.
+*Commit*: `af0992d`.
+
+### Dos botones llevaban a un módulo que el cliente no ha comprado · `healim`, `nutri_laura`
+
+«Citas → Sin profesional» no exigía ningún módulo, y Healim —que tiene agenda y
+no equipo— llegaba a una pantalla cuyo único uso es asignar la cita a alguien
+que no puede existir. Y las dos tarjetas fijas de «Mi espacio» no comprobaban
+nada. Cerrados **en el servidor** con `notFound()`, como la lista de espera de
+admisión: esconderlos del menú no basta, con la URL guardada se sigue entrando.
+
+*Cómo se comprobó*: desplegado, con la puerta nueva en
+`app/(dashboard)/citas/sin-profesional/layout.jsx`.
+*Commit*: `af0992d`.
+
+### Dos administradores no veían un módulo que su cliente paga · `retorika`, `spain_enzymes`
+
+`admin@retorika.es` no veía `leads` y `admin@spain-enzymes.salamandra` no veía
+`clients`. El fallo de las dos puertas por tercera vez: el cliente lo tiene
+contratado y su `module_access` no lo lista. Se arregló con `--skip-schema`, que
+era lo mínimo: los módulos ya estaban activos y sus tablas existían.
+
+*Cómo se comprobó*: `check-module-access.js` en producción ya no marca ningún
+✗ de admin (los 14 usuarios no admin que quedan son decisión de negocio).
+
+### CLAUDE.md deja de listar los módulos de cada cliente · documentación
+
+La tabla mentía en **5 de los 8 clientes** y le faltaban `healim` y
+`salamandra_solutions` enteros. De ahí salieron dos tareas falsas del backlog el
+mismo día. No es que nadie la actualizara: una lista copiada a mano de algo que
+cambia cada semana siempre acaba mintiendo, y ahí mentía en silencio.
+
+Ahora remite a `/admin/modulos` y se queda solo con lo que la base de datos no
+sabe: quién es cada cliente y qué no se le puede tocar.
+
+*Cómo se comprobó*: la tabla ya no tiene columna de módulos.
+*Commit*: `af0992d`.
+
+### Cosas menores que se cerraron de la misma pasada · varios
+
+- **`analytics` ya se puede vender**: faltaba en el catálogo de alta, así que
+  había que activarlo a mano en la base de datos. Su migración ya estaba
+  registrada, comprobado antes de añadirlo: el alta sabrá crearle la tabla.
+- **La cabecera de Equipo ya no dice siempre «0 inactivos»**: contaba sobre la
+  página ya filtrada y el filtro por defecto los excluye.
+- **El KPI «Con ficha creada»** ya no se pinta clavado a 0 en quien no tiene
+  Clientes.
+- **Borrado `/comercial/leads`**: código al que no llegaba nadie, con textos de
+  una campaña de Retorika escritos a mano.
+- **`modules/leads/LeadsModule`** deja de inventarse las etiquetas de etapa
+  («Cualificado / Ganado / Perdido») y las lee de `lib/leads/stages.js`, que es
+  la fuente única.
+- **El backlog se llama «Registro»** en el back-office, a petición de Jorge. La
+  ruta sigue en `/admin/tablero` para no romper marcadores.
+
+*Commits*: `af0992d`, `86801ad`.
+
+---
+
 ## 08/08/2026
 
 ### El cobro con tarjeta funciona de verdad · `nutri_laura`
