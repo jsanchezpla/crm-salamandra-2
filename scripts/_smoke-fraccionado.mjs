@@ -18,7 +18,7 @@
  */
 
 import { precioDeCompra, preciosDe } from "../lib/citas/packs.js";
-import { sesionDeFactura, suscripcionDeFactura } from "../lib/payments/fraccionado.js";
+import { sesionDeFactura, suscripcionDeFactura, topePuesto } from "../lib/payments/fraccionado.js";
 
 let fallos = 0;
 function check(etiqueta, real, esperado) {
@@ -53,8 +53,20 @@ check("cuota sin meses", precioDeCompra({ price: 36000, instalmentPrice: 13000 }
 check("meses sin cuota", precioDeCompra({ price: 36000, instalmentMonths: 3 }, "instalment"), null);
 
 process.stdout.write("\n▶ De quién es esta factura (las cuotas 2ª en adelante)\n");
+/*
+ * ⚠️ El primer caso es EL QUE IMPORTA y hasta el 10/08/2026 no estaba: es la
+ * forma que sirve la versión de API que tenemos clavada. Este bloque daba por
+ * bueno solo el sitio viejo, así que iba en verde con producción rota — las dos
+ * suscripciones de tunutrilaura llevaban tres días sin apuntar una sola cuota.
+ * Una prueba que defiende el camino muerto es peor que no tenerla.
+ */
 check(
-  "en la metadata de la suscripción, que es donde la pone el checkout",
+  "donde la deja la API de hoy: colgando de `parent`",
+  sesionDeFactura({ parent: { subscription_details: { metadata: { paymentSessionId: "ps-0" } } } }),
+  "ps-0"
+);
+check(
+  "o en la raíz, como hacían las versiones viejas",
   sesionDeFactura({ subscription_details: { metadata: { paymentSessionId: "ps-1" } } }),
   "ps-1"
 );
@@ -75,6 +87,45 @@ check(
   "sub_3"
 );
 check("y sin ella, null", suscripcionDeFactura({}), null);
+
+/*
+ * El tope: existir no es estar puesto.
+ *
+ * `subscriptionSchedules.create({ from_subscription })` nace en `release` —«al
+ * acabar, suéltala y que siga cobrando»— y el tope lo pone el `update` de
+ * después. Si esa segunda llamada no llega, queda un calendario que NO frena
+ * nada. Y como el reintento comprobaba «¿hay calendario?» en vez de «¿hay
+ * tope?», se daba por hecho y no se reintentaba nunca: así se quedaron las dos
+ * suscripciones de tunutrilaura del 07/08/2026.
+ */
+process.stdout.write("\n▶ ¿Está el tope puesto de verdad?\n");
+const FASE_EN_CURSO = { items: [{ price: "price_1" }], start_date: 1, end_date: 2 };
+check(
+  "recién creado por Stripe: hay calendario pero NO hay tope",
+  topePuesto({ end_behavior: "release", phases: [FASE_EN_CURSO] }, 2),
+  false
+);
+check(
+  "cancela al final pero le falta la fase de las cuotas que quedan",
+  topePuesto({ end_behavior: "cancel", phases: [FASE_EN_CURSO] }, 2),
+  false
+);
+check(
+  "cancela y cuenta las 2 que faltan: puesto",
+  topePuesto({ end_behavior: "cancel", phases: [FASE_EN_CURSO, { iterations: 2 }] }, 2),
+  true
+);
+check(
+  "las cuotas que quedan no cuadran (3 programadas, 2 pactadas)",
+  topePuesto({ end_behavior: "cancel", phases: [FASE_EN_CURSO, { iterations: 3 }] }, 2),
+  false
+);
+check(
+  "plan de una sola cuota: con que cancele al final basta",
+  topePuesto({ end_behavior: "cancel", phases: [FASE_EN_CURSO] }, 0),
+  true
+);
+check("sin calendario, no hay tope", topePuesto(null, 2), false);
 
 process.stdout.write(
   fallos === 0 ? "\n✓ Todo correcto\n\n" : `\n✗ ${fallos} comprobación(es) fallida(s)\n\n`

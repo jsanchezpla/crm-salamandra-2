@@ -77,7 +77,7 @@ import {
   PAGO_UNICO,
   PAGO_FRACCIONADO,
 } from "../../../../../../lib/citas/packs.js";
-import { createCheckoutSession } from "../../../../../../lib/payments/checkout.js";
+import { createCheckoutSession, HOLD_WINDOW_MS } from "../../../../../../lib/payments/checkout.js";
 import { exigePasarela, puedeReservar } from "../../../../../../lib/citas/tiposVisibles.js";
 import {
   puedeReservarValoracionInicial,
@@ -645,8 +645,27 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     // retenido— lo pone Stripe y se guarda cuando la retención existe de verdad
     // (ver `authorizationExpiresAt`). Confundirlos fue el error del flujo
     // anterior, donde un único hold servía para las dos cosas.
+    //
+    /*
+     * ⚠️ PERO COMPRAR UN BONO NO VA POR AHÍ (arreglo 10/08/2026).
+     *
+     * Los 20 minutos son la medida del formulario de tarjeta embebido, donde la
+     * retención se resuelve en la misma pantalla. Un bono no se retiene: se va a
+     * Stripe Checkout, y esa página sigue aceptando el pago 31 minutos (30 de
+     * mínimo que impone Stripe + el minuto de colchón de `checkout.js`).
+     *
+     * Con 20 y 31 quedaba una franja de once minutos larga en la que el hueco ya
+     * estaba libre y la pantalla de pago seguía viva. Si otra persona cogía la
+     * hora justo ahí, la primera pagaba y se quedaba SIN CITA y SIN BONO — y en
+     * un fraccionado, además, con la suscripción en marcha. Es el peor final
+     * posible de este endpoint.
+     *
+     * `HOLD_WINDOW_MS` (45 min) está escrita exactamente para esto y no se
+     * estaba usando en ningún sitio. La regla es que el hueco aguante MÁS que la
+     * pantalla de pago, pase lo que pase.
+     */
     const ahora = Date.now();
-    const holdCaducaEn = new Date(ahora + VENTANA_TARJETA_MS);
+    const holdCaducaEn = new Date(ahora + (compraDeBono ? HOLD_WINDOW_MS : VENTANA_TARJETA_MS));
 
     let row;
     try {
