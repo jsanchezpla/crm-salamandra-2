@@ -16,6 +16,22 @@
  *
  * A MEDIAS NO ES UN ERROR: es «tiene el módulo de origen y no el de destino».
  * Puede ser deliberado. Se pinta como aviso, en ámbar, nunca en rojo.
+ *
+ * ── DOS VISTAS DESDE EL 10/08/2026 ─────────────────────────────────────────
+ *
+ * «Qué necesita cada uno» responde la otra pregunta, la de ANTES de vender:
+ * ¿esto se puede vender solo? Son dos pestañas y no dos pantallas porque se
+ * consultan con el mismo cliente en la cabeza y el filtro de arriba vale para
+ * las dos; separarlas obligaría a recordar que la segunda existe.
+ *
+ * Y AQUÍ SÍ ES UNA TABLA —bueno, una lista comparable por grupos de venta— por
+ * el mismo motivo por el que la otra vista no lo es: la pregunta cambia. Allí
+ * es relacional («¿qué pasa entre Leads y Clientes?») y hace falta ver la
+ * flecha; aquí es comparativa («¿cuáles puedo vender sueltos?») y lo que hace
+ * falta es poder recorrer una columna con el dedo.
+ *
+ * Se agrupa por el grupo del CATÁLOGO DE VENTA y no por gravedad: quien abre
+ * esto está armando un presupuesto.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -53,11 +69,56 @@ function Modulo({ clave, nombre }) {
   );
 }
 
+/**
+ * Obligatorio vs parcial.
+ *
+ * Solo lo obligatorio se pinta en ámbar. Un `parcial` casi siempre es
+ * deliberado —Quality Energy tiene Leads y no quiere fichas— y pintarlo de
+ * alerta convertiría la pantalla en un muro de avisos falsos, que es
+ * exactamente lo que rompió la primera versión del mapa de integraciones.
+ */
+function Nivel({ nivel }) {
+  const obligatorio = nivel === "obligatorio";
+  return (
+    <span
+      className="text-[9.5px] uppercase tracking-[0.14em] px-1.5 py-0.5 rounded whitespace-nowrap"
+      style={{
+        color: obligatorio ? "var(--alerta)" : "var(--tenue)",
+        border: `1px solid color-mix(in srgb, ${obligatorio ? "var(--alerta)" : "var(--tenue)"} 35%, transparent)`,
+      }}
+    >
+      {obligatorio ? "obligatorio" : "pierde algo"}
+    </span>
+  );
+}
+
+/** Aviso de cabecera. Solo se pinta si hay algo que decir. */
+function Aviso({ tono = "alerta", titulo, children }) {
+  const color = tono === "ok" ? "var(--ok)" : "var(--alerta)";
+  return (
+    <div
+      className="rounded-lg px-4 py-3.5 mb-4"
+      style={{ background: "var(--panel)", border: `1px solid color-mix(in srgb, ${color} 30%, var(--line))` }}
+    >
+      <div className="text-[12px] uppercase tracking-[0.16em] mb-1.5" style={{ color }}>
+        {titulo}
+      </div>
+      <div className="text-[12.5px] leading-relaxed" style={{ color: "var(--dim)" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function IntegracionesPage() {
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState(null);
   const [filtro, setFiltro] = useState("");
   const [cliente, setCliente] = useState(null);
+  // Dos preguntas distintas sobre lo mismo: «¿qué pasa entre estos dos?» y
+  // «¿esto se puede vender solo?». Se entra por la primera, que es la que trae
+  // a alguien aquí con un cliente al teléfono.
+  const [vista, setVista] = useState("tocan");
 
   useEffect(() => {
     document.title = "Integraciones — Salamandra";
@@ -77,6 +138,41 @@ export default function IntegracionesPage() {
   const todas = datos?.integraciones ?? SIN_NADA;
   const nombres = datos?.nombresModulo ?? SIN_NADA_OBJ;
   const tipos = datos?.tipos ?? SIN_NADA_OBJ;
+  const matriz = datos?.dependencias?.matriz ?? SIN_NADA;
+  const discrepancias = datos?.dependencias?.discrepancias ?? SIN_NADA;
+  const rotos = datos?.dependencias?.rotos ?? SIN_NADA;
+
+  /**
+   * La matriz, filtrada y agrupada por el grupo del catálogo de venta.
+   *
+   * Se agrupa como se VENDE (Base, Dinero, Salud…) y no por si necesitan cosas
+   * o no: quien abre esto está armando un presupuesto, y ahí los módulos se
+   * miran por bloques. Con un cliente elegido se deja solo lo que tiene, que es
+   * la otra pregunta real: «¿qué le falta a este para que le funcione todo?».
+   */
+  const gruposDeps = useMemo(() => {
+    const q = filtro.trim().toLowerCase();
+    const m = new Map();
+
+    for (const fila of matriz) {
+      if (cliente && !fila.loTienen.includes(cliente)) continue;
+      if (q) {
+        const casa =
+          fila.modulo.toLowerCase().includes(q) ||
+          (nombres[fila.modulo] ?? "").toLowerCase().includes(q) ||
+          fila.necesita.some(
+            (d) =>
+              d.claves.some((k) => k.toLowerCase().includes(q) || (nombres[k] ?? "").toLowerCase().includes(q)) ||
+              d.porque.toLowerCase().includes(q)
+          );
+        if (!casa) continue;
+      }
+      if (!m.has(fila.grupo)) m.set(fila.grupo, []);
+      m.get(fila.grupo).push(fila);
+    }
+
+    return [...m.entries()].map(([grupo, lista]) => ({ grupo, lista }));
+  }, [matriz, filtro, cliente, nombres]);
 
   const visibles = useMemo(() => {
     const q = filtro.trim().toLowerCase();
@@ -146,34 +242,97 @@ export default function IntegracionesPage() {
           className="mt-2 text-[42px] lg:text-[58px] leading-[0.95] tracking-tight"
           style={{ fontFamily: "var(--admin-display)" }}
         >
-          Por dónde se
+          {vista === "tocan" ? "Por dónde se" : "Qué necesita"}
           <br />
-          <span style={{ fontStyle: "italic", color: "var(--ok)" }}>tocan los módulos</span>
+          <span style={{ fontStyle: "italic", color: "var(--ok)" }}>
+            {vista === "tocan" ? "tocan los módulos" : "cada módulo"}
+          </span>
         </h1>
 
-        <div className="mt-7 flex flex-wrap items-end gap-x-10 gap-y-4">
-          <div>
-            <div className="text-[34px] leading-none tabular-nums">{datos.totales.integraciones}</div>
-            <Etiqueta>integraciones</Etiqueta>
-          </div>
-          <div>
-            <div
-              className="text-[34px] leading-none tabular-nums"
-              style={{ color: datos.totales.aMedias > 0 ? "var(--alerta)" : "var(--ok)" }}
+        {/* Las dos preguntas. Se separan porque se hacen en momentos distintos:
+            «qué necesita» antes de vender, «por dónde se tocan» cuando ya está
+            vendido y algo no sale. */}
+        <div className="mt-6 flex gap-1">
+          {[
+            ["tocan", "Por dónde se tocan"],
+            ["necesitan", "Qué necesita cada uno"],
+          ].map(([clave, rotulo]) => (
+            <button
+              key={clave}
+              onClick={() => setVista(clave)}
+              className="text-[12.5px] px-3 py-1.5 rounded transition-colors"
+              style={{
+                background: vista === clave ? "var(--panel-alto)" : "transparent",
+                border: `1px solid ${vista === clave ? "var(--line)" : "transparent"}`,
+                color: vista === clave ? "var(--text)" : "var(--tenue)",
+              }}
             >
-              {datos.totales.aMedias}
-            </div>
-            <Etiqueta tono={datos.totales.aMedias > 0 ? "alerta" : "ok"}>a medias</Etiqueta>
-          </div>
-          <div>
-            <div className="text-[34px] leading-none tabular-nums">{datos.totales.sinNadie}</div>
-            <Etiqueta>sin usar por nadie</Etiqueta>
-          </div>
-          <p className="text-[12px] leading-relaxed max-w-xs ml-auto" style={{ color: "var(--dim)" }}>
-            Un módulo suelto se vende; dos que se hablan se notan. Aquí está lo que se le rompe a un
-            cliente si se le apaga algo — y lo que gana si se le enciende.
-          </p>
+              {rotulo}
+            </button>
+          ))}
         </div>
+
+        {vista === "tocan" ? (
+          <div className="mt-7 flex flex-wrap items-end gap-x-10 gap-y-4">
+            <div>
+              <div className="text-[34px] leading-none tabular-nums">{datos.totales.integraciones}</div>
+              <Etiqueta>integraciones</Etiqueta>
+            </div>
+            <div>
+              <div
+                className="text-[34px] leading-none tabular-nums"
+                style={{ color: datos.totales.aMedias > 0 ? "var(--alerta)" : "var(--ok)" }}
+              >
+                {datos.totales.aMedias}
+              </div>
+              <Etiqueta tono={datos.totales.aMedias > 0 ? "alerta" : "ok"}>a medias</Etiqueta>
+            </div>
+            <div>
+              <div className="text-[34px] leading-none tabular-nums">{datos.totales.sinNadie}</div>
+              <Etiqueta>sin usar por nadie</Etiqueta>
+            </div>
+            <p className="text-[12px] leading-relaxed max-w-xs ml-auto" style={{ color: "var(--dim)" }}>
+              Un módulo suelto se vende; dos que se hablan se notan. Aquí está lo que se le rompe a un
+              cliente si se le apaga algo — y lo que gana si se le enciende.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-7 flex flex-wrap items-end gap-x-10 gap-y-4">
+            <div>
+              <div className="text-[34px] leading-none tabular-nums">{datos.totales.modulos}</div>
+              <Etiqueta>módulos</Etiqueta>
+            </div>
+            <div>
+              <div className="text-[34px] leading-none tabular-nums" style={{ color: "var(--ok)" }}>
+                {datos.totales.seVendenSolos}
+              </div>
+              <Etiqueta tono="ok">se venden solos</Etiqueta>
+            </div>
+            <div>
+              <div
+                className="text-[34px] leading-none tabular-nums"
+                style={{ color: discrepancias.length > 0 ? "var(--alerta)" : "var(--ok)" }}
+              >
+                {discrepancias.length}
+              </div>
+              <Etiqueta tono={discrepancias.length > 0 ? "alerta" : "ok"}>el alta los vende mal</Etiqueta>
+            </div>
+            <div>
+              <div
+                className="text-[34px] leading-none tabular-nums"
+                style={{ color: rotos.length > 0 ? "var(--alerta)" : "var(--ok)" }}
+              >
+                {rotos.length}
+              </div>
+              <Etiqueta tono={rotos.length > 0 ? "alerta" : "ok"}>clientes afectados</Etiqueta>
+            </div>
+            <p className="text-[12px] leading-relaxed max-w-xs ml-auto" style={{ color: "var(--dim)" }}>
+              La pregunta de antes de vender. <strong>Obligatorio</strong> es que sin el otro no sirve
+              para lo que se vende; <strong>pierde algo</strong> es que funciona y se queda sin una
+              utilidad concreta, que casi siempre es a propósito.
+            </p>
+          </div>
+        )}
 
         {/* Los clientes, como filtro. Es la puerta por la que entra casi todo el
             mundo: la pregunta viene con un nombre delante. */}
@@ -209,12 +368,16 @@ export default function IntegracionesPage() {
         <input
           value={filtro}
           onChange={(e) => setFiltro(e.target.value)}
-          placeholder="Filtrar por módulo o por lo que hace — p. ej. «citas», «convierte»"
+          placeholder={
+            vista === "tocan"
+              ? "Filtrar por módulo o por lo que hace — p. ej. «citas», «convierte»"
+              : "Filtrar por módulo o por lo que le falta — p. ej. «facturación», «clientes»"
+          }
           className="mt-4 w-full max-w-md rounded-lg px-3 py-2 text-[13px] outline-none"
           style={{ background: "var(--panel)", border: "1px solid var(--line)", color: "var(--text)" }}
         />
 
-        {elegido && (
+        {elegido && vista === "tocan" && (
           <p className="mt-3 text-[12px]" style={{ color: "var(--dim)" }}>
             <strong>{elegido.nombre}</strong> tiene {plural(elegido.modulos, "módulo", "módulos")} y{" "}
             <strong>{elegido.vivas}</strong>{" "}
@@ -225,15 +388,180 @@ export default function IntegracionesPage() {
             .
           </p>
         )}
+
+        {elegido && vista === "necesitan" && (
+          <p className="mt-3 text-[12px]" style={{ color: "var(--dim)" }}>
+            <strong>{elegido.nombre}</strong> tiene {plural(elegido.modulos, "módulo", "módulos")}.{" "}
+            {rotos.filter((r) => r.slug === cliente).length === 0 ? (
+              <span style={{ color: "var(--ok)" }}>Ninguno le falta una dependencia obligatoria.</span>
+            ) : (
+              <span style={{ color: "var(--alerta)" }}>
+                {plural(
+                  rotos.filter((r) => r.slug === cliente).length,
+                  "módulo suyo no puede funcionar",
+                  "módulos suyos no pueden funcionar"
+                )}
+                .
+              </span>
+            )}
+          </p>
+        )}
       </header>
 
-      {visibles.length === 0 && (
+      {vista === "necesitan" && (
+        <>
+          {discrepancias.length > 0 && (
+            <Aviso titulo="el alta permite venderlos mal">
+              Estos módulos se pueden marcar solos en el alta de clientes y no funcionarían, porque
+              el catálogo no declara su <code>requiere</code>:{" "}
+              {discrepancias.map((d, n) => (
+                <span key={`${d.modulo}-${d.claves.join()}`}>
+                  {n > 0 && " · "}
+                  <strong style={{ color: "var(--text)" }}>{nombres[d.modulo] || d.modulo}</strong> sin{" "}
+                  {d.claves.map((k) => nombres[k] || k).join(d.cualquiera ? " ni " : " y ")}
+                </span>
+              ))}
+              . Se arregla en <code>lib/provisioning/catalogo.js</code>; el aviso desaparece solo
+              cuando esté puesto.
+            </Aviso>
+          )}
+
+          {rotos.length > 0 ? (
+            <Aviso titulo="clientes que ya lo sufren">
+              {rotos.map((r) => (
+                <div key={`${r.slug}-${r.modulo}`}>
+                  <strong style={{ color: "var(--text)" }}>{r.slug}</strong> tiene{" "}
+                  {nombres[r.modulo] || r.modulo} y le falta {r.faltan.map((k) => nombres[k] || k).join(" y ")}.
+                </div>
+              ))}
+            </Aviso>
+          ) : (
+            <Aviso tono="ok" titulo="ningún cliente afectado">
+              Ninguno de los clientes de producción tiene hoy un módulo sin su dependencia
+              obligatoria. Se comprueba en vivo contra <code>master.tenant_modules</code> cada vez
+              que se abre esta pantalla.
+            </Aviso>
+          )}
+
+          {gruposDeps.length === 0 && (
+            <p className="text-[13px]" style={{ color: "var(--tenue)" }}>
+              Nada casa con lo que hay filtrado.
+            </p>
+          )}
+
+          <div className="space-y-9 mt-7">
+            {gruposDeps.map(({ grupo, lista }) => (
+              <section key={grupo}>
+                <div className="flex items-baseline gap-2.5 mb-3">
+                  <Etiqueta>{grupo}</Etiqueta>
+                  <span className="text-[11px] tabular-nums" style={{ color: "var(--tenue)" }}>
+                    {lista.length}
+                  </span>
+                </div>
+
+                <div className="space-y-2.5">
+                  {lista.map((fila) => (
+                    <article
+                      key={fila.modulo}
+                      className="rounded-lg px-4 py-4"
+                      style={{ background: "var(--panel)", border: "1px solid var(--line)" }}
+                    >
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <Modulo clave={fila.modulo} nombre={nombres[fila.modulo]} />
+                        {fila.soloSeVendeSolo ? (
+                          <span className="text-[11px]" style={{ color: "var(--ok)" }}>
+                            se vende solo
+                          </span>
+                        ) : (
+                          <span className="text-[11px]" style={{ color: "var(--alerta)" }}>
+                            no se vende solo
+                          </span>
+                        )}
+                        <span className="text-[11px] ml-auto" style={{ color: "var(--tenue)" }}>
+                          {fila.loTienen.length === 0
+                            ? "no lo tiene nadie"
+                            : `lo tienen ${fila.loTienen.join(", ")}`}
+                        </span>
+                      </div>
+
+                      {fila.necesita.length === 0 && (
+                        <p className="text-[12.5px] leading-relaxed" style={{ color: "var(--dim)" }}>
+                          No necesita ningún otro módulo.
+                        </p>
+                      )}
+
+                      {fila.necesita.map((dep) => (
+                        <div key={dep.claves.join("-")} className="mt-2.5 pt-2.5" style={{ borderTop: "1px solid var(--line)" }}>
+                          <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                            <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
+                              necesita
+                            </span>
+                            {dep.claves.map((k, n) => (
+                              <span key={k} className="flex items-center gap-1.5">
+                                {n > 0 && (
+                                  <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
+                                    {dep.cualquiera ? "o" : "y"}
+                                  </span>
+                                )}
+                                <Modulo clave={k} nombre={nombres[k]} />
+                              </span>
+                            ))}
+                            <Nivel nivel={dep.nivel} />
+                          </div>
+
+                          <p className="text-[12.5px] leading-relaxed" style={{ color: "var(--dim)" }}>
+                            {dep.porque}
+                          </p>
+
+                          {dep.incumplen.length > 0 && (
+                            <p
+                              className="mt-1.5 text-[11.5px]"
+                              style={{ color: dep.nivel === "obligatorio" ? "var(--alerta)" : "var(--tenue)" }}
+                            >
+                              {dep.nivel === "obligatorio" ? "les falta a " : "sin esto en "}
+                              {dep.incumplen.join(", ")}
+                            </p>
+                          )}
+
+                          {dep.donde?.length > 0 && (
+                            <details className="mt-1.5">
+                              <summary className="cursor-pointer text-[11px]" style={{ color: "var(--tenue)" }}>
+                                dónde está en el código
+                              </summary>
+                              <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: "var(--tenue)" }}>
+                                {dep.donde.map((d) => (
+                                  <div key={d}>{d}</div>
+                                ))}
+                              </div>
+                            </details>
+                          )}
+                        </div>
+                      ))}
+
+                      {fila.nota && (
+                        <p
+                          className="mt-2.5 pt-2.5 text-[12px] leading-relaxed"
+                          style={{ borderTop: "1px solid var(--line)", color: "var(--tenue)" }}
+                        >
+                          {fila.nota}
+                        </p>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </>
+      )}
+
+      {vista === "tocan" && visibles.length === 0 && (
         <p className="text-[13px]" style={{ color: "var(--tenue)" }}>
           Nada casa con lo que hay filtrado.
         </p>
       )}
 
-      <div className="space-y-9">
+      <div className={`space-y-9 ${vista === "tocan" ? "" : "hidden"}`}>
         {grupos.map(({ modulo, lista }) => (
           <section key={modulo}>
             <div className="flex items-baseline gap-2.5 mb-3">
@@ -325,9 +653,21 @@ export default function IntegracionesPage() {
       </div>
 
       <p className="mt-8 text-[11px] leading-relaxed" style={{ color: "var(--tenue)" }}>
-        El mapa sale de <code>lib/provisioning/integraciones.js</code>, escrito leyendo el código, y se
-        cruza en vivo con lo que cada cliente tiene contratado. «A medias» significa que tiene el
-        módulo de origen y no el de destino: a veces es a propósito.
+        {vista === "tocan" ? (
+          <>
+            El mapa sale de <code>lib/provisioning/integraciones.js</code>, escrito leyendo el código, y
+            se cruza en vivo con lo que cada cliente tiene contratado. «A medias» significa que tiene el
+            módulo de origen y no el de destino: a veces es a propósito.
+          </>
+        ) : (
+          <>
+            La matriz sale de <code>lib/provisioning/dependencias.js</code>, escrita leyendo el código y
+            comprobada contra el VPS llamando a los endpoints reales de los clientes activos. Cada
+            dependencia lleva su fichero y su línea para poder verificarla dentro de seis meses. Los dos
+            avisos de arriba se calculan, no se escriben: el de venta cruza con{" "}
+            <code>catalogo.js</code> y el de clientes con <code>master.tenant_modules</code>.
+          </>
+        )}
       </p>
     </main>
   );

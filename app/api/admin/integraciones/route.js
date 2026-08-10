@@ -8,6 +8,11 @@ import {
   TIPOS,
   necesitaDestino,
 } from "../../../../lib/provisioning/integraciones.js";
+import {
+  matrizCompleta,
+  discrepanciasConCatalogo,
+  NIVELES,
+} from "../../../../lib/provisioning/dependencias.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -40,6 +45,17 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * sale nada. La primera versión lo deducía del tipo de integración y daba 33
  * avisos de los que la mayoría eran falsos; el detalle está en
  * `lib/provisioning/integraciones.js`.
+ *
+ * DOS CAPAS DESDE EL 10/08/2026
+ * A lo anterior —«por dónde se tocan»— se le añade «qué necesita cada uno»
+ * (`lib/provisioning/dependencias.js`), que es la pregunta de ANTES de vender:
+ * ¿esto se puede vender solo? Salió de repasar los 22 módulos contra el VPS y
+ * encontrar que el alta deja marcar Facturación sola, y que un cliente con
+ * Facturación y sin Clientes no puede emitir ni una factura.
+ *
+ * Aquí esa matriz se cruza dos veces: contra el CATÁLOGO —para avisar de los
+ * módulos que el alta permite vender mal— y contra la BD —para avisar de un
+ * cliente que ya esté pagando por algo que no puede usar—.
  *
  * Mismos tres candados que el resto del back-office.
  */
@@ -111,17 +127,60 @@ export const GET = withTenant(async (_request, _ctx, ctx) => {
       }))
       .sort((a, b) => b.vivas - a.vivas);
 
+    // ── Qué necesita cada módulo, cruzado con quién lo tiene ────────────────
+    //
+    // La matriz sola es documentación. Lo que la hace útil es esta pasada: un
+    // cliente que tenga un módulo y NO tenga su dependencia obligatoria está
+    // pagando por algo que no puede usar, y eso no lo detecta nadie hoy. Se
+    // calcula aquí y no en el fichero de datos porque depende de la BD.
+    const cumple = (tiene, dep) =>
+      dep.cualquiera ? dep.claves.some((k) => tiene.has(k)) : dep.claves.every((k) => tiene.has(k));
+
+    const rotos = [];
+    const matriz = matrizCompleta().map((fila) => {
+      const loTienen = clientes.filter((s) => activos.get(s).has(fila.modulo));
+
+      const necesita = fila.necesita.map((dep) => {
+        const incumplen = loTienen.filter((s) => !cumple(activos.get(s), dep));
+        if (dep.nivel === "obligatorio") {
+          for (const slug of incumplen) {
+            rotos.push({
+              slug,
+              modulo: fila.modulo,
+              faltan: dep.claves.filter((k) => !activos.get(slug).has(k)),
+              porque: dep.porque,
+            });
+          }
+        }
+        return { ...dep, incumplen };
+      });
+
+      return { ...fila, necesita, loTienen };
+    });
+
     return ok({
       integraciones,
       porCliente,
       nombresModulo: NOMBRES_MODULO,
       tipos: TIPOS,
+      dependencias: {
+        matriz,
+        niveles: NIVELES,
+        // Módulos que el alta deja marcar solos y que no funcionarían: el
+        // catálogo no declara su `requiere`. Se calcula, así que el día que
+        // alguien lo arregle el aviso se va solo.
+        discrepancias: discrepanciasConCatalogo(),
+        rotos,
+      },
       totales: {
         integraciones: integraciones.length,
         // Cuántas no las usa NADIE hoy: o son de un módulo que no ha vendido
         // nadie, o están escritas de más. Las dos cosas conviene verlas.
         sinNadie: integraciones.filter((i) => i.vivas.length === 0).length,
         aMedias: integraciones.reduce((n, i) => n + i.aMedias.length, 0),
+        seVendenSolos: matriz.filter((m) => m.soloSeVendeSolo).length,
+        modulos: matriz.length,
+        rotos: rotos.length,
       },
     });
   } catch (err) {
