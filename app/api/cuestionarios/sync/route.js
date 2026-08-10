@@ -42,7 +42,7 @@ async function fetchAttemptDetail(attemptId, authHeader) {
  * Devuelve { synced, skipped, errors }.
  */
 export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
-  if (!hasModule("training") && !hasModule("cuestionarios")) return forbidden();
+  if (!hasModule("training")) return forbidden();
   const role = request.headers.get("x-user-role");
   if (!ADMIN_ROLES.has(role)) return forbidden(ADMIN_DENY);
 

@@ -134,7 +134,7 @@ const TEST_USERS = [
   {
     email: "lead@demo.salamandra",
     role: "user",
-    moduleAccess: ["leads", "team", "projects", "billing", "training", "cuestionarios"],
+    moduleAccess: ["leads", "team", "projects", "billing", "training"],
     description: "User con módulos completos (rol user, no admin)",
   },
   {

@@ -11,11 +11,11 @@ import { ok, forbidden, serverError } from "../../../../../lib/utils/apiResponse
  * Cursos sin intentos no aparecen (no se cruzan con la tabla `courses`,
  * porque el filtro luego se aplica sobre wp_course_id de quiz_attempts).
  *
- * Auth: JWT + hasModule("training" || "cuestionarios").
+ * Auth: JWT + hasModule("training").
  */
 export const GET = withTenant(async (_request, _ctx, { tenantSequelize, hasModule, slug }) => {
   try {
-    if (!hasModule("training") && !hasModule("cuestionarios")) {
+    if (!hasModule("training")) {
       return forbidden("Módulo no activo");
     }
     const schema = `crm_${slug}`;

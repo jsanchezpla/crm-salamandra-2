@@ -33,7 +33,13 @@ Antes de implementar cambios en un módulo concreto, lee su doc:
 | Emails (infra)    | `docs/modules/emails.md`     | Infra transversal                |
 
 Módulos implementados **sin doc dedicado** (su detalle vive en la tabla de
-módulos más abajo): `calendar`, `orders`, `referidos`, `cuestionarios`.
+módulos más abajo): `calendar`, `orders`, `referidos`.
+
+> **`cuestionarios` dejó de ser un módulo el 10/08/2026.** Nunca lo fue del
+> todo: la puerta de sus siete endpoints era `training || cuestionarios`, así
+> que quien compraba Formación ya lo tenía. Ahora es una pantalla de Formación
+> (`/formacion/cuestionarios`) y solo se pide `training`. Ni el código ni la
+> tabla `quiz_attempts` se han tocado — Retorika tiene ahí 526 intentos reales.
 
 Cualquier detalle no recogido en CLAUDE.md (endpoints específicos,
 fórmulas de cálculo, decisiones de implementación, validaciones,
@@ -352,7 +358,7 @@ aplique.
 | citas         | Citas (reservas + portal SSO)  | Implementado (nutri_laura, aumenta) | `docs/modules/citas.md`     |
 | orders        | Pedidos                        | Implementado (spain_enzymes, aumenta) | —                         |
 | referidos     | Referidos (formulario público) | Implementado (abarcaia)             | —                           |
-| cuestionarios | Cuestionarios (TutorLMS)       | Implementado (retorika)             | (dentro de `training.md`)   |
+| ~~cuestionarios~~ | Cuestionarios (TutorLMS)   | **Ya no es un módulo** (10/08/2026): es una pantalla de Formación, `/formacion/cuestionarios` | (dentro de `training.md`) |
 | clients_avanzado | Clientes avanzado: lista de espera de admisión (aumenta, demo) | Implementado | — |
 | pacientes     | Pacientes                      | Implementado (aumenta)              | `docs/modules/pacientes.md` |
 | clinica       | Clínica                        | Implementado (aumenta)              | `docs/modules/clinica.md`   |

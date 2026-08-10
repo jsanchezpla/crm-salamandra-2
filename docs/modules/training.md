@@ -4,6 +4,13 @@
 > "Módulos del CRM"). Si encuentras una discrepancia con el código,
 > prevalece el código: actualiza este fichero.
 
+> **Cuestionarios entró aquí el 10/08/2026.** Era un `moduleKey` aparte y dejó
+> de serlo: la puerta de sus siete endpoints era `training || cuestionarios`, o
+> sea que quien compraba Formación ya lo tenía, y el único tenant con intentos
+> reales (`retorika`) ni siquiera tenía la clave. Ahora todos piden `training` a
+> secas. La pantalla (`/formacion/cuestionarios`), el código y la tabla
+> `quiz_attempts` no se han tocado.
+
 ## Visión general
 
 Gestión de la oferta formativa: catálogo de cursos, alumnos privados
@@ -665,10 +672,10 @@ webhooks o sync. No se pueden editar manualmente desde el CRM.
 | --- | --- | --- |
 | `GET /api/training/quiz-attempts` | Listado paginado. Filtros `search`, `companyName` (alias legacy: `empresa`), `result`, `courseId`, `quizId` (sprint Bloque 3). Excluye `answers` para aligerar. | `hasModule(...)` |
 | `GET /api/training/quiz-attempts/[id]` | Detalle con `answers` JSONB completo. | `hasModule(...)` |
-| `GET /api/training/quiz-attempts/stats?search=&companyName=&courseId=&quizId=` | **Sprint Retorika Bloque 3.** Estadísticas agregadas. Dos modos: **A (sin `quizId`)** devuelve `{ total, passCount, failCount, passRate, avgScorePct, topQuizzesByAttempts: [...×5], topQuizzesByFailRate: [...×5] }` con rankings globales. Mode B (con `quizId`) devuelve `{ total, passCount, failCount, passRate, avgScorePct, questionStats: [{ no, questionId, question, type, totalResponses, correctCount, correctRate }] }` agregando `answers[]` JSONB por `(questionId, no)`. Umbral `HAVING COUNT(*) >= 3` en `topQuizzesByFailRate` para evitar ruido. Coherencia 3-vías con `/list` y los lists auxiliares (mismo WHERE). Log `[retorika:quiz-stats]`. | `hasModule("training" o "cuestionarios")` |
-| `GET /api/training/quiz-attempts/quizzes-list?courseId=&companyName=` | **Sprint Bloque 3.** Lista DISTINCT de cuestionarios con count, derivada por `GROUP BY wp_quiz_id, quiz_title, wp_course_id, course_title` sobre `quiz_attempts`. Ordenada por count DESC. Pobla el dropdown "Cuestionario" en /formacion/cuestionarios. Cuestionarios sin ningún intento NO aparecen (no hay tabla `quizzes` separada — backlog). | `hasModule("training" o "cuestionarios")` |
-| `GET /api/training/quiz-attempts/courses-list` | **Sprint Bloque 3.** Lista DISTINCT de cursos con intentos, derivada por `GROUP BY wp_course_id, course_title`. Sin filtros. Pobla el dropdown "Curso". | `hasModule("training" o "cuestionarios")` |
-| `GET /api/training/quiz-attempts/companies-list` | **Sprint Bloque 3.** Lista DISTINCT del campo libre `empresa` con count, ordenada DESC. `LIMIT 100`. Pobla el dropdown "Empresa" (reemplaza al input texto libre anterior). | `hasModule("training" o "cuestionarios")` |
+| `GET /api/training/quiz-attempts/stats?search=&companyName=&courseId=&quizId=` | **Sprint Retorika Bloque 3.** Estadísticas agregadas. Dos modos: **A (sin `quizId`)** devuelve `{ total, passCount, failCount, passRate, avgScorePct, topQuizzesByAttempts: [...×5], topQuizzesByFailRate: [...×5] }` con rankings globales. Mode B (con `quizId`) devuelve `{ total, passCount, failCount, passRate, avgScorePct, questionStats: [{ no, questionId, question, type, totalResponses, correctCount, correctRate }] }` agregando `answers[]` JSONB por `(questionId, no)`. Umbral `HAVING COUNT(*) >= 3` en `topQuizzesByFailRate` para evitar ruido. Coherencia 3-vías con `/list` y los lists auxiliares (mismo WHERE). Log `[retorika:quiz-stats]`. | `hasModule("training")` |
+| `GET /api/training/quiz-attempts/quizzes-list?courseId=&companyName=` | **Sprint Bloque 3.** Lista DISTINCT de cuestionarios con count, derivada por `GROUP BY wp_quiz_id, quiz_title, wp_course_id, course_title` sobre `quiz_attempts`. Ordenada por count DESC. Pobla el dropdown "Cuestionario" en /formacion/cuestionarios. Cuestionarios sin ningún intento NO aparecen (no hay tabla `quizzes` separada — backlog). | `hasModule("training")` |
+| `GET /api/training/quiz-attempts/courses-list` | **Sprint Bloque 3.** Lista DISTINCT de cursos con intentos, derivada por `GROUP BY wp_course_id, course_title`. Sin filtros. Pobla el dropdown "Curso". | `hasModule("training")` |
+| `GET /api/training/quiz-attempts/companies-list` | **Sprint Bloque 3.** Lista DISTINCT del campo libre `empresa` con count, ordenada DESC. `LIMIT 100`. Pobla el dropdown "Empresa" (reemplaza al input texto libre anterior). | `hasModule("training")` |
 
 Sin PATCH ni DELETE: igual que enrollments, los intentos llegan solo
 por webhook o sync.
@@ -683,7 +690,7 @@ ruta del frontend `/cuestionarios` redirige a `/formacion/cuestionarios`.
 
 | Método y ruta | Propósito | Restricciones |
 | --- | --- | --- |
-| `GET /api/cuestionarios` | Idéntico a `GET /api/training/quiz-attempts`. | `hasModule("training" o "cuestionarios")` |
+| `GET /api/cuestionarios` | Idéntico a `GET /api/training/quiz-attempts`. | `hasModule("training")` |
 | `GET /api/cuestionarios/[id]` | Idéntico a `GET /api/training/quiz-attempts/[id]`. | idem |
 | `POST /api/cuestionarios/sync` | Pull desde TutorLMS REST API. Lee `WP_URL`, `WP_API_USER`, `WP_API_KEY` de env. | Solo admin/superadmin. |
 

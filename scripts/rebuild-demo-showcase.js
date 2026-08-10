@@ -41,8 +41,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // analytics, ai, automations, integrations) y `sales` (duplica a leads).
 // 2026-07-27: + formularios, referidos y documents (ya tienen página real).
 const MODULES = [
+  // 2026-08-10: fuera "cuestionarios" — dejó de ser un módulo, ahora es una
+  // pantalla de Formación y viaja con `training`.
   "clients", "leads", "projects", "billing", "team", "inventory", "training",
-  "cuestionarios", "calendar", "citas", "orders",
+  "calendar", "citas", "orders",
   "pacientes", "clinica", "nutricion", "outreach",
   "formularios", "referidos", "documents",
 ];

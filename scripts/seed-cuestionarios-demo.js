@@ -1,7 +1,8 @@
 /**
  * seed-cuestionarios-demo.js
  *
- * 1. Activa el módulo "cuestionarios" para el tenant demo
+ * 1. Comprueba que el tenant demo tenga el módulo "training" (antes activaba un
+ *    módulo "cuestionarios", que dejó de existir el 10/08/2026)
  * 2. Sincroniza el schema (crea la tabla quiz_attempts)
  * 3. Siembra intentos de cuestionario realistas (TutorLMS style)
  *
@@ -207,30 +208,23 @@ async function main() {
   }
   log(`✓ Tenant encontrado: ${tenant.name} (id: ${tenant.id})`);
 
-  // ── 2. Activar módulo cuestionarios ───────────────────────────────────────
-  header('Activando módulo "cuestionarios"...');
-  const [mod, created] = await TenantModule.findOrCreate({
-    where: { tenantId: tenant.id, moduleKey: "cuestionarios" },
-    defaults: {
-      tenantId: tenant.id,
-      moduleKey: "cuestionarios",
-      enabled: true,
-      version: "1.0.0",
-      schemaExtensions: {},
-      logicOverrides: {},
-      featureFlags: {},
-    },
+  // ── 2. Comprobar el módulo Formación ──────────────────────────────────────
+  // Antes este bloque ACTIVABA un módulo "cuestionarios". Dejó de existir el
+  // 10/08/2026: los intentos son una pantalla de Formación, y su puerta pide
+  // `training`. Un seed no debe vender módulos, así que ahora solo comprueba.
+  header('Comprobando módulo "training"...');
+  const trainingMod = await TenantModule.findOne({
+    where: { tenantId: tenant.id, moduleKey: "training" },
   });
-  if (created) {
-    log('✓ Módulo "cuestionarios" creado y activado');
-  } else {
-    if (!mod.enabled) {
-      await mod.update({ enabled: true });
-      log('· Ya existía — reactivado');
-    } else {
-      log('· Ya existía y estaba activo — sin cambios');
-    }
+  if (!trainingMod?.enabled) {
+    process.stderr.write(
+      `\n✗ El tenant "${DEMO_SLUG}" no tiene el módulo "training" activo.\n` +
+        `  Los intentos se verían en /formacion/cuestionarios, que exige Formación.\n` +
+        `  Actívalo antes:  node scripts/enable-module.js ${DEMO_SLUG} training\n\n`
+    );
+    process.exit(1);
   }
+  log('✓ Módulo "training" activo');
 
   // ── 3. Sync schema (crea quiz_attempts si no existe) ──────────────────────
   header("Sincronizando schema crm_demo...");

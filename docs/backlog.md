@@ -127,6 +127,33 @@ desde Instagram. Cualquiera puede reservarlo.
 
 ## P1 — esta semana
 
+### «Reorganizar con IA» se rompe justo al aplicar los cambios · `demo`, `aumenta`, `salamandra_solutions`
+
+El modal propone los cambios, el usuario desmarca los que no quiere y al pulsar
+«Aplicar cambios» el navegador pide `POST /api/projects/[id]/ai/apply` — **un
+endpoint que no se escribió nunca**. No es que se rompiera: no existe en ningún
+commit del historial. Lo único que hay es su hermano `/ai/edit`, que es el paso
+anterior, el que genera la propuesta.
+
+Donde duele es en la **demo**, que es pública y es el escaparate. Allí la
+propuesta se genera en modo simulado, **sin necesidad de clave de IA**, así que
+cualquiera a quien se le esté enseñando el CRM llega hasta el último botón y se
+come el error. En Aumenta no se llega tan lejos, pero por el motivo malo: el
+paso anterior ya devuelve 503 porque no tienen clave.
+
+Esto es la respuesta a «¿se metió al final la IA de proyectos?»: sí, entró
+entera en el commit `0d474c7` (31/07) y está desplegada —«Crear con IA» funciona
+de punta a punta—, pero la mitad de «Reorganizar» se quedó sin el último paso.
+Ni `CLAUDE.md` ni `docs/modules/projects.md` la mencionan, así que la
+documentación tampoco se enteró de que existe.
+
+*Se comprueba*: pulsar «Aplicar cambios» en la demo aplica las operaciones en
+vez de dar error.
+*Dónde*: `components/projects/AiEditModal.jsx:89` es quien llama;
+`app/api/projects/[id]/ai/edit/route.js` existe y falta el `apply` de al lado.
+*Comprobado en producción*: 10/08/2026 — en el contenedor,
+`.next/server/app/api/projects/[id]/ai/` solo contiene `edit`.
+
 ### «Pedirle otra tarjeta» no lleva a ninguna parte · todos
 
 El aviso recomienda pedir otra tarjeta y el botón se pinta, pero el endpoint
@@ -160,6 +187,80 @@ tarea antes.
 ---
 
 ## P2 — cuando se pueda
+
+### La nutrición solo sabe vivir en casa de Laura · `aumenta`, producto
+
+«Que la nutrición de Aumenta sea igual que la de nutri_laura» tiene una mitad
+gratis y una mitad rota.
+
+**Gratis**: la pantalla ya es idéntica por construcción. El módulo `nutricion`
+**no tiene base**: las cuatro páginas importan los componentes de
+`modules/overrides/nutri-laura/` y los usan como valor por defecto para
+cualquier cliente. Quien tenga el módulo ve las pantallas de Laura, tal cual.
+El `uiOverride` y el flag `externalSearchEnabled` que ella tiene en
+`master.tenant_modules` están muertos: el primero no lo lee nadie y el segundo
+era de OpenFoodFacts, que se retiró entero el 18/07.
+
+**Rota**: encenderlo hoy deja a Aumenta con el módulo puesto y **cero tablas**.
+De las nueve tablas de nutrición, cinco (`foods`, `plans`, `plan_meals`,
+`plan_meal_options`, `plan_meal_option_foods`) solo las crean dos scripts que
+llevan `crm_nutri_laura` escrito a mano dentro, y ninguno de los dos está en el
+mapa de migraciones del módulo. Las seis migraciones que sí se ejecutarían se
+saltan solas cualquier schema que no tenga ya `foods`, y lo dicen por pantalla:
+«faltan foods/plan_meal_options. Se salta». Es el mismo fallo que dejó a
+Abarcaia tres meses sin registrar leads; la diferencia es que este todavía no le
+ha pasado a nadie, porque nutrición nunca se ha vendido dos veces.
+
+Dos avisos para quien lo haga:
+
+- **El vocabulario NO se rompe.** Aumenta tiene `pacientes` y `clinica`, que
+  mandan sobre `nutricion` en `lib/clients/vocabulario.js`, así que «Clientes»
+  sigue llamándose «Clientes» y no salen dos «Pacientes» en el mismo menú. No
+  hay que fiarse del aviso de CLAUDE.md: la demo ya lleva los tres módulos
+  juntos en producción y se ve bien.
+- **`AUTO_ASSIGN_MODULE_KEYS = ["nutricion"]`**: con el módulo puesto, toda
+  ficha NUEVA se marca sola como paciente de nutrición. En un centro de
+  psicología con 1.083 familias, eso hay que quererlo.
+
+Y falta lo que no es código: Laura tiene 3.906 alimentos y 1.084 recetas.
+Aumenta empezaría con el recetario vacío.
+
+⚠️ Al comprobar esto salió otra cosa: `CLAUDE.md` y `docs/modules/nutricion.md`
+dicen que los bloques **C4 y C5 están «pendientes de despliegue» y llevan
+tiempo desplegados** (`assign`, `reapply-template` y `meals/reorder` están en el
+contenedor). Quien coja esta tarea leerá que falta media nutrición por subir, y
+no es verdad.
+
+*Se comprueba*: `docker exec crm-salamandra-app-1 node scripts/check-module-tables.js`
+no se queja de `aumenta`/`nutricion`, y las cuatro pantallas cargan.
+*Dónde*: `scripts/_module-migrations.js:324`,
+`scripts/add-nutricion-module-nutri-laura.js:33` y
+`scripts/add-nutricion-c2-plans-nutri-laura.js:36`.
+*Comprobado en producción*: 10/08/2026 — `aumenta` no tiene el módulo (solo lo
+tienen `nutri_laura` y `demo`) y `crm_aumenta` no tiene ninguna de las nueve
+tablas.
+
+### Redactar el informe clínico con IA · `aumenta`
+
+De toda la IA que se podría meter, esta es la que más trabajo ahorra y la única
+que el propio código ya tiene preparada: la cabecera de
+`lib/clinica/redactarInforme.js` dice que la redacción asistida «de mañana» se
+apoyará en él —no lo sustituirá—, y el endpoint donde encaja
+(`/api/clinica/reports/[id]/desde-sesiones`) existe y está desplegado. Hoy junta
+lo que dicen las sesiones; falta el paso de pulir la redacción.
+
+Las dos reglas que ya están escritas en ese fichero son la especificación, y no
+se negocian: **no pisa lo que la terapeuta ya escribió** y **no inventa** —cada
+línea sale literal de un registro de sesión, con su fecha delante—. Un informe
+clínico acaba en manos de una familia y a veces de un juzgado.
+
+Depende de la decisión de las claves: hoy Aumenta no tiene ninguna, así que esto
+no se podría ni probar en su casa.
+
+*Se comprueba*: una terapeuta genera un borrador desde sus sesiones y lo edita.
+*Dónde*: `lib/clinica/redactarInforme.js:1-19`.
+*Comprobado en producción*: 10/08/2026 — el endpoint está desplegado y sin paso
+de IA; Aumenta tiene 22.045 sesiones y 0 informes.
 
 ### Los contadores del embudo mienten al filtrar · `quality_energy`, `abarcaia`, `aumenta`
 
@@ -202,6 +303,33 @@ que hacerles están en `docs/revision-aumenta-2026-08.md`.
 
 *Se comprueba*: existe y Aumenta lo usa.
 *Comprobado en producción*: 09/08/2026 — no hay nada de fichaje en el código.
+
+### Retorika lleva cinco semanas sin mandar nada desde su web · `retorika`
+
+El último dato que entró de su WordPress fue el 29/06 (matrículas e
+inscripciones); los alumnos y los cuestionarios pararon el 25/06. La última
+llamada de `asesoriaretorika.com` a cualquier webhook fue el **06/07**, y era
+una comprobación que no escribe nada.
+
+**No estamos rechazando nada**: todas las llamadas que llegaron respondieron
+200. O la academia está parada por el verano —que en una academia es lo más
+probable— o su plugin dejó de disparar. Hasta preguntarles no se puede saber, y
+por eso esto no es un fallo todavía.
+
+Lo que sí es del producto: **nada avisa cuando la integración de un cliente se
+queda muda**. La de Laura llama cada noche a las 04:30 y eso solo se ve mirando
+a mano el `access.log` de nginx. Si dejara de llamar, tampoco se enteraría
+nadie.
+
+*Se comprueba*: preguntar a Retorika si han dado cursos desde julio. Si dicen
+que sí, el fallo es nuestro y sube a P1; si dicen que no, se cierra.
+*Dónde*: `app/api/webhooks/tutorlms/*` y `app/api/webhooks/retorika/*`. Los
+datos, en `crm_retorika.{quiz_attempts,training_users,course_enrollments,course_registrations}`.
+*Comprobado en producción*: 10/08/2026 — 526 intentos (último 25/06), 100
+alumnos (25/06), 88 matrículas y 23 inscripciones (29/06). En el `access.log`
+de nginx: 3 llamadas suyas en julio, todas 200, la última el 06/07, y ninguna
+en agosto. En ese mismo periodo `tunutrilaura.com` llamó 29 veces, la última
+hoy a las 04:30.
 
 ---
 
@@ -297,6 +425,32 @@ WordPress con calma y se quitaría el viejo después.
 Cosas que no se pueden hacer sin que Jorge o Rodrigo elijan. Van como tareas y
 no como una lista suelta a propósito: así aparecen en el tablero. Cuando se
 decida, la respuesta se escribe aquí y la tarea baja a su prioridad.
+
+### ¿La IA la ponen ellos, la ponemos nosotros, o se deja como está? · producto
+
+El CRM tiene **once disparadores de IA repartidos por nueve módulos** —el
+asistente, reorganizar la semana, proponer huecos de cita, transcribir y
+estructurar la sesión clínica, analizar leads de captación, redactar respuestas
+de soporte, crear y reorganizar proyectos— y **todos están desplegados**. Desde
+que existe el contador (28/07), la IA se ha usado **nueve veces en total en toda
+la plataforma**.
+
+El motivo es uno solo: es BYOK —cada cliente trae su clave— y **ningún cliente
+ha puesto la suya**. De nueve clientes, el único con clave de Anthropic somos
+nosotros, y la de OpenAI no la tiene nadie, así que transcribir sesiones no
+funciona en ninguna parte. Aumenta tiene ocho módulos con IA dentro y 22.045
+sesiones clínicas con **cero** transcripciones.
+
+No está roto ni escondido: la tarjeta para pegar la clave sale en Configuración
+→ IA de todos los clientes (regla #14), y sin ella el CRM contesta «Este cliente
+no tiene configurada la clave de IA». Es que nadie la ha puesto — y lo más
+probable es que nadie sepa que tiene que ponerla. Hay que elegir una: que se les
+explique y la pongan ellos, que la pongamos nosotros y vaya dentro del precio, o
+dejarlo así y asumir que la IA del producto es un adorno.
+
+*Comprobado en producción*: 10/08/2026 — 1 de 9 clientes con clave de Anthropic
+(nosotros), 0 de 9 con la de OpenAI, y `ai.uso` = 9 en todo el registro de
+auditoría.
 
 ### ¿La agenda de Aumenta se abre al público? · `aumenta`
 

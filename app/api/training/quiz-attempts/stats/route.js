@@ -17,8 +17,10 @@ import { ok, forbidden, serverError } from "../../../../../lib/utils/apiResponse
  * Coherencia 3-vías con /list y los endpoints auxiliares (courses-list,
  * quizzes-list, companies-list): mismo WHERE construido en buildRawWhere().
  *
- * Auth: JWT + hasModule("training" || "cuestionarios"). Mismo gating que el
- * alias /api/cuestionarios para no romper tenants con módulo legacy.
+ * Auth: JWT + hasModule("training"), igual que el alias /api/cuestionarios.
+ * Hasta el 10/08/2026 la puerta era `training || cuestionarios`, porque
+ * Cuestionarios se vendía como módulo aparte. Ya no: los intentos son una
+ * pantalla de Formación y su clave propia no la gatea nada.
  *
  * Identidad de pregunta: (questionId, no). El texto y type se toman del
  * primer intento encontrado — heurística "suficientemente buena" porque
@@ -27,7 +29,7 @@ import { ok, forbidden, serverError } from "../../../../../lib/utils/apiResponse
  */
 export const GET = withTenant(async (request, _ctx, { tenantSequelize, hasModule, slug }) => {
   try {
-    if (!hasModule("training") && !hasModule("cuestionarios")) {
+    if (!hasModule("training")) {
       return forbidden("Módulo no activo");
     }
     const { searchParams } = new URL(request.url);

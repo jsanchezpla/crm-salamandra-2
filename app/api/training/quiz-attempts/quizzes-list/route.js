@@ -14,11 +14,11 @@ import { ok, forbidden, serverError } from "../../../../../lib/utils/apiResponse
  *
  * Ordenados por count DESC para que los más usados queden arriba.
  *
- * Auth: JWT + hasModule("training" || "cuestionarios").
+ * Auth: JWT + hasModule("training").
  */
 export const GET = withTenant(async (request, _ctx, { tenantSequelize, hasModule, slug }) => {
   try {
-    if (!hasModule("training") && !hasModule("cuestionarios")) {
+    if (!hasModule("training")) {
       return forbidden("Módulo no activo");
     }
     const { searchParams } = new URL(request.url);

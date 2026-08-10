@@ -48,7 +48,6 @@ const MODULES = [
   "team",
   "inventory",
   "training",
-  "cuestionarios",
   "calendar",
   "citas",
   "orders",
