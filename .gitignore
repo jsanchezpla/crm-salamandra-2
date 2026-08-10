@@ -64,3 +64,24 @@ fiscal.json
 # Llevan datos personales y de salud copiados tal cual de la base de datos:
 # fuera del repositorio, siempre.
 rastro-*.json
+
+# ─── Copias de seguridad ─────────────────────────────────────────────────────
+# En el VPS, backups/ cuelga DENTRO del checkout (/opt/crm-salamandra/backups),
+# así que git las ve como ficheros sin seguimiento. Eso es peligroso por partida
+# doble, y ya pasaba en producción el 2026-08-07 con 159 MB dentro:
+#
+#   · un `git clean -fd` antes de un despliegue se lleva TODAS las copias;
+#   · un `git add -A` mete en el historial la base entera — datos de salud de
+#     1.083 familias — de forma prácticamente irreversible.
+#
+# Los volcados también se generan a mano fuera de esa carpeta, de ahí los
+# patrones sueltos.
+backups/
+*.sql.gz
+uploads-*.tar.gz
+pre-*.sql
+backup-pre-*.sql
+
+# Ficheros subidos por los usuarios (contratos firmados, informes clínicos,
+# adjuntos). En producción es un bind mount; en local se crea al probar.
+uploads/

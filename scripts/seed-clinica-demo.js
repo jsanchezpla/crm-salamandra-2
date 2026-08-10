@@ -5,14 +5,31 @@
  * array, observations como objeto de 4 campos, contentSections de 7 secciones,
  * coordinaciones con enum válido. Enganchado a los team_members reales del tenant.
  *
+ * ⚠️ VACÍA la historia clínica del tenant antes de sembrar. Solo para el
+ * escaparate (`demo`) — ver el freno de abajo.
+ *
  * Uso local:  node --env-file=.env.local scripts/seed-clinica-demo.js [slug]
- * Uso VPS:    docker exec crm-salamandra-app-1 node scripts/seed-clinica-demo.js aumenta
+ *
+ * NO se documenta aquí la invocación en el VPS a propósito (2026-08-07): esta
+ * cabecera enseñaba `docker exec crm-salamandra-app-1 node
+ * scripts/seed-clinica-demo.js aumenta`, con el tenant real ya escrito y listo
+ * para copiar. Ese comando borra los pacientes, las sesiones y los informes del
+ * centro. Si algún día hace falta sembrar el escaparate en producción, se
+ * escribe el comando a mano, con la copia hecha y sabiendo lo que se hace.
  */
 
 import { getTenantDb } from "../lib/db/tenantDb.js";
 import { AREA_KEYS } from "../lib/clinica/performanceAreas.js";
+import { exigirTenantDePruebas } from "./_guard-datos-reales.js";
 
 const SLUG = process.argv[2] || "demo";
+
+exigirTenantDePruebas(SLUG, {
+  script: "seed-clinica-demo.js",
+  destruye:
+    "pacientes, sesiones clínicas, informes, coordinaciones y métricas de desempeño " +
+    "del tenant (y, en cascada, planes de intervención e inscripciones a talleres).",
+});
 
 function log(m) { process.stdout.write(`  ${m}\n`); }
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }

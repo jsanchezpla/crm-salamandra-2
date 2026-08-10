@@ -13,8 +13,21 @@ import bcrypt from "bcrypt";
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
 import { getTenantDb, closeAllConnections } from "../lib/db/tenantDb.js";
 
+import { exigirTenantDePruebas } from "./_guard-datos-reales.js";
+
 const SLUG = "spain_enzymes";
 const SCHEMA = `crm_${SLUG}`;
+
+// Frenado el 2026-08-07. Spain Enzymes está EN PRODUCCIÓN (se corrigió el
+// 31/07: ya no es "solo local") y recibe leads reales del formulario de
+// spainenzymes.com. El sync({alter:true}) de este script borra columnas vivas
+// que el modelo no declara.
+exigirTenantDePruebas(SLUG, {
+  script: "seed-spain-enzymes.js",
+  destruye:
+    "siembra datos de ejemplo sobre un cliente en producción que recibe leads " +
+    "de su web, y el sync({alter:true}) elimina columnas que el modelo no expone.",
+});
 const USER_EMAIL = "admin@spain-enzymes.salamandra";
 const USER_PASSWORD = "SpainEnz#2026!";
 

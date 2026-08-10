@@ -13,8 +13,19 @@ import bcrypt from "bcrypt";
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
 import { getTenantDb } from "../lib/db/tenantDb.js";
 
+import { exigirTenantDePruebas } from "./_guard-datos-reales.js";
+
 const SLUG = "quality_energy";
 const SCHEMA = `crm_${SLUG}`;
+
+// Frenado el 2026-08-07. Quality Energy tiene un solo módulo contratado
+// (`leads`): lo que hay en ese schema es todo su CRM.
+exigirTenantDePruebas(SLUG, {
+  script: "seed-quality-energy.js",
+  destruye:
+    "siembra sobre el único módulo que tiene contratado el cliente, y el " +
+    "sync({alter:true}) elimina columnas que el modelo no expone.",
+});
 const USER_EMAIL = "admin@qualityholding.com";
 const USER_PASSWORD = "Qe#7829!Solar";
 

@@ -1,0 +1,16 @@
+[Unit]
+Description=Copia de seguridad de la base de datos y los ficheros del CRM Salamandra
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Copia FUERA del servidor. Sin esto, las copias viven en el mismo disco que la
+# base: protegen de un borrado accidental, no de perder el servidor.
+#   · rclone:  Environment="DESTINO_REMOTO=b2:salamandra-backups"
+#   · rsync:   Environment="DESTINO_REMOTO=usuario@otro-vps:/backups/salamandra"
+# Descomenta UNA de las dos y ajusta el destino. Ver la cabecera de backup-db.sh.
+#Environment="DESTINO_REMOTO=b2:salamandra-backups"
+ExecStart=/opt/crm-salamandra/scripts/backup-db.sh
+StandardOutput=append:/var/log/crm-backup.log
+StandardError=append:/var/log/crm-backup.log

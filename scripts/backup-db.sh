@@ -6,38 +6,77 @@
 # reales de los clientes (Aumenta con 15 personas, la consulta de Laura) sin
 # ninguna copia reciente. Esto lo automatiza.
 #
-# QUÉ HACE: un pg_dump comprimido de TODA la base (todos los tenants + master),
-# con rotación por antigüedad. Es idempotente y no toca nada más.
+# QUÉ HACE: un pg_dump comprimido de TODA la base (todos los tenants + master)
+# MÁS los ficheros subidos (uploads/), con rotación por antigüedad y, si está
+# configurado, copia a un destino FUERA del servidor. Es idempotente.
 #
 # INSTALACIÓN EN EL VPS (una sola vez, como root):
 #   chmod +x /opt/crm-salamandra/scripts/backup-db.sh
-#   crontab -e
-#   # copia diaria a las 03:15
-#   15 3 * * * /opt/crm-salamandra/scripts/backup-db.sh >> /var/log/crm-backup.log 2>&1
+#   cp /opt/crm-salamandra/scripts/deploy/crm-backup.{service,timer} /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now crm-backup.timer
+#   # (este servidor NO tiene cron: se usa un timer de systemd, como
+#   #  crm-poda, crm-recordatorios y crm-retenciones)
 #
 # COMPROBAR QUE FUNCIONA:
+#   systemctl list-timers | grep crm-backup
 #   /opt/crm-salamandra/scripts/backup-db.sh && ls -lh /opt/crm-salamandra/backups | tail
 #
-# RESTAURAR (¡ojo, sobrescribe!):
-#   gunzip -c backups/auto-YYYYMMDD-HHMM.sql.gz | docker exec -i crm-salamandra-db-1 psql -U crm_user -d salamandra
+# ─── RESTAURAR ───────────────────────────────────────────────────────────────
+# ⚠️ SOBRESCRIBE. Haz una copia ANTES de restaurar una copia.
 #
-# ⚠️ Esto es copia LOCAL en el mismo servidor: protege de un borrado accidental
-# o de una migración que salga mal, NO de la pérdida del servidor entero. El
-# siguiente paso pendiente es sincronizar la carpeta a un destino externo
-# (S3/Backblaze/otro VPS) — ver RETENCION_DIAS y la nota del final.
+#   1) Base de datos:
+#      gunzip -c backups/auto-AAAAMMDD-HHMM.sql.gz \
+#        | docker exec -i crm-salamandra-db-1 psql -v ON_ERROR_STOP=1 -U crm_user -d salamandra
+#
+#      El `-v ON_ERROR_STOP=1` NO es opcional: sin él, psql se traga los errores,
+#      sigue adelante y termina con código 0 aunque no haya restaurado nada. Una
+#      restauración rota sería indistinguible de una buena.
+#
+#   2) Ficheros (contratos firmados, informes, adjuntos):
+#      tar xzf backups/uploads-AAAAMMDD-HHMM.tar.gz -C /opt/crm-salamandra
+#
+#      Restaurar SOLO la base deja miles de filas apuntando a ficheros que no
+#      existen: la app arranca bien y los documentos fallan uno a uno.
+#
+# ⚠️ UNA COPIA NUNCA RESTAURADA ES UNA HIPÓTESIS. Prueba el procedimiento
+#    entero en local al menos una vez.
+#
+# ─── COPIA FUERA DEL SERVIDOR ────────────────────────────────────────────────
+# Sin DESTINO_REMOTO configurado, todo esto vive en el MISMO disco que la base:
+# protege de un borrado accidental o de una migración que salga mal, NO de la
+# pérdida del servidor. Para activarla, define DESTINO_REMOTO en el entorno del
+# servicio (ver scripts/deploy/crm-backup.service):
+#
+#   · rclone:  DESTINO_REMOTO="b2:salamandra-backups"   (requiere `rclone config`)
+#   · rsync:   DESTINO_REMOTO="usuario@otro-vps:/backups/salamandra"
+#
+# Se detecta solo cuál usar por el formato. Si falla, el script NO aborta: la
+# copia local ya está hecha y es mejor tenerla que perderla por un fallo de red.
 
 set -euo pipefail
 
 DIR_REPO="${DIR_REPO:-/opt/crm-salamandra}"
 DIR_BACKUPS="${DIR_BACKUPS:-$DIR_REPO/backups}"
+DIR_UPLOADS="${UPLOADS_HOST_DIR:-$DIR_REPO/uploads}"
 CONTENEDOR_DB="${CONTENEDOR_DB:-crm-salamandra-db-1}"
 USUARIO_DB="${USUARIO_DB:-crm_user}"
 NOMBRE_DB="${NOMBRE_DB:-salamandra}"
 RETENCION_DIAS="${RETENCION_DIAS:-14}"
 MINIMO_BYTES="${MINIMO_BYTES:-100000}" # por debajo de esto, el volcado es basura
+DESTINO_REMOTO="${DESTINO_REMOTO:-}"   # vacío = solo copia local (ver cabecera)
 
 marca=$(date +%Y%m%d-%H%M)
 destino="$DIR_BACKUPS/auto-$marca.sql.gz"
+destino_uploads="$DIR_BACKUPS/uploads-$marca.tar.gz"
+
+# Un fallo NO puede pasar desapercibido: el `set -e` mataría el script sin dejar
+# más rastro que una línea en un log que nadie lee. Esta trampa garantiza que la
+# última línea diga siempre si la copia salió o no.
+fallo() {
+  echo "[$(date '+%F %T')] ❌ LA COPIA HA FALLADO (línea $1). Revísalo: los datos"
+  echo "[$(date '+%F %T')]    de hoy NO están respaldados."
+}
+trap 'fallo $LINENO' ERR
 
 mkdir -p "$DIR_BACKUPS"
 
@@ -60,12 +99,65 @@ if [ "$tam" -lt "$MINIMO_BYTES" ]; then
 fi
 
 mv "$tmp" "$destino"
-echo "[$(date '+%F %T')] OK: $(du -h "$destino" | cut -f1)"
+echo "[$(date '+%F %T')] OK base de datos: $(du -h "$destino" | cut -f1)"
 
-# Rotación: se borran las copias AUTOMÁTICAS antiguas. Las manuales
-# (pre-deploy-*.sql.gz) NO se tocan: son puntos de rescate deliberados.
-borradas=$(find "$DIR_BACKUPS" -name 'auto-*.sql.gz' -type f -mtime "+$RETENCION_DIAS" -print -delete | wc -l)
+# ─── Ficheros subidos ────────────────────────────────────────────────────────
+# Contratos FIRMADOS, informes clínicos, adjuntos de clientes y de tickets. No
+# se regeneran solos: restaurar únicamente la base deja las fichas apuntando a
+# papeles que ya no existen. Siete módulos escriben aquí.
+if [ -d "$DIR_UPLOADS" ]; then
+  tmp_up="$destino_uploads.parcial"
+  if tar czf "$tmp_up" -C "$(dirname "$DIR_UPLOADS")" "$(basename "$DIR_UPLOADS")"; then
+    mv "$tmp_up" "$destino_uploads"
+    echo "[$(date '+%F %T')] OK ficheros: $(du -h "$destino_uploads" | cut -f1)"
+  else
+    rm -f "$tmp_up"
+    echo "[$(date '+%F %T')] ⚠️ No se pudo empaquetar $DIR_UPLOADS. La base SÍ está copiada."
+  fi
+else
+  echo "[$(date '+%F %T')] ⚠️ No existe $DIR_UPLOADS — no hay ficheros que copiar."
+fi
+
+# ─── Rotación ────────────────────────────────────────────────────────────────
+# Se borran las copias AUTOMÁTICAS antiguas. Las manuales (pre-deploy-*, etc.)
+# NO se tocan: son puntos de rescate deliberados.
+borradas=$(find "$DIR_BACKUPS" \( -name 'auto-*.sql.gz' -o -name 'uploads-*.tar.gz' \) \
+  -type f -mtime "+$RETENCION_DIAS" -print -delete | wc -l)
 echo "[$(date '+%F %T')] Rotación: $borradas copia(s) de más de $RETENCION_DIAS días borradas."
 
 total=$(find "$DIR_BACKUPS" -name 'auto-*.sql.gz' -type f | wc -l)
 echo "[$(date '+%F %T')] Copias automáticas guardadas: $total · espacio: $(du -sh "$DIR_BACKUPS" | cut -f1)"
+
+# ─── Copia FUERA del servidor ────────────────────────────────────────────────
+# Lo de arriba vive en el mismo disco que la base: si se pierde el servidor, se
+# pierde todo a la vez. Esto es lo único que protege de eso.
+#
+# Un fallo aquí NO aborta el script: la copia local ya está hecha, y perderla
+# por un problema de red sería peor que quedarse sin la remota de hoy.
+if [ -n "$DESTINO_REMOTO" ]; then
+  echo "[$(date '+%F %T')] Sincronizando fuera del servidor → $DESTINO_REMOTO"
+  ok_remoto=0
+  case "$DESTINO_REMOTO" in
+    *:/*|*@*:*)  # usuario@host:/ruta → rsync
+      rsync -az --delete "$DIR_BACKUPS/" "$DESTINO_REMOTO/" && ok_remoto=1 || true
+      ;;
+    *:*)         # remoto:bucket de rclone
+      rclone sync "$DIR_BACKUPS" "$DESTINO_REMOTO" && ok_remoto=1 || true
+      ;;
+    *)
+      echo "[$(date '+%F %T')] ⚠️ DESTINO_REMOTO no parece ni rsync ni rclone: '$DESTINO_REMOTO'"
+      ;;
+  esac
+  if [ "$ok_remoto" = "1" ]; then
+    echo "[$(date '+%F %T')] OK copia externa."
+  else
+    echo "[$(date '+%F %T')] ⚠️ FALLÓ la copia externa. La local SÍ está hecha,"
+    echo "[$(date '+%F %T')]    pero hoy no hay nada fuera del servidor."
+  fi
+else
+  echo "[$(date '+%F %T')] ⚠️ Sin DESTINO_REMOTO: las copias están en el MISMO disco"
+  echo "[$(date '+%F %T')]    que la base de datos. Ver la cabecera de este script."
+fi
+
+trap - ERR
+echo "[$(date '+%F %T')] ✅ Copia completada."

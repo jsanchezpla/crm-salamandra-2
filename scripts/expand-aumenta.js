@@ -21,8 +21,23 @@ import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
 import { getTenantDb, closeAllConnections } from "../lib/db/tenantDb.js";
 import { invalidateTenantCache } from "../lib/tenant/tenantResolver.js";
 
+import { exigirTenantDePruebas } from "./_guard-datos-reales.js";
+
 const SLUG = "aumenta";
 const SCHEMA = `crm_${SLUG}`;
+
+// Frenado el 2026-08-07, y este es el peor de todos: hace `sync({ alter: true })`
+// en la línea ~174 y REVIENTA después, en la ~346, porque usa `InboundProduct`,
+// un modelo que dejó de existir con el rehecho del inventario del 02/08. O sea
+// que aplica el ALTER destructivo, mete diez clientes falsos sobre el tenant
+// real y aborta a media faena, dejando el estropicio hecho y el trabajo sin
+// terminar.
+exigirTenantDePruebas(SLUG, {
+  script: "expand-aumenta.js",
+  destruye:
+    "aplica sync({alter:true}) sobre el tenant real y luego ABORTA (usa modelos " +
+    "de inventario que ya no existen), dejando clientes de ejemplo a medias.",
+});
 const NEW_MODULES = [
   "clients",
   "calendar",

@@ -16,8 +16,21 @@
 
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
 import { getTenantDb } from "../lib/db/tenantDb.js";
+import { exigirTenantDePruebas } from "./_guard-datos-reales.js";
 
 const TENANT_SLUG = "retorika";
+
+// Frenado el 2026-08-07. La cabecera dice «(LOCAL)», pero nada lo impedía:
+// Retorika es un cliente REAL que solo existe en producción, y este script
+// hace `sync({ alter: true })` (línea ~243), que borra de la base las columnas
+// que el modelo ya no declara. Sembrar intentos ficticios sobre los cursos
+// reales de la academia tampoco es inocuo.
+exigirTenantDePruebas(TENANT_SLUG, {
+  script: "seed-cuestionarios-retorika.js",
+  destruye:
+    "siembra intentos de cuestionario FICTICIOS sobre un cliente real, y el " +
+    "sync({alter:true}) elimina columnas que el modelo no expone.",
+});
 
 // Rango "alto" para no colisionar con datos reales (ni en local ni en prod
 // si por accidente se ejecutara — aunque no se debe).

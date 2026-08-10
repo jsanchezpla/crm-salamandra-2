@@ -1,12 +1,23 @@
 /**
- * Elimina TODOS los leads y referidos del tenant "abarcaia"
- * Uso: docker compose exec app node scripts/clear-abarcaia-leads.js
+ * Elimina TODOS los leads y referidos del tenant "abarcaia".
+ *
+ * ⚠️ FRENADO desde el 2026-08-07. AbarcaIA existe SOLO en producción y sus dos
+ * módulos son `leads` y `referidos`: aquí no hay red de un entorno local donde
+ * equivocarse sin consecuencias. La cabecera documentaba la invocación en el VPS.
  */
 
 import { getMasterDb } from "../lib/db/masterDb.js";
 import { getTenantDb, closeAllConnections } from "../lib/db/tenantDb.js";
+import { exigirTenantDePruebas } from "./_guard-datos-reales.js";
 
 const SLUG = "abarcaia";
+
+exigirTenantDePruebas(SLUG, {
+  script: "clear-abarcaia-leads.js",
+  destruye:
+    "TODOS los leads y referidos de AbarcaIA, que solo existe en PRODUCCIÓN " +
+    "y cuyo negocio entero son esas dos tablas.",
+});
 
 async function main() {
   process.stdout.write(`\n🗑️  Eliminando todos los leads de '${SLUG}'...\n\n`);

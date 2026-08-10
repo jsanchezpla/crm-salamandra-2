@@ -12,8 +12,20 @@ import bcrypt from "bcrypt";
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
 import { getTenantDb, closeAllConnections } from "../lib/db/tenantDb.js";
 
+import { exigirTenantDePruebas } from "./_guard-datos-reales.js";
+
 const SLUG = "abarcaia";
 const SCHEMA = `crm_${SLUG}`;
+
+// Frenado el 2026-08-07. AbarcaIA existe SOLO en producción: no hay entorno
+// local donde este script pueda correr sin consecuencias, y su cabecera
+// documenta la invocación dentro del contenedor.
+exigirTenantDePruebas(SLUG, {
+  script: "seed-abarcaia.js",
+  destruye:
+    "siembra sobre un cliente que solo existe en PRODUCCIÓN, y el " +
+    "sync({alter:true}) elimina columnas que el modelo no expone.",
+});
 const USER_EMAIL = "admin@abarcaia.es"; // ← cambiar si es necesario
 const USER_PASSWORD = "Abarca#2026!";   // ← cambiar antes de producción
 

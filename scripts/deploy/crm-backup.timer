@@ -1,0 +1,11 @@
+[Unit]
+Description=Copia de seguridad diaria del CRM Salamandra
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+# Persistent: si el servidor estaba apagado a las 03:15, la copia se hace al
+# arrancar en vez de saltarse el día.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

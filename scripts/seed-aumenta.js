@@ -13,8 +13,21 @@ import bcrypt from "bcrypt";
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
 import { getTenantDb } from "../lib/db/tenantDb.js";
 
+import { exigirTenantDePruebas } from "./_guard-datos-reales.js";
+
 const SLUG = "aumenta";
 const SCHEMA = `crm_${SLUG}`;
+
+// Frenado el 2026-08-07. Aumenta lleva el centro con el CRM desde el 24-jul, y
+// este script siembra datos de ejemplo Y hace `sync({ alter: true })` (línea
+// ~385), que borra de la base toda columna que el modelo ya no declare —
+// `costs.amount` y `costs.month` están así a propósito.
+exigirTenantDePruebas(SLUG, {
+  script: "seed-aumenta.js",
+  destruye:
+    "siembra datos de EJEMPLO sobre el tenant real, y el sync({alter:true}) " +
+    "elimina columnas vivas en la base que el modelo no expone (costs.amount, costs.month).",
+});
 const USER_EMAIL = "admin@aumenta.es";
 const USER_PASSWORD = "Aumta#2026!";
 
