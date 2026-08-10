@@ -1,35 +1,33 @@
 "use client";
 
 /**
- * Integraciones — por dónde se tocan los módulos entre sí.
+ * Integraciones — qué necesita cada módulo, y por dónde se tocan entre sí.
  *
- * POR QUÉ NO ES UNA TABLA (09/08/2026)
- * Módulos es una tabla porque allí la pregunta es comparativa: «¿quién tiene
- * support?». Aquí la pregunta es relacional —«¿qué pasa entre Leads y
- * Clientes?»— y lo que hay que ver de un vistazo es el SENTIDO del flujo. Una
- * fila de tabla no enseña una flecha; una tarjeta con origen → destino, sí.
+ * DOS PREGUNTAS EN DOS PESTAÑAS, EN EL ORDEN EN QUE SE HACEN. «Qué necesita
+ * cada uno» es la de ANTES de vender —¿esto se puede vender solo?— y «Por dónde
+ * se tocan» la de después, cuando el cliente ya está y algo no sale.
+ *
+ * Son dos pestañas y no dos pantallas porque se consultan con el mismo cliente
+ * en la cabeza y el filtro de arriba vale para las dos; separarlas obligaría a
+ * recordar que la segunda existe.
  *
  * LOS CLIENTES SON EL FILTRO, no una columna. La pregunta que trae a alguien a
  * esta pantalla casi siempre viene con un cliente delante («¿qué se le rompe a
  * Aumenta si le quito Pacientes?»), así que los clientes están arriba como
- * botones y filtran la lista entera. Escribir el nombre a mano también vale.
+ * botones y filtran las dos vistas. Escribir el nombre a mano también vale.
  *
- * A MEDIAS NO ES UN ERROR: es «tiene el módulo de origen y no el de destino».
- * Puede ser deliberado. Se pinta como aviso, en ámbar, nunca en rojo.
+ * ── 1. QUÉ NECESITA CADA UNO (la que se abre) ──────────────────────────────
  *
- * ── DOS VISTAS DESDE EL 10/08/2026 ─────────────────────────────────────────
- *
- * «Qué necesita cada uno» responde la otra pregunta, la de ANTES de vender:
- * ¿esto se puede vender solo? Son dos pestañas y no dos pantallas porque se
- * consultan con el mismo cliente en la cabeza y el filtro de arriba vale para
- * las dos; separarlas obligaría a recordar que la segunda existe.
+ * ES LA QUE SE ABRE desde el 10/08/2026 (Jorge). Antes se entraba por la otra.
+ * Cambió cuando el alta de clientes pasó a obedecer esta matriz: dejó de ser una
+ * consulta y pasó a ser la REGLA que decide qué se puede marcar y qué no. Lo que
+ * manda se enseña primero.
  *
  * Y AQUÍ SÍ ES UNA TABLA, por el mismo motivo por el que la otra vista no lo
- * es: la pregunta cambia. Allí es relacional («¿qué pasa entre Leads y
- * Clientes?») y hace falta ver la flecha; aquí es comparativa («¿cuáles puedo
- * vender sueltos?») y lo que hace falta es poder recorrer una columna con el
- * dedo. Cinco columnas y ni una más: módulo, qué necesita, si le hace falta
- * para funcionar y qué pasa si no lo tiene.
+ * es: la pregunta es comparativa —«¿cuáles puedo vender sueltos?»— y lo que
+ * hace falta es poder recorrer una columna con el dedo. Cinco columnas y ni una
+ * más: módulo, qué necesita, si le hace falta para funcionar y qué pasa si no
+ * lo tiene.
  *
  * ORDENADA POR GRAVEDAD, no por área de venta. La primera versión iba agrupada
  * por el grupo del catálogo —Base, Dinero, Salud— pensando en quien arma un
@@ -43,6 +41,17 @@
  * del panel no lo decían — ver `SEMAFORO` más abajo. La tabla va además sobre
  * blanco, en su propia tarjeta: sobre el beige de la página, un amarillo lavado
  * y un fondo lavado son casi el mismo color.
+ *
+ * ── 2. POR DÓNDE SE TOCAN ──────────────────────────────────────────────────
+ *
+ * POR QUÉ ESTA NO ES UNA TABLA (09/08/2026)
+ * Módulos es una tabla porque allí la pregunta es comparativa: «¿quién tiene
+ * support?». Esta es relacional —«¿qué pasa entre Leads y Clientes?»— y lo que
+ * hay que ver de un vistazo es el SENTIDO del flujo. Una fila de tabla no
+ * enseña una flecha; una tarjeta con origen → destino, sí.
+ *
+ * A MEDIAS NO ES UN ERROR: es «tiene el módulo de origen y no el de destino».
+ * Puede ser deliberado. Se pinta como aviso, en ámbar, nunca en rojo.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -299,10 +308,12 @@ export default function IntegracionesPage() {
   const [error, setError] = useState(null);
   const [filtro, setFiltro] = useState("");
   const [cliente, setCliente] = useState(null);
-  // Dos preguntas distintas sobre lo mismo: «¿qué pasa entre estos dos?» y
-  // «¿esto se puede vender solo?». Se entra por la primera, que es la que trae
-  // a alguien aquí con un cliente al teléfono.
-  const [vista, setVista] = useState("tocan");
+  // Dos preguntas distintas sobre lo mismo: «¿esto se puede vender solo?» y
+  // «¿qué pasa entre estos dos?». Se entra por la primera (Jorge, 10/08/2026):
+  // desde que el alta obedece la matriz, esa tabla dejó de ser una consulta y
+  // pasó a ser la regla que decide qué se puede marcar. La otra pregunta se
+  // hace después, cuando el cliente ya está vendido y algo no sale.
+  const [vista, setVista] = useState("necesitan");
 
   useEffect(() => {
     document.title = "Integraciones — Salamandra";
@@ -429,13 +440,13 @@ export default function IntegracionesPage() {
           </span>
         </h1>
 
-        {/* Las dos preguntas. Se separan porque se hacen en momentos distintos:
-            «qué necesita» antes de vender, «por dónde se tocan» cuando ya está
-            vendido y algo no sale. */}
+        {/* Las dos preguntas, EN EL ORDEN EN QUE SE HACEN: «qué necesita» antes
+            de vender, «por dónde se tocan» cuando ya está vendido y algo no
+            sale. Iban al revés hasta el 10/08/2026. */}
         <div className="mt-6 flex gap-1">
           {[
-            ["tocan", "Por dónde se tocan"],
             ["necesitan", "Qué necesita cada uno"],
+            ["tocan", "Por dónde se tocan"],
           ].map(([clave, rotulo]) => (
             <button
               key={clave}
