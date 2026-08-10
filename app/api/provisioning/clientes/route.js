@@ -2,7 +2,8 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
-import { CATALOGO, RECOMENDADOS, PAQUETES } from "../../../../lib/provisioning/catalogo.js";
+import { RECOMENDADOS, PAQUETES } from "../../../../lib/provisioning/catalogo.js";
+import { catalogoConExigencias } from "../../../../lib/provisioning/dependencias.js";
 import { altaTenant, slugDesdeNombre } from "../../../../lib/provisioning/altaTenant.js";
 import { whereClientesVisibles, pideSuspendidos } from "../../../../lib/provisioning/clientesVisibles.js";
 
@@ -63,7 +64,9 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     }
 
     return ok({
-      catalogo: CATALOGO,
+      // Con `exige` pegado a cada módulo: la pantalla aplica exactamente la
+      // misma regla que el servidor sin tener una copia de las dependencias.
+      catalogo: catalogoConExigencias(),
       recomendados: RECOMENDADOS,
       paquetes: PAQUETES,
       clientes: tenants.map((t) => ({

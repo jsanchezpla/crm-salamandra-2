@@ -26,6 +26,107 @@ import CredentialsModal from "@/components/team/CredentialsModal.jsx";
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
 
+/* ══════════════════════════════════════════════════════════════════════════
+ * DEPENDENCIAS ENTRE MÓDULOS — la misma regla que el servidor
+ *
+ * Las REGLAS no están aquí: vienen pegadas a cada módulo del catálogo, en
+ * `m.exige`, calculadas en `lib/provisioning/dependencias.js`. Lo que hay aquí
+ * es solo el algoritmo que las aplica, para poder decir lo que pasa ANTES de
+ * pulsar en vez de después de un 422. Copiar las reglas al navegador sería
+ * garantizar que se desincronizan la primera vez que alguien toque la matriz.
+ *
+ * El servidor lo vuelve a comprobar SIEMPRE. Esto es comodidad, no seguridad.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+const cumpleDep = (dep, tiene) =>
+  dep.cualquiera ? dep.claves.some((k) => tiene.has(k)) : dep.claves.every((k) => tiene.has(k));
+
+/** Lo que no se sostiene de una selección. No la arregla: solo lo dice. */
+function validarSeleccion(seleccion, exige, orden) {
+  const problemas = seleccion.flatMap((k) => faltaPara(k, seleccion, exige));
+  return { modulos: orden.filter((k) => seleccion.includes(k)), problemas };
+}
+
+/**
+ * Qué habría que añadir para poder marcar `clave`, en cascada. Alimenta el botón
+ * «añadir también …»; NO se aplica sola.
+ *
+ * Sin él, marcar Clínica obligaría a ir hacia atrás —Pacientes, luego Clientes,
+ * luego ya sí Clínica—, que es tres mensajes de error para llegar a lo mismo.
+ * Con él es un clic, y las tres casillas quedan marcadas a la vista.
+ */
+function cadenaPara(clave, seleccion, exige, orden) {
+  const dentro = new Set([...seleccion, clave]);
+  const pend = [clave];
+  while (pend.length) {
+    const k = pend.pop();
+    for (const dep of exige[k] ?? []) {
+      if (dep.cualquiera) continue; // eso lo decide una persona
+      for (const n of dep.claves) if (!dentro.has(n)) { dentro.add(n); pend.push(n); }
+    }
+  }
+  const modulos = orden.filter((k) => dentro.has(k));
+  return {
+    modulos,
+    anadidos: modulos.filter((k) => !seleccion.includes(k) && k !== clave),
+    sinResolver: validarSeleccion(modulos, exige, orden).problemas,
+  };
+}
+
+/**
+ * Quién, de lo seleccionado, necesita a `clave`. Convierte un «no se puede
+ * desmarcar» —que parece una pantalla rota— en «lo necesita Clínica».
+ */
+function quienNecesita(clave, seleccion, exige) {
+  const tiene = new Set(seleccion);
+  return seleccion.filter(
+    (k) =>
+      k !== clave &&
+      (exige[k] ?? []).some(
+        (d) =>
+          d.claves.includes(clave) &&
+          // Con alternativa solo ata si es la última que queda: quitar Citas a
+          // quien tiene Clínica no rompe Equipo avanzado.
+          (d.cualquiera ? !d.claves.some((o) => o !== clave && tiene.has(o)) : true)
+      )
+  );
+}
+
+/** La misma frase que devuelve el servidor, para que digan lo mismo. */
+function fraseExigencia(p, nombreDe) {
+  const lista = (p.faltan ?? p.claves).map(nombreDe).join(p.cualquiera ? " o " : " y ");
+  return `Para activar ${nombreDe(p.modulo)} hace falta también ${lista}.`;
+}
+
+/**
+ * Lo que le falta a `clave` para poder marcarse, con la selección de ahora.
+ *
+ * `faltan` es lo que hay que ir a marcar y no el requisito entero: con Clientes
+ * ya puesto, «necesita Citas y Clientes» hace dudar de si Clientes está o no.
+ */
+function faltaPara(clave, seleccion, exige) {
+  const tiene = new Set(seleccion);
+  return (exige[clave] ?? [])
+    .filter((dep) => !cumpleDep(dep, tiene))
+    .map((dep) => ({
+      modulo: clave,
+      ...dep,
+      faltan: dep.cualquiera ? dep.claves : dep.claves.filter((c) => !tiene.has(c)),
+    }));
+}
+
+/**
+ * La línea que explica por qué una casilla no se puede tocar.
+ *
+ * Va SIEMPRE que el estado sea distinto de «normal», nunca solo al intentarlo:
+ * una casilla gris sin motivo se lee como un fallo de la pantalla, y quien la
+ * ve llama por teléfono en vez de marcar lo que falta.
+ */
+function NotaDependencia({ tono = "gris", children }) {
+  const c = tono === "rojo" ? "text-red-700" : "text-neutral-400";
+  return <div className={`text-[10.5px] leading-snug mt-0.5 ${c}`}>{children}</div>;
+}
+
 function Campo({ etiqueta, pista, children }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -158,11 +259,6 @@ function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
 
   const [confirmando, setConfirmando] = useState(false);
 
-  const nuevos = f.modulos.filter((m) => !cliente.modulos.includes(m));
-  const quitados = cliente.modulos.filter((m) => !f.modulos.includes(m));
-  const hayCambios =
-    f.nombre !== cliente.nombre || f.plan !== cliente.plan || nuevos.length > 0 || quitados.length > 0;
-
   // La confirmación enseña nombres, no claves: quien decide si un cliente tiene
   // «Documentos avanzado» no tiene por qué saber que por dentro se llama
   // `documents_avanzado`.
@@ -171,6 +267,20 @@ function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
     for (const g of catalogo ?? []) for (const mod of g.modulos ?? []) m[mod.key] = mod.nombre;
     return m;
   }, [catalogo]);
+  const nombreDe = (k) => nombresDeModulo[k] ?? k;
+
+  const planos = useMemo(() => (catalogo ?? []).flatMap((g) => g.modulos ?? []), [catalogo]);
+  const orden = useMemo(() => planos.map((m) => m.key), [planos]);
+  const exige = useMemo(() => Object.fromEntries(planos.map((m) => [m.key, m.exige ?? []])), [planos]);
+
+  // Lo marcado es lo que se guarda: ni se completa ni se corrige. La
+  // confirmación que viene después promete exactamente esto.
+  const resuelto = useMemo(() => validarSeleccion(f.modulos, exige, orden), [f.modulos, exige, orden]);
+
+  const nuevos = resuelto.modulos.filter((m) => !cliente.modulos.includes(m));
+  const quitados = cliente.modulos.filter((m) => !resuelto.modulos.includes(m));
+  const hayCambios =
+    f.nombre !== cliente.nombre || f.plan !== cliente.plan || nuevos.length > 0 || quitados.length > 0;
 
   function alternar(key) {
     setF((p) => ({
@@ -201,35 +311,63 @@ function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
 
       <div>
         <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-2">
-          Módulos ({f.modulos.length})
+          Módulos ({resuelto.modulos.length})
         </div>
         <div className="grid md:grid-cols-2 gap-x-4 gap-y-1">
-          {catalogo.flatMap((g) => g.modulos).map((m) => {
+          {planos.map((m) => {
             const marcado = f.modulos.includes(m.key);
+            const necesitadoPor = marcado ? quienNecesita(m.key, f.modulos, exige) : [];
+            const fijo = necesitadoPor.length > 0;
+            const falta = marcado ? [] : faltaPara(m.key, f.modulos, exige);
+            const cadena = falta.length ? cadenaPara(m.key, f.modulos, exige, orden) : null;
             const esNuevo = marcado && !cliente.modulos.includes(m.key);
             const seQuita = !marcado && cliente.modulos.includes(m.key);
             return (
-              <label key={m.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm">
-                <input type="checkbox" checked={marcado} onChange={() => alternar(m.key)}
-                  className="rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)]" />
-                <span className={seQuita ? "text-neutral-400 line-through" : "text-neutral-700"}>{m.nombre}</span>
-                {esNuevo && <span className="text-[10px] text-emerald-700">se activará</span>}
-                {seQuita && <span className="text-[10px] text-amber-700">se quitará</span>}
-              </label>
+              <div key={m.key} className="py-1">
+                <label className={`flex items-center gap-2 text-sm ${fijo || falta.length ? "cursor-default" : "cursor-pointer"}`}>
+                  <input type="checkbox" checked={marcado} disabled={fijo || falta.length > 0}
+                    onChange={() => alternar(m.key)}
+                    className="rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)] disabled:opacity-50" />
+                  <span className={seQuita ? "text-neutral-400 line-through" : "text-neutral-700"}>{m.nombre}</span>
+                  {esNuevo && <span className="text-[10px] text-emerald-700">se activará</span>}
+                  {seQuita && <span className="text-[10px] text-amber-700">se quitará</span>}
+                </label>
+                {fijo && (
+                  <NotaDependencia>
+                    no se puede quitar: lo necesita {necesitadoPor.map(nombreDe).join(", ")}
+                  </NotaDependencia>
+                )}
+                {falta.length > 0 && (
+                  <NotaDependencia tono="rojo">
+                    {falta.map((p) => fraseExigencia(p, nombreDe)).join(" ")}
+                    {cadena && cadena.sinResolver.length === 0 && (
+                      <button type="button" onClick={() => setF((p) => ({ ...p, modulos: cadena.modulos }))}
+                        className="ml-1 underline underline-offset-2 hover:no-underline">
+                        activar también {cadena.anadidos.map(nombreDe).join(" y ")}
+                      </button>
+                    )}
+                  </NotaDependencia>
+                )}
+              </div>
             );
           })}
         </div>
       </div>
 
+      {resuelto.problemas.length > 0 && (
+        <div className="text-[11px] text-red-800 bg-red-50 border border-red-200 rounded-lg px-3 py-2 space-y-0.5">
+          {resuelto.problemas.map((p, i) => <div key={i}>{fraseExigencia(p, nombreDe)}</div>)}
+        </div>
+      )}
       {nuevos.length > 0 && (
         <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-          Al guardar se prepararán las tablas de {nuevos.join(", ")} en la base de datos de este cliente.
-          <b> Tarda unos 20 segundos.</b> No cierres la página.
+          Al guardar se prepararán las tablas de {nuevos.map(nombreDe).join(", ")} en la base de datos de
+          este cliente.<b> Tarda unos 20 segundos.</b> No cierres la página.
         </div>
       )}
       {quitados.length > 0 && (
         <div className="text-[11px] text-neutral-600 bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2">
-          Quitar {quitados.join(", ")} solo los esconde del menú. <b>Sus datos se conservan</b> y vuelven si los reactivas.
+          Quitar {quitados.map(nombreDe).join(", ")} solo los esconde del menú. <b>Sus datos se conservan</b> y vuelven si los reactivas.
         </div>
       )}
 
@@ -247,12 +385,13 @@ function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
           {cliente.estado === "suspended" ? "Reactivar cliente" : "Suspender cliente"}
         </button>
         {/* Cambiar el nombre o el plan se guarda directo; tocar los módulos pasa
-            por la confirmación, que es lo que mueve tablas y menús. */}
-        <button type="button" disabled={!hayCambios || guardando}
+            por la confirmación, que es lo que mueve tablas y menús. Se manda la
+            lista RESUELTA: es la que se acaba de enseñar y confirmar. */}
+        <button type="button" disabled={!hayCambios || guardando || resuelto.problemas.length > 0}
           onClick={() => {
             const tocaModulos = nuevos.length > 0 || quitados.length > 0;
             if (tocaModulos) setConfirmando(true);
-            else onGuardar(cliente.slug, { nombre: f.nombre, plan: f.plan, modulos: f.modulos });
+            else onGuardar(cliente.slug, { nombre: f.nombre, plan: f.plan, modulos: resuelto.modulos });
           }}
           className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-40"
           style={{ background: "var(--color-primary, #1B3A2D)" }}>
@@ -269,7 +408,7 @@ function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
           onCancelar={() => setConfirmando(false)}
           onConfirmar={() => {
             setConfirmando(false);
-            onGuardar(cliente.slug, { nombre: f.nombre, plan: f.plan, modulos: f.modulos });
+            onGuardar(cliente.slug, { nombre: f.nombre, plan: f.plan, modulos: resuelto.modulos });
           }}
         />
       )}
@@ -338,24 +477,17 @@ export default function AltaClientesPage() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  // Dependencias: marcar Clínica arrastra Pacientes y Clientes, y se avisa.
-  const metaPorClave = useMemo(() => {
-    const m = {};
-    for (const g of datos?.catalogo ?? []) for (const x of g.modulos) m[x.key] = x;
-    return m;
-  }, [datos]);
+  // Dependencias: Nutrición no se puede marcar sin Clientes, y la casilla lo
+  // dice con esas palabras en vez de dejarse marcar y añadirlo por detrás.
+  const planos = useMemo(() => (datos?.catalogo ?? []).flatMap((g) => g.modulos ?? []), [datos]);
+  const ordenModulos = useMemo(() => planos.map((m) => m.key), [planos]);
+  const exige = useMemo(() => Object.fromEntries(planos.map((m) => [m.key, m.exige ?? []])), [planos]);
+  const nombreDe = useCallback((k) => planos.find((m) => m.key === k)?.nombre ?? k, [planos]);
 
-  const arrastrados = useMemo(() => {
-    const fuera = new Set();
-    const pend = [...form.modulos];
-    while (pend.length) {
-      const k = pend.pop();
-      for (const dep of metaPorClave[k]?.requiere || []) {
-        if (!form.modulos.includes(dep)) { fuera.add(dep); pend.push(dep); }
-      }
-    }
-    return [...fuera];
-  }, [form.modulos, metaPorClave]);
+  const resuelto = useMemo(
+    () => validarSeleccion(form.modulos, exige, ordenModulos),
+    [form.modulos, exige, ordenModulos]
+  );
 
   function toggleModulo(key) {
     setForm((f) => ({
@@ -401,7 +533,12 @@ export default function AltaClientesPage() {
     e.preventDefault();
     setErr(null);
     if (!form.nombre.trim()) { setErr("Escribe el nombre del cliente"); return; }
-    if (!form.modulos.length) { setErr("Elige al menos un módulo"); return; }
+    if (!resuelto.modulos.length) { setErr("Elige al menos un módulo"); return; }
+    // El servidor lo vuelve a comprobar; esto es para no llegar allí.
+    if (resuelto.problemas.length) {
+      setErr(resuelto.problemas.map((p) => fraseExigencia(p, nombreDe)).join(" "));
+      return;
+    }
     if (!confirm(`Se va a crear el cliente «${form.nombre}» con identificador «${form.slug}».\n\nEl identificador NO se puede cambiar después. ¿Continuar?`)) return;
 
     setCreando(true);
@@ -413,7 +550,8 @@ export default function AltaClientesPage() {
           nombre: form.nombre,
           slug: form.slug,
           adminEmail: form.adminEmail || undefined,
-          modulos: form.modulos,
+          // La lista RESUELTA: lo que la pantalla acaba de enseñar marcado.
+          modulos: resuelto.modulos,
           brand: { primaryColor: form.primaryColor, secondaryColor: form.secondaryColor, logoUrl: form.logoUrl },
           fiscal: { fiscalName: form.fiscalName, taxId: form.taxId, address: form.address, city: form.city, zip: form.zip },
         }),
@@ -483,7 +621,7 @@ export default function AltaClientesPage() {
           {/* Módulos */}
           <div>
             <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-2">
-              Módulos contratados ({form.modulos.length})
+              Módulos contratados ({resuelto.modulos.length})
             </div>
 
             {/* Paquetes: marcan de golpe lo que se vende con un nombre. No
@@ -507,20 +645,42 @@ export default function AltaClientesPage() {
                   <div className="grid md:grid-cols-2 gap-x-4 gap-y-1.5">
                     {g.modulos.map((m) => {
                       const marcado = form.modulos.includes(m.key);
-                      const auto = arrastrados.includes(m.key);
+                      // Si alguien lo necesita, no se puede quitar. Y si no se
+                      // puede marcar todavía, se dice qué falta — con el atajo
+                      // para marcarlo, que si no hay que ir hacia atrás módulo
+                      // a módulo hasta llegar a Clientes.
+                      const necesitadoPor = marcado ? quienNecesita(m.key, form.modulos, exige) : [];
+                      const fijo = necesitadoPor.length > 0;
+                      const falta = marcado ? [] : faltaPara(m.key, form.modulos, exige);
+                      const cadena = falta.length ? cadenaPara(m.key, form.modulos, exige, ordenModulos) : null;
+                      const trabado = fijo || falta.length > 0;
                       return (
                         <label key={m.key}
-                          className={`flex items-start gap-2.5 p-2 rounded-lg cursor-pointer transition ${marcado || auto ? "bg-neutral-50" : "hover:bg-neutral-50/60"}`}>
-                          <input type="checkbox" checked={marcado || auto} disabled={auto}
+                          className={`flex items-start gap-2.5 p-2 rounded-lg transition ${trabado ? "cursor-default" : "cursor-pointer"} ${marcado ? "bg-neutral-50" : falta.length ? "opacity-70" : "hover:bg-neutral-50/60"}`}>
+                          <input type="checkbox" checked={marcado} disabled={trabado}
                             onChange={() => toggleModulo(m.key)}
-                            className="mt-0.5 rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)]" />
+                            className="mt-0.5 rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)] disabled:opacity-50" />
                           <div className="min-w-0">
-                            <div className="text-sm text-neutral-800">
-                              {m.nombre}
-                              {auto && <span className="ml-1.5 text-[10px] text-neutral-400">(lo necesita otro módulo)</span>}
-                            </div>
+                            <div className="text-sm text-neutral-800">{m.nombre}</div>
                             <div className="text-[11px] text-neutral-500 leading-snug">{m.desc}</div>
-                            {m.avisa && (marcado || auto) && (
+                            {fijo && (
+                              <NotaDependencia>
+                                no se puede quitar: lo necesita {necesitadoPor.map(nombreDe).join(", ")}
+                              </NotaDependencia>
+                            )}
+                            {falta.length > 0 && (
+                              <NotaDependencia tono="rojo">
+                                {falta.map((p) => fraseExigencia(p, nombreDe)).join(" ")}
+                                {cadena && cadena.sinResolver.length === 0 && (
+                                  <button type="button"
+                                    onClick={() => setForm((f) => ({ ...f, modulos: cadena.modulos }))}
+                                    className="ml-1 underline underline-offset-2 hover:no-underline">
+                                    marcar también {cadena.anadidos.map(nombreDe).join(" y ")}
+                                  </button>
+                                )}
+                              </NotaDependencia>
+                            )}
+                            {m.avisa && marcado && (
                               <div className="text-[11px] text-amber-700 mt-0.5">⚠ {m.avisa}</div>
                             )}
                           </div>
@@ -531,6 +691,18 @@ export default function AltaClientesPage() {
                 </div>
               ))}
             </div>
+
+            {/* Red de seguridad: las notas de cada casilla se leen cuando ya
+                sabes dónde mirar. Esto es lo que ve quien va a pulsar «Crear
+                cliente» sin repasar la lista — con las casillas bloqueadas no
+                debería salir nunca, y por eso mismo sale si sale. */}
+            {resuelto.problemas.length > 0 && (
+              <div className="mt-3 text-[11px] text-red-800 bg-red-50 border border-red-200 rounded-lg px-3 py-2 space-y-0.5">
+                {resuelto.problemas.map((p, i) => (
+                  <div key={i}>{fraseExigencia(p, nombreDe)}</div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Marca */}
@@ -598,7 +770,7 @@ export default function AltaClientesPage() {
               className="px-4 py-2 text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700">
               Cancelar
             </button>
-            <button type="submit" disabled={creando}
+            <button type="submit" disabled={creando || resuelto.problemas.length > 0}
               className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-50"
               style={{ background: "var(--color-primary, #1B3A2D)" }}>
               {creando ? "Creando cliente…" : "Crear cliente"}

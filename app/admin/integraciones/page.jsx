@@ -495,7 +495,7 @@ export default function IntegracionesPage() {
               >
                 {discrepancias.length}
               </div>
-              <Etiqueta tono={discrepancias.length > 0 ? "alerta" : "ok"}>el alta los vende mal</Etiqueta>
+              <Etiqueta tono={discrepancias.length > 0 ? "alerta" : "ok"}>el catálogo no lo dice</Etiqueta>
             </div>
             <div>
               <div
@@ -508,8 +508,9 @@ export default function IntegracionesPage() {
             </div>
             <p className="text-[12px] leading-relaxed max-w-xs ml-auto" style={{ color: "var(--dim)" }}>
               La pregunta de antes de vender. <strong>Obligatorio</strong> es que sin el otro no sirve
-              para lo que se vende; <strong>pierde algo</strong> es que funciona y se queda sin una
-              utilidad concreta, que casi siempre es a propósito.
+              para lo que se vende, y desde el 10/08/2026 <strong>el alta no deja marcarlo suelto</strong>;{" "}
+              <strong>pierde algo</strong> es que funciona y se queda sin una utilidad concreta, que
+              casi siempre es a propósito, y ese no bloquea nada.
             </p>
           </div>
         )}
@@ -591,9 +592,10 @@ export default function IntegracionesPage() {
       {vista === "necesitan" && (
         <>
           {discrepancias.length > 0 && (
-            <Aviso titulo="el alta permite venderlos mal">
-              Estos módulos se pueden marcar solos en el alta de clientes y no funcionarían, porque
-              el catálogo no declara su <code>requiere</code>:{" "}
+            <Aviso titulo="el catálogo se ha quedado corto">
+              El alta ya IMPIDE marcar estos módulos sueltos —lo que manda es esta matriz—, pero el
+              catálogo, que es lo que se lee al vender, no declara su <code>requiere</code>. Quien
+              arme un presupuesto los ofrecerá solos y se llevará la sorpresa al activarlos:{" "}
               {discrepancias.map((d, n) => (
                 <span key={`${d.modulo}-${d.claves.join()}`}>
                   {n > 0 && " · "}

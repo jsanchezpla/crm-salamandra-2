@@ -78,6 +78,41 @@ process.stdout.write("\n══════════════════�
 process.stdout.write(` Alta de módulo "${moduleKey}" en "${slug}" (${tenant.name})\n`);
 process.stdout.write("══════════════════════════════════════════════════════\n\n");
 
+// ── Dependencias ──────────────────────────────────────────────────────────
+// El alta de clientes IMPIDE encender un módulo sin lo que necesita
+// (lib/provisioning/dependencias.js). Este script es la puerta de servicio y
+// AVISA en vez de bloquear, a propósito: se usa justamente para los casos que
+// la pantalla no contempla —estrenar un módulo, reparar un cliente a mano— y un
+// cerrojo aquí solo se saltaría con SQL, que es peor. Pero encenderlo sin mirar
+// esto deja al cliente con un módulo que no le funciona y sin que nadie lo sepa.
+try {
+  const { exigenciasDe, fraseDeExigencia } = await import("../lib/provisioning/dependencias.js");
+  const { moduloPorClave } = await import("../lib/provisioning/catalogo.js");
+  const activos = new Set(
+    (await TenantModule.findAll({ where: { tenantId: tenant.id, enabled: true }, raw: true })).map(
+      (f) => f.moduleKey
+    )
+  );
+  activos.add(moduleKey);
+
+  const nombreDe = (k) => moduloPorClave(k)?.nombre ?? k;
+  const faltan = exigenciasDe(moduleKey).filter((dep) =>
+    dep.cualquiera ? !dep.claves.some((k) => activos.has(k)) : !dep.claves.every((k) => activos.has(k))
+  );
+
+  if (faltan.length) {
+    process.stdout.write("  ⚠ LE VA A FALTAR ALGO PARA FUNCIONAR:\n");
+    for (const dep of faltan) {
+      const sinCubrir = dep.cualquiera ? dep.claves : dep.claves.filter((k) => !activos.has(k));
+      process.stdout.write(`    · ${fraseDeExigencia({ modulo: moduleKey, ...dep, faltan: sinCubrir }, nombreDe)}\n`);
+      process.stdout.write(`      ${dep.porque}\n`);
+    }
+    process.stdout.write("    Enciéndelos también, o el cliente lo descubrirá usándolo.\n\n");
+  }
+} catch {
+  // Un módulo fuera del catálogo no tiene dependencias escritas: no es un error.
+}
+
 const migraciones = MODULES[moduleKey] || [];
 if (migraciones.length === 0) {
   process.stdout.write(`  ⚠ El módulo "${moduleKey}" no tiene migraciones en el mapa\n`);
