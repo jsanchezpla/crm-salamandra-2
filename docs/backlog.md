@@ -193,13 +193,22 @@ tarea antes.
 «Que la nutrición de Aumenta sea igual que la de nutri_laura» tiene una mitad
 gratis y una mitad rota.
 
-**Gratis**: la pantalla ya es idéntica por construcción. El módulo `nutricion`
-**no tiene base**: las cuatro páginas importan los componentes de
-`modules/overrides/nutri-laura/` y los usan como valor por defecto para
-cualquier cliente. Quien tenga el módulo ve las pantallas de Laura, tal cual.
-El `uiOverride` y el flag `externalSearchEnabled` que ella tiene en
-`master.tenant_modules` están muertos: el primero no lo lee nadie y el segundo
-era de OpenFoodFacts, que se retiró entero el 18/07.
+**Gratis**: las cuatro pantallas de `/nutricion/*` ya son idénticas por
+construcción. Ese módulo **no tiene base**: las cuatro páginas importan los
+componentes de `modules/overrides/nutri-laura/` y los usan como valor por
+defecto para cualquier cliente. El `uiOverride` y el flag
+`externalSearchEnabled` que Laura tiene en `master.tenant_modules` están
+muertos: el primero no lo lee nadie y el segundo era de OpenFoodFacts, que se
+retiró entero el 18/07.
+
+⚠️ **Pero «idéntica» solo vale para esas cuatro pantallas.** La pestaña
+**Pautas** de la ficha del cliente —y con ella asignar un menú desde la propia
+ficha— cuelga de `modules/overrides/nutri-laura/ClientDetailModule.jsx`, que
+solo renderiza Laura: el resto ve `modules/default/ClientDetailModule.jsx`, que
+no importa `ClientPlansPanel`. La prueba está en producción: **la demo tiene
+`nutricion` activo y no tiene la pestaña de Pautas**. Eso es lo que de verdad
+habría que llevar al default si se quiere que Aumenta lo tenga «igual que
+Laura», y es trabajo de código, no de encender un interruptor.
 
 **Rota**: encenderlo hoy deja a Aumenta con el módulo puesto y **cero tablas**.
 De las nueve tablas de nutrición, cinco (`foods`, `plans`, `plan_meals`,
@@ -240,27 +249,44 @@ no se queja de `aumenta`/`nutricion`, y las cuatro pantallas cargan.
 tienen `nutri_laura` y `demo`) y `crm_aumenta` no tiene ninguna de las nueve
 tablas.
 
-### Redactar el informe clínico con IA · `aumenta`
+### El informe clínico: el PDF ya está, falta que lo escriba la IA · `aumenta`
 
-De toda la IA que se podría meter, esta es la que más trabajo ahorra y la única
-que el propio código ya tiene preparada: la cabecera de
-`lib/clinica/redactarInforme.js` dice que la redacción asistida «de mañana» se
-apoyará en él —no lo sustituirá—, y el endpoint donde encaja
-(`/api/clinica/reports/[id]/desde-sesiones`) existe y está desplegado. Hoy junta
-lo que dicen las sesiones; falta el paso de pulir la redacción.
+**El PDF está hecho y desplegado**, que es lo primero que hay que saber para no
+rehacerlo: `lib/clinica/reportPdf.js` compone el informe que recibe la familia
+—secciones fijas, solo las que tienen contenido, sin membrete porque se abre en
+el móvil— y sale por «Enviar al paciente». En clínica hay un segundo PDF, el de
+estadísticas del centro (`lib/clinica/estadisticasExport.js`), también hecho.
+Ninguno de los dos lleva IA: son maquetación con pdfkit.
 
-Las dos reglas que ya están escritas en ese fichero son la especificación, y no
-se negocian: **no pisa lo que la terapeuta ya escribió** y **no inventa** —cada
-línea sale literal de un registro de sesión, con su fecha delante—. Un informe
-clínico acaba en manos de una familia y a veces de un juzgado.
+Lo que falta es el paso de ANTES. Hoy el contenido lo compone
+`lib/clinica/redactarInforme.js`, que copia literal lo que dicen las sesiones
+elegidas, con su fecha delante. Su cabecera ya dice que la redacción asistida
+«de mañana» se apoyará en él —no lo sustituirá—: primero se junta lo que dicen
+las sesiones, y luego, si acaso, se le pide a la IA que lo pula.
 
-Depende de la decisión de las claves: hoy Aumenta no tiene ninguna, así que esto
-no se podría ni probar en su casa.
+Las dos reglas que ese fichero ya tiene escritas son la especificación y no se
+negocian: **no pisa lo que la terapeuta ya escribió** y **no inventa**. Un
+informe clínico acaba en manos de una familia y a veces de un juzgado.
 
-*Se comprueba*: una terapeuta genera un borrador desde sus sesiones y lo edita.
-*Dónde*: `lib/clinica/redactarInforme.js:1-19`.
-*Comprobado en producción*: 10/08/2026 — el endpoint está desplegado y sin paso
-de IA; Aumenta tiene 22.045 sesiones y 0 informes.
+Dos cosas lo hacen prematuro HOY, y las dos son de fuera del código:
+
+- Aumenta **no tiene ninguna clave de IA** —ni Anthropic ni OpenAI—, así que
+  esto no se puede ni probar en su casa. Ver la decisión de las claves.
+- El módulo clínico se importó de Organízate el 02/08 y **todavía no ha
+  registrado su primera sesión por la aplicación**. Las 22.045 sesiones que hay
+  son ese volcado: notas ya redactadas a mano entre 2024 y 2026, de las que no
+  existió nunca un audio. Sobre ellas la IA no tiene nada que hacer, y contarlas
+  como trabajo pendiente es engañarse. El día que empiecen a registrar sesiones
+  desde el CRM, esto pasa a valer mucho.
+
+*Se comprueba*: una terapeuta genera el borrador desde sus sesiones, la IA lo
+pule sin tocar lo que ella escribió, y sale el PDF de siempre.
+*Dónde*: `lib/clinica/redactarInforme.js:1-19` es el punto de enganche;
+`lib/clinica/reportPdf.js` es lo que NO hay que tocar.
+*Comprobado en producción*: 10/08/2026 — los dos generadores de PDF están en el
+contenedor; `/api/clinica/reports/[id]/` tiene `desde-sesiones` y `enviar`, y
+ningún paso de IA en medio. Aumenta: 0 informes y 0 sesiones creadas desde la
+importación.
 
 ### Los contadores del embudo mienten al filtrar · `quality_energy`, `abarcaia`, `aumenta`
 
@@ -431,15 +457,21 @@ decida, la respuesta se escribe aquí y la tarea baja a su prioridad.
 El CRM tiene **once disparadores de IA repartidos por nueve módulos** —el
 asistente, reorganizar la semana, proponer huecos de cita, transcribir y
 estructurar la sesión clínica, analizar leads de captación, redactar respuestas
-de soporte, crear y reorganizar proyectos— y **todos están desplegados**. Desde
-que existe el contador (28/07), la IA se ha usado **nueve veces en total en toda
-la plataforma**.
+de soporte, crear y reorganizar proyectos— y **todos están desplegados**.
 
-El motivo es uno solo: es BYOK —cada cliente trae su clave— y **ningún cliente
-ha puesto la suya**. De nueve clientes, el único con clave de Anthropic somos
-nosotros, y la de OpenAI no la tiene nadie, así que transcribir sesiones no
-funciona en ninguna parte. Aumenta tiene ocho módulos con IA dentro y 22.045
-sesiones clínicas con **cero** transcripciones.
+Y no la usa nadie, porque es BYOK —cada cliente trae su clave— y **ningún
+cliente ha puesto la suya**. De nueve clientes, el único con clave de Anthropic
+somos nosotros, y la de OpenAI **no la tiene ni uno**, así que transcribir
+sesiones no funciona en ninguna parte del parque. Aumenta, que tiene ocho
+módulos con IA dentro, no tiene ninguna de las dos.
+
+⚠️ El registro de auditoría apunta en la misma dirección pero **no vale como
+prueba, y conviene no citarlo**: hay 9 filas `ai.uso`, y solo cubren desde el
+28/07 —cuando nació `vetoAi`—, solo los diez endpoints que lo llaman, y las de
+la demo se borran cada 7 días con la poda. Hay IA de pago que no pasa por ahí
+(`/api/public/c/[slug]/soporte` llama a Claude sin `vetoAi`) y hay una llamada
+real del 12/07 en `outreach_analyses` sin fila detrás. Lo que sostiene esta
+tarea son las CLAVES, no el contador.
 
 No está roto ni escondido: la tarjeta para pegar la clave sale en Configuración
 → IA de todos los clientes (regla #14), y sin ella el CRM contesta «Este cliente
@@ -448,9 +480,11 @@ probable es que nadie sepa que tiene que ponerla. Hay que elegir una: que se les
 explique y la pongan ellos, que la pongamos nosotros y vaya dentro del precio, o
 dejarlo así y asumir que la IA del producto es un adorno.
 
-*Comprobado en producción*: 10/08/2026 — 1 de 9 clientes con clave de Anthropic
-(nosotros), 0 de 9 con la de OpenAI, y `ai.uso` = 9 en todo el registro de
-auditoría.
+*Comprobado en producción*: 10/08/2026 — **1 de 9 clientes con clave de
+Anthropic (nosotros) y 0 de 9 con la de OpenAI**, leído de
+`master.tenants.settings`. Sin reserva por entorno: `ANTHROPIC_API_KEY` y
+`OPENAI_API_KEY` están ausentes en el contenedor y `lib/ai/anthropicKey.js` no
+las mira.
 
 ### ¿La agenda de Aumenta se abre al público? · `aumenta`
 
