@@ -28,6 +28,33 @@ Lo más reciente arriba.
 
 ## 10/08/2026
 
+### Los scripts que borran datos reales ya llevan seguro · producto
+
+Era el P0 del registro y llevaba desde el 07/08 hecho en local y sin desplegar.
+En el contenedor de producción no existía `_guard-datos-reales.js`, así que los
+`clear-*` y los `seed-*` corrían sin freno: cualquiera que lanzase uno dentro
+del contenedor —creyendo estar en local, que es como pasa siempre— se llevaba
+por delante los datos de Aumenta o de Abarcaia. `seed-clinica-demo.js` empieza
+con un `destroy({where:{}})` sobre pacientes, sesiones e informes, y su propia
+cabecera enseñaba a lanzarlo contra `aumenta` con el slug ya escrito.
+
+El guard pregunta por el TENANT y no por el entorno, porque mirar la
+`DATABASE_URL` no sirve: dentro del contenedor apunta al host `db` de Docker y
+no dice «prod» por ningún lado. Y enumera los tenants DE PRUEBA —cuatro, y no
+cambian— en vez de los reales, que crecen cada vez que se firma a alguien. Así
+el cliente que demos de alta mañana queda protegido hoy sin tocar nada.
+
+De paso, `.gitignore` deja fuera `backups/`, `*.sql.gz` y `uploads/`: en el VPS
+la carpeta de copias cuelga DENTRO del checkout, así que un `git clean -fd`
+antes de un despliegue se las llevaba todas y un `git add -A` habría metido en
+el historial los datos de salud de 1.083 familias.
+
+*Cómo se comprobó*: 10/08/2026, tras desplegar `d68b4ce` —
+`docker exec crm-salamandra-app-1 ls scripts/_guard-datos-reales.js` lo
+encuentra, y los seis scripts peligrosos (`clear-aumenta-leads`,
+`clear-abarcaia-leads`, `clear-quality-leads`, `seed-aumenta`, `seed-abarcaia`,
+`seed-clinica-demo`) lo importan. La app quedó respondiendo 200 y sin errores.
+
 ### Abarcaia llevaba desde mayo sin poder registrar un solo lead · `abarcaia`, `quality_energy`, `retorika`
 
 Lo encontró `check-module-tables.js` **a los cinco minutos de desplegarse**, que

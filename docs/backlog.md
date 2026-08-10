@@ -77,26 +77,24 @@ comprobarlo resulta que sigue pasando, se queda y se actualiza el sello.
 
 ## P0 — hoy
 
-### Los scripts que borran datos de clientes reales no llevan seguro · producto
+### El acceso SSH al VPS admite contraseña de root · producto
 
-En el contenedor de producción **no existe `scripts/_guard-datos-reales.js`** y
-los scripts peligrosos están sin él: comprobados `clear-aumenta-leads`,
-`clear-quality-leads`, `clear-abarcaia-leads`, `seed-aumenta` y `seed-abarcaia`,
-los cinco sin seguro. Cualquiera que lance uno dentro del contenedor —creyendo
-que está en local, que es como pasa siempre— se lleva por delante datos reales
-de Aumenta o de Abarcaia.
+`sshd -T` en el VPS responde `permitrootlogin yes` y `passwordauthentication
+yes`. El `PasswordAuthentication no` que hay escrito en `/etc/ssh/sshd_config`
+**está muerto**: el `Include /etc/ssh/sshd_config.d/*.conf` de la línea 12 va
+ANTES, y en la configuración de sshd gana el primer valor, así que
+`50-cloud-init.conf` —que dice `yes`— lo tapa. Y ese fichero lo reescribe
+cloud-init, con lo que arreglarlo a mano en el fichero grande no aguanta.
 
-Está **hecho en local y sin commitear** (los ficheros sueltos que hay en el
-disco: el guard, los doce scripts modificados y `docs/blindaje-datos-2026-08.md`).
-Falta commitearlo y desplegarlo. Lo lleva Jorge en otra ventana.
+Es una máquina con datos de salud de 1.083 familias y con root abierto a
+contraseña desde internet. Las claves públicas de los cuatro que entramos ya
+están puestas, así que cerrarlo no deja a nadie fuera.
 
-La copia de seguridad automática, en cambio, **sí funciona**: `crm-backup.timer`
-corre a las 03:15 y hay copias diarias en `/root/backups`. Eso es la red por
-debajo; el seguro es para no tener que usarla.
-
-*Se comprueba*: `docker exec crm-salamandra-app-1 ls scripts/_guard-datos-reales.js`
-y que los `clear-*` y `seed-*` lo importen.
-*Comprobado en producción*: 10/08/2026 — no está.
+*Se comprueba*: `sshd -T | grep -E "passwordauthentication|permitrootlogin"`
+devuelve `no` y `prohibit-password`, y los cuatro seguimos entrando.
+*Dónde*: `/etc/ssh/sshd_config.d/50-cloud-init.conf` (o uno propio con número
+más alto, que es lo que aguanta a cloud-init).
+*Comprobado en producción*: 10/08/2026 — `passwordauthentication yes` efectivo.
 
 ### Ocho familias admitidas no pueden pedir cita · `nutri_laura`
 
