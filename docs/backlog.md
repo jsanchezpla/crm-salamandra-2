@@ -603,6 +603,34 @@ ninguno conserva las tablas viejas de inventario, así que HOY las dos
 migraciones pasan. Lo que sí ocurre en cada alta es que se ejecutan sobre los
 9 schemas.
 
+⚠️ **Arreglado y desplegado el 11/08/2026** (commits `481178a` y `032b4fe`),
+pero la tarea SIGUE AQUÍ a propósito, porque falta la única comprobación que
+la cierra: **un alta de verdad en producción**.
+
+Lo que sí está visto en el VPS, dentro del contenedor:
+
+- `scripts/_solo-este-tenant.js` y `scripts/borrar-tenant.js` están en la
+  imagen, y **55 ficheros de `scripts/` importan el ayudante**.
+- `ensure-tenant-schema.js:96` pasa `ONLY_SCHEMAS` al proceso hijo, y respeta
+  el valor si ya venía puesto.
+- El filtro, **ejecutado en el Node de producción**: con
+  `ONLY_SCHEMAS=crm_nuevo` sobre `[aumenta, demo, nutri_laura, retorika,
+  nuevo]` devuelve `["nuevo"]`; sin la variable devuelve los cinco. O sea que
+  el alta se acota y una migración lanzada a mano sigue siendo global.
+- Tras el despliegue: 9 clientes (7 activos + 2 suspendidos), 10 schemas
+  `crm_` y **cero `zzz_baja_*`**. No se movió nada de nadie.
+
+Lo que NO está visto en producción es el alta entera, porque **hacerla crea
+un cliente real**. En local sí está: con dos tenants activos sin schema —el
+estado que rompía seis de cada siete altas— el alta completa sus 55
+migraciones, siembra las series de facturación y `crm_salamandra_solutions`
+sigue sin existir después.
+
+Se cierra con el próximo cliente real. Y si se quiere antes, ahora se puede:
+dar de alta un cliente de prueba en `admin.salamandrasolutions.com`, mirar que
+ningún otro schema se ha tocado, y quitarlo con `scripts/borrar-tenant.js`,
+que es justo la pieza que antes no existía y por la que esto no se probaba.
+
 ---
 
 ## P3 — deuda
