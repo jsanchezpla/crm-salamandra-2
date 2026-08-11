@@ -45,7 +45,7 @@
  *   docker exec crm-salamandra-app-1 node scripts/borrar-tenant.js <slug>
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Sequelize } from "sequelize";
 
@@ -339,10 +339,40 @@ async function baja() {
 
   lineas.push("", "COMMIT;");
 
-  const carpeta = join(process.cwd(), "backups");
-  mkdirSync(carpeta, { recursive: true });
+  /*
+   * ── DÓNDE SE ESCRIBE LA RED (11/08/2026, encontrado en producción) ────────
+   *
+   * Esto era `process.cwd()/backups` y en el contenedor petaba con EACCES: el
+   * proceso corre como `nextjs` y `/app` es de root. La baja documentada para
+   * producción NO se podía ejecutar.
+   *
+   * Y aunque se hubiera podido, `/app` no está montado: el `.rollback.sql` se
+   * habría ido con el siguiente `deploy.sh`, o sea que la red de rescate
+   * duraba hasta el próximo despliegue. Por eso el destino por defecto dentro
+   * del contenedor es la carpeta montada (`/app/uploads`), que sobrevive.
+   *
+   * Que el fallo saliera ANTES de tocar nada no fue suerte: el fichero se
+   * escribe a propósito antes del ALTER y de los DELETE. Si no hay red, no se
+   * salta. Eso se mantiene.
+   */
+  const carpeta = process.env.BAJA_BACKUPS_DIR
+    ? process.env.BAJA_BACKUPS_DIR
+    : existsSync("/app/uploads")
+      ? "/app/uploads/_bajas"
+      : join(process.cwd(), "backups");
+  try {
+    mkdirSync(carpeta, { recursive: true });
+  } catch (e) {
+    morir(
+      `No se puede escribir la red de rescate en "${carpeta}" (${e.code ?? e.message}).\n` +
+        `  No se ha tocado NADA: sin el .rollback.sql esta baja no es reversible.\n` +
+        `  Indica una carpeta escribible con BAJA_BACKUPS_DIR=/ruta.`
+    );
+  }
   const fichero = join(carpeta, `baja-${SLUG}-${sello()}.rollback.sql`);
-  writeFileSync(fichero, `${lineas.join("\n")}\n`, "utf8");
+  // 0600: dentro van los `password_hash` de sus usuarios. Son hashes de bcrypt,
+  // no contraseñas, pero no tienen por qué leerlos todos los del sistema.
+  writeFileSync(fichero, `${lineas.join("\n")}\n`, { encoding: "utf8", mode: 0o600 });
   di(`     red escrita en  ${fichero}`);
 
   /* ── Y ahora sí ─────────────────────────────────────────────────────── */
