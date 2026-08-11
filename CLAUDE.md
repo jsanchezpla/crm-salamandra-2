@@ -48,6 +48,13 @@ discrepancia entre código y doc, prevalece el código: actualiza el doc.
 
 Decisiones arquitectónicas históricas: `docs/decisions/` (cuando exista).
 
+> **¿Hay que apuntar una tarea en el backlog?** Léete antes
+> `docs/como-apuntar-en-el-tablero.md`. `docs/backlog.md` y `docs/resuelto.md`
+> son lo que pinta el tablero de `/admin/tablero`, y se trocean a mano: un
+> encabezado mal puesto no da error, parte la tarea en dos o la deja sin
+> cliente. Y editarlos **no basta** — viajan dentro de la imagen de Docker, así
+> que hasta que no se despliega, el tablero sigue enseñando lo de antes.
+
 ---
 
 ## Stack técnico

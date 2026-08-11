@@ -205,6 +205,119 @@ personas en el equipo. No lo sufre nadie más: nutri_laura tiene 6 tipos y demo 
 
 ## P2 — cuando se pueda
 
+### El back-office sabe suspender a un cliente, pero no darlo de baja · producto
+
+`/admin/clientes` deja crear, editar, cambiar marca, activar módulos y
+**suspender**, y ahí se acaba. No hay forma de cerrar la cuenta de un cliente:
+en todo el back-office (`app/api/admin/**` y `app/api/provisioning/**`) hay
+**siete handlers y ni un solo `DELETE` ni `PUT`**. La cabecera del endpoint lo
+dice —«No existe DELETE»—, igual que `lib/provisioning/cicloVida.js`: «un botón
+que borra los datos de un cliente es un accidente esperando su turno».
+
+Para el BORRADO esa decisión sigue siendo buena. El problema es que no hay nada
+en medio: quien se va se queda suspendido y ya. En producción hay **dos así
+desde el 08/08** —`quality_energy` (45 tablas, 1,4 MB) y `healim` (17 tablas,
+760 kB)—, cada uno con su usuario y su schema enteros, escondidos del listado
+tras el interruptor «ver los N suspendidos», y nada dice qué pasa con ellos.
+
+Existe media pieza: `scripts/borrar-tenant.js` (11/08), **ya en git y desplegada
+el 11/08**. Su idea es la correcta —APARTAR en vez de destruir: renombrar el
+schema a `zzz_baja_<slug>_<fecha>`, borrar las filas de `master` y dejar un
+`.rollback.sql`, con la destrucción real como segundo comando aparte—. Pero
+**tal como está no se puede poner detrás de un botón**, y arreglarlo es el
+trabajo de verdad de esta tarea:
+
+- ~~**La purga no tiene ningún freno.**~~ **Arreglado el 11/08**, antes de subir
+  el script, porque era un destructor de datos y no podía viajar así. `--purgar`
+  ignoraba el slug posicional y el `--confirmo=`: recorría TODOS los schemas
+  `zzz_baja_*` y les hacía `DROP ... CASCADE`, de modo que
+  `borrar-tenant.js nutri_laura --purgar --aplicar` parecía tocar a un cliente y
+  se llevaba a todos los apartados. El acto irreversible estaba PEOR protegido
+  que el reversible. Ahora la purga se acota al slug y exige el mismo
+  `--confirmo=`; llevarse los de todos los clientes de golpe hay que pedirlo con
+  `--todos --confirmo=todos`. El acotado se hace filtrando por
+  `^zzz_baja_<slug>_\d{14}$` **y no con un `LIKE`**, porque un slug puede ser
+  prefijo de otro (`demo` se habría llevado por delante los apartados de
+  `demo_golden`).
+- **La red no sobrevive al despliegue.** El `.rollback.sql` se escribe en
+  `/app/backups`, dentro del contenedor, y ahí el único volumen montado es
+  `/app/uploads`. El siguiente `deploy.sh` se lo lleva. Además deja los
+  `password_hash` en claro sobre disco.
+- **Los ficheros se quedan.** El script no toca `uploads/` en ninguna línea, y
+  los seis almacenes no comparten forma: tres ponen el slug primero y tres lo
+  meten detrás del tipo (`documents/`, `support/`, `nutricion-recipes/`).
+  Apartar el schema deja en disco los papeles del cliente, documentos de salud
+  incluidos. Cómo hacerlo bien ya está resuelto a nivel de ficha en
+  `lib/clients/borrarRastro.js`.
+- **No es atómico ni avisa a la app.** El `ALTER SCHEMA` y los tres `DELETE` van
+  sueltos, sin transacción: si el proceso muere en medio queda una fila de
+  tenant sin schema, que es justo lo que `altaTenant.js` describe como veneno
+  para todas las altas siguientes. Y como corre en otro proceso no puede
+  invalidar la caché, así que durante hasta 60 s el CRM sigue resolviendo un
+  tenant cuyo schema ya no se llama así.
+
+Con eso arreglado, lo razonable es que el panel ofrezca **solo el primer acto**,
+el reversible, con las trampas que ya tiene suspender (teclear el slug, enseñar
+cuántos datos hay dentro, nunca a nosotros mismos), y que la purga siga siendo
+SSH.
+
+⚠️ Y antes hay que responder qué manda sobre la retención: las facturas tienen
+obligación de conservarse años y los registros de auditoría no se borran nunca
+(regla del proyecto). «Apartar» convive con eso; «purgar» no.
+
+*Se comprueba*: cerrar un cliente de prueba desde `/admin/clientes` lo saca del
+listado, deja su schema como `zzz_baja_*` sin tocar a los demás, se lleva sus
+ficheros de las seis rutas de `uploads/`, deja el `.rollback.sql` en sitio
+montado, y `master.audit_logs` guarda su fila `provisioning.cliente_baja`.
+*Dónde*: `app/api/admin/clientes/[slug]/route.js:36` (solo PATCH),
+`lib/provisioning/cicloVida.js:26-28` (la decisión de no tener botón) y
+`scripts/borrar-tenant.js` (la red efímera, en la parte que escribe el
+`.rollback.sql`; la purga sin frenos que había ahí ya está arreglada).
+*Comprobado en producción*: 11/08/2026 — 9 clientes, **2 suspendidos** desde el
+08/08; ni un schema `zzz_baja_*`, cero filas `provisioning.cliente_baja`, ningún
+script de baja en el `scripts/` del contenedor, y `docker inspect` confirma que
+el único volumen montado es `/opt/crm-salamandra/uploads → /app/uploads`.
+
+### El tablero ordena por urgencia, pero no por cliente · interno
+
+`/admin/tablero` agrupa por prioridad (P0…P3) y ofrece un buscador de texto. La
+pregunta que se hace de verdad al descolgar el teléfono —«¿cómo vamos con
+Aumenta?»— se contesta hoy escribiendo el slug en el filtro y confiando en que
+esté bien puesto en todas las tareas.
+
+El dato ya existe: el troceador saca el cliente del título (`· aumenta`) y lo
+devuelve como `quien`. Falta agrupar por él. **Pero no se puede agrupar por
+`quien` tal y como está**, y eso es lo que hay que arreglar primero: es una
+CADENA de texto, no una lista de clientes.
+
+Contado con el mismo troceador sobre los ficheros que hay en producción:
+
+- 25 tareas pendientes y 23 resueltas.
+- Aumenta tiene **10 pendientes**, pero agrupando por `quien` saldrían **7**.
+  Las otras tres viven dentro de cadenas como `demo, aumenta,
+  salamandra_solutions` o `abarcaia, aumenta`, que cuentan como grupo propio.
+- Salen **12 grupos distintos para 9 clientes**, y cinco son combinaciones con
+  una sola tarea dentro.
+- `salamandra_solutions` no está en la lista `SLUGS` del troceador, así que su
+  tarea se queda sin cliente y no caería en ningún grupo. Lo mismo con la cola
+  `· varios` de una entrada de resuelto.
+
+O sea: agrupar sin tocar el troceador da un tablero que **miente por poco**, que
+es la peor forma de mentir — nadie lo comprueba. Primero `quien` tiene que ser
+una lista de slugs, con una tarea de tres clientes apareciendo en los tres
+grupos; con eso hecho, la agrupación es casi gratis y encaja con lo que la
+pantalla ya hace a propósito: conservar el filtro al cambiar de pestaña, porque
+«¿cómo vamos con Aumenta?» incluye lo ya entregado.
+
+*Se comprueba*: agrupado por cliente, Aumenta enseña **10** pendientes, y las
+tres compartidas aparecen además en `demo`, `abarcaia` y `salamandra_solutions`.
+El número de cada grupo tiene que cuadrar con `grep '^### ' docs/backlog.md`
+filtrado por ese slug.
+*Dónde*: `app/api/admin/tablero/route.js:35-38` (la lista `SLUGS`) y `71-90` (de
+dónde sale `quien`); `app/admin/tablero/page.jsx:70-84` (el filtro de hoy).
+*Comprobado en producción*: 11/08/2026 — contado sobre los ficheros del
+contenedor: 25 pendientes, Aumenta con 10 reales frente a 7 agrupables.
+
 ### La nutrición solo sabe vivir en casa de Laura · `aumenta`, producto
 
 «Que la nutrición de Aumenta sea igual que la de nutri_laura» tiene una mitad
@@ -448,6 +561,47 @@ es la tabla que hoy no sale del cliente.
 *Comprobado en producción*: 10/08/2026 — 2 de 9 clientes pueden usarlas y las
 dos tablas tienen **0 filas**. En los otros siete la tabla `incidencias` ni
 existe.
+
+### Dar de alta a un cliente ejecuta migraciones sobre los schemas de todos los demás · producto
+
+`ensure-tenant-schema.js <slug>` usa el slug SOLO para elegir QUÉ migraciones
+corre; no se lo pasa a ninguna. En la línea 76 las lanza con
+`spawnSync(process.execPath, [file])`, sin un solo argumento, así que cada
+migración decide su propio alcance — y al menos dos deciden «todos los clientes
+activos»: `migrate-citas-sprint-1` y `migrate-inventario-rework`.
+
+O sea que dar de alta a un cliente nuevo entra en el schema de Aumenta, el que
+tiene 12.030 citas y quince personas trabajando dentro. Hoy no rompe nada —esas
+migraciones son idempotentes y en producción salen bien— pero coge candados
+sobre sus tablas en mitad de la jornada, y sobre todo hace que **el alta de un
+cliente pueda fallar por el estado de OTRO**.
+
+Y ese «otro» es fácil de fabricar sin querer. `altaTenant.js` crea la fila en
+`master.tenants` ANTES que el schema y, si algo revienta a mitad, deja la fila
+puesta a propósito (borrar un schema solo es demasiado peligroso, y eso está
+bien). Pero desde ese momento hay un tenant ACTIVO sin schema, y
+`migrate-citas-sprint-1` se cae en CADA alta posterior: **un alta a medias
+envenena todas las siguientes**.
+
+Salió al probar el alta en local el 11/08 con siete clientes de prueba: seis
+acabaron con el aviso «no se pudieron aplicar las migraciones», y la culpa era
+de `crm_salamandra_solutions`, que en local no existe.
+
+De paso, el aviso miente por exceso: dice «No se pudieron aplicar las
+migraciones» cuando lo que ha fallado es UNA de 55. El cliente de prueba con
+Facturación tenía sus series F y R bien sembradas y aun así se anunció como
+roto, que es justo lo que lleva a repetir a mano un trabajo ya hecho.
+
+*Se comprueba*: `ensure-tenant-schema.js <slug>` no toca ningún schema que no
+sea `crm_<slug>`, y un tenant activo sin schema no impide dar de alta a nadie.
+*Dónde*: `scripts/ensure-tenant-schema.js:76` es el spawn sin argumentos;
+`scripts/migrate-citas-sprint-1.js:220,254` y `scripts/migrate-inventario-rework.js`
+son las dos que se lo saltan; `lib/provisioning/altaTenant.js:178-196` es el
+orden que puede dejar la fila huérfana.
+*Comprobado en producción*: 11/08/2026 — los 9 tenants tienen su schema y
+ninguno conserva las tablas viejas de inventario, así que HOY las dos
+migraciones pasan. Lo que sí ocurre en cada alta es que se ejecutan sobre los
+9 schemas.
 
 ---
 

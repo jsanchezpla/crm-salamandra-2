@@ -67,6 +67,11 @@ siempre es la segunda.
 **Voy a desplegar** → [`base/deploy.md`](base/deploy.md), con el checklist y
 los dos errores clásicos de `docker exec`.
 
+**Voy a apuntar una tarea en el backlog** →
+[`como-apuntar-en-el-tablero.md`](como-apuntar-en-el-tablero.md). El formato
+exacto, las cinco trampas del troceador —que no dan error, solo salen mal— y
+por qué hay que desplegar para que la tarea aparezca en el tablero.
+
 ## Reglas que no están en la doc porque están en el código
 
 - Si el código y un doc discrepan, **manda el código**. Actualiza el doc.
