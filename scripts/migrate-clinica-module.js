@@ -27,6 +27,7 @@
  */
 
 import { Sequelize } from "sequelize";
+import { acotarSlugs } from "./_solo-este-tenant.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -74,7 +75,9 @@ async function fetchTargetSlugs(s) {
     WHERE t.status = 'active' AND tm.enabled = TRUE AND tm.module_key IN ('clinica','pacientes')
     ORDER BY t.slug
   `);
-  return rows.map((r) => r.slug);
+  // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
+  // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
+  return acotarSlugs(rows.map((r) => r.slug));
 }
 
 // gen_random_uuid() es nativa desde PG13; en PG12 la aporta pgcrypto. Si no se

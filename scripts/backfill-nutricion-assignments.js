@@ -19,6 +19,7 @@
  */
 
 import { Sequelize } from "sequelize";
+import { acotarSlugs } from "./_solo-este-tenant.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -41,12 +42,16 @@ async function main() {
       ORDER BY t.slug
     `);
 
-    if (tenants.length === 0) {
+    // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
+    // lanza a mano, que es como se escribio. Ver scripts/_solo-este-tenant.js.
+    const slugs = acotarSlugs(tenants.map((r) => r.slug));
+
+    if (slugs.length === 0) {
       log("Ningún tenant activo tiene el módulo nutricion. Nada que hacer.");
       return;
     }
 
-    for (const { slug } of tenants) {
+    for (const slug of slugs) {
       const schema = `crm_${slug}`;
       header(`${slug} (${schema})`);
 

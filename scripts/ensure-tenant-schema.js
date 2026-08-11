@@ -70,11 +70,30 @@ async function tenantModules(s, slug) {
   };
 }
 
-function runMigration(name) {
+function runMigration(name, slug) {
   const file = join(HERE, `${name}.js`);
   if (!existsSync(file)) return { name, ok: false, out: "el fichero no existe" };
   const r = spawnSync(process.execPath, [file], {
-    env: process.env,
+    /*
+     * ⚠️ ACOTADO AL TENANT QUE SE PIDIÓ (11/08/2026).
+     *
+     * Hasta hoy aquí iba `process.env` a secas, y como las hijas se lanzan SIN
+     * argumentos, cada migración decidía su propio alcance. Treinta y una de
+     * las que dispara el alta se enumeran solas —«todos los tenants activos»—,
+     * así que `ensure-tenant-schema.js aumenta` acababa entrando en el schema
+     * de todos los demás clientes. Dar de alta a un cliente nuevo tocaba
+     * Aumenta, con quince personas trabajando dentro.
+     *
+     * `ONLY_SCHEMAS` no es nueva: es la que ya entendía `_schema-targets.js` en
+     * modo exclusivo. Las migraciones que usan ese helper quedan acotadas solo
+     * con ponerla; las que se enumeran a mano pasan su lista por
+     * `acotarSlugs()` de `_solo-este-tenant.js`.
+     *
+     * Si quien llama ya la traía puesta, manda la suya: acotar más es seguro,
+     * y así `ONLY_SCHEMAS=... node scripts/ensure-tenant-schema.js` sigue
+     * sirviendo para lo que servía.
+     */
+    env: { ...process.env, ONLY_SCHEMAS: process.env.ONLY_SCHEMAS || `crm_${slug}` },
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
   });
@@ -132,10 +151,10 @@ async function main() {
   }
 
   header("Ejecutando...");
-  log("(cada migración recorre por dentro todos los tenants; para el resto son no-ops)");
+  log(`(acotadas a crm_${slug}: ninguna toca el schema de otro cliente)`);
   const fallos = [];
   for (const m of migraciones) {
-    const r = runMigration(m);
+    const r = runMigration(m, slug);
     if (r.ok) {
       log(`✓ ${m}`);
     } else {

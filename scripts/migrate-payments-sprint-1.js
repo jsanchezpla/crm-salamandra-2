@@ -28,6 +28,7 @@
  */
 
 import { Sequelize } from "sequelize";
+import { acotarSchemas } from "./_solo-este-tenant.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -36,7 +37,9 @@ async function listSchemas(s) {
   const [rows] = await s.query(
     `SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'crm_%' ORDER BY schema_name`
   );
-  return rows.map((r) => r.schema_name);
+  // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
+  // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
+  return acotarSchemas(rows.map((r) => r.schema_name));
 }
 async function tableExists(s, t, schema, table) {
   const [rows] = await s.query(

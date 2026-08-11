@@ -34,6 +34,7 @@
  */
 
 import { Sequelize } from "sequelize";
+import { acotarSchemas } from "./_solo-este-tenant.js";
 import { randomUUID } from "node:crypto";
 import { copyFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -60,7 +61,6 @@ function rutaRollback(nombre) {
 
 /** Schemas que tienen las tres piezas: pacientes, archivo central y el puntero. */
 async function schemasAptos(s) {
-  const only = (process.env.ONLY_SCHEMAS || "").split(",").map((x) => x.trim()).filter(Boolean);
   const [rows] = await s.query(`
     SELECT t.table_schema AS schema
       FROM information_schema.tables t
@@ -72,8 +72,11 @@ async function schemasAptos(s) {
                       AND c.column_name = 'contract_document_id')
      ORDER BY t.table_schema
   `);
-  const todos = rows.map((r) => r.schema);
-  return only.length ? todos.filter((x) => only.includes(x)) : todos;
+  // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
+  // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
+  // Este script ya leía ONLY_SCHEMAS por su cuenta: se pasa al helper para que
+  // no haya dos formas de decir lo mismo. El comportamiento es el mismo.
+  return acotarSchemas(rows.map((r) => r.schema));
 }
 
 async function main() {

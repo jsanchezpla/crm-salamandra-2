@@ -39,6 +39,7 @@ import { Sequelize } from "sequelize";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { acotarSchemas } from "./_solo-este-tenant.js";
 
 const CONFIRM = process.argv.includes("--confirm");
 
@@ -58,14 +59,18 @@ function rutaRollback(nombre) {
 }
 
 async function schemasConPacientes(s) {
-  const only = (process.env.ONLY_SCHEMAS || "").split(",").map((x) => x.trim()).filter(Boolean);
   const [rows] = await s.query(
     `SELECT table_schema FROM information_schema.tables
       WHERE table_name = 'patients' AND table_schema LIKE 'crm_%'
       ORDER BY table_schema`
   );
-  const todos = rows.map((r) => r.table_schema);
-  return only.length ? todos.filter((x) => only.includes(x)) : todos;
+  // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
+  // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
+  //
+  // El filtro por ONLY_SCHEMAS lo hacía este fichero a mano (era el único que
+  // ya lo entendía). Pasa por el helper para que la regla se lea en un solo
+  // sitio; el criterio es el mismo, y además admite el slug pelado.
+  return acotarSchemas(rows.map((r) => r.table_schema));
 }
 
 /**

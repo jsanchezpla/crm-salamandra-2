@@ -33,6 +33,7 @@
  */
 
 import { Sequelize } from "sequelize";
+import { acotarSlugs } from "./_solo-este-tenant.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -66,7 +67,9 @@ async function constraintExists(s, t, schema, table, name) {
 
 async function fetchTargetSlugs(s) {
   const [rows] = await s.query(`SELECT slug FROM master.tenants WHERE status = 'active' ORDER BY slug`);
-  return rows.map((r) => r.slug);
+  // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
+  // lanza a mano, que es como se escribio. Ver scripts/_solo-este-tenant.js.
+  return acotarSlugs(rows.map((r) => r.slug));
 }
 
 // ─── Migración por schema ────────────────────────────────────────────────────

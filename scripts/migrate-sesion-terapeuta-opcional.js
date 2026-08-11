@@ -21,6 +21,7 @@
  */
 
 import { Sequelize } from "sequelize";
+import { acotarSchemas } from "./_solo-este-tenant.js";
 
 function log(m) { process.stdout.write(`  ${m}\n`); }
 
@@ -31,12 +32,15 @@ async function main() {
   const s = new Sequelize(url, { logging: false });
   try {
     await s.authenticate();
-    const [schemas] = await s.query(
+    const [filas] = await s.query(
       `SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'crm_%' ORDER BY schema_name`
     );
+    // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
+    // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
+    const schemas = acotarSchemas(filas.map((r) => r.schema_name));
     process.stdout.write(`\n▶ Terapeuta opcional en la sesión · ${schemas.length} schema(s)\n\n`);
 
-    for (const { schema_name: schema } of schemas) {
+    for (const schema of schemas) {
       const [col] = await s.query(
         `SELECT is_nullable FROM information_schema.columns
           WHERE table_schema=$1 AND table_name='clinic_sessions' AND column_name='therapist_id'`,

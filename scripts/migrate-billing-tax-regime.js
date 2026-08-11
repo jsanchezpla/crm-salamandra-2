@@ -25,6 +25,7 @@
  */
 
 import { Sequelize } from "sequelize";
+import { acotarSlugs } from "./_solo-este-tenant.js";
 
 function log(m) { process.stdout.write(`  ${m}\n`); }
 function header(m) { process.stdout.write(`\n▶ ${m}\n`); }
@@ -42,7 +43,9 @@ async function tableExists(s, schema, table) {
 }
 async function fetchSlugs(s) {
   const [rows] = await s.query(`SELECT DISTINCT slug FROM master.tenants WHERE status = 'active' ORDER BY slug`);
-  return rows.map((x) => x.slug);
+  // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
+  // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
+  return acotarSlugs(rows.map((x) => x.slug));
 }
 
 async function processSchema(s, schema) {

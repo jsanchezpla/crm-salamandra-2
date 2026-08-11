@@ -50,6 +50,7 @@
  */
 
 import { getMasterDb } from "../lib/db/masterDb.js";
+import { acotarSlugs } from "./_solo-este-tenant.js";
 
 /**
  * ESCRIBE POR DEFECTO, y el cambio es deliberado (10/08/2026, al registrarla en
@@ -93,13 +94,17 @@ const master = getMasterDb();
 
 // Los clientes se leen de master EN CALIENTE, nunca de una lista escrita a mano:
 // no es la misma en local que en producción (regla #12 del proyecto).
-const [clientes] = await master.query(`
+const [filas] = await master.query(`
   SELECT t.slug
   FROM master.tenants t
   JOIN master.tenant_modules m ON m.tenant_id = t.id
   WHERE m.module_key = 'leads' AND m.enabled = true
   ORDER BY t.slug
 `);
+// Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
+// lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
+const permitidos = new Set(acotarSlugs(filas.map((r) => r.slug)));
+const clientes = filas.filter((r) => permitidos.has(r.slug));
 
 process.stdout.write("\n══════════════════════════════════════════════════════\n");
 process.stdout.write(" Columnas de proyecto en la tabla `leads`\n");

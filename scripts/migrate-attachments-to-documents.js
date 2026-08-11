@@ -29,6 +29,7 @@ import { Sequelize } from "sequelize";
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { acotarSchemas } from "./_solo-este-tenant.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 
@@ -49,7 +50,9 @@ async function schemasConTabla(s, tabla) {
       WHERE table_name = :tabla AND table_schema LIKE 'crm_%' ORDER BY table_schema`,
     { replacements: { tabla } }
   );
-  return rows.map((r) => r.table_schema);
+  // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
+  // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
+  return acotarSchemas(rows.map((r) => r.table_schema));
 }
 
 async function main() {

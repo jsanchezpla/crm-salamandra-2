@@ -14,6 +14,7 @@
  */
 
 import { Sequelize } from "sequelize";
+import { acotarSlugs } from "./_solo-este-tenant.js";
 
 const TABLES = ["rates", "invoices", "costs"];
 const OLD_COL = "therapist_id";
@@ -26,7 +27,9 @@ async function fetchActiveSlugs(sequelize) {
   const [rows] = await sequelize.query(
     `SELECT slug FROM master.tenants WHERE status = 'active' ORDER BY slug`
   );
-  return rows.map((r) => r.slug);
+  // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
+  // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
+  return acotarSlugs(rows.map((r) => r.slug));
 }
 
 async function tableExists(sequelize, t, schema, table) {

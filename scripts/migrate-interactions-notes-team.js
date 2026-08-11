@@ -22,6 +22,8 @@
 
 import { Sequelize } from "sequelize";
 
+import { acotarSchemas } from "./_solo-este-tenant.js";
+
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 
 async function addFk(s, schema, table, column, refTable, constraint, t) {
@@ -48,7 +50,9 @@ async function schemasConTabla(s, tabla) {
       ORDER BY table_schema`,
     { replacements: { tabla } }
   );
-  return rows.map((r) => r.table_schema);
+  // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
+  // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
+  return acotarSchemas(rows.map((r) => r.table_schema));
 }
 
 const TABLAS = ["interactions", "client_notes"];

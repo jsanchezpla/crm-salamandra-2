@@ -17,6 +17,7 @@
  */
 
 import { Sequelize } from "sequelize";
+import { acotarSlugs } from "./_solo-este-tenant.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -120,7 +121,9 @@ async function fetchBillingSlugs(s) {
     WHERE t.status = 'active' AND tm.module_key = 'billing' AND tm.enabled = TRUE
     ORDER BY t.slug
   `);
-  return rows.map((r) => r.slug);
+  // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
+  // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
+  return acotarSlugs(rows.map((r) => r.slug));
 }
 
 async function main() {

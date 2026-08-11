@@ -16,6 +16,7 @@
  */
 
 import { Sequelize } from "sequelize";
+import { acotarSlugs } from "./_solo-este-tenant.js";
 
 const DEFAULT_NOTE = "Operación exenta de IVA conforme al artículo 20 de la Ley 37/1992 del IVA.";
 
@@ -35,7 +36,9 @@ async function tableExists(s, schema, table) {
 }
 async function fetchSlugs(s) {
   const [rows] = await s.query(`SELECT DISTINCT slug FROM master.tenants WHERE status = 'active' ORDER BY slug`);
-  return rows.map((x) => x.slug);
+  // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
+  // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
+  return acotarSlugs(rows.map((x) => x.slug));
 }
 
 async function processSchema(s, schema) {
