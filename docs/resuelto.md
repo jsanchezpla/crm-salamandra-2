@@ -26,6 +26,75 @@ Lo más reciente arriba.
 
 ---
 
+## 11/08/2026
+
+### Dar de alta a un cliente ejecutaba migraciones sobre los schemas de todos los demás · producto
+
+`ensure-tenant-schema.js <slug>` prometía poner al día el schema de ESE cliente,
+y usaba el slug solo para elegir QUÉ migraciones correr. Luego las lanzaba con
+`spawnSync(process.execPath, [file])` —**sin un solo argumento**—, así que cada
+migración decidía su propio alcance, y noventa y una de las noventa y dos
+decidían «todos los clientes activos». Dar de alta a un cliente nuevo entraba en
+el schema de Aumenta, con 12.030 citas y quince personas trabajando dentro.
+
+El código lo sabía y lo daba por bueno: la cabecera del disparador decía que las
+migraciones «recorren por dentro todos los tenants, así que ejecutarlas de más
+es inofensivo». Lo primero era cierto y lo segundo no.
+
+**Qué se hizo.** Cada hija se lanza ahora con `ONLY_SCHEMAS=crm_<slug>`, que no
+es una variable nueva: es la que `_schema-targets.js` ya entendía en modo
+exclusivo, reutilizada para que no haya dos formas de decir lo mismo. El
+ayudante `scripts/_solo-este-tenant.js` la aplica, y **sin la variable devuelve
+la lista intacta**, así que una migración lanzada a mano sigue siendo global,
+que es como se escribieron y como tienen que seguir funcionando.
+
+Hubo que barrer tres veces, y las tres hicieron falta:
+
+1. Las 31 que consultan `master.tenants`.
+2. Un segundo patrón que se había escapado entero —24 que enumeran schemas desde
+   el catálogo de PostgreSQL (`information_schema.schemata LIKE 'crm_%'`)—, y
+   ahí estaba justo la que reventaba.
+3. Una última, `migrate-stage-to-string.js`, que hardcodeaba cinco slugs. Salió
+   al auditar las 92 una por una para poder responder «¿me lo garantizas?». No
+   escribía nada porque las nueve columnas `stage` ya eran VARCHAR, pero eso era
+   el estado de ese día y no una garantía; y a los cuatro clientes posteriores a
+   esa lista no les hacía nada. Ahora lee de `master.tenants` (regla 12).
+
+**Dos fallos vecinos que salieron con él.** Un alta que fallaba a mitad dejaba
+el cliente `active` sin schema, y como media docena de migraciones enumeran «los
+activos», eso rompía TODAS las altas siguientes: en la prueba en local, seis de
+siete. Ahora queda `suspended`. Y el aviso de fallo mentía por exceso —decía «no
+se pudieron aplicar las migraciones» cuando había fallado UNA de 55—, así que
+ahora dice cuántas, de cuántas y cuáles.
+
+*Cómo se comprobó*: **con un alta real en producción**, el 11/08 a las 16:28.
+
+- Antes, huella de los 10 schemas más `master`: por cada uno, número de tablas,
+  de columnas, filas totales, un md5 de toda la estructura (tabla, columna,
+  tipo, nullabilidad y default) y otro de los recuentos por tabla.
+- Se creó «Prueba de huella» (`zzz_prueba_huella`) desde `/admin/clientes` con
+  **20 módulos**, los mismos que Demo, el cliente más cargado que hay. Salió
+  bien: 101 tablas, 20 módulos, 1 usuario, y las series `F` y `R` de facturación
+  sembradas, que es la señal de que las migraciones corrieron de verdad.
+- Después, misma huella: **los 10 schemas con estructura Y filas idénticas**.
+  Lo único que se movió fue `master`, +23 filas, que se descomponen exactamente
+  en 1 tenant + 1 usuario + 20 módulos + 1 línea de auditoría. Cada fila nueva
+  de toda la base de datos era del cliente nuevo.
+- Se retiró con `scripts/borrar-tenant.js` y se purgó. Huella final contra la
+  del principio: **todo idéntico**, salvo `master` con +2 filas — las dos de
+  auditoría, `provisioning.cliente_creado` y `provisioning.cliente_baja`, que
+  por regla no se borran nunca.
+
+Se reproduce con `scripts/huella-schemas.sql` (en el repo desde este commit):
+tomarla, dar de alta, volver a tomarla y comparar la columna del md5 de
+estructura. Si se mueve en un schema que no sea el del cliente nuevo, ha vuelto.
+
+*Dónde estaba*: `scripts/ensure-tenant-schema.js` (el spawn sin argumentos),
+`scripts/_solo-este-tenant.js` (nuevo) y las 55 migraciones acotadas.
+Commits `481178a`, `032b4fe` y `271fa80`.
+
+---
+
 ## 10/08/2026
 
 ### Dos pacientes con el pago a plazos sin freno, y el programa sin precio · `nutri_laura`
