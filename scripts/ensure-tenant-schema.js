@@ -13,10 +13,14 @@
  * mapa de scripts/_module-migrations.js y ejecuta las migraciones que le
  * corresponden, en el orden canónico.
  *
- * Todas las migraciones son idempotentes y recorren por dentro todos los tenants
- * (o todos los schemas con la tabla), así que ejecutarlas de más es inofensivo:
- * para los demás tenants son un no-op. Por eso este script se puede correr las
- * veces que haga falta.
+ * Todas las migraciones son idempotentes, así que este script se puede correr
+ * las veces que haga falta.
+ *
+ * ⚠️ Este párrafo decía hasta el 11/08/2026 que las migraciones «recorren por
+ * dentro todos los tenants, así que ejecutarlas de más es inofensivo». Lo
+ * primero era cierto y lo segundo no: poner al día a UN cliente hacía DDL
+ * sobre el schema de los otros ocho. Ahora cada hija se lanza con
+ * `ONLY_SCHEMAS=crm_<slug>` y no ve más schema que el suyo.
  *
  * USO
  *   node --env-file=.env.local scripts/ensure-tenant-schema.js <slug>
