@@ -85,6 +85,37 @@ ahora dice cuántas, de cuántas y cuáles.
   auditoría, `provisioning.cliente_creado` y `provisioning.cliente_baja`, que
   por regla no se borran nunca.
 
+**Y una cola, que es la parte que más enseña.** Jorge preguntó lo evidente:
+«mira también los datos, a ver si no han cambiado». Tenía razón en la pega —
+la huella comparaba **recuentos** de filas, y un `UPDATE` no cambia cuántas
+hay. Varios de esos scripts son `backfill-*`, que hacen exactamente eso.
+
+Se resolvió hacia atrás con el `xmin` de cada fila —la transacción que la
+escribió por última vez, sea INSERT o UPDATE—, tomando como referencia la
+propia línea de auditoría del alta (transacción 35133). Barriendo TODAS las
+tablas de TODOS los schemas apareció una que no encajaba:
+**`master.tenant_modules` de `nutri_laura`/`citas`, reescrita a las 16:28:41**,
+trece segundos después de empezar el alta y sin línea de auditoría.
+
+Era la Fase B de `migrate-booking-pending.js`: escribía
+`feature_flags.autoConfirmPublicBookings = false` en el módulo `citas` de
+Laura **con el slug a mano**, corriera quien corriera. La Fase A sí estaba
+acotada (usa `byTable`, que respeta ONLY_SCHEMAS); la B no.
+
+El valor no cambió —la migración fuerza `false` y ya estaba en `false`—, pero
+el efecto real es peor que un UPDATE de más: **ese interruptor era imposible de
+encender**. Si Laura activaba la autoconfirmación de reservas públicas, la
+siguiente alta de cualquier otro cliente se la apagaba, en silencio y sin
+rastro. Arreglado: la Fase B se omite si el alcance pedido no la incluye.
+
+Se re-auditaron las 92 con ese criterio nuevo —slug escrito a mano **y**
+escritura— y aparecieron otros dos candidatos, los dos falsos:
+`migrate-client-module-assignments` compara el slug dentro del bucle ya
+acotado, y en `migrate-contrato-estructurado` los slugs solo salen en un
+comentario. La lección queda: contar filas no basta, y «0 sin acotar» solo
+respondía por las enumeraciones de schemas, no por las escrituras en `master`
+con destinatario fijo.
+
 Se reproduce con `scripts/huella-schemas.sql` (en el repo desde este commit):
 tomarla, dar de alta, volver a tomarla y comparar la columna del md5 de
 estructura. Si se mueve en un schema que no sea el del cliente nuevo, ha vuelto.

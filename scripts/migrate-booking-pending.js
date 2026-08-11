@@ -23,6 +23,7 @@
 
 import { Sequelize } from "sequelize";
 import { byTable } from "./_schema-targets.js";
+import { acotarSlugs } from "./_solo-este-tenant.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -140,10 +141,33 @@ async function main() {
       }
     }
 
-    header("Fase B — feature flag autoConfirmPublicBookings (transacción)...");
-    await sequelize.transaction(async (t) => {
-      await setNutriLauraFlagInTx(sequelize, t);
-    });
+    /*
+     * ⚠️ LA FASE B TOCA A UN CLIENTE CONCRETO, ASÍ QUE HAY QUE ACOTARLA (11/08/2026).
+     *
+     * La Fase A ya iba acotada, porque `byTable` respeta ONLY_SCHEMAS. La B no:
+     * escribía en `master.tenant_modules` de `nutri_laura` con el slug a mano,
+     * corriera quien corriera. Como el alta dispara esta migración, dar de alta
+     * a CUALQUIER cliente reescribía la configuración de Laura.
+     *
+     * Se vio en la prueba de huella del 11/08: el alta de un cliente de prueba
+     * dejó su fila con `updated_at` trece segundos después de empezar. El valor
+     * no cambió —la migración fuerza `false` y ya estaba en `false`—, pero el
+     * efecto de verdad es peor que un UPDATE de más: ese interruptor era
+     * IMPOSIBLE DE ENCENDER. Si Laura activaba la autoconfirmación de reservas
+     * públicas, la siguiente alta de cualquier otro cliente se la apagaba, sin
+     * avisar y sin dejar rastro en la auditoría.
+     *
+     * El recuento de filas no lo habría visto nunca: un UPDATE no cambia
+     * cuántas hay. Salió mirando el `xmin` de cada fila.
+     */
+    if (acotarSlugs(["nutri_laura"]).length === 0) {
+      header("Fase B — omitida: el alcance pedido no incluye a nutri_laura");
+    } else {
+      header("Fase B — feature flag autoConfirmPublicBookings (transacción)...");
+      await sequelize.transaction(async (t) => {
+        await setNutriLauraFlagInTx(sequelize, t);
+      });
+    }
 
     process.stdout.write("\n══════════════════════════════════════════════════════\n");
     process.stdout.write(" ✓ Migración completada                              \n");
