@@ -15,6 +15,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import listPlugin from "@fullcalendar/list";
 import interactionPlugin from "@fullcalendar/interaction";
 import Select from "@/components/ui/Select.jsx";
+import MultiSelect from "@/components/ui/MultiSelect.jsx";
 import BuscadorPaciente from "@/components/citas/BuscadorPaciente.jsx";
 import { formatMoney } from "@/lib/payments/money.js";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "@/lib/citas/coloresBloqueo.js";
@@ -479,20 +480,19 @@ export default function CitasModule() {
         start: info.startStr,
         end: info.endStr,
       });
-      if (visibleEtIds && visibleEtIds.length > 0) {
-        params.set("eventTypeIds", visibleEtIds.join(","));
-      } else if (visibleEtIds && visibleEtIds.length === 0) {
-        success([]);
-        return;
-      }
-      // Filtro por profesional (solo lo usa el jefe; el servidor ya acota a un
-      // profesional no-admin). null = todos; [] = ninguno seleccionado.
-      if (visibleTmIds && visibleTmIds.length > 0) {
-        params.set("teamMemberIds", visibleTmIds.join(","));
-      } else if (visibleTmIds && visibleTmIds.length === 0) {
-        success([]);
-        return;
-      }
+      /*
+       * null = todos; lista con contenido = solo esos. La lista VACÍA ya no
+       * existe (12/08/2026): los dos filtros vuelven a `null` al quedarse sin
+       * nada marcado, así que aquí sobraban las dos ramas que devolvían
+       * `success([])` y pintaban el calendario en blanco sin llegar a
+       * preguntar al servidor. Con casillas eso estaba a un clic, y un
+       * calendario vacío se lee como «han desaparecido las citas».
+       *
+       * El filtro por profesional solo lo usa el jefe: el servidor ya acota
+       * por su cuenta a un profesional no-admin.
+       */
+      if (visibleEtIds?.length) params.set("eventTypeIds", visibleEtIds.join(","));
+      if (visibleTmIds?.length) params.set("teamMemberIds", visibleTmIds.join(","));
       const res = await fetch(`/api/citas/bookings/calendar?${params}`, { cache: "no-store" });
       const j = await res.json();
       if (!j.ok) throw new Error(j.error || "Error cargando citas");
@@ -583,40 +583,25 @@ export default function CitasModule() {
     calendarRef.current?.getApi().refetchEvents();
   }, [visibleEtIds, visibleTmIds]);
 
-  function toggleEventType(id) {
-    setVisibleEtIds((prev) => {
-      const current = prev ?? eventTypes.map((e) => e.id);
-      if (current.includes(id)) return current.filter((x) => x !== id);
-      return [...current, id];
-    });
-  }
-
-  function showAllEventTypes() { setVisibleEtIds(null); }
-
-  /**
-   * Elegir a una profesional deja SOLO sus citas (Rodrigo, 02/08/2026).
+  /*
+   * ── LOS DOS FILTROS SIGUEN LA MISMA REGLA, Y VIVE EN `MultiSelect` ─────────
    *
-   * Antes esto funcionaba al revés: se partía de «todas visibles» y cada clic
-   * OCULTABA a una. Para ver la agenda de Araceli había que ir tachando a las
-   * otras catorce, una a una, cada vez. Con quince profesionales eso no es un
-   * filtro, es un castigo.
+   * Elegir a una profesional deja SOLO sus citas (Rodrigo, 02/08/2026). Antes
+   * funcionaba al revés: se partía de «todas visibles» y cada clic OCULTABA a
+   * una, así que para ver la agenda de Araceli había que ir tachando a las
+   * otras catorce, cada vez. Con quince profesionales eso no es un filtro, es
+   * un castigo.
    *
-   * Ahora: el primer clic selecciona a esa sola; los siguientes añaden o quitan;
-   * y si te quedas sin ninguna, vuelve a verse todo (que es lo mismo que no
-   * filtrar, y evita dejar el calendario en blanco sin saber por qué).
+   * El de TIPO se quedó con el comportamiento viejo, y ahí el castigo era peor:
+   * 57 tipos, 56 clics. Unificados el 12/08/2026 (decisión de Jorge): el primer
+   * clic aísla, los siguientes suman, y quedarse sin ninguno vuelve a «todos».
+   *
+   * Las cuatro funciones que había aquí —`toggleEventType`, `toggleTeamMember`
+   * y sus dos `showAll…`— han desaparecido a propósito: la regla es ahora una
+   * sola y está en `alternar()` de `components/ui/MultiSelect.jsx`, para que las
+   * dos listas no puedan volver a divergir sin que nadie se entere. Aquí solo
+   * quedan los setters, que reciben el valor ya calculado (`null` o lista).
    */
-  function toggleTeamMember(id) {
-    setVisibleTmIds((prev) => {
-      if (prev === null) return [id];
-      if (prev.includes(id)) {
-        const resto = prev.filter((x) => x !== id);
-        return resto.length ? resto : null;
-      }
-      return [...prev, id];
-    });
-  }
-
-  function showAllTeamMembers() { setVisibleTmIds(null); }
 
   async function handleEventClick(info) {
     // Los bloqueos de vacaciones son fondo, no citas: no hay ficha que abrir y
@@ -1243,78 +1228,55 @@ Avísale tú.`);
         </div>
       )}
 
-      {/* Filtro de tipos */}
+      {/*
+        Filtros de la agenda — una sola línea, dos desplegables (12/08/2026).
+        Antes eran dos bandas de chips: en Aumenta, 74 botones en 10 filas y
+        379 px de alto, más que los 335 px que le quedaban al calendario.
+        El de profesional sigue siendo solo del jefe y solo si hay más de uno.
+      */}
       {tab === "calendar" && eventTypes.length > 0 && (
-        <div className="px-6 lg:px-10 py-3 flex items-center gap-2 flex-wrap shrink-0 border-b border-neutral-100">
-          <span className="text-[11px] uppercase tracking-wider text-neutral-400 mr-1">Filtrar:</span>
-          <button
-            onClick={showAllEventTypes}
-            className={`text-[11px] px-2 py-1 rounded-md border ${
-              visibleEtIds == null
-                ? "bg-neutral-900 text-white border-neutral-900"
-                : "bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50"
-            }`}
-          >
-            Todos
-          </button>
-          {eventTypes.map((et) => {
-            const active = visibleEtIds == null || visibleEtIds.includes(et.id);
-            return (
-              <button
-                key={et.id}
-                onClick={() => toggleEventType(et.id)}
-                className={`text-[11px] px-2 py-1 rounded-md border flex items-center gap-1.5 transition ${
-                  active
-                    ? "bg-white text-neutral-700 border-neutral-300"
-                    : "bg-neutral-50 text-neutral-400 border-neutral-200 line-through"
-                }`}
-              >
-                <span
-                  className="inline-block w-2 h-2 rounded-full"
-                  style={{ background: et.color ?? "#3F6E5B" }}
-                />
-                {et.name}
-              </button>
-            );
-          })}
-        </div>
-      )}
+        <div className="px-6 lg:px-10 py-2.5 flex items-center gap-x-5 gap-y-2 flex-wrap shrink-0 border-b border-neutral-100">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-[11px] uppercase tracking-wider text-neutral-400">Tipo</span>
+            <div className="w-[190px]">
+              <MultiSelect
+                aria-label="Filtrar por tipo de cita"
+                value={visibleEtIds}
+                onChange={setVisibleEtIds}
+                options={eventTypes.map((et) => ({
+                  value: et.id,
+                  label: et.name,
+                  color: et.color ?? "#3F6E5B",
+                }))}
+                etiquetaTodos="Todos los tipos"
+                resumen={(n) => `${n} tipos`}
+                // Con 57 tipos, encontrar uno a ojo es el trabajo de verdad.
+                searchable={eventTypes.length > 8}
+              />
+            </div>
+          </div>
 
-      {/* Filtro por profesional — solo el jefe (admin) y si hay más de uno. El
-          color del chip casa con el de sus citas en el calendario. */}
-      {tab === "calendar" && viewerIsAdmin && teamMembers.length > 1 && (
-        <div className="px-6 lg:px-10 py-3 flex items-center gap-2 flex-wrap shrink-0 border-b border-neutral-100">
-          <span className="text-[11px] uppercase tracking-wider text-neutral-400 mr-1">Profesional:</span>
-          <button
-            onClick={showAllTeamMembers}
-            className={`text-[11px] px-2 py-1 rounded-md border ${
-              visibleTmIds == null
-                ? "bg-neutral-900 text-white border-neutral-900"
-                : "bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50"
-            }`}
-          >
-            Todos
-          </button>
-          {teamMembers.map((m) => {
-            const active = visibleTmIds == null || visibleTmIds.includes(m.id);
-            return (
-              <button
-                key={m.id}
-                onClick={() => toggleTeamMember(m.id)}
-                className={`text-[11px] px-2 py-1 rounded-md border flex items-center gap-1.5 transition ${
-                  active
-                    ? "bg-white text-neutral-700 border-neutral-300"
-                    : "bg-neutral-50 text-neutral-400 border-neutral-200 line-through"
-                }`}
-              >
-                <span
-                  className="inline-block w-2 h-2 rounded-full"
-                  style={{ background: m.avatarColor ?? "#3F6E5B" }}
+          {viewerIsAdmin && teamMembers.length > 1 && (
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[11px] uppercase tracking-wider text-neutral-400">Profesional</span>
+              <div className="w-[190px]">
+                <MultiSelect
+                  aria-label="Filtrar por profesional"
+                  value={visibleTmIds}
+                  onChange={setVisibleTmIds}
+                  options={teamMembers.map((m) => ({
+                    value: m.id,
+                    label: m.displayName,
+                    // El color casa con el de sus citas en el calendario.
+                    color: m.avatarColor ?? "#3F6E5B",
+                  }))}
+                  etiquetaTodos="Todos"
+                  resumen={(n) => `${n} profesionales`}
+                  searchable={teamMembers.length > 8}
                 />
-                {m.displayName}
-              </button>
-            );
-          })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
