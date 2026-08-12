@@ -111,7 +111,7 @@ export async function POST(request) {
 
     const { tenantModels, hasModule } = context;
 
-    if (!hasModule("leads") && !hasModule("sales")) {
+    if (!hasModule("leads")) {
       return NextResponse.json({ ok: false, error: "Módulo no habilitado" }, { status: 403 });
     }
 

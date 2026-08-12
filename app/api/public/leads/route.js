@@ -27,7 +27,7 @@ export async function POST(request) {
     // Resolve tenant from x-tenant header (no auth cookie required)
     const { tenant, tenantModels, hasModule } = await getTenantContext(request);
 
-    if (!hasModule("leads") && !hasModule("sales")) {
+    if (!hasModule("leads")) {
       return Response.json({ ok: false, error: "Módulo no disponible" }, { status: 403, headers: CORS_HEADERS });
     }
 

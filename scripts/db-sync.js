@@ -16,9 +16,17 @@ const DEMO_SLUG = "demo";
 const DEMO_ADMIN_EMAIL = "admin@demo.salamandra";
 const DEMO_ADMIN_PASSWORD = "Admin1234!";
 
+/*
+ * ⚠️ Aquí ponía `sales` y NO ponía `leads` (12/08/2026).
+ *
+ * Es de donde salió la única fila `sales` que hay en producción: la de la demo,
+ * que este script sembró. Mientras los endpoints comerciales aceptaban
+ * `leads || sales` daba igual; al retirar `sales`, una demo recién sembrada en
+ * local se habría quedado sin módulo comercial y sin saber por qué.
+ */
 const ALL_MODULES = [
   "clients",
-  "sales",
+  "leads",
   "projects",
   "support",
   "billing",

@@ -42,7 +42,6 @@ const USER_EMAIL = "admin@sandbox.local";
 const MODULES = [
   "clients",
   "leads",
-  "sales",
   "projects",
   "billing",
   "team",

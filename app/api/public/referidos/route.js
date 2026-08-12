@@ -23,7 +23,7 @@ export async function POST(request) {
 
     const { tenantModels, hasModule } = await getTenantContext(request);
 
-    if (!hasModule("leads") && !hasModule("sales")) {
+    if (!hasModule("leads")) {
       return Response.json(
         { ok: false, error: "Módulo no disponible" },
         { status: 403, headers: CORS_HEADERS }

@@ -127,7 +127,7 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
 
     const historico = await consultarHistorico({ tenantModels: ctx.tenantModels, desde, hasta });
     let leadsDemo = null;
-    if (ctx.tenantHasModule("leads") || ctx.tenantHasModule("sales")) {
+    if (ctx.tenantHasModule("leads")) {
       try {
         leadsDemo = await leadsPorPais({ tenantModels: ctx.tenantModels, desde, hasta });
       } catch (err) {
@@ -191,7 +191,7 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
   // El cruce con leads es un extra: si el tenant no tiene el módulo comercial,
   // o si la consulta falla, la pantalla de visitas debe seguir funcionando.
   let leads = null;
-  if (ctx.tenantHasModule("leads") || ctx.tenantHasModule("sales")) {
+  if (ctx.tenantHasModule("leads")) {
     try {
       leads = await leadsPorPais({ tenantModels: ctx.tenantModels, desde, hasta });
     } catch (err) {

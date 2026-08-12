@@ -22,7 +22,7 @@ export const MODULE_LABELS = {
   orders: "Pedidos", billing: "Facturación", documents: "Documentos", clinica: "Clínica",
   pacientes: "Pacientes", team: "Equipo", inventory: "Inventario", training: "Formación",
   cuestionarios: "Cuestionarios", support: "Soporte", formularios: "Formularios",
-  sales: "Comercial", planning: "Planificación", analytics: "Analítica", ai: "IA",
+  planning: "Planificación", analytics: "Analítica", ai: "IA",
   automations: "Automatizaciones", integrations: "Integraciones",
 };
 export const moduleLabel = (key) => MODULE_LABELS[key] || key;

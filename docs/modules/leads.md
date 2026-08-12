@@ -329,7 +329,7 @@ cualquier autenticado del tenant.
 
 | Método y ruta | Propósito | Restricciones |
 | --- | --- | --- |
-| `GET /api/leads` | Listado con filtros `stage`, `search`, `empresa`, `motivo`, `promo`, `limit` (max 200), `offset`. Devuelve `{ leads, total }`. | `hasModule("leads")` o `hasModule("sales")`. |
+| `GET /api/leads` | Listado con filtros `stage`, `search`, `empresa`, `motivo`, `promo`, `limit` (max 200), `offset`. Devuelve `{ leads, total }`. | `hasModule("leads")`. |
 | `POST /api/leads` | Crear lead. Acepta tanto `mensaje` como `message` (alias). Mete `promo` en `metadata`. | Solo admin/superadmin. |
 | `GET /api/leads/[id]` | Detalle. | `hasModule(...)`. |
 | `PATCH /api/leads/[id]` | Actualiza campos whitelisted. Acepta los 12 stages (`ALLOWED_STAGES`). Hace merge de `customFields`. | Solo admin/superadmin. |

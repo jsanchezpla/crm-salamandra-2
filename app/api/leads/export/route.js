@@ -117,7 +117,7 @@ const DEFAULT_CONFIG = {
 };
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule, tenant }) => {
-  if (!hasModule("leads") && !hasModule("sales")) throw new ForbiddenError();
+  if (!hasModule("leads")) throw new ForbiddenError();
 
   const { Lead } = tenantModels;
   const { searchParams } = new URL(request.url);

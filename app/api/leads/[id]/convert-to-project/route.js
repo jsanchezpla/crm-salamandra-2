@@ -17,7 +17,7 @@ async function auditLog(data) {
 }
 
 export const POST = withTenant(async (request, { params }, ctx) => {
-  if (!ctx.hasModule("leads") && !ctx.hasModule("sales")) throw new ForbiddenError();
+  if (!ctx.hasModule("leads")) throw new ForbiddenError();
   if (!ctx.hasModule("projects")) {
     throw new ForbiddenError("El módulo 'projects' no está activo en este tenant");
   }

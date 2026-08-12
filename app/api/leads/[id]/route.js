@@ -15,14 +15,14 @@ async function resolveLead(tenantModels, id) {
 }
 
 export const GET = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
-  if (!hasModule("leads") && !hasModule("sales")) throw new ForbiddenError();
+  if (!hasModule("leads")) throw new ForbiddenError();
   const { id } = await params;
   const lead = await resolveLead(tenantModels, id);
   return ok(lead);
 });
 
 export const PATCH = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
-  if (!hasModule("leads") && !hasModule("sales")) throw new ForbiddenError();
+  if (!hasModule("leads")) throw new ForbiddenError();
   const role = request.headers.get("x-user-role");
   if (!ADMIN_ROLES.has(role)) return forbidden(ADMIN_DENY);
   const { id } = await params;
@@ -92,7 +92,7 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
 });
 
 export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
-  if (!hasModule("leads") && !hasModule("sales")) throw new ForbiddenError();
+  if (!hasModule("leads")) throw new ForbiddenError();
   const role = request.headers.get("x-user-role");
   if (!ADMIN_ROLES.has(role)) return forbidden(ADMIN_DENY);
   const { id } = await params;

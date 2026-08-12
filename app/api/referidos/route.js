@@ -3,7 +3,7 @@ import { ok, forbidden } from "../../../lib/utils/apiResponse.js";
 import { Op } from "sequelize";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
-  if (!hasModule("leads") && !hasModule("sales")) return forbidden();
+  if (!hasModule("leads")) return forbidden();
 
   const { Lead } = tenantModels;
   const { searchParams } = new URL(request.url);

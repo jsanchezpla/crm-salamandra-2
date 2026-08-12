@@ -5,7 +5,7 @@ import { Op } from "sequelize";
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 export const PATCH = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
-  if (!hasModule("leads") && !hasModule("sales")) return forbidden();
+  if (!hasModule("leads")) return forbidden();
   const role = request.headers.get("x-user-role");
   if (!ADMIN_ROLES.has(role)) return forbidden("Solo administradores pueden modificar referidos");
 

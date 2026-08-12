@@ -153,7 +153,7 @@ const DEFAULT_TEMPLATE = {
 };
 
 export const GET = withTenant(async (_request, _ctx, { hasModule, tenant }) => {
-  if (!hasModule("leads") && !hasModule("sales")) throw new ForbiddenError();
+  if (!hasModule("leads")) throw new ForbiddenError();
 
   const tmpl = TENANT_TEMPLATES[tenant?.slug] ?? DEFAULT_TEMPLATE;
 
