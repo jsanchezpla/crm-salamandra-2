@@ -160,53 +160,6 @@ producción.
 
 ## P2 — cuando se pueda
 
-### «Fichas a completar» sale en el menú de quien no tiene nada que completar · `somos`, `demo`
-
-En producción `somos` tiene esa pantalla en su menú y **cero filas en las ocho
-carpetas**. Un cliente que acaba de entrar la abre el primer día, la encuentra
-vacía y no vuelve a mirarla. A Aumenta le pasará lo mismo el día que termine la
-campaña: hoy tiene 173 que bloquean y 1.800 por completar, pero la pantalla no
-sabe desaparecer cuando ya no hace falta.
-
-Lo que impide que esto sea de cinco minutos: **saber si hay algo cuesta cuatro
-segundos**. Obliga a correr las seis consultas de `carpetasCon()`, que cruzan
-pacientes, citas y el JSONB de tutores. Medido en el VPS: 3.997 ms en Aumenta,
-23 ms en la demo, 18 ms en Somos. Meterlo tal cual en el menú añade cuatro
-segundos a CADA carga de página del cliente que más lo necesita.
-
-Salidas razonables: contar solo el bloque que bloquea, que son tres consultas y
-las tres baratas; cachear el número; o cargarlo aparte y esconder la entrada
-cuando ya se sepa. El hueco donde encajaría ya existe: cada entrada del menú
-tiene un campo `badge` que hoy vale `null` en las cuatro que lo declaran.
-
-*Se comprueba*: en un cliente con `clients_avanzado` y cero huecos la entrada no
-sale; en Aumenta sale, y con su número al lado.
-*Dónde*: `components/layout/Sidebar.jsx:60` es la entrada y `:542` el badge sin
-usar; `lib/clients/urgentes.js:253` es `carpetasCon()`.
-✅ **ARREGLADO Y DESPLEGADO el 12/08/2026**, a falta de verlo en un menú.
-`lib/clients/urgentes.js` se partió en `cuerpoDe()` —el FROM y el WHERE de cada
-carpeta, escritos UNA sola vez— y encima se montan las dos consultas: la que
-lista y la que cuenta. Escribir el WHERE dos veces habría roto sola la regla de
-la cabecera. El menú pide `/api/clients/urgentes?soloTotales=1` y esconde la
-entrada si sale cero; enseña además cuántas BLOQUEAN, no las 1.800 por
-completar, que sería un número que no baja nunca.
-
-⚠️ **Y una cosa de la implementación que conviene saber**: el número se pide UNA
-vez, al cargar la página entera. El menú vive en el layout del dashboard y no se
-vuelve a montar al navegar entre pantallas —comprobado en producción: cero
-llamadas a `?soloTotales=1` al ir de Clientes a Leads y volver—, así que quien
-cierre el último hueco no verá desaparecer la entrada hasta que recargue. Para
-una entrada de menú es aceptable; para un contador en vivo no lo sería.
-
-*Comprobado en producción*: 12/08/2026 — las **24 cuentas** de aumenta, demo y
-somos cuadran al registro con lo que devuelve el listado, incluida la resta de lo
-archivado, y Aumenta pasa de **3.340 ms a 16 ms**. En el menú de la demo la
-entrada **SALE**, que es lo correcto: tiene 21 huecos (0 que bloqueen, y por eso
-sin número al lado). **Falta ver la otra mitad**, que desaparezca a cero: hace
-falta una sesión de Somos, que es quien está a 0 en las ocho carpetas. Se
-intentó fingiendo la respuesta desde el navegador y no valió, justo por lo del
-párrafo de arriba: el menú ya estaba montado y no vuelve a preguntar.
-
 ### Custodia sabe qué claves le faltan a cada cliente, pero no puede ponérselas · producto
 
 La portada del back-office ya dice, cliente por cliente, qué credenciales tiene

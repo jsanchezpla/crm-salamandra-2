@@ -407,10 +407,29 @@ export default function TableroPage() {
               {g.tareas.map((t) => (
                 <details
                   key={`${g.titulo}·${t.titulo}`}
-                  className="rounded-lg px-4 py-3"
+                  className="group rounded-lg px-4 py-3"
                   style={{ background: "var(--panel)", border: "1px solid var(--line)" }}
                 >
                   <summary className="cursor-pointer list-none flex items-start gap-3">
+                    {/*
+                      LA FLECHITA (12/08/2026). El `list-none` de aquí al lado
+                      quita el triángulo que pone el navegador, y sin nada en su
+                      sitio la fila parece un título suelto: no hay forma de
+                      adivinar que debajo está el cuerpo entero de la tarea —el
+                      qué pasa, el cómo se comprueba y el sello—.
+                      No es una suposición: pasó. Al repasar el Registro se dio
+                      por hecho que la pantalla ya solo enseñaba títulos, y de
+                      ahí salió el encargo de «poner el cuerpo», que ya estaba.
+                      Gira 90° al abrir, para que también se lea el estado.
+                    */}
+                    <svg
+                      viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}
+                      aria-hidden="true"
+                      className="shrink-0 mt-[4px] w-3 h-3 transition-transform group-open:rotate-90"
+                      style={{ color: "var(--apagado)" }}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
                     <Tick
                       marcada={pestaña === "resuelto"}
                       ocupada={guardando === t.clave}

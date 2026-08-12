@@ -28,6 +28,41 @@ Lo más reciente arriba.
 
 ## 12/08/2026
 
+### «Fichas a completar» desaparece cuando no queda nada que completar · `somos`, `demo`, `aumenta`
+
+`somos` tenía esa pantalla en el menú con **cero filas en las ocho carpetas**: la
+abría el primer día, la encontraba vacía y no volvía. A Aumenta le pasará lo
+mismo el día que termine su campaña.
+
+Lo que impedía arreglarlo era el precio de saberlo: traerse las filas cuesta
+**3.340 ms en Aumenta**. Se partió `lib/clients/urgentes.js` en `cuerpoDe()` —el
+FROM y el WHERE de cada carpeta, escritos UNA sola vez— y encima se montan las
+dos consultas, la que lista y la que cuenta. Escribir el WHERE dos veces habría
+roto sola la regla de la cabecera del fichero: el total de la carpeta y las filas
+que se ven al abrirla tienen que salir de la misma fuente, o nadie se fía del
+número.
+
+El menú enseña además cuántas **bloquean** el trabajo, no las 1.800 por
+completar: un contador que no baja nunca se deja de mirar en dos días.
+
+⚠️ **El número se pide una vez por carga de página.** El menú vive en el layout
+del dashboard y no se vuelve a montar al navegar —comprobado: cero llamadas a
+`?soloTotales=1` al ir de Clientes a Leads y volver—, así que quien cierre el
+último hueco no verá desaparecer la entrada hasta que recargue. Para una entrada
+de menú es aceptable; si algún día se quiere un contador en vivo, hay que
+refrescarlo aparte.
+
+*Cómo se comprobó*: las dos mitades, en producción y con las dos sesiones.
+**Que sale**: en la demo, con sus 21 huecos y sin número al lado (0 bloquean).
+**Que no sale**: en `somos`, cuyo menú enseña bajo Clientes únicamente «Lista de
+espera» — «Fichas a completar» no está, y el endpoint devuelve 0 y 0. Y antes de
+eso, las **24 cuentas** de aumenta, demo y somos cuadran al registro con lo que
+devuelve el listado, incluida la resta de lo archivado; Aumenta pasa de 3.340 ms
+a **16 ms**.
+*Dónde*: `lib/clients/urgentes.js` (`cuerpoDe`, `cuentasDe`),
+`app/api/clients/urgentes/route.js` (`?soloTotales=1`) y
+`components/layout/Sidebar.jsx`.
+
 ### Desde el panel interno ya se puede cerrar sesión · producto
 
 El enlace «salir» era un `<a href>`, o sea un GET, y `/api/auth/logout` solo
