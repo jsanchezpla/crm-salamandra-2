@@ -119,6 +119,13 @@ La cancelación reutiliza `lib/citas/cancelBooking.js` (compartido con `cancel/{
    `docker compose exec app node scripts/configure-nutri-laura-citas-portal.js`
 2. **Secretos en `.env.production`** del VPS (regla #14, generar con `openssl rand -hex 32`):
    `WIDGET_SSO_SECRETS='{"nutri_laura":"<hex>"}'` y `CITAS_PORTAL_SESSION_SECRET='<otro hex>'`.
+
+   > **Para ROTAR el de WordPress sin cortar el portal** (12/08/2026), el valor
+   > acepta una LISTA: valen todos para verificar y se firma con el primero.
+   > Se pone el nuevo delante —`{"nutri_laura":["<nuevo>","<viejo>"]}`— y se
+   > despliega; se cambia `CRM_WIDGET_SSO_SECRET` en WordPress con calma; y en
+   > el siguiente despliegue se quita el viejo. Antes había que cambiar las dos
+   > puntas al mismo segundo y eso ya costó un corte.
 3. **WordPress**: pegar el snippet de `docs/modules/citas-portal-wordpress-snippet.php`
    (Code Snippets tipo PHP o mu-plugin — se guarda en BD, sobrevive a cambios de tema),
    definir `CRM_WIDGET_SSO_SECRET` (en `wp-config.php` o en el propio snippet) con el
