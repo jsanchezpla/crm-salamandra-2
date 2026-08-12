@@ -1,26 +1,38 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
-import { ok, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
+import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
+import { getMasterModels } from "../../../../lib/db/masterDb.js";
+import { RESPONSABLES, repartirPorEstado } from "../../../../lib/tablero/estado.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 /**
- * GET /api/admin/tablero — lo que falta y lo que ya está, leído de los ficheros.
+ * El Registro: lo que falta y lo que ya está.
  *
- * POR QUÉ LEE MARKDOWN Y NO UNA TABLA DE LA BASE DE DATOS
- * Porque quien mantiene esto es quien programa, y lo hace en el mismo commit que
- * el arreglo. Un backlog en base de datos se actualiza «luego» —y luego es
- * nunca—; uno en el repo se revisa en el diff, viaja con el código que lo
- * resuelve y tiene historial de quién lo escribió y cuándo.
+ * EL TEXTO EN EL REPO, EL ESTADO EN UNA TABLA (12/08/2026)
+ * Este endpoint nació de solo lectura y con un motivo escrito: «un backlog en
+ * base de datos se actualiza luego —y luego es nunca—; uno en el repo se revisa
+ * en el diff, viaja con el código que lo resuelve y tiene historial de quién lo
+ * escribió». Ese motivo sigue en pie para el TEXTO de cada tarea, y por eso
+ * `docs/backlog.md` y `docs/resuelto.md` no se tocan desde aquí.
  *
- * Esta pantalla es para LEER. Es el tablero que Jorge y Rodrigo miran sin entrar
- * al repositorio; el detalle sigue estando en `docs/backlog.md` y
- * `docs/resuelto.md`, que son la única fuente.
+ * Lo que Rodrigo pidió el 12/08 es otra cosa y no cabía en un fichero: repartir
+ * («esto es tuyo») y marcar («esto ya está») en caliente, desde el móvil, sin
+ * abrir el repositorio. Eso vive en `master.tablero_estado` y se pinta ENCIMA de
+ * lo que dicen los ficheros: una tarea marcada sale en Resuelto aunque siga
+ * escrita en `backlog.md`, y al quitarle el tick vuelve a Pendiente.
  *
- * ⚠️ Los dos ficheros viajan a la imagen: hay una línea en el Dockerfile que los
- * copia. Si algún día dejan de aparecer aquí, es eso.
+ * ⚠️ NO SE PUEDE ESCRIBIR EN LOS `.md` DESDE AQUÍ, y no es una decisión de
+ * criterio sino física: los dos ficheros viajan DENTRO de la imagen de Docker
+ * (`Dockerfile:33`), así que lo que escribiéramos en el disco del contenedor se
+ * lo llevaría el siguiente despliegue sin dar ningún error. Si algún día dejan
+ * de aparecer, es esa línea del Dockerfile.
+ *
+ * Que una tarea esté marcada aquí NO la cierra de verdad: cerrarla sigue siendo
+ * moverla a `resuelto.md` en el mismo commit que su arreglo. El tick es para
+ * ponerse de acuerdo entre los dos; el commit es lo que deja constancia.
  *
  * Mismos tres candados que el resto del back-office.
  */
@@ -170,19 +182,137 @@ async function leer(nombre) {
   }
 }
 
+/* ── El estado que se pone encima: reparto y tick ───────────────────────────
+ *
+ * La decisión de en qué pestaña cae cada tarea vive en `lib/tablero/estado.js`,
+ * que es lógica pura y se prueba sin levantar Next ni tener sesión de
+ * back-office. Aquí solo queda ir a buscar las filas.
+ */
+
+/**
+ * Lo guardado, por clave. Nunca lanza: si la tabla todavía no existe —el
+ * despliegue va por delante de la migración— el Registro se pinta como siempre,
+ * sin tick y sin reparto, en vez de responder un 500 y quedarse en blanco.
+ */
+async function estadosGuardados() {
+  try {
+    const { TableroEstado } = getMasterModels();
+    const filas = await TableroEstado.findAll({
+      attributes: ["clave", "asignadoA", "resuelta", "tocadaPor", "updatedAt"],
+    });
+    return new Map(filas.map((f) => [f.clave, f]));
+  } catch (err) {
+    process.stderr.write(`[tablero] sin estado guardado: ${err.message}\n`);
+    return new Map();
+  }
+}
+
 export const GET = withTenant(async (_request, _ctx, ctx) => {
   try {
     const veto = candado(ctx);
     if (veto) return veto;
 
-    const [backlog, resuelto] = await Promise.all([leer("backlog.md"), leer("resuelto.md")]);
+    const [backlog, resuelto, estados] = await Promise.all([
+      leer("backlog.md"),
+      leer("resuelto.md"),
+      estadosGuardados(),
+    ]);
+
+    const repartidas = repartirPorEstado(
+      backlog ? trocear(backlog) : null,
+      resuelto ? trocear(resuelto) : null,
+      estados
+    );
 
     return ok({
-      pendiente: backlog ? trocear(backlog) : null,
-      resuelto: resuelto ? trocear(resuelto) : null,
+      ...repartidas,
+      responsables: RESPONSABLES,
       // Si faltan, es que no llegaron a la imagen. Se dice en vez de enseñar un
       // tablero vacío, que se leería como «no hay nada que hacer».
       faltan: [!backlog && "backlog.md", !resuelto && "resuelto.md"].filter(Boolean),
+    });
+  } catch (err) {
+    return serverError(err);
+  }
+});
+
+/**
+ * PATCH /api/admin/tablero — repartir una tarea o marcarla.
+ *
+ * Cuerpo: `{ clave, titulo?, asignadoA?, marcada? }`. Se manda solo lo que
+ * cambia: `asignadoA: null` la deja sin dueño y `marcada: null` devuelve la
+ * tarea a donde diga el fichero, que no es lo mismo que `false` (eso es
+ * «reabierta a mano»).
+ *
+ * NO valida que la clave exista en los ficheros, y es deliberado: los `.md`
+ * cambian con cada despliegue y una tarea puede reescribirse mientras alguien
+ * tiene la pantalla abierta. Una fila que no case con nada no se pinta y no
+ * molesta; rechazarla obligaría a leer y trocear los dos ficheros para poder
+ * guardar un tick.
+ */
+export const PATCH = withTenant(async (request, _ctx, ctx) => {
+  try {
+    const veto = candado(ctx);
+    if (veto) return veto;
+
+    const cuerpo = await request.json().catch(() => null);
+    const clave = typeof cuerpo?.clave === "string" ? cuerpo.clave.trim() : "";
+    if (!clave) return error("Falta la tarea");
+
+    const cambios = {};
+
+    if ("asignadoA" in (cuerpo ?? {})) {
+      const quien = cuerpo.asignadoA;
+      if (quien !== null && !RESPONSABLES.includes(quien)) {
+        return error(`«${quien}» no está en la lista: ${RESPONSABLES.join(", ")}`);
+      }
+      cambios.asignadoA = quien;
+    }
+
+    if ("marcada" in (cuerpo ?? {})) {
+      const marcada = cuerpo.marcada;
+      if (marcada !== null && typeof marcada !== "boolean") {
+        return error("«marcada» tiene que ser true, false o null");
+      }
+      cambios.resuelta = marcada;
+    }
+
+    if (!Object.keys(cambios).length) return error("No se ha pedido ningún cambio");
+
+    const { TableroEstado, User } = getMasterModels();
+
+    // Quién la tocó. Se guarda en la propia fila y no en `audit_logs`: esa tabla
+    // es de lo que pasa DENTRO de un cliente, y esto es una nota entre nosotros
+    // dos sobre una tarea nuestra.
+    //
+    // El correo hay que ir a buscarlo: el contexto solo trae `id`, `role` y
+    // `moduleAccess`. Best-effort — un fallo aquí no puede tumbar el guardado,
+    // y sin correo se queda el id, que también identifica.
+    cambios.tocadaPor = ctx.user?.id ?? null;
+    if (ctx.user?.id) {
+      try {
+        const quien = await User.findByPk(ctx.user.id, { attributes: ["email"] });
+        if (quien?.email) cambios.tocadaPor = quien.email;
+      } catch {
+        /* se queda el id */
+      }
+    }
+
+    if (typeof cuerpo?.titulo === "string" && cuerpo.titulo.trim()) {
+      cambios.titulo = cuerpo.titulo.trim();
+    }
+
+    const [fila] = await TableroEstado.findOrCreate({
+      where: { clave },
+      defaults: { clave, ...cambios },
+    });
+    await fila.update(cambios);
+
+    return ok({
+      clave: fila.clave,
+      asignadoA: fila.asignadoA ?? null,
+      marcada: fila.resuelta ?? null,
+      tocadaPor: fila.tocadaPor ?? null,
     });
   } catch (err) {
     return serverError(err);

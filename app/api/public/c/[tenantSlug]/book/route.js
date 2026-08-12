@@ -46,6 +46,7 @@ import {
   exigeFormularioAceptado,
   urlDelFormulario,
   estadoDeAdmision,
+  admitido,
   mensajeDePuerta,
   emailDeContacto,
   urlDeLaWeb,
@@ -245,7 +246,7 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     // encender la puerta sin bandeja de formularios dejaría fuera a todos.
     if (exigeFormularioAceptado(tenant) && hasModule("formularios")) {
       const estado = await estadoDeAdmision(tenantModels, clientEmail);
-      if (estado !== "aceptada") {
+      if (!admitido(estado)) {
         // Si a quien rebotamos ya estaba admitido, que no se quede solo entre
         // ella y la pantalla: `sin_ficha` es una contradicción y alguien del
         // centro tiene que verla.

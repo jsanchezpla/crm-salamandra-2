@@ -5,6 +5,7 @@ import {
   exigeFormularioAceptado,
   urlDelFormulario,
   estadoDeAdmision,
+  admitido,
   mensajeDePuerta,
   emailDeContacto,
   urlDeLaWeb,
@@ -55,7 +56,7 @@ export const GET = withPublicTenant(
         ? await estadoDeAdmision(tenantModels, email)
         : "sin_bandeja";
 
-      if (estado === "aceptada") {
+      if (admitido(estado)) {
         return ok({ admitida: true, estado, aviso: null, urlFormulario: null });
       }
 

@@ -138,6 +138,140 @@ consulta de quién podría quedarse corto devuelve cero.
 *Dónde*: `lib/clients/avisoBorrado.js`, `app/(dashboard)/clientes/ClientesClient.jsx`,
 `modules/default/ClientDetailModule.jsx` y `modules/overrides/nutri-laura/ClientDetailModule.jsx`.
 
+### El Registro ya se reparte y se marca desde la pantalla · interno
+
+Estaba en «Pendiente de una decisión suya» con tres salidas posibles. **Rodrigo
+eligió la del medio el 12/08**: poder asignar cada tarea a él o a Jorge, y un
+tick que la manda a Resuelto — y quitándolo, de vuelta a Pendiente. Lo que NO
+entra es escribir tareas nuevas desde la pantalla.
+
+**Dónde vive cada cosa, que era el problema de verdad.** El texto de una tarea
+sigue en `docs/backlog.md` y `docs/resuelto.md`, y no se toca desde el
+navegador: los dos ficheros viajan DENTRO de la imagen de Docker
+(`Dockerfile:33`), así que cualquier cosa que la pantalla escribiera en ellos se
+la llevaría el siguiente despliegue sin dar ningún error. El reparto y el tick
+van a una tabla nueva, `master.tablero_estado`, y se pintan ENCIMA de lo que
+dicen los ficheros. Una tarea marcada sale en Resuelto aunque siga escrita en
+`backlog.md`; al quitarle el tick vuelve a su sitio.
+
+Solo se guarda lo que se DESVÍA del repositorio. Marcar una que ya está en
+`resuelto.md` no crea ninguna fila —el fichero ya lo decía— y devolver a
+pendiente una de `backlog.md`, tampoco. Así la tabla no acumula filas que no
+dicen nada, y el día que alguien cierre la tarea de verdad en su commit, el
+apaño desaparece solo.
+
+**Lo marcado a mano se ve marcado a mano.** Cae en su propio bloque —«Marcadas
+desde el Registro», con la etiqueta «sin commit»— en vez de mezclarse con lo
+cerrado en el repositorio. El tick es para poneros de acuerdo entre los dos;
+cerrar una tarea sigue siendo moverla a `resuelto.md` en el commit que la
+arregla, y esa regla no la toca nadie.
+
+⚠️ La clave de cada tarea es su TÍTULO normalizado. Reescribir un título en el
+fichero deja la fila huérfana y la tarea vuelve a salir donde diga el fichero.
+Es el precio de no meter identificadores dentro del markdown, que lo volvería
+ilegible y habría que inventarlos a mano al escribir cada tarea. Una fila
+huérfana no molesta: simplemente no casa con nada.
+
+*Dónde*: `app/api/admin/tablero/route.js` (ahora con PATCH),
+`app/admin/tablero/page.jsx`, `models/master/TableroEstado.model.js` y
+`scripts/migrate-tablero-estado.js`, que crea la tabla y es idempotente.
+*Cómo se comprobó*: migración lanzada en el VPS y, con el Registro abierto en
+producción, marcar una tarea la pasa a Resuelto, quitarle el tick la devuelve a
+Pendiente y el reparto aguanta al recargar. Detalle al final de esta entrada.
+
+### La IA la paga el cliente, con su clave · producto
+
+Estaba en «Pendiente de una decisión suya» y era la mitad cara: el CRM tiene
+once disparadores de IA repartidos por nueve módulos, todos desplegados, y no
+los usa nadie porque cada cliente tiene que traer su propia clave y ninguno la
+ha puesto. **Rodrigo lo cerró el 12/08: el modelo es BYOK y el consumo lo paga
+el cliente.** No entra en el precio.
+
+Con eso, el mecanismo que ya estaba escrito es el bueno y no hay que tocar
+código: la tarjeta para pegar la clave sale en Configuración → IA de todos los
+clientes (regla #14 de CLAUDE.md), sin clave el CRM contesta «Este cliente no
+tiene configurada la clave de IA», y `lib/ai/anthropicKey.js` no mira ninguna
+variable de entorno a propósito. Que no haya reserva por entorno deja de ser una
+carencia y pasa a ser lo que se quiere: si la clave la pone el cliente, una
+nuestra por detrás sería una factura silenciosa.
+
+Lo que queda es COMERCIAL y no de programación: nadie ha puesto su clave porque
+lo más probable es que nadie sepa que tiene que ponerla. Eso se resuelve
+contándoselo, y para poder pegársela nosotros cuando la traigan ya hay una tarea
+en P2 («Custodia sabe qué claves le faltan…»), con el campo de solo escribir.
+
+*Cómo se comprobó*: contra el VPS el 12/08/2026, `master.tenants.settings` →
+**1 de 10 clientes con clave de Anthropic (nosotros, `salamandra_solutions`) y 0
+de 10 con la de OpenAI**. Sigue igual que el 10/08, con un cliente más en la
+lista (`somos`).
+
+### Aumenta no abre su agenda al público · `aumenta`
+
+Estaba en «Pendiente de una decisión suya». **Rodrigo lo cerró el 12/08: no se
+abre.** Las familias tienen «Mi espacio» para ver sus citas y ahí acaba; pedir
+hora sigue siendo cosa del centro.
+
+Es la respuesta que deja las cosas como están, y por eso lo único que hacía
+falta era comprobar que están como creemos. Lo están: el interruptor
+`settings.citas.reservaOnlineCerrada` de Aumenta vale `true`, así que la reserva
+por internet está cerrada de verdad y no por casualidad.
+
+*Cómo se comprobó*: contra el VPS el 12/08/2026,
+`master.tenants.settings->'citas'->>'reservaOnlineCerrada'` = `true` en
+`aumenta`. Sigue cerrada, igual que el 09/08.
+
+### La primera visita de Laura puede elegir · `nutri_laura`
+
+Estaba en «Pendiente de una decisión suya»: una clienta llegó a la página de
+pago del bono de 360 €, vio el importe y se fue, y había un interruptor para
+obligar a que toda primera sesión pasara por la valoración inicial. **Rodrigo lo
+cerró el 12/08: puede elegir entre valoración inicial y acompañamiento
+mensual.** No se enciende nada.
+
+Los tres tipos públicos de su agenda son hoy «Valoración inicial» (sin precio,
+marcada como primera visita), «Acompañamiento mensual» (360 €, 6 sesiones) y
+«Supervisión profesional» (60 €, desde el 12/08 solo para profesionales). Quien
+entra por primera vez ve las dos primeras y decide; que se fuera al ver el
+importe es una conversación de precio, no una puerta que falte.
+
+*Cómo se comprobó*: contra el VPS el 12/08/2026, `crm_nutri_laura.event_types`
+→ las dos siguen activas y visibles, y `valoracionSoloConFormulario` no está
+puesto en los ajustes del cliente.
+
+### La puerta del formulario deja de pedírselo a los profesionales · `nutri_laura`
+
+Estaba en «Pendiente de una decisión suya» como «¿se apaga la puerta global del
+formulario?». **La respuesta de Rodrigo el 12/08 no fue ni sí ni no, sino que
+faltaba distinguir**: «una persona registrada como profesional no tiene que
+hacer el formulario, con haber hecho su formulario profesional le vale. Un
+paciente que entra por el formulario comercial sí que tiene que hacerlo sí o
+sí». Así que la puerta sigue encendida y global para los pacientes, y ahora
+tiene una excepción.
+
+**Son dos formularios distintos y solo se miraba uno.** Quien viene marcado como
+`profesional_salud` —un nutricionista que trae un caso— llegó por el formulario
+de profesionales de la web, que NO cae en la bandeja del módulo Formularios. La
+puerta le buscaba allí, no lo encontraba y le pedía rellenar el formulario de
+pacientes; y encima el único tipo de cita que puede reservar, «Supervisión
+profesional», ya está reservado a esa misma marca desde el mismo día.
+
+La excepción se cuelga de la MARCA de la ficha y no de un ajuste nuevo: es la
+misma llave que abre los tipos de cita de profesionales, puesta por el mismo
+sitio. Y vale para las DOS puertas —la global y la de la valoración inicial—
+porque partirlo por la mitad dejaría al mismo correo pasando por una y
+chocándose con la otra.
+
+Lo que no cambia: sin la marca no pasa nadie. Si la marca no se puede leer
+—tabla sin migrar, base de datos caída— se responde que no es profesional y la
+persona cae en la puerta normal. Un fallo de lectura no abre nunca.
+
+*Dónde*: `lib/citas/puertaFormulario.js` (`esProfesionalExento` y `admitido`),
+y los tres sitios que preguntaban `estado === "aceptada"` a mano ahora usan
+`admitido()`: `/book`, el portal y `lib/citas/puertaValoracion.js`.
+*Cómo se comprobó*: `node scripts/_smoke-puerta-profesional.mjs` (lógica pura,
+sin base de datos) fija los ocho casos, incluido que la marca ilegible cierra;
+y contra el VPS, después del despliegue. Detalle al final de esta entrada.
+
 ### Los trece de Aumenta ven lo que tienen que ver · `aumenta`
 
 Estaba en P1 esperando una respuesta del centro: trece personas sin acceso a
@@ -155,6 +289,12 @@ hay nada que tocar** (Rodrigo, 12/08/2026):
 
 Lo que la tarea leía como un olvido era el organigrama del centro. Que once
 personas no vean Facturación no es un permiso que falte: es que no facturan.
+
+**Esta respuesta cierra DOS tareas, no una.** En «Pendiente de una decisión
+suya» había una gemela —«¿Los trece de Aumenta deben ver más módulos?»— que era
+la misma pregunta escrita desde el otro lado y que apuntaba aquí. Se cierra con
+lo mismo y no se le escribe entrada propia: dos entradas diciendo la misma frase
+es exactamente lo que hace que dentro de seis meses nadie sepa cuál mirar.
 
 Queda apuntado, sin ser tarea: esas dos personas de dirección comparten un solo
 login, así que en Equipo → Actividad sus dos rastros salen como uno.

@@ -156,7 +156,7 @@ Configuración de VS Code, ESLint y Prettier en sus respectivos ficheros
 
 ```
 PostgreSQL DB: salamandra
-├── schema: master              ← tenants, users, tenant_modules, audit_log
+├── schema: master              ← tenants, users, tenant_modules, audit_log, tablero_estado
 ├── schema: crm_demo            ← tenant de desarrollo (local + producción)
 ├── schema: crm_retorika        ← Retorika (formación) — solo producción
 ├── schema: crm_quality_energy  ← Quality Energy (leads)
@@ -241,6 +241,11 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 - `User` — id (UUID), email, passwordHash, role, tenantId, moduleAccess, lastLoginAt
 - `TenantModule` — id, tenantId, moduleKey, enabled, version, schemaExtensions, logicOverrides, uiOverride, featureFlags
 - `AuditLog` — id, tenantId, userId, action, entity, entityId, before, after, ip
+- `TableroEstado` — el tick y el reparto que se ponen desde el Registro
+  (`/admin/tablero`), ENCIMA de lo que dicen `docs/backlog.md` y
+  `docs/resuelto.md`. El texto de las tareas sigue en esos ficheros y no se toca
+  desde la pantalla: viajan dentro de la imagen y el despliegue los reescribe.
+  La clave es el título normalizado; solo se guarda lo que se desvía del repo.
 
 ### Schema tenant (`models/tenant/`)
 

@@ -107,8 +107,24 @@ Reglas, decididas por el usuario: se aplica **a todos** —también a quien ya e
 paciente, que está avisado— y **a todos los tipos de cita**. No es una puerta
 cerrada: se enseña el aviso con el enlace.
 
-Estados que devuelve `estadoDeAdmision`: `aceptada` (pasa), `pendiente`,
-`descartada`, `descartada_final`, `sin_ficha`, `sin_enviar` y `sin_bandeja`.
+Estados que devuelve `estadoDeAdmision`: `profesional` y `aceptada` (pasan),
+`pendiente`, `descartada`, `descartada_final`, `sin_ficha`, `sin_enviar` y
+`sin_bandeja`. **Quién pasa se pregunta con `admitido(estado)`**, no comparando
+a mano: son dos estados desde el 12/08 y tres copias de esa condición es como se
+llega a que el portal diga que sí y `/book` responda 403.
+
+⚠️ **Los profesionales están exentos** (12/08/2026, Rodrigo). «Una persona
+registrada como profesional no tiene que hacer el formulario, con haber hecho su
+formulario profesional le vale. Un paciente que entra por el formulario
+comercial sí que tiene que hacerlo sí o sí.» Son dos formularios distintos y
+hasta entonces solo se miraba uno: quien viene marcado como `profesional_salud`
+llegó por el formulario de profesionales de la web, que NO cae en la bandeja del
+módulo Formularios, así que la puerta le pedía uno que no le toca. La excepción
+se cuelga de la MARCA de la ficha —la misma llave que abre los tipos de cita de
+profesionales— y vale para las DOS puertas, la global y la de la valoración
+inicial. Si la marca no se puede leer, se responde que no y la persona cae en la
+puerta normal: un fallo de lectura no abre nunca. Fijado en
+`_smoke-puerta-profesional.mjs`.
 Detalles que se rompen solos y por eso están fijados en
 `_smoke-puerta-formulario.mjs`, `_smoke-paciente-borrado.mjs` y
 `_smoke-puerta-descartada.mjs`:

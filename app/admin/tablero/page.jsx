@@ -32,9 +32,24 @@
  * enseñaba 7 de sus 10. Ahora el endpoint devuelve además `quienes`, ya troceado
  * en nombres conocidos, y una tarea compartida aparece en todos sus grupos. Un
  * tablero que miente por poco es peor que uno que no agrupa: nadie lo comprueba.
+ *
+ * YA NO ES SOLO DE LEER (12/08/2026, Rodrigo)
+ * Dos cosas se pueden tocar desde aquí: de quién es cada tarea y si ya está.
+ * Van a `master.tablero_estado`, NO a los ficheros —viajan dentro de la imagen
+ * de Docker y el siguiente despliegue se llevaría por delante lo que
+ * escribiéramos—, y se pintan encima de lo que dicen los `.md`.
+ *
+ * El tick MUEVE la tarea de pestaña, así que después de guardarlo hay que volver
+ * a pedir los datos: es el endpoint quien decide de qué lado cae cada una, y
+ * duplicar aquí esa decisión es como se llega a dos pantallas que no coinciden.
+ *
+ * Marcar aquí NO cierra una tarea de verdad: eso sigue siendo moverla a
+ * `resuelto.md` en el commit que la arregla. El tick es para ponerse de acuerdo
+ * entre los dos, y por eso lo marcado a mano se pinta en su propio bloque en vez
+ * de mezclarse con lo cerrado en el repositorio.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 /** Cuánto corre cada bloque, por su título. Lo que no case, en gris. */
 const TONOS = [
@@ -43,6 +58,11 @@ const TONOS = [
   { casa: /^P2/i, color: "var(--dim)", etiqueta: "cuando se pueda" },
   { casa: /^P3/i, color: "var(--tenue)", etiqueta: "deuda" },
   { casa: /decisión|decision/i, color: "var(--ok)", etiqueta: "lo decidís vosotros" },
+  // Los dos bloques que inventa el endpoint para lo que se mueve con el tick.
+  // Llevan etiqueta propia para que se vea de un vistazo que eso NO está cerrado
+  // en el repositorio: está marcado a mano y le falta su commit.
+  { casa: /^Marcadas desde el Registro/i, color: "var(--ok)", etiqueta: "sin commit" },
+  { casa: /^Reabiertas desde el Registro/i, color: "#B45309", etiqueta: "reabierta aquí" },
 ];
 
 function tonoDe(titulo) {
@@ -66,6 +86,68 @@ function Etiqueta({ children, color }) {
   );
 }
 
+/**
+ * El tick. Es un `button` y no un `input type=checkbox` a propósito: esto vive
+ * dentro de un `<summary>`, donde cualquier clic despliega el detalle, así que
+ * hace falta cortar el evento a mano — y un checkbox al que se le corta el
+ * evento por defecto se queda pintando lo contrario de lo que hay guardado.
+ */
+function Tick({ marcada, ocupada, onToggle }) {
+  return (
+    <button
+      type="button"
+      aria-label={marcada ? "Devolver a pendiente" : "Marcar como resuelta"}
+      title={marcada ? "Devolver a pendiente" : "Marcar como resuelta"}
+      disabled={ocupada}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggle();
+      }}
+      className="shrink-0 mt-[1px] w-[18px] h-[18px] rounded-[5px] grid place-items-center text-[11px] transition-colors disabled:opacity-40"
+      style={{
+        border: `1px solid ${marcada ? "var(--ok)" : "color-mix(in srgb, var(--tenue) 45%, transparent)"}`,
+        background: marcada ? "color-mix(in srgb, var(--ok) 22%, transparent)" : "transparent",
+        color: "var(--ok)",
+      }}
+    >
+      {marcada ? "✓" : ""}
+    </button>
+  );
+}
+
+/** De quién es. Dos botones porque somos dos; el segundo clic la deja sin dueño. */
+function Reparto({ responsables, asignadoA, ocupada, onElegir }) {
+  return (
+    <span className="flex items-center gap-1 shrink-0">
+      {responsables.map((r) => {
+        const suya = asignadoA === r;
+        return (
+          <button
+            key={r}
+            type="button"
+            disabled={ocupada}
+            title={suya ? `Quitar a ${r}` : `Asignar a ${r}`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onElegir(suya ? null : r);
+            }}
+            className="px-2 py-0.5 rounded-md text-[11px] capitalize transition-colors disabled:opacity-40"
+            style={{
+              background: suya ? "var(--panel-alto)" : "transparent",
+              color: suya ? "var(--text)" : "var(--tenue)",
+              border: `1px solid ${suya ? "var(--line)" : "transparent"}`,
+            }}
+          >
+            {r}
+          </button>
+        );
+      })}
+    </span>
+  );
+}
+
 export default function TableroPage() {
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState(null);
@@ -75,19 +157,67 @@ export default function TableroPage() {
   // ahora?»). Por cliente es la del teléfono sonando («¿cómo vamos con
   // Aumenta?»), que se hace menos veces pero con más prisa.
   const [agrupacion, setAgrupacion] = useState("urgencia");
+  // La tarea que se está guardando ahora mismo, por su clave: se le apagan los
+  // botones para que dos clics seguidos no manden dos cambios cruzados.
+  const [guardando, setGuardando] = useState(null);
+  const [fallo, setFallo] = useState(null);
 
   useEffect(() => { document.title = "Registro — Salamandra"; }, []);
 
-  useEffect(() => {
-    fetch("/api/admin/tablero", { cache: "no-store" })
-      .then(async (r) => {
-        const j = await r.json().catch(() => null);
-        if (!r.ok || !j?.ok) throw new Error(j?.error || `Error ${r.status}`);
-        return j.data;
-      })
-      .then(setDatos)
-      .catch((e) => setError(e.message));
-  }, []);
+  const cargar = useCallback(
+    () =>
+      fetch("/api/admin/tablero", { cache: "no-store" })
+        .then(async (r) => {
+          const j = await r.json().catch(() => null);
+          if (!r.ok || !j?.ok) throw new Error(j?.error || `Error ${r.status}`);
+          return j.data;
+        })
+        .then(setDatos)
+        .catch((e) => setError(e.message)),
+    []
+  );
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  /**
+   * Guarda un cambio y vuelve a pedir el tablero entero.
+   *
+   * Se recarga en vez de tocar el estado local porque el tick MUEVE la tarea de
+   * pestaña, y quién cae de qué lado lo decide el endpoint. Reproducir aquí esa
+   * regla es cómo se acaba con dos pantallas que no dicen lo mismo.
+   */
+  async function tocar(tarea, cambios) {
+    setGuardando(tarea.clave);
+    setFallo(null);
+    try {
+      const r = await fetch("/api/admin/tablero", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clave: tarea.clave, titulo: tarea.titulo, ...cambios }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.ok) throw new Error(j?.error || `Error ${r.status}`);
+      await cargar();
+    } catch (e) {
+      setFallo(e.message);
+    } finally {
+      setGuardando(null);
+    }
+  }
+
+  /**
+   * El tick, con la fuente delante.
+   *
+   * Solo se guarda lo que se DESVÍA del repositorio: marcar una tarea que ya
+   * está en `resuelto.md` no necesita fila (vuelve a `null`, «manda el
+   * fichero»), y lo mismo al devolver a pendiente una que está en `backlog.md`.
+   * Así el estado guardado no acumula filas que no dicen nada.
+   */
+  function alternarTick(t, estaResuelta) {
+    const quiero = !estaResuelta;
+    const loQueDiceElFichero = t.fuente === "resuelto";
+    return tocar(t, { marcada: quiero === loQueDiceElFichero ? null : quiero });
+  }
 
   const secciones = datos?.[pestaña] ?? [];
 
@@ -197,6 +327,12 @@ export default function TableroPage() {
           </p>
         )}
 
+        {fallo && (
+          <p className="mt-4 text-[12px]" style={{ color: "var(--alerta)" }}>
+            No se ha podido guardar: {fallo}
+          </p>
+        )}
+
         <div className="mt-7 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-1">
             {[
@@ -275,6 +411,11 @@ export default function TableroPage() {
                   style={{ background: "var(--panel)", border: "1px solid var(--line)" }}
                 >
                   <summary className="cursor-pointer list-none flex items-start gap-3">
+                    <Tick
+                      marcada={pestaña === "resuelto"}
+                      ocupada={guardando === t.clave}
+                      onToggle={() => alternarTick(t, pestaña === "resuelto")}
+                    />
                     <span
                       className="inline-block w-[3px] rounded-full shrink-0 self-stretch"
                       style={{ background: t.tono.color }}
@@ -303,6 +444,12 @@ export default function TableroPage() {
                         </span>
                       )}
                     </span>
+                    <Reparto
+                      responsables={datos.responsables ?? []}
+                      asignadoA={t.asignadoA}
+                      ocupada={guardando === t.clave}
+                      onElegir={(quien) => tocar(t, { asignadoA: quien })}
+                    />
                   </summary>
                   {/* El cuerpo se pinta tal cual, respetando saltos de línea: es
                       texto escrito para leerse, no datos que reformatear. */}
@@ -312,6 +459,12 @@ export default function TableroPage() {
                   >
                     {t.cuerpo}
                   </div>
+                  {t.tocadaPor && t.marcada !== null && (
+                    <p className="mt-2 ml-[15px] text-[11px]" style={{ color: "var(--tenue)" }}>
+                      {t.marcada ? "Marcada" : "Reabierta"} aquí por {t.tocadaPor} — sin pasar por el
+                      repositorio.
+                    </p>
+                  )}
                 </details>
               ))}
             </div>
@@ -320,9 +473,12 @@ export default function TableroPage() {
       </div>
 
       <p className="mt-10 text-[11px] leading-relaxed" style={{ color: "var(--tenue)" }}>
-        Esto sale de <code>docs/backlog.md</code> y <code>docs/resuelto.md</code>, que se editan en el
-        repositorio junto al código que resuelve cada cosa. Nada entra ni sale sin comprobarse contra
-        producción.
+        El texto de cada tarea sale de <code>docs/backlog.md</code> y <code>docs/resuelto.md</code>, que se
+        editan en el repositorio junto al código que resuelve cada cosa. Nada entra ni sale sin
+        comprobarse contra producción.
+        <br />
+        El tick y el reparto sí se guardan desde aquí, pero aparte: marcar una tarea la mueve de
+        pestaña para que los dos sepáis por dónde va, y no sustituye a cerrarla en su commit.
       </p>
     </main>
   );

@@ -14,9 +14,9 @@ deja sin cliente, o la esconde.
 
 ## 1. El tablero no es una base de datos
 
-Es **`docs/backlog.md` y `docs/resuelto.md`**, leídos en caliente. No hay tabla,
-no hay formulario, no hay «añadir tarea» en la pantalla: la pantalla es de
-**leer**. Se escribe en el repositorio, en el mismo commit que el arreglo.
+El TEXTO de cada tarea es **`docs/backlog.md` y `docs/resuelto.md`**, leídos en
+caliente. No hay formulario para escribir una tarea nueva desde la pantalla: eso
+se escribe en el repositorio, en el mismo commit que el arreglo.
 
 Es deliberado y está explicado en el propio endpoint: un backlog en base de
 datos se actualiza «luego», y luego es nunca; uno en el repo se revisa en el
@@ -26,6 +26,28 @@ diff, viaja con el código que lo resuelve y deja constancia de quién lo escrib
 | --- | --- | --- |
 | `docs/backlog.md` | **Pendiente** | Lo que falta por hacer. |
 | `docs/resuelto.md` | **Resuelto** | Lo cerrado, con cómo se comprobó. |
+
+### Lo que SÍ se toca desde la pantalla (12/08/2026)
+
+Dos cosas, y ninguna es el texto: **de quién es cada tarea** (Rodrigo o Jorge) y
+**un tick** que la manda a Resuelto —quitándolo, vuelve a Pendiente—. Van a la
+tabla `master.tablero_estado` y se pintan ENCIMA de lo que dicen los ficheros.
+
+No están en los `.md` por un motivo físico, no de criterio: los dos ficheros
+viajan dentro de la imagen de Docker (§2), así que lo que la pantalla escribiera
+en ellos lo borraría el siguiente despliegue sin dar ningún error.
+
+Tres cosas que hay que saber antes de fiarse del tick:
+
+- **Marcar aquí NO cierra una tarea.** Cerrarla sigue siendo moverla a
+  `resuelto.md` en el commit que la arregla. Lo marcado a mano cae en su propio
+  bloque, «Marcadas desde el Registro», con la etiqueta «sin commit».
+- **Solo se guarda lo que se desvía del repo.** Marcar una tarea que ya está en
+  `resuelto.md` no crea ninguna fila. Cuando alguien la cierra de verdad en su
+  commit, el apaño desaparece solo.
+- **La clave es el título normalizado.** Si reescribes el título de una tarea en
+  el fichero, su tick y su reparto se quedan huérfanos y la tarea vuelve a salir
+  donde diga el fichero. No da error; simplemente deja de casar.
 
 ---
 
