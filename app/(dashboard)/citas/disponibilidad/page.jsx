@@ -166,6 +166,12 @@ export default function CitasDisponibilidadPage() {
           >
             Tipos de cita
           </Link>
+          <Link
+            href="/citas/bloqueos"
+            className="px-3 py-1.5 text-xs font-medium rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition"
+          >
+            Bloqueos
+          </Link>
           <button
             onClick={copyWeekday}
             className="px-3 py-1.5 text-xs font-medium rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition"

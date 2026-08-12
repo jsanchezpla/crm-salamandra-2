@@ -16,7 +16,9 @@ import listPlugin from "@fullcalendar/list";
 import interactionPlugin from "@fullcalendar/interaction";
 import Select from "@/components/ui/Select.jsx";
 import MultiSelect from "@/components/ui/MultiSelect.jsx";
+import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import BuscadorPaciente from "@/components/citas/BuscadorPaciente.jsx";
+import ModalFestivos from "@/components/citas/ModalFestivos.jsx";
 import { formatMoney } from "@/lib/payments/money.js";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "@/lib/citas/coloresBloqueo.js";
 
@@ -294,6 +296,10 @@ export default function CitasModule() {
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
   const [visibleTmIds, setVisibleTmIds] = useState(null); // null = todos los profesionales
   const [patients, setPatients] = useState([]); // vacío si el tenant no tiene Clínica/Pacientes
+  const [festivosAbierto, setFestivosAbierto] = useState(false);
+
+  // Preguntas y avisos, dentro del CRM y no del navegador (12/08/2026, Rodrigo).
+  const { confirmar, avisar, pedirTexto, elegir, dialogo } = useDialogo();
 
   // Cuántas solicitudes pendientes hay (para el globito de la pestaña). No
   // cambia de vista: el usuario decidió arrancar SIEMPRE en el calendario.
@@ -331,7 +337,7 @@ export default function CitasModule() {
       loadChangeRequests();
       if (action === "approve") calendarRef.current?.getApi().refetchEvents();
     } catch (e) {
-      window.alert(e.message);
+      await avisar({ titulo: "No se ha podido", texto: e.message });
     } finally {
       setChangeReqBusyId(null);
     }
@@ -373,58 +379,15 @@ export default function CitasModule() {
       .catch(() => {});
   }, []);
 
-  /*
-   * Las fechas se ESCRIBEN y se LEEN en DD-MM-AAAA (07/08/2026, Rodrigo), que
-   * es como se escriben aquí. Por dentro y en la API siguen viajando en
-   * AAAA-MM-DD, que es lo que entiende la base de datos y lo único que ordena
-   * bien: cambiar el formato de la pantalla no puede cambiar el de los datos.
+  /**
+   * Recargar los festivos del mes que se está mirando. Lo llama el modal
+   * después de marcar o quitar un día: su lista y la del calendario son
+   * distintas a propósito (ver `ModalFestivos`), así que hay que avisar.
    */
-  const aBonita = useCallback((ymd) => {
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd ?? ""));
-    return m ? `${m[3]}-${m[2]}-${m[1]}` : String(ymd ?? "");
-  }, []);
-  /** "11-08-2026" → "2026-08-11". Traga barras y un AAAA-MM-DD ya hecho. */
-  const aIso = useCallback((texto) => {
-    const t = String(texto ?? "").trim().replace(/\//g, "-");
-    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
-    const m = /^(\d{1,2})-(\d{1,2})-(\d{4})$/.exec(t);
-    if (!m) return null;
-    const d = m[1].padStart(2, "0");
-    const mes = m[2].padStart(2, "0");
-    if (Number(d) < 1 || Number(d) > 31 || Number(mes) < 1 || Number(mes) > 12) return null;
-    return `${m[3]}-${mes}-${d}`;
-  }, []);
-
-  const alternarFestivo = useCallback(async (fecha) => {
-    const existente = festivos.get(fecha);
-    try {
-      if (existente) {
-        if (!confirm(`¿Quitar el cierre del ${aBonita(fecha)}? Volverán a ofrecerse huecos ese día.`)) return;
-        const r = await fetch(`/api/citas/blocked-days?date=${fecha}`, { method: "DELETE" });
-        if (!r.ok) throw new Error((await r.json()).error || "No se pudo quitar");
-      } else {
-        const label = prompt(`Marcar el ${aBonita(fecha)} como festivo o cierre del centro.\n\nMotivo (opcional):`, "Festivo");
-        if (label === null) return; // canceló
-        const r = await fetch("/api/citas/blocked-days", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date: fecha, label: label || null }),
-        });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.error || "No se pudo marcar");
-        // Las citas ya puestas NO se tocan: se avisa para que alguien decida.
-        if (j.data?.citasEseDia > 0) {
-          alert(`Marcado. OJO: ese día ya hay ${j.data.citasEseDia} cita(s) puestas. No se han tocado: decide tú si avisar o reubicar.`);
-        }
-      }
-      const v = calViewRef.current;
-      const cal = calendarRef.current?.getApi();
-      if (cal) cargarFestivos(ymdLocal(cal.view.activeStart), ymdLocal(cal.view.activeEnd));
-      else if (v) cargarFestivos(fecha, fecha);
-    } catch (e) {
-      alert(e.message);
-    }
-  }, [festivos, cargarFestivos, ymdLocal, aBonita]);
+  const recargarFestivosDeLaVista = useCallback(() => {
+    const cal = calendarRef.current?.getApi();
+    if (cal) cargarFestivos(ymdLocal(cal.view.activeStart), ymdLocal(cal.view.activeEnd));
+  }, [cargarFestivos, ymdLocal]);
 
   /*
    * ⚠️ QUITAR UN FESTIVO DEJABA EL NOMBRE PUESTO (07/08/2026, Rodrigo).
@@ -652,14 +615,22 @@ export default function CitasModule() {
   async function guardarFechaHora() {
     if (!detailFecha || !detailHora) { setFormError("Pon la fecha y la hora"); return; }
     /*
-     * El motivo viaja al correo del paciente (07/08/2026, Rodrigo). Opcional:
-     * cancelar el diálogo no cancela el cambio de hora — a veces solo hay que
-     * mover una cita y no hay nada que explicar.
+     * El motivo viaja al correo del paciente (07/08/2026, Rodrigo). Sigue
+     * siendo OPCIONAL —a veces solo hay que mover una cita y no hay nada que
+     * explicar—: se cambia la hora igual con la caja vacía.
+     *
+     * Lo que sí cambia con el modal (12/08/2026): «Cancelar» ahora CANCELA. Con
+     * el `prompt` del navegador, cancelar cambiaba la hora de todas formas, y
+     * en una ventana con un botón que pone «Cancelar» eso no lo espera nadie.
      */
-    const motivo = window.prompt(
-      "¿Por qué se cambia? Se lo contamos en el correo.\n\nDéjalo vacío si no quieres explicar nada.",
-      ""
-    );
+    const motivo = await pedirTexto({
+      titulo: "Cambiar la hora de la cita",
+      texto: "¿Por qué se cambia? Se lo contamos en el correo. Déjalo vacío si no quieres explicar nada.",
+      etiqueta: "Motivo (opcional)",
+      confirmar: "Cambiar la hora",
+      multilinea: true,
+    });
+    if (motivo === null) return;
     const [y, m, d] = detailFecha.split("-").map(Number);
     const [hh, mm] = detailHora.split(":").map(Number);
     // El offset de Madrid en esa fecha, resuelto por el propio navegador.
@@ -769,10 +740,29 @@ export default function CitasModule() {
    * las NO justificadas avisan a administración.
    */
   async function markNoShow() {
-    const justificada = window.confirm(
-      "¿La falta estaba JUSTIFICADA (avisaron, enfermedad…)?\n\nAceptar = justificada · Cancelar = sin justificar"
-    );
-    const motivo = window.prompt(justificada ? "Motivo (opcional)" : "¿Qué ha pasado? (opcional)") ?? "";
+    /*
+     * Las dos respuestas, cada una con su frase. Antes esto era un `confirm`
+     * con «Aceptar = justificada · Cancelar = sin justificar» dentro: dos
+     * respuestas distintas metidas a la fuerza en un sí/no, donde además
+     * cancelar no cancelaba nada — marcaba la falta como injustificada.
+     */
+    const respuesta = await elegir({
+      titulo: "Marcar la falta",
+      texto: "No es lo mismo un niño con fiebre que una familia que no aparece sin avisar: solo las faltas sin justificar avisan a administración.",
+      opciones: [
+        { valor: "justificada", label: "Estaba justificada", pista: "Avisaron, enfermedad, un imprevisto…" },
+        { valor: "sin_justificar", label: "No avisaron", tono: "peligro" },
+      ],
+    });
+    if (respuesta === null) return;
+    const justificada = respuesta === "justificada";
+    const motivo = await pedirTexto({
+      titulo: justificada ? "Motivo de la falta" : "¿Qué ha pasado?",
+      etiqueta: "Opcional",
+      confirmar: "Marcar la falta",
+      tono: justificada ? "normal" : "peligro",
+    });
+    if (motivo === null) return;
     await patchBooking({
       status: "no_show",
       noShowJustified: justificada,
@@ -780,7 +770,15 @@ export default function CitasModule() {
     });
   }
   async function cancelBooking() {
-    const reason = window.prompt("Motivo de cancelación (opcional)") ?? "";
+    const reason = await pedirTexto({
+      titulo: "Cancelar la cita",
+      texto: "Se le avisará por correo si tiene consentimiento y correo en su ficha.",
+      etiqueta: "Motivo (opcional)",
+      confirmar: "Cancelar la cita",
+      cancelar: "Volver",
+      tono: "peligro",
+    });
+    if (reason === null) return;
     await patchBooking({ status: "cancelled", cancellationReason: reason.trim() || null });
   }
   async function saveNotes() { await patchBooking({ notes: detailNotes.trim() || null }); }
@@ -849,7 +847,13 @@ export default function CitasModule() {
   async function assignTeamMember(v) { await patchBooking({ teamMemberId: v || null }); }
   async function assignPatient(v) { await patchBooking({ patientId: v || null }); }
   async function deleteBooking() {
-    if (!window.confirm("¿Eliminar esta cita? Quedará marcada como cancelada.")) return;
+    const seguro = await confirmar({
+      titulo: "Eliminar la cita",
+      texto: "Quedará marcada como cancelada.",
+      confirmar: "Eliminar",
+      tono: "peligro",
+    });
+    if (!seguro) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/citas/bookings/${openBooking.id}`, { method: "DELETE" });
@@ -950,7 +954,7 @@ export default function CitasModule() {
       calendarRef.current?.getApi().refetchEvents();
     } catch (err) {
       info.revert();
-      window.alert(err.message);
+      await avisar({ titulo: "La cita no se ha movido", texto: err.message });
     }
   }
 
@@ -961,6 +965,11 @@ export default function CitasModule() {
     if (!createForm.clientName.trim()) { setFormError("Nombre del cliente obligatorio"); return; }
     if (!createForm.clientEmail.trim()) { setFormError("Email del cliente obligatorio"); return; }
     if (!createForm.clientPhone.trim()) { setFormError("Teléfono del cliente obligatorio"); return; }
+    // Solo si hay equipo del que elegir: sin módulo `team` el campo ni se pinta.
+    if (teamMembers.length > 0 && !createForm.teamMemberId) {
+      setFormError("Elige el profesional que la atiende");
+      return;
+    }
     if (!createForm.modality) { setFormError("Selecciona modalidad"); return; }
 
     setSaving(true);
@@ -997,7 +1006,12 @@ export default function CitasModule() {
       // 409 = el día está cerrado, o alguien está de vacaciones. No se impone:
       // se pregunta, y si insiste (una urgencia en el puente) se reenvía.
       if (res.status === 409 && !j.ok) {
-        if (!confirm(`${j.error}\n\n¿Crear la cita igualmente?`)) {
+        const crearIgualmente = await confirmar({
+          titulo: "Ese hueco está bloqueado",
+          texto: j.error,
+          confirmar: "Crearla igualmente",
+        });
+        if (!crearIgualmente) {
           setSaving(false);
           return;
         }
@@ -1020,9 +1034,10 @@ export default function CitasModule() {
           sin_configurar: "este cliente no tiene el correo configurado",
           error: "falló el envío",
         }[j.data.emailMotivo] ?? "no se pudo enviar";
-        alert(`Cita creada, pero al paciente NO le ha llegado el correo: ${porQue}.
-
-Avísale tú.`);
+        await avisar({
+          titulo: "Cita creada, pero sin avisar",
+          texto: `Al paciente NO le ha llegado el correo: ${porQue}.\n\nAvísale tú.`,
+        });
       }
       calendarRef.current?.getApi().refetchEvents();
       setOpenCreate(false);
@@ -1094,6 +1109,12 @@ Avísale tú.`);
             className="px-3 py-1.5 text-xs font-medium rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition"
           >
             Disponibilidad
+          </Link>
+          <Link
+            href="/citas/bloqueos"
+            className="px-3 py-1.5 text-xs font-medium rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition"
+          >
+            Bloqueos
           </Link>
           <button
             onClick={() => { setCreateForm(EMPTY_BOOKING_FORM); setOpenCreate(true); setFormError(null); }}
@@ -1280,29 +1301,29 @@ Avísale tú.`);
         </div>
       )}
 
-      {/* Calendario */}
+      {/*
+        Calendario.
+
+        ⚠️ SIN SCROLL EN LA PÁGINA (12/08/2026, Rodrigo). Antes el alto de
+        FullCalendar era una resta a ojo sobre el alto de la ventana
+        (`calc(100vh - 280px)`) y la fila de ayuda de arriba no entraba en la
+        cuenta: sobraban unos pocos píxeles y la pantalla entera se movía. Ahora
+        el calendario RELLENA lo que quede (`flex-1 min-h-0` + `height="100%"`),
+        que es una medida real y no una estimación: cambie lo que cambie encima,
+        no puede desbordar.
+      */}
       {tab === "calendar" && (
-        <div className="flex-1 p-6 min-h-0">
-          <p className="text-[11px] text-neutral-400 mb-2 hidden lg:block">
-            Doble clic en un hueco para crear una cita, arrastra sobre un tramo horario, o arrastra una cita existente para moverla.
-          </p>
-          <p className="text-[11px] text-neutral-400 mb-2 lg:hidden">
+        <div className="flex-1 min-h-0 flex flex-col px-6 lg:px-10 pt-3 pb-4">
+          <p className="text-[11px] text-neutral-400 mb-2 lg:hidden shrink-0">
             Toca una cita para ver su ficha. Para crear o mover citas, mejor desde el ordenador.
           </p>
           {/* Festivos y cierres del centro. Solo admin: cerrar un día afecta a
               la agenda de todo el equipo y a la reserva pública. */}
           {viewerIsAdmin && (
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <div className="flex items-center gap-2 mb-2 flex-wrap shrink-0">
               <button
                 type="button"
-                onClick={() => {
-                  const hoy = ymdLocal(new Date());
-                  const f = prompt("Marcar o quitar un día cerrado (festivo, puente, formación).\n\nFecha (DD-MM-AAAA):", aBonita(hoy));
-                  if (!f) return;
-                  const iso = aIso(f);
-                  if (!iso) { alert("La fecha debe ser DD-MM-AAAA. Por ejemplo: 24-12-2026"); return; }
-                  alternarFestivo(iso);
-                }}
+                onClick={() => setFestivosAbierto(true)}
                 className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-neutral-200 text-neutral-600 hover:bg-neutral-50 transition-colors"
               >
                 Festivos y cierres
@@ -1314,6 +1335,7 @@ Avísale tú.`);
               )}
             </div>
           )}
+          <div className="flex-1 min-h-0">
           <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
@@ -1359,9 +1381,19 @@ Avísale tú.`);
             editable={true}
             eventDurationEditable={false}
             eventDrop={handleEventDrop}
-            height={esMovil ? "calc(100vh - 230px)" : "calc(100vh - 280px)"}
+            /*
+             * Tope de citas por día en la vista de MES (12/08/2026, Rodrigo).
+             * Sin esto, un martes con doce citas estira su fila y encoge las
+             * demás: el mes deja de leerse como una rejilla. A partir de la
+             * cuarta, FullCalendar pone un «+N más» que abre el día entero.
+             * Solo afecta a dayGrid; semana y día siguen enseñándolo todo.
+             */
+            dayMaxEvents={4}
+            moreLinkText={(n) => `+${n} más`}
+            height="100%"
             buttonText={{ today: "Hoy", month: "Mes", week: "Semana", day: "Día", list: "Lista" }}
           />
+          </div>
         </div>
       )}
 
@@ -1926,15 +1958,25 @@ Avísale tú.`);
               )}
 
               <div>
-                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Tipo de cita</label>
+                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Tipo de cita *</label>
                 <Select
                   value={createForm.eventTypeId}
                   onChange={(v) => updateCreateForm("eventTypeId", v)}
                   options={[
-                    { value: "", label: "— Selecciona —" },
+                    { value: "", label: "— Selecciona —", pinned: true },
                     ...eventTypes.map((e) => ({ value: e.id, label: `${e.name} (${e.duration} min)` })),
                   ]}
                   className={inputCls}
+                  /*
+                   * SIEMPRE, no a partir de N tipos (12/08/2026, Rodrigo).
+                   * Aumenta tiene 57 y encontrar el que toca bajando por la
+                   * lista es el trabajo de verdad. Se probó con el umbral del
+                   * filtro del calendario (`> 8`) y se descartó: quien apunta
+                   * citas todo el día escribe siempre las primeras letras, y
+                   * que la caja aparezca o no según el cliente convierte un
+                   * gesto automático en algo que hay que mirar antes.
+                   */
+                  searchable
                 />
               </div>
 
@@ -1960,7 +2002,7 @@ Avísale tú.`);
               </div>
 
               <BuscadorPaciente
-                etiqueta="Cliente / paciente *"
+                etiqueta={patients.length > 0 ? "Cliente (la familia) *" : "Cliente / paciente *"}
                 nombre={createForm.clientName}
                 vinculadaA={createForm.clientId}
                 onEscribir={(texto) =>
@@ -1999,9 +2041,17 @@ Avísale tú.`);
                 </div>
               </div>
 
+              {/*
+                «Cliente» arriba y «Paciente» aquí NO son lo mismo, y leídos
+                seguidos lo parecían (12/08/2026, Rodrigo). En un centro clínico
+                el cliente es la familia que paga y el paciente es el hijo que
+                viene a la sesión, así que cada campo dice de quién habla. Donde
+                no hay módulo de pacientes esta caja ni aparece, y entonces el
+                cliente ES el paciente — por eso el rótulo de arriba cambia.
+              */}
               {patients.length > 0 && (
                 <div>
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Paciente (opcional)</label>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Paciente</label>
                   <Select
                     value={createForm.patientId}
                     onChange={(v) => updateCreateForm("patientId", v)}
@@ -2009,20 +2059,31 @@ Avísale tú.`);
                     placeholder="Sin paciente asignado"
                     searchable
                   />
+                  <p className="text-[10px] text-neutral-400 mt-1">
+                    Quién viene a la sesión. Si la familia tiene varios, elige de quién es la cita.
+                  </p>
                 </div>
               )}
 
+              {/*
+                El profesional es OBLIGATORIO desde el 12/08/2026 (Rodrigo). Se
+                podía apuntar una cita sin nadie que la atendiera, y esas citas
+                acaban en la cola de `/citas/sin-profesional`: 1.827 de las
+                12.030 que importó Aumenta vinieron así. Solo se exige si hay
+                equipo del que elegir — un tenant sin módulo `team` no ve el
+                campo y no puede quedarse bloqueado por él.
+              */}
               {teamMembers.length > 0 && (
                 <div>
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Profesional (opcional)</label>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Profesional *</label>
                   <Select
                     value={createForm.teamMemberId}
                     onChange={(v) => updateCreateForm("teamMemberId", v)}
                     options={[
-                      { value: "", label: "Sin profesional asignado" },
+                      { value: "", label: "— Selecciona —", pinned: true },
                       ...teamMembers.map((m) => ({ value: m.id, label: m.displayName })),
                     ]}
-                    placeholder="Sin profesional asignado"
+                    placeholder="— Selecciona —"
                     searchable
                   />
                 </div>
@@ -2090,6 +2151,18 @@ Avísale tú.`);
           </aside>
         </div>
       )}
+
+      {/* Festivos y cierres, en una pantalla del CRM y no en una cadena de
+          ventanas del navegador (12/08/2026, Rodrigo). */}
+      {festivosAbierto && (
+        <ModalFestivos
+          onCerrar={() => setFestivosAbierto(false)}
+          onCambio={recargarFestivosDeLaVista}
+        />
+      )}
+
+      {/* Las preguntas y avisos sueltos (cancelar, falta, borrar…). */}
+      {dialogo}
     </div>
   );
 }

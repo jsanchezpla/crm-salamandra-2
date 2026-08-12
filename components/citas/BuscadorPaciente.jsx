@@ -11,9 +11,11 @@ import { useEffect, useState } from "react";
  * la de la ficha para que la cita NO apareciera luego en ella — el cruce
  * ficha↔citas se hacía comparando cadenas de email.
  *
- * Ahora se escribe y se filtra entre los clientes que tienen activado un
- * módulo asistencial (nutrición o clínica), al elegir uno se rellenan solos el
- * email y el teléfono, y la cita queda ENLAZADA a su ficha por clave real.
+ * Ahora se escribe y se filtra entre las fichas de cliente, al elegir una se
+ * rellenan solos el email y el teléfono, y la cita queda ENLAZADA a esa ficha
+ * por clave real. Donde el centro marca quién es paciente desde la ficha
+ * (nutrición o clínica) la lista se acota a esos; donde esa marca no la usa
+ * nadie, se ofrecen todos — ver `/api/citas/clientes`.
  *
  * CON SALIDA A PROPÓSITO: si la persona no está en la lista se puede seguir
  * escribiendo el nombre a mano y crear la cita igual. Es el caso de quien
@@ -118,9 +120,17 @@ export default function BuscadorPaciente({
               {!buscando && resultados.length === 0 && (
                 <div className="px-3 py-2.5 text-xs text-gray-500 leading-relaxed">
                   {nombre?.trim() ? (
-                    <>Nadie con ese nombre entre tus pacientes. Puedes <strong>seguir escribiendo</strong> y crear la cita igual.</>
+                    <>Nadie con ese nombre. Puedes <strong>seguir escribiendo</strong> y crear la cita igual.</>
                   ) : (
-                    <>Aún no hay pacientes con módulo asistencial activado. Se activa desde la ficha del cliente.</>
+                    /*
+                     * Con la caja vacía y sin resultados solo puede pasar una
+                     * cosa: que no haya ninguna ficha todavía. El cartel que
+                     * había aquí («aún no hay pacientes con módulo asistencial
+                     * activado») salía en centros con mil fichas, porque el
+                     * servidor filtraba por una marca que allí no usa nadie —
+                     * ya no filtra (ver `/api/citas/clientes`).
+                     */
+                    <>Todavía no hay ninguna ficha de cliente. Puedes escribir el nombre y crear la cita igual.</>
                   )}
                 </div>
               )}

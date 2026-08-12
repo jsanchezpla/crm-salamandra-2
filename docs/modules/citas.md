@@ -927,6 +927,19 @@ y el interruptor lo avisa.
 | `/api/citas/bookings/[id]/confirm` | PATCH | Transición `pending → confirmed`. Idempotente. Valida solapamiento. Dispara `bookingConfirmed` |
 | `/api/citas/bookings/[id]/reject` | PATCH | Transición `pending → cancelled`. Acepta `cancellationReason` en body. Dispara `bookingRejected` |
 | `/api/citas/bookings/calendar` | GET | JSON FullCalendar para la vista mensual |
+| `/api/citas/clientes` | GET | A quién se le puede poner una cita (surte al buscador del alta manual). `?q=`, `?limit=`, `?todos=1` |
+| `/api/citas/blocked-days` | GET / POST / DELETE | Festivos y cierres del centro. POST y DELETE solo admin |
+| `/api/citas/bloqueos` | GET / POST / DELETE | Vacaciones y ausencias de una persona (`team_blocks`) |
+
+> **`/api/citas/clientes` ofrece de más antes que dejar la lista vacía.**
+> Acota a quien tenga marcado un módulo asistencial (`nutricion` / `clinica`)
+> en su ficha, pero se salta el filtro cuando este no distingue nada: si falta
+> la tabla `client_module_assignments` (42P01) **o si no hay ni un cliente
+> marcado** (12/08/2026). Aumenta tiene 1.083 familias y CERO con la marca
+> —allí el paciente es el hijo, que tiene su propia tabla—, así que el buscador
+> del alta manual salía vacío con un cartel que sonaba a que faltaba
+> configurar algo. `soloPacientes` en la respuesta dice si la lista viene
+> acotada o no; hoy solo viene acotada en `nutri_laura`.
 
 ## UI
 
@@ -936,6 +949,50 @@ y el interruptor lo avisa.
 "Nueva cita manual" + modal detalle con acciones marcar completada / no
 asistió / cancelar. Sin tabs ni lista de espera (los otros tenants no
 usan `pending` hoy).
+
+#### Repaso del 12/08/2026 (Rodrigo)
+
+Cinco cosas de la pantalla, todas en el módulo por defecto (o sea, para todos
+los tenants con `citas`):
+
+| Qué | Dónde | Por qué |
+| --- | --- | --- |
+| **Sin scroll de página** | El calendario rellena lo que quede (`flex-1 min-h-0` + `height="100%"`) en vez de restar píxeles a ojo (`calc(100vh - 280px)`) | La resta no contaba la fila de ayuda y la pantalla entera se movía. Se quitó además la frase «Doble clic en un hueco para crear una cita…», que era la que sobraba. |
+| **Máximo 4 citas por día en la vista de mes** | `dayMaxEvents={4}` | Un martes con doce citas estiraba su fila y encogía las demás. A partir de la cuarta hay «+N más». |
+| **Festivos en un modal del CRM** | `components/citas/ModalFestivos.jsx` | Marcar el 24-dic eran hasta cuatro ventanas del navegador seguidas (fecha a mano en DD-MM-AAAA, motivo, `confirm`, `alert`), y para saber qué días estaban cerrados había que ir mes a mes. Ahora se ve la lista de lo cerrado por delante. **Su lista NO es la del calendario**: el calendario solo carga el mes visible, y con esa lista marcar el 24-dic desde agosto lo haría desaparecer al instante. |
+| **Profesional obligatorio en el alta manual** | `submitCreate`, solo si `teamMembers.length > 0` | Se podían apuntar citas sin nadie que las atendiera; 1.827 de las 12.030 que importó Aumenta vinieron así y viven en `/citas/sin-profesional`. Un tenant sin módulo `team` no ve el campo y no puede quedarse bloqueado por él. |
+| **Buscador en el tipo de cita** | `searchable` **siempre**, sin umbral | Aumenta tiene 57 tipos. Se probó con el umbral del filtro del calendario (`> 8`) y Rodrigo lo descartó el mismo día: quien apunta citas todo el día escribe siempre las primeras letras, y que la caja aparezca o no según el cliente convierte un gesto automático en algo que hay que mirar antes. |
+
+**Los diálogos del navegador se fueron de todo el módulo**, no solo de festivos:
+`components/ui/Dialogo.jsx` (`useDialogo` → `confirmar` / `avisar` /
+`pedirTexto` / `elegir`) los sustituye devolviendo promesas, así que cada sitio
+de llamada sigue siendo una línea. Dos cambios de comportamiento que van con
+ello, y son a mejor:
+
+- **«Cancelar» ahora cancela.** Con `window.prompt`, cancelar el motivo del
+  cambio de hora cambiaba la hora igual, y cancelar el motivo de cancelación
+  cancelaba la cita igual. En una ventana con un botón que pone «Cancelar» eso
+  no lo espera nadie. Para seguir sin explicar nada, se acepta con la caja vacía.
+- **La falta ya no se pregunta con un sí/no.** Era un `confirm` con «Aceptar =
+  justificada · Cancelar = sin justificar» dentro: dos respuestas distintas
+  metidas a la fuerza en un sí/no, donde además cancelar marcaba la falta como
+  injustificada. Ahora son dos botones con su frase (`elegir`).
+
+#### `/citas/bloqueos` — vacaciones y ausencias (12/08/2026)
+
+`PanelVacaciones` vivía desde el 06/08 debajo del catálogo de
+`/citas/tipos`, porque Rodrigo lo pidió como «un tipo de cita especial».
+No lo es —ni por dentro ni por fuera—, y tener las dos cosas apiladas
+obligaba a bajar por el catálogo entero para apuntar unas vacaciones.
+
+Ahora es una pantalla propia, y las tres cabeceras del módulo (calendario,
+tipos y disponibilidad) llevan el botón **Bloqueos** al lado de «Tipos de
+cita» y «Disponibilidad». Como sus vecinas, no está en el sidebar: se llega
+por esos botones, y la puerta de verdad la siguen poniendo los endpoints.
+
+> **Bloqueo ≠ festivo.** El festivo cierra el centro entero un día y se pone
+> desde el calendario (`blocked_days`); el bloqueo es de una persona, con hora
+> de inicio y de fin (`team_blocks`).
 
 ### Override nutri_laura
 

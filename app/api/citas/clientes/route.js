@@ -16,10 +16,11 @@ import { ok, forbidden, serverError } from "../../../../lib/utils/apiResponse.js
  *   ?limit=20     tope de resultados (por defecto 20, máximo 50)
  *   ?todos=1      ignora el filtro de módulos y devuelve cualquier cliente
  *
- * DEGRADACIÓN DELIBERADA: si el tenant tiene citas pero NO la tabla de
- * asignaciones (42P01), se devuelven todos los clientes en vez de una lista
- * vacía. Un desplegable vacío dejaría a la usuaria sin poder crear la cita, y
- * eso es peor que ofrecer de más.
+ * DEGRADACIÓN DELIBERADA: se devuelven TODOS los clientes, en vez de una lista
+ * vacía, cuando el filtro no puede distinguir nada — porque el tenant no tiene
+ * la tabla de asignaciones (42P01) o porque no hay ni un cliente marcado. Un
+ * desplegable vacío dejaría a la usuaria sin poder crear la cita, y eso es peor
+ * que ofrecer de más. `soloPacientes` dice cuál de los dos casos es.
  */
 
 const MODULOS_ASISTENCIALES = ["nutricion", "clinica"];
@@ -63,10 +64,26 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       }
     }
 
+    /*
+     * ⚠️ NADIE MARCADO ≠ NADIE A QUIEN DAR CITA (12/08/2026, Rodrigo: «¿por qué
+     * no me deja poner pacientes en la cita manual?»).
+     *
+     * La marca de módulo asistencial vive en la ficha del CLIENTE, y en un
+     * centro clínico el cliente es la FAMILIA que paga: quien es paciente es el
+     * hijo, que tiene su propia tabla y su propio selector en el alta. Aumenta
+     * tiene 1.083 familias y CERO con esa marca puesta, así que el buscador
+     * devolvía la lista vacía y un cartel («aún no hay pacientes con módulo
+     * asistencial activado») que sonaba a que faltaba configurar algo.
+     *
+     * Si NADIE la tiene, la marca no está en uso en este centro y filtrar por
+     * ella no distingue nada: se ofrecen todos los clientes. Es la misma
+     * degradación deliberada que cuando falta la tabla — un desplegable vacío
+     * deja a recepción sin poder dar la cita, y eso es peor que ofrecer de más.
+     * Donde sí se usa (nutri_laura) no cambia nada: la lista sigue acotada.
+     */
+    if (idsAsistenciales && idsAsistenciales.length === 0) idsAsistenciales = null;
+
     if (idsAsistenciales) {
-      if (idsAsistenciales.length === 0) {
-        return ok({ clientes: [], soloPacientes: true, totalPacientes: 0 });
-      }
       where.id = { [Op.in]: idsAsistenciales };
     }
 

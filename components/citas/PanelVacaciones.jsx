@@ -170,7 +170,7 @@ export default function PanelVacaciones() {
   }
 
   return (
-    <section className="mt-8 border border-[var(--ink-200)] rounded-xl overflow-hidden">
+    <section className="border border-[var(--ink-200)] rounded-xl overflow-hidden">
       <header className="px-4 lg:px-5 py-3.5 bg-neutral-50/70 border-b border-[var(--ink-200)] flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-sm font-semibold text-[var(--ink-900)]">Vacaciones y ausencias</h2>

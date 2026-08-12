@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
-import PanelVacaciones from "../../../../components/citas/PanelVacaciones.jsx";
 import { eurosToCents, centsToEuros, formatMoney } from "../../../../lib/payments/money.js";
 import {
   TIPOS as TIPOS_PREGUNTA,
@@ -489,6 +488,12 @@ export default function CitasTiposPage() {
           >
             Disponibilidad
           </Link>
+          <Link
+            href="/citas/bloqueos"
+            className="px-3 py-1.5 text-xs font-medium rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition"
+          >
+            Bloqueos
+          </Link>
           <button
             onClick={openCreate}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0F0F0F] text-white text-xs font-medium rounded-md hover:bg-[#222] transition-colors"
@@ -604,12 +609,12 @@ export default function CitasTiposPage() {
         )}
 
         {/*
-         * «Vacaciones» (06/08/2026, Rodrigo). Va aquí, debajo del catálogo,
-         * porque él lo pidió como «un tipo de cita especial»: es donde lo va a
-         * buscar. Lo usa todo el equipo desde el 07/08 — quien se va de
-         * vacaciones tiene que poder apuntarlo sin pedírselo a nadie.
+         * «Vacaciones y ausencias» estuvo aquí debajo del catálogo desde el
+         * 06/08/2026, porque Rodrigo lo pidió como «un tipo de cita especial».
+         * Se mudó a `/citas/bloqueos` el 12/08: no es un tipo de cita, y tener
+         * las dos cosas apiladas obligaba a bajar por el catálogo entero para
+         * apuntar unas vacaciones. Se llega por el botón «Bloqueos» de arriba.
          */}
-        <PanelVacaciones />
       </div>
 
       {/* Drawer */}
