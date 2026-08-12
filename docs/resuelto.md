@@ -26,6 +26,212 @@ Lo más reciente arriba.
 
 ---
 
+## 12/08/2026
+
+> ⚠️ **Estas seis se escribieron ANTES del despliegue, a petición de Jorge.** La
+> regla de la casa es no cerrar nada hasta verlo funcionar en el VPS, y eso no se
+> ha podido hacer todavía: el código está en el árbol de trabajo, sin commitear.
+>
+> Se escriben igual porque los dos ficheros viajan DENTRO de la imagen: el
+> Registro no las enseñará como resueltas hasta el despliegue que las hace
+> verdad, así que no hay ningún momento en el que el tablero mienta. Lo que sí
+> queda pendiente es mirar el comportamiento nuevo en producción, y cada sello
+> dice exactamente qué se comprobó y contra qué.
+
+### El filtro de la agenda ya no se come la pantalla · `aumenta`
+
+El filtro pintaba un botón por cada tipo de cita y otro por cada profesional.
+En Aumenta eso son **74 botones en 10 filas**, y medido en su producción
+ocupaban **379 px** cuando al calendario le quedaban **335 px** en un monitor de
+1920×953: el filtro ocupaba más que la agenda. En un portátil de 768 px de alto
+el día empezaba haciendo scroll para ver la primera cita. Lo sufría cada mañana
+el cliente que más usa el CRM.
+
+Ahora son **dos desplegables con casillas en una sola línea**, unos 42 px.
+Desplegables con casillas y no un `<select>` normal a propósito: los dos filtros
+son de selección múltiple y eso se usa —ver dos tipos a la vez, o a dos
+profesionales—, y un `<select>` se lo habría llevado por delante. El componente
+nuevo es `components/ui/MultiSelect.jsx`, calcado de `Select.jsx` para no
+inventar un lenguaje visual nuevo, con buscador a partir de 8 opciones porque
+encontrar uno entre 57 a ojo era el trabajo de verdad.
+
+**Los dos filtros hacían cosas contrarias, y eso se acabó.** El de profesional
+aislaba con el primer clic (Rodrigo, 02/08); el de tipo partía de «todos
+puestos» y cada clic ESCONDÍA uno, así que para ver un tipo entre 57 había que
+tachar 56. Era el mismo castigo que a los profesionales se les había quitado en
+agosto, pero peor. Decisión de Jorge (12/08): **el primer clic aísla en los
+dos**. La regla vive ahora en `alternar()`, un solo sitio, para que no puedan
+volver a divergir sin que nadie se entere.
+
+Tercera decisión suya del mismo día: **quedarse sin nada marcado vuelve a
+«todos»**, también en los dos. Antes el de tipo dejaba el calendario EN BLANCO
+sin llegar a preguntar al servidor; con chips hacían falta 57 clics para
+provocarlo, pero con casillas está a uno, y un calendario vacío se lee como «han
+desaparecido las citas». Con eso, la lista vacía dejó de existir y se pudo
+borrar código muerto del `fetchEvents`.
+
+⚠️ Para quien lo toque: `visibleTmIds` no solo filtra citas, también decide qué
+ausencias se ven (la regla del 10/08 de que con «Todos» cada cual ve las suyas).
+El contrato `null` = todos, lista = solo esos, y `[]` no existe.
+
+*Cómo se comprobó*: primero midiendo el problema en la agenda real de Aumenta en
+producción (74 botones, 10 filas, 379 px contra 335 px). Después, con un banco
+de pruebas en local cargado con los 57 tipos y las 15 personas reales, clic a
+clic: el primer clic aísla, el segundo suma y el botón pone «2 tipos», quitar el
+último vuelve a «todos» y no a lista vacía, el buscador filtra («pedagog» → 8
+resultados, «zzzz» → «Sin resultados») y el panel de 434 px no corta la etiqueta
+más larga que tienen, «INFORME PARA DIAGNOSTICO (PSICO - LOGO - I.S.-SOLO TEA)».
+*Falta*: verlo en la agenda de Aumenta después del despliegue.
+*Dónde*: `modules/default/CitasModule.jsx` y `components/ui/MultiSelect.jsx`
+(nuevo). No hay overrides de `CitasModule`, así que llega a la vez a Aumenta,
+nutri_laura, healim y la demo.
+
+### «Reorganizar con IA» ya aplica los cambios que propone · `demo`, `aumenta`, `salamandra_solutions`
+
+El modal proponía los cambios, dejaba desmarcar los que no interesaban y al
+pulsar «Aplicar cambios» pedía `POST /api/projects/[id]/ai/apply` — un endpoint
+que **no existía en ningún commit**. No es que se rompiera: nunca se escribió.
+Donde más dolía era en la demo, que es pública: allí la propuesta se simula sin
+clave de IA, así que cualquiera a quien se le estuviera enseñando el CRM llegaba
+al último botón y se comía el error.
+
+Este endpoint ya se había escrito el 10/08 (`599e9ed`) y **Jorge lo mandó
+revertir** el mismo día (`d5f7abe`), porque se había pedido por error desde otra
+conversación. El 12/08 pidió rehacerlo, así que se ha recuperado ese trabajo tal
+cual con `git revert -n` en vez de reescribirlo: era código ya revisado. Lo
+único que hubo que fusionar a mano fue `lib/actividad/etiquetas.js`, al que la
+baja de clientes le había metido tres líneas por medio.
+
+Lo que hace, y por qué así: revalida las operaciones que manda el navegador
+contra un snapshot RECIÉN leído —no contra el que generó la propuesta—, porque
+el cuerpo lo manda el cliente y sin eso se podrían colar operaciones sobre otro
+proyecto; y las aplica en una transacción, con las bajas al final, porque media
+reorganización aplicada es peor que ninguna. No llama a la IA, así que no
+necesita ni clave ni guard de demo: es justo lo que permite que la demo funcione
+de punta a punta.
+
+*Cómo se comprobó*: `npm run build` en verde y el endpoint compilado, `apply` al
+lado de `edit` en `.next/server/app/api/projects/[id]/ai/`.
+*Falta*: pulsar «Aplicar cambios» en la demo después del despliegue y ver que
+aplica en vez de dar 404.
+*Dónde*: `app/api/projects/[id]/ai/apply/route.js`.
+
+### El moduleKey `sales` ha desaparecido del código · producto
+
+El área comercial tenía dos claves y el código aceptaba las dos:
+`hasModule("leads") || hasModule("sales")`. Eran **dieciséis guardas** en doce
+ficheros de ruta, más `lib/home/summary.js`, la etiqueta de `AccessSection.jsx`
+y dos semillas. La tarea decía trece y eran dieciséis.
+
+**Quitar esos OR no era limpieza, era un cambio de autorización**, así que
+primero se comprobó contra producción que no dejaba a nadie fuera: de las ocho
+filas comerciales de `master.tenant_modules`, siete son `leads` y están activas,
+y la única `sales` es la de la demo y está **apagada**; ningún usuario tenía
+`sales` en su `module_access`. Cero clientes afectados.
+
+De paso salió lo que lo habría roto en local: `scripts/db-sync.js` tenía `sales`
+en su lista de módulos y **no tenía `leads`**. Es de donde salió esa fila de la
+demo. Una demo recién sembrada se habría quedado sin módulo comercial y sin
+saber por qué. Arreglado en el mismo cambio.
+
+*Cómo se comprobó*: con una consulta de solo lectura contra `master` en
+producción, listando las filas `leads`/`sales` de todos los clientes y los
+usuarios con `sales` en su `module_access`. Salieron 0 filas `sales` activas y 0
+usuarios.
+*Falta*: que un cliente con `leads` siga viendo su módulo comercial después del
+despliegue.
+*Dónde*: `/api/leads/*`, `/api/referidos/*`, `/api/public/{leads,referidos}`,
+`/api/analiticas`, `lib/home/summary.js`, `components/team/AccessSection.jsx`,
+`scripts/{db-sync,seed-sandbox}.js`.
+
+### El secreto del SSO se puede rotar sin cortar el portal · producto
+
+`WIDGET_SSO_SECRETS` guardaba **un** secreto por cliente, así que cambiarlo
+obligaba a tocar el CRM y WordPress al mismo segundo: entre un despliegue y el
+otro, todo lo que viaja firmado dejaba de valer. Ya costó un corte en el portal
+de Laura.
+
+Ahora el valor admite una LISTA, y el reparto es lo que importa: **para
+verificar lo que llega de WordPress valen todos; para firmar lo que el CRM le
+manda se usa el primero**. Al revés no funcionaría — firmando con el viejo,
+quitarlo de la lista volvería a ser un corte. Hay dos sitios que verifican
+(`ssoToken.js` y el registro web) y tres que firman (los dos de `portalUser.js`
+y el sync de formación).
+
+Rotar pasa a ser: poner el nuevo delante y desplegar, cambiar WordPress con
+calma, y quitar el viejo en el siguiente despliegue.
+
+*Cómo se comprobó*: 14 asertos en local firmando tokens con cada secreto. Vale
+el nuevo, vale el viejo, se firma con el primero, se rechaza uno que no está en
+la lista, se rechaza un token de otro cliente, y una lista vacía da
+`SSO_SECRET_MISSING` en vez de colarse. **El importante es el primero: el
+formato de siempre —un string suelto— sigue funcionando igual**, así que
+`.env.production` no hay que tocarlo el día del despliegue.
+*Falta*: que el portal «Mis citas» de nutri_laura, que es el único con secreto
+configurado, siga abriendo después del despliegue.
+*Dónde*: `lib/citas/ssoToken.js` y `lib/formularios/registroWeb.js`.
+
+### El Registro se puede mirar por cliente · interno
+
+`/admin/tablero` agrupaba solo por prioridad, y la pregunta que se hace al
+descolgar el teléfono —«¿cómo vamos con Aumenta?»— se contestaba escribiendo el
+slug en el filtro y confiando en que estuviera bien puesto en todas las tareas.
+
+Lo que costó no fue agrupar: fue poder hacerlo sin mentir. El troceador devolvía
+el destinatario como una CADENA, así que «demo, aumenta, salamandra_solutions»
+formaba un grupo propio de una sola tarea y **Aumenta enseñaba 7 de sus 10**. Un
+tablero que miente por poco es peor que uno que no agrupa, porque nadie lo
+comprueba. Ahora el endpoint devuelve además `quienes`, ya troceado en nombres
+conocidos, y una tarea compartida aparece en todos sus grupos.
+
+Los nombres se buscan SUELTOS dentro de la cola y **no partiendo por comas**: hay
+colas escritas a mano como `· nutri_laura (y todos con citas)` que partidas por
+comas inventan un cliente que no cae en ningún grupo. Se añadió
+`salamandra_solutions` a la lista, que no estaba, y `varios`.
+
+⚠️ Contrastar los grupos con un `grep` del fichero vale para los SLUGS y no para
+`todos`, `producto`, `interno` ni `varios`: son palabras corrientes y aparecen
+dentro del texto de algún título. Si algún día no cuadran en una de esas cuatro,
+el que se equivoca es el grep.
+
+*Cómo se comprobó*: sacando `backlog.md` y `resuelto.md` **de dentro del
+contenedor de producción** y pasándoles los dos troceadores, el desplegado y el
+nuevo. Sobre el backlog los dos dan 5 secciones y 27 tareas con títulos, cuerpos
+y `quien` **idénticos** —o sea, el cambio no toca nada de lo que ya se ve—, y el
+nuevo añade 10 grupos, con Aumenta en 10 y cero tareas sin grupo. Sobre
+`resuelto.md` aparece una sola diferencia, y es el arreglo: «Cosas menores que se
+cerraron de la misma pasada · varios» dejaba de tener cliente y ahora lo tiene.
+*Falta*: ver el interruptor «Agrupar por» funcionando. No se pudo abrir la
+pantalla: exige el módulo `provisioning` y la sesión de producción no llegó.
+*Dónde*: `app/api/admin/tablero/route.js` y `app/admin/tablero/page.jsx`.
+
+### El Registro ya no sale vacío en Windows · interno
+
+El troceador partía los ficheros por `"\n"` y luego buscaba `/^##\s+(.+)$/`. En
+JavaScript el `.` no casa con `\r`, así que en una copia de trabajo con finales
+de línea de Windows **ninguna cabecera casaba**: cero secciones, cero tareas, y
+la pantalla decía «Nada por aquí» — exactamente lo contrario de la verdad.
+
+Solo lo veía quien desarrolla en Windows, y solo en local: `core.autocrlf=true`
+deja LF en el repositorio y en el contenedor no hay ni un `\r`. Despistaba el
+doble porque `resuelto.md` sí estaba en LF y la pestaña de al lado se veía bien,
+con lo que el fallo parecía de los datos y no del código.
+
+El arreglo es partir por `/\r?\n/`, y va en el CORTE y no en aflojar los regex:
+así se limpian a la vez las cabeceras y los cuerpos, que también arrastraban un
+`\r` por línea porque `join("\n").trim()` solo toca los extremos.
+
+*Cómo se comprobó*: ejecutando el troceador real —el del fichero, no una copia—
+sobre el `docs/backlog.md` de la copia de trabajo, con sus 805 caracteres `\r`.
+Antes: 0 secciones y 0 tareas. Después: 5 y 27, con todos los clientes resueltos
+y ningún `\r` dentro de los cuerpos.
+*En producción no se daba y se comprobó también*: los dos ficheros del
+contenedor tienen 0 caracteres `\r`, así que allí la salida es idéntica byte a
+byte antes y después.
+*Dónde*: `app/api/admin/tablero/route.js`, la línea del `split`.
+
+---
+
 ## 11/08/2026
 
 ### Dar de alta a un cliente ejecutaba migraciones sobre los schemas de todos los demás · producto

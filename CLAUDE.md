@@ -24,7 +24,7 @@ Antes de implementar cambios en un módulo concreto, lee su doc:
 | Citas             | `docs/modules/citas.md`      | Implementado                     |
 | Pacientes         | `docs/modules/pacientes.md`  | Implementado (aumenta)           |
 | Clínica           | `docs/modules/clinica.md`    | Implementado (aumenta)           |
-| Nutrición         | `docs/modules/nutricion.md`  | C1+C2+C3 en prod, C4+C5 en local |
+| Nutrición         | `docs/modules/nutricion.md`  | Implementado (nutri_laura, demo)  |
 | Formularios       | `docs/modules/formularios.md` | Implementado (nutri_laura)      |
 | Outreach          | `docs/modules/outreach.md`   | Completo en local, sin desplegar  |
 | Soporte           | `docs/modules/support.md`    | Completo en local (demo), sin desplegar |
@@ -298,14 +298,24 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 | Slug             | Entorno         | Quién es y qué hay que saber |
 | ---------------- | --------------- | ---------------------------- |
 | `demo`           | local + prod    | Tenant de desarrollo y show-room. Datos FALSOS a propósito: tiene casi todos los módulos para poder enseñarlos juntos. **Es pública y da sesión de admin a cualquiera**, así que todo endpoint que mande correo, gaste IA o escriba en master necesita su guard de `lib/demo/isDemo.js`. |
-| `retorika`       | solo producción | Academia online (WordPress + TutorLMS). |
+| `retorika`       | local + prod    | Academia online (WordPress + TutorLMS). |
 | `quality_energy` | local + prod    | Empresa energética. Tuvo `referidos` en su día (limpiado por `remove-abarcaia-from-quality.js`). |
 | `aumenta`        | local + prod    | Centro de psicología y formación, y **el cliente que más usa el CRM**: 12.030 citas, 15 personas y 88 de las 99 integraciones vivas. Overrides de UI: `aumenta/LeadsModule` y `aumenta/FormacionOverview`; el sidebar dice "Interesados" en vez de "Leads". **CRM en uso REAL desde 2026-07-24**: datos de ejemplo borrados (`reset-aumenta-real-data.js`; los LEADS eran reales y se conservaron) y equipo real dado de alta (`seed-aumenta-equipo-real.js`: 13 logins tipo `nombre_aumenta` con rol `user`; dirección usa admin@aumenta.es). Desempeño/Dirección/Productividad son SOLO admin. **NO wipear ni sembrar sin permiso.** **Agenda compartida ENCENDIDA el 01/08/2026** a petición de Rodrigo: todo el equipo ve la agenda completa, y con ella los datos de contacto del paciente. |
 | `abarcaia`       | solo producción | Programa de referidos vía formulario público. |
 | `spain_enzymes`  | local + prod    | Cliente real en producción (admin `admin@spain-enzymes.salamandra`). Su web (spainenzymes.com, WordPress) manda los leads del formulario a `/api/public/leads`. **Ojo**: en local tiene módulos que en producción NO ha contratado; no dar por buena la lista de local. |
 | `nutri_laura`    | local + prod    | Nutricionista (Laura). Override de leads (embudo nutricional) + conversión lead→paciente + override del overview de formación (B2C, sin TutorLMS aún). Subida a prod el 2026-06-23 con el sprint Recetario C1. **NO tiene `clinica` ni `pacientes`**: sus "pacientes" son `Client` con plan de menú, y por eso el módulo `clients` se le rotula «Pacientes» (ver `lib/clients/vocabulario.js`). |
-| `healim`         | solo producción | Cliente de solo Citas. **No estaba en esta tabla hasta el 10/08/2026** y llevaba meses en producción. |
-| `salamandra_solutions` | solo producción | **Somos nosotros.** Es el único con el módulo `provisioning`, que es lo que abre el back-office (`/admin`). No es un cliente: no cuenta en los recuentos de las pantallas internas. |
+| `healim`         | local + prod    | Cliente de solo Citas. **No estaba en esta tabla hasta el 10/08/2026** y llevaba meses en producción. |
+| `salamandra_solutions` | prod; en local solo la ficha (sin schema `crm_salamandra_solutions`) | **Somos nosotros.** Es el único con el módulo `provisioning`, que es lo que abre el back-office (`/admin`). No es un cliente: no cuenta en los recuentos de las pantallas internas. |
+
+> ⚠️ **La columna «Entorno» también se había desviado** (corregido 12/08/2026):
+> decía «solo producción» de `retorika`, `healim` y `salamandra_solutions`, y los
+> tres están además en local. Mismo problema que la columna de módulos, en
+> pequeño: una lista copiada a mano de algo que cambia. Se comprueba en un
+> segundo, y hay que hacerlo antes de fiarse:
+>
+> ```bash
+> node --env-file=.env.local -e "import('./lib/db/masterDb.js').then(async({getMasterDb})=>{const d=getMasterDb();console.log((await d.query('SELECT slug FROM master.tenants ORDER BY slug'))[0].map(t=>t.slug).join(', '));await d.close()})"
+> ```
 
 Cada tenant puede tener override de UI en `modules/overrides/{slug}/`
 (carpeta con guión) y seed propio en `scripts/seed-{slug}.js` cuando
@@ -369,7 +379,7 @@ aplique.
 | clients_avanzado | Clientes avanzado: lista de espera de admisión (aumenta, demo) | Implementado | — |
 | pacientes     | Pacientes                      | Implementado (aumenta)              | `docs/modules/pacientes.md` |
 | clinica       | Clínica                        | Implementado (aumenta)              | `docs/modules/clinica.md`   |
-| nutricion     | Recetario                      | C1+C2+C3 en prod, C4+C5 en local    | `docs/modules/nutricion.md` |
+| nutricion     | Recetario                      | Implementado (nutri_laura, demo) — entero en producción, comprobado 12/08/2026 | `docs/modules/nutricion.md` |
 | outreach      | Captación (leads + scoring IA) | Completo en local (sandbox); falta desplegar | `docs/modules/outreach.md` |
 | formularios   | **Leads Comerciales**: formularios públicos → bandeja → ficha (antes «Formularios») | Implementado (nutri_laura) | `docs/modules/formularios.md` |
 | —             | Configuración (ajustes + claves IA por tenant) | Implementado (siempre visible, sin `moduleKey`) | `docs/modules/configuracion.md` |
@@ -406,10 +416,18 @@ endpoint (`/api/analiticas`), así que cumple la condición. Vuelve dentro del
 área **Comercial** (junto a Leads), no en el grupo "Inteligencia", que sigue
 desaparecido. `ai`, `automations` e `integrations` continúan fuera.
 
-> **`leads` vs `sales`**: hay dos `moduleKey` para el área comercial
-> (`leads` → `/leads`, `sales` → `/comercial`). En producción los tenants
-> activan `leads`. Inconsistencia de nomenclatura heredada, pendiente de
-> unificar.
+> **`leads` vs `sales`**: había dos `moduleKey` para el área comercial y el
+> código aceptaba los dos (`hasModule("leads") || hasModule("sales")` en dieciséis
+> guardas). **`sales` se retiró el 12/08/2026**: la única clave del área comercial
+> es `leads`.
+>
+> No era limpieza, era un cambio de AUTORIZACIÓN, así que primero se comprobó
+> contra producción que no dejaba a nadie fuera: de las ocho filas comerciales de
+> `master.tenant_modules`, siete son `leads` y están activas, y la única `sales`
+> es la de la demo y está **apagada**; ningún usuario tenía `sales` en su
+> `module_access`. Esa fila apagada sigue ahí y no molesta — la sembró
+> `scripts/db-sync.js`, que tenía `sales` y no tenía `leads` en su lista de
+> módulos, y que se arregló en el mismo cambio.
 >
 > **`pacientes` / `clinica`**: backend **REAL** (CRUD + IA), ya **no** son maqueta.
 > Tienen endpoints propios en `app/api/pacientes/*` y `app/api/clinica/*`

@@ -7,7 +7,11 @@
   `lib/email/templates/layout.js`) con cambios retrocompatibles y de
   endurecimiento (ver abajo).
 - **Estado:** implementado, revisado (revisión adversarial, 9 hallazgos
-  corregidos) y verificado en local (demo + sandbox). Sin desplegar.
+  corregidos), verificado en local (demo + sandbox) y **desplegado**. Entró en
+  master el 2026-07-16 con `e51f0d7` y viajó con los despliegues siguientes;
+  comprobado el 12/08/2026 en el contenedor — `plans/[id]/pdf` y
+  `plans/[id]/send-email` están ahí. Esta línea decía «Sin desplegar» y se quedó
+  sin actualizar casi un mes.
 
 Cierra el último trozo del plan de 9 sprints (`prompts-sprints-crm.txt`).
 

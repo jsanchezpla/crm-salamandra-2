@@ -1,7 +1,23 @@
 # Módulo Nutrición (Recetario)
 
-Estado: **Sprint Recetario cerrado en local 2026-06-24. C1+C2+C3 en
-producción. C4+C5 pendientes de despliegue.**
+Estado: **todo el módulo está desplegado.** Comprobado el 12/08/2026 dentro del
+contenedor: los 23 endpoints de `/api/nutricion/*` y las cuatro pantallas son
+exactamente los mismos que en local.
+
+> ⚠️ **Esta línea decía «C1+C2+C3 en producción, C4+C5 pendientes de
+> despliegue», y llevaba semanas sin ser verdad.** El endpoint que cerraba C5
+> entró en master el 2026-06-24 (`9822e9a`) y el sub-sprint 8.3 —el PDF del menú
+> y el envío por correo— el 2026-07-16 (`e51f0d7`); los dos viajaron con los
+> despliegues siguientes. Quien abría esta ficha daba por pendiente media
+> nutrición, y esa media nutrición ya la estaba usando Laura.
+>
+> Estos estados se escribieron durante el sprint y nadie volvió a tocarlos. **No
+> se deducen de aquí: se miran en el contenedor**, que es la única respuesta que
+> no envejece:
+>
+> ```bash
+> docker exec crm-salamandra-app-1 find .next/server/app/api/nutricion -name route.js
+> ```
 
 > **REWORK SEMANA REAL (2026-07-22, decisión de producto Rodrigo+Jorge).**
 > Anula parcialmente lo descrito más abajo; en caso de conflicto prevalece esto
@@ -579,7 +595,7 @@ docker exec -it crm-salamandra-app-1 node scripts/install-unaccent-extension.js
 | C2 | Backend planes | 2026-06-23 | 2026-06-24 |
 | C3 | UI constructor + accent search | 2026-06-24 | 2026-06-24 |
 | C4 | Asignación + tab Plan | 2026-06-24 | 2026-06-24 |
-| C5 | Smoke E2E + docs + reorder + fixes prod scripts | 2026-06-24 | Pendiente |
+| C5 | Smoke E2E + docs + reorder + fixes prod scripts | 2026-06-24 | 2026-06-24 (`9822e9a`) |
 
 Total estimado del sprint: ~11 días planificados, ejecutado en ~3 días
 gracias a iteración asistida intensiva con LLM.
@@ -596,9 +612,10 @@ Líneas de código aproximadas:
 - Smokes: ~2500 LOC.
 - Docs: ~600 LOC (este archivo).
 
-Producción: Laura tiene operativo C1+C2+C3 desde el 2026-06-24. La
-inversión está pendiente solo de validación browser de C4+C5 y un
-último deploy.
+Producción: Laura tiene el sprint entero operativo. C1+C2+C3 desde el
+2026-06-24, y C4+C5 con los despliegues que vinieron detrás —comprobado en el
+contenedor el 12/08/2026—. Este párrafo decía que faltaba «un último deploy» y
+se quedó escrito así hasta hoy.
 
 ---
 

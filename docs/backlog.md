@@ -117,33 +117,6 @@ correos devuelva 201.
 
 ## P1 — esta semana
 
-### «Reorganizar con IA» se rompe justo al aplicar los cambios · `demo`, `aumenta`, `salamandra_solutions`
-
-El modal propone los cambios, el usuario desmarca los que no quiere y al pulsar
-«Aplicar cambios» el navegador pide `POST /api/projects/[id]/ai/apply` — **un
-endpoint que no se escribió nunca**. No es que se rompiera: no existe en ningún
-commit del historial. Lo único que hay es su hermano `/ai/edit`, que es el paso
-anterior, el que genera la propuesta.
-
-Donde duele es en la **demo**, que es pública y es el escaparate. Allí la
-propuesta se genera en modo simulado, **sin necesidad de clave de IA**, así que
-cualquiera a quien se le esté enseñando el CRM llega hasta el último botón y se
-come el error. En Aumenta no se llega tan lejos, pero por el motivo malo: el
-paso anterior ya devuelve 503 porque no tienen clave.
-
-Esto es la respuesta a «¿se metió al final la IA de proyectos?»: sí, entró
-entera en el commit `0d474c7` (31/07) y está desplegada —«Crear con IA» funciona
-de punta a punta—, pero la mitad de «Reorganizar» se quedó sin el último paso.
-Ni `CLAUDE.md` ni `docs/modules/projects.md` la mencionan, así que la
-documentación tampoco se enteró de que existe.
-
-*Se comprueba*: pulsar «Aplicar cambios» en la demo aplica las operaciones en
-vez de dar error.
-*Dónde*: `components/projects/AiEditModal.jsx:89` es quien llama;
-`app/api/projects/[id]/ai/edit/route.js` existe y falta el `apply` de al lado.
-*Comprobado en producción*: 10/08/2026 — en el contenedor,
-`.next/server/app/api/projects/[id]/ai/` solo contiene `edit`.
-
 ### «Pedirle otra tarjeta» no lleva a ninguna parte · todos
 
 El aviso recomienda pedir otra tarjeta y el botón se pinta, pero el endpoint
@@ -155,9 +128,49 @@ Ojo al arreglarlo: esa lista está deliberadamente de más —«preguntar a Stri
 más es barato; darlo por perdido, no»—. La salida no es sacar `failed` de la
 lista, es que el botón sepa distinguir.
 
-*Se comprueba*: pulsarlo en una cita `failed` manda el correo en vez de dar 409.
-*Dónde*: `app/api/citas/bookings/[id]/pedir-tarjeta/route.js:77-82` y
-`lib/citas/cobroCita.js:37`.
+**La prueba de que ese 409 sobra está en el propio fichero.** Catorce líneas más
+abajo de la guarda, el endpoint calcula `motivo = row.paymentStatus === "failed"
+? "rechazada" : "caducada"` y se lo manda a Stripe. El camino de la tarjeta
+rechazada está escrito, pensado y con su palabra propia — y es inalcanzable,
+porque la guarda de arriba lo corta antes de llegar.
+
+**Antes de escribir código hay que elegir una cosa, y es de Rodrigo.** El caso
+que justifica que `failed` esté en la lista es que la retención vieja siga VIVA
+en Stripe (`requires_capture`). Dos salidas:
+
+- (a) Que el botón la suelte solo y cree la nueva en la misma pulsación. Un
+  clic, pero libera dinero de un paciente sin que nadie lo haya pedido.
+- (b) Que devuelva 409 SOLO en ese caso, con el mensaje bueno —«ese cobro sigue
+  vivo: reintenta el cobro o recházalo para soltarlo»— y que decida ella.
+
+Si la retención vieja está muerta o cancelada, que es lo normal, se crea la
+nueva sin más y el 409 desaparece con las dos opciones. Esto lo decide Rodrigo
+porque en este repo la política de qué hace el CRM con el dinero de alguien está
+reservada a humanos a propósito: en `lib/citas/reembolsoCita.js` se BORRÓ el
+código de devoluciones automáticas en vez de dejarlo detrás de un interruptor,
+justo para que nadie lo encendiera sin querer.
+
+**Y no se toca `PUEDE_HABER_DINERO`.** Su envoltorio `tieneRetencionPendiente`
+lo usan otros cuatro sitios que sí quieren la lista ancha: confirmar la cita
+(dos veces), pasarla a confirmada o completada, y el reembolso. El arreglo
+mínimo es una comprobación NUEVA al lado, que solo use este botón.
+
+⚠️ Si se abre la guarda sin liquidar antes la retención vieja, al paciente le
+quedan DOS retenciones a la vez sobre la misma cita —el doble del importe
+bloqueado en su tarjeta hasta que la vieja caduque sola— y el CRM pierde el
+rastro de la primera, porque `paymentSessionId` se pisa con la nueva. Eso
+alcanza a todos los clientes con citas y cobro online.
+
+*Se comprueba*: pulsarlo en una cita `failed` manda el correo en vez de dar 409,
+y el paciente no acaba con dos retenciones.
+*Dónde*: `app/api/citas/bookings/[id]/pedir-tarjeta/route.js:77-82` es la guarda
+y `:91` el código que no se alcanza; `lib/citas/cobroCita.js:37` es la lista. Los
+otros cuatro consumidores: `bookings/[id]/confirm/route.js:152` y `:161`,
+`bookings/[id]/route.js:347` y `lib/citas/reembolsoCita.js:72`.
+*Repasado en el código*: 12/08/2026 — la guarda, el código inalcanzable y los
+cuatro consumidores siguen exactamente donde dice. Esto es lectura del repo, no
+del VPS: lo que se añade hoy es la decisión que faltaba, no un hecho nuevo de
+producción.
 *Comprobado en producción*: 09/08/2026 — `failed` sigue en la lista.
 
 ### Trece personas de Aumenta no ven módulos que el centro tiene · `aumenta`
@@ -173,33 +186,6 @@ y las otras once no, lo que sugiere que en algún momento sí se repartió a man
 *Se comprueba*: preguntar a Aumenta y dejar la respuesta escrita aquí.
 *Comprobado en producción*: 09/08/2026 — **son 13, no 11** como decía esta
 tarea antes.
-
-### El filtro de la agenda pinta 72 botones antes del calendario · `aumenta`
-
-Aumenta tiene **57 tipos de cita activos y 15 personas**, y el filtro los pinta
-todos como chips, en dos bandas apiladas encima del calendario. Cada banda se
-parte en varias líneas y empuja la agenda hacia abajo: en un portátil se empieza
-el día haciendo scroll para ver a qué hora es la primera cita. Lo sufre el
-cliente que más usa el CRM y lo sufre cada mañana.
-
-Jorge lo pidió el 10/08: que el filtro de cita sea un **desplegable**, y que los
-dos —tipo y profesional— vayan **en paralelo**, en la misma línea, en vez de en
-dos bandas.
-
-⚠️ Los dos filtros son de selección MÚLTIPLE, y el de profesional tiene además
-una regla que costó escribir: el primer clic aísla a esa persona, los siguientes
-suman, y quedarse sin ninguna vuelve a enseñarlo todo. Su comentario explica por
-qué —con quince profesionales, ir tachando catorce «no es un filtro, es un
-castigo»—. Un `<select>` normal se lleva eso por delante: hace falta un
-desplegable con casillas, o decidir a propósito que se pasa a selección única.
-
-*Se comprueba*: en Aumenta se ve el calendario sin bajar, y se sigue pudiendo
-filtrar por varios tipos a la vez.
-*Dónde*: `modules/default/CitasModule.jsx:1246-1319` son las dos bandas;
-`toggleEventType` y `toggleTeamMember` (`:608`) son la regla que hay que
-respetar.
-*Comprobado en producción*: 10/08/2026 — Aumenta, 57 tipos activos de 57 y 15
-personas en el equipo. No lo sufre nadie más: nutri_laura tiene 6 tipos y demo 2.
 
 ---
 
@@ -278,46 +264,6 @@ montado, y `master.audit_logs` guarda su fila `provisioning.cliente_baja`.
 script de baja en el `scripts/` del contenedor, y `docker inspect` confirma que
 el único volumen montado es `/opt/crm-salamandra/uploads → /app/uploads`.
 
-### El tablero ordena por urgencia, pero no por cliente · interno
-
-`/admin/tablero` agrupa por prioridad (P0…P3) y ofrece un buscador de texto. La
-pregunta que se hace de verdad al descolgar el teléfono —«¿cómo vamos con
-Aumenta?»— se contesta hoy escribiendo el slug en el filtro y confiando en que
-esté bien puesto en todas las tareas.
-
-El dato ya existe: el troceador saca el cliente del título (`· aumenta`) y lo
-devuelve como `quien`. Falta agrupar por él. **Pero no se puede agrupar por
-`quien` tal y como está**, y eso es lo que hay que arreglar primero: es una
-CADENA de texto, no una lista de clientes.
-
-Contado con el mismo troceador sobre los ficheros que hay en producción:
-
-- 25 tareas pendientes y 23 resueltas.
-- Aumenta tiene **10 pendientes**, pero agrupando por `quien` saldrían **7**.
-  Las otras tres viven dentro de cadenas como `demo, aumenta,
-  salamandra_solutions` o `abarcaia, aumenta`, que cuentan como grupo propio.
-- Salen **12 grupos distintos para 9 clientes**, y cinco son combinaciones con
-  una sola tarea dentro.
-- `salamandra_solutions` no está en la lista `SLUGS` del troceador, así que su
-  tarea se queda sin cliente y no caería en ningún grupo. Lo mismo con la cola
-  `· varios` de una entrada de resuelto.
-
-O sea: agrupar sin tocar el troceador da un tablero que **miente por poco**, que
-es la peor forma de mentir — nadie lo comprueba. Primero `quien` tiene que ser
-una lista de slugs, con una tarea de tres clientes apareciendo en los tres
-grupos; con eso hecho, la agrupación es casi gratis y encaja con lo que la
-pantalla ya hace a propósito: conservar el filtro al cambiar de pestaña, porque
-«¿cómo vamos con Aumenta?» incluye lo ya entregado.
-
-*Se comprueba*: agrupado por cliente, Aumenta enseña **10** pendientes, y las
-tres compartidas aparecen además en `demo`, `abarcaia` y `salamandra_solutions`.
-El número de cada grupo tiene que cuadrar con `grep '^### ' docs/backlog.md`
-filtrado por ese slug.
-*Dónde*: `app/api/admin/tablero/route.js:35-38` (la lista `SLUGS`) y `71-90` (de
-dónde sale `quien`); `app/admin/tablero/page.jsx:70-84` (el filtro de hoy).
-*Comprobado en producción*: 11/08/2026 — contado sobre los ficheros del
-contenedor: 25 pendientes, Aumenta con 10 reales frente a 7 agrupables.
-
 ### La nutrición solo sabe vivir en casa de Laura · `aumenta`, producto
 
 «Que la nutrición de Aumenta sea igual que la de nutri_laura» tiene una mitad
@@ -364,11 +310,13 @@ Dos avisos para quien lo haga:
 Y falta lo que no es código: Laura tiene 3.906 alimentos y 1.084 recetas.
 Aumenta empezaría con el recetario vacío.
 
-⚠️ Al comprobar esto salió otra cosa: `CLAUDE.md` y `docs/modules/nutricion.md`
-dicen que los bloques **C4 y C5 están «pendientes de despliegue» y llevan
-tiempo desplegados** (`assign`, `reapply-template` y `meals/reorder` están en el
-contenedor). Quien coja esta tarea leerá que falta media nutrición por subir, y
-no es verdad.
+✅ De aquí salió un cabo suelto que **ya está atado** (12/08/2026): `CLAUDE.md`,
+`docs/modules/nutricion.md` y la decisión del sub-sprint 8.3 decían que había
+media nutrición «pendiente de despliegue», y llevaba semanas desplegada. Se
+comprobó listando los endpoints dentro del contenedor —los 23 de
+`/api/nutricion/*` son exactamente los mismos que en local— y se corrigieron las
+cuatro afirmaciones. Quien coja esta tarea ya no leerá que falta código por
+subir; lo que falta es lo de abajo.
 
 *Se comprueba*: `docker exec crm-salamandra-app-1 node scripts/check-module-tables.js`
 no se queja de `aumenta`/`nutricion`, y las cuatro pantallas cargan.
@@ -593,25 +541,6 @@ cancelan sus citas futuras. El error tiene que caer del lado inocuo.
 *Comprobado en producción*: 10/08/2026 — retorika y spain_enzymes tienen fichas
 y no tienen agenda.
 
-### El moduleKey `sales` sigue vivo en trece endpoints · producto
-
-`/comercial/leads` ya se ha borrado, pero la clave `sales` sigue en el patrón
-`hasModule("leads") || hasModule("sales")` de trece endpoints —todo
-`/api/leads/*`, `/api/referidos/*`, `/api/public/leads`, `/api/public/referidos`
-y `/api/analiticas`—, más `lib/home/summary.js`, la etiqueta de
-`AccessSection.jsx` y dos seeds. Es la inconsistencia de nomenclatura que
-CLAUDE.md tiene apuntada desde hace meses.
-
-**Quitar esos OR es un cambio de AUTORIZACIÓN, no limpieza.** Si algún schema
-tiene la fila `sales` activada y `leads` no, ese cliente se queda con 403 en su
-módulo comercial entero el mismo día del despliegue. El orden correcto: primero
-un script de solo lectura que confirme contra `master.tenant_modules` de
-PRODUCCIÓN que ninguna fila `sales` está `enabled`; después quitar los OR.
-
-*Se comprueba*: `sales` no aparece en ningún endpoint y ningún cliente lo tiene.
-*Comprobado en producción*: 10/08/2026 — ningún cliente tiene `sales`, pero los
-trece OR siguen en el código.
-
 ### El secreto global de webhooks tiene 31 caracteres · `retorika`
 
 No es longitud de nada generado al azar: parece escrito a mano. Funciona, pero
@@ -638,38 +567,6 @@ usan, apagarlos.
 *Se comprueba*: no están en sus módulos activos, o nos dicen que sí los quieren.
 *Comprobado en producción*: 09/08/2026 — los tres activos y **con 0 filas cada
 uno** (productos, pedidos, proyectos).
-
-### En Windows el Registro se ve vacío, como si no hubiera nada que hacer · interno
-
-`trocear` parte el fichero por `\n` y luego busca `^##\s+(.+)$`. En JavaScript
-`.` no casa con `\r`, así que en una copia de trabajo con finales de línea de
-Windows **ninguna cabecera casa** y la pantalla queda en blanco con el mensaje
-«Nada por aquí» — que es exactamente lo contrario de lo que pasa.
-
-En producción no se da: `core.autocrlf=true` guarda LF en el repositorio y el
-contenedor no tiene ni un `\r`. Solo lo ve quien desarrolla en Windows, o sea
-Jorge, y solo en local. Es una línea: partir por `/\r?\n/`.
-
-Ojo a que `resuelto.md` en la misma carpeta SÍ tiene LF, así que la pestaña de
-al lado se ve bien y el fallo parece de los datos y no del código.
-
-*Se comprueba*: con el proyecto abierto en Windows, `/admin/tablero` en local
-enseña las tareas.
-*Dónde*: `app/api/admin/tablero/route.js:60-61`.
-*Comprobado en producción*: 10/08/2026 — en el contenedor, `docs/backlog.md`
-tiene 0 caracteres `\r` y la pantalla trocea sus 26 tareas. En local, el mismo
-endpoint devuelve `pendiente: []` con el mismo fichero.
-
-### El SSO no admite rotar sin corte · producto
-
-`WIDGET_SSO_SECRETS` guarda un secreto por cliente, así que rotarlo obliga a
-coordinar el CRM y WordPress al segundo. Ya costó un corte en el portal de Laura.
-Aceptando una lista, se pondría el nuevo al lado del viejo, se cambiaría
-WordPress con calma y se quitaría el viejo después.
-
-*Se comprueba*: se puede rotar un secreto sin que nadie pierda el acceso.
-*Dónde*: `lib/citas/ssoToken.js:23-48`.
-*Comprobado en producción*: 09/08/2026 — sigue siendo un secreto por cliente.
 
 ---
 
