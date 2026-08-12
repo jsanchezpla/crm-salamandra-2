@@ -48,6 +48,7 @@ import {
   estadoDeAdmision,
   mensajeDePuerta,
 } from "../../../../../../lib/citas/puertaFormulario.js";
+import { avisarAdmisionRota } from "../../../../../../lib/citas/avisoAdmisionRota.js";
 import { puedePedirValoracion } from "../../../../../../lib/citas/puertaValoracion.js";
 import { citaPuedeAvisar } from "../../../../../../lib/clients/comunicaciones.js";
 import {
@@ -241,6 +242,10 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
     if (exigeFormularioAceptado(tenant) && hasModule("formularios")) {
       const estado = await estadoDeAdmision(tenantModels, clientEmail);
       if (estado !== "aceptada") {
+        // Si a quien rebotamos ya estaba admitido, que no se quede solo entre
+        // ella y la pantalla: `sin_ficha` es una contradicción y alguien del
+        // centro tiene que verla.
+        avisarAdmisionRota({ tenantId: tenant.id, tenantModels, estado, email: clientEmail });
         const aviso = mensajeDePuerta(estado, { identificado, nombre: tenant.name });
         return errorConDatos(aviso.texto, 403, {
           codigo: aviso.codigo,
@@ -284,6 +289,14 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
         email: clientEmail,
       });
       if (!admision.puede) {
+        // Mismo motivo que en la puerta general: una admitida sin ficha es una
+        // contradicción, y aquí también se la rebota en silencio.
+        avisarAdmisionRota({
+          tenantId: tenant.id,
+          tenantModels,
+          estado: admision.estado,
+          email: clientEmail,
+        });
         const aviso = mensajeDePuerta(admision.estado, {
           identificado,
           nombre: tenant.name,

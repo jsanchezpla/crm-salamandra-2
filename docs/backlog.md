@@ -103,15 +103,34 @@ aceptada, que exista una ficha con ese correo. **8 de las 13 aceptadas no la
 tienen**: Laura ya les dijo que sí y la agenda las rechaza con un 403. No se
 entera nadie, ni ellas ni Laura.
 
-Salió del commit `db974a2` (Rodrigo, 06/08). Tres salidas y hay que elegir:
-crearles la ficha, aflojar la condición, o que el 403 avise a Laura.
+**Arreglo escrito el 12/08, sin comprobar en producción todavía.** Dos cosas
+que esta tarea daba por buenas y no lo eran:
 
-*Se comprueba*: `SELECT count(*) FROM crm_nutri_laura.form_submissions f WHERE
-f.status='accepted' AND NOT EXISTS (SELECT 1 FROM crm_nutri_laura.clients c
-WHERE lower(c.email)=lower(f.email))` → 0, o que reservar con uno de esos
-correos devuelva 201.
-*Dónde*: `lib/citas/puertaFormulario.js:98-105`.
-*Comprobado en producción*: 09/08/2026 — **siguen siendo 8**.
+- **No salió de `db974a2`** sino de **`3947dc0`** (Rodrigo, 06/08, 03:54). El
+  primero no toca la puerta: es el del bono y el aviso amarillo.
+- **El `NOT EXISTS` de abajo no cuenta gente bloqueada.** La puerta no busca
+  por `clients.email`: usa `resolvePortalClient`, que además mira los TUTORES.
+  Y sobre todo mezcla dos casos que piden arreglos opuestos: (a) la ficha
+  EXISTE y la puerta no la ve —al aceptar, `buscarClienteExistente` reutiliza
+  fichas encontradas por **teléfono**, y entonces la ficha lleva otro correo—,
+  y (b) la ficha no está porque la borraron, donde el 403 es correcto. **Hasta
+  correr el diagnóstico no sabemos cuántos de los 8 son de cada tipo.**
+
+Lo hecho: la puerta busca la ficha también por `form_submissions.client_id`
+(con `findByPk`, porque esa columna **no tiene FK** y una ficha borrada deja el
+id colgando, no a NULL — así el caso (b) sigue bloqueado). Y un `sin_ficha`
+deja aviso en la campana de los admin, deduplicado contra la solicitud.
+
+Falta: correr `scripts/comprobar-admision.js nutri_laura` en el VPS (solo
+lectura) para ver el reparto, y decidir qué hacer con los del caso (b).
+
+*Se comprueba*: `docker exec crm-salamandra-app-1 node
+scripts/comprobar-admision.js nutri_laura` → «Bloqueadas TENIENDO ficha» a 0, o
+que reservar con uno de esos correos devuelva 201.
+*Dónde*: `lib/citas/puertaFormulario.js` (`fichaDeQuienFueAdmitido`) y
+`lib/citas/avisoAdmisionRota.js`.
+*Comprobado en producción*: 09/08/2026 — **siguen siendo 8**; el arreglo del
+12/08 aún no se ha visto correr allí.
 
 ---
 

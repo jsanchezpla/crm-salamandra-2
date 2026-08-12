@@ -12,6 +12,10 @@
  *   · si además había mandado una solicitud nueva, manda esa: «en revisión»;
  *   · lo de siempre (pendiente, descartada, sin enviar) sigue igual.
  *
+ * Y desde el 12/08/2026 (ver `fichaDeQuienFueAdmitido`):
+ *   · con ficha enlazada por `client_id` pero con OTRO correo → entra igual;
+ *   · con `client_id` colgando (la ficha ya no está) → sigue siendo paso cero.
+ *
  * Existe porque este fallo es invisible: la ficha desaparece del CRM y la
  * paciente sigue entrando a su área privada como si nada.
  */
@@ -20,11 +24,19 @@ import { estadoDeAdmision, mensajeDePuerta } from "../lib/citas/puertaFormulario
 
 // Modelos de mentira: lo justo para que `estadoDeAdmision` y el buscador de
 // fichas del portal funcionen sin tocar Postgres.
-function modelos({ solicitudes = [], ficha = null }) {
+//
+// `fichas` es la tabla `clients` en pequeño, indexada por id: lo que encuentre
+// `findByPk` es lo que decide el segundo camino. Un `client_id` que no esté en
+// ella es exactamente un id colgando, que es como queda tras borrar la ficha.
+function modelos({ solicitudes = [], ficha = null, fichas = {} }) {
   return {
-    FormSubmission: { findAll: async () => solicitudes.map((status) => ({ status })) },
+    FormSubmission: {
+      findAll: async () =>
+        solicitudes.map((s) => (typeof s === "string" ? { status: s, clientId: null } : s)),
+    },
     Client: {
       findOne: async () => ficha,
+      findByPk: async (id) => fichas[id] ?? null,
       // `resolvePortalClient` hace el segundo camino (tutores) con SQL crudo.
       sequelize: { literal: (s) => s, escape: (s) => `'${s}'` },
     },
@@ -64,6 +76,49 @@ check(
   "sin ficha NO cuela por tener solo una descartada",
   await estado({ solicitudes: ["rejected"], ficha: null }),
   "descartada"
+);
+
+process.stdout.write("\n▶ La ficha existe pero lleva otro correo (reutilizada por teléfono)\n");
+check(
+  "aceptada enlazada a una ficha viva → aceptada",
+  await estado({
+    solicitudes: [{ status: "accepted", clientId: "cli-7" }],
+    ficha: null,
+    fichas: { "cli-7": FICHA },
+  }),
+  "aceptada"
+);
+check(
+  "client_id colgando (la ficha ya no está) → sin_ficha",
+  await estado({
+    solicitudes: [{ status: "accepted", clientId: "cli-borrada" }],
+    ficha: null,
+    fichas: {},
+  }),
+  "sin_ficha"
+);
+check(
+  "y con una solicitud nueva esperando, manda esa",
+  await estado({
+    solicitudes: [{ status: "accepted", clientId: "cli-borrada" }, { status: "pending", clientId: null }],
+    ficha: null,
+    fichas: {},
+  }),
+  "pendiente"
+);
+check(
+  "una descartada CON client_id no abre la puerta",
+  await estado({
+    solicitudes: [{ status: "rejected", clientId: "cli-7" }],
+    ficha: null,
+    fichas: { "cli-7": FICHA },
+  }),
+  "descartada"
+);
+check(
+  "sin solicitudes no se entra por tener ficha",
+  await estado({ solicitudes: [], ficha: FICHA, fichas: { "cli-7": FICHA } }),
+  "sin_enviar"
 );
 
 process.stdout.write("\n▶ Lo que ve en pantalla\n");

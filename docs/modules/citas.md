@@ -116,8 +116,8 @@ solos y por eso están fijados en `_smoke-puerta-formulario.mjs` y en
   solicitud no vuelve a la cola.
 - **Pero hace falta FICHA, no solo solicitud** (06/08/2026, Rodrigo: «si elimino
   a un paciente, debería volver al paso cero»). La solicitud aceptada sobrevive
-  al borrado de la ficha —la FK se queda a NULL—, así que quien acababa de ser
-  dado de baja seguía entrando a su área privada y pidiendo cita. Aceptar SIEMPRE
+  al borrado de la ficha, así que quien acababa de ser dado de baja seguía
+  entrando a su área privada y pidiendo cita. Aceptar SIEMPRE
   crea ficha (lo garantiza `PATCH /api/formularios/[id]`, que prohíbe devolver
   una aceptada a pendiente por ese mismo motivo), así que «aceptada sin ficha»
   solo puede significar que la borraron: se devuelve `sin_ficha`, que enseña el
@@ -125,6 +125,28 @@ solos y por eso están fijados en `_smoke-puerta-formulario.mjs` y en
   DEGRADA el `aceptada`; si hay una solicitud nueva esperando, manda esa
   (`pendiente`). Al borrar la ficha, `contract_signatures` cae con ella
   (CASCADE), así que si vuelve, vuelve a firmar.
+- **La ficha se busca por DOS caminos, no solo por el correo** (12/08/2026).
+  Buscarla solo por correo dejaba fuera a gente que sí la tenía: al aceptar no
+  siempre se crea una ficha nueva —`buscarClienteExistente` reutiliza la que ya
+  haya, y la busca por correo **o por teléfono**—, así que una familia que ya
+  estaba en el CRM con otra dirección quedaba enlazada a una solicitud cuyo
+  correo no es el de su ficha. Era paciente, tenía ficha, había recibido el «ya
+  puedes pedir cita»… y la agenda le respondía 403. El segundo camino es
+  `form_submissions.client_id`, el enlace que escribió la propia aceptación.
+  ⚠️ Se resuelve con un `findByPk`, no mirando si la columna trae algo: **esa
+  columna no tiene FK** (comprobado en el schema: las únicas de la tabla son
+  `form_id` y `handled_by_team_id`), así que borrar una ficha no la pone a NULL,
+  deja el id colgando. Al buscarla, una ficha borrada devuelve `null` y la
+  persona vuelve al paso cero — el punto anterior sigue intacto.
+- **Un `sin_ficha` avisa a los admin** (12/08/2026, `lib/citas/avisoAdmisionRota.js`).
+  Es una contradicción —la profesional dijo que sí y la agenda dice que no— y
+  hasta ahora pasaba en silencio por los dos lados: la persona veía un aviso que
+  la mandaba a rellenar el formulario que ya había rellenado, y en el CRM no
+  quedaba rastro. Solo `sin_ficha`: los demás estados son la puerta funcionando.
+  Salta desde `/book` y desde `/citas-portal/admision` (que es donde antes se
+  detecta, porque el portal lo pregunta al entrar). Va **deduplicado contra la
+  solicitud**, no contra el intento: se dispara desde una agenda anónima, y sin
+  eso cinco reintentos serían cinco avisos.
 - **El correo se cruza con `iLike`**: nadie escribe su email dos veces igual.
 - **A un anónimo no se le dice si un correo está pendiente o no existe.** Sería
   un buscador de pacientes de la consulta. La diferencia solo se cuenta a quien

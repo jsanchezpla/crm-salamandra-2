@@ -7,6 +7,7 @@ import {
   estadoDeAdmision,
   mensajeDePuerta,
 } from "../../../../../../../lib/citas/puertaFormulario.js";
+import { avisarAdmisionRota } from "../../../../../../../lib/citas/avisoAdmisionRota.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/citas-portal/admision — ¿puede reservar ya?
@@ -55,6 +56,12 @@ export const GET = withPublicTenant(
       if (estado === "aceptada") {
         return ok({ admitida: true, estado, aviso: null, urlFormulario: null });
       }
+
+      // Aquí es donde antes se descubre que una admitida está bloqueada: esto
+      // lo pregunta el portal al ENTRAR, antes de que intente reservar. Quien
+      // se rinda al leer el aviso no llegaría nunca al 403 de /book, y sin este
+      // aviso no quedaría rastro de ella en ningún sitio.
+      avisarAdmisionRota({ tenantId: tenant?.id, tenantModels, estado, email });
 
       // `identificado: true` siempre: venimos de una sesión verificada, así que
       // sí se le puede decir «tu solicitud está en revisión» en vez del texto
