@@ -175,9 +175,16 @@ huérfana no molesta: simplemente no casa con nada.
 *Dónde*: `app/api/admin/tablero/route.js` (ahora con PATCH),
 `app/admin/tablero/page.jsx`, `models/master/TableroEstado.model.js` y
 `scripts/migrate-tablero-estado.js`, que crea la tabla y es idempotente.
-*Cómo se comprobó*: migración lanzada en el VPS y, con el Registro abierto en
-producción, marcar una tarea la pasa a Resuelto, quitarle el tick la devuelve a
-Pendiente y el reparto aguanta al recargar. Detalle al final de esta entrada.
+*Cómo se comprobó*: `scripts/_smoke-tablero-estado.mjs` fija los dieciocho casos
+de la lógica. Y contra el VPS, con el código YA desplegado y la base de datos de
+producción: la migración crea la tabla, un ida y vuelta desde dentro del
+contenedor escribe una tarea de mentira con el modelo real —que es donde se
+habría visto un nombre de columna mal puesto—, la lee, comprueba que se va a
+«Marcadas desde el Registro» y la borra; la tabla queda en 0 filas. Un PATCH sin
+sesión responde 401, no 405, que es como se sabe que el método está registrado.
+*Falta*: un clic de verdad con sesión de back-office. En local no se puede
+—`salamandra_solutions` no tiene ni usuario ni schema— así que esa parte la ve
+Rodrigo la primera vez que abra el Registro.
 
 ### La IA la paga el cliente, con su clave · producto
 
@@ -269,8 +276,15 @@ persona cae en la puerta normal. Un fallo de lectura no abre nunca.
 y los tres sitios que preguntaban `estado === "aceptada"` a mano ahora usan
 `admitido()`: `/book`, el portal y `lib/citas/puertaValoracion.js`.
 *Cómo se comprobó*: `node scripts/_smoke-puerta-profesional.mjs` (lógica pura,
-sin base de datos) fija los ocho casos, incluido que la marca ilegible cierra;
-y contra el VPS, después del despliegue. Detalle al final de esta entrada.
+con modelos de mentira) fija los ocho casos, incluido que la marca ilegible
+cierra en vez de abrir. Y contra el VPS, con el código ya desplegado y los datos
+REALES de nutri_laura: las cuatro pacientes con solicitud aceptada siguen
+pasando, y un correo desconocido sigue sin pasar — que era el riesgo de tocar
+una puerta que está viva en la agenda pública.
+*Falta*: verlo con un profesional de verdad. El 12/08 no hay **ningún** cliente
+marcado como `profesional_salud` en producción —la marca nació ese mismo día— así
+que la excepción todavía no ha entrado en juego con nadie. La primera vez que
+Laura marque a un colega, es la que hay que mirar.
 
 ### Los trece de Aumenta ven lo que tienen que ver · `aumenta`
 
