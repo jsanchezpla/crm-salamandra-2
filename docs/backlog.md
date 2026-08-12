@@ -123,9 +123,17 @@ deja de valer.
 *Dónde*: `app/admin/layout.jsx:104-110` es el enlace; `app/api/auth/logout/route.js:4`
 es el único método que hay; `components/layout/Sidebar.jsx:408-411` es cómo lo
 hace bien el CRM.
-*Comprobado en producción*: 12/08/2026 — dentro del contenedor, la ruta
-desplegada registra solo POST, y el `<a href="/api/auth/logout">` aparece en el
-HTML servido de las pantallas de `/admin`.
+✅ **ARREGLADO Y DESPLEGADO el 12/08/2026**, a falta de pulsarlo. Ahora es un
+botón que hace POST (`components/admin/SalirBoton.jsx`) y va a `/login` con
+`replace`, para que el botón de atrás no devuelva a una pantalla del panel. No
+se arregló añadiendo un GET al endpoint —habría sido una línea— porque un cierre
+de sesión por GET lo dispara cualquier página ajena con una etiqueta de imagen.
+
+*Comprobado en producción*: 12/08/2026 — en el contenedor, el `<a href>` ha
+desaparecido del HTML servido de `/admin` y el componente nuevo viaja en un
+bundle de cliente. **Falta el clic**: la sesión del panel caducó al reiniciarse
+el contenedor con el despliegue, y quien la abra tarda dos segundos en probarlo.
+Si funciona, esta tarea se cierra sin tocar código.
 
 ### «Pedirle otra tarjeta» no lleva a ninguna parte · todos
 
@@ -187,35 +195,6 @@ producción.
 
 ## P2 — cuando se pueda
 
-### Cambiar el color de un cliente sigue siendo escribir un script · producto
-
-El alta de clientes SÍ pide los colores, con sus dos selectores. El editor de un
-cliente que YA existe no: solo deja tocar nombre, plan y módulos. Para cambiarle
-dos colores a Somos el 12/08 hubo que escribir `scripts/update-somos-brand.js`,
-commitearlo, construir, desplegar y correrlo con `docker exec` dentro del
-contenedor. Media hora de proceso para dos campos de seis caracteres.
-
-Y lo llamativo es que **el trabajo de servidor ya está hecho**: `editarTenant()`
-acepta `brand` entero —valida que sea hex, hace merge sobre lo que ya hubiera y
-borra el campo si llega vacío— y el endpoint le pasa el cuerpo tal cual. Lo único
-que falta es que la pantalla mande esos tres campos. Son los mismos selectores
-que el formulario de alta ya tiene diez pantallas más abajo.
-
-⚠️ Al ponerlo, que avise del contraste. El color principal NO es un acento: es el
-FONDO del sidebar, y encima va texto blanco a opacidades que bajan hasta el 30%.
-El turquesa de la marca de Somos daba 2,22:1 cuando hacen falta 4,5:1 — el menú
-quedaba ilegible. Por eso su azul acabó siendo tan oscuro, y quien elija un color
-claro desde esta pantalla se va a llevar la misma sorpresa sin que nadie se lo
-diga.
-
-*Se comprueba*: cambiar el color de un cliente desde `/admin/clientes`, recargar
-su CRM y verlo, sin haber tocado el VPS.
-*Dónde*: `app/admin/clientes/page.jsx:253-417` es el editor que no manda la marca
-y `:709-735` los campos que ya existen en el alta; `lib/provisioning/cicloVida.js:105-137`
-es el backend que ya lo soporta.
-*Comprobado en producción*: 12/08/2026 — los 10 clientes tienen sus dos colores
-puestos, y el único camino que ha existido para cambiarlos es un script.
-
 ### «Fichas a completar» sale en el menú de quien no tiene nada que completar · `somos`, `demo`
 
 En producción `somos` tiene esa pantalla en su menú y **cero filas en las ocho
@@ -239,8 +218,20 @@ tiene un campo `badge` que hoy vale `null` en las cuatro que lo declaran.
 sale; en Aumenta sale, y con su número al lado.
 *Dónde*: `components/layout/Sidebar.jsx:60` es la entrada y `:542` el badge sin
 usar; `lib/clients/urgentes.js:253` es `carpetasCon()`.
-*Comprobado en producción*: 12/08/2026 — Somos 0 en las ocho carpetas, demo 21,
-Aumenta 173 + 1.800; las seis consultas tardan 3.997 ms en Aumenta.
+✅ **ARREGLADO Y DESPLEGADO el 12/08/2026**, a falta de verlo en un menú.
+`lib/clients/urgentes.js` se partió en `cuerpoDe()` —el FROM y el WHERE de cada
+carpeta, escritos UNA sola vez— y encima se montan las dos consultas: la que
+lista y la que cuenta. Escribir el WHERE dos veces habría roto sola la regla de
+la cabecera. El menú pide `/api/clients/urgentes?soloTotales=1` y esconde la
+entrada si sale cero; enseña además cuántas BLOQUEAN, no las 1.800 por
+completar, que sería un número que no baja nunca.
+
+*Comprobado en producción*: 12/08/2026 — las **24 cuentas** de aumenta, demo y
+somos cuadran al registro con lo que devuelve el listado, incluida la resta de lo
+archivado, y Aumenta pasa de **3.340 ms a 16 ms**. **Falta verlo en un menú**:
+para eso hace falta entrar como Somos (para que NO salga) o como Aumenta (para
+que salga con su 173), y no hay motivo para abrir esas sesiones solo por esto —
+se verá la próxima vez que alguien entre.
 
 ### Las cinco pantallas de Formación solo se encuentran desde su portada · `retorika`, `aumenta`, `nutri_laura`, `demo`, `somos`
 
@@ -265,63 +256,19 @@ secciones.
 `modules/training/FormacionOverview.jsx:7-63` son las cinco secciones y
 `modules/overrides/aumenta/FormacionOverview.jsx` es la versión de Aumenta, que
 solo ve tres.
-*Comprobado en producción*: 12/08/2026 — cinco clientes tienen `training`
-(aumenta, demo, nutri_laura, retorika, somos) y la entrada del menú sigue sin
-hijos en todos.
+✅ **ARREGLADO Y DESPLEGADO el 12/08/2026**, a falta de verlo en un menú. Las
+cinco pantallas cuelgan ya de la entrada de Formación. **Los rótulos NO se han
+tocado**: renombrar «Usuarios» y «Alumnos por curso» le cambia el vocabulario a
+cinco clientes de golpe y es otra tarea, que es lo que queda de esta.
 
-### Referidos se puede vender desde el alta y no lo puede usar nadie · producto
+Nació de paso `TENANT_HIDDEN_CHILDREN` en el sidebar: la portada de Aumenta
+esconde a propósito Empresas y Cuestionarios —es psicopedagogía, su formación es
+B2C— y sin eso el menú le habría devuelto por el lateral las dos pantallas que
+su propia pantalla le quita.
 
-`referidos` aparece en el catálogo de venta con su casilla y su descripción, así
-que se le puede marcar a un cliente nuevo. Lo que se le está vendiendo hoy no le
-va a funcionar: el módulo no tiene tabla propia —su pantalla lee y escribe
-`leads` filtrando por origen— y su formulario público está hecho a la medida de
-un cliente concreto. El propio catálogo ya lo avisa en letra pequeña: «Hoy está
-hecho a medida de un cliente; requiere ajuste».
-
-Jorge, 12/08: que deje de poder marcarse en el alta.
-
-Quitarlo del catálogo **no se lo apaga a quien lo tenga**, y conviene saber por
-qué antes de tocarlo: el editor solo desactiva lo que está en `CLAVES_VALIDAS`,
-así que un módulo fuera del catálogo queda intocable desde el panel — exactamente
-el trato que ya recibe `provisioning` desde el 11/08. Abarcaia lo conserva
-encendido; simplemente deja de tener casilla.
-
-*Se comprueba*: `referidos` ya no sale entre las casillas del alta, y abarcaia lo
-sigue teniendo activo.
-*Dónde*: `lib/provisioning/catalogo.js:86` es la entrada del catálogo; el filtro
-que lo protege está en `lib/provisioning/cicloVida.js:190` y
-`lib/provisioning/dependencias.js:568`.
-*Comprobado en producción*: 12/08/2026 — solo `abarcaia` lo tiene encendido (y
-está suspendido); `quality_energy` y `demo` tienen la fila apagada.
-
-### El plan que se le enseña a cada cliente no significa nada · todos
-
-Debajo del nombre del cliente, en su propio menú, pone PRO o STARTER en
-mayúsculas. No gatea nada: ni un módulo, ni un límite, ni un precio. En
-producción hay siete «pro» y tres «starter» repartidos por cómo se sembró cada
-uno — Somos, que tiene los 21 módulos, es «starter»; Retorika, que tiene tres,
-es «pro».
-
-Jorge, 12/08: quitarlo para que no confunda. Se ve en tres sitios: el menú del
-cliente, las fichas de `/admin` y `/admin/modulos`, y la casilla de edición del
-alta.
-
-De propina, esa casilla es una trampa: es un campo de **texto libre** sobre una
-columna que en base de datos es un ENUM de cuatro valores (free, starter, pro,
-enterprise). Escribir cualquier otra cosa y guardar revienta con un error de
-PostgreSQL que nadie ha visto todavía porque nadie ha tocado el campo.
-
-La columna puede quedarse donde está —es NOT NULL con valor por defecto y la
-escriben doce seeds—; lo que se retira es enseñarla y dejar escribirla.
-
-*Se comprueba*: no aparece «PRO» ni «STARTER» en ninguna pantalla que vea un
-cliente.
-*Dónde*: `components/layout/Sidebar.jsx:464` es lo que ve el cliente;
-`models/master/Tenant.model.js:28` es el ENUM; `app/admin/clientes/page.jsx:307-309`
-es la casilla de texto libre.
-*Comprobado en producción*: 12/08/2026 — 7 «pro» y 3 «starter», y buscando por
-todo el repo no se encontró ningún sitio donde el código decida nada por ese
-campo.
+*Comprobado en producción*: 12/08/2026 — los hijos nuevos viajan en los bundles
+desplegados. **Falta verlo en un menú** (hace falta una sesión de un cliente con
+Formación), y falta decidir lo de los nombres.
 
 ### Custodia sabe qué claves le faltan a cada cliente, pero no puede ponérselas · producto
 
@@ -364,31 +311,39 @@ de golpe sus módulos, y luego se añade o se quita a mano. Funciona, pero los d
 están escritos dentro de `lib/provisioning/catalogo.js`: inventar un tercero, o
 cambiar qué lleva uno, es tocar código y desplegar.
 
-Jorge, 12/08: una pestaña en el back-office para crear paquetes, y que salgan en
-el alta.
+✅ **HECHO Y DESPLEGADO el 12/08/2026**, a falta de crear uno con las manos.
+Pestaña **Paquetes** en el back-office, tabla `master.paquetes_modulos` y los dos
+de siempre sembrados por la migración.
 
-Eso mueve la definición de código a datos, y hay un aviso escrito en el propio
-fichero que conviene resolver en vez de ignorar: «Solo se escribe aquí un paquete
-cuando está DECIDIDO qué lleva. Media definición en el código es peor que
-ninguna: se acaba vendiendo lo que alguien marcó un martes». Hoy ese freno es el
-diff; con una pantalla de crear paquetes deja de existir, así que hay que
-ponerlo dentro.
+Las dos preguntas que esta tarea tenía abiertas quedaron contestadas por Jorge:
+«los clientes no tienen ningún paquete, solo módulos puestos a su gusto,
+quédalo así, y que se puedan ambas formas». O sea que **ningún tenant guarda
+paquete** —sin FK, sin columna, sin asociación— y editar o borrar uno no le
+cambia nada a nadie. El alta lo dice ahora con un rótulo, «Cómo se monta», con
+los paquetes y «Personalizado» al lado; en cuanto se toca una casilla vuelve a
+Personalizado, que es como está dado de alta todo el mundo.
 
-Dos cosas que hay que decidir antes de escribir nada. **Dónde viven**:
-`master.tenants` no vale porque no son de ningún cliente, así que es tabla nueva
-en `master` o una fila de configuración global. Y **qué pasa al editar uno**: hoy
-el paquete no se guarda en ninguna parte —es solo un atajo de marcado— y por eso
-tocar un paquete no puede afectar a los clientes ya dados de alta con él. Eso
-conviene que siga siendo así, y la pantalla tiene que dejarlo claro.
+El freno que se perdía —«solo se escribe aquí un paquete cuando está DECIDIDO
+qué lleva»— se rehízo en `lib/provisioning/paquetes.js`: no se guarda uno con
+módulos que no existen ni con dependencias que no se sostienen, y NO se
+completan solas (se dice qué falta y la pantalla ofrece añadirlo).
 
-Falta además contenido: los dos paquetes de hoy son los dos de salud. No hay
-ninguno para el perfil comercial, que es el de spain_enzymes, retorika y
-abarcaia.
+**Lo que queda de esta tarea es contenido, no código**: los dos paquetes de hoy
+son los dos de salud, y sigue sin haber ninguno para el perfil comercial —el de
+spain_enzymes, retorika y abarcaia—. Eso ya se puede hacer desde la pantalla, sin
+tocar el repo.
 
 *Se comprueba*: crear un paquete desde el back-office y verlo aparecer en el alta
 sin desplegar.
-*Dónde*: `lib/provisioning/catalogo.js:141-167` son los dos de ahora y
-`app/admin/clientes/page.jsx:629-639` los pinta.
+*Dónde*: `app/admin/paquetes/page.jsx`, `app/api/admin/paquetes/`,
+`lib/provisioning/{paquetes,paquetesStore}.js`.
+*Comprobado en producción*: 12/08/2026 — la migración corrió y la tabla tiene los
+dos paquetes; leídos desde dentro del contenedor con el mismo código que usa el
+alta. Los frenos, probados contra los nombres que hay allí: nombre repetido
+→ 409, `billing` suelto → 422 «hace falta también Clientes», módulo inventado
+→ 422. Y `scripts/_smoke-paquetes.mjs` los fija sin base de datos, 24 de 24.
+**Falta crear uno desde la pantalla**: la sesión del panel caducó al reiniciarse
+el contenedor con el despliegue.
 *Comprobado en producción*: 12/08/2026 — dos paquetes, ambos de salud, ambos
 escritos en el código.
 

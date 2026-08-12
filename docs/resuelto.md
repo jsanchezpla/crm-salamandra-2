@@ -28,6 +28,76 @@ Lo más reciente arriba.
 
 ## 12/08/2026
 
+### La marca de un cliente se cambia desde el panel · producto
+
+Cambiarle dos colores a un cliente era escribir un script, commitearlo,
+construir, desplegar y correrlo con `docker exec`: media hora de proceso para
+dos campos de seis caracteres. Fue literalmente lo que costó la paleta de Somos
+el 12/08 (`scripts/update-somos-brand.js`).
+
+El trabajo de servidor **ya estaba hecho** —`editarTenant()` acepta `brand`,
+valida el hex y hace merge—; lo único que faltaba era que la pantalla mandara
+esos tres campos. El editor de `/admin/clientes` los tiene ahora, y
+`/api/provisioning/clientes` devuelve `marca` (solo el `brand`: en `settings`
+también viven las credenciales cifradas del cliente, y esa pantalla no las
+necesita).
+
+**Avisa del contraste**, que es la mitad que no era obvia. El color principal NO
+es un acento: es el FONDO del menú lateral, con texto blanco encima a opacidades
+que bajan al 30%. Si no llega a 4,5:1 lo dice con el número delante.
+
+*Cómo se comprobó*: en producción, con la sesión del panel. Se abrió la ficha de
+`salamandra_solutions` y los campos salieron con sus colores REALES de la base
+(#1B3A2D / #3E6B54). Se escribió el turquesa que Somos no podía usar (#4BBDCF) y
+saltó el aviso con **2,22:1**, el mismo número que se había calculado a mano
+para esa marca. Y se probó el guardado de verdad sobre `demo` —secondary
+#152722 → #152723, comprobado leyendo la base— y se dejó como estaba.
+*Dónde*: `app/admin/clientes/page.jsx` (`contrasteConBlanco`, el bloque Marca) y
+`app/api/provisioning/clientes/route.js` (el campo `marca`).
+
+### El plan del cliente deja de enseñarse · todos
+
+Debajo del nombre del cliente, en su propio menú, ponía PRO o STARTER en
+mayúsculas. No gateaba nada: ni un módulo, ni un límite, ni un precio, y lo que
+cada uno tenía escrito venía de cómo se sembró — Somos, con los 21 módulos,
+ponía STARTER; Retorika, con tres, PRO.
+
+Fuera del menú del cliente y de las tres pantallas del back-office. La columna
+se queda en `master.tenants` (es NOT NULL con valor por defecto y la escriben
+doce seeds); lo que se retira es enseñarla y dejar escribirla.
+
+De propina, la casilla de edición era una trampa: **texto libre sobre un ENUM de
+cuatro valores**, así que escribir cualquier otra cosa y guardar reventaba con
+un error de PostgreSQL. Nadie lo había visto porque nadie tocaba el campo.
+
+*Cómo se comprobó*: en producción, con la sesión del panel — el listado de
+`/admin/clientes` enseña «Somos · somos · 21 módulos» sin plan, y el editor ya
+no tiene esa casilla. Y dentro del contenedor, **cero** bundles del menú lateral
+leen `.plan` (antes salía en el que pinta «Sin tenant»).
+*Dónde*: `components/layout/Sidebar.jsx` (lo que veía el cliente),
+`app/admin/{page,modulos/page,clientes/page}.jsx`.
+
+### Referidos ya no se puede vender desde el alta · producto
+
+Salía en el catálogo con su casilla y su letra pequeña —«hoy está hecho a medida
+de un cliente; requiere ajuste»—, así que se le podía marcar a un cliente nuevo
+algo que no le iba a funcionar: no tiene tabla propia (su pantalla lee y escribe
+`leads` filtrando por origen), sus endpoints exigen `leads` y NUNCA `referidos`,
+y su formulario público está escrito a la medida de abarcaia.
+
+**Quitarlo del catálogo no se lo apaga a quien lo tenga**, y ese es el detalle
+que hacía falta comprobar antes de tocarlo: el editor solo desactiva lo que está
+en `CLAVES_VALIDAS`, así que un módulo fuera del catálogo queda intocable desde
+el panel — el mismo trato que ya recibe `provisioning`. Abarcaia lo conserva
+encendido; simplemente deja de tener casilla.
+
+*Cómo se comprobó*: dentro del contenedor, `grep -c 'key: "referidos"'
+lib/provisioning/catalogo.js` devuelve **0**. Y antes de tocarlo, contra la base
+de producción: solo `abarcaia` lo tiene activo (y está suspendido);
+`quality_energy` y `demo` tienen la fila apagada.
+*Dónde*: `lib/provisioning/catalogo.js`; el filtro que lo protege está en
+`lib/provisioning/cicloVida.js:190` y `lib/provisioning/dependencias.js:568`.
+
 ### Los contadores del embudo ya no mienten al filtrar · `abarcaia`, `aumenta`, producto
 
 Al pulsar una etapa, las demás caían a cero y el «X en total» de la cabecera se
