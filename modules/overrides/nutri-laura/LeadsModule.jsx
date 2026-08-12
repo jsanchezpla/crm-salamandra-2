@@ -154,9 +154,11 @@ export default function NutriLauraLeadsModule() {
   const [converting, setConverting] = useState(false);
   const [convertDone, setConvertDone] = useState(false);
 
-  const fetchLeads = useCallback(() => {
-    setLoading(true);
-    const params = new URLSearchParams({ limit: "200" });
+  // `silencioso` para volver a pedirlo tras una baja o un cambio de etapa sin
+  // que la lista parpadee con el cargando.
+  const fetchLeads = useCallback((silencioso = false) => {
+    if (!silencioso) setLoading(true);
+    const params = new URLSearchParams({ limit: "200", desglose: "1" });
     if (activeStage !== "all") params.set("stage", activeStage);
     if (search.trim()) params.set("search", search.trim());
 
@@ -165,10 +167,13 @@ export default function NutriLauraLeadsModule() {
       .then((data) => {
         if (data.ok) {
           setLeads(data.data.leads);
-          setTotal(data.data.total);
+          setStageCounts(data.data.desglose ?? {});
+          setTotal(data.data.totalSinEtapa ?? data.data.total);
         }
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!silencioso) setLoading(false);
+      });
   }, [activeStage, search]);
 
   useEffect(() => {
@@ -181,10 +186,15 @@ export default function NutriLauraLeadsModule() {
     setBulkStageOpen(false);
   }, [activeStage, search]);
 
-  const stageCounts = leads.reduce((acc, l) => {
-    acc[l.stage] = (acc[l.stage] ?? 0) + 1;
-    return acc;
-  }, {});
+  /**
+   * El desglose por etapa lo cuenta el SERVIDOR (12/08/2026).
+   *
+   * Antes salía de un `reduce` sobre `leads`, que es la lista YA FILTRADA: al
+   * pulsar una etapa, las demás caían a cero y el total de la cabecera se
+   * contagiaba. Ahora `/api/leads?desglose=1` cuenta todas las etapas con los
+   * demás filtros aplicados. Estaba igual en los ocho overrides de leads.
+   */
+  const [stageCounts, setStageCounts] = useState({});
 
   function openLead(lead) {
     setSelected({ ...lead });
@@ -269,6 +279,8 @@ export default function NutriLauraLeadsModule() {
       const data = await res.json();
       if (data.ok) {
         setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, stage: newStage } : l)));
+        // El desglose lo cuenta el servidor: sin volver a pedirlo, los números de arriba se quedan en los de antes.
+        fetchLeads(true);
         if (selected?.id === leadId) setSelected((prev) => ({ ...prev, stage: newStage }));
       }
     } finally {
@@ -288,6 +300,8 @@ export default function NutriLauraLeadsModule() {
       if (data.ok) {
         const updated = data.data;
         setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, ...updated } : l)));
+        // El desglose lo cuenta el servidor: sin volver a pedirlo, los números de arriba se quedan en los de antes.
+        fetchLeads(true);
         if (selected?.id === leadId) setSelected((prev) => ({ ...prev, ...updated }));
         return true;
       }
@@ -340,6 +354,8 @@ export default function NutriLauraLeadsModule() {
   async function handleDelete(leadId) {
     await fetch(`/api/leads/${leadId}`, { method: "DELETE" });
     setLeads((prev) => prev.filter((l) => l.id !== leadId));
+    // El desglose lo cuenta el servidor: sin volver a pedirlo, los números de arriba se quedan en los de antes.
+    fetchLeads(true);
     setTotal((prev) => prev - 1);
     closePanel();
   }
@@ -376,6 +392,8 @@ export default function NutriLauraLeadsModule() {
         )
       );
       setLeads((prev) => prev.map((l) => (checkedIds.has(l.id) ? { ...l, stage } : l)));
+      // El desglose lo cuenta el servidor: sin volver a pedirlo, los números de arriba se quedan en los de antes.
+      fetchLeads(true);
       if (selected && checkedIds.has(selected.id)) setSelected((prev) => ({ ...prev, stage }));
       setCheckedIds(new Set());
     } finally {
@@ -391,6 +409,8 @@ export default function NutriLauraLeadsModule() {
       );
       const deletedCount = checkedIds.size;
       setLeads((prev) => prev.filter((l) => !checkedIds.has(l.id)));
+      // El desglose lo cuenta el servidor: sin volver a pedirlo, los números de arriba se quedan en los de antes.
+      fetchLeads(true);
       setTotal((prev) => prev - deletedCount);
       if (selected && checkedIds.has(selected.id)) closePanel();
       setCheckedIds(new Set());

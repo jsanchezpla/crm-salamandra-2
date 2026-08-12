@@ -6,9 +6,18 @@ import { useCallback, useEffect, useState } from "react";
  * PanelVacaciones — «Vacaciones» y ausencias del equipo (06/08/2026, Rodrigo).
  *
  * Rodrigo lo pidió como «un tipo de cita especial que no requiere paciente,
- * con fecha y hora de inicio y de fin, asignado a un miembro del equipo». Vive
- * en la pantalla de Tipos de cita porque es donde va a buscarlo, aunque por
- * dentro no sea una cita (el porqué, en `models/tenant/TeamBlock.model.js`).
+ * con fecha y hora de inicio y de fin, asignado a un miembro del equipo».
+ * Por dentro no es una cita (el porqué, en `models/tenant/TeamBlock.model.js`),
+ * y desde el 12/08/2026 tampoco vive donde una: tiene pantalla propia en
+ * `/citas/bloqueos`.
+ *
+ * ── SE PUEDEN CORREGIR (12/08/2026, Jorge) ──────────────────────────────────
+ * Hasta hoy una ausencia mal puesta solo se podía quitar y volver a escribir.
+ * Eso ya costó un script: las seis que en la consulta de Laura quedaron a
+ * nombre de «Todo el centro» hubo que arreglarlas con
+ * `scripts/reasignar-ausencias-sin-persona.js`. Ahora hay un botón de editar, y
+ * DE QUIÉN ES solo lo cambia dirección — reasignar es justo la operación que le
+ * cerró la agenda seis veces.
  *
  * LO USA TODO EL EQUIPO (07/08/2026, Rodrigo). Nació solo para admin, pensando
  * que bloquear la agenda era cosa de dirección, y en una consulta de dos
@@ -61,6 +70,27 @@ function bonito(valor) {
 
 const HOY = () => new Date().toISOString().slice(0, 10);
 
+/**
+ * El camino de vuelta de `bonito()`: un instante → la fecha y la hora que se ven
+ * en MADRID, listas para meter en los `<input type=date|time>` al editar.
+ *
+ * No vale `toISOString().slice(...)`, que daría la hora UTC: una ausencia de las
+ * 09:00 de Madrid se abriría diciendo 07:00 y, al guardar sin tocarla, se
+ * movería dos horas sola. Es el mismo enredo de zonas que ya costó el arreglo
+ * del 07/08 al guardar, ahora al revés.
+ */
+function partirEnMadrid(valor) {
+  const d = new Date(valor);
+  if (Number.isNaN(d.getTime())) return { fecha: "", hora: "00:00" };
+  const fecha = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(d);
+  const hora = new Intl.DateTimeFormat("es-ES", {
+    timeZone: "Europe/Madrid", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(d);
+  return { fecha, hora: hora === "24:00" ? "00:00" : hora };
+}
+
 export default function PanelVacaciones() {
   const [bloqueos, setBloqueos] = useState([]);
   const [equipo, setEquipo] = useState([]);
@@ -71,6 +101,8 @@ export default function PanelVacaciones() {
   const [aviso, setAviso] = useState(null);
   /** Quién soy, según el servidor: `{ esAdmin, teamMemberId }`. */
   const [yo, setYo] = useState(null);
+  /** `null` = el formulario crea; un id = está corrigiendo esa ausencia. */
+  const [editando, setEditando] = useState(null);
 
   const [form, setForm] = useState({
     teamMemberId: "", label: "Vacaciones",
@@ -117,7 +149,37 @@ export default function PanelVacaciones() {
     return () => { vivo = false; };
   }, []);
 
-  async function crear() {
+  /** Abre el formulario con una ausencia dentro, para corregirla. */
+  function editar(b) {
+    const ini = partirEnMadrid(b.startAt);
+    const fin = partirEnMadrid(b.endAt);
+    setForm({
+      teamMemberId: b.teamMemberId || "",
+      label: b.label || "Vacaciones",
+      fechaIni: ini.fecha, horaIni: ini.hora,
+      fechaFin: fin.fecha, horaFin: fin.hora,
+    });
+    setEditando(b.id);
+    setAbierto(true);
+    setFallo(null);
+    setAviso(null);
+  }
+
+  /** Cierra el formulario y lo deja como estaba para crear. */
+  function cerrar() {
+    setAbierto(false);
+    setEditando(null);
+    setFallo(null);
+    setForm((f) => ({
+      ...f,
+      teamMemberId: yo?.teamMemberId ?? "",
+      label: "Vacaciones",
+      fechaIni: "", horaIni: "00:00", fechaFin: "", horaFin: "23:59",
+    }));
+  }
+
+  // El mismo formulario pone y corrige: lo único que cambia es a dónde va.
+  async function guardar() {
     setFallo(null);
     setAviso(null);
     const fechaFin = form.fechaFin || form.fechaIni;
@@ -128,29 +190,37 @@ export default function PanelVacaciones() {
 
     setGuardando(true);
     try {
-      const res = await fetch("/api/citas/bloqueos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          teamMemberId: form.teamMemberId || null,
-          label: form.label || "Vacaciones",
-          startDate: form.fechaIni,
-          startTime: form.horaIni || "00:00",
-          endDate: fechaFin,
-          endTime: form.horaFin || "23:59",
-          startAt, endAt,
-        }),
-      });
+      const cuerpo = {
+        label: form.label || "Vacaciones",
+        startDate: form.fechaIni,
+        startTime: form.horaIni || "00:00",
+        endDate: fechaFin,
+        endTime: form.horaFin || "23:59",
+        startAt, endAt,
+      };
+      // De quién es solo se manda si se puede cambiar. Sin ser dirección no se
+      // manda NUNCA al corregir: el servidor responde 403 al verlo, aunque sea
+      // el mismo valor que ya tenía.
+      if (yo?.esAdmin) cuerpo.teamMemberId = form.teamMemberId || null;
+
+      const res = await fetch(
+        editando ? `/api/citas/bloqueos?id=${editando}` : "/api/citas/bloqueos",
+        {
+          method: editando ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(cuerpo),
+        }
+      );
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "No se ha podido guardar");
       // Las citas que ya estaban dentro NO se cancelan: se avisa y decide el centro.
+      const hecho = editando ? "Corregida" : "Bloqueado";
       if (json.data?.citasDentro > 0) {
-        setAviso(`Bloqueado. Ojo: hay ${json.data.citasDentro} cita(s) ya puestas dentro de ese tramo; no se han tocado.`);
+        setAviso(`${hecho}. Ojo: hay ${json.data.citasDentro} cita(s) ya puestas dentro de ese tramo; no se han tocado.`);
       } else {
-        setAviso("Bloqueado.");
+        setAviso(`${hecho}.`);
       }
-      setAbierto(false);
-      setForm((f) => ({ ...f, fechaIni: "", fechaFin: "" }));
+      cerrar();
       cargar();
     } catch (e) {
       setFallo(e.message);
@@ -180,7 +250,7 @@ export default function PanelVacaciones() {
           </p>
         </div>
         <button
-          onClick={() => { setAbierto((v) => !v); setFallo(null); }}
+          onClick={() => (abierto ? cerrar() : setAbierto(true))}
           className="px-3 py-1.5 text-xs font-medium rounded-md bg-[#0F0F0F] text-white hover:bg-[#222] transition-colors shrink-0"
         >
           {abierto ? "Cancelar" : "Bloquear un tramo"}
@@ -251,12 +321,17 @@ export default function PanelVacaciones() {
           </p>
           <div className="mt-3 flex items-center gap-2">
             <button
-              onClick={crear}
+              onClick={guardar}
               disabled={guardando}
               className="text-xs px-3 py-1.5 rounded-md bg-[#0F0F0F] text-white hover:bg-[#222] disabled:opacity-50"
             >
-              {guardando ? "Guardando…" : "Bloquear"}
+              {guardando ? "Guardando…" : editando ? "Guardar cambios" : "Bloquear"}
             </button>
+            {editando && (
+              <button onClick={cerrar} className="text-xs px-3 py-1.5 rounded-md text-neutral-500 hover:text-neutral-800">
+                Cancelar
+              </button>
+            )}
             {fallo && <span className="text-xs text-red-600">{fallo}</span>}
           </div>
         </div>
@@ -291,13 +366,23 @@ export default function PanelVacaciones() {
                 )}
               </p>
             </div>
+            {/* Editar y quitar van juntos: quien puede abrir un hueco puede
+                corregirlo. La condición es la misma que impone el servidor. */}
             {(yo?.esAdmin || (b.teamMemberId && b.teamMemberId === yo?.teamMemberId)) && (
-              <button
-                onClick={() => quitar(b.id)}
-                className="text-xs px-2.5 py-1 rounded-md border border-red-200 text-red-600 hover:bg-red-50 shrink-0"
-              >
-                Quitar
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => editar(b)}
+                  className="text-xs px-2.5 py-1 rounded-md border border-neutral-200 text-neutral-600 hover:bg-neutral-50"
+                >
+                  Editar
+                </button>
+                <button
+                  onClick={() => quitar(b.id)}
+                  className="text-xs px-2.5 py-1 rounded-md border border-red-200 text-red-600 hover:bg-red-50"
+                >
+                  Quitar
+                </button>
+              </div>
             )}
           </div>
         ))}

@@ -318,6 +318,167 @@ export const POST = withTenant(async (request, _rc, ctx) => {
   }
 });
 
+/**
+ * PATCH /api/citas/bloqueos?id=UUID — corregir una ausencia ya guardada.
+ *
+ * Faltaba desde el principio (12/08/2026). Ni las fechas, ni el motivo, ni de
+ * quién era una ausencia se podían cambiar: había que quitarla y escribirla otra
+ * vez. Eso ya costó un script — las seis ausencias que en la consulta de Laura
+ * se apuntaron como «Todo el centro» y le cerraron la agenda seis veces no se
+ * pudieron arreglar desde la pantalla, hubo que escribir
+ * `scripts/reasignar-ausencias-sin-persona.js` para cambiarles el dueño.
+ *
+ * ── LOS PERMISOS NO SE AFLOJAN ──────────────────────────────────────────────
+ * Hereda los del POST y el DELETE, y uno más propio:
+ *
+ *   · quien no es admin solo toca LAS SUYAS (misma comprobación que el DELETE),
+ *   · y **no puede cambiar de quién es**, ni siquiera de la suya. Reasignar es
+ *     exactamente la operación que dejó la agenda de Laura cerrada; poder
+ *     hacerlo desde aquí sería devolver por la puerta de atrás lo que el POST
+ *     cerró el 10/08. Cambiar el dueño es de dirección.
+ *
+ * Se aplica solo lo que venga en el cuerpo: lo que no se manda, no se toca.
+ */
+export const PATCH = withTenant(async (request, _rc, ctx) => {
+  try {
+    const veto = gate(ctx);
+    if (veto) return veto;
+
+    const { TeamBlock, TeamMember, Booking } = ctx.tenantModels;
+    if (!TeamBlock) return error("Los bloqueos no están disponibles en este cliente", 503);
+
+    const id = String(new URL(request.url).searchParams.get("id") ?? "").trim();
+    if (!UUID_RE.test(id)) return error("id inválido", 422);
+
+    const fila = await TeamBlock.findByPk(id);
+    if (!fila) return error("Esa ausencia ya no existe", 404);
+
+    const yo = await quienSoy(request, ctx);
+    if (!yo.esAdmin && (!fila.teamMemberId || fila.teamMemberId !== yo.teamMemberId)) {
+      return forbidden(
+        fila.teamMemberId
+          ? "Solo puedes cambiar tus propias ausencias."
+          : "Los cierres de todo el centro los cambia un administrador."
+      );
+    }
+
+    let body;
+    try { body = await request.json(); } catch { return error("Body inválido"); }
+
+    const cambios = {};
+
+    /*
+     * Las horas, con la MISMA regla que el POST: se construyen en hora de
+     * Madrid, no con `new Date()` de una cadena sin zona — que en el contenedor,
+     * que va en UTC, desplazaba dos horas y solo se veía en producción.
+     *
+     * Se valida contra el valor que va a QUEDAR, no contra el que llega: mover
+     * solo el inicio tiene que seguir cayendo antes del fin que ya estaba.
+     */
+    if (body.startDate || body.startTime || body.startAt) {
+      const startAt = instanteDeMadrid(body.startDate, body.startTime, body.startAt);
+      if (!startAt) return error("La fecha u hora de inicio no es válida", 422);
+      cambios.startAt = startAt;
+    }
+    if (body.endDate || body.endTime || body.endAt) {
+      const endAt = instanteDeMadrid(body.endDate, body.endTime, body.endAt);
+      if (!endAt) return error("La fecha u hora de fin no es válida", 422);
+      cambios.endAt = endAt;
+    }
+    const inicioFinal = cambios.startAt ?? fila.startAt;
+    const finFinal = cambios.endAt ?? fila.endAt;
+    if (new Date(finFinal) <= new Date(inicioFinal)) {
+      return error("La fecha de fin tiene que ser posterior a la de inicio", 422);
+    }
+
+    if (body.label !== undefined) {
+      cambios.label = (body.label ? String(body.label).trim() : "").slice(0, 120) || "Vacaciones";
+    }
+    if (body.notes !== undefined) {
+      cambios.notes = body.notes ? String(body.notes).trim() : null;
+    }
+
+    // De quién es: SOLO dirección, y solo si lo manda.
+    let colorPersona = null;
+    if (body.teamMemberId !== undefined) {
+      if (!yo.esAdmin) {
+        return forbidden(
+          "Cambiar de quién es una ausencia es cosa de dirección. Pídelo a un administrador."
+        );
+      }
+      const tmId = typeof body.teamMemberId === "string" && body.teamMemberId.trim()
+        ? body.teamMemberId.trim()
+        : null;
+      if (tmId) {
+        if (!UUID_RE.test(tmId)) return error("teamMemberId inválido", 422);
+        if (TeamMember) {
+          const tm = await TeamMember.findByPk(tmId, { attributes: ["id", "blockColor"] });
+          if (!tm) return error("Esa persona no está en el equipo", 422);
+          colorPersona = tm.blockColor ?? null;
+        }
+      }
+      cambios.teamMemberId = tmId;
+    }
+
+    if (!Object.keys(cambios).length) return error("No hay nada que cambiar", 422);
+
+    // Resumen de lo de antes, no la fila entera: la auditoría vive en master,
+    // que es la base compartida por todos los clientes.
+    const antes = {
+      teamMemberId: fila.teamMemberId,
+      startAt: fila.startAt,
+      endAt: fila.endAt,
+      label: fila.label,
+    };
+    await fila.update(cambios);
+
+    // Si el dueño no cambió, su color hay que ir a buscarlo igual para que la
+    // agenda no pinte el bloqueo del color equivocado al refrescar.
+    if (colorPersona === null && fila.teamMemberId && TeamMember) {
+      const tm = await TeamMember.findByPk(fila.teamMemberId, { attributes: ["blockColor"] });
+      colorPersona = tm?.blockColor ?? null;
+    }
+
+    // Citas que quedan dentro del tramo nuevo: como en el POST, no se tocan —
+    // avisar, reubicar o cobrar lo decide el centro— pero se cuentan para que la
+    // pantalla pueda decirlo. Mover una ausencia es justo cuando pasa.
+    let citasDentro = 0;
+    if (Booking) {
+      const donde = {
+        scheduledAt: { [Op.gte]: fila.startAt, [Op.lt]: fila.endAt },
+        status: { [Op.notIn]: ["cancelled", "no_show"] },
+      };
+      if (fila.teamMemberId) donde.teamMemberId = fila.teamMemberId;
+      citasDentro = await Booking.count({ where: donde });
+    }
+
+    await logCitasAudit({
+      tenantId: ctx.tenant.id,
+      userId: request.headers.get("x-user-id"),
+      action: "citas.bloqueo_updated",
+      entity: "TeamBlock",
+      entityId: fila.id,
+      before: antes,
+      after: {
+        teamMemberId: fila.teamMemberId,
+        startAt: fila.startAt,
+        endAt: fila.endAt,
+        label: fila.label,
+      },
+      ip: request.headers.get("x-forwarded-for") ?? null,
+    });
+
+    const colorGeneral = ctx.tenant?.settings?.citas?.colorBloqueos ?? null;
+    return ok({
+      ...serializa(fila, colorGeneral),
+      color: colorDeBloqueo(colorPersona, colorGeneral),
+      citasDentro,
+    });
+  } catch (err) {
+    return serverError(err);
+  }
+});
+
 export const DELETE = withTenant(async (request, _rc, ctx) => {
   try {
     const veto = gate(ctx);

@@ -153,9 +153,27 @@ export default function QECLeadsModule() {
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [bulkStageOpen, setBulkStageOpen] = useState(false);
 
-  const fetchLeads = useCallback(() => {
-    setLoading(true);
-    const params = new URLSearchParams({ limit: "200" });
+  /**
+   * El desglose por etapa lo cuenta el SERVIDOR (12/08/2026).
+   *
+   * Antes se calculaba con un `reduce` sobre `leads`, que es la lista ya
+   * filtrada: al pulsar una etapa, las demás caían a cero y el «X en total» de
+   * la cabecera se contagiaba. Ahora `/api/leads?desglose=1` devuelve la cuenta
+   * de TODAS las etapas con los demás filtros aplicados, y el total sale de
+   * sumarla — con lo que también desaparece la resta a ojo de los referidos,
+   * que solo descontaba los que hubieran caído en esta página de 200.
+   */
+  const [stageCounts, setStageCounts] = useState({});
+
+  // `silencioso` para volver a pedirlo después de una baja o un cambio de etapa
+  // sin que la lista parpadee con el cargando.
+  const fetchLeads = useCallback((silencioso = false) => {
+    if (!silencioso) setLoading(true);
+    const params = new URLSearchParams({
+      limit: "200",
+      desglose: "1",
+      excluirOrigen: "referido_abarcaia",
+    });
     if (activeStage !== "all") params.set("stage", activeStage);
     if (search.trim()) params.set("search", search.trim());
 
@@ -167,10 +185,13 @@ export default function QECLeadsModule() {
             (l) => l.customFields?.source !== "referido_abarcaia"
           );
           setLeads(filtered);
-          setTotal(data.data.total - (data.data.leads.length - filtered.length));
+          setStageCounts(data.data.desglose ?? {});
+          setTotal(data.data.totalSinEtapa ?? data.data.total);
         }
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!silencioso) setLoading(false);
+      });
   }, [activeStage, search]);
 
   useEffect(() => {
@@ -182,11 +203,6 @@ export default function QECLeadsModule() {
     setConfirmBulkDelete(false);
     setBulkStageOpen(false);
   }, [activeStage, search]);
-
-  const stageCounts = leads.reduce((acc, l) => {
-    acc[l.stage] = (acc[l.stage] ?? 0) + 1;
-    return acc;
-  }, {});
 
   function openLead(lead) {
     setSelected({ ...lead });
@@ -210,6 +226,10 @@ export default function QECLeadsModule() {
       if (data.ok) {
         setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, stage: newStage } : l)));
         if (selected?.id === leadId) setSelected((prev) => ({ ...prev, stage: newStage }));
+        // El desglose lo cuenta el servidor, así que hay que volver a pedirlo:
+        // si no, el lead se movería de etapa en la lista y los números de
+        // arriba se quedarían en los de antes.
+        fetchLeads(true);
       }
     } finally {
       setSaving(false);
@@ -229,6 +249,7 @@ export default function QECLeadsModule() {
         const updated = data.data;
         setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, ...updated } : l)));
         if (selected?.id === leadId) setSelected((prev) => ({ ...prev, ...updated }));
+        if (updated.stage) fetchLeads(true);
         return true;
       }
       return false;
@@ -270,6 +291,7 @@ export default function QECLeadsModule() {
     await fetch(`/api/leads/${leadId}`, { method: "DELETE" });
     setLeads((prev) => prev.filter((l) => l.id !== leadId));
     setTotal((prev) => prev - 1);
+    fetchLeads(true);
     closePanel();
   }
 
@@ -307,6 +329,7 @@ export default function QECLeadsModule() {
       setLeads((prev) => prev.map((l) => (checkedIds.has(l.id) ? { ...l, stage } : l)));
       if (selected && checkedIds.has(selected.id)) setSelected((prev) => ({ ...prev, stage }));
       setCheckedIds(new Set());
+      fetchLeads(true);
     } finally {
       setSaving(false);
     }
@@ -324,6 +347,7 @@ export default function QECLeadsModule() {
       if (selected && checkedIds.has(selected.id)) closePanel();
       setCheckedIds(new Set());
       setConfirmBulkDelete(false);
+      fetchLeads(true);
     } finally {
       setSaving(false);
     }

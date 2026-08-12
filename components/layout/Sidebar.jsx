@@ -169,6 +169,21 @@ const navigation = [
           // de entender por qué. Se exige `team` y no `citas` porque `citas`
           // ya lo pide el padre, y sin Equipo no hay a quién asignar nada.
           { key: "citas-sin-profesional", label: "Sin profesional", href: "/citas/sin-profesional", adminOnly: true, moduleKey: "team" },
+          // Vacaciones y ausencias (12/08/2026, Jorge pidió entrada propia).
+          //
+          // La PANTALLA es la que sacó Rodrigo ese mismo día a `/citas/bloqueos`
+          // —él la dejó accesible desde los botones de las tres cabeceras del
+          // módulo—; esto solo la pone también en el menú, que es donde Jorge la
+          // pidió. Una pantalla, dos caminos, ningún duplicado.
+          //
+          // Se rotula «Vacaciones y ausencias» y no «Bloqueos», que es como la
+          // llama su botón: quien va a apuntar que se va una semana busca la
+          // primera palabra, no la segunda. ⚠️ Son dos nombres para lo mismo y
+          // conviene unificarlos cuando se decida cuál manda.
+          //
+          // NO lleva adminOnly: lo apunta todo el equipo desde el 07/08, y cada
+          // cual solo puede tocar las suyas — eso lo impone la API.
+          { key: "citas-ausencias", label: "Vacaciones y ausencias", href: "/citas/bloqueos" },
         ],
       },
     ],

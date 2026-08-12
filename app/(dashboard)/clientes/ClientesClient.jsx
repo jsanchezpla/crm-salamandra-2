@@ -10,6 +10,7 @@ import ProgenitoresDelAlta, { PROGENITOR_VACIO } from "../../../components/clien
 import FacturacionDelAlta from "../../../components/clients/FacturacionDelAlta.jsx";
 import { camposCliente, PERFIL_COMERCIAL, PERFIL_SALUD } from "../../../lib/clients/formularioAlta.js";
 import { VOCABULARIO_CLIENTE } from "../../../lib/clients/vocabulario.js";
+import { avisoBorradoSegunModulos } from "../../../lib/clients/avisoBorrado.js";
 import Paginador from "@/components/ui/Paginador.jsx";
 
 function useMounted() {
@@ -64,6 +65,15 @@ export default function ClientesClient({
   const mounted = useMounted();
   const [clients, setClients] = useState([]);
   const [total, setTotal] = useState(0);
+  /**
+   * Los módulos que este usuario ve de verdad (tenant ∩ su acceso), tal cual los
+   * cruza `/api/auth/me`. Solo se usan para decidir DE QUÉ avisa el borrado.
+   *
+   * Arranca en `null` —«todavía no lo sé»— y no en `[]`: un array vacío se leería
+   * como «no tiene nada» y callaría el aviso justo mientras carga la pantalla.
+   * Ver `lib/clients/avisoBorrado.js`.
+   */
+  const [modulos, setModulos] = useState(null);
   // Paginación: hasta hoy la lista pedía 200 fijos y no mandaba página, así que
   // con 1.110 clientes solo se veían los primeros 200 y no había forma de
   // llegar al resto. La API ya paginaba; lo que faltaba era usarlo.
@@ -141,6 +151,17 @@ export default function ClientesClient({
   // 7 tras una búsqueda que devuelve 12 resultados deja la lista vacía sin
   // explicar por qué.
   useEffect(() => { setPagina(1); }, [activeStatus, search]);
+
+  // Si esto falla, `modulos` se queda en null y el aviso de borrado sale
+  // completo. Es lo que se quiere: avisar de más no rompe nada.
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo && Array.isArray(j?.data?.enabledModules)) setModulos(j.data.enabledModules); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(fetchClients, search ? 300 : 0);
@@ -250,14 +271,15 @@ export default function ClientesClient({
   }
 
   async function handleDelete(clientId) {
-    // Se dice QUÉ se lleva por delante (06/08/2026): desde hoy el borrado
-    // arrastra los documentos y las citas que aún no han ocurrido, y eso no se
-    // puede deshacer. Preguntar «¿eliminar?» a secas ya no describe lo que pasa.
-    const aviso =
-      `¿Eliminar este ${vocab.singular}?\n\n` +
-      "Se borrarán también sus documentos y las citas que todavía no han ocurrido. " +
-      "Las citas pasadas se conservan como constancia del trabajo hecho.\n\n" +
-      "No se puede deshacer.";
+    // Se dice QUÉ se lleva por delante (06/08/2026): el borrado arrastra los
+    // documentos y las citas que aún no han ocurrido, y eso no se puede
+    // deshacer. Preguntar «¿eliminar?» a secas no describe lo que pasa.
+    //
+    // Y se dice solo de lo que este cliente TIENE (12/08/2026): la frase entera
+    // prometía cancelar citas en clientes sin agenda, donde no está mal, está
+    // vacía. El texto se arma en `lib/clients/avisoBorrado.js` para que el
+    // listado y la ficha no puedan discrepar.
+    const aviso = avisoBorradoSegunModulos(modulos, { singular: vocab.singular });
     if (!confirm(aviso)) return;
     await fetch(`/api/clients/${clientId}`, { method: "DELETE" });
     setClients((prev) => prev.filter((c) => c.id !== clientId));

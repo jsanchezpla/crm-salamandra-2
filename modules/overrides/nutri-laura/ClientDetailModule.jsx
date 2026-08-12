@@ -50,6 +50,7 @@ import ClientConsultaExternaSection from "../../../components/clients/ClientCons
 import ClientCuentaWebSection from "../../../components/clients/ClientCuentaWebSection.jsx";
 import ClientProfesionalSection from "../../../components/clients/ClientProfesionalSection.jsx";
 import { edadDesde } from "../../../lib/clients/formularioAlta.js";
+import { fraseArrastreSegunModulos } from "../../../lib/clients/avisoBorrado.js";
 
 // Rótulos revisados el 04/08/2026 (Rodrigo): Datos · Historia clínica ·
 // Documentos · Sesiones · Pautas. SOLO cambian los nombres visibles — las
@@ -346,6 +347,7 @@ export default function NutriLauraClientDetailModule() {
             confirmDelete={confirmDelete}
             setConfirmDelete={setConfirmDelete}
             onDelete={handleDelete}
+            avisoArrastre={fraseArrastreSegunModulos(me?.enabledModules)}
             onRecargar={loadClient}
           />
         )}
@@ -405,6 +407,12 @@ function InfoTab({
   confirmDelete,
   setConfirmDelete,
   onDelete,
+  // Lo que el borrado se lleva por delante, según lo que Laura tenga
+  // contratado. El cuadro rojo decía «sus archivos y su historia clínica» y se
+  // callaba las CITAS FUTURAS, que también se borran y además le mandan a la
+  // paciente el correo de cancelación (12/08/2026). Sale del mismo sitio que el
+  // aviso del listado y el de la ficha del resto, para que digan lo mismo.
+  avisoArrastre,
   onRecargar,
 }) {
   /*
@@ -459,6 +467,7 @@ function InfoTab({
           <p className="text-xs text-red-700 font-medium">
             ¿Eliminar a {client.name}? Esto borra también sus archivos y su historia clínica.
           </p>
+          {avisoArrastre && <p className="text-xs text-red-700">{avisoArrastre}</p>}
           <div className="flex gap-2">
             <button
               onClick={() => setConfirmDelete(false)}

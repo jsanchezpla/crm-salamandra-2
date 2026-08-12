@@ -15,6 +15,7 @@ import ClientModulesSection from "../../components/clients/ClientModulesSection.
 import ClientContactMethodsSection from "../../components/clients/ClientContactMethodsSection.jsx";
 import ClientFiscalSection from "../../components/clients/ClientFiscalSection.jsx";
 import { camposCliente, PERFIL_COMERCIAL } from "../../lib/clients/formularioAlta.js";
+import { avisoBorradoSegunModulos } from "../../lib/clients/avisoBorrado.js";
 import ClientContractSection from "../../components/clients/ClientContractSection.jsx";
 import ClientGuardiansSection from "../../components/clients/ClientGuardiansSection.jsx";
 import ClientPortalMonthsSection from "../../components/clients/ClientPortalMonthsSection.jsx";
@@ -181,6 +182,21 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL, conPacie
     date: new Date().toISOString().slice(0, 10),
   });
   const [addingInteraction, setAddingInteraction] = useState(false);
+  /**
+   * Los módulos que este usuario ve (el centro ∩ su acceso), solo para saber DE
+   * QUÉ avisa el borrado. `null` = todavía no se sabe, y entonces se avisa de
+   * todo: ver `lib/clients/avisoBorrado.js`.
+   */
+  const [modulos, setModulos] = useState(null);
+
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo && Array.isArray(j?.data?.enabledModules)) setModulos(j.data.enabledModules); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
   const [tab, setTab] = useState("datos");
 
   // Qué pestañas se han quedado sin contenido. `undefined` = todavía no se sabe,
@@ -276,13 +292,12 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL, conPacie
   }
 
   async function handleDelete() {
-    // Mismo aviso que en el listado: desde el 06/08/2026 el borrado se lleva
-    // también los documentos y las citas que aún no han ocurrido.
-    const aviso =
-      "¿Eliminar este cliente y todas sus interacciones?\n\n" +
-      "Se borrarán también sus documentos y las citas que todavía no han ocurrido. " +
-      "Las citas pasadas se conservan como constancia del trabajo hecho.\n\n" +
-      "No se puede deshacer.";
+    // Mismo aviso que en el listado, y desde el mismo sitio: el borrado se lleva
+    // también los documentos y las citas que aún no han ocurrido — pero solo se
+    // promete de lo que este centro tiene contratado (12/08/2026). A retorika y
+    // a spain_enzymes, que no tienen agenda, esa frase no les mentía: les
+    // hablaba de cancelar citas que no existen.
+    const aviso = avisoBorradoSegunModulos(modulos, { esteCliente: true });
     if (!confirm(aviso)) return;
     await fetch(`/api/clients/${id}`, { method: "DELETE" });
     router.push("/clientes");

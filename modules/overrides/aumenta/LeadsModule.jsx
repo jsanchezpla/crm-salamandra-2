@@ -88,9 +88,11 @@ export default function AumentaLeadsModule() {
   const [saving, setSaving] = useState(false);
   const [soloEmpleo, setSoloEmpleo] = useState(false);
 
-  const fetchLeads = useCallback(() => {
-    setLoading(true);
-    const params = new URLSearchParams({ limit: "200" });
+  // `silencioso` para volver a pedirlo tras una baja o un cambio de etapa sin
+  // que la lista parpadee con el cargando.
+  const fetchLeads = useCallback((silencioso = false) => {
+    if (!silencioso) setLoading(true);
+    const params = new URLSearchParams({ limit: "200", desglose: "1" });
     if (activeStage !== "all") params.set("stage", activeStage);
     if (filtroMotivo) params.set("motivo", filtroMotivo);
     if (search.trim()) params.set("search", search.trim());
@@ -100,20 +102,28 @@ export default function AumentaLeadsModule() {
       .then((data) => {
         if (data.ok) {
           setLeads(data.data.leads);
-          setTotal(data.data.total);
+          setStageCounts(data.data.desglose ?? {});
+          setTotal(data.data.totalSinEtapa ?? data.data.total);
         }
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!silencioso) setLoading(false);
+      });
   }, [activeStage, filtroMotivo, search]);
 
   useEffect(() => {
     fetchLeads();
   }, [fetchLeads]);
 
-  const stageCounts = leads.reduce((acc, l) => {
-    acc[l.stage] = (acc[l.stage] ?? 0) + 1;
-    return acc;
-  }, {});
+  /**
+   * El desglose por etapa lo cuenta el SERVIDOR (12/08/2026).
+   *
+   * Antes salía de un `reduce` sobre `leads`, que es la lista YA FILTRADA: al
+   * pulsar una etapa, las demás caían a cero y el total de la cabecera se
+   * contagiaba. Ahora `/api/leads?desglose=1` cuenta todas las etapas con los
+   * demás filtros aplicados. Estaba igual en los ocho overrides de leads.
+   */
+  const [stageCounts, setStageCounts] = useState({});
 
   const jobCount = leads.filter(isJobLead).length;
   const visibleLeads = soloEmpleo ? leads.filter(isJobLead) : leads;
@@ -139,6 +149,8 @@ export default function AumentaLeadsModule() {
       const data = await res.json();
       if (data.ok) {
         setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, stage: newStage } : l)));
+        // El desglose lo cuenta el servidor: sin volver a pedirlo, los números de arriba se quedan en los de antes.
+        fetchLeads(true);
         if (selected?.id === leadId) setSelected((prev) => ({ ...prev, stage: newStage }));
       }
     } finally {

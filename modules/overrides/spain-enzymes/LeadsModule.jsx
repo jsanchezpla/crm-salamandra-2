@@ -164,9 +164,11 @@ export default function SpainEnzymesLeadsModule() {
   const [bulkStageOpen, setBulkStageOpen] = useState(false);
   const fileInputRef = useRef(null);
 
-  const fetchLeads = useCallback(() => {
-    setLoading(true);
-    const params = new URLSearchParams({ limit: "200" });
+  // `silencioso` para volver a pedirlo tras una baja o un cambio de etapa sin
+  // que la lista parpadee con el cargando.
+  const fetchLeads = useCallback((silencioso = false) => {
+    if (!silencioso) setLoading(true);
+    const params = new URLSearchParams({ limit: "200", desglose: "1" });
     if (activeStage !== "all") params.set("stage", activeStage);
     if (search.trim()) params.set("search", search.trim());
     fetch(`/api/leads?${params}`)
@@ -174,10 +176,13 @@ export default function SpainEnzymesLeadsModule() {
       .then((data) => {
         if (data.ok) {
           setLeads(data.data.leads);
-          setTotal(data.data.total ?? data.data.leads.length);
+          setStageCounts(data.data.desglose ?? {});
+          setTotal(data.data.totalSinEtapa ?? data.data.total);
         }
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!silencioso) setLoading(false);
+      });
   }, [activeStage, search]);
 
   useEffect(() => {
@@ -185,7 +190,15 @@ export default function SpainEnzymesLeadsModule() {
     return () => clearTimeout(t);
   }, [fetchLeads, search]);
 
-  const stageCounts = leads.reduce((acc, l) => { acc[l.stage] = (acc[l.stage] || 0) + 1; return acc; }, {});
+  /**
+   * El desglose por etapa lo cuenta el SERVIDOR (12/08/2026).
+   *
+   * Antes salía de un `reduce` sobre `leads`, que es la lista YA FILTRADA: al
+   * pulsar una etapa, las demás caían a cero y el total de la cabecera se
+   * contagiaba. Ahora `/api/leads?desglose=1` cuenta todas las etapas con los
+   * demás filtros aplicados. Estaba igual en los ocho overrides de leads.
+   */
+  const [stageCounts, setStageCounts] = useState({});
 
   function openPanel(lead) {
     setSelected(lead);
@@ -212,6 +225,8 @@ export default function SpainEnzymesLeadsModule() {
       const res = await fetch(`/api/leads/${leadId}`, { method: "DELETE" });
       if (res.ok) {
         setLeads((prev) => prev.filter((l) => l.id !== leadId));
+        // El desglose lo cuenta el servidor: sin volver a pedirlo, los números de arriba se quedan en los de antes.
+        fetchLeads(true);
         setTotal((prev) => prev - 1);
         closePanel();
       }
@@ -255,6 +270,8 @@ export default function SpainEnzymesLeadsModule() {
         const updated = { ...selected, ...body };
         setSelected(updated);
         setLeads((prev) => prev.map((l) => (l.id === leadId ? updated : l)));
+        // El desglose lo cuenta el servidor: sin volver a pedirlo, los números de arriba se quedan en los de antes.
+        fetchLeads(true);
       }
     } finally {
       setSaving(false);
@@ -273,6 +290,8 @@ export default function SpainEnzymesLeadsModule() {
       const data = await res.json().catch(() => ({}));
       if (!data.ok) return;
       setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, stage: next } : l)));
+      // El desglose lo cuenta el servidor: sin volver a pedirlo, los números de arriba se quedan en los de antes.
+      fetchLeads(true);
       if (selected?.id === lead.id) setSelected((prev) => (prev ? { ...prev, stage: next } : prev));
     } catch {
       // silencioso a propósito
@@ -380,6 +399,8 @@ export default function SpainEnzymesLeadsModule() {
         fetch(`/api/leads/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage }) })
       ));
       setLeads((prev) => prev.map((l) => (checkedIds.has(l.id) ? { ...l, stage } : l)));
+      // El desglose lo cuenta el servidor: sin volver a pedirlo, los números de arriba se quedan en los de antes.
+      fetchLeads(true);
       if (selected && checkedIds.has(selected.id)) setSelected((prev) => ({ ...prev, stage }));
       setCheckedIds(new Set());
     } finally {
@@ -393,6 +414,8 @@ export default function SpainEnzymesLeadsModule() {
       await Promise.all([...checkedIds].map((id) => fetch(`/api/leads/${id}`, { method: "DELETE" })));
       const deletedCount = checkedIds.size;
       setLeads((prev) => prev.filter((l) => !checkedIds.has(l.id)));
+      // El desglose lo cuenta el servidor: sin volver a pedirlo, los números de arriba se quedan en los de antes.
+      fetchLeads(true);
       setTotal((prev) => prev - deletedCount);
       if (selected && checkedIds.has(selected.id)) closePanel();
       setCheckedIds(new Set());
