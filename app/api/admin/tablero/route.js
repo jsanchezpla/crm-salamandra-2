@@ -36,6 +36,11 @@ const SLUGS = [
   "aumenta", "nutri_laura", "spain_enzymes", "quality_energy",
   "retorika", "abarcaia", "healim", "demo", "sandbox",
   "salamandra_solutions",
+  // `somos` se añadió el 12/08/2026: llevaba tiempo en producción y no estaba
+  // aquí, así que cualquier tarea suya se pintaba con la cola metida dentro del
+  // título y sin caer en ningún grupo. Es el mismo despiste que ya se documentó
+  // con healim en CLAUDE.md — un cliente nuevo hay que apuntarlo también aquí.
+  "somos",
 ];
 
 /**

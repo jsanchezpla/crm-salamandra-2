@@ -100,6 +100,33 @@ más alto, que es lo que aguanta a cloud-init).
 
 ## P1 — esta semana
 
+### Desde el panel interno no se puede cerrar sesión · producto
+
+El enlace «salir» de la barra del back-office es un enlace normal a
+`/api/auth/logout`, o sea un GET. Ese endpoint **solo entiende POST**: en la
+imagen desplegada la ruta registra exactamente un método —`["POST",0,R]`— así
+que el navegador se lleva un 405 y la sesión sigue abierta. El CRM de los
+clientes sí cierra bien porque su menú lo llama con `fetch(..., {method:"POST"})`.
+
+No es cosmético por dónde pasa: el back-office es la pantalla que crea clientes,
+les cambia los módulos y suspende cuentas, y es la que se queda abierta en un
+portátil al terminar el día.
+
+Al arreglarlo, que salga por POST desde un botón, como hace el sidebar del CRM,
+**y no añadiendo un GET** a ese endpoint: un cierre de sesión por GET lo dispara
+cualquier página ajena con una etiqueta de imagen. Es molesto más que peligroso,
+pero no hace falta abrir esa puerta cuando el patrón bueno ya está escrito dos
+carpetas más allá.
+
+*Se comprueba*: pulsar «salir» en el back-office devuelve al login y la sesión
+deja de valer.
+*Dónde*: `app/admin/layout.jsx:104-110` es el enlace; `app/api/auth/logout/route.js:4`
+es el único método que hay; `components/layout/Sidebar.jsx:408-411` es cómo lo
+hace bien el CRM.
+*Comprobado en producción*: 12/08/2026 — dentro del contenedor, la ruta
+desplegada registra solo POST, y el `<a href="/api/auth/logout">` aparece en el
+HTML servido de las pantallas de `/admin`.
+
 ### «Pedirle otra tarjeta» no lleva a ninguna parte · todos
 
 El aviso recomienda pedir otra tarjeta y el botón se pinta, pero el endpoint
@@ -191,6 +218,259 @@ Maider Zabala Gonzalez (1).
 ---
 
 ## P2 — cuando se pueda
+
+### Cambiar el color de un cliente sigue siendo escribir un script · producto
+
+El alta de clientes SÍ pide los colores, con sus dos selectores. El editor de un
+cliente que YA existe no: solo deja tocar nombre, plan y módulos. Para cambiarle
+dos colores a Somos el 12/08 hubo que escribir `scripts/update-somos-brand.js`,
+commitearlo, construir, desplegar y correrlo con `docker exec` dentro del
+contenedor. Media hora de proceso para dos campos de seis caracteres.
+
+Y lo llamativo es que **el trabajo de servidor ya está hecho**: `editarTenant()`
+acepta `brand` entero —valida que sea hex, hace merge sobre lo que ya hubiera y
+borra el campo si llega vacío— y el endpoint le pasa el cuerpo tal cual. Lo único
+que falta es que la pantalla mande esos tres campos. Son los mismos selectores
+que el formulario de alta ya tiene diez pantallas más abajo.
+
+⚠️ Al ponerlo, que avise del contraste. El color principal NO es un acento: es el
+FONDO del sidebar, y encima va texto blanco a opacidades que bajan hasta el 30%.
+El turquesa de la marca de Somos daba 2,22:1 cuando hacen falta 4,5:1 — el menú
+quedaba ilegible. Por eso su azul acabó siendo tan oscuro, y quien elija un color
+claro desde esta pantalla se va a llevar la misma sorpresa sin que nadie se lo
+diga.
+
+*Se comprueba*: cambiar el color de un cliente desde `/admin/clientes`, recargar
+su CRM y verlo, sin haber tocado el VPS.
+*Dónde*: `app/admin/clientes/page.jsx:253-417` es el editor que no manda la marca
+y `:709-735` los campos que ya existen en el alta; `lib/provisioning/cicloVida.js:105-137`
+es el backend que ya lo soporta.
+*Comprobado en producción*: 12/08/2026 — los 10 clientes tienen sus dos colores
+puestos, y el único camino que ha existido para cambiarlos es un script.
+
+### «Fichas a completar» sale en el menú de quien no tiene nada que completar · `somos`, `demo`
+
+En producción `somos` tiene esa pantalla en su menú y **cero filas en las ocho
+carpetas**. Un cliente que acaba de entrar la abre el primer día, la encuentra
+vacía y no vuelve a mirarla. A Aumenta le pasará lo mismo el día que termine la
+campaña: hoy tiene 173 que bloquean y 1.800 por completar, pero la pantalla no
+sabe desaparecer cuando ya no hace falta.
+
+Lo que impide que esto sea de cinco minutos: **saber si hay algo cuesta cuatro
+segundos**. Obliga a correr las seis consultas de `carpetasCon()`, que cruzan
+pacientes, citas y el JSONB de tutores. Medido en el VPS: 3.997 ms en Aumenta,
+23 ms en la demo, 18 ms en Somos. Meterlo tal cual en el menú añade cuatro
+segundos a CADA carga de página del cliente que más lo necesita.
+
+Salidas razonables: contar solo el bloque que bloquea, que son tres consultas y
+las tres baratas; cachear el número; o cargarlo aparte y esconder la entrada
+cuando ya se sepa. El hueco donde encajaría ya existe: cada entrada del menú
+tiene un campo `badge` que hoy vale `null` en las cuatro que lo declaran.
+
+*Se comprueba*: en un cliente con `clients_avanzado` y cero huecos la entrada no
+sale; en Aumenta sale, y con su número al lado.
+*Dónde*: `components/layout/Sidebar.jsx:60` es la entrada y `:542` el badge sin
+usar; `lib/clients/urgentes.js:253` es `carpetasCon()`.
+*Comprobado en producción*: 12/08/2026 — Somos 0 en las ocho carpetas, demo 21,
+Aumenta 173 + 1.800; las seis consultas tardan 3.997 ms en Aumenta.
+
+### Las cinco pantallas de Formación solo se encuentran desde su portada · `retorika`, `aumenta`, `nutri_laura`, `demo`, `somos`
+
+Formación es la única entrada grande del menú **sin hijos**. Clientes, Citas,
+Leads o Equipo despliegan sus pantallas en el propio menú; Formación es un enlace
+suelto a `/formacion`, y sus cinco secciones —Empresas, Cursos, Usuarios, Alumnos
+por curso y Cuestionarios— viven dentro como tarjetas. Para ir de Cursos a
+Alumnos hay que volver a la portada.
+
+Encima los nombres se pisan: **«Usuarios» son las personas y «Alumnos por curso»
+son las matrículas**, y la tarjeta de Usuarios se describe justamente como
+«alumnos privados y de empresa». Arriba, el recuadro de métricas vuelve a decir
+«Usuarios» y «Matrículas», que es un tercer par de palabras para lo mismo. La
+prueba de que no se entiende está escrita en la propia ayuda de Empresas, en
+mayúsculas: «IMPORTANTE: los alumnos de empresa se importan desde aquí» — porque
+quien quiere dar de alta alumnos entra en Usuarios, que es donde no se hace.
+
+*Se comprueba*: desde cualquier pantalla de Formación se llega a las demás sin
+pasar por la portada, y nadie tiene que preguntar en qué se diferencian dos
+secciones.
+*Dónde*: `components/layout/Sidebar.jsx:304-316` es la entrada sin hijos,
+`modules/training/FormacionOverview.jsx:7-63` son las cinco secciones y
+`modules/overrides/aumenta/FormacionOverview.jsx` es la versión de Aumenta, que
+solo ve tres.
+*Comprobado en producción*: 12/08/2026 — cinco clientes tienen `training`
+(aumenta, demo, nutri_laura, retorika, somos) y la entrada del menú sigue sin
+hijos en todos.
+
+### Referidos se puede vender desde el alta y no lo puede usar nadie · producto
+
+`referidos` aparece en el catálogo de venta con su casilla y su descripción, así
+que se le puede marcar a un cliente nuevo. Lo que se le está vendiendo hoy no le
+va a funcionar: el módulo no tiene tabla propia —su pantalla lee y escribe
+`leads` filtrando por origen— y su formulario público está hecho a la medida de
+un cliente concreto. El propio catálogo ya lo avisa en letra pequeña: «Hoy está
+hecho a medida de un cliente; requiere ajuste».
+
+Jorge, 12/08: que deje de poder marcarse en el alta.
+
+Quitarlo del catálogo **no se lo apaga a quien lo tenga**, y conviene saber por
+qué antes de tocarlo: el editor solo desactiva lo que está en `CLAVES_VALIDAS`,
+así que un módulo fuera del catálogo queda intocable desde el panel — exactamente
+el trato que ya recibe `provisioning` desde el 11/08. Abarcaia lo conserva
+encendido; simplemente deja de tener casilla.
+
+*Se comprueba*: `referidos` ya no sale entre las casillas del alta, y abarcaia lo
+sigue teniendo activo.
+*Dónde*: `lib/provisioning/catalogo.js:86` es la entrada del catálogo; el filtro
+que lo protege está en `lib/provisioning/cicloVida.js:190` y
+`lib/provisioning/dependencias.js:568`.
+*Comprobado en producción*: 12/08/2026 — solo `abarcaia` lo tiene encendido (y
+está suspendido); `quality_energy` y `demo` tienen la fila apagada.
+
+### El plan que se le enseña a cada cliente no significa nada · todos
+
+Debajo del nombre del cliente, en su propio menú, pone PRO o STARTER en
+mayúsculas. No gatea nada: ni un módulo, ni un límite, ni un precio. En
+producción hay siete «pro» y tres «starter» repartidos por cómo se sembró cada
+uno — Somos, que tiene los 21 módulos, es «starter»; Retorika, que tiene tres,
+es «pro».
+
+Jorge, 12/08: quitarlo para que no confunda. Se ve en tres sitios: el menú del
+cliente, las fichas de `/admin` y `/admin/modulos`, y la casilla de edición del
+alta.
+
+De propina, esa casilla es una trampa: es un campo de **texto libre** sobre una
+columna que en base de datos es un ENUM de cuatro valores (free, starter, pro,
+enterprise). Escribir cualquier otra cosa y guardar revienta con un error de
+PostgreSQL que nadie ha visto todavía porque nadie ha tocado el campo.
+
+La columna puede quedarse donde está —es NOT NULL con valor por defecto y la
+escriben doce seeds—; lo que se retira es enseñarla y dejar escribirla.
+
+*Se comprueba*: no aparece «PRO» ni «STARTER» en ninguna pantalla que vea un
+cliente.
+*Dónde*: `components/layout/Sidebar.jsx:464` es lo que ve el cliente;
+`models/master/Tenant.model.js:28` es el ENUM; `app/admin/clientes/page.jsx:307-309`
+es la casilla de texto libre.
+*Comprobado en producción*: 12/08/2026 — 7 «pro» y 3 «starter», y buscando por
+todo el repo no se encontró ningún sitio donde el código decida nada por ese
+campo.
+
+### Custodia sabe qué claves le faltan a cada cliente, pero no puede ponérselas · producto
+
+La portada del back-office ya dice, cliente por cliente, qué credenciales tiene
+puestas y cuáles le faltan — hasta con la frase «Ya tiene todas las claves
+puestas. No hay nada que pedirle». Lo que no puede hacer es ponerlas: hoy la
+única forma es que entre el cliente, en su propia Configuración.
+
+Y no entran. 1 de 9 clientes tiene clave de Anthropic —y somos nosotros— y 0 de
+9 la de OpenAI, con once disparadores de IA desplegados y sin usar por nadie.
+
+Jorge, 12/08: que las pueda poner el cliente **o** nosotros desde Custodia.
+
+⚠️ Esto NO rompe la regla escrita de ese endpoint, y conviene decirlo porque
+parece que sí. La regla es que **no descifra nada** —«no existe un caso legítimo
+en el que haga falta LEER la clave de Stripe de un cliente»— y sigue en pie tal
+cual: escribir una clave no obliga a leer la anterior. El campo tiene que ser de
+solo escribir: se pega, se cifra con `secretBox` igual que lo hace la
+Configuración del cliente, y no se devuelve nunca, ni enmascarado.
+
+Y falta el otro medio recado del mismo día: **no hay dónde apuntar el correo de
+contacto de un cliente**. El alta pide un `adminEmail`, pero eso es el USUARIO
+con el que entra —si se deja vacío se inventa `admin_{slug}`—, no a quién se le
+escribe cuando hay que pedirle algo.
+
+*Se comprueba*: pegar la clave de Anthropic de un cliente desde `/admin`, que su
+CRM la use, y que ninguna pantalla la devuelva.
+*Dónde*: `app/api/admin/configuraciones/route.js:10-27` es la regla de no
+descifrar y `app/admin/page.jsx:356` la frase de arriba; el guardado del lado del
+cliente está en `app/api/tenant/settings/route.js` y el cifrado en
+`lib/crypto/secretBox.js`.
+*Comprobado en producción*: 12/08/2026 — 1 de 9 con Anthropic y 0 de 9 con
+OpenAI; el endpoint del back-office es de solo lectura y en el alta no hay ningún
+campo de contacto.
+
+### Los paquetes de módulos están escritos en el código · producto
+
+En el alta hay dos botones —«Paquete Nutrición» y «Paquete Clínica»— que marcan
+de golpe sus módulos, y luego se añade o se quita a mano. Funciona, pero los dos
+están escritos dentro de `lib/provisioning/catalogo.js`: inventar un tercero, o
+cambiar qué lleva uno, es tocar código y desplegar.
+
+Jorge, 12/08: una pestaña en el back-office para crear paquetes, y que salgan en
+el alta.
+
+Eso mueve la definición de código a datos, y hay un aviso escrito en el propio
+fichero que conviene resolver en vez de ignorar: «Solo se escribe aquí un paquete
+cuando está DECIDIDO qué lleva. Media definición en el código es peor que
+ninguna: se acaba vendiendo lo que alguien marcó un martes». Hoy ese freno es el
+diff; con una pantalla de crear paquetes deja de existir, así que hay que
+ponerlo dentro.
+
+Dos cosas que hay que decidir antes de escribir nada. **Dónde viven**:
+`master.tenants` no vale porque no son de ningún cliente, así que es tabla nueva
+en `master` o una fila de configuración global. Y **qué pasa al editar uno**: hoy
+el paquete no se guarda en ninguna parte —es solo un atajo de marcado— y por eso
+tocar un paquete no puede afectar a los clientes ya dados de alta con él. Eso
+conviene que siga siendo así, y la pantalla tiene que dejarlo claro.
+
+Falta además contenido: los dos paquetes de hoy son los dos de salud. No hay
+ninguno para el perfil comercial, que es el de spain_enzymes, retorika y
+abarcaia.
+
+*Se comprueba*: crear un paquete desde el back-office y verlo aparecer en el alta
+sin desplegar.
+*Dónde*: `lib/provisioning/catalogo.js:141-167` son los dos de ahora y
+`app/admin/clientes/page.jsx:629-639` los pinta.
+*Comprobado en producción*: 12/08/2026 — dos paquetes, ambos de salud, ambos
+escritos en el código.
+
+### Una sola demo para todos los oficios · `demo`
+
+La demo pública entra siempre al mismo sitio: el slug está escrito en el código
+(`DEMO_SLUG = "demo"`) y esa cuenta tiene **20 módulos activos a la vez** —
+clínica, nutrición, inventario, pedidos, facturación, formación, captación,
+proyectos y soporte. Una nutricionista que entra a verla se encuentra un centro
+de psicología con almacén; un centro clínico se encuentra un recetario.
+
+Jorge, 12/08: hacer demos por oficio, al menos una clínica y una de nutrición.
+
+Lo que hay que resolver antes de sembrar nada es **cómo elige el visitante**. Hoy
+el botón hace un POST a `/api/auth/demo` que no admite ningún parámetro, así que
+o se abre a un slug pedido —con lista blanca, nunca el slug tal cual, que sería
+la puerta para entrar en cualquier cliente— o hay un botón por demo.
+
+Y cada demo nueva se lleva consigo su copia dorada, que es lo que la deja
+impecable para el siguiente visitante. Esa copia ya está desincronizada y su
+restauración se abandona a medias (ver la tarea de la demo pública, más abajo):
+multiplicar demos sin arreglar eso antes multiplica el problema por tres.
+
+*Se comprueba*: desde la web se puede entrar a una demo de nutrición y a una
+clínica, y cada una se limpia sola entre visitantes.
+*Dónde*: `app/api/auth/demo/route.js:10` es el slug escrito a mano;
+`scripts/demo-golden-snapshot.js` es la copia.
+*Comprobado en producción*: 12/08/2026 — un solo tenant de demo, con 20 módulos
+encendidos.
+
+### Aumenta necesita el formulario de profesionales en su web · `aumenta`
+
+Recado de Jorge, 12/08. Aumenta tiene los dos orígenes de leads encendidos
+—Profesionales y Comerciales— y **un solo formulario público**: «familias»
+(«Cuéntanos qué necesitáis»), que ya ha recogido 20 solicitudes. Falta el otro:
+el de los profesionales que derivan pacientes —colegios, pediatras, otros
+gabinetes— incrustado en su WordPress.
+
+No es programar. Un formulario es una FILA de la tabla `forms` —las preguntas son
+datos, no código— así que se hace con un seed como los que ya existen y se pega
+el embed en su web, sin desplegar el CRM. El límite conocido de la v1 es que
+Aumenta no podrá editarse las preguntas sola: las cambia quien administra,
+relanzando ese script.
+
+*Se comprueba*: el formulario de profesionales está publicado en la web de
+Aumenta y sus solicitudes caen en la bandeja de Comerciales.
+*Dónde*: `docs/modules/formularios.md`; los seeds de ejemplo son
+`scripts/seed-formulario-*.js`.
+*Comprobado en producción*: 12/08/2026 — Aumenta tiene 1 formulario activo
+(«familias») y 20 solicitudes; nutri_laura tiene 2 formularios y 70 solicitudes.
 
 ### El back-office sabe suspender a un cliente, pero no darlo de baja · producto
 
@@ -611,6 +891,34 @@ Cosas que no se pueden hacer sin que Jorge o Rodrigo elijan. Van como tareas y
 no como una lista suelta a propósito: así aparecen en el tablero. Cuando se
 decida, la respuesta se escribe aquí y la tarea baja a su prioridad.
 
+### ¿El Registro deja de ser de solo lectura? · interno
+
+Jorge lo pidió el 12/08: poder marcar una tarea como resuelta desde el Registro
+del back-office, y poder añadir tareas a mano, sin pasar por el repositorio.
+
+Eso invierte una decisión que está escrita y razonada en el propio endpoint que
+lo pinta: «un backlog en base de datos se actualiza luego —y luego es nunca—; uno
+en el repo se revisa en el diff, viaja con el código que lo resuelve y tiene
+historial de quién lo escribió». La pantalla es de leer a propósito.
+
+Y hay un obstáculo que no es de criterio sino físico: `docs/backlog.md` y
+`docs/resuelto.md` **viajan dentro de la imagen de Docker**. Lo que la pantalla
+escribiera se guardaría en el disco del contenedor y **el siguiente despliegue se
+lo llevaría por delante**, sin dar ningún error. Así que no existe la versión
+pequeña de esto. Las tres salidas dan productos distintos:
+
+- Las tareas pasan a una tabla de `master`. Se gana editarlas desde el móvil; se
+  pierde el diff, el historial y que una tarea se cierre en el mismo commit que
+  su arreglo.
+- Los ficheros siguen mandando y la pantalla no escribe. Es lo de hoy.
+- Término medio: lo apuntado a mano vive en una tabla y se PINTA junto a lo de
+  los ficheros, marcado como tal, sin tocar los `.md`. Se gana apuntar algo en
+  caliente; lo que se arregla se sigue cerrando en su commit.
+
+*Comprobado en producción*: 12/08/2026 — la API del Registro solo tiene GET y lee
+los dos ficheros del disco del contenedor; la línea que los mete en la imagen es
+`Dockerfile:33`.
+
 ### ¿La IA la ponen ellos, la ponemos nosotros, o se deja como está? · producto
 
 El CRM tiene **once disparadores de IA repartidos por nueve módulos** —el
@@ -635,9 +943,17 @@ tarea son las CLAVES, no el contador.
 No está roto ni escondido: la tarjeta para pegar la clave sale en Configuración
 → IA de todos los clientes (regla #14), y sin ella el CRM contesta «Este cliente
 no tiene configurada la clave de IA». Es que nadie la ha puesto — y lo más
-probable es que nadie sepa que tiene que ponerla. Hay que elegir una: que se les
-explique y la pongan ellos, que la pongamos nosotros y vaya dentro del precio, o
-dejarlo así y asumir que la IA del producto es un adorno.
+probable es que nadie sepa que tiene que ponerla.
+
+✅ **Media decisión tomada (Jorge, 12/08)**: el MECANISMO es que puedan las dos
+partes — el cliente desde su Configuración, como hasta ahora, y además nosotros
+desde Custodia. Eso ya está apuntado como tarea en P2 («Custodia sabe qué claves
+le faltan…»), con el detalle de que el campo del back-office tiene que ser de
+solo escribir para no romper la regla de no descifrar nada.
+
+Lo que sigue SIN decidir es lo comercial, que es la mitad cara: si el consumo de
+IA lo paga el cliente con su propia clave o lo ponemos nosotros dentro del
+precio. Poder pegársela desde Custodia no responde quién paga los tokens.
 
 *Comprobado en producción*: 10/08/2026 — **1 de 9 clientes con clave de
 Anthropic (nosotros) y 0 de 9 con la de OpenAI**, leído de
