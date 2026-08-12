@@ -89,7 +89,26 @@
       "Bash(python -c \"import pypdf;print\\('paginas:', len\\(pypdf.PdfReader\\('aumenta-modulos-crm.pdf'\\).pages\\)\\)\")",
       "Bash(python -c ' *)",
       "Bash(cp C:/Users/jorge/AppData/Local/Temp/claude/C--dev-salamandra-crm-salamandra-2/172dfe3e-dfc3-4598-aa5b-eb425c093156/scratchpad/aumenta-modulos-crm.pdf C:/Users/jorge/Desktop/aumenta-modulos-crm.pdf)",
-      "Read(//c/Users/jorge/Desktop/**)"
+            "Read(//c/Users/jorge/Desktop/**)",
+      "Bash(git push origin master)",
+      "Bash(git fetch *)",
+      "Bash(git pull --rebase)",
+      "Bash(git rebase origin/master)",
+      "Bash(git stash *)",
+      "Bash(git status *)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git show *)",
+      "Bash(git branch *)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git push -f *)",
+      "Bash(git reset --hard*)"
+    ]
+  }
+}
+      
     ]
   }
 }
