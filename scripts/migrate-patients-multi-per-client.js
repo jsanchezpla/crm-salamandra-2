@@ -50,7 +50,7 @@ async function indexExists(s, schema, indexName) {
 
 async function fetchSlugs(s) {
   const [rows] = await s.query(`
-    SELECT DISTINCT t.slug FROM master.tenants t WHERE t.status = 'active' ORDER BY t.slug
+    SELECT DISTINCT t.slug FROM master.tenants t ORDER BY t.slug
   `);
   // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
   // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.

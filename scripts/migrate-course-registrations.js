@@ -142,7 +142,7 @@ async function fetchTenantsWithTraining(s) {
     SELECT t.slug
     FROM master.tenants t
     JOIN master.tenant_modules tm ON tm.tenant_id = t.id
-    WHERE t.status = 'active' AND tm.module_key = 'training' AND tm.enabled = true
+    WHERE tm.module_key = 'training' AND tm.enabled = true
     ORDER BY t.slug
   `);
   // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se

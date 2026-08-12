@@ -212,7 +212,7 @@ async function fetchOutreachSlugs(s) {
     SELECT t.slug
     FROM master.tenants t
     JOIN master.tenant_modules tm ON tm.tenant_id = t.id
-    WHERE t.status = 'active' AND tm.module_key = 'outreach' AND tm.enabled = TRUE
+    WHERE tm.module_key = 'outreach' AND tm.enabled = TRUE
     ORDER BY t.slug
   `);
   // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se

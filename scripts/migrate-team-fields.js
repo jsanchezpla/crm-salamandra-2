@@ -31,9 +31,9 @@ const COLUMNS = [
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
 
-async function fetchActiveSlugs(sequelize) {
+async function fetchTargetSlugs(sequelize) {
   const [rows] = await sequelize.query(
-    `SELECT slug FROM master.tenants WHERE status = 'active' ORDER BY slug`
+    `SELECT slug FROM master.tenants ORDER BY slug`
   );
   // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
   // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
@@ -128,7 +128,7 @@ async function main() {
 
   try {
     header("Obteniendo lista de tenants activos...");
-    const slugs = await fetchActiveSlugs(sequelize);
+    const slugs = await fetchTargetSlugs(sequelize);
     if (slugs.length === 0) {
       log("· No hay tenants activos. Nada que hacer.");
       await sequelize.close();

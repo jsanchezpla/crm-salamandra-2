@@ -214,8 +214,7 @@ async function fetchProjectTenantSlugs(s) {
     SELECT t.slug
     FROM master.tenants t
     JOIN master.tenant_modules tm ON tm.tenant_id = t.id
-    WHERE t.status = 'active'
-      AND tm.module_key = 'projects'
+    WHERE tm.module_key = 'projects'
       AND tm.enabled = TRUE
     ORDER BY t.slug
   `);

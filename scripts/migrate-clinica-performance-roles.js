@@ -47,7 +47,7 @@ async function fetchTargetSlugs(s) {
     SELECT DISTINCT t.slug
     FROM master.tenants t
     JOIN master.tenant_modules tm ON tm.tenant_id = t.id
-    WHERE t.status = 'active' AND tm.enabled = TRUE AND tm.module_key IN ('clinica','pacientes')
+    WHERE tm.enabled = TRUE AND tm.module_key IN ('clinica','pacientes')
     ORDER BY t.slug
   `);
   // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se

@@ -35,7 +35,7 @@ async function tableExists(s, schema, table) {
   return r.length > 0;
 }
 async function fetchSlugs(s) {
-  const [rows] = await s.query(`SELECT DISTINCT slug FROM master.tenants WHERE status = 'active' ORDER BY slug`);
+  const [rows] = await s.query(`SELECT DISTINCT slug FROM master.tenants ORDER BY slug`);
   // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
   // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
   return acotarSlugs(rows.map((x) => x.slug));

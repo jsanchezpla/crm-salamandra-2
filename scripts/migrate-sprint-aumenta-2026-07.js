@@ -86,8 +86,8 @@ async function ensureUuidFn(s) {
   try { await s.query(`SELECT gen_random_uuid()`); return true; } catch { return false; }
 }
 
-async function fetchActiveSlugs(s) {
-  const [rows] = await s.query(`SELECT slug FROM master.tenants WHERE status = 'active' ORDER BY slug`);
+async function fetchTargetSlugs(s) {
+  const [rows] = await s.query(`SELECT slug FROM master.tenants ORDER BY slug`);
   // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
   // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
   return acotarSlugs(rows.map((r) => r.slug));
@@ -309,7 +309,7 @@ async function main() {
   }
   const sequelize = new Sequelize(process.env.DATABASE_URL, { dialect: "postgres", logging: false });
 
-  const slugs = await fetchActiveSlugs(sequelize);
+  const slugs = await fetchTargetSlugs(sequelize);
   if (slugs.length === 0) {
     log("· Ningún tenant activo.");
     await sequelize.close();

@@ -445,9 +445,9 @@ async function processSchemaInTx(s, t, schema) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────
 
-async function fetchActiveSlugs(s) {
+async function fetchTargetSlugs(s) {
   const [rows] = await s.query(
-    `SELECT slug FROM master.tenants WHERE status = 'active' ORDER BY slug`
+    `SELECT slug FROM master.tenants ORDER BY slug`
   );
   return rows.map((r) => r.slug);
 }

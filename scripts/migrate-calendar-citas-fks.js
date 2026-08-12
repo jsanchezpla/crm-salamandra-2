@@ -39,9 +39,9 @@ function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
 // Ahora se recorren TODOS los tenants activos y se decide por la EXISTENCIA DE
 // LA TABLA, no por el módulo: si la tabla está, se blinda; si no está, ya nacerá
 // correcta desde el modelo cuando `db:sync` la cree.
-async function fetchActiveSlugs(s) {
+async function fetchTargetSlugs(s) {
   const [rows] = await s.query(
-    `SELECT slug FROM master.tenants WHERE status = 'active' ORDER BY slug`
+    `SELECT slug FROM master.tenants ORDER BY slug`
   );
   // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
   // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
@@ -111,7 +111,7 @@ async function main() {
   }
   const s = new Sequelize(process.env.DATABASE_URL, { dialect: "postgres", logging: false });
 
-  const slugs = await fetchActiveSlugs(s);
+  const slugs = await fetchTargetSlugs(s);
   header(`Tenants activos: ${slugs.length} (${slugs.join(", ")})`);
 
   let calOk = 0, calSkip = 0, citOk = 0, citSkip = 0;

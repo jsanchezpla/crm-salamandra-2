@@ -41,10 +41,11 @@ const db = new Sequelize(DATABASE_URL, {
  *     lo que siempre acaba pasando con una lista copiada a mano.
  */
 async function slugsDestino() {
-  // `status = 'active'` es el criterio que ya usan las otras ocho migraciones
-  // que se enumeran solas: mismo criterio en todas, o nadie sabe cuál manda.
+  // TODOS los tenants, sin mirar el estado: mismo criterio en todas las que se
+  // enumeran solas, o nadie sabe cuál manda. Era `status = 'active'` hasta el
+  // 12/08/2026 — el porqué del cambio, en la regla 12 de CLAUDE.md.
   const [filas] = await db.query(
-    `SELECT slug FROM master.tenants WHERE status = 'active' ORDER BY slug`
+    `SELECT slug FROM master.tenants ORDER BY slug`
   );
   // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
   // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.

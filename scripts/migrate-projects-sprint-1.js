@@ -353,7 +353,7 @@ async function processSchemaInTx(s, t, schema) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────
 
-async function fetchActiveSlugs(s) {
+async function fetchTargetSlugs(s) {
   // Filtrar por tenants con el módulo `projects` activo. Sin este JOIN, la
   // migración corre en tenants como `nutri_laura`/`healim` que nunca tuvieron
   // el módulo y no tienen tabla `projects` → los CREATE TABLE con FK a
@@ -362,8 +362,7 @@ async function fetchActiveSlugs(s) {
     `SELECT t.slug
      FROM master.tenants t
      JOIN master.tenant_modules tm ON tm.tenant_id = t.id
-     WHERE t.status = 'active'
-       AND tm.module_key = 'projects'
+     WHERE tm.module_key = 'projects'
        AND tm.enabled = true
      ORDER BY t.slug`
   );
@@ -392,7 +391,7 @@ async function main() {
     log(`PostgreSQL: ${versionRows[0]?.server_version ?? "?"}`);
 
     header("Obteniendo lista de tenants activos...");
-    const slugs = await fetchActiveSlugs(sequelize);
+    const slugs = await fetchTargetSlugs(sequelize);
     if (slugs.length === 0) {
       log("· No hay tenants activos. Nada que hacer.");
       await sequelize.close();

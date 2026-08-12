@@ -216,9 +216,9 @@ async function processSchemaInTx(s, t, schema) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────
 
-async function fetchActiveSlugs(s) {
+async function fetchTargetSlugs(s) {
   const [rows] = await s.query(
-    `SELECT slug FROM master.tenants WHERE status = 'active' ORDER BY slug`
+    `SELECT slug FROM master.tenants ORDER BY slug`
   );
   // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
   // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
@@ -245,7 +245,7 @@ async function main() {
     log(`PostgreSQL: ${versionRows[0]?.server_version ?? "?"}`);
 
     header("Obteniendo lista de tenants activos...");
-    const slugs = await fetchActiveSlugs(sequelize);
+    const slugs = await fetchTargetSlugs(sequelize);
     if (slugs.length === 0) {
       log("· No hay tenants activos. Nada que hacer.");
       await sequelize.close();

@@ -71,7 +71,7 @@ async function fetchTargetSlugs(s) {
     SELECT DISTINCT t.slug
     FROM master.tenants t
     JOIN master.tenant_modules tm ON tm.tenant_id = t.id
-    WHERE t.status = 'active' AND tm.enabled = TRUE AND tm.module_key = 'nutricion'
+    WHERE tm.enabled = TRUE AND tm.module_key = 'nutricion'
     ORDER BY t.slug
   `);
   return rows.map((r) => r.slug);

@@ -645,12 +645,19 @@ apellido en toda la UI.
     base de datos.
     - `scripts/_schema-targets.js` (lo usan 43 de las 103 migraciones) ya no
       mira el estado, ni en `byTable` ni en `byModule`.
-    - **Las otras 29 llevan su propio `WHERE status = 'active'` copiado a mano**
-      y siguen igual. No es urgente porque reactivar un cliente ahora pone su
-      schema al día solo (`lib/provisioning/cicloVida.js`), pero una migración
-      lanzada mientras el cliente está suspendido no le llega.
+    - Las otras 30, que llevaban su propio `WHERE status = 'active'` copiado a
+      mano, se barrieron el mismo día. `fetchActiveSlugs` pasó a llamarse
+      `fetchTargetSlugs` donde existía: el nombre habría empezado a mentir.
+    - Reactivar un cliente pone además su schema al día solo
+      (`lib/provisioning/cicloVida.js`), que es el momento en que el retraso
+      pasa de inofensivo a 500 en pantalla.
     - Una migración nueva usa el helper. Si por lo que sea no puede, que su
       consulta no mire `status`.
+
+    > **Ojo: esto vale para la ESTRUCTURA, no para los datos.** Un seed o un
+    > backfill (`seed-foods-base-catalog.js`, `backfill-nutricion-assignments.js`,
+    > `reset-aumenta-real-data.js`) sí debe seguir mirando `status`: sembrar
+    > datos en un cliente apagado no arregla nada y puede ensuciar lo que había.
 13. En diseño responsivo, todo modal o panel lateral (drawer) debe respetar la
     barra superior móvil del dashboard (`h-14`, ~56px, `lg:hidden`) que contiene
     el botón del menú hamburguesa. Patrón: `top-14 lg:top-0 ... bottom-0`
