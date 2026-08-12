@@ -252,10 +252,20 @@ dice —«No existe DELETE»—, igual que `lib/provisioning/cicloVida.js`: «un
 que borra los datos de un cliente es un accidente esperando su turno».
 
 Para el BORRADO esa decisión sigue siendo buena. El problema es que no hay nada
-en medio: quien se va se queda suspendido y ya. En producción hay **dos así
-desde el 08/08** —`quality_energy` (45 tablas, 1,4 MB) y `healim` (17 tablas,
-760 kB)—, cada uno con su usuario y su schema enteros, escondidos del listado
-tras el interruptor «ver los N suspendidos», y nada dice qué pasa con ellos.
+en medio: quien se va se queda suspendido y ya, con su usuario y su schema
+enteros, escondido del listado tras el interruptor «ver los N suspendidos», y
+nada dice qué pasa con él.
+
+**Actualizado el 12/08/2026.** Los tres suspendidos que había —`abarcaia`,
+`quality_energy` y `healim`— se dieron de baja ese día por SSH, a mano, y se
+purgaron. O sea que hoy no hay ninguno esperando; lo que queda es que la próxima
+vez vuelva a hacerse igual, desde una terminal, en vez de desde el panel. De esa
+operación salieron dos cosas para esta tarea: la red YA sobrevive al despliegue
+(ver el punto tachado de abajo) y estos tres no tenían ni un fichero en
+`uploads/`, así que el agujero de los ficheros sigue sin haberse probado con un
+cliente que sí los tenga. Y una tercera, nueva: los tres `.rollback.sql` que
+quedaron en `uploads/_bajas/` ya no sirven para nada —sus schemas están
+purgados— pero **siguen teniendo los `password_hash` en claro sobre disco**.
 
 Existe media pieza: `scripts/borrar-tenant.js` (11/08), **ya en git y desplegada
 el 11/08**. Su idea es la correcta —APARTAR en vez de destruir: renombrar el
@@ -276,10 +286,12 @@ trabajo de verdad de esta tarea:
   `^zzz_baja_<slug>_\d{14}$` **y no con un `LIKE`**, porque un slug puede ser
   prefijo de otro (`demo` se habría llevado por delante los apartados de
   `demo_golden`).
-- **La red no sobrevive al despliegue.** El `.rollback.sql` se escribe en
-  `/app/backups`, dentro del contenedor, y ahí el único volumen montado es
-  `/app/uploads`. El siguiente `deploy.sh` se lo lleva. Además deja los
-  `password_hash` en claro sobre disco.
+- ~~**La red no sobrevive al despliegue.**~~ **Comprobado que ya no pasa el
+  12/08/2026.** El `.rollback.sql` se escribe hoy en `/app/uploads/_bajas/`, que
+  es el volumen montado, y los tres de ese día siguieron ahí después de un
+  `deploy.sh` completo. Lo que NO está arreglado es la segunda mitad del punto:
+  esos ficheros llevan los `password_hash` en claro sobre disco, con permisos
+  `600`, y nadie los caduca.
 - **Los ficheros se quedan.** El script no toca `uploads/` en ninguna línea, y
   los seis almacenes no comparten forma: tres ponen el slug primero y tres lo
   meten detrás del tipo (`documents/`, `support/`, `nutricion-recipes/`).
@@ -310,10 +322,13 @@ montado, y `master.audit_logs` guarda su fila `provisioning.cliente_baja`.
 `lib/provisioning/cicloVida.js:26-28` (la decisión de no tener botón) y
 `scripts/borrar-tenant.js` (la red efímera, en la parte que escribe el
 `.rollback.sql`; la purga sin frenos que había ahí ya está arreglada).
-*Comprobado en producción*: 11/08/2026 — 9 clientes, **2 suspendidos** desde el
-08/08; ni un schema `zzz_baja_*`, cero filas `provisioning.cliente_baja`, ningún
-script de baja en el `scripts/` del contenedor, y `docker inspect` confirma que
-el único volumen montado es `/opt/crm-salamandra/uploads → /app/uploads`.
+*Comprobado en producción*: 12/08/2026 — **7 clientes y ningún suspendido**: los
+tres que había se dieron de baja y se purgaron ese día por SSH, no desde el
+panel, que sigue sin ofrecerlo. Los tres `.rollback.sql` sobrevivieron al
+`deploy.sh` de las 20:20 en `uploads/_bajas/`, y `uploads/` no tenía ni un
+fichero de los tres, así que el agujero de los ficheros sigue sin probarse.
+(Antes, 11/08/2026: 9 clientes, 2 suspendidos desde el 08/08, ni un schema
+`zzz_baja_*` y cero filas `provisioning.cliente_baja`.)
 
 ### La nutrición solo sabe vivir en casa de Laura · `aumenta`, producto
 
@@ -542,6 +557,34 @@ sembrar.
 ---
 
 ## P3 — deuda
+
+### La foto dorada de la demo va por detrás del schema · `demo`
+
+La demo se restaura sola desde `crm_demo_golden` en cada recarga dura, y ese
+schema es una FOTO: se sacó un día y ahí se quedó. Las migraciones no lo tocan
+—y hacen bien: no es un tenant de `master`, así que no aparece en ninguna lista—,
+de modo que cada columna que se añade desde entonces existe en `crm_demo` y no
+en la foto.
+
+No rompe nada, y eso es lo que hace que nadie se acuerde: el restore solo copia
+las columnas que existen en LOS DOS schemas, así que las nuevas se quedan con su
+valor por defecto en vez de con el dato de ejemplo. El efecto es que la demo
+—que es el escaparate de ventas— arranca con esos campos vacíos: hoy son al
+menos cuatro de `clients` (`fiscal_tax_id`, `es_consulta_externa`,
+`categoria_externa`, `auto_confirm_bookings`), y la lista crece sola con cada
+sprint.
+
+Se arregla rehaciendo la foto con `scripts/demo-golden-snapshot.js` después de
+un sprint que añada columnas. Lo que falta por decidir es cuándo: a mano cada
+cierto tiempo, o dejarlo dicho en el guion de despliegue.
+
+*Se comprueba*: comparar columnas entre `crm_demo` y `crm_demo_golden` para una
+tabla cualquiera; hoy salen cuatro de diferencia en `clients`.
+*Dónde*: `lib/demo/resetDemo.js` (la parte que solo copia columnas comunes) y
+`scripts/demo-golden-snapshot.js`.
+*Comprobado en producción*: 12/08/2026 — `crm_demo_golden` no tiene ninguna de
+las cuatro columnas que sí tiene `crm_demo`, y en los logs de la app no aparece
+ni un fallo de `demo-reset` en 48 h: falla en silencio por diseño.
 
 ### En Formación, «Usuarios» y «Alumnos por curso» se pisan · `retorika`, `aumenta`, `nutri_laura`, `demo`, `somos`
 

@@ -28,6 +28,228 @@ Lo más reciente arriba.
 
 ## 12/08/2026
 
+### Abarca, Quality y Healim se han dado de baja, y con ellos Referidos · `abarcaia`, `quality_energy`, `healim`, producto
+
+**Lo que pidió Rodrigo.** «Abarca IA, Quality y Healim hay que eliminarlos
+totalmente. Y el módulo de referidos también. Era una cosa que pidió Abarca y
+que nadie ha querido.»
+
+**Lo que se hizo con los datos.** Los tres se apartaron con `borrar-tenant.js`
+(el schema se renombra, no se destruye) y después se purgaron. Entre medias se
+sacó un volcado de los tres a
+`/root/backups/bajas-abarcaia-quality-healim-20260812.sql.gz` en el VPS, y se
+comprobó DENTRO del fichero que llevaba los datos: 213 leads (84 de Abarca, 129
+de Quality), 5 citas pasadas de Healim y sus 10 disponibilidades. Destruir 213
+leads con una orden de una línea y sin red no es una operación, es un accidente.
+Ese fichero es ahora el único sitio donde existen esos datos.
+
+**Por qué Referidos no se echará de menos.** Nunca fue un módulo de verdad: no
+tenía tabla propia —su pantalla leía y escribía `leads` filtrando por
+`customFields.source = 'referido_abarcaia'`, con el nombre de un cliente escrito
+dentro del código— y sus endpoints exigían `leads` y NUNCA `referidos`. O sea
+que cualquiera con Leads podía abrir `/referidos` sin haberlo comprado, y quien
+comprara solo Referidos se habría llevado un 403 en su propia pantalla. Por la
+mañana ya se había caído del catálogo de venta; esto se llevó el resto.
+
+**Qué se ha ido con ellos.** La pantalla, sus tres endpoints, el formulario
+público, la entrada del menú y de la portada, su etiqueta en los accesos del
+equipo, sus fichas de dependencias e integraciones, los overrides de leads de
+Abarca y Quality, sus seeds y los scripts de un solo uso. 5.843 líneas menos.
+
+**Dos cosas se quedaron a propósito.** Sus nombres siguen en la lista de slugs
+del Registro: este tablero lee tareas históricas donde están escritos, y
+quitarlos de ahí no borra esas tareas, las deja sin cliente y con la cola metida
+dentro del título. Y las etapas extendidas de leads, que también usa el import
+histórico de otros clientes.
+
+*Se comprueba*: en el contenedor, `docker exec crm-salamandra-app-1 find
+.next/server/app -iname "*referid*"` no devuelve nada y `ls modules/overrides`
+no tiene `abarcaia` ni `quality-energy`; en la base de datos,
+`SELECT slug FROM master.tenants` devuelve siete y no hay ningún schema
+`crm_abarcaia`, `crm_quality_energy` ni `crm_healim`.
+*Dónde*: `scripts/borrar-tenant.js`, `lib/provisioning/catalogo.js` (el porqué),
+`app/api/admin/tablero/route.js` (los slugs que se quedan).
+*Comprobado en producción*: 12/08/2026 — quedan 7 tenants (5 clientes), los tres
+schemas purgados, las tres rutas de referidos fuera del build desplegado, y
+`uploads/` sin un solo fichero de los tres.
+
+### Un cliente apagado se quedaba sin migraciones, y se notaba al encenderlo · `quality_energy`, `abarcaia`, producto
+
+**Lo que se veía.** Nada, y ese era el problema. Comprobando otra cosa apareció
+que los siete clientes activos tenían el schema al día y los suspendidos no:
+`quality_energy` llevaba 22 columnas de retraso en 7 tablas y `abarcaia` 20 en 6.
+
+**Lo que había detrás.** Las migraciones eligen sus schemas preguntando a
+`master.tenants`, y lo hacían con `WHERE status = 'active'`. Suspender apaga al
+cliente de verdad —sus usuarios no pueden entrar y sus widgets públicos no
+responden—, así que mientras está apagado nadie choca con nada y el retraso se
+acumula callado. El daño no lo hace la suspensión: lo hace la REACTIVACIÓN, que
+lo devuelve a la vida con el schema de hace meses y le revienta la primera
+pantalla que lea una columna que no existe, con un 500 genérico. Es el incidente
+del 21/07 con otro disfraz: elegir schemas por una condición de NEGOCIO en vez
+de por lo que hay en la base de datos.
+
+**Lo que se hizo.** El estado ya no se mira en ninguna parte: ni en
+`_schema-targets.js` (que usan 43 de las 103 migraciones) ni en las 30 que
+llevaban su propia consulta copiada a mano. Y reactivar a un cliente pone su
+schema al día solo, con la pieza que ya existía y que hasta ahora solo se
+disparaba al activar un módulo.
+
+**Lo que NO se tocó.** Los seeds y los backfills siguen mirando el estado, y
+está bien así: escriben datos, no estructura, y sembrar datos en un cliente
+apagado no arregla nada.
+
+*Se comprueba*: `grep "status = 'active'" scripts/migrate-*.js` no devuelve
+ninguna consulta; y suspendiendo y reactivando un cliente de prueba desde
+`/admin/clientes`, el aviso dice que su schema se ha puesto al día.
+*Dónde*: `scripts/_schema-targets.js`, `lib/provisioning/cicloVida.js` y las 30
+migraciones del commit.
+*Comprobado en producción*: 12/08/2026 — antes del arreglo, 22 y 20 columnas de
+retraso medidas contra `crm_demo`; los tres clientes en cuestión se dieron de
+baja el mismo día, así que la red queda para el siguiente.
+
+### La ficha de cliente ya no es una columna de catorce tarjetas · todos
+
+**Lo que se veía.** Rodrigo: «ficha de cliente reorganizada, que es demasiado
+larga; universal, para que el que tenga todos los módulos no se líe». En Aumenta
+la ficha medía varias pantallas, y para llegar a la facturación había que pasar
+por delante del contrato, los tutores, los consentimientos y las citas.
+
+**Lo que se hizo.** Seis pestañas, agrupadas por PREGUNTA y no por módulo:
+Datos, Interacciones, Servicio, Contrato y avisos, Citas y Facturación. El
+patrón ya lo usaba la ficha de nutri_laura; aquí se generaliza.
+
+**Lo que costaba dinero pensar.** Casi todas esas secciones se esconden solas
+cuando el tenant no tiene su módulo, así que un cliente de solo Citas tendría
+cuatro pestañas vacías, que confunde más que una ficha larga. Como el padre no
+puede saberlo sin volver a preguntar a los mismos endpoints, cada panel se mide
+en el DOM y su pestaña desaparece si dentro no queda nada. Todos se montan
+aunque solo se vea uno, que es exactamente lo que hacía la ficha antes de tener
+pestañas: ni hay peticiones de más ni se pierde lo que estés escribiendo al
+cambiar de pestaña.
+
+**De paso, dos cosas de la misma pantalla.** El botón de crear la cuenta de la
+web existía desde el 05/08 pero vivía dentro del override de nutri_laura, así
+que Aumenta no lo tenía; el backend siempre fue común y solo faltaba el botón.
+Y «Consulta externa» era la única tarjeta sin margen ni ancho máximo: se pegaba
+a la de arriba y salía más ancha que sus vecinas.
+
+*Se comprueba*: abrir cualquier ficha de `/clientes/:id` y contar las pestañas;
+en la demo salen las seis. Vaciando por consola el panel de una, su pestaña
+desaparece del menú.
+*Dónde*: `modules/default/ClientDetailModule.jsx` (`PanelPestana`),
+`components/clients/ClientCuentaWebSection.jsx`.
+*Comprobado en producción*: 12/08/2026 — desplegado a las 20:20; las seis
+pestañas pintan y los doce endpoints de la ficha responden 200.
+
+### Los festivos se ponen en el CRM, y no en cuatro ventanas del navegador · todos
+
+**Lo que se veía.** Rodrigo: «modal para festivos, que ahora es una notificación
+de navegador extraña». Marcar el 24 de diciembre eran hasta cuatro ventanas del
+navegador seguidas —la fecha a mano en DD-MM-AAAA, el motivo, un aviso de
+confirmación y otro de resultado— y para saber qué días estaban cerrados había
+que ir mes a mes mirando el calendario.
+
+**Lo que se hizo.** Un modal del CRM con la lista de todo lo cerrado por
+delante, donde se marca y se quita sin salir. Su lista NO es la del calendario a
+propósito: el calendario solo carga el mes visible, y con esa lista marcar el
+24-dic desde agosto lo haría desaparecer al instante, que se lee como que no ha
+funcionado.
+
+**Y lo mismo con los otros ocho.** Rodrigo pidió «revisar si hay algo más que
+use lo mismo», y lo había: cancelar una cita, marcar una falta, borrar, mover la
+hora, el aviso de hueco bloqueado. Todos pasan ahora por un diálogo propio y
+reutilizable. Dos cambios de comportamiento van con ello, los dos a mejor:
+«Cancelar» ahora cancela —con el diálogo del navegador, cancelar el motivo de
+cancelación cancelaba la cita igual—, y la falta ya no se pregunta con un sí/no
+que llevaba dentro «Aceptar = justificada, Cancelar = sin justificar».
+
+*Se comprueba*: en `/citas`, el botón «Festivos y cierres» abre una ventana del
+CRM, no del navegador; marcar un día lo añade a la lista y el calendario lo
+pinta atenuado.
+*Dónde*: `components/citas/ModalFestivos.jsx`, `components/ui/Dialogo.jsx`.
+*Comprobado en producción*: 12/08/2026 — probado antes en local marcando y
+quitando el 24-12-2026, con la lista y el calendario refrescándose.
+
+### La agenda ya no se mueve, y el mes no se rompe · todos
+
+**Lo que se veía.** Un scroll de unos pocos píxeles en toda la pantalla del
+calendario, y en la vista de mes un día con doce citas estiraba su fila y
+encogía las demás hasta que el mes dejaba de leerse como una rejilla.
+
+**Lo que había detrás.** El alto del calendario era una resta a ojo sobre el
+alto de la ventana, y esa cuenta no incluía la fila de ayuda de arriba. Ahora el
+calendario rellena lo que quede, que es una medida real y no una estimación:
+cambie lo que cambie encima, no puede desbordar. Y la vista de mes enseña como
+mucho cuatro citas por día, con un «+N más» que abre el resto.
+
+Se fue con ello la frase «Doble clic en un hueco para crear una cita…», que era
+justo lo que sobraba.
+
+*Se comprueba*: en `/citas`, `document.scrollingElement.scrollHeight -
+clientHeight` da 0 en las vistas de mes y de semana.
+*Dónde*: `modules/default/CitasModule.jsx`, el bloque del calendario.
+*Comprobado en producción*: 12/08/2026 — medido en local a 1280x720: el
+calendario acaba en 704 px con ventana de 720, y un día de 5 citas pinta 4 más
+el «+1 más».
+
+### La cita manual ya no se apunta sin profesional ni busca entre nadie · todos
+
+**Tres cosas que pidió Rodrigo, y una cuarta que salió al mirarlas.**
+
+**El profesional era opcional.** Se podían apuntar citas sin nadie que las
+atendiera, y esas citas acaban en la cola de `/citas/sin-profesional`: 1.827 de
+las 12.030 que importó Aumenta vinieron así. Ahora es obligatorio, pero solo si
+hay equipo del que elegir, para que un cliente sin módulo Equipo no se quede
+bloqueado por un campo que no ve.
+
+**El tipo de cita no tenía buscador.** Aumenta tiene 57. Se probó con umbral —a
+partir de ocho tipos— y Rodrigo lo descartó el mismo día: quien apunta citas
+todo el día escribe siempre las primeras letras, y que la caja aparezca o no
+según el cliente convierte un gesto automático en algo que hay que mirar antes.
+
+**El buscador de pacientes salía vacío**, con un cartel que sonaba a que faltaba
+configurar algo. El servidor filtraba por una marca de módulo asistencial que
+vive en la ficha del CLIENTE, y en un centro clínico el cliente es la familia:
+Aumenta tiene 1.083 fichas y CERO con esa marca. Ahora, si no la tiene nadie, la
+marca no está en uso en ese centro y se ofrecen todos los clientes. Donde sí se
+usa, no cambia nada.
+
+**Y los rótulos se contradecían.** Arriba pedía «Cliente / paciente» con
+asterisco y abajo ofrecía «Paciente (opcional)», que leídos seguidos parecían el
+mismo campo. Ahora dicen de quién hablan: «Cliente (la familia)» y «Paciente»,
+con su frase debajo.
+
+*Se comprueba*: en «Nueva cita manual», guardar sin profesional da «Elige el
+profesional que la atiende»; el desplegable de tipo de cita trae caja de
+búsqueda aunque solo haya dos tipos; y `/api/citas/clientes?q=` devuelve fichas
+en un centro donde nadie tiene la marca asistencial.
+*Dónde*: `modules/default/CitasModule.jsx`, `app/api/citas/clientes/route.js`,
+`components/citas/BuscadorPaciente.jsx`.
+*Comprobado en producción*: 12/08/2026 — en local, el buscador pasó de 0 a 15
+fichas y la validación del profesional salta.
+
+### Los bloqueos tienen pantalla propia · todos
+
+**Lo que se veía.** «Vacaciones y ausencias» vivía debajo del catálogo de tipos
+de cita desde el 06/08, porque se pidió como «un tipo de cita especial». No lo
+es —ni por dentro ni por fuera—, y tener las dos cosas apiladas obligaba a bajar
+por el catálogo entero para apuntar unas vacaciones.
+
+**Lo que se hizo.** Pantalla propia en `/citas/bloqueos`, con su botón al lado
+de «Tipos de cita» y «Disponibilidad» en las tres cabeceras del módulo. Como sus
+vecinas, no está en el menú lateral: se llega por esos botones, y la puerta de
+verdad la siguen poniendo los endpoints.
+
+Conviene no confundirlo con un festivo: el festivo cierra el centro entero un
+día y se pone desde el calendario; el bloqueo es de una persona, con hora de
+inicio y de fin.
+
+*Se comprueba*: `/citas/bloqueos` abre la pantalla, y `/citas/tipos` ya no
+enseña el panel de vacaciones al final del catálogo.
+*Dónde*: `app/(dashboard)/citas/bloqueos/page.jsx`.
+*Comprobado en producción*: 12/08/2026 — desplegado a las 20:20.
+
 ### «Fichas a completar» desaparece cuando no queda nada que completar · `somos`, `demo`, `aumenta`
 
 `somos` tenía esa pantalla en el menú con **cero filas en las ocho carpetas**: la
