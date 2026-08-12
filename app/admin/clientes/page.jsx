@@ -312,7 +312,32 @@ function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
   const resuelto = useMemo(() => validarSeleccion(f.modulos, exige, orden), [f.modulos, exige, orden]);
 
   const nuevos = resuelto.modulos.filter((m) => !cliente.modulos.includes(m));
-  const quitados = cliente.modulos.filter((m) => !resuelto.modulos.includes(m));
+
+  /*
+   * ⚠️ SOLO SE CUENTA COMO «SE QUITA» LO QUE EL SERVIDOR VA A QUITAR DE VERDAD
+   * (12/08/2026, encontrado al probar el editor en producción).
+   *
+   * `cliente.modulos` son los módulos ACTIVOS, y `resuelto.modulos` sale de
+   * `orden`, que es el catálogo de venta. Un módulo interno —hoy solo
+   * `provisioning`, que es el que abre el back-office y lo tiene nuestro propio
+   * tenant— no está en el catálogo, así que no tiene casilla y caía siempre en
+   * `quitados`.
+   *
+   * Consecuencia, comprobada abriendo nuestra ficha en producción: al pulsar
+   * «Guardar cambios» salía la confirmación diciendo **«SE QUITAN 1 ·
+   * provisioning»**. Y era MENTIRA: `cicloVida.js:190` filtra por
+   * `CLAVES_VALIDAS` justo para que guardar nuestra ficha no nos deje fuera del
+   * panel. O sea que la pantalla prometía apagar el módulo más delicado del CRM
+   * y el servidor lo ignoraba en silencio.
+   *
+   * Las dos mitades son malas: una confirmación que asusta con algo que no va a
+   * pasar se acaba pulsando sin leer, que es exactamente lo contrario de para lo
+   * que está. Aquí se aplica el MISMO filtro que el servidor.
+   */
+  const enCatalogo = useMemo(() => new Set(orden), [orden]);
+  const quitados = cliente.modulos.filter(
+    (m) => !resuelto.modulos.includes(m) && enCatalogo.has(m)
+  );
 
   // La marca se manda SOLO si cambió: `editarTenant` hace merge sobre lo que ya
   // hubiera, y mandarla siempre reescribiría el `settings` del cliente en cada
@@ -579,6 +604,18 @@ export default function AltaClientesPage() {
     [form.modulos, exige, ordenModulos]
   );
 
+  /**
+   * ¿Lo marcado coincide EXACTAMENTE con algún paquete? Solo sirve para decir
+   * cuál está puesto; no se guarda ni se manda. En cuanto se toca una casilla
+   * pasa a `null` y la pantalla dice «Personalizado», que es lo que de verdad
+   * tienen todos los clientes.
+   */
+  const paquetePuesto = useMemo(() => {
+    const mio = [...form.modulos].sort().join(",");
+    const p = (datos?.paquetes ?? []).find((x) => [...x.modulos].sort().join(",") === mio);
+    return p?.key ?? null;
+  }, [form.modulos, datos]);
+
   function toggleModulo(key) {
     setForm((f) => ({
       ...f,
@@ -714,19 +751,54 @@ export default function AltaClientesPage() {
               Módulos contratados ({resuelto.modulos.length})
             </div>
 
-            {/* Paquetes: marcan de golpe lo que se vende con un nombre. No
-                sustituyen a las casillas — después se añade o se quita. */}
-            {(datos.paquetes ?? []).length > 0 && (
-              <div className="mb-4 flex flex-wrap gap-2">
-                {datos.paquetes.map((p) => (
-                  <button key={p.key} type="button" title={p.desc}
-                    onClick={() => setForm((f) => ({ ...f, modulos: [...p.modulos] }))}
-                    className="px-3 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700 hover:bg-neutral-50 transition">
-                    {p.nombre}
-                  </button>
-                ))}
+            {/*
+              LAS DOS FORMAS, DICHAS (12/08/2026, Jorge: «que se puedan ambas
+              formas, por paquetes y número de módulos personalizados, que es lo
+              que tienen todos los tenants ahora»).
+
+              Los paquetes ya estaban, pero como dos botones sueltos encima de
+              las casillas: nada decía que fueran una manera de empezar, ni cuál
+              se había usado. Ahora es una elección con su rótulo y su estado —
+              y sigue sin guardarse en ninguna parte: en cuanto se toca una
+              casilla, esto pasa a «Personalizado» y lo que se manda es la lista
+              de módulos, como siempre.
+            */}
+            <div className="mb-4 rounded-lg border border-neutral-200 bg-neutral-50/60 px-3 py-2.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mr-1">
+                  Cómo se monta
+                </span>
+                {(datos.paquetes ?? []).map((p) => {
+                  const puesto = paquetePuesto === p.key;
+                  return (
+                    <button key={p.key} type="button" title={p.desc}
+                      onClick={() => setForm((f) => ({ ...f, modulos: [...p.modulos] }))}
+                      className={`px-3 py-1.5 rounded-lg border text-xs transition ${
+                        puesto
+                          ? "border-transparent text-white"
+                          : "border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50"
+                      }`}
+                      style={puesto ? { background: "var(--color-primary, #1B3A2D)" } : undefined}>
+                      {p.nombre}
+                    </button>
+                  );
+                })}
+                <button type="button"
+                  onClick={() => setForm((f) => ({ ...f, modulos: [...(datos.recomendados ?? [])] }))}
+                  className={`px-3 py-1.5 rounded-lg border text-xs transition ${
+                    paquetePuesto === null
+                      ? "border-neutral-400 bg-white text-neutral-800"
+                      : "border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50"
+                  }`}>
+                  Personalizado
+                </button>
               </div>
-            )}
+              <p className="text-[11px] text-neutral-500 mt-2">
+                {paquetePuesto
+                  ? "Un paquete solo marca sus casillas: desde aquí puedes añadir o quitar lo que haga falta, y deja de ser un paquete."
+                  : `Personalizado: ${resuelto.modulos.length} módulo(s) marcados a mano. Es como está dado de alta todo el mundo.`}
+              </p>
+            </div>
 
             <div className="space-y-4">
               {datos.catalogo.map((g) => (

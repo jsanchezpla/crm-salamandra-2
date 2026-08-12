@@ -63,6 +63,13 @@ export const ONE_OFF = {
   "migrate-inventory-rework":
     "SUPERADA (02/08/2026). Es el rework de abril: creaba inbound_products, outbound_products, formulas y client_outbound_aliases, que son exactamente las tablas que `migrate-inventario-rework` (con «a») elimina. Ejecutarla en un tenant nuevo le devolvería el esquema viejo. Se conserva como histórico, NO se ejecuta.",
   "migrate-usuario-backoffice": "MASTER, no toca schemas de tenant: añade `solo_backoffice` a `master.users` para separar las cuentas del panel interno de las del CRM. Se corre a mano con `npm run db:migrate:backoffice`; aditiva, con default false, idempotente",
+  // Faltaba desde que se escribió (12/08/2026) y dejaba `check-migration-order`
+  // en rojo con dos incoherencias: «sin módulo asignado (nadie las ejecutaría)»
+  // e «ilegibles y sin arista declarada». No es la primera vez que pasa —los
+  // commits 74fc6d2 y be465f5 arreglaron lo mismo— así que el despiste es del
+  // flujo, no de nadie: una migración de MASTER no cae sola en ningún módulo.
+  "migrate-tablero-estado": "MASTER, no toca schemas de tenant: crea `master.tablero_estado`, donde el Registro guarda el tick y el reparto de cada tarea (el TEXTO sigue en los .md del repo). Se corre a mano una vez, idempotente",
+  "migrate-paquetes-modulos": "MASTER, no toca schemas de tenant: crea `master.paquetes_modulos` y siembra los dos paquetes que hasta ahora estaban escritos en `catalogo.js`. Se corre a mano con `npm run db:migrate:paquetes`; idempotente, y la semilla NO restaura lo que se haya borrado después",
 };
 
 /**

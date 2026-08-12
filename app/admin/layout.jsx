@@ -52,6 +52,9 @@ const SECCIONES = [
   // Va pegada a Módulos porque son la misma pregunta en dos pasos: qué tiene
   // cada cliente, y qué se hablan entre sí las cosas que tiene.
   { href: "/admin/integraciones", texto: "Integraciones" },
+  // Justo antes de «Alta de clientes» porque es lo que la alimenta: un paquete
+  // no es más que un atajo para marcar casillas ahí.
+  { href: "/admin/paquetes", texto: "Paquetes" },
   { href: "/admin/clientes", texto: "Alta de clientes" },
 ];
 

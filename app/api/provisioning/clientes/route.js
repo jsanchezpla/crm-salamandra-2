@@ -2,7 +2,8 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
-import { RECOMENDADOS, PAQUETES } from "../../../../lib/provisioning/catalogo.js";
+import { RECOMENDADOS } from "../../../../lib/provisioning/catalogo.js";
+import { leerPaquetesActivos } from "../../../../lib/provisioning/paquetesStore.js";
 import { catalogoConExigencias } from "../../../../lib/provisioning/dependencias.js";
 import { altaTenant, slugDesdeNombre } from "../../../../lib/provisioning/altaTenant.js";
 import { whereClientesVisibles, pideSuspendidos } from "../../../../lib/provisioning/clientesVisibles.js";
@@ -74,7 +75,11 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       // misma regla que el servidor sin tener una copia de las dependencias.
       catalogo: catalogoConExigencias(),
       recomendados: RECOMENDADOS,
-      paquetes: PAQUETES,
+      // Los paquetes ya no están escritos en el código: se crean desde
+      // /admin/paquetes (12/08/2026). Si la tabla todavía no existe —el
+      // despliegue va antes que la migración— salen los dos de siempre, para
+      // que el alta no cambie mientras tanto.
+      paquetes: (await leerPaquetesActivos()).paquetes,
       clientes: tenants.map((t) => ({
         id: t.id,
         nombre: t.name,
