@@ -171,7 +171,7 @@ export default function ModulosPage() {
                 <td className="px-4 py-3.5">
                   <div className="text-[14px] font-semibold">{c.nombre}</div>
                   <div className="text-[11px] mt-0.5" style={{ color: "var(--tenue)" }}>
-                    {c.slug} · {c.plan}
+                    {c.slug}
                     {c.estado !== "active" && (
                       <span style={{ color: "var(--alerta)" }}> · {c.estado}</span>
                     )}

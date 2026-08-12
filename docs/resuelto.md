@@ -28,6 +28,116 @@ Lo más reciente arriba.
 
 ## 12/08/2026
 
+### Los contadores del embudo ya no mienten al filtrar · `abarcaia`, `aumenta`, producto
+
+Al pulsar una etapa, las demás caían a cero y el «X en total» de la cabecera se
+contagiaba: el desglose salía de un `reduce` sobre la lista que acababa de
+llegar, y esa lista viene FILTRADA.
+
+**Estaba en los OCHO overrides de leads, no en tres.** La tarea nombraba a
+abarcaia, aumenta y quality-energy porque son los únicos con embudo lleno; los
+otros cinco tenían el mismo `reduce` y nadie lo había visto.
+
+Ahora lo cuenta el servidor: `/api/leads?desglose=1` hace un `GROUP BY stage`
+con el mismo `where` que la lista **pero sin la etapa** —los demás filtros sí
+cuentan, porque describen el conjunto que se está mirando—, y el total sale de
+sumarlo. Con eso desaparece también la resta a ojo de los referidos, que solo
+descontaba los que hubieran caído en la página de 200.
+
+**Por qué se resta en vez de excluir, que es lo que hay que entender si alguien
+lo toca**: `excluirOrigen` existe por abarcaia y quality-energy, que apartan del
+embudo los leads del formulario de referidos. Un `NOT (custom_fields @> …)`
+devuelve NULL en una fila con `custom_fields` vacío y **borraría ese lead de la
+cuenta sin que se note**. Se cuenta dos veces con `@>` —positivo, y por tanto a
+prueba de NULL— y se resta.
+
+De paso: hoy esa exclusión no filtra nada. Los 84 leads de abarcaia son
+`excel_import` y **ninguno tiene `customFields.source`**, o sea que el formulario
+público de referidos no ha producido ni una entrada.
+
+*Cómo se comprobó*: la aritmética de la resta, contra los NUEVE clientes de
+producción, comparándola con un `COALESCE(custom_fields->>'source','') <> …`
+explícito — cuadra al lead en todos, y no hay ni una fila con `custom_fields` a
+NULL. El comportamiento, en el navegador sobre la demo: al filtrar por etapa los
+contadores se quedan en 42/15/15/5 y la cabecera en «42 en total», mientras la
+lista baja a 15 filas. Y con búsqueda puesta, el desglose se recalcula sobre lo
+buscado (7) y no sobre el total, o sea que el `Op.or` sobrevive a la copia del
+`where`. En producción está comprobado que el código nuevo viajó en la imagen
+(`totalSinEtapa` en el bundle desplegado); el comportamiento no se pudo ver allí
+porque el endpoint pide sesión.
+*Dónde*: `app/api/leads/route.js` (`desglosePorEtapa`) y los ocho
+`modules/overrides/*/LeadsModule.jsx`.
+
+### Una ausencia mal puesta ya se puede corregir · `nutri_laura`, producto
+
+`/api/citas/bloqueos` tenía GET, POST y DELETE y ningún PATCH: ni las fechas, ni
+el motivo, ni de quién era una ausencia se podían cambiar. Quien se equivocaba
+de día la quitaba y la volvía a escribir — y arreglar las seis que en la consulta
+de Laura quedaron a nombre de «Todo el centro» costó un script
+(`scripts/reasignar-ausencias-sin-persona.js`).
+
+Ahora hay PATCH y un botón de Editar. **Los permisos no se aflojaron**, y se
+añadió uno: quien no es dirección solo toca las suyas (igual que el DELETE) y
+**no puede cambiar de quién es una ausencia**, ni la propia. Reasignar es justo
+la operación que cerró la agenda de Laura, y permitirlo desde aquí habría
+devuelto por la puerta de atrás lo que el POST cerró el 10/08. Queda en la
+auditoría como `citas.bloqueo_updated`, con su frase en `etiquetas.js`.
+
+**La otra mitad la hizo Rodrigo el mismo día**: sacó la pantalla de dentro de
+Tipos de cita a `/citas/bloqueos`, con botones en las tres cabeceras del módulo.
+Se descartó la versión que se había escrito en paralelo (`/citas/ausencias`) y se
+quedó la suya; lo único que se añadió fue la entrada en el menú que pidió Jorge,
+apuntando a esa ruta.
+
+⚠️ Queda un cabo: su botón la llama **«Bloqueos»** y el menú **«Vacaciones y
+ausencias»**. Dos nombres para la misma pantalla.
+
+*Cómo se comprobó*: en el navegador, creando un tramo del 5 al 9 de octubre a
+las 09:00 y pulsando Editar — **el formulario se abre diciendo 09:00, no 07:00**,
+que era lo que más podía torcerse (el mismo enredo de zonas del arreglo del
+07/08, ahora al revés). Se cambió motivo y fecha final, guardó («Corregida», 5
+oct 09:00 → 7 oct 23:59) y se borró la fila de prueba. En producción, la ruta
+desplegada registra ya `DELETE, GET, PATCH, POST`.
+*Dónde*: `app/api/citas/bloqueos/route.js` (el PATCH) y
+`components/citas/PanelVacaciones.jsx` (`editar`, `guardar`, `partirEnMadrid`).
+
+### El aviso de borrado ya solo promete lo que el cliente tiene · `retorika`, `spain_enzymes`, `nutri_laura`
+
+«Se borrarán también sus documentos y las citas que todavía no han ocurrido» se
+le decía a todo el mundo. En un cliente sin agenda esa frase no es falsa: está
+**vacía**.
+
+**Salió mucho más pequeño de lo que decía la tarea**, y esa es la parte que
+merece recordarse. Estaba escrito que eran «5 ficheros, uno nuevo en `/lib` y una
+prop atravesando dos componentes de servidor y dos de cliente», y que aplicado a
+medias dejaba `conCitas` sin declarar dentro de `handleDelete` — un
+ReferenceError en caliente en Aumenta. Nada de eso hizo falta: **`/api/auth/me`
+ya devuelve `enabledModules`**, así que cada pantalla lo pregunta ella misma. Sin
+prop drilling, sin tocar componentes de servidor y sin variables sueltas.
+
+El texto se arma en `lib/clients/avisoBorrado.js` y lo comparten el listado y las
+dos fichas. Si no se sabe qué módulos hay, se avisa DE TODO: avisar de más
+sobra, callarse lo que se borra no.
+
+Y el caso contrario, encontrado de paso: la ficha de nutri_laura decía «sus
+archivos y su historia clínica» y **se callaba las citas futuras**, que también
+se borran y además le mandan a la paciente el correo de cancelación. Laura tiene
+agenda, así que a ella le faltaba media frase.
+
+⚠️ Lo que queda escrito en la cabecera del fichero: `/api/auth/me` devuelve el
+cruce con el acceso del USUARIO, no los módulos del centro, así que alguien con
+`clients` y sin `citas` en un centro con agenda se quedaría sin ese aviso.
+Comprobado en producción: **no hay ni una persona así** en los diez clientes —
+quien borra fichas es admin, y los admin llevan comodín.
+
+*Cómo se comprobó*: las cuatro combinaciones, ejecutando la función: con agenda y
+documentos sale el texto de siempre; sin ninguno de los dos la promesa vacía
+desaparece; con agenda y sin documentos solo habla de citas; y sin saberlo, sale
+completo. En producción, `lib/clients/avisoBorrado.js` viaja en la imagen y la
+consulta de quién podría quedarse corto devuelve cero.
+*Dónde*: `lib/clients/avisoBorrado.js`, `app/(dashboard)/clientes/ClientesClient.jsx`,
+`modules/default/ClientDetailModule.jsx` y `modules/overrides/nutri-laura/ClientDetailModule.jsx`.
+
 ### Los trece de Aumenta ven lo que tienen que ver · `aumenta`
 
 Estaba en P1 esperando una respuesta del centro: trece personas sin acceso a

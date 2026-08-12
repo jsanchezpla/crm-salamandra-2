@@ -249,7 +249,7 @@ export default function CustodiaPage() {
                   <div className="flex items-baseline gap-2.5 flex-wrap">
                     <span className="text-[15px] font-semibold">{c.nombre}</span>
                     <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
-                      {c.slug} · {c.plan} · {c.modulos.length} módulos
+                      {c.slug} · {c.modulos.length} módulos
                       {c.bd?.existe ? ` · ${tamaño(c.bd.bytes)}` : " · sin base de datos"}
                     </span>
                     {c.estado !== "active" && (
@@ -436,7 +436,9 @@ export default function CustodiaPage() {
                 <Etiqueta>la cuenta</Etiqueta>
                 <dl className="mt-3 text-[12px] space-y-1.5">
                   {[
-                    ["Plan / estado", `${detalle.plan} · ${detalle.estado}`],
+                    // Sin el plan desde el 12/08/2026: no gateaba nada y lo que
+                    // cada cliente tenía escrito venía de cómo se sembró.
+                    ["Estado", detalle.estado],
                     ["Alta", fecha(detalle.alta)],
                     ["Último acceso", fecha(detalle.ultimoAcceso)],
                     ["Usuarios", `${detalle.usuarios.total} (${detalle.usuarios.admins} admin)`],

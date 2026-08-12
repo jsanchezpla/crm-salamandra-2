@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { vocabularioCliente } from "../../lib/clients/vocabulario.js";
 
@@ -323,6 +323,27 @@ const navigation = [
         key: "training",
         label: "Formación",
         href: "/formacion",
+        /*
+         * LAS CINCO PANTALLAS, EN EL MENÚ (12/08/2026, Jorge).
+         *
+         * Formación era la única entrada grande SIN hijos: un enlace suelto a
+         * `/formacion`, con sus secciones dentro como tarjetas. Para ir de
+         * Cursos a Alumnos había que volver a la portada.
+         *
+         * ⚠️ ESTA LISTA Y LA DE LA PORTADA TIENEN QUE DECIR LO MISMO. Los
+         * rótulos son literalmente los de `modules/training/FormacionOverview.jsx`
+         * y no se han tocado: quien cambie uno tiene que cambiar el otro. (Sí,
+         * «Usuarios» son las personas y «Alumnos por curso» son las matrículas,
+         * y eso se pisa; renombrarlos es otra tarea y le cambia el vocabulario a
+         * cinco clientes de golpe.)
+         */
+        children: [
+          { key: "formacion-empresas", label: "Empresas", href: "/formacion/empresas" },
+          { key: "formacion-cursos", label: "Cursos", href: "/formacion/cursos" },
+          { key: "formacion-usuarios", label: "Usuarios", href: "/formacion/usuarios" },
+          { key: "formacion-alumnos", label: "Alumnos por curso", href: "/formacion/alumnos" },
+          { key: "formacion-cuestionarios", label: "Cuestionarios", href: "/formacion/cuestionarios" },
+        ],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5" />
@@ -370,6 +391,23 @@ const TENANT_LABEL_OVERRIDES = {
   sandbox: { leads: "Interesados" },
 };
 
+/**
+ * Hijos que un tenant concreto NO ve, por `key`. Mismo espíritu que
+ * `TENANT_LABEL_OVERRIDES`: cambia lo que se enseña, no lo que se puede.
+ *
+ * Nació con los hijos de Formación (12/08/2026). La portada de Aumenta esconde
+ * a propósito **Empresas** y **Cuestionarios** —es psicopedagogía, su formación
+ * es B2C: no hay empresas que matricular ni se evalúa con tests— y su override
+ * lo dice desde que se escribió. Sin esto, colgar las cinco pantallas del menú
+ * le habría devuelto por el lateral las dos que su propia pantalla le quita.
+ *
+ * NO es una barrera: el endpoint sigue siendo la puerta. Es no ofrecer una
+ * pantalla que a ese cliente no le dice nada.
+ */
+const TENANT_HIDDEN_CHILDREN = {
+  aumenta: ["formacion-empresas", "formacion-cuestionarios"],
+};
+
 export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClose }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -382,6 +420,40 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
   const primaryColor = tenant?.settings?.brand?.primaryColor ?? "#1B3A2D";
 
   const enabledModules = new Set(modules.filter((m) => m.enabled).map((m) => m.moduleKey));
+
+  /**
+   * Cuántas fichas quedan a medias, para poder ESCONDER «Fichas a completar»
+   * cuando no queda ninguna (12/08/2026, Jorge).
+   *
+   * En producción `somos` tenía la pantalla en el menú y cero filas en las ocho
+   * carpetas: la abría el primer día, la encontraba vacía y no volvía. A Aumenta
+   * le pasará lo mismo el día que termine su campaña de 1.800 huecos.
+   *
+   * `null` = TODAVÍA NO SE SABE, y entonces la entrada SE VE. El error cae del
+   * lado de enseñar de más: esconderle a Aumenta su lista de trabajo porque una
+   * petición tardó es mucho peor que enseñar una entrada vacía un segundo.
+   *
+   * Va a `?soloTotales=1`, que cuenta en la base de datos en vez de traerse las
+   * filas: lo segundo son 3.997 ms en Aumenta y esto se pide en cada carga.
+   */
+  const [urgentes, setUrgentes] = useState(null);
+  const tieneClientesAvanzado = enabledModules.has("clients_avanzado");
+
+  useEffect(() => {
+    if (!tieneClientesAvanzado) return undefined;
+    let vivo = true;
+    fetch("/api/clients/urgentes?soloTotales=1", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!vivo || !j?.ok) return;
+        setUrgentes({
+          bloquea: j.data.totalBloquea ?? 0,
+          total: (j.data.totalBloquea ?? 0) + (j.data.totalCompletar ?? 0),
+        });
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [tieneClientesAvanzado]);
 
   // «Clientes» pasa a «Pacientes» donde el cliente ES el paciente (consulta de
   // nutrición, 04/08/2026). Por MÓDULOS y no por slug —ver
@@ -409,7 +481,12 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
   // tenant (p.ej. Comerciales/Referidos bajo Leads: solo salen donde el módulo
   // está activo). `requiresAll`: el hijo necesita TODOS esos módulos (p.ej.
   // Desempeño = avanzado + clínica).
+  const ocultosDelTenant = TENANT_HIDDEN_CHILDREN[tenant?.slug] ?? [];
+
   const puedeVerHijo = (child) => {
+    if (ocultosDelTenant.includes(child.key)) return false;
+    // Una lista de trabajo terminada deja de ser una entrada de menú.
+    if (child.key === "clients-urgentes" && urgentes && urgentes.total === 0) return false;
     if (child.adminOnly && !isAdminRole) return false;
     const exigidos = child.requiresAll || (child.moduleKey ? [child.moduleKey] : []);
     return exigidos.every((k) => {
@@ -474,9 +551,14 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
               <span className="absolute inset-0 rounded-full bg-white/40 animate-ping" />
               <span className="relative w-2 h-2 rounded-full bg-white/60" />
             </span>
+            {/* Aquí debajo salía el PLAN del cliente en mayúsculas (PRO,
+                STARTER). Se quitó el 12/08/2026 (Jorge) porque no significaba
+                nada: no gatea ni un módulo, ni un límite, ni un precio, y lo que
+                cada uno tenía escrito venía de cómo se sembró — Somos, con los
+                21 módulos, ponía STARTER; Retorika, con tres, PRO. La columna
+                sigue en `master.tenants`; lo que se retiró es enseñarla. */}
             <div className="min-w-0 flex-1">
               <div className="text-white text-[13px] font-medium truncate">{tenant?.name ?? "Sin tenant"}</div>
-              <div className="text-white/35 text-[10px] mt-0.5 uppercase tracking-wider font-mono">{tenant?.plan ?? "—"}</div>
             </div>
           </div>
 
@@ -564,17 +646,33 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
                           <div className="ml-7 mt-0.5 mb-1 space-y-0.5 border-l border-white/[0.08] pl-2.5">
                             {hijosVisibles.map((child) => {
                               const childActive = pathname === child.href;
+                              // Solo lo que BLOQUEA el trabajo lleva número: son
+                              // decenas y se pueden terminar. Poner ahí los
+                              // 1.800 «por completar» sería un número que no
+                              // baja nunca, y un contador que no baja se deja de
+                              // mirar en dos días.
+                              const cuenta =
+                                child.key === "clients-urgentes" && urgentes?.bloquea
+                                  ? urgentes.bloquea
+                                  : null;
                               return (
                                 <Link
                                   key={child.key}
                                   href={child.href}
-                                  className={`block px-2 py-1.5 rounded text-[12px] transition-colors ${
+                                  className={`flex items-center gap-2 px-2 py-1.5 rounded text-[12px] transition-colors ${
                                     childActive
                                       ? "text-white bg-white/[0.05] font-medium"
                                       : "text-white/45 hover:text-white/80 hover:bg-white/[0.03]"
                                   }`}
                                 >
-                                  {labelOverrides[child.key] ?? child.label}
+                                  <span className="flex-1 truncate">
+                                    {labelOverrides[child.key] ?? child.label}
+                                  </span>
+                                  {cuenta != null && (
+                                    <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-white/10 text-white/70 shrink-0">
+                                      {cuenta}
+                                    </span>
+                                  )}
                                 </Link>
                               );
                             })}

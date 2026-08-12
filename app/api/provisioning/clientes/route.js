@@ -42,9 +42,15 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     // nadie sin entrar a la base de datos a mano.
     const conSuspendidos = pideSuspendidos(request);
 
+    // `settings` viaja desde el 12/08/2026 para poder EDITAR la marca desde el
+    // panel: hasta entonces cambiarle dos colores a un cliente era escribir un
+    // script, commitear, desplegar y correrlo con `docker exec`. Se manda solo
+    // el `brand`, no el objeto entero — ahí dentro también viven las
+    // credenciales cifradas de sus integraciones, y esta pantalla no las
+    // necesita ni debe verlas.
     const tenants = await Tenant.findAll({
       where: whereClientesVisibles(conSuspendidos),
-      attributes: ["id", "name", "slug", "plan", "status", "createdAt"],
+      attributes: ["id", "name", "slug", "plan", "status", "createdAt", "settings"],
       order: [["createdAt", "DESC"]],
     });
 
@@ -76,6 +82,11 @@ export const GET = withTenant(async (request, _rc, ctx) => {
         plan: t.plan,
         estado: t.status,
         alta: t.createdAt,
+        marca: {
+          primaryColor: t.settings?.brand?.primaryColor ?? null,
+          secondaryColor: t.settings?.brand?.secondaryColor ?? null,
+          logoUrl: t.settings?.brand?.logoUrl ?? null,
+        },
         modulos: (porTenant.get(t.id) || []).sort(),
       })),
       suspendidos,

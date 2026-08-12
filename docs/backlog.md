@@ -615,29 +615,6 @@ contenedor; `/api/clinica/reports/[id]/` tiene `desde-sesiones` y `enviar`, y
 ningún paso de IA en medio. Aumenta: 0 informes y 0 sesiones creadas desde la
 importación.
 
-### Los contadores del embudo mienten al filtrar · `abarcaia`, `aumenta`
-
-Al pulsar una etapa se reconsulta filtrando y el desglose se recalcula sobre lo
-que ha llegado, con lo que las demás etapas caen a cero. En Aumenta hasta el
-«X en total» de la cabecera se contagia.
-
-*Los clientes de esta tarea han cambiado dos veces.* Primero decía `aumenta`,
-`nutri_laura` y `sandbox`: `nutri_laura` no tiene ese código y tiene **0 leads**,
-y `sandbox` **no existe en producción**. Después quedó en `quality_energy` (129
-leads) y `abarcaia` (84), que eran los de embudo lleno. Y el **10/08/2026**
-`quality_energy` pasó a **suspendido**, así que hoy no lo sufre: el único que lo
-sufre de verdad es `abarcaia`. Aumenta lo tiene en el código pero con 2 leads no
-se nota. El override de `quality-energy` sigue en el repo y volvería a fallar el
-día que se reactive, así que la tarea no se cierra.
-
-La segunda mitad —el corte a 200 filas— hoy no la toca nadie: nadie llega a 200.
-
-*Se comprueba*: filtrar por una etapa en `abarcaia` no pone las otras a cero.
-*Dónde*: `modules/overrides/{quality-energy,abarcaia,aumenta}/LeadsModule.jsx`.
-*Comprobado en producción*: 10/08/2026 — el patrón sigue en los tres overrides;
-`quality_energy` y `healim` están suspendidos (a propósito) y ya no salen en el
-back-office.
-
 ### Una receta corregida no llega a quien ya tiene la pauta · `nutri_laura`
 
 Al asignarla se congelan nombre e ingredientes, pero los pasos y la foto se leen
@@ -687,40 +664,6 @@ alumnos (25/06), 88 matrículas y 23 inscripciones (29/06). En el `access.log`
 de nginx: 3 llamadas suyas en julio, todas 200, la última el 06/07, y ninguna
 en agosto. En ese mismo periodo `tunutrilaura.com` llamó 29 veces, la última
 hoy a las 04:30.
-
-### Una ausencia mal puesta solo se puede borrar y escribir otra vez · `nutri_laura`, producto
-
-`/api/citas/bloqueos` tiene GET, POST y DELETE, y no tiene PATCH. Ni las fechas,
-ni el motivo, ni de quién es una ausencia se pueden cambiar una vez guardada: si
-alguien se equivoca de día, la quita y la vuelve a escribir.
-
-**Eso ya costó un script.** Las seis ausencias que en la consulta de Laura se
-apuntaron sin querer como «Todo el centro» —y que cerraron su agenda seis
-veces— no se pudieron arreglar desde la pantalla: hubo que escribir
-`scripts/reasignar-ausencias-sin-persona.js` para cambiarles el dueño. Con un
-botón de editar eso lo arregla Laura en un minuto y sin que nadie despliegue.
-
-Jorge pidió además (10/08) **un botón para entrar directamente**. Hoy
-«Vacaciones y ausencias» vive dentro de la pantalla de **Tipos de cita** —Rodrigo
-la puso ahí porque «es donde va a buscarlo»— así que para apuntar que te vas una
-semana hay que pasar por la pantalla donde se configuran precios y duraciones.
-No son la misma tarea ni las hace la misma gente: los tipos de cita los toca
-dirección de uvas a peras, las ausencias las toca todo el equipo.
-
-⚠️ El PATCH hereda los permisos del POST y del DELETE, y no se pueden aflojar:
-quien no es admin solo toca las suyas. Cambiar el dueño de una ausencia es
-justo la operación que dejó la agenda de Laura cerrada, así que si se permite
-editar ese campo, tiene que seguir siendo cosa de dirección.
-
-*Se comprueba*: cambiar fecha y motivo de una ausencia desde la pantalla, sin
-borrarla, y que el cambio quede en la auditoría.
-*Dónde*: `app/api/citas/bloqueos/route.js` (los tres métodos que hay, y el que
-falta); `components/citas/PanelVacaciones.jsx:294` es donde solo hay «Quitar»;
-el panel está incrustado en `app/(dashboard)/citas/tipos/page.jsx`.
-*Comprobado en producción*: 10/08/2026 — el bundle desplegado de
-`/api/citas/bloqueos` no contiene ningún PATCH. nutri_laura tiene 6 ausencias
-(5 aún por venir) y ya ninguna quedó a nombre del centro; Aumenta, demo y healim
-no han apuntado ninguna todavía.
 
 ### Nadie puede abrirnos una incidencia · producto
 
@@ -797,32 +740,6 @@ sembrar.
 ---
 
 ## P3 — deuda
-
-### Al borrar una ficha se promete cancelar citas a quien no tiene agenda · `retorika`, `spain_enzymes`
-
-El aviso de borrado dice «se borrarán también sus documentos y las citas que
-todavía no han ocurrido». En un cliente sin el módulo Citas esa frase no es
-falsa: está **vacía**. Es cosmético.
-
-Se intentó arreglar el 10/08 y **se retiró a propósito**, que es lo que hay que
-saber si alguien lo retoma: son 5 ficheros, uno nuevo en `/lib` y una prop nueva
-atravesando dos componentes de servidor y dos de cliente, uno de ellos la ficha
-que usan todos los clientes menos nutri_laura. Aplicado a medias dejaba
-`conCitas` sin declarar dentro de `handleDelete` — y sin TypeScript eso compila,
-así que el fallo sale EN CALIENTE: un ReferenceError al pulsar «Eliminar» en
-Aumenta, con quince personas trabajando.
-
-**La forma segura**, si se hace: primero el fichero de `/lib` y las props, sin
-tocar los textos y con todo funcionando igual, commit y build; y en un SEGUNDO
-commit cambiar los avisos. Nunca los dos en el mismo despliegue. Ojo además a
-que `app/(dashboard)/clientes/[id]/page.jsx` tiene un `catch` que deja las
-banderas a `false`: con el valor por defecto mal elegido, un fallo al leer
-`master` haría que Aumenta borrase una ficha SIN que se le avise de que se
-cancelan sus citas futuras. El error tiene que caer del lado inocuo.
-
-*Se comprueba*: la frase no sale en un cliente sin `citas`, y sí sale en Aumenta.
-*Comprobado en producción*: 10/08/2026 — retorika y spain_enzymes tienen fichas
-y no tienen agenda.
 
 ### El secreto global de webhooks tiene 31 caracteres · `retorika`
 

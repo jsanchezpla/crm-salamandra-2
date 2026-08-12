@@ -250,11 +250,45 @@ function ConfirmarModulos({ cliente, nuevos, quitados, nombres, onConfirmar, onC
   );
 }
 
+/**
+ * ⚠️ EL COLOR PRINCIPAL NO ES UN ACENTO: ES EL FONDO DEL SIDEBAR.
+ *
+ * Encima va texto blanco a opacidades que bajan hasta el 30%, así que un color
+ * claro deja el menú ilegible. Con el turquesa de la marca de Somos salía 2,22:1
+ * cuando hacen falta 4,5:1, y por eso su azul acabó siendo tan oscuro. Sin este
+ * aviso, quien elija un color claro desde aquí se lleva la misma sorpresa y no
+ * entiende por qué.
+ *
+ * Es la fórmula de contraste de la WCAG: luminancia relativa de cada color y
+ * `(L1 + 0.05) / (L2 + 0.05)`.
+ */
+function contrasteConBlanco(hex) {
+  const m = /^#([0-9a-f]{6})$/i.exec(String(hex ?? "").trim());
+  if (!m) return null;
+  const canal = (v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const n = parseInt(m[1], 16);
+  const L =
+    0.2126 * canal((n >> 16) & 255) +
+    0.7152 * canal((n >> 8) & 255) +
+    0.0722 * canal(n & 255);
+  return 1.05 / (L + 0.05);
+}
+
 function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
   const [f, setF] = useState({
     nombre: cliente.nombre,
-    plan: cliente.plan,
     modulos: [...cliente.modulos],
+    // El PLAN se editaba aquí y se quitó el 12/08/2026 (Jorge): no gateaba nada
+    // y era un campo de TEXTO LIBRE sobre una columna que en base de datos es un
+    // ENUM de cuatro valores, así que escribir cualquier otra cosa reventaba con
+    // un error de PostgreSQL. La columna sigue ahí; lo que se retiró es poder
+    // escribirla a ciegas.
+    primaryColor: cliente.marca?.primaryColor ?? "",
+    secondaryColor: cliente.marca?.secondaryColor ?? "",
+    logoUrl: cliente.marca?.logoUrl ?? "",
   });
 
   const [confirmando, setConfirmando] = useState(false);
@@ -279,8 +313,28 @@ function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
 
   const nuevos = resuelto.modulos.filter((m) => !cliente.modulos.includes(m));
   const quitados = cliente.modulos.filter((m) => !resuelto.modulos.includes(m));
+
+  // La marca se manda SOLO si cambió: `editarTenant` hace merge sobre lo que ya
+  // hubiera, y mandarla siempre reescribiría el `settings` del cliente en cada
+  // guardado aunque solo se hubiera tocado el nombre.
+  const marcaTocada =
+    (f.primaryColor || "") !== (cliente.marca?.primaryColor ?? "") ||
+    (f.secondaryColor || "") !== (cliente.marca?.secondaryColor ?? "") ||
+    (f.logoUrl || "") !== (cliente.marca?.logoUrl ?? "");
+
+  const contraste = contrasteConBlanco(f.primaryColor);
+  const menuIlegible = contraste !== null && contraste < 4.5;
+
   const hayCambios =
-    f.nombre !== cliente.nombre || f.plan !== cliente.plan || nuevos.length > 0 || quitados.length > 0;
+    f.nombre !== cliente.nombre || marcaTocada || nuevos.length > 0 || quitados.length > 0;
+
+  const cambiosAMandar = () => ({
+    nombre: f.nombre,
+    modulos: resuelto.modulos,
+    ...(marcaTocada
+      ? { brand: { primaryColor: f.primaryColor, secondaryColor: f.secondaryColor, logoUrl: f.logoUrl } }
+      : {}),
+  });
 
   function alternar(key) {
     setF((p) => ({
@@ -300,13 +354,49 @@ function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
 
   return (
     <div className="mt-3 pt-3 border-t border-neutral-100 space-y-4">
-      <div className="grid md:grid-cols-2 gap-3">
-        <Campo etiqueta="Nombre">
-          <input value={f.nombre} onChange={(e) => setF((p) => ({ ...p, nombre: e.target.value }))} className={inputCls} />
-        </Campo>
-        <Campo etiqueta="Plan">
-          <input value={f.plan} onChange={(e) => setF((p) => ({ ...p, plan: e.target.value }))} className={inputCls} />
-        </Campo>
+      <Campo etiqueta="Nombre">
+        <input value={f.nombre} onChange={(e) => setF((p) => ({ ...p, nombre: e.target.value }))} className={inputCls} />
+      </Campo>
+
+      {/* MARCA — antes solo se podía poner al crear el cliente. Cambiársela
+          después era escribir un script, commitear, desplegar y correrlo con
+          `docker exec`: media hora para dos campos de seis caracteres. El
+          servidor ya sabía hacerlo (`editarTenant` valida el hex y hace merge);
+          lo único que faltaba era esto. */}
+      <div>
+        <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-2">Marca</div>
+        <div className="grid md:grid-cols-3 gap-3">
+          <Campo etiqueta="Color principal" pista="Es el FONDO del menú lateral, no un acento.">
+            <div className="flex gap-2">
+              <input type="color" value={f.primaryColor || "#1B3A2D"}
+                onChange={(e) => setF((p) => ({ ...p, primaryColor: e.target.value }))}
+                className="h-9 w-12 rounded border border-neutral-200 bg-white shrink-0" />
+              <input value={f.primaryColor} onChange={(e) => setF((p) => ({ ...p, primaryColor: e.target.value }))}
+                className={inputCls + " font-mono"} placeholder="#1B3A2D" />
+            </div>
+          </Campo>
+          <Campo etiqueta="Color secundario">
+            <div className="flex gap-2">
+              <input type="color" value={f.secondaryColor || "#3E6B54"}
+                onChange={(e) => setF((p) => ({ ...p, secondaryColor: e.target.value }))}
+                className="h-9 w-12 rounded border border-neutral-200 bg-white shrink-0" />
+              <input value={f.secondaryColor} onChange={(e) => setF((p) => ({ ...p, secondaryColor: e.target.value }))}
+                className={inputCls + " font-mono"} placeholder="#3E6B54" />
+            </div>
+          </Campo>
+          <Campo etiqueta="Logo (URL)">
+            <input value={f.logoUrl} onChange={(e) => setF((p) => ({ ...p, logoUrl: e.target.value }))}
+              className={inputCls} placeholder="https://…/logo.png" />
+          </Campo>
+        </div>
+        {menuIlegible && (
+          <div className="mt-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Con ese color principal, el texto blanco del menú queda en{" "}
+            <b>{contraste.toFixed(2)}:1</b> y hacen falta <b>4,5:1</b> para poder leerlo. El menú
+            lateral se pinta de este color con el texto encima: elige uno más oscuro, o deja el claro
+            para el secundario.
+          </div>
+        )}
       </div>
 
       <div>
@@ -384,14 +474,14 @@ function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
           }`}>
           {cliente.estado === "suspended" ? "Reactivar cliente" : "Suspender cliente"}
         </button>
-        {/* Cambiar el nombre o el plan se guarda directo; tocar los módulos pasa
-            por la confirmación, que es lo que mueve tablas y menús. Se manda la
-            lista RESUELTA: es la que se acaba de enseñar y confirmar. */}
+        {/* Cambiar el nombre o la marca se guarda directo; tocar los módulos
+            pasa por la confirmación, que es lo que mueve tablas y menús. Se
+            manda la lista RESUELTA: es la que se acaba de enseñar y confirmar. */}
         <button type="button" disabled={!hayCambios || guardando || resuelto.problemas.length > 0}
           onClick={() => {
             const tocaModulos = nuevos.length > 0 || quitados.length > 0;
             if (tocaModulos) setConfirmando(true);
-            else onGuardar(cliente.slug, { nombre: f.nombre, plan: f.plan, modulos: resuelto.modulos });
+            else onGuardar(cliente.slug, cambiosAMandar());
           }}
           className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-40"
           style={{ background: "var(--color-primary, #1B3A2D)" }}>
@@ -408,7 +498,7 @@ function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
           onCancelar={() => setConfirmando(false)}
           onConfirmar={() => {
             setConfirmando(false);
-            onGuardar(cliente.slug, { nombre: f.nombre, plan: f.plan, modulos: resuelto.modulos });
+            onGuardar(cliente.slug, cambiosAMandar());
           }}
         />
       )}
