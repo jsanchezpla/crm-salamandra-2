@@ -179,6 +179,9 @@ export default function WidgetBookPage() {
           texto: j.error,
           urlFormulario: j.urlFormulario ?? null,
           irAlPortal: j.irAlPortal ?? false,
+          // Agotados los reenvíos del formulario (12/08/2026): no hay ningún
+          // paso que pueda dar aquí, así que la única salida es la web.
+          urlVolver: j.urlVolver ?? null,
         });
         return;
       }
@@ -487,13 +490,30 @@ export default function WidgetBookPage() {
               </a>
             )}
 
-            <button
-              type="button"
-              onClick={() => setPuerta(null)}
-              className="mt-3 w-full px-5 py-3 text-sm rounded-lg border border-[var(--widget-border)] text-[var(--widget-text-muted)] hover:text-[var(--widget-text)] transition"
-            >
-              Volver
-            </button>
+            {puerta.urlVolver && (
+              <a
+                href={puerta.urlVolver}
+                target="_top"
+                rel="noopener"
+                className="inline-flex w-full items-center justify-center gap-2 px-5 py-3 text-sm font-semibold rounded-lg text-white transition bg-[var(--brand-primary,var(--widget-button))] hover:bg-[var(--widget-button-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-focus)]"
+              >
+                Volver a la web
+                <span aria-hidden="true">→</span>
+              </a>
+            )}
+
+            {/* El «Volver» de toda la vida devuelve al formulario de reserva con
+                lo que ya había escrito. Se esconde cuando la puerta está cerrada
+                del todo: ahí volver al formulario es volver al mismo 403. */}
+            {!puerta.urlVolver && (
+              <button
+                type="button"
+                onClick={() => setPuerta(null)}
+                className="mt-3 w-full px-5 py-3 text-sm rounded-lg border border-[var(--widget-border)] text-[var(--widget-text-muted)] hover:text-[var(--widget-text)] transition"
+              >
+                Volver
+              </button>
+            )}
           </div>
         </div>
       </div>

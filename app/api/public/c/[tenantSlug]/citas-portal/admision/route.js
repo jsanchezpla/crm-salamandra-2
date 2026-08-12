@@ -6,6 +6,8 @@ import {
   urlDelFormulario,
   estadoDeAdmision,
   mensajeDePuerta,
+  emailDeContacto,
+  urlDeLaWeb,
 } from "../../../../../../../lib/citas/puertaFormulario.js";
 import { avisarAdmisionRota } from "../../../../../../../lib/citas/avisoAdmisionRota.js";
 
@@ -66,13 +68,18 @@ export const GET = withPublicTenant(
       // `identificado: true` siempre: venimos de una sesión verificada, así que
       // sí se le puede decir «tu solicitud está en revisión» en vez del texto
       // genérico que se le da a un anónimo.
-      const aviso = mensajeDePuerta(estado, { identificado: true, nombre: tenant?.name });
+      const aviso = mensajeDePuerta(estado, {
+        identificado: true,
+        nombre: tenant?.name,
+        emailContacto: emailDeContacto(tenant),
+      });
 
       return ok({
         admitida: false,
         estado,
         aviso,
         urlFormulario: aviso.mostrarEnlace ? urlDelFormulario(tenant) : null,
+        urlVolver: aviso.mostrarVolver ? urlDeLaWeb(tenant) : null,
       });
     } catch (err) {
       return serverError(err);

@@ -28,6 +28,50 @@ Lo más reciente arriba.
 
 ## 12/08/2026
 
+### Las «ocho familias admitidas que no podían pedir cita» no existían · `nutri_laura`
+
+Estaba en P0: *«8 de las 13 aceptadas no tienen ficha; Laura ya les dijo que sí
+y la agenda las rechaza con un 403»*. Comprobado en producción, **no hay ninguna
+familia esperando a nadie**. La tarea contaba filas sin mirar quién había detrás.
+
+Lo que hay de verdad, con `scripts/comprobar-admision.js` (solo lectura, escrito
+para esto) contra el VPS el 12/08: **16 aceptadas, no 13. Nueve bloqueadas, no
+ocho.** Y de esas nueve:
+
+- **cinco son pruebas nuestras** — `prueba@email.com` repetido cuatro veces y
+  `rodri@email.com`, con teléfonos correlativos inventados (666666665,
+  666666654, 656666666);
+- **dos son de Rodrigo**, con su nombre y su correo;
+- **una es Carlos Torrents**, novio y coworker de Laura;
+- **y la última, Andrea Castellanos**, que no es paciente ni ha comprado nada:
+  entró en la puesta al día de usuarios de la web y Laura la descartó el 05/08.
+
+Las que **sí** pueden reservar incluyen a Inés y a Maider, que son justo las dos
+pacientes reales que la otra tarea del backlog identifica. Las nueve están
+bloqueadas porque su ficha ya no está, que es **exactamente lo que `3947dc0`
+quería que pasara**. La puerta funciona.
+
+También cae el diagnóstico de la tarea: el fallo no salió de `db974a2` —ése es
+el del bono y el aviso amarillo— sino de `3947dc0`. Y el `SELECT ... NOT EXISTS`
+que proponía como comprobación no cuenta gente bloqueada: ignora a los tutores
+—la puerta resuelve la ficha con `resolvePortalClient`— y mezcla dos casos que
+piden arreglos opuestos, «tiene ficha y no la vemos» y «no tiene ficha».
+
+Es el mismo fallo del que avisa la cabecera de `backlog.md` con la tarea de los
+dos pagos: una cifra escrita sin mirar quién había detrás. **Escribir la tarea y
+comprobarla son el mismo acto.**
+
+De la investigación salieron tres cosas que sí valían, y están hechas: la puerta
+resuelve la ficha también por `form_submissions.client_id`, un descarte posterior
+deja de quedar tapado por una aceptada vieja, y quien agota tres formularios ve
+una pantalla que corta en vez de una noria. Detalle en `docs/modules/citas.md`.
+
+*Cómo se comprobó*: `docker exec crm-salamandra-app-1 node
+scripts/comprobar-admision.js nutri_laura` en el VPS el 12/08/2026 →
+«Bloqueadas TENIENDO ficha (fallo nuestro): **0**». Los nombres y las fechas de
+aceptación se contrastaron uno a uno con Rodrigo, que identificó a Carlos
+Torrents y a Andrea Castellanos.
+
 > ⚠️ **Estas seis se escribieron ANTES del despliegue, a petición de Jorge.** La
 > regla de la casa es no cerrar nada hasta verlo funcionar en el VPS, y eso no se
 > ha podido hacer todavía: el código está en el árbol de trabajo, sin commitear.

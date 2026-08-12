@@ -13,7 +13,9 @@
  *     la agenda un instante y quitarla es peor que esperar medio segundo.
  *   · `admitida: true`        → adelante (o el centro no tiene la puerta puesta).
  *   · `admitida: false`       → `aviso` trae el título y el texto, y
- *     `urlFormulario` a dónde mandarla.
+ *     `urlFormulario` a dónde mandarla. Cuando ya no hay formulario al que
+ *     mandarla —agotados los reenvíos— viene `urlVolver` en su lugar, para que
+ *     la pantalla no se quede sin ningún botón dentro del iframe.
  *
  * Ante cualquier fallo se deja pasar: el servidor vuelve a comprobarlo en
  * `/book` y corta ahí. Bloquear la agenda porque una consulta no respondió
@@ -23,7 +25,7 @@
 import { useEffect, useState } from "react";
 
 export function useAdmision(tenantSlug, portal) {
-  const [estado, setEstado] = useState({ cargando: true, admitida: true, aviso: null, urlFormulario: null });
+  const [estado, setEstado] = useState({ cargando: true, admitida: true, aviso: null, urlFormulario: null, urlVolver: null });
 
   const listo = portal?.status && portal.status !== "loading";
   const token = portal?.sessionToken ?? null;
@@ -34,7 +36,7 @@ export function useAdmision(tenantSlug, portal) {
     // Sin sesión no se puede preguntar por nadie. Que pase: si el centro exige
     // identificarse, de eso ya se encarga el gate de acceso.
     if (!token) {
-      setEstado({ cargando: false, admitida: true, aviso: null, urlFormulario: null });
+      setEstado({ cargando: false, admitida: true, aviso: null, urlFormulario: null, urlVolver: null });
       return;
     }
 
@@ -52,10 +54,11 @@ export function useAdmision(tenantSlug, portal) {
           admitida: d ? d.admitida !== false : true,
           aviso: d?.aviso ?? null,
           urlFormulario: d?.urlFormulario ?? null,
+          urlVolver: d?.urlVolver ?? null,
         });
       })
       .catch(() => {
-        if (!cancelado) setEstado({ cargando: false, admitida: true, aviso: null, urlFormulario: null });
+        if (!cancelado) setEstado({ cargando: false, admitida: true, aviso: null, urlFormulario: null, urlVolver: null });
       });
 
     return () => { cancelado = true; };

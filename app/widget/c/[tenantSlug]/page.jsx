@@ -417,6 +417,7 @@ export default function WidgetSelectionPage() {
       <PuertaScreen
         aviso={admision.aviso}
         urlFormulario={admision.urlFormulario}
+        enlace={admision.urlVolver ? { href: admision.urlVolver, texto: "Volver a la web" } : null}
         brandStyle={brandStyle}
       />
     );

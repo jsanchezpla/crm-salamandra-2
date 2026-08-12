@@ -108,12 +108,41 @@ paciente, que está avisado— y **a todos los tipos de cita**. No es una puerta
 cerrada: se enseña el aviso con el enlace.
 
 Estados que devuelve `estadoDeAdmision`: `aceptada` (pasa), `pendiente`,
-`descartada`, `sin_ficha`, `sin_enviar` y `sin_bandeja`. Detalles que se rompen
-solos y por eso están fijados en `_smoke-puerta-formulario.mjs` y en
-`_smoke-paciente-borrado.mjs`:
+`descartada`, `descartada_final`, `sin_ficha`, `sin_enviar` y `sin_bandeja`.
+Detalles que se rompen solos y por eso están fijados en
+`_smoke-puerta-formulario.mjs`, `_smoke-paciente-borrado.mjs` y
+`_smoke-puerta-descartada.mjs`:
 
 - **Una aceptada manda sobre el resto.** Quien fue admitido y luego manda otra
   solicitud no vuelve a la cola.
+- **Pero no sobre un descarte POSTERIOR** (12/08/2026). Tomado al pie de la
+  letra, «manda la aceptada» hacía que descartar a alguien no surtiera efecto si
+  en su día se le había admitido: la fila descartada se quedaba debajo de una
+  aceptada más vieja. Lo enseñó una solicitud real de nutri_laura, admitida el
+  03/08 y descartada el 05/08, que la puerta seguía dando por admitida — ahí no
+  se notó porque además le faltaba la ficha, pero **con ficha habría podido
+  reservar después de que la descartaran**. Manda la decisión MÁS RECIENTE, no
+  el mejor resultado. Solo se aplica cuando las dos fechas se pueden comparar:
+  es una regla que CIERRA, y sobre una fila vieja sin fechar echaría a un
+  paciente de verdad por un dato que no tenemos.
+- **Tres reenvíos y se cierra** (`RECHAZOS_ANTES_DE_CERRAR`, 12/08/2026).
+  Descartar no es una puerta cerrada —el primer formulario puede estar mal
+  rellenado, y las circunstancias cambian— pero a la cuarta, devolverle el mismo
+  enlace es mandarle a una noria. Al tercer descarte pasa a `descartada_final`:
+  pantalla que corta, con «Has alcanzado el número máximo de formularios», el
+  correo del centro y un botón de volver a la web. Sin enlace al formulario.
+  ⚠️ **El tope se comprueba también en el POST del formulario público**
+  (`/api/public/c/[tenantSlug]/formularios/[formSlug]`), no solo en la pantalla:
+  el formulario vive en el WordPress del cliente y se manda sin pasar por el
+  portal, así que sin ese corte el contador seguiría subiendo y el «has
+  alcanzado el máximo» sería mentira. Una solicitud PENDIENTE manda sobre el
+  tope: es justo el reenvío que se le está permitiendo.
+- **El correo de contacto sale solo del tenant** (`emailDeContacto`:
+  `resendReplyTo` → `resendFromEmail`), sin el respaldo por variable de entorno
+  que usa `getTenantResendConfig` — ese respaldo es NUESTRA dirección de
+  Outreach, y mandar a una paciente de Laura a escribirnos sería peor que no
+  darle ninguna. El botón «Volver a la web» sale del ORIGEN de las direcciones
+  ya configuradas en Citas (`urlDeLaWeb`), para no pedir un ajuste nuevo.
 - **Pero hace falta FICHA, no solo solicitud** (06/08/2026, Rodrigo: «si elimino
   a un paciente, debería volver al paso cero»). La solicitud aceptada sobrevive
   al borrado de la ficha, así que quien acababa de ser dado de baja seguía

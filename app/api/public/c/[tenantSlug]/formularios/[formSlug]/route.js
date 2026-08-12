@@ -1,4 +1,9 @@
+import { Op } from "sequelize";
 import { withPublicTenant } from "../../../../../../../lib/tenant/publicTenantContext.js";
+import {
+  RECHAZOS_ANTES_DE_CERRAR,
+  emailDeContacto,
+} from "../../../../../../../lib/citas/puertaFormulario.js";
 import { enforceRateLimit } from "../../../../../../../lib/utils/rateLimit.js";
 import { notifyAdmins } from "../../../../../../../lib/notifications/notifyUsers.js";
 import { ok, created, error, notFound, serverError } from "../../../../../../../lib/utils/apiResponse.js";
@@ -106,6 +111,40 @@ export const POST = withPublicTenant(
       });
       if (duplicado) {
         return created({ ok: true, mensaje: form.thankYouMessage || "¡Gracias!" });
+      }
+
+      /*
+       * 7. El tope de reenvíos (12/08/2026, Rodrigo). A quien ha sido descartado
+       * se le deja volver a intentarlo —el primer formulario puede estar mal
+       * rellenado, y las circunstancias cambian— pero solo
+       * `RECHAZOS_ANTES_DE_CERRAR` veces.
+       *
+       * Tiene que cortarse AQUÍ y no solo en la pantalla del área privada: el
+       * formulario vive en el WordPress del cliente y se puede mandar sin pasar
+       * por el portal, así que sin este corte el contador seguiría subiendo y el
+       * «has alcanzado el máximo» sería mentira.
+       *
+       * Se le dice, en vez de tragarse el envío en silencio como se hace con el
+       * spam: quien manda este formulario está mandando SU propio correo, y
+       * dejarle creer que su solicitud está en revisión es la misma espera a
+       * ciegas que veníamos arreglando. El precio es que confirma el estado de
+       * un correo a quien complete el formulario entero con él, que es un listón
+       * bastante más alto que el de la agenda.
+       */
+      if (destinos.email) {
+        const descartes = await FormSubmission.count({
+          where: { email: { [Op.iLike]: destinos.email }, status: "rejected" },
+        });
+        if (descartes >= RECHAZOS_ANTES_DE_CERRAR) {
+          const contacto = emailDeContacto(tenant);
+          return error(
+            contacto
+              ? `Contacta por correo a ${contacto} para más información.`
+              : "Contacta por correo con el centro para más información.",
+            422,
+            { codigo: "ADMISION_CERRADA", titulo: "Has alcanzado el número máximo de formularios" }
+          );
+        }
       }
 
       const ajustes = form.settings || {};
