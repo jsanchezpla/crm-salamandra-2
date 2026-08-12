@@ -28,6 +28,99 @@ Lo más reciente arriba.
 
 ## 12/08/2026
 
+### Desde el panel interno ya se puede cerrar sesión · producto
+
+El enlace «salir» era un `<a href>`, o sea un GET, y `/api/auth/logout` solo
+entiende POST: 405 y la sesión seguía abierta. En la pantalla que crea clientes,
+cambia módulos y suspende cuentas — la que se queda abierta en un portátil.
+
+Ahora es un botón que hace POST (`components/admin/SalirBoton.jsx`) y va a
+`/login` con `replace`, para que el botón de atrás no devuelva a una pantalla
+del panel. **No se arregló añadiendo un GET al endpoint**, que habría sido una
+línea: un cierre de sesión por GET lo dispara cualquier página ajena con una
+etiqueta de imagen, y el patrón bueno ya estaba escrito en el sidebar del CRM.
+
+*Cómo se comprobó*: en producción, pulsándolo. El botón pasó a «saliendo…», la
+pantalla fue a `/login`, y una llamada a `/api/admin/paquetes` que antes daba
+200 pasó a dar **401**.
+*Dónde*: `components/admin/SalirBoton.jsx` y `app/admin/layout.jsx`.
+
+### Los paquetes de módulos se crean desde el panel · producto
+
+Los dos que había estaban escritos en `lib/provisioning/catalogo.js`: inventar
+un tercero era tocar código y desplegar. Ahora hay pestaña **Paquetes** en el
+back-office y tabla `master.paquetes_modulos`.
+
+**Ningún cliente guarda un paquete**, y esa era la pregunta que la tarea tenía
+abierta: la contestó Jorge —«los clientes no tienen ningún paquete, solo módulos
+puestos a su gusto, quédalo así»— así que no hay FK, ni columna, ni asociación,
+y editar o borrar uno no le cambia nada a nadie. El alta ofrece **las dos
+formas** bajo un rótulo, «Cómo se monta»: los paquetes y «Personalizado», y en
+cuanto se toca una casilla vuelve a Personalizado.
+
+El freno que se perdía al sacarlos del código —«solo se escribe aquí un paquete
+cuando está DECIDIDO qué lleva»— se rehízo en `lib/provisioning/paquetes.js`.
+
+*Cómo se comprobó*: el ciclo entero en producción. Se intentó crear uno con
+`billing` suelto y **rebotó** con «Para activar Facturación hace falta también
+Clientes» ofreciendo «añadir también Clientes»; se pulsó el atajo y se creó; se
+abrió el alta y **apareció allí sin desplegar**, marcando exactamente sus
+módulos al pulsarlo y volviendo a «Personalizado» al tocar una casilla; se
+editó (el nombre cambió, la clave `prueba-de-claude` NO, que es lo buscado); se
+retiró —desapareció del alta— y se reactivó; y se borró. Producción vuelve a
+tener exactamente los dos de siempre. Los frenos también están fijados sin base
+de datos en `scripts/_smoke-paquetes.mjs`, 24 de 24.
+*Dónde*: `app/admin/paquetes/page.jsx`, `app/api/admin/paquetes/`,
+`lib/provisioning/{paquetes,paquetesStore}.js`,
+`models/master/PaqueteModulos.model.js`.
+
+⚠️ **Lo que queda no es código sino contenido**: los dos paquetes de hoy son los
+dos de salud, y sigue sin haber ninguno para el perfil comercial (el de
+spain_enzymes, retorika y abarcaia). Eso ya se hace desde la pantalla.
+
+### Dos fallos que salieron al probar lo anterior · producto
+
+Ninguno estaba en el backlog: aparecieron el mismo día, probando lo de arriba, y
+se arreglaron en el acto. Quedan escritos para que no se vuelvan a descubrir.
+
+**El repo estaba en rojo.** `node scripts/check-migration-order.js` salía con
+`exit 1`: la migración del Registro no estaba registrada en
+`_module-migrations.js` y daba dos incoherencias —«sin módulo asignado (nadie
+las ejecutaría)» e «ilegibles y sin arista declarada»—. Registradas esa y la de
+paquetes, vuelve a `exit 0`. **Es un despiste del flujo, no de nadie**: a una
+migración de MASTER no le toca ningún módulo y se queda huérfana sola. Ya había
+pasado dos veces (`74fc6d2`, `be465f5`).
+
+**Y el panel mentía en la operación más delicada que tiene.** Al abrir NUESTRA
+ficha en `/admin/clientes` y pulsar «Guardar cambios», la confirmación decía
+«SE QUITAN 1 · **provisioning**» — el módulo que abre todo el back-office. Era
+falso: `cicloVida.js:190` filtra por `CLAVES_VALIDAS` justo para que guardar
+nuestra ficha no nos deje fuera. O sea que la pantalla asustaba con algo que el
+servidor iba a ignorar, y una confirmación que asusta de más se acaba pulsando
+sin leer — lo contrario de para lo que está. Ahora cuenta como «se quita» solo
+lo que el servidor va a quitar de verdad.
+
+*Cómo se comprobó*: en producción. `check-migration-order` en verde; y al
+guardar nuestra ficha ya no sale ningún aviso de módulos, se guarda directo sin
+la confirmación, y `provisioning` sigue entre sus 7 módulos.
+
+### Las cinco pantallas de Formación están en el menú · `retorika`, `aumenta`, `nutri_laura`, `demo`, `somos`
+
+Formación era la única entrada grande sin hijos: para ir de Cursos a Alumnos
+había que volver a la portada.
+
+**Los rótulos no se han tocado.** Renombrar «Usuarios» y «Alumnos por curso»
+—que se pisan— le cambia el vocabulario a cinco clientes de golpe, y Jorge lo
+dejó fuera a propósito: «solo la navegación». Queda apuntado aparte.
+
+Nació de paso `TENANT_HIDDEN_CHILDREN`: la portada de Aumenta esconde Empresas y
+Cuestionarios porque su formación es B2C, y sin eso el menú le habría devuelto
+por el lateral las dos pantallas que su propia pantalla le quita.
+
+*Cómo se comprobó*: en producción, en el menú de la demo — salen las cinco
+(Empresas, Cursos, Usuarios, Alumnos por curso, Cuestionarios).
+*Dónde*: `components/layout/Sidebar.jsx`.
+
 ### La marca de un cliente se cambia desde el panel · producto
 
 Cambiarle dos colores a un cliente era escribir un script, commitearlo,

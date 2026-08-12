@@ -100,41 +100,6 @@ más alto, que es lo que aguanta a cloud-init).
 
 ## P1 — esta semana
 
-### Desde el panel interno no se puede cerrar sesión · producto
-
-El enlace «salir» de la barra del back-office es un enlace normal a
-`/api/auth/logout`, o sea un GET. Ese endpoint **solo entiende POST**: en la
-imagen desplegada la ruta registra exactamente un método —`["POST",0,R]`— así
-que el navegador se lleva un 405 y la sesión sigue abierta. El CRM de los
-clientes sí cierra bien porque su menú lo llama con `fetch(..., {method:"POST"})`.
-
-No es cosmético por dónde pasa: el back-office es la pantalla que crea clientes,
-les cambia los módulos y suspende cuentas, y es la que se queda abierta en un
-portátil al terminar el día.
-
-Al arreglarlo, que salga por POST desde un botón, como hace el sidebar del CRM,
-**y no añadiendo un GET** a ese endpoint: un cierre de sesión por GET lo dispara
-cualquier página ajena con una etiqueta de imagen. Es molesto más que peligroso,
-pero no hace falta abrir esa puerta cuando el patrón bueno ya está escrito dos
-carpetas más allá.
-
-*Se comprueba*: pulsar «salir» en el back-office devuelve al login y la sesión
-deja de valer.
-*Dónde*: `app/admin/layout.jsx:104-110` es el enlace; `app/api/auth/logout/route.js:4`
-es el único método que hay; `components/layout/Sidebar.jsx:408-411` es cómo lo
-hace bien el CRM.
-✅ **ARREGLADO Y DESPLEGADO el 12/08/2026**, a falta de pulsarlo. Ahora es un
-botón que hace POST (`components/admin/SalirBoton.jsx`) y va a `/login` con
-`replace`, para que el botón de atrás no devuelva a una pantalla del panel. No
-se arregló añadiendo un GET al endpoint —habría sido una línea— porque un cierre
-de sesión por GET lo dispara cualquier página ajena con una etiqueta de imagen.
-
-*Comprobado en producción*: 12/08/2026 — en el contenedor, el `<a href>` ha
-desaparecido del HTML servido de `/admin` y el componente nuevo viaja en un
-bundle de cliente. **Falta el clic**: la sesión del panel caducó al reiniciarse
-el contenedor con el despliegue, y quien la abra tarda dos segundos en probarlo.
-Si funciona, esta tarea se cierra sin tocar código.
-
 ### «Pedirle otra tarjeta» no lleva a ninguna parte · todos
 
 El aviso recomienda pedir otra tarjeta y el botón se pinta, pero el endpoint
@@ -226,49 +191,21 @@ la cabecera. El menú pide `/api/clients/urgentes?soloTotales=1` y esconde la
 entrada si sale cero; enseña además cuántas BLOQUEAN, no las 1.800 por
 completar, que sería un número que no baja nunca.
 
+⚠️ **Y una cosa de la implementación que conviene saber**: el número se pide UNA
+vez, al cargar la página entera. El menú vive en el layout del dashboard y no se
+vuelve a montar al navegar entre pantallas —comprobado en producción: cero
+llamadas a `?soloTotales=1` al ir de Clientes a Leads y volver—, así que quien
+cierre el último hueco no verá desaparecer la entrada hasta que recargue. Para
+una entrada de menú es aceptable; para un contador en vivo no lo sería.
+
 *Comprobado en producción*: 12/08/2026 — las **24 cuentas** de aumenta, demo y
 somos cuadran al registro con lo que devuelve el listado, incluida la resta de lo
-archivado, y Aumenta pasa de **3.340 ms a 16 ms**. **Falta verlo en un menú**:
-para eso hace falta entrar como Somos (para que NO salga) o como Aumenta (para
-que salga con su 173), y no hay motivo para abrir esas sesiones solo por esto —
-se verá la próxima vez que alguien entre.
-
-### Las cinco pantallas de Formación solo se encuentran desde su portada · `retorika`, `aumenta`, `nutri_laura`, `demo`, `somos`
-
-Formación es la única entrada grande del menú **sin hijos**. Clientes, Citas,
-Leads o Equipo despliegan sus pantallas en el propio menú; Formación es un enlace
-suelto a `/formacion`, y sus cinco secciones —Empresas, Cursos, Usuarios, Alumnos
-por curso y Cuestionarios— viven dentro como tarjetas. Para ir de Cursos a
-Alumnos hay que volver a la portada.
-
-Encima los nombres se pisan: **«Usuarios» son las personas y «Alumnos por curso»
-son las matrículas**, y la tarjeta de Usuarios se describe justamente como
-«alumnos privados y de empresa». Arriba, el recuadro de métricas vuelve a decir
-«Usuarios» y «Matrículas», que es un tercer par de palabras para lo mismo. La
-prueba de que no se entiende está escrita en la propia ayuda de Empresas, en
-mayúsculas: «IMPORTANTE: los alumnos de empresa se importan desde aquí» — porque
-quien quiere dar de alta alumnos entra en Usuarios, que es donde no se hace.
-
-*Se comprueba*: desde cualquier pantalla de Formación se llega a las demás sin
-pasar por la portada, y nadie tiene que preguntar en qué se diferencian dos
-secciones.
-*Dónde*: `components/layout/Sidebar.jsx:304-316` es la entrada sin hijos,
-`modules/training/FormacionOverview.jsx:7-63` son las cinco secciones y
-`modules/overrides/aumenta/FormacionOverview.jsx` es la versión de Aumenta, que
-solo ve tres.
-✅ **ARREGLADO Y DESPLEGADO el 12/08/2026**, a falta de verlo en un menú. Las
-cinco pantallas cuelgan ya de la entrada de Formación. **Los rótulos NO se han
-tocado**: renombrar «Usuarios» y «Alumnos por curso» le cambia el vocabulario a
-cinco clientes de golpe y es otra tarea, que es lo que queda de esta.
-
-Nació de paso `TENANT_HIDDEN_CHILDREN` en el sidebar: la portada de Aumenta
-esconde a propósito Empresas y Cuestionarios —es psicopedagogía, su formación es
-B2C— y sin eso el menú le habría devuelto por el lateral las dos pantallas que
-su propia pantalla le quita.
-
-*Comprobado en producción*: 12/08/2026 — los hijos nuevos viajan en los bundles
-desplegados. **Falta verlo en un menú** (hace falta una sesión de un cliente con
-Formación), y falta decidir lo de los nombres.
+archivado, y Aumenta pasa de **3.340 ms a 16 ms**. En el menú de la demo la
+entrada **SALE**, que es lo correcto: tiene 21 huecos (0 que bloqueen, y por eso
+sin número al lado). **Falta ver la otra mitad**, que desaparezca a cero: hace
+falta una sesión de Somos, que es quien está a 0 en las ocho carpetas. Se
+intentó fingiendo la respuesta desde el navegador y no valió, justo por lo del
+párrafo de arriba: el menú ya estaba montado y no vuelve a preguntar.
 
 ### Custodia sabe qué claves le faltan a cada cliente, pero no puede ponérselas · producto
 
@@ -303,49 +240,6 @@ cliente está en `app/api/tenant/settings/route.js` y el cifrado en
 *Comprobado en producción*: 12/08/2026 — 1 de 9 con Anthropic y 0 de 9 con
 OpenAI; el endpoint del back-office es de solo lectura y en el alta no hay ningún
 campo de contacto.
-
-### Los paquetes de módulos están escritos en el código · producto
-
-En el alta hay dos botones —«Paquete Nutrición» y «Paquete Clínica»— que marcan
-de golpe sus módulos, y luego se añade o se quita a mano. Funciona, pero los dos
-están escritos dentro de `lib/provisioning/catalogo.js`: inventar un tercero, o
-cambiar qué lleva uno, es tocar código y desplegar.
-
-✅ **HECHO Y DESPLEGADO el 12/08/2026**, a falta de crear uno con las manos.
-Pestaña **Paquetes** en el back-office, tabla `master.paquetes_modulos` y los dos
-de siempre sembrados por la migración.
-
-Las dos preguntas que esta tarea tenía abiertas quedaron contestadas por Jorge:
-«los clientes no tienen ningún paquete, solo módulos puestos a su gusto,
-quédalo así, y que se puedan ambas formas». O sea que **ningún tenant guarda
-paquete** —sin FK, sin columna, sin asociación— y editar o borrar uno no le
-cambia nada a nadie. El alta lo dice ahora con un rótulo, «Cómo se monta», con
-los paquetes y «Personalizado» al lado; en cuanto se toca una casilla vuelve a
-Personalizado, que es como está dado de alta todo el mundo.
-
-El freno que se perdía —«solo se escribe aquí un paquete cuando está DECIDIDO
-qué lleva»— se rehízo en `lib/provisioning/paquetes.js`: no se guarda uno con
-módulos que no existen ni con dependencias que no se sostienen, y NO se
-completan solas (se dice qué falta y la pantalla ofrece añadirlo).
-
-**Lo que queda de esta tarea es contenido, no código**: los dos paquetes de hoy
-son los dos de salud, y sigue sin haber ninguno para el perfil comercial —el de
-spain_enzymes, retorika y abarcaia—. Eso ya se puede hacer desde la pantalla, sin
-tocar el repo.
-
-*Se comprueba*: crear un paquete desde el back-office y verlo aparecer en el alta
-sin desplegar.
-*Dónde*: `app/admin/paquetes/page.jsx`, `app/api/admin/paquetes/`,
-`lib/provisioning/{paquetes,paquetesStore}.js`.
-*Comprobado en producción*: 12/08/2026 — la migración corrió y la tabla tiene los
-dos paquetes; leídos desde dentro del contenedor con el mismo código que usa el
-alta. Los frenos, probados contra los nombres que hay allí: nombre repetido
-→ 409, `billing` suelto → 422 «hace falta también Clientes», módulo inventado
-→ 422. Y `scripts/_smoke-paquetes.mjs` los fija sin base de datos, 24 de 24.
-**Falta crear uno desde la pantalla**: la sesión del panel caducó al reiniciarse
-el contenedor con el despliegue.
-*Comprobado en producción*: 12/08/2026 — dos paquetes, ambos de salud, ambos
-escritos en el código.
 
 ### Una sola demo para todos los oficios · `demo`
 
@@ -695,6 +589,33 @@ sembrar.
 ---
 
 ## P3 — deuda
+
+### En Formación, «Usuarios» y «Alumnos por curso» se pisan · `retorika`, `aumenta`, `nutri_laura`, `demo`, `somos`
+
+**Usuarios** son las personas y **Alumnos por curso** son las matrículas, y la
+tarjeta de Usuarios se describe además como «alumnos privados y de empresa».
+Arriba, el recuadro de métricas vuelve a decir «Usuarios» y «Matrículas», que es
+un tercer par de palabras para las mismas dos cosas.
+
+La prueba de que no se entiende está escrita en la propia ayuda de Empresas, en
+mayúsculas: «IMPORTANTE: los alumnos de empresa se importan desde aquí» — porque
+quien quiere dar de alta alumnos entra en Usuarios, que es donde no se hace.
+
+Salió al colgar las cinco pantallas del menú (12/08/2026) y se dejó fuera a
+propósito: Jorge pidió «solo la navegación». **Renombrarlas le cambia el
+vocabulario a cinco clientes de golpe**, dos de ellos con formación en uso real
+(Retorika lleva 526 intentos de cuestionario), así que es una decisión de
+producto, no una limpieza. Si se hace, hay que tocar a la vez el menú, la
+portada, los rótulos de las métricas y el override de Aumenta, o quedarán
+diciendo cosas distintas.
+
+*Se comprueba*: una persona que entra por primera vez sabe, sin preguntar, en
+cuál de las dos pantallas se dan de alta alumnos.
+*Dónde*: `modules/training/FormacionOverview.jsx:31-51` (las dos secciones) y
+`:65-70` (las métricas); `components/layout/Sidebar.jsx` (los hijos nuevos);
+`modules/overrides/aumenta/FormacionOverview.jsx`.
+*Comprobado en producción*: 12/08/2026 — en el menú de la demo salen los dos
+nombres, «Usuarios» y «Alumnos por curso», uno debajo del otro.
 
 ### El secreto global de webhooks tiene 31 caracteres · `retorika`
 
