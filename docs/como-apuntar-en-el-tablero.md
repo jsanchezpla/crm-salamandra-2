@@ -103,19 +103,26 @@ como cliente si reconoce el nombre**. Los que reconoce:
 ```
 aumenta · nutri_laura · spain_enzymes · quality_energy
 retorika · abarcaia · healim · demo · sandbox
+salamandra_solutions
 ```
 
-...más `todos`, `producto`, `interno` y `documentación`.
+...más `todos`, `producto`, `interno`, `documentación` y `varios`.
 
-⚠️ **`salamandra_solutions` a solas NO está en esa lista.** Una tarea titulada
-`### Lo que sea · salamandra_solutions` se pinta con el «· salamandra_solutions»
-metido dentro del título y **sin la etiqueta de cliente**, así que el filtro por
-cliente no la encuentra. Escribe `· producto`, o acompáñalo de otro slug
-(`· demo, salamandra_solutions`), que es lo que hace la tarea que ya hay.
+**Si son varios, se escriben separados por comas** y la tarea sale en el grupo
+de cada uno. Los nombres se buscan sueltos dentro de la cola, no partiendo por
+comas, para que una cola escrita a mano como `· nutri_laura (y todos con citas)`
+siga entendiéndose. Aun así, cuanto más limpia la lista, mejor.
+
+⚠️ **Un nombre que no esté en esa lista no existe para el tablero.** La tarea se
+pinta con la cola metida dentro del título y sin etiqueta de cliente, y no cae
+en ningún grupo. Si damos de alta un cliente nuevo, hay que **añadir su slug a
+`SLUGS`** en `app/api/admin/tablero/route.js` — no se lee de la base de datos a
+propósito, porque el tablero también habla de clientes que ya no están y de
+cosas que no son un cliente.
 
 Y al revés: **no uses `·` en el título por otro motivo**. Si el título lleva un
-punto medio decorativo y detrás no hay un slug, no pasa nada; pero si detrás hay
-por casualidad una palabra que contenga un slug, te parte el título por ahí.
+punto medio decorativo y detrás no hay un nombre conocido, no pasa nada; pero si
+detrás hay por casualidad uno de esos nombres, te parte el título por ahí.
 
 ### 4.2 Nada de `##` ni `###` dentro del cuerpo de una tarea
 

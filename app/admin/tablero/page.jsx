@@ -21,6 +21,17 @@
  *
  * El filtro por cliente cruza las dos pestañas a propósito: la pregunta real
  * cuando llama alguien es «¿cómo vamos con Aumenta?», y eso incluye lo hecho.
+ *
+ * AGRUPAR POR CLIENTE (12/08/2026)
+ * Antes eso solo se podía contestar escribiendo el slug en el filtro y fiándose
+ * de que estuviera bien puesto en todas las tareas. Ahora hay un interruptor.
+ *
+ * Lo que costó no fue agrupar, fue poder hacerlo sin mentir: el troceador
+ * devolvía el destinatario como una CADENA, así que «demo, aumenta,
+ * salamandra_solutions» formaba un grupo propio de una sola tarea y Aumenta
+ * enseñaba 7 de sus 10. Ahora el endpoint devuelve además `quienes`, ya troceado
+ * en nombres conocidos, y una tarea compartida aparece en todos sus grupos. Un
+ * tablero que miente por poco es peor que uno que no agrupa: nadie lo comprueba.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -38,6 +49,15 @@ function tonoDe(titulo) {
   return TONOS.find((t) => t.casa.test(titulo)) ?? { color: "var(--tenue)", etiqueta: null };
 }
 
+/**
+ * Los que no son un cliente. Agrupando por cliente van DESPUÉS de los clientes
+ * de verdad: «producto» es una respuesta válida a «¿de quién es esto?», pero no
+ * es quien llama por teléfono.
+ */
+const NO_ES_CLIENTE = new Set([
+  "todos", "producto", "interno", "documentación", "varios", "sin asignar",
+]);
+
 function Etiqueta({ children, color }) {
   return (
     <span className="text-[10px] uppercase tracking-[0.18em]" style={{ color: color ?? "var(--tenue)" }}>
@@ -51,6 +71,10 @@ export default function TableroPage() {
   const [error, setError] = useState(null);
   const [pestaña, setPestaña] = useState("pendiente");
   const [filtro, setFiltro] = useState("");
+  // Se abre por urgencia, que es la pregunta de todos los días («¿qué toca
+  // ahora?»). Por cliente es la del teléfono sonando («¿cómo vamos con
+  // Aumenta?»), que se hace menos veces pero con más prisa.
+  const [agrupacion, setAgrupacion] = useState("urgencia");
 
   useEffect(() => { document.title = "Registro — Salamandra"; }, []);
 
@@ -82,6 +106,51 @@ export default function TableroPage() {
       }))
       .filter((s) => s.tareas.length > 0);
   }, [secciones, filtro]);
+
+  /**
+   * Los bloques que se pintan, agrupados de una forma o de la otra.
+   *
+   * Cada tarea se lleva su `tono` puesto, porque agrupando por cliente el color
+   * ya no lo puede dar el bloque: dentro de «aumenta» hay P0 y P3 mezclados, y
+   * perder de vista qué corre prisa sería cambiar un problema por otro.
+   *
+   * Una tarea de tres clientes sale en los TRES grupos. Es a propósito: si
+   * saliera en uno solo, los recuentos volverían a mentir, que es de lo que
+   * venimos.
+   */
+  const grupos = useMemo(() => {
+    if (agrupacion === "urgencia") {
+      return visibles.map((s) => {
+        const tono = tonoDe(s.titulo);
+        return {
+          titulo: s.titulo,
+          etiqueta: tono.etiqueta,
+          color: tono.color,
+          tareas: s.tareas.map((t) => ({ ...t, tono, deSeccion: null })),
+        };
+      });
+    }
+
+    const mapa = new Map();
+    for (const s of visibles) {
+      const tono = tonoDe(s.titulo);
+      for (const t of s.tareas) {
+        for (const quien of t.quienes?.length ? t.quienes : ["sin asignar"]) {
+          if (!mapa.has(quien)) mapa.set(quien, []);
+          mapa.get(quien).push({ ...t, tono, deSeccion: s.titulo });
+        }
+      }
+    }
+
+    return [...mapa.entries()]
+      .map(([titulo, tareas]) => ({ titulo, etiqueta: null, color: "var(--tenue)", tareas }))
+      .sort((a, b) => {
+        const ga = NO_ES_CLIENTE.has(a.titulo) ? 1 : 0;
+        const gb = NO_ES_CLIENTE.has(b.titulo) ? 1 : 0;
+        if (ga !== gb) return ga - gb;
+        return b.tareas.length - a.tareas.length || a.titulo.localeCompare(b.titulo);
+      });
+  }, [visibles, agrupacion]);
 
   const cuantas = (clave) =>
     (datos?.[clave] ?? []).reduce((n, s) => n + s.tareas.length, 0);
@@ -128,24 +197,49 @@ export default function TableroPage() {
           </p>
         )}
 
-        <div className="mt-7 flex items-center gap-1">
-          {[
-            ["pendiente", "Pendiente", cuantas("pendiente")],
-            ["resuelto", "Resuelto", cuantas("resuelto")],
-          ].map(([clave, texto, n]) => (
-            <button
-              key={clave}
-              onClick={() => setPestaña(clave)}
-              className="px-4 py-2 rounded-lg text-[13px] transition-colors"
-              style={{
-                background: pestaña === clave ? "var(--panel-alto)" : "transparent",
-                color: pestaña === clave ? "var(--text)" : "var(--tenue)",
-                border: `1px solid ${pestaña === clave ? "var(--line)" : "transparent"}`,
-              }}
-            >
-              {texto} <span className="tabular-nums opacity-60">{n}</span>
-            </button>
-          ))}
+        <div className="mt-7 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-1">
+            {[
+              ["pendiente", "Pendiente", cuantas("pendiente")],
+              ["resuelto", "Resuelto", cuantas("resuelto")],
+            ].map(([clave, texto, n]) => (
+              <button
+                key={clave}
+                onClick={() => setPestaña(clave)}
+                className="px-4 py-2 rounded-lg text-[13px] transition-colors"
+                style={{
+                  background: pestaña === clave ? "var(--panel-alto)" : "transparent",
+                  color: pestaña === clave ? "var(--text)" : "var(--tenue)",
+                  border: `1px solid ${pestaña === clave ? "var(--line)" : "transparent"}`,
+                }}
+              >
+                {texto} <span className="tabular-nums opacity-60">{n}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Agrupar. La agrupación se conserva al cambiar de pestaña, igual
+              que el filtro: «¿cómo vamos con Aumenta?» incluye lo entregado. */}
+          <div className="flex items-center gap-1">
+            <Etiqueta>Agrupar por</Etiqueta>
+            {[
+              ["urgencia", "Urgencia"],
+              ["cliente", "Cliente"],
+            ].map(([clave, texto]) => (
+              <button
+                key={clave}
+                onClick={() => setAgrupacion(clave)}
+                className="px-2.5 py-1 rounded-md text-[12px] transition-colors"
+                style={{
+                  background: agrupacion === clave ? "var(--panel-alto)" : "transparent",
+                  color: agrupacion === clave ? "var(--text)" : "var(--tenue)",
+                  border: `1px solid ${agrupacion === clave ? "var(--line)" : "transparent"}`,
+                }}
+              >
+                {texto}
+              </button>
+            ))}
+          </div>
         </div>
 
         <input
@@ -157,65 +251,72 @@ export default function TableroPage() {
         />
       </header>
 
-      {visibles.length === 0 && (
+      {grupos.length === 0 && (
         <p className="text-[13px]" style={{ color: "var(--tenue)" }}>
           {filtro ? `Nada casa con «${filtro}».` : "Nada por aquí."}
         </p>
       )}
 
       <div className="space-y-8">
-        {visibles.map((s) => {
-          const tono = tonoDe(s.titulo);
-          return (
-            <section key={s.titulo}>
-              <div className="flex items-baseline gap-2.5 mb-3">
-                <Etiqueta color={tono.color}>{s.titulo}</Etiqueta>
-                <span className="text-[11px] tabular-nums" style={{ color: "var(--tenue)" }}>
-                  {s.tareas.length}
-                </span>
-              </div>
+        {grupos.map((g) => (
+          <section key={g.titulo}>
+            <div className="flex items-baseline gap-2.5 mb-3">
+              <Etiqueta color={g.color}>{g.titulo}</Etiqueta>
+              <span className="text-[11px] tabular-nums" style={{ color: "var(--tenue)" }}>
+                {g.tareas.length}
+              </span>
+            </div>
 
-              <div className="space-y-px">
-                {s.tareas.map((t) => (
-                  <details
-                    key={t.titulo}
-                    className="rounded-lg px-4 py-3"
-                    style={{ background: "var(--panel)", border: "1px solid var(--line)" }}
+            <div className="space-y-px">
+              {g.tareas.map((t) => (
+                <details
+                  key={`${g.titulo}·${t.titulo}`}
+                  className="rounded-lg px-4 py-3"
+                  style={{ background: "var(--panel)", border: "1px solid var(--line)" }}
+                >
+                  <summary className="cursor-pointer list-none flex items-start gap-3">
+                    <span
+                      className="inline-block w-[3px] rounded-full shrink-0 self-stretch"
+                      style={{ background: t.tono.color }}
+                    />
+                    <span className="flex-1 min-w-0">
+                      <span className="text-[14px]">{t.titulo}</span>
+                      {/* Agrupando por cliente, la urgencia deja de estar en la
+                          cabecera del bloque, así que se dice aquí. */}
+                      {t.deSeccion && t.tono.etiqueta && (
+                        <span
+                          className="ml-2 text-[10px] uppercase tracking-[0.14em] whitespace-nowrap"
+                          style={{ color: t.tono.color }}
+                        >
+                          {t.tono.etiqueta}
+                        </span>
+                      )}
+                      {t.quien && (
+                        <span
+                          className="ml-2 text-[11px] px-1.5 py-0.5 rounded whitespace-nowrap"
+                          style={{
+                            color: "var(--dim)",
+                            border: "1px solid color-mix(in srgb, var(--tenue) 35%, transparent)",
+                          }}
+                        >
+                          {t.quien}
+                        </span>
+                      )}
+                    </span>
+                  </summary>
+                  {/* El cuerpo se pinta tal cual, respetando saltos de línea: es
+                      texto escrito para leerse, no datos que reformatear. */}
+                  <div
+                    className="mt-3 ml-[15px] text-[12.5px] leading-relaxed whitespace-pre-wrap"
+                    style={{ color: "var(--dim)" }}
                   >
-                    <summary className="cursor-pointer list-none flex items-start gap-3">
-                      <span
-                        className="inline-block w-[3px] rounded-full shrink-0 self-stretch"
-                        style={{ background: tono.color }}
-                      />
-                      <span className="flex-1 min-w-0">
-                        <span className="text-[14px]">{t.titulo}</span>
-                        {t.quien && (
-                          <span
-                            className="ml-2 text-[11px] px-1.5 py-0.5 rounded whitespace-nowrap"
-                            style={{
-                              color: "var(--dim)",
-                              border: "1px solid color-mix(in srgb, var(--tenue) 35%, transparent)",
-                            }}
-                          >
-                            {t.quien}
-                          </span>
-                        )}
-                      </span>
-                    </summary>
-                    {/* El cuerpo se pinta tal cual, respetando saltos de línea: es
-                        texto escrito para leerse, no datos que reformatear. */}
-                    <div
-                      className="mt-3 ml-[15px] text-[12.5px] leading-relaxed whitespace-pre-wrap"
-                      style={{ color: "var(--dim)" }}
-                    >
-                      {t.cuerpo}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            </section>
-          );
-        })}
+                    {t.cuerpo}
+                  </div>
+                </details>
+              ))}
+            </div>
+          </section>
+        ))}
       </div>
 
       <p className="mt-10 text-[11px] leading-relaxed" style={{ color: "var(--tenue)" }}>

@@ -35,7 +35,39 @@ function candado(ctx) {
 const SLUGS = [
   "aumenta", "nutri_laura", "spain_enzymes", "quality_energy",
   "retorika", "abarcaia", "healim", "demo", "sandbox",
+  "salamandra_solutions",
 ];
+
+/**
+ * Destinatarios que no son un cliente, pero sí una respuesta legítima a «¿de
+ * quién es esto?». Van al lado de los slugs y forman grupo propio.
+ */
+const GENERICOS = ["todos", "producto", "interno", "documentación", "varios"];
+
+/**
+ * Que el nombre esté SUELTO, no dentro de otra palabra: si no, «producto
+ * (demostración)» le colgaría la tarea a `demo`. El guión bajo cuenta como
+ * letra para que `nutri_laura` no case dentro de `nutri_laura_2`.
+ */
+const sueltoEn = (texto, nombre) =>
+  new RegExp(`(^|[^a-z0-9_])${nombre}([^a-z0-9_]|$)`, "i").test(texto);
+
+/**
+ * Los destinatarios de una tarea, sacados de la cola del título.
+ *
+ * NO SE PARTE POR COMAS, y ese detalle es justo lo que hace que los recuentos
+ * cuadren. Las colas están escritas a mano y no son listas limpias: hay «demo,
+ * aumenta, salamandra_solutions», pero también «nutri_laura (y todos con
+ * citas)». Partiendo por comas, esa segunda inventa un cliente llamado
+ * «nutri_laura (y todos con citas)» que no cae en ningún grupo — que es
+ * exactamente lo que hacía que Aumenta enseñara 7 tareas teniendo 10.
+ *
+ * Se buscan los nombres CONOCIDOS dentro de la cadena y se devuelven los que
+ * estén, sin repetir. Una tarea de tres clientes sale en los tres grupos.
+ */
+function destinatarios(cola) {
+  return [...SLUGS, ...GENERICOS].filter((n) => sueltoEn(cola, n));
+}
 
 /**
  * Trocea un fichero en secciones (`##`) y tareas (`###`).
@@ -45,7 +77,24 @@ const SLUGS = [
  * se deja tal cual y lo pinta el navegador como texto.
  */
 function trocear(texto) {
-  const lineas = texto.split("\n");
+  /*
+   * Se parte por /\r?\n/ y no por "\n" a secas (12/08/2026).
+   *
+   * Con finales de línea de Windows, cada línea conservaba su `\r` final. Y en
+   * JavaScript el `.` no casa con `\r`, así que `/^##\s+(.+)$/` NO casaba con
+   * «## P0 — hoy\r»: ninguna cabecera entraba, el troceador devolvía cero
+   * secciones y la pantalla decía «Nada por aquí» — lo contrario de la verdad.
+   *
+   * Solo lo veía quien desarrolla en Windows, porque `core.autocrlf=true` deja
+   * LF en el repositorio y en el contenedor no hay ni un `\r`. Y despistaba el
+   * doble, porque `resuelto.md` sí estaba en LF y la pestaña de al lado se veía
+   * bien, con lo que el fallo parecía de los datos.
+   *
+   * El arreglo va aquí, en el corte, y no aflojando los regex: así se limpian a
+   * la vez las cabeceras y los cuerpos, que también arrastraban un `\r` por
+   * línea porque `join("\n").trim()` solo toca los extremos.
+   */
+  const lineas = texto.split(/\r?\n/);
   const secciones = [];
   let seccion = null;
   let tarea = null;
@@ -75,17 +124,23 @@ function trocear(texto) {
       const corte = bruto.lastIndexOf("·");
       let titulo = bruto;
       let quien = null;
+      let quienes = [];
       if (corte > 0) {
         const cola = bruto.slice(corte + 1).replace(/`/g, "").trim();
-        // Solo se separa si de verdad es un cliente conocido (o «todos» /
-        // «producto» / «interno»): así un título con un punto medio por otro
-        // motivo no se parte por la mitad.
-        if (SLUGS.some((s) => cola.includes(s)) || /^(todos|producto|interno|documentación)/i.test(cola)) {
+        // Solo se separa si de verdad hay alguien conocido detrás: así un
+        // título con un punto medio por otro motivo no se parte por la mitad.
+        const encontrados = destinatarios(cola);
+        if (encontrados.length > 0) {
           titulo = bruto.slice(0, corte).trim();
           quien = cola;
+          quienes = encontrados;
         }
       }
-      tarea = { titulo, quien, cuerpo: [] };
+      // `quien` es lo que escribió la persona y es lo que se enseña; `quienes`
+      // es la lista para agrupar y contar. Son dos cosas distintas a propósito:
+      // dentro del grupo de Aumenta sigue interesando ver que una tarea es
+      // compartida con la demo.
+      tarea = { titulo, quien, quienes, cuerpo: [] };
       continue;
     }
 
