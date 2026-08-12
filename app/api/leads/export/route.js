@@ -57,42 +57,7 @@ const TENANT_COLUMNS = {
       createdAt: lead.createdAt ? new Date(lead.createdAt).toLocaleDateString("es-ES") : "",
     }),
   },
-  abarcaia: {
-    columns: [
-      { header: "Nombre", key: "name", width: 25 },
-      { header: "Email", key: "email", width: 30 },
-      { header: "Teléfono", key: "phone", width: 15 },
-      { header: "Cargo", key: "cargo", width: 28 },
-      { header: "Empresa actual", key: "empresa_actual", width: 28 },
-      { header: "Ubicación", key: "zona", width: 20 },
-      { header: "LinkedIn", key: "linkedin", width: 40 },
-      { header: "Usuario Instagram", key: "instagram_user", width: 25 },
-      { header: "Estado", key: "stage", width: 20 },
-      { header: "Respuesta", key: "respuesta", width: 30 },
-      { header: "Demo Agendada", key: "demo_agendada", width: 15 },
-      { header: "Fecha Demo", key: "fecha_demo", width: 18 },
-      { header: "Prioridad", key: "prioridad", width: 12 },
-      { header: "Notas", key: "notes", width: 40 },
-      { header: "Fecha", key: "createdAt", width: 14 },
-    ],
-    row: (lead) => ({
-      name: lead.name || lead.title || "",
-      email: lead.email || "",
-      phone: lead.phone || "",
-      cargo: lead.customFields?.cargo || "",
-      empresa_actual: lead.customFields?.empresa_actual || "",
-      zona: lead.customFields?.zona ?? lead.customFields?.zone ?? "",
-      linkedin: lead.customFields?.linkedin || "",
-      instagram_user: lead.customFields?.instagram_user || "",
-      stage: STAGE_LABELS[lead.stage] ?? lead.stage,
-      respuesta: lead.customFields?.respuesta || "",
-      demo_agendada: lead.customFields?.demo_agendada || "",
-      fecha_demo: lead.customFields?.fecha_demo || "",
-      prioridad: lead.customFields?.prioridad || "",
-      notes: lead.notes || "",
-      createdAt: lead.createdAt ? new Date(lead.createdAt).toLocaleDateString("es-ES") : "",
-    }),
-  },
+  // `abarcaia` tenía el suyo y se fue con el cliente el 12/08/2026.
 };
 
 const DEFAULT_CONFIG = {

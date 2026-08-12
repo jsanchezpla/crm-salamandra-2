@@ -14,7 +14,8 @@
 import { getMasterModels } from "../lib/db/masterDb.js";
 
 const SLUG = "demo";
-const MODULES = ["formularios", "referidos", "documents"];
+// `referidos` estaba aquí y se cayó el 12/08/2026 con el módulo entero.
+const MODULES = ["formularios", "documents"];
 
 function log(m) { process.stdout.write(`  ${m}\n`); }
 

@@ -17,7 +17,7 @@ import CredentialsModal from "./CredentialsModal.jsx";
  */
 
 export const MODULE_LABELS = {
-  clients: "Clientes", leads: "Leads", outreach: "Captación", referidos: "Referidos",
+  clients: "Clientes", leads: "Leads", outreach: "Captación",
   calendar: "Calendario", citas: "Citas", nutricion: "Nutrición", projects: "Proyectos",
   orders: "Pedidos", billing: "Facturación", documents: "Documentos", clinica: "Clínica",
   pacientes: "Pacientes", team: "Equipo", inventory: "Inventario", training: "Formación",

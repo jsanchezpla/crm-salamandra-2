@@ -78,13 +78,15 @@ const navigation = [
         //   Profesionales → quien deriva (el embudo de siempre, /leads).
         //   Comerciales   → quien llega por la web (el antiguo Formularios).
         // En el menú van sin la palabra «Leads» delante, que ya la pone el
-        // grupo; dentro de cada pantalla sí, completa. Referidos es un tercer
-        // origen. Llevan `moduleKey` porque los hijos no gatean por módulo por
-        // defecto y estos solo existen en algunos tenants.
+        // grupo; dentro de cada pantalla sí, completa. Llevan `moduleKey` porque
+        // los hijos no gatean por módulo por defecto y estos solo existen en
+        // algunos tenants.
+        //
+        // Hubo un tercer origen, «Referidos», que se retiró entero el
+        // 12/08/2026 con el cliente para el que estaba hecho (abarcaia).
         children: [
           { key: "leads-profesionales", label: "Profesionales", href: "/leads", moduleKey: "leads" },
           { key: "leads-comerciales", label: "Comerciales", href: "/formularios", moduleKey: "formularios" },
-          { key: "leads-referidos", label: "Referidos", href: "/referidos", moduleKey: "referidos" },
         ],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">

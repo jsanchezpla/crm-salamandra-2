@@ -117,8 +117,6 @@ const MODULOS = {
   // tabla, otra ruta. Se declara para que un tenant que lo tenga no salga como
   // "módulo sin tablas declaradas".
   sales: { nucleo: ["leads"], extras: [] },
-  // Referidos no tiene tablas propias: el formulario público escribe en `leads`.
-  referidos: { nucleo: ["leads"], extras: [] },
   formularios: { nucleo: ["forms", "form_submissions"], extras: [] },
   team: { nucleo: ["team_members"], extras: ["team_member_modules", "team_member_hours"] },
   // Equipo avanzado no tiene tablas SUYAS: vive sobre las de team y clinica, y

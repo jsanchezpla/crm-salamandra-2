@@ -33,7 +33,7 @@ Antes de implementar cambios en un módulo concreto, lee su doc:
 | Emails (infra)    | `docs/modules/emails.md`     | Infra transversal                |
 
 Módulos implementados **sin doc dedicado** (su detalle vive en la tabla de
-módulos más abajo): `calendar`, `orders`, `referidos`.
+módulos más abajo): `calendar`, `orders`.
 
 > **`cuestionarios` dejó de ser un módulo el 10/08/2026.** Nunca lo fue del
 > todo: la puerta de sus siete endpoints era `training || cuestionarios`, así
@@ -158,10 +158,9 @@ Configuración de VS Code, ESLint y Prettier en sus respectivos ficheros
 PostgreSQL DB: salamandra
 ├── schema: master              ← tenants, users, tenant_modules, audit_log, tablero_estado
 ├── schema: crm_demo            ← tenant de desarrollo (local + producción)
-├── schema: crm_retorika        ← Retorika (formación) — solo producción
-├── schema: crm_quality_energy  ← Quality Energy (leads)
+├── schema: crm_retorika        ← Retorika (formación)
 ├── schema: crm_aumenta         ← Aumenta (leads)
-├── schema: crm_abarcaia        ← Abarcaia (leads + referidos) — solo producción
+├── schema: crm_somos           ← Somos
 └── schema: crm_spain_enzymes   ← Spain Enzymes (leads + analytics en prod; en local además clientes/inventario/billing/orders)
 ```
 
@@ -300,16 +299,25 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 > Lo que queda abajo es lo que la base de datos NO sabe: quién es cada cliente,
 > qué no se le puede tocar y por qué. Eso sí vive aquí.
 
+> **TRES BAJAS EL 12/08/2026** (Rodrigo). `abarcaia`, `quality_energy` y
+> `healim` se dieron de baja y **se purgaron sus schemas**: ya no existen ni en
+> `master.tenants` ni en PostgreSQL. Antes se sacó un volcado de los tres a
+> `/root/backups/bajas-abarcaia-quality-healim-20260812.sql.gz` en el VPS (84
+> leads de Abarca, 129 de Quality, 5 citas pasadas de Healim). Si algún día hace
+> falta algo de ahí, está en ese fichero y en ningún otro sitio.
+>
+> Con ellos se fueron sus overrides de leads, sus seeds y sus scripts de un solo
+> uso. **Sus nombres siguen a propósito en `app/api/admin/tablero/route.js`**:
+> el tablero lee tareas históricas donde están escritos, y quitarlos de esa
+> lista dejaría esas tareas sin cliente.
+
 | Slug             | Entorno         | Quién es y qué hay que saber |
 | ---------------- | --------------- | ---------------------------- |
 | `demo`           | local + prod    | Tenant de desarrollo y show-room. Datos FALSOS a propósito: tiene casi todos los módulos para poder enseñarlos juntos. **Es pública y da sesión de admin a cualquiera**, así que todo endpoint que mande correo, gaste IA o escriba en master necesita su guard de `lib/demo/isDemo.js`. |
 | `retorika`       | local + prod    | Academia online (WordPress + TutorLMS). |
-| `quality_energy` | local + prod    | Empresa energética. Tuvo `referidos` en su día (limpiado por `remove-abarcaia-from-quality.js`). |
 | `aumenta`        | local + prod    | Centro de psicología y formación, y **el cliente que más usa el CRM**: 12.030 citas, 15 personas y 88 de las 99 integraciones vivas. Overrides de UI: `aumenta/LeadsModule` y `aumenta/FormacionOverview`; el sidebar dice "Interesados" en vez de "Leads". **CRM en uso REAL desde 2026-07-24**: datos de ejemplo borrados (`reset-aumenta-real-data.js`; los LEADS eran reales y se conservaron) y equipo real dado de alta (`seed-aumenta-equipo-real.js`: 13 logins tipo `nombre_aumenta` con rol `user`; dirección usa admin@aumenta.es). Desempeño/Dirección/Productividad son SOLO admin. **NO wipear ni sembrar sin permiso.** **Agenda compartida ENCENDIDA el 01/08/2026** a petición de Rodrigo: todo el equipo ve la agenda completa, y con ella los datos de contacto del paciente. |
-| `abarcaia`       | solo producción | Programa de referidos vía formulario público. |
 | `spain_enzymes`  | local + prod    | Cliente real en producción (admin `admin@spain-enzymes.salamandra`). Su web (spainenzymes.com, WordPress) manda los leads del formulario a `/api/public/leads`. **Ojo**: en local tiene módulos que en producción NO ha contratado; no dar por buena la lista de local. |
 | `nutri_laura`    | local + prod    | Nutricionista (Laura). Override de leads (embudo nutricional) + conversión lead→paciente + override del overview de formación (B2C, sin TutorLMS aún). Subida a prod el 2026-06-23 con el sprint Recetario C1. **NO tiene `clinica` ni `pacientes`**: sus "pacientes" son `Client` con plan de menú, y por eso el módulo `clients` se le rotula «Pacientes» (ver `lib/clients/vocabulario.js`). |
-| `healim`         | local + prod    | Cliente de solo Citas. **No estaba en esta tabla hasta el 10/08/2026** y llevaba meses en producción. |
 | `somos`          | prod            | **No estaba en esta tabla hasta el 12/08/2026**, igual que le pasó a healim. Lo que se sabe mirando la base de datos: activo, 21 módulos —todos los que se venden—, sin un solo dato dentro todavía (0 fichas, 0 formularios, 0 leads) y con paleta propia desde el 12/08 (`#124A55` azul petróleo + `#F59C00` naranja, ver `scripts/update-somos-brand.js`). **Quién es y qué no se le puede tocar, que es para lo que sirve esta tabla, sigue sin escribir**: lo sabe Jorge o Rodrigo. |
 | `salamandra_solutions` | prod; en local solo la ficha (sin schema `crm_salamandra_solutions`) | **Somos nosotros.** Es el único con el módulo `provisioning`, que es lo que abre el back-office (`/admin`). No es un cliente: no cuenta en los recuentos de las pantallas internas. |
 
@@ -380,7 +388,7 @@ aplique.
 | calendar      | Calendario                     | Implementado (demo, aumenta)        | —                           |
 | citas         | Citas (reservas + portal SSO)  | Implementado (nutri_laura, aumenta) | `docs/modules/citas.md`     |
 | orders        | Pedidos                        | Implementado (spain_enzymes, aumenta) | —                         |
-| referidos     | Referidos (formulario público) | Implementado (abarcaia)             | —                           |
+| ~~referidos~~ | Referidos (formulario público) | **Retirado el 12/08/2026.** Ver abajo | —                        |
 | ~~cuestionarios~~ | Cuestionarios (TutorLMS)   | **Ya no es un módulo** (10/08/2026): es una pantalla de Formación, `/formacion/cuestionarios` | (dentro de `training.md`) |
 | clients_avanzado | Clientes avanzado: lista de espera de admisión (aumenta, demo) | Implementado | — |
 | pacientes     | Pacientes                      | Implementado (aumenta)              | `docs/modules/pacientes.md` |

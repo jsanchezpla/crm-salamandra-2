@@ -35,7 +35,8 @@ const QUICK_LINKS = [
   { moduleKey: "training",    href: "/formacion",   eyebrow: "Conocimiento", title: "Formación",   hint: "Cursos y alumnos" },
   { moduleKey: "inventory",   href: "/inventario",  eyebrow: "Operaciones",  title: "Inventario",  hint: "Productos y existencias" },
   { moduleKey: "calendar",    href: "/calendario",  eyebrow: "Tiempo",       title: "Calendario",  hint: "Agenda del equipo" },
-  { moduleKey: "referidos",   href: "/referidos",   eyebrow: "Crecimiento",  title: "Referidos",   hint: "Programa de referidos" },
+  // `referidos` se cae de la lista el 12/08/2026: el módulo se retiró entero
+  // junto al cliente para el que estaba hecho a medida (abarcaia).
   // `sales` se cae de la lista: apuntaba a /comercial, que NO EXISTE como
   // página —da 404— y su único contenido real vive en /leads. Ver el runbook de
   // ayudas, donde quedó anotado como código al que no se llega.

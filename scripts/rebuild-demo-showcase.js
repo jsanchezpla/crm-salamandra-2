@@ -46,7 +46,8 @@ const MODULES = [
   "clients", "leads", "projects", "billing", "team", "inventory", "training",
   "calendar", "citas", "orders",
   "pacientes", "clinica", "nutricion", "outreach",
-  "formularios", "referidos", "documents",
+  // 2026-08-12: fuera "referidos" — el módulo se retiró entero.
+  "formularios", "documents",
 ];
 
 function log(m) { process.stdout.write(`  ${m}\n`); }

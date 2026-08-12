@@ -50,7 +50,6 @@ const MODULES = [
   "calendar",
   "citas",
   "orders",
-  "referidos",
   "pacientes",
   "clinica",
   "nutricion",

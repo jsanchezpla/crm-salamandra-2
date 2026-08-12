@@ -43,16 +43,20 @@ function candado(ctx) {
   return null;
 }
 
-/** Clientes conocidos, para poder colgarle cada tarea a quien es. */
+/**
+ * Clientes conocidos, para poder colgarle cada tarea a quien es.
+ *
+ * `quality_energy`, `abarcaia` y `healim` se fueron el 12/08/2026 (baja y purga
+ * del schema), pero SIGUEN AQUÍ a propósito: el tablero lee tareas históricas
+ * del backlog y del registro de resueltas, y ahí sus nombres están escritos.
+ * Quitarlos de esta lista no borra esas tareas — las deja sin cliente, con la
+ * cola metida dentro del título, que es justo el despiste que costó apuntar a
+ * `somos` ese mismo día.
+ */
 const SLUGS = [
   "aumenta", "nutri_laura", "spain_enzymes", "quality_energy",
   "retorika", "abarcaia", "healim", "demo", "sandbox",
-  "salamandra_solutions",
-  // `somos` se añadió el 12/08/2026: llevaba tiempo en producción y no estaba
-  // aquí, así que cualquier tarea suya se pintaba con la cola metida dentro del
-  // título y sin caer en ningún grupo. Es el mismo despiste que ya se documentó
-  // con healim en CLAUDE.md — un cliente nuevo hay que apuntarlo también aquí.
-  "somos",
+  "salamandra_solutions", "somos",
 ];
 
 /**

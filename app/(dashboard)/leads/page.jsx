@@ -2,21 +2,20 @@ import { headers } from "next/headers";
 import { getMasterModels } from "../../../lib/db/masterDb.js";
 
 import DefaultLeadsModule from "../../../modules/leads/LeadsModule.jsx";
-import QECLeadsModule from "../../../modules/overrides/quality-energy/LeadsModule.jsx";
 import RetorikaLeadsModule from "../../../modules/overrides/retorika/LeadsModule.jsx";
 import AumentaLeadsModule from "../../../modules/overrides/aumenta/LeadsModule.jsx";
-import AbarcaIALeadsModule from "../../../modules/overrides/abarcaia/LeadsModule.jsx";
 import DemoLeadsModule from "../../../modules/overrides/demo/LeadsModule.jsx";
 import SpainEnzymesLeadsModule from "../../../modules/overrides/spain-enzymes/LeadsModule.jsx";
 import NutriLauraLeadsModule from "../../../modules/overrides/nutri-laura/LeadsModule.jsx";
 import SandboxLeadsModule from "../../../modules/overrides/sandbox/LeadsModule.jsx";
 
+// Los overrides de `quality_energy` y `abarcaia` se fueron con sus clientes el
+// 12/08/2026: los dos se dieron de baja y su schema se destruyó. Quien no está
+// en este mapa usa el módulo por defecto.
 const UI_OVERRIDES = {
-  quality_energy: QECLeadsModule,
   retorika: RetorikaLeadsModule,
   aumenta: AumentaLeadsModule,
   sandbox: SandboxLeadsModule, // copia del override de aumenta recoloreada a #1B3A2D
-  abarcaia: AbarcaIALeadsModule,
   demo: DemoLeadsModule,
   spain_enzymes: SpainEnzymesLeadsModule,
   nutri_laura: NutriLauraLeadsModule,
