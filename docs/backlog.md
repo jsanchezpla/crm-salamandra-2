@@ -183,38 +183,6 @@ del VPS: lo que se añade hoy es la decisión que faltaba, no un hecho nuevo de
 producción.
 *Comprobado en producción*: 09/08/2026 — `failed` sigue en la lista.
 
-### Trece personas de Aumenta no ven módulos que el centro tiene · `aumenta`
-
-Los usuarios normales no tienen acceso a `clients`, `documents`, `formularios`,
-`team` ni una decena más. Puede ser deliberado —trabajan en Pacientes y
-Clínica— o puede que nadie se lo diera al ampliar módulos entre el 27/07 y el
-01/08. **Es una decisión de negocio, no un fallo**: hay que preguntarles.
-
-Dos de las trece (`rosa_aumenta`, `olga_aumenta`) tienen `billing` y `documents`
-y las otras once no, lo que sugiere que en algún momento sí se repartió a mano.
-
-*Se comprueba*: preguntar a Aumenta y dejar la respuesta escrita aquí.
-*Comprobado en producción*: 09/08/2026 — **son 13, no 11** como decía esta
-tarea antes.
-
-### La agenda de Laura tiene 16 citas que son pruebas nuestras · `nutri_laura`
-
-Antes de abrir la agenda, el equipo reservó citas a su propio nombre para probar
-el widget, el cobro y los avisos, y ahí siguen. Laura ve en su calendario a
-Jorge Sánchez Pla, a Rodrigo, a Carlos Torrents y una llamada «Pruebita»
-mezclados con sus pacientes. **Seis son de días que aún no han llegado**, así
-que no parecen basura vieja: parecen visitas que tiene que atender. Las únicas
-citas reales son las de Inés y las de Maider.
-
-*Se comprueba*: `SELECT client_name, count(*) FROM crm_nutri_laura.bookings
-GROUP BY 1` solo devuelve nombres de pacientes de verdad.
-*Dónde*: hay un script listo, `scripts/borrar-citas-por-nombre.js` — simula por
-defecto y `--inventario` enseña todos los nombres antes de tocar nada.
-*Comprobado en producción*: 10/08/2026 — 15 del equipo (Rodrigo 6, Jorge
-Sánchez Pla 6, Carlos Torrents 2, Rodrigo Herreros de Tejada 1) más «Pruebita»,
-de las cuales **6 son futuras**; reales solo Inés (2), Inés Chico Cornejo (1) y
-Maider Zabala Gonzalez (1).
-
 ---
 
 ## P2 — cuando se pueda

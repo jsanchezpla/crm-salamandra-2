@@ -28,6 +28,88 @@ Lo más reciente arriba.
 
 ## 12/08/2026
 
+### Los trece de Aumenta ven lo que tienen que ver · `aumenta`
+
+Estaba en P1 esperando una respuesta del centro: trece personas sin acceso a
+`clients`, `documents`, `formularios`, `team` y una decena más, con dos de ellas
+—`rosa_aumenta` y `olga_aumenta`— sí con `billing` y `documents`, lo que parecía
+un reparto a medio hacer. **Preguntado a Aumenta, el reparto es el correcto y no
+hay nada que tocar** (Rodrigo, 12/08/2026):
+
+- **Once son terapeutas** y trabajan en Pacientes y Clínica. Tienen `calendar`,
+  `citas`, `clinica` y `pacientes`, que es su trabajo entero.
+- **Olga y Rosa son administración y finanzas**, y por eso ellas dos suman
+  `billing` y `documents`. El reparto a mano que se intuía era ese, y a propósito.
+- **La dirección son otras dos personas** y entran por la cuenta de admin
+  (`admin@aumenta.es`), que tiene `["all"]` y lo ve todo.
+
+Lo que la tarea leía como un olvido era el organigrama del centro. Que once
+personas no vean Facturación no es un permiso que falte: es que no facturan.
+
+Queda apuntado, sin ser tarea: esas dos personas de dirección comparten un solo
+login, así que en Equipo → Actividad sus dos rastros salen como uno.
+
+*Cómo se comprobó*: contra el VPS el 12/08/2026, `master.users` de `aumenta` sale
+partida en exactamente tres grupos, sin mezcla ni caso suelto: once con
+["calendar","citas","clinica","pacientes"] (araceli, arantxa, blanca, daniela,
+elena, estefanía, isabel, laura, raquelm, raquelt, silvia), dos con esos cuatro
+más "billing" y "documents" (olga, rosa) y admin@aumenta.es con ["all"]. Catorce
+logins: trece de rol user y uno admin.
+
+### La agenda de Laura ya solo tiene pacientes suyas · `nutri_laura`, `healim`
+
+Estaba en P1: dieciséis citas del equipo mezcladas con las pacientes de Laura,
+seis de ellas en días que aún no habían llegado, así que parecían visitas que
+tenía que atender. **Borradas el 12/08/2026** a petición de Rodrigo: «elimina de
+todos lados las citas de Rodrigo, Jorge, Carlos y Rodrigo Herreros de Tejada».
+
+Lo que se ha ido, con `scripts/borrar-citas-por-nombre.js`:
+
+- **nutri_laura, 16 citas**: Jorge Sánchez Pla (7), Rodrigo (6, contando la que
+  estaba a nombre de «Rodrigo Herreros de Tejada») y Carlos Torrents (2), más las
+  5 sesiones de cobro que colgaban de ellas. Ninguna petición de cambio de hora
+  ni aviso al cliente.
+- **healim, 1 cita**: Jorge Sánchez Pla, del 17/06. Nadie la había visto porque
+  la tarea solo hablaba de Laura; «de todos lados» era literal.
+- **Y «Pruebita»**, la cancelada del 06/08 a nombre de prueba@email.com. No
+  estaba en los cuatro nombres que se pidieron, así que se preguntó antes en vez
+  de darla por basura: Rodrigo confirmó que también se iba.
+
+La agenda de Laura queda en 6 citas y todas son suyas: Inés (2), Inés Chico
+Cornejo, Maider Zabala Gonzalez, Cristina García y Carolina Gil —las dos últimas,
+pacientes nuevas que entraron después de escribirse la tarea.
+
+Lo que NO se ha tocado, y sigue ahí: en Pacientes de Laura hay dos fichas de
+prueba, «Rodrigo» (info@agenciasalamandra.com) y «Jorge Sánchez Pla». No son
+citas y no salen gratis — de esas dos cuelgan 2 contratos firmados, 2 documentos,
+3 bonos de sesiones, 2 formularios y 4 formas de contacto—, así que borrarlas es
+otra decisión y otra pasada. Rodrigo lo dejó para más adelante el 12/08.
+
+⚠️ **Lo que casi sale mal, y hay que saber antes de volver a lanzar ese script.**
+Su lista de fábrica lleva «Rodrigo» a secas, y su regla de coincidencia es el
+nombre entero o el patrón seguido de un espacio: caza a cualquiera que se llame
+Rodrigo algo. En Aumenta hay un paciente REAL, Rodrigo Sebastián Silva Leiva,
+con 42 citas confirmadas de aquí a junio de 2027, y otros cinco que empiezan por
+Jorge o Carlos con entre 43 y 87 citas cada uno. Lanzarlo con `--tenant aumenta`
+y la lista por defecto se habría llevado 302 citas de seis pacientes de verdad,
+todas futuras. Por eso se inventarió PRIMERO nombre a nombre en los once schemas
+con tabla `bookings`, y en healim se lanzó con `--nombre "Jorge Sánchez Pla"` en
+vez de con la lista por defecto. El peligro de este script no es el SQL: son los
+homónimos.
+
+**Hay copia de seguridad.** Las 23 filas (17 citas de nutri_laura, sus 5 cobros y
+la de healim) están enteras en el schema `zzz_backup_citas_20260812`, que lleva un
+COMMENT con cómo devolverlas: `INSERT INTO crm_<slug>.<tabla> SELECT * FROM
+zzz_backup_citas_20260812.<tabla>`. Ese schema se puede tirar cuando Laura
+confirme que su agenda está como debe.
+
+*Cómo se comprobó*: la misma consulta de nombres contra los once schemas con
+tabla `bookings`, antes y después. Antes salían 13 grupos que contenían
+rodrigo/jorge/carlos/torrents/prueba; después solo los seis pacientes reales de
+Aumenta, intactos con sus 12.030 citas. nutri_laura pasó de 23 citas a 6 y healim
+de 6 a 5. Los bloqueos de agenda y los festivos no se tocaron: viven en
+`team_blocks` y `blocked_days` y el script no abre esas tablas.
+
 ### Las «ocho familias admitidas que no podían pedir cita» no existían · `nutri_laura`
 
 Estaba en P0: *«8 de las 13 aceptadas no tienen ficha; Laura ya les dijo que sí
@@ -47,7 +129,8 @@ ocho.** Y de esas nueve:
   entró en la puesta al día de usuarios de la web y Laura la descartó el 05/08.
 
 Las que **sí** pueden reservar incluyen a Inés y a Maider, que son justo las dos
-pacientes reales que la otra tarea del backlog identifica. Las nueve están
+pacientes reales que identificaba la tarea de las citas de prueba, cerrada hoy
+también y unas entradas más arriba. Las nueve están
 bloqueadas porque su ficha ya no está, que es **exactamente lo que `3947dc0`
 quería que pasara**. La puerta funciona.
 
