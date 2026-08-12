@@ -7,7 +7,7 @@ import {
   setPrimaryContactValue,
   isMissingTable,
 } from "../../../lib/clients/contactMethods.js";
-import { applyAutoAssignments } from "../../../lib/clients/moduleAssignments.js";
+import { applyAutoAssignments, marcarProfesionalDesdeLead } from "../../../lib/clients/moduleAssignments.js";
 import {
   normalizarPacientes,
   normalizarProgenitores,
@@ -324,6 +324,17 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
     // (p. ej. "Paciente Nutrición" en tenants de nutrición) es un extra y no
     // puede tumbar un alta ya hecha.
     await applyAutoAssignments({ tenantModels, clientId: client.id, tenantHasModule, userId: user?.id ?? null });
+    // Y si viene de un lead del formulario de profesionales, hereda la marca
+    // que le abre los tipos de cita reservados (12/08/2026). Se lee del LEAD,
+    // no del cuerpo: ver `marcarProfesionalDesdeLead`.
+    if (body.leadId) {
+      await marcarProfesionalDesdeLead({
+        tenantModels,
+        clientId: client.id,
+        leadId: body.leadId,
+        userId: user?.id ?? null,
+      });
+    }
     await auditar({
       tenantId: tenant.id,
       ...datosPeticion(request),

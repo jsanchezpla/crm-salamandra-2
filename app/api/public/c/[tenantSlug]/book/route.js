@@ -82,6 +82,8 @@ import {
 } from "../../../../../../lib/citas/packs.js";
 import { createCheckoutSession, HOLD_WINDOW_MS } from "../../../../../../lib/payments/checkout.js";
 import { exigePasarela, puedeReservar } from "../../../../../../lib/citas/tiposVisibles.js";
+import { resolvePortalClient } from "../../../../../../lib/citas/portalClient.js";
+import { esProfesionalDeLaSalud } from "../../../../../../lib/clients/moduleAssignments.js";
 import {
   puedeReservarValoracionInicial,
   esValoracionInicial,
@@ -610,6 +612,14 @@ export const POST = withPublicTenant(async (request, _ctx, tenantContext) => {
       tieneBono: !!enBono,
       seCobra: Number.isInteger(precio) && precio > 0,
       exigePago: exigePasarela(tenant),
+      // La marca de la ficha, resuelta desde el correo de quien reserva. El
+      // filtro del listado ya lo esconde, pero el `eventTypeId` viaja en este
+      // cuerpo: esta es la comprobación que cierra la puerta de verdad.
+      esProfesional: await esProfesionalDeLaSalud(
+        tenantModels,
+        (await resolvePortalClient(tenantModels, clientEmail))?.id ?? null
+      ),
+      tenant,
     });
     if (!permiso.ok) return error(permiso.motivo, 422);
 

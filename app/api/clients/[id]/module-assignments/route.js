@@ -2,7 +2,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, notFound, error } from "../../../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
 import {
-  ASSIGNABLE_MODULE_KEYS,
+  marcasYModulosAsignables,
   syncClinicPatient,
   listAssignments,
   isMissingTable,
@@ -42,7 +42,7 @@ export const GET = withTenant(async (_request, { params }, { tenantModels, hasMo
   const client = await Client.findByPk(id, { attributes: ["id"] });
   if (!client) return notFound("Cliente no encontrado");
 
-  const available = ASSIGNABLE_MODULE_KEYS.filter((k) => hasModule(k));
+  const available = marcasYModulosAsignables(hasModule);
   const rows = await listAssignments(ClientModuleAssignment, id);
   return ok({ available, assignments: serialize(rows) });
 });
@@ -67,7 +67,7 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
   const incoming = Array.isArray(body?.assignments) ? body.assignments : null;
   if (!incoming) return error("Body inválido: se espera { assignments: [{ module_key, enabled }] }", 422);
 
-  const available = ASSIGNABLE_MODULE_KEYS.filter((k) => hasModule(k));
+  const available = marcasYModulosAsignables(hasModule);
   const userId = request.headers.get("x-user-id");
   const now = new Date();
 

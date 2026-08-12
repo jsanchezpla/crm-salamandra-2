@@ -5,6 +5,8 @@ import { normalizarPreguntas } from "../../../../../../lib/citas/preguntasCita.j
 import { duracionDeContacto } from "../../../../../../lib/citas/slots.js";
 import { verifyPortalSession, readBearer } from "../../../../../../lib/citas/portalSession.js";
 import { tiposConBonoActivo, filtrarTiposPara, soloSuPrograma } from "../../../../../../lib/citas/tiposVisibles.js";
+import { resolvePortalClient } from "../../../../../../lib/citas/portalClient.js";
+import { esProfesionalDeLaSalud } from "../../../../../../lib/clients/moduleAssignments.js";
 import {
   puedeReservarValoracionInicial,
   esValoracionInicial,
@@ -56,6 +58,12 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
 
     const conBono = await tiposConBonoActivo(tenantModels, email);
 
+    // ¿Es profesional de la salud? La marca vive en su FICHA, así que hace
+    // falta resolverla desde el correo de la sesión: a un anónimo se le
+    // responde que no, que es el lado que cierra la puerta.
+    const ficha = email ? await resolvePortalClient(tenantModels, email) : null;
+    const esProfesional = ficha ? await esProfesionalDeLaSalud(tenantModels, ficha.id) : false;
+
     // La valoración inicial es de una sola vez (ver lib/citas/valoracionInicial.js).
     // Se pregunta AQUÍ y no se repite la condición en la vista: el cliente ya
     // detectó que ocultarla en un sitio y no en otro la dejaba accesible.
@@ -70,7 +78,7 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
     // después de `filtrarTiposPara` —que es quien destapa el tipo oculto— y
     // antes de todo lo demás: si se estrecha a su programa, lo de la valoración
     // ya no pinta nada.
-    const data = soloSuPrograma(filtrarTiposPara(rows, conBono), conBono)
+    const data = soloSuPrograma(filtrarTiposPara(rows, conBono, { esProfesional, tenant }), conBono)
       .filter((r) => valoracion.puede || !esValoracionInicial(r))
       .filter((r) => Array.isArray(r.modalities) && r.modalities.includes("online"))
       .map((r) => ({

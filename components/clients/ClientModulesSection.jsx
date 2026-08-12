@@ -17,6 +17,12 @@ import HelpTooltip from "../ui/HelpTooltip.jsx";
 
 const MODULE_META = {
   nutricion: { label: "Paciente Nutrición", desc: "Pertenece al módulo de Nutrición." },
+  // No es un módulo, es una MARCA sobre el cliente (ver `lib/clients/moduleAssignments.js`).
+  // Se pinta aquí porque para quien usa la ficha es una casilla igual que las otras.
+  profesional_salud: {
+    label: "Es profesional de la salud",
+    desc: "Nutricionista o profesional que viene a supervisión, no a consulta. Le abre los tipos de cita reservados a profesionales.",
+  },
   // Ya NO crea la ficha de paciente: los pacientes se dan de alta explícitamente
   // en la sección «Pacientes» de la ficha (un cliente puede tener varios).
   clinica: { label: "Paciente Clínica", desc: "Marca que pertenece a Clínica. Los pacientes se crean en «Pacientes»." },
