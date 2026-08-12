@@ -10,7 +10,7 @@
  *
  * Dos modos, según lo que haga la migración:
  *
- *   byTable(s, "bookings")     → todo tenant activo cuyo schema TENGA esa tabla.
+ *   byTable(s, "bookings")     → todo tenant cuyo schema TENGA esa tabla.
  *                                Para migraciones ADITIVAS (ADD COLUMN, índices,
  *                                FKs, ALTER TYPE): si la tabla está, se blinda,
  *                                haya comprado el módulo o no.
@@ -21,6 +21,27 @@
  *                                tenant que no la ha comprado. Estas dependen de
  *                                `ensure-tenant-schema.js`, que las relanza
  *                                cuando el módulo se activa.
+ *
+ * ── UN CLIENTE APAGADO TAMBIÉN SE MIGRA (12/08/2026) ────────────────────────
+ * Los dos modos filtraban por `status = 'active'`, y eso dejaba a los
+ * SUSPENDIDOS congelados en el schema del día que se apagaron. En silencio: como
+ * suspender apaga de verdad al cliente (sus usuarios no pueden entrar y sus
+ * widgets públicos no responden), nadie choca con nada… hasta que se reactiva.
+ * Ese día vuelve a estar vivo con el schema N migraciones por detrás, y lo que
+ * se lleva el golpe es la primera pantalla que lea una columna que no existe,
+ * con un 500 genérico.
+ *
+ * Se vio en producción el 12/08/2026: `quality_energy` llevaba 22 columnas de
+ * retraso en 7 tablas y `abarcaia` 20 en 6, mientras los siete activos estaban
+ * al día. Es exactamente el incidente del 2026-07-21 de aquí arriba, con otro
+ * disfraz: elegir los schemas por una condición de NEGOCIO en vez de por lo que
+ * hay en la base de datos.
+ *
+ * Por eso ya no se mira el estado en ninguno de los dos modos: el estado decide
+ * quién PUEDE ENTRAR, no qué FORMA tiene su schema. Un schema que existe se
+ * mantiene al día, y punto. `crm_demo_golden` sigue fuera porque no es un
+ * tenant de `master` (su restore ya tolera columnas que le falten: ver
+ * `lib/demo/resetDemo.js`).
  *
  * Ambos respetan las variables de entorno que ya usaba Jorge en
  * migrate-nutricion-recipes.js:
@@ -44,11 +65,9 @@ function applyEnvOverrides(schemas) {
   return { schemas: [...new Set([...schemas, ...extra])], exclusive: false };
 }
 
-/** Slugs de todos los tenants activos. */
-async function activeSlugs(s) {
-  const [rows] = await s.query(
-    `SELECT slug FROM master.tenants WHERE status = 'active' ORDER BY slug`
-  );
+/** Slugs de TODOS los tenants, activos o no (ver la cabecera del fichero). */
+async function tenantSlugs(s) {
+  const [rows] = await s.query(`SELECT slug FROM master.tenants ORDER BY slug`);
   return rows.map((r) => r.slug);
 }
 
@@ -63,11 +82,11 @@ export async function tableExists(s, schema, table) {
 }
 
 /**
- * Schemas de tenants activos que TIENEN la tabla indicada.
+ * Schemas que TIENEN la tabla indicada, sea cual sea el estado del tenant.
  * @returns {Promise<{schemas: string[], skipped: string[], exclusive: boolean}>}
  */
 export async function byTable(s, table) {
-  const slugs = await activeSlugs(s);
+  const slugs = await tenantSlugs(s);
   const withTable = [];
   const skipped = [];
   for (const slug of slugs) {
@@ -80,7 +99,8 @@ export async function byTable(s, table) {
 }
 
 /**
- * Schemas de tenants activos con ese módulo (o alguno de esos módulos) activo.
+ * Schemas de tenants con ese módulo (o alguno de esos módulos) CONTRATADO.
+ * El estado del tenant no entra: lo que decide es el módulo.
  * @param {string|string[]} moduleKeys
  */
 export async function byModule(s, moduleKeys) {
@@ -88,7 +108,7 @@ export async function byModule(s, moduleKeys) {
   const [rows] = await s.query(
     `SELECT DISTINCT t.slug FROM master.tenants t
        JOIN master.tenant_modules tm ON tm.tenant_id = t.id
-      WHERE t.status = 'active' AND tm.enabled = TRUE AND tm.module_key IN (:keys)
+      WHERE tm.enabled = TRUE AND tm.module_key IN (:keys)
       ORDER BY t.slug`,
     { replacements: { keys } }
   );

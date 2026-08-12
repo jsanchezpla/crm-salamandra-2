@@ -634,6 +634,23 @@ apellido en toda la UI.
       ya fusionadas. Nada destructivo sin permiso explícito.
 12. Scripts de migración deben leer la lista de schemas desde `master.tenants`,
     nunca hardcodear slugs (la lista difiere entre local y producción).
+    **Y sin filtrar por `status`** (12/08/2026): el estado decide quién PUEDE
+    ENTRAR, no qué FORMA tiene su schema. Filtrar por `status = 'active'` deja a
+    los clientes suspendidos congelados en el schema del día que se apagaron, y
+    en silencio —como suspender los apaga de verdad, nadie choca con nada hasta
+    que se reactivan—. Se descubrió en producción con `quality_energy` (22
+    columnas de retraso en 7 tablas) y `abarcaia` (20 en 6), mientras los siete
+    activos estaban al día. Es el incidente del 2026-07-21 con otro disfraz:
+    elegir schemas por una condición de NEGOCIO en vez de por lo que hay en la
+    base de datos.
+    - `scripts/_schema-targets.js` (lo usan 43 de las 103 migraciones) ya no
+      mira el estado, ni en `byTable` ni en `byModule`.
+    - **Las otras 29 llevan su propio `WHERE status = 'active'` copiado a mano**
+      y siguen igual. No es urgente porque reactivar un cliente ahora pone su
+      schema al día solo (`lib/provisioning/cicloVida.js`), pero una migración
+      lanzada mientras el cliente está suspendido no le llega.
+    - Una migración nueva usa el helper. Si por lo que sea no puede, que su
+      consulta no mire `status`.
 13. En diseño responsivo, todo modal o panel lateral (drawer) debe respetar la
     barra superior móvil del dashboard (`h-14`, ~56px, `lg:hidden`) que contiene
     el botón del menú hamburguesa. Patrón: `top-14 lg:top-0 ... bottom-0`
