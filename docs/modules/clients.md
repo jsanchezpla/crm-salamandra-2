@@ -323,9 +323,49 @@ ni de corregirlo desde la ficha.
 
 ### Default (vanilla)
 
-`modules/default/ClientDetailModule.jsx` — ficha clásica con: header
-(back link + nombre + status chip), datos del cliente (vista/edición),
-historial de interacciones, sección de facturación.
+`modules/default/ClientDetailModule.jsx` — header (back link + nombre + status
+chip + aviso de lista de espera) y, debajo, **seis pestañas** desde el
+12/08/2026 (Rodrigo: «demasiado larga, pero universal, para que el que tenga
+todos los módulos no se líe»). Antes eran CATORCE tarjetas apiladas en una
+columna: en Aumenta la ficha medía varias pantallas y para llegar a la
+facturación había que pasar por delante del contrato, los tutores, los
+consentimientos y las citas.
+
+| Pestaña | Qué lleva | La pregunta que responde |
+| --- | --- | --- |
+| **Datos** | Datos del cliente (vista/edición) · Contactos · Datos fiscales · Acceso a la web | quién es y cómo se le escribe |
+| **Interacciones** | Historial de interacciones | qué se ha hablado con esta persona |
+| **Servicio** | Módulos asignados · Pacientes · Consulta externa · Profesional de referencia | qué se le presta y quién se lo presta |
+| **Contrato y avisos** | Tutores · Contrato · Comunicaciones · Meses del portal | qué ha firmado y qué ha consentido |
+| **Citas** | Sus citas | su agenda |
+| **Facturación** | Resumen y facturas | su dinero |
+
+El patrón (pestañas + `TabButton`) es el que ya usaba nutri_laura; aquí no se
+inventó nada, se generalizó.
+
+⚠️ **Una pestaña vacía confunde más que una ficha larga.** Casi todas estas
+secciones se esconden solas (`return null`) cuando el tenant no tiene su
+módulo, así que un cliente de solo Citas tendría cuatro pestañas que no
+enseñan nada. El padre no puede saberlo sin volver a preguntar a los mismos
+endpoints, así que **cada panel se mide en el DOM**: sin ningún hijo, su
+pestaña desaparece del menú (`PanelPestana`). Todos los paneles se MONTAN
+aunque solo se vea uno (`hidden`, no desmonta) — exactamente lo que hacía la
+ficha antes de tener pestañas, así que no hay peticiones de más ni se pierde
+lo que estés escribiendo al cambiar de pestaña.
+
+#### «Acceso a la web»: crear la cuenta desde la ficha (universal desde 12/08/2026)
+
+`components/clients/ClientCuentaWebSection.jsx`. El botón existía desde el
+05/08 pero vivía DENTRO del override de nutri_laura, así que el resto de
+clientes —Aumenta incluida, que usa la ficha por defecto— no tenía forma de
+abrirle la cuenta a nadie desde el CRM. El backend siempre fue común
+(`/api/clients/[id]/portal-user` + `lib/formularios/portalUser.js`); faltaba
+el botón. Ahora es una tarjeta compartida por las dos fichas.
+
+Se esconde sola cuando no pinta nada: si quien mira no es admin (403 del
+endpoint) o si el centro no tiene web configurada (`motivo: "sin_url"`). Lo
+que NO la esconde es que la web no conteste — «no he podido preguntar» es
+distinto de «no tiene cuenta» y se dice tal cual.
 
 ### Override nutri_laura
 

@@ -47,6 +47,7 @@ import ClientPlansPanel from "./ClientPlansPanel.jsx";
 import ClientModulesSection from "../../../components/clients/ClientModulesSection.jsx";
 import ClientCitasSection from "../../../components/clients/ClientCitasSection.jsx";
 import ClientConsultaExternaSection from "../../../components/clients/ClientConsultaExternaSection.jsx";
+import ClientCuentaWebSection from "../../../components/clients/ClientCuentaWebSection.jsx";
 import ClientProfesionalSection from "../../../components/clients/ClientProfesionalSection.jsx";
 import { edadDesde } from "../../../lib/clients/formularioAlta.js";
 
@@ -481,7 +482,10 @@ function InfoTab({
         Se consulta y se cambia de vez en cuando; no se lee entero cada vez que
         se abre la ficha. (07/08/2026, Rodrigo: reparto pedido por él.) */}
     <div className="space-y-6 min-w-0">
-      <CuentaWebSection client={client} />
+      {/* Compartida con la ficha por defecto desde el 12/08/2026: el botón
+          vivía solo aquí y Aumenta no lo tenía. Sin `mt-6` porque esta columna
+          ya reparte el espacio con `space-y-6`. */}
+      <ClientCuentaWebSection clientId={client.id} className="" />
       <ClientCitasSection clientId={client.id} />
       <ClientConsultaExternaSection clientId={client.id} />
       {/* Con quién lleva el seguimiento. Va justo debajo de consulta externa
@@ -613,123 +617,6 @@ Dejará de poder reservar con él. Las citas que ya tenga puestas no se tocan.`)
             </div>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-/**
- * El distintivo de «¿tiene cuenta con este correo?».
- *
- * TRES estados, no dos, y la diferencia importa: «no la tiene» es un aviso
- * accionable; «no he podido preguntar» —la web no responde, o todavía tiene un
- * theme sin la consulta— no lo es, y pintarlo igual sería mentir en rojo.
- */
-function EstadoCuentaWeb({ estado }) {
-  if (estado === null) {
-    return <span className="text-[10px] text-gray-400">comprobando…</span>;
-  }
-  if (!estado.ok) {
-    const texto = estado.motivo === "sin_soporte"
-      ? "la web aún no responde a esta consulta"
-      : "no se ha podido comprobar";
-    return <span className="text-[10px] text-gray-400" title={estado.motivo}>{texto}</span>;
-  }
-  return estado.existe ? (
-    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-      ✓ tiene cuenta
-    </span>
-  ) : (
-    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-      sin cuenta
-    </span>
-  );
-}
-
-/**
- * Crearle la cuenta de la web (05/08/2026, Rodrigo).
- *
- * Quien llega por el formulario de la web ya sale con cuenta: al aceptar su
- * solicitud, el CRM crea la ficha Y el usuario de WordPress. Pero quien escribe
- * por Instagram, o a quien Laura da de alta a mano, se quedaba solo con la
- * ficha — sin poder entrar a su área privada, y por tanto sin ver sus citas ni
- * poder usar un bono. Esto es ese mismo paso, a un botón.
- *
- * No viaja ninguna contraseña: WordPress le manda a ELLA un enlace con
- * caducidad para que elija la suya.
- */
-function CuentaWebSection({ client }) {
-  const [estado, setEstado] = useState(null); // { ok, mensaje }
-  const [creando, setCreando] = useState(false);
-  // null = todavía preguntando. Después: { ok, existe, motivo }
-  const [tieneCuenta, setTieneCuenta] = useState(null);
-  const correo = client?.portalEmail || client?.email || "";
-
-  // ¿El correo de la ficha es REALMENTE el de su cuenta en la web? Se pregunta
-  // a WordPress al abrir la ficha. Es lo que convierte un correo mal escrito en
-  // algo que se ve, en vez de un fallo mudo que aparece semanas después.
-  const comprobar = useCallback(() => {
-    if (!client?.id) return;
-    setTieneCuenta(null);
-    fetch(`/api/clients/${client.id}/portal-user`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => setTieneCuenta(j?.data ?? { ok: false, motivo: "red" }))
-      .catch(() => setTieneCuenta({ ok: false, motivo: "red" }));
-  }, [client?.id]);
-
-  useEffect(() => { comprobar(); }, [comprobar]);
-
-  async function crear() {
-    setEstado(null);
-    setCreando(true);
-    try {
-      const res = await fetch(`/api/clients/${client.id}/portal-user`, { method: "POST" });
-      const j = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(j?.error || "No se pudo crear la cuenta");
-      setEstado({ ok: !!j?.data?.ok, mensaje: j?.data?.mensaje || "Hecho." });
-      comprobar(); // el distintivo tiene que reflejar lo que acaba de pasar
-    } catch (e) {
-      setEstado({ ok: false, mensaje: e.message });
-    } finally {
-      setCreando(false);
-    }
-  }
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold text-gray-700">Acceso a la web</span>
-        <EstadoCuentaWeb estado={tieneCuenta} />
-      </div>
-      <div className="p-5 space-y-3">
-        <p className="text-[11px] text-gray-500 leading-relaxed">
-          Con cuenta en la web puede entrar a su área privada, ver sus citas y reservar sola. Se
-          comprueba con el correo <strong className="text-gray-700">{correo || "—"}</strong>, que es
-          el que tienes en su ficha: si ella entra en la web con otro distinto, su bono no le
-          funcionará y sus citas no se enlazarán con esta ficha.
-        </p>
-
-        {tieneCuenta?.ok && tieneCuenta.existe === false && (
-          <p className="text-[11px] text-amber-700">
-            ⚠ No hay ninguna cuenta con este correo. O es nueva y hay que creársela, o el correo de
-            la ficha no es el que ella usa.
-          </p>
-        )}
-
-        <button
-          type="button"
-          onClick={crear}
-          disabled={creando || !correo}
-          className="w-full bg-white border border-[var(--color-primary)] text-[var(--color-primary)] text-xs font-semibold py-2 rounded-md disabled:opacity-40 hover:bg-gray-50"
-        >
-          {creando ? "Creando…" : "Crear cuenta en la web"}
-        </button>
-
-        {estado && (
-          <p className={`text-[11px] ${estado.ok ? "text-emerald-700" : "text-amber-700"}`}>
-            {estado.ok ? "✓" : "⚠"} {estado.mensaje}
-          </p>
-        )}
       </div>
     </div>
   );

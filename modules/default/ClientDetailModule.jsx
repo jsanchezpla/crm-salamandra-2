@@ -7,7 +7,7 @@
  * componente y el override según `x-tenant` del request.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import ClientBillingSection from "../../components/billing/ClientBillingSection.jsx";
@@ -23,6 +23,42 @@ import ClientCitasSection from "../../components/clients/ClientCitasSection.jsx"
 import ClientConsultaExternaSection from "../../components/clients/ClientConsultaExternaSection.jsx";
 import ClientProfesionalSection from "../../components/clients/ClientProfesionalSection.jsx";
 import ClientPatientsSection from "../../components/clients/ClientPatientsSection.jsx";
+import ClientCuentaWebSection from "../../components/clients/ClientCuentaWebSection.jsx";
+
+/**
+ * ── LA FICHA VA POR PESTAÑAS (12/08/2026, Rodrigo) ─────────────────────────
+ *
+ * Eran CATORCE tarjetas apiladas en una sola columna. En un cliente con todos
+ * los módulos —Aumenta— la ficha medía varias pantallas y para llegar a la
+ * facturación había que pasar por delante del contrato, los tutores, los
+ * consentimientos y las citas. Y lo pidió así: «demasiado larga, pero universal,
+ * para que el que tenga todos los módulos no se líe».
+ *
+ * El reparto agrupa por PREGUNTA, no por módulo:
+ *   · Datos          — quién es y cómo se le escribe.
+ *   · Interacciones  — el diario de lo que se ha hablado con esta persona.
+ *   · Servicio       — qué se le presta y quién se lo presta.
+ *   · Contrato y avisos — lo que ha firmado y lo que ha consentido.
+ *   · Citas          — su agenda.
+ *   · Facturación    — su dinero.
+ *
+ * El patrón (pestañas + `TabButton`) es el que ya usaba la ficha de nutri_laura;
+ * aquí no se inventa nada, se generaliza.
+ *
+ * ⚠️ UNA PESTAÑA VACÍA CONFUNDE MÁS QUE UNA LARGA. Casi todas estas secciones
+ * se esconden solas cuando el tenant no tiene su módulo (`return null`), así que
+ * un cliente de solo Citas tendría cuatro pestañas que no enseñan nada. Por eso
+ * cada panel se mide a sí mismo y la pestaña desaparece si dentro no queda nada
+ * (ver `PanelPestana`).
+ */
+const TABS = [
+  { key: "datos", label: "Datos" },
+  { key: "interacciones", label: "Interacciones" },
+  { key: "servicio", label: "Servicio" },
+  { key: "contrato", label: "Contrato y avisos" },
+  { key: "citas", label: "Citas" },
+  { key: "facturacion", label: "Facturación" },
+];
 
 const STATUSES = [
   { key: "new", label: "Nuevo" },
@@ -145,6 +181,24 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL, conPacie
     date: new Date().toISOString().slice(0, 10),
   });
   const [addingInteraction, setAddingInteraction] = useState(false);
+  const [tab, setTab] = useState("datos");
+
+  // Qué pestañas se han quedado sin contenido. `undefined` = todavía no se sabe,
+  // y mientras tanto se enseñan todas: esconderlas de entrada y devolverlas al
+  // cargar las secciones sería un parpadeo en el menú.
+  const [vacias, setVacias] = useState({});
+  const marcarPanel = useCallback((clave, vacio) => {
+    setVacias((prev) => (prev[clave] === vacio ? prev : { ...prev, [clave]: vacio }));
+  }, []);
+  const pestanasVisibles = TABS.filter((t) => !vacias[t.key]);
+
+  // Si la abierta se queda sin contenido, se salta a la primera que tenga. No
+  // puede pasar hoy —«Datos» siempre pinta algo— pero deja la pantalla a salvo
+  // de que mañana una sección nueva se esconda sola.
+  useEffect(() => {
+    if (vacias[tab]) setTab(pestanasVisibles[0]?.key ?? "datos");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vacias, tab]);
 
   useEffect(() => {
     fetch(`/api/clients/${id}`)
@@ -294,12 +348,23 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL, conPacie
         )}
       </div>
 
+      {/* Pestañas */}
+      <div className="border-b border-gray-100 bg-white shrink-0">
+        <div className="px-4 lg:px-8 flex items-center gap-1 overflow-x-auto whitespace-nowrap">
+          {pestanasVisibles.map((t) => (
+            <TabButton key={t.key} active={tab === t.key} onClick={() => setTab(t.key)}>
+              {t.label}
+            </TabButton>
+          ))}
+        </div>
+      </div>
+
       {/* Body */}
       <div className="flex-1 overflow-auto px-4 lg:px-8 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl">
+        <PanelPestana clave="datos" activo={tab === "datos"} onEstado={marcarPanel}>
 
           {/* Datos del cliente */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden max-w-5xl">
             <div className="px-5 py-4 border-b border-gray-100">
               <span className="text-[13px] font-semibold text-gray-700">Datos del cliente</span>
               {/* Botones en su propia fila, debajo del título (evita que el
@@ -480,8 +545,19 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL, conPacie
             )}
           </div>
 
+          <ClientContactMethodsSection clientId={id} />
+
+          {/* A nombre de quién se factura. Solo donde se factura: al resto le
+              sobraría una tarjeta de datos fiscales que nadie va a usar. */}
+          {conFacturacion && <ClientFiscalSection clientId={id} />}
+
+          {/* Abrirle la cuenta de la web, si el centro tiene web (12/08/2026). */}
+          <ClientCuentaWebSection clientId={id} />
+        </PanelPestana>
+
+        <PanelPestana clave="interacciones" activo={tab === "interacciones"} onEstado={marcarPanel}>
           {/* Historial de interacciones */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col" style={{ minHeight: "400px" }}>
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col max-w-5xl" style={{ minHeight: "400px" }}>
             <div className="px-5 py-4 border-b border-gray-100 shrink-0">
               <span className="text-[13px] font-semibold text-gray-700">
                 Historial de interacciones
@@ -560,40 +636,111 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL, conPacie
               )}
             </div>
           </div>
-        </div>
+        </PanelPestana>
 
-        <ClientContactMethodsSection clientId={id} />
+        <PanelPestana clave="servicio" activo={tab === "servicio"} onEstado={marcarPanel}>
+          <ClientModulesSection clientId={id} />
 
-        {/* A nombre de quién se factura. Solo donde se factura: al resto le
-            sobraría una tarjeta de datos fiscales que nadie va a usar. */}
-        {conFacturacion && <ClientFiscalSection clientId={id} />}
+          <ClientPatientsSection clientId={id} />
 
-        <ClientModulesSection clientId={id} />
+          {/* Sus citas, ¿entran confirmadas o pasan por la bandeja? (06/08). */}
+          <ClientConsultaExternaSection clientId={id} />
+          {/* Con quién lleva el seguimiento (10/08/2026, Rodrigo). Debajo de
+              consulta externa: en una externa, quién la lleva es además quién la
+              ve, y las dos cosas se leen juntas. */}
+          <ClientProfesionalSection clientId={id} />
+        </PanelPestana>
 
-        <ClientPatientsSection clientId={id} />
+        <PanelPestana clave="contrato" activo={tab === "contrato"} onEstado={marcarPanel}>
+          {/* Los tutores son quienes firman; el contrato es de la familia, no del
+              paciente (sprint 2026-07, puntos 1.2 y 1.1). */}
+          <ClientGuardiansSection clientId={id} />
 
-        {/* Los tutores son quienes firman; el contrato es de la familia, no del
-            paciente (sprint 2026-07, puntos 1.2 y 1.1). */}
-        <ClientGuardiansSection clientId={id} />
+          <ClientContractSection clientId={id} />
 
-        <ClientContractSection clientId={id} />
+          {/* Por dónde acepta la familia que se le escriba (01/08). */}
+          <ClientComunicacionesSection clientId={id} />
 
-        {/* Por dónde acepta la familia que se le escriba (01/08). */}
-        <ClientComunicacionesSection clientId={id} />
+          {/* Solo se pinta si el centro tiene el bloqueo por impago encendido. */}
+          <ClientPortalMonthsSection clientId={id} />
+        </PanelPestana>
 
-        {/* Sus citas, ¿entran confirmadas o pasan por la bandeja? (06/08). */}
-        <ClientConsultaExternaSection clientId={id} />
-        {/* Con quién lleva el seguimiento (10/08/2026, Rodrigo). Debajo de
-            consulta externa: en una externa, quién la lleva es además quién la
-            ve, y las dos cosas se leen juntas. */}
-        <ClientProfesionalSection clientId={id} />
-        <ClientCitasSection clientId={id} />
+        <PanelPestana clave="citas" activo={tab === "citas"} onEstado={marcarPanel}>
+          <ClientCitasSection clientId={id} />
+        </PanelPestana>
 
-        {/* Solo se pinta si el centro tiene el bloqueo por impago encendido. */}
-        <ClientPortalMonthsSection clientId={id} />
-
-        <ClientBillingSection clientId={id} />
+        <PanelPestana clave="facturacion" activo={tab === "facturacion"} onEstado={marcarPanel}>
+          <ClientBillingSection clientId={id} />
+        </PanelPestana>
       </div>
+    </div>
+  );
+}
+
+// ── Pestañas ────────────────────────────────────────────────────────────────
+
+function TabButton({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`text-sm font-semibold px-3 lg:px-4 py-3 border-b-2 transition-colors shrink-0 ${
+        active
+          ? "border-[var(--color-primary)] text-gray-900"
+          : "border-transparent text-gray-400 hover:text-gray-700"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Cuánto se espera antes de dar una pestaña por vacía (ms). */
+const MARGEN_CARGA = 900;
+
+/**
+ * PanelPestana — el contenido de una pestaña, que además se mide a sí mismo.
+ *
+ * POR QUÉ SE MIDE. Las secciones de la ficha deciden solas si se pintan: sin el
+ * módulo del tenant, sin permiso o sin datos, cada una devuelve `null`. El padre
+ * no puede saberlo sin preguntárselo a los mismos endpoints otra vez, así que se
+ * mira el resultado: un panel SIN NINGÚN HIJO en el DOM es una pestaña que no
+ * tiene nada que enseñar, y esa pestaña no debe salir en el menú.
+ *
+ * TODAS LAS PESTAÑAS SE MONTAN, aunque solo una se vea (`hidden` = display:none,
+ * no desmonta). Es a propósito y no cuesta nada: es exactamente lo que hacía la
+ * ficha antes de tener pestañas —las catorce secciones montadas a la vez—, así
+ * que ni hay peticiones de más ni se recarga nada al cambiar de pestaña, que es
+ * lo que haría que perder lo que estás escribiendo fuera posible.
+ *
+ * El margen de `MARGEN_CARGA` evita el parpadeo: las secciones tardan lo que
+ * tarde su fetch en aparecer, y sin él el menú saldría con todas las pestañas,
+ * se quedaría en una, y volverían de una en una. Un panel que se llena ANTES
+ * (mutación del DOM) se declara lleno al instante, sin esperar.
+ */
+function PanelPestana({ clave, activo, onEstado, children }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const mirar = () => onEstado(clave, el.childElementCount === 0);
+
+    // Cualquier sección que aparezca (o desaparezca) lo dice al momento.
+    const observador = new MutationObserver(mirar);
+    observador.observe(el, { childList: true });
+    // Y el veredicto para las que nunca llegan, pasado el margen.
+    const reloj = setTimeout(mirar, MARGEN_CARGA);
+
+    return () => {
+      observador.disconnect();
+      clearTimeout(reloj);
+    };
+  }, [clave, onEstado]);
+
+  return (
+    <div ref={ref} className={activo ? undefined : "hidden"}>
+      {children}
     </div>
   );
 }
