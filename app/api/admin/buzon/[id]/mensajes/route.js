@@ -8,7 +8,6 @@ import {
   COMANDO_MIGRACION,
 } from "../../../../../../lib/buzon/buzonStore.js";
 import { candadoBuzon, quienContesta } from "../../../../../../lib/buzon/candadoBackoffice.js";
-import { avisarAlCliente } from "../../../../../../lib/buzon/avisarPorCorreo.js";
 import { avisarEnSuCrm } from "../../../../../../lib/buzon/avisarEnSuCrm.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -57,10 +56,16 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     // Solo si es una respuesta de verdad: una nota interna no se le manda a
     // nadie. Best-effort, como todo el correo del buzón — si no sale, la
     // respuesta está guardada y él la ve igual en su pantalla.
+    // Se le avisa DENTRO de su CRM —campana y bloque en la portada— y no por
+    // correo (Jorge, 13/08/2026). Es gente que entra al CRM todos los días: un
+    // correo más por cada respuesta es ruido en una bandeja que ya va llena, y
+    // encima sacaría fuera de nuestro sistema algo que ya está donde tiene que
+    // estar. El correo que sí se manda es el que nos llega a NOSOTROS cuando
+    // entra un aviso, que es otra cosa: sin él no nos enteraríamos hasta que
+    // alguien se acordara de abrir el panel.
+    //
+    // Best-effort: no puede tumbar la respuesta, que ya está guardada.
     if (!v.limpio.interno) {
-      await avisarAlCliente({ aviso, mensaje });
-      // Y en su CRM: campana + el aviso de la portada. Ninguno de los dos puede
-      // tumbar la respuesta, que ya está guardada.
       await avisarEnSuCrm({ aviso });
     }
 
