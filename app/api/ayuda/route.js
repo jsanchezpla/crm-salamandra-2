@@ -3,7 +3,13 @@ import { ok, created, error, forbidden, serverError } from "../../../lib/utils/a
 import { isDemoTenant } from "../../../lib/demo/isDemo.js";
 import { enforceRateLimit } from "../../../lib/utils/rateLimit.js";
 import { auditar, datosPeticion } from "../../../lib/utils/auditoria.js";
-import { validarAvisoNuevo, serializarAviso, referencia, TIPOS } from "../../../lib/buzon/buzon.js";
+import {
+  validarAvisoNuevo,
+  serializarAviso,
+  referencia,
+  TIPOS,
+  MB_POR_ADJUNTO,
+} from "../../../lib/buzon/buzon.js";
 import {
   crearAviso,
   crearAdjunto,
@@ -91,13 +97,19 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     if (frenado) return frenado;
 
     // Se corta por el tamaño ANTES de leer el cuerpo: si no, nos comemos en
-    // memoria un envío que de todas formas vamos a rechazar. Y el tope real lo
-    // pone nginx en 30 MB, así que pasarse de ahí ni siquiera llegaría aquí:
-    // devolvería una página HTML suya que en pantalla parece que no ha pasado
-    // nada.
+    // memoria un envío que de todas formas vamos a rechazar.
+    //
+    // Este tiene que ser el tope que MANDA. nginx va por encima a propósito
+    // (40M en el bloque del CRM) para que quien conteste sea siempre la app,
+    // con su JSON, y no el proxy con una página HTML que el navegador no puede
+    // leer. Cuando nginx estaba en su defecto de 1 MB, ese HTML es lo que salía
+    // en pantalla como «Unexpected token '<'».
     const declarado = Number(request.headers.get("content-length") ?? 0);
     if (declarado > (MAX_FICHEROS * MAX_BYTES_POR_FICHERO + 1024 * 1024)) {
-      return error(`Demasiado grande. Como mucho ${MAX_FICHEROS} ficheros de 5 MB.`, 413);
+      return error(
+        `Demasiado grande. Como mucho ${MAX_FICHEROS} ficheros de ${MB_POR_ADJUNTO} MB.`,
+        413
+      );
     }
 
     const tipoContenido = request.headers.get("content-type") ?? "";

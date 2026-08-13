@@ -134,9 +134,41 @@ el nombre del fichero**; el nombre viaja en `Content-Disposition`.
 `lib/buzon/buzonStorage.js`, clon de `lib/support/ticketStorage.js`. Layout:
 `buzon/{slug}/{avisoId}/{adjuntoId}.{ext}` bajo `/app/uploads`.
 
-**3 ficheros × 5 MB**, más corto que los 5 × 10 MB de tickets: nginx corta el
-cuerpo en 30 MB y pasarse devolvería una página HTML suya, no el JSON de
-`apiResponse` — en pantalla se ve como «no ha pasado nada».
+**3 ficheros × 10 MB**, y se puede adjuntar tanto en el aviso inicial como al
+responder en el hilo (las del hilo llevan `mensaje_id` y se pintan donde se
+mandaron, no amontonadas arriba).
+
+Los 10 MB no son un número redondo cualquiera: el caso que se rompía con 5 es el
+más común entre clientes reales — la gente no técnica no hace captura de
+pantalla, hace una **foto al monitor con el móvil**, y eso son 3–8 MB. Es además
+el mismo tope que usa Soporte para lo mismo. Documentos está en 25 MB porque es
+otra cosa (un archivo de contratos, con su cuota de 1 GB por cliente).
+
+El tope vive en `LIMITES` de `lib/buzon/buzon.js` y `buzonStorage.js` lo importa
+de ahí: estuvo escrito en los dos ficheros con el número copiado, que es como se
+desincronizan.
+
+⚠️ **El tope de verdad lo ponía nginx, y era 1 MB.** El bloque del CRM no tenía
+`client_max_body_size`, así que aplicaba el defecto de nginx: cualquier captura
+de más de 1 MB —casi todas— se cortaba **antes** de llegar a la app y volvía una
+página HTML que el navegador intentaba leer como JSON («Unexpected token '<'»).
+Lo encontró Jorge el 13/08/2026 adjuntando un PNG normal. Ese bloque está ahora
+en `client_max_body_size 40M`, por encima de lo que puede pedir cualquier módulo,
+para que **el tope que manda sea siempre el del código** y el usuario reciba una
+frase en cristiano en vez del HTML del proxy.
+
+Ojo si se vuelve a mirar esto: los 30 MB que se leen en `nginx/nginx.conf` **no
+son los de producción** — ese fichero es una plantilla legacy que no se usa; la
+nginx real es nativa del VPS y no está versionada.
+
+De la misma pasada se descubrió que los adjuntos del módulo **Soporte**
+(escritos para 10 MB × 5) llevaban todo este tiempo capados a 1 MB en
+producción. Con el cambio ya caben, pero nadie lo había sufrido porque Soporte
+aún no tiene ni un ticket.
+
+Y aun así, el navegador nunca puede dar por hecho que la respuesta es JSON:
+`leerRespuesta()` en `modules/buzon/AyudaModule.jsx` mira si se puede parsear y,
+si no, traduce el 413 a una frase con el tope y el peso real del fichero.
 
 Siempre `Content-Disposition: attachment` + `nosniff`: un SVG servido en línea
 sería un XSS, y en el caso del panel, en `admin.salamandrasolutions.com`.
