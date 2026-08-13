@@ -218,16 +218,6 @@ contenedor; `/api/clinica/reports/[id]/` tiene `desde-sesiones` y `enviar`, y
 ningún paso de IA en medio. Aumenta: 0 informes y 0 sesiones creadas desde la
 importación.
 
-### Módulo de fichaje · `aumenta`
-
-Lo pidieron por WhatsApp: «que vuelquen el excel de cada mes». No sabemos las
-columnas, ni de qué máquina sale, ni si un mes se puede volcar dos veces. Un
-fichaje mal importado es una nómina mal pagada. El plan y las preguntas que hay
-que hacerles están en `docs/revision-aumenta-2026-08.md`.
-
-*Se comprueba*: existe y Aumenta lo usa.
-*Comprobado en producción*: 09/08/2026 — no hay nada de fichaje en el código.
-
 ### Retorika lleva cinco semanas sin mandar nada desde su web · `retorika`
 
 El último dato que entró de su WordPress fue el 29/06 (matrículas e

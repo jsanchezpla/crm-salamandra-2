@@ -28,6 +28,63 @@ Lo más reciente arriba.
 
 ## 13/08/2026
 
+### Módulo de Fichaje: el Excel del reloj de fichar entra en el CRM · `aumenta`, `demo`, producto
+
+**Lo que pasaba.** La tarea llevaba desde el 09/08 diciendo lo mismo: «lo
+pidieron por WhatsApp, que vuelquen el excel de cada mes. No sabemos las
+columnas, ni de qué máquina sale, ni si un mes se puede volcar dos veces». Sin
+el fichero no se podía hacer. El 13/08 llegó un mes real —marzo de 2026— y
+resulta que el fichero decide casi todo el diseño.
+
+**La frase que manda.** Un fichaje mal importado es una nómina mal pagada. Las
+cuatro garantías salen de ahí: volcar dos veces el mismo mes no duplica horas;
+se puede corregir a mano y la corrección sobrevive al siguiente volcado; el
+volcado se deshace ENTERO, no fila a fila; y **una fila cuyo nombre no case con
+una persona del equipo no se importa jamás** — sale en el preview y se mapea ahí.
+
+**Universal por dentro, de cada cliente por fuera.** Tablas, endpoints,
+pantallas, totales y avisos son los mismos para todos. Lo único que cambia es el
+LECTOR del Excel (`lib/fichaje/parsers/`), porque cada reloj escupe un formato
+distinto y pedirle al cliente que cambie su hoja es pedirle lo que no va a
+hacer. Añadir un cliente nuevo es un fichero ahí y una línea; quien no tenga
+lector propio usa el genérico. Cuelga de `team` y no de `team_avanzado` a
+propósito: el avanzado exige además `clinica`, y eso dejaría un control horario
+invendible a quien solo quiere Equipo, que es justo quien lo compra.
+
+**Las trampas del fichero real, que no se habrían adivinado sin él.** La columna
+de nombres también lleva anotaciones (BAJA, MÉDICO, JUSTIFICANTE DE MÉDICO): sin
+la regla que las distingue, el justificante se leía como una persona más y **se
+llevaba las 39 horas de Victoria**. Los bloques no son de tamaño fijo —«ISA»
+está en la fila 13 en unas hojas y en la 14 en otras—. Las fórmulas del Excel
+devuelven `21.000000000000245` minutos y, cuando falta una hora de salida,
+duraciones NEGATIVAS. Y `M-1` / `M-2` son dos tramos el mismo día —Rosa trabaja
+los martes mañana y tarde—, que es la razón de que el modelo guarde tramos y no
+días.
+
+**Identificar a la persona.** El Excel trae `ISA` y `DANIA`; el CRM tiene
+«Isabel Alberca Bolaños» y «Daniela de la Cruz Esteban». Solo se asigna sola la
+coincidencia exacta; lo demás es una sugerencia que confirma una persona, y al
+confirmarla el alias se guarda para el mes siguiente. Con el equipo real sugiere
+9 de 14 y **se calla en las cinco ambiguas**: dos Isabeles, dos Raqueles, DANIA
+junto a DANIELA y dos Lauras. Una sugerencia se acepta a ciegas, y ahí serían las
+horas de otra persona.
+
+*Cómo se comprobó*: las cuatro garantías, de punta a punta contra el fichero real
+(13/08, local): entran **269 jornadas** de las 271 leídas —las 2 que faltan son
+errores reales del Excel, un día sin hora de salida y una jornada de 21 h—,
+volver a volcar deja 269 y no 538, una corrección a mano sobrevive con su valor,
+revertir deja el mes limpio y la corrección viva, y al mes siguiente los 14
+nombres casan solos. En producción, 13/08: módulo activo en `aumenta` y `demo`,
+las dos tablas y el índice único `fichajes_import_unico` creados en los dos
+schemas, «Fichaje» sale en el menú, `/equipo/fichaje` responde 200, el endpoint
+del mes devuelve el equipo, y el volcado está bloqueado en la demo.
+
+⚠️ **Lo que hay que hablar con Aumenta**: en el fichero de marzo hay dos nombres
+—`VICTORIA` y `LAURA ARROYO`— que no están en el equipo del CRM, y una persona
+del CRM (`Arantxa Garrote`) que no está en el Excel. Eso se resuelve hablando,
+no en código.
+
+
 ### En Formación, las personas son «Alumnos» y las inscripciones «Matrículas» · `retorika`, `aumenta`, `nutri_laura`, `demo`, `somos`
 
 **Lo que pasaba.** Había TRES pares de palabras para las mismas dos cosas. El
