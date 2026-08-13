@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+// Las MISMAS reglas que aplica el endpoint. Se puede importar aquí porque
+// `lib/buzon/buzon.js` no importa nada (ni BD, ni Next): así el motivo que se
+// enseña en pantalla y el que devolvería el servidor son literalmente la misma
+// frase, y no dos textos parecidos que se separan con el tiempo.
+import { validarAvisoNuevo } from "../../lib/buzon/buzon.js";
 
 /**
  * Ayuda — lo que el cliente ve para escribirnos y para seguir lo que nos mandó.
@@ -57,6 +63,10 @@ export default function AyudaModule({ esDemo = false }) {
 
   const [abierto, setAbierto] = useState(null);
 
+  // Para poder llevar el cursor al campo que falta, y no solo decirlo.
+  const refAsunto = useRef(null);
+  const refCuerpo = useRef(null);
+
   const cargar = useCallback(async (silencioso = false) => {
     if (!silencioso) setCargando(true);
     try {
@@ -81,6 +91,18 @@ export default function AyudaModule({ esDemo = false }) {
   async function enviar(e) {
     e.preventDefault();
     if (enviando) return;
+
+    // Se comprueba AQUÍ y no apagando el botón: si algo falta hay que decir qué
+    // es y llevar el cursor allí. El mensaje sale de la misma función que usa el
+    // endpoint, así que es palabra por palabra el que daría el servidor.
+    const revision = validarAvisoNuevo({ tipo, asunto, cuerpo, bloquea });
+    if (!revision.ok) {
+      setFallo(revision.error);
+      const campo = asunto.trim().length < 3 ? refAsunto : refCuerpo;
+      campo.current?.focus();
+      return;
+    }
+
     setEnviando(true);
     setFallo(null);
     try {
@@ -187,6 +209,7 @@ export default function AyudaModule({ esDemo = false }) {
               </label>
               <input
                 id="ayuda-asunto"
+                ref={refAsunto}
                 value={asunto}
                 onChange={(e) => setAsunto(e.target.value)}
                 maxLength={200}
@@ -199,6 +222,7 @@ export default function AyudaModule({ esDemo = false }) {
               </label>
               <textarea
                 id="ayuda-cuerpo"
+                ref={refCuerpo}
                 value={cuerpo}
                 onChange={(e) => setCuerpo(e.target.value)}
                 rows={6}
@@ -259,9 +283,20 @@ export default function AyudaModule({ esDemo = false }) {
                 </span>
               </label>
 
+              {/* ⚠️ EL BOTÓN NO SE APAGA POR ESTAR INCOMPLETO, y es lo único
+                  importante de este bloque. Antes se desactivaba solo cuando
+                  faltaba texto, sin decir nada: escribías «prueba» —seis letras,
+                  y el mínimo son diez— y el botón se quedaba gris para siempre
+                  sin ninguna explicación. Quien no adivinara qué le faltaba
+                  cerraba la pestaña y cogía el teléfono, que es exactamente lo
+                  que esta pantalla viene a evitar.
+
+                  Ahora se puede pulsar siempre: al pulsar, `enviar` dice qué
+                  falta y pone el foco en el campo. La única razón para apagarlo
+                  es que ya se esté enviando. */}
               <button
                 type="submit"
-                disabled={enviando || asunto.trim().length < 3 || cuerpo.trim().length < 10}
+                disabled={enviando}
                 className="w-full sm:w-auto px-5 py-2.5 rounded-lg text-white text-sm font-medium transition-opacity cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ backgroundColor: "var(--color-primary, #1B3A2D)" }}
               >
