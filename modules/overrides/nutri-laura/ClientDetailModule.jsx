@@ -38,7 +38,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { eurosToCents } from "../../../lib/payments/money.js";
 
 import ClientNotesPanel from "./ClientNotesPanel.jsx";
 import ClientAttachmentsPanel from "./ClientAttachmentsPanel.jsx";
@@ -46,6 +45,7 @@ import ClientBookingsPanel from "./ClientBookingsPanel.jsx";
 import ClientPlansPanel from "./ClientPlansPanel.jsx";
 import ClientModulesSection from "../../../components/clients/ClientModulesSection.jsx";
 import ClientCitasSection from "../../../components/clients/ClientCitasSection.jsx";
+import ClientBonosSection from "../../../components/clients/ClientBonosSection.jsx";
 import ClientConsultaExternaSection from "../../../components/clients/ClientConsultaExternaSection.jsx";
 import ClientCuentaWebSection from "../../../components/clients/ClientCuentaWebSection.jsx";
 import ClientProfesionalSection from "../../../components/clients/ClientProfesionalSection.jsx";
@@ -447,8 +447,13 @@ function InfoTab({
       />
 
       {/* Lo que ES la paciente: quién es, qué tiene contratado y en qué
-          programas está. Se lee de arriba abajo. */}
-      <BonosSection bonos={client.bonos} client={client} onCambio={onRecargar} />
+          programas está. Se lee de arriba abajo.
+
+          La sección de bonos se mudó a `components/clients/ClientBonosSection`
+          el 13/08/2026: era el único sitio del CRM donde se podía dar uno, y el
+          motor (tabla, endpoint, descuento) siempre fue de todos. Aquí se ve
+          igual; la diferencia es que ahora también sale en las demás fichas. */}
+      <ClientBonosSection clientId={client.id} onCambio={onRecargar} />
 
       <ClientModulesSection clientId={client.id} />
 
@@ -507,277 +512,6 @@ function InfoTab({
 }
 
 // ── PatientCard ──────────────────────────────────────────────────────────────
-
-/**
- * Bonos de sesiones de la paciente (04/08/2026).
- *
- * Lo que Laura necesita ver de un vistazo es CUÁNTAS LE QUEDAN, así que ese
- * número va primero y grande. Las reservadas se dicen aparte porque no son lo
- * mismo que las gastadas: están puestas en la agenda pero todavía se pueden
- * cancelar a tiempo.
- *
- * Si no hay bonos la sección no se pinta: la mayoría de las pacientes vienen
- * por sesiones sueltas y un recuadro vacío solo estorba.
- */
-function BonosSection({ bonos, client, onCambio }) {
-  const [abierto, setAbierto] = useState(false);
-  const [quitando, setQuitando] = useState(null);
-  const [falloQuitar, setFalloQuitar] = useState(null);
-  const lista = Array.isArray(bonos) ? bonos.filter((b) => b.estado !== "anulado") : [];
-
-  /*
-   * Quitarle el bono (06/08/2026, Rodrigo). Por dentro se ANULA, no se borra:
-   * la fila se queda con lo que se cobró, quién lo dio y cuándo, y las sesiones
-   * que ya se dieron conservan su número. Borrarla dejaría sesiones numeradas
-   * colgando de un bono que nadie recuerda.
-   *
-   * De cara a la nutricionista da igual: deja de contar, desaparece de aquí y
-   * la paciente vuelve a dejar de ver ese tipo de cita en la agenda.
-   */
-  async function quitar(b) {
-    const quedan = b.restantes > 0 ? ` Le quedan ${b.restantes} sesión(es) sin usar.` : "";
-    if (!window.confirm(`¿Quitarle el bono «${b.nombre}»?${quedan}
-
-Dejará de poder reservar con él. Las citas que ya tenga puestas no se tocan.`)) return;
-    setQuitando(b.id);
-    setFalloQuitar(null);
-    try {
-      const res = await fetch(`/api/citas/packs/${b.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "anulado" }),
-      });
-      const j = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(j?.error || "No se ha podido quitar el bono");
-      onCambio?.();
-    } catch (e) {
-      setFalloQuitar(e.message);
-    }
-    setQuitando(null);
-  }
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold text-gray-700">Bonos de sesiones</span>
-        <button
-          type="button"
-          onClick={() => setAbierto((v) => !v)}
-          className="text-xs font-semibold text-[var(--color-primary)] hover:underline shrink-0"
-        >
-          {abierto ? "Cancelar" : "Dar un bono"}
-        </button>
-      </div>
-
-      {abierto && (
-        <DarBonoForm
-          client={client}
-          onHecho={() => { setAbierto(false); onCambio?.(); }}
-        />
-      )}
-
-      {lista.length === 0 && !abierto && (
-        <p className="px-5 py-4 text-[11px] text-gray-400">
-          Todavía no tiene ningún bono. Dale uno cuando te pague por fuera de la pasarela
-          (transferencia, Bizum): a partir de ahí verá su tipo de cita y podrá reservar sola.
-        </p>
-      )}
-
-      {falloQuitar && (
-        <p className="px-5 pt-3 text-[11px] text-red-600">{falloQuitar}</p>
-      )}
-
-      <div className={lista.length ? "p-5 space-y-4" : "hidden"}>
-        {lista.map((b) => (
-          <div key={b.id}>
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-sm text-gray-800">{b.nombre}</span>
-              <span
-                className={`text-sm font-semibold ${b.restantes > 0 ? "text-[var(--color-primary)]" : "text-gray-400"}`}
-              >
-                {b.restantes > 0 ? `Le quedan ${b.restantes}` : "Agotado"}
-              </span>
-            </div>
-            <div className="text-[11px] text-gray-500 mt-0.5 flex items-baseline justify-between gap-3">
-              <span>
-                {b.resumen}
-                {b.modoPago === "instalment" && " · pago fraccionado"}
-              </span>
-              <button
-                type="button"
-                onClick={() => quitar(b)}
-                disabled={quitando === b.id}
-                title="Deja de contar y la paciente deja de ver ese tipo de cita. Queda registrado que se le dio."
-                className="text-[11px] text-gray-400 hover:text-red-600 hover:underline shrink-0 disabled:opacity-50"
-              >
-                {quitando === b.id ? "Quitando…" : "Quitar bono"}
-              </button>
-            </div>
-            {/* Barra de progreso: gastadas + reservadas sobre el total. */}
-            <div className="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden flex">
-              <div
-                className="bg-[var(--color-primary)]"
-                style={{ width: `${b.total ? (b.gastadas / b.total) * 100 : 0}%` }}
-              />
-              <div
-                className="bg-[var(--color-primary)] opacity-40"
-                style={{ width: `${b.total ? (b.reservadas / b.total) * 100 : 0}%` }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Dar un bono a mano (05/08/2026).
- *
- * Es lo que cierra el círculo de los cobros que NO pasan por la pasarela: la
- * paciente paga por transferencia o Bizum, aquí se le abre el bono, y a partir
- * de ese momento ve su tipo de cita —aunque esté oculto— con su contador y
- * reserva sola, sin pedir hora por WhatsApp cada vez.
- *
- * El importe es opcional y NO se comprueba contra el precio del tipo de cita:
- * un acuerdo cerrado por WhatsApp puede ser otro, y bloquear el alta por un
- * descuadre de 10 € obligaría a mentir en el formulario.
- */
-function DarBonoForm({ client, onHecho }) {
-  const [tipos, setTipos] = useState([]);
-  const [eventTypeId, setEventTypeId] = useState("");
-  const [sesiones, setSesiones] = useState("");
-  const [importe, setImporte] = useState("");
-  const [nota, setNota] = useState("");
-  const [guardando, setGuardando] = useState(false);
-  const [err, setErr] = useState(null);
-  const [avisos, setAvisos] = useState([]);
-
-  useEffect(() => {
-    let vivo = true;
-    fetch("/api/citas/event-types?active=true", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => { if (vivo && j.ok) setTipos(j.data ?? []); })
-      .catch(() => { if (vivo) setErr("No se pudieron cargar los tipos de cita"); });
-    return () => { vivo = false; };
-  }, []);
-
-  // Al elegir el tipo, se propone su número de sesiones. Se puede cambiar: no
-  // todos los acuerdos son el paquete estándar.
-  function elegirTipo(id) {
-    setEventTypeId(id);
-    const t = tipos.find((x) => x.id === id);
-    setSesiones(String(t?.sessionsCount ?? 1));
-  }
-
-  async function guardar(e) {
-    e.preventDefault();
-    setErr(null);
-    setAvisos([]);
-    if (!eventTypeId) { setErr("Elige el tipo de cita"); return; }
-
-    setGuardando(true);
-    try {
-      const res = await fetch("/api/citas/packs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId: client?.id ?? null,
-          clientEmail: client?.portalEmail || client?.email || "",
-          eventTypeId,
-          totalSessions: Number(sesiones) || 1,
-          amount: importe === "" ? null : eurosToCents(importe),
-          notes: nota.trim() || null,
-        }),
-      });
-      const j = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(j?.error || "No se pudo dar el bono");
-      // Los avisos no bloquean: el bono ya está dado. Se enseñan un momento por
-      // si algo no encaja (tipo a la vista de todos, sesiones de más).
-      if (j?.data?.avisos?.length) {
-        setAvisos(j.data.avisos);
-        setTimeout(() => onHecho?.(), 3500);
-      } else {
-        onHecho?.();
-      }
-    } catch (e2) {
-      setErr(e2.message);
-    } finally {
-      setGuardando(false);
-    }
-  }
-
-  const correo = client?.portalEmail || client?.email || "";
-  const inputCls =
-    "w-full text-xs border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]";
-
-  return (
-    <form onSubmit={guardar} className="px-5 py-4 bg-gray-50/70 border-b border-gray-100 space-y-3">
-      <p className="text-[11px] text-gray-500">
-        El bono se le da al correo <strong className="text-gray-700">{correo || "—"}</strong>, que es
-        con el que entra en su área privada.
-      </p>
-
-      <div>
-        <label className="block text-[11px] font-medium text-gray-500 mb-1">Tipo de cita</label>
-        <select value={eventTypeId} onChange={(e) => elegirTipo(e.target.value)} className={inputCls}>
-          <option value="">Elige…</option>
-          {tipos.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}{t.isHidden ? " · oculto" : ""}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-[11px] font-medium text-gray-500 mb-1">Sesiones</label>
-          <input
-            type="number" min={1} max={200}
-            value={sesiones}
-            onChange={(e) => setSesiones(e.target.value)}
-            className={inputCls}
-          />
-        </div>
-        <div>
-          <label className="block text-[11px] font-medium text-gray-500 mb-1">Importe cobrado (€)</label>
-          <input
-            type="number" step="0.01" min={0}
-            value={importe}
-            onChange={(e) => setImporte(e.target.value)}
-            placeholder="Opcional"
-            className={inputCls}
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-[11px] font-medium text-gray-500 mb-1">Nota</label>
-        <input
-          type="text"
-          value={nota}
-          onChange={(e) => setNota(e.target.value)}
-          placeholder="Transferencia recibida el 3/8"
-          className={inputCls}
-        />
-      </div>
-
-      {err && <p className="text-[11px] text-red-600">{err}</p>}
-      {avisos.map((a, i) => (
-        <p key={i} className="text-[11px] text-amber-700">⚠ {a}</p>
-      ))}
-
-      <button
-        type="submit"
-        disabled={guardando}
-        className="w-full bg-[var(--color-primary)] text-white text-xs font-semibold py-2 rounded-md disabled:opacity-50"
-      >
-        {guardando ? "Dando el bono…" : "Dar el bono"}
-      </button>
-    </form>
-  );
-}
 
 function PatientCard({
   client,

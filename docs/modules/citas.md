@@ -357,6 +357,25 @@ de 6 sesiones se convierta en barra libre.
 `POST /api/citas/packs` (solo admin). Era la pieza que faltaba: hasta hoy un
 bono **solo** podía nacer del webhook de Stripe.
 
+⚠️ **La pantalla es de TODOS desde el 13/08/2026** (Rodrigo: «todo el mundo
+tiene bonos, solo tienen que ponerlos»). La sección «Bonos de sesiones» vivía
+dentro de `modules/overrides/nutri-laura/ClientDetailModule.jsx`, así que la
+ficha de Laura era el ÚNICO sitio del CRM donde se podía dar uno: el resto de
+centros con `citas` tenían la tabla, el endpoint y el descuento de sesiones, y
+ningún botón con el que estrenarlo. Ahora es
+`components/clients/ClientBonosSection.jsx`, la comparten las dos fichas y sale
+en cualquier cliente con `citas` (en la ficha por defecto, dentro de la pestaña
+**Citas**). Dos cosas que decide la propia sección:
+
+- **No se pinta si el centro no tiene Citas** — 403/404 en `event-types`, mismo
+  criterio que `ClientCitasSection`.
+- **Dar y quitar son de admin**, igual que el endpoint. Quien no lo sea ve los
+  bonos y su cuenta —lo que necesita para atender— pero no los botones: enseñar
+  uno que siempre responde 403 es peor que no enseñarlo.
+
+Y una diferencia con lo que había: la tarjeta **se pinta aunque no haya ningún
+bono**, porque es donde está el botón de darlo. Antes, sin bonos, no salía nada.
+
 Es la única puerta del CRM que abre derecho a citas sin un cobro detrás que
 mirar, así que queda marcado `session_packs.origin = 'manual'` con el nombre de
 quien lo creó (`created_by`) y se audita (`citas.pack_manual_created`). Un bono

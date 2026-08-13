@@ -21,6 +21,7 @@ import ClientGuardiansSection from "../../components/clients/ClientGuardiansSect
 import ClientPortalMonthsSection from "../../components/clients/ClientPortalMonthsSection.jsx";
 import ClientComunicacionesSection from "../../components/clients/ClientComunicacionesSection.jsx";
 import ClientCitasSection from "../../components/clients/ClientCitasSection.jsx";
+import ClientBonosSection from "../../components/clients/ClientBonosSection.jsx";
 import ClientConsultaExternaSection from "../../components/clients/ClientConsultaExternaSection.jsx";
 import ClientProfesionalSection from "../../components/clients/ClientProfesionalSection.jsx";
 import ClientPatientsSection from "../../components/clients/ClientPatientsSection.jsx";
@@ -682,6 +683,13 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL, conPacie
 
         <PanelPestana clave="citas" activo={tab === "citas"} onEstado={marcarPanel}>
           <ClientCitasSection clientId={id} />
+
+          {/* Bonos de sesiones (13/08/2026, Rodrigo: «todo el mundo tiene
+              bonos, solo tienen que ponerlos»). La sección vivía solo en la
+              ficha de nutri_laura, así que el resto de centros con Citas tenían
+              el motor entero —tabla, endpoint, descuento— y ningún sitio donde
+              dar uno. Se pinta sola solo si el centro tiene Citas. */}
+          <ClientBonosSection clientId={id} />
         </PanelPestana>
 
         <PanelPestana clave="facturacion" activo={tab === "facturacion"} onEstado={marcarPanel}>
