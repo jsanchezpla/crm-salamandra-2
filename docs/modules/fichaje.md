@@ -173,7 +173,19 @@ DELETE /api/fichaje/[id]               baja blanda (motivo obligatorio)
 ```
 
 **En la demo el volcado está deshabilitado**: es pública y da sesión de admin a
-cualquiera. Se ven los datos sembrados.
+cualquiera. Se ven los datos sembrados por `scripts/seed-fichaje-demo.js`, que
+siembra el mes en curso y el anterior con los seis casos que la pantalla sabe
+detectar (un día sin salida, una jornada de 14 h, un día partido en dos tramos,
+una corrección a mano, alguien que hace de más y alguien sin ningún fichaje). Los
+meses se calculan al vuelo, así que el seed no caduca, y está en la lista de
+`reset-demo-tenant.js`.
+
+⚠️ **Sembrar la demo no basta: hay que re-hacer su foto dorada.** La demo se
+restaura desde `crm_demo_golden` en cada recarga dura, y el `TRUNCATE` de ese
+restore es **CASCADE**: `fichajes` apunta a `team_members`, así que se vaciaba en
+cada recarga aunque la tabla ni siquiera estuviera en la foto. Después de
+sembrar, `scripts/demo-golden-snapshot.js demo`. Vale para cualquier módulo que
+estrene tablas con clave ajena hacia una tabla de la demo.
 
 Auditoría: `fichaje.volcado`, `fichaje.corregido`, `fichaje.creado_a_mano`,
 `fichaje.dado_de_baja`, `fichaje.volcado_deshecho`, con **resumen** y nunca la
