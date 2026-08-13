@@ -179,23 +179,25 @@ process.stdout.write("\n▶ Lo que el CLIENTE no puede ver\n");
   comprobar("y de quién es", nuestro.asignadoA === "rodrigo" && nuestro.tenantSlug === "aumenta");
 }
 
-process.stdout.write("\n▶ El asunto del correo, con la fila CRUDA de la base\n");
+process.stdout.write("\n▶ El correo, con la fila CRUDA de la base\n");
 {
-  // Se rompió en producción el 13/08/2026: a la plantilla del correo al cliente
-  // le llega la fila de Sequelize, que tiene `numero` pero NO `ref` —eso solo
-  // existe en el objeto serializado—, y salió un correo con el asunto «Te hemos
-  // contestado · undefined». No dio ningún error: se envió tal cual.
-  const { avisoParaNosotros, respuestaParaElCliente } = await import(
-    "../lib/email/templates/buzon/avisoNuevo.js"
-  );
+  // Se rompió en producción el 13/08/2026: a la plantilla le llega a veces la
+  // fila de Sequelize, que tiene `numero` pero NO `ref` —eso solo existe en el
+  // objeto ya serializado—, y salió un correo con el asunto «Te hemos
+  // contestado · undefined». No dio ningún error: se envió tal cual. Aquella
+  // plantilla ya no existe (al cliente se le avisa dentro de su CRM, no por
+  // correo), pero la trampa sigue viva en la que queda, así que se fija con la
+  // fila cruda a propósito.
+  const { avisoParaNosotros } = await import("../lib/email/templates/buzon/avisoNuevo.js");
   const filaCruda = { numero: 7, asunto: "No va", cuerpo: "eso", tipo: "error", tenantSlug: "aumenta" };
 
   const paraNosotros = avisoParaNosotros({ aviso: filaCruda, url: "https://x/admin/buzon" });
-  comprobar("el nuestro lleva la referencia", paraNosotros.subject.startsWith("AV-0007"), paraNosotros.subject);
-
-  const paraEl = respuestaParaElCliente({ aviso: filaCruda, mensaje: { cuerpo: "ya está" } });
-  comprobar("y el suyo TAMBIÉN, sin `ref` en la fila", paraEl.subject === "Te hemos contestado · AV-0007", paraEl.subject);
-  comprobar("nunca sale la palabra undefined", !/undefined/.test(paraEl.subject + paraEl.text), paraEl.subject);
+  comprobar("lleva la referencia sin `ref` en la fila", paraNosotros.subject.startsWith("AV-0007"), paraNosotros.subject);
+  comprobar(
+    "nunca sale la palabra undefined",
+    !/undefined/.test(paraNosotros.subject + paraNosotros.text),
+    paraNosotros.subject
+  );
 }
 
 process.stdout.write(`\n${fallos === 0 ? "✓" : "✗"} ${pasadas} bien · ${fallos} mal\n\n`);

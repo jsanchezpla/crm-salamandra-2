@@ -209,14 +209,21 @@ qué dominio entra cada uno (unos por subdominio nuestro, `nutri_laura` por
 `tunutrilaura.com`), y un enlace roto en un correo de soporte es peor que no
 ponerlo.
 
-## Cuando le contestamos se entera por tres sitios
+## Cuando le contestamos se entera DENTRO de su CRM
 
-1. **Correo** (`avisarPorCorreo.js`).
-2. **La portada y el punto del menú**, los dos leídos de `master` desde su
+Y **no por correo** (Jorge, 13/08/2026). Es gente que entra al CRM todos los
+días: un correo por cada respuesta es ruido en una bandeja que ya va llena, y
+saca fuera de nuestro sistema algo que ya está donde tiene que estar. Por dos
+sitios:
+
+1. **La portada y el punto del menú**, los dos leídos de `master` desde su
    propio host y con su propia sesión: `sinVerDeUsuario()` / `contarSinVer()`,
-   que comparan `respondido_at` con `visto_cliente_at`. No cruzan a ningún
-   schema.
-3. **La campana** (`lib/buzon/avisarEnSuCrm.js`).
+   que comparan `respondido_at` con `visto_cliente_at` (misma condición,
+   `whereSinVer()`, para que no puedan discrepar). No cruzan a ningún schema.
+2. **La campana** (`lib/buzon/avisarEnSuCrm.js`).
+
+El único correo que se manda es el que nos llega a **nosotros** cuando entra un
+aviso: sin él no nos enteraríamos hasta que alguien abriera el panel.
 
 ⚠️ **Ese tercero es el ÚNICO sitio del back-office que abre el schema de un
 cliente**, y conviene que siga siéndolo. Hasta el 13/08/2026 ningún endpoint de
