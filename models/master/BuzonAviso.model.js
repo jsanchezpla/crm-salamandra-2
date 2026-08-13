@@ -97,8 +97,27 @@ export function defineBuzonAviso(sequelize) {
       /** Navegador y tamaño de ventana. Nada de datos personales. */
       contexto: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
 
-      /** Cuándo lo abrimos NOSOTROS. */
+      /**
+       * Cuándo lo abrimos NOSOTROS **por última vez**.
+       *
+       * ⚠️ ANTES ERA «LA PRIMERA VEZ» y solo se escribía si estaba a null, así
+       * que servía para un «Sin abrir» y para nada más: un cliente que escribía
+       * por tercera vez en un hilo que ya habíamos mirado no encendía nada, y su
+       * mensaje se quedaba esperando a que alguien bajara por la lista. Desde el
+       * 13/08/2026 se reescribe en CADA apertura, que es lo que la convierte en
+       * la gemela de `vistoClienteAt` y permite comparar «quién escribió después
+       * de que el otro mirara» en los dos sentidos.
+       */
       leidoAt: { type: DataTypes.DATE, allowNull: true },
+      /**
+       * Cuándo nos escribió ÉL por última vez (el alta, o un mensaje suyo en el
+       * hilo). Es lo que enciende la campana del panel.
+       *
+       * No vale `ultimoMensajeAt` para esto: esa se mueve también cuando
+       * contestamos NOSOTROS, así que responder dejaría el aviso marcado como
+       * pendiente para siempre.
+       */
+      clienteEscribioAt: { type: DataTypes.DATE, allowNull: true },
       /**
        * Cuándo lo abrió ÉL. Es lo único que permite encender un punto en su menú
        * cuando le hemos contestado y aún no lo ha visto, y apagarlo cuando entra.

@@ -72,7 +72,7 @@ export const ONE_OFF = {
   "migrate-paquetes-modulos": "MASTER, no toca schemas de tenant: crea `master.paquetes_modulos` y siembra los dos paquetes que hasta ahora estaban escritos en `catalogo.js`. Se corre a mano con `npm run db:migrate:paquetes`; idempotente, y la semilla NO restaura lo que se haya borrado después",
   "migrate-auto-asignar-nutricion":
     "MASTER, no toca schemas de tenant: enciende `featureFlags.autoAsignarEnAlta` en la fila de `nutricion` de quien ya dependía del auto-marcado (nutri_laura). El flag nace apagado para todos los demás a propósito — antes, tener el módulo bastaba para que TODA ficha nueva se marcara como paciente de nutrición. Se corre a mano una vez, idempotente",
-  "migrate-buzon": "MASTER, no toca schemas de tenant: crea `master.buzon_avisos`, `buzon_mensajes`, `buzon_adjuntos` y la secuencia del correlativo, que es donde caen los avisos que nos mandan los clientes. Va en master —y no en el schema de cada uno— para que sobrevivan a su baja y para que funcionen aunque su base esté rota. Se corre a mano con `npm run db:migrate:buzon`; idempotente",
+  "migrate-buzon": "MASTER, no toca schemas de tenant: crea `master.buzon_avisos`, `buzon_mensajes`, `buzon_adjuntos` y la secuencia del correlativo, que es donde caen los avisos que nos mandan los clientes. Va en master —y no en el schema de cada uno— para que sobrevivan a su baja y para que funcionen aunque su base esté rota. Desde el 13/08/2026 además AÑADE Y RELLENA `cliente_escribio_at` sobre la tabla que ya existía (la campana del panel), así que ya no solo crea: correrla es obligatorio en cada despliegue que traiga una columna nueva, y el relleno solo toca las filas a NULL. Se corre a mano con `npm run db:migrate:buzon`; idempotente",
 };
 
 /**

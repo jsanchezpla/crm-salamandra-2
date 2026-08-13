@@ -76,6 +76,38 @@ docker exec crm-salamandra-app-1 node scripts/migrate-buzon.js
 - **`buzon_mensajes`** — el hilo. `interno` marca las notas nuestras.
 - **`buzon_adjuntos`** — la ficha del fichero; el binario va a disco.
 
+### Las cuatro fechas que deciden quién tiene que mirar algo
+
+Son dos PAREJAS, y la gracia está en que se comparan cruzadas:
+
+| Quién escribió | Cuándo miró el otro | Enciende |
+| --- | --- | --- |
+| `respondido_at` (nosotros) | `visto_cliente_at` | el punto de **su** menú y el aviso de su portada |
+| `cliente_escribio_at` (él) | `leido_at` (nosotros) | la **campana** de la barra del panel |
+
+Cada pareja está escrita **dos veces**: en JavaScript (`tieneRespuestaSinVer` y
+`tienePendienteNuestro`, en `lib/buzon/buzon.js`) para poder marcar una fila que
+ya se tiene en la mano, y en SQL (`whereSinVer` y `wherePendienteNuestro`, en
+`buzonStore.js`) para poder CONTAR sin traerse las filas. No se pueden unificar
+—una corre en el navegador y la otra dentro de Postgres— y si se separan no da
+ningún error: sale un número encendido sin nada que enseñar. Lo único que lo
+impide es `scripts/_smoke-buzon.mjs`, que las fija caso por caso.
+
+⚠️ **Se comparan FECHAS y no un booleano «leído»** porque a un mismo aviso se le
+puede contestar dos veces. Un `leido = true` se quedaría puesto y la segunda
+respuesta no avisaría de nada.
+
+⚠️ **`leido_at` es la ÚLTIMA vez que lo abrimos, no la primera.** Nació como «la
+primera» y solo se escribía si estaba a `NULL`, y por eso un cliente podía
+insistir por tercera vez en un hilo ya abierto sin encender nada: su mensaje se
+quedaba esperando a que alguien bajara por la lista. Si algún día vuelve un
+`if (!aviso.leidoAt)` a `leerParaSalamandra`, la campana se apaga en silencio.
+
+`cliente_escribio_at` se añadió el 13/08/2026 sobre una tabla que ya tenía
+avisos, así que la migración la **crea y la rellena** mirando el último mensaje
+del cliente (o el alta). Sin ese relleno los avisos anteriores contarían como
+«no ha escrito nunca» y la campana nacería a cero teniendo cosas dentro.
+
 ### Sin claves ajenas, y con fotos de texto
 
 `tenant_id` y `usuario_id` son UUID **sueltos**, y al lado van `tenant_slug`,
@@ -115,7 +147,8 @@ por descuido, como si siguiera esperándonos.
 | `POST /api/ayuda/[id]/mensajes` | Ídem. Un mensaje suyo nunca puede ser `interno` |
 | `GET /api/ayuda/adjuntos/[adjuntoId]` | El adjunto tiene que colgar de un aviso **suyo** |
 | `GET /api/admin/buzon` | `candadoBuzon` |
-| `GET/PATCH /api/admin/buzon/[id]` | Ídem. PATCH solo estado, prioridad y reparto |
+| `GET /api/admin/buzon/pendientes` | Ídem. Lo que alimenta la campana de la barra |
+| `GET/PATCH /api/admin/buzon/[id]` | Ídem. PATCH solo estado, prioridad y reparto. El GET apunta `leido_at` |
 | `POST /api/admin/buzon/[id]/mensajes` | Ídem. `interno: true` = nota nuestra |
 | `GET /api/admin/buzon/adjuntos/[adjuntoId]` | Ídem |
 
@@ -221,6 +254,17 @@ sitios:
    que comparan `respondido_at` con `visto_cliente_at` (misma condición,
    `whereSinVer()`, para que no puedan discrepar). No cruzan a ningún schema.
 2. **La campana** (`lib/buzon/avisarEnSuCrm.js`).
+3. **Su lista de `/ayuda`**, donde la fila lleva un «Nueva respuesta» en verde
+   mientras no la abra.
+
+Los tres **se apagan sin recargar la página**. Abrir el hilo ya apunta la visita
+en la base (`GET /api/ayuda/[id]` → `marcarVistoPorCliente`), pero el punto lo
+pinta el `Sidebar`, que está en el layout y no comparte estado con la pantalla:
+se le avisa con un evento del navegador (`EVENTO_SIN_VER`). El número que viaja
+en el evento se **cuenta de la lista que el usuario tiene delante**, no de otra
+consulta, para que fila y punto no puedan decir cosas distintas. Antes de eso el
+punto seguía encendido después de leer la respuesta, así que se volvía a entrar a
+buscar qué se había escapado (Jorge, 13/08/2026).
 
 El único correo que se manda es el que nos llega a **nosotros** cuando entra un
 aviso: sin él no nos enteraríamos hasta que alguien abriera el panel.
@@ -240,6 +284,36 @@ propio fichero:
 - Solo se avisa a **quien escribió**: es el único que ve ese aviso en `/ayuda`.
 
 El clic de la campana lleva a `/ayuda` (`notificationLink`, `case "BuzonAviso"`).
+
+## Y nosotros nos enteramos por la campana del panel
+
+`components/admin/CampanaBuzon.jsx`, en la barra superior de **todas** las
+pantallas de `/admin` (13/08/2026, lo pidió Jorge). Está siempre visible, tenga
+o no avisos: una campana que solo aparece cuando hay algo obliga a acordarse de
+que existe, y el hueco vacío también es información.
+
+- **Qué cuenta**: avisos donde el cliente ha escrito después de la última vez que
+  lo abrimos —el alta incluida—, o sea lo nuevo y lo que ha vuelto a moverse. NO
+  cuenta lo que ya hemos contestado y le espera a él: eso es trabajo hecho.
+- **De dónde**: `GET /api/admin/buzon/pendientes`, endpoint aparte y no un campo
+  más de `GET /api/admin/buzon`. Aquel devuelve hasta cien avisos con su hilo y
+  sus adjuntos, y esto se pregunta desde cualquier pantalla **cada minuto**.
+- **Cuándo se repregunta**: cada 60 s, al volver a la pestaña
+  (`visibilitychange`), al abrir el desplegable, y cuando la bandeja avisa por
+  `EVENTO_PENDIENTES` de que se ha abierto un aviso — que es lo que hace que el
+  número baje al instante en vez de al minuto siguiente.
+- El desplegable lleva a `/admin/buzon?aviso=<id>`, que abre ese hilo directo. La
+  bandeja limpia la query con `replaceState` para que recargar no vuelva a abrir
+  el de hace media hora.
+- Distingue **«Nuevo»** de **«Ha vuelto a escribir»**: el segundo suele correr
+  más prisa, porque significa que ya hablamos y no le sirvió. La fila de la
+  bandeja lleva la misma marca, salida de la misma función.
+
+El evento del panel viaja **sin número** (un «vuelve a mirar») y el del CRM **con
+él**. No es un descuido: allí la cuenta ya está en la lista que el usuario tiene
+delante y no hace falta preguntar nada; aquí la bandeja no la sabe —lo suyo es el
+recuento por estado, que es otra cosa— y la campana la pide a su endpoint, que es
+una consulta pequeña.
 
 ## Lo que NO hace
 

@@ -6,7 +6,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // `lib/buzon/buzon.js` no importa nada (ni BD, ni Next): así el motivo que se
 // enseña en pantalla y el que devolvería el servidor son literalmente la misma
 // frase, y no dos textos parecidos que se separan con el tiempo.
-import { validarAvisoNuevo, LIMITES, MB_POR_ADJUNTO } from "../../lib/buzon/buzon.js";
+import {
+  validarAvisoNuevo,
+  LIMITES,
+  MB_POR_ADJUNTO,
+  EVENTO_SIN_VER,
+} from "../../lib/buzon/buzon.js";
 
 /**
  * Lee la respuesta SIN dar por hecho que es JSON.
@@ -98,6 +103,12 @@ export default function AyudaModule({ esDemo = false }) {
   const refAsunto = useRef(null);
   const refCuerpo = useRef(null);
 
+  // Se pone en cuanto la lista ha llegado UNA vez. Sin él, el aviso al menú de
+  // aquí abajo saldría en el primer render con la lista todavía vacía —o sea
+  // «cero sin leer»— y apagaría el punto un instante antes de volver a
+  // encenderlo.
+  const yaCargado = useRef(false);
+
   const cargar = useCallback(async (silencioso = false) => {
     if (!silencioso) setCargando(true);
     try {
@@ -108,6 +119,7 @@ export default function AyudaModule({ esDemo = false }) {
       setTipos(json.data.tipos ?? []);
       setSoloLectura(!!json.data.soloLectura);
       setFallo(null);
+      yaCargado.current = true;
     } catch (e) {
       setFallo(e.message);
     } finally {
@@ -118,6 +130,46 @@ export default function AyudaModule({ esDemo = false }) {
   useEffect(() => {
     cargar();
   }, [cargar]);
+
+  /**
+   * Cuántas respuestas nuestras le quedan por abrir.
+   *
+   * NO se guarda en su propio estado: se CUENTA de la lista que está viendo. Un
+   * contador por un lado y unas filas por otro acaban discrepando el día que a
+   * alguien se le olvide actualizar uno de los dos, y el resultado es el peor de
+   * los dos mundos: un punto encendido en el menú sin ninguna fila marcada que
+   * lo explique.
+   *
+   * (La lista trae como mucho 100 avisos, así que en teoría alguien con más de
+   * 100 sin leer vería el punto quedarse corto. Es preferible a dos números que
+   * se contradicen en pantalla, y con avisos que escribe una persona a mano no
+   * va a pasar.)
+   */
+  const sinLeer = avisos.filter((a) => a.sinLeer).length;
+
+  /**
+   * Y se le dice al MENÚ, que vive fuera de esta pantalla.
+   *
+   * El punto verde del pie del sidebar lo pinta el layout del dashboard, que no
+   * comparte estado con esta página: sin este aviso el punto se quedaba
+   * encendido hasta la siguiente recarga completa, así que quien abría la
+   * respuesta la leía, salía, seguía viendo el punto y volvía a entrar a buscar
+   * qué se le había escapado (Jorge, 13/08/2026).
+   */
+  useEffect(() => {
+    if (!yaCargado.current) return;
+    window.dispatchEvent(new CustomEvent(EVENTO_SIN_VER, { detail: { sinVer: sinLeer } }));
+  }, [sinLeer]);
+
+  /**
+   * «Este ya lo ha abierto». Lo llama el panel en cuanto el servidor le
+   * confirma el hilo — que es el momento en que `/api/ayuda/[id]` ha apuntado la
+   * visita en la base. No se hace al pulsar: si la carga falla, la visita no ha
+   * quedado escrita en ningún sitio y borrar el aviso en pantalla sería mentir.
+   */
+  const marcarVisto = useCallback((id) => {
+    setAvisos((previos) => previos.map((a) => (a.id === id ? { ...a, sinLeer: false } : a)));
+  }, []);
 
   async function enviar(e) {
     e.preventDefault();
@@ -365,7 +417,11 @@ export default function AyudaModule({ esDemo = false }) {
                 <li key={a.id}>
                   <button
                     onClick={() => setAbierto(a)}
-                    className="w-full text-left bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-gray-300 transition-colors cursor-pointer"
+                    className={`w-full text-left bg-white border rounded-lg px-4 py-3 transition-colors cursor-pointer ${
+                      a.sinLeer
+                        ? "border-emerald-300 hover:border-emerald-400"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -375,13 +431,25 @@ export default function AyudaModule({ esDemo = false }) {
                           {a.mensajes.length > 0 && ` · ${a.mensajes.length} respuesta${a.mensajes.length > 1 ? "s" : ""}`}
                         </div>
                       </div>
-                      <span
-                        className={`shrink-0 text-[11px] px-2 py-0.5 rounded-full border ${
-                          ESTADO_COLOR[a.estado] ?? ESTADO_COLOR.nuevo
-                        }`}
-                      >
-                        {a.estadoLabel}
-                      </span>
+                      <div className="shrink-0 flex flex-col items-end gap-1">
+                        {/* ⚠️ ARRIBA DEL ESTADO, NO EN VEZ DE ÉL. Son dos cosas
+                            distintas: «Nueva respuesta» es lo que tiene que
+                            hacer él, y el estado es por dónde va el asunto. Con
+                            un aviso resuelto y contestado a la vez, quedarse
+                            solo con uno de los dos esconde el otro. */}
+                        {a.sinLeer && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full border border-emerald-300 bg-emerald-50 text-emerald-700 font-medium whitespace-nowrap">
+                            Nueva respuesta
+                          </span>
+                        )}
+                        <span
+                          className={`text-[11px] px-2 py-0.5 rounded-full border whitespace-nowrap ${
+                            ESTADO_COLOR[a.estado] ?? ESTADO_COLOR.nuevo
+                          }`}
+                        >
+                          {a.estadoLabel}
+                        </span>
+                      </div>
                     </div>
                   </button>
                 </li>
@@ -394,6 +462,7 @@ export default function AyudaModule({ esDemo = false }) {
       {abierto && (
         <Detalle
           avisoId={abierto.id}
+          onVisto={marcarVisto}
           onCerrar={() => {
             setAbierto(null);
             cargar(true);
@@ -563,7 +632,7 @@ function Visor({ adjunto, base, onCerrar }) {
  * El hilo. Panel lateral, y respeta la barra móvil del dashboard (`top-14
  * lg:top-0`, regla #13) y la escala de capas: fondo z-40, panel z-50.
  */
-function Detalle({ avisoId, onCerrar }) {
+function Detalle({ avisoId, onVisto, onCerrar }) {
   const [aviso, setAviso] = useState(null);
   const [texto, setTexto] = useState("");
   const [ficheros, setFicheros] = useState([]);
@@ -578,10 +647,15 @@ function Detalle({ avisoId, onCerrar }) {
       const json = await leerRespuesta(res);
       if (!res.ok) throw new Error(json.error || "No se ha podido cargar");
       setAviso(json.data);
+      // Abrir el hilo ES haberlo leído, y el servidor acaba de apuntarlo (el GET
+      // llama a `marcarVistoPorCliente`). Se avisa a la lista para que el
+      // «Nueva respuesta» de la fila y el punto del menú se apaguen AHORA, en
+      // vez de en la próxima recarga.
+      onVisto?.(avisoId);
     } catch (e) {
       setFallo(e.message);
     }
-  }, [avisoId]);
+  }, [avisoId, onVisto]);
 
   useEffect(() => {
     cargar();

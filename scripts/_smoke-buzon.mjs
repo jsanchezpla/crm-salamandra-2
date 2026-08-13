@@ -21,6 +21,8 @@ import {
   validarCambio,
   estadoTrasMensaje,
   serializarAviso,
+  tieneRespuestaSinVer,
+  tienePendienteNuestro,
   LIMITES,
 } from "../lib/buzon/buzon.js";
 
@@ -141,6 +143,97 @@ comprobar(
 comprobar("añadir datos a uno nuevo no lo mueve", estadoTrasMensaje("nuevo", "cliente") === "nuevo");
 comprobar("un resuelto no se reabre solo por nosotros", estadoTrasMensaje("resuelto", "salamandra") === "resuelto");
 
+process.stdout.write("\n▶ «Te hemos contestado y no lo has abierto»\n");
+{
+  // Esta regla está escrita DOS veces: aquí en JavaScript (marca la fila en la
+  // lista del cliente) y en SQL dentro de `buzonStore.whereSinVer()` (cuenta el
+  // punto del menú y saca el aviso de la portada). No se pueden unificar —una
+  // corre en Postgres y la otra en el navegador—, así que lo único que impide
+  // que se separen es esta lista de casos. Si alguien toca una de las dos, que
+  // sea mirando estos cinco.
+  const t = (s) => new Date(s);
+
+  comprobar(
+    "sin contestar, no hay nada que leer",
+    tieneRespuestaSinVer({ respondidoAt: null, vistoClienteAt: null }) === false
+  );
+  comprobar(
+    "contestado y nunca abierto → sin leer",
+    tieneRespuestaSinVer({ respondidoAt: t("2026-08-13T11:00:00Z"), vistoClienteAt: null }) === true
+  );
+  comprobar(
+    "lo abrió DESPUÉS de contestarle → leído",
+    tieneRespuestaSinVer({
+      respondidoAt: t("2026-08-13T11:00:00Z"),
+      vistoClienteAt: t("2026-08-13T11:05:00Z"),
+    }) === false
+  );
+  // El caso que obliga a comparar fechas en vez de guardar un booleano «leído»:
+  // le contestamos por segunda vez a un aviso que ya había abierto.
+  comprobar(
+    "SEGUNDA respuesta a un hilo ya abierto → vuelve a estar sin leer",
+    tieneRespuestaSinVer({
+      respondidoAt: t("2026-08-13T18:00:00Z"),
+      vistoClienteAt: t("2026-08-13T11:05:00Z"),
+    }) === true
+  );
+  comprobar(
+    "abierto pero sin contestar todavía no cuenta",
+    tieneRespuestaSinVer({ respondidoAt: null, vistoClienteAt: t("2026-08-13T09:00:00Z") }) === false
+  );
+  comprobar("una fila que no existe no revienta", tieneRespuestaSinVer(null) === false);
+}
+
+process.stdout.write("\n▶ «Nos ha escrito y no lo hemos mirado» (la campana del panel)\n");
+{
+  // El espejo de lo de arriba, y con la misma trampa: es la regla que decide si
+  // la campana del panel enseña un número. Su gemela en SQL es
+  // `buzonStore.wherePendienteNuestro()`.
+  const t = (s) => new Date(s);
+
+  comprobar(
+    "un aviso recién creado nos espera",
+    tienePendienteNuestro({ clienteEscribioAt: t("2026-08-13T09:00:00Z"), leidoAt: null }) === true
+  );
+  comprobar(
+    "abierto después de que escribiera → mirado",
+    tienePendienteNuestro({
+      clienteEscribioAt: t("2026-08-13T09:00:00Z"),
+      leidoAt: t("2026-08-13T09:30:00Z"),
+    }) === false
+  );
+  // ⚠️ EL CASO QUE ANTES NO SE VEÍA. `leidoAt` significaba «la primera vez que
+  // lo abrimos» y solo se escribía una vez, así que el cliente podía insistir
+  // por tercera vez en un hilo ya visto sin encender absolutamente nada.
+  comprobar(
+    "VUELVE A ESCRIBIR en un hilo ya abierto → vuelve a esperarnos",
+    tienePendienteNuestro({
+      clienteEscribioAt: t("2026-08-13T18:00:00Z"),
+      leidoAt: t("2026-08-13T09:30:00Z"),
+    }) === true
+  );
+  comprobar(
+    "sin que él haya escrito, no hay nada pendiente",
+    tienePendienteNuestro({ clienteEscribioAt: null, leidoAt: null }) === false
+  );
+  comprobar("una fila que no existe no revienta", tienePendienteNuestro(null) === false);
+
+  // Las dos reglas son independientes: que él tenga algo sin leer no nos pone a
+  // nosotros nada pendiente, ni al revés. Si algún día alguien las funde en una,
+  // esto lo caza.
+  const contestadoYVisto = {
+    respondidoAt: t("2026-08-13T12:00:00Z"),
+    vistoClienteAt: null,
+    clienteEscribioAt: t("2026-08-13T09:00:00Z"),
+    leidoAt: t("2026-08-13T11:00:00Z"),
+  };
+  comprobar(
+    "le hemos contestado: él lo tiene sin leer y nosotros no tenemos nada",
+    tieneRespuestaSinVer(contestadoYVisto) === true &&
+      tienePendienteNuestro(contestadoYVisto) === false
+  );
+}
+
 process.stdout.write("\n▶ Lo que el CLIENTE no puede ver\n");
 {
   const fila = {
@@ -175,6 +268,18 @@ process.stdout.write("\n▶ Lo que el CLIENTE no puede ver\n");
 
   const nuestro = serializarAviso(fila, { para: "salamandra" });
   comprobar("nosotros sí vemos las dos líneas", nuestro.mensajes.length === 2);
+  // `sinLeer` va en la parte común: al cliente le pinta el «Nueva respuesta» y a
+  // nosotros nos dice si ya ha leído lo que le contestamos.
+  comprobar(
+    "los DOS lados llevan si está sin leer",
+    suyo.sinLeer === false && nuestro.sinLeer === false,
+    `${suyo.sinLeer} / ${nuestro.sinLeer}`
+  );
+  const contestado = serializarAviso(
+    { ...fila, respondidoAt: new Date("2026-08-13T11:00:00Z"), vistoClienteAt: null },
+    { para: "cliente" }
+  );
+  comprobar("contestado y sin abrir sale marcado", contestado.sinLeer === true);
   comprobar("y el hilo va en orden", nuestro.mensajes[0].id === "m1" && nuestro.mensajes[1].id === "m2");
   comprobar("y de quién es", nuestro.asignadoA === "rodrigo" && nuestro.tenantSlug === "aumenta");
 }

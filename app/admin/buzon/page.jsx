@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { EVENTO_PENDIENTES } from "../../../lib/buzon/buzon.js";
+
 /**
  * Buzón — lo que nos escriben los clientes.
  *
@@ -188,6 +190,24 @@ export default function BuzonPage() {
     cargar();
   }, [cargar]);
 
+  /**
+   * Abrir el aviso al que apunta la campana.
+   *
+   * Se lee de `window.location.search` y no con `useSearchParams` a propósito:
+   * ese hook obliga a envolver la página en un `<Suspense>` para que Next pueda
+   * prerenderizarla, y esto es una pantalla de cliente entera detrás de un
+   * login. Un efecto de montaje hace lo mismo sin arrastrar esa ceremonia.
+   *
+   * La query se limpia de la barra con `replaceState` para que recargar no
+   * vuelva a abrir el aviso de hace media hora.
+   */
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("aviso");
+    if (!id) return;
+    setAbierto(id);
+    window.history.replaceState(null, "", "/admin/buzon");
+  }, []);
+
   if (error) {
     return (
       <main className="min-h-screen flex items-center justify-center px-6">
@@ -291,7 +311,16 @@ export default function BuzonPage() {
                           {a.ref}
                         </span>
                         {a.bloquea && <Chip nivel="amber">Le bloquea</Chip>}
-                        {!a.leidoAt && <Chip nivel="blue">Sin abrir</Chip>}
+                        {/* Antes esto era `!a.leidoAt`, o sea «no lo hemos
+                            abierto NUNCA», y por eso un cliente podía insistir
+                            tres veces en un hilo ya visto sin que la fila se
+                            marcara. Ahora es `pendiente`: nos ha escrito él
+                            después de la última vez que miramos. Es lo mismo que
+                            cuenta la campana de arriba, salido de la misma
+                            función. */}
+                        {a.pendiente && (
+                          <Chip nivel="blue">{a.leidoAt ? "Ha vuelto a escribir" : "Sin abrir"}</Chip>
+                        )}
                       </div>
                       <div className="text-[13px] mt-1 truncate" style={{ color: "var(--text)" }}>
                         {a.asunto}
@@ -340,6 +369,15 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "No se pudo leer");
       setAviso(json.data);
+      // Abrirlo ES haberlo mirado, y el GET acaba de apuntarlo (`leidoAt`). Se
+      // avisa a la campana de la barra para que el número baje AHORA y no en la
+      // próxima recarga: si no, se queda diciendo que hay algo esperando
+      // mientras lo tienes abierto delante.
+      //
+      // El evento no lleva el número, solo un «vuelve a mirar»: esta pantalla
+      // no lo sabe —el suyo es el recuento por estado, otra cosa— y la campana
+      // lo pregunta a su endpoint, que es una consulta pequeña.
+      window.dispatchEvent(new Event(EVENTO_PENDIENTES));
     } catch (e) {
       setFallo(e.message);
     }

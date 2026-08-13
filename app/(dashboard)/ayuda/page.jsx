@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 
 import AyudaModule from "../../../modules/buzon/AyudaModule.jsx";
+import { esSlugDemo } from "../../../lib/demo/demos.js";
 
 /**
  * /ayuda — la línea directa del cliente con NOSOTROS.
@@ -17,11 +18,19 @@ import AyudaModule from "../../../modules/buzon/AyudaModule.jsx";
  * `esDemo` se resuelve AQUÍ, en el servidor, y no esperando a la respuesta del
  * endpoint: si no, el visitante de la demo vería el formulario un instante,
  * empezaría a escribir y se encontraría con un 403 al enviar.
+ *
+ * ⚠️ Y SE PREGUNTA CON `esSlugDemo`, NO COMPARANDO CON "demo". Aquí ponía
+ * `x-tenant === "demo"`, que era verdad hasta que la demo se partió en una por
+ * oficio (13/08/2026): desde entonces el visitante de `demo_clinica`,
+ * `demo_nutricion` o `demo_agencia` SÍ veía el formulario, lo rellenaba entero y
+ * se comía el 403 de `/api/ayuda` al darle a enviar — porque el endpoint sí
+ * usaba el helper. Es exactamente el error que este comentario decía evitar,
+ * escrito de la única forma que se desincroniza sola.
  */
 export const metadata = { title: "Ayuda" };
 
 export default async function AyudaPage() {
   const headersList = await headers();
-  const esDemo = headersList.get("x-tenant") === "demo";
+  const esDemo = esSlugDemo(headersList.get("x-tenant"));
   return <AyudaModule esDemo={esDemo} />;
 }

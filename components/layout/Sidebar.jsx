@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { vocabularioCliente } from "../../lib/clients/vocabulario.js";
+import { EVENTO_SIN_VER } from "../../lib/buzon/buzon.js";
 
 const navigation = [
   // Áreas reorganizadas 2026-07-27 (pedido del socio): Inicio suelto arriba y
@@ -481,6 +482,28 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
       })
       .catch(() => {});
     return () => { vivo = false; };
+  }, []);
+
+  /**
+   * Y se le hace caso a la propia pantalla de Ayuda cuando dice que ya está
+   * leído.
+   *
+   * El contador de arriba se pide UNA vez, al montar el menú, y el menú no se
+   * vuelve a montar al navegar dentro del CRM. O sea que sin esto el punto se
+   * quedaba encendido hasta una recarga completa (F5): quien abría la respuesta
+   * la leía, salía y seguía viendo el punto, así que volvía a entrar a buscar
+   * qué se le había escapado (Jorge, 13/08/2026).
+   *
+   * El número viene contado de la lista que la persona tiene delante, no de otra
+   * consulta: ver `sinLeer` en `modules/buzon/AyudaModule.jsx`.
+   */
+  useEffect(() => {
+    const alCambiar = (e) => {
+      const cuantas = e?.detail?.sinVer;
+      if (typeof cuantas === "number") setAyudaSinVer(cuantas);
+    };
+    window.addEventListener(EVENTO_SIN_VER, alCambiar);
+    return () => window.removeEventListener(EVENTO_SIN_VER, alCambiar);
   }, []);
 
   // «Clientes» pasa a «Pacientes» donde el cliente ES el paciente (consulta de

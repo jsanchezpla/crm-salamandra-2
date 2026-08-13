@@ -105,6 +105,11 @@ async function main() {
       -- encendido para siempre.
       leido_at          TIMESTAMPTZ,
       visto_cliente_at  TIMESTAMPTZ,
+      -- Cuándo nos escribió ÉL por última vez. Es la pareja de leido_at, igual
+      -- que respondido_at lo es de visto_cliente_at: comparando cada par se sabe
+      -- quién ha escrito después de que el otro mirara, que es lo único que hace
+      -- falta para encender un aviso en cada lado.
+      cliente_escribio_at TIMESTAMPTZ,
       respondido_at     TIMESTAMPTZ,
       resuelto_at       TIMESTAMPTZ,
       ultimo_mensaje_at TIMESTAMPTZ,
@@ -113,6 +118,21 @@ async function main() {
     )
   `);
   process.stdout.write("✓ master.buzon_avisos\n");
+
+  // ── Lo que le falta a una tabla que ya existía ────────────────────────────
+  //
+  // `cliente_escribio_at` llegó DESPUÉS (13/08/2026, la campana del panel), y en
+  // producción ya había avisos escritos. El CREATE de arriba no toca una tabla
+  // que ya está, así que la columna se añade aparte o los avisos que ya hay se
+  // quedan sin ella y la campana no cuenta nada.
+  //
+  // El RELLENO no va aquí sino más abajo, después de crear `buzon_mensajes`: en
+  // una base nueva esa tabla todavía no existe en este punto y la consulta
+  // moriría con un 42P01 en la primera instalación.
+  await s.query(`
+    ALTER TABLE master.buzon_avisos
+      ADD COLUMN IF NOT EXISTS cliente_escribio_at TIMESTAMPTZ
+  `);
 
   // ── El hilo ───────────────────────────────────────────────────────────────
   //
@@ -134,6 +154,34 @@ async function main() {
     )
   `);
   process.stdout.write("✓ master.buzon_mensajes\n");
+
+  // Ahora sí: se rellena `cliente_escribio_at` mirando lo que ya hay. La última
+  // vez que escribió el cliente es, o su último mensaje del hilo, o el alta.
+  // Sin esto los avisos anteriores al 13/08/2026 saldrían como «no ha escrito
+  // nunca» y la campana del panel nacería a cero teniendo cosas pendientes.
+  //
+  // Solo toca las filas a NULL: correrlo dos veces no repite nada, y sobre todo
+  // no pisa el valor real de un aviso que ya lo tenga.
+  const [, relleno] = await s.query(`
+    UPDATE master.buzon_avisos a
+       SET cliente_escribio_at = GREATEST(
+             a.created_at,
+             COALESCE(
+               (SELECT MAX(m.created_at)
+                  FROM master.buzon_mensajes m
+                 WHERE m.aviso_id = a.id
+                   AND m.autor_tipo = 'cliente'
+                   AND m.interno = false),
+               a.created_at)
+           )
+     WHERE a.cliente_escribio_at IS NULL
+  `);
+  const rellenados = relleno?.rowCount ?? 0;
+  process.stdout.write(
+    rellenados > 0
+      ? `✓ cliente_escribio_at (rellenados ${rellenados} avisos ya existentes)\n`
+      : "✓ cliente_escribio_at\n"
+  );
 
   // ── Los adjuntos ──────────────────────────────────────────────────────────
   //

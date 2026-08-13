@@ -18,6 +18,7 @@
  */
 import { Fraunces, Poppins } from "next/font/google";
 
+import CampanaBuzon from "../../components/admin/CampanaBuzon.jsx";
 import SalirBoton from "../../components/admin/SalirBoton.jsx";
 import SessionKeeper from "../../components/auth/SessionKeeper.jsx";
 
@@ -111,13 +112,20 @@ export default function AdminLayout({ children }) {
             {s.texto}
           </a>
         ))}
-        {/* Era un <a> a /api/auth/logout, o sea un GET, y ese endpoint solo
-            entiende POST: daba 405 y no cerraba sesión. El porqué de que sea un
-            botón y no un enlace está en el propio componente. */}
-        <SalirBoton
-          className="ml-auto text-[11px] uppercase tracking-[0.16em] cursor-pointer hover:opacity-70 transition-opacity disabled:opacity-40"
-          style={{ color: "var(--tenue)" }}
-        />
+        <div className="ml-auto flex items-center gap-4">
+          {/* Lo que nos han escrito los clientes y no hemos mirado. Va en la
+              BARRA y no dentro del buzón porque el buzón es la única pantalla
+              donde ya se veía, y es justo la que no estás mirando cuando entra
+              algo (Jorge, 13/08/2026). */}
+          <CampanaBuzon />
+          {/* Era un <a> a /api/auth/logout, o sea un GET, y ese endpoint solo
+              entiende POST: daba 405 y no cerraba sesión. El porqué de que sea
+              un botón y no un enlace está en el propio componente. */}
+          <SalirBoton
+            className="text-[11px] uppercase tracking-[0.16em] cursor-pointer hover:opacity-70 transition-opacity disabled:opacity-40"
+            style={{ color: "var(--tenue)" }}
+          />
+        </div>
       </nav>
       {/* La sesión del panel duraba 15 MINUTOS y la del CRM 7 días, y no era
           una decisión: es que esto solo estaba montado en el layout del
