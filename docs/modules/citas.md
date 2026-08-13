@@ -759,6 +759,52 @@ Existe `cancellationToken` (UUID por booking) usado por el email
 paciente cancelar él mismo desde el email sin auth. Endpoint admin
 equivalente: `PATCH /api/citas/bookings/[id]` con `{ status: "cancelled" }`.
 
+### Cuando el dinero se pierde: las tres salidas (13/08/2026)
+
+Si al confirmar el cobro no cuaja, la solicitud se queda en la lista de espera
+con `paymentStatus` en `void` (la retención caducó) o `failed` (el banco dijo
+que no). Desde ahí hay **tres** salidas, y las tres tienen que existir:
+
+| Salida | Qué hace con el dinero |
+|---|---|
+| Reintentar (Confirmar) | Vuelve a capturar la retención que ya hay |
+| **Pedirle otra tarjeta** | Crea una retención NUEVA y le manda el enlace por correo |
+| Rechazar | Suelta la retención y cierra la solicitud |
+
+⚠️ **`failed` no significa que el dinero se haya soltado.** Que el banco rechace
+la captura no mata el PaymentIntent: puede seguir en `requires_capture` con el
+importe bloqueado en la tarjeta. Por eso `failed` está dentro de
+`PUEDE_HABER_DINERO` y ahí se queda — la lista es ancha a propósito y sus cuatro
+consumidores la quieren así.
+
+**Lo que no puede hacer esa lista es guardar la puerta de «pedirle otra
+tarjeta».** Lo hizo hasta el 13/08/2026 y borraba la salida del medio: toda cita
+`failed` se topaba con «ya tiene dinero reservado, confírmala para cobrarlo», que
+en una tarjeta rechazada es un callejón sin salida. El endpoint tenía incluso
+escrito el camino de la tarjeta rechazada, con su palabra propia para el correo
+(`motivo = "rechazada"`), y era inalcanzable.
+
+Ahora ese botón usa `estorbaParaPedirOtraTarjeta` (`lib/citas/cobroCita.js`),
+que en vez de mirar la lista **le pregunta a Stripe** por la retención vieja
+(`leerEstadoAutorizacion`, una lectura que no mueve dinero):
+
+- muerta o cancelada, que es lo normal → crea la nueva y manda el correo;
+- **viva** (`requires_capture`) → 409 diciendo que el paciente todavía tiene el
+  importe retenido, y que lo suelte antes —rechazando, o confirmando sin cobrar—;
+- **no se pudo preguntar** → 409 también. «No lo sé» no es vía libre aquí.
+
+⚠️ **Por qué el CRM no la suelta él solo** (decisión de Rodrigo, 13/08/2026): es
+dinero de un paciente y aquí no se mueve sin que lo pida una persona — la misma
+política por la que en `reembolsoCita.js` se borró el código de devoluciones
+automáticas en vez de dejarlo apagado tras un interruptor. Y si se abriera la
+puerta sin soltar antes la vieja, al paciente le quedarían **dos retenciones a la
+vez** sobre la misma cita y el CRM perdería el rastro de la primera, porque
+`paymentSessionId` se pisa con la nueva.
+
+Los casos de la guarda están en `scripts/_smoke-pedir-otra-tarjeta.mjs` (no toca
+red ni base de datos). La distinción viva/muerta contra Stripe de verdad la
+ejercita `_smoke-autorizacion.mjs`, que necesita un tenant con claves `sk_test_`.
+
 ## Feature flag: `autoConfirmPublicBookings`
 
 Vive en `master.tenant_modules.feature_flags` del módulo `citas`.

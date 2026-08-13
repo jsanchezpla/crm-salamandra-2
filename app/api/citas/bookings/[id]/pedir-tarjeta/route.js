@@ -2,7 +2,7 @@ import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { logCitasAudit } from "../../../../../../lib/citas/audit.js";
 import { autorizarPago, tenantPuedeAutorizar } from "../../../../../../lib/payments/autorizacion.js";
-import { tieneRetencionPendiente, estaEsperandoAlPaciente } from "../../../../../../lib/citas/cobroCita.js";
+import { estorbaParaPedirOtraTarjeta, estaEsperandoAlPaciente } from "../../../../../../lib/citas/cobroCita.js";
 import { firmarTokenPago } from "../../../../../../lib/citas/tokenPago.js";
 import { sendEmail } from "../../../../../../lib/email/resendClient.js";
 import { pedirTarjetaTemplate } from "../../../../../../lib/email/templates/citas/pedirTarjeta.js";
@@ -74,14 +74,20 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         409
       );
     }
-    if (tieneRetencionPendiente(row)) {
-      return error(
-        "Esta cita ya tiene dinero reservado en la tarjeta del paciente. Confírmala para cobrarlo.",
-        409
-      );
-    }
     if (!tenantPuedeAutorizar(ctx)) {
       return error("El cobro online no está configurado del todo", 503);
+    }
+    // Comprobación PROPIA, no `tieneRetencionPendiente`: esa lista mete
+    // 'failed' a propósito y cortaba aquí toda cita con la tarjeta rechazada,
+    // que es justo el caso para el que existe este botón. Ver el porqué en
+    // `lib/citas/cobroCita.js`.
+    //
+    // Va DESPUÉS de comprobar que hay Stripe configurado porque le pregunta a
+    // Stripe: al revés, a un cliente sin cobro online se le contestaba «no se ha
+    // podido comprobar» pudiendo decirle lo que de verdad le pasa.
+    const estorbo = await estorbaParaPedirOtraTarjeta(ctx, row);
+    if (estorbo.estorba) {
+      return error(estorbo.mensaje, 409);
     }
     if (!row.clientEmail) {
       return error("Esta cita no tiene email al que escribir", 409);
