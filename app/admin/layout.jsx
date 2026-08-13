@@ -19,6 +19,7 @@
 import { Fraunces, Poppins } from "next/font/google";
 
 import SalirBoton from "../../components/admin/SalirBoton.jsx";
+import SessionKeeper from "../../components/auth/SessionKeeper.jsx";
 
 const display = Fraunces({
   subsets: ["latin"],
@@ -118,6 +119,19 @@ export default function AdminLayout({ children }) {
           style={{ color: "var(--tenue)" }}
         />
       </nav>
+      {/* La sesión del panel duraba 15 MINUTOS y la del CRM 7 días, y no era
+          una decisión: es que esto solo estaba montado en el layout del
+          dashboard. El access token vive 15 min y quien lo renueva es este
+          componente llamando a `/api/auth/refresh` cada 12; aquí no lo llamaba
+          nadie, así que a los 15 minutos el middleware te mandaba a /login en
+          mitad de lo que estuvieras haciendo.
+
+          Que la puerta ya estaba preparada para el panel se ve en el propio
+          endpoint (`app/api/auth/refresh/route.js`): comprueba que la cuenta
+          corresponde al host y ARRASTRA el sello `bo`, con un comentario que
+          describe exactamente este fallo. Estaba todo hecho menos llamarlo.
+          (13/08/2026, lo pidió Jorge.) */}
+      <SessionKeeper />
       {children}
     </div>
   );
