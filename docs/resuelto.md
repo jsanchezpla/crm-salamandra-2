@@ -217,7 +217,12 @@ usa— y el GET de Custodia no la devuelve ni entera ni enmascarada (0 aparicion
 del valor en la respuesta). Los cinco rechazos, uno a uno: clave a medias 422,
 demo 409, credencial inventada 422, prefijo raro guardado con aviso, y la
 auditoría guarda `{"anthropicApiKey":"puesta"}` sin el valor.
-*Queda por comprobar en producción*: viaja en el próximo despliegue.
+*Comprobado en producción*: 13/08/2026 — el código está desplegado (los ficheros
+de `lib/provisioning/` están dentro del contenedor y el back-office responde en
+su host). Lo que NO se ha hecho es pegar una credencial de un cliente real desde
+producción, y no se va a hacer por probar: se comprobará la primera vez que haga
+falta poner una de verdad. La prueba completa —pegar, que el CRM del cliente la
+use y que ninguna pantalla la devuelva— está hecha en local, arriba.
 
 ### La demo ya no es una sola: hay una por oficio · `demo`
 
@@ -260,8 +265,20 @@ inventario ni proyectos) y la de clínica sale con Pacientes separado de Cliente
 Pedir el slug de un cliente real a `/api/auth/demo` devuelve 404; sin cuerpo,
 abre la general. Y cada una se limpia sola: se ensució `crm_demo_nutricion` con
 una ficha de más y la restauración la dejó otra vez en 14, sin error.
-*Queda por comprobar en producción*: hay que crear allí las tres cuentas con
-`scripts/crear-demos-por-oficio.js --confirm` después de desplegar.
+*Comprobado en producción*: 13/08/2026 — las tres cuentas creadas y sembradas
+(`demo_clinica` 12 módulos, `demo_nutricion` 9, `demo_agencia` 11). Las cuatro
+abren desde el botón público; `aumenta` y `nutri_laura` responden 404, que es la
+lista blanca. Cada una sale con su menú y su color: clínica con Pacientes aparte
+de Clientes, nutrición con Recetario y Pautas, agencia con Captación, Analíticas,
+Proyectos y Pedidos.
+
+**El montaje se cortó a la mitad y de ahí salió un fallo que arreglar.** El
+proceso murió (señal 9) sembrando `demo_agencia`: quedó con schema, módulos y
+datos pero SIN administrador —`altaTenant` lo crea al final—, y al relanzar el
+script entraba por la rama de «ya existe», que daba por hecho que estaba. El
+botón devolvía 404 y cada reintento repetía la misma rama. Arreglado en
+`crear-demos-por-oficio.js`: ahora esa rama comprueba que haya administrador y lo
+crea si falta.
 
 ### La demo pública vuelve a limpiarse sola · `demo`
 
@@ -292,9 +309,13 @@ memoria en vez de perderlo.
 los tres tipos propios de la foto de la demo general con sus valores. Después de
 rehacerla, las cuatro fotos «casan» y una restauración de `crm_demo` termina sin
 error: se cambió el nombre de una ficha y la recarga lo devolvió.
-*Queda por comprobar en producción*: al desplegar hay que correr
-`docker exec crm-salamandra-app-1 node scripts/demo-golden-snapshot.js`, que es
-lo que rehace las fotos allí.
+*Comprobado en producción*: 13/08/2026. El comprobador cantó allí exactamente lo
+que decía esta tarea —**3 tipos enum propios** (5 valores contra 9), 9 tablas y
+27 columnas de menos— y tras rehacer las cuatro fotos no queda ni uno: los tipos
+son ya los del schema vivo. Y lo que importa, comprobado sin fiarse del script:
+se ensució `crm_demo` con un nombre falso y la recarga lo dejó limpio, **sin una
+sola línea de fallo en los logs**; lo mismo con `demo_clinica`. El último fallo
+registrado es de siete segundos ANTES de la foto nueva.
 
 ### El back-office ya sabe dar de baja a un cliente, y sigue sin poder borrarlo · producto
 
@@ -347,9 +368,14 @@ devolvió el tenant, su usuario, sus 4 módulos, su contacto y sus 7 fichas dent
 del schema. Los cinco frenos, uno a uno: sin teclear el slug 428, con datos sin
 aceptarlo 428 (con la lista de tablas), a una demo 409, a nosotros mismos 409, y
 la purga sin `--confirmo` se planta.
-*Queda por comprobar en producción*: viaja en el próximo despliegue. El agujero
-de los ficheros sigue sin probarse con un cliente REAL que los tenga — los tres
-del 12/08 no tenían ninguno.
+*Comprobado en producción*: 13/08/2026 — el código está desplegado y el listado
+de cuentas cerradas responde en su host (vacío: hoy no hay ninguna). **No se ha
+dado de baja a nadie en producción para probarlo**, y no se va a hacer: el único
+ensayo posible sería con un cliente de verdad. La prueba entera —incluida la
+vuelta atrás con `psql < el .rollback.sql`— está hecha en local, arriba.
+*Lo que sigue sin probarse*: el agujero de los ficheros con un cliente REAL que
+los tenga. Los tres del 12/08 no tenían ninguno, y en local se probó con seis
+puestos a mano. La próxima baja de verdad es la que lo dirá.
 
 ### Los dos formularios de Aumenta, y cada uno cae por su puerta · `aumenta`
 

@@ -307,11 +307,13 @@ salga en el despliegue y cante la diferencia.
 `--comprobar` dentro del contenedor) sale sin ninguna diferencia.
 *Dónde*: `lib/demo/resetDemo.js` (la parte que solo copia columnas comunes) y
 `scripts/demo-golden-snapshot.js`.
-*Comprobado en producción*: 12/08/2026 — `crm_demo_golden` no tiene ninguna de
-las cuatro columnas que sí tiene `crm_demo`, y en los logs de la app no aparece
-ni un fallo de `demo-reset` en 48 h: falla en silencio por diseño. (En local, ya
-con el comprobador, 13/08/2026: 9 tablas y 38 columnas de diferencia antes de
-rehacer las fotos, y ninguna después.)
+*Comprobado en producción*: 13/08/2026 — se midió con el comprobador y salieron
+**9 tablas y 27 columnas** de diferencia (y 3 tipos enum propios, que eran otra
+tarea y ya está cerrada). Se rehicieron las cuatro fotos y hoy no queda ninguna
+diferencia. **Y ahí está exactamente lo que sigue abierto**: la diferencia era
+CERO el 27/07, cuando se hizo la foto anterior, y en dos semanas y media volvió a
+ser 9 y 27 sin que nadie se enterara. Volverá a crecer con el próximo sprint que
+añada columnas; lo que falta por decidir es qué avisa.
 
 ### En Formación, «Usuarios» y «Alumnos por curso» se pisan · `retorika`, `aumenta`, `nutri_laura`, `demo`, `somos`
 
