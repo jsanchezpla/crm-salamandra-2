@@ -277,44 +277,6 @@ bandeja de Aumenta.
 
 ## P3 — deuda
 
-### La foto dorada de la demo va por detrás del schema · `demo`
-
-Cada demo se restaura sola desde su foto `crm_{slug}_golden` en cada recarga
-dura, y ese schema es una FOTO: se sacó un día y ahí se quedó. Las migraciones no
-lo tocan —y hacen bien: no es un tenant de `master`, así que no aparece en
-ninguna lista—, de modo que cada columna que se añade desde entonces existe en el
-schema vivo y no en la foto.
-
-No rompe nada, y eso es lo que hace que nadie se acuerde: el restore solo copia
-las columnas que existen en LOS DOS schemas, así que las nuevas se quedan con su
-valor por defecto en vez de con el dato de ejemplo. El efecto es que la demo
-—que es el escaparate de ventas— arranca con esos campos vacíos.
-
-**Ya se puede medir (13/08/2026).** Antes había que ir tabla por tabla a mano y
-por eso nadie lo miraba nunca. `npm run db:demo:snapshot:check` lo dice de las
-cuatro demos de golpe, con nombres. Al mirarlo ese día en local, ANTES de rehacer
-las fotos, salían **9 tablas y 38 columnas** de diferencia, no las cuatro que
-decía esta tarea: `blocked_days`, `waitlist_entries`, `contract_signatures`,
-`intervention_plans`, `session_packs`… La cifra real era diez veces la anunciada.
-
-**Lo que queda es CUÁNDO rehacerla**, que sigue sin decidirse. Rehacerla es un
-comando y no se olvida por difícil, se olvida porque nada avisa. Las opciones
-siguen siendo las de siempre: a mano cada cierto tiempo, o dejarlo escrito en el
-guion de despliegue. Una tercera, ahora que se puede medir: que el comprobador
-salga en el despliegue y cante la diferencia.
-
-*Se comprueba*: `npm run db:demo:snapshot:check` (o el mismo script con
-`--comprobar` dentro del contenedor) sale sin ninguna diferencia.
-*Dónde*: `lib/demo/resetDemo.js` (la parte que solo copia columnas comunes) y
-`scripts/demo-golden-snapshot.js`.
-*Comprobado en producción*: 13/08/2026 — se midió con el comprobador y salieron
-**9 tablas y 27 columnas** de diferencia (y 3 tipos enum propios, que eran otra
-tarea y ya está cerrada). Se rehicieron las cuatro fotos y hoy no queda ninguna
-diferencia. **Y ahí está exactamente lo que sigue abierto**: la diferencia era
-CERO el 27/07, cuando se hizo la foto anterior, y en dos semanas y media volvió a
-ser 9 y 27 sin que nadie se enterara. Volverá a crecer con el próximo sprint que
-añada columnas; lo que falta por decidir es qué avisa.
-
 ### En Formación, «Usuarios» y «Alumnos por curso» se pisan · `retorika`, `aumenta`, `nutri_laura`, `demo`, `somos`
 
 **Usuarios** son las personas y **Alumnos por curso** son las matrículas, y la

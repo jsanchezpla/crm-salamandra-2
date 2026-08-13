@@ -55,3 +55,57 @@ fi
 
 echo "──────────────────────────────────────"
 echo "Deploy completado — $(date '+%H:%M:%S')"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. ¿Se han quedado atrás las fotos doradas de las demos?
+#
+# ── POR QUÉ ESTO VIVE EN EL DEPLOY (13/08/2026) ──────────────────────────────
+# Cada demo se restaura sola desde su foto `crm_{slug}_golden`, y esa foto es
+# una FOTO: se saca un día y ahí se queda. Las migraciones no la tocan —y hacen
+# bien: no es un tenant de `master`—, así que cada columna que se añade desde
+# entonces existe en el schema vivo y no en la foto.
+#
+# Rehacerla es UN COMANDO. Nunca fue un problema de dificultad: es que nada
+# avisaba. La diferencia era CERO el 27/07 y en dos semanas y media había vuelto
+# a ser 9 tablas y 27 columnas sin que nadie se enterara, y encima con tres tipos
+# enum desincronizados que hacían que la restauración se abandonara en silencio
+# —el `catch` que evita que un fallo ahí tumbe el dashboard se lo tragaba—. La
+# demo es el escaparate de ventas y llevaba semanas sin limpiarse sola.
+#
+# El deploy es el único momento en que alguien está MIRANDO esto y además acaba
+# de meter las columnas nuevas. Por eso el aviso va aquí y va el ÚLTIMO: lo que
+# se lee de un deploy son las tres últimas líneas.
+#
+# ── NO LO ARREGLA SOLO, Y ES A PROPÓSITO ─────────────────────────────────────
+# Rehacer la foto congela lo que haya en la demo EN ESE MOMENTO, incluido lo que
+# haya dejado un visitante cinco minutos antes. Automatizarlo aquí convertiría
+# el escaparate en la última cagada de alguien, sin que nadie lo viera. Se avisa;
+# lo mira una persona y lanza el comando.
+#
+# NUNCA hace fallar el deploy: una foto vieja no es motivo para dar por malo un
+# despliegue que ha ido bien.
+# ─────────────────────────────────────────────────────────────────────────────
+if docker ps --format '{{.Names}}' | grep -q '^crm-salamandra-app-1$'; then
+  echo ""
+  echo "→ Comprobando las fotos doradas de las demos..."
+  set +e
+  docker exec crm-salamandra-app-1 node scripts/demo-golden-snapshot.js --comprobar
+  FOTOS=$?
+  set -e
+
+  if [ "$FOTOS" -ne 0 ]; then
+    echo ""
+    echo "  ⚠  ALGUNA FOTO DORADA NO CASA CON SU SCHEMA (el detalle, arriba)."
+    echo ""
+    echo "     Lo que se ve por fuera: campos vacíos en el escaparate, o la"
+    echo "     restauración abandonándose y el siguiente visitante encontrándose"
+    echo "     lo que ensució el anterior."
+    echo ""
+    echo "     Se rehacen con:"
+    echo "       docker exec crm-salamandra-app-1 node scripts/demo-golden-snapshot.js"
+    echo ""
+    echo "     MÍRALAS ANTES: la foto congela lo que haya en la demo ahora mismo,"
+    echo "     incluido lo que haya dejado un visitante."
+    echo ""
+  fi
+fi

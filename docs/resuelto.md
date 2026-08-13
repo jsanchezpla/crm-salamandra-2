@@ -28,6 +28,46 @@ Lo más reciente arriba.
 
 ## 13/08/2026
 
+### La foto dorada ya avisa cuando se queda atrás · `demo`
+
+**Lo que pasaba.** Cada demo se restaura sola desde su foto `crm_{slug}_golden`,
+y ese schema es una FOTO: se saca un día y ahí se queda. Las migraciones no la
+tocan —y hacen bien: no es un tenant de `master`—, así que cada columna que se
+añade desde entonces existe en el schema vivo y no en la foto. El restore solo
+copia las columnas comunes, o sea que las nuevas salen con su valor por defecto:
+la demo, que es el escaparate de ventas, arrancaba con esos campos vacíos.
+
+**Y no rompía nada, que es justo lo que lo hacía durar.** No había error, no
+había log, no había número. Para saber cuánto se había desviado había que ir
+tabla por tabla a mano, así que no lo miraba nadie.
+
+**Lo que faltaba por decidir no era cómo rehacerla, era QUÉ AVISA.** Rehacerla
+siempre fue un comando. El dato que cerró la discusión: la diferencia era CERO el
+27/07, cuando se sacó la foto anterior, y dos semanas y media después había
+vuelto a ser 9 tablas y 27 columnas —más tres tipos enum desincronizados que
+además abandonaban la restauración en silencio— sin que nadie se enterara.
+Cualquier plan que dependa de que alguien se acuerde vuelve a ese mismo sitio.
+
+**La decisión (Rodrigo, 13/08): el comprobador entra en `deploy.sh`.** Es el
+único momento en que alguien está mirando esto Y acaba de meter las columnas
+nuevas. Va al final, porque de un deploy se leen las tres últimas líneas.
+
+Dos cosas que NO hace, las dos a propósito:
+
+- **No rehace la foto solo.** Congelaría lo que haya en la demo en ese momento,
+  incluido lo que un visitante dejara cinco minutos antes: el escaparate pasaría
+  a ser la última cagada de alguien, y sin que nadie lo viera. Avisa, lo mira una
+  persona y lanza el comando.
+- **No hace fallar el deploy.** Una foto vieja no es motivo para dar por malo un
+  despliegue que ha ido bien.
+
+*Cómo se comprobó*: 13/08/2026, el bloque tal cual, corriendo en el VPS. Con las
+fotos al día imprime las cuatro en verde y sale con 0. Forzando el fallo, saca el
+aviso entero con el comando para rehacerlas… y el deploy **sigue saliendo con 0**,
+que era el otro requisito. Antes de eso, ese mismo día, el comprobador midió en
+producción las 9 tablas y 27 columnas de esta tarea y quedaron a cero al rehacer
+las fotos.
+
 ### La nutrición ya no vive solo en casa de Laura, y Aumenta se ha mudado · `aumenta`, `nutri_laura`, producto
 
 **Lo que pasaba.** «Que la nutrición de Aumenta sea igual que la de Laura» tenía
