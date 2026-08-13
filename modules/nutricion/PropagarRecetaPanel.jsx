@@ -24,7 +24,7 @@
  *   lo que ya se entregó a diez personas no puede ser un botón a ciegas.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 function fmtFecha(iso) {
   if (!iso) return null;
@@ -37,9 +37,18 @@ function fmtFecha(iso) {
 
 export default function PropagarRecetaPanel({ recipeId, recipeName, onDone }) {
   const [items, setItems] = useState(null); // null = cargando
+  const [total, setTotal] = useState(0); // en cuántos sitios está, al día o no
   const [marcados, setMarcados] = useState(() => new Set());
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState(null);
+
+  // `onDone` llega como una arrow nueva en cada render del modal padre. Si
+  // entrara en las dependencias del efecto, cualquier repintado del padre
+  // volvería a lanzar la consulta —y con ella el `onDone()` del camino «no hay
+  // nada que propagar»—. Por eso se guarda en una ref: el efecto depende solo
+  // de la receta, que es de lo que de verdad depende.
+  const onDoneRef = useRef(onDone);
+  useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
 
   const cargar = useCallback(async () => {
     try {
@@ -48,20 +57,22 @@ export default function PropagarRecetaPanel({ recipeId, recipeName, onDone }) {
       if (!j?.ok) {
         // Si no se puede saber dónde está usada, no se bloquea el guardado: la
         // receta YA se guardó bien, esto es un extra.
-        onDone?.();
+        onDoneRef.current?.();
         return;
       }
-      const desactualizados = (j.data?.items || []).filter((i) => i.desactualizado);
+      const todos = j.data?.items || [];
+      const desactualizados = todos.filter((i) => i.desactualizado);
       if (desactualizados.length === 0) {
-        onDone?.();
+        onDoneRef.current?.();
         return;
       }
+      setTotal(todos.length);
       setItems(desactualizados);
       setMarcados(new Set(desactualizados.map((i) => i.planId)));
     } catch {
-      onDone?.();
+      onDoneRef.current?.();
     }
-  }, [recipeId, onDone]);
+  }, [recipeId]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -110,11 +121,13 @@ export default function PropagarRecetaPanel({ recipeId, recipeName, onDone }) {
         <header className="px-6 py-4 border-b border-gray-100 shrink-0">
           <div className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Receta guardada</div>
           <h2 className="text-lg font-semibold text-gray-900 mt-0.5">
-            «{recipeName}» está escrita en {items.length} sitio{items.length === 1 ? "" : "s"}
+            {items.length} {items.length === 1 ? "copia" : "copias"} de «{recipeName}»{" "}
+            {items.length === 1 ? "se ha quedado" : "se han quedado"} con la versión anterior
           </h2>
           <p className="text-sm text-gray-500 mt-1.5">
-            Cada uno guarda su propia copia, así que ahí sigue la versión anterior. Marca dónde
-            quieres que entre la corrección.
+            Cada menú y cada pauta guardan su propia copia de la receta, y no cambian solas.
+            {total > items.length && ` (Está en ${total} en total; el resto ya está al día.)`}{" "}
+            Marca dónde quieres que entre la corrección.
           </p>
         </header>
 

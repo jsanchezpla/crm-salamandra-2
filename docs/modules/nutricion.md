@@ -116,10 +116,33 @@ re-ejecutar los scripts de migración cambiando el slug.
 
 ## 2. Activación del módulo
 
+### La vía correcta desde el 13/08/2026
+
+```bash
+docker exec crm-salamandra-app-1 node scripts/enable-module.js <slug> nutricion
+```
+
+Eso hace las TRES cosas en el orden bueno: la fila en `master.tenant_modules`,
+las migraciones del módulo (`migrate-nutricion-base` la primera, que crea las
+nueve tablas) y la siembra de los **497 alimentos del catálogo base**. Un
+recetario sin alimentos no deja escribir ni una receta, así que sin ese último
+paso el cliente estrena el módulo y no puede hacer nada con él.
+
+**Quién lo tiene** (comprobado en producción el 13/08/2026): `nutri_laura` —la
+reina—, `demo` y `demo_nutricion` de escaparate, `somos` y **`aumenta`**.
+
+⚠️ **El auto-marcado nace APAGADO** (`featureFlags.autoAsignarEnAlta`). Solo
+`nutri_laura` lo tiene encendido, porque lo pidió. En un centro grande —Aumenta
+tiene 1.083 familias— encenderlo marcaría como paciente de dietas a todo el que
+entre por la puerta. `backfill-nutricion-assignments.js` exige el mismo flag, o
+sería la puerta de atrás para el mismo estropicio.
+
+### Cómo se hacía antes (histórico)
+
 El proyecto NO tiene tabla maestra `master.modules` — los módulos se
 "registran" implícitamente al crear filas en `master.tenant_modules`.
-Por eso "activar el módulo nutrición" significa ejecutar los scripts
-de migración por orden:
+Por eso "activar el módulo nutrición" significaba ejecutar a mano estos
+scripts, que **ya no se usan** (hardcodean `crm_nutri_laura`):
 
 ```powershell
 # C1 — Crea enums, tabla foods, fila tenant_modules con

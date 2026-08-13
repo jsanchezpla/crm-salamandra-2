@@ -24,11 +24,11 @@ Antes de implementar cambios en un módulo concreto, lee su doc:
 | Citas             | `docs/modules/citas.md`      | Implementado                     |
 | Pacientes         | `docs/modules/pacientes.md`  | Implementado (aumenta)           |
 | Clínica           | `docs/modules/clinica.md`    | Implementado (aumenta)           |
-| Nutrición         | `docs/modules/nutricion.md`  | Implementado (nutri_laura, demo)  |
+| Nutrición         | `docs/modules/nutricion.md`  | Implementado (nutri_laura, demo, aumenta, somos) |
 | Formularios       | `docs/modules/formularios.md` | Implementado (nutri_laura)      |
 | Outreach          | `docs/modules/outreach.md`   | Completo en local, sin desplegar  |
 | Soporte           | `docs/modules/support.md`    | Completo en local (demo), sin desplegar |
-| Analíticas        | `docs/modules/analytics.md`  | Implementado (spain_enzymes)     |
+| Analíticas        | `docs/modules/analytics.md`  | Implementado (spain_enzymes, aumenta, somos) |
 | Configuración     | `docs/modules/configuracion.md` | Implementado (claves IA por tenant) |
 | Emails (infra)    | `docs/modules/emails.md`     | Infra transversal                |
 | Buzón / Ayuda     | `docs/modules/buzon.md`      | Implementado (todos, sin `moduleKey`) |
@@ -325,7 +325,7 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 | `demo`           | local + prod    | Tenant de desarrollo y show-room. Datos FALSOS a propósito: tiene casi todos los módulos para poder enseñarlos juntos. **Es pública y da sesión de admin a cualquiera**, así que todo endpoint que mande correo, gaste IA o escriba en master necesita su guard de `lib/demo/isDemo.js`. |
 | `demo_clinica`, `demo_nutricion`, `demo_agencia` | local + prod | **Las demos por oficio (13/08/2026).** La general enseñaba veinte módulos a la vez y era lo que veía todo el que pulsaba «Prueba una demo»: una nutricionista se encontraba un centro de psicología con almacén. El visitante entra por `demo` y salta desde unas pestañas arriba. Son PÚBLICAS igual que la general y llevan sus mismos guards — cambiar `lib/demo/isDemo.js` las cubre a las cuatro. Quién es cada una y con qué módulos, en `lib/demo/demos.js`; se montan y se siembran con `scripts/crear-demos-por-oficio.js`. **No se dan de baja desde el panel**: se rehacen con ese script. |
 | `retorika`       | local + prod    | Academia online (WordPress + TutorLMS). |
-| `aumenta`        | local + prod    | Centro de psicología y formación, y **el cliente que más usa el CRM**: 12.030 citas, 15 personas y 88 de las 99 integraciones vivas. Overrides de UI: `aumenta/LeadsModule` y `aumenta/FormacionOverview`; el sidebar dice "Interesados" en vez de "Leads". **CRM en uso REAL desde 2026-07-24**: datos de ejemplo borrados (`reset-aumenta-real-data.js`; los LEADS eran reales y se conservaron) y equipo real dado de alta (`seed-aumenta-equipo-real.js`: 13 logins tipo `nombre_aumenta` con rol `user`; dirección usa admin@aumenta.es). Desempeño/Dirección/Productividad son SOLO admin. **NO wipear ni sembrar sin permiso.** **Agenda compartida ENCENDIDA el 01/08/2026** a petición de Rodrigo: todo el equipo ve la agenda completa, y con ella los datos de contacto del paciente. |
+| `aumenta`        | local + prod    | Centro de psicología y formación, y **el cliente que más usa el CRM**: 12.030 citas, 15 personas y 88 de las 99 integraciones vivas. Overrides de UI: `aumenta/LeadsModule` y `aumenta/FormacionOverview`; el sidebar dice "Interesados" en vez de "Leads". **CRM en uso REAL desde 2026-07-24**: datos de ejemplo borrados (`reset-aumenta-real-data.js`; los LEADS eran reales y se conservaron) y equipo real dado de alta (`seed-aumenta-equipo-real.js`: 13 logins tipo `nombre_aumenta` con rol `user`; dirección usa admin@aumenta.es). Desempeño/Dirección/Productividad son SOLO admin. **NO wipear ni sembrar sin permiso.** **Agenda compartida ENCENDIDA el 01/08/2026** a petición de Rodrigo: todo el equipo ve la agenda completa, y con ella los datos de contacto del paciente. **`analytics` y `nutricion` activados el 13/08/2026** (los dos a petición suya). ⚠️ Nutrición va con el auto-marcado **APAGADO** (`featureFlags.autoAsignarEnAlta`): con 1.083 familias dentro, encenderlo marcaría como paciente de dietas a todo el que entre por la puerta, incluidos los que solo van a terapia. No encenderlo sin que lo pidan, y `backfill-nutricion-assignments.js` respeta el mismo flag para que no entre por la puerta de atrás. |
 | `spain_enzymes`  | local + prod    | Cliente real en producción (admin `admin@spain-enzymes.salamandra`). Su web (spainenzymes.com, WordPress) manda los leads del formulario a `/api/public/leads`. **Ojo**: en local tiene módulos que en producción NO ha contratado; no dar por buena la lista de local. |
 | `nutri_laura`    | local + prod    | Nutricionista (Laura). Override de leads (embudo nutricional) + conversión lead→paciente + override del overview de formación (B2C, sin TutorLMS aún). Subida a prod el 2026-06-23 con el sprint Recetario C1. **NO tiene `clinica` ni `pacientes`**: sus "pacientes" son `Client` con plan de menú, y por eso el módulo `clients` se le rotula «Pacientes» (ver `lib/clients/vocabulario.js`). |
 | `somos`          | prod            | **No estaba en esta tabla hasta el 12/08/2026**, igual que le pasó a healim. Lo que se sabe mirando la base de datos: activo, 21 módulos —todos los que se venden—, sin un solo dato dentro todavía (0 fichas, 0 formularios, 0 leads) y con paleta propia desde el 12/08 (`#124A55` azul petróleo + `#F59C00` naranja, ver `scripts/update-somos-brand.js`). **Quién es y qué no se le puede tocar, que es para lo que sirve esta tabla, sigue sin escribir**: lo sabe Jorge o Rodrigo. |
@@ -388,7 +388,7 @@ aplique.
 | automations     | #12 Automatizaciones & Flujos | Pendiente (motor n8n externo, sin módulo UI) | —                           |
 | ai              | #13 IA & Asistente            | Pendiente                                    | —                           |
 | integrations    | #14 Integraciones & API       | Pendiente (infra parcial: webhooks/external) | —                           |
-| analytics       | #15 Analítica & BI            | Implementado (spain_enzymes) — visitas web   | `docs/modules/analytics.md` |
+| analytics       | #15 Analítica & BI            | Implementado — visitas web. Credenciales de Cloudflare POR CLIENTE: sin ellas la pantalla dice «sin configurar» | `docs/modules/analytics.md` |
 | communications  | #16 Comunicaciones            | Pendiente (modelos `Message`/`Notification`) | —                           |
 
 ### Fuera del plan 1-16 (ya implementados)
@@ -403,7 +403,7 @@ aplique.
 | clients_avanzado | Clientes avanzado: lista de espera de admisión (aumenta, demo) | Implementado | — |
 | pacientes     | Pacientes                      | Implementado (aumenta)              | `docs/modules/pacientes.md` |
 | clinica       | Clínica                        | Implementado (aumenta)              | `docs/modules/clinica.md`   |
-| nutricion     | Recetario                      | Implementado (nutri_laura, demo) — entero en producción, comprobado 12/08/2026 | `docs/modules/nutricion.md` |
+| nutricion     | Recetario                      | Implementado. **Deja de ser exclusivo de Laura el 13/08/2026**: sus componentes viven en `modules/nutricion/` (no en `overrides/nutri-laura/`), la pestaña «Pautas» la monta la ficha por defecto, y `enable-module.js <slug> nutricion` crea las nueve tablas y siembra los 497 alimentos base. Activo en `nutri_laura`, `demo`, `somos` y `aumenta` | `docs/modules/nutricion.md` |
 | outreach      | Captación (leads + scoring IA) | Completo en local (sandbox); falta desplegar | `docs/modules/outreach.md` |
 | formularios   | **Leads Comerciales**: formularios públicos → bandeja → ficha (antes «Formularios») | Implementado (nutri_laura) | `docs/modules/formularios.md` |
 | —             | Configuración (ajustes + claves IA por tenant) | Implementado (siempre visible, sin `moduleKey`) | `docs/modules/configuracion.md` |

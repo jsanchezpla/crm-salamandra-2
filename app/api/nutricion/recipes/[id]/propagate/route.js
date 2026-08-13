@@ -102,9 +102,35 @@ function estaAlDia(copia, receta, ingredientesVivos, ingredientesCopia) {
   if (JSON.stringify(pasosCopia) !== JSON.stringify(pasosVivos)) return false;
 
   if (ingredientesVivos.length !== ingredientesCopia.length) return false;
+  // `ordering` entra en la clave a propósito: reordenar los ingredientes de una
+  // receta es un cambio como otro cualquiera —el orden es el de la elaboración—
+  // y sin él la copia se daría por buena y no se ofrecería propagar. Las claves
+  // se ordenan antes de comparar para no depender de en qué orden los devolvió
+  // la base de datos, que es otra cosa.
   const clave = (x) =>
-    [x.foodId, String(x.amount ?? ""), x.unit, x.householdLabel ?? "", String(x.householdGrams ?? ""), x.notes ?? ""].join("|");
-  const vivos = ingredientesVivos.map(clave).sort();
+    [
+      x.foodId,
+      String(x.amount ?? ""),
+      x.unit,
+      x.householdLabel ?? "",
+      String(x.householdGrams ?? ""),
+      x.notes ?? "",
+      String(x.ordering ?? ""),
+    ].join("|");
+  const vivos = ingredientesVivos
+    .map((rf, i) => ({
+      foodId: rf.foodId,
+      amount: rf.amount,
+      unit: rf.unit,
+      householdLabel: rf.householdLabel,
+      householdGrams: rf.householdGrams,
+      notes: rf.notes,
+      // El mismo `?? i` que usa la copia al escribirse, o una receta sin
+      // `ordering` saldría eternamente desactualizada contra su propia copia.
+      ordering: rf.ordering ?? i,
+    }))
+    .map(clave)
+    .sort();
   const copiados = ingredientesCopia
     .map((i) => ({
       foodId: i.foodId,
@@ -113,6 +139,7 @@ function estaAlDia(copia, receta, ingredientesVivos, ingredientesCopia) {
       householdLabel: i.householdLabelSnapshot,
       householdGrams: i.householdGramsSnapshot,
       notes: i.notesSnapshot,
+      ordering: i.ordering,
     }))
     .map(clave)
     .sort();

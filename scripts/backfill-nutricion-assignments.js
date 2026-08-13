@@ -2,11 +2,14 @@
  * backfill-nutricion-assignments.js — puesta al día del check «Paciente Nutrición».
  *
  * Desde 2026-07-27 toda alta de cliente en un tenant con el módulo `nutricion`
- * marca la asignación sola (lib/clients/moduleAssignments.js →
- * applyAutoAssignments, decisión de nutri_laura, la reina del módulo). Este
- * script alinea a los clientes creados ANTES: para cada tenant con `nutricion`
- * activo, inserta la fila que falte en client_module_assignments para todos sus
- * clientes no inactivos.
+ * marcaba la asignación sola (lib/clients/moduleAssignments.js →
+ * applyAutoAssignments, decisión de nutri_laura, la reina del módulo). Desde el
+ * 13/08/2026 eso ya no basta: hace falta además el flag `autoAsignarEnAlta` del
+ * tenant, y **este script exige el mismo flag**.
+ *
+ * Alinea a los clientes creados ANTES: para cada tenant con `nutricion` activo Y
+ * el auto-marcado encendido, inserta la fila que falte en
+ * client_module_assignments para todos sus clientes no inactivos.
  *
  * Es de DATOS, no de schema → registrado como ONE_OFF (no lo corre el
  * disparador de migraciones). REPETIBLE SIN MIEDO: ON CONFLICT DO NOTHING sobre
@@ -34,11 +37,23 @@ async function main() {
 
   try {
     // Regla #12: la lista de tenants sale de master en runtime, nunca hardcodeada.
+    //
+    // ⚠️ Y ADEMÁS EXIGE EL FLAG `autoAsignarEnAlta` (13/08/2026). Sin esa línea
+    // este script era la puerta trasera del estropicio que el flag existe para
+    // evitar: marcaba a TODOS los clientes de TODO tenant con `nutricion`, y ese
+    // mismo día Aumenta estrenó el módulo con 1.083 familias dentro. Una sola
+    // ejecución —y la cabecera dice «repetible sin miedo»— las habría marcado
+    // todas como pacientes de dietas, incluidas las que van a terapia.
+    //
+    // El criterio es el mismo que el del alta: marcar solo donde el cliente ha
+    // dicho que quiere que se marque. Un tenant con el flag apagado no quiere
+    // ese check ni en las fichas nuevas ni en las viejas.
     const [tenants] = await s.query(`
       SELECT DISTINCT t.slug
       FROM master.tenants t
       JOIN master.tenant_modules tm ON tm.tenant_id = t.id
       WHERE t.status = 'active' AND tm.enabled = TRUE AND tm.module_key = 'nutricion'
+        AND COALESCE(tm.feature_flags->>'autoAsignarEnAlta', 'false') = 'true'
       ORDER BY t.slug
     `);
 
@@ -47,7 +62,7 @@ async function main() {
     const slugs = acotarSlugs(tenants.map((r) => r.slug));
 
     if (slugs.length === 0) {
-      log("Ningún tenant activo tiene el módulo nutricion. Nada que hacer.");
+      log("Ningún tenant activo tiene nutrición CON el auto-marcado encendido. Nada que hacer.");
       return;
     }
 

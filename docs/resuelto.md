@@ -28,6 +28,109 @@ Lo más reciente arriba.
 
 ## 13/08/2026
 
+### La nutrición ya no vive solo en casa de Laura, y Aumenta se ha mudado · `aumenta`, `nutri_laura`, producto
+
+**Lo que pasaba.** «Que la nutrición de Aumenta sea igual que la de Laura» tenía
+dos mitades rotas, y ninguna era encender un interruptor.
+
+**Una: cinco de las nueve tablas no las creaba ninguna migración.** `foods`,
+`plans`, `plan_meals`, `plan_meal_options` y `plan_meal_option_foods` salían de
+dos scripts de un solo uso con `crm_nutri_laura` escrito a mano dentro, y
+ninguno estaba en el mapa del módulo. Activar `nutricion` en un cliente antiguo
+le dejaba el menú puesto y nada debajo: las seis migraciones declaradas se
+saltan solas cualquier schema sin `foods` y lo dicen por pantalla. Es el fallo
+que dejó a Abarcaia tres meses sin registrar leads, esperando a que nutrición se
+vendiera dos veces. Ahora existe `migrate-nutricion-base`, declarada la primera
+del módulo y con **arista explícita** hacia `migrate-nutricion-recipes`: el
+orden salía bien por desempate alfabético, que es lo mismo que no salir.
+
+**Y una que no estaba escrita en ningún sitio: `sequelize.sync()` da las
+columnas y no las reglas.** Es lo que salvaba a los tenants NUEVOS —el alta crea
+las nueve tablas tenga el cliente el módulo o no, y por eso `somos` las tenía— y
+también lo que los dejaba a medias: `crm_somos` tenía `plans` **sin un solo
+CHECK**, o sea aceptando una plantilla con paciente asignado, que es justo lo que
+el CHECK existe para impedir. La migración repara además lo ya creado.
+
+**Dos: la pestaña «Pautas» era de Laura por accidente.** `ClientPlansPanel` y los
+otros diez ficheros del módulo vivían en `modules/overrides/nutri-laura/` aunque
+las cuatro pantallas de `/nutricion` los usaran como valor por defecto para
+todos —con un mapa `UI_OVERRIDES` cuyo override y cuyo default eran el MISMO
+componente—. Estar en esa carpeta es lo que dejó la pestaña solo en su ficha: la
+demo llevaba `nutricion` activo en producción y no podía asignar un menú a
+nadie. Ahora están en `modules/nutricion/` y la pestaña la monta la ficha por
+defecto. Quién la ve lo decide el SERVIDOR (`conNutricion`), no el panel: el
+panel siempre pinta algo —cargando, vacío o el error del 403— así que nunca se
+declararía vacío y no se escondería solo.
+
+**Y el auto-marcado, que era una bomba de relojería.** `AUTO_ASSIGN_MODULE_KEYS`
+colgaba solo de TENER el módulo. Se escribió para una consulta de una persona,
+donde «todo cliente nuevo es paciente» es verdad; en Aumenta habría marcado como
+paciente de dietas a toda ficha que entrara por la puerta, incluidas las que solo
+van a terapia, y sin nada que lo dijera. Ahora es un flag por tenant
+(`autoAsignarEnAlta`) **apagado por defecto**, encendido para Laura por
+migración para que su comportamiento no cambiara. El backfill
+(`backfill-nutricion-assignments.js`) exige el mismo flag: era la puerta de atrás
+—se documenta como «repetible sin miedo» y habría marcado las 1.083 familias de
+una sentada.
+
+**Lo que no se copia: el recetario.** Activar el módulo siembra los 497
+alimentos del catálogo base en ese cliente (un recetario sin alimentos no deja
+escribir ni un menú, y Laura no lo sufrió porque el suyo se sembró a mano en
+junio). Las 1.084 recetas de Laura NO se copian: son suyas.
+
+**Un hallazgo que no es de esta tarea**: los alimentos NO son comunes entre
+clientes. Los 497 de base sí —se siembran iguales— pero lo que añade una
+nutricionista se queda en su schema: hay **465 que solo existen en el de Laura**.
+Compartirlos de verdad es otra decisión, y hay que resolver antes si el trabajo
+de un cliente debe aparecer en el CRM de otro.
+
+*Cómo se comprobó*: en producción, 13/08/2026. `enable-module.js aumenta
+nutricion` dejó `crm_aumenta` con **las 9 tablas, las 5 constraints CHECK y 497
+alimentos**, y —lo importante— con las **1.083 fichas intactas y 0 marcadas**
+como paciente de nutrición, que es el flag apagado haciendo su trabajo. La
+pestaña «Pautas» sale en la ficha de un cliente de la demo y NO sale en
+`demo_clinica`, que no tiene el módulo. `check-module-tables.js` da `somos` con
+todas sus tablas y columnas y no se queja de nutrición en ningún cliente.
+
+### Una receta corregida ya llega a quien tiene la pauta, si se quiere · `nutri_laura`
+
+**Lo que pasaba.** Se congelaba MEDIA receta. Al meterla en un menú se copiaban
+nombre e ingredientes, pero los pasos y la foto se leían en vivo de la receta
+original. Lo peor de las dos opciones: corregir una cantidad mal puesta no le
+llegaba a quien ya tenía la pauta —ni con «Re-aplicar menú origen», que recopia
+las copias viejas de la plantilla— y reescribir unos pasos sí le cambiaba pautas
+de hace meses, sin avisar a nadie.
+
+**La decisión, de Rodrigo**: de las tres salidas posibles (congelar todo, leer
+todo en vivo, o un botón que propague), la tercera. Lo que se le entrega a un
+paciente es un documento cerrado y no se mueve solo; para que una corrección
+llegue hay una acción explícita.
+
+**Cómo quedó.** Al guardar una receta que ya está usada aparece un panel que
+dice cuántas copias se han quedado con la versión anterior y deja marcar a
+cuáles llevar el cambio. No interrumpe si no hay nada desincronizado. Tres reglas
+del endpoint: **no toca pautas archivadas** —son el registro de lo que se
+entregó aquel día—, **no toca `servings`** —la ración es del menú, no de la
+receta— y **se audita**, porque reescribe de golpe lo que ya se dio a varias
+personas. Los menús plantilla salen en su propia lista: es lo que arregla, de
+paso, «Re-aplicar», porque un menú sin corregir vuelve a repartir el error la
+próxima vez que se asigne.
+
+**El backfill era la parte delicada.** `migrate-nutricion-congelar-receta` no
+solo añade las dos columnas: rellena cada copia existente con lo que su receta
+dice HOY. Sin eso, todas las pautas vivas se habrían quedado de golpe sin pasos
+y sin foto. Con eso, el día del despliegue no se nota nada y lo que cambia es el
+futuro.
+
+*Cómo se comprobó*: de punta a punta en local contra el servidor de desarrollo
+(13/08): se corrigió una receta de 200 g a 20 g y se reescribieron sus pasos; la
+pauta ya asignada **no se movió**, el sistema detectó el desfase, y al propagar
+llegaron tanto la cantidad como los pasos. En producción, 13/08: las dos columnas
+existen en los 6 schemas con la tabla y el backfill cubrió el 100% —en el schema
+de Laura hay exactamente **una** receta metida dentro de un menú, así que el
+cambio cayó sobre casi nada de dato vivo—. El árbol de un menú carga (200) y el
+PDF se genera (9.808 bytes) leyendo ya del snapshot.
+
 ### A Aumenta le faltaba Analíticas, no le sobraban módulos · `aumenta`
 
 **Lo que pasaba.** La tarea estaba escrita al revés. Decía que `inventory`,

@@ -13,9 +13,17 @@ import { isDemoTenant } from "../../../lib/demo/isDemo.js";
  * /api/analiticas — visitas de la web del cliente (Cloudflare Web Analytics).
  *
  * Solo lectura. No escribe en ninguna base de datos, no gasta IA y no manda
- * correos, así que no lleva guard de demo: el tenant `demo` sencillamente no
- * tiene credenciales de Cloudflare y recibe el estado "sin configurar", que es
- * exactamente lo que debe ver un visitante anónimo.
+ * correos, así que no lleva guard de demo.
+ *
+ * ⚠️ Esta cabecera decía hasta el 13/08/2026 que la demo «no tiene credenciales
+ * de Cloudflare y recibe el estado sin configurar». Es mentira desde que existe
+ * el camino de demo de más abajo: las demos NO llaman a Cloudflare y se pintan
+ * con las visitas inventadas de `web_visits_daily`
+ * (scripts/seed-analiticas-demo.js), justamente para que el escaparate no salga
+ * vacío. Sigue siendo cierto que no hace falta ninguna clave.
+ *
+ * Un cliente REAL sin credenciales sí recibe "sin configurar" — es lo que ve
+ * hoy Aumenta, que estrenó el módulo el 13/08 y aún no ha dado su cuenta.
  *
  * Lo que NO hace, y conviene que siga siendo así: cruzar una visita con una
  * persona. Cloudflare entrega agregados anónimos (ver lib/analytics/cloudflareRum.js).

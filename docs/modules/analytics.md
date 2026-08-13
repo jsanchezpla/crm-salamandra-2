@@ -3,6 +3,21 @@
 Visitas de la web del cliente, medidas con **Cloudflare Web Analytics**.
 Estado: **implementado** (2026-07-31). Tenant de referencia: `spain_enzymes`.
 
+> **Quién lo tiene y quién ve algo (13/08/2026).** Tener el módulo y ver datos
+> son cosas distintas, y conviene no confundirlas al vender:
+>
+> | Cliente | Módulo | Credenciales de Cloudflare | Qué ve |
+> | --- | --- | --- | --- |
+> | `spain_enzymes` | sí | **sí** | Sus visitas reales (293 días de histórico) |
+> | `aumenta` | sí, desde el 13/08 | no | «Sin configurar» |
+> | `somos` | sí | no | «Sin configurar» |
+> | demos | sí | no hacen falta | Visitas INVENTADAS de `seed-analiticas-demo.js` |
+>
+> Las credenciales son **del cliente** (BYOK) y se pegan en Configuración →
+> Integraciones. Nadie las puede poner por él salvo desde el back-office
+> (`/admin`, desde el 13/08). Además su web tiene que llevar el beacon de
+> Cloudflare, o no habrá nada que contar.
+
 ---
 
 ## Qué es y qué NO es
@@ -131,9 +146,15 @@ anillos de menos de 0,7 px.
   indistinguible del fondo, y esos países pequeños son justo la información
   interesante.
 - **Sin guard de demo.** El endpoint es de solo lectura, no escribe en `master`,
-  no gasta IA y no manda correos. El tenant `demo` no tiene credenciales de
-  Cloudflare, así que ve el estado «sin configurar», que es exactamente lo que
-  debe ver un visitante anónimo.
+  no gasta IA y no manda correos.
+  ⚠️ Este punto decía hasta el 13/08/2026 que «el tenant demo no tiene
+  credenciales de Cloudflare, así que ve el estado sin configurar». Es falso
+  desde que existe el camino de demo del endpoint: las demos **no llaman a
+  Cloudflare** y se pintan con las visitas inventadas de `web_visits_daily`
+  (`scripts/seed-analiticas-demo.js`), para que el escaparate no salga vacío.
+  Lo que sigue siendo cierto es lo importante: no hace falta ninguna clave y un
+  visitante anónimo no ve datos de nadie. Quien sí recibe «sin configurar» es un
+  cliente REAL sin credenciales.
 - **Los errores de Cloudflare se enseñan tal cual.** `CloudflareAnalyticsError`
   extiende `AppError` a propósito, porque `handleRouteError` solo conserva el
   mensaje de los `AppError`. «Cloudflare rechazó el token» es accionable;
