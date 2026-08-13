@@ -277,33 +277,6 @@ bandeja de Aumenta.
 
 ## P3 — deuda
 
-### En Formación, «Usuarios» y «Alumnos por curso» se pisan · `retorika`, `aumenta`, `nutri_laura`, `demo`, `somos`
-
-**Usuarios** son las personas y **Alumnos por curso** son las matrículas, y la
-tarjeta de Usuarios se describe además como «alumnos privados y de empresa».
-Arriba, el recuadro de métricas vuelve a decir «Usuarios» y «Matrículas», que es
-un tercer par de palabras para las mismas dos cosas.
-
-La prueba de que no se entiende está escrita en la propia ayuda de Empresas, en
-mayúsculas: «IMPORTANTE: los alumnos de empresa se importan desde aquí» — porque
-quien quiere dar de alta alumnos entra en Usuarios, que es donde no se hace.
-
-Salió al colgar las cinco pantallas del menú (12/08/2026) y se dejó fuera a
-propósito: Jorge pidió «solo la navegación». **Renombrarlas le cambia el
-vocabulario a cinco clientes de golpe**, dos de ellos con formación en uso real
-(Retorika lleva 526 intentos de cuestionario), así que es una decisión de
-producto, no una limpieza. Si se hace, hay que tocar a la vez el menú, la
-portada, los rótulos de las métricas y el override de Aumenta, o quedarán
-diciendo cosas distintas.
-
-*Se comprueba*: una persona que entra por primera vez sabe, sin preguntar, en
-cuál de las dos pantallas se dan de alta alumnos.
-*Dónde*: `modules/training/FormacionOverview.jsx:31-51` (las dos secciones) y
-`:65-70` (las métricas); `components/layout/Sidebar.jsx` (los hijos nuevos);
-`modules/overrides/aumenta/FormacionOverview.jsx`.
-*Comprobado en producción*: 12/08/2026 — en el menú de la demo salen los dos
-nombres, «Usuarios» y «Alumnos por curso», uno debajo del otro.
-
 ### El secreto global de webhooks tiene 31 caracteres · `retorika`
 
 No es longitud de nada generado al azar: parece escrito a mano. Funciona, pero

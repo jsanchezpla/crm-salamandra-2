@@ -28,6 +28,69 @@ Lo más reciente arriba.
 
 ## 13/08/2026
 
+### En Formación, las personas son «Alumnos» y las inscripciones «Matrículas» · `retorika`, `aumenta`, `nutri_laura`, `demo`, `somos`
+
+**Lo que pasaba.** Había TRES pares de palabras para las mismas dos cosas. El
+menú y las tarjetas decían «Usuarios» y «Alumnos por curso»; las métricas de la
+portada, justo encima, decían «Usuarios» y «Matrículas»; y el override de Aumenta
+llamaba «Alumnos» a las personas y «Matrículas por curso» a las otras. Quien
+entraba por primera vez no podía saber en cuál de las dos pantallas se dan de
+alta alumnos.
+
+**La prueba estaba escrita en el propio producto**, en la ayuda de Empresas y en
+mayúsculas: «IMPORTANTE: los alumnos de empresa se importan desde aquí» — porque
+quien quería dar de alta alumnos entraba en «Usuarios», que es donde no se hace.
+Un aviso a gritos es lo que se pone cuando el nombre no basta.
+
+**Lo que se decidió** (Rodrigo, 13/08): las PERSONAS son «Alumnos» y las
+inscripciones «Matrículas», en los tres sitios a la vez. El aviso en mayúsculas
+se ha quitado —ahora es una frase normal, y está en las dos pantallas— y cada una
+dice de la otra para qué sirve: en Alumnos, «si buscas quién está apuntado a qué
+curso, eso es Matrículas»; en Matrículas, «aquí no se dan de alta personas».
+
+**Las RUTAS no se han tocado, y quedan al revés de lo que parece**: los alumnos
+están en `/formacion/usuarios` y las matrículas en `/formacion/alumnos`.
+Cambiarlas rompería enlaces guardados por cinco clientes a cambio de nada. Es el
+mismo criterio que en Nutrición, donde `/nutricion/asignados` se llama «Pautas».
+
+*Cómo se comprobó*: 13/08/2026 contra producción, en la demo pública. En
+`/formacion` salen «Alumnos» y «Matrículas» tres veces cada uno —menú, tarjeta y
+métrica, que son los tres sitios que se contradecían—; el título de
+`/formacion/usuarios` es «Alumnos» y el de `/formacion/alumnos` «Matrículas», con
+la referencia cruzada a la otra en la ayuda de cada una. «Alumnos por curso» no
+aparece ya en ninguna de las tres páginas.
+
+### El ancho de una pantalla deja de escribirse a mano · `retorika`, `aumenta`, `nutri_laura`, `demo`, `somos`
+
+**Por qué volvía.** «El módulo de Formación se ve demasiado ancho» se había
+arreglado ya varias veces. No era mala suerte: **no había ningún sitio donde el
+ancho estuviera decidido**. Cada pantalla escribía su `p-… max-w-…` a mano,
+copiado de la que tuviera más cerca, así que el módulo acabó con CUATRO
+respuestas a la misma pregunta — la portada a 5xl, Cursos y Empresas a 6xl,
+Alumnos y Matrículas a 7xl, y Cuestionarios sin ninguna, de lado a lado de la
+pantalla. El CRM entero igual: 19 pantallas a 7xl, 13 a 6xl, 12 a 5xl y 6 a 4xl,
+sin nada que diga cuál toca.
+
+El arreglo del 27/07 tocó las dos portadas y las otras cinco pantallas siguieron
+cada una por su lado. Por eso «volvía»: arreglar una pantalla no arregla nada.
+
+**Lo que se ha hecho.** `components/layout/anchoPantalla.js` decide, con dos
+valores y solo dos —con tres, quien duda elige mal y nadie lo nota—: `portada`
+(4xl) para landings, fichas y formularios, `listado` (7xl) para pantallas con
+tabla. Las ocho pantallas de Formación cuelgan de ahí. La portada baja de 5xl a
+4xl, que es la que Rodrigo veía ancha, y Cuestionarios deja de ocupar la pantalla
+entera.
+
+**No se ha aplicado al resto del CRM**, a propósito: cambiaría el ancho de
+cincuenta pantallas de siete clientes en un commit que nadie podría revisar. Lo
+que sí vale desde ya, y está escrito en el fichero: una pantalla nueva usa eso y
+no escribe `max-w-` a mano.
+
+*Cómo se comprobó*: 13/08/2026 contra producción, mirando el HTML servido de las
+siete pantallas. `/formacion` sale con `max-w-4xl`; Alumnos, Matrículas, Cursos,
+Empresas y **Cuestionarios** —que antes no tenía ninguno— salen con `max-w-7xl`.
+Antes eran cuatro anchos distintos; ahora son los dos que decide el fichero.
+
 ### La foto dorada ya avisa cuando se queda atrás · `demo`
 
 **Lo que pasaba.** Cada demo se restaura sola desde su foto `crm_{slug}_golden`,
