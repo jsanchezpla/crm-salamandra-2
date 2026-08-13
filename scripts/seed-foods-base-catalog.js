@@ -1,9 +1,9 @@
 /**
  * seed-foods-base-catalog.js — Seed del catálogo base de alimentos (Nutrición).
  *
- * Para CADA tenant activo (lista de master.tenants en runtime — regla #12):
- *   - Si su schema no existe o no tiene la tabla `foods` (solo la tienen los
- *     tenants con el módulo nutricion materializado), se omite con un log.
+ * Para cada tenant activo CON el módulo `nutricion` (lista de master.tenants en
+ * runtime — regla #12), o para uno solo con `--tenant <slug>`:
+ *   - Si su schema no existe o no tiene la tabla `foods`, se omite con un log.
  *   - Inserta los ~500 alimentos genéricos de scripts/data/foods-base-catalog.mjs
  *     que aún no existan. Idempotente POR SLUG (mismo slugifyName que usa la
  *     app): NUNCA se actualizan filas existentes, así las ediciones de la
@@ -14,7 +14,12 @@
  *
  * Transacción por-tenant; un fallo en un tenant no aborta el resto.
  *
+ * Lo lanza solo `scripts/enable-module.js <slug> nutricion` al activar el
+ * módulo; a mano solo hace falta para repasar el catálogo de todos.
+ *
  * Uso local:  node --env-file=.env.local scripts/seed-foods-base-catalog.js
+ *             node --env-file=.env.local scripts/seed-foods-base-catalog.js --tenant nutri_laura
+ * Uso VPS:    docker exec crm-salamandra-app-1 node scripts/seed-foods-base-catalog.js
  */
 
 import { Sequelize } from "sequelize";
@@ -73,8 +78,46 @@ async function tableExists(s, schema, table) {
   return rows.length > 0;
 }
 
-async function fetchTargetSlugs(s) {
-  const [rows] = await s.query(`SELECT slug FROM master.tenants WHERE status = 'active' ORDER BY slug`);
+/**
+ * A QUIÉN se le siembra el catálogo.
+ *
+ * Sigue mirando `status = 'active'` a propósito: esto son DATOS, no estructura
+ * (ver la nota de la regla 12 de CLAUDE.md). Sembrar en un cliente apagado no
+ * arregla nada.
+ *
+ * ── DOS CAMBIOS EL 13/08/2026 ──────────────────────────────────────────────
+ *
+ * 1. `--tenant <slug>` siembra UNO solo. Lo usa `enable-module.js` al activar
+ *    `nutricion`: hasta hoy, un cliente que estrenaba el módulo se encontraba
+ *    el recetario con CERO alimentos y había que acordarse de lanzar esto a
+ *    mano. Acordarse falla — es el mismo razonamiento que puso las migraciones
+ *    dentro del alta de módulo.
+ *
+ * 2. Sin `--tenant`, ya solo se siembran los tenants CON el módulo `nutricion`.
+ *    Antes se sembraba a todo activo que tuviera tabla `foods`, y eso hoy son
+ *    todos: `sequelize.sync()` en el alta crea las nueve tablas de nutrición
+ *    tenga el cliente el módulo o no. El resultado era meter 497 alimentos en
+ *    clientes que no venden dietas — invisibles, pero basura.
+ */
+async function fetchTargetSlugs(s, soloSlug) {
+  if (soloSlug) {
+    const [rows] = await s.query(
+      `SELECT slug FROM master.tenants WHERE slug = :slug AND status = 'active'`,
+      { replacements: { slug: soloSlug } }
+    );
+    if (rows.length === 0) {
+      process.stderr.write(`\n✗ No hay tenant activo con slug "${soloSlug}"\n\n`);
+      process.exit(1);
+    }
+    return rows.map((r) => r.slug);
+  }
+  const [rows] = await s.query(
+    `SELECT DISTINCT t.slug
+       FROM master.tenants t
+       JOIN master.tenant_modules tm ON tm.tenant_id = t.id
+      WHERE t.status = 'active' AND tm.enabled = TRUE AND tm.module_key = 'nutricion'
+      ORDER BY t.slug`
+  );
   return rows.map((r) => r.slug);
 }
 
@@ -131,8 +174,19 @@ async function main() {
   const catalog = buildCatalog();
   const sequelize = new Sequelize(process.env.DATABASE_URL, { dialect: "postgres", logging: false });
 
-  const slugs = await fetchTargetSlugs(sequelize);
-  header(`Tenants activos: ${slugs.length} (${slugs.join(", ")}) — catálogo: ${catalog.length} alimentos`);
+  const argv = process.argv.slice(2);
+  const iTenant = argv.indexOf("--tenant");
+  const soloSlug = iTenant >= 0 ? argv[iTenant + 1] : null;
+
+  const slugs = await fetchTargetSlugs(sequelize, soloSlug);
+  if (slugs.length === 0) {
+    log("· Ningún tenant con el módulo `nutricion` activo. Nada que sembrar.");
+    await sequelize.close();
+    process.exit(0);
+  }
+  header(
+    `${soloSlug ? "Tenant" : "Tenants con nutrición"}: ${slugs.length} (${slugs.join(", ")}) — catálogo: ${catalog.length} alimentos`
+  );
 
   let okCount = 0;
   let omittedCount = 0;

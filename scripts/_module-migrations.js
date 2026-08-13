@@ -70,6 +70,8 @@ export const ONE_OFF = {
   // flujo, no de nadie: una migración de MASTER no cae sola en ningún módulo.
   "migrate-tablero-estado": "MASTER, no toca schemas de tenant: crea `master.tablero_estado`, donde el Registro guarda el tick y el reparto de cada tarea (el TEXTO sigue en los .md del repo). Se corre a mano una vez, idempotente",
   "migrate-paquetes-modulos": "MASTER, no toca schemas de tenant: crea `master.paquetes_modulos` y siembra los dos paquetes que hasta ahora estaban escritos en `catalogo.js`. Se corre a mano con `npm run db:migrate:paquetes`; idempotente, y la semilla NO restaura lo que se haya borrado después",
+  "migrate-auto-asignar-nutricion":
+    "MASTER, no toca schemas de tenant: enciende `featureFlags.autoAsignarEnAlta` en la fila de `nutricion` de quien ya dependía del auto-marcado (nutri_laura). El flag nace apagado para todos los demás a propósito — antes, tener el módulo bastaba para que TODA ficha nueva se marcara como paciente de nutrición. Se corre a mano una vez, idempotente",
   "migrate-buzon": "MASTER, no toca schemas de tenant: crea `master.buzon_avisos`, `buzon_mensajes`, `buzon_adjuntos` y la secuencia del correlativo, que es donde caen los avisos que nos mandan los clientes. Va en master —y no en el schema de cada uno— para que sobrevivan a su baja y para que funcionen aunque su base esté rota. Se corre a mano con `npm run db:migrate:buzon`; idempotente",
 };
 
@@ -364,6 +366,16 @@ export const MODULES = {
   // haber tenido el básico no nazca sin `documents`.
   documents_avanzado: ["migrate-documents-sprint-1", "migrate-documents-client-link", "migrate-documents-transversal", "migrate-documents-patient-link", "migrate-documents-client-portal"],
   nutricion: [
+    // ⚠️ VA LA PRIMERA Y NO ES COSMÉTICO (13/08/2026). Crea las CINCO tablas
+    // cimiento del módulo (foods, plans, plan_meals, plan_meal_options,
+    // plan_meal_option_foods), que hasta hoy no creaba ninguna migración: las
+    // hacían dos scripts de un solo uso con `crm_nutri_laura` escrito dentro
+    // (add-nutricion-module-nutri-laura.js y add-nutricion-c2-plans-nutri-laura.js),
+    // ninguno declarado aquí. Sin ella, activar `nutricion` en un tenant
+    // antiguo dejaba las seis de abajo saltándose solas por no encontrar
+    // `foods` —lo dicen por pantalla— y al cliente con el módulo en el menú y
+    // nada debajo. Las seis siguientes DEPENDEN de que esta haya corrido.
+    "migrate-nutricion-base",
     "migrate-nutricion-recipes",
     "migrate-nutricion-week-recipe-media",
     "migrate-nutricion-day-comments",
@@ -372,6 +384,11 @@ export const MODULES = {
     // recetas (04/08/2026): con mil recetas, sin filtros no hay recetario.
     "migrate-recetas-clasificacion",
     "migrate-plan-team",
+    // Congela pasos y foto DENTRO de la pauta (13/08/2026): antes se leían en
+    // vivo de la receta, así que reescribir unos pasos cambiaba pautas de hace
+    // meses y corregir una cantidad no llegaba a nadie. Lleva backfill desde la
+    // receta viva, para que el día del despliegue no se note nada.
+    "migrate-nutricion-congelar-receta",
   ],
 
   outreach: [
@@ -398,6 +415,28 @@ export function migrationsFor(moduleKeys = []) {
   for (const k of moduleKeys) for (const m of MODULES[k] || []) set.add(m);
   return ORDER.filter((m) => set.has(m));
 }
+
+/**
+ * MÓDULO → SEMILLAS de DATOS que hay que sembrar al activarlo.
+ *
+ * Las migraciones dejan la ESTRUCTURA; esto deja el CONTENIDO mínimo sin el
+ * cual el módulo, aun estando bien montado, no sirve de nada el primer día.
+ * Hoy solo hay un caso, y es el que lo motiva: un recetario sin un solo
+ * alimento no deja escribir ni un menú, porque toda receta y toda pauta se
+ * construyen eligiendo alimentos del catálogo. Laura no lo sufrió porque su
+ * catálogo se sembró a mano en el sprint C1.
+ *
+ * Cada entrada es `{ script, args }` y la lanza `enable-module.js` DESPUÉS de
+ * las migraciones (necesita las tablas ya creadas). El `--tenant` acota la
+ * siembra al cliente que estrena el módulo, sin tocar a los demás.
+ *
+ * ⚠️ Solo DATOS SEMILLA, idempotentes y neutros: catálogos de referencia que
+ * cualquier cliente querría. Nada de datos de escaparate — eso son los seeds
+ * de demo, que se lanzan a mano y a propósito.
+ */
+export const MODULE_SEEDS = {
+  nutricion: [{ script: "seed-foods-base-catalog.js", args: ["--tenant"] }],
+};
 
 /**
  * Salud del mapa. Como ORDER se calcula de los ficheros que hay en disco, esto

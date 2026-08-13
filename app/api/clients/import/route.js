@@ -9,7 +9,7 @@ import { applyAutoAssignments } from "../../../../lib/clients/moduleAssignments.
 
 const VALID_STATUSES = ["new", "contacted", "following", "converted", "discarded"];
 
-export const POST = withTenant(async (request, _ctx, { tenantModels, tenantSequelize, hasModule, tenantHasModule, user }) => {
+export const POST = withTenant(async (request, _ctx, { tenantModels, tenantSequelize, hasModule, tenantHasModule, hasFeatureFlag, user }) => {
   if (!hasModule("clients")) return forbidden();
 
   const { Client, ClientContactMethod } = tenantModels;
@@ -74,14 +74,14 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, tenantSeque
           clientId = c.id;
         }
         // Marcado automático de módulos (fuera de la tx, best-effort).
-        await applyAutoAssignments({ tenantModels, clientId, tenantHasModule, userId: user?.id ?? null });
+        await applyAutoAssignments({ tenantModels, clientId, tenantHasModule, hasFeatureFlag, userId: user?.id ?? null });
         results.imported++;
       } catch (err) {
         // Tenant sin la tabla de contactos: desactiva el espejo y reintenta en plano.
         if (mirrorAvailable && isMissingTable(err)) {
           mirrorAvailable = false;
           const c = await Client.create(payload);
-          await applyAutoAssignments({ tenantModels, clientId: c.id, tenantHasModule, userId: user?.id ?? null });
+          await applyAutoAssignments({ tenantModels, clientId: c.id, tenantHasModule, hasFeatureFlag, userId: user?.id ?? null });
           results.imported++;
         } else {
           throw err;

@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { headers } from "next/headers";
 
-import NutriLauraPlantillasModule from "../../../../modules/overrides/nutri-laura/NutricionPlantillasModule.jsx";
+import NutriLauraPlantillasModule from "../../../../modules/nutricion/NutricionPlantillasModule.jsx";
 
 const UI_OVERRIDES = {
   nutri_laura: NutriLauraPlantillasModule,

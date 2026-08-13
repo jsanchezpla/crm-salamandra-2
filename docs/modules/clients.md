@@ -461,8 +461,9 @@ histórico y metadata.
   Client materializa como mucho un Patient.
 
 **Auto-marcado en el alta (2026-07-27, decisión de nutri_laura, reina de
-nutrición)**: en tenants con el módulo `nutricion` activo, TODA alta de cliente
-marca sola la asignación `nutricion` (`AUTO_ASSIGN_MODULE_KEYS` +
+nutrición)**: en tenants con el módulo `nutricion` activo **Y el flag
+`autoAsignarEnAlta` encendido**, TODA alta de cliente marca sola la asignación
+`nutricion` (`AUTO_ASSIGN_MODULE_KEYS` + `AUTO_ASSIGN_FLAG` +
 `applyAutoAssignments` en `lib/clients/moduleAssignments.js`). Cubre los tres
 caminos de alta: POST `/api/clients` (manual y conversión de lead),
 aceptar solicitud de Formularios e importación masiva. Siempre FUERA de la
@@ -472,6 +473,20 @@ sin migrar): un fallo del extra no tumba el alta. Decide con `tenantHasModule`
 usuario que crea la ficha). `clinica` queda EXPRESAMENTE fuera: Aumenta pidió
 paciente siempre explícito. Metadata `{auto: true}` distingue el marcado
 automático del manual.
+
+⚠️ **DEJÓ DE SER INCONDICIONAL EL 13/08/2026.** Colgaba solo de tener el módulo,
+y eso se escribió para una consulta de una persona, donde «todo cliente nuevo es
+paciente» es verdad. En un centro grande deja de serlo: el día que Nutrición se
+venda a un centro de psicología con 1.083 familias, toda ficha que entre por la
+puerta quedaría marcada como paciente de dietas —incluidas las que van a terapia
+y no pisan la consulta— y sin nada que lo dijera. Ahora manda
+`featureFlags.autoAsignarEnAlta` en la fila de `nutricion` de
+`master.tenant_modules`, **apagado por defecto**; `nutri_laura` lo tiene
+encendido desde `scripts/migrate-auto-asignar-nutricion.js`, que existe
+precisamente para que el cambio no le moviera el suelo a quien ya dependía del
+comportamiento viejo. Es la misma lección que «Fichas a completar»: lo que
+resuelve el problema de una consulta de una persona no es el default de un centro
+de veinte.
 
 **Backfill** (`scripts/migrate-client-module-assignments.js`, solo `nutri_laura`):
 marca `nutricion` a los clients con plan asignado activo **o** `origin='lead'`.

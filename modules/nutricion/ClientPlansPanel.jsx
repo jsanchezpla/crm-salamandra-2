@@ -1,9 +1,20 @@
 "use client";
 
 /**
- * ClientPlansPanel — tab "Pautas" en la ficha de paciente nutri_laura.
+ * ClientPlansPanel — pestaña "Pautas" de la ficha, para CUALQUIER cliente con
+ * el módulo `nutricion`.
  *
- * Sprint nutri-laura Recetario C4.
+ * Sprint nutri-laura Recetario C4. Hasta el 13/08/2026 vivía en
+ * `modules/overrides/nutri-laura/` y solo lo montaba la ficha de Laura, así que
+ * el resto de centros con Nutrición —la demo, sin ir más lejos— tenían las
+ * cuatro pantallas de /nutricion y ningún sitio desde donde asignar un menú a
+ * una persona concreta. No era una decisión: es que nació con ella y nadie lo
+ * bajó al default.
+ *
+ * Quien decide si esta pestaña existe es el SERVIDOR
+ * (`app/(dashboard)/clientes/[id]/page.jsx` mira el módulo y pasa
+ * `conNutricion`), porque este componente siempre pinta algo —cargando, vacío o
+ * el error— y nunca se declararía vacío por su cuenta.
  *
  * Vocabulario (04/08/2026, Rodrigo): el modelo reutilizable es un MENÚ y la
  * copia que recibe esta paciente es su PAUTA. Por debajo las dos son `plans`

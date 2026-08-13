@@ -62,7 +62,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * mandarle un «ya puedes pedir cita» a gente que escribió hace meses. Para eso
  * está `avisar: false`.
  */
-export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tenantSequelize, hasModule, tenantHasModule, user }) => {
+export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tenantSequelize, hasModule, tenantHasModule, hasFeatureFlag, user }) => {
   try {
     if (!hasModule(MODULE_KEYS.FORMULARIOS)) return forbidden("Módulo formularios no activo");
 
@@ -117,7 +117,7 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
     // Marcado automático de módulos (p. ej. "Paciente Nutrición"): fuera de la
     // transacción y best-effort, como el resto de extras de esta ruta. También
     // al reutilizar una ficha existente: si Laura la acepta, es paciente.
-    await applyAutoAssignments({ tenantModels, clientId: client.id, tenantHasModule, userId: user?.id ?? null });
+    await applyAutoAssignments({ tenantModels, clientId: client.id, tenantHasModule, hasFeatureFlag, userId: user?.id ?? null });
 
     // ── Alta en el WordPress del tenant (best-effort) ────────────────────────
     let acceso = { intentado: false };

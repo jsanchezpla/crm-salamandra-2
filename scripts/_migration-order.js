@@ -90,6 +90,11 @@ export const EXTRA_EDGES = [
     after: "migrate-patients-specialties",
     why: "specialties hace UPDATE ... WHERE care_type='nutricion' para el backfill; care_type lo añade care-type. El analizador no ve deps de columna dentro de un UPDATE (hasta ahora solo funcionaba por el desempate alfabético).",
   },
+  {
+    before: "migrate-nutricion-base",
+    after: "migrate-nutricion-recipes",
+    why: "recipes se salta el schema entero si no encuentra `foods` y `plan_meal_options` («faltan foods/plan_meal_options. Se salta»), y las dos las crea nutricion-base. El analizador no ve la atadura porque recipes solo nombra `foods` dentro de un REFERENCES, así que el orden salía bien por PURO DESEMPATE ALFABÉTICO ('base' < 'recipes'). Renombrar cualquiera de las dos lo habría invertido en silencio, y el síntoma sería el de siempre: tenant nuevo con el módulo puesto y sin recetario.",
+  },
 ];
 
 const RX = {

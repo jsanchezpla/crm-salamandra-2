@@ -42,7 +42,7 @@ import Link from "next/link";
 import ClientNotesPanel from "./ClientNotesPanel.jsx";
 import ClientAttachmentsPanel from "./ClientAttachmentsPanel.jsx";
 import ClientBookingsPanel from "./ClientBookingsPanel.jsx";
-import ClientPlansPanel from "./ClientPlansPanel.jsx";
+import ClientPlansPanel from "../../nutricion/ClientPlansPanel.jsx";
 import ClientModulesSection from "../../../components/clients/ClientModulesSection.jsx";
 import ClientCitasSection from "../../../components/clients/ClientCitasSection.jsx";
 import ClientBonosSection from "../../../components/clients/ClientBonosSection.jsx";

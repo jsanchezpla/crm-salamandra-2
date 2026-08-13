@@ -26,6 +26,7 @@ import ClientConsultaExternaSection from "../../components/clients/ClientConsult
 import ClientProfesionalSection from "../../components/clients/ClientProfesionalSection.jsx";
 import ClientPatientsSection from "../../components/clients/ClientPatientsSection.jsx";
 import ClientCuentaWebSection from "../../components/clients/ClientCuentaWebSection.jsx";
+import ClientPlansPanel from "../nutricion/ClientPlansPanel.jsx";
 
 /**
  * ── LA FICHA VA POR PESTAÑAS (12/08/2026, Rodrigo) ─────────────────────────
@@ -59,6 +60,13 @@ const TABS = [
   { key: "servicio", label: "Servicio" },
   { key: "contrato", label: "Contrato y avisos" },
   { key: "citas", label: "Citas" },
+  // "Pautas" — el menú que sigue esta persona (13/08/2026). Vivía SOLO en la
+  // ficha de nutri_laura, así que cualquier otro centro con Nutrición tenía las
+  // cuatro pantallas de /nutricion y ningún sitio desde donde asignar un menú a
+  // alguien: se veía en la demo, que lleva `nutricion` activo y no tenía esta
+  // pestaña. Va después de Citas y antes del dinero, junto al resto de lo que
+  // se le presta al paciente.
+  { key: "pautas", label: "Pautas" },
   { key: "facturacion", label: "Facturación" },
 ];
 
@@ -168,7 +176,12 @@ function fechaLarga(iso) {
     : d.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
 }
 
-export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL, conPacientes = false, conFacturacion = false }) {
+export default function ClientDetailModule({
+  perfil = PERFIL_COMERCIAL,
+  conPacientes = false,
+  conFacturacion = false,
+  conNutricion = false,
+}) {
   const { id } = useParams();
   const router = useRouter();
   const [client, setClient] = useState(null);
@@ -690,6 +703,15 @@ export default function ClientDetailModule({ perfil = PERFIL_COMERCIAL, conPacie
               el motor entero —tabla, endpoint, descuento— y ningún sitio donde
               dar uno. Se pinta sola solo si el centro tiene Citas. */}
           <ClientBonosSection clientId={id} />
+        </PanelPestana>
+
+        {/* Sin el módulo no se pinta NADA aquí dentro, y entonces `PanelPestana`
+            se declara vacío y la pestaña desaparece sola del menú. Por eso el
+            gate va aquí y no dentro del panel: `ClientPlansPanel` siempre pinta
+            algo (cargando, vacío o el error del 403), así que nunca se
+            declararía vacío por sí mismo. */}
+        <PanelPestana clave="pautas" activo={tab === "pautas"} onEstado={marcarPanel}>
+          {conNutricion && <ClientPlansPanel clientId={id} />}
         </PanelPestana>
 
         <PanelPestana clave="facturacion" activo={tab === "facturacion"} onEstado={marcarPanel}>

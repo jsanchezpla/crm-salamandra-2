@@ -43,6 +43,22 @@ export function definePlanMealOptionRecipe(sequelize) {
         defaultValue: 1,
         validate: { min: 0.01 },
       },
+      // Pasos y foto CONGELADOS (13/08/2026). Hasta esa fecha no existían y se
+      // leían en vivo de `recipes` por `recipeId`, con lo que la pauta ya
+      // entregada cambiaba sola cada vez que alguien tocaba la receta. Ahora la
+      // pauta es un documento cerrado; para que una corrección llegue está la
+      // acción «Actualizar recetas», que reescribe estos campos a propósito.
+      stepsSnapshot: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+        field: "steps_snapshot",
+      },
+      photoPathSnapshot: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        field: "photo_path_snapshot",
+      },
       ordering: {
         type: DataTypes.INTEGER,
         allowNull: false,

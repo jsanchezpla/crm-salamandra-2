@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 
-import NutriLauraFoodsModule from "../../../../modules/overrides/nutri-laura/NutricionFoodsModule.jsx";
+import NutriLauraFoodsModule from "../../../../modules/nutricion/NutricionFoodsModule.jsx";
 
 const UI_OVERRIDES = {
   nutri_laura: NutriLauraFoodsModule,

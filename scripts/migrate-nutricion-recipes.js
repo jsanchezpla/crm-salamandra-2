@@ -54,6 +54,14 @@ async function indexExists(s, t, schema, indexName) {
   });
   return rows.length > 0;
 }
+async function constraintExists(s, schema, table, name) {
+  const [rows] = await s.query(
+    `SELECT 1 FROM information_schema.table_constraints
+      WHERE table_schema = $1 AND table_name = $2 AND constraint_name = $3`,
+    { bind: [schema, table, name] }
+  );
+  return rows.length > 0;
+}
 
 async function ensureUuidFn(s) {
   try { await s.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`); } catch { /* sin permiso */ }
@@ -182,16 +190,74 @@ async function ensureTables(s, t, schema, uuidDefault) {
   await ensureIndex(s, t, schema, "pmorf_food_id_idx", "plan_meal_option_recipe_foods", "(food_id)");
 }
 
+/**
+ * Las tres reglas que van INCRUSTADAS en los CREATE TABLE de arriba, repetidas
+ * aquí como ALTER para poder ponérselas a una tabla que ya existía sin ellas.
+ *
+ * Hace falta porque hay DOS formas de que estas tablas nazcan: esta migración
+ * (con sus CHECK) o `sequelize.sync()` en el alta de un tenant nuevo
+ * (lib/provisioning/altaTenant.js), que crea las columnas y ninguna de las
+ * reglas. Como la migración solo creaba «si no existe», a un schema nacido de
+ * sync no le llegaban nunca: en producción, `crm_somos` tenía las cuatro tablas
+ * del recetario sin un solo CHECK (13/08/2026).
+ */
+const CHECKS = [
+  {
+    table: "recipe_foods",
+    name: "recipe_foods_unit_chk",
+    sql: `CHECK (
+      (unit = 'g'         AND amount IS NOT NULL AND household_label IS NULL     AND household_grams IS NULL)
+      OR (unit = 'household' AND amount IS NOT NULL AND household_label IS NOT NULL AND household_grams IS NOT NULL)
+      OR (unit = 'free'      AND amount IS NULL     AND household_label IS NULL     AND household_grams IS NULL)
+    )`,
+  },
+  {
+    table: "plan_meal_option_recipe_foods",
+    name: "pmorf_unit_chk",
+    sql: `CHECK (
+      (unit_snapshot = 'g'         AND amount_snapshot IS NOT NULL AND household_label_snapshot IS NULL     AND household_grams_snapshot IS NULL)
+      OR (unit_snapshot = 'household' AND amount_snapshot IS NOT NULL AND household_label_snapshot IS NOT NULL AND household_grams_snapshot IS NOT NULL)
+      OR (unit_snapshot = 'free'      AND amount_snapshot IS NULL     AND household_label_snapshot IS NULL     AND household_grams_snapshot IS NULL)
+    )`,
+  },
+  {
+    table: "plan_meal_option_recipes",
+    name: "plan_meal_option_recipes_servings_check",
+    sql: `CHECK (servings > 0)`,
+  },
+];
+
+async function ensureConstraints(s, schema) {
+  for (const { table, name, sql } of CHECKS) {
+    if (!(await tableExists(s, null, schema, table))) continue;
+    if (await constraintExists(s, schema, table, name)) continue;
+    try {
+      await s.query(`ALTER TABLE "${schema}"."${table}" ADD CONSTRAINT "${name}" ${sql}`);
+      log(`✓ ${schema}.${table}: constraint ${name} añadido`);
+    } catch (err) {
+      // 23514 = check_violation: ya hay filas que incumplen. Se avisa y se sigue;
+      // el arreglo es de datos y lo decide una persona.
+      const code = err?.parent?.code || err?.original?.code;
+      if (code !== "23514") throw err;
+      log(`⚠ ${schema}.${table}: HAY FILAS QUE INCUMPLEN ${name}. Constraint NO añadido.`);
+    }
+  }
+}
+
 async function processSchema(s, schema) {
-  // Prerequisitos del recetario: foods (C1) + plan_meal_options (C2).
+  // Prerequisitos del recetario: foods + plan_meal_options, que crea
+  // migrate-nutricion-base (antes, los scripts C1/C2 atados a nutri_laura).
   if (!(await tableExists(s, null, schema, "foods")) || !(await tableExists(s, null, schema, "plan_meal_options"))) {
-    log(`✗ ${schema}: faltan foods/plan_meal_options (C1/C2 no aplicados). Se salta.`);
+    log(`✗ ${schema}: faltan foods/plan_meal_options (migrate-nutricion-base no aplicada). Se salta.`);
     return;
   }
   const uuidDefault = await ensureUuidFn(s);
   await s.transaction(async (t) => {
     await ensureTables(s, t, schema, uuidDefault);
   });
+  // Fuera de la transacción de creación: alcanza también a las tablas que ya
+  // existían de antes (las de `sequelize.sync()`), que es justo el caso.
+  await ensureConstraints(s, schema);
   log(`✓ ${schema}: listo`);
 }
 

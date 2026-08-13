@@ -41,7 +41,7 @@ import {
   computePlanMacros,
   computeRecipeMacros,
   scaleMacros,
-} from "../../../lib/nutricion/macros.js";
+} from "../../lib/nutricion/macros.js";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Utilidades de formato

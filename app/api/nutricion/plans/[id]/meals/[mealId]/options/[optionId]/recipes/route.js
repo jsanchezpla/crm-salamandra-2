@@ -10,8 +10,10 @@ import {
 // POST /api/nutricion/plans/[id]/meals/[mealId]/options/[optionId]/recipes
 // Body: { recipeId, servings? }
 // Añade una receta del catálogo a la opción CONGELÁNDOLA (snapshot): copia el
-// nombre + los ingredientes actuales de la receta. Editar la receta del
-// catálogo después NO cambia esta copia (D1 = congelado).
+// nombre, los ingredientes, los pasos y la foto actuales de la receta. Editar
+// la receta del catálogo después NO cambia esta copia (D1 = congelado). Para
+// que una corrección llegue a las pautas ya escritas está
+// POST /api/nutricion/recipes/[id]/propagate.
 // ─────────────────────────────────────────────────────────────────────────────
 export const POST = withTenant(async (request, ctx, { tenantModels, tenantSequelize, hasModule }) => {
   try {
@@ -61,6 +63,10 @@ export const POST = withTenant(async (request, ctx, { tenantModels, tenantSequel
           planMealOptionId: optionId,
           recipeId: recipe.id,
           nameSnapshot: recipe.name,
+          // Pasos y foto también congelados (13/08/2026): antes se leían en
+          // vivo y la pauta ya entregada cambiaba sola al editar la receta.
+          stepsSnapshot: Array.isArray(recipe.steps) ? recipe.steps : [],
+          photoPathSnapshot: recipe.photoPath ?? null,
           servings,
           ordering: Number(maxOrdering) + 1,
         },

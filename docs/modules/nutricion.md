@@ -36,9 +36,10 @@ exactamente los mismos que en local.
 >   `recipes.photo_path` (disco, patrón documentStorage, helper
 >   `lib/nutricion/recipePhotoStorage.js`, JPEG/PNG/WebP ≤5 MB, magic bytes) y
 >   `recipes.steps` JSONB [string]. Endpoints POST/GET/DELETE
->   `/api/nutricion/recipes/[id]/photo`. Foto y pasos se leen EN VIVO desde los
->   menús (via `recipeId` de provenance); el snapshot sigue congelando solo
->   nombre e ingredientes.
+>   `/api/nutricion/recipes/[id]/photo`.
+>   ⚠️ **Foto y pasos se leían EN VIVO desde los menús hasta el 13/08/2026**, y
+>   eso ya NO es así: ahora el snapshot los congela también. Ver «Congelado y
+>   propagación» en la sección 7.
 > - **El PDF del menú agrupa por día** (banda por día, comidas dentro), embebe
 >   la foto de cada receta y sus pasos numerados, y **omite comidas/días vacíos**.
 >   Los planes sin días se imprimen plano, como antes.
@@ -246,13 +247,28 @@ OR
 
 ## 4. Rutas frontend
 
-| Ruta | Se llama | Componente (override nutri_laura) | Descripción |
+⚠️ **Los componentes ya NO viven en `modules/overrides/nutri-laura/`**
+(13/08/2026). Están en **`modules/nutricion/`**, que es donde debieron nacer:
+nunca fueron un override —las cuatro páginas los usaban como valor por defecto
+para cualquier cliente, con un mapa `UI_OVERRIDES` cuyo override y cuyo valor por
+defecto eran el mismo componente—, y estar en la carpeta de Laura es lo que hizo
+que la pestaña Pautas se quedara solo en su ficha. En `overrides/nutri-laura/`
+queda lo que sí es suyo: su ficha (rótulos «Historia clínica» y «Sesiones»), su
+embudo de leads y sus paneles.
+
+| Ruta | Se llama | Componente (`modules/nutricion/`) | Descripción |
 | ---- | -------- | -------------------------------- | ----------- |
-| `/nutricion/alimentos` | Alimentos | `NutricionFoodsModule.jsx` | Catálogo paginado, edit inline macros, buscar online OFF, papelera (C1) |
+| `/nutricion/alimentos` | Alimentos | `NutricionFoodsModule.jsx` | Catálogo paginado, edit inline macros, papelera (C1) |
 | `/nutricion/recetas` | **Recetario** | `NutricionRecetasModule.jsx` | Catálogo de recetas con foto y pasos (8.2) |
 | `/nutricion/plantillas` | Menús | `NutricionPlantillasModule.jsx` | Grid de cards con preview de comidas + contador de asignaciones, CRUD, duplicar (C3) |
 | `/nutricion/asignados` | **Pautas** | `NutricionAsignadosModule.jsx` | Tabla lg / cards mobile + filtro por plantilla origen + botón "+ Nueva asignación" (C3+C4) |
-| `/clientes/[id]` (tab "Pautas") | — | `ClientPlansPanel.jsx` dentro de `ClientDetailModule.jsx` | Plan activo + histórico colapsable + acciones (C4) |
+| `/clientes/[id]` (tab "Pautas") | — | `ClientPlansPanel.jsx` dentro de `modules/default/ClientDetailModule.jsx` | Plan activo + histórico colapsable + acciones (C4). **Desde el 13/08/2026 la ve cualquier cliente con `nutricion`**, no solo Laura. |
+
+⚠️ **Quién decide si sale la pestaña Pautas es el SERVIDOR**:
+`app/(dashboard)/clientes/[id]/page.jsx` mira el módulo del tenant y pasa
+`conNutricion`. No se puede decidir dentro del panel porque `ClientPlansPanel`
+siempre pinta algo —cargando, vacío o el error del 403—, así que nunca se
+declararía vacío por su cuenta y `PanelPestana` no escondería la pestaña.
 
 El sidebar (`components/layout/Sidebar.jsx`) tiene una entrada
 "Nutrición" plegable con las 4 sub-rutas; se auto-expande cuando
@@ -387,6 +403,40 @@ Líneas con macro `null` se ignoran en sumas; si TODAS las líneas son
 
 ## 7. Decisiones arquitectónicas cerradas
 
+### Congelado y propagación (13/08/2026, Rodrigo)
+
+**La pauta entregada es un documento cerrado.** Al meter una receta en un menú se
+copia entera —nombre, ingredientes, **pasos y foto**— a
+`plan_meal_option_recipes` / `plan_meal_option_recipe_foods`, y desde ahí no se
+mueve. `attachRecipesToTree` lee del snapshot; el PDF del menú, también.
+
+Hasta esta fecha se congelaba MEDIA receta: nombre e ingredientes sí, pasos y
+foto se leían en vivo por `recipeId`. Eso daba lo peor de las dos opciones —
+corregir una cantidad mal puesta no le llegaba a quien ya tenía la pauta, y
+reescribir unos pasos le cambiaba pautas de hace meses sin avisar.
+
+**Para que una corrección llegue hay una acción explícita**:
+`/api/nutricion/recipes/[id]/propagate`. `GET` dice dónde está usada la receta y
+cuáles se han quedado atrás; `POST` refresca el snapshot solo en los planes que
+se le pasen. La UI aparece sola al guardar una receta ya usada
+(`modules/nutricion/PropagarRecetaPanel.jsx`) y no interrumpe si no hay nada
+desincronizado.
+
+Tres reglas del endpoint:
+
+- **No toca planes archivados.** Una pauta archivada es el registro de lo que se
+  entregó aquel día; reescribirla sería falsearlo.
+- **No toca `servings` ni `ordering`.** La ración es del menú, no de la receta:
+  si alguien puso media, media se queda.
+- **Se audita** (`nutricion.recipe.propagated`), al revés que la edición
+  granular de un menú: reescribe de golpe lo que ya se había entregado a varias
+  personas.
+
+Los menús plantilla salen en la lista aparte y también se pueden propagar. Es lo
+que arregla, de paso, «Re-aplicar menú origen»: re-aplicar copia el menú
+plantilla tal cual, así que si la plantilla no se corrige, vuelve a repartir el
+error.
+
 **Sprint completo**:
 
 1. Plantillas **mutables** + asignados **independientes**. PATCH
@@ -498,12 +548,19 @@ Conteo último run (C5):
 
 ## 9. Migrations
 
-Tres scripts idempotentes en `scripts/`:
+⚠️ **LA VÍA CORRECTA PARA DAR NUTRICIÓN A UN CLIENTE ES
+`scripts/enable-module.js <slug> nutricion`** (13/08/2026). Hace las tres cosas
+en orden: la fila en `master.tenant_modules`, las migraciones del módulo y la
+siembra del catálogo base de alimentos. Los dos scripts C1/C2 de abajo son
+HISTÓRICOS y están atados a `crm_nutri_laura`: no se ejecutan nunca más.
 
 | Script | Sprint | Hace |
 | ------ | ------ | ---- |
-| `add-nutricion-module-nutri-laura.js` | C1 | Crea enums + tabla `foods` + fila `master.tenant_modules` con `uiOverride='nutri-laura/NutricionFoodsModule'` + featureFlag `externalSearchEnabled=true` + añade 'nutricion' al `moduleAccess` del admin. |
-| `add-nutricion-c2-plans-nutri-laura.js` | C2 | Crea enums `plans_type` y `plan_meal_option_food_unit` + las 4 tablas (`plans`, `plan_meals`, `plan_meal_options`, `plan_meal_option_foods`) + índices + constraints CHECK + FKs. NO toca `tenant_modules` (lo hace C1). |
+| **`migrate-nutricion-base.js`** | 13/08/2026 | **La primera del módulo.** Crea enums + las CINCO tablas cimiento (`foods`, `plans`, `plan_meals`, `plan_meal_options`, `plan_meal_option_foods`) en cualquier schema, y en una segunda pasada BLINDA las que ya existan: los 2 CHECK y los 3 índices parciales que `sequelize.sync()` no crea. Sustituye a C1+C2 como fuente de esas tablas. |
+| **`migrate-nutricion-congelar-receta.js`** | 13/08/2026 | Añade `steps_snapshot` y `photo_path_snapshot` a `plan_meal_option_recipes` + backfill desde la receta viva. Ver «Congelado y propagación». |
+| **`migrate-auto-asignar-nutricion.js`** | 13/08/2026 | ONE_OFF de MASTER: enciende `featureFlags.autoAsignarEnAlta` a quien ya dependía del auto-marcado (`nutri_laura`). Apagado para el resto a propósito. |
+| `add-nutricion-module-nutri-laura.js` | C1 | **HISTÓRICO, no se ejecuta.** Creaba enums + tabla `foods` + la fila de `tenant_modules` con `uiOverride` y `externalSearchEnabled`, los dos muertos hoy (nadie lee el primero; el segundo era de OpenFoodFacts, retirado el 18/07). Lo que hacía lo hace ahora `migrate-nutricion-base` para cualquier cliente. |
+| `add-nutricion-c2-plans-nutri-laura.js` | C2 | **HISTÓRICO, no se ejecuta.** Creaba las 4 tablas de planes solo en `crm_nutri_laura`. Idem. |
 | `install-unaccent-extension.js` | C3 | `CREATE EXTENSION IF NOT EXISTS unaccent` en la BD principal (es extensión a nivel de BD, no de schema). |
 
 Comando local + producción:

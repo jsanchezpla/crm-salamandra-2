@@ -119,7 +119,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   return ok({ clients: rows, total: count, page, pages: Math.ceil(count / limit) });
 });
 
-export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, tenantSequelize, hasModule, tenantHasModule, user }) => {
+export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, tenantSequelize, hasModule, tenantHasModule, hasFeatureFlag, user }) => {
   if (!hasModule("clients")) return forbidden();
 
   const { Client, ClientContactMethod } = tenantModels;
@@ -323,7 +323,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
     // Fuera de la transacción a propósito: el marcado automático de módulos
     // (p. ej. "Paciente Nutrición" en tenants de nutrición) es un extra y no
     // puede tumbar un alta ya hecha.
-    await applyAutoAssignments({ tenantModels, clientId: client.id, tenantHasModule, userId: user?.id ?? null });
+    await applyAutoAssignments({ tenantModels, clientId: client.id, tenantHasModule, hasFeatureFlag, userId: user?.id ?? null });
     // Y si viene de un lead del formulario de profesionales, hereda la marca
     // que le abre los tipos de cita reservados (12/08/2026). Se lee del LEAD,
     // no del cuerpo: ver `marcarProfesionalDesdeLead`.
@@ -360,7 +360,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, ten
     // hizo rollback → creamos el cliente sin métodos (comportamiento legacy).
     if (isMissingTable(err)) {
       const c = await Client.create(clientPayload);
-      await applyAutoAssignments({ tenantModels, clientId: c.id, tenantHasModule, userId: user?.id ?? null });
+      await applyAutoAssignments({ tenantModels, clientId: c.id, tenantHasModule, hasFeatureFlag, userId: user?.id ?? null });
       return created(c);
     }
     throw err;

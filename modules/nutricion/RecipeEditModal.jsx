@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
 import { computeFoodMacros, computeRecipeMacros } from "@/lib/nutricion/macros.js";
 import { useFoodSections } from "./foodSections.js";
+import PropagarRecetaPanel from "./PropagarRecetaPanel.jsx";
 
 const UNIT_OPTS = [
   { value: "g", label: "gramos" },
@@ -57,6 +58,8 @@ export default function RecipeEditModal({ recipe, onClose, onSaved }) {
   const hasCurrentPhoto = !!recipe?.hasPhoto && !photoRemoved;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  // Receta ya guardada y pendiente de decidir a qué pautas se lleva el cambio.
+  const [propagar, setPropagar] = useState(null);
 
   // Liberar el objectURL del preview al desmontar o reemplazar.
   useEffect(() => () => photoPreview && URL.revokeObjectURL(photoPreview), [photoPreview]);
@@ -151,7 +154,16 @@ export default function RecipeEditModal({ recipe, onClose, onSaved }) {
         data = { ...data, hasPhoto: false };
       }
 
-      onSaved?.(data);
+      // Una receta que YA está metida en algún menú o pauta guarda allí su
+      // propia copia congelada, así que este cambio no le llega a nadie por sí
+      // solo. Antes de cerrar se pregunta a dónde llevarlo. El panel se va solo
+      // y sin pintarse si la receta es nueva, no está usada o ya está al día:
+      // solo interrumpe cuando de verdad hay algo desincronizado.
+      if (isNew) {
+        onSaved?.(data);
+      } else {
+        setPropagar({ id: data.id, name: data.name, data });
+      }
     } catch (err) {
       finishErr(err.message || "Error de red");
     }
@@ -163,6 +175,16 @@ export default function RecipeEditModal({ recipe, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-50 flex">
+      {propagar && (
+        <PropagarRecetaPanel
+          recipeId={propagar.id}
+          recipeName={propagar.name}
+          onDone={() => {
+            setPropagar(null);
+            onSaved?.(propagar.data);
+          }}
+        />
+      )}
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <aside className="relative ml-auto bg-white shadow-2xl overflow-y-auto w-full max-w-2xl flex flex-col fixed right-0 top-14 lg:top-0 bottom-0">
         <header className="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0 sticky top-0 bg-white z-10">

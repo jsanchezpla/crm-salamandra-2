@@ -30,6 +30,7 @@ export default async function ClienteDetailPage() {
   let perfil = PERFIL_COMERCIAL;
   let conPacientes = false;
   let conFacturacion = false;
+  let conNutricion = false;
   try {
     const { Tenant, TenantModule } = getMasterModels();
     const tenant = tenantSlug ? await Tenant.findOne({ where: { slug: tenantSlug } }) : null;
@@ -39,6 +40,12 @@ export default async function ClienteDetailPage() {
       perfil = perfilDeAlta((k) => activos.has(k));
       conPacientes = activos.has("pacientes");
       conFacturacion = activos.has("billing");
+      // Decide si la ficha lleva pestaña "Pautas". Se resuelve AQUÍ, en el
+      // servidor, y no dentro del panel: `ClientPlansPanel` siempre pinta algo
+      // —cargando, vacío o el error del 403— así que un cliente sin Nutrición
+      // vería la pestaña con «Módulo nutricion no activo» dentro. Es el mismo
+      // patrón que `conFacturacion`.
+      conNutricion = activos.has("nutricion");
     }
   } catch {
     perfil = PERFIL_COMERCIAL;
@@ -48,6 +55,13 @@ export default async function ClienteDetailPage() {
   // tenant (CLAUDE.md). El componente sale de un mapa de MÓDULO, así que su
   // identidad es estable, y además esto es un componente de SERVIDOR: se
   // renderiza una vez por petición, no hay remontaje posible.
-  // eslint-disable-next-line react-hooks/static-components
-  return <Component perfil={perfil} conPacientes={conPacientes} conFacturacion={conFacturacion} />;
+  return (
+    // eslint-disable-next-line react-hooks/static-components
+    <Component
+      perfil={perfil}
+      conPacientes={conPacientes}
+      conFacturacion={conFacturacion}
+      conNutricion={conNutricion}
+    />
+  );
 }

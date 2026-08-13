@@ -179,68 +179,63 @@ siembra; el catálogo está en `lib/demo/demos.js`.
 *Comprobado en producción*: 13/08/2026 — desplegado y sano (contenedores arriba,
 `/login` en 200), y `master.tenants` con 7 clientes y ninguna demo de oficio.
 
-### La nutrición solo sabe vivir en casa de Laura · `aumenta`, producto
+### La nutrición ya sabe vivir fuera de casa de Laura, pero nadie se ha mudado · `aumenta`, producto
 
-«Que la nutrición de Aumenta sea igual que la de nutri_laura» tiene una mitad
-gratis y una mitad rota.
+**El trabajo de código está hecho (13/08/2026) y falta desplegarlo.** Lo que
+queda de la tarea es una pregunta de negocio, no de programación: **¿Aumenta
+quiere Nutrición?** Rodrigo decidió no encendérselo hasta que lo confirmen, y
+encenderlo será entonces un comando.
 
-**Gratis**: las cuatro pantallas de `/nutricion/*` ya son idénticas por
-construcción. Ese módulo **no tiene base**: las cuatro páginas importan los
-componentes de `modules/overrides/nutri-laura/` y los usan como valor por
-defecto para cualquier cliente. El `uiOverride` y el flag
-`externalSearchEnabled` que Laura tiene en `master.tenant_modules` están
-muertos: el primero no lo lee nadie y el segundo era de OpenFoodFacts, que se
-retiró entero el 18/07.
+Lo que estaba roto y ya no:
 
-⚠️ **Pero «idéntica» solo vale para esas cuatro pantallas.** La pestaña
-**Pautas** de la ficha del cliente —y con ella asignar un menú desde la propia
-ficha— cuelga de `modules/overrides/nutri-laura/ClientDetailModule.jsx`, que
-solo renderiza Laura: el resto ve `modules/default/ClientDetailModule.jsx`, que
-no importa `ClientPlansPanel`. La prueba está en producción: **la demo tiene
-`nutricion` activo y no tiene la pestaña de Pautas**. Eso es lo que de verdad
-habría que llevar al default si se quiere que Aumenta lo tenga «igual que
-Laura», y es trabajo de código, no de encender un interruptor.
+- **Las cinco tablas sin migración.** De las nueve de nutrición, cinco (`foods`,
+  `plans`, `plan_meals`, `plan_meal_options`, `plan_meal_option_foods`) solo las
+  creaban dos scripts con `crm_nutri_laura` escrito a mano dentro, y ninguno
+  estaba en el mapa del módulo: activarlo en un cliente antiguo dejaba el módulo
+  en el menú y nada debajo. Ahora las crea `migrate-nutricion-base`, declarada
+  la primera de `nutricion` y con arista explícita hacia `migrate-nutricion-recipes`
+  (el orden salía bien por desempate alfabético, que es lo mismo que no salir).
+- **`sequelize.sync()` da las columnas y NO las reglas.** Es la razón de que
+  `somos` (alta del 12/08) sí tuviera las nueve tablas: el alta las crea todas,
+  tenga el cliente el módulo o no. Pero sin un solo CHECK — su `plans` aceptaba
+  una plantilla con paciente asignado, que es justo lo que el CHECK impide. La
+  migración repara además lo ya creado: 5 constraints y 3 índices parciales.
+- **La pestaña Pautas.** `ClientPlansPanel` y los otros diez ficheros del módulo
+  vivían en `modules/overrides/nutri-laura/` aunque los usara todo el mundo;
+  ahora están en `modules/nutricion/` y la pestaña la monta el
+  `ClientDetailModule` por defecto, condicionada al módulo. Se comprobó en los
+  dos sentidos contra el servidor de desarrollo: `demo` (con nutrición) enseña
+  Pautas y `demo_clinica` (sin ella) no.
+- **El recetario vacío.** Activar el módulo ahora siembra los 497 alimentos del
+  catálogo base en ese cliente (`MODULE_SEEDS` en `_module-migrations.js`). Las
+  recetas NO se copian: las 1.084 de Laura son suyas.
+- **El auto-marcado.** `AUTO_ASSIGN_MODULE_KEYS` colgaba solo de tener el módulo,
+  así que en un centro con 1.083 familias toda ficha nueva habría quedado marcada
+  como paciente de dietas. Ahora es un flag por tenant apagado por defecto
+  (`autoAsignarEnAlta`); `migrate-auto-asignar-nutricion` se lo enciende a Laura
+  para que su comportamiento no cambie.
 
-**Rota**: encenderlo hoy deja a Aumenta con el módulo puesto y **cero tablas**.
-De las nueve tablas de nutrición, cinco (`foods`, `plans`, `plan_meals`,
-`plan_meal_options`, `plan_meal_option_foods`) solo las crean dos scripts que
-llevan `crm_nutri_laura` escrito a mano dentro, y ninguno de los dos está en el
-mapa de migraciones del módulo. Las seis migraciones que sí se ejecutarían se
-saltan solas cualquier schema que no tenga ya `foods`, y lo dicen por pantalla:
-«faltan foods/plan_meal_options. Se salta». Es el mismo fallo que dejó a
-Abarcaia tres meses sin registrar leads; la diferencia es que este todavía no le
-ha pasado a nadie, porque nutrición nunca se ha vendido dos veces.
+Lo que sigue en pie de la tarea original: **el vocabulario NO se rompe** —Aumenta
+tiene `pacientes` y `clinica`, que mandan sobre `nutricion` en
+`lib/clients/vocabulario.js`, así que «Clientes» se sigue llamando «Clientes»—, y
+Aumenta empezaría con el recetario de recetas vacío aunque tenga el catálogo de
+alimentos.
 
-Dos avisos para quien lo haga:
-
-- **El vocabulario NO se rompe.** Aumenta tiene `pacientes` y `clinica`, que
-  mandan sobre `nutricion` en `lib/clients/vocabulario.js`, así que «Clientes»
-  sigue llamándose «Clientes» y no salen dos «Pacientes» en el mismo menú. No
-  hay que fiarse del aviso de CLAUDE.md: la demo ya lleva los tres módulos
-  juntos en producción y se ve bien.
-- **`AUTO_ASSIGN_MODULE_KEYS = ["nutricion"]`**: con el módulo puesto, toda
-  ficha NUEVA se marca sola como paciente de nutrición. En un centro de
-  psicología con 1.083 familias, eso hay que quererlo.
-
-Y falta lo que no es código: Laura tiene 3.906 alimentos y 1.084 recetas.
-Aumenta empezaría con el recetario vacío.
-
-✅ De aquí salió un cabo suelto que **ya está atado** (12/08/2026): `CLAUDE.md`,
-`docs/modules/nutricion.md` y la decisión del sub-sprint 8.3 decían que había
-media nutrición «pendiente de despliegue», y llevaba semanas desplegada. Se
-comprobó listando los endpoints dentro del contenedor —los 23 de
-`/api/nutricion/*` son exactamente los mismos que en local— y se corrigieron las
-cuatro afirmaciones. Quien coja esta tarea ya no leerá que falta código por
-subir; lo que falta es lo de abajo.
+Y una cosa que se descubrió por el camino y no es de esta tarea: **los alimentos
+no son comunes entre clientes**. Los 497 del catálogo base sí (se siembran
+iguales en todos), pero lo que añade una nutricionista se queda en su schema —
+hoy hay **465 alimentos que solo existen en el de Laura**. Si se quiere que un
+alimento nuevo llegue a todos, es otra tarea, y hay que decidir antes si el
+trabajo de un cliente debe aparecer en el CRM de otro.
 
 *Se comprueba*: `docker exec crm-salamandra-app-1 node scripts/check-module-tables.js`
-no se queja de `aumenta`/`nutricion`, y las cuatro pantallas cargan.
-*Dónde*: `scripts/_module-migrations.js:324`,
-`scripts/add-nutricion-module-nutri-laura.js:33` y
-`scripts/add-nutricion-c2-plans-nutri-laura.js:36`.
-*Comprobado en producción*: 10/08/2026 — `aumenta` no tiene el módulo (solo lo
-tienen `nutri_laura` y `demo`) y `crm_aumenta` no tiene ninguna de las nueve
-tablas.
+no se queja de `aumenta`/`nutricion`, las cuatro pantallas cargan y la ficha de
+un cliente enseña la pestaña Pautas.
+*Dónde*: `scripts/migrate-nutricion-base.js`, `modules/nutricion/`,
+`lib/clients/moduleAssignments.js` (`AUTO_ASSIGN_FLAG`).
+*Comprobado en producción*: 10/08/2026 — `aumenta` no tiene el módulo y
+`crm_aumenta` no tiene ninguna de las nueve tablas. Sigue igual a propósito: el
+código está listo, la decisión no.
 
 ### El informe clínico: el PDF ya está, falta que lo escriba la IA · `aumenta`
 
@@ -283,16 +278,38 @@ importación.
 
 ### Una receta corregida no llega a quien ya tiene la pauta · `nutri_laura`
 
-Al asignarla se congelan nombre e ingredientes, pero los pasos y la foto se leen
-en vivo. Corregir una cantidad mal puesta NO le llega a quien ya la tiene —ni
-con «Re-aplicar menú origen», que recopia las copias viejas— y reescribir los
-pasos sí le cambia pautas de hace meses. Es una decisión de producto: o se
-congela todo, o se lee todo en vivo, o hay un botón que propague de verdad.
+**Decidido y escrito el 13/08/2026; falta desplegarlo.** Se queda aquí y no en
+Resuelto porque nada entra allí sin verse funcionando en producción.
 
-*Se comprueba*: cambiar una cantidad y ver si llega a un plan ya asignado.
-*Dónde*: `lib/nutricion/menuPdf.js:30` lo dice explícito.
+Lo que pasaba: al asignar se congelaban nombre e ingredientes, pero los pasos y
+la foto se leían en vivo. Media receta quieta y media viva, que es lo peor de las
+dos opciones — corregir una cantidad no le llegaba a quien ya tenía la pauta, ni
+con «Re-aplicar menú origen» (recopia las copias viejas del menú plantilla), y
+reescribir unos pasos sí le cambiaba pautas de hace meses.
+
+De las tres salidas posibles, Rodrigo eligió la tercera: **congelar todo y que
+haya un botón que propague de verdad**. La pauta entregada pasa a ser un
+documento cerrado, y al guardar una receta que ya está usada aparece un panel que
+dice en cuántos sitios está y deja marcar a cuáles llevar la corrección. Las
+pautas archivadas nunca se tocan: son el registro de lo que se entregó aquel día.
+Los menús plantilla salen en la lista aparte, porque un menú sin corregir vuelve
+a repartir el error la próxima vez que se asigne — y eso es lo que arregla, de
+paso, «Re-aplicar».
+
+Al desplegar hay que correr `migrate-nutricion-congelar-receta`, que además de
+las dos columnas nuevas hace un **backfill desde la receta viva**: sin él las
+pautas vivas se quedarían de golpe sin pasos y sin foto. Con él, el día del
+despliegue no se nota nada; lo que cambia es que a partir de ahí se quedan
+quietas.
+
+*Se comprueba*: cambiar una cantidad de una receta usada y ver que la pauta ya
+asignada NO cambia, y que el panel de después de guardar la ofrece.
+*Dónde*: `app/api/nutricion/recipes/[id]/propagate/route.js`,
+`modules/nutricion/PropagarRecetaPanel.jsx`, `lib/nutricion/plans.js`
+(`attachRecipesToTree`).
 *Comprobado en producción*: 09/08/2026 — sigue así, con **3 planes asignados**
-que hoy heredarían el cambio a medias.
+que hoy heredarían el cambio a medias. Probado de punta a punta en local el
+13/08 contra el servidor de desarrollo.
 
 ### Módulo de fichaje · `aumenta`
 
@@ -432,16 +449,29 @@ caracteres, y el global deja de usarse.
 *Comprobado en producción*: 09/08/2026 — solo `nutri_laura` (64) tiene entrada
 propia; el global sigue en 31.
 
-### Aumenta tiene módulos encendidos que no usa · `aumenta`
+### Analíticas de Aumenta: el módulo está, faltan las credenciales de su web · `aumenta`
 
-`inventory`, `orders` y `projects` se activaron en bloque para sembrar datos de
-escaparate; los datos se borraron y los módulos se quedaron. Ya no ensucian la
-portada —los bloques vacíos no se pintan— pero siguen en su menú. Si no los
-usan, apagarlos.
+Se le activó `analytics` el 13/08/2026 (venía de la tarea que proponía apagarle
+los módulos vacíos y que Rodrigo dio la vuelta: los tres vacíos se quedan, lo que
+faltaba era este). El menú y la pantalla ya están, pero enseñan «sin configurar»:
+Analíticas lee Cloudflare Web Analytics con las credenciales DEL CLIENTE, no con
+una nuestra, y Aumenta no las ha dado.
 
-*Se comprueba*: no están en sus módulos activos, o nos dicen que sí los quieren.
-*Comprobado en producción*: 09/08/2026 — los tres activos y **con 0 filas cada
-uno** (productos, pedidos, proyectos).
+Hace falta pedirles dos cosas: el `accountId` de su cuenta de Cloudflare y un
+token de API de solo lectura con permiso «Account Analytics: Read», que se pegan
+en Configuración → Integraciones. Y que su web lleve el beacon de Cloudflare, o
+no habrá visitas que contar. Nada de esto lo podemos hacer nosotros por ellos.
+
+Mientras tanto, la captura diaria no pierde nada porque no hay nada que perder:
+Cloudflare solo guarda 7 días, así que el histórico empieza el día que se
+configure, no antes.
+
+*Se comprueba*: entrar en `/analiticas` como Aumenta y ver visitas en vez de
+«sin configurar».
+*Dónde*: `lib/analytics/cloudflareConfig.js` (qué credenciales pide y por qué son
+del cliente).
+*Comprobado en producción*: 13/08/2026 — módulo activo y `web_visits_daily`
+creada; de los siete clientes solo `spain_enzymes` tiene credenciales puestas.
 
 ---
 

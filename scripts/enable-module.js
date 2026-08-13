@@ -25,11 +25,12 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
 import { MODULE_KEYS } from "../lib/tenant/moduleKeys.js";
-import { MODULES } from "./_module-migrations.js";
+import { MODULES, MODULE_SEEDS } from "./_module-migrations.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -122,7 +123,11 @@ if (migraciones.length === 0) {
 if (flags.has("--dry-run")) {
   process.stdout.write("  --dry-run: no se toca nada.\n");
   process.stdout.write(`  · Se habilitaría master.tenant_modules(${slug}, ${moduleKey})\n`);
-  process.stdout.write(`  · Se ejecutaría ensure-tenant-schema.js ${slug}\n\n`);
+  process.stdout.write(`  · Se ejecutaría ensure-tenant-schema.js ${slug}\n`);
+  for (const { script } of MODULE_SEEDS[moduleKey] || []) {
+    process.stdout.write(`  · Se sembraría ${script} --tenant ${slug}\n`);
+  }
+  process.stdout.write("\n");
   process.exit(0);
 }
 
@@ -238,6 +243,39 @@ if (r.status !== 0) {
       `  vuelve a lanzar  node scripts/ensure-tenant-schema.js ${slug}\n\n`
   );
   process.exit(1);
+}
+
+// ── 4. Los DATOS SEMILLA ────────────────────────────────────────────────────
+//
+// Hay módulos que con la estructura al día siguen sin servir para nada el
+// primer día. El caso es Nutrición: el recetario se construye eligiendo
+// alimentos de un catálogo, así que con `foods` vacía no se puede escribir ni
+// una receta ni un menú. Laura no lo notó porque su catálogo se sembró a mano
+// en el sprint C1 (2026-06), y como nutrición no se había vendido dos veces,
+// nadie estrenó nunca el módulo de cero.
+//
+// Va DESPUÉS del schema: la semilla escribe en tablas que acaban de crearse.
+// Y no es bloqueante — si falla, el módulo queda bien montado y lo único que
+// falta es contenido que se puede volver a sembrar. Un módulo activo con el
+// catálogo a medias es mejor que un alta abortada a la mitad.
+const seeds = MODULE_SEEDS[moduleKey] || [];
+for (const { script, args = [] } of seeds) {
+  const ruta = join(HERE, script);
+  if (!existsSync(ruta)) {
+    process.stdout.write(`\n  ⚠ Semilla declarada pero sin fichero: ${script} — se salta.\n`);
+    continue;
+  }
+  process.stdout.write(`\n  ▶ Sembrando datos base (${script})...\n\n`);
+  // `--tenant` se declara sin valor en el mapa: el slug lo pone quien sabe cuál
+  // es, que es este script.
+  const argv = args.flatMap((a) => (a === "--tenant" ? ["--tenant", slug] : [a]));
+  const s = spawnSync(process.execPath, [ruta, ...argv], { env: process.env, stdio: "inherit" });
+  if (s.status !== 0) {
+    process.stdout.write(
+      `\n  ⚠ La semilla ${script} falló. El módulo está activo y el schema al día;\n` +
+        `    lo que falta son datos. Repite:  node scripts/${script} --tenant ${slug}\n`
+    );
+  }
 }
 
 process.stdout.write(`\n✓ "${moduleKey}" activo y schema de "${slug}" al día.\n\n`);

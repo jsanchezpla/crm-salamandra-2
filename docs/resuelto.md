@@ -28,6 +28,43 @@ Lo más reciente arriba.
 
 ## 13/08/2026
 
+### A Aumenta le faltaba Analíticas, no le sobraban módulos · `aumenta`
+
+**Lo que pasaba.** La tarea estaba escrita al revés. Decía que `inventory`,
+`orders` y `projects` se habían quedado encendidos de cuando se sembraron datos
+de escaparate, con 0 filas cada uno, y proponía apagarlos. Rodrigo lo miró el
+13/08 y la dio la vuelta: **«está fenomenal, no han empezado a usarlos. Lo
+importante es que no tienen el módulo de Analíticas y deberían tenerlo».** Un
+módulo vacío no molesta —los bloques sin datos ya no se pintan en la portada—;
+lo que sí se pierde es lo que no está.
+
+**Lo que se hizo.** `scripts/enable-module.js aumenta analytics`, que es la vía
+correcta y hace las dos mitades del alta a la vez: la fila en
+`master.tenant_modules` y el schema al día. De paso corrió las 86 migraciones
+que le tocaban a `crm_aumenta` y creó `web_visits_daily`, que es la tabla donde
+se guarda el histórico largo de visitas.
+
+**Los tres módulos vacíos se quedan como estaban**, a propósito y no por
+olvido.
+
+**Lo que le falta para enseñar algo, y no es código.** Analíticas lee Cloudflare
+Web Analytics con las credenciales DEL CLIENTE (BYOK, igual que la IA): sin
+ellas la pantalla enseña el estado «sin configurar», que es lo correcto pero es
+un vacío. Hoy solo `spain_enzymes` las tiene puestas de los siete clientes.
+Aumenta tiene que dar su `accountId` y un token de solo lectura de «Account
+Analytics: Read» desde Configuración → Integraciones, y su web tiene que llevar
+el beacon de Cloudflare. Hasta entonces el menú está y la pantalla está vacía.
+
+*Cómo se comprobó*: en producción, 13/08/2026, por SQL. `master.tenant_modules`
+tiene la fila `analytics` de `aumenta` habilitada; `crm_aumenta.web_visits_daily`
+existe; y `admin@aumenta.es` la ve porque su `module_access` es `["all"]`. Los 13
+usuarios con rol `user` NO la ven —su `module_access` es una lista explícita de
+`calendar/citas/clinica/pacientes`— y eso es lo que hace el script a propósito:
+a los admin les da acceso solo, y para los demás hace falta `--grant-users`.
+También se comprobó que la captura diaria está viva: el temporizador
+`crm-capturar-visitas.timer` corre a las 03:40 UTC y `spain_enzymes` lleva 293
+días guardados.
+
 ### Las claves de un cliente ya se las podemos poner nosotros · producto
 
 **Lo que pasaba.** La portada del back-office decía, cliente por cliente, qué
