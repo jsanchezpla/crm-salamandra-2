@@ -122,6 +122,15 @@ const SEEDS = [
   // módulo. No depende de nada: son datos inventados, sin FK a clientes ni
   // equipo, así que puede ir el último.
   { script: "seed-analiticas-demo.js", description: "Analíticas (400 días de visitas web)" },
+  // Fichaje del escaparate. Va DESPUÉS de `seed-team-demo` porque las jornadas
+  // cuelgan de `team_members`. Y tiene que estar en esta lista por lo mismo que
+  // Analíticas: el TRUNCATE de arriba se lleva `fichajes`, y sin resembrar la
+  // pantalla queda vacía — en una demo, un módulo vacío es peor que no tenerlo.
+  //
+  // El seed calcula los meses al vuelo (el actual y el anterior), así que cada
+  // reset lo deja al día solo. Un mes escrito a mano se queda viejo al mes
+  // siguiente y nadie se entera hasta que lo enseña delante de un cliente.
+  { script: "seed-fichaje-demo.js", description: "Fichaje (dos meses, con sus avisos)" },
 ];
 
 const TEST_USERS = [
