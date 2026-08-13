@@ -26,6 +26,56 @@ Lo más reciente arriba.
 
 ---
 
+## 13/08/2026
+
+### Ya se nos puede abrir una incidencia desde cualquier cliente · producto
+
+**Lo que no había.** Ningún camino por el que un cliente nos contara que algo
+va mal. Lo único era un `mailto:` en la pantalla de Soporte, y encima solo lo
+veían los clientes SIN el módulo `support`: Aumenta y la demo, que sí lo tienen,
+veían su propia bandeja y no tenían ni el correo. Lo pidió Jorge el 10/08.
+
+**Lo que hay.** El cliente escribe en `/ayuda` —icono nuevo en el pie del
+sidebar, SIN `moduleKey`, lo ve todo el mundo tenga lo que tenga contratado— y
+nos llega a `/admin/buzon`. Con hilo, estados, capturas y correo en las dos
+direcciones. No se llama «incidencias» ni «avisos» porque las dos palabras ya
+estaban cogidas por otras cosas (`Incidencia` de Clínica y `ClientNotice`).
+
+**La decisión que el backlog dejaba abierta era dónde vive el texto, y vive
+entero en `master`.** Tres motivos: sobrevive a la baja del cliente —el 12/08 se
+purgaron tres schemas, y lo que escriben antes de irse suele ser el motivo—,
+funciona aunque su base esté rota (que es cuando escriben), y la bandeja es una
+consulta y no N conexiones. Es una excepción consciente a la regla de no
+duplicar datos personales en master, así que va con TRES frenos: el formulario
+pide que no se escriban nombres de pacientes, la auditoría guarda la referencia
+y el cliente pero NUNCA el cuerpo, y `podar-buzon.js` caduca lo resuelto a los
+dos años.
+
+**Un fallo que solo se vio en producción.** La primera respuesta salió con el
+asunto «Te hemos contestado · undefined»: a la plantilla le llega la fila de
+Sequelize, que tiene `numero` pero no `ref` —eso solo existe en el objeto
+serializado—. No dio ningún error, se envió tal cual. Arreglado calculando la
+referencia del número, y fijado en el smoke con la fila cruda.
+
+*Cómo se comprobó*: 13/08/2026 en producción, con sesión real en los dos lados.
+Se mandó un aviso desde `crm.salamandrasolutions.com/ayuda` → salió **AV-0001**
+(el correlativo arranca en 1, no en 2); `docker logs` enseñó
+`[email:send] sent to="info@salamandrasolutions.com" subject="AV-0001 · …"` con
+id de Resend, o sea envío real y no simulacro; la fila guardó `pantalla=/ayuda`
+y el navegador, y **no** la query de la URL. Se contestó desde `/admin/buzon`:
+el estado saltó solo a «Esperando al cliente» y salió el segundo correo. Desde
+el CRM se vio la respuesta en el hilo, el punto verde encendido en el icono de
+Ayuda y apagado después de abrirlo. La fila de prueba se borró y la secuencia
+quedó a cero.
+
+*Antes de eso, en local*: `_smoke-buzon.mjs` 42/42 —incluido que la nota interna
+no sale en el lado del cliente ni su adjunto—, el reparto por host comprobado en
+los dos sentidos (404 y 404) y el envío desde la demo cortado con un 403 legible
+y cero filas escritas.
+
+*Dónde*: `docs/modules/buzon.md`, `lib/buzon/`, `app/api/{ayuda,admin/buzon}/`,
+`models/master/Buzon*.model.js`, `scripts/migrate-buzon.js`.
+
 ## 12/08/2026
 
 ### Abarca, Quality y Healim se han dado de baja, y con ellos Referidos · `abarcaia`, `quality_energy`, `healim`, producto

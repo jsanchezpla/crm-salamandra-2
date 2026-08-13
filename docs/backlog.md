@@ -482,43 +482,6 @@ de nginx: 3 llamadas suyas en julio, todas 200, la última el 06/07, y ninguna
 en agosto. En ese mismo periodo `tunutrilaura.com` llamó 29 veces, la última
 hoy a las 04:30.
 
-### Nadie puede abrirnos una incidencia · producto
-
-No hay ningún camino por el que un cliente nos cuente que algo va mal. Soporte
-va del cliente hacia SUS clientes, no hacia nosotros. Y lo que se llama
-«Incidencias» es otra cosa: es del Programa de Excelencia del módulo Clínica, se
-queda dentro del centro y se asigna a alguien de su propio equipo.
-
-Encima casi nadie la tiene. Exige `team_avanzado` **y** (`clinica` o
-`pacientes`), así que la pueden usar 2 de los 9 clientes —Aumenta y la demo— y
-**ninguno de los dos ha registrado una sola**, ni de prueba.
-
-Jorge lo pidió el 10/08: que **cualquier cliente** pueda mandar una incidencia
-hacia arriba, y que llegue a dos sitios — a su propio administrador y a nosotros.
-
-Son dos trabajos y conviene no mezclarlos:
-
-- **Dentro del centro** ya existe a medias: es abrir la pantalla a quien no
-  tiene el módulo clínico, y decidir qué categorías tienen sentido en un cliente
-  que no es una clínica (la taxonomía de hoy es terapéutica, documental,
-  coordinación…).
-- **Sacarla del tenant hasta nosotros** no existe en absoluto, y es la parte
-  delicada. La tabla `incidencias` vive en el schema del cliente, y lo que hay
-  que decidir ANTES de escribir código es qué viaja: el texto entero o solo un
-  aviso con el cliente y un enlace. Una incidencia puede llevar dentro el nombre
-  de un paciente, y duplicar eso en `master` —que es la base compartida por
-  todos— es la misma regla que ya obliga a que la auditoría guarde un resumen y
-  nunca la fila entera.
-
-*Se comprueba*: desde un cliente sin `clinica` —spain_enzymes, por ejemplo— se
-abre una incidencia y nos llega.
-*Dónde*: `app/api/clinica/incidencias/route.js:19,45` son las dos puertas;
-`components/layout/Sidebar.jsx:215` es el menú; `models/tenant/Incidencia.model.js`
-es la tabla que hoy no sale del cliente.
-*Comprobado en producción*: 10/08/2026 — 2 de 9 clientes pueden usarlas y las
-dos tablas tienen **0 filas**. En los otros siete la tabla `incidencias` ni
-existe.
-
 ### Lo que un cliente escriba por correo a Soporte no llega a ningún sitio · `aumenta`, `demo`
 
 Soporte se vendió con dos vías de entrada: el portal y el correo. El portal
