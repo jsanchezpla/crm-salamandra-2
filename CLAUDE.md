@@ -661,6 +661,21 @@ apellido en toda la UI.
       `git commit` en `master` con Conventional Commits + trailer `Co-Authored-By`,
       **`npm run build` en verde ANTES del push** (ya no hay CI que lo pare) y
       `git push origin master`. Enseñar siempre qué se commiteó.
+    - ⚠️ **SINCRONIZAR SIEMPRE ANTES, Y PREGUNTAR SI ALGO SE SOLAPA**
+      (13/08/2026). Aquí trabajan DOS personas empujando a `master` sin PRs que
+      avisen: el 13/08, en una sola hora, entraron `25c7771` y `94a6d3f` mientras
+      había trabajo a medias en local. Antes de commitear nada:
+
+      ```bash
+      git fetch origin && git diff --name-only HEAD origin/master
+      ```
+
+      Si ninguno de esos ficheros es tuyo, `git pull --ff-only` y adelante. **Si
+      alguno coincide, PARA Y PREGUNTA** qué hacer — no lo resuelvas por tu
+      cuenta aunque el conflicto parezca trivial. Lo que se ve en un diff es el
+      texto, no la intención: dos cambios pueden fusionar limpiamente y ser
+      incompatibles igual, y quien puede saberlo es quien escribió el otro.
+      Enseña las dos versiones y espera.
     - Para trabajos grandes sigue estando bien una rama local temporal, pero se
       fusiona a `master` en local y el push va a `master` (sin PR).
     - **Prohibido reescribir historia en master**: nada de `push --force` ni
