@@ -28,6 +28,42 @@ Lo más reciente arriba.
 
 ## 13/08/2026
 
+### Dar un bono era cosa solo de la ficha de Laura · `aumenta`, `somos`, `demo`, todos
+
+**Lo que se vio al terminar lo de arriba.** Rodrigo: «todo el mundo tiene bonos,
+solo tienen que ponerlos». Y era verdad a medias: la tabla, el endpoint, el
+descuento de sesiones y el tipo de cita que ahora se pone solo en el alta manual
+son de todos, pero **la sección «Bonos de sesiones» vivía dentro del override de
+nutri_laura**. Los otros tres centros con Citas tenían el motor entero y ni un
+botón con el que estrenarlo: dar un bono solo era posible llamando a la API.
+
+**Lo que hay.** `components/clients/ClientBonosSection.jsx`, compartido por las
+dos fichas. En la ficha por defecto sale en la pestaña **Citas**; en la de Laura,
+donde estaba. Una sola implementación: su override pasa a importarla y se queda
+con 274 líneas menos.
+
+**Lo que decide la sección, y antes no hacía falta** con un tenant de una
+persona: no se pinta si el centro no tiene Citas (403 en `event-types`, mismo
+criterio que `ClientCitasSection`); dar y quitar son de admin, como el endpoint,
+y quien no lo sea ve los bonos y su cuenta pero no los botones; y **la tarjeta se
+pinta aunque no haya ningún bono**, que es donde está el botón de darlo — antes,
+sin bonos, no salía nada, que es justo el estado de todos los que aún no ha dado
+ninguno. De propina: sin correo en la ficha no deja enviar y explica por qué (el
+bono va atado al correo, y el servidor contestaba un 422 seco), y «Quitar bono»
+pregunta con el diálogo del CRM y no con el del navegador.
+
+*Cómo se comprobó*: 13/08/2026 en producción con la sesión de la demo —datos
+falsos, y solo lecturas—: `/api/auth/me` devuelve `admin` (los botones salen),
+`GET /api/citas/event-types` **200** (la puerta de la sección se abre) y la ficha
+de un cliente trae `"bonos":[]`, o sea la tarjeta vacía con su botón. Que es
+exactamente lo que la sección necesita para pintarse en Aumenta, Somos y la demo.
+*Antes de eso, en local*: el ciclo entero desde una ficha del módulo POR DEFECTO
+—dar un bono de 6 sesiones, ver «Le quedan 6 · 0 de 6 usadas», los dos avisos del
+endpoint, y quitarlo con el diálogo del CRM hasta volver a la tarjeta vacía—.
+*Dónde*: `components/clients/ClientBonosSection.jsx`,
+`modules/default/ClientDetailModule.jsx` (pestaña Citas),
+`docs/modules/citas.md` («Dar un bono a mano»).
+
 ### El bono pone el tipo de cita, y «Eliminar» borra de verdad · `nutri_laura`, `aumenta`, todos
 
 **Lo que pidió Rodrigo.** Tres cosas del alta manual y del calendario: que el
