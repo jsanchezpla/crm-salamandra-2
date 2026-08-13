@@ -28,6 +28,61 @@ Lo más reciente arriba.
 
 ## 13/08/2026
 
+### El bono pone el tipo de cita, y «Eliminar» borra de verdad · `nutri_laura`, `aumenta`, todos
+
+**Lo que pidió Rodrigo.** Tres cosas del alta manual y del calendario: que el
+bono ponga solo el tipo de cita «así no hay que ir a buscarlo a la ficha de
+paciente», que las citas se puedan «eliminar del todo, se quedan canceladas pero
+no desaparecen», y que en el formulario vaya «primero el paciente y segundo el
+tipo de cita».
+
+**El bono pone el tipo.** Al elegir la ficha se piden sus bonos vivos
+(`GET /api/citas/packs`, nuevo: solo activos y con sesiones libres) y el tipo se
+rellena con el contador delante — «le quedan 4 de 6». Con varios bonos no
+adivina: los lista. Si ya habías elegido otro tipo no lo pisa, lo ofrece. Y hay
+un aviso que es el que de verdad importa: **si el bono está a otro correo, la
+cita saldría con el tipo correcto y NO descontaría**, porque `asignarSesion` los
+busca por correo. Era el fallo mudo de los bonos y ahora se ve antes de guardar.
+
+**«Eliminar» borra de verdad** (`?hard=true`). Hacía exactamente lo mismo que
+«Cancelar cita» —dejarla en gris—, así que una cita del día equivocado,
+duplicada o de una prueba se quedaba en el calendario para siempre. Se lleva lo
+que colgaba de ella (cobro sin dinero, peticiones de cambio, avisos), no manda
+ningún correo —el diálogo lo advierte si la cita aún no ha pasado— y queda
+auditado (`citas.booking_deleted`) quién lo hizo y qué se llevó: es el único
+rastro que queda. **Una cita con dinero no se borra**: cobrada, con retención
+viva o devuelta responde 409 y ofrece cancelarla, porque el registro del dinero
+tiene que quedar. Puede borrar quien puede cancelar, no solo dirección: quien
+apunta las citas del día es quien se equivoca al apuntarlas.
+
+**Primero quién, después qué.** El formulario empezaba por el tipo de cita, que
+es el campo que más se falla —Aumenta tiene 57— y el único que la propia ficha
+puede rellenar sola. Ahora: cliente, paciente, tipo, fecha y hora, contacto. El
+email y el teléfono bajan porque se rellenan solos desde la ficha.
+
+*Cómo se comprobó*: 13/08/2026 en producción, después de desplegar `e110bb3`.
+Las dos rutas nuevas responden **401** y no 404 (existen y están cerradas), y los
+textos nuevos están dentro de la imagen. La prueba de verdad se hizo corriendo
+la MISMA función que usa el endpoint contra los datos reales:
+`docker exec crm-salamandra-app-1 node -e "…bonosDeCliente…"` sobre
+`nutri_laura` devolvió **sus 6 bonos activos con sesiones libres**, cada uno con
+su tipo y su cuenta («1 de 6 usadas, 1 reservada · quedan 4»), o sea que a las
+seis se les pondrá el tipo solo; y por SQL, **cero** de esos seis tiene el bono a
+un correo distinto del de su ficha, así que hoy el aviso ámbar no le sale a
+nadie. El borrado NO se ha ejecutado contra una cita real a propósito.
+
+*Antes de eso, en local* (demo, con un bono de prueba ya limpiado): elegir a la
+persona puso el tipo y el aviso; la cita creada quedó enganchada al bono como
+sesión 1 (`pack_id` + `session_number`); borrarla la quitó del calendario y de
+la base de datos dejando su línea de auditoría con la cita, el estado y lo que
+se llevó; una cita con un cobro `paid` devolvió el 409 con el motivo en
+pantalla; y una cancelada se pudo borrar, que es el caso que lo motivó.
+
+*Dónde*: `modules/default/CitasModule.jsx` (`buscarBono`, `deleteBooking`),
+`app/api/citas/bookings/[id]/route.js` (`borrarDeVerdad`),
+`app/api/citas/packs/route.js` (el GET), `lib/citas/packs.js`,
+`docs/modules/citas.md` («Repaso del 13/08/2026» y «Borrar una cita del todo»).
+
 ### Ya se nos puede abrir una incidencia desde cualquier cliente · producto
 
 **Lo que no había.** Ningún camino por el que un cliente nos contara que algo
