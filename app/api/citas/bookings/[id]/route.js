@@ -1,3 +1,4 @@
+import { Op } from "sequelize";
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
 import { avisarCitaPorWhatsapp } from "../../../../../lib/citas/avisosWhatsapp.js";
 import { citaPuedeAvisar } from "../../../../../lib/clients/comunicaciones.js";
@@ -619,8 +620,120 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
   }
 });
 
+/**
+ * Estados de cobro en los que hay DINERO de verdad de por medio.
+ *
+ * `authorized` es una retención viva en la tarjeta de alguien, `paid` un
+ * ingreso y `refunded` una devolución ya hecha: los tres son registros
+ * contables. Los demás (`pending`, `authorizing`, `failed`, `expired`, `void`)
+ * son intentos que no movieron nada y se pueden tirar con la cita.
+ */
+const COBROS_CON_DINERO = {
+  paid: "está cobrada",
+  authorized: "tiene una retención en la tarjeta",
+  refunded: "tiene una devolución registrada",
+};
+
+/**
+ * 42P01 = esa tabla no existe en este schema. Pasa de verdad en tenants con
+ * schema parcial (ver `bookingIncludes` aquí arriba), y no puede impedir borrar
+ * una cita.
+ */
+const esTablaAusente = (err) => err?.parent?.code === "42P01" || err?.original?.code === "42P01";
+
+async function borrarSiExiste(modelo, where) {
+  if (!modelo) return 0;
+  try {
+    return await modelo.destroy({ where });
+  } catch (err) {
+    if (esTablaAusente(err)) return 0;
+    throw err;
+  }
+}
+
+/**
+ * Borrar una cita PARA SIEMPRE (13/08/2026, Rodrigo: «poder eliminar del todo
+ * las citas del calendario, se quedan canceladas pero no desaparecen»).
+ *
+ * «Eliminar» cancelaba, que es lo que ya hace el botón de al lado, así que la
+ * cita seguía ahí en gris. Lo que hace falta al apuntar una cita en el día
+ * equivocado, duplicarla o probar el widget es que desaparezca.
+ *
+ * ── QUÉ SE VA CON ELLA ─────────────────────────────────────────────────────
+ * Lo que cuelga de la cita y quedaría apuntando al vacío: su sesión de cobro
+ * (`payment_sessions`), las peticiones de cambio de hora (`booking_change_
+ * requests`, cuyo `booking_id` es NOT NULL) y los avisos que nacieron de ella
+ * (`client_notices`). Mismo barrido que `scripts/borrar-citas-por-nombre.js`.
+ *
+ * Sin transacción a propósito: una sentencia que falla dentro de una
+ * transacción de PostgreSQL la deja abortada, y aquí hay que tolerar que a un
+ * tenant le falte alguna de esas tablas. Se borra de fuera hacia dentro y la
+ * cita la última; si algo se tuerce, lo que queda son filas sueltas que ya no
+ * significan nada, no una cita a medio borrar.
+ *
+ * ── LO QUE NO SE BORRA ─────────────────────────────────────────────────────
+ * · Una cita con dinero (cobrada, retenida o devuelta) NO se borra: el rastro
+ *   del dinero tiene que quedar. Se dice y se ofrece cancelarla.
+ * · El bono. Si la cita era una sesión de un bono, esa sesión vuelve a quedar
+ *   libre — las sesiones se cuentan desde las citas (`lib/citas/packs.js`), así
+ *   que borrar la cita es exactamente eso: no se dio.
+ * · La auditoría. Es el ÚNICO rastro que queda de la cita, y por eso guarda algo
+ *   más que las otras: sin ella, borrar sería invisible.
+ */
+async function borrarDeVerdad({ ctx, row, userId, ip }) {
+  const { tenant, tenantModels } = ctx;
+  const { PaymentSession, BookingChangeRequest, ClientNotice } = tenantModels;
+
+  let conDinero = null;
+  try {
+    conDinero = await PaymentSession?.findOne({
+      where: {
+        entityType: "booking",
+        entityId: row.id,
+        status: { [Op.in]: Object.keys(COBROS_CON_DINERO) },
+      },
+      attributes: ["id", "status"],
+    });
+  } catch (err) {
+    if (!esTablaAusente(err)) throw err;
+  }
+  if (conDinero) {
+    return error(
+      `Esta cita ${COBROS_CON_DINERO[conDinero.status]}: no se puede borrar, porque el registro del dinero tiene que quedar. Puedes cancelarla.`,
+      409
+    );
+  }
+
+  const antes = {
+    cliente: row.clientName,
+    scheduledAt: row.scheduledAt,
+    estado: row.status,
+    eventTypeId: row.eventTypeId,
+    teamMemberId: row.teamMemberId,
+    sessionNumber: row.sessionNumber ?? null,
+  };
+
+  const cobros = await borrarSiExiste(PaymentSession, { entityType: "booking", entityId: row.id });
+  const cambios = await borrarSiExiste(BookingChangeRequest, { bookingId: row.id });
+  const avisos = await borrarSiExiste(ClientNotice, { bookingId: row.id });
+  await row.destroy();
+
+  await logCitasAudit({
+    tenantId: tenant.id,
+    userId,
+    action: "citas.booking_deleted",
+    entity: "Booking",
+    entityId: row.id,
+    before: antes,
+    after: { borrada: true, cobros, cambios, avisos },
+    ip,
+  });
+
+  return noContent();
+}
+
 // ───────────────────────────────────────────────────────────────────────────
-// DELETE /api/citas/bookings/[id] — equivale a cancelar
+// DELETE /api/citas/bookings/[id] — cancela; con ?hard=true la borra del todo
 // ───────────────────────────────────────────────────────────────────────────
 export const DELETE = withTenant(async (request, { params }, ctx) => {
   try {
@@ -640,6 +753,16 @@ export const DELETE = withTenant(async (request, { params }, ctx) => {
     // Permitir pasar ?reason=... en query string para registrar el motivo
     const { searchParams } = new URL(request.url);
     const reason = normalizeString(searchParams.get("reason"));
+
+    /*
+     * Borrado físico. Misma puerta que cancelar (`noPuedeTocarla`) y no solo
+     * admin: quien apunta las citas del día es quien se equivoca al apuntarlas,
+     * y dejarle cancelar pero no borrar le obliga a pedirlo por WhatsApp. Se
+     * abre porque queda auditado quién lo hizo y qué se llevó por delante.
+     */
+    if (searchParams.get("hard") === "true") {
+      return await borrarDeVerdad({ ctx, row, userId, ip });
+    }
 
     if (row.status === "cancelled") return noContent();
 

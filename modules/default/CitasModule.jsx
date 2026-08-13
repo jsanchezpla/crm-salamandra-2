@@ -274,6 +274,9 @@ export default function CitasModule() {
   const [suggestSent, setSuggestSent] = useState(null); // confirmación tras enviar propuesta al centro
   const [openCreate, setOpenCreate] = useState(false);
   const [createForm, setCreateForm] = useState(EMPTY_BOOKING_FORM);
+  // El bono de quien se acaba de elegir en el alta manual: `{ tono, texto,
+  // eventTypeId }`. Ver `buscarBono`.
+  const [bonoAviso, setBonoAviso] = useState(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
   const [detailNotes, setDetailNotes] = useState("");
@@ -846,22 +849,49 @@ export default function CitasModule() {
 
   async function assignTeamMember(v) { await patchBooking({ teamMemberId: v || null }); }
   async function assignPatient(v) { await patchBooking({ patientId: v || null }); }
+  /**
+   * Borrar la cita DE VERDAD (13/08/2026, Rodrigo: «se quedan canceladas pero
+   * no desaparecen si le doy a eliminar»).
+   *
+   * «Eliminar» hacía lo mismo que «Cancelar cita» —la dejaba en gris en el
+   * calendario—, así que una cita apuntada en el día equivocado, duplicada o de
+   * una prueba se quedaba ahí para siempre. Ahora se va del todo (`?hard=true`).
+   *
+   * Se avisa de lo que no se ve: que al borrar NO sale ningún correo (cancelar
+   * sí lo manda) y que la sesión de un bono vuelve a quedar libre. El error del
+   * servidor se enseña con `avisar` y no en `formError`, que solo se pinta en el
+   * alta: la negativa por tener dinero de por medio hay que poder leerla.
+   */
   async function deleteBooking() {
+    const futura = new Date(openBooking.scheduledAt).getTime() > Date.now();
+    const letraPequena = [];
+    if (futura && openBooking.status !== "cancelled") {
+      letraPequena.push("Aún no ha pasado y al borrarla NO se avisa a nadie. Si quieres que se entere, cancélala antes.");
+    }
+    if (openBooking.sessionNumber > 0) {
+      letraPequena.push(`Es la sesión ${openBooking.sessionNumber} de un bono: esa sesión le vuelve a quedar libre.`);
+    }
     const seguro = await confirmar({
-      titulo: "Eliminar la cita",
-      texto: "Quedará marcada como cancelada.",
-      confirmar: "Eliminar",
+      titulo: "Borrar la cita",
+      texto: ["Desaparece del calendario y del historial. No se puede deshacer.", ...letraPequena].join("\n\n"),
+      confirmar: "Borrar",
       tono: "peligro",
     });
     if (!seguro) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/citas/bookings/${openBooking.id}`, { method: "DELETE" });
-      if (!res.ok && res.status !== 204) throw new Error("Error eliminando");
+      const res = await fetch(`/api/citas/bookings/${openBooking.id}?hard=true`, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) {
+        const j = await res.json().catch(() => null);
+        throw new Error(j?.error || "No se ha podido borrar la cita");
+      }
       setOpenBooking(null);
       calendarRef.current?.getApi().refetchEvents();
     } catch (err) {
-      setFormError(err.message);
+      // Antes del aviso: `avisar` no resuelve hasta que lo cierran, y hasta
+      // entonces la tarjeta de la cita se quedaría con todo deshabilitado.
+      setSaving(false);
+      await avisar({ titulo: "La cita sigue ahí", texto: err.message });
     } finally {
       setSaving(false);
     }
@@ -897,6 +927,101 @@ export default function CitasModule() {
     setCreateForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  /*
+   * ── EL BONO PONE EL TIPO DE CITA (13/08/2026, Rodrigo) ────────────────────
+   *
+   * «Si tiene un bono asignado, cuando se pone el paciente en la cita manual
+   * directamente el tipo de cita se pone con el bono, así no hay que ir a
+   * buscarlo a la ficha.» Quien tiene un bono viene SIEMPRE a lo mismo, y con
+   * 57 tipos de cita en la lista elegir el que no es se paga caro: la cita no
+   * descuenta del bono y hay que rehacerla.
+   *
+   * Solo se pone solo si el campo está vacío. Si ya hay un tipo elegido y el del
+   * bono es otro, no se pisa lo que ha escrito una persona: se ofrece.
+   */
+  function ponerTipoDelBono(eventTypeId) {
+    updateCreateForm("eventTypeId", eventTypeId);
+  }
+
+  async function buscarBono(cliente) {
+    setBonoAviso(null);
+    if (!cliente?.id && !cliente?.email) return;
+    try {
+      const params = new URLSearchParams();
+      if (cliente.id) params.set("clientId", cliente.id);
+      if (cliente.email) params.set("email", cliente.email);
+      const r = await fetch(`/api/citas/packs?${params.toString()}`, { cache: "no-store" });
+      const j = await r.json();
+      const bonos = j?.ok ? (j.data?.bonos ?? []) : [];
+      if (!bonos.length) return;
+
+      // Con varios bonos vivos no se adivina: se enseñan y elige la persona.
+      if (bonos.length > 1) {
+        setBonoAviso({
+          tono: "aviso",
+          eventTypeId: null,
+          texto: `Tiene ${bonos.length} bonos activos (${bonos
+            .map((b) => `«${b.nombre}», le quedan ${b.restantes}`)
+            .join(" · ")}). Elige tú el tipo de cita.`,
+        });
+        return;
+      }
+
+      const bono = bonos[0];
+      const yaHayOtroTipo = Boolean(createForm.eventTypeId) && createForm.eventTypeId !== bono.eventTypeId;
+      if (!yaHayOtroTipo) ponerTipoDelBono(bono.eventTypeId);
+
+      /*
+       * ⚠️ El bono va atado al CORREO (ver `lib/citas/packs.js`): la cita se
+       * engancha buscando el bono por el correo con el que se crea. Si el de la
+       * ficha es otro —hay bonos dados al correo del portal—, la cita se crearía
+       * con el tipo correcto y AUN ASÍ no descontaría. Es el fallo mudo de los
+       * bonos, y aquí se puede decir a tiempo.
+       */
+      const correoCita = (cliente.email || createForm.clientEmail || "").trim().toLowerCase();
+      const correoBono = (bono.correo || "").trim().toLowerCase();
+      const cuenta = `le quedan ${bono.restantes} de ${bono.total}`;
+
+      // Ficha sin correo y bono con él: se pone el del bono. Sin correo la cita
+      // ni se puede crear, y ese es justo el que hace que descuente.
+      const correoPuesto = Boolean(correoBono) && !correoCita;
+      if (correoPuesto) setCreateForm((prev) => ({ ...prev, clientEmail: correoBono }));
+
+      if (correoBono && correoCita && correoBono !== correoCita) {
+        setBonoAviso({
+          tono: "aviso",
+          eventTypeId: bono.eventTypeId,
+          ofrecer: yaHayOtroTipo,
+          texto: `Su bono «${bono.nombre}» (${cuenta}) está a nombre de ${correoBono} y la cita va a ${correoCita}: así NO descontará del bono. Cambia el correo de la cita si quieres que cuente.`,
+        });
+        return;
+      }
+
+      let texto;
+      if (!yaHayOtroTipo && correoPuesto) texto = `Tipo y correo puestos por su bono «${bono.nombre}»: ${cuenta}.`;
+      else if (!yaHayOtroTipo) texto = `Tipo puesto por su bono «${bono.nombre}»: ${cuenta}.`;
+      else if (correoPuesto) texto = `Correo puesto por su bono «${bono.nombre}»: ${cuenta}. El tipo elegido no es el del bono.`;
+      else texto = `Tiene bono de «${bono.nombre}» y ${cuenta}, pero el tipo elegido es otro.`;
+
+      setBonoAviso({
+        tono: yaHayOtroTipo ? "aviso" : "bono",
+        eventTypeId: bono.eventTypeId,
+        ofrecer: yaHayOtroTipo,
+        texto,
+      });
+    } catch {
+      // Sin bonos que enseñar la cita se apunta igual: esto ayuda, no manda.
+    }
+  }
+
+  /** Se rompe el enlace con la ficha → el bono deja de aplicar. */
+  function olvidarBono() {
+    if (bonoAviso?.eventTypeId && createForm.eventTypeId === bonoAviso.eventTypeId) {
+      setCreateForm((prev) => ({ ...prev, eventTypeId: "", modality: "" }));
+    }
+    setBonoAviso(null);
+  }
+
   // Abre "Nueva cita" con la fecha/hora ya puestas desde un clic en el
   // calendario. `iso` es la fecha ISO del hueco pulsado.
   function abrirCreacionEn(iso) {
@@ -904,6 +1029,7 @@ export default function CitasModule() {
     const date = d && !Number.isNaN(d.getTime()) ? toDateInput(d) : "";
     const time = d && !Number.isNaN(d.getTime()) && iso.includes("T") ? toTimeInput(d) : "";
     setCreateForm({ ...EMPTY_BOOKING_FORM, date, time });
+    setBonoAviso(null);
     setFormError(null);
     setOpenCreate(true);
   }
@@ -1042,6 +1168,7 @@ export default function CitasModule() {
       calendarRef.current?.getApi().refetchEvents();
       setOpenCreate(false);
       setCreateForm(EMPTY_BOOKING_FORM);
+      setBonoAviso(null);
     } catch (err) {
       setFormError(err.message);
     } finally {
@@ -1117,7 +1244,7 @@ export default function CitasModule() {
             Bloqueos
           </Link>
           <button
-            onClick={() => { setCreateForm(EMPTY_BOOKING_FORM); setOpenCreate(true); setFormError(null); }}
+            onClick={() => { setCreateForm(EMPTY_BOOKING_FORM); setBonoAviso(null); setOpenCreate(true); setFormError(null); }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0F0F0F] text-white text-xs font-medium rounded-md hover:bg-[#222] transition-colors"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
@@ -1920,6 +2047,7 @@ export default function CitasModule() {
               <button
                 onClick={deleteBooking}
                 disabled={saving}
+                title="La quita del calendario y del historial. No se puede deshacer y no se avisa a nadie."
                 className="text-[12px] px-3 py-1.5 rounded-md bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-50"
               >
                 Eliminar
@@ -1957,89 +2085,37 @@ export default function CitasModule() {
                 </div>
               )}
 
-              <div>
-                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Tipo de cita *</label>
-                <Select
-                  value={createForm.eventTypeId}
-                  onChange={(v) => updateCreateForm("eventTypeId", v)}
-                  options={[
-                    { value: "", label: "— Selecciona —", pinned: true },
-                    ...eventTypes.map((e) => ({ value: e.id, label: `${e.name} (${e.duration} min)` })),
-                  ]}
-                  className={inputCls}
-                  /*
-                   * SIEMPRE, no a partir de N tipos (12/08/2026, Rodrigo).
-                   * Aumenta tiene 57 y encontrar el que toca bajando por la
-                   * lista es el trabajo de verdad. Se probó con el umbral del
-                   * filtro del calendario (`> 8`) y se descartó: quien apunta
-                   * citas todo el día escribe siempre las primeras letras, y
-                   * que la caja aparezca o no según el cliente convierte un
-                   * gesto automático en algo que hay que mirar antes.
-                   */
-                  searchable
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Fecha</label>
-                  <input
-                    type="date"
-                    value={createForm.date}
-                    onChange={(e) => updateCreateForm("date", e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Hora</label>
-                  <input
-                    type="time"
-                    value={createForm.time}
-                    onChange={(e) => updateCreateForm("time", e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-
+              {/*
+                PRIMERO QUIÉN, DESPUÉS QUÉ (13/08/2026, Rodrigo: «poner en la
+                cita manual primero el paciente y segundo el tipo de cita»). El
+                formulario empezaba por el tipo, que es el campo que más se
+                falla —Aumenta tiene 57— y el único que la ficha de la persona
+                puede rellenar sola: eligiéndola antes, su bono pone el tipo (ver
+                `buscarBono`) y su terapeuta pone el profesional.
+              */}
               <BuscadorPaciente
                 etiqueta={patients.length > 0 ? "Cliente (la familia) *" : "Cliente / paciente *"}
                 nombre={createForm.clientName}
                 vinculadaA={createForm.clientId}
-                onEscribir={(texto) =>
-                  setCreateForm((prev) => ({ ...prev, clientName: texto, clientId: "" }))
-                }
-                onElegir={(c) =>
+                onEscribir={(texto) => {
+                  olvidarBono();
+                  setCreateForm((prev) => ({ ...prev, clientName: texto, clientId: "" }));
+                }}
+                onElegir={(c) => {
                   setCreateForm((prev) => ({
                     ...prev,
                     clientId: c.id,
                     clientName: c.name || "",
                     clientEmail: c.email || prev.clientEmail,
                     clientPhone: c.phone || prev.clientPhone,
-                  }))
-                }
-                onDesvincular={() => setCreateForm((prev) => ({ ...prev, clientId: "" }))}
+                  }));
+                  buscarBono(c);
+                }}
+                onDesvincular={() => {
+                  olvidarBono();
+                  setCreateForm((prev) => ({ ...prev, clientId: "" }));
+                }}
               />
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={createForm.clientEmail}
-                    onChange={(e) => updateCreateForm("clientEmail", e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Teléfono</label>
-                  <input
-                    type="tel"
-                    value={createForm.clientPhone}
-                    onChange={(e) => updateCreateForm("clientPhone", e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-              </div>
 
               {/*
                 «Cliente» arriba y «Paciente» aquí NO son lo mismo, y leídos
@@ -2064,6 +2140,95 @@ export default function CitasModule() {
                   </p>
                 </div>
               )}
+
+              <div>
+                <label className="block text-[11px] font-medium text-neutral-500 mb-1">Tipo de cita *</label>
+                <Select
+                  value={createForm.eventTypeId}
+                  onChange={(v) => {
+                    // Cambiarlo a mano deja sin sentido el cartel del bono.
+                    if (bonoAviso?.eventTypeId && v !== bonoAviso.eventTypeId) setBonoAviso(null);
+                    updateCreateForm("eventTypeId", v);
+                  }}
+                  options={[
+                    { value: "", label: "— Selecciona —", pinned: true },
+                    ...eventTypes.map((e) => ({ value: e.id, label: `${e.name} (${e.duration} min)` })),
+                  ]}
+                  className={inputCls}
+                  /*
+                   * SIEMPRE, no a partir de N tipos (12/08/2026, Rodrigo).
+                   * Aumenta tiene 57 y encontrar el que toca bajando por la
+                   * lista es el trabajo de verdad. Se probó con el umbral del
+                   * filtro del calendario (`> 8`) y se descartó: quien apunta
+                   * citas todo el día escribe siempre las primeras letras, y
+                   * que la caja aparezca o no según el cliente convierte un
+                   * gesto automático en algo que hay que mirar antes.
+                   */
+                  searchable
+                />
+                {bonoAviso && (
+                  <div
+                    className={`mt-1.5 text-[11px] leading-snug rounded-md px-2.5 py-1.5 border ${
+                      bonoAviso.tono === "aviso"
+                        ? "text-amber-800 bg-amber-50 border-amber-100"
+                        : "text-emerald-800 bg-emerald-50 border-emerald-100"
+                    }`}
+                  >
+                    {bonoAviso.texto}
+                    {bonoAviso.ofrecer && (
+                      <button
+                        type="button"
+                        onClick={() => ponerTipoDelBono(bonoAviso.eventTypeId)}
+                        className="ml-1.5 underline underline-offset-2 font-medium"
+                      >
+                        Poner el del bono
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Fecha</label>
+                  <input
+                    type="date"
+                    value={createForm.date}
+                    onChange={(e) => updateCreateForm("date", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Hora</label>
+                  <input
+                    type="time"
+                    value={createForm.time}
+                    onChange={(e) => updateCreateForm("time", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={createForm.clientEmail}
+                    onChange={(e) => updateCreateForm("clientEmail", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Teléfono</label>
+                  <input
+                    type="tel"
+                    value={createForm.clientPhone}
+                    onChange={(e) => updateCreateForm("clientPhone", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
 
               {/*
                 El profesional es OBLIGATORIO desde el 12/08/2026 (Rodrigo). Se

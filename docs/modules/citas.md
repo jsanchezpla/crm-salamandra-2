@@ -373,6 +373,11 @@ Los bonos no se borran, se anulan (`PATCH /api/citas/packs/[id]`): las citas ya
 dadas conservan su número. `agotado` no se puede poner a mano — lo dice el
 recuento de las citas, no una persona.
 
+Desde el 13/08/2026 el bono también se lee desde el alta manual de citas
+(`GET /api/citas/packs?clientId=…&email=…`, solo los activos con sesiones
+libres): al elegir a la paciente, su bono pone el tipo de cita. Ver «Repaso del
+13/08/2026» en la sección de UI.
+
 ⚠️ **El bono va atado al CORREO, y ese es el fallo mudo de esta pantalla.** Es
 como la identifica el portal. Si el correo de la ficha no es el que ella usa
 para entrar en la web, el bono queda creado, se ve en su ficha y **ella no ve
@@ -690,6 +695,7 @@ Tabla de transiciones permitidas:
 | `confirmed` | marcar realizada | `completed` | `PATCH /api/citas/bookings/[id]` |
 | `confirmed` | no asistió | `no_show` | `PATCH /api/citas/bookings/[id]` |
 | `confirmed` | cancelar | `cancelled` | `PATCH /api/citas/bookings/[id]` o `DELETE` |
+| cualquiera | borrar del todo | (la fila deja de existir) | `DELETE /api/citas/bookings/[id]?hard=true` |
 | cualquiera → `pending` | **prohibido** | — | 403 desde PATCH base |
 
 ### Por qué no se permite regresión a `pending`
@@ -939,11 +945,14 @@ y el interruptor lo avisa.
 | `/api/citas/availability/bulk` | POST | Operación masiva |
 | `/api/citas/bookings` | GET | Listar paginado. Filtros: `from`, `to`, `future`, `status`, `eventTypeId`, `clientEmail`, `search` |
 | `/api/citas/bookings` | POST | Crear booking manual (default `confirmed`) |
-| `/api/citas/bookings/[id]` | GET/PATCH/DELETE | CRUD. PATCH bloquea regresión a `pending` |
+| `/api/citas/bookings/[id]` | GET/PATCH/DELETE | CRUD. PATCH bloquea regresión a `pending`. DELETE cancela; **`?hard=true` la borra de verdad** (ver «Borrar una cita del todo») |
 | `/api/citas/bookings/[id]/confirm` | PATCH | Transición `pending → confirmed`. Idempotente. Valida solapamiento. Dispara `bookingConfirmed` |
 | `/api/citas/bookings/[id]/reject` | PATCH | Transición `pending → cancelled`. Acepta `cancellationReason` en body. Dispara `bookingRejected` |
 | `/api/citas/bookings/calendar` | GET | JSON FullCalendar para la vista mensual |
 | `/api/citas/clientes` | GET | A quién se le puede poner una cita (surte al buscador del alta manual). `?q=`, `?limit=`, `?todos=1` |
+| `/api/citas/packs` | GET | Los bonos VIVOS de alguien (`?clientId=` y/o `?email=`): activos y con sesiones libres. Lo pide el alta manual para poner el tipo de cita |
+| `/api/citas/packs` | POST | Dar un bono a mano (solo admin) |
+| `/api/citas/packs/[id]` | PATCH | Anular un bono (no se borra) |
 | `/api/citas/blocked-days` | GET / POST / DELETE | Festivos y cierres del centro. POST y DELETE solo admin |
 | `/api/citas/bloqueos` | GET / POST / DELETE | Vacaciones y ausencias de una persona (`team_blocks`) |
 
@@ -993,6 +1002,75 @@ ello, y son a mejor:
   justificada · Cancelar = sin justificar» dentro: dos respuestas distintas
   metidas a la fuerza en un sí/no, donde además cancelar marcaba la falta como
   injustificada. Ahora son dos botones con su frase (`elegir`).
+
+#### Repaso del 13/08/2026 (Rodrigo)
+
+Tres cosas del alta manual y del calendario, otra vez en el módulo por defecto y
+por tanto para todos los tenants con `citas`.
+
+**1. El orden del formulario: primero QUIÉN, después QUÉ.** Empezaba por el tipo
+de cita, que es el campo que más se falla —Aumenta tiene 57— y el único que la
+propia persona puede rellenar sola. Ahora el orden es cliente → paciente → tipo
+de cita → fecha y hora → contacto. Con la ficha elegida antes, su bono pone el
+tipo y su terapeuta pone el profesional; el email y el teléfono se rellenan
+solos desde la ficha, así que bajan al hueco donde solo estorban a quien apunta
+a alguien que aún no la tiene.
+
+**2. El bono pone el tipo de cita.** «Si tiene un bono asignado, cuando se pone
+el paciente directamente el tipo de cita se pone con el bono, así no hay que ir
+a buscarlo a la ficha.» Al elegir la ficha se pregunta a
+`GET /api/citas/packs?clientId=…&email=…` por sus bonos vivos y:
+
+| Caso | Qué hace |
+| --- | --- |
+| Un bono con sesiones libres | Pone su tipo y lo dice: «Tipo puesto por su bono «X»: le quedan 4 de 6» |
+| Varios bonos vivos | No adivina: los lista con lo que queda de cada uno y elige la persona |
+| Ya había otro tipo elegido | No lo pisa. Avisa de que tiene bono y ofrece «Poner el del bono» |
+| La ficha no tiene correo | Pone el del bono, que es el que hace que descuente |
+| El correo del bono es OTRO | Avisa en ámbar: la cita se crearía bien y **no descontaría** |
+
+Ese último aviso es el que más vale. El bono va atado al CORREO
+(`asignarSesion` lo busca por ahí), así que una cita creada con el correo de
+contacto cuando el bono se dio al del portal sale con el tipo correcto y aun así
+no gasta sesión. Era el fallo mudo de los bonos y ahora se ve antes de guardar.
+
+Un tenant sin bonos (Aumenta y el resto) no nota nada: el endpoint devuelve la
+lista vacía y no se toca ningún campo.
+
+**3. «Eliminar» borra de verdad.** Hacía lo mismo que «Cancelar cita» —la dejaba
+en gris en el calendario—, así que una cita apuntada en el día equivocado,
+duplicada o de una prueba se quedaba ahí para siempre. Ver la sección de abajo.
+
+#### Borrar una cita del todo (13/08/2026)
+
+`DELETE /api/citas/bookings/[id]?hard=true`. Sin el parámetro sigue cancelando,
+que es lo que hacen las otras vías.
+
+Se lleva por delante lo que cuelga de la cita y quedaría apuntando al vacío: su
+sesión de cobro (`payment_sessions`), las peticiones de cambio de hora
+(`booking_change_requests`, con `booking_id` NOT NULL) y los avisos que nacieron
+de ella (`client_notices`). Es el mismo barrido que
+`scripts/borrar-citas-por-nombre.js`, y va **sin transacción** a propósito: una
+sentencia que falla dentro de una transacción de PostgreSQL la deja abortada, y
+aquí hay que tolerar que a un tenant le falte alguna de esas tablas.
+
+Tres decisiones que conviene no deshacer sin pensarlo:
+
+- **Una cita con dinero NO se borra.** Si tiene un cobro `paid`, `authorized`
+  (retención viva) o `refunded`, responde 409 y lo dice en pantalla: el registro
+  del dinero tiene que quedar. Cancelarla sigue estando disponible.
+- **No manda ningún correo.** Cancelar avisa al paciente; borrar es limpieza. El
+  diálogo lo advierte cuando la cita todavía no ha pasado, y ofrece cancelar
+  antes.
+- **Puede borrar quien puede cancelar** (`noPuedeTocarla`), no solo admin. Quien
+  apunta las citas del día es quien se equivoca al apuntarlas. Queda auditado
+  (`citas.booking_deleted`) con quién, cuándo, de quién era la cita y qué se
+  llevó por delante: es el ÚNICO rastro que queda, porque la fila ya no está.
+
+⚠️ **Si la cita era la sesión N de un bono, esa sesión vuelve a quedar libre.**
+No es un efecto secundario: las sesiones se cuentan desde las citas
+(`lib/citas/packs.js`), así que borrar la cita es decir que no se dio. El
+diálogo lo avisa antes de borrar.
 
 #### `/citas/bloqueos` — vacaciones y ausencias (12/08/2026)
 

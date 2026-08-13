@@ -1,8 +1,8 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
-import { created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
+import { created, ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
-import { esPack } from "../../../../lib/citas/packs.js";
+import { esPack, bonosDeCliente } from "../../../../lib/citas/packs.js";
 
 /**
  * POST /api/citas/packs — dar un bono a mano (05/08/2026).
@@ -28,6 +28,52 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 const normalizeEmail = (v) => (typeof v === "string" ? v.trim().toLowerCase() : "");
 const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+
+/**
+ * GET /api/citas/packs?clientId=…&email=… — los bonos VIVOS de una persona
+ * (13/08/2026, Rodrigo).
+ *
+ * Nace del alta manual de citas: quien tiene un bono viene siempre a lo mismo,
+ * y había que ir a su ficha a mirar de qué era para elegir el tipo de cita a
+ * mano. Con esto, al elegir a la paciente el tipo se pone solo.
+ *
+ * Solo devuelve los que se pueden gastar HOY (activos y con sesiones libres):
+ * un bono agotado o anulado no debe poner ningún tipo de cita. Si no hay
+ * ninguno —el caso normal— devuelve la lista vacía, que no es un error.
+ *
+ * Se busca por ficha Y por correo, como `bonosDeCliente`: el bono va atado al
+ * correo, pero puede haberse dado desde la ficha con otro (el del portal).
+ */
+export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+  try {
+    if (!hasModule("citas")) return forbidden("Módulo citas no activo");
+
+    const { SessionPack, Client } = tenantModels;
+    // Un tenant sin la migración de bonos no tiene el modelo: no es un fallo,
+    // simplemente no tiene bonos que enseñar.
+    if (!SessionPack) return ok({ bonos: [] });
+
+    const url = new URL(request.url);
+    const clientId = url.searchParams.get("clientId") || null;
+    const email = normalizeEmail(url.searchParams.get("email"));
+    if (!clientId && !email) return error("Hace falta la ficha o el correo", 422);
+
+    // `bonosDeCliente` espera una ficha, pero le vale cualquier objeto con
+    // id/email/portalEmail: así se puede preguntar por un correo suelto (alguien
+    // que llama por teléfono y todavía no tiene ficha).
+    let quien = { id: clientId, email, portalEmail: null };
+    if (clientId && Client) {
+      const ficha = await Client.findByPk(clientId);
+      if (!ficha) return error("Esa ficha no existe", 422);
+      quien = { id: ficha.id, email: email || ficha.email, portalEmail: ficha.portalEmail };
+    }
+
+    const bonos = await bonosDeCliente(tenantModels, quien);
+    return ok({ bonos: bonos.filter((b) => b.estado === "active" && b.restantes > 0) });
+  } catch (err) {
+    return serverError(err);
+  }
+});
 
 /** Nombre legible de quien está creando el bono, para dejarlo escrito. */
 async function quienLoCrea(request, tenantModels) {
