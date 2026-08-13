@@ -70,6 +70,7 @@ export const ONE_OFF = {
   // flujo, no de nadie: una migración de MASTER no cae sola en ningún módulo.
   "migrate-tablero-estado": "MASTER, no toca schemas de tenant: crea `master.tablero_estado`, donde el Registro guarda el tick y el reparto de cada tarea (el TEXTO sigue en los .md del repo). Se corre a mano una vez, idempotente",
   "migrate-paquetes-modulos": "MASTER, no toca schemas de tenant: crea `master.paquetes_modulos` y siembra los dos paquetes que hasta ahora estaban escritos en `catalogo.js`. Se corre a mano con `npm run db:migrate:paquetes`; idempotente, y la semilla NO restaura lo que se haya borrado después",
+  "migrate-buzon": "MASTER, no toca schemas de tenant: crea `master.buzon_avisos`, `buzon_mensajes`, `buzon_adjuntos` y la secuencia del correlativo, que es donde caen los avisos que nos mandan los clientes. Va en master —y no en el schema de cada uno— para que sobrevivan a su baja y para que funcionen aunque su base esté rota. Se corre a mano con `npm run db:migrate:buzon`; idempotente",
 };
 
 /**

@@ -43,6 +43,8 @@
     "db:migrate:booking-auth:prod": "node --env-file=.env.production scripts/migrate-booking-authorization.js",
     "db:migrate:backoffice": "node --env-file=.env.local scripts/migrate-usuario-backoffice.js",
     "db:migrate:backoffice:prod": "node --env-file=.env.production scripts/migrate-usuario-backoffice.js",
+    "db:migrate:buzon": "node --env-file=.env.local scripts/migrate-buzon.js",
+    "db:migrate:buzon:prod": "node --env-file=.env.production scripts/migrate-buzon.js",
     "db:migrate:paquetes": "node --env-file=.env.local scripts/migrate-paquetes-modulos.js",
     "db:migrate:paquetes:prod": "node --env-file=.env.production scripts/migrate-paquetes-modulos.js",
     "db:migrate:projects-1": "node --env-file=.env.local scripts/migrate-projects-sprint-1.js",

@@ -379,33 +379,46 @@ function BotonSecundario({ activo, onClick, children }) {
   );
 }
 
-/** El tenant no tiene el módulo: canal de contacto directo con Salamandra. */
+/**
+ * El tenant no tiene el módulo Soporte, así que esta pantalla no es suya.
+ *
+ * Antes esto era un `mailto:` y era el ÚNICO camino que había hacia nosotros —
+ * y encima solo lo veían los clientes SIN el módulo: los que sí lo tenían
+ * (Aumenta, el que más lo usa) no tenían ninguna forma de escribirnos desde el
+ * CRM. Desde el 13/08/2026 esa línea existe de verdad y vive en `/ayuda`, con
+ * su hilo y su seguimiento, así que esto solo señala hacia allí.
+ */
 function ContactoSalamandra() {
   return (
     <div className="p-4 lg:p-8 max-w-3xl mx-auto">
       <div className="mb-6 lg:mb-8">
-        <div className="text-[10px] uppercase tracking-[0.18em] text-gray-400 mb-1.5">Ayuda · Soporte</div>
-        <h1 className="text-gray-900 text-xl lg:text-2xl font-semibold mb-2">¿En qué te ayudamos?</h1>
+        <div className="text-[10px] uppercase tracking-[0.18em] text-gray-400 mb-1.5">Soporte</div>
+        <h1 className="text-gray-900 text-xl lg:text-2xl font-semibold mb-2">Esta pantalla no está contratada</h1>
         <p className="text-sm text-gray-500 max-w-xl leading-relaxed">
-          Escríbenos y te respondemos en el día.
+          Soporte es la bandeja desde la que atiendes a <strong>tus</strong> clientes: tickets,
+          plazos de respuesta y un portal donde ellos escriben. Si te interesa, dínoslo.
         </p>
       </div>
       <div className="bg-white border border-gray-200 rounded-xl p-6">
         <div className="flex items-start gap-4">
           <div className="w-10 h-10 rounded-lg grid place-items-center shrink-0 text-white" style={{ backgroundColor: "var(--color-primary, #1B3A2D)" }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
             </svg>
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-neutral-800">Escríbenos</h2>
-            <p className="text-[13px] text-neutral-500 mt-1">Incidencias, dudas o mejoras del CRM:</p>
-            <a href="mailto:info@salamandrasolutions.com" className="inline-block mt-2 text-sm font-medium underline underline-offset-2" style={{ color: "var(--color-primary, #1B3A2D)" }}>
-              info@salamandrasolutions.com
-            </a>
-            <p className="text-[11px] text-neutral-400 mt-3">
-              Cuéntanos qué pasaba, en qué pantalla y, si puedes, adjunta una captura: se arregla antes.
+            <h2 className="text-sm font-semibold text-neutral-800">¿Necesitas algo de nosotros?</h2>
+            <p className="text-[13px] text-neutral-500 mt-1 leading-relaxed">
+              Si lo que quieres es contarnos que algo del CRM no funciona, preguntarnos una duda o
+              pedirnos una mejora, eso va por otro sitio y te contestamos ahí mismo.
             </p>
+            <a
+              href="/ayuda"
+              className="inline-block mt-3 text-sm font-medium underline underline-offset-2"
+              style={{ color: "var(--color-primary, #1B3A2D)" }}
+            >
+              Ir a Ayuda
+            </a>
           </div>
         </div>
       </div>

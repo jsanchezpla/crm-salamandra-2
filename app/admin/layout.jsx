@@ -47,6 +47,10 @@ const SECCIONES = [
   // cambiar el rótulo). Renombrarla obligaría a tocar enlaces y rompería
   // cualquier marcador ya guardado, y lo que se lee es esta palabra.
   { href: "/admin/tablero", texto: "Registro" },
+  // Justo detrás del Registro porque es la otra bandeja de entrada del día, y
+  // la única que la escribe gente de fuera: aquí caen los avisos que los
+  // clientes nos mandan desde su propio CRM (13/08/2026).
+  { href: "/admin/buzon", texto: "Buzón" },
   { href: "/admin", texto: "Custodia" },
   { href: "/admin/modulos", texto: "Módulos" },
   // Va pegada a Módulos porque son la misma pregunta en dos pasos: qué tiene

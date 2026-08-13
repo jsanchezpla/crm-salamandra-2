@@ -31,6 +31,7 @@ Antes de implementar cambios en un módulo concreto, lee su doc:
 | Analíticas        | `docs/modules/analytics.md`  | Implementado (spain_enzymes)     |
 | Configuración     | `docs/modules/configuracion.md` | Implementado (claves IA por tenant) |
 | Emails (infra)    | `docs/modules/emails.md`     | Infra transversal                |
+| Buzón / Ayuda     | `docs/modules/buzon.md`      | Implementado (todos, sin `moduleKey`) |
 
 Módulos implementados **sin doc dedicado** (su detalle vive en la tabla de
 módulos más abajo): `calendar`, `orders`.
@@ -240,6 +241,14 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 - `User` — id (UUID), email, passwordHash, role, tenantId, moduleAccess, lastLoginAt
 - `TenantModule` — id, tenantId, moduleKey, enabled, version, schemaExtensions, logicOverrides, uiOverride, featureFlags
 - `AuditLog` — id, tenantId, userId, action, entity, entityId, before, after, ip
+- `BuzonAviso`, `BuzonMensaje`, `BuzonAdjunto` — lo que un cliente nos escribe a
+  NOSOTROS desde su CRM (`/ayuda`), y nuestra respuesta. Están en `master` —y no
+  en el schema de quien escribe— para que sobrevivan a su baja y para que
+  funcionen aunque su base esté rota, que es cuando escriben. **Sin FK a
+  `tenants` ni a `users`**: UUID sueltos más una foto de texto del cliente y de
+  la persona. Es una excepción consciente a la regla de no duplicar datos
+  personales en master, y va con tres frenos (aviso en el formulario, auditoría
+  sin el cuerpo, y `podar-buzon.js`). Detalle en `docs/modules/buzon.md`.
 - `TableroEstado` — el tick y el reparto que se ponen desde el Registro
   (`/admin/tablero`), ENCIMA de lo que dicen `docs/backlog.md` y
   `docs/resuelto.md`. El texto de las tareas sigue en esos ficheros y no se toca
@@ -397,6 +406,7 @@ aplique.
 | outreach      | Captación (leads + scoring IA) | Completo en local (sandbox); falta desplegar | `docs/modules/outreach.md` |
 | formularios   | **Leads Comerciales**: formularios públicos → bandeja → ficha (antes «Formularios») | Implementado (nutri_laura) | `docs/modules/formularios.md` |
 | —             | Configuración (ajustes + claves IA por tenant) | Implementado (siempre visible, sin `moduleKey`) | `docs/modules/configuracion.md` |
+| —             | **Buzón**: el cliente nos escribe a NOSOTROS (`/ayuda` → `/admin/buzon`) | Implementado 13/08/2026 (todos los clientes, sin `moduleKey`) | `docs/modules/buzon.md` |
 
 ### Módulos nuevos (2026-07-27/28)
 

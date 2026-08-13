@@ -457,6 +457,32 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
     return () => { vivo = false; };
   }, [tieneClientesAvanzado]);
 
+  /**
+   * Respuestas nuestras que esta persona todavía no ha abierto, para poner un
+   * punto en el icono de Ayuda.
+   *
+   * Esto SUSTITUYE a la campana, y a propósito: avisarle por la campana obliga a
+   * escribir en el schema de su tenant desde el back-office, y hoy ningún
+   * endpoint de `/api/admin` abre el schema de un cliente. Un contador leído de
+   * master, desde su propio host y con su propia sesión, da el mismo aviso sin
+   * cruzar nada.
+   *
+   * Sin `moduleKey`: Ayuda la ve todo el mundo.
+   */
+  const [ayudaSinVer, setAyudaSinVer] = useState(0);
+
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/ayuda", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!vivo || !j?.ok) return;
+        setAyudaSinVer(j.data.sinVer ?? 0);
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+
   // «Clientes» pasa a «Pacientes» donde el cliente ES el paciente (consulta de
   // nutrición, 04/08/2026). Por MÓDULOS y no por slug —ver
   // lib/clients/vocabulario.js—, y desde el mismo sitio que lo dice la
@@ -691,7 +717,13 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
 
         {/* Usuario + acciones debajo, en horizontal y a la derecha. Orden
             pedido por el socio (2026-07-27): Soporte · Configuración (solo
-            admin) · Cerrar sesión. */}
+            admin) · Cerrar sesión.
+            13/08/2026: entra AYUDA la primera. Son dos cosas distintas y por eso
+            son dos iconos: la llave inglesa es el helpdesk del cliente hacia SUS
+            clientes (módulo `support`); el interrogante es su línea con
+            NOSOTROS. Va delante porque la ve todo el mundo —no depende de ningún
+            módulo— y porque hasta hoy los clientes que sí tenían Soporte no
+            tenían ninguna forma de escribirnos. */}
         <div className="px-4 py-3 border-t border-white/[0.08]">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-white/[0.08] border border-white/15 flex items-center justify-center font-display text-[13px] text-white/70 shrink-0">
@@ -703,6 +735,25 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
             </div>
           </div>
           <div className="flex items-center justify-end gap-1 mt-1.5">
+            <Link
+              href="/ayuda"
+              className={`relative p-1 rounded transition-colors hover:bg-white/[0.06] ${
+                pathname?.startsWith("/ayuda") ? "text-white" : "text-white/30 hover:text-white/70"
+              }`}
+              title="Ayuda de Salamandra"
+              aria-label="Ayuda de Salamandra"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+              </svg>
+              {/* Le hemos contestado y todavía no lo ha abierto. */}
+              {ayudaSinVer > 0 && (
+                <span
+                  className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400"
+                  aria-label={`${ayudaSinVer} respuesta(s) sin leer`}
+                />
+              )}
+            </Link>
             <Link
               href="/soporte"
               className={`p-1 rounded transition-colors hover:bg-white/[0.06] ${
