@@ -25,16 +25,31 @@
  *   · La edad. En el de Laura el mínimo es 14 (la edad legal para consentir el
  *     tratamiento de datos por medios electrónicos), porque su paciente es
  *     quien rellena. Aquí quien rellena es la madre o el padre y la edad que se
- *     pregunta es la del PEQUE: copiando el 14 tal cual, el CRM rechazaría con
- *     un error casi todos los envíos reales de un centro de atención infantil.
+ *     pregunta es la del PACIENTE: copiando el 14 tal cual, el CRM rechazaría
+ *     con un error casi todos los envíos reales de un centro de atención
+ *     infantil.
  *   · Quién rellena y su parentesco. En el formulario de Laura existen en la
  *     web pero NO en su definición del CRM, así que hoy se envían y se tiran
  *     sin dejar rastro. Aquí van declarados, que es lo único que hace que se
  *     guarden.
- *   · La edad del peque NO sube al campo `age` de la ficha. Ese es el de la
- *     persona titular —la madre o el padre—, y meter ahí los años del niño
+ *   · La edad del paciente NO sube al campo `age` de la ficha. Ese es el de la
+ *     persona titular —la madre o el padre—, y meter ahí los años del paciente
  *     sería un dato falso en la ficha de un adulto. Va a `patientAge`, que es
  *     del paciente.
+ *
+ * ── SE DICE «PACIENTE», NO «PEQUE» (13/08/2026, Rodrigo) ───────────────────
+ * El centro no es solo infantil: los talleres de estimulación cognitiva y la
+ * neuropsicología son de adultos, y la propia pregunta 2 ofrece «Soy yo quien
+ * necesita ayuda». Llamarle «el peque» a quien viene dejaba fuera a la mitad
+ * de la gente a la que atienden.
+ *
+ * ⚠️ Cambian los ENUNCIADOS; las `key` siguen siendo `nombrePeque` y
+ * `edadPeque` y no se tocan. Dos motivos: el `name` de cada campo de la web
+ * tiene que coincidir con la `key` o el CRM la descarta en silencio (ver más
+ * abajo), y el CRM se siembra desde aquí en el acto mientras que el tema de
+ * WordPress lo sube Rodrigo cuando puede — con las claves cambiadas, todo lo
+ * que entrara entre un momento y el otro perdería el nombre y la edad sin que
+ * saltara ningún error. Las `key` no las ve nadie; los enunciados sí.
  *
  * ── LOS TRES DESTINOS NUEVOS (08/08/2026) ──────────────────────────────────
  * `mapTo` admitía seis valores, todos de la ficha del cliente, así que el
@@ -90,7 +105,7 @@ const CAMPOS = [
   },
   {
     key: "nombrePeque",
-    label: "¿Cómo se llama el peque?",
+    label: "¿Cómo se llama el paciente?",
     type: "text",
     required: false,
     order: 3,

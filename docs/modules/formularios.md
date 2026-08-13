@@ -29,6 +29,33 @@ preguntas es un sprint aparte.
 
 ---
 
+## No todo formulario de la web es de este módulo
+
+Una web de cliente suele tener **dos puertas**, y solo una pasa por aquí. Lo
+tienen igual tunutrilaura y Aumenta, y confundirlas ya generó una tarea de
+backlog equivocada (12/08/2026, cerrada el 13):
+
+| Quién escribe | Va a | Endpoint | Dónde viven sus preguntas |
+| --- | --- | --- | --- |
+| La familia o la paciente | **Formularios** → bandeja de Comerciales | `POST /api/public/c/{tenant}/formularios/{slug}` | En `forms.fields`, o sea en el CRM |
+| Un profesional que deriva o propone | **Leads** → embudo de Profesionales | `POST /api/public/leads` (cabecera `x-tenant`) | En el tema de WordPress |
+
+La regla para decidir: **si lo que llega hay que aceptarlo o descartarlo y de ahí
+sale una ficha, es de este módulo. Si hay que trabajarlo por etapas a lo largo de
+semanas, es del embudo.** Un colegio que deriva casos no se «acepta» una vez: se
+le llama, se le visita y se le vuelve a llamar. Además el embudo marca
+`tipo_usuario = 'profesional'` en el lead, que es lo que separa esa cartera de la
+de familias, y la bandeja no tiene dónde guardar eso.
+
+⚠️ Lo que se paga por ir por el embudo, y conviene tenerlo presente antes de
+mandar un formulario nuevo por ahí: `/api/public/leads` **no valida nada** y
+acepta una lista fija de claves —cualquier otra la tira en silencio salvo que
+viaje dentro de `customFields`—, no tiene trampa ni control de duplicados
+(solo límite de peticiones), no guarda versión del consentimiento ni retención,
+y sus preguntas están en el tema, así que cambiarlas es tocar la web.
+
+---
+
 ## Tablas
 
 Ambas en el schema del tenant. Nada en `master`.
@@ -50,15 +77,25 @@ Contrato de cada elemento de `fields`:
   options, maxLength, min, max, mapTo, linkUrl, linkLabel }
 ```
 
-- `type`: `text | textarea | tel | email | number | select | checkbox | date | consent`
+- `type`: `text | textarea | tel | dni | email | number | select | checkbox |
+  date | consent`
 - `key`: `[a-z0-9_]{1,40}`, único en el formulario. **Nunca se reutiliza para
   otra pregunta**: las respuestas antiguas quedarían mal etiquetadas.
-- `mapTo`: `null | name | email | phone | age | reason` — a qué parte de la
-  ficha de cliente sube la respuesta al aceptar. Los destinos son fijos a
-  propósito: `age`→`customFields.edad`, `reason`→`customFields.motivo`, y todo
-  lo que no tiene destino se concatena en `customFields.info_adicional`. Son
-  **exactamente** las claves que la ficha de cliente ya pinta, así que aceptar
-  no obliga a tocar ninguna UI.
+- `mapTo`: a qué parte de la ficha sube la respuesta al aceptar. La lista viva
+  está en `lib/formularios/fields.js` y son dos grupos:
+  - **`DESTINOS_FICHA`** — `name | email | phone | age | reason | taxId`. Los
+    que la ficha de cliente ya pinta, así que aceptar no obliga a tocar ninguna
+    UI: `age`→`customFields.edad`, `reason`→`customFields.motivo`,
+    `taxId`→el DNI/NIF de la ficha.
+  - **`DESTINOS_FAMILIA`** (08/08/2026) — `patientName | patientAge |
+    relationship`. Se convierten en el PACIENTE y en el TUTOR al aceptar, y solo
+    en clientes con el módulo `pacientes`. Donde no lo hay no se pierde nada: se
+    quedan en «lo que nos contó».
+  - `null` y todo lo que no tenga destino se concatena en
+    `customFields.info_adicional`.
+
+  ⚠️ Un `mapTo` que no esté en esa lista hace que la respuesta se caiga de los
+  dos sitios. O está declarado allí, o va a null.
 
 Claves de `settings` que el código lee: `notifyEmails`, `privacyUrl`,
 `privacyVersion`, `retentionDays`, `wordpressUrl`.
