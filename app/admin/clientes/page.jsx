@@ -277,7 +277,337 @@ function contrasteConBlanco(hex) {
   return 1.05 / (L + 0.05);
 }
 
-function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
+/**
+ * Cerrar la cuenta de un cliente.
+ *
+ * ── LAS TRAMPAS SON LAS DE SUSPENDER, MÁS UNA ───────────────────────────────
+ * Teclear el identificador, enseñar cuántos datos hay dentro y nunca a nosotros
+ * mismos. La que se añade es la que faltaba en todas partes: decir QUÉ hay en
+ * disco. Un cliente puede tener cero filas y doscientos documentos de salud
+ * subidos, y hasta hoy nadie lo veía porque `borrar-tenant.js` ni miraba
+ * `uploads/`.
+ *
+ * Y la frase que evita el pánico: esto NO borra. Aparta el schema y los
+ * ficheros, y deja escrito el comando exacto para deshacerlo. Lo que no se puede
+ * deshacer —la purga— no está aquí ni va a estarlo.
+ *
+ * El botón nace deshabilitado un segundo y medio, igual que el de módulos: es lo
+ * único que de verdad evita el doble clic con el que se salta cualquier
+ * confirmación sin haberla leído.
+ */
+function ConfirmarBaja({ cliente, onHecho, onCancelar }) {
+  const [rx, setRx] = useState(null);
+  const [err, setErr] = useState(null);
+  const [tecleado, setTecleado] = useState("");
+  const [mirados, setMirados] = useState(false);
+  const [listo, setListo] = useState(false);
+  const [yendo, setYendo] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setListo(true), 1500);
+    fetch(`/api/admin/clientes/${cliente.slug}/baja`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => (j.ok ? setRx(j.data) : setErr(j.error)))
+      .catch((e) => setErr(e.message));
+    return () => clearTimeout(t);
+  }, [cliente.slug]);
+
+  const hayDatos = (rx?.filas ?? 0) > 0;
+  const puede = listo && !yendo && rx && tecleado === cliente.slug && (!hayDatos || mirados);
+
+  async function darDeBaja() {
+    setYendo(true);
+    setErr(null);
+    try {
+      const r = await fetch(`/api/admin/clientes/${cliente.slug}/baja`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmo: tecleado, conDatos: true }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) { setErr(j.error || `Error ${r.status}`); setYendo(false); return; }
+      onHecho(j.data);
+    } catch (e) {
+      setErr(e.message);
+      setYendo(false);
+    }
+  }
+
+  const kb = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.round(b / 1024)} kB`);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(15,23,42,0.55)" }}
+      role="dialog" aria-modal="true" aria-labelledby="baja-titulo">
+      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl p-6 space-y-4 max-h-[85vh] overflow-auto">
+        <div>
+          <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">
+            Vas a cerrar la cuenta de
+          </div>
+          <h2 id="baja-titulo" className="text-xl font-semibold text-neutral-900 mt-1">{cliente.nombre}</h2>
+          <div className="text-xs text-neutral-500 font-mono mt-0.5">{cliente.slug}</div>
+        </div>
+
+        {!rx && !err && <p className="text-sm text-neutral-500">Mirando qué hay dentro…</p>}
+
+        {rx && (
+          <>
+            <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 space-y-1.5">
+              <div className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wide">Qué hay dentro</div>
+              <div className="text-sm text-neutral-700">
+                {rx.tablas} tablas · {rx.usuarios.length} usuario{rx.usuarios.length === 1 ? "" : "s"} ·{" "}
+                {rx.modulos.length} módulos
+              </div>
+              <div className="text-sm" style={{ color: hayDatos ? "#b45309" : "#525252" }}>
+                {hayDatos
+                  ? `${rx.filas.toLocaleString("es-ES")} filas en ${rx.tablasConDatos} tablas`
+                  : "Ni una fila de datos"}
+              </div>
+              {hayDatos && (
+                <div className="text-[11px] text-neutral-500 leading-relaxed">
+                  {rx.datos.map((d) => `${d.tabla}=${d.n}`).join(", ")}
+                  {rx.tablasConDatos > rx.datos.length ? ` (y ${rx.tablasConDatos - rx.datos.length} tablas más)` : ""}
+                </div>
+              )}
+              <div className="text-sm" style={{ color: rx.ficheros.total.ficheros ? "#b45309" : "#525252" }}>
+                {rx.ficheros.total.ficheros
+                  ? `${rx.ficheros.total.ficheros} ficheros en disco (${kb(rx.ficheros.total.bytes)})`
+                  : "Ningún fichero en disco"}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-[12px] text-emerald-900 leading-relaxed">
+              <b>Esto no borra nada.</b> Su schema pasa a llamarse <code>zzz_baja_…</code> y sus
+              ficheros se mueven a <code>uploads/_bajas/</code>: sigue todo entero. Se escribe un{" "}
+              <code>.rollback.sql</code> con el comando exacto para devolverlo. Destruirlo de verdad
+              solo se puede por SSH, y se lleva por delante sus facturas.
+            </div>
+
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[12px] text-red-900 leading-relaxed">
+              Sus usuarios dejan de poder entrar de inmediato, sus formularios y widgets públicos
+              dejan de responder y desaparece del back-office.
+            </div>
+
+            {hayDatos && (
+              <label className="flex items-start gap-2 text-[12px] text-neutral-700">
+                <input type="checkbox" checked={mirados} onChange={(e) => setMirados(e.target.checked)} className="mt-0.5" />
+                <span>He mirado esos datos y sé lo que hay dentro.</span>
+              </label>
+            )}
+
+            <div>
+              <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1">
+                Escribe <span className="font-mono text-neutral-800">{cliente.slug}</span> para confirmar
+              </label>
+              <input value={tecleado} onChange={(e) => setTecleado(e.target.value)} autoComplete="off"
+                className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm font-mono" placeholder={cliente.slug} />
+            </div>
+          </>
+        )}
+
+        {err && <p className="text-sm text-red-700">{err}</p>}
+
+        <div className="flex justify-end gap-3 pt-1">
+          <button type="button" onClick={onCancelar} disabled={yendo}
+            className="px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wide text-neutral-600 hover:bg-neutral-100 disabled:opacity-40">
+            Cancelar
+          </button>
+          <button type="button" onClick={darDeBaja} disabled={!puede}
+            className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white bg-red-700 disabled:opacity-40">
+            {yendo ? "Cerrando…" : "Cerrar la cuenta"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Eliminar del todo una cuenta ya cerrada. **Esto no se puede deshacer.**
+ *
+ * Vive aquí y no en la ficha del cliente porque a estas alturas el cliente ya no
+ * existe: lo que queda es un schema apartado y una carpeta. Y es lo que hace que
+ * este botón no contradiga la regla de `cicloVida.js` —un botón que borra los
+ * datos de un cliente es un accidente esperando su turno—: no alcanza a ningún
+ * cliente, solo a lo que YA se dio de baja. Para llegar hasta aquí hay que haber
+ * cerrado la cuenta antes, tecleando su identificador.
+ *
+ * Dos confirmaciones, y la segunda no es burocracia: reconocer que se destruyen
+ * sus FACTURAS, que hay obligación legal de conservar años. Es la única casilla
+ * del back-office que existe para reconocer una consecuencia legal.
+ */
+function ConfirmarEliminar({ baja, onHecho, onCancelar }) {
+  const [tecleado, setTecleado] = useState("");
+  const [acepta, setAcepta] = useState(false);
+  const [listo, setListo] = useState(false);
+  const [yendo, setYendo] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setListo(true), 1500);
+    return () => clearTimeout(t);
+  }, []);
+
+  const puede = listo && !yendo && tecleado === baja.slug && acepta;
+
+  async function eliminar() {
+    setYendo(true);
+    setErr(null);
+    try {
+      const q = new URLSearchParams({
+        slug: baja.slug, sello: baja.sello, confirmo: tecleado, facturas: "destruir",
+      });
+      const r = await fetch(`/api/admin/bajas?${q}`, { method: "DELETE" });
+      const j = await r.json();
+      if (!r.ok || !j.ok) { setErr(j.error || `Error ${r.status}`); setYendo(false); return; }
+      onHecho(j.data);
+    } catch (e) {
+      setErr(e.message);
+      setYendo(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(15,23,42,0.55)" }}
+      role="dialog" aria-modal="true" aria-labelledby="eliminar-titulo">
+      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl p-6 space-y-4 max-h-[85vh] overflow-auto">
+        <div>
+          <div className="text-[10px] font-semibold text-red-500 uppercase tracking-widest">
+            Esto no se puede deshacer
+          </div>
+          <h2 id="eliminar-titulo" className="text-xl font-semibold text-neutral-900 mt-1">
+            Eliminar del todo a {baja.slug}
+          </h2>
+          <div className="text-xs text-neutral-500 mt-0.5">
+            Dado de baja el {new Date(baja.cuando).toLocaleString("es-ES")}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 space-y-1.5">
+          <div className="text-[11px] font-semibold text-red-800 uppercase tracking-wide">Se destruye</div>
+          <ul className="text-sm text-red-900 space-y-0.5">
+            {baja.schema && <li>· Su schema <code className="text-xs">{baja.schema}</code>, con sus {baja.tablas} tablas y todo lo que hay dentro.</li>}
+            {baja.ficheros && <li>· Todos sus ficheros: documentos, adjuntos, firmas y contratos.</li>}
+            {baja.red && <li>· Su red de rescate, o sea la posibilidad de recuperarlo.</li>}
+          </ul>
+        </div>
+
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] text-amber-900 leading-relaxed">
+          Entre lo que se destruye hay <b>facturas</b>, que tienen obligación legal de conservarse
+          años. Sus registros de auditoría no se borran —nunca se borran— pero se quedan sin dueño
+          para siempre: con esto desaparece la última forma de saber de quién eran.
+        </div>
+
+        <label className="flex items-start gap-2 text-[12px] text-neutral-800">
+          <input type="checkbox" checked={acepta} onChange={(e) => setAcepta(e.target.checked)} className="mt-0.5" />
+          <span>Sé que destruyo sus facturas y que esto no tiene vuelta atrás.</span>
+        </label>
+
+        <div>
+          <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1">
+            Escribe <span className="font-mono text-neutral-800">{baja.slug}</span> para confirmar
+          </label>
+          <input value={tecleado} onChange={(e) => setTecleado(e.target.value)} autoComplete="off"
+            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm font-mono" placeholder={baja.slug} />
+        </div>
+
+        {err && <p className="text-sm text-red-700">{err}</p>}
+
+        <div className="flex justify-end gap-3 pt-1">
+          <button type="button" onClick={onCancelar} disabled={yendo}
+            className="px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wide text-neutral-600 hover:bg-neutral-100 disabled:opacity-40">
+            Cancelar
+          </button>
+          <button type="button" onClick={eliminar} disabled={!puede}
+            className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white bg-red-700 disabled:opacity-40">
+            {yendo ? "Eliminando…" : "Eliminar para siempre"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Las cuentas cerradas que siguen apartadas.
+ *
+ * Existe por algo que no se veía en ningún sitio: tras una baja, lo que queda
+ * —un schema `zzz_baja_*` y una carpeta con sus papeles— no salía en ninguna
+ * pantalla. Había que entrar por SSH y listar schemas para saber si quedaba algo
+ * de alguien. Los tres `.rollback.sql` que sobrevivieron a la purga del 12/08,
+ * con los `password_hash` dentro, estuvieron ahí porque nadie podía verlos.
+ *
+ * Si no hay ninguna, el bloque no se pinta: un apartado vacío en pantalla es
+ * ruido permanente por algo que pasa dos veces al año.
+ */
+function CuentasCerradas({ bajas, onEliminada }) {
+  const [eliminando, setEliminando] = useState(null);
+  const [hecho, setHecho] = useState(null);
+
+  if (!bajas?.length && !hecho) return null;
+
+  return (
+    <div className="mb-8">
+      <div className="flex items-baseline gap-3 mb-2">
+        <h2 className="text-[11px] font-bold uppercase tracking-widest text-neutral-400">Cuentas cerradas</h2>
+        <span className="text-[11px] text-neutral-400">
+          apartadas y recuperables — eliminar es lo único que no tiene vuelta atrás
+        </span>
+      </div>
+
+      {hecho && (
+        <div className="mb-3 rounded-xl border border-neutral-300 bg-neutral-50 px-4 py-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="text-xs text-neutral-700">
+              <b>{hecho.slug}</b> eliminado del todo
+              {hecho.schemaDestruido ? ` (${hecho.tablas} tablas)` : ""}
+              {hecho.ficheros?.length ? " · con sus ficheros" : ""}
+              {hecho.redes?.length ? " · y su red de rescate" : ""}.
+            </div>
+            <button onClick={() => setHecho(null)} className="text-[11px] text-neutral-500 hover:underline shrink-0">
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
+
+      <ul className="rounded-xl border border-neutral-200 bg-white divide-y divide-neutral-100">
+        {bajas.map((b) => (
+          <li key={`${b.slug}_${b.sello}`} className="px-4 py-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-neutral-800">
+                {b.slug}
+                <span className="ml-2 text-[11px] text-neutral-400 font-normal">
+                  {new Date(b.cuando).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" })}
+                </span>
+              </div>
+              <div className="text-[11px] text-neutral-400 truncate">
+                {[
+                  b.schema ? `${b.tablas} tablas en ${b.schema}` : "sin schema",
+                  b.ficheros ? "con sus ficheros" : null,
+                  b.red ? "con red de rescate" : "SIN red de rescate",
+                ].filter(Boolean).join(" · ")}
+              </div>
+            </div>
+            <button type="button" onClick={() => setEliminando(b)}
+              className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-red-700 hover:text-red-900">
+              Eliminar del todo
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      {eliminando && (
+        <ConfirmarEliminar
+          baja={eliminando}
+          onCancelar={() => setEliminando(null)}
+          onHecho={(res) => { setEliminando(null); setHecho(res); onEliminada(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function EditorCliente({ cliente, catalogo, onGuardar, onBaja, guardando, avisos }) {
   const [f, setF] = useState({
     nombre: cliente.nombre,
     modulos: [...cliente.modulos],
@@ -292,6 +622,7 @@ function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
   });
 
   const [confirmando, setConfirmando] = useState(false);
+  const [cerrandoCuenta, setCerrandoCuenta] = useState(false);
 
   // La confirmación enseña nombres, no claves: quien decide si un cliente tiene
   // «Documentos avanzado» no tiene por qué saber que por dentro se llama
@@ -493,12 +824,23 @@ function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
       )}
 
       <div className="flex items-center justify-between gap-3 pt-1">
-        <button type="button" onClick={suspender} disabled={guardando}
-          className={`text-xs font-semibold uppercase tracking-wide disabled:opacity-40 ${
-            cliente.estado === "suspended" ? "text-emerald-700" : "text-red-700"
-          }`}>
-          {cliente.estado === "suspended" ? "Reactivar cliente" : "Suspender cliente"}
-        </button>
+        <div className="flex items-center gap-4 flex-wrap">
+          <button type="button" onClick={suspender} disabled={guardando}
+            className={`text-xs font-semibold uppercase tracking-wide disabled:opacity-40 ${
+              cliente.estado === "suspended" ? "text-emerald-700" : "text-red-700"
+            }`}>
+            {cliente.estado === "suspended" ? "Reactivar cliente" : "Suspender cliente"}
+          </button>
+          {/* CERRAR LA CUENTA (13/08/2026). Antes esto se acababa en «suspender»:
+              quien se iba se quedaba apagado y ya, con su usuario y su schema
+              enteros, escondido tras el interruptor de suspendidos, y nada decía
+              qué pasaba con él. La baja de verdad era SSH — así se dieron las
+              tres del 12/08. */}
+          <button type="button" onClick={() => setCerrandoCuenta(true)} disabled={guardando}
+            className="text-xs font-semibold uppercase tracking-wide text-red-700 disabled:opacity-40">
+            Cerrar la cuenta
+          </button>
+        </div>
         {/* Cambiar el nombre o la marca se guarda directo; tocar los módulos
             pasa por la confirmación, que es lo que mueve tablas y menús. Se
             manda la lista RESUELTA: es la que se acaba de enseñar y confirmar. */}
@@ -524,6 +866,17 @@ function EditorCliente({ cliente, catalogo, onGuardar, guardando, avisos }) {
           onConfirmar={() => {
             setConfirmando(false);
             onGuardar(cliente.slug, cambiosAMandar());
+          }}
+        />
+      )}
+
+      {cerrandoCuenta && (
+        <ConfirmarBaja
+          cliente={cliente}
+          onCancelar={() => setCerrandoCuenta(false)}
+          onHecho={(res) => {
+            setCerrandoCuenta(false);
+            onBaja(res);
           }}
         />
       )}
@@ -555,12 +908,23 @@ export default function AltaClientesPage() {
   const [editando, setEditando] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const [avisosEdit, setAvisosEdit] = useState([]);
+  // Resultado de la última baja. Se queda en pantalla hasta que se cierra a
+  // mano: lleva la ruta del .rollback.sql, que es lo que la hace reversible.
+  const [baja, setBaja] = useState(null);
+  // Las cuentas ya cerradas que siguen apartadas. Van en su propia petición
+  // porque no salen de `master.tenants`: salen de los schemas y del disco.
+  const [bajas, setBajas] = useState([]);
 
   const [form, setForm] = useState({
     nombre: "",
     slug: "",
     slugTocado: false,
     adminEmail: "",
+    // A quién se le escribe, que no es el de arriba: ver
+    // lib/provisioning/contactoCliente.js.
+    contactoEmail: "",
+    contactoNombre: "",
+    contactoTelefono: "",
     modulos: [],
     primaryColor: "",
     secondaryColor: "",
@@ -656,6 +1020,33 @@ export default function AltaClientesPage() {
     }
   }
 
+  /**
+   * Cuenta cerrada. Se cierra la ficha (el cliente ya no está en la lista) y se
+   * dejan a la vista las dos cosas que hay que saber DESPUÉS: dónde quedó su
+   * schema y cuál es el comando para deshacerlo. Eso no puede quedarse en un
+   * `alert` que se cierra solo — es lo único que hace la baja reversible.
+   */
+  function cerrarCuenta(res) {
+    setEditando(null);
+    setAvisosEdit([]);
+    setBaja(res);
+    cargar();
+    cargarBajas();
+  }
+
+  /**
+   * Las cuentas cerradas. No se propaga el error a la pantalla a propósito: si
+   * este listado falla, el alta de clientes tiene que seguir funcionando.
+   */
+  const cargarBajas = useCallback(() => {
+    fetch("/api/admin/bajas", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setBajas(j.ok ? j.data.bajas : []))
+      .catch(() => setBajas([]));
+  }, []);
+
+  useEffect(() => { cargarBajas(); }, [cargarBajas]);
+
   async function crear(e) {
     e.preventDefault();
     setErr(null);
@@ -677,6 +1068,11 @@ export default function AltaClientesPage() {
           nombre: form.nombre,
           slug: form.slug,
           adminEmail: form.adminEmail || undefined,
+          contacto: {
+            email: form.contactoEmail,
+            nombre: form.contactoNombre,
+            telefono: form.contactoTelefono,
+          },
           // La lista RESUELTA: lo que la pantalla acaba de enseñar marcado.
           modulos: resuelto.modulos,
           brand: { primaryColor: form.primaryColor, secondaryColor: form.secondaryColor, logoUrl: form.logoUrl },
@@ -688,7 +1084,7 @@ export default function AltaClientesPage() {
       setCredenciales({ username: j.data.adminEmail, password: j.data.password, slug: j.data.slug, modulos: j.data.modulos });
       setAvisos(Array.isArray(j.data.avisos) ? j.data.avisos : []);
       setAbierto(false);
-      setForm((f) => ({ ...f, nombre: "", slug: "", slugTocado: false, adminEmail: "", fiscalName: "", taxId: "", address: "", city: "", zip: "" }));
+      setForm((f) => ({ ...f, nombre: "", slug: "", slugTocado: false, adminEmail: "", contactoEmail: "", contactoNombre: "", contactoTelefono: "", fiscalName: "", taxId: "", address: "", city: "", zip: "" }));
       cargar();
     } catch (e2) {
       setErr(e2.message);
@@ -740,10 +1136,36 @@ export default function AltaClientesPage() {
             </Campo>
           </div>
 
-          <Campo etiqueta="Usuario administrador" pista="Si lo dejas vacío se crea admin_{identificador}. La contraseña se genera sola y se enseña una vez.">
+          <Campo etiqueta="Usuario administrador" pista="Con lo que ENTRA al CRM, no a dónde se le escribe. Si lo dejas vacío se crea admin_{identificador}. La contraseña se genera sola y se enseña una vez.">
             <input value={form.adminEmail} onChange={(e) => setForm((f) => ({ ...f, adminEmail: e.target.value }))}
               className={inputCls} placeholder="direccion@sucliente.com" />
           </Campo>
+
+          {/*
+            A QUIÉN SE LE ESCRIBE (13/08/2026, el otro medio recado de Jorge del
+            12/08). No había dónde apuntarlo: se daba por hecho que el campo de
+            arriba servía, y no sirve — es el nombre de usuario con el que entra,
+            puede no llevar arroba y si se deja vacío se lo inventa el alta. El
+            día que Custodia dice que a un cliente le faltan cuatro credenciales,
+            a quién se le pide estaba en la cabeza de alguien.
+          */}
+          <div className="grid md:grid-cols-3 gap-4">
+            <Campo etiqueta="Correo de contacto" pista="A quién se le escribe cuando hay que pedirle algo.">
+              <input type="email" value={form.contactoEmail}
+                onChange={(e) => setForm((f) => ({ ...f, contactoEmail: e.target.value }))}
+                className={inputCls} placeholder="maria@sucliente.com" />
+            </Campo>
+            <Campo etiqueta="Persona de contacto">
+              <input value={form.contactoNombre}
+                onChange={(e) => setForm((f) => ({ ...f, contactoNombre: e.target.value }))}
+                className={inputCls} placeholder="María Ruiz" />
+            </Campo>
+            <Campo etiqueta="Teléfono">
+              <input value={form.contactoTelefono}
+                onChange={(e) => setForm((f) => ({ ...f, contactoTelefono: e.target.value }))}
+                className={inputCls} placeholder="600 11 22 33" />
+            </Campo>
+          </div>
 
           {/* Módulos */}
           <div>
@@ -999,6 +1421,7 @@ export default function AltaClientesPage() {
                     cliente={c}
                     catalogo={datos.catalogo}
                     onGuardar={guardarEdicion}
+                    onBaja={cerrarCuenta}
                     guardando={guardando}
                     avisos={avisosEdit}
                   />
@@ -1008,6 +1431,9 @@ export default function AltaClientesPage() {
           </ul>
         </div>
       )}
+
+      {/* Las cuentas cerradas que siguen apartadas, y su segundo acto. */}
+      <CuentasCerradas bajas={bajas} onEliminada={cargarBajas} />
 
       {/* Avisos del alta (p.ej. migraciones que no se pudieron aplicar). Van
           FUERA del modal de credenciales para que no se cierren con él: son
@@ -1027,6 +1453,49 @@ export default function AltaClientesPage() {
               <li key={i} className="text-xs text-amber-900 break-words">{a}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {baja && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(15,23,42,0.55)" }}
+          role="dialog" aria-modal="true">
+          <div className="w-full max-w-xl rounded-xl bg-white shadow-xl p-6 space-y-4 max-h-[85vh] overflow-auto">
+            <div>
+              <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Cuenta cerrada</div>
+              <h2 className="text-xl font-semibold text-neutral-900 mt-1">{baja.nombre}</h2>
+            </div>
+
+            <ul className="text-sm text-neutral-700 space-y-1">
+              <li>· {baja.modulos} módulos, {baja.usuarios} usuarios y su ficha, fuera de master.</li>
+              {baja.schemaApartado && <li>· Su schema, apartado como <code className="text-xs">{baja.schemaApartado}</code>.</li>}
+              {baja.ficheros.movidos > 0 && <li>· {baja.ficheros.movidos} ficheros movidos a <code className="text-xs">{baja.ficheros.carpeta}</code>.</li>}
+            </ul>
+
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <div className="text-[11px] font-semibold text-emerald-900 uppercase tracking-wide mb-1.5">
+                Para deshacerlo
+              </div>
+              <code className="block text-[12px] text-emerald-950 break-all">psql &lt; {baja.rollback}</code>
+              <p className="text-[11px] text-emerald-800 mt-2 leading-relaxed">
+                Apunta esta ruta: es lo único que hace reversible la baja, y el fichero caduca.
+                Sus ficheros no vuelven con ese comando — hay que mover las carpetas a mano.
+              </p>
+            </div>
+
+            {baja.ficheros.errores?.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] text-amber-900">
+                No se han podido apartar todos sus ficheros: {baja.ficheros.errores.join("; ")}
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button type="button" onClick={() => setBaja(null)}
+                className="px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wide text-white"
+                style={{ background: "var(--color-primary, #1B3A2D)" }}>
+                Entendido
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

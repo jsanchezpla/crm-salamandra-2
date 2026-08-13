@@ -49,8 +49,11 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     // el `brand`, no el objeto entero — ahí dentro también viven las
     // credenciales cifradas de sus integraciones, y esta pantalla no las
     // necesita ni debe verlas.
+    // `incluirDemos`: ESTA es la pantalla que administra los tenants, así que es
+    // la única que ve las cuentas de escaparate. Las que solo cuentan (Custodia,
+    // Módulos, Integraciones) las dejan fuera — ver clientesVisibles.js.
     const tenants = await Tenant.findAll({
-      where: whereClientesVisibles(conSuspendidos),
+      where: whereClientesVisibles(conSuspendidos, { incluirDemos: true }),
       attributes: ["id", "name", "slug", "plan", "status", "createdAt", "settings"],
       order: [["createdAt", "DESC"]],
     });
@@ -115,6 +118,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       slug: body.slug || slugDesdeNombre(body.nombre),
       modulos: body.modulos,
       adminEmail: body.adminEmail,
+      contacto: body.contacto || {},
       brand: body.brand || {},
       fiscal: body.fiscal || {},
       plan: body.plan || "starter",

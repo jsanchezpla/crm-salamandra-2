@@ -100,214 +100,53 @@ más alto, que es lo que aguanta a cloud-init).
 
 ## P1 — esta semana
 
-### «Pedirle otra tarjeta» no lleva a ninguna parte · todos
+### «Pedirle otra tarjeta» ya funciona, pero nadie lo ha visto funcionar · todos
 
-El aviso recomienda pedir otra tarjeta y el botón se pinta, pero el endpoint
-responde 409: `failed` está dentro de `PUEDE_HABER_DINERO`, así que una tarjeta
-rechazada cuenta como «ya hay dinero reservado». Si una tarjeta falla, no hay
-salida: o reintentar o cancelar.
+**Escrito y probado el 13/08/2026; sin comprobar en el VPS.** El botón se pintaba
+y el aviso lo recomendaba, pero el endpoint contestaba 409 a toda cita `failed`:
+usaba `tieneRetencionPendiente`, y esa lista mete `failed` a propósito. De las
+tres salidas del dinero perdido —reintentar, pedir otra tarjeta, rechazar—
+desaparecía la del medio, justo la recomendada. El propio endpoint tenía escrito
+el camino de la tarjeta rechazada, con su palabra para el correo
+(`motivo = "rechazada"`), y era inalcanzable.
 
-Ojo al arreglarlo: esa lista está deliberadamente de más —«preguntar a Stripe de
-más es barato; darlo por perdido, no»—. La salida no es sacar `failed` de la
-lista, es que el botón sepa distinguir.
+**Lo que se hizo.** `PUEDE_HABER_DINERO` no se tocó —sus otros cuatro
+consumidores la quieren ancha—: el botón usa ahora una comprobación propia,
+`estorbaParaPedirOtraTarjeta`, que en vez de mirar la lista le PREGUNTA a Stripe
+por la retención vieja con una lectura que no mueve dinero. Muerta (lo normal) →
+crea la nueva y manda el correo. Viva → 409 explicando que el paciente aún tiene
+el importe retenido. Sin poder preguntar → 409 también, porque «no lo sé» no
+puede ser vía libre: crear la segunda a ciegas le bloquea el importe dos veces.
 
-**La prueba de que ese 409 sobra está en el propio fichero.** Catorce líneas más
-abajo de la guarda, el endpoint calcula `motivo = row.paymentStatus === "failed"
-? "rechazada" : "caducada"` y se lo manda a Stripe. El camino de la tarjeta
-rechazada está escrito, pensado y con su palabra propia — y es inalcanzable,
-porque la guarda de arriba lo corta antes de llegar.
+**La decisión que faltaba la tomó Rodrigo el 13/08**: opción (b), el CRM **no**
+suelta el dinero por su cuenta. Y con un matiz suyo que conviene no perder — si
+el banco no acepta el pago, el CRM no reintenta nada: espera a que la persona
+vuelva a pagar físicamente.
 
-**Antes de escribir código hay que elegir una cosa, y es de Rodrigo.** El caso
-que justifica que `failed` esté en la lista es que la retención vieja siga VIVA
-en Stripe (`requires_capture`). Dos salidas:
+**Por qué sigue aquí y no en `resuelto.md`.** Comprobarlo de verdad pide una cita
+`failed` real, y pulsarlo crea una retención y le manda un correo a un paciente
+de carne y hueso; no se puede ensayar contra producción sin molestar a alguien.
+En local tampoco: ningún tenant tiene claves de Stripe. Se queda hasta que se
+vea funcionando, que es lo que manda la norma de arriba.
 
-- (a) Que el botón la suelte solo y cree la nueva en la misma pulsación. Un
-  clic, pero libera dinero de un paciente sin que nadie lo haya pedido.
-- (b) Que devuelva 409 SOLO en ese caso, con el mensaje bueno —«ese cobro sigue
-  vivo: reintenta el cobro o recházalo para soltarlo»— y que decida ella.
-
-Si la retención vieja está muerta o cancelada, que es lo normal, se crea la
-nueva sin más y el 409 desaparece con las dos opciones. Esto lo decide Rodrigo
-porque en este repo la política de qué hace el CRM con el dinero de alguien está
-reservada a humanos a propósito: en `lib/citas/reembolsoCita.js` se BORRÓ el
-código de devoluciones automáticas en vez de dejarlo detrás de un interruptor,
-justo para que nadie lo encendiera sin querer.
-
-**Y no se toca `PUEDE_HABER_DINERO`.** Su envoltorio `tieneRetencionPendiente`
-lo usan otros cuatro sitios que sí quieren la lista ancha: confirmar la cita
-(dos veces), pasarla a confirmada o completada, y el reembolso. El arreglo
-mínimo es una comprobación NUEVA al lado, que solo use este botón.
-
-⚠️ Si se abre la guarda sin liquidar antes la retención vieja, al paciente le
-quedan DOS retenciones a la vez sobre la misma cita —el doble del importe
-bloqueado en su tarjeta hasta que la vieja caduque sola— y el CRM pierde el
-rastro de la primera, porque `paymentSessionId` se pisa con la nueva. Eso
-alcanza a todos los clientes con citas y cobro online.
-
-*Se comprueba*: pulsarlo en una cita `failed` manda el correo en vez de dar 409,
-y el paciente no acaba con dos retenciones.
-*Dónde*: `app/api/citas/bookings/[id]/pedir-tarjeta/route.js:77-82` es la guarda
-y `:91` el código que no se alcanza; `lib/citas/cobroCita.js:37` es la lista. Los
-otros cuatro consumidores: `bookings/[id]/confirm/route.js:152` y `:161`,
-`bookings/[id]/route.js:347` y `lib/citas/reembolsoCita.js:72`.
-*Repasado en el código*: 12/08/2026 — la guarda, el código inalcanzable y los
-cuatro consumidores siguen exactamente donde dice. Esto es lectura del repo, no
-del VPS: lo que se añade hoy es la decisión que faltaba, no un hecho nuevo de
-producción.
-*Comprobado en producción*: 09/08/2026 — `failed` sigue en la lista.
+*Se comprueba*: en una cita `failed` con la retención ya muerta, pulsarlo manda
+el correo en vez de dar 409; y con una viva, contesta 409 sin crear la segunda
+—el paciente nunca acaba con dos importes bloqueados—. La vía barata es un
+tenant de pruebas con claves `sk_test_`: entonces vale `_smoke-autorizacion.mjs`
+para montar el caso y este flujo entero se puede ensayar sin tocar a nadie.
+*Dónde*: `lib/citas/cobroCita.js` (`estorbaParaPedirOtraTarjeta`),
+`lib/payments/autorizacion.js` (`leerEstadoAutorizacion`),
+`app/api/citas/bookings/[id]/pedir-tarjeta/route.js:77`. El apartado del doc:
+`docs/modules/citas.md`, «Cuando el dinero se pierde: las tres salidas».
+*Probado*: 13/08/2026 — `scripts/_smoke-pedir-otra-tarjeta.mjs`, seis casos en
+verde, incluido el de «no se pudo preguntar → estorba». No cubre la distinción
+viva/muerta contra Stripe: eso necesita claves de prueba.
+*Comprobado en producción*: 09/08/2026 — `failed` sigue en la lista (que es
+correcto y no se ha tocado). Del arreglo nuevo, nada todavía.
 
 ---
 
 ## P2 — cuando se pueda
-
-### Custodia sabe qué claves le faltan a cada cliente, pero no puede ponérselas · producto
-
-La portada del back-office ya dice, cliente por cliente, qué credenciales tiene
-puestas y cuáles le faltan — hasta con la frase «Ya tiene todas las claves
-puestas. No hay nada que pedirle». Lo que no puede hacer es ponerlas: hoy la
-única forma es que entre el cliente, en su propia Configuración.
-
-Y no entran. 1 de 9 clientes tiene clave de Anthropic —y somos nosotros— y 0 de
-9 la de OpenAI, con once disparadores de IA desplegados y sin usar por nadie.
-
-Jorge, 12/08: que las pueda poner el cliente **o** nosotros desde Custodia.
-
-⚠️ Esto NO rompe la regla escrita de ese endpoint, y conviene decirlo porque
-parece que sí. La regla es que **no descifra nada** —«no existe un caso legítimo
-en el que haga falta LEER la clave de Stripe de un cliente»— y sigue en pie tal
-cual: escribir una clave no obliga a leer la anterior. El campo tiene que ser de
-solo escribir: se pega, se cifra con `secretBox` igual que lo hace la
-Configuración del cliente, y no se devuelve nunca, ni enmascarado.
-
-Y falta el otro medio recado del mismo día: **no hay dónde apuntar el correo de
-contacto de un cliente**. El alta pide un `adminEmail`, pero eso es el USUARIO
-con el que entra —si se deja vacío se inventa `admin_{slug}`—, no a quién se le
-escribe cuando hay que pedirle algo.
-
-*Se comprueba*: pegar la clave de Anthropic de un cliente desde `/admin`, que su
-CRM la use, y que ninguna pantalla la devuelva.
-*Dónde*: `app/api/admin/configuraciones/route.js:10-27` es la regla de no
-descifrar y `app/admin/page.jsx:356` la frase de arriba; el guardado del lado del
-cliente está en `app/api/tenant/settings/route.js` y el cifrado en
-`lib/crypto/secretBox.js`.
-*Comprobado en producción*: 12/08/2026 — 1 de 9 con Anthropic y 0 de 9 con
-OpenAI; el endpoint del back-office es de solo lectura y en el alta no hay ningún
-campo de contacto.
-
-### Una sola demo para todos los oficios · `demo`
-
-La demo pública entra siempre al mismo sitio: el slug está escrito en el código
-(`DEMO_SLUG = "demo"`) y esa cuenta tiene **20 módulos activos a la vez** —
-clínica, nutrición, inventario, pedidos, facturación, formación, captación,
-proyectos y soporte. Una nutricionista que entra a verla se encuentra un centro
-de psicología con almacén; un centro clínico se encuentra un recetario.
-
-Jorge, 12/08: hacer demos por oficio, al menos una clínica y una de nutrición.
-
-Lo que hay que resolver antes de sembrar nada es **cómo elige el visitante**. Hoy
-el botón hace un POST a `/api/auth/demo` que no admite ningún parámetro, así que
-o se abre a un slug pedido —con lista blanca, nunca el slug tal cual, que sería
-la puerta para entrar en cualquier cliente— o hay un botón por demo.
-
-Y cada demo nueva se lleva consigo su copia dorada, que es lo que la deja
-impecable para el siguiente visitante. Esa copia ya está desincronizada y su
-restauración se abandona a medias (ver la tarea de la demo pública, más abajo):
-multiplicar demos sin arreglar eso antes multiplica el problema por tres.
-
-*Se comprueba*: desde la web se puede entrar a una demo de nutrición y a una
-clínica, y cada una se limpia sola entre visitantes.
-*Dónde*: `app/api/auth/demo/route.js:10` es el slug escrito a mano;
-`scripts/demo-golden-snapshot.js` es la copia.
-*Comprobado en producción*: 12/08/2026 — un solo tenant de demo, con 20 módulos
-encendidos.
-
-### El back-office sabe suspender a un cliente, pero no darlo de baja · producto
-
-`/admin/clientes` deja crear, editar, cambiar marca, activar módulos y
-**suspender**, y ahí se acaba. No hay forma de cerrar la cuenta de un cliente:
-en todo el back-office (`app/api/admin/**` y `app/api/provisioning/**`) hay
-**siete handlers y ni un solo `DELETE` ni `PUT`**. La cabecera del endpoint lo
-dice —«No existe DELETE»—, igual que `lib/provisioning/cicloVida.js`: «un botón
-que borra los datos de un cliente es un accidente esperando su turno».
-
-Para el BORRADO esa decisión sigue siendo buena. El problema es que no hay nada
-en medio: quien se va se queda suspendido y ya, con su usuario y su schema
-enteros, escondido del listado tras el interruptor «ver los N suspendidos», y
-nada dice qué pasa con él.
-
-**Actualizado el 12/08/2026.** Los tres suspendidos que había —`abarcaia`,
-`quality_energy` y `healim`— se dieron de baja ese día por SSH, a mano, y se
-purgaron. O sea que hoy no hay ninguno esperando; lo que queda es que la próxima
-vez vuelva a hacerse igual, desde una terminal, en vez de desde el panel. De esa
-operación salieron dos cosas para esta tarea: la red YA sobrevive al despliegue
-(ver el punto tachado de abajo) y estos tres no tenían ni un fichero en
-`uploads/`, así que el agujero de los ficheros sigue sin haberse probado con un
-cliente que sí los tenga. Y una tercera, nueva: los tres `.rollback.sql` que
-quedaron en `uploads/_bajas/` ya no sirven para nada —sus schemas están
-purgados— pero **siguen teniendo los `password_hash` en claro sobre disco**.
-
-Existe media pieza: `scripts/borrar-tenant.js` (11/08), **ya en git y desplegada
-el 11/08**. Su idea es la correcta —APARTAR en vez de destruir: renombrar el
-schema a `zzz_baja_<slug>_<fecha>`, borrar las filas de `master` y dejar un
-`.rollback.sql`, con la destrucción real como segundo comando aparte—. Pero
-**tal como está no se puede poner detrás de un botón**, y arreglarlo es el
-trabajo de verdad de esta tarea:
-
-- ~~**La purga no tiene ningún freno.**~~ **Arreglado el 11/08**, antes de subir
-  el script, porque era un destructor de datos y no podía viajar así. `--purgar`
-  ignoraba el slug posicional y el `--confirmo=`: recorría TODOS los schemas
-  `zzz_baja_*` y les hacía `DROP ... CASCADE`, de modo que
-  `borrar-tenant.js nutri_laura --purgar --aplicar` parecía tocar a un cliente y
-  se llevaba a todos los apartados. El acto irreversible estaba PEOR protegido
-  que el reversible. Ahora la purga se acota al slug y exige el mismo
-  `--confirmo=`; llevarse los de todos los clientes de golpe hay que pedirlo con
-  `--todos --confirmo=todos`. El acotado se hace filtrando por
-  `^zzz_baja_<slug>_\d{14}$` **y no con un `LIKE`**, porque un slug puede ser
-  prefijo de otro (`demo` se habría llevado por delante los apartados de
-  `demo_golden`).
-- ~~**La red no sobrevive al despliegue.**~~ **Comprobado que ya no pasa el
-  12/08/2026.** El `.rollback.sql` se escribe hoy en `/app/uploads/_bajas/`, que
-  es el volumen montado, y los tres de ese día siguieron ahí después de un
-  `deploy.sh` completo. Lo que NO está arreglado es la segunda mitad del punto:
-  esos ficheros llevan los `password_hash` en claro sobre disco, con permisos
-  `600`, y nadie los caduca.
-- **Los ficheros se quedan.** El script no toca `uploads/` en ninguna línea, y
-  los seis almacenes no comparten forma: tres ponen el slug primero y tres lo
-  meten detrás del tipo (`documents/`, `support/`, `nutricion-recipes/`).
-  Apartar el schema deja en disco los papeles del cliente, documentos de salud
-  incluidos. Cómo hacerlo bien ya está resuelto a nivel de ficha en
-  `lib/clients/borrarRastro.js`.
-- **No es atómico ni avisa a la app.** El `ALTER SCHEMA` y los tres `DELETE` van
-  sueltos, sin transacción: si el proceso muere en medio queda una fila de
-  tenant sin schema, que es justo lo que `altaTenant.js` describe como veneno
-  para todas las altas siguientes. Y como corre en otro proceso no puede
-  invalidar la caché, así que durante hasta 60 s el CRM sigue resolviendo un
-  tenant cuyo schema ya no se llama así.
-
-Con eso arreglado, lo razonable es que el panel ofrezca **solo el primer acto**,
-el reversible, con las trampas que ya tiene suspender (teclear el slug, enseñar
-cuántos datos hay dentro, nunca a nosotros mismos), y que la purga siga siendo
-SSH.
-
-⚠️ Y antes hay que responder qué manda sobre la retención: las facturas tienen
-obligación de conservarse años y los registros de auditoría no se borran nunca
-(regla del proyecto). «Apartar» convive con eso; «purgar» no.
-
-*Se comprueba*: cerrar un cliente de prueba desde `/admin/clientes` lo saca del
-listado, deja su schema como `zzz_baja_*` sin tocar a los demás, se lleva sus
-ficheros de las seis rutas de `uploads/`, deja el `.rollback.sql` en sitio
-montado, y `master.audit_logs` guarda su fila `provisioning.cliente_baja`.
-*Dónde*: `app/api/admin/clientes/[slug]/route.js:36` (solo PATCH),
-`lib/provisioning/cicloVida.js:26-28` (la decisión de no tener botón) y
-`scripts/borrar-tenant.js` (la red efímera, en la parte que escribe el
-`.rollback.sql`; la purga sin frenos que había ahí ya está arreglada).
-*Comprobado en producción*: 12/08/2026 — **7 clientes y ningún suspendido**: los
-tres que había se dieron de baja y se purgaron ese día por SSH, no desde el
-panel, que sigue sin ofrecerlo. Los tres `.rollback.sql` sobrevivieron al
-`deploy.sh` de las 20:20 en `uploads/_bajas/`, y `uploads/` no tenía ni un
-fichero de los tres, así que el agujero de los ficheros sigue sin probarse.
-(Antes, 11/08/2026: 9 clientes, 2 suspendidos desde el 08/08, ni un schema
-`zzz_baja_*` y cero filas `provisioning.cliente_baja`.)
 
 ### La nutrición solo sabe vivir en casa de Laura · `aumenta`, producto
 
@@ -479,54 +318,45 @@ bandeja de Aumenta.
 **ninguna se llama RESEND**, ni `RESEND_INBOUND_DOMAIN` ni `RESEND_WEBHOOK_SECRET`.
 `support` está activo en `aumenta` y `demo`; Aumenta tiene 0 tickets.
 
-### La demo pública ya no se limpia sola · `demo`
-
-La demo se rehace desde una copia «dorada» para que cada visitante la encuentre
-impecable. Esa copia se quedó atrás respecto a la base: el estado de cobro de
-las citas admite hoy nueve valores y la copia solo conoce cinco, así que al
-restaurar choca y la restauración se abandona sin ruido. La demo sigue en pie,
-pero lo que ensucie un visitante se lo encuentra el siguiente — y es la
-herramienta con la que se enseña el CRM.
-
-*Se comprueba*: el estado de cobro tiene los mismos valores en `crm_demo` y en
-`crm_demo_golden`, y una restauración termina sin error.
-*Dónde*: se regenera con `scripts/demo-golden-snapshot.js`, siempre después de
-sembrar.
-*Comprobado en producción*: 10/08/2026 — `enum_bookings_payment_status` tiene
-**9 valores en `crm_demo` y 5 en `crm_demo_golden`**; a la copia le faltan
-`authorized`, `authorizing`, `capturing` y `void`.
-
 ---
 
 ## P3 — deuda
 
 ### La foto dorada de la demo va por detrás del schema · `demo`
 
-La demo se restaura sola desde `crm_demo_golden` en cada recarga dura, y ese
-schema es una FOTO: se sacó un día y ahí se quedó. Las migraciones no lo tocan
-—y hacen bien: no es un tenant de `master`, así que no aparece en ninguna lista—,
-de modo que cada columna que se añade desde entonces existe en `crm_demo` y no
-en la foto.
+Cada demo se restaura sola desde su foto `crm_{slug}_golden` en cada recarga
+dura, y ese schema es una FOTO: se sacó un día y ahí se quedó. Las migraciones no
+lo tocan —y hacen bien: no es un tenant de `master`, así que no aparece en
+ninguna lista—, de modo que cada columna que se añade desde entonces existe en el
+schema vivo y no en la foto.
 
 No rompe nada, y eso es lo que hace que nadie se acuerde: el restore solo copia
 las columnas que existen en LOS DOS schemas, así que las nuevas se quedan con su
 valor por defecto en vez de con el dato de ejemplo. El efecto es que la demo
-—que es el escaparate de ventas— arranca con esos campos vacíos: hoy son al
-menos cuatro de `clients` (`fiscal_tax_id`, `es_consulta_externa`,
-`categoria_externa`, `auto_confirm_bookings`), y la lista crece sola con cada
-sprint.
+—que es el escaparate de ventas— arranca con esos campos vacíos.
 
-Se arregla rehaciendo la foto con `scripts/demo-golden-snapshot.js` después de
-un sprint que añada columnas. Lo que falta por decidir es cuándo: a mano cada
-cierto tiempo, o dejarlo dicho en el guion de despliegue.
+**Ya se puede medir (13/08/2026).** Antes había que ir tabla por tabla a mano y
+por eso nadie lo miraba nunca. `npm run db:demo:snapshot:check` lo dice de las
+cuatro demos de golpe, con nombres. Al mirarlo ese día en local, ANTES de rehacer
+las fotos, salían **9 tablas y 38 columnas** de diferencia, no las cuatro que
+decía esta tarea: `blocked_days`, `waitlist_entries`, `contract_signatures`,
+`intervention_plans`, `session_packs`… La cifra real era diez veces la anunciada.
 
-*Se comprueba*: comparar columnas entre `crm_demo` y `crm_demo_golden` para una
-tabla cualquiera; hoy salen cuatro de diferencia en `clients`.
+**Lo que queda es CUÁNDO rehacerla**, que sigue sin decidirse. Rehacerla es un
+comando y no se olvida por difícil, se olvida porque nada avisa. Las opciones
+siguen siendo las de siempre: a mano cada cierto tiempo, o dejarlo escrito en el
+guion de despliegue. Una tercera, ahora que se puede medir: que el comprobador
+salga en el despliegue y cante la diferencia.
+
+*Se comprueba*: `npm run db:demo:snapshot:check` (o el mismo script con
+`--comprobar` dentro del contenedor) sale sin ninguna diferencia.
 *Dónde*: `lib/demo/resetDemo.js` (la parte que solo copia columnas comunes) y
 `scripts/demo-golden-snapshot.js`.
 *Comprobado en producción*: 12/08/2026 — `crm_demo_golden` no tiene ninguna de
 las cuatro columnas que sí tiene `crm_demo`, y en los logs de la app no aparece
-ni un fallo de `demo-reset` en 48 h: falla en silencio por diseño.
+ni un fallo de `demo-reset` en 48 h: falla en silencio por diseño. (En local, ya
+con el comprobador, 13/08/2026: 9 tablas y 38 columnas de diferencia antes de
+rehacer las fotos, y ninguna después.)
 
 ### En Formación, «Usuarios» y «Alumnos por curso» se pisan · `retorika`, `aumenta`, `nutri_laura`, `demo`, `somos`
 

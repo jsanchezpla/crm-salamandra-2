@@ -57,6 +57,11 @@ const SLUGS = [
   "aumenta", "nutri_laura", "spain_enzymes", "quality_energy",
   "retorika", "abarcaia", "healim", "demo", "sandbox",
   "salamandra_solutions", "somos",
+  // Las tres demos por oficio (13/08/2026, ver lib/demo/demos.js). Una tarea
+  // de `· demo_clinica` NO cae además en el grupo de `demo`: el guión bajo
+  // cuenta como parte del nombre en `sueltoEn`, así que `demo` no casa dentro
+  // de `demo_clinica`. Si algún día se relaja ese límite, saldrían en los dos.
+  "demo_clinica", "demo_nutricion", "demo_agencia",
 ];
 
 /**

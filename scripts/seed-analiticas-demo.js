@@ -42,8 +42,14 @@
 
 import { getMasterDb } from "../lib/db/masterDb.js";
 import { getTenantDb } from "../lib/db/tenantDb.js";
+import { DEMO_SLUGS } from "../lib/demo/demos.js";
 
-const TENANTS_PERMITIDOS = new Set(["demo", "demo_golden", "sandbox"]);
+// La lista de demos NO se escribe aquí (13/08/2026): sale de lib/demo/demos.js,
+// que es la misma que usan el guard de la demo pública y las pestañas. Estaba
+// escrita a mano —"demo", "demo_golden", "sandbox"— y se quedó corta el día que
+// hubo cuatro demos: la de agencia, que es la que tiene Analíticas, era
+// justamente la única a la que este seed se negaba a sembrar.
+const TENANTS_PERMITIDOS = new Set([...DEMO_SLUGS, "demo_golden", "sandbox"]);
 
 const args = process.argv.slice(2);
 const flag = (n) => args.find((a) => a.startsWith(`--${n}=`))?.split("=")[1] ?? null;

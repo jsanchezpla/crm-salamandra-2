@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { getMasterModels } from "../../lib/db/masterDb.js";
 import { maybeResetDemo } from "../../lib/demo/resetDemo.js";
+import { DEMO_SLUGS, esSlugDemo } from "../../lib/demo/demos.js";
 import DashboardShell from "../../components/layout/DashboardShell.jsx";
 import SessionKeeper from "../../components/auth/SessionKeeper.jsx";
 
@@ -18,10 +19,12 @@ export default async function DashboardLayout({ children }) {
   const userId = headersList.get("x-user-id");
   const tenantSlug = headersList.get("x-tenant");
 
-  // Demo pública auto-restaurable: en cada recarga dura del demo se restaura
-  // la foto dorada (si existe) ANTES de que el cliente pida datos. Ver
-  // lib/demo/resetDemo.js — para los demás tenants es un no-op inmediato.
-  if (tenantSlug === "demo") await maybeResetDemo(tenantSlug);
+  // Demos públicas auto-restaurables: en cada recarga dura de una demo se
+  // restaura SU foto dorada (si existe) ANTES de que el cliente pida datos. Ver
+  // lib/demo/resetDemo.js — para los demás tenants es un no-op inmediato, y por
+  // eso se llama sin preguntar: el `=== "demo"` que había aquí era una segunda
+  // lista de demos que se habría quedado atrás al haber cuatro.
+  await maybeResetDemo(tenantSlug);
 
   const { User, Tenant, TenantModule } = getMasterModels();
 
@@ -31,6 +34,28 @@ export default async function DashboardLayout({ children }) {
   ]);
 
   const modules = tenant ? await TenantModule.findAll({ where: { tenantId: tenant.id } }) : [];
+
+  /*
+   * Qué demos EXISTEN de verdad, para las pestañas de arriba.
+   *
+   * La lista de `lib/demo/demos.js` es la lista blanca de lo que se puede pedir,
+   * no la de lo que hay montado: el código viaja en el despliegue y las cuentas
+   * se siembran después, con `scripts/crear-demos-por-oficio.js`. Entre las dos
+   * cosas —y en cualquier entorno donde solo esté la general— las pestañas
+   * habrían ofrecido demos que responden 404. Una pestaña que no lleva a ningún
+   * sitio en el escaparate público es peor que no tenerla.
+   *
+   * Una consulta más, y SOLO estando dentro de una demo: en el CRM de un cliente
+   * real esto no se ejecuta.
+   */
+  const demosDisponibles = esSlugDemo(tenantSlug)
+    ? (
+        await Tenant.findAll({
+          where: { slug: DEMO_SLUGS, status: "active" },
+          attributes: ["slug"],
+        })
+      ).map((t) => t.slug)
+    : [];
 
   const tenantJson = tenant?.toJSON() ?? null;
   // Los secretos (API keys de IA en settings.integrations) NUNCA deben llegar
@@ -44,6 +69,7 @@ export default async function DashboardLayout({ children }) {
       tenant={tenantJson}
       user={user?.toJSON() ?? null}
       modules={modules.map((m) => m.toJSON())}
+      demosDisponibles={demosDisponibles}
       primaryColor={brand.primaryColor}
       secondaryColor={brand.secondaryColor}
       accentColor={brand.accentColor}

@@ -1,14 +1,23 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
-import { ok, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
+import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { getMasterDb, getMasterModels } from "../../../../lib/db/masterDb.js";
 import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
-import { isEncrypted } from "../../../../lib/crypto/secretBox.js";
 import { whereClientesVisibles } from "../../../../lib/provisioning/clientesVisibles.js";
+import {
+  CREDENCIALES,
+  estadoCredencial,
+  ponerCredenciales,
+} from "../../../../lib/provisioning/credencialesCliente.js";
+import { leerContacto } from "../../../../lib/provisioning/contactoCliente.js";
+import { editarTenant } from "../../../../lib/provisioning/cicloVida.js";
+import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
+import { avisarCambioDeConfiguracion } from "../../../../lib/configuracion/avisoCambio.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 /**
  * GET /api/admin/configuraciones — la ficha completa de todos los clientes.
+ * PUT /api/admin/configuraciones — poner (nunca leer) las credenciales de uno.
  *
  * ── LA REGLA QUE DEFINE ESTE ENDPOINT ───────────────────────────────────────
  * NO DESCIFRA NADA. Ni una vez, ni para una pista enmascarada.
@@ -23,6 +32,14 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * el abuso del que este panel debe estar a salvo. Una sesión robada se lleva una
  * lista de qué está puesto, no las credenciales de nadie.
  *
+ * ── EL PUT NO ROMPE ESA REGLA (13/08/2026) ──────────────────────────────────
+ * Y conviene decirlo porque parece que sí. La regla es que no se LEE ninguna
+ * credencial; escribir una no obliga a leer la anterior. El campo es de SOLO
+ * ESCRIBIR: se pega, se cifra con `secretBox` igual que lo hace la Configuración
+ * del cliente, y no se devuelve nunca, ni enmascarado, ni a quien acaba de
+ * escribirlo. De vuelta va QUÉ le pasó a cada una —puesta, cambiada, borrada— y
+ * nada más. El detalle, en lib/provisioning/credencialesCliente.js.
+ *
  * Mismos tres candados que el alta: módulo `provisioning` (que solo tiene
  * nuestro tenant), rol admin leído fresco de BD, y nunca desde la demo.
  */
@@ -32,17 +49,6 @@ function candado(ctx) {
   if (isDemoTenant(ctx)) return forbidden("No disponible en la demo");
   return null;
 }
-
-const CREDENCIALES = [
-  { clave: "stripeSecretKey", nombre: "Stripe — clave secreta", grupo: "Cobros" },
-  { clave: "stripeWebhookSecret", nombre: "Stripe — webhook", grupo: "Cobros" },
-  { clave: "resendApiKey", nombre: "Correo (Resend)", grupo: "Correo" },
-  { clave: "anthropicApiKey", nombre: "IA (Anthropic)", grupo: "IA" },
-  { clave: "openaiApiKey", nombre: "Transcripción (OpenAI)", grupo: "IA" },
-  { clave: "googlePlacesApiKey", nombre: "Google Places", grupo: "Otros" },
-  { clave: "whatsappToken", nombre: "WhatsApp", grupo: "Otros" },
-  { clave: "cloudflareApiToken", nombre: "Cloudflare (visitas web)", grupo: "Otros" },
-];
 
 /**
  * ¿Lee el CÓDIGO cada tipo de personalización?
@@ -71,11 +77,6 @@ const LO_LEE_EL_CODIGO = {
   uiOverride: { lee: false, nota: "Decorativo: la pantalla propia se elige con un if por slug en el código." },
   schemaExtensions: { lee: false, nota: "Decorativo: los campos extra están escritos dentro del componente." },
 };
-
-function estadoCredencial(valor) {
-  if (typeof valor !== "string" || !valor.trim()) return { puesta: false, cifrada: null };
-  return { puesta: true, cifrada: isEncrypted(valor) };
-}
 
 const vacio = (o) => !o || typeof o !== "object" || Object.keys(o).length === 0;
 
@@ -158,7 +159,8 @@ export const GET = withTenant(async (_request, _rc, ctx) => {
     const clientes = tenants.map((t) => {
       const integ = t.settings?.integrations ?? {};
       const credenciales = CREDENCIALES.map((c) => ({
-        clave: c.clave, nombre: c.nombre, grupo: c.grupo, ...estadoCredencial(integ[c.clave]),
+        clave: c.clave, nombre: c.nombre, grupo: c.grupo, donde: c.donde,
+        ...estadoCredencial(integ[c.clave]),
       }));
       const enClaro = credenciales.filter((c) => c.puesta && c.cifrada === false).length;
 
@@ -212,6 +214,10 @@ export const GET = withTenant(async (_request, _rc, ctx) => {
         // Credenciales
         credenciales,
         enClaro,
+        // A quién se le escribe cuando falta algo. NO es el usuario con el que
+        // entra (ver lib/provisioning/contactoCliente.js). No es un secreto: se
+        // devuelve tal cual, que es para lo único que sirve.
+        contacto: leerContacto(t),
         ajustes: {
           remitenteCorreo: integ.resendFromEmail ?? null,
           modeloIA: integ.anthropicModel ?? null,
@@ -230,6 +236,118 @@ export const GET = withTenant(async (_request, _rc, ctx) => {
         nota: "Este panel nunca lee el valor de una credencial. Solo si está puesta y si está cifrada.",
       },
     });
+  } catch (err) {
+    return serverError(err);
+  }
+});
+
+/**
+ * PUT /api/admin/configuraciones — poner las credenciales de un cliente, y a
+ * quién se le escribe.
+ *
+ * Cuerpo: `{ slug, claves?: { anthropicApiKey: "sk-ant-…" | null }, contacto?: { email, nombre, telefono } }`
+ *   · una cadena FIJA la credencial (se cifra antes de guardarla),
+ *   · `null` o `""` la BORRAN,
+ *   · lo que no venga no se toca.
+ *
+ * La respuesta NUNCA lleva un valor: solo qué le pasó a cada clave. Ver la
+ * cabecera del fichero y lib/provisioning/credencialesCliente.js.
+ */
+export const PUT = withTenant(async (request, _rc, ctx) => {
+  try {
+    const veto = candado(ctx);
+    if (veto) return veto;
+
+    let body;
+    try { body = await request.json(); } catch { return error("Body inválido"); }
+
+    const slug = String(body?.slug || "").trim();
+    if (!slug || !/^[a-z0-9_]+$/.test(slug)) return error("Falta el cliente", 422);
+
+    const traeClaves = body.claves && typeof body.claves === "object" && Object.keys(body.claves).length;
+    const traeContacto = body.contacto !== undefined;
+    if (!traeClaves && !traeContacto) return error("No hay nada que guardar", 422);
+
+    const aplicado = {};
+    const avisos = [];
+
+    // ── Credenciales ────────────────────────────────────────────────────────
+    let tenantId = null;
+    if (traeClaves) {
+      const res = await ponerCredenciales({ slug, valores: body.claves });
+      if (res.error) return error(res.error, res.status ?? 400);
+      Object.assign(aplicado, res.aplicado);
+      avisos.push(...(res.avisos ?? []));
+      tenantId = res.tenantId ?? null;
+    }
+
+    // ── Contacto ────────────────────────────────────────────────────────────
+    // Va por `editarTenant` y no a pelo: es el mismo camino que usa
+    // /admin/clientes, y así el dato no puede quedar guardado de dos formas
+    // distintas según por qué pantalla se haya escrito.
+    if (traeContacto) {
+      const res = await editarTenant(slug, { contacto: body.contacto });
+      if (res.error) return error(res.error, res.status ?? 400);
+      if (res.aplicado?.contacto !== undefined) aplicado.contacto = res.aplicado.contacto;
+    }
+
+    // ── Rastro ──────────────────────────────────────────────────────────────
+    // Se audita contra NUESTRO tenant (que es quien hace la acción) y se guarda
+    // a quién se le hizo. De las credenciales solo el nombre del campo y qué le
+    // pasó: el valor no entra ni cifrado, que es la regla de siempre para los
+    // secretos (misma que /api/tenant/settings).
+    if (Object.keys(aplicado).length) {
+      const { userId, ip } = datosPeticion(request);
+      if (!tenantId) {
+        const { Tenant } = getMasterModels();
+        const destino = await Tenant.findOne({ where: { slug }, attributes: ["id"] });
+        tenantId = destino?.id ?? null;
+      }
+      await auditar({
+        tenantId: ctx.tenant.id,
+        userId,
+        action: "provisioning.credenciales_cliente",
+        entity: "Tenant",
+        entityId: tenantId,
+        before: { slug },
+        after: aplicado,
+        ip,
+      });
+
+      /*
+       * Y EL RECIBO AL CLIENTE, que es la parte que no se puede saltar.
+       *
+       * Las credenciales son SUYAS, y el motivo de que exista el aviso de
+       * cambios está escrito en lib/configuracion/avisoCambio.js: «que alguien
+       * pueda tocarlas —NOSOTROS INCLUIDOS— sin que él se entere es lo que había
+       * que arreglar». Abrir esta puerta sin enganchar el aviso convertía esa
+       * frase en mentira el mismo día.
+       *
+       * Va firmado como Salamandra: quien lo hizo no es nadie de su equipo, y un
+       * recibo sin firmar no se puede reconocer ni desconocer. Best-effort y sin
+       * esperar: que el correo tarde no puede colgar la pantalla.
+       */
+      const soloCredenciales = Object.fromEntries(
+        Object.entries(aplicado).filter(([k]) => k !== "contacto")
+      );
+      const { Tenant } = getMasterModels();
+      const destino = await Tenant.findOne({ where: { slug } });
+      if (destino) {
+        avisarCambioDeConfiguracion({
+          tenant: destino,
+          cambios: {
+            before: null,
+            after: {
+              ...(Object.keys(soloCredenciales).length ? { credenciales: soloCredenciales } : {}),
+              ...(aplicado.contacto !== undefined ? { "contacto de la cuenta": "actualizado" } : {}),
+            },
+          },
+          autor: `Salamandra Solutions (${ctx.slug})`,
+        }).catch(() => {});
+      }
+    }
+
+    return ok({ slug, aplicado, avisos });
   } catch (err) {
     return serverError(err);
   }

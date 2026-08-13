@@ -28,6 +28,189 @@ Lo más reciente arriba.
 
 ## 13/08/2026
 
+### Las claves de un cliente ya se las podemos poner nosotros · producto
+
+**Lo que pasaba.** La portada del back-office decía, cliente por cliente, qué
+credenciales le faltaban —hasta con la frase «Ya tiene todas las claves puestas.
+No hay nada que pedirle»— y no podía ponerlas. La única forma era que entrara el
+cliente, en su propia Configuración. Y no entran: 1 de 9 clientes tenía clave de
+Anthropic (y éramos nosotros) y 0 de 9 la de OpenAI, con once disparadores de IA
+desplegados y sin usar por nadie. Recado de Jorge del 12/08: que las pueda poner
+el cliente **o** nosotros.
+
+**La regla del endpoint sigue entera, y esa era la parte delicada.** «No descifra
+nada» no se ha tocado: escribir una clave no obliga a leer la anterior. El campo
+es de SOLO ESCRIBIR — se pega, se cifra con `secretBox` igual que lo hace la
+Configuración del cliente, y no se devuelve nunca, ni enmascarado, ni a quien
+acaba de escribirlo. De vuelta va qué le pasó a cada una: puesta, cambiada o
+borrada. Una sesión robada del panel se sigue llevando una lista de qué está
+puesto y ninguna credencial de nadie.
+
+**Lo que se rechaza, y por qué.** A las demos NO se les pone ninguna: son
+públicas y dan sesión de admin a cualquiera, así que una clave ahí es la de un
+cliente real detrás de un enlace público. Sin `SETTINGS_ENCRYPTION_KEY` tampoco
+se guarda nada, porque fuera de producción `encryptSecret` degrada a texto plano
+y la clave habría quedado LEGIBLE en la base mientras la pantalla decía
+«configurada». Y se rechaza en el acto lo que no puede ser una credencial de
+ninguna manera —espacios, saltos de línea, menos de 16 caracteres—: un pegado a
+medias tiene que cantar al pegarlo, no tres semanas después con un
+«Authentication failed» del proveedor. Un prefijo raro no bloquea: avisa.
+
+**Y el recibo al cliente, que no se podía saltar.** El aviso de cambios de
+configuración existe porque «que alguien pueda tocarlas —nosotros incluidos— sin
+que él se entere es lo que había que arreglar». Abrir esta puerta sin engancharlo
+habría convertido esa frase en mentira el mismo día. Va firmado como Salamandra:
+`avisarCambioDeConfiguracion` buscaba al autor entre los usuarios DEL CLIENTE, y
+un cambio nuestro no casaba con nadie, así que el correo salía sin firmar.
+
+**El otro medio recado: dónde apuntar a quién se le escribe.** No había sitio. Se
+daba por hecho que el `adminEmail` del alta servía, y no sirve: es el nombre de
+usuario con el que entra, puede no llevar arroba y si se deja vacío el alta se
+inventa `admin_{slug}`. Ahora hay correo, persona y teléfono de contacto, en el
+alta y en la ficha de Custodia, y el modal de «pedírselas» dice a qué dirección
+iría o avisa de que no hay ninguna.
+
+*Cómo se comprobó*: de punta a punta en local, 13/08/2026. Se pegó una clave de
+Anthropic a un cliente desde `/admin`: quedó en la base con prefijo `enc:v1:`, el
+CRM de ese cliente la resolvió entera con `getTenantAnthropicKey` —o sea que la
+usa— y el GET de Custodia no la devuelve ni entera ni enmascarada (0 apariciones
+del valor en la respuesta). Los cinco rechazos, uno a uno: clave a medias 422,
+demo 409, credencial inventada 422, prefijo raro guardado con aviso, y la
+auditoría guarda `{"anthropicApiKey":"puesta"}` sin el valor.
+*Queda por comprobar en producción*: viaja en el próximo despliegue.
+
+### La demo ya no es una sola: hay una por oficio · `demo`
+
+**Lo que pasaba.** El botón «Prueba una demo» entraba siempre al mismo sitio —el
+slug estaba escrito en el código— y esa cuenta tenía 20 módulos encendidos a la
+vez: clínica, nutrición, inventario, pedidos, facturación, formación, captación,
+proyectos y soporte. Una nutricionista que entraba a verla se encontraba un
+centro de psicología con almacén; un centro clínico, un recetario. Recado de
+Jorge del 12/08; el reparto lo decidió Rodrigo el 13/08.
+
+**Cómo elige el visitante.** Entra por la general, que es la que abre el botón de
+la web, y salta desde unas pestañas arriba del todo del CRM. Se pintan como
+pestañas y no como un desplegable a propósito: la gracia es que se VEA que hay
+más de una. Cada una tiene su color, que es lo que hace que se note el salto.
+
+**El slug es una lista blanca, nunca el parámetro.** Ese endpoint firma un token
+de ADMIN a un visitante anónimo, y lo que lo hacía seguro era justamente no
+admitir parámetros. Ahora admite uno, y solo se acepta si está en
+`lib/demo/demos.js`. Un slug desconocido responde 404 y NO cae a la demo general:
+caer de vuelta escondería un intento de entrar en el CRM de un cliente detrás de
+una pantalla normal.
+
+**Y el guard de demo pasó a ser uno para las cuatro.** Había un `DEMO_SLUG =
+"demo"` escrito en `lib/demo/isDemo.js` y noventa y cuatro llamadas a sus tres
+guards repartidas por el CRM. Cambiando solo ese fichero, las cuatro quedan
+protegidas a la vez; si la comparación se hubiera quedado como estaba, las tres
+nuevas habrían nacido siendo un CRM de administrador público capaz de gastar IA
+real y de escribir en master.
+
+**Una demo no es un cliente.** Sin esto, las pantallas que cuentan habrían dicho
+«11 clientes» donde hay siete, y Custodia habría pintado las cuatro en rojo
+reclamándoles credenciales que NO PUEDEN tener. Se excluyen de Custodia, Módulos
+e Integraciones, y se mantienen en `/admin/clientes`, que es quien las
+administra: mismo reparto que con los suspendidos y por el mismo motivo.
+
+*Cómo se comprobó*: en local, 13/08/2026. Desde el botón público se entra en la
+general y desde sus pestañas se salta a la de nutrición: cambia el color, el menú
+pasa a ser el de una consulta (Pacientes, Recetario, Alimentos, Pautas, sin
+inventario ni proyectos) y la de clínica sale con Pacientes separado de Clientes.
+Pedir el slug de un cliente real a `/api/auth/demo` devuelve 404; sin cuerpo,
+abre la general. Y cada una se limpia sola: se ensució `crm_demo_nutricion` con
+una ficha de más y la restauración la dejó otra vez en 14, sin error.
+*Queda por comprobar en producción*: hay que crear allí las tres cuentas con
+`scripts/crear-demos-por-oficio.js --confirm` después de desplegar.
+
+### La demo pública vuelve a limpiarse sola · `demo`
+
+**Lo que pasaba.** La demo se rehace desde una copia «dorada» para que cada
+visitante la encuentre impecable, y esa restauración llevaba desde el 10/08
+abandonándose a medias. El motivo era de TIPOS, no de datos:
+`enum_bookings_payment_status` tenía nueve valores en `crm_demo` y cinco en la
+foto, porque la foto tenía un tipo PROPIO en vez de compartir el del schema vivo.
+PostgreSQL no convierte solo entre dos enums distintos, así que el INSERT
+reventaba, la transacción se deshacía entera y el `catch` —que existe para que un
+fallo ahí no tumbe el dashboard— se lo tragaba. La demo seguía en pie, sucia, sin
+un solo error visible.
+
+**Por qué no vuelve a pasar solo.** La foto que saca el script hoy copia los
+datos con `CREATE TABLE AS TABLE`, que REUTILIZA los tipos del schema vivo
+(comprobado el 13/08), así que ampliar un enum con `ALTER TYPE ... ADD VALUE`
+—que es como lo hacen las migraciones— llega a la foto sola. El tipo propio era
+un resto de otra época.
+
+**Y ahora se puede preguntar.** `npm run db:demo:snapshot:check` compara cada
+foto con su schema vivo y canta tres cosas: tipos propios (tienen que ser cero),
+tablas que faltan y columnas que faltan. Eso último es la otra tarea del backlog
+—la foto iba por detrás del schema— y ahora sale con nombres: al mirarlo el 13/08
+faltaban 9 tablas y 38 columnas. Además la restauración deja el último fallo en
+memoria en vez de perderlo.
+
+*Cómo se comprobó*: en local, 13/08/2026. Antes del arreglo, el comprobador sacó
+los tres tipos propios de la foto de la demo general con sus valores. Después de
+rehacerla, las cuatro fotos «casan» y una restauración de `crm_demo` termina sin
+error: se cambió el nombre de una ficha y la recarga lo devolvió.
+*Queda por comprobar en producción*: al desplegar hay que correr
+`docker exec crm-salamandra-app-1 node scripts/demo-golden-snapshot.js`, que es
+lo que rehace las fotos allí.
+
+### El back-office ya sabe dar de baja a un cliente, y sigue sin poder borrarlo · producto
+
+**Lo que pasaba.** `/admin/clientes` dejaba crear, editar, cambiar marca, activar
+módulos y suspender, y ahí se acababa. Quien se iba se quedaba suspendido y ya,
+con su usuario y su schema enteros, escondido tras el interruptor «ver los N
+suspendidos», y nada decía qué pasaba con él. Las tres bajas del 12/08 se hicieron
+por SSH, a mano.
+
+**Lo que NO ha cambiado, a propósito.** No hay DELETE ni lo va a haber. Lo que
+hace el botón es APARTAR: el schema se renombra a `zzz_baja_<slug>_<fecha>` y sus
+ficheros se mueven a `uploads/_bajas/<slug>_<fecha>/`, todo entero y reversible.
+Destruir de verdad sigue siendo SSH, y ahora el script lo dice en voz alta cuando
+se lo pides: se lleva por delante sus facturas.
+
+**La pregunta de la retención, respondida.** Las facturas tienen obligación de
+conservarse años y los registros de auditoría no se borran nunca. Apartar convive
+con las dos cosas —el schema sigue entero con sus facturas dentro, y de la
+auditoría no se toca ni una fila: lo que los DELETE le vacían es la ATRIBUCIÓN,
+que el `.rollback.sql` guarda para poder devolverla—. Purgar no convive con
+ninguna, y por eso es lo único que se queda en una terminal.
+
+**Los cuatro arreglos que hacían falta para poder poner un botón.** Uno, es
+atómico: el renombrado y los tres DELETE iban sueltos, así que un proceso muerto
+a mitad dejaba una fila de tenant sin schema, que es lo que `altaTenant.js`
+describe como veneno para TODAS las altas siguientes. Dos, avisa a la app:
+corriendo en otro proceso no se podía invalidar la caché, y el CRM seguía hasta 60
+segundos resolviendo a un cliente cuyo schema ya no se llamaba así. Tres, se lleva
+los ficheros: el script no tocaba `uploads/` en ninguna línea y los seis almacenes
+no comparten forma, así que apartar el schema dejaba en disco los papeles del
+cliente, documentos de salud incluidos. Y cuatro, la red de rescate caduca:
+`scripts/podar-bajas.js` borra los `.rollback.sql` de más de 90 días, y la purga
+se lleva ahora el del cliente que purga — los tres del 12/08 se quedaron con sus
+`password_hash` sobre disco cuando sus schemas ya no existían.
+
+**Las trampas del botón son las de suspender más una.** Hay que teclear el
+identificador, se enseña cuántas filas y cuántos ficheros hay dentro antes de
+nada, y nunca a nosotros mismos ni a una demo. La que se añade es la de los
+ficheros: un cliente puede tener cero filas y doscientos documentos subidos, y
+hasta hoy eso no lo veía nadie.
+
+*Cómo se comprobó*: de punta a punta en local, 13/08/2026, con un cliente de
+prueba con 10 filas y 6 ficheros repartidos por las cuatro rutas de `uploads/`.
+Cerrado desde `/admin/clientes`: salió del listado, su schema quedó como
+`zzz_baja_zzz_prueba_baja_<fecha>` sin tocar a los demás, sus 6 ficheros
+desaparecieron de las seis rutas y aparecieron en `uploads/_bajas/`, el
+`.rollback.sql` quedó escrito y `master.audit_logs` guarda su fila
+`provisioning.cliente_baja`. Y la vuelta atrás también: `psql < el .rollback.sql`
+devolvió el tenant, su usuario, sus 4 módulos, su contacto y sus 7 fichas dentro
+del schema. Los cinco frenos, uno a uno: sin teclear el slug 428, con datos sin
+aceptarlo 428 (con la lista de tablas), a una demo 409, a nosotros mismos 409, y
+la purga sin `--confirmo` se planta.
+*Queda por comprobar en producción*: viaja en el próximo despliegue. El agujero
+de los ficheros sigue sin probarse con un cliente REAL que los tenga — los tres
+del 12/08 no tenían ninguno.
+
 ### Los dos formularios de Aumenta, y cada uno cae por su puerta · `aumenta`
 
 **Lo que pedía la tarea, y lo que no cuadraba.** El recado de Jorge del 12/08 daba

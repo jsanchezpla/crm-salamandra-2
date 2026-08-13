@@ -23,8 +23,12 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * usuarios EN EL ACTO y tumba sus widgets públicos. Un clic de más antes de eso
  * está bien empleado.
  *
- * No existe DELETE. Borrar el schema de un cliente sigue siendo un script que se
- * corre a mano mirando lo que se va a destruir.
+ * No existe DELETE, y sigue sin existir (13/08/2026). Cerrar la cuenta de un
+ * cliente se pide en `[slug]/baja`, y eso NO borra nada: aparta su schema a
+ * `zzz_baja_*` y sus ficheros a `uploads/_bajas/`, todo reversible. Destruirlo
+ * de verdad sigue siendo un script que se corre a mano mirando lo que se va a
+ * destruir — entre otras cosas porque se lleva por delante facturas que hay
+ * obligación legal de conservar (ver lib/provisioning/bajaTenant.js).
  */
 function candado(ctx) {
   if (!ctx.hasModule("provisioning")) return forbidden("Este panel es solo para Salamandra Solutions");

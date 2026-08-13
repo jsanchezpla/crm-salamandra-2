@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import Sidebar from "./Sidebar.jsx";
 import Salamandrobot from "../assistant/Salamandrobot.jsx";
 import NotificationBell from "./NotificationBell.jsx";
+import DemoTabs from "./DemoTabs.jsx";
 
 export default function DashboardShell({
   tenant,
   user,
   modules,
+  demosDisponibles,
   primaryColor,
   secondaryColor,
   accentColor,
@@ -76,6 +78,11 @@ export default function DashboardShell({
       />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {/* Las demos por oficio. Fuera de una demo no pinta nada. Va ARRIBA del
+            todo —encima incluso de la barra móvil— porque es lo que cambia de
+            CRM entero: si estuviera dentro de <main> se iría con el scroll. */}
+        <DemoTabs slug={tenant?.slug} disponibles={demosDisponibles} />
+
         {/* Mobile top bar */}
         <header
           className="lg:hidden sticky top-0 z-30 h-14 flex items-center px-4 gap-3 shrink-0 backdrop-blur-md"

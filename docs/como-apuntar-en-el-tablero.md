@@ -126,6 +126,7 @@ como cliente si reconoce el nombre**. Los que reconoce:
 aumenta · nutri_laura · spain_enzymes · quality_energy
 retorika · abarcaia · healim · demo · sandbox
 salamandra_solutions · somos
+demo_clinica · demo_nutricion · demo_agencia
 ```
 
 ...más `todos`, `producto`, `interno`, `documentación` y `varios`.

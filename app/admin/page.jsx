@@ -16,6 +16,16 @@
  * Lo que NO hace, y es lo importante: no enseña ni un carácter de ninguna
  * credencial. El endpoint no las descifra (ver app/api/admin/configuraciones),
  * así que aquí no hay nada que ocultar en el cliente.
+ *
+ * ── DESDE EL 13/08/2026 TAMBIÉN SE PONEN ────────────────────────────────────
+ * Esta pantalla decía qué le faltaba a cada cliente —hasta con la frase «Ya
+ * tiene todas las claves puestas. No hay nada que pedirle»— y no podía ponerlas:
+ * la única forma era que entrara el cliente, en su Configuración. Y no entran.
+ *
+ * Los campos son de SOLO ESCRIBIR: se pega, se manda, y lo que vuelve es «puesta»
+ * o «cambiada», nunca el valor. Que no se pueda LEER lo que ya está puesto no es
+ * una limitación de la pantalla: es la regla del endpoint, y se mantiene entera.
+ * Por eso no hay ningún campo que venga relleno ni enmascarado.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -132,16 +142,82 @@ export default function CustodiaPage() {
   // el botón enseña lo que se le pediría y nada sale de aquí.
   const [pidiendo, setPidiendo] = useState(null);
 
+  // Lo que se está tecleando AHORA en los campos de credencial, por clave. Vive
+  // aquí y no en el cliente abierto porque se vacía entero al guardar: un campo
+  // que conserva lo pegado da la impresión de que el valor «está», y aquí
+  // precisamente no se puede leer nada de lo guardado.
+  const [pegando, setPegando] = useState({});
+  const [contacto, setContacto] = useState(null);
+  const [guardando, setGuardando] = useState(false);
+  const [resultado, setResultado] = useState(null);
+
+  async function recargar() {
+    const r = await fetch("/api/admin/configuraciones", { cache: "no-store" });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j?.ok) throw new Error(j?.error || `Error ${r.status}`);
+    setDatos(j.data);
+    return j.data;
+  }
+
   useEffect(() => {
-    fetch("/api/admin/configuraciones", { cache: "no-store" })
-      .then(async (r) => {
-        const j = await r.json().catch(() => null);
-        if (!r.ok || !j?.ok) throw new Error(j?.error || `Error ${r.status}`);
-        return j.data;
-      })
-      .then(setDatos)
-      .catch((e) => setError(e.message));
+    recargar().catch((e) => setError(e.message));
   }, []);
+
+  /** Abre/cierra la ficha de un cliente, y con ella su formulario en limpio. */
+  function abrir(cliente) {
+    const cerrando = abierto === cliente.slug;
+    setAbierto(cerrando ? null : cliente.slug);
+    setPegando({});
+    setResultado(null);
+    setContacto(cerrando ? null : { ...cliente.contacto });
+  }
+
+  /**
+   * Manda lo que haya escrito. `claves` va con lo pegado; `contacto` solo si ha
+   * cambiado, para no reescribirlo cada vez que se guarda una clave.
+   */
+  async function guardar(cliente) {
+    const claves = {};
+    for (const [k, v] of Object.entries(pegando)) {
+      if (typeof v === "string" && v.trim()) claves[k] = v.trim();
+      else if (v === null) claves[k] = null; // marcada para borrar
+    }
+    const cambiaContacto =
+      contacto && JSON.stringify(contacto) !== JSON.stringify(cliente.contacto);
+
+    if (!Object.keys(claves).length && !cambiaContacto) {
+      setResultado({ error: "No has escrito nada." });
+      return;
+    }
+
+    setGuardando(true);
+    setResultado(null);
+    try {
+      const r = await fetch("/api/admin/configuraciones", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug: cliente.slug,
+          ...(Object.keys(claves).length ? { claves } : {}),
+          ...(cambiaContacto ? { contacto } : {}),
+        }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.ok) {
+        setResultado({ error: j?.error || `Error ${r.status}` });
+        return;
+      }
+      setPegando({});
+      setResultado({ aplicado: j.data.aplicado, avisos: j.data.avisos ?? [] });
+      const frescos = await recargar();
+      const actualizado = frescos.clientes.find((c) => c.slug === cliente.slug);
+      if (actualizado) setContacto({ ...actualizado.contacto });
+    } catch (e) {
+      setResultado({ error: e.message });
+    } finally {
+      setGuardando(false);
+    }
+  }
 
   const clientes = datos?.clientes ?? [];
   const enClaroTotal = useMemo(
@@ -242,10 +318,7 @@ export default function CustodiaPage() {
             >
               <div className="flex items-start gap-4">
                 {/* Izquierda: nombre arriba, servicios abajo separados por guiones */}
-                <button
-                  onClick={() => setAbierto(activo ? null : c.slug)}
-                  className="flex-1 min-w-0 text-left"
-                >
+                <button onClick={() => abrir(c)} className="flex-1 min-w-0 text-left">
                   <div className="flex items-baseline gap-2.5 flex-wrap">
                     <span className="text-[15px] font-semibold">{c.nombre}</span>
                     <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
@@ -293,15 +366,26 @@ export default function CustodiaPage() {
                   )}
                 </button>
 
-                {/* Derecha: la acción. Todavía NO manda nada — ver el aviso. */}
-                <button
-                  type="button"
-                  onClick={() => setPidiendo(c)}
-                  className="shrink-0 px-3.5 py-2 rounded-lg text-[11px] font-semibold uppercase tracking-wide transition-colors"
-                  style={{ border: "1px solid var(--line)", color: "var(--ok)" }}
-                >
-                  Solicitar configuración
-                </button>
+                {/* Derecha: las dos acciones. Poner las claves es lo que abre la
+                    ficha; pedírselas al cliente sigue sin mandar nada. */}
+                <div className="shrink-0 flex flex-col gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => abrir(c)}
+                    className="px-3.5 py-2 rounded-lg text-[11px] font-semibold uppercase tracking-wide transition-colors"
+                    style={{ border: "1px solid var(--ok)", color: "var(--ok)" }}
+                  >
+                    {activo ? "Cerrar" : "Poner claves"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPidiendo(c)}
+                    className="px-3.5 py-2 rounded-lg text-[11px] font-semibold uppercase tracking-wide transition-colors"
+                    style={{ border: "1px solid var(--line)", color: "var(--dim)" }}
+                  >
+                    Pedírselas
+                  </button>
+                </div>
               </div>
 
               {sinCifrar.length > 0 && (
@@ -349,6 +433,22 @@ export default function CustodiaPage() {
 
             <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3">
               <div className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
+                A quién
+              </div>
+              {pidiendo.contacto?.email ? (
+                <p className="text-sm text-neutral-700">
+                  {pidiendo.contacto.email}
+                  {pidiendo.contacto.nombre ? ` · ${pidiendo.contacto.nombre}` : ""}
+                </p>
+              ) : (
+                <p className="text-sm text-amber-700">
+                  No hay correo de contacto apuntado. Se pone en su ficha, abajo del todo.
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3">
+              <div className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
                 Se le pediría
               </div>
               {pidiendo.credenciales.filter((c) => !c.puesta).length === 0 ? (
@@ -365,9 +465,9 @@ export default function CustodiaPage() {
             </div>
 
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] text-amber-900 leading-relaxed">
-              <b>Todavía no se envía nada.</b> Falta acordar a qué dirección va el correo y qué dice
-              exactamente. Pedirle credenciales a un cliente es de lo más delicado que se le escribe:
-              cuando el texto esté aprobado, este botón lo manda.
+              <b>Todavía no se envía nada.</b> Falta el texto aprobado: pedirle credenciales a un
+              cliente es de lo más delicado que se le escribe. Mientras tanto, si te la da por otro
+              lado, se la puedes poner tú desde su ficha.
             </div>
 
             <div className="flex justify-end">
@@ -394,7 +494,7 @@ export default function CustodiaPage() {
               {detalle.nombre}
             </h2>
             <button
-              onClick={() => setAbierto(null)}
+              onClick={() => abrir(detalle)}
               className="text-[11px] uppercase tracking-[0.16em]"
               style={{ color: "var(--tenue)" }}
             >
@@ -405,26 +505,77 @@ export default function CustodiaPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
             <div>
               <Etiqueta>credenciales</Etiqueta>
-              <div className="mt-3 space-y-2">
+              <p className="text-[11px] mt-1.5 leading-relaxed" style={{ color: "var(--dim)" }}>
+                Pega una clave y guarda. No se puede ver lo que ya está puesto —ni aquí ni en
+                ninguna pantalla—; volver a pegar una la sustituye.
+              </p>
+              <div className="mt-3 space-y-3">
                 {GRUPOS.map((g) => {
                   const del = detalle.credenciales.filter((c) => c.grupo === g);
                   if (!del.length) return null;
                   return (
                     <div key={g}>
                       <div className="text-[10px] mb-1" style={{ color: "var(--tenue)" }}>{g}</div>
-                      {del.map((c) => (
-                        <div key={c.clave} className="flex items-center gap-2.5 text-[12px] py-0.5">
-                          <Pip puesta={c.puesta} cifrada={c.cifrada} titulo={c.nombre} />
-                          <span style={{ color: c.puesta ? "var(--text)" : "var(--tenue)" }}>
-                            {c.nombre}
-                          </span>
-                          {c.puesta && c.cifrada === false && (
-                            <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--alerta)" }}>
-                              sin cifrar
-                            </span>
-                          )}
-                        </div>
-                      ))}
+                      {del.map((c) => {
+                        const marcadaParaBorrar = pegando[c.clave] === null;
+                        return (
+                          <div key={c.clave} className="py-1">
+                            <div className="flex items-center gap-2.5 text-[12px]">
+                              <Pip puesta={c.puesta} cifrada={c.cifrada} titulo={c.nombre} />
+                              <span style={{ color: c.puesta ? "var(--text)" : "var(--tenue)" }}>
+                                {c.nombre}
+                              </span>
+                              {c.puesta && c.cifrada === false && (
+                                <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--alerta)" }}>
+                                  sin cifrar
+                                </span>
+                              )}
+                              {c.puesta && !marcadaParaBorrar && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPegando((p) => ({ ...p, [c.clave]: null }))}
+                                  className="ml-auto text-[10px] uppercase tracking-wider"
+                                  style={{ color: "var(--tenue)" }}
+                                  title="Marcar para borrar al guardar"
+                                >
+                                  quitar
+                                </button>
+                              )}
+                            </div>
+                            {marcadaParaBorrar ? (
+                              <div
+                                className="mt-1 ml-[19px] text-[11px] flex items-center gap-3 rounded px-2 py-1"
+                                style={{ color: "var(--alerta)", background: "color-mix(in srgb, var(--alerta) 8%, transparent)" }}
+                              >
+                                Se borrará al guardar.
+                                <button
+                                  type="button"
+                                  onClick={() => setPegando((p) => { const n = { ...p }; delete n[c.clave]; return n; })}
+                                  className="uppercase tracking-wider text-[10px]"
+                                  style={{ color: "var(--dim)" }}
+                                >
+                                  deshacer
+                                </button>
+                              </div>
+                            ) : (
+                              <input
+                                type="password"
+                                autoComplete="off"
+                                spellCheck={false}
+                                value={pegando[c.clave] ?? ""}
+                                onChange={(e) => setPegando((p) => ({ ...p, [c.clave]: e.target.value }))}
+                                placeholder={c.puesta ? "pegar otra para sustituirla" : `pegar aquí — ${c.donde ?? ""}`}
+                                className="mt-1 ml-[19px] w-[calc(100%-19px)] rounded px-2 py-1.5 text-[12px] font-mono"
+                                style={{
+                                  background: "var(--panel-alto)",
+                                  border: "1px solid var(--line)",
+                                  color: "var(--text)",
+                                }}
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
@@ -489,7 +640,81 @@ export default function CustodiaPage() {
                   </p>
                 </div>
               )}
+
+              {/* ── A quién se le escribe ────────────────────────────────────
+                  El `adminEmail` del alta NO es esto: es el usuario con el que
+                  entra, y si se deja vacío se inventa `admin_{slug}`. Hasta hoy
+                  no había dónde apuntar a quién se le pide una clave. */}
+              <div>
+                <Etiqueta>a quién se le escribe</Etiqueta>
+                <div className="mt-2.5 space-y-1.5">
+                  {[
+                    ["email", "Correo", "alguien@sucliente.com"],
+                    ["nombre", "Persona", "nombre y apellidos"],
+                    ["telefono", "Teléfono", "opcional"],
+                  ].map(([campo, rotulo, ejemplo]) => (
+                    <div key={campo} className="flex items-center gap-3">
+                      <label className="w-40 shrink-0 text-[12px]" style={{ color: "var(--tenue)" }}>
+                        {rotulo}
+                      </label>
+                      <input
+                        type={campo === "email" ? "email" : "text"}
+                        value={contacto?.[campo] ?? ""}
+                        onChange={(e) => setContacto((c) => ({ ...(c ?? {}), [campo]: e.target.value }))}
+                        placeholder={ejemplo}
+                        className="flex-1 min-w-0 rounded px-2 py-1.5 text-[12px]"
+                        style={{ background: "var(--panel-alto)", border: "1px solid var(--line)", color: "var(--text)" }}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] mt-2 leading-relaxed" style={{ color: "var(--apagado)" }}>
+                  No es el usuario con el que entra al CRM. Es la dirección a la que se le pide
+                  algo.
+                </p>
+              </div>
             </div>
+          </div>
+
+          {/* ── Guardar ──────────────────────────────────────────────────── */}
+          <div
+            className="mt-6 pt-5 flex flex-wrap items-center gap-4"
+            style={{ borderTop: "1px solid var(--line-suave)" }}
+          >
+            <button
+              type="button"
+              onClick={() => guardar(detalle)}
+              disabled={guardando}
+              className="px-4 py-2 rounded-lg text-[11px] font-semibold uppercase tracking-wide disabled:opacity-50"
+              style={{ background: "var(--ok)", color: "var(--panel)" }}
+            >
+              {guardando ? "Guardando…" : "Guardar en este cliente"}
+            </button>
+
+            {resultado?.error && (
+              <span className="text-[12px]" style={{ color: "var(--alerta)" }}>
+                {resultado.error}
+              </span>
+            )}
+
+            {resultado?.aplicado && (
+              <div className="text-[12px] flex-1 min-w-0">
+                {Object.keys(resultado.aplicado).length === 0 ? (
+                  <span style={{ color: "var(--tenue)" }}>No había nada que cambiar.</span>
+                ) : (
+                  <span style={{ color: "var(--ok)" }}>
+                    {Object.entries(resultado.aplicado)
+                      .map(([k, v]) => `${k}: ${typeof v === "string" ? v : "guardado"}`)
+                      .join(" · ")}
+                  </span>
+                )}
+                {resultado.avisos?.map((a) => (
+                  <div key={a} className="mt-1" style={{ color: "var(--alerta)" }}>
+                    {a}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </section>
       )}
@@ -558,8 +783,10 @@ export default function CustodiaPage() {
       )}
 
       <p className="mt-10 text-[11px] leading-relaxed max-w-lg" style={{ color: "var(--tenue)" }}>
-        Solo lectura. Para cambiar la configuración de un cliente se entra en su propio CRM, y
-        cada cambio le llega por correo con el detalle de qué se tocó.
+        Las credenciales se pueden PONER desde aquí, nunca leer: ni esta pantalla ni el
+        endpoint descifran ninguna. El cliente puede seguir poniéndolas él desde su propia
+        Configuración, y cualquiera de los dos caminos le manda el recibo por correo con el
+        detalle de qué se tocó y de quién lo hizo.
       </p>
 
       <style>{`

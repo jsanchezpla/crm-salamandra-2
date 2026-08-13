@@ -323,6 +323,7 @@ El detalle de cada subcarpeta se descubre con `ls` cuando haga falta.
 | Slug             | Entorno         | Quién es y qué hay que saber |
 | ---------------- | --------------- | ---------------------------- |
 | `demo`           | local + prod    | Tenant de desarrollo y show-room. Datos FALSOS a propósito: tiene casi todos los módulos para poder enseñarlos juntos. **Es pública y da sesión de admin a cualquiera**, así que todo endpoint que mande correo, gaste IA o escriba en master necesita su guard de `lib/demo/isDemo.js`. |
+| `demo_clinica`, `demo_nutricion`, `demo_agencia` | local + prod | **Las demos por oficio (13/08/2026).** La general enseñaba veinte módulos a la vez y era lo que veía todo el que pulsaba «Prueba una demo»: una nutricionista se encontraba un centro de psicología con almacén. El visitante entra por `demo` y salta desde unas pestañas arriba. Son PÚBLICAS igual que la general y llevan sus mismos guards — cambiar `lib/demo/isDemo.js` las cubre a las cuatro. Quién es cada una y con qué módulos, en `lib/demo/demos.js`; se montan y se siembran con `scripts/crear-demos-por-oficio.js`. **No se dan de baja desde el panel**: se rehacen con ese script. |
 | `retorika`       | local + prod    | Academia online (WordPress + TutorLMS). |
 | `aumenta`        | local + prod    | Centro de psicología y formación, y **el cliente que más usa el CRM**: 12.030 citas, 15 personas y 88 de las 99 integraciones vivas. Overrides de UI: `aumenta/LeadsModule` y `aumenta/FormacionOverview`; el sidebar dice "Interesados" en vez de "Leads". **CRM en uso REAL desde 2026-07-24**: datos de ejemplo borrados (`reset-aumenta-real-data.js`; los LEADS eran reales y se conservaron) y equipo real dado de alta (`seed-aumenta-equipo-real.js`: 13 logins tipo `nombre_aumenta` con rol `user`; dirección usa admin@aumenta.es). Desempeño/Dirección/Productividad son SOLO admin. **NO wipear ni sembrar sin permiso.** **Agenda compartida ENCENDIDA el 01/08/2026** a petición de Rodrigo: todo el equipo ve la agenda completa, y con ella los datos de contacto del paciente. |
 | `spain_enzymes`  | local + prod    | Cliente real en producción (admin `admin@spain-enzymes.salamandra`). Su web (spainenzymes.com, WordPress) manda los leads del formulario a `/api/public/leads`. **Ojo**: en local tiene módulos que en producción NO ha contratado; no dar por buena la lista de local. |
@@ -416,7 +417,25 @@ aplique.
 | `team_avanzado` | **Equipo avanzado** | Desempeño, Dirección, Productividad, Incidencias, Bandeja, Ocupación y Actividad. Se vende aparte; los submenús exigen `requiresAll` (avanzado + el módulo que aporta el contenido) y sus 16 endpoints lo comprueban. |
 | `documents` | **Documentos básico** | Solo el Contrato de Prestación de Servicios del centro. Es lo que necesita un cliente que no quiere un gestor documental (nutri_laura). |
 | `documents_avanzado` | **Documentos avanzado** | El archivo completo: carpetas, buscador, subida general y cuota. Mismo patrón que `team`/`team_avanzado`; los endpoints de `/api/documents/*` lo exigen. |
-| `provisioning` | **Alta de clientes** | Panel interno SOLO de `salamandra_solutions`: crea el cliente entero (schema, tablas, módulos con dependencias, admin, marca y datos fiscales). `lib/provisioning/`. |
+| `provisioning` | **Alta de clientes** | Panel interno SOLO de `salamandra_solutions`: crea el cliente entero (schema, tablas, módulos con dependencias, admin, marca y datos fiscales) y lo acompaña hasta el final — editarlo, suspenderlo, ponerle las credenciales y CERRARLE la cuenta. `lib/provisioning/`. |
+
+> **El ciclo de vida de un cliente, en un sitio** (13/08/2026). `lib/provisioning/`
+> tiene cuatro piezas y conviene saber cuál es cuál antes de tocar ninguna:
+> `altaTenant.js` lo crea, `cicloVida.js` lo edita/suspende/reactiva,
+> `credencialesCliente.js` le pone las claves (solo escribir: nada de esto las
+> LEE nunca) y `bajaTenant.js` lo cierra.
+>
+> La baja **aparta, no destruye**: renombra el schema a `zzz_baja_<slug>_<fecha>`
+> y mueve sus ficheros a `uploads/_bajas/<slug>_<fecha>/`, dejando un
+> `.rollback.sql` que lo devuelve todo. Es reversible, y por eso puede ser un
+> botón. **Destruir de verdad sigue siendo SSH** y no tiene endpoint:
+> `scripts/borrar-tenant.js <slug> --purgar`. El motivo no es solo prudencia —
+> las facturas tienen obligación legal de conservarse años y los registros de
+> auditoría no se borran nunca; apartar convive con las dos cosas y purgar no.
+>
+> La red de rescate lleva los `password_hash` de sus usuarios sobre disco, así
+> que caduca: `scripts/podar-bajas.js` (90 días por defecto), y la purga se
+> lleva la del cliente que purga.
 
 > **ACTIVAR UN MÓDULO TIENE DOS PUERTAS** (01/08/2026, después de tropezar dos
 > veces). No basta con `master.tenant_modules`: si el usuario tiene una lista

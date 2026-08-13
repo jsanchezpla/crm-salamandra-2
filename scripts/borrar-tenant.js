@@ -10,23 +10,29 @@
  * prueba, se limpiaba escribiendo SQL destructivo a mano contra producción, que
  * es MUCHO peor que un script pensado.
  *
- * ── LA IDEA: APARTAR, NO DESTRUIR ───────────────────────────────────────────
- * El schema NO se borra: se RENOMBRA a `zzz_baja_<slug>_<fecha>`. En un segundo
- * queda fuera de todo —nadie enumera schemas con ese prefijo, el resolutor de
- * tenants no lo encuentra, las migraciones no lo ven— y sigue estando entero
- * por si mañana resulta que había algo dentro. Eso convierte la operación
- * peligrosa en una reversible.
+ * ── LA BAJA YA NO VIVE AQUÍ (13/08/2026) ────────────────────────────────────
+ * Está en `lib/provisioning/bajaTenant.js`, y este script es una de sus dos
+ * puertas: la otra es el botón de `/admin/clientes`. Se movió porque el trabajo
+ * de ponerla detrás de un botón era arreglar cuatro cosas —hacerla atómica,
+ * invalidar la caché, llevarse los ficheros de `uploads/` y caducar la red de
+ * rescate— y arreglarlas solo en un lado habría dejado dos bajas distintas
+ * según por dónde entraras. Los frenos son los mismos por los dos caminos.
  *
- * Destruir de verdad es un SEGUNDO acto, deliberado y aparte, y va acotado al
- * mismo cliente y con los mismos frenos que el primero:
+ * ── LA IDEA: APARTAR, NO DESTRUIR ───────────────────────────────────────────
+ * El schema NO se borra: se RENOMBRA a `zzz_baja_<slug>_<fecha>`, y sus ficheros
+ * se mueven a `uploads/_bajas/<slug>_<fecha>/`. Todo sigue entero por si mañana
+ * resulta que había algo dentro.
+ *
+ * Destruir de verdad es un SEGUNDO acto, deliberado y aparte, y **solo se puede
+ * pedir desde aquí**: no hay botón para la purga ni lo va a haber.
  *   node scripts/borrar-tenant.js <slug> --purgar                        (ensaya)
  *   node scripts/borrar-tenant.js <slug> --purgar --aplicar --confirmo=<slug>
  * Llevarse de golpe los apartados de TODOS los clientes hay que pedirlo aparte:
  *   node scripts/borrar-tenant.js --purgar --todos --aplicar --confirmo=todos
  *
- * Las filas de `master` (tenant, usuarios, módulos) sí se borran, porque un
- * tenant sin schema es justo el estado que envenena las altas. Pero antes se
- * escribe un `.rollback.sql` con los INSERT exactos para devolverlas.
+ * ⚠️ La purga destruye sus FACTURAS, que tienen obligación legal de conservarse
+ * años. Apartar convive con esa obligación; purgar no. Por eso el reversible es
+ * un botón y esto es una terminal, donde quien lo escribe mira lo que destruye.
  *
  * ── FRENOS ──────────────────────────────────────────────────────────────────
  *   · Ensaya por defecto. Sin `--aplicar` no escribe nada.
@@ -45,9 +51,14 @@
  *   docker exec crm-salamandra-app-1 node scripts/borrar-tenant.js <slug>
  */
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { Sequelize } from "sequelize";
+import { getMasterDb } from "../lib/db/masterDb.js";
+import {
+  APARTADO,
+  NOSOTROS,
+  darDeBajaTenant,
+  radiografiaParaBaja,
+} from "../lib/provisioning/bajaTenant.js";
+import { listarApartados, purgarFicherosApartados } from "../lib/provisioning/ficherosTenant.js";
 
 const APLICAR = process.argv.includes("--aplicar");
 const CON_DATOS = process.argv.includes("--con-datos");
@@ -61,16 +72,12 @@ const SLUG = process.argv.slice(2).find((a) => !a.startsWith("--")) ?? null;
 const di = (s = "") => process.stdout.write(`${s}\n`);
 const morir = (msg) => { process.stderr.write(`\n✗ ${msg}\n\n`); process.exit(1); };
 
-/** Nuestro propio tenant: sin él no hay back-office. */
-const NOSOTROS = "salamandra_solutions";
-/** Prefijo de los schemas apartados. Nadie los enumera. */
-const APARTADO = "zzz_baja_";
+const kb = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.round(b / 1024)} kB`);
 
 if (!process.env.DATABASE_URL) morir("DATABASE_URL no configurada.");
 
-const db = new Sequelize(process.env.DATABASE_URL, { dialect: "postgres", logging: false });
+const db = getMasterDb();
 const q = (sql, opts) => db.query(sql, opts);
-const sello = () => new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
 
 /* ══════════════════════════════════════════════════════════════════════════
  * SEGUNDO ACTO: destruir de verdad lo ya apartado
@@ -97,11 +104,18 @@ async function purgar() {
   );
   // El filtro fino se hace aquí y no con un LIKE, porque un slug puede ser
   // PREFIJO de otro: `LIKE 'zzz_baja_demo_%'` se llevaría también los apartados
-  // de `demo_golden`. El formato es <prefijo><slug>_<14 dígitos>, así que se
+  // de `demo_clinica`. El formato es <prefijo><slug>_<14 dígitos>, así que se
   // exige exactamente eso.
   const filas = SLUG
     ? candidatos.filter((f) => new RegExp(`^${APARTADO}${SLUG}_\\d{14}$`).test(f.nspname))
     : candidatos;
+
+  // LO DE DISCO SE MIRA AQUÍ, ANTES DE DECIDIR SI HAY ALGO QUE HACER
+  // (13/08/2026). Mirando solo los schemas, esto decía «nada que purgar» y se
+  // iba — dejando los papeles del cliente y su `.rollback.sql` en disco para
+  // siempre en cuanto el schema se hubiera purgado en otra pasada. Es
+  // literalmente lo que quedó de las tres bajas del 12/08.
+  const enDisco = SLUG ? await listarApartados(SLUG) : { carpetas: [], redes: [] };
 
   di();
   if (SLUG) di(`  Apartados de «${SLUG}»: ${filas.length} de ${candidatos.length} en total`);
@@ -112,10 +126,17 @@ async function purgar() {
     );
     di(`     ${f.nspname}   ${t.n} tablas`);
   }
-  if (!filas.length) { di("\n  Nada que purgar.\n"); return; }
+  for (const c of enDisco.carpetas) di(`     uploads/_bajas/${c}/   sus ficheros`);
+  for (const r of enDisco.redes) di(`     uploads/_bajas/${r}   red de rescate (lleva password_hash)`);
+
+  if (!filas.length && !enDisco.carpetas.length && !enDisco.redes.length) {
+    di("\n  Nada que purgar.\n");
+    return;
+  }
 
   if (!APLICAR) {
     di("\n  ENSAYO. Nada se ha tocado.");
+    di("  ⚠ Destruye también sus FACTURAS, que hay obligación de conservar. Míralo antes.");
     di(`  Para hacerlo:  node scripts/borrar-tenant.js ${SLUG ?? ""}${SLUG ? " " : ""}--purgar --aplicar ` +
        `--confirmo=${SLUG ?? "todos"}${SLUG ? "" : " --todos"}\n`);
     return;
@@ -126,7 +147,9 @@ async function purgar() {
   if (CONFIRMO !== esperado) {
     morir(
       `Para purgar hay que teclear el identificador: --confirmo=${esperado}\n` +
-        `  Se van a DESTRUIR ${filas.length} schema(s), y eso no tiene vuelta atrás.`
+        `  Se van a DESTRUIR ${filas.length} schema(s)` +
+        `${enDisco.carpetas.length ? `, sus ficheros` : ""}` +
+        `${enDisco.redes.length ? ` y su red de rescate` : ""}, y eso no tiene vuelta atrás.`
     );
   }
 
@@ -135,6 +158,23 @@ async function purgar() {
     await q(`DROP SCHEMA "${f.nspname}" CASCADE`);
     di(`     destruido ${f.nspname}`);
   }
+
+  /* Y SUS PAPELES, Y SU RED (13/08/2026). Antes la purga solo miraba a
+   * PostgreSQL, así que «destruido» dejaba en disco los documentos del cliente
+   * —de salud incluidos— para siempre y sin nada que los apuntara; y dejaba
+   * también el `.rollback.sql`, que sin su schema ya no restaura nada y lo único
+   * que conserva son los `password_hash` de sus usuarios. Las tres bajas del
+   * 12/08 acabaron exactamente así. Se van con el mismo comando o no se van
+   * nunca: nadie iba a acordarse de un segundo paso. */
+  if (SLUG) {
+    const { borradas, redes } = await purgarFicherosApartados(SLUG);
+    for (const c of borradas) di(`     destruidos sus ficheros de ${c}`);
+    for (const r of redes) di(`     destruida su red de rescate ${r}`);
+    if (!borradas.length && !redes.length) di("     (no tenía ficheros ni red apartados)");
+  } else {
+    di("     ⚠ Con --todos NO se tocan los ficheros ni las redes: púrgalos cliente a cliente.");
+  }
+
   di(`\n  ${filas.length} schemas destruidos. Esto ya no tiene vuelta atrás.\n`);
 }
 
@@ -143,8 +183,11 @@ async function purgar() {
  * ════════════════════════════════════════════════════════════════════════ */
 async function baja() {
   if (!SLUG) morir("Falta el slug.\n  Uso: node scripts/borrar-tenant.js <slug> [--aplicar --confirmo=<slug>]");
-  if (!/^[a-z][a-z0-9_]{2,40}$/.test(SLUG)) morir(`"${SLUG}" no es un identificador válido.`);
-  if (SLUG === NOSOTROS && !SUICIDIO) {
+
+  const rx = await radiografiaParaBaja(SLUG);
+  if (rx.error) morir(rx.error);
+
+  if (rx.esNosotros && !SUICIDIO) {
     morir(
       `"${NOSOTROS}" somos nosotros: es el único tenant con el módulo 'provisioning' y sin él\n` +
         `  no hay back-office (ni esta pantalla, ni el alta, ni el registro). Si de verdad es lo\n` +
@@ -152,89 +195,41 @@ async function baja() {
     );
   }
 
-  const [[t]] = await q(
-    `SELECT id, slug, name, plan, status, settings, created_at FROM master.tenants WHERE slug = :slug`,
-    { replacements: { slug: SLUG }, type: undefined }
-  ).then(([r]) => [r]);
-  if (!t) morir(`No existe ningún cliente con el identificador "${SLUG}".`);
-
-  const schema = `crm_${SLUG}`;
-  const [[hay]] = await q(`SELECT to_regclass('${schema}.clients') IS NOT NULL AS x`).then(([r]) => [r]);
-  const [[tablas]] = await q(
-    `SELECT count(*)::int n FROM information_schema.tables WHERE table_schema = '${schema}'`
-  ).then(([r]) => [r]);
-  const [usuarios] = await q(
-    `SELECT id, email, role FROM master.users WHERE tenant_id = :id ORDER BY email`,
-    { replacements: { id: t.id } }
-  );
-  // El `id` va incluido a propósito: `master.tenant_modules.id` es NOT NULL y no
-  // tiene valor por defecto en la base, así que un rollback que no lo traiga
-  // falla con 23502 justo el día que hace falta. Lo descubrió la prueba de ida
-  // y vuelta del 11/08, no un incidente.
-  const [modulos] = await q(
-    `SELECT id, module_key, enabled, version, schema_extensions, logic_overrides, ui_override, feature_flags
-       FROM master.tenant_modules WHERE tenant_id = :id ORDER BY module_key`,
-    { replacements: { id: t.id } }
-  );
-
-  /* ── Cuánta vida hay dentro ─────────────────────────────────────────────
-   * Se cuentan TODAS las tablas del schema, no una lista escrita a mano.
-   *
-   * Había una lista de trece tablas «interesantes», y mentía: Retorika tiene
-   * sus datos en `quiz_attempts` (212 filas en local, 526 en producción) y
-   * `training_users`, que no estaban en ella. El script anunciaba «DATOS
-   * DENTRO: ninguno», el freno de `--con-datos` no saltaba, y la baja pasaba
-   * sola. Es el peor fallo posible en un freno: decir que no hay nada justo
-   * en el momento en que alguien decide.
-   *
-   * Una lista a mano de tablas que crecen cada sprint solo puede ir a peor,
-   * así que no hay lista. */
-  // Se pregunta a `pg_catalog` y no a `information_schema.tables`: Sequelize
-  // reconoce las consultas a esa vista como «listar tablas» y devuelve un array
-  // plano de cadenas en vez de filas, así que `row.table_name` salía undefined
-  // y la consulta siguiente iba contra `crm_x.undefined`. Lo cazó la prueba.
-  const [tablasDelSchema] = await q(
-    `SELECT c.relname AS tabla
-       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = :schema AND c.relkind = 'r'
-      ORDER BY 1`,
-    { replacements: { schema } }
-  );
-  const conDatos = [];
-  for (const { tabla } of tablasDelSchema) {
-    const [[c]] = await q(`SELECT count(*)::int n FROM "${schema}"."${tabla}"`).then(([r]) => [r]);
-    if (c.n > 0) conDatos.push({ tabla, n: c.n });
-  }
-  conDatos.sort((a, b) => b.n - a.n);
-  // Para no escupir cuarenta tablas: se enseñan las diez con más filas y se
-  // dice cuántas quedan. El recuento total sí es el de verdad.
-  const filasTotales = conDatos.reduce((s, x) => s + x.n, 0);
-  const resumenDatos = conDatos.length
-    ? conDatos.slice(0, 10).map((x) => `${x.tabla}=${x.n}`).join(", ") +
-      (conDatos.length > 10 ? ` (y ${conDatos.length - 10} tablas más)` : "")
+  // Para no escupir cuarenta tablas: se enseñan las diez con más filas y se dice
+  // cuántas quedan. El recuento total sí es el de verdad.
+  const resumenDatos = rx.conDatos.length
+    ? rx.conDatos.slice(0, 10).map((x) => `${x.tabla}=${x.n}`).join(", ") +
+      (rx.conDatos.length > 10 ? ` (y ${rx.conDatos.length - 10} tablas más)` : "")
     : "ninguno";
-  const cuantoHay = `${filasTotales} filas en ${conDatos.length} tabla${conDatos.length === 1 ? "" : "s"}`;
+  const cuantoHay = `${rx.filasTotales} filas en ${rx.conDatos.length} tabla${rx.conDatos.length === 1 ? "" : "s"}`;
 
   di();
   di("  ══════════════════════════════════════════════════════════");
-  di(`   BAJA DE «${t.name}»  (${SLUG})`);
+  di(`   BAJA DE «${rx.tenant.nombre}»  (${SLUG})`);
   di("  ══════════════════════════════════════════════════════════");
-  di(`     estado          ${t.status}`);
-  di(`     alta            ${new Date(t.created_at).toISOString().slice(0, 10)}`);
-  di(`     schema          ${schema}  ${tablas.n} tablas${hay.x ? "" : "  (⚠ sin tabla clients)"}`);
-  di(`     usuarios        ${usuarios.length}${usuarios.length ? `  (${usuarios.map((u) => u.email).join(", ")})` : ""}`);
-  di(`     módulos         ${modulos.length}`);
+  di(`     estado          ${rx.tenant.estado}`);
+  di(`     alta            ${new Date(rx.tenant.alta).toISOString().slice(0, 10)}`);
+  di(`     schema          ${rx.schema}  ${rx.tablas} tablas`);
+  di(`     usuarios        ${rx.usuarios.length}${rx.usuarios.length ? `  (${rx.usuarios.map((u) => u.email).join(", ")})` : ""}`);
+  di(`     módulos         ${rx.modulos.length}`);
   di(`     DATOS DENTRO    ${resumenDatos}`);
-  if (conDatos.length) di(`                     ${cuantoHay} con contenido`);
+  if (rx.conDatos.length) di(`                     ${cuantoHay} con contenido`);
+  di(`     FICHEROS        ${rx.ficheros.total.ficheros
+    ? `${rx.ficheros.total.ficheros} (${kb(rx.ficheros.total.bytes)})`
+    : "ninguno"}`);
+  for (const r of rx.ficheros.rutas) {
+    if (r.ficheros) di(`                     uploads/${r.rel}  ${r.ficheros} (${kb(r.bytes)})`);
+  }
   di();
   di("     Qué va a pasar:");
   di(`       · el schema se RENOMBRA a ${APARTADO}${SLUG}_<fecha> (reversible, no se borra)`);
+  di("       · sus ficheros se MUEVEN a uploads/_bajas/<slug>_<fecha>/");
   di("       · se borran sus filas de master.tenants, users y tenant_modules");
   di("       · se escribe un .rollback.sql que devuelve esas filas Y la");
   di("         atribución de sus líneas de auditoría (el DELETE las deja a NULL)");
   di();
 
-  if (conDatos.length && !CON_DATOS) {
+  if (rx.conDatos.length && !CON_DATOS) {
     morir(
       `Este cliente TIENE DATOS: ${cuantoHay}.\n` +
         `  ${resumenDatos}\n` +
@@ -245,148 +240,25 @@ async function baja() {
   if (!APLICAR) {
     di("  ENSAYO. Nada se ha tocado.");
     di(`  Para hacerlo:  node scripts/borrar-tenant.js ${SLUG} --aplicar --confirmo=${SLUG}` +
-       `${conDatos.length ? " --con-datos" : ""}\n`);
+       `${rx.conDatos.length ? " --con-datos" : ""}\n`);
     return;
   }
-  if (CONFIRMO !== SLUG) {
-    morir(`Para aplicar hay que teclear el identificador: --confirmo=${SLUG}`);
-  }
+  if (CONFIRMO !== SLUG) morir(`Para aplicar hay que teclear el identificador: --confirmo=${SLUG}`);
 
-  /* ── La red: cómo devolver las filas de master ──────────────────────── */
-  const destino = `${APARTADO}${SLUG}_${sello()}`;
-  const esc = (v) => (v === null || v === undefined ? "NULL" : `'${String(v).replace(/'/g, "''")}'`);
-  const json = (v) => (v === null || v === undefined ? "NULL" : `'${JSON.stringify(v).replace(/'/g, "''")}'::jsonb`);
+  const res = await darDeBajaTenant({
+    slug: SLUG,
+    confirmo: CONFIRMO,
+    conDatos: CON_DATOS,
+    permitirNosotros: SUICIDIO,
+  });
+  if (res.error) morir(res.error);
 
-  const lineas = [
-    `-- Vuelta atrás de la baja de "${SLUG}" (${new Date().toISOString()}).`,
-    `-- Devuelve las filas de master. El schema se recupera con:`,
-    `--   ALTER SCHEMA "${destino}" RENAME TO "${schema}";`,
-    ``,
-    // Sin esto, `psql < fichero` sigue adelante tras un error y deja una
-    // restauración A MEDIAS con pinta de correcta: fue exactamente lo que pasó
-    // con las comillas de `version`. Si algo falla, que se pare y se vea.
-    `\\set ON_ERROR_STOP on`,
-    `BEGIN;`,
-    ``,
-    `ALTER SCHEMA "${destino}" RENAME TO "${schema}";`,
-    ``,
-    `INSERT INTO master.tenants (id, name, slug, db_name, plan, status, settings, created_at, updated_at)`,
-    `VALUES (${esc(t.id)}, ${esc(t.name)}, ${esc(t.slug)}, 'salamandra', ${esc(t.plan)}, ${esc(t.status)}, ${json(t.settings)}, ${esc(t.created_at?.toISOString?.() ?? t.created_at)}, now());`,
-    ``,
-  ];
-  for (const u of usuarios) {
-    const [[full]] = await q(
-      `SELECT id, email, password_hash, role, tenant_id, module_access, created_at FROM master.users WHERE id = :id`,
-      { replacements: { id: u.id } }
-    ).then(([r]) => [r]);
-    lineas.push(
-      `INSERT INTO master.users (id, email, password_hash, role, tenant_id, module_access, created_at, updated_at)`,
-      `VALUES (${esc(full.id)}, ${esc(full.email)}, ${esc(full.password_hash)}, ${esc(full.role)}, ${esc(full.tenant_id)}, ${json(full.module_access)}, ${esc(full.created_at?.toISOString?.() ?? full.created_at)}, now());`
-    );
-  }
-  lineas.push("");
-  for (const m of modulos) {
-    lineas.push(
-      `INSERT INTO master.tenant_modules (id, tenant_id, module_key, enabled, version, schema_extensions, logic_overrides, ui_override, feature_flags, created_at, updated_at)`,
-      // `version` va por `esc()` como todo lo demás: en la base es VARCHAR y su
-      // valor real es '1.0.0', así que interpolarlo a pelo generaba
-      // `VALUES (..., 1.0.0, ...)`, un error de sintaxis (42601). Y `psql` no
-      // para en el primer fallo: entraban el tenant y los usuarios, y solo
-      // reventaban los módulos, uno a uno. El cliente volvía sin un solo módulo
-      // —sidebar vacío, 403 en todo— con apariencia de restauración correcta.
-      `VALUES (${esc(m.id)}, ${esc(t.id)}, ${esc(m.module_key)}, ${m.enabled}, ${esc(m.version)}, ${json(m.schema_extensions)}, ${json(m.logic_overrides)}, ${esc(m.ui_override)}, ${json(m.feature_flags)}, now(), now());`
-    );
-  }
-
-  /* ── La auditoría: devolver de quién era cada línea ──────────────────────
-   * `master.audit_logs` apunta a tenants y a users con FK ON DELETE SET NULL.
-   * O sea que los tres DELETE de aquí abajo, sin tocar la tabla de auditoría,
-   * le vacían el `tenant_id` y el `user_id` a TODO el historial del cliente.
-   * Y eso no lo devolvía nada: el rollback traía de vuelta al tenant y a sus
-   * usuarios con los mismos UUID, pero las líneas de auditoría se quedaban a
-   * NULL para siempre, sin ninguna columna de la que deducir de quién eran.
-   * Deshacer la baja de Aumenta le habría dejado Equipo → Actividad en blanco.
-   *
-   * Aquí NO se modifica el contenido de ningún registro de auditoría —eso sí
-   * lo prohíbe la regla del proyecto—: se guarda a quién pertenecía cada uno
-   * para poder devolverle la atribución que el SET NULL le quita. */
-  const [rastro] = await q(
-    `SELECT id, tenant_id, user_id FROM master.audit_logs
-      WHERE tenant_id = :id OR user_id IN (SELECT id FROM master.users WHERE tenant_id = :id)`,
-    { replacements: { id: t.id } }
-  );
-  if (rastro.length) {
-    // Se agrupa por el par (tenant_id, user_id) —que son un puñado: el tenant
-    // y sus usuarios— y se emite un UPDATE por grupo, troceado, en vez de una
-    // sentencia por fila. Con años de auditoría eso es la diferencia entre un
-    // fichero manejable y uno de cientos de miles de líneas.
-    const grupos = new Map();
-    for (const r of rastro) {
-      const clave = `${r.tenant_id ?? ""}|${r.user_id ?? ""}`;
-      if (!grupos.has(clave)) grupos.set(clave, { tid: r.tenant_id, uid: r.user_id, ids: [] });
-      grupos.get(clave).ids.push(r.id);
-    }
-    lineas.push("", `-- Atribución de ${rastro.length} líneas de auditoría (el DELETE las deja a NULL).`);
-    for (const g of grupos.values()) {
-      for (let i = 0; i < g.ids.length; i += 500) {
-        const trozo = g.ids.slice(i, i + 500).map(esc).join(", ");
-        lineas.push(
-          `UPDATE master.audit_logs SET tenant_id = ${esc(g.tid)}, user_id = ${esc(g.uid)} WHERE id IN (${trozo});`
-        );
-      }
-    }
-  }
-
-  lineas.push("", "COMMIT;");
-
-  /*
-   * ── DÓNDE SE ESCRIBE LA RED (11/08/2026, encontrado en producción) ────────
-   *
-   * Esto era `process.cwd()/backups` y en el contenedor petaba con EACCES: el
-   * proceso corre como `nextjs` y `/app` es de root. La baja documentada para
-   * producción NO se podía ejecutar.
-   *
-   * Y aunque se hubiera podido, `/app` no está montado: el `.rollback.sql` se
-   * habría ido con el siguiente `deploy.sh`, o sea que la red de rescate
-   * duraba hasta el próximo despliegue. Por eso el destino por defecto dentro
-   * del contenedor es la carpeta montada (`/app/uploads`), que sobrevive.
-   *
-   * Que el fallo saliera ANTES de tocar nada no fue suerte: el fichero se
-   * escribe a propósito antes del ALTER y de los DELETE. Si no hay red, no se
-   * salta. Eso se mantiene.
-   */
-  const carpeta = process.env.BAJA_BACKUPS_DIR
-    ? process.env.BAJA_BACKUPS_DIR
-    : existsSync("/app/uploads")
-      ? "/app/uploads/_bajas"
-      : join(process.cwd(), "backups");
-  try {
-    mkdirSync(carpeta, { recursive: true });
-  } catch (e) {
-    morir(
-      `No se puede escribir la red de rescate en "${carpeta}" (${e.code ?? e.message}).\n` +
-        `  No se ha tocado NADA: sin el .rollback.sql esta baja no es reversible.\n` +
-        `  Indica una carpeta escribible con BAJA_BACKUPS_DIR=/ruta.`
-    );
-  }
-  const fichero = join(carpeta, `baja-${SLUG}-${sello()}.rollback.sql`);
-  // 0600: dentro van los `password_hash` de sus usuarios. Son hashes de bcrypt,
-  // no contraseñas, pero no tienen por qué leerlos todos los del sistema.
-  writeFileSync(fichero, `${lineas.join("\n")}\n`, { encoding: "utf8", mode: 0o600 });
-  di(`     red escrita en  ${fichero}`);
-
-  /* ── Y ahora sí ─────────────────────────────────────────────────────── */
-  if (tablas.n > 0) {
-    await q(`ALTER SCHEMA "${schema}" RENAME TO "${destino}"`);
-    di(`     apartado        ${schema} → ${destino}`);
-  } else {
-    di(`     sin schema      (no había nada que apartar)`);
-  }
-
-  await q(`DELETE FROM master.tenant_modules WHERE tenant_id = :id`, { replacements: { id: t.id } });
-  await q(`DELETE FROM master.users WHERE tenant_id = :id`, { replacements: { id: t.id } });
-  await q(`DELETE FROM master.tenants WHERE id = :id`, { replacements: { id: t.id } });
-  di(`     borradas        ${modulos.length} módulos, ${usuarios.length} usuarios, 1 cliente`);
+  di(`     red escrita en  ${res.rollback}`);
+  if (res.schemaApartado) di(`     apartado        ${rx.schema} → ${res.schemaApartado}`);
+  else di("     sin schema      (no había nada que apartar)");
+  di(`     borradas        ${res.modulos} módulos, ${res.usuarios} usuarios, 1 cliente`);
+  if (res.ficheros.movidos) di(`     ficheros        ${res.ficheros.movidos} movidos a ${res.ficheros.carpeta}`);
+  for (const e of res.ficheros.errores) di(`     ⚠ ficheros      ${e}`);
 
   // Rastro. Va a nombre de NOSOTROS porque el tenant al que se refiere ya no
   // existe, y una FK a una fila borrada no se puede guardar.
@@ -402,22 +274,26 @@ async function baja() {
         {
           replacements: {
             tid: yo.id,
-            eid: t.id,
+            eid: res.tenantId,
             antes: JSON.stringify({
-              slug: SLUG, nombre: t.name, modulos: modulos.map((m) => m.module_key),
-              usuarios: usuarios.length, schemaApartado: destino, datos: conDatos,
+              slug: SLUG, nombre: rx.tenant.nombre, modulos: rx.modulos,
+              usuarios: res.usuarios, schemaApartado: res.schemaApartado,
+              datos: rx.conDatos, ficheros: res.ficheros.movidos, desde: "ssh",
             }),
           },
         }
       );
+    } else {
+      di(`     (sin auditar: no existe el tenant ${NOSOTROS} en esta base)`);
     }
   } catch (e) {
     di(`     (no se pudo auditar: ${e.message})`);
   }
 
   di();
-  di(`  Hecho. El schema sigue entero en "${destino}".`);
-  di(`  Para deshacerlo:  psql < ${fichero}`);
+  di(`  Hecho. ${res.schemaApartado ? `El schema sigue entero en "${res.schemaApartado}".` : ""}`);
+  di(`  Para deshacerlo:  psql < ${res.rollback}`);
+  if (res.ficheros.carpeta) di(`  (sus ficheros no vuelven solos: están en ${res.ficheros.carpeta})`);
   di(`  Para destruirlo de verdad, más adelante:  node scripts/borrar-tenant.js ${SLUG} --purgar --aplicar --confirmo=${SLUG}`);
   di();
 }

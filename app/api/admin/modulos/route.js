@@ -60,7 +60,16 @@ export const GET = withTenant(async (_request, _ctx, ctx) => {
         // Solo los clientes en marcha: un suspendido no tiene módulos que
         // gestionar hoy y aquí solo ensuciaba la matriz. Se reactiva desde
         // /admin/clientes, que sí los sabe pedir.
-        where: whereClientesVisibles(),
+        //
+        // LAS DEMOS SÍ SALEN, y es la excepción entre las pantallas que miran
+        // (13/08/2026). En Custodia e Integraciones estorban —no pueden tener
+        // credenciales, e inflan «esta integración la usan N clientes» porque
+        // tienen medio catálogo encendido—, pero ESTA es la matriz de quién
+        // tiene qué, y es donde CLAUDE.md manda mirar cuando hay dudas. Fue
+        // aquí donde se vio que la demo tenía `support` en producción y no
+        // «solo en local», como decía la tabla escrita a mano. Esconderlas
+        // sería quitar justo la información por la que se abre la pantalla.
+        where: whereClientesVisibles(false, { incluirDemos: true }),
         attributes: ["id", "name", "slug", "plan", "status"],
         order: [["name", "ASC"]],
       }),

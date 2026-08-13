@@ -117,6 +117,31 @@ Consumo desde Outreach:
 - `buscar-nuevos` lee la clave de Google del tenant y la **descifra** con
   `decryptSecret` (sin fallback de entorno).
 
+### También se las podemos poner NOSOTROS (13/08/2026)
+
+Además de esta pantalla, las credenciales de un cliente se pueden poner desde el
+back-office, en la ficha de Custodia (`PUT /api/admin/configuraciones`,
+`lib/provisioning/credencialesCliente.js`). Existe porque los clientes no
+entraban aquí: **1 de 9 tenía clave de Anthropic y 0 de 9 la de OpenAI**, con
+once disparadores de IA desplegados y sin usar por nadie.
+
+Los cuatro puntos de arriba **siguen valiendo igual** por ese camino, y uno más:
+
+- El campo es de **solo escribir**. La regla del back-office —«no descifra
+  nada»— no se ha tocado: escribir una clave no obliga a leer la anterior. La
+  respuesta dice `puesta`, `cambiada` o `borrada` y nunca el valor, ni
+  enmascarado. Ahí NO hay `hint`; la pista enmascarada solo existe en esta
+  pantalla, que es la del propio cliente.
+- Se cifra con el mismo `secretBox` y se invalida la misma caché.
+- **A las demos no se les pone ninguna** (409): son públicas y dan sesión de
+  admin a cualquiera.
+- **El cliente recibe el mismo recibo por correo**, firmado como Salamandra en
+  vez de con el nombre de alguien de su equipo.
+
+Y en `settings.contacto` se apunta a quién se le escribe cuando hay que pedirle
+algo (`lib/provisioning/contactoCliente.js`). No confundir con el `adminEmail`
+del alta, que es el USUARIO con el que entra.
+
 ---
 
 ## API — `/api/tenant/settings`
