@@ -424,6 +424,16 @@ function TarjetaDemo() {
   );
 }
 
+/**
+ * El acuse. Y, si procede, la mala noticia.
+ *
+ * ⚠️ EL AVISO DE LA CAPTURA QUE NO ENTRÓ NO ES OPCIONAL. Cuando un adjunto se
+ * pasa de tamaño, el aviso SÍ se guarda —perder la captura es molesto, perder lo
+ * que nos querían contar es peor— y el endpoint devuelve el motivo en
+ * `avisoAdjuntos`. Hasta el 13/08/2026 ese motivo no se pintaba en ninguna
+ * parte: la persona veía «Recibido» y se iba convencida de que su captura había
+ * llegado. Una imagen que desaparece en silencio es peor que un error.
+ */
 function Recibido({ aviso, onOtro }) {
   return (
     <div className="bg-white border border-emerald-200 rounded-xl p-6">
@@ -432,6 +442,12 @@ function Recibido({ aviso, onOtro }) {
         Le hemos puesto la referencia <strong>{aviso.ref}</strong>. Te contestamos aquí mismo, y lo
         verás en esta pantalla.
       </p>
+      {aviso.avisoAdjuntos && (
+        <p className="text-[13px] mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 leading-relaxed">
+          Eso sí, <strong>la captura no ha entrado</strong>: {aviso.avisoAdjuntos} El aviso está
+          guardado igual; si la necesitamos te la pedimos.
+        </p>
+      )}
       <button
         onClick={onOtro}
         className="mt-3 text-[13px] underline underline-offset-2 cursor-pointer"
