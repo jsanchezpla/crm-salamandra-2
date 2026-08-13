@@ -6,7 +6,38 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // `lib/buzon/buzon.js` no importa nada (ni BD, ni Next): así el motivo que se
 // enseña en pantalla y el que devolvería el servidor son literalmente la misma
 // frase, y no dos textos parecidos que se separan con el tiempo.
-import { validarAvisoNuevo } from "../../lib/buzon/buzon.js";
+import { validarAvisoNuevo, LIMITES, MB_POR_ADJUNTO } from "../../lib/buzon/buzon.js";
+
+/**
+ * Lee la respuesta SIN dar por hecho que es JSON.
+ *
+ * ── POR QUÉ NO BASTA CON `res.json()` ───────────────────────────────────────
+ * Porque no todas las respuestas las escribe nuestra app. Cuando el cuerpo de
+ * la petición se pasa de tamaño, quien contesta es **nginx**, que corta antes de
+ * llegar a Next y devuelve una página HTML. `res.json()` se atraganta con ella y
+ * lanza «Unexpected token '<', "<html> <h"... is not valid JSON», que es lo que
+ * acaba viendo el usuario en la pantalla de Ayuda. Es decir: la pantalla que
+ * existe para que nos cuenten los fallos, fallando con un error de programador.
+ *
+ * Lo encontró Jorge el 13/08/2026 adjuntando un PNG normal, con el bloque del
+ * CRM en el 1 MB por defecto de nginx.
+ */
+async function leerRespuesta(res) {
+  const texto = await res.text();
+  try {
+    return JSON.parse(texto);
+  } catch {
+    if (res.status === 413) {
+      return {
+        ok: false,
+        error:
+          `Esa captura pesa demasiado para enviarla. El tope es ${MB_POR_ADJUNTO} MB por archivo ` +
+          `y hasta ${LIMITES.adjuntos}. Recórtala, o mándanos el aviso sin ella y nos la pasas aparte.`,
+      };
+    }
+    return { ok: false, error: `No se ha podido enviar (error ${res.status}). Vuelve a intentarlo.` };
+  }
+}
 
 /**
  * Ayuda — lo que el cliente ve para escribirnos y para seguir lo que nos mandó.
@@ -71,7 +102,7 @@ export default function AyudaModule({ esDemo = false }) {
     if (!silencioso) setCargando(true);
     try {
       const res = await fetch("/api/ayuda");
-      const json = await res.json();
+      const json = await leerRespuesta(res);
       if (!res.ok) throw new Error(json.error || "No se ha podido cargar");
       setAvisos(json.data.avisos ?? []);
       setTipos(json.data.tipos ?? []);
@@ -98,7 +129,7 @@ export default function AyudaModule({ esDemo = false }) {
     const revision = validarAvisoNuevo({ tipo, asunto, cuerpo, bloquea });
     if (!revision.ok) {
       setFallo(revision.error);
-      const campo = asunto.trim().length < 3 ? refAsunto : refCuerpo;
+      const campo = asunto.trim().length < LIMITES.asuntoMinimo ? refAsunto : refCuerpo;
       campo.current?.focus();
       return;
     }
@@ -138,7 +169,7 @@ export default function AyudaModule({ esDemo = false }) {
       }
 
       const res = await fetch("/api/ayuda", peticion);
-      const json = await res.json();
+      const json = await leerRespuesta(res);
       if (!res.ok) throw new Error(json.error || "No se ha podido enviar");
       setEnviado(json.data);
       setAsunto("");
@@ -237,7 +268,9 @@ export default function AyudaModule({ esDemo = false }) {
 
               <label className="block text-[13px] font-medium text-gray-700 mb-1.5" htmlFor="ayuda-ficheros">
                 Una captura ayuda mucho{" "}
-                <span className="font-normal text-gray-400">(opcional, hasta 3)</span>
+                <span className="font-normal text-gray-400">
+                  (opcional, hasta {LIMITES.adjuntos} de {MB_POR_ADJUNTO} MB)
+                </span>
               </label>
               <input
                 id="ayuda-ficheros"
@@ -245,13 +278,19 @@ export default function AyudaModule({ esDemo = false }) {
                 multiple
                 accept="image/*,.pdf"
                 onChange={(e) => {
-                  const elegidos = Array.from(e.target.files ?? []).slice(0, 3);
-                  const grande = elegidos.find((f) => f.size > 5 * 1024 * 1024);
+                  const elegidos = Array.from(e.target.files ?? []).slice(0, LIMITES.adjuntos);
+                  const grande = elegidos.find((f) => f.size > LIMITES.bytesPorAdjunto);
                   if (grande) {
-                    // Se avisa AQUÍ y no al enviar: descubrir que la captura no
-                    // cabe después de escribirlo todo es la peor forma de
-                    // enterarse.
-                    setFallo(`«${grande.name}» pasa de 5 MB. Recórtala o mándala aparte.`);
+                    // Se avisa AQUÍ, al elegir el fichero, y no al enviar:
+                    // descubrir que la captura no cabe DESPUÉS de haberlo
+                    // escrito todo es la peor forma de enterarse. Y se dice el
+                    // tope y lo que pesa la suya, para que no tenga que ir
+                    // probando.
+                    const pesa = (grande.size / (1024 * 1024)).toFixed(1);
+                    setFallo(
+                      `«${grande.name}» pesa ${pesa} MB y el tope son ${MB_POR_ADJUNTO} MB. ` +
+                        `Recórtala, o manda el aviso sin ella y nos la pasas aparte.`
+                    );
                     setFicheros([]);
                     e.target.value = "";
                     return;
@@ -417,7 +456,7 @@ function Detalle({ avisoId, onCerrar }) {
   const cargar = useCallback(async () => {
     try {
       const res = await fetch(`/api/ayuda/${avisoId}`);
-      const json = await res.json();
+      const json = await leerRespuesta(res);
       if (!res.ok) throw new Error(json.error || "No se ha podido cargar");
       setAviso(json.data);
     } catch (e) {
@@ -439,7 +478,7 @@ function Detalle({ avisoId, onCerrar }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cuerpo: texto }),
       });
-      const json = await res.json();
+      const json = await leerRespuesta(res);
       if (!res.ok) throw new Error(json.error || "No se ha podido enviar");
       setAviso(json.data);
       setTexto("");

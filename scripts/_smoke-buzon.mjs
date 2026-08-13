@@ -61,13 +61,26 @@ process.stdout.write("\n▶ El contexto del navegador es una lista CERRADA\n");
   comprobar("un contexto que no es objeto no rompe", JSON.stringify(limpiarContexto("x")) === "{}");
 }
 
-process.stdout.write("\n▶ Lo que NO se puede mandar\n");
+process.stdout.write("\n▶ Lo que NO se puede mandar, y CON QUÉ NÚMERO se dice\n");
 {
   const corto = validarAvisoNuevo({ asunto: "ab", cuerpo: "esto es suficientemente largo" });
   comprobar("un asunto de dos letras", !corto.ok && corto.status === 422, corto.error);
+  comprobar(
+    "dice el mínimo del asunto y lo que lleva",
+    corto.error.includes(String(LIMITES.asuntoMinimo)) && corto.error.includes("2"),
+    corto.error
+  );
 
-  const flojo = validarAvisoNuevo({ asunto: "No va el calendario", cuerpo: "no va" });
-  comprobar("un cuerpo de cuatro letras", !flojo.ok && flojo.status === 422, flojo.error);
+  // El caso exacto de Jorge (13/08/2026): «prueba», seis letras. El mensaje de
+  // antes decía «cuéntanos un poco más» y ya está, así que no había forma de
+  // saber si faltaban dos letras o dos frases.
+  const flojo = validarAvisoNuevo({ asunto: "PRUEBA del buzón", cuerpo: "prueba" });
+  comprobar("un cuerpo de seis letras", !flojo.ok && flojo.status === 422, flojo.error);
+  comprobar(
+    "DICE EL MÍNIMO EXACTO y cuánto lleva",
+    flojo.error.includes(String(LIMITES.cuerpoMinimo)) && flojo.error.includes("6"),
+    flojo.error
+  );
 
   const vacio = validarMensaje({ cuerpo: "   " });
   comprobar("un mensaje en blanco", !vacio.ok && vacio.status === 422, vacio.error);
