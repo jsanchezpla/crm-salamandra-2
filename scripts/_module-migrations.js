@@ -304,6 +304,12 @@ export const MODULES = {
     "migrate-clinica-performance-roles",
   ],
 
+  // Control horario. Depende de `team_members`, que crea el módulo Equipo: la
+  // arista está declarada en _migration-order.js porque la migración se salta
+  // sola el schema que no tenga esa tabla, y saltarse algo en silencio es
+  // justo lo que no se puede permitir aquí.
+  fichaje: ["migrate-fichaje-module"],
+
   team: [
     "migrate-team-fields",
     "migrate-rename-therapist-to-employee",

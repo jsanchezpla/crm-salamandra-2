@@ -227,6 +227,12 @@ const navigation = [
         // (decisión de Aumenta 2026-07-24); Incidencias y Bandeja las usa todo
         // el equipo, por eso van SIN adminOnly.
         children: [
+          // Fichaje: control horario. `moduleKey: "fichaje"` a secas, SIN
+          // `requiresAll` con `team_avanzado` — sus siete hermanos de abajo
+          // exigen además `clinica`, y atar un control horario a un módulo
+          // clínico lo dejaría invendible al cliente que solo quiere Equipo,
+          // que es justo quien lo compra. adminOnly: son datos laborales.
+          { key: "fichaje", label: "Fichaje", href: "/equipo/fichaje", adminOnly: true, moduleKey: "fichaje" },
           { key: "team-desempeno", label: "Desempeño", href: "/equipo/mi-desempeno", adminOnly: true, requiresAll: ["team_avanzado", "clinica"] },
           { key: "team-direccion", label: "Dirección", href: "/equipo/direccion", adminOnly: true, requiresAll: ["team_avanzado", "clinica"] },
           { key: "team-productividad", label: "Productividad", href: "/equipo/productividad", adminOnly: true, requiresAll: ["team_avanzado", "clinica"] },

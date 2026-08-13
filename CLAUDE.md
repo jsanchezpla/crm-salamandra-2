@@ -29,6 +29,7 @@ Antes de implementar cambios en un módulo concreto, lee su doc:
 | Outreach          | `docs/modules/outreach.md`   | Completo en local, sin desplegar  |
 | Soporte           | `docs/modules/support.md`    | Completo en local (demo), sin desplegar |
 | Analíticas        | `docs/modules/analytics.md`  | Implementado (spain_enzymes, aumenta, somos) |
+| Fichaje           | `docs/modules/fichaje.md`    | Implementado (aumenta) — control horario |
 | Configuración     | `docs/modules/configuracion.md` | Implementado (claves IA por tenant) |
 | Emails (infra)    | `docs/modules/emails.md`     | Infra transversal                |
 | Buzón / Ayuda     | `docs/modules/buzon.md`      | Implementado (todos, sin `moduleKey`) |
@@ -417,6 +418,7 @@ aplique.
 | `team_avanzado` | **Equipo avanzado** | Desempeño, Dirección, Productividad, Incidencias, Bandeja, Ocupación y Actividad. Se vende aparte; los submenús exigen `requiresAll` (avanzado + el módulo que aporta el contenido) y sus 16 endpoints lo comprueban. |
 | `documents` | **Documentos básico** | Solo el Contrato de Prestación de Servicios del centro. Es lo que necesita un cliente que no quiere un gestor documental (nutri_laura). |
 | `documents_avanzado` | **Documentos avanzado** | El archivo completo: carpetas, buscador, subida general y cuota. Mismo patrón que `team`/`team_avanzado`; los endpoints de `/api/documents/*` lo exigen. |
+| `fichaje` | **Fichaje** | Control horario: se vuelca el Excel del reloj de fichar cada mes. **Universal por dentro y de cada cliente por fuera**: el módulo es el mismo para todos y lo único que cambia es el LECTOR del Excel (`lib/fichaje/parsers/`), porque cada reloj escupe un formato distinto. Añadir un cliente = un fichero ahí y una línea en `POR_TENANT`. Requiere `team` y NO `team_avanzado` a propósito: los submenús del avanzado exigen además `clinica`, y eso dejaría el control horario invendible a quien solo quiere Equipo. |
 | `provisioning` | **Alta de clientes** | Panel interno SOLO de `salamandra_solutions`: crea el cliente entero (schema, tablas, módulos con dependencias, admin, marca y datos fiscales) y lo acompaña hasta el final — editarlo, suspenderlo, ponerle las credenciales y CERRARLE la cuenta. `lib/provisioning/`. |
 
 > **El ciclo de vida de un cliente, en un sitio** (13/08/2026). `lib/provisioning/`
