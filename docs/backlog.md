@@ -100,46 +100,6 @@ más alto, que es lo que aguanta a cloud-init).
 
 ## P1 — esta semana
 
-### Veinte familias escribieron por la web y siguen sin abrir en el CRM · `aumenta`
-
-Salió al comprobar los formularios el 13/08. La bandeja de Comerciales de Aumenta
-tiene **20 solicitudes en `pending` y una sola aceptada en todo el histórico**. La
-más antigua es del **11/04/2026**; luego 8 en junio, 8 en julio y 2 en agosto. O
-las están atendiendo por teléfono sin tocar el CRM —probable, y entonces lo que
-sobra es la bandeja— o hay familias esperando desde abril. No se puede saber
-desde fuera: hay que preguntarle al centro.
-
-Lo que sí explica que pase: **de las 14 personas dadas de alta, solo la cuenta
-`admin@aumenta.es` ve el módulo**. Las otras 13 tienen lista explícita en
-`master.users.module_access` y no incluye ni `formularios` ni `leads`, así que
-para ellas la bandeja no existe.
-
-Y los avisos llegaron tarde. La campana no existía hasta el 05/08 (`e756d9f`):
-en toda la tabla de Aumenta hay **una sola notificación**, del 12/08, para 21
-solicitudes. El correo a `info@aumentafuenlabrada.com` sí está desde que se hizo
-el módulo, pero necesita clave de Resend y **falla callado sin ella**; la de
-Aumenta está puesta hoy y sus ajustes se tocaron por última vez el 08/08, así
-que lo que entró antes probablemente no avisó por ningún sitio. Del lado de
-profesionales no hay correo en absoluto —ese endpoint solo manda campana, a
-propósito— y esa campana la ve una única persona.
-
-No es un fallo de código: las dos bandejas funcionan y se comprobó el 13/08 que
-lo que entra cae donde debe. Es que casi nadie puede mirarlas. La decisión de a
-quién se le abre —recepción, dirección— es de Aumenta, no nuestra.
-
-*Se comprueba*: hoy son 20 `pending` y 1 `accepted`. Y quién las ve, con
-`npm run db:check-access`.
-
-```sql
-SELECT status, count(*) FROM crm_aumenta.form_submissions GROUP BY status;
-```
-
-*Dónde*: `scripts/grant-module-access.js` para abrirlo a quien diga el centro;
-`app/api/public/leads/route.js:119` es la campana sin correo.
-*Comprobado en producción*: 13/08/2026 — 20 pendientes, la primera del 11/04;
-1 admin con acceso y 13 usuarios sin él; `last_login_at` del admin, 12/08 (entra,
-pero no las abre).
-
 ### «Pedirle otra tarjeta» no lleva a ninguna parte · todos
 
 El aviso recomienda pedir otra tarjeta y el botón se pinta, pero el endpoint
