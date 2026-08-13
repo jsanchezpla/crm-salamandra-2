@@ -8,6 +8,13 @@
 #             (usar cuando cambian dependencias o hay problemas)
 #
 # Requisito: node y npm instalados en el VPS host
+#
+# ⚠️ UN CAMBIO EN ESTE FICHERO NO SE APLICA HASTA EL DESPLIEGUE SIGUIENTE
+# (13/08/2026). El `git pull` de aquí abajo reemplaza este mismo script mientras
+# bash lo está ejecutando, así que la ejecución en curso sigue con el contenido
+# viejo. Se vio al meter el comprobador de las fotos doradas: el deploy terminó
+# sin sacarlo, y salió al relanzarlo sin haber cambiado nada. Si tocas
+# `deploy.sh`, cuenta con lanzarlo DOS veces.
 
 set -e
 
