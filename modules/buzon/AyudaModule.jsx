@@ -459,6 +459,25 @@ function Recibido({ aviso, onOtro }) {
   );
 }
 
+/** La lista de capturas de un mensaje (o del alta). No pinta nada si no hay. */
+function Capturas({ lista }) {
+  if (!lista?.length) return null;
+  return (
+    <ul className="mt-2 space-y-1">
+      {lista.map((ad) => (
+        <li key={ad.id}>
+          <a
+            href={`/api/ayuda/adjuntos/${ad.id}`}
+            className="text-[12px] underline underline-offset-2 text-gray-600 hover:text-gray-900"
+          >
+            {ad.nombre}
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /**
  * El hilo. Panel lateral, y respeta la barra móvil del dashboard (`top-14
  * lg:top-0`, regla #13) y la escala de capas: fondo z-40, panel z-50.
@@ -466,8 +485,10 @@ function Recibido({ aviso, onOtro }) {
 function Detalle({ avisoId, onCerrar }) {
   const [aviso, setAviso] = useState(null);
   const [texto, setTexto] = useState("");
+  const [ficheros, setFicheros] = useState([]);
   const [enviando, setEnviando] = useState(false);
   const [fallo, setFallo] = useState(null);
+  const refFicheros = useRef(null);
 
   const cargar = useCallback(async () => {
     try {
@@ -489,21 +510,54 @@ function Detalle({ avisoId, onCerrar }) {
     if (enviando || texto.trim().length === 0) return;
     setEnviando(true);
     try {
-      const res = await fetch(`/api/ayuda/${avisoId}/mensajes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cuerpo: texto }),
-      });
+      // Con capturas va como formulario; sin ellas, JSON. Igual que el alta.
+      let peticion;
+      if (ficheros.length) {
+        const fd = new FormData();
+        fd.set("cuerpo", texto);
+        for (const f of ficheros) fd.append("adjuntos", f);
+        peticion = { method: "POST", body: fd };
+      } else {
+        peticion = {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cuerpo: texto }),
+        };
+      }
+
+      const res = await fetch(`/api/ayuda/${avisoId}/mensajes`, peticion);
       const json = await leerRespuesta(res);
       if (!res.ok) throw new Error(json.error || "No se ha podido enviar");
       setAviso(json.data);
       setTexto("");
-      setFallo(null);
+      setFicheros([]);
+      if (refFicheros.current) refFicheros.current.value = "";
+      // Si la captura no entró, el mensaje SÍ: hay que decirlo, no callarlo.
+      setFallo(
+        json.data?.avisoAdjuntos
+          ? `El mensaje ha entrado, pero la captura no: ${json.data.avisoAdjuntos}`
+          : null
+      );
     } catch (e) {
       setFallo(e.message);
     } finally {
       setEnviando(false);
     }
+  }
+
+  /** El mismo freno que en el alta: se avisa AL ELEGIR, no al enviar. */
+  function elegirFicheros(e) {
+    const elegidos = Array.from(e.target.files ?? []).slice(0, LIMITES.adjuntos);
+    const grande = elegidos.find((f) => f.size > LIMITES.bytesPorAdjunto);
+    if (grande) {
+      const pesa = (grande.size / (1024 * 1024)).toFixed(1);
+      setFallo(`«${grande.name}» pesa ${pesa} MB y el tope son ${MB_POR_ADJUNTO} MB.`);
+      setFicheros([]);
+      e.target.value = "";
+      return;
+    }
+    setFallo(null);
+    setFicheros(elegidos);
   }
 
   return (
@@ -525,7 +579,9 @@ function Detalle({ avisoId, onCerrar }) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {fallo && <div className="text-[13px] text-red-700">{fallo}</div>}
+          {/* El error del panel se pinta UNA sola vez, abajo junto al botón de
+              enviar: es donde está mirando quien acaba de pulsar. Aquí había
+              otro igual y salía por duplicado. */}
           {aviso && (
             <>
               <div className="flex items-center gap-2 flex-wrap">
@@ -542,20 +598,8 @@ function Detalle({ avisoId, onCerrar }) {
               <div>
                 <div className="text-[11px] text-gray-400 mb-1">Tú · {fechaHora(aviso.createdAt)}</div>
                 <p className="text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed">{aviso.cuerpo}</p>
-                {aviso.adjuntos?.length > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {aviso.adjuntos.map((ad) => (
-                      <li key={ad.id}>
-                        <a
-                          href={`/api/ayuda/adjuntos/${ad.id}`}
-                          className="text-[12px] underline underline-offset-2 text-gray-600 hover:text-gray-900"
-                        >
-                          {ad.nombre}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                {/* Las del alta: las que NO cuelgan de ningún mensaje. */}
+                <Capturas lista={(aviso.adjuntos ?? []).filter((a) => !a.mensajeId)} />
               </div>
 
               {aviso.mensajes.map((m) => (
@@ -571,6 +615,12 @@ function Detalle({ avisoId, onCerrar }) {
                   >
                     {m.cuerpo}
                   </p>
+                  {/* Cada captura se enseña DONDE se mandó, no amontonada
+                      arriba: en un hilo con idas y venidas, saber a qué
+                      respuesta acompañaba es la mitad de la información. */}
+                  <div className="text-left">
+                    <Capturas lista={(aviso.adjuntos ?? []).filter((a) => a.mensajeId === m.id)} />
+                  </div>
                 </div>
               ))}
             </>
@@ -586,6 +636,20 @@ function Detalle({ avisoId, onCerrar }) {
             placeholder="Añadir algo…"
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-gray-400"
           />
+          {/* Hasta el 13/08/2026 solo se podía adjuntar en el aviso inicial: si
+              al responder hacía falta una segunda captura, no había forma. */}
+          <input
+            ref={refFicheros}
+            type="file"
+            multiple
+            accept="image/*,.pdf"
+            onChange={elegirFicheros}
+            className="w-full text-[12px] text-gray-500 mt-2 file:mr-2 file:py-1 file:px-2 file:rounded file:border file:border-gray-200 file:bg-white file:text-[12px] file:text-gray-700 file:cursor-pointer hover:file:border-gray-300"
+          />
+          {ficheros.length > 0 && (
+            <p className="text-[11px] text-gray-500 mt-1">{ficheros.map((f) => f.name).join(" · ")}</p>
+          )}
+          {fallo && <p className="text-[12px] text-red-700 mt-2 leading-snug">{fallo}</p>}
           <button
             type="submit"
             disabled={enviando || texto.trim().length === 0}

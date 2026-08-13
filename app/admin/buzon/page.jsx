@@ -52,6 +52,29 @@ function Etiqueta({ children }) {
   );
 }
 
+/** Las capturas de un mensaje (o del alta), con su peso. */
+function Capturas({ lista }) {
+  if (!lista?.length) return null;
+  return (
+    <ul className="mt-2 space-y-1">
+      {lista.map((ad) => (
+        <li key={ad.id}>
+          <a
+            href={`/api/admin/buzon/adjuntos/${ad.id}`}
+            className="text-[12px] underline underline-offset-2"
+            style={{ color: "var(--ok)" }}
+          >
+            {ad.nombre}
+          </a>{" "}
+          <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
+            {Math.round((ad.bytes ?? 0) / 1024)} kB
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Chip({ nivel = "grey", children }) {
   const c = NIVEL[nivel] ?? NIVEL.grey;
   return (
@@ -397,24 +420,8 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
                 <p className="text-[13px] whitespace-pre-wrap leading-relaxed" style={{ color: "var(--text)" }}>
                   {aviso.cuerpo}
                 </p>
-                {aviso.adjuntos?.length > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {aviso.adjuntos.map((ad) => (
-                      <li key={ad.id}>
-                        <a
-                          href={`/api/admin/buzon/adjuntos/${ad.id}`}
-                          className="text-[12px] underline underline-offset-2"
-                          style={{ color: "var(--ok)" }}
-                        >
-                          {ad.nombre}
-                        </a>{" "}
-                        <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
-                          {Math.round((ad.bytes ?? 0) / 1024)} kB
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                {/* Las del alta: las que no cuelgan de ningún mensaje. */}
+                <Capturas lista={(aviso.adjuntos ?? []).filter((a) => !a.mensajeId)} />
               </div>
 
               {aviso.mensajes.map((m) => (
@@ -435,6 +442,9 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
                   >
                     {m.cuerpo}
                   </p>
+                  {/* La captura, donde se mandó. Saber a qué respuesta
+                      acompañaba es la mitad de la información. */}
+                  <Capturas lista={(aviso.adjuntos ?? []).filter((a) => a.mensajeId === m.id)} />
                 </div>
               ))}
             </>

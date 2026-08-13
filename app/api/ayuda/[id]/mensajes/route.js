@@ -2,13 +2,19 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { created, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { isDemoTenant } from "../../../../../lib/demo/isDemo.js";
 import { enforceRateLimit } from "../../../../../lib/utils/rateLimit.js";
-import { validarMensaje, serializarAviso } from "../../../../../lib/buzon/buzon.js";
+import { validarMensaje, serializarAviso, MB_POR_ADJUNTO } from "../../../../../lib/buzon/buzon.js";
 import {
   leerDeUsuario,
   anadirMensaje,
+  crearAdjunto,
   esSinTabla,
   COMANDO_MIGRACION,
 } from "../../../../../lib/buzon/buzonStore.js";
+import {
+  guardarAdjuntosDelFormulario,
+  MAX_FICHEROS,
+  MAX_BYTES_POR_FICHERO,
+} from "../../../../../lib/buzon/buzonStorage.js";
 import { quienEscribe } from "../../../../../lib/buzon/quienEscribe.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -39,9 +45,27 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     });
     if (frenado) return frenado;
 
+    // Mismo tope que el alta, y por el mismo motivo: que conteste la app y no
+    // el proxy.
+    const declarado = Number(request.headers.get("content-length") ?? 0);
+    if (declarado > (MAX_FICHEROS * MAX_BYTES_POR_FICHERO + 1024 * 1024)) {
+      return error(
+        `Demasiado grande. Como mucho ${MAX_FICHEROS} ficheros de ${MB_POR_ADJUNTO} MB.`,
+        413
+      );
+    }
+
+    const esFormulario = (request.headers.get("content-type") ?? "").includes("multipart/form-data");
+
     let body;
+    let form = null;
     try {
-      body = await request.json();
+      if (esFormulario) {
+        form = await request.formData();
+        body = { cuerpo: form.get("cuerpo") };
+      } else {
+        body = await request.json();
+      }
     } catch {
       return error("Body inválido");
     }
@@ -53,7 +77,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     if (!aviso) return notFound("Ese aviso no existe");
 
     const usuario = await quienEscribe(request, ctx);
-    await anadirMensaje(aviso, {
+    const mensaje = await anadirMensaje(aviso, {
       autorTipo: "cliente",
       autorNombre: usuario.nombre,
       autorEmail: usuario.email,
@@ -62,8 +86,27 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       interno: false,
     });
 
+    // Las capturas del hilo cuelgan del MENSAJE (`mensajeId`), no del aviso: es
+    // lo que permite enseñarlas donde se mandaron y no todas amontonadas arriba.
+    // Si fallan, el mensaje se queda: perder la captura es molesto, perder el
+    // «sigue pasando» es peor.
+    let falloAdjuntos = null;
+    if (form) {
+      const r = await guardarAdjuntosDelFormulario({
+        form,
+        slug: ctx.slug,
+        avisoId: aviso.id,
+        subidoPor: "cliente",
+      });
+      for (const ficha of r.fichas) await crearAdjunto({ ...ficha, mensajeId: mensaje.id });
+      falloAdjuntos = r.error;
+    }
+
     const fresco = await leerDeUsuario(id, { usuarioId });
-    return created(serializarAviso(fresco, { para: "cliente" }));
+    return created({
+      ...serializarAviso(fresco, { para: "cliente" }),
+      avisoAdjuntos: falloAdjuntos,
+    });
   } catch (err) {
     if (esSinTabla(err)) {
       return error(`No se ha podido guardar. Falta correr en el VPS: ${COMANDO_MIGRACION}`, 503);
