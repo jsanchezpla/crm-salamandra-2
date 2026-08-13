@@ -165,6 +165,67 @@ function Chip({ nivel = "grey", children }) {
   );
 }
 
+/**
+ * Cómo se tría esto con Claude, explicado DENTRO del buzón.
+ *
+ * Va aquí y no en un README porque el momento en que hace falta saberlo es
+ * mirando esta pantalla, no buscando por el repositorio (lo pidió Jorge el
+ * 13/08/2026, para que Rodrigo lo tenga a mano sin preguntar).
+ *
+ * Plegado por defecto: quien ya lo sabe no tiene que verlo cada vez, y quien no,
+ * lo encuentra sin buscar. Es `<details>` del navegador y no un estado de React
+ * a propósito — un desplegable que no necesita JavaScript no se puede romper.
+ */
+function ComoTriarlo() {
+  const orden = { background: "var(--panel-alto)", border: "1px solid var(--line)" };
+  return (
+    <details className="mt-5 rounded" style={{ border: "1px solid var(--line)", background: "var(--panel)" }}>
+      <summary className="text-[12px] px-3.5 py-2.5 cursor-pointer select-none" style={{ color: "var(--dim)" }}>
+        ¿Cómo se convierte esto en tareas? — triaje con Claude
+      </summary>
+
+      <div className="px-3.5 pb-3.5 text-[12px] leading-relaxed" style={{ color: "var(--dim)" }}>
+        <p className="mb-2.5">
+          Hay una skill que lee de aquí los avisos de <b>«algo no funciona»</b> (las dudas y las
+          mejoras no), comprueba <b>contra producción</b> si el fallo sigue pasando y hace una de
+          dos cosas: lo apunta en el Registro y lo despliega, o —si ya estaba arreglado— le
+          contesta al cliente ella misma. Para contestarle tiene que poder señalar el commit que
+          lo arregla <i>y</i> comprobar que está desplegado; si no puede, no le dice nada.
+        </p>
+
+        <p className="mb-1.5">
+          <b>Cómo se lanza.</b> Abre <b>Claude Code de escritorio</b> en la carpeta del CRM
+          (<code>crm-salamandra-2</code>), escribe esto y pulsa Enter:
+        </p>
+        <div className="rounded px-2.5 py-1.5 mb-2.5 font-mono text-[12px]" style={orden}>
+          /incidencias-buzon
+        </div>
+
+        <p className="mb-1.5">
+          Así las tría todas. Para una sola, con su referencia —la que sale en cada fila, tipo
+          AV-0007—:
+        </p>
+        <div className="rounded px-2.5 py-1.5 mb-2.5 font-mono text-[12px]" style={orden}>
+          /incidencias-buzon AV-0007
+        </div>
+
+        <p className="mb-2.5">
+          <b>Cuándo se para y te lo deja a ti.</b> Cuando no pueda decidir si un fallo sigue pasando —porque
+          hace falta la captura, o reproducirlo con la sesión del cliente— <b>no se lo inventa</b>:
+          te lo dice y lo deja. Eso es una respuesta buena, no un fallo de la skill.
+        </p>
+
+        <p className="mb-0" style={{ color: "var(--tenue)" }}>
+          Lo que escribe en el Registro viaja dentro de la imagen de Docker, así que la skill
+          despliega sola: hasta que no se despliega, el tablero enseña lo de antes. Las reglas
+          completas están en <code>.claude/skills/incidencias-buzon/SKILL.md</code> y en{" "}
+          <code>docs/como-apuntar-en-el-tablero.md</code>.
+        </p>
+      </div>
+    </details>
+  );
+}
+
 export default function BuzonPage() {
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState(null);
@@ -258,6 +319,8 @@ export default function BuzonPage() {
           escrito. En el VPS: <code>docker exec crm-salamandra-app-1 node scripts/migrate-buzon.js</code>
         </div>
       )}
+
+      <ComoTriarlo />
 
       <div className="mt-8 flex items-center gap-1.5 flex-wrap">
         {PESTANAS.map((p) => {
