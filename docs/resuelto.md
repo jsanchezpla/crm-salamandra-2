@@ -28,6 +28,45 @@ Lo más reciente arriba.
 
 ## 13/08/2026
 
+### Los dos formularios de Aumenta, y cada uno cae por su puerta · `aumenta`
+
+**Lo que pedía la tarea, y lo que no cuadraba.** El recado de Jorge del 12/08 daba
+por hecho que el de profesionales sería otra fila de `forms` y que sus solicitudes
+caerían en **Interesados → Comerciales**. Al ir a comprobarlo, el formulario ya
+estaba publicado —viene con el tema nuevo— pero enviando a `/api/public/leads`, o
+sea a **Interesados → Profesionales**, el embudo por etapas.
+
+**Lo que se decidió.** Rodrigo, 13/08: está bien así y se queda. Son dos puertas
+distintas a propósito. «Soy una familia» va a la bandeja de Comerciales, donde
+alguien acepta o descarta y de ahí sale la ficha; «Soy profesional» va al embudo y
+además **marca el perfil como profesional de la salud** (`tipo_usuario` =
+`profesional`), que es lo que permite trabajarlo por etapas y lo que no daría la
+bandeja. Es el mismo reparto que tunutrilaura. Se corrige la tarea, no el código.
+
+**Lo que sí cambió.** En el de familias, la pregunta 3 decía «¿Cómo se llama el
+peque?» y ahora dice **«¿Cómo se llama el paciente?»** (Rodrigo). El centro no es
+solo infantil —estimulación cognitiva y neuropsicología son de adultos, y la
+pregunta 2 ya ofrece «Soy yo quien necesita ayuda»—, así que «el peque» dejaba
+fuera a media consulta. Cambia el ENUNCIADO; las `key` siguen siendo `nombrePeque`
+y `edadPeque` **a propósito**: el `name` de cada campo de la web tiene que
+coincidir con la `key` o el CRM lo descarta en silencio, y el CRM se siembra en el
+acto mientras que el tema lo sube Rodrigo cuando puede — con las claves cambiadas,
+todo lo que entrara entre un momento y el otro perdería el nombre y la edad sin
+que saltara ningún error.
+
+*Cómo se comprobó*: 13/08/2026 contra producción. Un envío real a
+`POST /api/public/leads` con `x-tenant: aumenta` y el mismo cuerpo que manda la
+web: entró con `tipo_usuario = profesional`, `stage = new` y los nueve
+`customFields` intactos —incluida la prueba del consentimiento con su fecha y su
+URL—; la fila de prueba se borró después, con su notificación, y
+`crm_aumenta.leads` volvió a sus 2 reales. Del lado de familias,
+`GET /api/public/c/aumenta/formularios/familias` ya devuelve el enunciado nuevo, y
+la fila conserva sus 8 preguntas, el aviso a `info@aumentafuenlabrada.com` y su
+`wordpressUrl`. En la web, la portada trae los dos formularios (`auf` y `aup`, en
+pestañas) y `/formularios/` el de familias (`auf2`).
+*Dónde*: `scripts/seed-formulario-aumenta.js`; el tema, en `aumenta-work/aumenta/`
+(`aumenta-formularios.php` y `aumenta-leads.php`).
+
 ### Dar un bono era cosa solo de la ficha de Laura · `aumenta`, `somos`, `demo`, todos
 
 **Lo que se vio al terminar lo de arriba.** Rodrigo: «todo el mundo tiene bonos,
