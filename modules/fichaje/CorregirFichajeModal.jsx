@@ -33,12 +33,34 @@ export default function CorregirFichajeModal({ fichaje, onClose, onHecho }) {
   });
   const [entrada, setEntrada] = useState(fichaje.entradaAt ? String(fichaje.entradaAt).slice(0, 5) : "");
   const [salida, setSalida] = useState(fichaje.salidaAt ? String(fichaje.salidaAt).slice(0, 5) : "");
+
   const [nota, setNota] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState(null);
 
   const minutos = aMinutos(horas);
   const original = fichaje.minutosOriginal ?? fichaje.minutos;
+
+  /**
+   * Cambiar una hora RECALCULA el total.
+   *
+   * Antes no lo hacía y había un cartelito diciendo «las horas mandan: si
+   * cambias la entrada, ajusta también el total». Eso es pedirle al usuario que
+   * haga una resta para que el sistema no se contradiga, y el día que se le
+   * olvide guarda una jornada de 09:00 a 17:00 que dice durar seis horas. En un
+   * módulo cuyo número acaba en una nómina, eso no puede depender de que
+   * alguien se acuerde.
+   *
+   * Se sigue pudiendo escribir el total a mano —hay días sin horas de reloj—:
+   * solo se recalcula al tocar una de las dos horas, y solo si están las dos.
+   */
+  function recalcular(nuevaEntrada, nuevaSalida) {
+    const e = aMinutos(nuevaEntrada);
+    const s = aMinutos(nuevaSalida);
+    if (e === null || s === null) return;
+    const total = s >= e ? s - e : s - e + 1440; // cruzó la medianoche
+    setHoras(`${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`);
+  }
 
   async function guardar(borrar = false) {
     if (!nota.trim()) return setError("Escribe el motivo: es lo que hace que esto sea una corrección y no un número cambiado.");
@@ -96,12 +118,14 @@ export default function CorregirFichajeModal({ fichaje, onClose, onHecho }) {
           <div className="grid grid-cols-3 gap-2">
             <label className="block">
               <span className="text-[11px] uppercase tracking-wider text-gray-400 block mb-1">Entrada</span>
-              <input type="time" value={entrada} onChange={(e) => setEntrada(e.target.value)}
+              <input type="time" value={entrada}
+                onChange={(e) => { setEntrada(e.target.value); recalcular(e.target.value, salida); }}
                 className="w-full px-2 py-1.5 text-sm rounded-md border border-gray-200" />
             </label>
             <label className="block">
               <span className="text-[11px] uppercase tracking-wider text-gray-400 block mb-1">Salida</span>
-              <input type="time" value={salida} onChange={(e) => setSalida(e.target.value)}
+              <input type="time" value={salida}
+                onChange={(e) => { setSalida(e.target.value); recalcular(entrada, e.target.value); }}
                 className="w-full px-2 py-1.5 text-sm rounded-md border border-gray-200" />
             </label>
             <label className="block">
@@ -111,7 +135,8 @@ export default function CorregirFichajeModal({ fichaje, onClose, onHecho }) {
             </label>
           </div>
           <p className="text-xs text-gray-400 -mt-2">
-            Las horas mandan sobre entrada y salida: si cambias solo la entrada, ajusta también el total.
+            El total se recalcula solo al cambiar una hora. También puedes escribirlo a mano
+            («7:30» o «7,5») si ese día no hay horas de reloj.
           </p>
 
           <label className="block">

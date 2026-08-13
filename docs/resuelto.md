@@ -72,9 +72,11 @@ horas de otra persona.
 *Cómo se comprobó*: las cuatro garantías, de punta a punta contra el fichero real
 (13/08, local): entran **269 jornadas** de las 271 leídas —las 2 que faltan son
 errores reales del Excel, un día sin hora de salida y una jornada de 21 h—,
-volver a volcar deja 269 y no 538, una corrección a mano sobrevive con su valor,
-revertir deja el mes limpio y la corrección viva, y al mes siguiente los 14
-nombres casan solos. En producción, 13/08: módulo activo en `aumenta` y `demo`,
+volver a volcar deja 269 y no 538, una corrección a mano sobrevive con su valor
+al RE-VOLCAR, revertir se lleva el lote entero —incluidas las correcciones que
+nacieron de él, que es lo correcto: una corrección sobre una fila que no debió
+entrar solo hereda el error con mejor letra— y al mes siguiente los 14 nombres
+casan solos. En producción, 13/08: módulo activo en `aumenta` y `demo`,
 las dos tablas y el índice único `fichajes_import_unico` creados en los dos
 schemas, «Fichaje» sale en el menú, `/equipo/fichaje` responde 200, el endpoint
 del mes devuelve el equipo, y el volcado está bloqueado en la demo.

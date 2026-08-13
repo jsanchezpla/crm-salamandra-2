@@ -123,6 +123,14 @@ como el stock del inventario se suma de sus movimientos.
    `superseded` y da de baja **solo sus filas `origen='import'`**. Las `manual` y
    `corregido` sobreviven, y el preview lo dice antes de tocar nada.
 
+⚠️ **RE-VOLCAR y REVERTIR no siguen la misma regla, y es a propósito.** Re-volcar
+es «aquí está el fichero bueno»: las correcciones a mano SOBREVIVEN, porque
+siguen siendo válidas. Revertir es «este fichero entero no debería existir»: se
+va todo lo que nació de él, corregido o no — una corrección sobre una fila que no
+debió entrar solo hereda el error con mejor letra. Por eso `revertir` devuelve
+`correcciones`: quien pulse el botón tiene que ver «esto se lleva 3 correcciones
+que hiciste» antes de hacerlo.
+
 ---
 
 ## Identificar a la persona

@@ -38,7 +38,7 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
       action: "fichaje.volcado_deshecho",
       entity: "FichajeImport",
       entityId: id,
-      after: { periodo: res.periodo, jornadasDadasDeBaja: res.bajas },
+      after: { periodo: res.periodo, jornadasDadasDeBaja: res.bajas, correccionesArrastradas: res.correcciones },
       ...datosPeticion(request),
     });
 

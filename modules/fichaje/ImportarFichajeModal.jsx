@@ -112,6 +112,13 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
                   Se dieron de baja {resultado.reemplazadas} del volcado anterior de ese mes.
                 </p>
               )}
+              {resultado.duplicadas > 0 && (
+                <p className="text-sm text-gray-500 mt-1">
+                  Se descartaron {resultado.duplicadas}{" "}
+                  {resultado.duplicadas === 1 ? "fila repetida" : "filas repetidas"} del fichero
+                  (misma persona, mismo día y misma hora).
+                </p>
+              )}
               {resultado.anotaciones > 0 && (
                 <p className="text-sm text-gray-500 mt-1">
                   Se guardaron {resultado.anotaciones} anotaciones del fichero.
