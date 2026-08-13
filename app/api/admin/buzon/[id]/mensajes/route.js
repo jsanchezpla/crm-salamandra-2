@@ -9,6 +9,7 @@ import {
 } from "../../../../../../lib/buzon/buzonStore.js";
 import { candadoBuzon, quienContesta } from "../../../../../../lib/buzon/candadoBackoffice.js";
 import { avisarAlCliente } from "../../../../../../lib/buzon/avisarPorCorreo.js";
+import { avisarEnSuCrm } from "../../../../../../lib/buzon/avisarEnSuCrm.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -58,6 +59,9 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     // respuesta está guardada y él la ve igual en su pantalla.
     if (!v.limpio.interno) {
       await avisarAlCliente({ aviso, mensaje });
+      // Y en su CRM: campana + el aviso de la portada. Ninguno de los dos puede
+      // tumbar la respuesta, que ya está guardada.
+      await avisarEnSuCrm({ aviso });
     }
 
     const fresco = await leerParaSalamandra(id, { marcarLeido: false });
