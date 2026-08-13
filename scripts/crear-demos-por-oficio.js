@@ -31,6 +31,7 @@
  * Uso VPS:    docker exec crm-salamandra-app-1 node scripts/crear-demos-por-oficio.js --confirm
  */
 
+import bcrypt from "bcrypt";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -40,6 +41,7 @@ import { getTenantDb, closeAllConnections } from "../lib/db/tenantDb.js";
 import { invalidateTenantCache } from "../lib/tenant/tenantResolver.js";
 import { DEMOS, demoPorSlug } from "../lib/demo/demos.js";
 import { altaTenant, ponerSchemaAlDia } from "../lib/provisioning/altaTenant.js";
+import { generatePassword } from "../lib/team/access.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -173,6 +175,39 @@ async function montar(demo) {
     log(`✓ ${modulos.length} módulos activos`);
     const puesta = await ponerSchemaAlDia(slug, modulos);
     log(puesta.ok ? "✓ schema al día" : `⚠ migraciones: ${puesta.motivo}`);
+  }
+
+  /*
+   * ── Y QUE TENGA ADMIN, AUNQUE EL ALTA SE HAYA QUEDADO A MEDIAS ────────────
+   *
+   * Pasó en producción el 13/08/2026: el proceso murió (señal 9) mientras
+   * sembraba `demo_agencia`. El tenant y su schema ya estaban creados, así que
+   * al relanzar entraba por la rama de «ya existe»… que daba por hecho que el
+   * usuario estaba. No estaba: `altaTenant` lo crea DESPUÉS de las migraciones.
+   *
+   * El resultado era una demo con su schema, sus módulos y sus datos, y con el
+   * botón público devolviendo 404 — porque `/api/auth/demo` necesita una cuenta
+   * con la que firmar la sesión. Una idempotencia que solo aguanta si nada se
+   * interrumpe no es idempotencia.
+   *
+   * La contraseña es aleatoria y no se enseña a propósito: a una demo se entra
+   * por el botón, sin contraseña. Si alguna vez hace falta, se resetea con
+   * scripts/reset-tenant-admin-password.js.
+   */
+  const admins = await User.count({ where: { tenantId: tenant.id } });
+  if (!admins) {
+    const passwordHash = await bcrypt.hash(generatePassword(), 12);
+    await User.create(
+      {
+        email: `admin@${slug}.salamandra`,
+        passwordHash,
+        role: "admin",
+        tenantId: tenant.id,
+        moduleAccess: ["all"],
+      },
+      { validate: false }
+    );
+    log(`✓ creado el administrador que faltaba (admin@${slug}.salamandra)`);
   }
 
   // Los admin de la demo ven TODOS los módulos: sin esto, `users.module_access`
