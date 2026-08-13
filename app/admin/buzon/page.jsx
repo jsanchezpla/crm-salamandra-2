@@ -52,26 +52,102 @@ function Etiqueta({ children }) {
   );
 }
 
-/** Las capturas de un mensaje (o del alta), con su peso. */
-function Capturas({ lista }) {
+/**
+ * Las capturas de un mensaje (o del alta), con su peso.
+ *
+ * «Ver» solo aparece cuando el fichero se puede enseñar de verdad (`verComo`,
+ * que decide la extensión guardada y nunca acepta SVG). Lo demás se descarga.
+ */
+function Capturas({ lista, onVer }) {
   if (!lista?.length) return null;
   return (
     <ul className="mt-2 space-y-1">
       {lista.map((ad) => (
-        <li key={ad.id}>
+        <li key={ad.id} className="flex items-center gap-2 flex-wrap">
           <a
             href={`/api/admin/buzon/adjuntos/${ad.id}`}
             className="text-[12px] underline underline-offset-2"
             style={{ color: "var(--ok)" }}
           >
             {ad.nombre}
-          </a>{" "}
+          </a>
           <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
             {Math.round((ad.bytes ?? 0) / 1024)} kB
           </span>
+          {ad.verComo && (
+            <button
+              type="button"
+              onClick={() => onVer(ad)}
+              className="text-[11px] px-2 py-0.5 rounded cursor-pointer"
+              style={{ border: "1px solid var(--line)", color: "var(--dim)" }}
+            >
+              Ver
+            </button>
+          )}
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * El visor. Encima del panel lateral (z-[60] sobre su z-50), porque se abre
+ * desde él y taparlo es lo que tiene que hacer.
+ *
+ * Pide el fichero con `?ver=1`; sin ese parámetro el endpoint lo sirve como
+ * descarga. Solo llegan aquí imágenes y PDF: el botón que lo abre no existe
+ * para lo demás.
+ */
+function Visor({ adjunto, onCerrar }) {
+  useEffect(() => {
+    const alPulsar = (e) => {
+      if (e.key === "Escape") onCerrar();
+    };
+    document.addEventListener("keydown", alPulsar);
+    return () => document.removeEventListener("keydown", alPulsar);
+  }, [onCerrar]);
+
+  if (!adjunto) return null;
+  const url = `/api/admin/buzon/adjuntos/${adjunto.id}?ver=1`;
+  const esPdf = adjunto.verComo === "application/pdf";
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] bg-black/70 flex flex-col"
+      onClick={onCerrar}
+      role="dialog"
+      aria-label={adjunto.nombre}
+    >
+      <div className="flex items-center justify-between gap-3 px-4 py-3 text-white shrink-0">
+        <span className="text-[13px] truncate">{adjunto.nombre}</span>
+        <div className="flex items-center gap-3 shrink-0">
+          <a
+            href={`/api/admin/buzon/adjuntos/${adjunto.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-[12px] underline underline-offset-2 text-white/80 hover:text-white"
+          >
+            Descargar
+          </a>
+          <button
+            onClick={onCerrar}
+            className="text-white/80 hover:text-white text-2xl leading-none cursor-pointer"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 min-h-0 px-4 pb-4" onClick={(e) => e.stopPropagation()}>
+        {esPdf ? (
+          <iframe src={url} title={adjunto.nombre} className="w-full h-full rounded bg-white" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={url} alt={adjunto.nombre} className="max-w-full max-h-full object-contain rounded" />
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -256,6 +332,7 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
   const [interno, setInterno] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [fallo, setFallo] = useState(null);
+  const [viendo, setViendo] = useState(null);
 
   const cargar = useCallback(async () => {
     try {
@@ -402,14 +479,16 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
                   <b>Quién</b>: {aviso.usuarioNombre || "—"} · {aviso.usuarioEmail || "sin correo"} ·{" "}
                   {aviso.usuarioRol || "—"}
                 </div>
+                {/* El churro del user-agent NO se pinta (Jorge, 13/08/2026): son
+                    tres líneas ilegibles que no dicen nada de un vistazo. Se
+                    SIGUE guardando en `contexto.navegador` por si algún día hace
+                    falta para un fallo que solo pase en un navegador; se mira en
+                    la base, no aquí. El tamaño de ventana sí se queda: es corto
+                    y es lo que explica los «el botón se sale de la pantalla». */}
                 <div>
                   <b>Dónde</b>: {aviso.pantalla || "no lo dijo"}
+                  {aviso.contexto?.ventana ? ` · ventana ${aviso.contexto.ventana}` : ""}
                 </div>
-                {aviso.contexto?.navegador && (
-                  <div className="truncate">
-                    <b>Con</b>: {aviso.contexto.navegador} · {aviso.contexto.ventana ?? ""}
-                  </div>
-                )}
                 {aviso.bloquea && <div style={{ color: "var(--alerta)" }}>Dice que le impide trabajar.</div>}
               </div>
 
@@ -421,7 +500,7 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
                   {aviso.cuerpo}
                 </p>
                 {/* Las del alta: las que no cuelgan de ningún mensaje. */}
-                <Capturas lista={(aviso.adjuntos ?? []).filter((a) => !a.mensajeId)} />
+                <Capturas lista={(aviso.adjuntos ?? []).filter((a) => !a.mensajeId)} onVer={setViendo} />
               </div>
 
               {aviso.mensajes.map((m) => (
@@ -444,7 +523,7 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
                   </p>
                   {/* La captura, donde se mandó. Saber a qué respuesta
                       acompañaba es la mitad de la información. */}
-                  <Capturas lista={(aviso.adjuntos ?? []).filter((a) => a.mensajeId === m.id)} />
+                  <Capturas lista={(aviso.adjuntos ?? []).filter((a) => a.mensajeId === m.id)} onVer={setViendo} />
                 </div>
               ))}
             </>
@@ -482,6 +561,8 @@ function Detalle({ avisoId, asignables, estados, prioridades, onCerrar }) {
           </div>
         </form>
       </aside>
+
+      <Visor adjunto={viendo} onCerrar={() => setViendo(null)} />
     </>
   );
 }

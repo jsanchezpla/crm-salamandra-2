@@ -83,6 +83,26 @@ async function loadHome() {
   }
 }
 
+/**
+ * Lo que Salamandra le ha contestado y aún no ha abierto.
+ *
+ * Se lee de `master` —donde vive el buzón— y NO del schema del cliente, así que
+ * no depende de que tenga ningún módulo. Best-effort a conciencia: la portada
+ * nunca da 500, y menos por un aviso.
+ */
+async function respuestasSinLeer() {
+  try {
+    const h = await headers();
+    const userId = h.get("x-user-id");
+    if (!userId) return [];
+    const { sinVerDeUsuario } = await import("../../lib/buzon/buzonStore.js");
+    return await sinVerDeUsuario(userId);
+  } catch (err) {
+    console.error("[home] buzón no disponible:", err?.message || err);
+    return [];
+  }
+}
+
 export default async function HomePage() {
   const today = new Date().toLocaleDateString("es-ES", {
     weekday: "long",
@@ -91,7 +111,10 @@ export default async function HomePage() {
     year: "numeric",
   });
 
-  const { blocks, enabled, admin, vocab } = await loadHome();
+  const [{ blocks, enabled, admin, vocab }, sinLeer] = await Promise.all([
+    loadHome(),
+    respuestasSinLeer(),
+  ]);
   const visibleLinks = QUICK_LINKS.filter((l) => enabled.has(l.moduleKey)).map((l) =>
     l.moduleKey === "clients"
       ? { ...l, eyebrow: vocab.area, title: vocab.plural, hint: vocab.pistaHome }
@@ -119,6 +142,29 @@ export default async function HomePage() {
           clientes, ventas, facturación y todo lo que tienes activo.
         </p>
       </section>
+
+      {/* Le hemos contestado desde el panel y aún no lo ha abierto.
+          Va ARRIBA DEL TODO, antes de los widgets: es lo único de esta pantalla
+          que espera algo de él. Solo sale si hay algo — una portada con un hueco
+          fijo de avisos se convierte en un hueco vacío que nadie mira. */}
+      {sinLeer.length > 0 && (
+        <section className="px-5 lg:px-12 pb-8 max-w-6xl">
+          <a
+            href="/ayuda"
+            className="block border border-[var(--ink-200)] rounded-[var(--radius-card)] px-5 py-4 hover:border-[var(--ink-300)] transition-colors bg-[var(--color-card,#fff)]"
+          >
+            <div className="eyebrow mb-2">Salamandra te ha contestado</div>
+            <ul className="space-y-1">
+              {sinLeer.map((a) => (
+                <li key={a.id} className="text-[15px] text-[var(--ink-900)] leading-snug">
+                  {a.asunto}
+                </li>
+              ))}
+            </ul>
+            <div className="text-[13px] text-[var(--ink-500)] mt-2">Verlo en Ayuda →</div>
+          </a>
+        </section>
+      )}
 
       {/* Resumen "Tu día" — widgets de datos por módulo activo */}
       <HomeSummary blocks={blocks} admin={admin} vocab={vocab} />

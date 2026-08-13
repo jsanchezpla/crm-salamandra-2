@@ -5,6 +5,7 @@ import { error, notFound, unauthorized, serverError } from "../../../../../lib/u
 import { contentDisposition } from "../../../../../lib/documents/helpers.js";
 import { adjuntoConSuAviso } from "../../../../../lib/buzon/buzonStore.js";
 import { abrirFichero } from "../../../../../lib/buzon/buzonStorage.js";
+import { tipoParaVerEnPantalla } from "../../../../../lib/buzon/buzon.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -52,14 +53,21 @@ export const GET = withTenant(async (request, { params }) => {
       throw e;
     }
 
+    // `?ver=1` = enseñarlo en pantalla en vez de descargarlo. Solo se concede
+    // para lo que `tipoParaVerEnPantalla` acepta (imágenes normales y PDF, NUNCA
+    // SVG), y con el tipo que decide ELLA a partir de la extensión que
+    // guardamos, no con el `mime` que declaró quien lo subió.
+    const url = new URL(request.url);
+    const tipoEnLinea = url.searchParams.get("ver") === "1" ? tipoParaVerEnPantalla(adj.ruta) : null;
+
     return new Response(Readable.toWeb(stream), {
       status: 200,
       headers: {
-        "Content-Type": adj.mime || "application/octet-stream",
-        // SIEMPRE como adjunto y con nosniff: un SVG servido en línea sería un
-        // XSS en el dominio del cliente.
-        "Content-Disposition": contentDisposition("attachment", adj.nombre),
+        "Content-Type": tipoEnLinea || adj.mime || "application/octet-stream",
+        "Content-Disposition": contentDisposition(tipoEnLinea ? "inline" : "attachment", adj.nombre),
         "Content-Length": String(size),
+        // Siempre, en los dos casos: es lo que impide que el navegador adivine
+        // un tipo distinto del que le decimos.
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, no-cache",
       },

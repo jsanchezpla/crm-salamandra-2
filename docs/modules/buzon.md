@@ -170,8 +170,22 @@ Y aun así, el navegador nunca puede dar por hecho que la respuesta es JSON:
 `leerRespuesta()` en `modules/buzon/AyudaModule.jsx` mira si se puede parsear y,
 si no, traduce el 413 a una frase con el tope y el peso real del fichero.
 
-Siempre `Content-Disposition: attachment` + `nosniff`: un SVG servido en línea
-sería un XSS, y en el caso del panel, en `admin.salamandrasolutions.com`.
+### Vista previa
+
+Las dos pantallas tienen un botón **«Ver»** que abre la captura sin descargarla
+(imágenes y PDF). Pide el fichero con `?ver=1`; sin ese parámetro el endpoint lo
+sirve como descarga, que sigue siendo lo que hace el nombre del fichero.
+
+⚠️ **`tipoParaVerEnPantalla()` es lista blanca y NUNCA acepta SVG.** Un SVG es un
+XML que puede llevar `<script>` dentro: abierto en línea se ejecuta en nuestro
+origen, y una de las dos pantallas es `admin.salamandrasolutions.com`. Además el
+tipo con el que se sirve lo decide **la extensión que guardamos nosotros**, no el
+`mime` de la ficha — ese lo declaró el navegador de quien subió el fichero, o
+sea alguien de fuera. `nosniff` va siempre, en línea o descargando.
+
+La función vive en `lib/buzon/buzon.js` y no en `buzonStorage.js` porque la
+necesitan a la vez el endpoint y el navegador, y `buzonStorage` arrastra
+`node:fs`.
 
 ## Correo
 
@@ -195,16 +209,30 @@ qué dominio entra cada uno (unos por subdominio nuestro, `nutri_laura` por
 `tunutrilaura.com`), y un enlace roto en un correo de soporte es peor que no
 ponerlo.
 
-## En vez de campana, un punto
+## Cuando le contestamos se entera por tres sitios
 
-Cuando le contestamos, el icono de Ayuda de su sidebar se enciende con un punto.
-Sale de `contarSinVer()`, que compara `respondido_at` con `visto_cliente_at`.
+1. **Correo** (`avisarPorCorreo.js`).
+2. **La portada y el punto del menú**, los dos leídos de `master` desde su
+   propio host y con su propia sesión: `sinVerDeUsuario()` / `contarSinVer()`,
+   que comparan `respondido_at` con `visto_cliente_at`. No cruzan a ningún
+   schema.
+3. **La campana** (`lib/buzon/avisarEnSuCrm.js`).
 
-Se eligió esto y **no** una notificación en su campana porque avisarle por la
-campana obliga a escribir en el schema de su tenant desde `/api/admin`, y hoy
-**ningún endpoint del back-office abre el schema de un cliente**. Un contador
-leído de master, desde su propio host y con su propia sesión, da el mismo aviso
-sin cruzar nada.
+⚠️ **Ese tercero es el ÚNICO sitio del back-office que abre el schema de un
+cliente**, y conviene que siga siéndolo. Hasta el 13/08/2026 ningún endpoint de
+`/api/admin` lo hacía, y ese aislamiento es media razón de que exista la
+separación por host. Se hizo la excepción porque la campana es donde la gente
+mira. Va con tres condiciones que no son negociables y están escritas en el
+propio fichero:
+
+- Se comprueba el cliente en `master.tenants` con `status: 'active'` **antes** de
+  tocar nada. Con uno de baja el schema ya no se llama igual y el INSERT
+  reventaría; con uno **suspendido** es peor, porque funcionaría y escribiríamos
+  una campana que nadie podrá leer jamás.
+- Best-effort: no puede tumbar la respuesta, que ya está guardada.
+- Solo se avisa a **quien escribió**: es el único que ve ese aviso en `/ayuda`.
+
+El clic de la campana lleva a `/ayuda` (`notificationLink`, `case "BuzonAviso"`).
 
 ## Lo que NO hace
 

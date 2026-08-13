@@ -459,22 +459,103 @@ function Recibido({ aviso, onOtro }) {
   );
 }
 
-/** La lista de capturas de un mensaje (o del alta). No pinta nada si no hay. */
-function Capturas({ lista }) {
+/**
+ * La lista de capturas de un mensaje (o del alta). No pinta nada si no hay.
+ *
+ * El botón «Ver» solo sale cuando el fichero se puede enseñar de verdad
+ * (`verComo`, que lo decide la extensión guardada y NUNCA acepta SVG). Para lo
+ * demás queda el nombre, que descarga. Un botón que a veces no hace nada es
+ * peor que no tenerlo.
+ */
+function Capturas({ lista, onVer }) {
   if (!lista?.length) return null;
   return (
     <ul className="mt-2 space-y-1">
       {lista.map((ad) => (
-        <li key={ad.id}>
+        <li key={ad.id} className="flex items-center gap-2 flex-wrap">
           <a
             href={`/api/ayuda/adjuntos/${ad.id}`}
             className="text-[12px] underline underline-offset-2 text-gray-600 hover:text-gray-900"
           >
             {ad.nombre}
           </a>
+          {ad.verComo && (
+            <button
+              type="button"
+              onClick={() => onVer(ad)}
+              className="text-[11px] px-2 py-0.5 rounded-full border border-gray-200 text-gray-600 hover:border-gray-300 cursor-pointer"
+            >
+              Ver
+            </button>
+          )}
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * El visor. Se abre encima de todo, incluido el panel lateral.
+ *
+ * Sube un escalón sobre la escala de capas del proyecto (widgets z-30, fondo
+ * z-40, panel z-50): esto es z-[60] porque se abre DESDE el panel y taparlo es
+ * justo lo que tiene que hacer.
+ *
+ * Pide el fichero con `?ver=1`; sin ese parámetro el endpoint lo sirve como
+ * descarga. La imagen y el PDF son lo único que llega aquí, porque el botón que
+ * abre esto solo aparece para ellos.
+ */
+function Visor({ adjunto, base, onCerrar }) {
+  useEffect(() => {
+    const alPulsar = (e) => {
+      if (e.key === "Escape") onCerrar();
+    };
+    document.addEventListener("keydown", alPulsar);
+    return () => document.removeEventListener("keydown", alPulsar);
+  }, [onCerrar]);
+
+  if (!adjunto) return null;
+  const url = `${base}/${adjunto.id}?ver=1`;
+  const esPdf = adjunto.verComo === "application/pdf";
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] bg-black/70 flex flex-col"
+      onClick={onCerrar}
+      role="dialog"
+      aria-label={adjunto.nombre}
+    >
+      <div className="flex items-center justify-between gap-3 px-4 py-3 text-white shrink-0">
+        <span className="text-[13px] truncate">{adjunto.nombre}</span>
+        <div className="flex items-center gap-3 shrink-0">
+          <a
+            href={`${base}/${adjunto.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-[12px] underline underline-offset-2 text-white/80 hover:text-white"
+          >
+            Descargar
+          </a>
+          <button
+            onClick={onCerrar}
+            className="text-white/80 hover:text-white text-2xl leading-none cursor-pointer"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+      {/* El clic en el contenido no cierra: solo el de fuera. */}
+      <div className="flex-1 min-h-0 px-4 pb-4" onClick={(e) => e.stopPropagation()}>
+        {esPdf ? (
+          <iframe src={url} title={adjunto.nombre} className="w-full h-full rounded bg-white" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={url} alt={adjunto.nombre} className="max-w-full max-h-full object-contain rounded" />
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -488,6 +569,7 @@ function Detalle({ avisoId, onCerrar }) {
   const [ficheros, setFicheros] = useState([]);
   const [enviando, setEnviando] = useState(false);
   const [fallo, setFallo] = useState(null);
+  const [viendo, setViendo] = useState(null);
   const refFicheros = useRef(null);
 
   const cargar = useCallback(async () => {
@@ -599,7 +681,7 @@ function Detalle({ avisoId, onCerrar }) {
                 <div className="text-[11px] text-gray-400 mb-1">Tú · {fechaHora(aviso.createdAt)}</div>
                 <p className="text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed">{aviso.cuerpo}</p>
                 {/* Las del alta: las que NO cuelgan de ningún mensaje. */}
-                <Capturas lista={(aviso.adjuntos ?? []).filter((a) => !a.mensajeId)} />
+                <Capturas lista={(aviso.adjuntos ?? []).filter((a) => !a.mensajeId)} onVer={setViendo} />
               </div>
 
               {aviso.mensajes.map((m) => (
@@ -619,7 +701,7 @@ function Detalle({ avisoId, onCerrar }) {
                       arriba: en un hilo con idas y venidas, saber a qué
                       respuesta acompañaba es la mitad de la información. */}
                   <div className="text-left">
-                    <Capturas lista={(aviso.adjuntos ?? []).filter((a) => a.mensajeId === m.id)} />
+                    <Capturas lista={(aviso.adjuntos ?? []).filter((a) => a.mensajeId === m.id)} onVer={setViendo} />
                   </div>
                 </div>
               ))}
@@ -660,6 +742,8 @@ function Detalle({ avisoId, onCerrar }) {
           </button>
         </form>
       </aside>
+
+      <Visor adjunto={viendo} base="/api/ayuda/adjuntos" onCerrar={() => setViendo(null)} />
     </>
   );
 }

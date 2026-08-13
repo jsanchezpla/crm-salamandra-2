@@ -5,6 +5,7 @@ import { error, notFound, serverError } from "../../../../../../lib/utils/apiRes
 import { contentDisposition } from "../../../../../../lib/documents/helpers.js";
 import { adjuntoConSuAviso } from "../../../../../../lib/buzon/buzonStore.js";
 import { abrirFichero } from "../../../../../../lib/buzon/buzonStorage.js";
+import { tipoParaVerEnPantalla } from "../../../../../../lib/buzon/buzon.js";
 import { candadoBuzon } from "../../../../../../lib/buzon/candadoBackoffice.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -41,13 +42,23 @@ export const GET = withTenant(async (request, { params }, ctx) => {
       throw e;
     }
 
+    // `?ver=1` = enseñarlo aquí en vez de descargarlo, que es lo normal cuando
+    // alguien nos manda una captura de un fallo.
+    //
+    // ⚠️ Aquí el filtro de `tipoParaVerEnPantalla` importa MÁS que en el lado del
+    // cliente: esto se sirve desde `admin.salamandrasolutions.com`, donde vive la
+    // sesión que toca la configuración de TODOS los clientes. Un SVG abierto en
+    // línea se ejecutaría ahí. Por eso el tipo lo decide la extensión que
+    // guardamos nosotros y no el `mime` que declaró quien lo subió — que es,
+    // literalmente, alguien de fuera.
+    const url = new URL(request.url);
+    const tipoEnLinea = url.searchParams.get("ver") === "1" ? tipoParaVerEnPantalla(adj.ruta) : null;
+
     return new Response(Readable.toWeb(stream), {
       status: 200,
       headers: {
-        "Content-Type": adj.mime || "application/octet-stream",
-        // Nunca en línea: un SVG que nos manden abierto en el navegador sería un
-        // XSS en `admin.salamandrasolutions.com`, que es el peor sitio posible.
-        "Content-Disposition": contentDisposition("attachment", adj.nombre),
+        "Content-Type": tipoEnLinea || adj.mime || "application/octet-stream",
+        "Content-Disposition": contentDisposition(tipoEnLinea ? "inline" : "attachment", adj.nombre),
         "Content-Length": String(size),
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, no-cache",
