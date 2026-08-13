@@ -102,7 +102,7 @@ más alto, que es lo que aguanta a cloud-init).
 
 ### «Pedirle otra tarjeta» ya funciona, pero nadie lo ha visto funcionar · todos
 
-**Escrito y probado el 13/08/2026; sin comprobar en el VPS.** El botón se pintaba
+**Desplegado el 13/08/2026; sin ejercitar en el VPS.** El botón se pintaba
 y el aviso lo recomendaba, pero el endpoint contestaba 409 a toda cita `failed`:
 usaba `tieneRetencionPendiente`, y esa lista mete `failed` a propósito. De las
 tres salidas del dinero perdido —reintentar, pedir otra tarjeta, rechazar—
@@ -141,12 +141,43 @@ para montar el caso y este flujo entero se puede ensayar sin tocar a nadie.
 *Probado*: 13/08/2026 — `scripts/_smoke-pedir-otra-tarjeta.mjs`, seis casos en
 verde, incluido el de «no se pudo preguntar → estorba». No cubre la distinción
 viva/muerta contra Stripe: eso necesita claves de prueba.
-*Comprobado en producción*: 09/08/2026 — `failed` sigue en la lista (que es
-correcto y no se ha tocado). Del arreglo nuevo, nada todavía.
+*Comprobado en producción*: 13/08/2026 — el arreglo está **desplegado** (las dos
+funciones nuevas responden dentro del contenedor y `/login` sigue en 200), pero
+su COMPORTAMIENTO no se ha ejercitado: para eso hace falta una cita `failed`
+real. Lo anterior, del 09/08: `failed` sigue en la lista, que es correcto y no se
+ha tocado.
 
 ---
 
 ## P2 — cuando se pueda
+
+### El back-office nuevo está desplegado y en producción no se le nota · producto
+
+Salió al comprobar el despliegue del 13/08 (17:35), que subió `fbdd116` —demos
+por oficio, poner claves a un cliente y cerrar cuentas—. El código está en el
+VPS, pero **sus cuatro entradas de `resuelto.md` dicen «comprobado en local»** y
+ninguna se ha visto funcionando allí. La norma de arriba pide lo contrario, así
+que o se comprueban o vuelven aquí.
+
+Lo único que se puede afirmar hoy, mirando la base de datos: **las demos por
+oficio no existen en producción**. `master.tenants` tiene los siete clientes de
+siempre y ninguna `demo_clinica`, `demo_nutricion` ni `demo_agencia`. O sea que
+el escaparate público sigue siendo exactamente el de antes —una sola demo con
+veinte módulos—, que es el problema que esa tarea daba por resuelto. No está
+roto: `DemoTabs` cuenta las que existen de verdad y se esconde con menos de dos,
+así que no hay ninguna pestaña que lleve a un 404. Simplemente no hay nada nuevo
+que ver hasta que se siembren.
+
+Las otras dos —poner claves y cerrar cuentas— no se pueden comprobar mirando:
+hay que ponerle una clave a alguien y dar de baja a alguien. La de bajas conviene
+ensayarla con un cliente de mentira antes que con uno real.
+
+*Se comprueba*: en producción existen `demo_clinica`, `demo_nutricion` y
+`demo_agencia`, y desde la demo general se salta a ellas por las pestañas.
+*Dónde*: `npm run db:demos` (`scripts/crear-demos-por-oficio.js`) es lo que las
+siembra; el catálogo está en `lib/demo/demos.js`.
+*Comprobado en producción*: 13/08/2026 — desplegado y sano (contenedores arriba,
+`/login` en 200), y `master.tenants` con 7 clientes y ninguna demo de oficio.
 
 ### La nutrición solo sabe vivir en casa de Laura · `aumenta`, producto
 
