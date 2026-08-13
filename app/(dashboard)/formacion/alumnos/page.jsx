@@ -6,6 +6,7 @@ import { TrainingTable, Tr, Td } from "../../../../components/training/TrainingT
 import { TypeBadge } from "../../../../components/training/TrainingBadge.jsx";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Select from "@/components/ui/Select.jsx";
+import { anchoPantalla } from "../../../../components/layout/anchoPantalla.js";
 
 const LIMIT = 50;
 
@@ -69,16 +70,17 @@ export default function AlumnosPage() {
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
-    <div className="p-4 lg:p-8 max-w-7xl mx-auto">
+    <div className={anchoPantalla("listado")}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl font-extrabold text-neutral-900 flex items-center gap-2" style={{ fontFamily: "'Syne', sans-serif" }}>
-            Alumnos por curso
-            <HelpTooltip title="Alumnos por curso">
+            Matrículas
+            <HelpTooltip title="Matrículas">
               Cada línea es una matrícula: un alumno apuntado a un curso. Si una misma persona está
               en tres cursos, aparece tres veces. Es la forma rápida de responder a preguntas como
-              «¿qué alumnos tengo en este curso?» o «¿qué cursos está haciendo esta persona?».
+              «¿qué alumnos tengo en este curso?» o «¿qué cursos está haciendo esta persona?». Aquí
+              no se dan de alta personas: eso es Alumnos.
             </HelpTooltip>
           </h1>
           <p className="text-xs text-neutral-400 mt-0.5">{total} matrículas</p>

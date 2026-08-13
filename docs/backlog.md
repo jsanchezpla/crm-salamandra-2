@@ -320,30 +320,6 @@ caracteres, y el global deja de usarse.
 *Comprobado en producción*: 09/08/2026 — solo `nutri_laura` (64) tiene entrada
 propia; el global sigue en 31.
 
-### Analíticas de Aumenta: el módulo está, faltan las credenciales de su web · `aumenta`
-
-Se le activó `analytics` el 13/08/2026 (venía de la tarea que proponía apagarle
-los módulos vacíos y que Rodrigo dio la vuelta: los tres vacíos se quedan, lo que
-faltaba era este). El menú y la pantalla ya están, pero enseñan «sin configurar»:
-Analíticas lee Cloudflare Web Analytics con las credenciales DEL CLIENTE, no con
-una nuestra, y Aumenta no las ha dado.
-
-Hace falta pedirles dos cosas: el `accountId` de su cuenta de Cloudflare y un
-token de API de solo lectura con permiso «Account Analytics: Read», que se pegan
-en Configuración → Integraciones. Y que su web lleve el beacon de Cloudflare, o
-no habrá visitas que contar. Nada de esto lo podemos hacer nosotros por ellos.
-
-Mientras tanto, la captura diaria no pierde nada porque no hay nada que perder:
-Cloudflare solo guarda 7 días, así que el histórico empieza el día que se
-configure, no antes.
-
-*Se comprueba*: entrar en `/analiticas` como Aumenta y ver visitas en vez de
-«sin configurar».
-*Dónde*: `lib/analytics/cloudflareConfig.js` (qué credenciales pide y por qué son
-del cliente).
-*Comprobado en producción*: 13/08/2026 — módulo activo y `web_visits_daily`
-creada; de los siete clientes solo `spain_enzymes` tiene credenciales puestas.
-
 ---
 
 ## Pendiente de una decisión suya

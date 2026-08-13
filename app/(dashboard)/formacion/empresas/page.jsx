@@ -6,6 +6,7 @@ import Link from "next/link";
 import { TrainingTable, Tr, Td } from "../../../../components/training/TrainingTable.jsx";
 import { ActiveBadge } from "../../../../components/training/TrainingBadge.jsx";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
+import { anchoPantalla } from "../../../../components/layout/anchoPantalla.js";
 
 export default function EmpresasPage() {
   const router = useRouter();
@@ -65,7 +66,7 @@ export default function EmpresasPage() {
   }
 
   return (
-    <div className="p-4 lg:p-8 max-w-6xl mx-auto">
+    <div className={anchoPantalla("listado")}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>

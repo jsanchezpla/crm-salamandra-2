@@ -8,6 +8,7 @@ import { ActiveBadge } from "../../../../../components/training/TrainingBadge.js
 import CreateEmployeeDrawer from "../../../../../components/training/CreateEmployeeDrawer.jsx";
 import ArchiveUserDialog from "../../../../../components/training/ArchiveUserDialog.jsx";
 import HardDeleteUserDialog from "../../../../../components/training/HardDeleteUserDialog.jsx";
+import { anchoPantalla } from "../../../../../components/layout/anchoPantalla.js";
 
 const TABS = [
   { id: "info", label: "Información" },
@@ -62,7 +63,7 @@ export default function EmpresaDetailPage({ params }) {
 
   if (loading) {
     return (
-      <div className="p-4 lg:p-8 max-w-5xl mx-auto">
+      <div className={anchoPantalla("portada")}>
         <div className="h-8 w-48 bg-neutral-100 rounded animate-pulse mb-4" />
         <div className="h-32 bg-white border border-neutral-100 rounded-xl animate-pulse" />
       </div>
@@ -71,7 +72,7 @@ export default function EmpresaDetailPage({ params }) {
 
   if (error || !company) {
     return (
-      <div className="p-4 lg:p-8 max-w-5xl mx-auto">
+      <div className={anchoPantalla("portada")}>
         <div className="px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-600">
           {error || "Empresa no encontrada"}
         </div>
@@ -83,7 +84,7 @@ export default function EmpresaDetailPage({ params }) {
   }
 
   return (
-    <div className="p-4 lg:p-8 max-w-5xl mx-auto">
+    <div className={anchoPantalla("portada")}>
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="min-w-0">

@@ -334,17 +334,24 @@ const navigation = [
          * Cursos a Alumnos había que volver a la portada.
          *
          * ⚠️ ESTA LISTA Y LA DE LA PORTADA TIENEN QUE DECIR LO MISMO. Los
-         * rótulos son literalmente los de `modules/training/FormacionOverview.jsx`
-         * y no se han tocado: quien cambie uno tiene que cambiar el otro. (Sí,
-         * «Usuarios» son las personas y «Alumnos por curso» son las matrículas,
-         * y eso se pisa; renombrarlos es otra tarea y le cambia el vocabulario a
-         * cinco clientes de golpe.)
+         * rótulos son literalmente los de `modules/training/FormacionOverview.jsx`:
+         * quien cambie uno tiene que cambiar el otro.
+         *
+         * Y el 13/08/2026 hubo que cambiarlos los dos: decían «Usuarios» y
+         * «Alumnos por curso» mientras las métricas de la portada decían
+         * «Usuarios» y «Matrículas» y el override de Aumenta decía «Alumnos» —
+         * tres pares de palabras para las mismas dos cosas. Ahora, en los tres
+         * sitios: las PERSONAS son «Alumnos» y las inscripciones «Matrículas».
          */
         children: [
           { key: "formacion-empresas", label: "Empresas", href: "/formacion/empresas" },
           { key: "formacion-cursos", label: "Cursos", href: "/formacion/cursos" },
-          { key: "formacion-usuarios", label: "Usuarios", href: "/formacion/usuarios" },
-          { key: "formacion-alumnos", label: "Alumnos por curso", href: "/formacion/alumnos" },
+          // «Alumnos» son las PERSONAS y «Matrículas» las inscripciones
+          // (13/08/2026). Antes decían «Usuarios» y «Alumnos por curso», que
+          // con las métricas de la portada («Usuarios»/«Matrículas») hacían tres
+          // pares de palabras para las mismas dos cosas. Las rutas no se tocan.
+          { key: "formacion-usuarios", label: "Alumnos", href: "/formacion/usuarios" },
+          { key: "formacion-alumnos", label: "Matrículas", href: "/formacion/alumnos" },
           { key: "formacion-cuestionarios", label: "Cuestionarios", href: "/formacion/cuestionarios" },
         ],
         icon: (

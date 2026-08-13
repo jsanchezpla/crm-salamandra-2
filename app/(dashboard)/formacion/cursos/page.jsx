@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { TrainingTable, Tr, Td } from "../../../../components/training/TrainingTable.jsx";
 import { EditCourseDrawer } from "../../../../components/training/EditCourseDrawer.jsx";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
+import { anchoPantalla } from "../../../../components/layout/anchoPantalla.js";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -56,7 +57,7 @@ export default function CursosPage() {
   }, [loadCourses, loadSyncStatus]);
 
   return (
-    <div className="p-4 lg:p-8 max-w-6xl mx-auto">
+    <div className={anchoPantalla("listado")}>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl font-extrabold text-neutral-900 flex items-center gap-2" style={{ fontFamily: "'Syne', sans-serif" }}>

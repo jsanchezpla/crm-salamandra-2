@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import Select from "@/components/ui/Select.jsx";
+import { anchoPantalla } from "../../components/layout/anchoPantalla.js";
 import { CuestionariosDashboard } from "./CuestionariosDashboard.jsx";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -838,8 +839,11 @@ export default function CuestionariosModule() {
   }
 
   if (selectedId) {
+    // El detalle de un intento es una ficha, no un listado: se lee mejor
+    // estrecho. Y antes NO tenía ningún límite de ancho — esta pantalla era la
+    // única de Formación que iba de lado a lado (ver anchoPantalla.js).
     return (
-      <div className="p-4 sm:p-8">
+      <div className={anchoPantalla("portada")}>
         {loadingDetail ? (
           <p className="text-neutral-400 text-sm py-8 text-center">Cargando detalle…</p>
         ) : attempt ? (
@@ -857,7 +861,7 @@ export default function CuestionariosModule() {
   }
 
   return (
-    <div className="p-4 sm:p-8 space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       <CuestionariosDashboard filters={filters} />
       <AttemptsList
         filters={filters}

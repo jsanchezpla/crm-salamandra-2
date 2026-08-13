@@ -25,6 +25,44 @@ que más superficie de ataque tiene: cinco webhooks públicos firmados
 con HMAC, tres endpoints externos protegidos con API key, dos endpoints
 sin auth llamados desde el WordPress de Retorika.
 
+## Cómo se llaman las dos listas (13/08/2026)
+
+Las dos pantallas que más se confundían ya dicen lo mismo en el menú, en la
+portada y en las métricas:
+
+| Pantalla | Ruta | Qué es | Una fila es |
+| --- | --- | --- | --- |
+| **Alumnos** | `/formacion/usuarios` | Las personas | una PERSONA |
+| **Matrículas** | `/formacion/alumnos` | Quién está apuntado a qué | una INSCRIPCIÓN |
+
+Antes había **tres pares de palabras para las mismas dos cosas**: el menú y las
+tarjetas decían «Usuarios» y «Alumnos por curso», las métricas de la portada
+decían «Usuarios» y «Matrículas», y el override de Aumenta decía «Alumnos». La
+prueba de que no se entendía estaba escrita en la propia ayuda de Empresas, en
+mayúsculas: «IMPORTANTE: los alumnos de empresa se importan desde aquí» — porque
+quien quería dar de alta alumnos entraba en «Usuarios», que es donde no se hace.
+Ese aviso a gritos ya no está: la frase es normal y aparece en las dos pantallas.
+
+⚠️ **Las RUTAS no se tocaron**, y son al revés de lo que parece: los alumnos
+están en `/formacion/usuarios` y las matrículas en `/formacion/alumnos`.
+Cambiarlas rompería enlaces guardados por cinco clientes a cambio de nada. Mismo
+criterio que en Nutrición, donde `/nutricion/asignados` se llama «Pautas».
+
+⚠️ **Los rótulos viven en TRES sitios y tienen que decir lo mismo**:
+`components/layout/Sidebar.jsx` (el menú), `modules/training/FormacionOverview.jsx`
+(tarjetas y métricas) y `modules/overrides/aumenta/FormacionOverview.jsx`. Que se
+desincronizaran es exactamente lo que creó el problema.
+
+## El ancho de las pantallas no se escribe a mano
+
+Las siete pantallas de Formación llevaban cada una el suyo —5xl, 6xl, 7xl y una
+sin ninguno— y por eso el «se ve demasiado ancho» volvía cada pocas semanas: se
+arreglaba una y las demás seguían por su lado. Ahora lo decide
+`components/layout/anchoPantalla.js`, con dos valores: `portada` (fichas y
+landings) y `listado` (pantallas con tabla). Ahí está el porqué, con los datos.
+
+Si añades una pantalla a Formación, úsalo. No escribas `max-w-` a mano.
+
 ## Lo que NO hace (por ahora)
 
 Confirmado leyendo el código:
@@ -835,10 +873,13 @@ conectado.
 `modules/overrides/aumenta/FormacionOverview.jsx`. Diferencias frente
 a la landing `default`:
 
-- **3 KPIs en vez de 4**: Cursos activos, Alumnos, Matrículas (sin
+- **3 KPIs en vez de 4**: Cursos activos, Alumnos, Matrículas — los mismos
+  rótulos que el overview base desde el 13/08/2026 (sin
   "Empresas").
-- **3 secciones en vez de 5**: Cursos, Alumnos, Matrículas por curso
-  (sin "Empresas" ni "Cuestionarios").
+- **3 secciones en vez de 5**: Cursos, Alumnos, Matrículas (sin "Empresas" ni
+  "Cuestionarios"). Decía «Matrículas por curso», con apellido, y bastaba para
+  que Aumenta leyera algo distinto que los demás: desde el 13/08/2026 son las
+  mismas palabras en los tres sitios.
 - **Copy editorial adaptado**: título "Formación — cursos para
   familias y profesionales".
 - **Sin endpoint a `/api/training/companies`** (la card de empresas

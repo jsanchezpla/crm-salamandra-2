@@ -8,6 +8,7 @@ import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Select from "@/components/ui/Select.jsx";
 import ArchiveUserDialog from "../../../../components/training/ArchiveUserDialog.jsx";
 import HardDeleteUserDialog from "../../../../components/training/HardDeleteUserDialog.jsx";
+import { anchoPantalla } from "../../../../components/layout/anchoPantalla.js";
 
 const LIMIT = 50;
 
@@ -86,21 +87,21 @@ export default function UsuariosPage() {
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
-    <div className="p-4 lg:p-8 max-w-7xl mx-auto">
+    <div className={anchoPantalla("listado")}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl font-extrabold text-neutral-900 flex items-center gap-2" style={{ fontFamily: "'Syne', sans-serif" }}>
-            Usuarios
-            <HelpTooltip title="Usuarios">
-              Todas las personas registradas en tu plataforma de formación. Aquí hay dos tipos:
-              alumnos particulares (han comprado un curso por su cuenta) y empleados de empresa
-              (vienen de una empresa cliente). Puedes filtrar, buscar y exportar la lista a Excel.
-              {" "}<strong className="text-white">Importante:</strong> los alumnos de empresa se
-              importan desde Formación → Empresas → ficha de la empresa → «Importar empleados».
+            Alumnos
+            <HelpTooltip title="Alumnos">
+              Todas las personas registradas en tu plataforma de formación, una fila por PERSONA.
+              Hay dos tipos: los que han comprado un curso por su cuenta y los empleados que vienen
+              de una empresa cliente. Puedes filtrar, buscar y exportar la lista a Excel. Los de
+              empresa se dan de alta desde Formación → Empresas → ficha de la empresa → «Importar
+              empleados». Si lo que buscas es quién está apuntado a qué curso, eso es Matrículas.
             </HelpTooltip>
           </h1>
-          <p className="text-xs text-neutral-400 mt-0.5">{total} usuarios</p>
+          <p className="text-xs text-neutral-400 mt-0.5">{total} alumnos</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link href="/formacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">
