@@ -199,10 +199,22 @@ lo de la imagen anterior. Es la explicación de casi todos los «pues yo lo apun
 y no sale».
 
 1. Enseña lo que has escrito antes de commitear.
-2. `npm run build` en verde.
-3. Commit (Conventional Commits, trailer `Co-Authored-By`) y push a `master`.
-4. `ssh crm-vps 'cd /opt/crm-salamandra && ./deploy.sh'`.
-5. **Verifícalo dentro del contenedor**, no en el repo, que ya sabes que está
+2. **Sincroniza Y COMPRUEBA SOLAPE** (regla #11 de `CLAUDE.md`). `master` es
+   compartido y el socio sube sin que nada avise:
+
+   ```bash
+   git fetch origin && git diff --name-only HEAD origin/master
+   ```
+
+   Si no hay nada tuyo en esa lista, `git pull --ff-only` y sigue. **Si aparece
+   `docs/backlog.md` o `docs/resuelto.md`, PARA Y PREGUNTA**: es el solape más
+   probable del repo, porque ahí escriben las dos personas y las dos skills. Que
+   no dé conflicto de texto no significa que sea compatible — puede que el otro
+   esté cerrando justo lo que tú vas a apuntar.
+3. `npm run build` en verde.
+4. Commit (Conventional Commits, trailer `Co-Authored-By`) y push a `master`.
+5. `ssh crm-vps 'cd /opt/crm-salamandra && ./deploy.sh'`.
+6. **Verifícalo dentro del contenedor**, no en el repo, que ya sabes que está
    bien:
 
 ```bash
