@@ -24,11 +24,16 @@
  */
 
 import crypto from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Sequelize } from "sequelize";
 import bcrypt from "bcrypt";
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
 import { getTenantDb, closeAllConnections } from "../lib/db/tenantDb.js";
 import { invalidateTenantCache } from "../lib/tenant/tenantResolver.js";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 const SLUG = "sandbox";
 const SCHEMA = `crm_${SLUG}`;
@@ -36,17 +41,27 @@ const NAME = "Sandbox (pruebas)";
 const USER_EMAIL = "admin@sandbox.local";
 
 // Todos los módulos FUNCIONALES (con página real), sin override.
-// Se omiten los placeholders del sidebar sin pantalla (support, planning,
-// documents, analytics, ai, automations, integrations): activarlos solo
-// mostraría entradas de menú que llevan a páginas inexistentes.
+// Se omiten los placeholders del sidebar sin pantalla (`planning`, `ai`,
+// `automations`, `integrations`): activarlos solo mostraría entradas de menú
+// que llevan a páginas inexistentes.
+//
+// ⚠️ Esta lista dejaba fuera `support`, `documents` y `analytics` llamándolos
+// placeholders (14/08/2026). Ya no lo son —los tres tienen pantalla y clientes
+// de verdad— y su ausencia se notaba: el sandbox es donde se prueba lo que no
+// se puede probar contra un cliente, y el correo entrante de Soporte no se
+// podía ensayar en ningún sitio porque los dos únicos tenants locales con el
+// módulo eran demos, y la demo tiene el envío de correo cortado a propósito.
 const MODULES = [
   "clients",
   "leads",
   "projects",
+  "support",
   "billing",
   "team",
+  "documents",
   "inventory",
   "training",
+  "analytics",
   "calendar",
   "citas",
   "orders",
@@ -151,6 +166,36 @@ async function main() {
   const { sequelize: tenantSeq } = getTenantDb(SLUG);
   await tenantSeq.sync();
   log("✓ Tablas creadas (citas, proyectos, billing+quotes+IRPF, clínica, pacientes, nutrición…)");
+
+  // ── 5b. …y las migraciones, que `sync()` NO hace ─────────────────────────
+  //
+  // `sync()` levanta las tablas leyendo los MODELOS, y hay cosas que no están
+  // en el modelo: secuencias, DEFAULT en base de datos, índices únicos, filas
+  // de arranque. Sin este paso el sandbox salía a medias y en silencio — el
+  // caso que lo destapó (14/08/2026) fue Soporte: `tickets.number` se queda sin
+  // la secuencia `ticket_number_seq`, así que TODOS los tickets nacen sin
+  // número, la referencia que se dice por teléfono sale "TK-????" y el correo
+  // entrante deja de reconocer el "TK-0042" del asunto. Nada de eso da error:
+  // simplemente no funciona.
+  //
+  // Es la misma lección que el alta de clientes ya aprendió
+  // (`lib/provisioning/altaTenant.js` llama aquí mismo) y que la siembra de las
+  // demos apuntó el 13/08. Se lanza como hija para no arrastrar 88 migraciones
+  // a este proceso.
+  header("Poniendo el schema al día (migraciones de sus módulos)...");
+  const puesta = spawnSync(
+    process.execPath,
+    [join(HERE, "ensure-tenant-schema.js"), SLUG],
+    { encoding: "utf8", env: process.env }
+  );
+  if (puesta.status === 0) {
+    log("✓ Schema al día");
+  } else {
+    log("⚠ Las migraciones no terminaron bien. El tenant está creado, pero");
+    log(`  a medias. Míralo con:  node --env-file=.env.local scripts/ensure-tenant-schema.js ${SLUG}`);
+    if (puesta.stdout) process.stdout.write(puesta.stdout.slice(-2000));
+    if (puesta.stderr) process.stderr.write(puesta.stderr.slice(-2000));
+  }
 
   invalidateTenantCache(SLUG);
 

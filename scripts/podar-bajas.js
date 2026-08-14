@@ -50,7 +50,11 @@ const kb = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.rou
 const dias = (ms) => Math.floor(ms / 86_400_000);
 
 async function main() {
-  if (!Number.isFinite(DIAS) || DIAS < 1) {
+  // `--dias=0` vale y significa «todas»: es lo que se quiere después de una
+  // prueba, y rechazarlo obligaba a borrar los ficheros a mano, que es
+  // exactamente lo que este script existe para evitar. Sigue haciendo falta
+  // `--aplicar`, así que un 0 de más no borra nada solo.
+  if (!Number.isFinite(DIAS) || DIAS < 0) {
     process.stderr.write(`\n✗ --dias tiene que ser un número de días (has puesto "${DIAS}").\n\n`);
     process.exit(1);
   }
