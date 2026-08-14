@@ -136,6 +136,40 @@ El email de Resend es UNA posibilidad, no una obligación:
   `RESEND_WEBHOOK_SECRET` (setup en `.env.production.example`). Sin ellas no
   hay captura y el portal sigue siendo el camino de vuelta.
 
+⚠️ **`captureAddress` exige LAS DOS** (14/08/2026). Antes bastaba el dominio, y
+esa media configuración era el peor estado posible: la pantalla de arriba le
+enseñaba al cliente su dirección de captura y le pedía que reenviara ahí TODO su
+buzón de soporte, mientras el webhook —que necesita el secreto— contestaba 503 a
+cada entrega. El correo se perdía entero y sin rebote: Resend lo aceptaba y era
+NUESTRO endpoint el que lo rechazaba después. Con las dos comprobadas, faltar una
+deja la vía de correo simplemente ausente, que es una puerta cerrada y no una
+puerta pintada en la pared.
+
+**Cómo se comprueba que está montado**, sin mandar un correo de verdad:
+
+```bash
+docker exec crm-salamandra-app-1 node scripts/check-resend-tenant.mjs
+```
+
+Solo lectura. Dice, cliente a cliente, si su clave de Resend descifra y si su
+remitente sale de un dominio verificado (nunca imprime la clave, regla #15), y
+después si las dos variables del entrante están puestas y si el dominio de
+captura consta en alguna de las cuentas. Ojo: una clave de Resend con permiso
+solo de envío no puede listar dominios, y entonces el script lo dice en vez de
+inventarse un veredicto — es lo que pasa hoy con las tres que hay guardadas.
+
+**Y el camino entero, sin dominio ni cuenta**: `scripts/_smoke-correo-entrante.mjs`
+entrega correos firmados como los firma Resend (svix) contra el endpoint REAL y
+fija la firma (sin firma, falsa y de hace 10 minutos → 401), el encaminado (a un
+tenant que no existe o sin el módulo → 200 e ignorado, nunca un error que ponga a
+Resend a reintentar eternamente), el alta por correo, el hilo, el `TK-0042` del
+asunto mandando sobre el remitente, el remitente del equipo, el duplicado y la
+reapertura.
+
+```bash
+node --env-file=.env.local scripts/_smoke-correo-entrante.mjs sandbox
+```
+
 ## SLA por ticket
 
 Los plazos de la config son el punto de partida; cada ticket puede pactarse
