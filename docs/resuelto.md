@@ -28,6 +28,31 @@ Lo más reciente arriba.
 
 ## 14/08/2026
 
+### Aumenta no tiene ninguna clave de IA, y ya hay cosas suyas esperándola · `aumenta`
+
+**Se cierra por decisión, no porque haya cambiado nada.** Jorge, 14/08/2026: está
+bien así, ya la pondrán ellos. No queda trabajo nuestro — la clave es suya, la
+cuenta es suya y el coste es suyo, que es lo que significa BYOK, y desde el
+back-office ya se le puede pegar en cuanto la manden sin que tengan que entrar
+ellos a configurarla.
+
+**Lo que sigue siendo verdad, para que nadie lo lea como un fallo.** «Redactar
+con IA» y la transcripción de sesiones siguen contestando 503 en Aumenta, y
+seguirán hasta que haya clave. Eso es exactamente lo que hace
+`lib/ai/anthropicKey.js`, que no recurre a la clave del entorno a propósito. Si
+dentro de unos meses alguien abre esto como un bug, esta entrada es la respuesta.
+
+*Se comprueba*: en `master.tenants`, `aumenta` sigue sin
+`settings.integrations.anthropicApiKey` — y eso es lo esperado, no un problema.
+*Dónde*: `lib/ai/anthropicKey.js` (BYOK, sin recurso al entorno);
+`lib/provisioning/credencialesCliente.js` es por donde se le pega cuando llegue.
+*Comprobado en producción*: 14/08/2026 — consultado `master.tenants`: `aumenta`
+sin clave de Anthropic ni de OpenAI, `salamandra_solutions` sí tiene la de
+Anthropic. Cerrada por decisión, no por un arreglo: la situación es la misma que
+cuando se apuntó.
+
+---
+
 ### El informe clínico ya lo redacta la IA, y no puede inventarse nada · `aumenta`, `demo`
 
 **Lo que había.** «Volcar las sesiones al informe» copia literal lo que escribió
