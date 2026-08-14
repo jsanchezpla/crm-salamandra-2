@@ -1041,7 +1041,7 @@ y el interruptor lo avisa.
 | `/api/citas/packs` | POST | Dar un bono a mano (solo admin) |
 | `/api/citas/packs/[id]` | PATCH | Anular un bono (no se borra) |
 | `/api/citas/blocked-days` | GET / POST / DELETE | Festivos y cierres del centro. POST y DELETE solo admin |
-| `/api/citas/bloqueos` | GET / POST / DELETE | Vacaciones y ausencias de una persona (`team_blocks`) |
+| `/api/citas/bloqueos` | GET / POST / PATCH / DELETE | Bloqueos: tramos en los que alguien no pasa consulta (`team_blocks`). El GET los devuelve TODOS a todo el equipo; escribir es solo sobre los propios salvo dirección |
 
 > **`/api/citas/clientes` ofrece de más antes que dejar la lista vacía.**
 > Acota a quien tenga marcado un módulo asistencial (`nutricion` / `clinica`)
@@ -1159,7 +1159,7 @@ No es un efecto secundario: las sesiones se cuentan desde las citas
 (`lib/citas/packs.js`), así que borrar la cita es decir que no se dio. El
 diálogo lo avisa antes de borrar.
 
-#### `/citas/bloqueos` — vacaciones y ausencias (12/08/2026)
+#### `/citas/bloqueos` — Bloqueos (12/08/2026)
 
 `PanelVacaciones` vivía desde el 06/08 debajo del catálogo de
 `/citas/tipos`, porque Rodrigo lo pidió como «un tipo de cita especial».
@@ -1168,12 +1168,39 @@ obligaba a bajar por el catálogo entero para apuntar unas vacaciones.
 
 Ahora es una pantalla propia, y las tres cabeceras del módulo (calendario,
 tipos y disponibilidad) llevan el botón **Bloqueos** al lado de «Tipos de
-cita» y «Disponibilidad». Como sus vecinas, no está en el sidebar: se llega
-por esos botones, y la puerta de verdad la siguen poniendo los endpoints.
+cita» y «Disponibilidad». Desde el 12/08 está **además en el sidebar**, que
+es donde la pidió Jorge: una pantalla, dos caminos.
+
+> **Se llama «Bloqueos» en todas partes** (14/08/2026, Rodrigo). El menú
+> decía «Vacaciones y ausencias» y el botón «Bloqueos»; eran dos nombres para
+> lo mismo. Manda «Bloqueos», que es lo que dicen la cabecera de la pantalla y
+> el tramo que se pinta en el calendario. «Vacaciones» sigue siendo el MOTIVO
+> por defecto de un bloqueo nuevo, que es otra cosa.
 
 > **Bloqueo ≠ festivo.** El festivo cierra el centro entero un día y se pone
 > desde el calendario (`blocked_days`); el bloqueo es de una persona, con hora
 > de inicio y de fin (`team_blocks`).
+
+**Quién ve qué, y quién puede qué** (14/08/2026, Rodrigo):
+
+| | Regla |
+| --- | --- |
+| **Ver** | Todo el equipo ve los de todo el equipo, más los cierres de centro. Sin excepciones ni interruptor. |
+| **Poner / editar / quitar** | Cada cual, SOLO los suyos. Dirección, los de cualquiera y los cierres de centro. Lo imponen el POST, el PATCH y el DELETE; el desplegable «Quién» ni siquiera se le enseña a quien no es admin. |
+| **En el calendario** | El tramo se rotula `Motivo · Persona` (y `Motivo · Todo el centro` si no tiene persona), para que se sepa de quién es sin abrirlo. |
+
+⚠️ Ver los bloqueos **no** sigue la regla de `lib/citas/visibilidad.js`, y es a
+propósito. La agenda compartida existe porque el listado de citas enseña
+nombre, email y teléfono del PACIENTE; un bloqueo no tiene paciente. Además, un
+bloqueo es la señal de que esa persona NO está, así que a quien le sirve es
+justo a los demás. Entre el 10 y el 14/08 sí siguió esa regla y el resultado en
+nutri_laura fue que Laura —dirección, y la única otra profesional— no veía
+ninguna de las ocho ausencias de Rocío en el calendario mientras esta pantalla
+se las listaba todas.
+
+⚠️ Y esto es SOLO lo que se ve: el cálculo de huecos (`lib/citas/ausencias.js`)
+lee `team_blocks` por su cuenta y sin filtrar. Lo que una paciente puede
+reservar no depende de nada de esta tabla.
 
 ### Override nutri_laura
 

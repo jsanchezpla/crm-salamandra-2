@@ -4,7 +4,8 @@ import { ok, created, error, forbidden, serverError } from "../../../../lib/util
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
 import { buildMadridDate } from "../../../../lib/citas/slots.js";
 import { colorDeBloqueo } from "../../../../lib/citas/coloresBloqueo.js";
-import { veTodaLaAgenda, agendaCompartida } from "../../../../lib/citas/visibilidad.js";
+// `lib/citas/visibilidad.js` ya no se usa aquí: desde el 14/08/2026 los bloqueos
+// los ve todo el equipo y no siguen la regla de las citas (ver cabecera del GET).
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,16 +38,29 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  *     igual. Cerrar el centro entero sigue siendo cosa de dirección.
  *   · admin puede todo, incluido el cierre de centro.
  *
- * ── QUIÉN VE QUÉ ────────────────────────────────────────────────────────────
- * Las ausencias siguen la MISMA regla que las citas (`lib/citas/visibilidad.js`)
- * en vez de inventarse otro interruptor: con la agenda compartida encendida
- * —Aumenta, que lo pidió el 01/08 para cubrirse entre terapeutas— se ven las de
- * todo el mundo; apagada, cada cual ve las SUYAS y las del centro, que son las
- * que le afectan. El admin ve todas.
+ * ── QUIÉN VE QUÉ: TODOS, LAS DE TODOS (14/08/2026, Rodrigo) ─────────────────
+ * Aquí no se recorta nada. Poner un bloqueo sigue siendo cosa de cada cual
+ * (arriba), pero VERLOS es de todo el equipo.
+ *
+ * Antes esto seguía la regla de las citas (`lib/citas/visibilidad.js`): sin
+ * agenda compartida, cada cual veía las suyas y las del centro. Sonaba bien y
+ * duró cuatro días, porque choca con para qué sirve un bloqueo. Una cita es de
+ * quien la pasa; un bloqueo es justo lo contrario, es la señal de que ESA
+ * persona no está — y a quien le sirve saberlo es a los demás, que son los que
+ * tienen que cubrirla o decidir a quién le dan la hora.
+ *
+ * En nutri_laura acabó en lo absurdo: las ocho ausencias eran de Rocío, así que
+ * Laura —que es dirección y la única otra profesional— abría el calendario y no
+ * veía ninguna, mientras esta misma pantalla se las listaba todas.
+ *
+ * Y no es la misma decisión de privacidad: la agenda compartida existe porque
+ * el listado de citas enseña nombre, email y teléfono del PACIENTE. Un bloqueo
+ * no tiene paciente. Lo que se enseña es que una compañera está de vacaciones el
+ * martes, que es información del centro y no de nadie.
  *
  * ⚠️ Esto es SOLO lo que se ve. El cálculo de huecos (`lib/citas/ausencias.js`)
- * lee la tabla por su cuenta y sin filtrar, así que ocultar una ausencia NO
- * abre su hueco: la paciente sigue sin poder reservarlo.
+ * lee la tabla por su cuenta y sin filtrar, así que esto no abre ni cierra
+ * ningún hueco: lo que la paciente puede reservar no cambia.
  *
  * Crear un bloqueo NO cancela las citas que ya hubiera dentro: eso lo decide el
  * centro (avisar, reubicar, cobrar o no), igual que con los festivos. La
@@ -92,9 +106,11 @@ function gate(ctx) {
 async function quienSoy(request, ctx) {
   const esAdmin = ADMIN_ROLES.has(request.headers.get("x-user-role"));
   const teamMemberId = await resolveCurrentTeamMemberId(request, ctx.tenantModels);
-  // Viaja al navegador para que el CALENDARIO sepa si «Todos» significa «todo
-  // el equipo» o «yo y el centro». La API sigue mandando: esto es solo pintar.
-  return { esAdmin, teamMemberId, agendaCompartida: agendaCompartida(ctx.tenant) };
+  // Viaja al navegador para que la tabla sepa a cuáles ponerle los botones de
+  // editar y quitar. La API manda igual: esto es solo no enseñar una puerta
+  // cerrada. `agendaCompartida` estaba aquí para el filtro del calendario y se
+  // ha ido con él (14/08/2026).
+  return { esAdmin, teamMemberId };
 }
 
 /**
@@ -162,22 +178,8 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       where.endAt = { [Op.gt]: new Date(from) };
     }
 
-    /*
-     * Sin agenda compartida, cada cual ve las SUYAS y las del centro (las que
-     * van sin persona), que son las que le afectan. Las de la compañera no le
-     * dicen nada y le ensucian el calendario — es lo que pidió la consulta de
-     * Laura el 10/08.
-     *
-     * Quien no tiene ficha de equipo se queda solo con las del centro: no hay
-     * ninguna «suya» que enseñarle, y colarle las de todos sería justo lo que
-     * se está quitando.
-     */
-    if (!veTodaLaAgenda({ tenant: ctx.tenant, role: request.headers.get("x-user-role") })) {
-      where[Op.or] = yo.teamMemberId
-        ? [{ teamMemberId: null }, { teamMemberId: yo.teamMemberId }]
-        : [{ teamMemberId: null }];
-    }
-
+    // Sin recorte por persona: ver la cabecera. Lo único que acota es el rango
+    // de fechas que pida quien llama.
     const filas = await TeamBlock.findAll({
       where,
       include: TeamMember ? [{ model: TeamMember, as: "teamMember", attributes: ["id", "displayName", "blockColor"], required: false }] : [],

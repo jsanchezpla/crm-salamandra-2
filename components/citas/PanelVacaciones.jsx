@@ -243,10 +243,14 @@ export default function PanelVacaciones() {
     <section className="border border-[var(--ink-200)] rounded-xl overflow-hidden">
       <header className="px-4 lg:px-5 py-3.5 bg-neutral-50/70 border-b border-[var(--ink-200)] flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-sm font-semibold text-[var(--ink-900)]">Vacaciones y ausencias</h2>
+          {/* «Bloqueos», igual que el menú, el botón y la cabecera de la
+              pantalla (14/08/2026, Rodrigo). Se llamaba «Vacaciones y
+              ausencias» y era el único sitio que no lo decía así. */}
+          <h2 className="text-sm font-semibold text-[var(--ink-900)]">Bloqueos</h2>
           <p className="text-xs text-neutral-500 mt-0.5">
             Tramos en los que alguien no pasa consulta. La agenda deja de ofrecer sus huecos;
-            las citas que ya hubiera dentro no se tocan.
+            las citas que ya hubiera dentro no se tocan. Los ve todo el equipo; cada cual solo
+            puede poner y quitar los suyos.
           </p>
         </div>
         <button

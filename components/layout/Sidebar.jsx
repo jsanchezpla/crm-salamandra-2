@@ -172,21 +172,25 @@ const navigation = [
           // de entender por qué. Se exige `team` y no `citas` porque `citas`
           // ya lo pide el padre, y sin Equipo no hay a quién asignar nada.
           { key: "citas-sin-profesional", label: "Sin profesional", href: "/citas/sin-profesional", adminOnly: true, moduleKey: "team" },
-          // Vacaciones y ausencias (12/08/2026, Jorge pidió entrada propia).
+          // Bloqueos (12/08/2026, Jorge pidió entrada propia).
           //
           // La PANTALLA es la que sacó Rodrigo ese mismo día a `/citas/bloqueos`
           // —él la dejó accesible desde los botones de las tres cabeceras del
           // módulo—; esto solo la pone también en el menú, que es donde Jorge la
           // pidió. Una pantalla, dos caminos, ningún duplicado.
           //
-          // Se rotula «Vacaciones y ausencias» y no «Bloqueos», que es como la
-          // llama su botón: quien va a apuntar que se va una semana busca la
-          // primera palabra, no la segunda. ⚠️ Son dos nombres para lo mismo y
-          // conviene unificarlos cuando se decida cuál manda.
+          // ⚠️ SE LLAMA «BLOQUEOS» EN TODAS PARTES (14/08/2026, Rodrigo). Nació
+          // rotulado «Vacaciones y ausencias» aquí y «Bloqueos» en su botón, y
+          // el comentario que había en su lugar dejaba la duda anotada para
+          // cuando se decidiera cuál manda. Manda «Bloqueos»: es lo que dicen su
+          // botón, su cabecera y el propio tramo que se pinta en el calendario,
+          // y tener dos nombres para lo mismo es lo que hace que alguien busque
+          // una pantalla que está delante. El MOTIVO por defecto sigue siendo
+          // «Vacaciones», que es otra cosa: eso es lo que se apunta, no dónde.
           //
           // NO lleva adminOnly: lo apunta todo el equipo desde el 07/08, y cada
-          // cual solo puede tocar las suyas — eso lo impone la API.
-          { key: "citas-ausencias", label: "Vacaciones y ausencias", href: "/citas/bloqueos" },
+          // cual solo puede tocar los suyos — eso lo impone la API.
+          { key: "citas-ausencias", label: "Bloqueos", href: "/citas/bloqueos" },
         ],
       },
     ],

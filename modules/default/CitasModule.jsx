@@ -480,7 +480,6 @@ export default function CitasModule() {
         );
         const jb = await rb.json();
         if (jb.ok) {
-          const quienSoy = jb.data.yo ?? {};
           fondos = (jb.data.bloqueos ?? [])
             .filter((b) => {
               // Los cierres del centro (sin persona) los ve todo el mundo:
@@ -489,27 +488,31 @@ export default function CitasModule() {
               // Si se está filtrando por profesional, manda el filtro.
               if (visibleTmIds) return visibleTmIds.includes(b.teamMemberId);
               /*
-               * Y con «Todos» puesto, cada cual ve las SUYAS (10/08/2026).
+               * Y con «Todos» puesto, TODOS ven los de todos (14/08/2026,
+               * Rodrigo).
                *
-               * Antes salían las de todo el equipo, y en la consulta de Laura
-               * eso le llenaba la semana de bloques negros de Rocío: horas en
-               * las que ELLA sí pasa consulta. Un calendario que enseña como
-               * ocupado lo que tienes libre deja de servir para lo único que
-               * sirve, que es ver dónde te cabe una paciente.
-               *
-               * Con la agenda compartida encendida (Aumenta) se siguen viendo
-               * todas: allí se cubren entre terapeutas y necesitan saberlo.
-               *
-               * Esto es SOLO el calendario. La tabla de «Vacaciones y
-               * ausencias» se las sigue enseñando enteras a dirección, que es
-               * donde se gestionan, y el filtro de profesional de aquí arriba
-               * también las saca si se pide a Rocío expresamente.
+               * Aquí había un segundo filtro —cada cual los suyos— que ya no
+               * está; el porqué se explica entero en el GET de
+               * `/api/citas/bloqueos`. Lo que conviene recordar en este fichero
+               * es la trampa: aquel filtro vivía SOLO en el navegador. El
+               * servidor mandaba los bloqueos correctos y esta línea los tiraba
+               * después, así que la pantalla y su propio endpoint decían cosas
+               * distintas y ninguna prueba de API podía cazarlo. Si algún día
+               * hay que volver a recortar quién ve qué, se recorta en el
+               * endpoint.
                */
-              return quienSoy.agendaCompartida || b.teamMemberId === quienSoy.teamMemberId;
+              return true;
             })
             .map((b) => ({
               id: `bloqueo-${b.id}`,
-              title: `${b.label}${b.teamMemberName ? ` · ${b.teamMemberName}` : ""}`,
+              /*
+               * Motivo Y persona, siempre (14/08/2026, Rodrigo). Ahora que se
+               * ven los de todo el equipo, un bloque que solo dijera
+               * «Vacaciones» obliga a adivinar de quién es. Los cierres del
+               * centro no tienen persona, y decirlo con todas las letras evita
+               * leerlos como el bloqueo de alguien.
+               */
+              title: `${b.label} · ${b.teamMemberName || "Todo el centro"}`,
               start: b.startAt,
               end: b.endAt,
               /*
