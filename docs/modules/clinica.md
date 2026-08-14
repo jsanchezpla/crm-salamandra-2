@@ -225,8 +225,41 @@ que hubiera y, sin contenido, decía que la redacción asistida por IA llegaría
     dejaría de coincidir con el CRM.
   - Devuelve `aporte` (cuántas líneas ha traído cada apartado) para que la
     pantalla pueda decirlo: si no, parece que el botón no ha hecho nada.
-- La IA llegará y **partirá de esto**, no lo sustituirá: primero se junta lo que
-  dicen las sesiones, luego se pule.
+- La IA **parte de esto**, no lo sustituye: primero se junta lo que dicen las
+  sesiones, luego se pule. Ver el apartado siguiente.
+
+## Redactar con IA (14/08/2026)
+
+`POST /api/clinica/reports/[id]/pulir` coge el volcado y lo redacta.
+`lib/clinica/pulirInforme.js`. Clave BYOK del tenant; sin clave, 503. En la demo,
+simulado (`demoForcesFakeAi`), y el simulado pasa la misma verificación que el de
+verdad.
+
+⚠️ **NO GUARDA NADA, y es el diseño.** Devuelve `{ propuesta, avisos }` y el
+cajón la pinta al lado de lo que hay, apartado por apartado, con su «Usar este
+texto» y un «Usar todos». Nada llega a la base de datos hasta que la profesional
+guarda. Un informe clínico lo firma una persona: el día que este endpoint escriba
+solo, lo que la familia recibe habrá dejado de ser lo que ella escribió.
+
+**Las dos reglas de `redactarInforme.js`, aquí cumplidas en código:**
+
+- **No pisa lo escrito.** Además de no guardar, de los ocho apartados solo se le
+  mandan al modelo los CINCO que salen del volcado (`SECCIONES_PULIBLES`:
+  objetivos, evolución, logros, dificultades, recomendaciones). El motivo de
+  intervención y la propuesta de continuidad los escribe ella y **ni siquiera
+  viajan** al modelo, así que no hay forma de que se los reescriba.
+- **No inventa.** Se le pide en el prompt y además se comprueba:
+  `verificarSinInventar` rechaza la propuesta ENTERA —502 con el detalle— si
+  aparece cualquier número o cualquier mes que no estuviera en el volcado. Una
+  edad, un porcentaje o una sesión que no hubo son la invención que más daño hace
+  en un informe y la única que se puede comprobar sin opinar. Repetir un número
+  que ya estaba, claro, pasa.
+
+`avisosDePerdida` no rechaza: señala los apartados que encogen a menos de la
+mitad o se quedan vacíos, y el cajón los pinta en ámbar. Unir dos anotaciones
+acorta con razón; perder un hecho, no.
+
+Se fija en `scripts/_smoke-pulir-informe.mjs` (sin base de datos ni servidor).
 
 ## «Enviar al paciente» (sprint Aumenta 2026-07, punto 3.2)
 

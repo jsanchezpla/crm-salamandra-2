@@ -29,6 +29,21 @@ const STATUS_STYLES = {
 
 const TA = "w-full px-3 py-2 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400 leading-relaxed";
 
+/**
+ * Los cinco apartados que salen del volcado de sesiones y que, por tanto, puede
+ * redactar la IA. Los otros dos —motivo de intervención y propuesta de
+ * continuidad— los escribe la profesional y NI SIQUIERA se le mandan al modelo
+ * (ver lib/clinica/pulirInforme.js).
+ */
+const CLAVES_IA = ["objectives", "evolution", "achievements", "persistentDifficulties", "recommendations"];
+const NOMBRES_IA = {
+  objectives: "Objetivos de trabajo",
+  evolution: "Evolución",
+  achievements: "Logros",
+  persistentDifficulties: "Dificultades que persisten",
+  recommendations: "Recomendaciones",
+};
+
 function Campo({ label, ayuda, children }) {
   return (
     <div>
@@ -61,6 +76,16 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
   const [guardando, setGuardando] = useState(false);
   const [aviso, setAviso] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
+  // La propuesta de la IA vive SOLO aquí hasta que la profesional la acepta: el
+  // endpoint no guarda nada (ver app/api/clinica/reports/[id]/pulir/route.js).
+  const [puliendo, setPuliendo] = useState(false);
+  const [propuesta, setPropuesta] = useState(null);
+  const [avisosIa, setAvisosIa] = useState([]);
+  const [simulado, setSimulado] = useState(false);
+
+  // Solo tiene sentido pulir lo que ya está volcado: la IA redacta anotaciones,
+  // no las inventa. Con los cinco apartados vacíos el botón no hace nada útil.
+  const hayQuePulir = CLAVES_IA.some((k) => (form[k] ?? "").trim().length > 0);
 
   useEffect(() => {
     // Solo las sesiones COMPLETADAS: un borrador a medias no es material para
@@ -106,8 +131,10 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
       if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo guardar");
       setAviso("Informe guardado.");
       onGuardado?.();
+      return true;
     } catch (e) {
       setErrorMsg(e.message);
+      return false;
     } finally {
       setGuardando(false);
     }
@@ -151,6 +178,62 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
     } finally {
       setGuardando(false);
     }
+  }
+
+  /**
+   * Pide la redacción asistida. Lo que vuelve NO se guarda ni se mete en el
+   * formulario: se enseña aparte para que la profesional compare. Se le manda
+   * lo que hay en pantalla ahora mismo —no lo último guardado— para que pula lo
+   * que está viendo.
+   */
+  async function pulirConIa() {
+    setPuliendo(true);
+    setErrorMsg(null);
+    setAviso(null);
+    try {
+      // Si tiene cambios sin guardar, se guardan primero: el endpoint lee el
+      // informe de la base de datos, y pulir la versión de ayer confunde más
+      // que ayuda. Si el guardado falla, no se sigue: se pediría la redacción
+      // de un texto que no es el que ella está viendo.
+      if (!(await guardar())) return;
+      const r = await fetch(`/api/clinica/reports/${report.id}/pulir`, { method: "POST" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo redactar");
+      setPropuesta(j.data.propuesta ?? null);
+      setAvisosIa(j.data.avisos ?? []);
+      setSimulado(!!j.data.simulado);
+      setAviso(null);
+    } catch (e) {
+      setErrorMsg(e.message);
+    } finally {
+      setPuliendo(false);
+    }
+  }
+
+  /** Acepta un apartado: pasa al formulario, y de ahí solo sale con «Guardar». */
+  function aceptarApartado(clave) {
+    const lineas = propuesta?.[clave];
+    if (!Array.isArray(lineas)) return;
+    setForm((f) => ({ ...f, [clave]: lineas.join("\n") }));
+    setPropuesta((p) => {
+      const resto = { ...p };
+      delete resto[clave];
+      return Object.keys(resto).length ? resto : null;
+    });
+    setAviso(`«${NOMBRES_IA[clave] ?? clave}» actualizado con la propuesta. Recuerda guardar.`);
+  }
+
+  function aceptarTodo() {
+    if (!propuesta) return;
+    setForm((f) => {
+      const n = { ...f };
+      for (const [clave, lineas] of Object.entries(propuesta)) {
+        if (Array.isArray(lineas)) n[clave] = lineas.join("\n");
+      }
+      return n;
+    });
+    setPropuesta(null);
+    setAviso("Informe actualizado con la propuesta. Repásalo y guarda.");
   }
 
   const st = STATUS_STYLES[report.status] ?? STATUS_STYLES.draft;
@@ -223,19 +306,85 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
               </div>
             )}
 
-            <button
-              onClick={volcarSesiones}
-              disabled={guardando || entregado || sesiones.length === 0}
-              className="mt-3 text-xs font-medium px-3 py-2 rounded-lg text-white disabled:opacity-40"
-              style={{ background: "var(--color-primary, #1B3A2D)" }}
-            >
-              {guardando ? "Trabajando…" : `Volcar ${elegidas.size || "las"} sesion${elegidas.size === 1 ? "" : "es"} al informe`}
-            </button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                onClick={volcarSesiones}
+                disabled={guardando || entregado || sesiones.length === 0}
+                className="text-xs font-medium px-3 py-2 rounded-lg text-white disabled:opacity-40"
+                style={{ background: "var(--color-primary, #1B3A2D)" }}
+              >
+                {guardando ? "Trabajando…" : `Volcar ${elegidas.size || "las"} sesion${elegidas.size === 1 ? "" : "es"} al informe`}
+              </button>
+              <button
+                onClick={pulirConIa}
+                disabled={guardando || puliendo || entregado || !hayQuePulir}
+                title={hayQuePulir ? "" : "Vuelca antes las sesiones: la IA redacta lo volcado, no lo inventa"}
+                className="text-xs font-medium px-3 py-2 rounded-lg border border-neutral-300 text-neutral-700 hover:border-neutral-500 disabled:opacity-40"
+              >
+                {puliendo ? "Redactando…" : "Redactar con IA"}
+              </button>
+            </div>
             <p className="text-[10px] text-neutral-400 mt-2">
               Cada línea sale literal de un registro de sesión, con su fecha delante: aquí no se
-              inventa nada. La redacción asistida por IA llegará más adelante y partirá de esto.
+              inventa nada. «Redactar con IA» convierte ese volcado en prosa y te lo enseña al
+              lado para que decidas apartado por apartado — no escribe nada por su cuenta.
             </p>
           </div>
+
+          {/* ── La propuesta de la IA, al lado de lo que hay ── */}
+          {propuesta && (
+            <div className="border border-neutral-300 rounded-lg overflow-hidden">
+              <div className="bg-neutral-100 px-4 py-2.5 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="eyebrow">Propuesta de redacción{simulado ? " (simulada — demo)" : ""}</div>
+                  <p className="text-[10px] text-neutral-500 mt-0.5">
+                    Nada de esto está guardado. Acepta lo que te sirva y repásalo antes de enviarlo.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setPropuesta(null)}
+                  className="shrink-0 text-[11px] text-neutral-500 hover:text-neutral-800"
+                >
+                  Descartar
+                </button>
+              </div>
+
+              {avisosIa.length > 0 && (
+                <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 text-[10px] text-amber-800 space-y-0.5">
+                  {avisosIa.map((a, i) => <p key={i}>{a}</p>)}
+                </div>
+              )}
+
+              <div className="divide-y divide-neutral-100">
+                {Object.entries(propuesta).map(([clave, lineas]) => (
+                  <div key={clave} className="px-4 py-3">
+                    <div className="flex items-center justify-between gap-3 mb-1.5">
+                      <span className="text-[11px] font-medium text-neutral-700">{NOMBRES_IA[clave] ?? clave}</span>
+                      <button
+                        onClick={() => aceptarApartado(clave)}
+                        className="shrink-0 text-[11px] font-medium px-2 py-1 rounded-md border border-neutral-300 text-neutral-700 hover:border-neutral-500"
+                      >
+                        Usar este texto
+                      </button>
+                    </div>
+                    <div className="text-[11px] text-neutral-600 leading-relaxed space-y-1">
+                      {lineas.map((l, i) => <p key={i}>{l}</p>)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="px-4 py-2.5 bg-neutral-50 border-t border-neutral-100 flex justify-end">
+                <button
+                  onClick={aceptarTodo}
+                  className="text-[11px] font-medium px-3 py-1.5 rounded-lg text-white"
+                  style={{ background: "var(--color-primary, #1B3A2D)" }}
+                >
+                  Usar todos los apartados
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* ── El informe ── */}
           {report.type === "referral" && derivaciones.length > 0 && (
