@@ -92,6 +92,31 @@ function Etiqueta({ children, color }) {
  * hace falta cortar el evento a mano — y un checkbox al que se le corta el
  * evento por defecto se queda pintando lo contrario de lo que hay guardado.
  */
+/**
+ * Los botones de dentro de una tarjeta (solución y copiar).
+ *
+ * Están apagados de color a propósito: la tarjeta ya tiene un tick, un reparto y
+ * una etiqueta de urgencia, y tres botones más gritando dejarían el tablero
+ * ilegible de un vistazo, que es justo para lo que sirve.
+ */
+function BotonTarjeta({ children, onClick, ocupada = false, destacado = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={ocupada}
+      className="text-[11.5px] px-2.5 py-1 rounded transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+      style={
+        destacado
+          ? { background: "var(--ok)", color: "#fff", border: "1px solid var(--ok)" }
+          : { background: "var(--panel)", color: "var(--dim)", border: "1px solid var(--line)" }
+      }
+    >
+      {children}
+    </button>
+  );
+}
+
 function Tick({ marcada, ocupada, onToggle }) {
   return (
     <button
@@ -161,6 +186,13 @@ export default function TableroPage() {
   // botones para que dos clics seguidos no manden dos cambios cruzados.
   const [guardando, setGuardando] = useState(null);
   const [fallo, setFallo] = useState(null);
+  // Qué tarea tiene el cuadro de la solución abierto, y lo que lleva escrito sin
+  // guardar. Solo una a la vez: dos cuadros abiertos con dos borradores es la
+  // forma más rápida de guardar el texto en la tarea equivocada.
+  const [editando, setEditando] = useState(null);
+  const [borrador, setBorrador] = useState("");
+  // La clave de la que se acaba de copiar, para poder decirlo. Se borra sola.
+  const [copiada, setCopiada] = useState(null);
 
   useEffect(() => { document.title = "Registro — Salamandra"; }, []);
 
@@ -203,6 +235,48 @@ export default function TableroPage() {
     } finally {
       setGuardando(null);
     }
+  }
+
+  /**
+   * La tarea entera en texto, lista para pegar.
+   *
+   * Sale de aquí y no de la pantalla porque la pantalla la parte en trozos —el
+   * título arriba, el cliente en una etiqueta, el cuerpo dentro del desplegable,
+   * la solución más abajo— y seleccionarlos a mano es justo lo que este botón
+   * viene a evitar. El orden es el de siempre: qué pasa, de quién es, el detalle,
+   * y lo que ya hemos pensado.
+   *
+   * Sin markdown: se pega en un chat, no en un fichero.
+   */
+  function comoTexto(t) {
+    const trozos = [t.titulo];
+    if (t.quien) trozos.push(`Cliente: ${t.quien}`);
+    if (t.cuerpo?.trim()) trozos.push("", t.cuerpo.trim());
+    if (t.solucion?.trim()) trozos.push("", "Solución propuesta:", t.solucion.trim());
+    return trozos.join("\n");
+  }
+
+  async function copiar(t) {
+    try {
+      await navigator.clipboard.writeText(comoTexto(t));
+      setCopiada(t.clave);
+      setFallo(null);
+      // Se apaga sola: un «copiado» que se queda fijo deja de significar nada
+      // cuando copias la siguiente.
+      setTimeout(() => setCopiada((c) => (c === t.clave ? null : c)), 2000);
+    } catch {
+      // El portapapeles necesita HTTPS y permiso del navegador. Si lo niega hay
+      // que decirlo: un botón que no hace nada y no se queja es peor que no
+      // tenerlo.
+      setFallo("El navegador no ha dejado copiar. Abre la tarea y cópiala a mano.");
+    }
+  }
+
+  /** Guarda la solución escrita a mano y cierra el cuadro. */
+  async function guardarSolucion(t) {
+    await tocar(t, { solucion: borrador });
+    setEditando(null);
+    setBorrador("");
   }
 
   /**
@@ -478,6 +552,66 @@ export default function TableroPage() {
                   >
                     {t.cuerpo}
                   </div>
+                  {/* La solución escrita a mano. Se enseña SIEMPRE que exista, y
+                      no escondida detrás del botón: para eso se escribió. */}
+                  {t.solucion && editando !== t.clave && (
+                    <div
+                      className="mt-3 ml-[15px] rounded px-3 py-2 text-[12.5px] leading-relaxed whitespace-pre-wrap"
+                      style={{ background: "var(--panel-alto)", color: "var(--dim)" }}
+                    >
+                      <span
+                        className="block text-[10px] uppercase tracking-[0.16em] mb-1"
+                        style={{ color: "var(--tenue)" }}
+                      >
+                        Solución propuesta
+                      </span>
+                      {t.solucion}
+                    </div>
+                  )}
+
+                  {editando === t.clave ? (
+                    <div className="mt-3 ml-[15px]">
+                      <textarea
+                        value={borrador}
+                        onChange={(e) => setBorrador(e.target.value)}
+                        rows={5}
+                        autoFocus
+                        placeholder="Cómo se arregla. Lo que sepas ahora vale: dónde está, qué hay que tocar, con qué se comprueba."
+                        className="w-full rounded px-3 py-2 text-[12.5px] leading-relaxed outline-none"
+                        style={{ background: "var(--panel-alto)", border: "1px solid var(--line)", color: "var(--text)" }}
+                      />
+                      <div className="mt-2 flex items-center gap-2 flex-wrap">
+                        <BotonTarjeta onClick={() => guardarSolucion(t)} ocupada={guardando === t.clave} destacado>
+                          {guardando === t.clave ? "Guardando…" : "Guardar"}
+                        </BotonTarjeta>
+                        <BotonTarjeta onClick={() => { setEditando(null); setBorrador(""); }}>
+                          Cancelar
+                        </BotonTarjeta>
+                        {/* Vaciar el cuadro y guardar la borra: se dice, porque
+                            si no nadie lo descubre. */}
+                        {t.solucion && (
+                          <span className="text-[11px]" style={{ color: "var(--tenue)" }}>
+                            Déjalo en blanco para borrarla.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-3 ml-[15px] flex items-center gap-2 flex-wrap">
+                      <BotonTarjeta
+                        onClick={() => { setEditando(t.clave); setBorrador(t.solucion ?? ""); }}
+                        ocupada={guardando === t.clave}
+                      >
+                        {t.solucion ? "Editar solución" : "Solución"}
+                      </BotonTarjeta>
+                      {/* Copia título, cliente, descripción y solución de un
+                          golpe, para poder pegarle la tarea entera a Claude. */}
+                      <BotonTarjeta onClick={() => copiar(t)}>
+                        {copiada === t.clave ? "Copiado ✓" : "Copiar"}
+                      </BotonTarjeta>
+                    </div>
+                  )}
+
                   {t.tocadaPor && t.marcada !== null && (
                     <p className="mt-2 ml-[15px] text-[11px]" style={{ color: "var(--tenue)" }}>
                       {t.marcada ? "Marcada" : "Reabierta"} aquí por {t.tocadaPor} — sin pasar por el

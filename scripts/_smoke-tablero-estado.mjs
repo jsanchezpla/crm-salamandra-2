@@ -64,6 +64,30 @@ process.stdout.write("\n▶ Sin nada guardado, manda el fichero\n");
     r.pendiente[0].tareas[0].marcada,
     r.pendiente[0].tareas[0].fuente,
   ], [null, null, "backlog"]);
+  check("y sin solución escrita", r.pendiente[0].tareas[0].solucion, null);
+}
+
+process.stdout.write("\n▶ La solución escrita a mano viaja con la tarea\n");
+{
+  // No sale del fichero: se escribe desde la pantalla y vive en
+  // `master.tablero_estado`, porque los .md viajan dentro de la imagen y el
+  // siguiente despliegue se llevaría por delante lo que se escribiera en ellos.
+  const r = repartirPorEstado(
+    PENDIENTE,
+    RESUELTO,
+    guardado([["Pedirle otra tarjeta", { solucion: "Mirar el guard de la retención." }]])
+  );
+  const conSolucion = r.pendiente[1].tareas.find((t) => t.titulo === "Pedirle otra tarjeta");
+  check("llega a la pantalla", conSolucion.solucion, "Mirar el guard de la retención.");
+  check("y no se le pega a las demás", r.pendiente[0].tareas[0].solucion, null);
+
+  // Escribir una solución NO mueve la tarea de pestaña: es una nota, no un
+  // cierre. Si algún día alguien la usa para marcar, esto lo caza.
+  check("escribirla no la marca", conSolucion.marcada, null);
+  check("ni la saca de Pendiente", titulos(r.pendiente), [
+    ["P0 — hoy", ["El acceso SSH admite contraseña"]],
+    ["P1 — esta semana", ["No se puede cerrar sesión", "Pedirle otra tarjeta"]],
+  ]);
 }
 
 process.stdout.write("\n▶ El tick mueve de pestaña\n");

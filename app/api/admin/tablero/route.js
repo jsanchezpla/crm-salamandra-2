@@ -211,7 +211,7 @@ async function estadosGuardados() {
   try {
     const { TableroEstado } = getMasterModels();
     const filas = await TableroEstado.findAll({
-      attributes: ["clave", "asignadoA", "resuelta", "tocadaPor", "updatedAt"],
+      attributes: ["clave", "asignadoA", "resuelta", "tocadaPor", "solucion", "updatedAt"],
     });
     return new Map(filas.map((f) => [f.clave, f]));
   } catch (err) {
@@ -249,13 +249,16 @@ export const GET = withTenant(async (_request, _ctx, ctx) => {
   }
 });
 
+/** Tope de la solución escrita a mano. Ver el porqué donde se valida. */
+const MAX_SOLUCION = 10_000;
+
 /**
- * PATCH /api/admin/tablero — repartir una tarea o marcarla.
+ * PATCH /api/admin/tablero — repartir una tarea, marcarla o escribir su solución.
  *
- * Cuerpo: `{ clave, titulo?, asignadoA?, marcada? }`. Se manda solo lo que
- * cambia: `asignadoA: null` la deja sin dueño y `marcada: null` devuelve la
- * tarea a donde diga el fichero, que no es lo mismo que `false` (eso es
- * «reabierta a mano»).
+ * Cuerpo: `{ clave, titulo?, asignadoA?, marcada?, solucion? }`. Se manda solo lo
+ * que cambia: `asignadoA: null` la deja sin dueño, `marcada: null` devuelve la
+ * tarea a donde diga el fichero —que no es lo mismo que `false`, eso es
+ * «reabierta a mano»— y `solucion: ""` o `null` borra lo escrito.
  *
  * NO valida que la clave exista en los ficheros, y es deliberado: los `.md`
  * cambian con cada despliegue y una tarea puede reescribirse mientras alguien
@@ -288,6 +291,27 @@ export const PATCH = withTenant(async (request, _ctx, ctx) => {
         return error("«marcada» tiene que ser true, false o null");
       }
       cambios.resuelta = marcada;
+    }
+
+    /*
+     * La solución, en texto libre.
+     *
+     * Vaciarla la BORRA (queda a null) en vez de guardar una cadena vacía: así
+     * «no hay solución escrita» es UN solo estado y no dos que se pintan igual.
+     * El tope es generoso a propósito —esto es una nota entre nosotros, no un
+     * campo de un formulario público— pero existe: sin él, un pegado accidental
+     * de medio fichero entra en la base y se arrastra en cada carga del tablero.
+     */
+    if ("solucion" in (cuerpo ?? {})) {
+      const texto = cuerpo.solucion;
+      if (texto !== null && typeof texto !== "string") {
+        return error("«solucion» tiene que ser texto, o null para borrarla");
+      }
+      const limpia = (texto ?? "").trim();
+      if (limpia.length > MAX_SOLUCION) {
+        return error(`La solución se pasa de larga: ${limpia.length} de ${MAX_SOLUCION} caracteres.`);
+      }
+      cambios.solucion = limpia || null;
     }
 
     if (!Object.keys(cambios).length) return error("No se ha pedido ningún cambio");
@@ -326,6 +350,7 @@ export const PATCH = withTenant(async (request, _ctx, ctx) => {
       asignadoA: fila.asignadoA ?? null,
       marcada: fila.resuelta ?? null,
       tocadaPor: fila.tocadaPor ?? null,
+      solucion: fila.solucion ?? null,
     });
   } catch (err) {
     return serverError(err);

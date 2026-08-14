@@ -62,6 +62,21 @@ export function defineTableroEstado(sequelize) {
         type: DataTypes.STRING(255),
         allowNull: true,
       },
+      /**
+       * Cómo se arregla, en texto libre, escrito desde la pantalla (14/08/2026).
+       *
+       * Vive aquí por el mismo motivo que el tick y el reparto: `docs/backlog.md`
+       * viaja DENTRO de la imagen de Docker, así que lo que la pantalla
+       * escribiera en él se lo llevaría el siguiente despliegue sin dar ningún
+       * error. Que la solución NO esté en el fichero tiene además una
+       * consecuencia buena — es una nota entre nosotros dos, no la tarea, y
+       * cuando se arregla de verdad lo que queda escrito en `resuelto.md` es lo
+       * que se hizo, no lo que se pensaba hacer.
+       */
+      solucion: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
     },
     {
       tableName: "tablero_estado",
