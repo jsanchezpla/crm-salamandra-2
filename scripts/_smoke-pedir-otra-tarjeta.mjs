@@ -17,10 +17,15 @@
  *      caso de «no lo sé», y aquí no saber nunca es vía libre: crear otra
  *      retención a ciegas le dejaría al paciente el importe bloqueado dos veces.
  *
- * NO cubre la distinción final `requires_capture` (viva) contra `canceled`
- * (muerta), porque para eso hay que preguntarle a Stripe de verdad y ningún
- * tenant de local tiene claves. Esa parte es el `=== "requires_capture"` de
- * `leerEstadoAutorizacion`, y quien la ejercita contra Stripe en modo prueba es
+ * La distinción final `requires_capture` (viva) contra `canceled` (muerta) NO
+ * está aquí, pero **ya no está sin comprobar** (14/08/2026): la cubre
+ * `_smoke-retencion-viva-o-muerta.mjs`, que ejercita el camino entero —
+ * `getStripe` → `leerEstadoAutorizacion` → `estorbaParaPedirOtraTarjeta` —
+ * falseando solo la LIBRERÍA de Stripe (`_fake-stripe.mjs`). Así se prueban los
+ * cinco desenlaces posibles sin necesitar una cuenta de Stripe, que es lo que
+ * tenía este trozo parado desde el 13/08.
+ *
+ * Contra una cuenta de Stripe de prueba de verdad, el que manda sigue siendo
  * `_smoke-autorizacion.mjs`, que necesita un tenant con `sk_test_`.
  *
  * No toca base de datos ni red: los modelos van con dobles. Se ejecuta suelto.

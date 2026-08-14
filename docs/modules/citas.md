@@ -802,8 +802,30 @@ vez** sobre la misma cita y el CRM perdería el rastro de la primera, porque
 `paymentSessionId` se pisa con la nueva.
 
 Los casos de la guarda están en `scripts/_smoke-pedir-otra-tarjeta.mjs` (no toca
-red ni base de datos). La distinción viva/muerta contra Stripe de verdad la
-ejercita `_smoke-autorizacion.mjs`, que necesita un tenant con claves `sk_test_`.
+red ni base de datos).
+
+**La distinción viva/muerta ya está comprobada** (14/08/2026), y sin necesitar
+una cuenta de Stripe: `scripts/_smoke-retencion-viva-o-muerta.mjs` falsea la
+LIBRERÍA de Stripe (`_fake-stripe.mjs`, enchufada por `_fake-stripe-loader.mjs`)
+y deja intacto todo nuestro camino — `getStripe` monta el cliente con la clave
+del tenant, `leerEstadoAutorizacion` interpreta el estado y
+`estorbaParaPedirOtraTarjeta` decide. Cubre los cinco desenlaces posibles:
+
+| Lo que contesta Stripe | Qué hace el botón |
+|---|---|
+| `requires_capture` | 409 — hay importe bloqueado, no se crea otra retención |
+| `canceled` | adelante — es para lo que existe el botón |
+| `succeeded` | adelante — ya se cobró, no hay nada que duplicar |
+| no existe (`resource_missing`) | adelante — clave rotada o cuenta cambiada |
+| no contesta | 409 — «no lo sé» no es vía libre |
+
+```bash
+node --import ./scripts/_fake-stripe-loader.mjs --env-file=.env.local scripts/_smoke-retencion-viva-o-muerta.mjs
+```
+
+Lo que ese smoke NO cubre es la capa HTTP de encima (el 409 del endpoint y el
+correo de Resend): para eso hace falta un tenant con claves `sk_test_`, y ahí
+manda `_smoke-autorizacion.mjs`.
 
 ## Feature flag: `autoConfirmPublicBookings`
 
