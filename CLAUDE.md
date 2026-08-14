@@ -26,8 +26,8 @@ Antes de implementar cambios en un módulo concreto, lee su doc:
 | Clínica           | `docs/modules/clinica.md`    | Implementado (aumenta)           |
 | Nutrición         | `docs/modules/nutricion.md`  | Implementado (nutri_laura, demo, aumenta, somos) |
 | Formularios       | `docs/modules/formularios.md` | Implementado (nutri_laura)      |
-| Outreach          | `docs/modules/outreach.md`   | Completo en local, sin desplegar  |
-| Soporte           | `docs/modules/support.md`    | Completo en local (demo), sin desplegar |
+| Outreach          | `docs/modules/outreach.md`   | Implementado (aumenta, demo, demo_agencia, salamandra_solutions, somos) |
+| Soporte           | `docs/modules/support.md`    | Implementado (aumenta, demo, demo_agencia, somos) — el correo ENTRANTE aún sin dar de alta en Resend |
 | Analíticas        | `docs/modules/analytics.md`  | Implementado (spain_enzymes, aumenta, somos) |
 | Fichaje           | `docs/modules/fichaje.md`    | Implementado (aumenta) — control horario |
 | Configuración     | `docs/modules/configuracion.md` | Implementado (claves IA por tenant) |
@@ -378,11 +378,11 @@ aplique.
 | clients         | #1 Clientes & Cuentas         | Implementado                                 | `docs/modules/clients.md`   |
 | sales / leads   | #2 Comercial & Ventas (Leads) | Implementado (varios tenants)                | `docs/modules/leads.md`     |
 | projects        | #3 Proyectos (Kanban)         | Implementado (demo, aumenta)                 | `docs/modules/projects.md`  |
-| support         | #4 Soporte & Calidad          | Completo en local (demo), sin desplegar      | `docs/modules/support.md`   |
+| support         | #4 Soporte & Calidad          | Implementado (aumenta, demo, demo_agencia, somos) | `docs/modules/support.md`   |
 | billing         | #5 Facturación                | Implementado (demo, aumenta, spain_enzymes)  | `docs/modules/billing.md`   |
 | team            | #6 Equipo & RRHH              | Implementado                                 | `docs/modules/team.md`      |
 | planning        | #7 Planificación & Recursos   | Pendiente                                    | —                           |
-| documents       | #8 Documentación & Contratos  | Sprint 1+2 (backend+UI) en local, sin desplegar | `docs/modules/documents.md` |
+| documents       | #8 Documentación & Contratos  | Implementado (aumenta, demo, demo_clinica, demo_nutricion, nutri_laura, somos; `documents_avanzado` en aumenta, demo y somos) | `docs/modules/documents.md` |
 | —               | #9 Filtro global por cliente  | Pendiente (feature transversal, sin menú)    | —                           |
 | inventory       | #10 Inventario & Activos      | Implementado (spain_enzymes, demo, aumenta)  | `docs/modules/inventory.md` |
 | training        | #11 Formación & Conocimiento  | Implementado (retorika, aumenta)             | `docs/modules/training.md`  |
@@ -405,7 +405,7 @@ aplique.
 | pacientes     | Pacientes                      | Implementado (aumenta)              | `docs/modules/pacientes.md` |
 | clinica       | Clínica                        | Implementado (aumenta)              | `docs/modules/clinica.md`   |
 | nutricion     | Recetario                      | Implementado. **Deja de ser exclusivo de Laura el 13/08/2026**: sus componentes viven en `modules/nutricion/` (no en `overrides/nutri-laura/`), la pestaña «Pautas» la monta la ficha por defecto, y `enable-module.js <slug> nutricion` crea las nueve tablas y siembra los 497 alimentos base. Activo en `nutri_laura`, `demo`, `somos` y `aumenta` | `docs/modules/nutricion.md` |
-| outreach      | Captación (leads + scoring IA) | Completo en local (sandbox); falta desplegar | `docs/modules/outreach.md` |
+| outreach      | Captación (leads + scoring IA) | Implementado (aumenta, demo, demo_agencia, salamandra_solutions, somos) | `docs/modules/outreach.md` |
 | formularios   | **Leads Comerciales**: formularios públicos → bandeja → ficha (antes «Formularios») | Implementado (nutri_laura) | `docs/modules/formularios.md` |
 | —             | Configuración (ajustes + claves IA por tenant) | Implementado (siempre visible, sin `moduleKey`) | `docs/modules/configuracion.md` |
 | —             | **Buzón**: el cliente nos escribe a NOSOTROS (`/ayuda` → `/admin/buzon`) | Implementado 13/08/2026 (todos los clientes, sin `moduleKey`) | `docs/modules/buzon.md` |

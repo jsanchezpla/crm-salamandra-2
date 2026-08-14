@@ -26,6 +26,162 @@ Lo más reciente arriba.
 
 ---
 
+## 14/08/2026
+
+### El informe clínico ya lo redacta la IA, y no puede inventarse nada · `aumenta`, `demo`
+
+**Lo que había.** «Volcar las sesiones al informe» copia literal lo que escribió
+la terapeuta en cada sesión, con su fecha delante: `3 de marzo: se trabajan
+tareas de atención sostenida con apoyo visual, responde con interés`. Es exacto y
+se lee como un parte, no como un informe — y quien lo recibe es una familia. La
+cabecera de `redactarInforme.js` llevaba desde julio diciendo que la redacción
+asistida «de mañana» se apoyaría en él y no lo sustituiría. Esto es ese mañana.
+
+**Las dos reglas del fichero, ahora en código y no en el prompt.** La primera —no
+pisa lo que la terapeuta escribió— se cumple porque **el endpoint no guarda
+nada**: `POST /api/clinica/reports/[id]/pulir` devuelve una PROPUESTA que se
+pinta al lado, apartado por apartado, con su «Usar este texto». Y porque de los
+ocho apartados del informe solo se le mandan al modelo los CINCO que salen del
+volcado: el motivo de intervención y la propuesta de continuidad los escribe ella
+y no salen de su sitio ni para que la IA los lea.
+
+La segunda —no inventa— se le pide en el prompt, pero pedir no basta. La
+propuesta pasa por `verificarSinInventar`, que la **rechaza entera** si aparece
+cualquier número o cualquier mes que no estuviera en el volcado, y dice cuál: una
+edad, un porcentaje, una sesión que no hubo. Es la invención que más daño hace en
+un informe clínico y la única que se puede comprobar sin opinar. Un apartado que
+encoge a menos de la mitad no se rechaza —unir dos anotaciones acorta con
+razón— pero se avisa, para que lo mire con lupa antes de aceptarlo.
+
+**Lo que no se ha tocado**: `lib/clinica/reportPdf.js`. El PDF que recibe la
+familia es el mismo de siempre.
+
+*Cómo se comprobó*: `scripts/_smoke-pulir-informe.mjs` (sin base de datos ni
+servidor) fija las dos reglas: que el motivo de intervención y la continuidad no
+se le mandan al modelo, que una edad, una fecha o un porcentaje inventados se
+cazan y se nombran, que repetir un número que ya estaba sí pasa, que lo que
+encoge se avisa y que el modo simulado de la demo pasa la MISMA verificación que
+el de verdad. Y de punta a punta contra el servidor: en `demo` el endpoint
+devuelve 200 con la propuesta simulada; en un tenant sin clave, 503 con «Este
+cliente no tiene configurada la clave de IA».
+*Comprobado en producción*: 14/08/2026 — desplegado; y lo que faltaba para que
+Aumenta lo use es SOLO su clave de Anthropic, que sigue ausente
+(`anthropicApiKey` vacío en `master.tenants`). Queda apuntado en el backlog.
+
+### «Pedirle otra tarjeta»: la retención viva o muerta, por fin comprobada · todos
+
+**Lo que quedaba.** El arreglo del 13/08 estaba desplegado y sin ejercitar: los
+seis casos que se deciden sin salir de casa estaban fijados, pero la pregunta
+final —¿la retención del intento anterior sigue VIVA?— solo la contesta Stripe, y
+ningún tenant de local tiene claves. Ensayarlo contra producción pedía una cita
+`failed` de una persona de carne y hueso.
+
+**Cómo se ha resuelto sin una cuenta de Stripe.** Se falsea la LIBRERÍA
+(`scripts/_fake-stripe.mjs`, enchufada por un cargador de Node), no nuestro
+código. Así se ejercita el camino entero de producción —`getStripe` monta el
+cliente con la clave del tenant, `leerEstadoAutorizacion` interpreta el estado y
+`estorbaParaPedirOtraTarjeta` decide— y lo único inventado es la respuesta de
+Stripe, que es justo lo que no se tenía. El guion se elige por el id del
+PaymentIntent, así que ninguna prueba contamina a otra, y el falso se planta si
+alguna vez le llega una clave `sk_live_`.
+
+**Los cinco desenlaces, y qué hace el botón con cada uno**: `requires_capture` →
+409 (el paciente tiene el importe bloqueado; crear otra retención le dejaría
+dos); `canceled` → adelante, que es para lo que existe el botón; `succeeded` →
+adelante; el PaymentIntent que ya no existe —clave rotada, cuenta cambiada— →
+adelante, porque no hay nada que duplicar; y Stripe que no contesta → 409,
+porque «no lo sé» no puede ser vía libre cuando hay dinero de por medio. Los dos
+mensajes de 409 son distintos a propósito, y solo el segundo invita a
+reintentar, que es el único que se arregla esperando.
+
+*Cómo se comprobó*: `node --import ./scripts/_fake-stripe-loader.mjs
+--env-file=.env.local scripts/_smoke-retencion-viva-o-muerta.mjs`, con el tenant
+`sandbox`: seis lecturas de estado y cinco decisiones del botón, todas en verde,
+más que los dos mensajes no se confunden. Lo que sigue sin ejercitarse es la capa
+HTTP de encima —el 409 del endpoint y el correo de Resend—, que no se puede
+montar sin una cuenta de Stripe de prueba; ahí manda `_smoke-autorizacion.mjs`.
+*Comprobado en producción*: 14/08/2026 — desplegado, contenedor arriba y `/login`
+en 200. La lógica que decide es la misma que se ha ejercitado, y `failed` sigue
+en `PUEDE_HABER_DINERO`, que es correcto y no se ha tocado.
+
+### El back-office nuevo, ejercitado: demos por oficio, claves y cierre de cuentas · producto
+
+**Las demos por oficio SÍ están en producción** (la tarea decía que no, y era
+verdad el 13/08): `demo_clinica`, `demo_nutricion` y `demo_agencia` existen con
+su schema, su foto dorada y su administrador. Las cuatro pestañas se pintan
+arriba del CRM y llevan a donde dicen — al saltar a la de clínica el menú cambia
+al suyo (aparecen Formularios y Equipo, desaparecen Captación, Analíticas y
+Proyectos). Un slug que no esté en la lista blanca responde 404, que es lo que
+impide que ese botón sea una puerta al CRM de un cliente.
+
+**Poner claves y cerrar cuentas no se pueden mirar: hay que hacerlas.** Se han
+hecho contra el tenant `sandbox`, que es el cliente de mentira que pedía la
+tarea. Poner una clave: se guarda con prefijo `enc:v1:` y **no se devuelve en la
+respuesta**, ni a quien acaba de escribirla; un pegado a medias (corto, con
+espacios, con saltos de línea) se rechaza en el acto; y a una demo se le contesta
+409. Cerrar la cuenta: la radiografía dice antes lo que hay dentro; sin teclear
+el identificador no se cierra, ni tecleándolo mal; una demo da 409 —se rehacen
+con su script— y el tenant desde el que trabajas, también; y al cerrarla de
+verdad el schema aparece como `zzz_baja_sandbox_<sello>`, `crm_sandbox` deja de
+responder, el cliente desaparece de `master.tenants` y la baja sale listada con
+su red de rescate.
+
+**Dos cosas que salieron por el camino.** `scripts/seed-sandbox.js` creaba las
+tablas con `sequelize.sync()` y **no corría las migraciones**, así que el
+sandbox nacía a medias y en silencio: en Soporte, `tickets.number` se quedaba sin
+su secuencia y todos los tickets salían sin número —la referencia que se dice por
+teléfono era «TK-????» y el correo entrante dejaba de reconocer el «TK-0042» del
+asunto—. Ahora llama a `ensure-tenant-schema.js`, como hace el alta de clientes.
+Y `podar-bajas.js` rechazaba `--dias=0`, que es justo lo que se quiere después de
+una prueba.
+
+*Cómo se comprobó*: en producción, las cuatro demos por HTTP
+(`/api/auth/demo` responde 200 a las cuatro y 404 a un slug inventado) y las
+pestañas navegando de verdad en el CRM. En local, `scripts/_smoke-backoffice-ciclo.mjs`
+contra el sandbox: 21 comprobaciones en verde, incluido el cierre completo y su
+schema apartado. Ese smoke se pide con `node:http` y no con `fetch` a propósito
+— `fetch` descarta la cabecera `Host`, y sin ella el middleware contestaba 404 a
+todo y la prueba pasaba en verde sin haber llegado a ningún sitio.
+*Comprobado en producción*: 14/08/2026 — `master.tenants` con las tres demos de
+oficio activas (11, 12 y 9 módulos) y sus cuatro schemas `_golden`; las cuatro
+pestañas funcionando. Lo de las claves y la baja se ejercitó en local, contra un
+cliente de mentira, que es lo que la propia tarea pedía: darle de baja a un
+cliente real por probar no es una opción.
+
+### La integración de Retorika no estaba rota: la academia estaba parada · `retorika`
+
+**Decisión de Rodrigo, 14/08/2026**: Retorika está bien, solo parados. La tarea
+se cierra.
+
+Lo que se sabía el 10/08 sigue siendo cierto y explica por qué esto nunca llegó a
+ser un fallo: **no se rechazó ni una llamada**. Las tres que llegaron en julio
+respondieron 200, y la última —del 06/07— era una comprobación que no escribe
+nada. Los datos pararon donde para una academia en verano: cuestionarios y
+alumnos el 25/06, matrículas e inscripciones el 29/06. La tarea decía
+explícitamente que hasta preguntarles no se podía saber; se preguntó, y la
+respuesta cierra el caso.
+
+*Cómo se comprobó*: preguntándoselo, que era el `*Se comprueba*` de la tarea.
+*Comprobado en producción*: 10/08/2026 — 526 intentos, 100 alumnos, 88 matrículas
+y 23 inscripciones, ninguna llamada rechazada.
+
+### El secreto global de webhooks se queda como está · `retorika`
+
+**Decisión de Rodrigo, 14/08/2026**: está bien así. La tarea se cierra.
+
+Es el `CRM_WEBHOOK_SECRET` de reserva, de 31 caracteres, y quien cae en él es
+Retorika, que no tiene entrada propia en `CRM_WEBHOOK_SECRETS` (Laura sí, con 64).
+No es una vulnerabilidad conocida: es un secreto que parece escrito a mano en vez
+de generado al azar. Cambiarlo obliga a tocar el `wp-config.php` de la web de
+Retorika a la vez, y el riesgo de dejar su integración muda por una limpieza es
+mayor que lo que se gana. Si algún día se toca esa zona, o si Retorika vuelve a
+mandar datos y hay que entrar en su WordPress igualmente, es el momento.
+
+*Comprobado en producción*: 09/08/2026 — solo `nutri_laura` (64) tiene entrada
+propia; el global sigue en 31.
+
+---
+
 ## 13/08/2026
 
 ### Módulo de Fichaje: el Excel del reloj de fichar entra en el CRM · `aumenta`, `demo`, producto

@@ -62,6 +62,10 @@ const SLUGS = [
   // cuenta como parte del nombre en `sueltoEn`, así que `demo` no casa dentro
   // de `demo_clinica`. Si algún día se relaja ese límite, saldrían en los dos.
   "demo_clinica", "demo_nutricion", "demo_agencia",
+  // Alta del 14/08/2026 desde el back-office. Esta lista no se lee de la base de
+  // datos a propósito (habla también de clientes que ya no están), así que un
+  // cliente nuevo hay que añadirlo aquí a mano o sus tareas se quedan sin grupo.
+  "gm_alvar_alonso",
 ];
 
 /**

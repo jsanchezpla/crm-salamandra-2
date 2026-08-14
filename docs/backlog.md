@@ -100,188 +100,74 @@ más alto, que es lo que aguanta a cloud-init).
 
 ## P1 — esta semana
 
-### «Pedirle otra tarjeta» ya funciona, pero nadie lo ha visto funcionar · todos
-
-**Desplegado el 13/08/2026; sin ejercitar en el VPS.** El botón se pintaba
-y el aviso lo recomendaba, pero el endpoint contestaba 409 a toda cita `failed`:
-usaba `tieneRetencionPendiente`, y esa lista mete `failed` a propósito. De las
-tres salidas del dinero perdido —reintentar, pedir otra tarjeta, rechazar—
-desaparecía la del medio, justo la recomendada. El propio endpoint tenía escrito
-el camino de la tarjeta rechazada, con su palabra para el correo
-(`motivo = "rechazada"`), y era inalcanzable.
-
-**Lo que se hizo.** `PUEDE_HABER_DINERO` no se tocó —sus otros cuatro
-consumidores la quieren ancha—: el botón usa ahora una comprobación propia,
-`estorbaParaPedirOtraTarjeta`, que en vez de mirar la lista le PREGUNTA a Stripe
-por la retención vieja con una lectura que no mueve dinero. Muerta (lo normal) →
-crea la nueva y manda el correo. Viva → 409 explicando que el paciente aún tiene
-el importe retenido. Sin poder preguntar → 409 también, porque «no lo sé» no
-puede ser vía libre: crear la segunda a ciegas le bloquea el importe dos veces.
-
-**La decisión que faltaba la tomó Rodrigo el 13/08**: opción (b), el CRM **no**
-suelta el dinero por su cuenta. Y con un matiz suyo que conviene no perder — si
-el banco no acepta el pago, el CRM no reintenta nada: espera a que la persona
-vuelva a pagar físicamente.
-
-**Por qué sigue aquí y no en `resuelto.md`.** Comprobarlo de verdad pide una cita
-`failed` real, y pulsarlo crea una retención y le manda un correo a un paciente
-de carne y hueso; no se puede ensayar contra producción sin molestar a alguien.
-En local tampoco: ningún tenant tiene claves de Stripe. Se queda hasta que se
-vea funcionando, que es lo que manda la norma de arriba.
-
-*Se comprueba*: en una cita `failed` con la retención ya muerta, pulsarlo manda
-el correo en vez de dar 409; y con una viva, contesta 409 sin crear la segunda
-—el paciente nunca acaba con dos importes bloqueados—. La vía barata es un
-tenant de pruebas con claves `sk_test_`: entonces vale `_smoke-autorizacion.mjs`
-para montar el caso y este flujo entero se puede ensayar sin tocar a nadie.
-*Dónde*: `lib/citas/cobroCita.js` (`estorbaParaPedirOtraTarjeta`),
-`lib/payments/autorizacion.js` (`leerEstadoAutorizacion`),
-`app/api/citas/bookings/[id]/pedir-tarjeta/route.js:77`. El apartado del doc:
-`docs/modules/citas.md`, «Cuando el dinero se pierde: las tres salidas».
-*Probado*: 13/08/2026 — `scripts/_smoke-pedir-otra-tarjeta.mjs`, seis casos en
-verde, incluido el de «no se pudo preguntar → estorba». No cubre la distinción
-viva/muerta contra Stripe: eso necesita claves de prueba.
-*Comprobado en producción*: 13/08/2026 — el arreglo está **desplegado** (las dos
-funciones nuevas responden dentro del contenedor y `/login` sigue en 200), pero
-su COMPORTAMIENTO no se ha ejercitado: para eso hace falta una cita `failed`
-real. Lo anterior, del 09/08: `failed` sigue en la lista, que es correcto y no se
-ha tocado.
+_Ahora mismo no hay ninguna._
 
 ---
 
 ## P2 — cuando se pueda
 
-### El back-office nuevo está desplegado y en producción no se le nota · producto
+### El correo de entrada de Soporte necesita tres cosas que no están en el código · `aumenta`, `demo`, `somos`
 
-Salió al comprobar el despliegue del 13/08 (17:35), que subió `fbdd116` —demos
-por oficio, poner claves a un cliente y cerrar cuentas—. El código está en el
-VPS, pero **sus cuatro entradas de `resuelto.md` dicen «comprobado en local»** y
-ninguna se ha visto funcionando allí. La norma de arriba pide lo contrario, así
-que o se comprueban o vuelven aquí.
+**El CRM ya sabe hacerlo entero** (14/08/2026): un correo firmado que entra por
+`/api/webhooks/resend-inbound` abre su ticket, cae en el hilo por el `TK-0042`
+del asunto o por el remitente, distingue si escribe el equipo, no duplica los
+reintentos y reabre lo que estaba resuelto. Todo eso está fijado en
+`scripts/_smoke-correo-entrante.mjs` y pasa. **La otra mitad de Soporte —que el
+cliente nos avise a NOSOTROS desde su Ayuda— está comprobada contra producción y
+funciona**: el aviso de Aumenta se guarda y el correo sale de verdad.
 
-Lo único que se puede afirmar hoy, mirando la base de datos: **las demos por
-oficio no existen en producción**. `master.tenants` tiene los siete clientes de
-siempre y ninguna `demo_clinica`, `demo_nutricion` ni `demo_agencia`. O sea que
-el escaparate público sigue siendo exactamente el de antes —una sola demo con
-veinte módulos—, que es el problema que esa tarea daba por resuelto. No está
-roto: `DemoTabs` cuenta las que existen de verdad y se esconde con menos de dos,
-así que no hay ninguna pestaña que lleve a un 404. Simplemente no hay nada nuevo
-que ver hasta que se siembren.
+Lo que falta no se programa, se da de alta, y son tres cosas fuera del
+repositorio: **(1)** un dominio de RECEPCIÓN en la cuenta de Resend de Salamandra
+(p. ej. `inbound.salamandrasolutions.com`), **(2)** su registro MX en el DNS del
+dominio y **(3)** un webhook apuntando a
+`https://crm.salamandrasolutions.com/api/webhooks/resend-inbound`, cuyo
+`whsec_…` se pega en `.env.production`. Hacen falta el panel de Resend y el DNS;
+desde aquí no se puede.
 
-Las otras dos —poner claves y cerrar cuentas— no se pueden comprobar mirando:
-hay que ponerle una clave a alguien y dar de baja a alguien. La de bajas conviene
-ensayarla con un cliente de mentira antes que con uno real.
+Hoy **no se pierde ni un correo**, y conviene saber por qué: sin las variables no
+existe ninguna dirección de captura, así que nadie tiene a dónde escribir. La
+pantalla de Soporte esconde el bloque entero y ofrece el portal. Lo que sí era un
+riesgo —y se arregló el 14/08— es la media configuración: con solo el dominio
+puesto, el CRM le enseñaba a cada cliente su dirección y le pedía que reenviara
+ahí TODO su buzón, mientras el webhook contestaba 503 a cada entrega. Ahora
+`captureAddress` exige las dos variables, así que faltar una deja la vía
+ausente en vez de pintada en la pared.
 
-*Se comprueba*: en producción existen `demo_clinica`, `demo_nutricion` y
-`demo_agencia`, y desde la demo general se salta a ellas por las pestañas.
-*Dónde*: `npm run db:demos` (`scripts/crear-demos-por-oficio.js`) es lo que las
-siembra; el catálogo está en `lib/demo/demos.js`.
-*Comprobado en producción*: 13/08/2026 — desplegado y sano (contenedores arriba,
-`/login` en 200), y `master.tenants` con 7 clientes y ninguna demo de oficio.
-
-### El informe clínico: el PDF ya está, falta que lo escriba la IA · `aumenta`
-
-**El PDF está hecho y desplegado**, que es lo primero que hay que saber para no
-rehacerlo: `lib/clinica/reportPdf.js` compone el informe que recibe la familia
-—secciones fijas, solo las que tienen contenido, sin membrete porque se abre en
-el móvil— y sale por «Enviar al paciente». En clínica hay un segundo PDF, el de
-estadísticas del centro (`lib/clinica/estadisticasExport.js`), también hecho.
-Ninguno de los dos lleva IA: son maquetación con pdfkit.
-
-Lo que falta es el paso de ANTES. Hoy el contenido lo compone
-`lib/clinica/redactarInforme.js`, que copia literal lo que dicen las sesiones
-elegidas, con su fecha delante. Su cabecera ya dice que la redacción asistida
-«de mañana» se apoyará en él —no lo sustituirá—: primero se junta lo que dicen
-las sesiones, y luego, si acaso, se le pide a la IA que lo pula.
-
-Las dos reglas que ese fichero ya tiene escritas son la especificación y no se
-negocian: **no pisa lo que la terapeuta ya escribió** y **no inventa**. Un
-informe clínico acaba en manos de una familia y a veces de un juzgado.
-
-Dos cosas lo hacen prematuro HOY, y las dos son de fuera del código:
-
-- Aumenta **no tiene ninguna clave de IA** —ni Anthropic ni OpenAI—, así que
-  esto no se puede ni probar en su casa. Ver la decisión de las claves.
-- El módulo clínico se importó de Organízate el 02/08 y **todavía no ha
-  registrado su primera sesión por la aplicación**. Las 22.045 sesiones que hay
-  son ese volcado: notas ya redactadas a mano entre 2024 y 2026, de las que no
-  existió nunca un audio. Sobre ellas la IA no tiene nada que hacer, y contarlas
-  como trabajo pendiente es engañarse. El día que empiecen a registrar sesiones
-  desde el CRM, esto pasa a valer mucho.
-
-*Se comprueba*: una terapeuta genera el borrador desde sus sesiones, la IA lo
-pule sin tocar lo que ella escribió, y sale el PDF de siempre.
-*Dónde*: `lib/clinica/redactarInforme.js:1-19` es el punto de enganche;
-`lib/clinica/reportPdf.js` es lo que NO hay que tocar.
-*Comprobado en producción*: 10/08/2026 — los dos generadores de PDF están en el
-contenedor; `/api/clinica/reports/[id]/` tiene `desde-sesiones` y `enviar`, y
-ningún paso de IA en medio. Aumenta: 0 informes y 0 sesiones creadas desde la
-importación.
-
-### Retorika lleva cinco semanas sin mandar nada desde su web · `retorika`
-
-El último dato que entró de su WordPress fue el 29/06 (matrículas e
-inscripciones); los alumnos y los cuestionarios pararon el 25/06. La última
-llamada de `asesoriaretorika.com` a cualquier webhook fue el **06/07**, y era
-una comprobación que no escribe nada.
-
-**No estamos rechazando nada**: todas las llamadas que llegaron respondieron
-200. O la academia está parada por el verano —que en una academia es lo más
-probable— o su plugin dejó de disparar. Hasta preguntarles no se puede saber, y
-por eso esto no es un fallo todavía.
-
-Lo que sí es del producto: **nada avisa cuando la integración de un cliente se
-queda muda**. La de Laura llama cada noche a las 04:30 y eso solo se ve mirando
-a mano el `access.log` de nginx. Si dejara de llamar, tampoco se enteraría
-nadie.
-
-*Se comprueba*: preguntar a Retorika si han dado cursos desde julio. Si dicen
-que sí, el fallo es nuestro y sube a P1; si dicen que no, se cierra.
-*Dónde*: `app/api/webhooks/tutorlms/*` y `app/api/webhooks/retorika/*`. Los
-datos, en `crm_retorika.{quiz_attempts,training_users,course_enrollments,course_registrations}`.
-*Comprobado en producción*: 10/08/2026 — 526 intentos (último 25/06), 100
-alumnos (25/06), 88 matrículas y 23 inscripciones (29/06). En el `access.log`
-de nginx: 3 llamadas suyas en julio, todas 200, la última el 06/07, y ninguna
-en agosto. En ese mismo periodo `tunutrilaura.com` llamó 29 veces, la última
-hoy a las 04:30.
-
-### Lo que un cliente escriba por correo a Soporte no llega a ningún sitio · `aumenta`, `demo`
-
-Soporte se vendió con dos vías de entrada: el portal y el correo. El portal
-funciona; el correo nunca llegó a encenderse, porque hace falta dar de alta el
-dominio de recepción en Resend, crear el webhook y poner las dos variables en el
-servidor. Hoy no lo sufre nadie —Aumenta tiene el módulo activo pero aún no ha
-abierto ni un ticket—, y por eso está aquí y no más arriba. El día que empiecen
-a usarlo, el correo de un cliente se perderá sin que nadie se entere: no hay
-rebote ni aviso.
-
-*Se comprueba*: un correo a `soporte-aumenta@{dominio}` crea su ticket en la
-bandeja de Aumenta.
-*Dónde*: `app/api/webhooks/resend-inbound/route.js:141` y
-`lib/support/notify.js:27`. Los pasos están comentados en `.env.production.example`.
-*Comprobado en producción*: 10/08/2026 — `.env.production` tiene 26 variables y
-**ninguna se llama RESEND**, ni `RESEND_INBOUND_DOMAIN` ni `RESEND_WEBHOOK_SECRET`.
-`support` está activo en `aumenta` y `demo`; Aumenta tiene 0 tickets.
+*Se comprueba*: `docker exec crm-salamandra-app-1 node scripts/check-resend-tenant.mjs`
+dice que las dos variables están y que el dominio de captura consta verificado; y
+un correo a `soporte-aumenta@{dominio}` abre su ticket en la bandeja de Aumenta.
+*Dónde*: `app/api/webhooks/resend-inbound/route.js`, `lib/support/notify.js:26`
+(`captureAddress`). Los pasos del alta, comentados en `.env.production.example`.
+*Comprobado en producción*: 14/08/2026 — siguen sin estar `RESEND_INBOUND_DOMAIN`
+y `RESEND_WEBHOOK_SECRET` (las 26 variables del `.env.production`, ninguna
+RESEND), `inbound.salamandrasolutions.com` no existe en el DNS, y las tres claves
+de Resend que hay guardadas son de solo envío, así que ni siquiera pueden listar
+los dominios de su cuenta. `support` activo en `aumenta`, `demo`, `demo_agencia`
+y `somos`; Aumenta sigue con 0 tickets.
 
 ---
 
 ## P3 — deuda
 
-### El secreto global de webhooks tiene 31 caracteres · `retorika`
+### Aumenta no tiene ninguna clave de IA, y ya hay cosas suyas esperándola · `aumenta`
 
-No es longitud de nada generado al azar: parece escrito a mano. Funciona, pero
-conviene cambiarlo por 32 bytes aleatorios. Hay que coordinarlo con el
-`wp-config.php` de la web que lo use.
+Desde el 14/08 el informe clínico se puede redactar con IA («Redactar con IA» en
+el cajón del informe, que propone y no guarda). En Aumenta ese botón contesta
+503: `settings.integrations.anthropicApiKey` está vacío, igual que el de OpenAI
+que necesita la transcripción de sesiones. No es un fallo del CRM —es BYOK a
+propósito, la cuenta y el coste son del cliente— pero sí es trabajo entregado que
+nadie puede usar.
 
-*Esta tarea decía `nutri_laura` y era falso*: Laura ya tiene su propio secreto de
-64 caracteres en `CRM_WEBHOOK_SECRETS`. El de 31 es el **global de reserva**
-(`CRM_WEBHOOK_SECRET`), y quien cae en él es Retorika, que no tiene entrada
-propia.
+Ya no hace falta que entre el cliente a ponerla: desde el back-office se le pega
+en Custodia → claves (`/admin/configuraciones`), que quedó comprobado el 14/08.
+Lo que falta es la conversación con ellos y su cuenta de Anthropic.
 
-*Se comprueba*: `CRM_WEBHOOK_SECRETS` tiene entrada para `retorika` con 64
-caracteres, y el global deja de usarse.
-*Comprobado en producción*: 09/08/2026 — solo `nutri_laura` (64) tiene entrada
-propia; el global sigue en 31.
+*Se comprueba*: `master.tenants` de `aumenta` tiene `anthropicApiKey` en
+`settings.integrations`, y «Redactar con IA» devuelve una propuesta en vez de 503.
+*Dónde*: `lib/ai/anthropicKey.js` (BYOK, sin fallback al entorno);
+`lib/provisioning/credencialesCliente.js` es por donde se pega.
+*Comprobado en producción*: 14/08/2026 — `anthropicApiKey` y `openaiApiKey`
+ausentes en `aumenta`; sí las tiene `salamandra_solutions`.
 
 ---
 
