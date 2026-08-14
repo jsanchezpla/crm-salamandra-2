@@ -1198,9 +1198,25 @@ nutri_laura fue que Laura —dirección, y la única otra profesional— no veí
 ninguna de las ocho ausencias de Rocío en el calendario mientras esta pantalla
 se las listaba todas.
 
-⚠️ Y esto es SOLO lo que se ve: el cálculo de huecos (`lib/citas/ausencias.js`)
-lee `team_blocks` por su cuenta y sin filtrar. Lo que una paciente puede
-reservar no depende de nada de esta tabla.
+⚠️ Y esto es SOLO lo que se ve. El cálculo de huecos (`lib/citas/ausencias.js`)
+lee `team_blocks` por su cuenta, así que nada de lo de arriba abre ni cierra una
+hora reservable. **Ahí sí se filtra, y por otro criterio**: a quien pregunta se
+le restan los bloqueos de SU profesional y los del centro (`teamMemberId` null),
+y ninguno más. O sea que si dirección se bloquea el martes, la paciente que
+lleva Rocío sigue viendo el martes entero — el centro no cierra porque falte una
+persona. El único bloqueo que cierra la agenda de todas es el que se pone SIN
+persona, que es la equivocación de los seis casos de nutri_laura.
+
+Las dos reglas —quién los ve y a nombre de quién se ponen— las fija
+`scripts/_smoke-bloqueos-quien-ve.mjs`, que las ejercita contra el endpoint con
+dos sesiones, dirección y una profesional. Existe porque las dos se rompieron ya
+y las dos en silencio: la de VER vivía solo en el navegador (el servidor mandaba
+lo correcto y la pantalla lo tiraba), así que ninguna prueba de API podía
+cazarla.
+
+```bash
+node --env-file=.env.local scripts/_smoke-bloqueos-quien-ve.mjs
+```
 
 ### Override nutri_laura
 
