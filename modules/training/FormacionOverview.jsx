@@ -94,9 +94,21 @@ const METRIC_HELP = {
   Matrículas: "Inscripciones a cursos. Si un alumno está apuntado a 3 cursos, cuenta 3 veces — por eso este número suele ser mayor que el de Alumnos.",
 };
 
+/*
+ * El número va ABAJO, no debajo del rótulo (14/08/2026).
+ *
+ * Al estrechar la portada, «Cursos activos» dejó de caber en una línea —necesita
+ * 136 px y tiene 122— y su número se quedó 16 px por debajo de los otros tres.
+ * Cuatro cifras grandes desalineadas se ven antes que el motivo.
+ *
+ * `justify-between` en una tarjeta que ya estira a la altura de la fila (son
+ * celdas de un grid) los deja a la misma altura sea cual sea el rótulo, en vez
+ * de depender de que ninguno crezca. Que es lo que pasa en cuanto se añade una
+ * métrica o el cliente le cambia el nombre.
+ */
 function MetricCard({ label, value, loading }) {
   return (
-    <div className="bg-white border border-neutral-100 rounded-xl p-5">
+    <div className="bg-white border border-neutral-100 rounded-xl p-5 flex flex-col justify-between">
       <div className="flex items-center gap-1.5 mb-2">
         <p className="text-[11px] font-medium text-neutral-400 uppercase tracking-widest">{label}</p>
         {METRIC_HELP[label] && (

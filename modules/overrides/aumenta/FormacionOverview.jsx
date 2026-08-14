@@ -55,9 +55,14 @@ const SECTIONS = [
   },
 ];
 
+// El número abajo, para que las tres cifras queden a la misma altura aunque un
+// rótulo pase a dos líneas. Aquí hoy no pasa —son tres tarjetas y caben más
+// anchas que las cuatro del overview base—, pero esta tarjeta y la de
+// `modules/training/FormacionOverview.jsx` son la misma copiada, y lo que se
+// arregla solo en una vuelve por la otra (ver `components/layout/anchoPantalla.js`).
 function MetricCard({ label, value, loading }) {
   return (
-    <div className="bg-white border border-neutral-100 rounded-xl p-5">
+    <div className="bg-white border border-neutral-100 rounded-xl p-5 flex flex-col justify-between">
       <p className="text-[11px] font-medium text-neutral-400 uppercase tracking-widest mb-2">{label}</p>
       {loading ? (
         <div className="h-8 w-16 bg-neutral-100 rounded animate-pulse" />

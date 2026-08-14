@@ -27,7 +27,7 @@
  * ── SOLO HAY DOS ANCHOS, Y ES A PROPÓSITO ───────────────────────────────────
  * Con tres o más vuelve el problema: quien duda elige mal y nadie lo nota.
  *
- *   `portada`  (max-w-4xl)  Portadas de módulo, fichas y formularios. Poco
+ *   `portada`  (max-w-3xl)  Portadas de módulo, fichas y formularios. Poco
  *                           contenido: estirarlo deja tarjetas de 500 px con dos
  *                           líneas de texto dentro, que es justo lo que se ve
  *                           «demasiado ancho».
@@ -36,6 +36,23 @@
  *
  * Si dudas: ¿tiene una tabla con más de tres columnas? `listado`. Si no,
  * `portada`.
+ *
+ * ── `portada` BAJÓ DE 4xl A 3xl (14/08/2026, Rodrigo: «se sigue viendo
+ *    demasiado wide») ──────────────────────────────────────────────────────────
+ * Centralizar el ancho quitó el problema de que volviera por sitios distintos,
+ * pero el valor seguía siendo el heredado. Medido en la portada de Formación a
+ * 1600 px: tarjetas de 408 px para un icono de 40 px y una descripción de ~250,
+ * o sea 150 px de vacío a la derecha de cada una, y métricas de 196 px para un
+ * número de una cifra. Lo que se lee como «ancho» no es la página: son cajas
+ * grandes con el texto pegado a la izquierda.
+ *
+ * A 3xl las tarjetas quedan en 344 px y esas descripciones pasan a ocupar sus
+ * dos líneas, que es lo que llena la caja. Se comprobó que ninguna pantalla de
+ * `portada` tiene tabla —la ficha de empresa son tarjetas a dos columnas, que a
+ * 344 px siguen cabiendo—, así que estrechar no obliga a truncar nada.
+ *
+ * `listado` NO se toca: en /formacion/usuarios son ocho columnas repartidas en
+ * 1280 px. Ahí el ancho no sobra, se usa.
  *
  * ── POR QUÉ UNA FUNCIÓN Y NO UN COMPONENTE ──────────────────────────────────
  * Un `<Pantalla>` habría obligado a reestructurar el JSX de siete pantallas
@@ -51,7 +68,7 @@
  */
 
 const ANCHOS = {
-  portada: "max-w-4xl",
+  portada: "max-w-3xl",
   listado: "max-w-7xl",
 };
 
