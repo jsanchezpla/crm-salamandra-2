@@ -3,8 +3,6 @@ import { ok, noContent, error, forbidden, notFound, serverError } from "../../..
 import { calculateInvoice } from "../../../../../lib/billing/calculateInvoice.js";
 import { auditar, datosPeticion, resumen } from "../../../../../lib/utils/auditoria.js";
 
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
-const ADMIN_DENY = "Solo administradores pueden gestionar facturas recurrentes";
 
 // GET /api/billing/recurring/[id]
 export const GET = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
@@ -28,8 +26,6 @@ export const GET = withTenant(async (request, { params }, { tenant, tenantModels
 export const PATCH = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const role = request.headers.get("x-user-role");
-    if (!ADMIN_ROLES.has(role)) return forbidden(ADMIN_DENY);
 
     const { RecurringInvoice } = tenantModels;
     const { id } = await params;
@@ -66,8 +62,6 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
 export const POST = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const role = request.headers.get("x-user-role");
-    if (!ADMIN_ROLES.has(role)) return forbidden(ADMIN_DENY);
 
     const { RecurringInvoice, Invoice } = tenantModels;
     const { id } = await params;
@@ -129,8 +123,6 @@ export const POST = withTenant(async (request, { params }, { tenant, tenantModel
 export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const role = request.headers.get("x-user-role");
-    if (!ADMIN_ROLES.has(role)) return forbidden(ADMIN_DENY);
 
     const { RecurringInvoice } = tenantModels;
     const { id } = await params;

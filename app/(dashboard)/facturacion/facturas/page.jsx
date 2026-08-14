@@ -71,7 +71,17 @@ export default function FacturasPage() {
   const [settings, setSettings] = useState(null);
   const [outboundCatalog, setOutboundCatalog] = useState([]);
   const [me, setMe] = useState(null);
-  const isAdmin = me?.role === "admin" || me?.role === "superadmin";
+  /*
+   * Facturar lo hace quien tiene el MÓDULO de Facturación, no solo quien manda
+   * (14/08/2026, Rodrigo — la regla, en lib/auth/permisos.js). En Aumenta son
+   * Olga y Rosa: rol `user`, y son las que llevan la contabilidad. Esto era
+   * `me.role === "admin"` y las dejaba mirando la pantalla entera sin poder
+   * pulsar un botón — ni siquiera apuntar un cobro.
+   *
+   * `Boolean(me)` y no `true`: mientras /api/auth/me va y viene no hay que
+   * enseñar botones que a lo mejor luego se quitan.
+   */
+  const puedeFacturar = Boolean(me);
 
   // Drawer / detalle
   const [openInvoice, setOpenInvoice] = useState(null); // factura abierta
@@ -370,7 +380,7 @@ export default function FacturasPage() {
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
-          {isAdmin && (
+          {puedeFacturar && (
             <button
               onClick={openCreate}
               className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white"
@@ -519,7 +529,7 @@ export default function FacturasPage() {
             <div className="px-6 py-5">
               {/* MODO DETALLE (no edición) */}
               {!editing && openInvoice && (
-                <DetailView invoice={openInvoice} isAdmin={isAdmin} onAction={performAction} onEdit={startEdit} onOpenLinked={openDetailById} saving={saving} />
+                <DetailView invoice={openInvoice} puedeFacturar={puedeFacturar} onAction={performAction} onEdit={startEdit} onOpenLinked={openDetailById} saving={saving} />
               )}
 
               {/* MODO EDICIÓN o CREAR */}
@@ -795,7 +805,7 @@ function FormRow({ label, children }) {
   );
 }
 
-function DetailView({ invoice, isAdmin, onAction, onEdit, onOpenLinked, saving }) {
+function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, saving }) {
   const totalPaid = Number(invoice.paidAmount || 0);
   const remaining = Math.max(0, Number(invoice.total) - totalPaid);
   const lineBreakdown = (invoice.lines ?? []).reduce((map, l) => {
@@ -921,7 +931,7 @@ function DetailView({ invoice, isAdmin, onAction, onEdit, onOpenLinked, saving }
       )}
 
       {/* Acciones */}
-      {isAdmin && (() => {
+      {puedeFacturar && (() => {
         const fiscalMissing = [];
         if (!invoice.client?.fiscalName) fiscalMissing.push("razón social");
         // El mismo criterio que el candado del servidor: con dos columnas

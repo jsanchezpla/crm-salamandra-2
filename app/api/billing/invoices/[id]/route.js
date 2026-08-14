@@ -5,7 +5,6 @@ import { withEffectiveStatus } from "../../../../../lib/billing/invoiceStatus.js
 import { resolveInvoicePatientId, invoicePatientInclude } from "../../../../../lib/billing/patientLink.js";
 import { logBillingAudit, resumenFactura, datosPeticion } from "../../../../../lib/billing/audit.js";
 
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 // GET /api/billing/invoices/[id]
 export const GET = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
@@ -36,8 +35,6 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
 export const PATCH = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const role = request.headers.get("x-user-role");
-    if (!ADMIN_ROLES.has(role)) return forbidden("Solo admin");
 
     const { Invoice } = tenantModels;
     const { id } = await params;
@@ -100,8 +97,6 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
 export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const role = request.headers.get("x-user-role");
-    if (!ADMIN_ROLES.has(role)) return forbidden("Solo admin");
 
     const { Invoice } = tenantModels;
     const { id } = await params;

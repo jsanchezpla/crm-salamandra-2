@@ -3,7 +3,6 @@ import { logBillingAudit, datosPeticion } from "../../../../../lib/billing/audit
 import { ok, noContent, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../../lib/billing/calculateInvoice.js";
 
-const ADMIN_ROLES = new Set(["admin", "superadmin", "manager"]);
 
 // GET /api/billing/quotes/[id] — detalle
 export const GET = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
@@ -31,8 +30,6 @@ export const GET = withTenant(async (_request, { params }, { tenantModels, hasMo
 export const PATCH = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const role = request.headers.get("x-user-role");
-    if (!ADMIN_ROLES.has(role)) return forbidden("Sin permiso para editar presupuestos");
 
     const { Quote, TenantBillingSettings } = tenantModels;
     const { id } = await params;
@@ -92,8 +89,6 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
 export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const role = request.headers.get("x-user-role");
-    if (!ADMIN_ROLES.has(role)) return forbidden("Sin permiso para borrar presupuestos");
 
     const { Quote } = tenantModels;
     const { id } = await params;

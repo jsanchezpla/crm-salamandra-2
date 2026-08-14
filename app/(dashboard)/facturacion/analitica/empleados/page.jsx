@@ -19,6 +19,16 @@ export default function AnaliticaEmpleadosPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [me, setMe] = useState(null);
+  /*
+   * ESTE `isAdmin` SE QUEDA, y no es un olvido del 14/08/2026 (cuando las otras
+   * cinco pantallas de Facturación pasaron a abrirse con el módulo).
+   *
+   * Aquí no esconde botones: esconde la columna de coste salarial, o sea lo que
+   * cobra cada compañera. Eso es nómina, no facturación — y la regla que se
+   * abrió es la del dinero del NEGOCIO, no la del sueldo de al lado. El
+   * endpoint lo respeta igual (no manda `projectedSalaryCost` a quien no es
+   * admin) y `serializeTeamMember` hace lo mismo en el módulo de Equipo.
+   */
   const isAdmin = me?.role === "admin" || me?.role === "superadmin";
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");

@@ -10,7 +10,17 @@ const inputCls =
 
 export default function ConfiguracionPage() {
   const [me, setMe] = useState(null);
-  const isAdmin = me?.role === "admin" || me?.role === "superadmin";
+  /*
+   * Facturar lo hace quien tiene el MÓDULO de Facturación, no solo quien manda
+   * (14/08/2026, Rodrigo — la regla, en lib/auth/permisos.js). En Aumenta son
+   * Olga y Rosa: rol `user`, y son las que llevan la contabilidad. Esto era
+   * `me.role === "admin"` y las dejaba mirando la pantalla entera sin poder
+   * pulsar un botón — ni siquiera apuntar un cobro.
+   *
+   * `Boolean(me)` y no `true`: mientras /api/auth/me va y viene no hay que
+   * enseñar botones que a lo mejor luego se quitan.
+   */
+  const puedeFacturar = Boolean(me);
 
   const [settings, setSettings] = useState(null);
   const [series, setSeries] = useState([]);
@@ -105,32 +115,32 @@ export default function ConfiguracionPage() {
       {errorMsg && <div className="px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{errorMsg}</div>}
       {okMsg && <div className="px-4 py-3 bg-emerald-50 border border-emerald-100 rounded-lg text-xs text-emerald-700">{okMsg}</div>}
 
-      {!isAdmin && (
-        <div className="px-4 py-3 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-800">
-          Solo administradores pueden modificar la configuración.
-        </div>
-      )}
+      {/* Aquí iba un aviso ámbar de «Solo administradores pueden modificar la
+          configuración». Se va con la puerta que lo justificaba (14/08/2026):
+          ahora esto lo toca quien tiene el módulo. Dejarlo colgando de
+          `!puedeFacturar` lo habría convertido en un parpadeo mientras carga
+          /api/auth/me, que es peor que no avisar de nada. */}
 
       {/* Datos fiscales */}
       <Section title="Datos fiscales del emisor">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Razón social">
-            <input disabled={!isAdmin} value={settings.fiscalName ?? ""} onChange={(e) => setField("fiscalName", e.target.value)} className={inputCls} />
+            <input disabled={!puedeFacturar} value={settings.fiscalName ?? ""} onChange={(e) => setField("fiscalName", e.target.value)} className={inputCls} />
           </Field>
           <Field label="NIF / CIF">
-            <input disabled={!isAdmin} value={settings.taxId ?? ""} onChange={(e) => setField("taxId", e.target.value)} className={inputCls} />
+            <input disabled={!puedeFacturar} value={settings.taxId ?? ""} onChange={(e) => setField("taxId", e.target.value)} className={inputCls} />
           </Field>
           <Field label="Dirección" full>
-            <input disabled={!isAdmin} value={settings.fiscalAddress ?? ""} onChange={(e) => setField("fiscalAddress", e.target.value)} className={inputCls} />
+            <input disabled={!puedeFacturar} value={settings.fiscalAddress ?? ""} onChange={(e) => setField("fiscalAddress", e.target.value)} className={inputCls} />
           </Field>
           <Field label="Ciudad">
-            <input disabled={!isAdmin} value={settings.fiscalCity ?? ""} onChange={(e) => setField("fiscalCity", e.target.value)} className={inputCls} />
+            <input disabled={!puedeFacturar} value={settings.fiscalCity ?? ""} onChange={(e) => setField("fiscalCity", e.target.value)} className={inputCls} />
           </Field>
           <Field label="Código postal">
-            <input disabled={!isAdmin} value={settings.fiscalZip ?? ""} onChange={(e) => setField("fiscalZip", e.target.value)} className={inputCls} />
+            <input disabled={!puedeFacturar} value={settings.fiscalZip ?? ""} onChange={(e) => setField("fiscalZip", e.target.value)} className={inputCls} />
           </Field>
           <Field label="País (ISO 2)">
-            <input disabled={!isAdmin} maxLength={2} value={settings.fiscalCountry ?? ""} onChange={(e) => setField("fiscalCountry", e.target.value.toUpperCase())} className={inputCls} />
+            <input disabled={!puedeFacturar} maxLength={2} value={settings.fiscalCountry ?? ""} onChange={(e) => setField("fiscalCountry", e.target.value.toUpperCase())} className={inputCls} />
           </Field>
         </div>
       </Section>
@@ -141,13 +151,13 @@ export default function ConfiguracionPage() {
           {(settings.availableVatRates ?? []).map((v) => (
             <span key={v} className="inline-flex items-center gap-1 px-3 py-1 bg-neutral-100 text-neutral-700 text-xs rounded-full border border-neutral-200">
               {v}%
-              {isAdmin && (
+              {puedeFacturar && (
                 <button onClick={() => removeVatRate(v)} className="text-neutral-400 hover:text-red-500 transition-colors">×</button>
               )}
             </span>
           ))}
         </div>
-        {isAdmin && (
+        {puedeFacturar && (
           <div className="flex items-center gap-2">
             <input type="number" min="0" max="100" step="0.01" value={vatInput} onChange={(e) => setVatInput(e.target.value)}
               placeholder="Nuevo tipo (ej: 5)" className={inputCls + " w-40"} />
@@ -156,7 +166,7 @@ export default function ConfiguracionPage() {
         )}
         <div className="mt-3">
           <Field label="IVA por defecto">
-            <Select disabled={!isAdmin} value={settings.defaultVatRate} onChange={(v) => setField("defaultVatRate", Number(v))} options={(settings.availableVatRates ?? []).map((v) => ({ value: v, label: `${v}%` }))} className={inputCls + " sm:w-48"} />
+            <Select disabled={!puedeFacturar} value={settings.defaultVatRate} onChange={(v) => setField("defaultVatRate", Number(v))} options={(settings.availableVatRates ?? []).map((v) => ({ value: v, label: `${v}%` }))} className={inputCls + " sm:w-48"} />
           </Field>
         </div>
       </Section>
@@ -165,13 +175,13 @@ export default function ConfiguracionPage() {
       <Section title="Términos de pago y branding">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Días de vencimiento por defecto">
-            <input disabled={!isAdmin} type="number" min="0" value={settings.defaultPaymentTermsDays} onChange={(e) => setField("defaultPaymentTermsDays", Number(e.target.value))} className={inputCls} />
+            <input disabled={!puedeFacturar} type="number" min="0" value={settings.defaultPaymentTermsDays} onChange={(e) => setField("defaultPaymentTermsDays", Number(e.target.value))} className={inputCls} />
           </Field>
           <Field label="URL del logo">
-            <input disabled={!isAdmin} value={settings.logoUrl ?? ""} onChange={(e) => setField("logoUrl", e.target.value)} className={inputCls} />
+            <input disabled={!puedeFacturar} value={settings.logoUrl ?? ""} onChange={(e) => setField("logoUrl", e.target.value)} className={inputCls} />
           </Field>
           <Field label="Texto al pie de la factura" full>
-            <textarea disabled={!isAdmin} rows={2} value={settings.invoiceFooterText ?? ""} onChange={(e) => setField("invoiceFooterText", e.target.value)} className={inputCls + " resize-y"} />
+            <textarea disabled={!puedeFacturar} rows={2} value={settings.invoiceFooterText ?? ""} onChange={(e) => setField("invoiceFooterText", e.target.value)} className={inputCls + " resize-y"} />
           </Field>
         </div>
       </Section>
@@ -217,7 +227,7 @@ export default function ConfiguracionPage() {
         <p className="text-[11px] text-neutral-400 mt-2">El contador no se puede editar a mano para garantizar la correlatividad fiscal.</p>
       </Section>
 
-      {isAdmin && (
+      {puedeFacturar && (
         <div className="flex justify-end pt-3 border-t border-neutral-100">
           <button onClick={save} disabled={saving} className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-50"
             style={{ background: "var(--color-primary, #1B3A2D)" }}>{saving ? "Guardando..." : "Guardar cambios"}</button>

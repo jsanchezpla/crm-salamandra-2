@@ -8,7 +8,6 @@ import { sendEmail } from "../../../../../../lib/email/resendClient.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
 import { isDemoTenant } from "../../../../../../lib/demo/isDemo.js";
 
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_VIA = new Set(["email", "whatsapp", "other"]);
 
 /**
@@ -36,9 +35,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
   const { tenantModels, hasModule, tenant } = ctx;
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const role = request.headers.get("x-user-role");
     const userId = request.headers.get("x-user-id");
-    if (!ADMIN_ROLES.has(role)) return forbidden("Solo admin");
 
     const { id } = await params;
     const { Invoice } = tenantModels;

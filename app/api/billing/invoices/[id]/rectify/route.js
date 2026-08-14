@@ -5,7 +5,6 @@ import { assignInvoiceNumber } from "../../../../../../lib/billing/generateInvoi
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { withEffectiveStatus } from "../../../../../../lib/billing/invoiceStatus.js";
 
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const round2 = (n) => Math.round(Number(n) * 100) / 100;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -41,9 +40,7 @@ class RectifyConflict extends Error {}
 export const POST = withTenant(async (request, { params }, { tenantModels, hasModule, tenant }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const role = request.headers.get("x-user-role");
     const userId = request.headers.get("x-user-id");
-    if (!ADMIN_ROLES.has(role)) return forbidden("Solo admin");
 
     const { id } = await params;
     const { Invoice, InvoiceSeries } = tenantModels;

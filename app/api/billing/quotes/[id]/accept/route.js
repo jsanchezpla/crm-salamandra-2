@@ -1,14 +1,11 @@
 import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 
-const ADMIN_ROLES = new Set(["admin", "superadmin", "manager"]);
 
 // POST /api/billing/quotes/[id]/accept — marcar presupuesto como aceptado
 export const POST = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const role = request.headers.get("x-user-role");
-    if (!ADMIN_ROLES.has(role)) return forbidden("Sin permiso para aceptar presupuestos");
 
     const { Quote } = tenantModels;
     const { id } = await params;

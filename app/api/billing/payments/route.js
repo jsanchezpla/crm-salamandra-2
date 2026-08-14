@@ -79,8 +79,6 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const role = request.headers.get("x-user-role");
-    if (!new Set(["admin", "superadmin"]).has(role)) return forbidden("Solo admin");
 
     const { Payment, Invoice, Client } = tenantModels;
     const body = await request.json();

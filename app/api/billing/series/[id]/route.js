@@ -2,13 +2,10 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, noContent, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion, resumen } from "../../../../../lib/utils/auditoria.js";
 
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 export const PATCH = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const role = request.headers.get("x-user-role");
-    if (!ADMIN_ROLES.has(role)) return forbidden("Solo admin");
 
     const { id } = await params;
     const { InvoiceSeries } = tenantModels;
@@ -39,8 +36,6 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
 export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const role = request.headers.get("x-user-role");
-    if (!ADMIN_ROLES.has(role)) return forbidden("Solo admin");
 
     const { id } = await params;
     const { InvoiceSeries, Invoice } = tenantModels;

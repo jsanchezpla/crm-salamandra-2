@@ -17,7 +17,17 @@ export default function RecurrentesPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [me, setMe] = useState(null);
-  const isAdmin = me?.role === "admin" || me?.role === "superadmin";
+  /*
+   * Facturar lo hace quien tiene el MÓDULO de Facturación, no solo quien manda
+   * (14/08/2026, Rodrigo — la regla, en lib/auth/permisos.js). En Aumenta son
+   * Olga y Rosa: rol `user`, y son las que llevan la contabilidad. Esto era
+   * `me.role === "admin"` y las dejaba mirando la pantalla entera sin poder
+   * pulsar un botón — ni siquiera apuntar un cobro.
+   *
+   * `Boolean(me)` y no `true`: mientras /api/auth/me va y viene no hay que
+   * enseñar botones que a lo mejor luego se quitan.
+   */
+  const puedeFacturar = Boolean(me);
 
   const [clients, setClients] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -108,7 +118,7 @@ export default function RecurrentesPage() {
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
           <ExportButtons xlsxUrl="/api/billing/exports/recurring" />
-          {isAdmin && (
+          {puedeFacturar && (
             <button onClick={() => setShowForm(true)} className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white"
               style={{ background: "var(--color-primary, #1B3A2D)" }}>+ Nueva recurrencia</button>
           )}
@@ -158,15 +168,15 @@ export default function RecurrentesPage() {
                 <SortableTh k="frequency" label="Frecuencia" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                 <SortableTh k="nextRunAt" label="Próxima emisión" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                 <SortableTh k="active" label="Estado" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
-                {isAdmin && <th className="px-4 py-3"></th>}
+                {puedeFacturar && <th className="px-4 py-3"></th>}
               </tr>
             </thead>
             <tbody>
               {loading && filtered.length === 0 && (
-                <tr><td colSpan={isAdmin ? 5 : 4} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
+                <tr><td colSpan={puedeFacturar ? 5 : 4} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
               )}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={isAdmin ? 5 : 4} className="text-center py-12 text-xs text-neutral-400">{search ? "Sin resultados" : "Sin recurrencias"}</td></tr>
+                <tr><td colSpan={puedeFacturar ? 5 : 4} className="text-center py-12 text-xs text-neutral-400">{search ? "Sin resultados" : "Sin recurrencias"}</td></tr>
               )}
               {filtered.map((r) => (
                 <tr key={r.id} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">
@@ -178,7 +188,7 @@ export default function RecurrentesPage() {
                       r.active ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-neutral-100 text-neutral-500 border-neutral-200"
                     }`}>{r.active ? "Activa" : "Pausada"}</span>
                   </td>
-                  {isAdmin && (
+                  {puedeFacturar && (
                     <td className="px-4 py-3 text-right">
                       <button onClick={() => toggleActive(r)} className="text-xs text-neutral-400 hover:text-neutral-700 transition-colors">
                         {r.active ? "Pausar" : "Activar"}

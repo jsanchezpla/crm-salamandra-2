@@ -6,7 +6,6 @@ import { withEffectiveStatus } from "../../../../../../lib/billing/invoiceStatus
 import { applyStockMovementsForInvoice } from "../../../../../../lib/inventory/applyStockMovementsForInvoice.js";
 
 import { nifDeCliente } from "../../../../../../lib/billing/nifCliente.js";
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 /**
  * POST /api/billing/invoices/[id]/issue
@@ -21,9 +20,7 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
   const inventoryWarnings = [];
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const role = request.headers.get("x-user-role");
     const userId = request.headers.get("x-user-id");
-    if (!ADMIN_ROLES.has(role)) return forbidden("Solo admin");
 
     const { id } = await params;
     const { Invoice, Client, TenantBillingSettings } = tenantModels;

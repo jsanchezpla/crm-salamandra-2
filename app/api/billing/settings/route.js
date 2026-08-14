@@ -1,7 +1,6 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 export const GET = withTenant(async (_request, _ctx, { tenantModels, hasModule }) => {
   try {
@@ -20,8 +19,6 @@ export const GET = withTenant(async (_request, _ctx, { tenantModels, hasModule }
 export const PUT = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const role = request.headers.get("x-user-role");
-    if (!ADMIN_ROLES.has(role)) return forbidden("Solo admin");
 
     const { TenantBillingSettings } = tenantModels;
     const body = await request.json();

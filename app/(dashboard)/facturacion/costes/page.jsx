@@ -60,7 +60,17 @@ export default function CostesPage() {
   const [clients, setClients] = useState([]);
   const [settings, setSettings] = useState(null);
   const [me, setMe] = useState(null);
-  const isAdmin = me?.role === "admin" || me?.role === "superadmin";
+  /*
+   * Facturar lo hace quien tiene el MÓDULO de Facturación, no solo quien manda
+   * (14/08/2026, Rodrigo — la regla, en lib/auth/permisos.js). En Aumenta son
+   * Olga y Rosa: rol `user`, y son las que llevan la contabilidad. Esto era
+   * `me.role === "admin"` y las dejaba mirando la pantalla entera sin poder
+   * pulsar un botón — ni siquiera apuntar un cobro.
+   *
+   * `Boolean(me)` y no `true`: mientras /api/auth/me va y viene no hay que
+   * enseñar botones que a lo mejor luego se quitan.
+   */
+  const puedeFacturar = Boolean(me);
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -203,7 +213,7 @@ export default function CostesPage() {
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
           <ExportButtons xlsxUrl={exportUrl} />
-          {isAdmin && (
+          {puedeFacturar && (
             <button onClick={openCreate} className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white"
               style={{ background: "var(--color-primary, #1B3A2D)" }}>+ Nuevo coste</button>
           )}
@@ -246,15 +256,15 @@ export default function CostesPage() {
                 <SortableTh k="taxBase" label="Base" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
                 <SortableTh k="taxAmount" label="IVA" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
                 <SortableTh k="total" label="Total" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
-                {isAdmin && <th className="px-4 py-3"></th>}
+                {puedeFacturar && <th className="px-4 py-3"></th>}
               </tr>
             </thead>
             <tbody>
               {loading && filtered.length === 0 && (
-                <tr><td colSpan={isAdmin ? 9 : 8} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
+                <tr><td colSpan={puedeFacturar ? 9 : 8} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
               )}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={isAdmin ? 9 : 8} className="text-center py-12 text-xs text-neutral-400">{search || filterType || filterCategory ? "Sin costes que coincidan con los filtros" : "Sin costes registrados"}</td></tr>
+                <tr><td colSpan={puedeFacturar ? 9 : 8} className="text-center py-12 text-xs text-neutral-400">{search || filterType || filterCategory ? "Sin costes que coincidan con los filtros" : "Sin costes registrados"}</td></tr>
               )}
               {filtered.map((c) => (
                 <tr key={c.id} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">
@@ -272,7 +282,7 @@ export default function CostesPage() {
                     {fmtMoney(c.taxAmount)} <span className="text-neutral-300">({Number(c.vatRate)}%)</span>
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-neutral-900 tabular">{fmtMoney(c.total)}</td>
-                  {isAdmin && (
+                  {puedeFacturar && (
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <button onClick={() => openEdit(c)} className="text-neutral-400 hover:text-neutral-700 transition-colors text-xs mr-2">Editar</button>
                       <button onClick={() => handleDelete(c.id)} disabled={deleting === c.id} className="text-neutral-300 hover:text-red-500 transition-colors text-xs disabled:opacity-40">
