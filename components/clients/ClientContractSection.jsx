@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import HelpTooltip from "../ui/HelpTooltip.jsx";
+import { esAdmin } from "../../lib/auth/permisos.js";
 
 function formatSize(bytes) {
   if (!bytes && bytes !== 0) return "";
@@ -35,6 +36,21 @@ export default function ClientContractSection({ clientId }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const inputRef = useRef(null);
+  /*
+   * Subir el contrato lo hace cualquiera —recepción recibe el PDF firmado y lo
+   * cuelga—, pero ELIMINARLO es de admin (14/08/2026, ver lib/auth/permisos.js):
+   * se lleva el fichero del disco y deja a la familia sin el papel que firmó.
+   * El endpoint lo exige igual; esto solo evita enseñar un botón que va a fallar.
+   */
+  const [rol, setRol] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo && j?.data?.role) setRol(j.data.role); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
 
   const load = useCallback(() => {
     let alive = true;
@@ -151,9 +167,11 @@ export default function ClientContractSection({ clientId }) {
                   }}
                 />
               </label>
-              <button onClick={eliminar} disabled={busy} className="text-rose-500 hover:text-rose-700 disabled:opacity-40">
-                Eliminar
-              </button>
+              {esAdmin(rol) && (
+                <button onClick={eliminar} disabled={busy} className="text-rose-500 hover:text-rose-700 disabled:opacity-40">
+                  Eliminar
+                </button>
+              )}
             </div>
           </div>
         ) : (

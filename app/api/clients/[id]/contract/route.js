@@ -19,6 +19,7 @@ import {
   effectiveSigners,
 } from "../../../../../lib/clients/clientContract.js";
 import { documentosQueAplican } from "../../../../../lib/clients/contratoFirma.js";
+import { esAdmin, rolDe } from "../../../../../lib/auth/permisos.js";
 
 /**
  * /api/clients/[id]/contract — Contrato del Centro de una FAMILIA
@@ -39,6 +40,21 @@ const PDF_MIME = "application/pdf";
 
 function gate(ctx) {
   return ctx.hasModule("clients") ? null : forbidden("Módulo clients no activo");
+}
+
+/**
+ * Para BORRARLO, además, hay que ser admin (14/08/2026, Rodrigo; la regla en
+ * `lib/auth/permisos.js`).
+ *
+ * Subirlo y consultarlo lo hace cualquiera del equipo —recepción recibe el PDF
+ * firmado y lo cuelga, y eso es su trabajo—, pero borrarlo se lleva el fichero
+ * del disco y deja a la familia sin el papel que firmó. No hay copia en ningún
+ * otro sitio y no hay botón que lo traiga de vuelta.
+ */
+function gateBorrado(ctx, request) {
+  const veto = gate(ctx);
+  if (veto) return veto;
+  return esAdmin(rolDe(request)) ? null : forbidden("Solo un administrador puede eliminar el contrato firmado");
 }
 
 // `documents` (el archivo central) no existe en todos los schemas: solo en los
@@ -295,7 +311,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
 
 export const DELETE = withTenant(async (request, rc, ctx) => {
   try {
-    const veto = gate(ctx);
+    const veto = gateBorrado(ctx, request);
     if (veto) return veto;
     const { id } = await rc.params;
     if (!UUID_RE.test(id)) return error("id inválido", 422);
