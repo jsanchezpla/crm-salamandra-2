@@ -22,8 +22,10 @@
  *     se quitó del render. El backend tolera la tabla missing (try/catch en
  *     GET /api/clients/:id) y otros tenants siguen recibiendo el array para
  *     su default module.
- *   - Permisos: gate por `me.role ∈ {admin, superadmin, employee}` antes
- *     de pintar el detalle. Sin rol válido → mensaje "Sin acceso".
+ *   - Permisos: la ficha la abre CUALQUIERA del equipo que tenga el módulo
+ *     `clients` (14/08/2026, Rodrigo). Aquí solo se comprueba que haya
+ *     sesión, porque el render usa `me.role`; quién puede ver cada ficha lo
+ *     decide la API (`puedeVerFicha`, consultas externas).
  *
  * Endpoints usados directamente:
  *   - GET    /api/auth/me
@@ -51,6 +53,7 @@ import ClientCuentaWebSection from "../../../components/clients/ClientCuentaWebS
 import ClientProfesionalSection from "../../../components/clients/ClientProfesionalSection.jsx";
 import { edadDesde } from "../../../lib/clients/formularioAlta.js";
 import { fraseArrastreSegunModulos } from "../../../lib/clients/avisoBorrado.js";
+import { esAdmin } from "../../../lib/auth/permisos.js";
 
 // Rótulos revisados el 04/08/2026 (Rodrigo): Datos · Historia clínica ·
 // Documentos · Sesiones · Pautas. SOLO cambian los nombres visibles — las
@@ -72,8 +75,6 @@ const TABS = [
   // visible en nutri_laura.
   { key: "plan", label: "Pautas" },
 ];
-
-const ROLES_WITH_ACCESS = new Set(["admin", "superadmin", "employee"]);
 
 const STATUSES = [
   { key: "new", label: "Nuevo" },
@@ -207,18 +208,25 @@ export default function NutriLauraClientDetailModule() {
     );
   }
 
-  if (!me || !ROLES_WITH_ACCESS.has(me.role)) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 px-4 text-center">
-        <div className="text-2xl">🔒</div>
-        <p className="text-gray-500 text-sm">No tienes acceso a esta ficha.</p>
-        <Link href="/" className="text-[var(--color-primary)] hover:underline text-sm">
-          ← Volver al dashboard
-        </Link>
-      </div>
-    );
-  }
-
+  /*
+   * AQUÍ HABÍA UNA PUERTA CERRADA (retirada el 14/08/2026, Rodrigo).
+   *
+   * Un `ROLES_WITH_ACCESS = {admin, superadmin, employee}` dejaba fuera a
+   * cualquiera con rol `user`, o sea a todo el equipo menos Laura, con un
+   * candado y un «No tienes acceso a esta ficha». Los roles del CRM son
+   * `superadmin | admin | manager | user` y "employee" no existe, así que esa
+   * lista era admin a secas escrita de forma que no lo parecía.
+   *
+   * No la tenía nadie más: `modules/default/ClientDetailModule.jsx` no mira el
+   * rol, y la API tampoco (solo `hasModule("clients")` y la regla de consultas
+   * externas de `lib/clients/consultaExterna.js`). Y aquí no hay facturación
+   * que proteger: la historia clínica, los documentos, las sesiones y las
+   * pautas son justo lo que el equipo viene a escribir.
+   *
+   * `me` se sigue pidiendo, pero solo para saber qué módulos hay activos —
+   * igual que en el módulo por defecto—, y por eso se lee con `?.`: que
+   * `/api/auth/me` falle no puede volver a cerrar la ficha.
+   */
   if (clientError) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 px-4 text-center">
@@ -348,6 +356,10 @@ export default function NutriLauraClientDetailModule() {
             setConfirmDelete={setConfirmDelete}
             onDelete={handleDelete}
             avisoArrastre={fraseArrastreSegunModulos(me?.enabledModules)}
+            // Eliminar es de admin (14/08/2026, ver lib/auth/permisos.js). Ante
+            // la duda —`me` todavía sin llegar— NO se enseña: es más fácil
+            // recargar que deshacer un borrado, que no se deshace.
+            puedeEliminar={esAdmin(me?.role)}
             onRecargar={loadClient}
           />
         )}
@@ -358,11 +370,7 @@ export default function NutriLauraClientDetailModule() {
 
         {tab === "bookings" && (
           <>
-            <ClientBookingsPanel
-              clientId={id}
-              clientEmail={client.email}
-              userRole={me.role}
-            />
+            <ClientBookingsPanel clientId={id} clientEmail={client.email} />
           </>
         )}
 
@@ -413,6 +421,7 @@ function InfoTab({
   // paciente el correo de cancelación (12/08/2026). Sale del mismo sitio que el
   // aviso del listado y el de la ficha del resto, para que digan lo mismo.
   avisoArrastre,
+  puedeEliminar,
   onRecargar,
 }) {
   /*
@@ -459,8 +468,13 @@ function InfoTab({
 
       {/* Borrar va al FINAL de todo y no en medio de la columna: es lo último
           que se hace con una ficha, y tenerlo entre dos tarjetas invita a
-          pulsarlo mientras se busca otra cosa. */}
-      {!confirmDelete ? (
+          pulsarlo mientras se busca otra cosa.
+
+          Y solo lo ve admin: el resto del equipo edita la ficha entera, pero
+          esto no es editar (14/08/2026, ver lib/auth/permisos.js). No se
+          enseña deshabilitado a propósito — un botón apagado es una pregunta
+          que alguien tiene que ir a hacer; que no esté, no la genera. */}
+      {puedeEliminar && (!confirmDelete ? (
         <button
           onClick={() => setConfirmDelete(true)}
           className="w-full text-xs text-red-400 hover:text-red-600 transition-colors py-1.5"
@@ -488,7 +502,7 @@ function InfoTab({
             </button>
           </div>
         </div>
-      )}
+      ))}
     </div>
 
     {/* La DERECHA: cómo se relaciona con el centro por fuera de la consulta —

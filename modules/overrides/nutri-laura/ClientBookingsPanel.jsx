@@ -18,13 +18,13 @@
  *   heurística.
  *
  * Permisos:
- *   confirm/reject requieren role ∈ {admin, superadmin} en backend. Si el
- *   usuario actual no tiene rol válido, los botones se ocultan.
+ *   confirmar y rechazar lo hace CUALQUIERA del equipo desde el 06/08/2026
+ *   (decisión de Rodrigo, ver los dos endpoints): la API solo pide sesión y
+ *   módulo `citas`. Este panel se quedó atrás y siguió enseñando «Solo admin»
+ *   donde el backend ya decía que sí — corregido el 14/08/2026, a la vez que
+ *   se abrió la ficha entera al equipo de la consulta.
  *
  * Errores:
- *   - 403 "Solo admin puede confirmar/rechazar citas" → tooltip "Pide ayuda
- *     al admin" + botón visible pero deshabilitado (no debería pasar si
- *     userRole es admin desde el padre).
  *   - 403 race condition ("no se puede confirmar/rechazar en estado X") →
  *     banner explicativo + refetch automático para sincronizar estado.
  *   - 409 solapamiento (confirm) → banner con la razón.
@@ -35,8 +35,6 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 function fmtDateTime(iso) {
   if (!iso) return "—";
@@ -69,7 +67,7 @@ function statusMeta(b) {
   }
 }
 
-export default function ClientBookingsPanel({ clientId, clientEmail, userRole }) {
+export default function ClientBookingsPanel({ clientId, clientEmail }) {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -79,8 +77,6 @@ export default function ClientBookingsPanel({ clientId, clientEmail, userRole })
 
   const [rejectFor, setRejectFor] = useState(null); // booking.id pendiente de razón
   const [rejectReason, setRejectReason] = useState("");
-
-  const isAdmin = ADMIN_ROLES.has(userRole);
 
   const reload = useCallback(() => {
     // Desde 2026-07-22 se busca por el ENLACE real (clientId) y, además, por
@@ -117,9 +113,7 @@ export default function ClientBookingsPanel({ clientId, clientEmail, userRole })
       });
       const j = await r.json().catch(() => ({}));
       if (!j?.ok) {
-        if (r.status === 403 && /admin/i.test(j?.error ?? "")) {
-          setActionError("No tienes permisos para confirmar citas. Pide ayuda al admin.");
-        } else if (r.status === 403) {
+        if (r.status === 403) {
           setActionError(j?.error || "La cita ya no se puede confirmar (cambió de estado).");
           reload();
         } else if (r.status === 409) {
@@ -149,9 +143,7 @@ export default function ClientBookingsPanel({ clientId, clientEmail, userRole })
       });
       const j = await r.json().catch(() => ({}));
       if (!j?.ok) {
-        if (r.status === 403 && /admin/i.test(j?.error ?? "")) {
-          setActionError("No tienes permisos para rechazar citas. Pide ayuda al admin.");
-        } else if (r.status === 409) {
+        if (r.status === 409) {
           setActionError(j?.error || "La cita ya no se puede rechazar (cambió de estado).");
           reload();
         } else {
@@ -302,7 +294,7 @@ export default function ClientBookingsPanel({ clientId, clientEmail, userRole })
                           )}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          {b.status === "pending" && isAdmin && (
+                          {b.status === "pending" && (
                             <div className="flex justify-end gap-1.5">
                               <button
                                 onClick={() => handleConfirm(b)}
@@ -319,9 +311,6 @@ export default function ClientBookingsPanel({ clientId, clientEmail, userRole })
                                 Rechazar
                               </button>
                             </div>
-                          )}
-                          {b.status === "pending" && !isAdmin && (
-                            <span className="text-[11px] text-gray-400 italic">Solo admin</span>
                           )}
                         </td>
                       </tr>
@@ -354,7 +343,7 @@ export default function ClientBookingsPanel({ clientId, clientEmail, userRole })
                         Motivo: {b.cancellationReason}
                       </div>
                     )}
-                    {b.status === "pending" && isAdmin && (
+                    {b.status === "pending" && (
                       <div className="flex gap-1.5 mt-2">
                         <button
                           onClick={() => handleConfirm(b)}

@@ -3,6 +3,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { auditar, datosPeticion, resumen } from "../../../../lib/utils/auditoria.js";
 import { ok, noContent, forbidden, notFound, error } from "../../../../lib/utils/apiResponse.js";
 import { puedeVerFicha, normalizarCategoria, veTodasLasExternas } from "../../../../lib/clients/consultaExterna.js";
+import { esAdmin, rolDe } from "../../../../lib/auth/permisos.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { getClientDir } from "../../../../lib/clients/attachmentStorage.js";
 import { borrarRastroDelCliente } from "../../../../lib/clients/borrarRastro.js";
@@ -274,6 +275,23 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
 
 export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
+
+  /*
+   * BORRAR UNA FICHA ES DE ADMIN (14/08/2026, Rodrigo). Ver `lib/auth/permisos.js`:
+   * el equipo edita, pero lo que no se puede deshacer lo decide quien dirige.
+   *
+   * Aquí no se borra «un cliente»: se borra su historia clínica, sus archivos y
+   * sus citas futuras, y a la paciente le llega un correo de cancelación (ver
+   * `borrarRastroDelCliente` unas líneas más abajo). Ni el propio botón puede
+   * prometer que eso se deshace.
+   *
+   * La comprobación va ANTES de tocar nada. Y va aquí y no solo en la pantalla:
+   * las dos fichas esconden el botón a quien no es admin, pero esconder un
+   * botón no cierra una puerta.
+   */
+  if (!esAdmin(rolDe(request))) {
+    return forbidden("Solo un administrador puede eliminar una ficha");
+  }
 
   const { Client, Invoice } = tenantModels;
   const { id } = await params;

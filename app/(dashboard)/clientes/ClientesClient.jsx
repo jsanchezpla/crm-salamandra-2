@@ -11,6 +11,7 @@ import FacturacionDelAlta from "../../../components/clients/FacturacionDelAlta.j
 import { camposCliente, PERFIL_COMERCIAL, PERFIL_SALUD } from "../../../lib/clients/formularioAlta.js";
 import { VOCABULARIO_CLIENTE } from "../../../lib/clients/vocabulario.js";
 import { avisoBorradoSegunModulos } from "../../../lib/clients/avisoBorrado.js";
+import { esAdmin } from "../../../lib/auth/permisos.js";
 import Paginador from "@/components/ui/Paginador.jsx";
 
 function useMounted() {
@@ -74,6 +75,15 @@ export default function ClientesClient({
    * Ver `lib/clients/avisoBorrado.js`.
    */
   const [modulos, setModulos] = useState(null);
+  /*
+   * Y el rol, solo para el botón de la papelera (14/08/2026, Rodrigo; la regla
+   * en `lib/auth/permisos.js`). Sale de la misma llamada que los módulos.
+   *
+   * Igual que arriba: arranca en `null` y `esAdmin(null)` es false, así que
+   * mientras no se sepa no hay papelera. Aquí importa más que en la ficha —esto
+   * es una LISTA, y el botón está al lado del de abrir.
+   */
+  const [rol, setRol] = useState(null);
   // Paginación: hasta hoy la lista pedía 200 fijos y no mandaba página, así que
   // con 1.110 clientes solo se veían los primeros 200 y no había forma de
   // llegar al resto. La API ya paginaba; lo que faltaba era usarlo.
@@ -158,7 +168,11 @@ export default function ClientesClient({
     let vivo = true;
     fetch("/api/auth/me", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (vivo && Array.isArray(j?.data?.enabledModules)) setModulos(j.data.enabledModules); })
+      .then((j) => {
+        if (!vivo) return;
+        if (Array.isArray(j?.data?.enabledModules)) setModulos(j.data.enabledModules);
+        if (j?.data?.role) setRol(j.data.role);
+      })
       .catch(() => {});
     return () => { vivo = false; };
   }, []);
@@ -707,6 +721,8 @@ export default function ClientesClient({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
               </svg>
             </Link>
+            {/* Solo admin (14/08/2026, ver lib/auth/permisos.js). */}
+            {esAdmin(rol) && (
             <button
               onClick={() => handleDelete(selected.id)}
               className="px-3 py-2 text-red-500 hover:text-red-700 border border-red-100 hover:border-red-200 rounded-lg transition-colors"
@@ -716,6 +732,7 @@ export default function ClientesClient({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
               </svg>
             </button>
+            )}
           </div>
         </div>
         </>,

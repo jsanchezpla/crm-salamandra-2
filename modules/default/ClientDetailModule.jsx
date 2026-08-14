@@ -16,6 +16,7 @@ import ClientContactMethodsSection from "../../components/clients/ClientContactM
 import ClientFiscalSection from "../../components/clients/ClientFiscalSection.jsx";
 import { camposCliente, PERFIL_COMERCIAL } from "../../lib/clients/formularioAlta.js";
 import { avisoBorradoSegunModulos } from "../../lib/clients/avisoBorrado.js";
+import { esAdmin } from "../../lib/auth/permisos.js";
 import ClientContractSection from "../../components/clients/ClientContractSection.jsx";
 import ClientGuardiansSection from "../../components/clients/ClientGuardiansSection.jsx";
 import ClientPortalMonthsSection from "../../components/clients/ClientPortalMonthsSection.jsx";
@@ -202,12 +203,26 @@ export default function ClientDetailModule({
    * todo: ver `lib/clients/avisoBorrado.js`.
    */
   const [modulos, setModulos] = useState(null);
+  /*
+   * El rol, solo para decidir si sale el botón de Eliminar (14/08/2026,
+   * Rodrigo; la regla, en `lib/auth/permisos.js`). Todo lo demás de la ficha lo
+   * hace cualquiera del equipo que tenga el módulo — esto no es «la ficha es de
+   * admin», es «destruirla sí».
+   *
+   * Arranca en `null` y `esAdmin(null)` es false: mientras no se sepa, no se
+   * enseña. Recargar es más barato que deshacer un borrado, que no se deshace.
+   */
+  const [rol, setRol] = useState(null);
 
   useEffect(() => {
     let vivo = true;
     fetch("/api/auth/me", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (vivo && Array.isArray(j?.data?.enabledModules)) setModulos(j.data.enabledModules); })
+      .then((j) => {
+        if (!vivo) return;
+        if (Array.isArray(j?.data?.enabledModules)) setModulos(j.data.enabledModules);
+        if (j?.data?.role) setRol(j.data.role);
+      })
       .catch(() => {});
     return () => { vivo = false; };
   }, []);
@@ -426,12 +441,17 @@ export default function ClientDetailModule({
                       </svg>
                       Editar
                     </button>
-                    <button
-                      onClick={handleDelete}
-                      className="text-xs text-red-500 hover:text-red-700 border border-red-100 hover:border-red-200 px-3 py-1.5 rounded-lg transition-colors"
-                    >
-                      Eliminar
-                    </button>
+                    {/* Solo admin (14/08/2026, ver lib/auth/permisos.js). No
+                        sale deshabilitado a propósito: un botón apagado es una
+                        pregunta que alguien tiene que ir a hacer. */}
+                    {esAdmin(rol) && (
+                      <button
+                        onClick={handleDelete}
+                        className="text-xs text-red-500 hover:text-red-700 border border-red-100 hover:border-red-200 px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        Eliminar
+                      </button>
+                    )}
                   </>
                 )}
               </div>
