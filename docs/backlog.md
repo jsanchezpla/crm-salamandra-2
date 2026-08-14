@@ -145,39 +145,6 @@ de Resend que hay guardadas son de solo envío, así que ni siquiera pueden list
 los dominios de su cuenta. `support` activo en `aumenta`, `demo`, `demo_agencia`
 y `somos`; Aumenta sigue con 0 tickets.
 
-### El Registro no deja escribir la solución de una tarea, ni copiarla de un golpe · `interno`
-
-**Lo que falta.** Cuando ya se sabe cómo se arregla algo, ese conocimiento no
-tiene dónde ir hasta que alguien se siente a programarlo: se queda en una
-conversación y se pierde. Y para pasarle una tarea a Claude hay que ir
-seleccionando a mano el título, el cliente y el cuerpo, que están en tres sitios
-distintos de la tarjeta.
-
-**Lo que hace falta.** Dos botones en cada tarea de /admin/tablero. Uno de
-Solución, que abre un campo de texto libre y lo GUARDA. Y otro de Copiar, que
-deje en el portapapeles de una vez el título, el cliente, la descripción y esa
-solución propuesta, listo para pegar.
-
-**La trampa está en dónde se guarda, y no es evidente.** NO puede ir a
-docs/backlog.md: ese fichero viaja dentro de la imagen de Docker, así que el
-siguiente despliegue borraría lo que la pantalla hubiera escrito, y sin dar
-ningún error. Tiene que ir a master.tablero_estado, que es donde ya viven el tick
-y el reparto exactamente por este motivo. Esa tabla tiene hoy clave, titulo,
-asignado_a, resuelta y tocada_por: hace falta una columna nueva con su migración,
-y que el PATCH la acepte igual que acepta las otras dos.
-
-**Para qué es.** Para poder pegarle una tarea entera a Claude de un tirón, que es
-como se trabaja ya con las dos skills del Registro.
-
-*Se comprueba*: escribir una solución en una tarea del Registro, desplegar, y que
-siga estando ahí. Y que el botón de copiar pegue las cuatro cosas de una vez.
-*Dónde*: `app/admin/tablero/page.jsx` (los botones),
-`app/api/admin/tablero/route.js:266` (el PATCH que ya guarda tick y reparto),
-`models/master/TableroEstado.model.js` (la columna nueva y su migración).
-*Comprobado en producción*: 14/08/2026 — en `master.tablero_estado` solo hay id,
-clave, titulo, asignado_a, resuelta, tocada_por y las dos fechas: no existe
-ninguna columna donde guardar una solución.
-
 ---
 
 ## P3 — deuda

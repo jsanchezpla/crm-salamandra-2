@@ -28,6 +28,47 @@ Lo más reciente arriba.
 
 ## 14/08/2026
 
+### El Registro ya deja escribir la solución de una tarea y copiarla entera · `interno`
+
+**Lo que había.** Cuando ya se sabía cómo se arreglaba algo, ese conocimiento no
+tenía dónde ir hasta que alguien se sentara a programarlo: se quedaba en una
+conversación y se perdía. Y para pasarle una tarea a Claude había que ir
+seleccionando a mano el título, el cliente y el cuerpo, que están en tres sitios
+distintos de la tarjeta.
+
+**Lo que hay ahora.** Dos botones dentro de cada tarea. Solución abre un campo de
+texto libre y lo guarda; si ya hay una escrita se enseña siempre, sin abrir nada,
+porque para eso se escribió. Copiar deja en el portapapeles el título, el
+cliente, la descripción y la solución, en ese orden y sin markdown, listo para
+pegar en un chat. Vaciar el cuadro y guardar la borra, para que «no hay solución»
+sea un solo estado y no dos que se pintan igual.
+
+**Dónde se guarda, que era la trampa.** En `master.tablero_estado`, columna
+`solucion`, y NO en docs/backlog.md: ese fichero viaja dentro de la imagen de
+Docker y el siguiente despliegue se habría llevado por delante lo que la pantalla
+escribiera, sin dar ningún error. Es el mismo motivo por el que ya vivían ahí el
+tick y el reparto.
+
+**El orden del despliegue no fue casualidad.** La migración se corrió en
+producción ANTES de subir el código: el `findOrCreate` del PATCH hace SELECT de
+todos los atributos del modelo, así que con el código nuevo por delante de la
+columna, guardar un tick habría dado 42703. Una columna que todavía no lee nadie
+es invisible para la app que está corriendo.
+
+*Se comprueba*: escribir una solución en una tarea del Registro, recargar, y que
+siga ahí; y que Copiar pegue las cuatro cosas de una vez.
+*Dónde*: `app/admin/tablero/page.jsx` (los botones y el texto que se copia),
+`app/api/admin/tablero/route.js` (el PATCH acepta `solucion`),
+`lib/tablero/estado.js` (`conEstado` la pasa a la pantalla),
+`scripts/migrate-tablero-estado.js` (la columna).
+*Comprobado en producción*: 14/08/2026 — `solucion` existe en
+`master.tablero_estado` (17 filas de estado, intactas), y ejercitado el camino
+real del PATCH contra la base del VPS: guardar, leerla por el mismo SELECT que
+usa el GET, comprobar que no marca ni mueve la tarea, y borrarla vaciándola.
+Fila de prueba eliminada después.
+
+---
+
 ### Aumenta no tiene ninguna clave de IA, y ya hay cosas suyas esperándola · `aumenta`
 
 **Se cierra por decisión, no porque haya cambiado nada.** Jorge, 14/08/2026: está
