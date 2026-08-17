@@ -194,8 +194,19 @@ export default function LeadsEstadisticasPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <Kpi label="Entradas" value={entrada} sub={c ? `${p.total} profesionales · ${c.total} comerciales` : "leads profesionales"} />
             <Kpi label="En marcha" value={p.abiertos} sub="ni ganados ni descartados" />
-            <Kpi label="Convertidos" value={p.ganados} sub={p.conversion != null ? `${p.conversion}% de los cerrados` : "aún no hay cerrados"}
-              tono={p.conversion != null && p.conversion >= 50 ? "bien" : "neutral"} />
+            {/* Solo donde el embudo pueda dar a alguien por ganado. Hay
+                embudos que terminan en Nuevo, Contactado y Descartado: ahí este
+                0 no puede subir nunca y la conversión sería un 0 % en cuanto se
+                descarte a alguien. Serían números ciertos y engañarían igual,
+                porque no es que no conviertan — es que no tienen dónde
+                apuntarlo. Mismo criterio que «Con ficha» de aquí abajo, y lo
+                decide el servidor en `lib/leads/embudos.js`. Un 0 de verdad
+                (embudo con etapa ganadora, nadie convertido todavía) SÍ se
+                sigue viendo: por eso «distinto de null» y no «si es falso». */}
+            {p.ganados != null && (
+              <Kpi label="Convertidos" value={p.ganados} sub={p.conversion != null ? `${p.conversion}% de los cerrados` : "aún no hay cerrados"}
+                tono={p.conversion != null && p.conversion >= 50 ? "bien" : "neutral"} />
+            )}
             {/* Solo donde hay fichas que crear. Sin el módulo Clientes un lead
                 no puede convertirse en cliente, así que la cifra sería un 0
                 clavado para siempre, y un cero grande se lee como una avería,
