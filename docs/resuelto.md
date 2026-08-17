@@ -28,6 +28,88 @@ Lo más reciente arriba.
 
 ## 17/08/2026
 
+### «Convertidos» ya no sale donde el embudo no puede ganar a nadie · `aumenta`, `demo`, `sandbox`
+
+**Qué pasaba.** De los seis embudos, tres —aumenta, demo y sandbox— terminan en
+Nuevo, Contactado y Descartado, sin ninguna etapa de «ganado». Para ellos la
+tarjeta «Convertidos» de la pantalla de estadísticas era un 0 que no podía subir
+por bien que les fuera, y su conversión pasaba a «0 % de los cerrados» en cuanto
+alguien pulsara Descartado, que es uno de los tres botones que ofrecen. Los dos
+números eran ciertos y engañaban igual: no es que no conviertan, es que su
+embudo no tiene dónde apuntarlo.
+
+**Qué lo arregla.** El mismo criterio que esa pantalla ya seguía con «Con ficha
+creada»: cuando la cifra no significa nada se pone a `null` y la tarjeta
+desaparece, porque un cero grande se lee como una avería y no como «esto no va
+contigo». Un 0 legítimo —embudo con etapa ganadora y nadie convertido todavía—
+se sigue viendo.
+
+**Lo que hubo que construir.** Para decidirlo hacía falta que el SERVIDOR supiera
+qué etapas ofrece cada cliente, y no podía: viven dentro de componentes de React
+que no se pueden importar desde ahí. `lib/leads/embudos.js` las declara. Los
+siete componentes NO se han unificado —siguen separados como se decidió el
+17/08—, así que la lista está en dos sitios; por eso el arreglo trae su propia
+red: `_smoke-leads-etapas.mjs` compara ahora las dos, cliente por cliente, y
+casca si alguien añade una etapa a un componente y no la declara. Esa prueba
+estaba escrita y sin commitear, y este cambio la rompió al mudar `GANADOS`:
+leía el conjunto del TEXTO con una expresión regular. Ahora lo importa.
+
+**Lo que NO entra aquí, a propósito.** Que el embudo de Aumenta siga sin poder
+dar a nadie por ganado. Eso ya no es un fallo de la pantalla, es una pregunta de
+producto —qué significa «ganado» en un centro de psicología— y sigue abierta en
+el backlog junto con el estilo huérfano de `qualified`.
+
+*Se comprueba*: entrar en la demo pública y pedir `/api/leads/estadisticas`;
+`profesionales.ganados` viene a `null` y la tarjeta no se pinta.
+*Dónde*: `lib/leads/embudos.js` (nuevo), `lib/leads/estadisticas.js` y
+`app/(dashboard)/leads/estadisticas/page.jsx`.
+*Comprobado en producción*: 17/08/2026 — con `efee2c2` desplegado, `demo` (16
+leads, 5 descartados, que es justo el caso que daba el 0 %) devuelve `ganados:
+null` y `conversion: null`; y de control, `demo_agencia`, `demo_nutricion` y
+`demo_clinica`, que usan el embudo por defecto, siguen devolviendo `ganados: 0`
+con la tarjeta puesta. La prueba de humo, en verde en el repo del VPS.
+
+### El correo de acceso de tunutrilaura sí llega: la tarea era falsa · `nutri_laura`
+
+**Qué decía.** Que al aceptar una solicitud, la paciente nunca recibe el correo
+con el enlace para elegir contraseña. Se apuntó en P0 la mañana del 17/08 con
+«reproducido dos veces» en el sello.
+
+**No era verdad, y el fallo fue del método de prueba.** Las reproducciones usaron
+direcciones con `+` (`info+alta-prueba@…`). El correo de Salamandra es Microsoft
+365, que **no acepta subdirecciones con `+` salvo que el administrador lo
+active**: para su servidor esa dirección no existe y la rechaza en la puerta. No
+fallaba el alta, fallaba el destinatario.
+
+**Cómo se destapó.** Mandando por el mismo camino el correo de WordPress —el del
+botón «Restablecer contraseña», que se sabía que SÍ llega— a la misma dirección
+con `+`. Tampoco llegó. Si el camino bueno también falla, lo que falla no es el
+camino: es la dirección.
+
+**Y entonces se probó bien.** Contra un Gmail normal, sin `+`: llegaron los dos,
+a la bandeja de entrada y no a spam. Incluido «Tu acceso a tunutrilaura», que es
+justo el que se decía que no salía nunca.
+
+**De la paciente que lo levantó todo**: su ficha tiene el correo bien escrito y
+su cuenta en la web se creó dos segundos después, con esa misma dirección exacta.
+Lo más probable con diferencia es que le llegara y no lo viera. No se puede
+demostrar —del 14/08 no hay registros de envío— y se deja dicho así en vez de
+rellenarlo con una suposición.
+
+**Lo que sí queda de todo esto**, y no es poco: `nutrilaura-portal-user.php` es
+código nuestro cuya única copia está en el WordPress de una clienta, y
+`crearUsuarioPortal` sigue diciendo «se le ha enviado un correo» sin que
+WordPress confirme nunca que salió.
+
+*Se comprueba*: llamar a `crm/v1/portal-user` con una dirección **sin `+`** que
+no tenga cuenta, y que llegue «Tu acceso a tunutrilaura».
+*Dónde*: `lib/formularios/portalUser.js`. El envío, en el tema de
+tunutrilaura.com, fuera de este repo.
+*Comprobado en producción*: 17/08/2026 — alta contra un Gmail limpio: llegan el
+correo del alta y el de WordPress, los dos a la bandeja de entrada. Un registro
+temporal de `wp_mail` en la web confirmó que el tema sí intenta el envío y que
+no falla.
+
 ### Las seis llaves de root del VPS, identificadas una por una · producto
 
 **De dónde venía.** Había una tarea en P0 que decía que el VPS admite entrar como

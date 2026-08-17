@@ -77,54 +77,7 @@ comprobarlo resulta que sigue pasando, se queda y se actualiza el sello.
 
 ## P0 — hoy
 
-### Las pacientes aceptadas no reciben el correo para entrar en la web · `nutri_laura`
-
-**Lo que pasa.** Al aceptar una solicitud, el CRM crea la ficha y le pide a la
-web de Laura que dé de alta a la paciente. La cuenta se crea bien, pero **el
-correo con el enlace para elegir contraseña no llega nunca**. La paciente se
-queda sin poder entrar al portal ni reservar, y nadie se entera: el CRM le
-enseña a Laura «se le ha enviado un correo».
-
-**Cómo salió.** Una paciente a punto de contratar avisó el 14/08 de que no podía
-entrar. Su ficha estaba creada, su cuenta en la web también —usuario dado de
-alta, rol Suscriptor— y el correo del CRM «Ya puedes pedir tu cita» le salió por
-Resend con acuse. El único que faltaba era el de la contraseña.
-
-**Reproducido dos veces el mismo día** con direcciones nuevas contra la web real.
-La segunda, llamando al endpoint directamente, WordPress contestó `201` y
-`{"creado":true,"user_id":57,"message":"Usuario creado y correo de acceso
-enviado."}` — y no llegó nada. El fallo es mudo por los dos lados.
-
-**Dónde está, y no es en el CRM.** El alta la atiende
-`nutrilaura-portal-user.php`, un fichero del TEMA de su WordPress (303 líneas):
-crea a la persona con `wp_insert_user` y **no llama al aviso estándar de
-WordPress**; se fabrica su propio correo con `get_password_reset_key` y `wp_mail`.
-El envío de la web NO está roto —el «Restablecer la contraseña» de WordPress core
-sí llega, desde `info@tunutrilaura.com`—, así que lo que falla es ese envío a
-mano, que además no mira lo que devuelve `wp_mail`.
-
-**Nuestra mitad, que es la que lo hizo invisible.** `crearUsuarioPortal` compone
-«Usuario creado. Se le ha enviado un correo para que elija su contraseña» solo
-con ver que la respuesta trae `creado`, sin que WordPress diga nunca si el correo
-salió; y esa frase es la que se le enseña a Laura al aceptar. Mientras siga ahí,
-esto se seguirá descubriendo por WhatsApp y no por el CRM.
-
-**Mientras no esté arreglado**, a quien se quede fuera se le manda el
-restablecimiento desde Usuarios de su WordPress: ese va por el camino de core y
-sí llega.
-
-⚠️ Quedan **dos usuarios de prueba** en la web de Laura de reproducir esto:
-`infoalta-prueba` y el de `user_id` 57. Hay que borrarlos al cerrar la tarea.
-
-*Se comprueba*: aceptar una solicitud con un correo nuevo —o llamar a
-`crm/v1/portal-user` con una dirección que no exista— y que llegue el correo con
-el enlace para elegir contraseña.
-*Dónde*: el fallo, en `nutrilaura-portal-user.php` del tema de tunutrilaura.com,
-FUERA de este repo. Lo nuestro, en `lib/formularios/portalUser.js:198-204` y
-`app/api/formularios/[id]/accept/route.js:127`.
-*Comprobado en producción*: 14/08/2026 — reproducido dos veces con correos
-nuevos; la web responde 201 «correo de acceso enviado» y no llega nada. El correo
-de core sí llega, así que el envío de la web no está roto.
+_Ahora mismo no hay ninguna._
 
 ---
 
@@ -253,46 +206,7 @@ y `somos`; Aumenta sigue con 0 tickets.
 
 ## P3 — deuda
 
-### El embudo de Aumenta no puede dar por ganado a nadie, y la conversión cuenta con que sí · `aumenta`, `demo`
-
-**Lo que pasa.** El embudo de Aumenta ofrece tres etapas —Nuevo, Contactado y
-Descartado— y ninguna es de «ganado». La pantalla de estadísticas calcula la
-conversión como ganados entre cerrados, y las etapas que da por ganadoras son
-`won`, `closed_yes` y `paciente`: ninguna de las tres está en su embudo. Así que
-«Convertidos» es un 0 clavado que no puede subir nunca, por bien que les vaya.
-
-**Hoy no se ve, y por eso está aquí abajo y no más arriba.** En producción
-Aumenta tiene dos leads, uno en Nuevo y otro en Contactado, y ninguno descartado.
-Sin cerrados la pantalla dice «aún no hay cerrados», que es honesto. El día que
-alguien pulse Descartado —uno de los tres botones que ofrece— pasará a decir
-«0 % de los cerrados», y eso ya engaña: no es que no conviertan, es que su
-embudo no tiene dónde apuntarlo.
-
-**A la demo le pasa igual**, y ahí no cuesta dinero pero es la pantalla que se
-enseña.
-
-**Hay un segundo desajuste, del mismo origen.** El override de Aumenta tiene
-definido el color de la etapa `qualified`, que su embudo no ofrece. Si algún día
-entra un lead ahí —el importador la acepta, está en la lista canónica—, saldrá
-con su chip de color pero sin fila en la barra de etapas, y los contadores de la
-cabecera dejarán de sumar el total.
-
-**La raíz es dónde vive el embudo.** Las etapas de cada cliente están escritas
-dentro de su componente de React, así que el servidor —que es quien calcula la
-conversión— no puede saber qué etapas ofrece nadie. Por eso no puede decir «este
-embudo no marca ninguna etapa como ganada» en lugar de un 0 %. Arreglarlo de
-raíz toca cómo se define un embudo, y el 17/08 quedó dicho que los siete se
-quedan separados a propósito, así que la salida tendrá que respetar eso.
-
-*Se comprueba*: marcar un lead de Aumenta como Descartado y que
-`/leads/estadisticas` no diga «0 % de los cerrados», sino que ese embudo no
-tiene etapa de ganado.
-*Dónde*: `lib/leads/estadisticas.js:61` (la lista `GANADOS`),
-`modules/overrides/aumenta/LeadsModule.jsx:15` (las tres etapas) y `:21` (el
-estilo huérfano).
-*Comprobado en producción*: 17/08/2026 — Aumenta tiene 2 leads, uno `contacted`
-y otro `new`; ninguno en `lost` ni en `qualified`, así que el 0 % todavía no se
-ve. Lo destapó `scripts/_smoke-leads-etapas.mjs`.
+_Ahora mismo no hay ninguna._
 
 ---
 
@@ -302,8 +216,36 @@ Cosas que no se pueden hacer sin que Jorge o Rodrigo elijan. Van como tareas y
 no como una lista suelta a propósito: así aparecen en el tablero. Cuando se
 decida, la respuesta se escribe aquí y la tarea baja a su prioridad.
 
-**Ahora mismo no hay ninguna.** Rodrigo contestó las seis que había el
-12/08/2026; están en `resuelto.md` con la respuesta y con lo que se hizo después
-de cada una. Un bloque vacío no se pinta en el Registro, así que esta sección
-desaparece de la pantalla hasta que vuelva a haber algo que decidir.
+### ¿Qué es «ganado» en el embudo de Aumenta? · `aumenta`, `sandbox`
+
+**Lo que se decidió el 17/08 y lo que no.** Se arregló la mitad que engañaba:
+donde el embudo no tiene ninguna etapa de «ganado», la pantalla de estadísticas
+ya no enseña «Convertidos», en vez de un 0 con un porcentaje debajo que no podía
+subir nunca. Lo que sigue igual es el embudo. Aumenta ofrece Nuevo, Contactado y
+Descartado, así que a nadie se le puede marcar como ganado y su embudo no puede
+medir si convierten.
+
+**Por qué no se arregló de una vez.** Porque ya no es un fallo, es una pregunta:
+qué significa «ganado» en un centro de psicología. Lo más probable, que la
+persona entre como paciente. Pero eso cambia la pantalla que su equipo usa todos
+los días, y añadir una etapa a un embudo en marcha se decide, no se deduce.
+Escribirla es una línea; elegirla es la conversación.
+
+**Un cabo del mismo sitio, que se resuelve con la misma respuesta.** Los
+overrides de Aumenta y de sandbox tienen definido el color de la etapa
+`qualified`, que sus embudos no ofrecen. Hoy no hay ni un lead ahí, pero el
+importador la acepta —está en la lista canónica—, así que el día que entre uno
+saldrá con su chip de color y sin fila en la barra de etapas, y los contadores de
+la cabecera dejarán de sumar el total. Borrar el estilo sin más lo empeora: ese
+lead perdería hasta el color. La salida es ofrecer la etapa o impedir que entre
+nadie.
+
+*Se comprueba*: que un lead de Aumenta se pueda marcar como ganado y que
+`/leads/estadisticas` vuelva a enseñarle su conversión.
+*Dónde*: `modules/overrides/aumenta/LeadsModule.jsx:15` (las etapas) y `:21` (el
+estilo), y la declaración espejo de `lib/leads/embudos.js`, que hay que cambiar
+en el mismo commit o la prueba de humo casca.
+*Comprobado en producción*: 17/08/2026 — Aumenta tiene 2 leads, uno `contacted`
+y otro `new`, ninguno en `lost` ni en `qualified`. En la demo, que sí tiene 5
+descartados, se confirmó que la tarjeta ya no sale.
 
