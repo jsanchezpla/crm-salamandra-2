@@ -26,6 +26,82 @@ Lo más reciente arriba.
 
 ---
 
+## 17/08/2026
+
+### Las seis llaves de root del VPS, identificadas una por una · producto
+
+**De dónde venía.** Había una tarea en P0 que decía que el VPS admite entrar como
+root con contraseña, y que cerrarlo «no deja a nadie fuera» porque «las claves
+públicas de los cuatro que entramos ya están puestas». Antes de cerrar nada se
+comprobó de quién es cada llave, y de paso salió que la tarea se equivocaba en
+tres cosas.
+
+**Las seis llaves, y ninguna era de un desconocido.** Son de Jorge y de Rodrigo,
+tres cada uno. Se identificaron por evidencia y no por el comentario del fichero,
+que lo escribe quien quiere:
+
+- rodri-pc-windows (AHFX+bd…) — Rodrigo, sobremesa. Sin accesos esa semana.
+- jsanchezpla@gmail.com (4LaZvG…) — Jorge, con su correo personal. Sin accesos.
+- rodrigo@salamandra (BNnVND…) — Rodrigo, su máquina de trabajo: 355 accesos.
+- rodrigo@portatil (UkCe6r…) — Rodrigo, portátil: 7 accesos, desde la MISMA IP
+  que la anterior, o sea el mismo sitio con dos equipos.
+- claude-code-deploy@DESKTOP-KEM8CKA (zqDP04…) — el PC de Jorge, la que usa
+  Claude Code: 377 accesos, el último el mismo día de esta entrada.
+- claude-code-crm (0mIFQM…) — también el PC de Jorge, y no había entrado nunca.
+
+Las dos de Claude Code se ataron en directo: su `.pub` está en el `.ssh` de Jorge
+y `ssh -v` enseña al servidor aceptando esa huella desde esa máquina. La de
+`claude-code-crm` no se usaba porque su `config` apunta el alias a la otra. Y en
+todo el registro solo han entrado con llave DOS IPs, el Jazztel de Jorge y el ONO
+de Rodrigo; ninguna tercera.
+
+**Con un límite que hay que saber:** el registro de sshd solo llega al 10 de
+agosto, aunque la máquina es del 24 de junio. Así que «sin accesos» quiere decir
+«no en esos siete días», no «nunca».
+
+**Lo único que se ha tocado.** Dos líneas fuera de
+`/root/.ssh/authorized_keys`, las dos de Jorge: la repetida y la de
+`claude-code-crm`. Quedan cinco. Copia previa en
+`/root/backups/authorized_keys-antes-de-podar-20260817`, y el script abortaba
+solo si el resultado no eran cinco llaves o si faltaba la que estaba en uso. No
+se tocó la configuración de sshd ni se reinició: `authorized_keys` se lee en cada
+conexión, así que este cambio no podía dejar a nadie fuera de la máquina.
+
+**Lo que se decidió, y hay que leerlo antes de dar esto por seguro.** La
+contraseña de root SE QUEDA, por decisión de Jorge: la usa para entrar al VPS a
+mano desde cmd. Hoy la máquina sigue respondiendo `permitrootlogin yes` y
+`passwordauthentication yes`, así que esta entrada NO significa que el acceso por
+contraseña esté cerrado. Lo que queda abierto, medido: 88 intentos contra root en
+siete días desde 11 IPs distintas, ninguno acertado; 730 accesos legítimos y
+todos con llave; root con contraseña puesta y fail2ban sin instalar.
+
+**Tres cosas en las que la tarea se equivocaba, por si se retoma.** Una, el
+arreglo que proponía era al revés: decía un fichero «con número más alto», y en
+sshd gana el PRIMER valor, así que un número alto no habría hecho nada y el
+problema se habría dado por cerrado. Se midió con `sshd -T -f` sobre una
+configuración de mentira en /tmp, borrada después: un fichero numerado 10 da
+`no`, uno numerado 99 da `yes`. Dos, eran dos problemas y no uno: la contraseña
+sí está tapada por el Include de la línea 12, pero `PermitRootLogin yes` está
+escrito a pelo en la línea 124 y no lo tapa nadie. Tres, no son cuatro personas:
+son dos, con seis llaves.
+
+**Y la contraseña puede que no haga falta.** El `config` de Jorge tiene la llave
+solo en el alias `crm-vps`; los otros Host por IP no llevan IdentityFile, así que
+al escribir `ssh root@<IP>` no se ofrece ninguna llave y sshd pide la contraseña.
+Escribiendo `ssh crm-vps` desde cmd se entra con llave y sin contraseña, sin
+cambiar nada en ningún sitio. Si eso se confirma, cerrar la contraseña deja de
+costar nada.
+
+*Se comprueba*: `ssh crm-vps "ssh-keygen -lf /root/.ssh/authorized_keys"` devuelve
+cinco llaves sin ninguna repetida, y los dos siguen entrando.
+*Dónde*: `/root/.ssh/authorized_keys` en el VPS, fuera de este repositorio. Lo que
+NO se hizo, en `/etc/ssh/sshd_config` línea 124 y en el Include de la línea 12.
+*Comprobado en producción*: 17/08/2026 — cinco llaves en el fichero, conexión
+nueva verificada después de escribir, y `sshd -T` sigue diciendo
+`permitrootlogin yes` y `passwordauthentication yes`, como se decidió.
+
+---
+
 ## 14/08/2026
 
 ### El Registro ya deja escribir la solución de una tarea y copiarla entera · `interno`

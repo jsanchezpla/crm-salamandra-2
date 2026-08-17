@@ -126,25 +126,6 @@ FUERA de este repo. Lo nuestro, en `lib/formularios/portalUser.js:198-204` y
 nuevos; la web responde 201 «correo de acceso enviado» y no llega nada. El correo
 de core sí llega, así que el envío de la web no está roto.
 
-### El acceso SSH al VPS admite contraseña de root · producto
-
-`sshd -T` en el VPS responde `permitrootlogin yes` y `passwordauthentication
-yes`. El `PasswordAuthentication no` que hay escrito en `/etc/ssh/sshd_config`
-**está muerto**: el `Include /etc/ssh/sshd_config.d/*.conf` de la línea 12 va
-ANTES, y en la configuración de sshd gana el primer valor, así que
-`50-cloud-init.conf` —que dice `yes`— lo tapa. Y ese fichero lo reescribe
-cloud-init, con lo que arreglarlo a mano en el fichero grande no aguanta.
-
-Es una máquina con datos de salud de 1.083 familias y con root abierto a
-contraseña desde internet. Las claves públicas de los cuatro que entramos ya
-están puestas, así que cerrarlo no deja a nadie fuera.
-
-*Se comprueba*: `sshd -T | grep -E "passwordauthentication|permitrootlogin"`
-devuelve `no` y `prohibit-password`, y los cuatro seguimos entrando.
-*Dónde*: `/etc/ssh/sshd_config.d/50-cloud-init.conf` (o uno propio con número
-más alto, que es lo que aguanta a cloud-init).
-*Comprobado en producción*: 10/08/2026 — `passwordauthentication yes` efectivo.
-
 ---
 
 ## P1 — esta semana
