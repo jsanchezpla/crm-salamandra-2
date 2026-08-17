@@ -179,7 +179,46 @@ y `somos`; Aumenta sigue con 0 tickets.
 
 ## P3 — deuda
 
-_Ahora mismo no hay ninguna._
+### El embudo de Aumenta no puede dar por ganado a nadie, y la conversión cuenta con que sí · `aumenta`, `demo`
+
+**Lo que pasa.** El embudo de Aumenta ofrece tres etapas —Nuevo, Contactado y
+Descartado— y ninguna es de «ganado». La pantalla de estadísticas calcula la
+conversión como ganados entre cerrados, y las etapas que da por ganadoras son
+`won`, `closed_yes` y `paciente`: ninguna de las tres está en su embudo. Así que
+«Convertidos» es un 0 clavado que no puede subir nunca, por bien que les vaya.
+
+**Hoy no se ve, y por eso está aquí abajo y no más arriba.** En producción
+Aumenta tiene dos leads, uno en Nuevo y otro en Contactado, y ninguno descartado.
+Sin cerrados la pantalla dice «aún no hay cerrados», que es honesto. El día que
+alguien pulse Descartado —uno de los tres botones que ofrece— pasará a decir
+«0 % de los cerrados», y eso ya engaña: no es que no conviertan, es que su
+embudo no tiene dónde apuntarlo.
+
+**A la demo le pasa igual**, y ahí no cuesta dinero pero es la pantalla que se
+enseña.
+
+**Hay un segundo desajuste, del mismo origen.** El override de Aumenta tiene
+definido el color de la etapa `qualified`, que su embudo no ofrece. Si algún día
+entra un lead ahí —el importador la acepta, está en la lista canónica—, saldrá
+con su chip de color pero sin fila en la barra de etapas, y los contadores de la
+cabecera dejarán de sumar el total.
+
+**La raíz es dónde vive el embudo.** Las etapas de cada cliente están escritas
+dentro de su componente de React, así que el servidor —que es quien calcula la
+conversión— no puede saber qué etapas ofrece nadie. Por eso no puede decir «este
+embudo no marca ninguna etapa como ganada» en lugar de un 0 %. Arreglarlo de
+raíz toca cómo se define un embudo, y el 17/08 quedó dicho que los siete se
+quedan separados a propósito, así que la salida tendrá que respetar eso.
+
+*Se comprueba*: marcar un lead de Aumenta como Descartado y que
+`/leads/estadisticas` no diga «0 % de los cerrados», sino que ese embudo no
+tiene etapa de ganado.
+*Dónde*: `lib/leads/estadisticas.js:61` (la lista `GANADOS`),
+`modules/overrides/aumenta/LeadsModule.jsx:15` (las tres etapas) y `:21` (el
+estilo huérfano).
+*Comprobado en producción*: 17/08/2026 — Aumenta tiene 2 leads, uno `contacted`
+y otro `new`; ninguno en `lost` ni en `qualified`, así que el 0 % todavía no se
+ve. Lo destapó `scripts/_smoke-leads-etapas.mjs`.
 
 ---
 
