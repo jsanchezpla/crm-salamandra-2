@@ -43,13 +43,18 @@
  * a pedir los datos: es el endpoint quien decide de qué lado cae cada una, y
  * duplicar aquí esa decisión es como se llega a dos pantallas que no coinciden.
  *
+ * Y desde el 17/08/2026 el tick PREGUNTA antes (Jorge). Era un cuadro de 18px
+ * pegado a la flecha de desplegar, así que bastaba un clic mal puesto para mover
+ * una tarea de pestaña sin ningún aviso. El modal enseña el título de la tarea,
+ * que es lo que hace que sirva: el error no es dudar, es la fila de al lado.
+ *
  * Marcar aquí NO cierra una tarea de verdad: eso sigue siendo moverla a
  * `resuelto.md` en el commit que la arregla. El tick es para ponerse de acuerdo
  * entre los dos, y por eso lo marcado a mano se pinta en su propio bloque en vez
  * de mezclarse con lo cerrado en el repositorio.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /** Cuánto corre cada bloque, por su título. Lo que no case, en gris. */
 const TONOS = [
@@ -87,12 +92,6 @@ function Etiqueta({ children, color }) {
 }
 
 /**
- * El tick. Es un `button` y no un `input type=checkbox` a propósito: esto vive
- * dentro de un `<summary>`, donde cualquier clic despliega el detalle, así que
- * hace falta cortar el evento a mano — y un checkbox al que se le corta el
- * evento por defecto se queda pintando lo contrario de lo que hay guardado.
- */
-/**
  * Los botones de dentro de una tarjeta (solución y copiar).
  *
  * Están apagados de color a propósito: la tarjeta ya tiene un tick, un reparto y
@@ -117,6 +116,16 @@ function BotonTarjeta({ children, onClick, ocupada = false, destacado = false })
   );
 }
 
+/**
+ * El tick. Es un `button` y no un `input type=checkbox` a propósito: esto vive
+ * dentro de un `<summary>`, donde cualquier clic despliega el detalle, así que
+ * hace falta cortar el evento a mano — y un checkbox al que se le corta el
+ * evento por defecto se queda pintando lo contrario de lo que hay guardado.
+ *
+ * No guarda al pulsarlo: abre el modal de confirmación (17/08/2026, Jorge). Es
+ * un cuadro de 18px pegado a la flecha que despliega la tarea, así que un clic
+ * mal puesto movía la tarea de pestaña sin decir nada.
+ */
 function Tick({ marcada, ocupada, onToggle }) {
   return (
     <button
@@ -138,6 +147,131 @@ function Tick({ marcada, ocupada, onToggle }) {
     >
       {marcada ? "✓" : ""}
     </button>
+  );
+}
+
+/**
+ * Confirmar el tick (17/08/2026, Jorge).
+ *
+ * Pregunta en las DOS direcciones. La de marcar es la que pidió Jorge, pero en
+ * la pestaña de Resuelto el cuadro está en el mismo sitio de la fila, así que el
+ * resbalón que REABRE una tarea cerrada es exactamente igual de fácil.
+ *
+ * Enseña el TÍTULO de la tarea, y eso es lo que hace que esto sirva para algo:
+ * el fallo no es dudar de si quieres marcarla, es haber pulsado en la fila de al
+ * lado. Un «¿seguro?» a secas no lo cazaría.
+ *
+ * El color va con la dirección, y no es decorativo: verde y ámbar son los dos
+ * que la pantalla ya usa para los bloques «Marcadas» y «Reabiertas desde el
+ * Registro», así que se sabe hacia dónde vas antes de leer una palabra.
+ *
+ * Si el guardado falla, el modal NO se cierra y lo dice aquí dentro: el aviso de
+ * la cabecera puede quedar fuera de pantalla, y un modal que se cierra solo
+ * después de fallar parece que ha funcionado.
+ */
+function ConfirmarTick({ tarea, resuelta, ocupada, fallo, onConfirmar, onCancelar }) {
+  // El foco se pone a mano y no con `autoFocus`: React no aplica autoFocus
+  // cuando hidrata un nodo que ya venía del servidor, y entonces el foco se
+  // queda en el body — comprobado en el navegador, no supuesto.
+  const cancelar = useRef(null);
+  useEffect(() => { cancelar.current?.focus(); }, []);
+
+  useEffect(() => {
+    const alPulsar = (e) => {
+      if (e.key === "Escape" && !ocupada) onCancelar();
+    };
+    window.addEventListener("keydown", alPulsar);
+    return () => window.removeEventListener("keydown", alPulsar);
+  }, [ocupada, onCancelar]);
+
+  const acento = resuelta ? "#B45309" : "var(--ok)";
+  const accion = resuelta ? "Devolver a pendiente" : "Marcar como resuelta";
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center px-4"
+      style={{ background: "rgba(21,20,15,0.45)" }}
+      onClick={ocupada ? undefined : onCancelar}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirmar-tick-titulo"
+        onClick={(e) => e.stopPropagation()}
+        className="relative z-50 w-full max-w-md rounded-xl p-5 max-h-[85vh] overflow-auto"
+        style={{
+          background: "var(--panel)",
+          border: "1px solid var(--line)",
+          boxShadow: "0 18px 50px -12px rgba(21,20,15,0.28)",
+        }}
+      >
+        <Etiqueta color={acento}>Vas a {accion.toLowerCase()}</Etiqueta>
+        <h2
+          id="confirmar-tick-titulo"
+          className="mt-2 text-[19px] leading-snug"
+          style={{ fontFamily: "var(--admin-display)" }}
+        >
+          {tarea.titulo}
+        </h2>
+
+        {tarea.quien && (
+          <span
+            className="mt-2.5 inline-block text-[11px] px-1.5 py-0.5 rounded"
+            style={{
+              color: "var(--dim)",
+              border: "1px solid color-mix(in srgb, var(--tenue) 35%, transparent)",
+            }}
+          >
+            {tarea.quien}
+          </span>
+        )}
+
+        <p className="mt-3 text-[12.5px] leading-relaxed" style={{ color: "var(--dim)" }}>
+          {resuelta
+            ? "Vuelve a Pendiente, al bloque «Reabiertas desde el Registro», y lo veis los dos."
+            : "Sale de Pendiente y pasa a Resuelto, y lo veis los dos."}
+        </p>
+
+        {/* El recordatorio va solo al marcar: es donde se confunde una cosa con
+            la otra. Al reabrir no hay nada que aclarar. */}
+        {!resuelta && (
+          <p className="mt-2 text-[11.5px] leading-relaxed" style={{ color: "var(--tenue)" }}>
+            No la cierra en el repositorio. Eso sigue siendo moverla a <code>resuelto.md</code> en el
+            commit que la arregla.
+          </p>
+        )}
+
+        {fallo && (
+          <p className="mt-3 text-[12px]" style={{ color: "var(--alerta)" }}>
+            No se ha podido guardar: {fallo}
+          </p>
+        )}
+
+        <div className="mt-5 flex items-center justify-end gap-2">
+          {/* El foco arranca en Cancelar: si esto se abre por un clic que no
+              querías, un Enter de más no debe confirmarlo. */}
+          <button
+            type="button"
+            ref={cancelar}
+            onClick={onCancelar}
+            disabled={ocupada}
+            className="text-[12px] px-3 py-1.5 rounded transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2"
+            style={{ background: "var(--panel-alto)", color: "var(--dim)", border: "1px solid var(--line)" }}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirmar}
+            disabled={ocupada}
+            className="text-[12px] px-3 py-1.5 rounded transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2"
+            style={{ background: acento, color: "#fff", border: `1px solid ${acento}` }}
+          >
+            {ocupada ? "Guardando…" : accion}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -193,6 +327,9 @@ export default function TableroPage() {
   const [borrador, setBorrador] = useState("");
   // La clave de la que se acaba de copiar, para poder decirlo. Se borra sola.
   const [copiada, setCopiada] = useState(null);
+  // La tarea cuyo tick está esperando confirmación: `{ tarea, resuelta }`, donde
+  // `resuelta` es de qué lado venía. Null = no hay modal abierto.
+  const [confirmando, setConfirmando] = useState(null);
 
   useEffect(() => { document.title = "Registro — Salamandra"; }, []);
 
@@ -217,6 +354,9 @@ export default function TableroPage() {
    * Se recarga en vez de tocar el estado local porque el tick MUEVE la tarea de
    * pestaña, y quién cae de qué lado lo decide el endpoint. Reproducir aquí esa
    * regla es cómo se acaba con dos pantallas que no dicen lo mismo.
+   *
+   * Devuelve si ha ido bien, para que quien llame pueda decidir qué hacer al
+   * fallar: el modal del tick se queda abierto en vez de cerrarse como si nada.
    */
   async function tocar(tarea, cambios) {
     setGuardando(tarea.clave);
@@ -230,8 +370,10 @@ export default function TableroPage() {
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.ok) throw new Error(j?.error || `Error ${r.status}`);
       await cargar();
+      return true;
     } catch (e) {
       setFallo(e.message);
+      return false;
     } finally {
       setGuardando(null);
     }
@@ -291,6 +433,12 @@ export default function TableroPage() {
     const quiero = !estaResuelta;
     const loQueDiceElFichero = t.fuente === "resuelto";
     return tocar(t, { marcada: quiero === loQueDiceElFichero ? null : quiero });
+  }
+
+  /** Lo que pasa al aceptar el modal. Solo se cierra si el guardado ha ido bien. */
+  async function confirmarTick() {
+    const { tarea, resuelta } = confirmando;
+    if (await alternarTick(tarea, resuelta)) setConfirmando(null);
   }
 
   const secciones = datos?.[pestaña] ?? [];
@@ -507,7 +655,12 @@ export default function TableroPage() {
                     <Tick
                       marcada={pestaña === "resuelto"}
                       ocupada={guardando === t.clave}
-                      onToggle={() => alternarTick(t, pestaña === "resuelto")}
+                      onToggle={() => {
+                        // Se limpia el fallo anterior: si no, el modal se abre
+                        // enseñando el error de otra cosa.
+                        setFallo(null);
+                        setConfirmando({ tarea: t, resuelta: pestaña === "resuelto" });
+                      }}
                     />
                     <span
                       className="inline-block w-[3px] rounded-full shrink-0 self-stretch"
@@ -633,6 +786,19 @@ export default function TableroPage() {
         El tick y el reparto sí se guardan desde aquí, pero aparte: marcar una tarea la mueve de
         pestaña para que los dos sepáis por dónde va, y no sustituye a cerrarla en su commit.
       </p>
+
+      {/* Fuera de la lista a propósito: dentro del `<details>` heredaría el clic
+          que despliega la tarjeta. */}
+      {confirmando && (
+        <ConfirmarTick
+          tarea={confirmando.tarea}
+          resuelta={confirmando.resuelta}
+          ocupada={guardando === confirmando.tarea.clave}
+          fallo={fallo}
+          onConfirmar={confirmarTick}
+          onCancelar={() => setConfirmando(null)}
+        />
+      )}
     </main>
   );
 }
