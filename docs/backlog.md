@@ -77,6 +77,55 @@ comprobarlo resulta que sigue pasando, se queda y se actualiza el sello.
 
 ## P0 — hoy
 
+### Las pacientes aceptadas no reciben el correo para entrar en la web · `nutri_laura`
+
+**Lo que pasa.** Al aceptar una solicitud, el CRM crea la ficha y le pide a la
+web de Laura que dé de alta a la paciente. La cuenta se crea bien, pero **el
+correo con el enlace para elegir contraseña no llega nunca**. La paciente se
+queda sin poder entrar al portal ni reservar, y nadie se entera: el CRM le
+enseña a Laura «se le ha enviado un correo».
+
+**Cómo salió.** Una paciente a punto de contratar avisó el 14/08 de que no podía
+entrar. Su ficha estaba creada, su cuenta en la web también —usuario dado de
+alta, rol Suscriptor— y el correo del CRM «Ya puedes pedir tu cita» le salió por
+Resend con acuse. El único que faltaba era el de la contraseña.
+
+**Reproducido dos veces el mismo día** con direcciones nuevas contra la web real.
+La segunda, llamando al endpoint directamente, WordPress contestó `201` y
+`{"creado":true,"user_id":57,"message":"Usuario creado y correo de acceso
+enviado."}` — y no llegó nada. El fallo es mudo por los dos lados.
+
+**Dónde está, y no es en el CRM.** El alta la atiende
+`nutrilaura-portal-user.php`, un fichero del TEMA de su WordPress (303 líneas):
+crea a la persona con `wp_insert_user` y **no llama al aviso estándar de
+WordPress**; se fabrica su propio correo con `get_password_reset_key` y `wp_mail`.
+El envío de la web NO está roto —el «Restablecer la contraseña» de WordPress core
+sí llega, desde `info@tunutrilaura.com`—, así que lo que falla es ese envío a
+mano, que además no mira lo que devuelve `wp_mail`.
+
+**Nuestra mitad, que es la que lo hizo invisible.** `crearUsuarioPortal` compone
+«Usuario creado. Se le ha enviado un correo para que elija su contraseña» solo
+con ver que la respuesta trae `creado`, sin que WordPress diga nunca si el correo
+salió; y esa frase es la que se le enseña a Laura al aceptar. Mientras siga ahí,
+esto se seguirá descubriendo por WhatsApp y no por el CRM.
+
+**Mientras no esté arreglado**, a quien se quede fuera se le manda el
+restablecimiento desde Usuarios de su WordPress: ese va por el camino de core y
+sí llega.
+
+⚠️ Quedan **dos usuarios de prueba** en la web de Laura de reproducir esto:
+`infoalta-prueba` y el de `user_id` 57. Hay que borrarlos al cerrar la tarea.
+
+*Se comprueba*: aceptar una solicitud con un correo nuevo —o llamar a
+`crm/v1/portal-user` con una dirección que no exista— y que llegue el correo con
+el enlace para elegir contraseña.
+*Dónde*: el fallo, en `nutrilaura-portal-user.php` del tema de tunutrilaura.com,
+FUERA de este repo. Lo nuestro, en `lib/formularios/portalUser.js:198-204` y
+`app/api/formularios/[id]/accept/route.js:127`.
+*Comprobado en producción*: 14/08/2026 — reproducido dos veces con correos
+nuevos; la web responde 201 «correo de acceso enviado» y no llega nada. El correo
+de core sí llega, así que el envío de la web no está roto.
+
 ### El acceso SSH al VPS admite contraseña de root · producto
 
 `sshd -T` en el VPS responde `permitrootlogin yes` y `passwordauthentication
