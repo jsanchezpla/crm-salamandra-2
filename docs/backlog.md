@@ -130,53 +130,67 @@ de core sí llega, así que el envío de la web no está roto.
 
 ## P1 — esta semana
 
-### El botón «Reservar sesión de supervisión» de la web lleva a una agenda donde ese servicio no aparece · `nutri_laura`
+### El formulario de profesionales funciona, pero ningún enlace publicado lleva a él · `nutri_laura`
 
-**Lo que pasa.** En la página de servicios de tunutrilaura.com hay un bloque,
-«Supervisión individual para nutricionistas», con un botón que dice «Reservar
-sesión de supervisión →» y que lleva a tunutrilaura.com/citas/, la agenda
-pública. Ahí ese tipo de cita **no le aparece a nadie**, así que quien llega
-buscándolo ve los acompañamientos mensuales y se va. La supervisión son 60 €.
+**Lo que pasa.** Una profesional que quiere supervisión de casos no tiene por
+dónde decir que es profesional, así que entra como paciente — y desde ahí la
+supervisión (60 €) le queda invisible para siempre. La web la anuncia: en
+`/servicios/` hay un bloque «Supervisión individual para nutricionistas» con un
+botón «Reservar sesión de supervisión →» que lleva a `/citas/`, donde ese tipo de
+cita **no le aparece a nadie**.
 
-**Por qué.** «Supervisión profesional» está reservada a quien tenga su ficha
-marcada como profesional de la salud (se puso el 12/08 a petición de Rodrigo,
-porque esa sesión entre colegas estaba abierta a cualquiera). Esa marca tiene UN
-solo camino automático: convertir un lead en cliente leyendo
-`customFields.profesionalSalud` del lead, que pondría el formulario de
-profesionales de la web. **Ese formulario no existe.** La web tiene un único
-formulario, el de pacientes («Cuéntame cómo puedo ayudarte»), y no hay en toda la
-web ni una casilla que pregunte si eres profesional. Así que ese campo no puede
-valer `true` nunca, y la marca solo se puede poner a mano.
+**Por qué, y no es que falte nada por programar.** «Supervisión profesional» está
+reservada a quien tenga su ficha marcada como profesional de la salud (se puso el
+12/08 a petición de Rodrigo, porque esa sesión entre colegas estaba abierta a
+cualquiera). La marca se pone sola al convertir un lead que traiga
+`customFields.profesionalSalud`, y **el formulario que lo manda existe y está bien
+hecho**: es el shortcode `[nutrilaura_lead_form]` del tema, sale como pestaña
+«Profesionales» al lado de «Pacientes», pega a `/api/public/leads` con
+`x-tenant: nutri_laura` y calcula la marca con `esPro = datos.tipo ===
+'profesional'`, valor que el desplegable «¿Quién eres?» ofrece tal cual.
+
+**Lo que falla es que nadie llega a ese formulario.** Vive SOLO en `/contacto/`,
+y ninguno de los enlaces que Laura publica va allí: el de su biografía de
+Instagram lleva a `/formularios/`, **donde solo está el de pacientes**, y el botón
+«Reservar sesión de supervisión →» de `/servicios/` lleva a `/citas/`, la agenda.
+Un profesional que entre por cualquiera de los dos no tiene ni la opción de
+decir que lo es: rellena el de pacientes, y desde ese momento su ficha ya no puede
+marcarse sola, porque las solicitudes del módulo Formularios ponen «Paciente
+Nutrición» y nunca la de profesional.
 
 **Cómo salió.** Una usuaria pidió reservar el acompañamiento de supervisión de
-casos y solo le salían los mensuales. Su ficha existe, está activa y entró por una
-solicitud aceptada el 07/08; tiene una sola marca, `nutricion`, puesta
-automáticamente al aceptarla. Aceptar una solicitud pone «Paciente Nutrición»,
-nunca la de profesional.
+casos y solo le salían los mensuales. Llegó por un enlace social, rellenó
+`consulta` (el de pacientes) el 07/08 y se le aceptó la solicitud; su ficha tiene
+una sola marca, `nutricion`, puesta automáticamente. Nunca vio la pestaña de
+profesionales.
 
-**No le pasa solo a ella: le pasa a todo el mundo.** En producción hay **0 leads**
-en `crm_nutri_laura.leads` —así que el camino automático no se ha ejercitado
-jamás—, **0 fichas** con la marca y **0 reservas** de ese tipo en toda la
-historia. Se puso la puerta y no se cortó ninguna llave. Ya quedó avisado al
+**Y por eso el embudo entero está sin estrenar.** En producción hay **0 leads** en
+`crm_nutri_laura.leads` —el formulario de profesionales no lo ha rellenado nadie
+nunca, no porque esté roto, sino porque ningún enlace lleva a él—, **0 fichas** con
+la marca y **0 reservas** de ese tipo en toda la historia. Ya quedó avisado al
 cerrar la tarea de la puerta del formulario, que terminaba con «falta verlo con un
-profesional de verdad»: esta es esa primera vez.
+profesional de verdad»: esta es esa primera vez, y ha entrado por la puerta
+equivocada.
 
 **Mientras no esté arreglado** se desatasca sin desplegar nada: Laura entra en la
 ficha y marca la casilla «Es profesional de la salud», justo debajo de «Paciente
 Nutrición» (sí se pinta en su ficha, que es un override). Es una casilla que no ha
 usado nunca, así que hay que avisarla cada vez.
 
-**Lo que hay que decidir**, porque hay dos arreglos y no son lo mismo: **(1)**
-montar en la web un formulario de profesionales que cree el lead con la marca
-—que es el diseño que el CRM ya espera y no toca nuestro código—, o **(2)** que
-la vía por la que sí entran sus pacientes, aceptar una solicitud del módulo
-Formularios, pueda poner la marca. La segunda es código y decisión de producto:
-hoy esa pantalla no pregunta nada de esto.
+**Lo que hay que decidir**, porque son dos arreglos distintos y el barato no es
+nuestro: **(1)** en la web, que los enlaces que se publican lleven a donde está el
+formulario de profesionales —o ponerlo también en `/formularios/`, que es donde
+cae el tráfico de Instagram—, y así el CRM marca la ficha solo, sin tocar una
+línea de nuestro código; o **(2)** que aceptar una solicitud del módulo
+Formularios pueda poner la marca. La segunda es código y decisión de producto: hoy
+esa pantalla no pregunta nada de esto, y hay que elegir si se le añade la pregunta
+al formulario de pacientes o una casilla al aceptar.
 
-*Se comprueba*: entrar en tunutrilaura.com/citas/ como una profesional dada de
-alta y que «Supervisión profesional» aparezca y se pueda reservar. Y del lado del
-CRM, que la marca llegue sola por el camino que se elija, sin que Laura tenga que
-acordarse de la casilla.
+*Se comprueba*: rellenar el formulario de profesionales eligiendo «Nutricionista o
+profesional de la salud», que aparezca el lead con `customFields.profesionalSalud
+= true`, y que al convertirlo la ficha quede marcada sola y le salga «Supervisión
+profesional» en la agenda. Y por el otro lado, que un profesional que llegue por
+el enlace de Instagram tenga forma de decir que lo es.
 *Dónde*: `lib/clients/moduleAssignments.js:69` (`marcarProfesionalDesdeLead`) y su
 único llamante, `app/api/clients/route.js:331`; el filtro en
 `lib/citas/tiposVisibles.js` (`esSoloParaProfesionales`); el ajuste
@@ -185,9 +199,12 @@ acordarse de la casilla.
 `app/api/formularios/[id]/accept/route.js:117`. El botón, en la página
 `/servicios/` de su WordPress, fuera de este repo.
 *Comprobado en producción*: 17/08/2026 — 0 leads, 0 fichas con la marca y 0
-reservas de ese tipo; la ficha de quien avisó tiene solo `nutricion` con
-`{"auto":true}` y su solicitud aceptada. Y en la web: el botón «Reservar sesión de
-supervisión →» apunta a /citas/, y el único formulario que hay es el de pacientes.
+reservas de ese tipo; de las 81 solicitudes que han entrado, todas son de dos
+formularios (`registro-web` y `consulta`) y ninguna del de profesionales. La ficha
+de quien avisó tiene solo `nutricion` con `{"auto":true}`. Y en la web, leído del
+tema y del HTML servido: el shortcode manda bien la marca, el formulario está solo
+en `/contacto/`, `/formularios/` únicamente tiene el de pacientes, y el botón de
+`/servicios/` apunta a `/citas/`.
 
 ---
 
