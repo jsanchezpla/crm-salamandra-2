@@ -405,10 +405,12 @@ const navigation = [
 ];
 
 // Overrides de label de sidebar por tenant. Solo cambia el texto visible;
-// el moduleKey en BD/backend no se toca.
+// el moduleKey en BD/backend no se toca. (`sandbox` salió de aquí el
+// 18/08/2026 con su override de Leads: es el tenant local de pruebas «sin
+// override», y con la pantalla base diciendo «Leads Profesionales» un menú que
+// dijera «Interesados» sería una incoherencia gratuita.)
 const TENANT_LABEL_OVERRIDES = {
   aumenta: { leads: "Interesados" },
-  sandbox: { leads: "Interesados" },
 };
 
 /**

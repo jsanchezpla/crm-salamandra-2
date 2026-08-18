@@ -22,10 +22,11 @@
  *
  * ── DE QUÉ FALLO REAL NACE CADA BLOQUE ─────────────────────────────────────
  *
- * 1. PANTALLA EN BLANCO. Los seis overrides recorren su `STAGES` y desreferencian
+ * 1. PANTALLA EN BLANCO. Los overrides recorren su `STAGES` y desreferencian
  *    el estilo SIN defensa: `STAGE_STYLE[s.key].dot` en nutri-laura, retorika y
  *    spain-enzymes, y `const style = STAGE_STYLE[s.key]` + `style.dot` en
- *    aumenta, demo y sandbox. Una etapa en `STAGES` que no esté en `STAGE_STYLE`
+ *    aumenta (y en demo y sandbox, que eran copias suyas hasta el 18/08/2026).
+ *    Una etapa en `STAGES` que no esté en `STAGE_STYLE`
  *    no da un aviso: tira la pantalla entera con un TypeError, y `next build` no
  *    lo ve porque pasa al renderizar. Donde pintan `lead.stage` (el dato de BD)
  *    sí van defendidos con `?? STAGE_STYLE.new` — el agujero está justo en el
@@ -148,7 +149,10 @@ const overrides = slugs.map((dir) => {
 // ── 0. Meta: los ficheros dicen lo que esta prueba cree que dicen ────────────
 
 h(`Se han podido leer los ${slugs.length} overrides`);
-check("hay overrides que leer", slugs.length >= 5, `encontrados: ${slugs.join(", ") || "ninguno"}`);
+// El mínimo es 1 y no un número: la lista ENCOGE a propósito (CLAUDE.md, «En
+// Leads la pirámide está al revés»: demo y sandbox se fueron el 18/08/2026), y
+// una prueba que exija seis carpetas se pondría en rojo cada vez que se gane.
+check("hay overrides que leer", slugs.length >= 1, `encontrados: ${slugs.join(", ") || "ninguno"}`);
 for (const o of overrides) {
   check(
     `${o.dir}: se le lee el STAGES y el STAGE_STYLE`,
@@ -329,13 +333,12 @@ if (bMapa) {
 // compartida de estadísticas usan el rótulo canónico. Estas divergencias están
 // MEDIDAS contra el código, no copiadas de la memoria de nadie.
 
+// (`demo` y `sandbox` salieron el 18/08/2026 con sus overrides.)
 const DIVERGENCIAS_ACEPTADAS = {
   "nutri-laura": { consulta_agendada: 1, consulta_realizada: 1, paciente: 1 },
   "spain-enzymes": { new: 1 },
   aumenta: {},
-  demo: {},
   retorika: {},
-  sandbox: {},
 };
 
 h("Los rótulos que no coinciden con el Excel son los conocidos");

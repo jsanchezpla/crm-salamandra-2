@@ -30,8 +30,10 @@
  *     (`nutri-laura/FormacionOverview` se fue en 125ccf8 cuando Laura pasó al
  *     overview por defecto; `nutri-laura/NutricionFoodsModule` en 25c7771
  *     cuando Nutrición dejó de ser suya). Se movió el código, nadie tocó la fila.
- *   · 4 pantallas propias que SÍ existen y SÍ se cargan no tenían fila
+ *   · 4 pantallas propias que SÍ existían y SÍ se cargaban no tenían fila
  *     (demo, retorika y sandbox en Leads; nutri_laura en la ficha de cliente).
+ *     (Esa misma tarde se borraron los overrides de demo y sandbox, así que
+ *     el letrero de la demo volvió a cambiar: se relanzó este script.)
  *
  * ── CÓMO DECIDE QUÉ ES VERDAD ───────────────────────────────────────────────
  *

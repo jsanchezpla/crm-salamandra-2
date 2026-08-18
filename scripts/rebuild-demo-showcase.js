@@ -17,9 +17,10 @@
  * Uso VPS:    docker exec crm-salamandra-app-1 node scripts/rebuild-demo-showcase.js --confirm
  *
  * Nota leads: la UI de leads del demo la decide el SLUG en
- * app/(dashboard)/leads/page.jsx (DemoLeadsModule, estilo aumenta pero verde),
- * NO el campo tenant_modules.uiOverride. Por eso aquí no se toca override de
- * leads; lo que hace que se vea completa es que el seed llena sus campos
+ * app/(dashboard)/leads/page.jsx, NO el campo tenant_modules.uiOverride. Desde
+ * el 18/08/2026 la demo no tiene override: usa el módulo base (el de aumenta
+ * parametrizado, con el embudo por defecto). Por eso aquí no se toca override
+ * de leads; lo que hace que se vea completa es que el seed llena sus campos
  * (motivo, servicio, curso, taller, mensaje, tipo_usuario).
  */
 

@@ -114,21 +114,20 @@ Lee `x-tenant` del request, busca un override en un mapa
 
 ```jsx
 const UI_OVERRIDES = {
-  quality_energy: QECLeadsModule,
   retorika: RetorikaLeadsModule,
   aumenta: AumentaLeadsModule,
-  abarcaia: AbarcaIALeadsModule,
-  demo: DemoLeadsModule,
   spain_enzymes: SpainEnzymesLeadsModule,
   nutri_laura: NutriLauraLeadsModule,
 };
 ```
 
-`TenantModule.uiOverride` (campo registrado por los seeds) **no se
-consulta**: existe la columna en BD, los seeds escriben valores tipo
-`"quality-energy/LeadsModule"`, pero ningún componente la lee. Es
-infraestructura preparada para resolución dinámica que de momento se
-sustituye con `import` + `switch` en código. Ver "Incoherencias".
+(`quality_energy` y `abarcaia` se fueron con sus clientes el 12/08/2026;
+`demo` y `sandbox` el 18/08/2026, ver «Módulo base» más abajo.)
+
+`TenantModule.uiOverride` **no se consulta**: es un LETRERO que solo enseña
+`/admin/modulos`, y se mantiene fiel al código con
+`scripts/sincronizar-ui-override.mjs` (ver CLAUDE.md, «En Leads la pirámide
+está al revés»).
 
 Todos los overrides siguen el mismo patrón funcional (estado en React,
 panel lateral de detalle, debounced search, fetch a `/api/leads`); lo
@@ -146,9 +145,9 @@ que cambia es:
 
 | Slug | Líneas | Stages que muestra | `customFields` que lee | Particularidades |
 | --- | ---: | --- | --- | --- |
-| (base) | 80 | 7 estándar | ninguno | Tabla mínima sin filtros, sin edición, sin panel. Fallback. |
-| `aumenta` | 568 | `new`, `contacted`, `lost` | (ninguno extra; usa `motivo`/`servicio`/`curso`/`taller`/`mensaje` del modelo) | Filtro por `motivo`. Brand rosa `#FF1F96`. |
-| `demo` | 579 | `new`, `contacted`, `lost` | (ninguno extra; igual a aumenta) | Clon casi literal de `aumenta` sin brand. |
+| (base) | 775 | las que declare `lib/leads/embudos.js` (5 por defecto) | (usa `motivo`/`servicio`/`curso`/`taller`/`mensaje` del modelo) | **Es el de aumenta parametrizado** (18/08/2026): tarjetas por etapa, filtro por motivo, buscador, ofertas de empleo, panel lateral. Color de marca del tenant. Lo ven somos, gm_alvar_alonso y las cuatro demos. |
+| `aumenta` | 671 | `new`, `contacted`, `lost` | (ninguno extra; usa `motivo`/`servicio`/`curso`/`taller`/`mensaje` del modelo) | Filtro por `motivo`. Brand rosa `#FF1F96`. Idéntico al base salvo el color: se conserva a propósito. |
+| ~~`demo`~~ | — | — | — | **Borrado el 18/08/2026**: era una copia anterior del de aumenta sin nada propio. La demo usa el base con el embudo por defecto. |
 | `retorika` | 568 | `new`, `contacted`, `qualified`, `won`, `lost` | `mensaje` (con fallback al campo del modelo) | Sin import inline ni bulk. |
 | `spain-enzymes` | 1025 | `new`, `contacted`, `qualified`, `won`, `lost` | `empresa`, `pais`, `ciudad`, `asunto`, `prioridad` | CSV import inline, bulk ops, conversión a Cliente parcial (`company`, `country`, `city`, `topic`). Drawer en portal. |
 | `quality-energy` | 1744 | `new`, `contacted`, **`in_progress`**, **`demo_scheduled`**, **`demo_done`**, **`closed_yes`**, **`closed_no`** | `cargo`, `empresa_actual`, `zona`/`zone`, `linkedin`, `utmSource`, `utmMedium`, `utmCampaign` | Excluye en cliente los leads `referido_abarcaia`. Cargos `Autónomo`/`Trabajador por cuenta ajena`. CSV import. Bulk ops. **PATCH de stage falla silencioso** (ver bug). |
@@ -157,15 +156,31 @@ que cambia es:
 
 ### Módulo base — `modules/leads/LeadsModule.jsx`
 
-Tabla simple con cuatro columnas (Nombre/Título, Email, Teléfono,
-Estado). Las etiquetas de etapa las importa de `lib/leads/stages.js`,
-la fuente única que ya usan el PATCH, el import y el export (hasta el
-10/08/2026 tenía su propia copia, desincronizada: decía «Cualificado /
-Ganado / Perdido» donde la fuente dice «En seguimiento / Convertido /
-Descartado»). Fetch a `/api/leads` sin filtros. Sin edición, sin panel,
-sin import. Sirve únicamente como fallback si el slug del tenant no
-está en `UI_OVERRIDES`: hoy no lo renderiza nadie, porque todos los
-tenants con `leads` tienen su entrada en el mapa.
+**Desde el 18/08/2026 es el override de aumenta promocionado y
+parametrizado** (antes era una tabla de 94 líneas sin filtros ni panel que
+veían, en producción, somos, gm_alvar_alonso y las tres demos por oficio: los
+clientes más nuevos tenían la peor pantalla). Recibe de la página tres props:
+
+- `stages` — el embudo del tenant, resuelto en el servidor con
+  `etapasDe(slug)` de `lib/leads/embudos.js` (`EMBUDO_POR_DEFECTO` = las
+  cinco estándar para quien no tenga override) y rotulado con `STAGE_LABELS`.
+- `titulo` y `sujeto` — «Leads Profesionales» / «leads» salvo
+  `TENANT_TITLE_OVERRIDES` («Interesados» en aumenta).
+
+El color sale de `var(--color-primary)` (la marca del tenant) y
+`color-mix` para los tonos, así que no lleva ningún hex de nadie. Lo que
+añade sobre el override de aumenta: estilo para las 15 etapas canónicas con
+gris de fallback, aviso ámbar en el panel si el lead está en una etapa que
+el embudo no ofrece, bloque «Mensaje» para leads sin motivo, botón «Ofertas
+de empleo» solo si hay alguna, panel bajo la barra móvil (regla 13) y el
+tooltip del tope de 200. Lo vigila `scripts/_smoke-leads-etapas.mjs`.
+
+**La demo lo usa desde el 18/08/2026** con el embudo por defecto (cinco
+etapas): es el escaparate, y enseña lo que verá quien compre. Su override
+—una copia anterior del de aumenta— y el de `sandbox` —la misma recoloreada,
+para un tenant que no existe en ningún entorno— se borraron ese día sin
+tocar un dato: los dos llamaban a los mismos tres endpoints con los mismos
+cuerpos que el base.
 
 ### Override `aumenta` — `modules/overrides/aumenta/LeadsModule.jsx`
 
@@ -178,14 +193,6 @@ campos legacy del modelo (`tipo_usuario`, `motivo`, `servicio`,
 público. Un helper `getDetalle(lead)` decide qué texto mostrar según
 `motivo`. Filtro adicional `?motivo=` que viaja al backend (lo soporta
 `GET /api/leads`).
-
-### Override `demo` — `modules/overrides/demo/LeadsModule.jsx`
-
-Tenant interno de pruebas. **Es prácticamente una copia del override
-`aumenta`** (mismos stages, mismo `MOTIVO_LABEL`, mismo
-`getDetalle`, misma estructura), sin la paleta rosa. Útil para
-demostraciones a clientes interesados en el caso de uso "centro de
-formación".
 
 ### Override `retorika` — `modules/overrides/retorika/LeadsModule.jsx`
 
@@ -485,7 +492,7 @@ Cada tenant tiene su propio seed que crea schema, fila en
 | `aumenta` | `seed-aumenta.js` | `aumenta/LeadsModule` | `["leads"]` | ~40 |
 | `quality_energy` | `seed-quality-energy.js` | `quality-energy/LeadsModule` | `["leads"]` | ~40 (stages estándar; el override pinta otros) |
 | `abarcaia` | `seed-abarcaia.js` | `abarcaia/LeadsModule` | `["leads", "referidos"]` | 0 (datos vienen de import o público) |
-| `demo` | `seed-demo.js` + `add-leads-module-demo.js` | `demo/LeadsModule` | `["clients", "leads", ...]` | 35 |
+| `demo` | `seed-demo.js` + `add-leads-module-demo.js` | (ninguno desde el 18/08/2026: usa el base) | `["clients", "leads", ...]` | 35 |
 | `spain_enzymes` | `seed-spain-enzymes.js` (+ `seed-spain-enzymes-data.js`) | `spain-enzymes/LeadsModule` | `["leads"]` | variable |
 
 Los slugs en `master.tenants` que llevan más de una palabra usan
@@ -536,8 +543,9 @@ Detectado durante la documentación (en orden vagamente sugerido):
   útil para alertas de stage `won` o `closed_yes`).
 - **Asociación Sequelize `Lead.belongsTo(TeamMember, ...)`** para
   filtrar y validar `assignedTo`.
-- **Eliminar el override `demo`** o convertirlo en un alias de
-  `aumenta` (es prácticamente idéntico).
+- ~~**Eliminar el override `demo`** o convertirlo en un alias de
+  `aumenta` (es prácticamente idéntico).~~ Hecho el 18/08/2026: borrado, y
+  la demo usa el base.
 - **Mover `ReferidosModule.jsx`** de
   `modules/overrides/quality-energy/` a
   `modules/overrides/abarcaia/` para que coincida con el tenant que
@@ -673,5 +681,5 @@ Documentadas como tareas concretas para iteraciones futuras:
 
 - **Conversión de lead `won` a `Client` o `Project`** automática.
 
-- **Eliminar el override `demo`** o convertirlo en alias de `aumenta`
-  (es prácticamente idéntico).
+- ~~**Eliminar el override `demo`** o convertirlo en alias de `aumenta`
+  (es prácticamente idéntico).~~ Hecho el 18/08/2026.

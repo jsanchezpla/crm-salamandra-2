@@ -298,8 +298,12 @@ export default function LeadsModule({ stages, titulo = "Leads Profesionales", su
                 { value: "", label: "Todos los motivos" },
                 ...Object.entries(MOTIVO_LABEL).map(([k, v]) => ({ value: k, label: v })),
               ]}
-              className="lg:w-52 px-4 py-2.5 rounded-xl border bg-white text-gray-700 font-medium focus:outline-none text-sm shadow-sm transition-colors"
-              style={{ borderColor: filtroMotivo ? COLOR_MARCA : "#e5e7eb" }}
+              // Por CLASES y no por `style`: `Select` no acepta esa prop (se
+              // perdía en silencio y el borde salía en currentColor). Con la
+              // clase arbitraria el color de marca llega igual.
+              className={`lg:w-52 px-4 py-2.5 rounded-xl border ${
+                filtroMotivo ? "border-[var(--color-primary)]" : "border-gray-200"
+              } bg-white text-gray-700 font-medium focus:outline-none text-sm shadow-sm transition-colors`}
             />
 
             {hayEmpleo && (
