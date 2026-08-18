@@ -385,6 +385,18 @@ aplique.
 > - El objetivo es un módulo base digno que lean todos los clientes nuevos, no
 >   borrar carpetas.
 >
+> **Lo que ya encogió** (18/08/2026, misma tarde): el base de Leads pasó a ser
+> el de aumenta parametrizado, y con eso los overrides de `demo` y `sandbox`
+> —copias del de aumenta sin nada propio— se borraron; la demo enseña el embudo
+> por defecto (cinco etapas). Aumenta conserva el suyo a propósito: lo único
+> que la separa del base es el rosa `#FF1F96`, y no se le cambia sin que lo
+> pida. Y los tres paneles de la ficha de Laura (Historia clínica, Documentos,
+> Sesiones) pasaron a `components/clients/`; el base los monta por módulos
+> según `lib/clients/piezasFicha.js` —**Aumenta no gana ninguno**, decisión de
+> Jorge— y la ficha de Laura los importa de ahí con sus palabras de siempre.
+> Quedan cuatro overrides de Leads (aumenta, nutri-laura, retorika,
+> spain-enzymes) y la ficha de Laura, que ya es cabecera + tarjeta + pestañas.
+>
 > **La columna `ui_override` de `master.tenant_modules` es un LETRERO**: el
 > código no la lee (la pantalla se elige con el mapa `UI_OVERRIDES` por slug de
 > cada página); solo la enseña `/admin/modulos`. Se mantiene fiel con

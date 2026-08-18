@@ -335,10 +335,37 @@ consentimientos y las citas.
 | --- | --- | --- |
 | **Datos** | Datos del cliente (vista/edición) · Contactos · Datos fiscales · Acceso a la web | quién es y cómo se le escribe |
 | **Interacciones** | Historial de interacciones | qué se ha hablado con esta persona |
+| **Notas** / **Historia clínica** ⁽¹⁾ | Entradas de texto con autor y fecha (`client_notes`) | el diario de esta persona |
 | **Servicio** | Módulos asignados · Pacientes · Consulta externa · Profesional de referencia | qué se le presta y quién se lo presta |
 | **Contrato y avisos** | Tutores · Contrato · Comunicaciones · Meses del portal | qué ha firmado y qué ha consentido |
-| **Citas** | Sus citas | su agenda |
+| **Documentos** ⁽¹⁾ | Sus ficheros (`client_attachments`), «que lo vea en su portal», firmas documento a documento | sus papeles |
+| **Citas** | Interruptor de autoconfirmar · Bonos · y, ⁽¹⁾, la lista de sus citas con Confirmar/Rechazar | su agenda |
+| **Pautas** | El menú que sigue (solo con `nutricion`) | qué come |
 | **Facturación** | Resumen y facturas | su dinero |
+
+⁽¹⁾ **Las tres piezas que vinieron de la ficha de Laura (18/08/2026).**
+Vivían en `modules/overrides/nutri-laura/` sobre tablas y endpoints que tiene
+TODO el mundo (`client_notes`, `client_attachments`, `bookings`; gateados solo
+por `clients` y `citas`). Pasaron a `components/clients/` (`ClientNotesPanel`,
+`ClientAttachmentsPanel`, `ClientBookingsPanel`) y las monta esta ficha **para
+quien diga `lib/clients/piezasFicha.js`**, por módulos y con la condición
+negativa como en `vocabulario.js`:
+
+| Pieza | Se monta si | Por qué la negativa |
+| --- | --- | --- |
+| Notas / Historia clínica | `clients` y **no** `clinica` | en un centro clínico la historia clínica son las sesiones e informes del módulo `clinica`, no notas en la ficha de la familia |
+| Documentos | `clients` y **no** `documents_avanzado` | el archivo avanzado ya cuelga cada fichero de su ficha (`documents.client_id`) |
+| Lista de citas | `citas` y **no** `clinica` | un centro clínico ya llama «Sesiones» a `clinic_sessions`; y **Aumenta no cambia** (decisión de Jorge, 18/08/2026) |
+
+Con eso, en producción: aumenta, somos y `demo` **no ven ninguna** (misma
+forma que hoy); `demo_nutricion` ve las tres y las llama Historia clínica /
+Documentos / Sesiones del paciente (vocabulario de paciente); `demo_agencia`,
+`gm_alvar_alonso`, `retorika`, `spain_enzymes` y `salamandra_solutions` ven
+Notas y Documentos; `demo_clinica` solo Documentos. Lo vigila
+`scripts/_smoke-piezas-ficha.mjs` (`npm test`), que tiene escrita la forma de
+Aumenta y falla si gana una pestaña. Los textos («el cliente» / «el paciente»)
+salen de `textosPiezas(vocab)` y llegan a los paneles por la prop `textos`; la
+página lo resuelve todo de una vez con `fichaSegunModulos(tieneModulo)`.
 
 El patrón (pestañas + `TabButton`) es el que ya usaba nutri_laura; aquí no se
 inventó nada, se generalizó.
@@ -378,10 +405,18 @@ claves, paneles, tablas y endpoints siguen siendo los de siempre —
 | Tab | Componente | Endpoints leídos | Notas |
 |---|---|---|---|
 | Datos (antes "Información") | `PatientCard` + delete inline | `GET/PUT/DELETE /api/clients/:id` | Edición inline; `editMode`/`editForm` viven en el padre para sobrevivir cambios de tab |
-| Historia clínica (antes "Notas") | `ClientNotesPanel.jsx` | `GET/POST /api/clients/:id/notes`, `DELETE /api/clients/:id/notes/:noteId` | Paginación incremental "Cargar más" (limit 50). Sin restricción de borrado por autor (Laura es única usuaria) |
-| Documentos (antes "Adjuntos") | `ClientAttachmentsPanel.jsx` | `GET/POST /api/clients/:id/attachments`, `DELETE`, `GET .../download` | Drop zone + validación frontend (PDF, ≤10MB, ≤50 archivos) |
-| Sesiones (antes "Citas") | `ClientBookingsPanel.jsx` | `GET /api/citas/bookings?clientId=&clientEmail=`, `PATCH .../confirm`, `PATCH .../reject` | En la consulta cada cita ES una sesión de seguimiento. Confirm/Reject inline para `pending` con mini-modal opcional para motivo |
-| Pautas (antes "Plan") | `ClientPlansPanel.jsx` | `GET /api/clients/:id/plans`, `POST /api/nutricion/plans/:id/reapply-template` | Plan activo + histórico archivado (Recetario C4) |
+| Historia clínica (antes "Notas") | `components/clients/ClientNotesPanel.jsx` ⁽²⁾ | `GET/POST /api/clients/:id/notes`, `DELETE /api/clients/:id/notes/:noteId` | Paginación incremental "Cargar más" (limit 50). Sin restricción de borrado por autor (Laura es única usuaria) |
+| Documentos (antes "Adjuntos") | `components/clients/ClientAttachmentsPanel.jsx` ⁽²⁾ | `GET/POST /api/clients/:id/attachments`, `DELETE`, `GET .../download`, `PATCH` (visibilidad), `GET /contract` (firmas) | Drop zone + validación frontend (cualquier tipo, ≤25MB, ≤50 archivos); «que la paciente lo vea»; tarjeta Firmas |
+| Sesiones (antes "Citas") | `components/clients/ClientBookingsPanel.jsx` ⁽²⁾ | `GET /api/citas/bookings?clientId=&clientEmail=`, `PATCH .../confirm`, `PATCH .../reject` | En la consulta cada cita ES una sesión de seguimiento. Confirm/Reject inline para `pending` con mini-modal opcional para motivo |
+| Pautas (antes "Plan") | `ClientPlansPanel.jsx` (`modules/nutricion/`) | `GET /api/clients/:id/plans`, `POST /api/nutricion/plans/:id/reapply-template` | Plan activo + histórico archivado (Recetario C4) |
+
+⁽²⁾ **Desde el 18/08/2026 los tres paneles son compartidos** (ver la ficha
+default, arriba): esta ficha los importa de `components/clients/` y les pasa
+sus palabras de siempre por la prop `textos` (`TEXTOS_LAURA`: «la paciente»,
+«Sesiones del paciente»…), así que Laura ve lo mismo que veía. Lo que queda de
+propio en `modules/overrides/nutri-laura/ClientDetailModule.jsx` es la
+cabecera de paciente (edad, DNI, contacto, lead de origen), la tarjeta de
+datos con su edición y el reparto en cinco pestañas.
 
 **Permisos**: el detalle hace gate por `me.role ∈ {admin, superadmin, employee}`
 fetcheando `/api/auth/me` al montar. Sin rol válido → "Sin acceso".
@@ -390,12 +425,13 @@ fetcheando `/api/auth/me` al montar. Sin rol válido → "Sin acceso".
 seguimiento…), edad/email/teléfono inline, link "↳ Lead origen" si
 `client.leadId` (o `customFields.leadId` por compat).
 
-**`InteractionsLegacySection`**: archivado en
+**`InteractionsLegacySection`**: estuvo archivado en
 `modules/overrides/nutri-laura/_InteractionsLegacySection.jsx` (con prefijo
-`_` para indicar no-importado). La tabla `interactions` no existe en
-`crm_nutri_laura`, así que la sección desapareció del tab Información. Si
-en el futuro se decide crearla, restaurar el import. El backend
-`GET /api/clients/:id` tolera la tabla missing con try/catch del 42P01 —
+`_` para indicar no-importado) y **se borró el 18/08/2026**: nadie lo importaba
+desde junio, y su equivalente vivo es la tarjeta «Historial de interacciones»
+de la ficha default. La tabla `interactions` no existe en `crm_nutri_laura`
+(ni en `crm_retorika`), así que la sección desapareció del tab Información. El
+backend `GET /api/clients/:id` tolera la tabla missing con try/catch del 42P01 —
 otros tenants donde la tabla SÍ existe siguen recibiendo el array poblado
 para el default module.
 

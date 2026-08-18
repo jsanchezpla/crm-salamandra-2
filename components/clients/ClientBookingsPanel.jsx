@@ -1,7 +1,16 @@
 "use client";
 
 /**
- * ClientBookingsPanel — tab "Citas" del detalle de paciente (nutri_laura).
+ * ClientBookingsPanel — las citas de esa persona dentro de su ficha, con
+ * Confirmar y Rechazar desde ahí mismo.
+ *
+ * Nació en `modules/overrides/nutri-laura/` como pestaña «Sesiones» de la
+ * ficha de Laura. Pasó aquí el 18/08/2026 (CLAUDE.md, «En Leads la pirámide
+ * está al revés»): los endpoints de `bookings` son de todo el que tenga Citas,
+ * y solo una ficha los enseñaba. Lo montan la ficha por defecto —para quien
+ * decida `lib/clients/piezasFicha.js`; en un centro clínico no, que ya llama
+ * «Sesiones» a otra cosa— y la de Laura, cada una con sus palabras por
+ * `textos`.
  *
  * Funcionalidad:
  *   - GET /api/citas/bookings?clientEmail=:email&limit=50 — el backend filtra
@@ -67,7 +76,15 @@ function statusMeta(b) {
   }
 }
 
-export default function ClientBookingsPanel({ clientId, clientEmail }) {
+/** Las palabras por defecto: las de un cliente cualquiera. */
+const TEXTOS_POR_DEFECTO = {
+  titulo: "Citas de este cliente",
+  vacio: "Este cliente no tiene citas registradas.",
+  avisoRechazo: "El cliente recibirá un email automático con tu motivo (si lo escribes).",
+};
+
+export default function ClientBookingsPanel({ clientId, clientEmail, textos: textosProp }) {
+  const textos = { ...TEXTOS_POR_DEFECTO, ...(textosProp ?? {}) };
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -175,7 +192,7 @@ export default function ClientBookingsPanel({ clientId, clientEmail }) {
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden max-w-4xl">
       <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-semibold text-gray-700">Sesiones del paciente</div>
+          <div className="text-sm font-semibold text-gray-700">{textos.titulo}</div>
           <div className="text-[11px] text-gray-400 mt-0.5">
             {clientId
               ? <>Citas enlazadas a esta ficha{clientEmail ? <> y a <span className="font-mono">{clientEmail}</span></> : null}</>
@@ -228,7 +245,7 @@ export default function ClientBookingsPanel({ clientId, clientEmail }) {
           </ul>
         ) : bookings.length === 0 && !error ? (
           <div className="py-10 text-center text-xs text-gray-400">
-            Este paciente no tiene citas registradas.
+            {textos.vacio}
           </div>
         ) : (
           <>
@@ -369,14 +386,15 @@ export default function ClientBookingsPanel({ clientId, clientEmail }) {
         )}
       </div>
 
-      {/* Modal inline "Razón del rechazo" — NO usa lib externa */}
+      {/* Modal inline "Razón del rechazo" — NO usa lib externa. z-50: la
+          escala de la regla 13 (iba a z-[90] cuando era solo de Laura). */}
       {rejectFor && (
-        <div className="fixed inset-0 bg-black/40 z-[90] flex items-end sm:items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col">
             <div className="px-5 py-3.5 border-b border-gray-100">
               <h3 className="text-sm font-semibold text-gray-900">Rechazar cita</h3>
               <p className="text-[11px] text-gray-500 mt-0.5">
-                El paciente recibirá un email automático con tu motivo (si lo escribes).
+                {textos.avisoRechazo}
               </p>
             </div>
             <div className="p-5">

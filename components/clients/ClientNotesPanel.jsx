@@ -1,12 +1,16 @@
 "use client";
 
 /**
- * ClientNotesPanel — tab "Historia clínica" del detalle de paciente (nutri_laura).
+ * ClientNotesPanel — la pestaña «Notas» / «Historia clínica» de la ficha.
  *
- * Se llamaba "Notas"; para Laura estas anotaciones SON el seguimiento clínico,
- * así que se renombró la UI. Por dentro NO cambia nada: misma tabla
- * `client_notes`, mismos endpoints /api/clients/:id/notes y misma clave de tab
- * (`notes`). El resto de tenants sigue viendo "Notas" (modules/default/).
+ * Nació en `modules/overrides/nutri-laura/` como pestaña de la ficha de Laura,
+ * donde estas anotaciones SON el seguimiento clínico. Pasó aquí el 18/08/2026
+ * (CLAUDE.md, «En Leads la pirámide está al revés»): la tabla `client_notes` y
+ * los endpoints /api/clients/:id/notes son de TODOS los clientes desde el
+ * principio, y solo una ficha los usaba. Ahora lo montan la ficha por defecto
+ * —para quien decida `lib/clients/piezasFicha.js`— y la de Laura, cada una con
+ * sus palabras: el panel no sabe si habla de un cliente o de una paciente,
+ * se lo dicen por `textos`.
  *
  * Funcionalidad:
  *   - GET /api/clients/:id/notes paginado (limit 50 por página, incremental).
@@ -28,11 +32,20 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import TimestampRelative from "../../../components/ui/TimestampRelative.jsx";
+import TimestampRelative from "../ui/TimestampRelative.jsx";
 
 const PAGE_LIMIT = 50;
 
-export default function ClientNotesPanel({ clientId }) {
+/** Las palabras por defecto: las de un cliente cualquiera. */
+const TEXTOS_POR_DEFECTO = {
+  titulo: "Nueva nota",
+  placeholder: "Lo que conviene recordar de este cliente… (uso interno, no lo ve el cliente)",
+  boton: "Añadir nota",
+  vacio: "Todavía no hay notas. Escribe la primera arriba.",
+};
+
+export default function ClientNotesPanel({ clientId, textos: textosProp }) {
+  const textos = { ...TEXTOS_POR_DEFECTO, ...(textosProp ?? {}) };
   const [notes, setNotes] = useState([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -127,7 +140,7 @@ export default function ClientNotesPanel({ clientId }) {
       {/* Composer */}
       <div className="px-5 py-4 border-b border-gray-100">
         <div className="text-sm font-semibold text-gray-700 mb-2">
-          Nueva entrada de historia clínica
+          {textos.titulo}
         </div>
         {submitError && (
           <div className="px-3 py-2 mb-2 bg-red-50 border border-red-100 rounded-md text-xs text-red-700">
@@ -138,7 +151,7 @@ export default function ClientNotesPanel({ clientId }) {
           value={content}
           onChange={(e) => setContent(e.target.value)}
           rows={3}
-          placeholder="Evolución, observaciones, acuerdos de la sesión… (uso interno, no lo ve la paciente)"
+          placeholder={textos.placeholder}
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] resize-none placeholder:text-gray-300"
         />
         <div className="flex justify-end mt-2">
@@ -147,7 +160,7 @@ export default function ClientNotesPanel({ clientId }) {
             disabled={!content.trim() || saving}
             className="bg-[var(--color-primary)] hover:opacity-90 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-opacity disabled:opacity-40"
           >
-            {saving ? "Guardando…" : "Añadir entrada"}
+            {saving ? "Guardando…" : textos.boton}
           </button>
         </div>
       </div>
@@ -179,7 +192,7 @@ export default function ClientNotesPanel({ clientId }) {
           </ul>
         ) : notes.length === 0 && !error ? (
           <div className="py-10 text-center text-xs text-gray-400">
-            La historia clínica está vacía. Escribe la primera entrada arriba.
+            {textos.vacio}
           </div>
         ) : (
           <ul className="divide-y divide-gray-50">

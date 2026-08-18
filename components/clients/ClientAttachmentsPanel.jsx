@@ -1,8 +1,16 @@
 "use client";
 
 /**
- * ClientAttachmentsPanel — tab "Adjuntos" del detalle de paciente
- * (nutri_laura). PDFs subidos asociados al cliente.
+ * ClientAttachmentsPanel — la pestaña «Documentos» de la ficha: los ficheros
+ * de esa persona, y las firmas documento a documento.
+ *
+ * Nació en `modules/overrides/nutri-laura/` como pestaña de la ficha de Laura.
+ * Pasó aquí el 18/08/2026 (CLAUDE.md, «En Leads la pirámide está al revés»):
+ * la tabla `client_attachments` y sus endpoints son de TODOS los clientes, y
+ * solo una ficha los usaba. Lo montan la ficha por defecto —para quien decida
+ * `lib/clients/piezasFicha.js`; en un centro con `documents_avanzado` no, que
+ * ya tiene el archivo por otro lado— y la de Laura, cada una con sus palabras
+ * por `textos` («el cliente» / «la paciente»).
  *
  * Funcionalidad:
  *   - GET    /api/clients/:id/attachments
@@ -25,11 +33,20 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import TimestampRelative from "../../../components/ui/TimestampRelative.jsx";
+import TimestampRelative from "../ui/TimestampRelative.jsx";
 
 const MAX_FILE_MB = 25;
 const MAX_FILES = 50;
 // Archivo central (2026-07-23): se acepta cualquier tipo de fichero.
+
+/** Las palabras por defecto: las de un cliente cualquiera. */
+const TEXTOS_POR_DEFECTO = {
+  limite: "archivos por cliente",
+  loSubio: "Lo subió el cliente",
+  loVe: "El cliente lo ve",
+  queLoVea: "Que el cliente lo vea",
+  faltaFirma: "el cliente",
+};
 
 function fmtBytes(bytes) {
   if (bytes == null) return "—";
@@ -38,7 +55,8 @@ function fmtBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function ClientAttachmentsPanel({ clientId }) {
+export default function ClientAttachmentsPanel({ clientId, textos: textosProp }) {
+  const textos = { ...TEXTOS_POR_DEFECTO, ...(textosProp ?? {}) };
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -79,7 +97,7 @@ export default function ClientAttachmentsPanel({ clientId }) {
       return `Archivo demasiado grande: ${(file.size / (1024 * 1024)).toFixed(1)} MB · máximo ${MAX_FILE_MB} MB.`;
     }
     if (items.length >= MAX_FILES) {
-      return `Límite alcanzado: ${MAX_FILES} archivos por paciente.`;
+      return `Límite alcanzado: ${MAX_FILES} ${textos.limite}.`;
     }
     return null;
   }
@@ -172,7 +190,7 @@ export default function ClientAttachmentsPanel({ clientId }) {
 
   return (
     <div className="space-y-4 max-w-3xl">
-    <FirmasPendientes clientId={clientId} />
+    <FirmasPendientes clientId={clientId} faltaFirma={textos.faltaFirma} />
 
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       {/* Cabecera */}
@@ -292,12 +310,13 @@ export default function ClientAttachmentsPanel({ clientId }) {
                       )}
                       {a.uploadedByClient && (
                         <span className="ml-1 px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 font-medium">
-                          Lo subió la paciente
+                          {textos.loSubio}
                         </span>
                       )}
                     </div>
-                    {/* Visibilidad para la paciente. Lo que sube ella lo ve
-                        siempre (es suyo), así que ahí no hay interruptor. */}
+                    {/* Visibilidad para la persona de la ficha. Lo que sube
+                        ella lo ve siempre (es suyo), así que ahí no hay
+                        interruptor. */}
                     <div className="mt-1">
                       {a.uploadedByClient ? (
                         <span className="text-[11px] text-gray-400">Lo ve en su perfil</span>
@@ -311,7 +330,7 @@ export default function ClientAttachmentsPanel({ clientId }) {
                             className="rounded border-gray-300 text-[var(--color-primary)] focus:ring-[var(--color-primary)] w-3.5 h-3.5"
                           />
                           {a.clientVisible ? (
-                            <span className="text-emerald-700 font-medium">La paciente lo ve</span>
+                            <span className="text-emerald-700 font-medium">{textos.loVe}</span>
                           ) : (
                             <span>Solo para ti</span>
                           )}
@@ -371,9 +390,9 @@ export default function ClientAttachmentsPanel({ clientId }) {
               placeholder="Ej. Contrato firmado, Analítica…"
               className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm"
             />
-            {/* ¿Se comparte con la paciente? Va aquí, en el mismo gesto de
-                subir, para que sea una decisión consciente y no un ajuste que
-                haya que recordar después. Desmarcado por defecto. */}
+            {/* ¿Se comparte con la persona de la ficha? Va aquí, en el mismo
+                gesto de subir, para que sea una decisión consciente y no un
+                ajuste que haya que recordar después. Desmarcado por defecto. */}
             <label className="mt-3 flex items-start gap-2 rounded-lg border border-gray-200 px-3 py-2.5 cursor-pointer select-none hover:bg-gray-50">
               <input
                 type="checkbox"
@@ -383,7 +402,7 @@ export default function ClientAttachmentsPanel({ clientId }) {
               />
               <span className="min-w-0">
                 <span className="block text-xs font-medium text-gray-700">
-                  Que la paciente lo vea
+                  {textos.queLoVea}
                 </span>
                 <span className="block text-[11px] text-gray-500 leading-snug mt-0.5">
                   {pendingVisible
@@ -420,7 +439,7 @@ export default function ClientAttachmentsPanel({ clientId }) {
 }
 
 /**
- * FirmasPendientes — qué documentos ha firmado esta paciente y cuáles no
+ * FirmasPendientes — qué documentos ha firmado esta persona y cuáles no
  * (06/08/2026, Rodrigo).
  *
  * La ficha decía «1 de 2 firmas» y poco más: con el contrato, sus tres anexos
@@ -432,7 +451,7 @@ export default function ClientAttachmentsPanel({ clientId }) {
  * papeleo. No se pinta nada si el centro no usa contrato: sin documentos que
  * firmar, una sección vacía solo estorba.
  */
-function FirmasPendientes({ clientId }) {
+function FirmasPendientes({ clientId, faltaFirma = "el cliente" }) {
   const [estado, setEstado] = useState(null);
 
   useEffect(() => {
@@ -477,7 +496,7 @@ function FirmasPendientes({ clientId }) {
                 </div>
               ) : (
                 <div className="text-[11px] text-amber-700 mt-0.5">
-                  Falta la firma de {d.faltaPor.join(" y ") || "la paciente"}
+                  Falta la firma de {d.faltaPor.join(" y ") || faltaFirma}
                 </div>
               )}
 
