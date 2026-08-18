@@ -245,18 +245,43 @@ if (ganados && perdidos && cerradosPortada) {
 
 // ── 5. El módulo por defecto no vuelve a tener sus propias etiquetas ────────
 // El fallo 5, que ya pasó el 10/08/2026.
+//
+// Desde el 18/08/2026 el módulo base es el de aumenta promocionado, y ya NI
+// SIQUIERA importa las etiquetas: las recibe por props desde la página, que
+// es quien las resuelve con `etapasDe()` (embudos.js) + `STAGE_LABELS`
+// (stages.js). Así que lo que se vigila es lo mismo —una sola fuente— pero se
+// mira en dos sitios: que el módulo no tenga copia propia, y que la página se
+// las dé desde /lib.
 
 h("El módulo por defecto sigue sin copia propia de las etiquetas");
 const txtDefault = leer("modules/leads/LeadsModule.jsx");
+const txtPaginaLeads = leer("app/(dashboard)/leads/page.jsx");
 check(
-  "importa STAGE_LABELS de lib/leads/stages.js",
-  /import\s*\{[^}]*STAGE_LABELS[^}]*\}\s*from\s*["'][^"']*lib\/leads\/stages\.js["']/.test(txtDefault),
+  "el módulo no declara ningún STAGE_LABELS ni STAGES propio",
+  !/^const (STAGE_LABELS|STAGES)\s*=/m.test(txtDefault),
+  "ha vuelto a tener su propia lista: es la regresión del 10/08/2026"
+);
+check(
+  "el módulo recibe las etapas por props (stages) y no las importa",
+  /export default function LeadsModule\(\{[^}]*\bstages\b/.test(txtDefault) &&
+    !/from\s*["'][^"']*lib\/leads\/stages\.js["']/.test(txtDefault),
+  "si importa stages.js o no recibe `stages`, ha dejado de ser el módulo parametrizado"
+);
+check(
+  "la página resuelve las etapas con etapasDe() de embudos.js",
+  /import\s*\{[^}]*\betapasDe\b[^}]*\}\s*from\s*["'][^"']*lib\/leads\/embudos\.js["']/.test(txtPaginaLeads) &&
+    /etapasDe\(tenantSlug\)/.test(txtPaginaLeads),
+  "sin eso el módulo base pintaría un embudo que el servidor no conoce"
+);
+check(
+  "y los rótulos con STAGE_LABELS de stages.js",
+  /import\s*\{[^}]*STAGE_LABELS[^}]*\}\s*from\s*["'][^"']*lib\/leads\/stages\.js["']/.test(txtPaginaLeads),
   "sin ese import volvería a pintar etiquetas distintas de las del Excel"
 );
 check(
-  "y no declara ningún STAGE_LABELS ni STAGES propio",
-  !/^const (STAGE_LABELS|STAGES)\s*=/m.test(txtDefault),
-  "ha vuelto a tener su propia lista: es la regresión del 10/08/2026"
+  "y se las pasa al módulo",
+  /<LeadsModule\s[^>]*\bstages=\{stages\}/.test(txtPaginaLeads),
+  "el módulo base recibiría `stages` undefined y reventaría al montar"
 );
 
 // ── 6. El cableado de page.jsx ──────────────────────────────────────────────
@@ -386,6 +411,35 @@ for (const o of legibles) {
     declarado.length === enElComponente.length && declarado.every((k, i) => k === enElComponente[i]),
     `el componente ofrece [${enElComponente.join(", ")}] y embudos.js dice ` +
       `[${declarado.join(", ")}] para '${slug}' — si son las 15 canónicas, es que esa clave no está`
+  );
+}
+
+// Y el embudo POR DEFECTO, el que ve un cliente sin override (18/08/2026):
+// cinco etapas, todas canónicas, con una de ganado dentro — que es lo que hace
+// que «Convertidos» le salga a un cliente nuevo en /leads/estadisticas. Si
+// alguien lo deja en las 15 de ALLOWED_STAGES, el módulo base pinta quince
+// tarjetas y esto lo dice.
+{
+  const porDefecto = etapasDe("__cliente_sin_override__");
+  check(
+    `el embudo por defecto tiene entre 3 y 7 etapas (${porDefecto.length})`,
+    porDefecto.length >= 3 && porDefecto.length <= 7,
+    `tiene ${porDefecto.length}: ${porDefecto.join(", ")}`
+  );
+  check(
+    "y todas son canónicas",
+    porDefecto.every((k) => ALLOWED_STAGES.includes(k)),
+    porDefecto.filter((k) => !ALLOWED_STAGES.includes(k)).join(", ")
+  );
+  check(
+    "y tiene una etapa de ganado (para que «Convertidos» le salga a un cliente nuevo)",
+    porDefecto.some((k) => GANADAS.has(k)),
+    `sin ganado, /leads/estadisticas taparía «Convertidos» a todo cliente nuevo`
+  );
+  check(
+    "y termina en una de perdido",
+    porDefecto.some((k) => PERDIDAS.has(k)),
+    "sin descartado no hay forma de sacar a nadie del embudo"
   );
 }
 
