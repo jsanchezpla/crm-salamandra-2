@@ -361,6 +361,37 @@ aplique.
 > `modules/overrides/{slug}/` se reservan para cuando un tenant se desvía DE VERDAD
 > del default (UI o lógica propia), no para el comportamiento base del módulo.
 
+> ⚠️ **En Leads la pirámide está al revés, y hay que dejar de alimentarla**
+> (Jorge, 18/08/2026). Medido ese día: el módulo base de Leads tiene 94 líneas
+> y es una tabla pobre; cada uno de los seis overrides tiene entre 600 y 1.060,
+> y son el producto de verdad, copiado seis veces. El comentario del base decía
+> «hoy no lo ve nadie» — ya no es cierto: en producción lo ven `somos`,
+> `gm_alvar_alonso` y las tres demos por oficio. **Los clientes más nuevos ven
+> la peor pantalla.** Y `overrides/nutri-laura/` (6 ficheros, 3.855 líneas, 41
+> commits en un mes) no es un override: es la ficha de cliente entera.
+>
+> Pasó porque copiar era el seguro más barato cuando no había ni pruebas ni
+> forma de ver las pantallas. Desde el 18/08 sí las hay (`npm test`, la prueba
+> de deriva de etapas, sesión de demo pública para mirar). Reglas desde hoy:
+>
+> - **Nada nuevo entra en `modules/overrides/`** salvo comportamiento propio de
+>   UN cliente. Lo genérico va al módulo base, gateado por módulo o feature flag.
+> - **Un dato que el servidor necesita se declara en `lib/`**, no dentro del
+>   componente: `lib/leads/embudos.js` es el modelo (declara las etapas de cada
+>   tenant, y `_smoke-leads-etapas.mjs` vigila que las copias no se separen).
+> - **Los seis overrides NO se unifican de golpe** (decisión de Jorge, 17/08).
+>   Se encogen por oportunidad, cuando se toque uno por otro motivo, sacando la
+>   pieza compartida al base con su prueba. Nunca un «sprint de refactor».
+> - El objetivo es un módulo base digno que lean todos los clientes nuevos, no
+>   borrar carpetas.
+>
+> **La columna `ui_override` de `master.tenant_modules` es un LETRERO**: el
+> código no la lee (la pantalla se elige con el mapa `UI_OVERRIDES` por slug de
+> cada página); solo la enseña `/admin/modulos`. Se mantiene fiel con
+> `scripts/sincronizar-ui-override.mjs`, que lee la verdad de esos mapas — se
+> relanza tras añadir, mover o borrar un override, y en producción va con
+> `docker run` montando el repo (la imagen no lleva `app/`; ver su cabecera).
+
 ---
 
 ## Módulos del CRM — 17 planificados
