@@ -136,20 +136,24 @@ export default function ModulosPage() {
             <div className="text-[34px] leading-none tabular-nums">{datos.totales.personalizaciones}</div>
             <Etiqueta>cosas a medida</Etiqueta>
           </div>
+          {/* Dos números y no uno (18/08/2026): CUÁNTAS pantallas propias hay
+              que mantener y a CUÁNTOS clientes afectan. Solo el segundo
+              escondía que Laura tiene dos. */}
           <div>
             <div
               className="text-[34px] leading-none tabular-nums"
-              style={{ color: datos.totales.conPantallaPropia > 0 ? "var(--alerta)" : "var(--ok)" }}
+              style={{ color: datos.totales.pantallasPropias > 0 ? "var(--alerta)" : "var(--ok)" }}
             >
-              {datos.totales.conPantallaPropia}
+              {datos.totales.pantallasPropias ?? datos.totales.conPantallaPropia}
             </div>
-            <Etiqueta tono={datos.totales.conPantallaPropia > 0 ? "alerta" : "ok"}>
-              con pantalla propia
+            <Etiqueta tono={datos.totales.pantallasPropias > 0 ? "alerta" : "ok"}>
+              pantallas propias · en {datos.totales.conPantallaPropia} cliente{datos.totales.conPantallaPropia === 1 ? "" : "s"}
             </Etiqueta>
           </div>
           <p className="text-[12px] leading-relaxed max-w-xs ml-auto" style={{ color: "var(--dim)" }}>
             Los módulos se venden; las personalizaciones se mantienen. Una pantalla propia hay que
-            tocarla aparte cada vez que se cambia la base.
+            tocarla aparte cada vez que se cambia la base: es el último peldaño de la escalera, no el
+            primero.
           </p>
         </div>
 
@@ -217,12 +221,16 @@ export default function ModulosPage() {
                             <Marca
                               fuerte
                               texto="pantalla propia"
-                              titulo={`${m.pantalla} — hay que mantenerla aparte cada vez que se toque la pantalla base`}
+                              titulo={`${m.pantalla} — peldaño 5: un fichero aparte que hay que tocar cada vez que se cambia la pantalla base`}
                             />
                           )}
-                          {m.logica && <Marca texto="lógica" titulo="Este módulo se comporta distinto para este cliente" />}
-                          {m.pruebas && <Marca texto="pruebas" titulo="Tiene features en marcha (featureFlags)" />}
-                          {m.campos && <Marca texto="campos" titulo="Tiene campos extra en su schema" />}
+                          {m.logica && (
+                            <Marca texto="parámetro" titulo="Peldaño 4 (logicOverrides): el módulo se comporta distinto para este cliente según un valor" />
+                          )}
+                          {m.pruebas && (
+                            <Marca texto="interruptor" titulo="Peldaño 3 (featureFlags): un «esto sí / esto no» encendido para este cliente, p. ej. «formación abierta»" />
+                          )}
+                          {m.campos && <Marca texto="campos" titulo="Campos extra en su schema (schemaExtensions)" />}
                         </div>
                       ))}
                     </div>
@@ -244,6 +252,33 @@ export default function ModulosPage() {
         Se listan solo las personalizaciones de módulos encendidos. Los apagados se cuentan aparte
         («+N off»): pasa el ratón por encima para ver cuáles son.
       </p>
+
+      {/* La escalera de la regla #16 (CLAUDE.md), para que las marcas se lean
+          como lo que son: peldaños de coste creciente. Los dos primeros no
+          salen en esta tabla porque viven en el código, no en la base. */}
+      <section
+        className="mt-6 rounded-lg px-4 py-4 text-[12px] leading-relaxed"
+        style={{ background: "var(--panel)", border: "1px solid var(--line)", color: "var(--dim)" }}
+      >
+        <Etiqueta>cómo se trabaja · la escalera</Etiqueta>
+        <p className="mt-2">
+          Cuando un cliente pide algo se prueba en este orden y se para en el primer peldaño que
+          sirva:{" "}
+          <span style={{ color: "var(--text)" }}>1 palabras</span> (un rótulo, p. ej. «Interesados») ·{" "}
+          <span style={{ color: "var(--text)" }}>2 un dato en el código</span> (su embudo, sus campos del
+          alta) ·{" "}
+          <span style={{ color: "var(--text)" }}>3 interruptor</span> ·{" "}
+          <span style={{ color: "var(--text)" }}>4 parámetro</span> ·{" "}
+          <span style={{ color: "var(--alerta)" }}>5 pantalla propia</span>, y solo si es de verdad de un
+          cliente y no cabe antes. Si funciona distinto de verdad, no es un peldaño: es un módulo nuevo
+          que se pueda vender a un segundo cliente. Nunca más una copia entera de un módulo.
+        </p>
+        <p className="mt-2">
+          Aquí salen los peldaños 3, 4 y 5 y los campos extra, que viven en la base de datos. Los
+          peldaños 1 y 2 viven en el código y no se listan a mano a propósito: una lista copiada
+          mentiría en una semana. Está escrito entero en CLAUDE.md, regla #16.
+        </p>
+      </section>
     </main>
   );
 }
