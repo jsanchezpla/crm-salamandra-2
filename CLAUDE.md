@@ -384,6 +384,10 @@ aplique.
 >   pieza compartida al base con su prueba. Nunca un «sprint de refactor».
 > - El objetivo es un módulo base digno que lean todos los clientes nuevos, no
 >   borrar carpetas.
+> - **Cuando un cliente pide algo, se sube LA ESCALERA de la regla #16** (abajo,
+>   en «Reglas de trabajo»): palabras → dato en `lib/` → interruptor →
+>   parámetro → y solo al final pantalla propia. Es la regla que decide qué
+>   entra aquí y qué no.
 >
 > **Lo que ya encogió** (18/08/2026, misma tarde): el base de Leads pasó a ser
 > el de aumenta parametrizado, y con eso los overrides de `demo` y `sandbox`
@@ -778,6 +782,75 @@ apellido en toda la UI.
     configurarlo directamente en `.env.production` del VPS por SSH, y comunicarlo
     a terceros (clientes, integraciones) por canal cifrado. Si un secret se ha
     visto en un chat, considerarlo comprometido y rotarlo inmediatamente.
+16. ⚠️ **CUANDO UN CLIENTE PIDE ALGO: LA ESCALERA, Y EL OVERRIDE ES EL ÚLTIMO
+    PELDAÑO** (Jorge, 18/08/2026: «importante que esto se tenga muy en cuenta
+    en el futuro»). Es la regla que evita volver a la pirámide invertida (ver
+    «En Leads la pirámide está al revés»), y se aplica ANTES de abrir un
+    fichero. Hay tres casos y solo tres:
+
+    **Caso 1 — pide un módulo que ya tenemos.** No se toca código: es un alta.
+    `/admin/modulos` para ver qué tiene, `scripts/enable-module.js <slug>
+    <moduleKey>` para encenderlo (abre las DOS puertas: `tenant_modules` y
+    `users.module_access`; siembra lo que el módulo traiga de fábrica), `npm
+    run db:check-access` para comprobar que lo ve. Minutos, sin despliegue.
+    **Si el caso 1 lleva a abrir un fichero de código, algo va mal.**
+
+    **Caso 2 — pide ese módulo con un cambio pequeño.** Se sube esta escalera
+    peldaño a peldaño y se para en el PRIMERO que sirva; cuanto más arriba, más
+    caro de mantener:
+
+    | # | Cuándo | Dónde | Ya existe así |
+    | --- | --- | --- | --- |
+    | 1 | Solo cambia cómo se llama algo | Regla por MÓDULOS en `lib/…/vocabulario.js`; `TENANT_TITLE_OVERRIDES` solo si es de verdad de uno | «Pacientes» en nutrición; «Interesados» en Aumenta |
+    | 2 | Cambia un dato: una lista, un embudo, unos campos | Se declara en `lib/` por cliente y el módulo base lo LEE (por props) | `lib/leads/embudos.js`, `lib/clients/formularioAlta.js`, `lib/clients/piezasFicha.js` |
+    | 3 | «Esto sí / esto no» | `featureFlags` del módulo (`hasFeatureFlag`) | `autoAsignarEnAlta` apagado en Aumenta |
+    | 4 | Lo mismo con otro valor | `logicOverrides` del módulo (`getLogicOverride`) | — |
+    | 5 | Nada de lo anterior sirve Y es de UN solo cliente | `modules/overrides/{slug}/`, pero FINA: una cabecera o un reparto que reutiliza las piezas compartidas, nunca una copia del base | La ficha de Laura: cabecera + tarjeta + pestañas, con los paneles de `components/clients/` |
+
+    Dos preguntas que dicen el peldaño: **«Si mañana lo pide otro cliente,
+    ¿tendría que copiar código?»** — si sí, no es un override, es una mejora
+    del base gateada por módulo o interruptor. **«Si cambio el base, ¿este
+    cliente tiene que cambiar también?»** — si sí, no puede tener pantalla
+    propia: se quedará atrás en silencio (es lo que le pasó a demo y sandbox).
+    Y siempre: si hace falta código, **primero gana el base** (con su prueba en
+    `npm test` y su línea en `docs/modules/`), y lo del cliente es lo más
+    pequeño posible encima. Si acaba en pantalla propia: entrada en el mapa
+    `UI_OVERRIDES` de la página + `scripts/sincronizar-ui-override.mjs` para
+    que `/admin/modulos` la cuente.
+
+    **Caso 3 — pide ese módulo pero funciona prácticamente distinto.** Ya no es
+    una pregunta técnica sino de producto, y solo tiene DOS respuestas:
+    (a) **es otro producto → módulo nuevo** con su `moduleKey`, que se vende
+    aparte (como `formularios` frente a `leads`, `clients_avanzado`,
+    `team_avanzado`, `fichaje`): modelo → endpoints → pantalla, gateado por su
+    clave, doc en `docs/modules/`, sidebar, `enable-module.js`; reutiliza
+    piezas de `components/` y `lib/`, no hereda la pantalla del otro. La prueba
+    de que es módulo y no capricho: **¿se lo venderíamos a un segundo
+    cliente?** (b) **es un capricho de uno → se decide en el despacho**, no en
+    el código: se le dice que el CRM hace lo que hace, o se cobra como encargo
+    y AUN ASÍ se construye como (a). **Lo que no se hace nunca más es la
+    tercera vía**: copiar el módulo entero a `overrides/{slug}/` y retocarlo.
+    Cada copia son 600–1.000 líneas que hay que tocar a mano en cada cambio del
+    base y nadie avisa cuando se quedan atrás; `/admin/modulos` enseña en rojo
+    cuántas mantenemos.
+
+    **Las reinas ordenan todo.** Cada módulo tiene un cliente real de
+    referencia (Aumenta = clínico, Laura = nutrición). Cuando un segundo
+    cliente pide algo distinto en ese módulo, la primera pregunta es **«¿la
+    reina querría esto también?»**: si sí, base (peldaños 1–2); si no,
+    interruptor (3) o módulo nuevo (caso 3a). La pantalla propia es la última
+    salida, no la primera.
+
+    **Los tres peros, sabidos de antemano.** (1) Cada «si tiene X no enseñes
+    Y» es un `if` más en el base: se escribe con nombre en `lib/` y con su
+    prueba, no suelto por el JSX. (2) `featureFlags` y `logicOverrides` son
+    JSON sin inventario: el día que crezcan hará falta un sitio que liste
+    cuáles hay y qué hace cada uno. (3) Nada impide copiar un módulo entero
+    otra vez; lo que hay es que SE VE (contador rojo de `/admin/modulos`,
+    pruebas de deriva). Por eso está escrito aquí. Si llegan tres o cuatro
+    clientes del MISMO oficio pidiendo variaciones parecidas, la escalera se
+    queda corta en el 3–4 y tocará algo intermedio (presets por oficio, el paso
+    natural de las demos por oficio); se construye cuando lo pida la realidad.
 
 **PowerShell vs bash en ejemplos**: el entorno local de Jorge es PowerShell
 (Windows). Cuando se necesite curl, usar `curl.exe` para invocar el binario
