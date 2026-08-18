@@ -12,8 +12,18 @@
  *
  * La columna que de verdad importa es la de A MEDIDA. Los módulos se venden;
  * las personalizaciones se mantienen, y ese coste no aparece en ninguna factura.
- * Cinco de los seis clientes con `leads` tienen su propia pantalla del embudo:
- * cada arreglo de leads hay que hacerlo cinco veces, y eso solo se ve aquí.
+ * Cuando nació esta pantalla, cinco de los seis clientes con `leads` tenían su
+ * propia pantalla del embudo: cada arreglo de leads había que hacerlo cinco
+ * veces, y eso solo se veía aquí. El 18/08/2026 quedaron cuatro de nueve
+ * (aumenta, nutri_laura, retorika, spain_enzymes): el base pasó a ser el de
+ * aumenta y las copias de demo y sandbox se borraron (CLAUDE.md, «En Leads la
+ * pirámide está al revés»).
+ *
+ * LA MARCA «pantalla propia» SALE DE `tenant_modules.ui_override`, que es un
+ * LETRERO: el código no lo lee, y se mantiene fiel a los mapas UI_OVERRIDES con
+ * `scripts/sincronizar-ui-override.mjs` (en producción, tras cada despliegue
+ * que añada, mueva o borre un override). Si aquí sale algo que el código ya no
+ * carga, no es que la pantalla mienta: es que falta relanzar ese script.
  */
 
 import { useEffect, useMemo, useState } from "react";
