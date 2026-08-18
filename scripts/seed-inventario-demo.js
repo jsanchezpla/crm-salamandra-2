@@ -16,6 +16,22 @@
  * SOLO toca `crm_demo`. Es idempotente: si ya hay productos, no hace nada (con
  * `--rehacer` los borra y los vuelve a poner).
  *
+ * ── YA NO HACE FALTA PARA QUE LA DEMO TENGA ALMACÉN (18/08/2026) ────────────
+ *
+ * Nació porque `seed-sandbox-data.js` sembraba el inventario con los modelos
+ * que el rework del 02/08 había borrado, y dejaba el almacén vacío. Como aquel
+ * fallo se tragaba solo, esto se escribió al lado en vez de arreglarlo, y quedó
+ * sin que lo llamara NADIE: ni el rebuild del escaparate, ni un atajo de
+ * `package.json`. La demo de producción se sembró a mano desde aquí una vez, y
+ * ahí se quedó la cosa.
+ *
+ * El 18/08 se arregló el sembrado de verdad, con un catálogo genérico que
+ * comparten las cuatro demos (decisión de Jorge). Así que esto ya no es la
+ * forma de que la demo tenga almacén: es un EXTRA opcional, a mano, para
+ * ponerle a `demo` un catálogo de centro clínico en vez del genérico. Si se
+ * lanza después del rebuild SUMA seis productos a los que ya hay; con
+ * `--rehacer` los sustituye.
+ *
  * Uso: node --env-file=.env.local scripts/seed-inventario-demo.js
  */
 

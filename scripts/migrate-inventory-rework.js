@@ -30,6 +30,35 @@
 import { Sequelize } from "sequelize";
 import { acotarSlugs } from "./_solo-este-tenant.js";
 
+// ⛔ ESTA MIGRACIÓN ESTÁ SUPERADA Y NO DEBE EJECUTARSE (candado del 18/08/2026).
+//
+// Es el rework de ABRIL. Crea `inbound_products`, `inbound_batches`,
+// `outbound_products`, `formulas` y `client_outbound_aliases`, que son
+// exactamente las tablas que `migrate-inventario-rework.js` —con «a», el del
+// 02/08/2026— ELIMINA. Lanzarla hoy le devuelve a un cliente el esquema viejo.
+//
+// `_module-migrations.js` ya la daba por superada y la sacó de la cadena de
+// altas. Lo que faltaba era el candado en el propio fichero: hasta hoy
+// `package.json` tenía DOS atajos apuntando aquí, y uno de ellos con
+// `--env-file=.env.production`. Un `npm run db:migrate:inventory-rework:prod`
+// escrito de memoria, o el autocompletado eligiendo mal entre dos nombres que
+// solo se diferencian en tres letras, bastaba para romper producción. Los dos
+// atajos se han quitado; esto es el segundo cerrojo, para que el peligro no
+// dependa de que nadie los vuelva a escribir.
+//
+// Se conserva el fichero como histórico: cuenta cómo era el modelo anterior y
+// hay migraciones posteriores que se leen mejor con esto delante.
+if (!process.argv.includes("--soy-consciente-de-que-esto-devuelve-el-esquema-viejo")) {
+  process.stderr.write(
+    "\n⛔ migrate-inventory-rework.js (sin «a») está SUPERADA desde el 02/08/2026.\n\n" +
+      "   Devuelve el esquema de inventario ANTERIOR: inbound_products,\n" +
+      "   inbound_batches, outbound_products, formulas y client_outbound_aliases.\n\n" +
+      "   Lo que seguramente buscas es la de después, que se llama casi igual:\n" +
+      "     node --env-file=.env.local scripts/migrate-inventario-rework.js --dry-run\n\n"
+  );
+  process.exit(1);
+}
+
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
 
