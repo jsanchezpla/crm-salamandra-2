@@ -4,8 +4,26 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import { anchoPantalla } from "../../components/layout/anchoPantalla.js";
+import { textosPortada } from "../../lib/training/formacionAbierta.js";
 
 /**
+ * ── UNA PORTADA PARA TODOS, «COMPLETA» O «ABIERTA» (18/08/2026) ─────────────
+ *
+ * Hasta hoy Aumenta tenía la suya en `modules/overrides/aumenta/`: la misma
+ * pantalla con tres tarjetas en vez de cinco (sin Empresas ni Cuestionarios),
+ * tres cifras en vez de cuatro, sin el botón de sincronizar con WordPress y
+ * con sus frases. Era la portada base recortada y copiada, y cada arreglo
+ * había que hacerlo dos veces (los propios comentarios de abajo lo cuentan).
+ *
+ * Ahora es UNA portada con un interruptor: la prop `abierta`, que la página
+ * resuelve leyendo `featureFlags.formacionAbierta` del módulo `training` del
+ * tenant (`lib/training/formacionAbierta.js`, donde está explicado qué es y
+ * por qué no se leen las banderas viejas de `logicOverrides`). Con `abierta`:
+ * fuera Empresas y Cuestionarios (tarjetas y cifra), fuera «Sincronizar con la
+ * web», y las palabras de formación abierta. Las frases que solo son de un
+ * cliente —el párrafo de Aumenta sobre su centro— llegan por `textos` desde la
+ * página, no viven aquí.
+ *
  * ── LAS PERSONAS SON «ALUMNOS» Y LAS INSCRIPCIONES «MATRÍCULAS» ─────────────
  * (13/08/2026, decisión de Rodrigo.)
  *
@@ -26,8 +44,16 @@ import { anchoPantalla } from "../../components/layout/anchoPantalla.js";
  * el mismo criterio que en Nutrición, donde `/nutricion/asignados` se llama
  * «Pautas».
  */
-const SECTIONS = [
+/**
+ * Las tarjetas de acceso. `soloCompleta` marca las que una formación abierta
+ * no ofrece; los textos que cambian entre completa y abierta llegan en
+ * `textos` (los de Empresas y Cuestionarios no cambian: cuando se ven, es
+ * porque el centro los usa como siempre).
+ */
+function seccionesDe(textos, abierta) {
+  const todas = [
   {
+    soloCompleta: true,
     href: "/formacion/empresas",
     label: "Empresas",
     desc: "Gestión de empresas cliente y cursos asignados",
@@ -41,8 +67,8 @@ const SECTIONS = [
   {
     href: "/formacion/cursos",
     label: "Cursos",
-    desc: "Catálogo de cursos sincronizados con WordPress",
-    help: "El listado completo de cursos que ofreces. Pulsa cualquier curso para abrir su ficha: ahí ves toda la información del curso y los registros del curso (los alumnos apuntados con sus datos). También puedes editar el nombre, activar o desactivar un curso y ver cuándo se sincronizó por última vez con tu academia online.",
+    desc: textos.descCursos,
+    help: textos.ayudaCursos,
     icon: (
       <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
@@ -52,8 +78,8 @@ const SECTIONS = [
   {
     href: "/formacion/usuarios",
     label: "Alumnos",
-    desc: "Las personas, una ficha por cada una",
-    help: "Todas las personas registradas en tu plataforma, tanto las que se apuntan por su cuenta como los empleados que vienen de una empresa. Una fila por PERSONA, no por curso. Puedes buscar por nombre o email, filtrar por empresa y exportar la lista a Excel. Para dar de alta a los de una empresa de golpe, se hace desde Empresas: abre su ficha e importa el Excel de empleados.",
+    desc: textos.descAlumnos,
+    help: textos.ayudaAlumnos,
     icon: (
       <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-4.5 0 2.625 2.625 0 014.5 0z" />
@@ -63,8 +89,8 @@ const SECTIONS = [
   {
     href: "/formacion/alumnos",
     label: "Matrículas",
-    desc: "Quién está apuntado a qué curso",
-    help: "Aquí no se dan de alta personas: se ve quién está apuntado a qué. Cada fila es una matrícula —el alumno, el curso y la fecha—, así que la misma persona sale tantas veces como cursos tenga. Puedes filtrar por curso o por empresa para saber, por ejemplo, qué empleados de una empresa están haciendo un curso concreto.",
+    desc: textos.descMatriculas,
+    help: textos.ayudaMatriculas,
     icon: (
       <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5" />
@@ -72,6 +98,7 @@ const SECTIONS = [
     ),
   },
   {
+    soloCompleta: true,
     href: "/formacion/cuestionarios",
     label: "Cuestionarios",
     desc: "Intentos de quiz sincronizados con TutorLMS",
@@ -82,17 +109,21 @@ const SECTIONS = [
       </svg>
     ),
   },
-];
+  ];
+  return abierta ? todas.filter((s) => !s.soloCompleta) : todas;
+}
 
 // Los rótulos son los MISMOS que los de las tarjetas de abajo, a propósito: eran
 // un tercer par de palabras («Usuarios» / «Matrículas») para las dos cosas que
 // el menú llamaba de otra forma.
-const METRIC_HELP = {
-  Empresas: "Número total de empresas dadas de alta en tu plataforma de formación.",
-  "Cursos activos": "Cursos que actualmente están visibles para los alumnos. Los cursos desactivados no cuentan aquí.",
-  Alumnos: "Personas registradas, contadas una vez cada una: las que se apuntan por su cuenta más los empleados de empresa.",
-  Matrículas: "Inscripciones a cursos. Si un alumno está apuntado a 3 cursos, cuenta 3 veces — por eso este número suele ser mayor que el de Alumnos.",
-};
+function metricHelpDe(textos) {
+  return {
+    Empresas: "Número total de empresas dadas de alta en tu plataforma de formación.",
+    "Cursos activos": "Cursos que actualmente están visibles para los alumnos. Los cursos desactivados no cuentan aquí.",
+    Alumnos: textos.metricaAlumnos,
+    Matrículas: "Inscripciones a cursos. Si un alumno está apuntado a 3 cursos, cuenta 3 veces — por eso este número suele ser mayor que el de Alumnos.",
+  };
+}
 
 /*
  * El número va ABAJO, no debajo del rótulo (14/08/2026).
@@ -106,14 +137,14 @@ const METRIC_HELP = {
  * de depender de que ninguno crezca. Que es lo que pasa en cuanto se añade una
  * métrica o el cliente le cambia el nombre.
  */
-function MetricCard({ label, value, loading }) {
+function MetricCard({ label, value, loading, help }) {
   return (
     <div className="bg-white border border-neutral-100 rounded-xl p-5 flex flex-col justify-between">
       <div className="flex items-center gap-1.5 mb-2">
         <p className="text-[11px] font-medium text-neutral-400 uppercase tracking-widest">{label}</p>
-        {METRIC_HELP[label] && (
+        {help && (
           <HelpTooltip title={label} placement="bottom">
-            {METRIC_HELP[label]}
+            {help}
           </HelpTooltip>
         )}
       </div>
@@ -187,13 +218,23 @@ function SincronizarConLaWeb() {
   );
 }
 
-export default function FormacionOverview() {
+export default function FormacionOverview({ abierta = false, textos: textosProp }) {
+  // Las palabras: las de completa o abierta, y encima las que el tenant tenga
+  // propias (la página se las pasa; hoy solo Aumenta).
+  const textos = { ...textosPortada(abierta), ...(textosProp ?? {}) };
+  const SECTIONS = seccionesDe(textos, abierta);
+  const METRIC_HELP = metricHelpDe(textos);
+
   const [stats, setStats] = useState({ companies: null, courses: null, users: null, enrollments: null });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // En formación abierta no hay empresas que contar: ni se pide.
+    const empresas = abierta
+      ? Promise.resolve({ ok: false })
+      : fetch("/api/training/companies").then((r) => r.json());
     Promise.all([
-      fetch("/api/training/companies").then((r) => r.json()),
+      empresas,
       fetch("/api/training/courses?active=true").then((r) => r.json()),
       fetch("/api/training/users?limit=1").then((r) => r.json()),
       fetch("/api/training/enrollments?limit=1").then((r) => r.json()),
@@ -207,7 +248,7 @@ export default function FormacionOverview() {
         });
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [abierta]);
 
   return (
     // El ancho ya NO se escribe aquí (13/08/2026). Esta pantalla se estrechó una
@@ -219,30 +260,31 @@ export default function FormacionOverview() {
     <div className={anchoPantalla("portada")}>
       {/* Header */}
       <div className="mb-6 lg:mb-8">
-        <div className="eyebrow mb-1.5 lg:mb-2">Conocimiento · Formación</div>
+        <div className="eyebrow mb-1.5 lg:mb-2">{textos.eyebrow}</div>
         <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mb-3 flex items-center gap-2">
           <span>
-            Formación <span className="font-display-italic text-[var(--ink-400)]">— empresas, cursos, alumnos</span>
+            Formación <span className="font-display-italic text-[var(--ink-400)]">{textos.tituloSufijo}</span>
           </span>
           <HelpTooltip title="Módulo de Formación" placement="bottom">
-            Es el centro de control de tu academia online. Desde aquí gestionas las empresas que compran formación,
-            tu catálogo de cursos, los alumnos inscritos y los exámenes que han hecho. Los datos llegan
-            automáticamente desde tu WordPress, no tienes que meterlos a mano.
+            {textos.ayudaModulo}
           </HelpTooltip>
         </h1>
         <p className="text-sm text-[var(--ink-500)] max-w-xl leading-relaxed">
-          Gestión centralizada de empresas cliente, catálogo de cursos y matrículas de alumnos.
+          {textos.intro}
         </p>
       </div>
 
-      <SincronizarConLaWeb />
+      {/* Sin WordPress detrás no hay nada que sincronizar. */}
+      {!abierta && <SincronizarConLaWeb />}
 
-      {/* Métricas */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <MetricCard label="Empresas" value={stats.companies} loading={loading} />
-        <MetricCard label="Cursos activos" value={stats.courses} loading={loading} />
-        <MetricCard label="Alumnos" value={stats.users} loading={loading} />
-        <MetricCard label="Matrículas" value={stats.enrollments} loading={loading} />
+      {/* Métricas: cuatro, o tres sin Empresas en formación abierta. */}
+      <div className={`grid gap-4 mb-8 ${abierta ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-2 lg:grid-cols-4"}`}>
+        {!abierta && (
+          <MetricCard label="Empresas" value={stats.companies} loading={loading} help={METRIC_HELP.Empresas} />
+        )}
+        <MetricCard label="Cursos activos" value={stats.courses} loading={loading} help={METRIC_HELP["Cursos activos"]} />
+        <MetricCard label="Alumnos" value={stats.users} loading={loading} help={METRIC_HELP.Alumnos} />
+        <MetricCard label="Matrículas" value={stats.enrollments} loading={loading} help={METRIC_HELP.Matrículas} />
       </div>
 
       {/* Accesos rápidos */}

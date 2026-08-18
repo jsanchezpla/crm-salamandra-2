@@ -775,15 +775,28 @@ Resumen rápido (detalle en "Integraciones externas"):
 Páginas bajo `app/(dashboard)/formacion/`. Componentes compartidos en
 `components/training/` (`TrainingTable`, `TypeBadge`, `ActiveBadge`).
 
-El overview (`/formacion`) usa el mismo patrón de override por tenant
-que el módulo de leads: `app/(dashboard)/formacion/page.jsx` selecciona
-entre `modules/training/FormacionOverview.jsx` (default, copy orientado
-a Retorika con WP + TutorLMS) y los overrides de `modules/overrides/{slug}/FormacionOverview.jsx`.
-Hoy solo `aumenta` tiene override propio. `nutri_laura` y `retorika` usan
-el default (las 5 secciones). El override antiguo de `nutri_laura` (copy
-nutricional B2C sin "Empresas" ni "Cuestionarios") se eliminó cuando Laura
-decidió usar la UI completa. Las páginas internas (`/formacion/cursos`,
-`/formacion/usuarios`, etc.) son comunes a todos los tenants.
+El overview (`/formacion`) es **una sola portada para todos**
+(`modules/training/FormacionOverview.jsx`) **con un interruptor**
+(18/08/2026): `featureFlags.formacionAbierta` del módulo `training`,
+declarado en `lib/training/formacionAbierta.js`. Encendido —«formación
+abierta», el centro que vende cursos a personas una a una: Aumenta— la
+portada se pinta sin Empresas ni Cuestionarios (tarjetas y cifra), sin el
+botón «Sincronizar con la web», y con las palabras de formación abierta; el
+menú lateral esconde Empresas y Cuestionarios por el MISMO interruptor
+(`Sidebar.jsx`, `hijosOcultosSegunModulos`), así que portada y menú no pueden
+contradecirse. Apagado —lo normal— es la portada completa de siempre
+(Retorika, Laura, la demo). Se enciende con
+`scripts/formacion-abierta.js <slug> --encender`, sin código ni despliegue.
+Las frases que solo son de un cliente (el párrafo de Aumenta sobre su centro)
+viven en `TEXTOS_POR_TENANT` de la página, no en el componente.
+
+Hasta ese día Aumenta tenía la portada en `modules/overrides/aumenta/`: la
+base recortada y copiada, y cada arreglo se hacía dos veces. El override
+antiguo de `nutri_laura` (copy nutricional B2C) se había eliminado antes,
+cuando Laura decidió usar la UI completa: por eso **Laura NO lleva el
+interruptor** aunque sus `logicOverrides` digan `b2bEnabled: false` (ver
+abajo). Las páginas internas (`/formacion/cursos`, `/formacion/usuarios`,
+etc.) son comunes a todos los tenants.
 
 | Ruta | Función |
 | --- | --- |
@@ -822,7 +835,7 @@ viene del propio TutorLMS.
 | `scripts/add-training-module-demo.js` | Activa el módulo `training` en el tenant `demo` y siembra 4 empresas, 8 cursos, ~36 alumnos de empresa + 10 privados, ~55 matrículas. Para demos a clientes potenciales. Idempotente. |
 | `scripts/seed-cuestionarios-demo.js` | Activa el módulo `cuestionarios` en demo y siembra intentos de quiz realistas (datos pedagógicos sobre comunicación, módulos de Retorika). Útil para mostrar la pestaña Cuestionarios sin necesitar webhooks. |
 | `scripts/add-training-module-nutri-laura.js` | Activa el módulo `training` en `nutri_laura`. Crea las 6 tablas con SQL crudo (sin la legacy `trainings`), registra el módulo sin `uiOverride` (usa el default igual que retorika) y siembra 3 cursos de nutrición. Patrón idéntico al `add-leads-module-nutri-laura.js` por la filosofía de tenant minimal. |
-| `scripts/add-training-module-aumenta.js` | Activa el módulo `training` en `aumenta`. Las 6 tablas ya existen desde el sync inicial — el script solo registra el módulo con `uiOverride: aumenta/FormacionOverview` y siembra 6 cursos reales de la web de Aumenta + 15 alumnos B2C + 22 matrículas. Sin cuestionarios (la tabla `quiz_attempts` queda vacía). Ver "Activación en Aumenta" más abajo. |
+| `scripts/add-training-module-aumenta.js` | Activa el módulo `training` en `aumenta`. Las 6 tablas ya existen desde el sync inicial — el script solo registra el módulo con el interruptor «formación abierta» encendido (desde el 18/08/2026; antes, `uiOverride: aumenta/FormacionOverview`) y siembra 6 cursos reales de la web de Aumenta + 15 alumnos B2C + 22 matrículas. Sin cuestionarios (la tabla `quiz_attempts` queda vacía). Ver "Activación en Aumenta" más abajo. |
 
 `seed-master.js` (que crea el tenant retorika) registra el módulo
 `training` con `moduleAccess` admin. La activación inicial del
@@ -868,25 +881,20 @@ conectado.
 - **0 empresas** (`companies` vacío).
 - **0 cuestionarios** (`quiz_attempts` vacío).
 
-### Override de UI: `aumenta/FormacionOverview`
+### La portada de Aumenta: «formación abierta» (antes un override)
 
-`modules/overrides/aumenta/FormacionOverview.jsx`. Diferencias frente
-a la landing `default`:
+Hasta el 18/08/2026, `modules/overrides/aumenta/FormacionOverview.jsx`: la
+portada base recortada (3 KPIs en vez de 4, 3 secciones en vez de 5, sin
+sincronizar con la web, sin pedir `/api/training/companies`) y con su copy
+(«Formación — cursos para familias y profesionales»). **Borrado ese día**: la
+portada base hace exactamente eso con `abierta = true`, que la página resuelve
+de `featureFlags.formacionAbierta` (encendido en Aumenta con
+`scripts/formacion-abierta.js aumenta --encender`; el script de alta
+`add-training-module-aumenta.js` ya lo deja encendido y sin `uiOverride`).
+Sus frases siguen siendo suyas: `TEXTOS_POR_TENANT.aumenta` en la página.
 
-- **3 KPIs en vez de 4**: Cursos activos, Alumnos, Matrículas — los mismos
-  rótulos que el overview base desde el 13/08/2026 (sin
-  "Empresas").
-- **3 secciones en vez de 5**: Cursos, Alumnos, Matrículas (sin "Empresas" ni
-  "Cuestionarios"). Decía «Matrículas por curso», con apellido, y bastaba para
-  que Aumenta leyera algo distinto que los demás: desde el 13/08/2026 son las
-  mismas palabras en los tres sitios.
-- **Copy editorial adaptado**: título "Formación — cursos para
-  familias y profesionales".
-- **Sin endpoint a `/api/training/companies`** (la card de empresas
-  no existe).
-
-Registrado en `app/(dashboard)/formacion/page.jsx` en el map
-`UI_OVERRIDES`. Tenant decide por `x-tenant` header.
+Lo único que Aumenta gana con la mudanza son los «?» de ayuda de la portada
+base (con textos de formación abierta), que su override no tenía.
 
 ### `logicOverrides` en `master.tenant_modules`
 
@@ -894,19 +902,24 @@ Registrado en `app/(dashboard)/formacion/page.jsx` en el map
 { "b2bEnabled": false, "quizzesEnabled": false, "tutorlmsConnected": false }
 ```
 
-Estos flags hoy son **indicativos** (los lee solo el override de UI).
-No hay validación de backend que los consulte.
+Banderas de junio de 2026 que **no lee nadie** — ni antes (el override las
+ignoraba: iba a fuego) ni ahora. Y **no se usan a propósito para decidir la
+portada**: `nutri_laura` también lleva `b2bEnabled: false` y
+`tutorlmsConnected: false` y ve la portada completa porque lo pidió; leerlas le
+habría quitado Empresas y el botón de sincronizar sin que nadie lo pidiera. Se
+conservan porque están en producción; el interruptor de verdad es
+`featureFlags.formacionAbierta`.
 
 ### Cuestionarios para Aumenta
 
 Decisión cerrada: **Aumenta no usa cuestionarios** en su flujo
 formativo. La tabla `quiz_attempts` existe en `crm_aumenta` desde el
-sync inicial pero queda vacía. El override de UI no muestra la
-sección. Si en el futuro Aumenta los quisiera, basta con:
-
-1. Cambiar `logicOverrides.quizzesEnabled = true`.
-2. Añadir la sección "Cuestionarios" al override
-   `aumenta/FormacionOverview.jsx`.
+sync inicial pero queda vacía, y con «formación abierta» la portada y el
+menú no enseñan la sección. Si en el futuro Aumenta los quisiera —junto con
+Empresas y la sincronización, que van en el mismo interruptor— basta con
+`scripts/formacion-abierta.js aumenta --apagar`; si los quisiera SOLOS,
+habría que partir el interruptor en dos, que es un cambio de una línea en
+`lib/training/formacionAbierta.js`.
 
 ## Integraciones con otros módulos del CRM
 

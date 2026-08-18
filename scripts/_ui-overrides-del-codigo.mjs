@@ -26,7 +26,13 @@ const MODULO_DE_PAGINA = {
   "app/(dashboard)/clientes/[id]/page.jsx": "clients",
 };
 
-/** Todas las páginas del dashboard que importan algo de `modules/overrides/`. */
+/**
+ * Todas las páginas del dashboard que IMPORTAN algo de `modules/overrides/`.
+ * Solo los `import`, no cualquier mención: un comentario que cuente que «aquí
+ * había un override» (formacion/page.jsx desde el 18/08/2026) no carga ninguna
+ * pantalla, y contarlo obligaría a la página a tener un mapa que ya no tiene.
+ */
+const IMPORTA_OVERRIDE = /^import .*["'][^"'\n]*modules\/overrides\//m;
 export function paginasConOverride(RAIZ) {
   const base = join(RAIZ, "app", "(dashboard)");
   const encontradas = [];
@@ -34,7 +40,7 @@ export function paginasConOverride(RAIZ) {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       const ruta = join(dir, e.name);
       if (e.isDirectory()) recorrer(ruta);
-      else if (e.name === "page.jsx" && /modules\/overrides\//.test(readFileSync(ruta, "utf8"))) {
+      else if (e.name === "page.jsx" && IMPORTA_OVERRIDE.test(readFileSync(ruta, "utf8"))) {
         encontradas.push(relative(RAIZ, ruta).split(sep).join("/"));
       }
     }

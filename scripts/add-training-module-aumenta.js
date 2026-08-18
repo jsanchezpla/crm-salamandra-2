@@ -12,9 +12,10 @@
  * Lo que hace:
  *   1. Verifica que el tenant existe y que las tablas de training ya están
  *      creadas en crm_aumenta (lo están desde sync inicial).
- *   2. Registra el módulo `training` en master.tenant_modules con
- *      uiOverride: "aumenta/FormacionOverview" (la landing por defecto habla
- *      de empresas+TutorLMS, no encaja).
+ *   2. Registra el módulo `training` en master.tenant_modules con el
+ *      interruptor «formación abierta» encendido (featureFlags.formacionAbierta:
+ *      la portada base se pinta sin empresas ni cuestionarios ni TutorLMS;
+ *      hasta el 18/08/2026 esto era un uiOverride "aumenta/FormacionOverview").
  *   3. Añade "training" al moduleAccess del admin de aumenta.
  *   4. Siembra 6 cursos reales + 15 alumnos privados + ~25 matrículas.
  *
@@ -268,8 +269,8 @@ async function main() {
 
   // Las tablas de training en crm_aumenta ya existen desde el sync inicial:
   // companies, courses, company_courses, training_users, course_enrollments,
-  // quiz_attempts. La de quiz_attempts NO se usa: el seed no crea filas y el
-  // override de UI oculta la sección Cuestionarios.
+  // quiz_attempts. La de quiz_attempts NO se usa: el seed no crea filas y la
+  // portada, en «formación abierta», no enseña la sección Cuestionarios.
 
   // ── 2. Registrar módulo training ────────────────────────────────────────
   header("Registrando módulo training en master.tenant_modules...");
@@ -280,31 +281,36 @@ async function main() {
       moduleKey: "training",
       enabled: true,
       version: "1.0.0",
-      uiOverride: "aumenta/FormacionOverview",
+      // Sin pantalla propia desde el 18/08/2026: la portada base sabe pintarse
+      // «abierta» y lo decide el interruptor de abajo (lib/training/formacionAbierta.js).
+      uiOverride: null,
       schemaExtensions: {},
       logicOverrides: {
-        // Indicadores para el override de UI
+        // Indicadores históricos (junio 2026). NO los lee nadie: la portada
+        // lee featureFlags.formacionAbierta. Se conservan porque ya están así
+        // en producción y quitarlos aquí no los quitaría de allí.
         b2bEnabled: false,
         quizzesEnabled: false,
         tutorlmsConnected: false,
       },
-      featureFlags: {},
+      featureFlags: { formacionAbierta: true },
     },
   });
 
   if (!modCreated) {
     await moduleRow.update({
       enabled: true,
-      uiOverride: "aumenta/FormacionOverview",
+      uiOverride: null,
       logicOverrides: {
         b2bEnabled: false,
         quizzesEnabled: false,
         tutorlmsConnected: false,
       },
+      featureFlags: { ...(moduleRow.featureFlags ?? {}), formacionAbierta: true },
     });
-    log("· Módulo ya existía — actualizado");
+    log("· Módulo ya existía — actualizado (formación abierta encendida, sin pantalla propia)");
   } else {
-    log("✓ Módulo training creado con uiOverride: aumenta/FormacionOverview");
+    log("✓ Módulo training creado con formación abierta encendida (sin pantalla propia)");
   }
 
   // ── 3. moduleAccess del admin ───────────────────────────────────────────
@@ -385,7 +391,7 @@ async function main() {
   process.stdout.write(`  Alumnos:          ${STUDENTS.length} (todos B2C, sin empresa)\n`);
   process.stdout.write(`  Matrículas:       ${STUDENTS.reduce((s, u) => s + u.courses.length, 0)}\n`);
   process.stdout.write(`  Cuenta admin:     ${ADMIN_EMAIL}\n`);
-  process.stdout.write(`  uiOverride:       aumenta/FormacionOverview\n`);
+  process.stdout.write(`  Portada:          formación abierta (featureFlags.formacionAbierta), sin pantalla propia\n`);
   process.stdout.write(`  Cuestionarios:    DESACTIVADOS (sin datos, sección oculta en UI)\n`);
   process.stdout.write("════════════════════════════════════════\n\n");
 
