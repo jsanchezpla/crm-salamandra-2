@@ -352,6 +352,12 @@ async function main() {
     await step12AuditLog();
     await step13Cleanup();
   } catch (e) {
+    // Contar el corte como fallo (18/08/2026). Antes solo se imprimía, y como
+    // el código de salida sale de `counts.fail`, reventar en el primer paso
+    // —el servidor apagado, sin ir más lejos— terminaba en VERDE: «pass=0
+    // fail=0» y salida 0. Una prueba que no ha podido probar nada no puede
+    // decir que todo está bien; es peor que una que falla, porque no avisa.
+    counts.fail++;
     process.stderr.write(`\n  ✗ Falló: ${e.message}\n`);
   } finally {
     process.stdout.write("\n════════════════════════════════════════════════════\n");

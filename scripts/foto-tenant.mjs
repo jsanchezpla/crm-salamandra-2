@@ -21,15 +21,18 @@
  * `pg_stat_user_tables`, que después de una carga grande y sin ANALYZE miente
  * por miles. Son decenas de consultas triviales; tardan menos que escribirlas.
  *
- * Uso local:      node --env-file=.env.local scripts/foto-tenant.mjs aumenta
+ * Uso local:      npm run foto aumenta
+ *                 node --env-file=.env.local scripts/foto-tenant.mjs aumenta
  * Uso producción: docker exec crm-salamandra-app-1 node scripts/foto-tenant.mjs aumenta
- *
- * NO lleva alias en package.json a propósito: `deploy.sh` compara `package.json`
- * y `package-lock.json` y, si cambian, se va por la ruta larga (`npm ci` +
- * `docker compose down`), que tumba el stack entero. Dos atajos de escritura no
- * valen una parada del CRM — y en producción no se usarían igualmente, porque
- * ahí todo va por `docker exec`.
  *   (dentro del contenedor las envs ya vienen por env_file; NO usar --env-file)
+ *
+ * El alias de `package.json` nació el 18/08/2026 y llegó tarde a propósito: se
+ * escribió este fichero sin él porque `deploy.sh` compara `package.json` entero
+ * y, si cambia, se va por la ruta larga (`npm ci` + `docker compose down`), que
+ * tumba el stack. Un atajo de escritura no valía una parada del CRM. El día que
+ * hubo que tocar el fichero de todas formas —para dar de alta `npm test`— se
+ * metieron los tres de una vez, que es la forma barata de pagarlo: una sola
+ * parada, elegida.
  *
  * Sin argumento lista los clientes que hay y para.
  *

@@ -1,3 +1,4 @@
+// @prueba ligera — se fabrica un sequelize de mentira; no abre ninguna conexión.
 /**
  * _smoke-paciente-borrado.mjs — borrar a un paciente lo devuelve al paso cero
  * (06/08/2026, Rodrigo).

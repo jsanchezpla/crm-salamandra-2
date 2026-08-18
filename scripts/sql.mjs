@@ -32,7 +32,8 @@
  * contenido de una ficha, una sesión clínica o un correo NO se saca por pantalla
  * ni se pega en un chat.
  *
- * Uso local:      node --env-file=.env.local scripts/sql.mjs aumenta 'SELECT count(*) FROM clients'
+ * Uso local:      npm run sql aumenta 'SELECT count(*) FROM clients'
+ *                 node --env-file=.env.local scripts/sql.mjs aumenta 'SELECT count(*) FROM clients'
  * Uso producción: docker exec crm-salamandra-app-1 node scripts/sql.mjs aumenta 'SELECT count(*) FROM clients'
  *   (dentro del contenedor las envs ya vienen por env_file; NO usar --env-file)
  *
