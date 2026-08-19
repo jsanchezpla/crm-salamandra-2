@@ -1,0 +1,8 @@
+[Unit]
+Description=CRM Salamandra - repaso nocturno de Formacion (TutorLMS -> CRM)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec crm-salamandra-app-1 node scripts/sync-formacion-nocturno.js

@@ -38,10 +38,18 @@ AFTER=$(git rev-parse HEAD)
 #    cambios de dependencias que venían commits atrás, tomaba la ruta rápida sin
 #    `npm ci` y el build podía romper por módulos que faltan. Ahora se compara el
 #    estado previo al pull contra el posterior, que es lo que de verdad entra.
+#
+#    Se mira SOLO package-lock.json (19/08/2026). Antes se miraba también
+#    package.json, y eso mandaba a la ruta larga —`npm ci` y `docker compose
+#    down`, o sea la base de TODOS los clientes parada un rato— por tocar un
+#    alias de `scripts` que no cambia ninguna dependencia. El lock es lo que
+#    `npm ci` instala: si cambian las dependencias, cambia el lock (y si alguien
+#    edita package.json a mano sin `npm install`, `npm ci` falla igual por lock
+#    desincronizado, así que mirar package.json no protegía de nada).
 if [ "$BEFORE" = "$AFTER" ]; then
   DEPS_CHANGED=""
 else
-  DEPS_CHANGED=$(git diff --name-only "$BEFORE" "$AFTER" -- package.json package-lock.json)
+  DEPS_CHANGED=$(git diff --name-only "$BEFORE" "$AFTER" -- package-lock.json)
 fi
 
 if [ "$FULL" = true ] || [ -n "$DEPS_CHANGED" ]; then
