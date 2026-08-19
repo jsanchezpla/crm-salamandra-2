@@ -103,13 +103,21 @@ function exigirDocumento(nombre) {
   }
 }
 
-function leerTexto(opciones) {
+/**
+ * El texto, del fichero o de stdin. Stdin se lee como flujo y no con
+ * `readFileSync(0)`: por `docker exec -i` la entrada es una tubería no
+ * bloqueante y con más de unas decenas de KB la lectura síncrona da EAGAIN
+ * (pasó con resuelto, 170 KB, el 19/08/2026; backlog, 35 KB, colaba).
+ */
+async function leerTexto(opciones) {
   if (opciones.fichero) return readFileSync(opciones.fichero, "utf8");
   if (process.stdin.isTTY) {
     err("Pasa el texto por stdin (… < fichero.md) o con --fichero ruta.");
     process.exit(1);
   }
-  return readFileSync(0, "utf8");
+  const trozos = [];
+  for await (const trozo of process.stdin) trozos.push(trozo);
+  return Buffer.concat(trozos).toString("utf8");
 }
 
 function quien(opciones) {
@@ -180,7 +188,7 @@ function pintarComprobacion(r) {
 
 async function comprobarOrden(nombre, opciones) {
   exigirDocumento(nombre);
-  const r = comprobar(leerTexto(opciones), nombre);
+  const r = comprobar(await leerTexto(opciones), nombre);
   out(`${nombre}: ${r.tareas} tareas en ${r.secciones} secciones`);
   pintarComprobacion(r);
   if (r.errores.length) process.exit(2);
@@ -194,7 +202,7 @@ async function publicar(
   { textoDado = null, notaPorDefecto = null } = {}
 ) {
   exigirDocumento(nombre);
-  const contenido = textoDado ?? leerTexto(opciones);
+  const contenido = textoDado ?? (await leerTexto(opciones));
   const actual = await ultimaVersion(models, nombre);
   const base = opciones.base !== undefined ? Number(opciones.base) : null;
   const p = prepararPublicacion({
