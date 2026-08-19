@@ -113,6 +113,28 @@ reinterpretaría el histórico, convirtiendo 400 «unidades» en 400 «kilos».
 **Retirar un producto** con movimientos lo desactiva (`active = false`) en vez de
 borrarlo: el histórico apunta ahí y borrarlo lo dejaría sin nombre.
 
+### Proveedores (fuera de `/api/inventory`)
+
+| Método | Ruta | Qué hace |
+| --- | --- | --- |
+| GET/POST | `/api/proveedores` | Lista (`search`; solo activos salvo `incluirInactivos=1`) · alta (`409` si ya hay uno con ese nombre) |
+| GET/PUT/DELETE | `/api/proveedores/[id]` | Ficha (con `totalGastado` si el tenant tiene `billing`) · edición · baja |
+
+La puerta es **`billing` o `inventory`** a propósito: el proveedor es la misma
+ficha para las dos cosas (te factura y te entrega mercancía), y un tenant que
+solo tenga uno de los dos módulos debe poder mantener su lista. La baja
+**desactiva** si tiene gastos o entradas colgando y borra de verdad si no tiene
+nada. El desplegable de proveedor del alta de entrada lee de aquí.
+
+### Auditoría
+
+Los endpoints escriben en `master.AuditLog` con `inventory.entry.created`,
+`inventory.product.updated`, `inventory.product.deactivated`,
+`inventory.product.deleted` e `inventory.stock.adjusted`; sus frases están en
+`lib/actividad/etiquetas.js` y salen en Equipo → Actividad. (Ahí siguen también
+las frases de `inventory.inbound.*`, `outbound.*` y `formula.*`, para que los
+registros del esquema anterior sigan leyéndose.)
+
 ## Pantalla
 
 `/inventario` — lista con stock y unidad, filtro por categoría y por bajo
@@ -140,8 +162,21 @@ un pedido de hace un año no puede cambiar de importe.
   **Cuenta las filas antes de borrar y se planta** si encuentra datos en un
   schema que no sea `crm_demo` (`--forzar` para saltárselo, `--dry-run` para ver
   qué haría).
-- `scripts/seed-inventario-demo.js` — llena el almacén de la demo con material
-  de centro clínico, con varias unidades y algún producto bajo mínimo.
+- **Activar en un tenant**: `node scripts/enable-module.js <slug> inventory`.
+  La migración está declarada en `MODULES.inventory` de
+  `scripts/_module-migrations.js` y va DESPUÉS de `migrate-suppliers` (bloque
+  `billing`), porque `stock_entries.supplier_id` apunta a `suppliers`.
+  En producción: `docker exec crm-salamandra-app-1 node scripts/enable-module.js <slug> inventory`
+  (los scripts viajan dentro de la imagen).
+- **Semilla de las demos**: desde el 18/08/2026 el almacén lo siembra
+  `scripts/seed-sandbox-data.js` (bloque «5. INVENTARIO»: catálogo genérico,
+  proveedores, entradas, salidas y un ajuste), que es lo que llaman
+  `rebuild-demo-showcase.js` y `crear-demos-por-oficio.js`. Las cuatro demos
+  comparten ese catálogo, y los pedidos de la demo apuntan a él.
+- `scripts/seed-inventario-demo.js` — **extra opcional, a mano**: sustituye el
+  catálogo genérico de `crm_demo` por material de centro clínico (varias
+  unidades, algún producto bajo mínimo). Solo toca `crm_demo`; idempotente,
+  `--rehacer` para borrar y volver a poner. Nadie lo llama desde el rebuild.
 
 ⚠️ `scripts/migrate-inventory-rework.js` (sin la «a») es el rework de ABRIL y
 está en `ONE_OFF`: **no se ejecuta**. Creaba justo las tablas que el nuevo

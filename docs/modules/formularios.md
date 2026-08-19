@@ -1,4 +1,4 @@
-# Módulo Formularios
+# Módulo Formularios — «Leads Comerciales» (`formularios`)
 
 ## Mapa
 
@@ -19,13 +19,20 @@
 | **Modelos** | `Form` → `forms` (`models/tenant/Form.model.js`; las preguntas en `fields` JSONB) y `FormSubmission` → `form_submissions` (`models/tenant/FormSubmission.model.js`; `answers` JSONB con enunciado, `client_id` como candado, `handled_by_team_id`). Asociaciones en `lib/db/tenantDb.js`: `FormSubmission.belongsTo(Form)` y `FormSubmission.belongsTo(TeamMember)`. |
 | **Interruptores y parámetros** | Ninguno propio que lea el código. Al aceptar, `applyAutoAssignments` (`lib/clients/moduleAssignments.js`) lee `nutricion.autoAsignarEnAlta` del módulo Nutrición. Los parámetros del módulo van en la fila del formulario, `forms.settings`: `notifyEmails`, `privacyUrl`, `privacyVersion`, `wordpressUrl` (`retentionDays` solo lo escriben los seeds; nadie lo lee). |
 | **Pantallas propias** | Ninguna: el mapa `UI_OVERRIDES` de `app/(dashboard)/formularios/page.jsx` está vacío (el módulo pinta las preguntas que traiga cada formulario). |
-| **Scripts** | Activar: `node scripts/enable-module.js <slug> formularios` (crea `forms` y `form_submissions`: `migrate-formularios-module.js` y `migrate-formsubmission-team.js`, registradas en `scripts/_module-migrations.js`) y después `grant-module-access.js <slug> formularios`. Seeds de DATOS (nombran tenant): `seed-formulario-nutri-laura.js [slug]`, `seed-formulario-aumenta.js <slug>`. Herramientas: `mover-leads-a-comerciales.js <slug> <form> [--confirm]` (leads de familias → bandeja, idempotente), `backfill-origen-formulario.js [--confirm]` (`customFields.origen` → `origin` en las fichas nacidas de una solicitud; ya lanzado, repetible). |
+| **Scripts** | Activar: `node scripts/enable-module.js <slug> formularios` (crea `forms` y `form_submissions`: `migrate-formularios-module.js` y `migrate-formsubmission-team.js`, registradas en `scripts/_module-migrations.js`) (abre las dos puertas para los admin; `--grant-users` para el resto, o `grant-module-access.js <slug> formularios` a mano). Seeds de DATOS (nombran tenant): `seed-formulario-nutri-laura.js [slug]`, `seed-formulario-aumenta.js <slug>`. Herramientas: `mover-leads-a-comerciales.js <slug> <form> [--confirm]` (leads de familias → bandeja, idempotente), `backfill-origen-formulario.js [--confirm]` (`customFields.origen` → `origin` en las fichas nacidas de una solicitud; ya lanzado, repetible). |
 | **Pruebas** | En `npm test`: `scripts/_smoke-aceptar-solicitud.mjs` (`accept.js` y `fields.js`, sin base) y `_smoke-menor-firma.mjs` (`edadDeclarada.js`); más las de Citas que leen la bandeja con un `FormSubmission` falso (`_smoke-puerta-descartada`, `_smoke-puerta-profesional`, `_smoke-aviso-admision`, `_smoke-paciente-borrado`). Con base de datos: `_smoke-formulario-cita.mjs` (`fields.js` desde un tipo de cita). Con servidor y base: `_smoke-dni-formulario.mjs` (formulario público → aceptar → `Client.taxId`, por HTTP) y `_smoke-puerta-formulario.mjs` (sin solicitud aceptada no hay cita). |
 | **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` (`form_submissions.handled_by_team_id`) · `../decisions/2026-08-01-leads-dos-origenes-un-grupo.md` |
 | **En este doc** | La decisión de fondo: las preguntas son DATOS · No todo formulario de la web es de este módulo · Tablas · Endpoints · Antispam · Aceptar: qué pasa exactamente · Alta en WordPress (`lib/formularios/portalUser.js`) · Puesta en marcha de un tenant |
 
 **moduleKey:** `formularios` · **Estado:** implementado (2026-07-22) ·
 **Primer tenant:** `nutri_laura`
+
+Nació como «Formularios» y desde el 01/08/2026 es **Leads Comerciales**: en el
+sidebar cuelga del grupo «Leads» como «Comerciales» (el embudo de `leads` es
+«Profesionales») y la pantalla `/formularios` se titula así. La clave
+`formularios`, la ruta y las tablas no cambiaron, y **requiere `leads`**: una
+bandeja sin embudo donde caer no es un producto. Detalle en
+`../decisions/2026-08-01-leads-dos-origenes-un-grupo.md`.
 
 Formularios públicos incrustados en la web del cliente cuyas solicitudes caen
 en una bandeja del CRM. Al aceptar una solicitud se crea la ficha de cliente
@@ -122,7 +129,9 @@ Contrato de cada elemento de `fields`:
   dos sitios. O está declarado allí, o va a null.
 
 Claves de `settings` que el código lee: `notifyEmails`, `privacyUrl`,
-`privacyVersion`, `retentionDays`, `wordpressUrl`.
+`privacyVersion`, `wordpressUrl`. `retentionDays` la escriben los seeds
+(365) y la documenta el modelo, pero **no la lee nadie**: la purga de
+descartadas sigue siendo manual (ver «Pendiente»).
 
 ### `form_submissions` — cada solicitud
 
@@ -159,11 +168,14 @@ de anónimo, y no hace falta para nada del flujo.
 | PATCH | `/api/formularios/{id}` | descartar, recuperar o anotar |
 | GET | `/api/formularios/{id}/accept` | ¿ya existe ficha de esta persona? |
 | POST | `/api/formularios/{id}/accept` | aceptar → crear/enlazar ficha |
+| DELETE | `/api/formularios/{id}` | eliminar DEL TODO una solicitud, **solo si está `rejected`** (409 en otro estado): las `pending` se trían, las `accepted` tienen ficha detrás. Borrado físico |
+| POST | `/api/public/c/{tenant}/registro-web` | aviso firmado (HMAC, subclave derivada + `ts` con ventana antirreplay) que manda el WordPress del tenant cuando alguien se registra. **Desde el 05/08/2026 no crea nada**: responde 200 con `{ creada: false, motivo: "registro_no_es_solicitud" }`. Se conserva para que el theme que aún lo llama no registre errores; 20/min por tenant |
+| POST | `/api/public/c/{tenant}/registro-web/sync` | puesta al día en LOTE (hasta 1.000 usuarios, 4/min): misma firma; por cada correo sin ficha ni solicitud pendiente crea una solicitud en el formulario de registro (`asegurarFormularioRegistro`). Repetible: no duplica |
 
 Transiciones permitidas: `pending → rejected`, `rejected → pending`.
 **`accepted` no vuelve atrás**: ya hay una ficha creada a partir de esa
 solicitud y devolverla a pendiente abriría la puerta a una segunda ficha de la
-misma persona.
+misma persona. La única salida de `rejected` hacia fuera es el `DELETE`.
 
 ---
 
@@ -278,20 +290,37 @@ preguntar» —la web no responde, o su theme todavía no trae la consulta— no
 es, y pintarlos igual sería mentir en rojo. El motivo `sin_soporte` (404) es el
 caso normal hasta que el cliente suba el theme nuevo.
 
-**2. Cazar a quien entra con otro correo.** En el canje del SSO
-(`/citas-portal/session`) el CRM ve el correo real con el que la paciente entra
-en la web — y hasta hoy lo tiraba. Ahora, si no hay ficha con ese correo, deja
-una solicitud en la bandeja («Entró en su área privada y no hay ficha con este
-correo»). Va sin esperarla: entrar en el área privada no puede depender de esto.
+**2. Cazar a quien entra con otro correo — RETIRADO el mismo día (05/08/2026,
+Rodrigo).** En el canje del SSO (`/citas-portal/session`) el CRM ve el correo
+real con el que la paciente entra en la web. La primera versión dejaba, si no
+había ficha con ese correo, una solicitud en la bandeja («Entró en su área
+privada y no hay ficha con este correo»), con la misma lógica idempotente que
+`registro-web` (`asegurarSolicitudDeAlta`). **Se quitó esa misma tarde**: una
+solicitud significa «quiero ser paciente», y la web tiene DOS registros que el
+CRM no distingue (el botón de registro para comprar cursos —la mayoría— y el
+formulario de `/formularios`). Tratar cualquier entrada como solicitud llenó
+Leads Comerciales de gente que no había pedido nada (46 rechazadas a mano en
+tres semanas) y, peor, la puerta de admisión les leía esa solicitud como
+«pendiente» y les decía «tu solicitud está en revisión» sin haber rellenado
+nada.
 
-La lógica de esa solicitud es `asegurarSolicitudDeAlta`, compartida con
-`registro-web`: mismas guardas de idempotencia (ya es cliente / ya hay una
-pendiente), así que un portal que se abre veinte veces al día no llena la
-bandeja.
+**La regla, de Rodrigo: una solicitud la crea SOLO el formulario de
+`/formularios`.** Hoy:
 
-⚠️ Al aceptar esa solicitud, **enlazarla con la ficha que ya existe** en vez de
-crear una nueva, o quedarán dos fichas de la misma persona. La bandeja ya ofrece
-esa opción (`buscarClienteExistente`).
+- el canje del SSO **no crea nada** (el comentario en `session/route.js` lo
+  explica);
+- `POST …/registro-web` sigue existiendo pero responde 200 sin crear
+  (`registro_no_es_solicitud`), para que el theme que aún lo llama no registre
+  errores; se borrará cuando salga de `nutrilaura-registro-crm.php`;
+- `asegurarSolicitudDeAlta` sigue en `lib/formularios/registroWeb.js` y hoy
+  solo la importa `registro-web`, que ya no la llama;
+- la única que crea solicitudes desde WordPress es `registro-web/sync`, la
+  puesta al día en lote, y a mano.
+
+Lo que SÍ queda del punto 2 es el aviso en la ficha: si el correo no coincide,
+el punto 1 lo pinta («sin cuenta»), y la solución es corregir el correo en uno
+de los dos lados o enlazar la solicitud con la ficha existente
+(`buscarClienteExistente`) si entró por el formulario.
 
 ⚠️ **Se descartó sincronizar los correos automáticamente** (que el CRM cambie el
 de WordPress al cambiar el de la ficha): le estaría cambiando a alguien el
@@ -305,21 +334,26 @@ Lado WordPress de la consulta: `nutrilaura-portal-user.php`, theme v1.29.0.
 ## Puesta en marcha de un tenant
 
 ```bash
-node scripts/enable-module.js <slug> formularios          # activa Y migra
-node scripts/seed-formulario-nutri-laura.js <slug>        # siembra el formulario
-node scripts/grant-module-access.js <slug> formularios    # acceso a los usuarios
+node scripts/enable-module.js <slug> formularios          # activa, migra Y abre el acceso a los admin
+node scripts/seed-formulario-nutri-laura.js <slug>        # siembra el formulario (o seed-formulario-aumenta.js)
+node scripts/enable-module.js <slug> formularios --grant-users   # si además lo tienen que ver usuarios normales
 ```
 
 El segundo acepta el slug como argumento para poder ensayarlo en un tenant de
 pruebas antes de tocar el del cliente.
 
-**El tercero no es opcional y es donde se falla.** `enable-module` enciende el
-módulo para el TENANT, pero cada usuario tiene además su propia lista
-`master.users.module_access`. Si esa lista existe y no incluye la clave, la
-persona ve la entrada en el menú y **toda la API le responde 403** — parece un
-bug del módulo nuevo y no lo es. Los usuarios con lista vacía o con el comodín
-`all` (y los `superadmin`) no necesitan nada: el script los detecta y no los
-toca. Admite `--dry-run` y `--revoke`.
+**Las dos puertas.** `enable-module` enciende el módulo para el TENANT, pero
+cada usuario tiene además su propia lista `master.users.module_access`. Si esa
+lista existe y no incluye la clave, la persona ve la entrada en el menú y
+**toda la API le responde 403** — parece un bug del módulo nuevo y no lo es.
+Desde el 01/08/2026 `enable-module.js` abre esa segunda puerta a los **admin**
+del tenant él solo (`--sin-admins` para evitarlo) y avisa de los usuarios
+normales que se quedan sin verlo, que se dan con `--grant-users` (que una
+terapeuta vea una bandeja es una decisión, no un efecto secundario). Los
+usuarios con lista vacía o con el comodín `all` (y los `superadmin`) no
+necesitan nada. `scripts/grant-module-access.js <slug> formularios` sigue
+valiendo para hacerlo aparte (admite `--dry-run` y `--revoke`), y `npm run
+db:check-access` lista quién no ve qué en todos los clientes.
 
 ---
 
@@ -344,6 +378,7 @@ ejecución.
 ## Pendiente
 
 - Purga automática de las solicitudes **descartadas** pasado
-  `settings.retentionDays` (1 año para tunutrilaura). Hoy hay que hacerlo a mano.
+  `settings.retentionDays` (los seeds lo dejan en 365, pero ningún código lo
+  lee). Hoy hay que hacerlo a mano: `DELETE /api/formularios/{id}` una a una.
 - Editor visual de preguntas dentro del CRM.
 - Buscar dentro de las respuestas exige recorrer un JSONB sin índice útil.

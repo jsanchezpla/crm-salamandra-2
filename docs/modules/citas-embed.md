@@ -20,19 +20,28 @@
 | **Decisiones** | — (las del módulo, en `citas.md`) |
 | **En este doc** | Qué es · Endpoints públicos que consume · Snippet para WordPress (Sprint 1) · Portal "Mis citas" (SSO WordPress) — Sprint 2 · TODO Sprint 2 · Verificación manual rápida |
 
-> **Sprint 1 (landing pública)** — generado 2026-05-29.
-> Reemplaza este doc con la versión Sprint 2 cuando lleguen emails de Resend
-> y restricción de dominio.
+> **Histórico:** este doc nació como «Sprint 1 (landing pública)» el 2026-05-29 y
+> decía «reemplázalo cuando lleguen emails de Resend y restricción de dominio». Las
+> dos cosas llegaron —10 plantillas en `lib/email/templates/citas/` y CSP por tenant
+> con `WIDGET_FRAME_ANCESTORS`— y después el portal SSO, las puertas y el cobro. Las
+> secciones de abajo conservan la cronología (Sprint 1 → Sprint 2) con lo que ha
+> cambiado anotado; lo vigente está en el `## Mapa` y en `citas.md`.
 
 ## Qué es
 
 La landing pública del módulo Citas vive **dentro del CRM Next.js** bajo
-`/widget/c/{tenantSlug}`. Es un mini-flujo de 3 vistas:
+`/widget/c/{tenantSlug}`. Empezó como un mini-flujo de 3 vistas y hoy son cinco:
 
 - `/widget/c/{tenantSlug}` — pantalla 1: seleccionar tipo de cita + día + hora.
 - `/widget/c/{tenantSlug}/book?eventTypeId=…&datetime=…` — pantalla 2: datos
-  del cliente + confirmación inline.
+  del cliente + confirmación inline (y, si el tipo tiene precio, el formulario de
+  tarjeta; si es un bono, salta a Stripe Checkout).
 - `/widget/c/{tenantSlug}/cancel/{token}` — cancelar una cita desde un enlace.
+- `/widget/c/{tenantSlug}/mi-perfil` — el portal de la familia con sesión SSO
+  (Sprint 2, abajo). `/mis-citas` fue su primer nombre y **redirige** ahí
+  (`next.config.mjs`).
+- `/widget/c/{tenantSlug}/pagar/{token}` — volver a meter la tarjeta cuando la
+  profesional la pide otra vez (ver `pagos.md`).
 
 Se embebe en cualquier web del cliente (WordPress, etc.) vía `<iframe>`.
 
@@ -46,13 +55,15 @@ Todos bajo `/api/public/c/{tenantSlug}/*` (sin JWT):
 | GET    | `/api/public/c/{slug}/event-types`                              | EventType activos con modalidad `online`  |
 | GET    | `/api/public/c/{slug}/availability?eventTypeId=…&date=…`        | Slots libres de un día                    |
 | GET    | `/api/public/c/{slug}/availability/month?eventTypeId=…&year=…&month=…` | Días del mes con al menos 1 slot   |
-| POST   | `/api/public/c/{slug}/book`                                     | Crea Booking (modalidad `online` fija)    |
+| POST   | `/api/public/c/{slug}/book`                                     | Crea Booking (modalidad `online` fija). Antes pasa las PUERTAS (identidad, admisión, contrato, tipos visibles, `reservaOnlineCerrada`, `soloConPago`) y, con precio, deja la retención preparada |
 | GET    | `/api/public/c/{slug}/booking/{token}`                          | Datos mínimos para mostrar en cancelación |
 | POST   | `/api/public/c/{slug}/cancel/{token}`                           | Cancela el Booking                        |
+| GET    | `/api/public/c/{slug}/pagar/{token}`                            | Lo que necesita `/pagar/{token}`: servicio, hora, importe y `clientSecret` de la retención nueva |
 
 Todos validan que el tenant existe, que el módulo `citas` está activo y, en
 los endpoints que tocan EventType, que el EventType tiene `online` en
-`modalities`.
+`modalities`. Además de estos ocho, el portal con sesión añade trece bajo
+`citas-portal/` (Sprint 2, abajo).
 
 Si el tenant o el módulo no existen → **404**.
 
@@ -83,31 +94,44 @@ Notas para Laura:
 2. El iframe es `loading="lazy"`: solo carga cuando entra en viewport. Si lo
    pones above-the-fold (al principio de la página) puedes quitar ese atributo.
 3. El `meetUrl` de cada tipo de cita se configura desde el CRM (`Citas →
-   Tipos de cita`). En Sprint 1 es una sala permanente de Google Meet —
-   todas las reservas comparten la misma URL.
+   Tipos de cita`). **Histórico:** en Sprint 1 era una sala permanente de
+   Google Meet compartida por todas las reservas. Hoy el modo por defecto es
+   **manual** (`lib/citas/videollamada.js`, `settings.citas.meetModo`): la cita
+   nace sin enlace y la profesional lo pega y lo envía con «Guardar y enviar»;
+   el modo «automático» es el que hereda la sala fija del tipo.
 
-## Sprint 1: CSP `frame-ancestors *`
+## CSP `frame-ancestors`: por tenant
 
-El middleware (`middleware.js`) añade en rutas `/widget/c/*`:
+El middleware (`middleware.js`, `applyWidgetCspHeaders`) añade en rutas
+`/widget/c/*` la cabecera `Content-Security-Policy: frame-ancestors …`. Los
+dominios permitidos salen de la variable de entorno **`WIDGET_FRAME_ANCESTORS`**,
+un JSON `{ slug: "https://dominio.com https://www.dominio.com" }` (va en el
+entorno porque el middleware corre antes que la base de datos). Con entrada, el
+valor es `'self' <dominios>`; **un tenant SIN entrada sigue con `*`**, así que
+encenderlo no rompe a nadie y se va cerrando cliente a cliente según confirman su
+dominio.
 
-```
-Content-Security-Policy: frame-ancestors *
-```
-
-Esto permite embeber la landing desde **cualquier dominio**. Es práctico en
-Sprint 1 mientras probamos con Laura, pero **inseguro como estado final**:
-cualquier web podría incrustar tu landing.
+**Histórico (Sprint 1):** era `frame-ancestors *` para todos — práctico mientras
+se probaba con Laura, inseguro como estado final: cualquier web podía incrustar
+la landing y hacerse pasar por el centro ante sus pacientes.
 
 ## Portal "Mis citas" (SSO WordPress) — Sprint 2
 
 Segunda página embebible donde el cliente **logueado en la web de Laura** ve
-**sus** citas (próximas + historial) y cancela las futuras. A diferencia del
-widget de reserva (anónimo, gate `?wpa=1` sin firma), aquí hace falta **identidad**:
-qué citas mostrar depende de quién eres.
+**sus** citas (próximas + historial) y cancela las futuras; desde entonces ha
+crecido y se llama «Mi perfil»: contrato, datos, documentos, avisos, comunicaciones y
+consentimiento de imagen (las puertas están en `citas.md`). Aquí hace falta
+**identidad**: qué citas mostrar depende de quién eres. El widget de reserva
+era anónimo; **`?wpa=1` nunca fue identidad** (lo pone quien abre la URL y el
+servidor no lo miraba) y desde el 05/08/2026 ya no prueba nada: lo único que
+cuenta es la sesión de portal, también para reservar si el centro enciende
+`identidadObligatoria` (ver «Puerta de identidad» en `citas.md`).
 
 ### Ruta y flujo
 
-- Página: `/widget/c/{tenantSlug}/mis-citas` (hereda el `layout.jsx` del widget).
+- Página: `/widget/c/{tenantSlug}/mi-perfil` (hereda el `layout.jsx` del widget).
+  Nació como `/mis-citas`; esa URL sigue funcionando como redirect permanente
+  (`next.config.mjs`) porque está enlazada desde la web y en correos ya enviados.
 - **SSO por doble token** (patrón OAuth "code → access token"), porque el iframe
   es cross-origin y **no se pueden usar cookies** (Chrome/Safari bloquean cookies
   de terceros):
@@ -121,9 +145,11 @@ qué citas mostrar depende de quién eres.
   guarda el `sessionToken` en `sessionStorage` y limpia el `wpsso` de la URL. Todos
   los tokens son JWT **HS256** verificados con `algorithms:["HS256"]`.
 
-### Endpoints nuevos (bajo `/api/public/c/{slug}/citas-portal/`)
+### Endpoints del portal (bajo `/api/public/c/{slug}/citas-portal/`)
 
 Todos requieren módulo `citas` activo **y** `tenant.settings.widget.sso.enabled === true` (si no → 403).
+
+Los tres del Sprint 2:
 
 | Método | Ruta | Auth | Devuelve |
 | ------ | ---- | ---- | -------- |
@@ -133,11 +159,21 @@ Todos requieren módulo `citas` activo **y** `tenant.settings.widget.sso.enabled
 
 La cancelación reutiliza `lib/citas/cancelBooking.js` (compartido con `cancel/{token}`).
 
+Y los diez que vinieron después, todos con `Authorization: Bearer` (su detalle
+en la tabla «Portal de la familia» de `citas.md`): `admision` (GET: ¿puede
+reservar ya?), `avisos` (GET/POST), `comunicaciones` (GET/POST),
+`consentimiento-imagen` (GET/POST), `mis-datos` (GET/POST), `documents`
+(GET/POST) y `documents/{id}` (GET), `contract` (GET), `contract/sign` (POST)
+y `contract/documento` (GET). Trece en total.
+
 ### Puesta en marcha (checklist)
 
 1. **Activar el flag** por tenant:
-   `docker compose exec app node scripts/configure-nutri-laura-citas-portal.js`
-2. **Secretos en `.env.production`** del VPS (regla #14, generar con `openssl rand -hex 32`):
+   `docker exec crm-salamandra-app-1 node scripts/configure-portal-citas.js <slug>`
+   (acepta `--sin-cancelacion`, `--sin-reserva`, `--apagar`, `--dry-run`; sustituye
+   a `configure-nutri-laura-citas-portal.js`, que tenía el slug a fuego y sigue en
+   disco).
+2. **Secretos en `.env.production`** del VPS (regla #15, generar con `openssl rand -hex 32`):
    `WIDGET_SSO_SECRETS='{"nutri_laura":"<hex>"}'` y `CITAS_PORTAL_SESSION_SECRET='<otro hex>'`.
 
    > **Para ROTAR el de WordPress sin cortar el portal** (12/08/2026), el valor
@@ -159,12 +195,15 @@ La cancelación reutiliza `lib/citas/cancelBooking.js` (compartido con `cancel/{
 
 ### Reserva con login + email autorrellenado
 
-El shortcode `[crm_reservar_cita]` pasa `?wpa=1&wpsso=<token>` al widget de reserva. El
-widget canjea el `wpsso` por una sesión de portal (mismo mecanismo que "Mis citas") y con
-ella **pre-rellena y bloquea** el campo de email del formulario con el email de la cuenta
-de WordPress. Al confirmar, el frontend envía el `sessionToken` en `Authorization: Bearer`
-y el endpoint `POST /book` **fuerza** ese email verificado (ignora el del body). Así la cita
-queda ligada a la cuenta del cliente y aparece automáticamente en su "Mis citas".
+El shortcode `[crm_reservar_cita]` pasa `?wpa=1&wpsso=<token>` al widget de reserva. Lo
+que importa es el **`wpsso`**: el widget lo canjea por una sesión de portal (mismo
+mecanismo que "Mi perfil") y con ella **pre-rellena y bloquea** el campo de email del
+formulario con el email de la cuenta de WordPress. Al confirmar, el frontend envía el
+`sessionToken` en `Authorization: Bearer` y el endpoint `POST /book` **fuerza** ese email
+verificado (ignora el del body). Así la cita queda ligada a la cuenta del cliente y
+aparece automáticamente en su "Mi perfil". `?wpa=1` se conserva solo como apaño de
+pantalla (`useWidgetAuth`) para webs que lo pasen sin pasar la sesión; desde el
+05/08/2026 no abre nada por sí solo.
 
 > El embed plano de la sección "Snippet para WordPress (Sprint 1)" queda **superado** por
 > `[crm_reservar_cita]` para tenants con SSO: no exige login ni autorrellena el email.
@@ -173,14 +212,15 @@ queda ligada a la cuenta del cliente y aparece automáticamente en su "Mis citas
 
 El shortcode `[crm_mis_citas]` ya genera el `<iframe>` con el `wpsso`. Solo si se
 prefiere control manual, el iframe apunta a
-`https://crm.salamandrasolutions.com/widget/c/nutri_laura/mis-citas?wpsso=<token>`
-(el `<token>` lo debe generar WordPress server-side; **no** hardcodear).
+`https://crm.salamandrasolutions.com/widget/c/nutri_laura/mi-perfil?wpsso=<token>`
+(la ruta vieja `/mis-citas` redirige; el `<token>` lo debe generar WordPress
+server-side; **no** hardcodear).
 
 ### Prueba en local (sin WordPress)
 
 ```powershell
 # 1. Activar flag + poner ambos secretos en .env.local
-node --env-file=.env.local scripts/configure-nutri-laura-citas-portal.js
+node --env-file=.env.local scripts/configure-portal-citas.js nutri_laura
 
 # 2. Generar un wpsso de prueba (imprime la URL del iframe)
 node --env-file=.env.local scripts/dev-mint-wpsso.js nutri_laura test@x.com
@@ -189,17 +229,24 @@ node --env-file=.env.local scripts/dev-mint-wpsso.js nutri_laura test@x.com
 
 ## TODO Sprint 2
 
-- [ ] Restringir `frame-ancestors` a `https://tunutrilaura.com
-  https://www.tunutrilaura.com` (y subdominios de prueba si aplica). Editar
-  `applyWidgetCspHeaders()` en `middleware.js`.
-- [ ] Emails de confirmación (Resend o similar) al cliente y a Laura,
-  incluyendo el enlace de cancelación (`/widget/c/{slug}/cancel/{token}`).
-- [ ] Integración Google Calendar / Meet — cada Booking genera su propio
-  enlace único en lugar de usar la sala permanente del EventType.
-- [ ] Altura dinámica del iframe vía `postMessage`. El widget enviaría su
-  altura tras cada render y el snippet de WordPress ajustaría el `height`.
+Revisado el 19/08/2026:
+
+- [x] Restringir `frame-ancestors`: hecho por tenant con `WIDGET_FRAME_ANCESTORS`
+  (ver «CSP `frame-ancestors`: por tenant»); no se edita código, se añade la entrada
+  del cliente en el entorno.
+- [x] Emails de confirmación al cliente con el enlace de cancelación: hechos
+  (`bookingConfirmed`, `bookingReceived`, `bookingRejected`, `bookingCancelled`,
+  `bookingReminder`… en `lib/email/templates/citas/`; ver `emails.md`). La clave de
+  Resend es del cliente (BYOK). A Laura le avisa la campana del CRM, no un correo.
+- [ ] Integración Google Calendar / Meet — cada Booking genera su propio enlace
+  único. Hoy hay dos modos (`lib/citas/videollamada.js`: manual por defecto,
+  automático = sala fija del tipo) y «Añadir a Google Calendar»
+  (`lib/citas/googleCalendar.js`), pero nadie crea salas llamando a Google.
+- [ ] Altura dinámica del iframe vía `postMessage`. Sigue sin hacerse: el snippet
+  pone `min-height` fijo y el scroll va dentro del iframe.
 - [ ] Revisar si interesa exponer `/widget/c/{slug}` como public crawl
-  (hoy lleva `robots: noindex,nofollow` desde `app/widget/c/[tenantSlug]/layout.jsx`).
+  (sigue con `robots: { index: false, follow: false }` en
+  `app/widget/c/[tenantSlug]/layout.jsx`).
 
 ## Verificación manual rápida
 

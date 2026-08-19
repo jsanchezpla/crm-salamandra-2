@@ -73,7 +73,8 @@ const navigation = [
         label: "Leads",
         // El padre son las ESTADÍSTICAS (01/08/2026): es lo único que mira los
         // dos orígenes a la vez. El embudo de siempre no se mueve de /leads —
-        // tiene ocho overrides por tenant colgando— y pasa a ser un hijo.
+        // tiene overrides por tenant colgando (cuatro hoy: aumenta, nutri-laura,
+        // retorika y spain-enzymes; eran ocho)— y pasa a ser un hijo.
         href: "/leads/estadisticas",
         badge: null,
         // Leads tiene DOS orígenes y se llaman por su origen (01/08/2026):

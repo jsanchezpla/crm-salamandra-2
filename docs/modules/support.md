@@ -29,9 +29,13 @@ plantillas de respuesta, SLA con avisos, informes, IA a demanda y un portal
 público para el cliente final. Implementado 2026-07-27 (fases 1–3 completas).
 
 **No confundir con:**
-- El canal tenant→Salamandra: cuando el tenant NO tiene el módulo, `/soporte`
-  degrada a la tarjeta de contacto (mailto a info@salamandrasolutions.com). La
-  llave inglesa del pie del sidebar la ve todo el mundo, con o sin módulo.
+- El canal tenant→Salamandra, que es el **Buzón** (`/ayuda`, `buzon.md`) y lo
+  tienen todos. Cuando el tenant NO tiene el módulo `support`, `/soporte` no da
+  404: la API responde 403 y la pantalla degrada a `ContactoSalamandra()`, que
+  explica que Soporte es otra cosa y enlaza a `/ayuda` (hasta el 13/08/2026 era
+  un `mailto:` a info@salamandrasolutions.com, y era el único camino hacia
+  nosotros). La llave inglesa del pie del sidebar la ve todo el mundo, con o
+  sin módulo.
 - `Incidencia` (Clínica): helpdesk interno del Programa de Excelencia.
 
 ## Modelos (`models/tenant/`)
@@ -86,7 +90,8 @@ estado dejan nota `system` (interna) en el hilo con quién y cuándo.
 - `categories`, `templates`, `settings` — CRUD/ajustes (escritura solo admin).
 - `GET /api/tickets/stats?months=N` — serie mensual, tiempos medios, % SLA,
   por categoría y por responsable.
-- `GET /api/tickets/attachments/[id]` — descarga por stream (attachment+nosniff).
+- `GET /api/tickets/attachments/[attachmentId]` — descarga por stream
+  (attachment+nosniff).
 
 Roles: cabecera `x-user-role` (`ADMIN_ROLES`). Asignación = `TeamMember.id`
 (mismo criterio que `Incidencia.assignedToId`); el aviso resuelve su User
@@ -123,10 +128,14 @@ se quedaba en "Cargando"), `TicketDetail` (drawer regla #13, hilo + propiedades
 + composer respuesta/nota con plantillas y Borrador IA), `NewTicketModal`,
 `SupportReports` (KPIs + barras CSS), `SupportConfig` (portal, SLA, avisos,
 IA, categorías, plantillas). Sin módulo → la API responde 403 y la UI degrada
-a la tarjeta de contacto con Salamandra.
+a `ContactoSalamandra()`, que enlaza al Buzón (`/ayuda`).
 
-Pie del sidebar (pedido del socio 2026-07-27): **Soporte · Configuración ·
-Cerrar sesión**, en ese orden.
+Pie del sidebar: **Ayuda · Soporte · Configuración (solo admin) · Cerrar
+sesión**, en ese orden. Los tres últimos los pidió el socio el 2026-07-27;
+Ayuda entró la primera el 13/08/2026 porque la ve todo el mundo y no depende
+de ningún módulo. Son dos iconos distintos a propósito: la llave inglesa es el
+helpdesk del cliente hacia SUS clientes; el interrogante, su línea con
+nosotros.
 
 ## Conversación por CORREO (bidireccional, 2026-07-27 tarde)
 
@@ -190,8 +199,12 @@ asunto mandando sobre el remitente, el remitente del equipo, el duplicado y la
 reapertura.
 
 ```bash
-node --env-file=.env.local scripts/_smoke-correo-entrante.mjs sandbox
+node --env-file=.env.local scripts/_smoke-correo-entrante.mjs demo
 ```
+
+(El argumento es el slug de un tenant local con el módulo; el valor por defecto
+del script sigue siendo `sandbox`, que ya no existe en ningún entorno, así que
+hay que pasarlo.)
 
 ## SLA por ticket
 
@@ -233,6 +246,8 @@ el módulo).
 - El reloj SLA no se pausa en `waiting` (ver arriba).
 - Adjuntos del correo entrante: solo se importan si el webhook los trae inline
   (base64). Si Resend manda solo referencias, se anota en el hilo sin importar.
-- `scripts/enable-module.js` no arranca en Node puro local por la cadena
-  `tenantResolver → lib/utils/errors.js → next/server` (preexistente). Rodeo
-  usado: fila en `master.tenant_modules` a mano + `ensure-tenant-schema.js`.
+- (Resuelto.) `scripts/enable-module.js` ya arranca en Node puro local: no
+  importa `tenantResolver`, solo `masterDb`, `moduleKeys` y
+  `_module-migrations`. El rodeo de «fila a mano + `ensure-tenant-schema.js`»
+  que hizo falta el 27/07 ya no aplica: la activación es
+  `node --env-file=.env.local scripts/enable-module.js <slug> support`.

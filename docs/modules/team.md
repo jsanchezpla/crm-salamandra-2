@@ -30,18 +30,20 @@
 
 ## Visión general
 
-CRUD mínimo de miembros del equipo del tenant. MVP cuyo propósito real es
-servir de base a módulos posteriores (Proyectos, Soporte, Planificación,
-Comunicaciones) y a Facturación, no implementar RRHH completo. Cubre lo
-imprescindible: identificar a la persona, asignarle un rol, calcular
+Nació como CRUD mínimo de miembros del equipo del tenant: un MVP cuyo
+propósito real era servir de base a módulos posteriores (Proyectos, Soporte,
+Planificación, Comunicaciones) y a Facturación, no implementar RRHH completo.
+Cubre lo imprescindible: identificar a la persona, asignarle un rol, calcular
 rentabilidad (coste/tarifa por hora) y poder vincularla a un User para
-permisos. Una sola página, un solo modelo, un único serializer.
+permisos. Hoy ya no es «una sola página, un solo modelo»: bajo `/equipo` hay
+diez páginas (la plantilla, las ocho de `team_avanzado` y Fichaje, ver el Mapa)
+y tres modelos (`TeamMember`, `TeamMemberHours`, `TeamMemberModule`). Lo que
+sigue siendo único es el serializer.
 
 ## Lo que NO hace (por ahora)
 
 - Vacaciones / ausencias.
 - Contratos / nóminas.
-- Permisos granulares por módulo (eso vive en `User.moduleAccess` en master).
 - Capacity planning / carga de trabajo.
 - Organigrama visual.
 - Página detalle como ruta propia (`/equipo/[id]`). El detalle vive en el
@@ -63,14 +65,19 @@ Fichero: `models/tenant/TeamMember.model.js`. Tabla: `team_members`.
 | `phone` | STRING nullable | |
 | `avatarUrl` | STRING nullable | URL del avatar. Si está vacío la UI pinta iniciales. |
 | `avatarColor` | VARCHAR(7) nullable, `field: avatar_color` | Hex `#rrggbb` usado como fondo del avatar circular cuando no hay `avatarUrl`. Backfill determinista por `id` (MD5), así que el mismo miembro mantiene el mismo color en cualquier entorno y tras un reseteo. Lo consume Sprint 2 Proyectos (`TaskCard`, `TaskDrawer`) y queda disponible para futuros módulos. Migración: `scripts/migrate-team-members-avatar-color.js`. |
+| `blockColor` | VARCHAR(7) nullable, `field: block_color` | Hex `#rrggbb` de SUS bloqueos de agenda (10/08/2026, Rodrigo). `NULL` = hereda el general del centro (`settings.citas.colorBloqueos`), por eso la migración `migrate-team-members-block-color.js` NO hace backfill. Campo aparte de `avatarColor` a propósito: ese ya pinta sus citas, y un bloqueo del mismo color que una cita no se distingue. Ver `lib/citas/coloresBloqueo.js`. |
 | `hourlyCost` | DECIMAL(10,2) nullable, ≥ 0 | Coste interno. **Solo admin/superadmin** lo ve y edita. |
 | `hourlyRate` | DECIMAL(10,2) nullable, ≥ 0 | Precio facturable al cliente. Visible para todo autenticado del tenant. |
-| `monthlySalary` | DECIMAL(10,2) nullable, ≥ 0 | Salario mensual estimado. **Solo admin/superadmin**. Informativo: NO se cuenta como coste real (eso lo hace `Cost.type = 'salary'` en billing). Se añadió en la migración del rework de Facturación, no en la del MVP. |
+| `annualGross` | DECIMAL(10,2) nullable, ≥ 0 | Bruto anual. Es la **fuente de verdad de la retribución**: `monthlySalary` se CALCULA a partir de él. **Solo admin/superadmin.** Lo añade `migrate-team-modules-salary.js` (backfill `monthly_salary × 12` para quien ya tenía mensual). |
+| `paymentPeriods` | INTEGER NOT NULL, `12` o `14` | Nº de pagas al año. Default 12. Misma migración. |
+| `monthlySalary` | DECIMAL(10,2) nullable, ≥ 0 | Salario mensual. Hoy es **DERIVADO** (`annualGross / paymentPeriods`, calculado y persistido en el PATCH; la API no lo acepta directo). **Solo admin/superadmin**. Informativo: NO se cuenta como coste real (eso lo hace `Cost.type = 'salary'` en billing). Se añadió en la migración del rework de Facturación, no en la del MVP; si un miembro nunca tuvo `annualGross` (legacy solo-mensual), el PATCH no le toca el mensual. |
 | `currency` | VARCHAR(3) NOT NULL | Default `EUR`. Se almacena siempre en mayúsculas, máximo 3 caracteres. |
 | `status` | ENUM | `active`, `inactive`, `on_leave`. `on_leave` está **dormido** en el MVP: no se ofrece como opción nueva en el formulario, pero si llega de BD se respeta y se renderiza. |
 | `hiredAt` | DATEONLY nullable | Fecha de incorporación. En la API se expone como `startDate`; ver "Renombrados". |
 | `notes` | TEXT nullable | Texto libre. |
 | `customFields` | JSONB | Default `{}`. Extensión libre por tenant. |
+| `specialties` | JSONB NOT NULL, default `[]` | Especialidad(es) clínica(s) del profesional (Nutrición, Logopedia, Psicología…); taxonomía en `lib/clinica/specialties.js`. Array porque puede cubrir varias. Solo tiene sentido si atiende pacientes (Clínica o Nutrición). El serializer devuelve además `specialtyLabels`. Migración: `migrate-team-specialties.js` (sin backfill: `position` es texto libre). |
+| `weeklyDirectHours` | INTEGER nullable, 0–80 | Horas objetivo de intervención directa por semana: el denominador de la productividad (`lib/clinica/productivity.js`, `/equipo/productividad`). `NULL` = sin objetivo → productividad N/D. **No pasa por el serializer**: lo escribe `PUT /api/clinica/productividad/hours` (`team_avanzado` + clínica) y lo lee la consulta de productividad. Migración: `migrate-team-weekly-hours.js`. |
 
 #### Renombrados BD ↔ API
 
@@ -87,10 +94,12 @@ hizo en BD; se hace en serialización.
 ### `lib/team/serializeTeamMember.js`
 
 Único punto de mapeo BD → API. Recibe la instancia de Sequelize (o un
-objeto plano) y `{ isAdmin }`. Aplica el renombre, añade `hourlyCost` y
-`monthlySalary` solo si `isAdmin = true`, y deja el resto siempre
-visible. Usar **siempre** este serializer en respuestas del módulo:
-listado, detalle, post-create y post-update lo invocan.
+objeto plano) y `{ isAdmin }`. Aplica el renombre, añade `hourlyCost`,
+`annualGross`, `paymentPeriods` y `monthlySalary` solo si `isAdmin = true`,
+y deja el resto siempre visible (incluidos `blockColor`, `specialties` y
+`specialtyLabels`; `weeklyDirectHours` no sale por aquí). Usar **siempre**
+este serializer en respuestas del módulo: listado, detalle, post-create y
+post-update lo invocan.
 
 ## Filtrado de campos sensibles
 
@@ -98,7 +107,8 @@ Decisión de seguridad central del módulo. El filtrado se hace **siempre
 en el backend antes de serializar el JSON**, nunca solo en el frontend.
 
 - `hourlyCost`: solo admin/superadmin.
-- `monthlySalary`: solo admin/superadmin (añadido en sprint billing).
+- `annualGross`, `paymentPeriods`, `monthlySalary`: solo admin/superadmin
+  (el mensual se añadió en el sprint billing; el bruto y las pagas después).
 - `hourlyRate`, `email`, `phone`, `notes`, etc.: visibles para cualquier
   autenticado del tenant.
 
@@ -126,13 +136,23 @@ Todos se registran en `master.AuditLog` con `entity: "TeamMember"`,
   en sprint billing).
 - `team.status_changed` — cuando cambia `status` (PATCH).
 - `team.deactivated` — al hacer DELETE (soft delete).
+- `team.modules_changed` — al cambiar los módulos marcados del miembro
+  (PATCH `[id]/modules`; es el espejo informativo, no el acceso).
+- `team.user_created`, `team.access_changed`, `team.password_reset`,
+  `team.user_removed` — los del login del miembro (ver «Acceso al CRM desde
+  Equipo»); el último también salta al dar de baja a alguien con usuario.
 
 El registro de auditoría se hace dentro de un `try/catch` aislado: un
 fallo de auditoría no rompe la respuesta principal del endpoint.
 
 ## Endpoints
 
-Todos validan `hasModule("team")` antes de operar.
+Todos validan `hasModule("team")` antes de operar, salvo los que se indican:
+los de autoservicio (`me`, `me/documents`, `[id]/hours`) gatean a nivel de
+TENANT con `team` O `clinica`, porque las terapeutas de un centro no llevan
+`team` en su `moduleAccess` y aun así tienen ficha y horario (bug del
+27/07/2026); `billing-summary` y `[id]/projects` gatean por el módulo que
+aporta el contenido.
 
 | Método y ruta | Propósito | Restricciones |
 | --- | --- | --- |
@@ -142,6 +162,11 @@ Todos validan `hasModule("team")` antes de operar.
 | `PATCH /api/team/[id]` | Edita; auditoría granular por campo (ver eventos). | Solo admin/superadmin. |
 | `DELETE /api/team/[id]` | **Soft delete**: cambia `status` a `inactive`. NUNCA borrado físico. Idempotente (si ya está inactivo devuelve `204` sin tocar nada). | Solo admin/superadmin. |
 | `GET /api/team/[id]/billing-summary` | Resumen de facturación del empleado (ver módulo Billing). | Requiere `hasModule("billing")` (no basta con `team`); cualquier autenticado del tenant, pero `monthlySalary` y `projectedSalaryCost` solo a admin. |
+| `GET /api/team/[id]/projects` | Proyectos en los que el miembro figura en `project_members`, con su `memberRole`; presupuesto filtrado por `serializeProject`. | Requiere `hasModule("projects")`. |
+| `GET/PUT /api/team/[id]/hours` | Horario semanal PROPIO del miembro (`team_member_hours`: `dayOfWeek` 0–6 + franjas). El PUT es un reemplazo atómico. Lo usa `TeamHoursEditor` en la ficha y en `/mi-horario` (Citas). | Gate de tenant `team` O `clinica`. El admin ve/edita cualquiera; un profesional solo el SUYO. |
+| `GET/PATCH /api/team/[id]/modules` | Módulos marcados del miembro (`team_member_modules`, espejo informativo): GET devuelve TODOS los activos del tenant con el flag; PATCH hace upsert e ignora claves que no sean módulos del tenant. NO es el acceso al CRM: eso es `[id]/access`. | Solo admin. |
+| `GET /api/team/me` | La ficha de equipo del usuario logueado (autoservicio: Mi horario, `MiEquipo`). Solo campos NO sensibles, nada de retribución. El segmento estático `me` gana al dinámico `[id]`. | Gate de tenant `team` O `clinica`. |
+| `GET/POST /api/team/me/documents` · `GET/DELETE /api/team/me/documents/[id]` | Documentación personal que el propio miembro sube en su ficha (CV, titulaciones). Reutiliza el almacén de Documentos (`source: "equipo"`, `ownerUserId` = quien sube) pero **no depende del módulo `documents`**: siempre acotado al dueño, nunca alcanza el archivo general del centro. | Gate de tenant `team` O `clinica`; solo lo propio. |
 | `GET /api/team/modules` | Módulos activos del TENANT (para los checkboxes de acceso en el alta). No confundir con `/api/auth/me → enabledModules` (esa es la intersección del usuario actual). | Solo admin (rol fresco de BD). |
 | `GET /api/team/[id]/access` | Estado del login del miembro: `{ hasUser, username, lastLoginAt, managedElsewhere, modules }`. Sin usuario, `modules` propone lo marcado en `team_member_modules`. | Solo admin (rol fresco de BD). |
 | `POST /api/team/[id]/access` | **Crea el usuario de login** en `master.users` (patrón terapeutas de Aumenta): username sin `@` con sufijo `_{slug}` forzado (o email real), rol `user`, `moduleAccess` = módulos marcados (mínimo 1). Devuelve `{ username, password }` UNA única vez. | Solo admin; nunca en demo; 409 si ya tiene usuario o el username existe. |
@@ -227,8 +252,12 @@ para gating de admin. Vive en `app/api/auth/me/route.js`.
 
 ## Frontend
 
-Una sola página: `app/(dashboard)/equipo/page.jsx`. Listado en tabla
-con drawer lateral para detalle / alta / edición.
+La página principal del módulo: `app/(dashboard)/equipo/page.jsx`. Listado
+en tabla con drawer lateral para detalle / alta / edición (al no admin le
+pinta `components/team/MiEquipo.jsx`, su propia ficha). Las ocho pantallas
+de `team_avanzado` y la de Fichaje cuelgan de la misma carpeta (ver el Mapa)
+y se documentan en `clinica.md` / `citas.md` / `fichaje.md`; aquí solo la
+plantilla.
 
 Columnas visibles del listado:
 
@@ -300,14 +329,18 @@ hamburguesa).
   `TeamMember` del User no afecta al login del User.
 - **Audit (master.AuditLog)**: cambios sensibles registrados (ver
   "Eventos de auditoría").
-- **Próximos**: Proyectos (#3) usará `TeamMember` como responsables y
-  miembros del proyecto. Soporte (#4) para asignar tickets.
-  Planificación (#7) y Comunicaciones (#16) también lo necesitarán.
+- **Proyectos (#3)**: `project_members` y `task_assignees` apuntan a
+  `TeamMember` (`GET /api/team/[id]/projects`). **Soporte (#4)**:
+  `Ticket.assignedTo` = `TeamMember.id`. **Citas**: `team_member_hours` y el
+  `teamMemberId` de la cita. Planificación (#7) y Comunicaciones (#16)
+  también lo necesitarán cuando existan.
 
 ## Migración y backfill
 
 Fichero: `scripts/migrate-team-fields.js`. Idempotente. Lee la lista de
-schemas activos desde `master.tenants` (regla 12 de CLAUDE.md).
+schemas desde `master.tenants` **sin filtrar por `status`** (regla 12 de
+CLAUDE.md: el estado decide quién entra, no qué forma tiene su schema; el
+`WHERE status = 'active'` se barrió el 12/08/2026).
 
 Una sola transacción global para todos los tenants. Para cada schema
 `crm_{slug}`:
@@ -368,11 +401,12 @@ seed de equipo solo deja los empleados con `monthlySalary` en `NULL`.
 
 ## Actividad (registro legible) — 2026-07-27
 
-`/equipo/actividad` (hijo adminOnly del grupo Equipo, sin moduleKey: hereda la
-visibilidad team|clinica) enseña master.audit_logs del tenant en frases
-legibles, agrupado por días, con filtros por módulo, usuario y rango
-(7/30/90 días). Piezas: `GET /api/actividad` (solo admin, rol fresco de BD;
-máx. 400 filas por consulta) + catálogo de etiquetas
+`/equipo/actividad` (hijo adminOnly del grupo Equipo con `moduleKey:
+"team_avanzado"` en el Sidebar; nació sin moduleKey heredando team|clinica y
+pasó al avanzado cuando se vendió aparte) enseña master.audit_logs del tenant
+en frases legibles, agrupado por días, con filtros por módulo, usuario y rango
+(7/30/90 días). Piezas: `GET /api/actividad` (solo admin, rol fresco de BD, y
+`hasModule("team_avanzado")`; máx. 400 filas por consulta) + catálogo de etiquetas
 `lib/actividad/etiquetas.js` (acción → { modulo, texto }; las acciones nuevas
 caen en un traductor genérico, nunca salen en crudo — al añadir una acción de
 AuditLog, añade su frase al catálogo). Índice de apoyo en master:

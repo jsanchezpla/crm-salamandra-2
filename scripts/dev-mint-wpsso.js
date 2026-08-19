@@ -1,6 +1,7 @@
 /**
  * dev-mint-wpsso.js — genera un token `wpsso` de PRUEBA (como lo firmaría
- * WordPress) para probar el portal "Mis citas" en local sin WordPress.
+ * WordPress) para probar el portal «Mi perfil» (`/widget/c/<slug>/mi-perfil`;
+ * `/mis-citas` fue su primer nombre y hoy redirige ahí) en local sin WordPress.
  *
  * Firma un JWT HS256 con WIDGET_SSO_SECRETS[slug], payload { email, tenant },
  * exp +5 min (o pasado con --expired). Imprime el token y la URL del iframe.
@@ -49,7 +50,7 @@ async function main() {
 
   const base = process.env.APP_BASE_URL || "http://localhost:3000";
   process.stdout.write(`\nwpsso (${expired ? "CADUCADO" : "válido 5 min"}):\n${token}\n\n`);
-  process.stdout.write(`URL:\n${base}/widget/c/${slug}/mis-citas?wpsso=${encodeURIComponent(token)}\n\n`);
+  process.stdout.write(`URL:\n${base}/widget/c/${slug}/mi-perfil?wpsso=${encodeURIComponent(token)}\n\n`);
   process.exit(0);
 }
 

@@ -21,7 +21,7 @@
 | **Scripts** | Migraciones vivas: `migrate-payments-sprint-1.js` (CORE: `payment_sessions`, `stripe_webhook_events`, `event_types.price`, `bookings.payment_status`), `migrate-booking-authorization.js` (`npm run db:migrate:booking-auth`) y `migrate-packs-sesiones.js` (las dos en `MODULES.citas`). Herramientas: `configure-stripe-tenant.js` (guarda las claves desde variables de entorno), `comprobar-stripe.js` e `inspeccionar-cita-cobro.js` (solo lectura), `vigilar-retenciones.js` (temporizador horario en el VPS: avisa de retenciones que caducan), `dev-precio-cita.js`, `dev-cita-retenida.js`, `dev-token-admin.js`, `dev-limpiar-pruebas.js`. ONE_OFF ya ejecutados: `reponer-precios-nutri-laura.js`, `arreglar-suscripciones-sin-tope.js`. |
 | **Pruebas** | En `npm test` (sin nada encendido): `scripts/_smoke-fraccionado.mjs`, `_smoke-no-se-devuelve.mjs`, `_smoke-packs-sesiones.mjs`, `_smoke-pedir-otra-tarjeta.mjs`. Con base de datos: `_smoke-autorizacion.mjs`, `_smoke-ocupa-hueco.mjs`, `_smoke-packs-reserva.mjs`, `_smoke-fraccionado-reloj.mjs`, `_smoke-retencion-viva-o-muerta.mjs` (con `--import ./scripts/_fake-stripe-loader.mjs`). Con servidor y base de datos: `_smoke-book-autorizacion.mjs`, `_smoke-webhook-retencion.mjs`, `_smoke-confirmar-cobrar.mjs`, `_smoke-cancelar-retencion.mjs`, `_smoke-carreras-cobro.mjs`, `_smoke-pedir-tarjeta.mjs`, `_smoke-vigilar-retenciones.mjs`, `_smoke-dinero-solo-direccion.mjs`. Sonda: `_probe-capture-before.mjs`. Ninguna lleva `// @prueba ligera`: `scripts/pruebas.mjs` las clasifica leyendo el fichero. |
 | **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (la demo pública nunca cobra de verdad —`assertNotDemoPaidCall` en `lib/demo/isDemo.js`— y se audita lo que mueve dinero). |
-| **En este doc** | 2. Arquitectura · 3. Flujo de reserva con pago — RETENCIÓN, no cobro · 3.5 Qué ve la profesional · 4. Cancelaciones: devolver o soltar · 5. Riesgos y mitigaciones · 5.bis Cómo se prueba esto (2026-07-29) · 6. Fases |
+| **En este doc** | 2. Arquitectura · 3. Flujo de reserva con pago — RETENCIÓN, no cobro · 3.5 Qué ve la profesional · 4. Cancelaciones: soltar, nunca devolver · 5. Riesgos y mitigaciones · 5.bis Cómo se prueba esto (2026-07-29) · 6. Fases |
 
 > Diseño aprobado 2026-07-27. Primer caso de uso: cobrar las citas de `nutri_laura`
 > al reservar. La capa es **genérica**: sirve luego para pedidos, facturas u otros
@@ -53,18 +53,18 @@ nosotros nos da igual: la API de cobro y de reembolso es la misma para todos.
 
 | Regla | Decisión |
 | --- | --- |
-| Cuándo se cobra | **Al reservar**. Pagar = cita confirmada |
-| Lista de espera | **Se elimina** para nutri_laura (hoy `autoConfirmPublicBookings=false`) |
-| Precio | **Por tipo de cita** (`EventType`) |
-| Cancela el cliente ≥24 h antes | **Reembolso automático íntegro** |
-| Cancela el cliente <24 h antes | **Sin devolución** |
-| Cancela Laura | **Reembolso íntegro siempre** |
+| Cuándo se cobra | **Al confirmar la profesional**: al reservar se RETIENE en la tarjeta (§3); un bono o un plazo se cobra al reservar por Checkout |
+| Lista de espera | **Se mantiene**: con precio la cita nace `pending` y espera el visto bueno (§3); `autoConfirmPublicBookings=false` en nutri_laura |
+| Precio | **Por tipo de cita** (`EventType`), y también precio de bono y de plazo (`sessionsCount`, `instalmentPrice`, `instalmentMonths`) |
+| Cancela quien sea, antes o después | **No se devuelve nunca desde el CRM** (07/08/2026, §4). Solo se SUELTA lo retenido; lo cobrado se queda y la consulta decide |
 | No-show | **Sin devolución** |
 | Factura | **No se genera** (billing queda al margen) |
 
-> ⚠️ Consecuencia que Laura debe tener clara: al quitar la lista de espera **pierde el
-> filtro de pacientes**. Entra quien pague. Rechazar a alguien pasa a ser "cancelar y
-> devolver".
+> **Histórico (hasta 07/08/2026):** el diseño del 27/07 cerraba «se cobra al reservar,
+> se quita la lista de espera, reembolso automático íntegro si cancela el cliente con
+> ≥24 h o si cancela Laura». Lo primero cambió el 29/07 (retención, no cobro); lo
+> segundo no llegó a quitarse; lo tercero se construyó y se retiró el 07/08 a petición
+> de Rodrigo (`lib/citas/politicaReembolso.js`).
 
 ---
 
@@ -101,7 +101,10 @@ se rechaza. Sin webhook secret los cobros se quedarían colgados sin confirmar.
 ### 2.2 Modelo de datos
 
 Tabla nueva `payment_sessions` (no se reutiliza `Payment`, que está atada a
-`invoiceId` y aquí no hay factura):
+`invoiceId` y aquí no hay factura), más `stripe_webhook_events`
+(`StripeWebhookEvent`: un `stripe_event_id` UNIQUE por evento recibido, es la
+idempotencia del webhook) y, desde el 04/08/2026, `session_packs` (`SessionPack`:
+los bonos, ver `lib/citas/packs.js` y «Tipos de cita ocultos» en `citas.md`):
 
 | Campo | Tipo | Notas |
 | --- | --- | --- |
@@ -119,7 +122,8 @@ Tabla nueva `payment_sessions` (no se reutiliza `Payment`, que está atada a
 | `metadata` | JSONB | |
 
 Y en `Booking`: `paymentStatus`, `amount`, `holdExpiresAt`,
-`authorizationExpiresAt`, `paymentSessionId`.
+`authorizationExpiresAt`, `paymentSessionId`, `packId` y `sessionNumber` (la sesión
+N de un bono).
 
 `Booking.paymentStatus` = `none | pending | authorizing | authorized | capturing |
 paid | refunded | failed | void`:
@@ -144,7 +148,11 @@ schemas por existencia de la tabla `bookings`, no por módulo activo).
 
 En `EventType`: **`price`** (INTEGER, céntimos, nullable) — **null o 0 = cita
 gratuita**, y entonces la reserva no pasa por el checkout. Así los tenants que no
-cobran (`aumenta`, `healim`, `demo`) siguen funcionando sin tocar nada.
+cobran (`aumenta`, las demos, `somos`) siguen funcionando sin tocar nada. Desde el
+04-05/08/2026 lleva además `sessionsCount` (un tipo que vale por N sesiones: bono),
+`instalmentPrice` e `instalmentMonths` (el mismo bono pagado a plazos; ver «Pago a
+plazos» en `citas.md` y `lib/payments/fraccionado.js`). El importe de una compra lo
+calcula `precioDeCompra` en `lib/citas/packs.js`.
 
 > Sin `priceCurrency`: se descartó por YAGNI. La moneda vive en `PaymentSession`
 > (por si algún día hace falta), pero un campo por tipo de cita que nadie va a
@@ -166,10 +174,13 @@ por la UI es exactamente como se cuela un cobro de 0,75 € en vez de 75 €.
 | --- | --- |
 | **Retener / cobrar / soltar** | `lib/payments/autorizacion.js` → `autorizarPago` · `capturarPago` · `liberarAutorizacion` — **funciones de librería, NO endpoints públicos** |
 | Leer la caducidad | `lib/payments/autorizacion.js` → `leerCaducidadAutorizacion(charge)` |
-| Cobro inmediato (sin llamantes hoy) | `lib/payments/checkout.js` → `createCheckoutSession(ctx, {...})` |
+| Cobro inmediato (Checkout) | `lib/payments/checkout.js` → `createCheckoutSession(ctx, {...})`. Lo llama `/book` (`app/api/public/c/[tenantSlug]/book/route.js`) cuando lo que se compra es un **bono** o un **plazo**: eso no se retiene, se cobra, y en el fraccionado la sesión nace con `recurring` (suscripción) |
+| Tope de cuotas | `lib/payments/fraccionado.js` (`subscription_schedule` + `frenarSiYaEstaPagado`) |
+| Pedir otra tarjeta | `POST /api/citas/bookings/[id]/pedir-tarjeta` → retención NUEVA + correo con token (`lib/citas/tokenPago.js`); la página pública `/widget/c/<slug>/pagar/[token]` pide su `clientSecret` a `GET /api/public/c/[slug]/pagar/[token]` |
 | Avisos de Stripe | `POST /api/webhooks/stripe/[tenantSlug]` |
-| Reembolsar | `lib/payments/refund.js` → `refundPayment(ctx, session, { amount, reason })` |
-| Enganche por módulo | `lib/payments/entityHooks.js` → `onEntityAuthorized` / `onEntityPaid` / `onEntityAuthorizationVoided` / `onEntityRefunded` |
+| Reembolsar | `lib/payments/refund.js` → `refundPayment(ctx, session, { amount, reason })`. **Sin llamantes desde el 07/08/2026** (§4): se conserva por si algún día hace falta devolver desde el CRM, pero hoy nadie lo llama. Las devoluciones se hacen a mano desde el panel de Stripe y las apunta el webhook (`charge.refunded`) |
+| Enganche por módulo | `lib/payments/entityHooks.js` → `onEntityAuthorized` / `onEntityPaid` / `onEntityAuthorizationVoided` / `onEntityRefunded` / `onEntityExpired` |
+| Quién ve el dinero | `lib/citas/dinero.js` (`citaSegunRol`…): el importe y el estado de cobro solo viajan en el JSON a dirección; el equipo con rol `user` no los recibe (`_smoke-dinero-solo-direccion.mjs`) |
 
 Eventos de webhook que se procesan:
 
@@ -179,7 +190,16 @@ Eventos de webhook que se procesan:
 | `payment_intent.succeeded` | se capturó → `paid` |
 | `payment_intent.canceled` | retención liberada → `void`, **la cita no se cancela** |
 | `payment_intent.payment_failed` | rechazo; **no** se cierra la sesión (puede reintentar con otra tarjeta) |
-| `checkout.session.*`, `charge.refunded` | flujo de cobro inmediato y devoluciones |
+| `checkout.session.completed` / `async_payment_succeeded` | cobro de bono o plazo → `paid`, **nace el bono entero** y, si es fraccionado, se le pone el tope de cuotas |
+| `checkout.session.async_payment_failed` / `expired` | el Checkout murió sin pagar → `failed` / `expired` |
+| `charge.refunded` | devolución hecha **desde el panel de Stripe**: se apunta (parcial → la cita sigue pagada; total → `refunded`). Si aún no existe la `PaymentSession`, lanza para que Stripe reintente (hasta 6 h) |
+| `invoice.paid` / `invoice.payment_failed` | cuotas 2ª en adelante del fraccionado: se apuntan y, si el tope no llegó a ponerse, `frenarSiYaEstaPagado` cancela al completar el total |
+
+⚠️ **Hay que dar de alta esos eventos en el endpoint de Stripe del cliente** (lo
+comprueba `scripts/comprobar-stripe.js`). La lista que enseña hoy la tarjeta de Stripe
+en Configuración (`modules/config/ConfigModule.jsx`) se quedó en los cuatro de
+`checkout.session.*` + `charge.refunded`: le faltan los de `payment_intent.*` y los de
+`invoice.*` (pendiente de corregir en código).
 
 > ⚠️ **Un PaymentIntent NUNCA emite un evento de caducidad** (eso solo lo hacen las
 > Checkout Sessions). Cuando una retención muere, Stripe no avisa: hay que vigilarlo
@@ -261,8 +281,8 @@ que demuestra que la prueba distingue el comportamiento nuevo del viejo.
 
 | Tenant | `EventType.price` | Comportamiento |
 | --- | --- | --- |
-| nutri_laura | > 0 | Retiene al reservar; **cobra al confirmar** |
-| aumenta / healim / demo | null | **Flujo actual intacto** (con o sin lista de espera) |
+| nutri_laura | > 0 | Retiene al reservar; **cobra al confirmar**. Si el tipo es un bono o se paga a plazos, Checkout y cobro al reservar |
+| aumenta / demo / cualquiera sin precio | null | **Flujo actual intacto** (con o sin lista de espera) |
 | cualquiera | > 0 pero sin Stripe **completo** | Error 503 claro, no reserva silenciosa |
 
 "Stripe completo" ahora incluye la **clave publicable**: con el formulario embebido ya
@@ -273,10 +293,10 @@ no es opcional (`tenantPuedeAutorizar`). Con el checkout redirigido no se usaba.
 que se confirme". Un tenant que quiera Bizum necesita otro flujo.
 
 Las citas creadas por la profesional **desde el dashboard** (paciente que llama por
-teléfono) **no exigen pago**: nacen `paymentStatus: 'none'`.
-
-Las citas creadas por Laura **desde el dashboard** (paciente que llama por teléfono)
-**no exigen pago**: nacen `paymentStatus: 'none'`.
+teléfono) **no exigen pago**: nacen `paymentStatus: 'none'`. Y la sesión de un **bono**
+tampoco pasa por caja (ya está pagada): nace sin precio, enganchada al bono
+(`packId`, `sessionNumber`) y, desde el 07/08/2026, **también espera en la lista**
+salvo que la ficha de esa paciente tenga «citas autoconfirmadas».
 
 ---
 
@@ -305,8 +325,11 @@ dura un minuto.
 | Estado | Etiqueta | Qué puede hacer |
 | --- | --- | --- |
 | `authorized` | **Retenido, sin cobrar · 45,00 €** + *caduca en N días* | **Confirmar y cobrar 45,00 €** · Rechazar |
-| `void` / `failed` | **Sin cobro · 45,00 €** | Confirmar (reintenta) · **Confirmar sin cobrar** · Rechazar |
+| `void` / `failed` | **Sin cobro · 45,00 €** | Confirmar (reintenta) · **Confirmar sin cobrar** · **Pedirle otra tarjeta** · Rechazar |
 | `paid` | Cobrada | — |
+
+> Esto lo ve **dirección**. Al equipo con rol `user` ni el chip ni el importe le
+> llegan en el JSON (`lib/citas/dinero.js`, 07/08/2026, queja de Laura).
 
 Dos decisiones deliberadas:
 
@@ -319,21 +342,52 @@ Dos decisiones deliberadas:
 real esperando y lo correcto no es rechazarla, es aceptarla y cobrarle en consulta.
 Queda en auditoría.
 
-> Pendiente: el tercer botón del diseño, **"Pedir otra tarjeta al paciente"**, no está
-> construido. Necesita autorización nueva (el PaymentIntent muerto no se reutiliza),
-> correo con token y página pública.
+**Pedirle otra tarjeta** está construido (13/08/2026): `POST
+/api/citas/bookings/[id]/pedir-tarjeta` crea una retención NUEVA (el PaymentIntent
+muerto no se reutiliza), vuelve a poner la cita en `authorizing` con `holdExpiresAt`
+igual a la vida del enlace (para que no desaparezca de la lista de espera) y manda el
+correo `pedirTarjeta` con un token (`lib/citas/tokenPago.js`, 7 días) que abre
+`/widget/c/<slug>/pagar/[token]`. Antes de crearla le pregunta a Stripe si la retención
+vieja sigue viva (`estorbaParaPedirOtraTarjeta`, `lib/citas/cobroCita.js`): si lo está
+—o no se puede saber— responde 409, para no dejar al paciente con dos importes
+bloqueados. El detalle y los cinco desenlaces, en `citas.md` → «Cuando el dinero se
+pierde: las tres salidas». Pruebas: `_smoke-pedir-tarjeta.mjs` (HTTP),
+`_smoke-pedir-otra-tarjeta.mjs` y `_smoke-retencion-viva-o-muerta.mjs` (guarda).
 
 ---
 
-## 4. Cancelaciones: devolver o soltar
+## 4. Cancelaciones: soltar, nunca devolver
 
-Todas las vías pasan por `reembolsarCitaSiProcede`, que decide **qué forma tiene el
-dinero** antes de aplicar ninguna política:
+⚠️ **REGLA ÚNICA DESDE EL 07/08/2026 (Rodrigo): el CRM no devuelve dinero nunca.**
+«No se devuelve el dinero nunca. Ya lo harán ellos manualmente si tal. Si se cancela
+algo, se mantiene la cita: la cita no se puede cancelar una vez pagada, se puede
+cancelar una sesión concreta.» Lo que se cancela es UNA SESIÓN, no la compra: lo
+pagado sigue pagado y se le da otra fecha; si algún día hay que devolver algo, lo
+decide la consulta y lo hace **a mano desde el panel de Stripe**, donde se ve el cobro
+entero y quien lo hace responde por él. Una devolución automática es dinero saliendo
+de la cuenta de un cliente sin que nadie lo haya mirado.
 
-- **Solo retenido** → se **suelta** (no hay comisión ni movimiento que devolver). No
-  depende de quién cancele ni de la antelación: quedarse el dinero de alguien a quien
-  no se le ha dado la cita no es una política, es un error.
-- **Ya cobrado** → se **devuelve**, con la tabla de abajo.
+Vive en `lib/citas/politicaReembolso.js`: `decidirReembolso` devuelve **siempre**
+`reembolsar: false`, y se conservan la función y su forma de respuesta para que, si el
+negocio cambia de idea, el cambio vuelva a ser AHÍ y en un solo sitio. Lo fija
+`scripts/_smoke-no-se-devuelve.mjs` (en `npm test`): nadie recupera el dinero
+automáticamente, y ningún mensaje del portal promete devolución.
+
+Todas las vías de cancelación (enlace del email, portal, rechazo desde el panel, PATCH
+y DELETE de admin) pasan por `reembolsarCitaSiProcede` (`lib/citas/reembolsoCita.js`),
+que decide **qué forma tiene el dinero**:
+
+- **Sesión de un bono** → no se toca el dinero: la sesión **vuelve al bono** (las
+  sesiones se cuentan desde las citas, `estadoPack`) y se le da otra fecha. Devolver un
+  bono es una decisión de la consulta, no algo que se dispare por mover una hora.
+- **Solo retenido** (`authorized`, `capturing`, `failed`) → se **suelta**
+  (`soltarRetencionDeCita`). No depende de quién cancele ni de la antelación: retener
+  no es cobrar, y dejarle a alguien el dinero congelado por una cita que no va a
+  existir no es «no devolver», es retenerlo sin motivo.
+- **Ya cobrado** (`paid`) → **no se devuelve**. La cita queda `cancelled` +
+  `paymentStatus: 'paid'`: esa combinación es la consulta que localiza el dinero que la
+  consulta tiene que decidir. Si lo devuelve desde Stripe, el webhook `charge.refunded`
+  lo apunta (`refunded` si es total; parcial, la cita sigue pagada).
 
 > **El agujero que esto tapó (2026-07-29):** de las cinco vías de cancelación, el
 > `DELETE` del panel era la ÚNICA que no liquidaba nada — cancelaba, auditaba y
@@ -342,19 +396,14 @@ dinero** antes de aplicar ninguna política:
 > se quedaba con el importe bloqueado hasta que caducara solo. La decisión se toma
 > DENTRO del helper, no en cada llamante, para que ninguna vía futura pueda olvidarse.
 
-| Quién cancela | Cuándo | Reembolso |
-| --- | --- | --- |
-| Cliente | ≥ 24 h antes | **Íntegro, automático** |
-| Cliente | < 24 h antes | Ninguno |
-| Laura | Cuando sea | **Íntegro, automático** |
-| — (no-show) | — | Ninguno |
-
-El cálculo es una simple diferencia entre instantes: `scheduledAt - now >= 24h`.
-**No hay problema de zonas horarias ni de cambio de hora**: ambos son `timestamptz`
-(instantes absolutos), y su diferencia no depende del huso.
-
-La API de reembolso de Stripe es la misma para tarjeta y para Klarna, así que **el
-código no distingue** el método de pago.
+> **Histórico (29/07 – 07/08/2026):** hubo devolución automática íntegra si cancelaba
+> la profesional, o el paciente con 24 h o más de antelación (`scheduledAt - now >=
+> 24h`, sin problema de husos por ser `timestamptz`); <24 h y no-show, sin devolución.
+> El código que llamaba a Stripe **se borró, no se apagó con un flag**: media política
+> es la que acaba devolviendo dinero el día que alguien toca el interruptor sin querer.
+> Si vuelve a hacer falta, está en el historial (commit del 07/08/2026) con su porqué.
+> La frontera de las 24 h sobrevive como `HORAS_PARA_CANCELACION_TARDIA` y hoy solo la
+> usa `packs.js` para dar por gastada una sesión de bono cancelada a última hora.
 
 ---
 
@@ -365,9 +414,10 @@ De 25 riesgos revisados adversarialmente, los que **cambian el diseño**:
 | Riesgo | Mitigación |
 | --- | --- |
 | **Dos clientes pagan el mismo hueco** | Comprobar en código no basta (hay carrera). Bloqueo en la transacción de reserva; a futuro, constraint `EXCLUDE` con rangos temporales en PostgreSQL. Ojo: un `UNIQUE(scheduledAt)` **no** cubre solapamientos parciales (10:00/60min vs 10:30/45min) |
-| **Doble cobro** por webhook reintentado | Tabla de eventos con `stripe_event_id` **UNIQUE** → el reintento se ignora. Stripe reintenta durante 3 días |
-| **Stripe cobra pero la BD falla** | Reembolso automático de compensación |
-| **Bloqueo de agenda** con reservas fantasma | Hold corto (15 min) + límite de holds simultáneos por email/IP (el endpoint es público, 30 req/min por IP) |
+| **Doble cobro** por webhook reintentado | Tabla `stripe_webhook_events` con `stripe_event_id` **UNIQUE** → el reintento se ignora. Stripe reintenta durante 3 días |
+| **Stripe cobra pero la cita ya no está en pie** (se canceló mientras se capturaba) | Desde el 07/08 **no se devuelve solo** (§4): queda `cancelled` + `paid`, auditado como `citas.booking_confirm_tarde`, y la consulta decide desde Stripe. *(Histórico: hasta esa fecha, reembolso automático de compensación.)* |
+| **Retención que caduca sin que nadie mire** | `scripts/vigilar-retenciones.js` cada hora (`lib/citas/caducidadRetencion.js`): avisa a 36 h y a 6 h, y reconcilia con Stripe las ya muertas para que el panel no enseñe «Retenido» sobre un dinero que no existe |
+| **Bloqueo de agenda** con reservas fantasma | Hold corto: **20 min** para meter la tarjeta (`VENTANA_TARJETA_MS`, `lib/payments/autorizacion.js`) y **45 min** cuando se va a Checkout por un bono (`HOLD_WINDOW_MS`, siempre por encima de los 31 min que vive la página de Stripe) + el endpoint es público, 30 req/min por IP |
 | **Precio cambiado entre reservar y pagar** | `amountSnapshot` en la sesión; el webhook valida que el importe cobrado coincide |
 | **Tenant `demo` cobrando de verdad** | `assertNotDemoPaidCall` (ya existe en `lib/demo/isDemo.js`) + demo nunca tiene claves Stripe |
 | **Secretos en logs** | Nunca loguear el objeto de Stripe ni las claves; redactar antes de escribir |
@@ -376,19 +426,35 @@ De 25 riesgos revisados adversarialmente, los que **cambian el diseño**:
 
 ## 5.bis Cómo se prueba esto (2026-07-29)
 
-**No hay framework de tests en el repo.** Las pruebas son scripts que ejercitan el
-código de verdad contra Stripe en **modo prueba** y comprueban la base de datos.
-**No hace falta la CLI de Stripe**: el SDK firma eventos de webhook con el mismo
-secreto del tenant, que es lo que hace `stripe listen`.
+(Al día el 19/08/2026.) Desde el 18/08/2026 hay `npm test` (`scripts/pruebas.mjs`): recoge los `_smoke-*.mjs`
+y lanza solo los que no necesitan base ni servidor; `npm run test:todo` el resto. Las
+de pagos que necesitan Stripe ejercitan el código de verdad contra Stripe en **modo
+prueba** y comprueban la base de datos. **No hace falta la CLI de Stripe**: el SDK
+firma eventos de webhook con el mismo secreto del tenant, que es lo que hace `stripe
+listen`. **Histórico:** hasta el 18/08 no había framework; eran scripts sueltos.
 
 | Script | Qué fija |
 | --- | --- |
+| *(en `npm test`, sin nada encendido)* | |
+| `_smoke-no-se-devuelve.mjs` | **la regla de negocio de §4**: nadie recupera el dinero solo, una retención sí se suelta, ningún mensaje del portal promete devolución |
+| `_smoke-fraccionado.mjs` | `amount` es la PRIMERA CUOTA y no el total; de quién es cada `invoice.paid` |
+| `_smoke-packs-sesiones.mjs` | qué estados gastan sesión de un bono (frontera de las 24 h, falta justificada), que las futuras reservan, que los números no se reciclan |
+| `_smoke-pedir-otra-tarjeta.mjs` | la guarda del botón «pedirle otra tarjeta» (`estorbaParaPedirOtraTarjeta`), seis casos; «no lo sé» nunca es vía libre |
+| *(con base de datos)* | |
 | `_smoke-autorizacion.mjs` | retener → cobrar → soltar, y los casos límite (doble captura, doble liberación, capturar lo caducado) |
 | `_smoke-ocupa-hueco.mjs` | qué citas bloquean su hora, en 11 estados. **Lleva un control** que exige que el filtro nuevo dé un veredicto distinto al viejo: sin él, la prueba pasaría sin probar nada |
+| `_smoke-packs-reserva.mjs` | la reserva se engancha al bono por correo y se numera; un bono agotado o anulado no engancha; con dos, gasta el más antiguo |
+| `_smoke-retencion-viva-o-muerta.mjs` | los cinco desenlaces de preguntarle a Stripe por la retención vieja, falseando la LIBRERÍA (`--import ./scripts/_fake-stripe-loader.mjs`) |
+| `_smoke-fraccionado-reloj.mjs` | con un reloj de prueba de Stripe, que el tope de cuotas FRENA de verdad en la 4ª (solo claves `sk_test_`) |
+| *(con servidor `npm run dev` y base)* | |
 | `_smoke-book-autorizacion.mjs` | `POST /book` por HTTP y, sobre todo, que el **doble clic no cree dos retenciones** |
 | `_smoke-webhook-retencion.mjs` | el webhook mete la solicitud en la lista de espera; idempotencia y firma falsa |
 | `_smoke-confirmar-cobrar.mjs` | confirmar cobra y rechazar suelta, con sesión de admin. Fija **la regla de oro**: sin dinero, la cita NO se confirma |
-| `_smoke-cancelar-retencion.mjs` | cancelar suelta el dinero por todas las vías, y una cita ya cobrada se sigue **devolviendo** |
+| `_smoke-cancelar-retencion.mjs` | cancelar suelta el dinero por todas las vías. ⚠️ Su paso 3 («una cita ya cobrada se sigue devolviendo») es de ANTES del 07/08 y hoy fallará: lo que espera ya no pasa (§4) |
+| `_smoke-carreras-cobro.mjs` | dos confirmaciones a la vez → un solo cobro; cita pegada en `capturing` → el vigilante la desatasca. ⚠️ Su caso 2 («el paciente cancela mientras se le cobra → se le devuelve») también es de antes del 07/08 |
+| `_smoke-pedir-tarjeta.mjs` | el enlace de «pedir otra tarjeta» abre el formulario de SU cita, la solicitud no desaparece de la lista mientras espera, y un token ajeno o manipulado no abre nada |
+| `_smoke-vigilar-retenciones.mjs` | el vigilante avisa una vez por nivel, reconcilia las muertas y no toca las que Stripe dice vivas |
+| `_smoke-dinero-solo-direccion.mjs` | el importe y el estado de cobro NO viajan en el JSON al equipo con rol `user` |
 | `_probe-capture-before.mjs` | sonda: dónde vive de verdad `capture_before` |
 
 Utilidades de desarrollo (no son pruebas, sirven para mirar pantallas con datos de
@@ -406,20 +472,21 @@ Se paran solos si detectan claves `sk_live_`.
 
 ## 6. Fases
 
-| Fase | Contenido |
-| --- | --- |
-| **1** | Capa de pagos: modelo `payment_sessions`, `stripeConfig`, checkout, webhook, refund, migración |
-| **2** | `price` en `EventType` + UI para que Laura ponga precios |
-| **3** | Reserva con pago: hold, caducidad perezosa, quitar lista de espera |
-| **4** | Reembolsos automáticos (24 h / Laura / no-show) |
-| **5** | UI: precio en el widget, importe y estado en "Mis citas" (**con aviso de <24 h antes de cancelar**), estado de pago en el panel |
-| **6** | E2E en modo test → claves reales → producción |
+| Fase | Contenido | Qué pasó |
+| --- | --- | --- |
+| **1** | Capa de pagos: modelo `payment_sessions`, `stripeConfig`, checkout, webhook, refund, migración | Hecha |
+| **2** | `price` en `EventType` + UI para que Laura ponga precios | Hecha |
+| **3** | Reserva con pago: hold, caducidad perezosa, quitar lista de espera | Hecha salvo lo último: la lista de espera **no se quitó** — el 29/07 se cambió a RETENCIÓN y la profesional decide (§3) |
+| **4** | Reembolsos automáticos (24 h / Laura / no-show) | **Histórico:** se construyó el 29/07 y **se retiró el 07/08/2026** (§4). Hoy no hay devolución automática |
+| **5** | UI: precio en el widget, importe y estado en "Mis citas", estado de pago en el panel | Hecha; el aviso de «<24 h» ya no habla de devolución, solo de sesión de bono gastada |
+| **6** | E2E en modo test → claves reales → producción | Hecha: nutri_laura cobra en producción |
+| *después* | Bonos y pago a plazos (04-05/08), vigilante de retenciones, «quién ve el dinero» (07/08), pedir otra tarjeta (13/08) | Ver §2.3 y `citas.md` |
 
 **Fuera del alcance inicial** (a propósito): captcha, reembolsos parciales, botón de
 resincronizar pagos con webhook perdido.
 
-Las fases 1-5 se desarrollan y prueban enteras con el **modo test** de Stripe. La cuenta
-real de Laura solo hace falta en la fase 6.
+Las fases 1-5 se desarrollaron y probaron enteras con el **modo test** de Stripe. La
+cuenta real de Laura solo hizo falta en la fase 6.
 
 ---
 
@@ -428,11 +495,17 @@ real de Laura solo hace falta en la fase 6.
 1. **Abrir cuenta en Stripe** a su nombre/NIF (verificación de identidad + cuenta
    bancaria; puede tardar de horas a un par de días).
 2. **Decidir el precio** de cada tipo de cita.
-3. **Validar la política de cancelación**, que debe mostrarse en el checkout:
-   > *Puedes cancelar hasta 24 horas antes de la cita y se te devolverá el importe
-   > íntegro automáticamente. Las cancelaciones con menos de 24 horas de antelación, o
-   > la no asistencia, no dan derecho a devolución.*
-4. Opcional: solicitar **Klarna** y mirar si tiene **Bizum** en su panel.
+3. **Tener clara la política de cancelación** (la que aplica el CRM desde el
+   07/08/2026, §4): cancelar una cita pagada **no devuelve nada automáticamente** — la
+   sesión se cancela y se le da otra fecha; si el centro decide devolver, lo hace a
+   mano desde Stripe. Una sesión de bono cancelada con menos de 24 h cuenta como
+   gastada (es lo que firma en el Anexo I del contrato, ver `citas.md`).
+   > **Histórico (hasta 07/08/2026):** el texto que se validó entonces era «Puedes
+   > cancelar hasta 24 horas antes y se te devolverá el importe íntegro
+   > automáticamente…». Ya no es lo que hace el sistema; no enseñarlo.
+4. Opcional: solicitar **Klarna** y mirar si tiene **Bizum** en su panel. Ojo: con la
+   RETENCIÓN solo funciona **tarjeta** (§2.3), y el fraccionado también; Klarna/Bizum
+   solo servirían para el Checkout de un bono de pago único.
 
 > Fiscal: se decidió que la cita **no genera factura**. Conviene que su gestoría
 > confirme si necesita emitir al menos factura simplificada por estos cobros; el módulo

@@ -20,7 +20,7 @@
 | **Interruptores y parámetros** | `featureFlags` / `logicOverrides`: ninguno que lea el código. Lo configurable vive en `outreach_settings` (modelo, contexto, regla) y en `master.tenants.settings.integrations` (claves de Anthropic, Google Places y Resend, remitente y reply-to), que se pegan en `/configuracion`. |
 | **Pantallas propias** | ninguna. |
 | **Scripts** | Activar: `node scripts/enable-module.js <slug> outreach` (`ensure-tenant-schema.js` corre las 4 del bloque `outreach` de `scripts/_module-migrations.js`: `migrate-outreach-sprint-1`, `migrate-outreach-google-usage`, `migrate-outreach-convert`, `migrate-outreach-website-text`). Los atajos anteriores siguen vivos: `enable-outreach.js` (`npm run db:enable:outreach`) y `setup-outreach.js` (`npm run db:setup:outreach`: activa + migra + siembra de una vez). Seed: `seed-outreach.js <slug>` (líneas de negocio + leads de muestra con análisis `model: 'demo'`; lo lanzan `crear-demos-por-oficio.js` para `demo_agencia` y `rebuild-demo-showcase.js`). `setup-demo-outreach-fake.js` deja la demo con claves ficticias para enseñar el flujo sin gastar. Sin backfills. |
-| **Pruebas** | Ninguna `_smoke-*`: las cuatro suyas se llaman `scripts/_outreach-*.mjs` y **`npm test` no las ve** (`pruebas.mjs` solo recoge `_smoke-*` y `smoke-test-*`). `_outreach-ai-unit.mjs` es pura (prompt, parseo, `analyzeLead` con el simulado; sin base de datos ni servidor); `_outreach-smoke.mjs`, `_outreach-e2e.mjs` y `_outreach-ui-check.mjs` piden servidor + base de datos y el tenant local `sandbox`. |
+| **Pruebas** | `scripts/_smoke-outreach-ai-unit.mjs` — pura (prompt, parseo, `analyzeLead` con el simulado; sin base de datos ni servidor): **entra en `npm test`** desde el 19/08/2026 (antes se llamaba `_outreach-ai-unit.mjs` y `pruebas.mjs`, que solo recoge `_smoke-*` y `smoke-test-*`, no la veía). Las otras tres siguen fuera **a propósito**: `_outreach-smoke.mjs`, `_outreach-e2e.mjs` y `_outreach-ui-check.mjs` piden servidor + base de datos y firman el JWT de `admin@sandbox.local` para el tenant `sandbox`, que no existe ni en local ni en producción; se lanzan a mano, y antes habría que apuntarlas a un tenant que exista. |
 | **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` |
 | **En este doc** | Decisiones de arquitectura · Fuente de datos: Google Maps nativo + email de la web · Dedupe de "Buscar nuevos" (`lib/outreach/persistLeads.js`) · Conversión a cliente · Modelo de datos · API · Reglas de negocio que no se rompen · Puesta en marcha en un tenant |
 
@@ -49,8 +49,16 @@ el CRM.
 | Orden por columnas y filtros (ubicación, email, analizado, score) | **Hecho** |
 | "Buscar nuevos" con Páginas Amarillas / LinkedIn (vía n8n) | **Pendiente** (flujo n8n sin montar) |
 
-Todo verificado en local contra el tenant `sandbox`. **Falta desplegar en
-producción** (correr las migraciones) y que cada tenant pegue sus claves.
+**En producción** (foto de `master` del 19/08/2026) en cinco tenants:
+`aumenta`, `demo` (11 leads), `demo_agencia` (11), `salamandra_solutions` (40:
+somos nosotros, captando) y `somos`. Lo que cada uno puede hacer depende de las
+claves que haya pegado en `/configuracion` (Anthropic, Google Places, Resend).
+
+> **Histórico (hasta 08/2026):** «Todo verificado en local contra el tenant
+> `sandbox`. Falta desplegar en producción (correr las migraciones) y que cada
+> tenant pegue sus claves.» `sandbox` no existe hoy ni en local ni en
+> producción; solo sobrevive en las tres pruebas con servidor (ver Mapa →
+> Pruebas).
 
 > Las claves de IA (**Anthropic** y **Google Places**) ya **no** son secrets
 > globales del `.env`: se configuran **por tenant** en el módulo
@@ -343,28 +351,38 @@ mapeado va a `raw_data`. **Google Maps ya no pasa por aquí.**
 
 ## Puesta en marcha en un tenant
 
+Un solo comando desde el 01/08/2026 — abre las DOS puertas (la fila en
+`master.tenant_modules` y el `module_access` de los admin; usuarios normales
+con `--grant-users`) y corre las **cuatro** migraciones del bloque `outreach`
+de `scripts/_module-migrations.js` (`migrate-outreach-sprint-1`,
+`-google-usage`, `-convert`, `-website-text`), idempotentes:
+
 ```powershell
-# 1. Activar el módulo
-npm run db:enable:outreach -- <slug>
+# Local
+node --env-file=.env.local scripts/enable-module.js <slug> outreach
 
-# 2. Crear las tablas (idempotente, lee la lista de master.tenants)
-npm run db:migrate:outreach
-
-# 3. Migraciones incrementales (contador de Google + conversión a cliente +
-#    website a TEXT para URLs largas de Google)
-npm run db:migrate:outreach:usage
-npm run db:migrate:outreach:convert
-npm run db:migrate:outreach:website
-
-# 4. (Opcional) Datos de muestra
-npm run db:seed:outreach -- <slug>
+# (Opcional) Datos de muestra: líneas de negocio + leads con análisis `model: 'demo'`
+node --env-file=.env.local scripts/seed-outreach.js <slug>
 ```
 
-En producción, la variante `:prod` de cada una, o
-`docker exec crm-salamandra-app-1 node scripts/migrate-outreach-*.js`.
+```bash
+# Producción: dentro del contenedor (las vars vienen del entorno Docker)
+docker exec crm-salamandra-app-1 node scripts/enable-module.js <slug> outreach
+```
 
-Después: cada tenant pega su clave de **Anthropic** y de **Google Places** en
-`/configuracion` → Inteligencia Artificial.
+Y `npm run db:check-access` para comprobar que los usuarios lo ven.
+
+Los atajos anteriores siguen vivos y hacen lo mismo por partes:
+`npm run db:enable:outreach -- <slug>` (solo la fila), `npm run
+db:migrate:outreach` + `:usage` + `:convert` + `:website` (las cuatro
+migraciones, una a una), `npm run db:seed:outreach -- <slug>`, y
+`setup-outreach.js` (`npm run db:setup:outreach`: activa + migra + siembra de
+una vez). En producción, nunca `:prod` con `--env-file`: `docker exec`.
+
+Después: cada tenant pega su clave de **Anthropic**, de **Google Places** y de
+**Resend** en `/configuracion` → Inteligencia Artificial. Sin ellas el módulo se
+abre, pero las acciones que cuestan API quedan deshabilitadas (ver «Bloqueo en
+la UI»).
 
 > **Postgres 12 (local):** la migración base usa `gen_random_uuid()` (nativa
 > desde PG13); en local la aporta `pgcrypto`, y si no, omite el `DEFAULT`
@@ -387,9 +405,10 @@ Después: cada tenant pega su clave de **Anthropic** y de **Google Places** en
 | `OUTREACH_FAKE_AI` | Entorno | `=1` activa el analizador simulado (solo fuera de producción) |
 
 Los secrets de entorno se ponen en `.env.local` y en el `.env.production` del VPS
-por SSH. **Nunca por chat** (regla #14). Las claves de IA por-tenant las pega el
-propio cliente en la UI (BYOK) y se guardan en BD (enmascaradas en la API, nunca
-al cliente).
+por SSH. **Nunca por chat** (regla #15 de CLAUDE.md). Las claves de IA por-tenant las pega el
+propio cliente en la UI (BYOK) —o se las ponemos nosotros desde el back-office,
+`lib/provisioning/credencialesCliente.js`— y se guardan en BD cifradas
+(enmascaradas en la API, nunca al cliente).
 
 ---
 
@@ -397,8 +416,18 @@ al cliente).
 
 `OUTREACH_FAKE_AI=1` sustituye Claude por un analizador determinista con contenido
 `[SIMULADO]`; los análisis se guardan con `model = "fake"`. Ignorado en
-`NODE_ENV=production`. Sin `RESEND_API_KEY` el envío es dry-run (`dryRun: true`,
-no marca `sent_at`).
+`NODE_ENV=production`.
+
+Para el correo no hay variable de entorno que valga: la clave de Resend es la
+del tenant (`lib/outreach/resendConfig.js`, **sin fallback** a
+`RESEND_API_KEY`), y sin ella `enviar-correo` responde **400** antes de
+intentar nada. Para probar sin mandar nada al exterior se guarda en
+Configuración la clave literal `dry-run`: `sendEmail` entonces solo loguea y el
+endpoint devuelve `dryRun: true` sin marcar `sent_at`. (`setup-demo-outreach-fake.js`
+deja así la demo.)
+
+> **Histórico:** «Sin `RESEND_API_KEY` el envío es dry-run» — era verdad cuando
+> la clave era global del `.env`.
 
 ---
 

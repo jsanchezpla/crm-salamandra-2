@@ -27,8 +27,13 @@ bloques de disponibilidad (Availability) y reservas (Booking). Tiene una
 landing pública embebible (`/widget/c/[tenantSlug]`) que crea reservas
 sin auth + endpoints admin bajo `/api/citas/*`.
 
-Tenants que lo usan hoy: `nutri_laura` (única con flujo activo en
-producción tras Fase 1).
+Quién lo tiene se mira en `/admin/modulos` (una lista a mano se queda vieja).
+Foto de producción del 19/08/2026: seis clientes — `aumenta` (12.030 citas,
+importadas de Organízate; quien más lo usa por dentro), `nutri_laura` (10; para
+quien se hizo el flujo público entero: widget, portal SSO, puertas y cobro),
+`demo`, `demo_clinica`, `demo_nutricion` y `somos`.
+**Histórico (hasta 07/2026):** `nutri_laura` era la única con flujo activo tras
+la Fase 1.
 
 ---
 
@@ -623,8 +628,10 @@ algo falta, así que sirve de comprobación tras cada despliegue que toque citas
 
 ## Informe de ocupación y ausencias (2026-07-27)
 
-`/equipo/ocupacion` (hijo adminOnly del grupo Equipo, `moduleKey: citas`):
-cuántas citas hubo en el mes, cuántas se atendieron, cuántas se cancelaron y a
+`/equipo/ocupacion` (hijo adminOnly del grupo Equipo, `requiresAll:
+["team_avanzado", "citas"]` en `Sidebar.jsx`; el endpoint exige las dos cosas
+y rol admin fresco de BD — es una pantalla de Equipo avanzado que depende de
+Citas y no de `clinica`): cuántas citas hubo en el mes, cuántas se atendieron, cuántas se cancelaron y a
 cuántas NO SE PRESENTÓ NADIE, por profesional, más el reparto por tipo de cita.
 El estado `no_show` existía desde el principio pero no se agregaba en ninguna
 pantalla: había que contarlo cita a cita.
@@ -693,11 +700,25 @@ mandar correos a pacientes reales.
   filtrable por EventType.
 - `Booking` — reserva concreta con snapshot de duración/meetUrl,
   `cancellationToken` (UUID público para cancelar desde email),
-  `status` ENUM `pending|confirmed|completed|cancelled|no_show`.
+  `status` ENUM `pending|confirmed|completed|cancelled|no_show`, y los
+  enlaces reales `clientId` (ficha), `patientId`, `teamMemberId`
+  (profesional) y `packId` + `sessionNumber` (bono). Más los campos de
+  dinero (`paymentStatus`, `amount`, `holdExpiresAt`,
+  `authorizationExpiresAt`, `paymentSessionId`; ver `pagos.md`),
+  `formAnswers` y `reminderSentAt`.
 
-Asociaciones: `EventType.hasMany(Booking)`. **`Booking` NO tiene FK a
-`Client`** — el cruce con la ficha del paciente es por `clientEmail`
-(decisión arquitectónica explícita).
+Asociaciones (en `lib/db/tenantDb.js`): `EventType.hasMany(Booking)`,
+`Client.hasMany(Booking)`, `Patient.hasMany(Booking)`,
+`TeamMember.hasMany(Booking)`, `SessionPack.hasMany(Booking)`,
+`Booking.hasMany(BookingChangeRequest)` y `Booking.hasMany(ClientNotice)`.
+**`Booking` tiene FK a `Client` desde el 22/07/2026** (`bookings.client_id`,
+`migrate-booking-client-link`; decisión en
+`../decisions/2026-07-23-conexion-cliente-equipo.md`): `/book` la enlaza al
+crearla si el correo ya tiene ficha, y el alta manual la pone a dedo.
+`clientEmail` se conserva y sigue siendo la llave del **portal** (la sesión SSO
+identifica por correo; mucha gente reserva sin ficha) y de los bonos.
+**Histórico (hasta 22/07/2026):** el cruce con la ficha era solo por
+`clientEmail`, y así se quedaron huérfanas durante meses las citas de Aumenta.
 
 ## Estados y transiciones
 
@@ -728,6 +749,7 @@ Tabla de transiciones permitidas:
 |---|---|---|---|
 | (creación pública) | flag `autoConfirmPublicBookings=true` (default) | `confirmed` | `POST /api/public/c/[slug]/book` |
 | (creación pública) | flag `autoConfirmPublicBookings=false` (nutri_laura) | `pending` | `POST /api/public/c/[slug]/book` |
+| (creación pública) | el tipo tiene **precio** o la cita es **sesión de un bono** | `pending` **siempre**, mande lo que mande el flag (con precio: hasta que la tarjeta responda; con bono: salvo que la ficha tenga «citas autoconfirmadas») | `POST /api/public/c/[slug]/book` |
 | (creación admin) | siempre | `confirmed` | `POST /api/citas/bookings` |
 | `pending` | confirmar | `confirmed` | `PATCH /api/citas/bookings/[id]/confirm` |
 | `pending` | rechazar | `cancelled` | `PATCH /api/citas/bookings/[id]/reject` |
@@ -764,9 +786,16 @@ Conceptualmente son operaciones distintas:
   de cita").
 - **Cancelar confirmada**: Laura tenía la cita en agenda y se cae —
   enfermedad, viaje, paciente avisa que no puede. Es PATCH base con
-  `{ status: "cancelled" }` o `DELETE`. (Hoy NO dispara email
-  automático; pendiente backlog si quieres "tu cita ha sido cancelada"
-  como template separado.)
+  `{ status: "cancelled" }` o `DELETE`. **Sí dispara email** (desde el
+  27/07/2026): `bookingCancelled` («Tu cita ha sido cancelada»), solo si la
+  cita es FUTURA y solo cuando cancela el CENTRO — si cancela el propio
+  paciente desde su enlace o su portal, a él no se le escribe (ya lo sabe) y
+  al centro le llega un aviso a la campana. La lógica compartida está en
+  `lib/citas/notificarCancelacion.js` (la usan `cancelBooking.js` —enlace del
+  correo y portal— y `lib/clients/borrarRastro.js`); el PATCH/DELETE del panel
+  monta la misma plantilla en su `sendCancellationEmail`. (A diferencia del
+  aviso de cambio de hora y del enlace de videollamada, este NO mira las
+  preferencias de comunicación de la familia: se manda igual.)
 
 Ambas marcan `status="cancelled"` y rellenan `cancelledAt` +
 `cancellationReason`, pero el endpoint y el email asociado distinguen
@@ -859,7 +888,16 @@ Vive en `master.tenant_modules.feature_flags` del módulo `citas`.
 
 Hoy solo `nutri_laura` tiene el flag en `false` (script
 `scripts/migrate-booking-pending.js` lo aplica como parte de la
-migración). Otros tenants conservan el comportamiento histórico.
+migración; comprobado en producción el 19/08/2026). Otros tenants conservan
+el comportamiento histórico.
+
+Dos cosas que mandan SOBRE el flag, en `/book` (ver la tabla de transiciones):
+una cita **con precio** o **sesión de un bono** nace `pending` aunque el flag
+diga `true` (con tarjeta de por medio decide la profesional; la sesión de bono
+es de quien más pide y la nutricionista quiere verlas una a una, 07/08/2026);
+y al revés, la ficha de la paciente puede tener «citas autoconfirmadas»
+(`Client.autoConfirmBookings`, 06/08/2026), que la exime de la bandeja
+del centro — solo exime, nunca salta el precio ni las puertas.
 
 ## Endpoints
 
@@ -867,12 +905,14 @@ migración). Otros tenants conservan el comportamiento histórico.
 
 | Ruta | Método | Descripción |
 |---|---|---|
-| `/api/public/c/[tenantSlug]/info` | GET | Metadatos del tenant + branding |
-| `/api/public/c/[tenantSlug]/event-types` | GET | Tipos de cita activos |
-| `/api/public/c/[tenantSlug]/availability` | GET | Slots disponibles |
-| `/api/public/c/[tenantSlug]/book` | POST | Crear booking (lee flag autoConfirm) |
+| `/api/public/c/[tenantSlug]/info` | GET | Metadatos del tenant + branding + qué puertas están encendidas |
+| `/api/public/c/[tenantSlug]/event-types` | GET | Tipos de cita activos y online; con `Authorization: Bearer` opcional añade los ocultos con bono |
+| `/api/public/c/[tenantSlug]/availability` | GET | Slots disponibles de un día |
+| `/api/public/c/[tenantSlug]/availability/month` | GET | Días del mes con al menos un hueco |
+| `/api/public/c/[tenantSlug]/book` | POST | Crear booking (lee flag autoConfirm; pasa las puertas; con precio, retención; con bono, Checkout) |
 | `/api/public/c/[tenantSlug]/booking/[token]` | GET | Detalle desde token |
 | `/api/public/c/[tenantSlug]/cancel/[token]` | POST | Cancelar desde token |
+| `/api/public/c/[tenantSlug]/pagar/[token]` | GET | Lo que necesita la página «vuelve a meter tu tarjeta»: servicio, hora, importe y `clientSecret` de SU retención nueva (token de 7 días; ver `pagos.md`) |
 
 ### Portal de la familia (sesión SSO, `Authorization: Bearer`)
 
@@ -881,6 +921,11 @@ migración). Otros tenants conservan el comportamiento histórico.
 | `/api/public/c/[tenantSlug]/citas-portal/session` | POST | Canjea el `wpsso` de WordPress por sesión del portal |
 | `/api/public/c/[tenantSlug]/citas-portal/bookings` | GET | Citas de quien ha entrado |
 | `/api/public/c/[tenantSlug]/citas-portal/cancel/[id]` | POST | Cancelar su cita |
+| `/api/public/c/[tenantSlug]/citas-portal/admision` | GET | ¿Puede reservar ya? Su estado ante la puerta de admisión, para avisar ANTES de elegir hora (05/08) |
+| `/api/public/c/[tenantSlug]/citas-portal/avisos` | GET/POST | Los avisos del centro publicados en su área privada; POST los marca leídos (solo los suyos) |
+| `/api/public/c/[tenantSlug]/citas-portal/comunicaciones` | GET/POST | Qué le puede escribir el centro (correo de citas, WhatsApp, novedades); guarda la respuesta con fecha, IP y navegador |
+| `/api/public/c/[tenantSlug]/citas-portal/consentimiento-imagen` | GET/POST | Consentimiento de imagen, por paciente; el «no» también se guarda |
+| `/api/public/c/[tenantSlug]/citas-portal/mis-datos` | GET/POST | «Completa tus datos» antes de firmar: solo los huecos de la ficha |
 | `/api/public/c/[tenantSlug]/citas-portal/documents` | GET/POST | «Mis documentos» (cerrado si falta firmar el contrato) |
 | `/api/public/c/[tenantSlug]/citas-portal/documents/[id]` | GET | Descarga de un documento suyo |
 | `/api/public/c/[tenantSlug]/citas-portal/contract` | GET | Estado del contrato + la plantilla que toca firmar (ver abajo) |
@@ -1046,7 +1091,7 @@ y el interruptor lo avisa.
 | Ruta | Método | Descripción |
 |---|---|---|
 | `/api/citas/event-types` | GET/POST | Listar / crear EventType |
-| `/api/citas/event-types/[id]` | GET/PATCH | CRUD individual |
+| `/api/citas/event-types/[id]` | GET/PATCH/DELETE | CRUD individual |
 | `/api/citas/availability` | GET/POST | Listar / crear bloque |
 | `/api/citas/availability/[id]` | GET/PATCH/DELETE | CRUD bloque |
 | `/api/citas/availability/bulk` | POST | Operación masiva |
@@ -1054,8 +1099,16 @@ y el interruptor lo avisa.
 | `/api/citas/bookings` | POST | Crear booking manual (default `confirmed`) |
 | `/api/citas/bookings/[id]` | GET/PATCH/DELETE | CRUD. PATCH bloquea regresión a `pending`. DELETE cancela; **`?hard=true` la borra de verdad** (ver «Borrar una cita del todo») |
 | `/api/citas/bookings/[id]/confirm` | PATCH | Transición `pending → confirmed`. Idempotente. Valida solapamiento. Dispara `bookingConfirmed` |
-| `/api/citas/bookings/[id]/reject` | PATCH | Transición `pending → cancelled`. Acepta `cancellationReason` en body. Dispara `bookingRejected` |
+| `/api/citas/bookings/[id]/reject` | PATCH | Transición `pending → cancelled`. Acepta `cancellationReason` en body. Dispara `bookingRejected` y suelta la retención si la hay |
+| `/api/citas/bookings/[id]/pedir-tarjeta` | POST | Retención NUEVA + correo con enlace para volver a meter la tarjeta (ver «Cuando el dinero se pierde» y `pagos.md`) |
+| `/api/citas/bookings/[id]/reschedule-request` | POST | Una profesional PROPONE mover la cita: crea una solicitud pendiente, la cita no se toca |
+| `/api/citas/bookings/[id]/suggest-slots` | POST | IA: propone 3 horarios para reprogramar (solo admin; ámbito `professional` o `company`) |
+| `/api/citas/reschedule-requests` | GET | Solicitudes de cambio de hora pendientes (admin), con el contador para el globito |
+| `/api/citas/reschedule-requests/[id]` | PATCH | El centro aprueba o rechaza; al aprobar, mueve la cita de verdad (transacción + lock por profesional) |
 | `/api/citas/bookings/calendar` | GET | JSON FullCalendar para la vista mensual |
+| `/api/citas/avisos` | GET/POST | Avisos del centro a un cliente: salen por correo Y quedan en su portal (ver «Decirle algo al cliente») |
+| `/api/citas/sin-profesional` | GET/POST | Citas sin profesional, agrupadas por departamento; POST las asigna en lote a una profesional |
+| `/api/citas/informe-ocupacion` | GET | Informe de ocupación y ausencias del mes (`?periodo=YYYY-MM`; exige `team_avanzado` + admin) |
 | `/api/citas/clientes` | GET | A quién se le puede poner una cita (surte al buscador del alta manual). `?q=`, `?limit=`, `?todos=1` |
 | `/api/citas/packs` | GET | Los bonos VIVOS de alguien (`?clientId=` y/o `?email=`): activos y con sesiones libres. Lo pide el alta manual para poner el tipo de cita |
 | `/api/citas/packs` | POST | Dar un bono a mano (solo admin) |
@@ -1075,12 +1128,18 @@ y el interruptor lo avisa.
 
 ## UI
 
-### Default (vanilla)
+### Default (para todos)
 
-`modules/default/CitasModule.jsx` — calendario FullCalendar con modal
-"Nueva cita manual" + modal detalle con acciones marcar completada / no
-asistió / cancelar. Sin tabs ni lista de espera (los otros tenants no
-usan `pending` hoy).
+`modules/default/CitasModule.jsx` (2.595 líneas) — es la ÚNICA pantalla de
+Citas: `UI_OVERRIDES = {}` en `app/(dashboard)/citas/page.jsx`, solo cambia
+el rótulo («Agenda» en nutri_laura). Dos pestañas: **Calendario**
+(FullCalendar con modal «Nueva cita manual» + modal de detalle con marcar
+completada / no asistió / cancelar / eliminar / cambiar hora / enlace de
+videollamada) y **Lista de espera** (las `pending`: confirmar —y cobrar, si
+hay retención—, rechazar, pedir otra tarjeta; globito con las que faltan por
+atender), más las solicitudes de cambio de hora para dirección.
+**Histórico (hasta 22/07/2026):** el default no tenía lista de espera; la
+tenía solo el override de nutri_laura, que ese día se fundió en el default.
 
 #### Repaso del 12/08/2026 (Rodrigo)
 
@@ -1238,51 +1297,71 @@ cazarla.
 node --env-file=.env.local scripts/_smoke-bloqueos-quien-ve.mjs
 ```
 
-### Override nutri_laura
+### Override nutri_laura — **Histórico (hasta 22/07/2026)**
 
-`modules/overrides/nutri-laura/CitasModule.jsx` — dos tabs:
-
-1. **Lista de espera** (tab default si hay pendings):
-   - Cards por solicitud con nombre, contacto, servicio, fecha
-     propuesta, modalidad y respuesta al formulario.
-   - Acciones "Confirmar" (dialog "¿Confirmar cita con {nombre} el
-     {fecha}?") y "Rechazar" (textarea opcional para motivo).
-   - Tras la acción, la fila desaparece y los emails salen automáticos.
-2. **Calendario**: vista FullCalendar simplificada. Modal de detalle
-   solo lectura — la edición pasa por el flujo de lista de espera o
-   por el detalle base.
-
-Badge contador de pendientes en el tab.
+`modules/overrides/nutri-laura/CitasModule.jsx` **ya no existe**. Fue la
+primera pantalla con lista de espera (cards por solicitud, Confirmar /
+Rechazar con motivo, badge de pendientes, calendario simplificado) y el
+22/07/2026 se fundió en el default: hoy Laura ve la misma pantalla que
+todos, con el rótulo «Agenda» por `TENANT_TITLE_OVERRIDES`.
 
 ### Citas desde la ficha del paciente
 
-Como complemento al módulo `/citas`, la **tab Citas del detalle de cliente**
-(`/clientes/:id` → tab "Citas" en el override nutri_laura) lista los
-bookings de ese paciente concreto y permite confirmar/rechazar
-inline cualquier `pending`. Cruce por `clientEmail` (Booking no tiene FK
-a Client).
+Como complemento al módulo `/citas`, la ficha de cliente (`/clientes/:id`)
+lista las citas de esa persona y permite confirmar/rechazar inline
+cualquier `pending`. Cruce por `clientId` (el enlace real, desde el
+22/07/2026) **y** por `clientEmail` (las citas anteriores al enlace, o de
+quien reserva sin ficha).
 
-Componente: `modules/overrides/nutri-laura/ClientBookingsPanel.jsx`.
-Endpoints usados: idénticos a esta página (`GET /api/citas/bookings?clientEmail=`,
-`PATCH .../confirm`, `PATCH .../reject`). Detalle del flujo y permisos en
-[`docs/modules/clients.md`](./clients.md#override-nutri_laura).
+Componente: `components/clients/ClientBookingsPanel.jsx` (desde el
+18/08/2026; antes vivía en `modules/overrides/nutri-laura/`). Lo monta la
+ficha por defecto como pestaña «Sesiones» allí donde lo decide
+`lib/clients/piezasFicha.js` (tiene `citas` y NO `clinica`, que ya llama
+«Sesiones» a otra cosa), y la ficha de Laura con sus palabras; confirmar y
+rechazar lo puede hacer cualquiera del equipo (06/08). Además,
+`ClientCitasSection.jsx` (el interruptor «citas autoconfirmadas» de esa
+paciente) y `ClientBonosSection.jsx` (bonos), en `components/clients/`.
+Endpoints usados: los de esta página (`GET
+/api/citas/bookings?clientId=&clientEmail=`, `PATCH .../confirm`,
+`PATCH .../reject`). Detalle en [`docs/modules/clients.md`](./clients.md).
 
 ## Integración Google Calendar / Meet — **Fase 2 (no implementado)**
 
-El campo `Booking.meetUrl` es un snapshot del `EventType.meetUrl`
-configurado manualmente (URL Meet estática). Para Fase 2 la integración
-generará Meet links reales vía Google Calendar API por cita y los
-emails llevarán el link dinámico. Variables env placeholder ya
+`Booking.meetUrl` lo decide `lib/citas/videollamada.js` según
+`settings.citas.meetModo`: en **manual** (por defecto) la cita nace sin
+enlace y la profesional lo pega y lo manda con «Guardar y enviar»; en
+**automático** hereda la sala fija del `EventType.meetUrl` (snapshot). Para
+Fase 2 la integración generará Meet links reales vía Google Calendar API por
+cita y los emails llevarán el link dinámico. Variables env placeholder ya
 añadidas a `.env.production.example` (`GOOGLE_CLIENT_ID`,
 `GOOGLE_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`,
 `GOOGLE_TOKEN_ENCRYPTION_KEY`).
 
-## Migraciones aplicadas (sprint Fase 1)
+## Migraciones
 
-- `scripts/migrate-booking-pending.js`: añade `'pending'` al enum
-  `enum_bookings_status` en todos los tenants con módulo citas
-  habilitado. Setea `featureFlags.autoConfirmPublicBookings=false` en
-  `nutri_laura.citas`. Idempotente.
+Las del módulo están registradas en `MODULES.citas` de
+`scripts/_module-migrations.js` (15 a 19/08/2026) y las corre
+`enable-module.js <slug> citas` (y `ensure-tenant-schema` al reactivar); el
+orden real lo calcula `scripts/_migration-order.js` (`npm run
+db:check-migration-order` lo audita): `migrate-vacaciones` (bloqueos por
+persona, `team_blocks`),
+`migrate-citas-sprint-1` (las tablas base), `migrate-calendar-citas-fks`,
+`migrate-booking-pending`, `migrate-booking-client-link`
+(`bookings.client_id`), `migrate-booking-change-requests`,
+`migrate-booking-reminder` (`reminder_sent_at`),
+`migrate-booking-authorization` (retención: enum de `payment_status` +
+`authorization_expires_at`), `migrate-booking-email-opcional`,
+`migrate-team-member-hours`, `migrate-avisos-cliente` (`client_notices`),
+`migrate-citas-tipos-ocultos` (`is_hidden`), `migrate-packs-sesiones`
+(bonos, plazos, `form_questions`), `migrate-valoracion-inicial` y
+`migrate-preguntas-cita`. Además tocan citas varias CORE
+(`migrate-payments-sprint-1`, `migrate-contrato-estructurado`,
+`migrate-sprint-aumenta-2026-07`…).
+
+**Histórico (sprint Fase 1):** la primera fue `migrate-booking-pending`
+(añade `'pending'` al enum `enum_bookings_status` y pone
+`featureFlags.autoConfirmPublicBookings=false` en `nutri_laura.citas`;
+idempotente).
 
 ## Backlog
 
@@ -1291,9 +1370,10 @@ añadidas a `.env.production.example` (`GOOGLE_CLIENT_ID`,
   email no se envía).
 - Reintentos persistentes para emails fallidos (apuntar a `email_send_log`
   o n8n cola).
-- Email "tu cita ha sido cancelada" cuando se cancela una confirmada
-  (hoy solo el reject manda email).
-- FK física `Booking.clientId → clients.id` opcional, con merge por
-  email al crear bookings desde formulario público (decisión
-  arquitectónica pendiente: hoy hay `clientEmail` libre).
-- Integración Google Calendar real (Fase 2).
+- Integración Google Calendar real (Fase 2): hoy hay dos modos de enlace
+  (`lib/citas/videollamada.js`, manual por defecto; «automático» reutiliza la
+  sala fija del tipo) y un «Añadir a Google Calendar»
+  (`lib/citas/googleCalendar.js`), pero nadie crea salas llamando a Google.
+
+Hechos y quitados de aquí: el correo «tu cita ha sido cancelada» (27/07) y
+la FK `Booking.clientId → clients.id` (22/07).

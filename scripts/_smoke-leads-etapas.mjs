@@ -1,5 +1,6 @@
 /**
- * _smoke-leads-etapas.mjs — las etapas de las SIETE pantallas de Leads (17/08/2026).
+ * _smoke-leads-etapas.mjs — las etapas de TODAS las pantallas de Leads (17/08/2026;
+ * hoy cinco: el base y cuatro overrides).
  *
  *   node scripts/_smoke-leads-etapas.mjs
  *
@@ -11,11 +12,14 @@
  *
  * ── POR QUÉ EXISTE ─────────────────────────────────────────────────────────
  *
- * La pantalla de Leads existe SIETE veces: el módulo por defecto y seis
- * overrides por cliente, que se quedan separados a propósito (decisión de
+ * La pantalla de Leads existe VARIAS veces: el módulo por defecto y los
+ * overrides por cliente (siete en total el 17/08/2026; cinco desde el 18/08,
+ * cuando demo y sandbox se borraron: base + aumenta, nutri-laura, retorika y
+ * spain-enzymes), que se quedan separados a propósito (decisión de
  * Jorge, 17/08/2026: «si cambio uno y se cambian los demás se podría romper
  * todo»). Esta prueba no viene a unificarlos. Viene a cubrir lo ÚNICO que cada
  * uno declara por su cuenta y que puede matar la pantalla: su lista de etapas.
+ * Los overrides se DESCUBREN en disco, así que el número no está escrito aquí.
  *
  * Hasta hoy Leads no tenía NI UNA prueba: ~60 ficheros `_smoke-*` en el repo y
  * ninguno lo tocaba.
@@ -74,9 +78,10 @@
  *
  * ── LO QUE ESTO NO CUBRE ───────────────────────────────────────────────────
  *
- * Que los seis overrides FUNCIONEN. Prueba que sus etapas son coherentes, no
- * que el panel guarde notas ni que el import de CSV parsee. Son ~5.400 líneas
- * de JavaScript de cliente y cubrirlas de verdad pide un navegador.
+ * Que los overrides FUNCIONEN. Prueba que sus etapas son coherentes, no
+ * que el panel guarde notas ni que el import de CSV parsee. Son ~4.200 líneas
+ * de JavaScript de cliente (los cuatro overrides) y cubrirlas de verdad pide
+ * un navegador.
  */
 
 import { readFileSync, readdirSync, existsSync } from "node:fs";
@@ -370,13 +375,13 @@ for (const o of legibles) {
   );
 }
 
-// ── 8. Los seis siguen dejando contar al servidor ───────────────────────────
+// ── 8. Los overrides siguen dejando contar al servidor ──────────────────────
 // El contador de la cabecera se rompió una vez contando sobre la lista ya
 // filtrada. El arreglo vive en el endpoint, pero depende de que la pantalla
 // pida el desglose y lea la respuesta.
 
 // ⚠️ Buscar «desglose» a secas NO vale: la palabra está en los comentarios de
-// los seis ficheros, así que pasaría en verde aunque el código dejara de
+// todos los ficheros, así que pasaría en verde aunque el código dejara de
 // pedirlo. Hay que mirar los dos patrones de CÓDIGO: que lo pida en la query y
 // que lo lea de la respuesta.
 h("Los contadores de cabecera los sigue dando el servidor");

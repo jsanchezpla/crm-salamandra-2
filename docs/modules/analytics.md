@@ -107,8 +107,8 @@ pantalla de tokens personalizados: `Cuenta` · `Account Analytics` · `Leer`
 (comprobado en el panel el 2026-07-31 — el desplegable del medio solo ofrece
 esa opción al escribir «Analytics»). No puede tocar DNS, dominios ni nada más.
 
-> **El token no se pide ni se pega nunca por chat ni por correo** (regla 14 de
-> CLAUDE.md). Lo crea el cliente o el administrador en Cloudflare y lo pega
+> **El token no se pide ni se pega nunca por chat ni por correo** (regla 15 de
+> CLAUDE.md, «Secrets de producción»). Lo crea el cliente o el administrador en Cloudflare y lo pega
 > directamente en la pantalla de Configuración, que lo cifra en reposo.
 > Si un token se ha visto en un canal no seguro, se revoca en Cloudflare y se
 > crea otro.
@@ -118,17 +118,20 @@ esa opción al escribir «Analytics»). No puede tocar DNS, dominios ni nada má
 ## Alta en un tenant
 
 ```bash
-docker exec crm-salamandra-app-1 node scripts/enable-module.js <slug> analytics --force
+docker exec crm-salamandra-app-1 node scripts/enable-module.js <slug> analytics
 ```
 
-`--force` es necesario **la primera vez**: `analytics` no está en `MODULE_KEYS`,
-así que `enable-module.js` lo trata como clave desconocida (protección contra
-typos). A partir de que un tenant lo tenga, ya aparece como conocido y el
-`--force` sobra.
+Sin `--force`: `enable-module.js` da por conocida cualquier clave que esté en
+`MODULE_KEYS`, en `MODULES` de `scripts/_module-migrations.js` o ya en uso en
+`master.tenant_modules`, y `analytics` está en la segunda lista desde que tiene
+migración. (**Histórico:** hasta que existió `migrate-web-visits-daily` el alta
+exigía `--force` la primera vez, porque la clave no aparecía en ningún sitio.)
 
 Desde que existe el histórico, el módulo **sí tiene migración**
 (`migrate-web-visits-daily`, registrada en `scripts/_module-migrations.js`), así
-que el alta crea también la tabla `web_visits_daily`.
+que el alta crea también la tabla `web_visits_daily` y abre el
+`module_access` a los admin del tenant (la segunda puerta, ver
+`../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md`).
 
 Después, comprobar la conexión:
 

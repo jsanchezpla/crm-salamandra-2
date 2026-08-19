@@ -16,13 +16,14 @@
 | **Interruptores y parámetros** | `featureFlags.autoAsignarEnAlta` — lo lee `lib/clients/moduleAssignments.js` (`AUTO_ASSIGN_FLAG`) y lo respeta `backfill-nutricion-assignments.js`; en producción solo `nutri_laura` lo tiene a `true` (Aumenta no lo tiene puesto = apagado) · `featureFlags.externalSearchEnabled` está puesto en `nutri_laura` pero **ningún código lo lee**: solo lo escribe `scripts/add-nutricion-module-nutri-laura.js` (histórico, OpenFoodFacts retirado) · `logicOverrides`: ninguno |
 | **Pantallas propias** | ninguna. Las cuatro páginas de `/nutricion/*` llevan un mapa `UI_OVERRIDES` con `nutri_laura`, pero apunta al MÓDULO BASE (`modules/nutricion/…`), el mismo componente que el valor por defecto: **mapa vacío de facto**, y por eso ni `sincronizar-ui-override.mjs` ni `/admin/modulos` lo cuentan. Lo de Laura en `modules/overrides/nutri-laura/` es su ficha (`ClientDetailModule.jsx`, que importa `ClientPlansPanel` del base) y su embudo de leads, no nutrición |
 | **Scripts** | activar: `node scripts/enable-module.js <slug> nutricion` (fila en `tenant_modules` + las 8 migraciones que declara `scripts/_module-migrations.js` + siembra) · migraciones vivas, en ese orden: `migrate-nutricion-base.js` (las cinco tablas cimiento), `migrate-nutricion-recipes.js`, `migrate-nutricion-week-recipe-media.js`, `migrate-nutricion-day-comments.js`, `migrate-nutricion-show-macros.js`, `migrate-recetas-clasificacion.js`, `migrate-plan-team.js`, `migrate-nutricion-congelar-receta.js`; aparte `install-unaccent-extension.js` (extensión de BD, una vez por base) · seed: `seed-foods-base-catalog.js` (497 alimentos de `scripts/data/foods-base-catalog.mjs`, idempotente por slug) · datos y one-off, a mano: `migrate-auto-asignar-nutricion.js` (MASTER: enciende el flag a nutri_laura), `backfill-nutricion-assignments.js` (marca fichas previas; exige el flag), `import-harbiz-recetas.js` (las 1.083 recetas de Laura, `--confirm`), `cleanup-branded-foods.js` (archiva las marcas de OFF) · históricos que no se ejecutan: `add-nutricion-module-nutri-laura.js`, `add-nutricion-c2-plans-nutri-laura.js` |
-| **Pruebas** | `scripts/smoke-nutri-laura-recetario-{c1,c2,c3,c4,e2e}.mjs` — piden base de datos y `npm run dev` (c3 con `--only-unit` prueba `macros.js` sin servidor); **`npm test` no las descubre** (`pruebas.mjs` solo recoge `_smoke-*` y `smoke-test-*`), se lanzan a mano · `_smoke-piezas-ficha.mjs` (`@prueba ligera`, en `npm test`) fija qué paneles ve la consulta de nutrición en la ficha · ningún `_smoke-*` toca `lib/nutricion/` |
+| **Pruebas** | `scripts/_smoke-nutri-laura-recetario-{c1,c2,c3,c4,e2e}.mjs` (renombradas el 19/08/2026: antes sin el `_` y el runner no las veía) — piden base de datos y `npm run dev`; `scripts/pruebas.mjs` las clasifica «servidor y base de datos», así que entran en **`npm run test:todo`** y NO en `npm test` (c3 con `--only-unit` prueba `macros.js` sin servidor, a mano) · `_smoke-piezas-ficha.mjs` (`@prueba ligera`, en `npm test`) fija qué paneles ve la consulta de nutrición en la ficha · ningún `_smoke-*` ligero toca `lib/nutricion/` |
 | **Decisiones** | `../decisions/2026-07-nutricion-refactor-sprint-8.md`, `../decisions/2026-07-nutricion-8.2-runbook.md`, `../decisions/2026-07-nutricion-8.3-menu-pdf-email.md` (las del sprint) · `../decisions/2026-07-23-conexion-cliente-equipo.md` (`plans.team_member_id`) · `../decisions/2026-07-28-repaso-de-seguridad.md` (la edición granular del menú no se audita) · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` (`enable-module.js` siembra las nueve tablas y los 497 alimentos) · `../decisions/2026-08-01-alta-de-clientes-por-perfil.md` (perfil `salud`) · `../decisions/2026-08-04-clientes-se-llama-pacientes-en-nutricion.md` (Recetario / Pautas) · `../decisions/2026-08-12-migraciones-sin-filtrar-por-status.md` (seed y backfill sí miran `status`) |
 | **En este doc** | «2. Activación del módulo» · «3. Arquitectura BD» · «4. Rutas frontend» · «5. Endpoints REST» · «7. Decisiones arquitectónicas cerradas» (Congelado y propagación) · «8. Tests / Smokes» · «9. Migrations» · «PDF del menú — rediseño del 2026-07-22 (segunda pasada)» |
 
 Estado: **todo el módulo está desplegado.** Comprobado el 12/08/2026 dentro del
-contenedor: los 23 endpoints de `/api/nutricion/*` y las cuatro pantallas son
-exactamente los mismos que en local.
+contenedor: los endpoints de `/api/nutricion/*` y las cuatro pantallas eran
+exactamente los mismos que en local (entonces 23; son **24** desde el 13/08
+con `recipes/[id]/propagate`, desplegado también).
 
 > ⚠️ **Esta línea decía «C1+C2+C3 en producción, C4+C5 pendientes de
 > despliegue», y llevaba semanas sin ser verdad.** El endpoint que cerraba C5
@@ -96,41 +97,58 @@ exactamente los mismos que en local.
 >   semántica de copia independiente (deep-copy) + "Re-aplicar".
 > - El smoke C1 pasa a verificar que los endpoints externos responden 404.
 
-Tenant activo: `nutri_laura` únicamente. El backend está pensado para
-escalar a otros tenants sin reescribir nada: el módulo `nutricion` se
-"registra" insertando una fila en `master.tenant_modules`.
+Tenants activos (foto de `master` del 19/08/2026): **cinco** — `nutri_laura`
+(la reina, 4 pautas), `aumenta`, `demo`, `demo_nutricion` y `somos`. El
+backend nació pensado para escalar sin reescribir nada, y desde el 13/08/2026
+eso es literal: se da con `scripts/enable-module.js <slug> nutricion` (ver §2).
 
-> **Refactor Sprint 8 (en planificación):** reestructura del módulo
-> (Alimentos→Recetas, Plantillas→Menús con comidas×recetas×opciones,
-> Asignados→Pacientes Nutrición, PDF+email del menú). Plan detallado, riesgos
-> y decisiones abiertas en
+> **Histórico (hasta 13/08/2026):** aquí decía «Tenant activo: `nutri_laura`
+> únicamente», y activarlo en otro significaba ejecutar a mano los scripts C1/C2.
+
+> **Refactor Sprint 8 (hecho en 07/2026: 8.2 recetario, 8.3 PDF + email):**
+> reestructura del módulo (Alimentos→Recetas, Plantillas→Menús con
+> comidas×recetas×opciones, Asignados→Pacientes Nutrición, PDF+email del
+> menú). Plan detallado, riesgos y decisiones en
 > [`docs/decisions/2026-07-nutricion-refactor-sprint-8.md`](../decisions/2026-07-nutricion-refactor-sprint-8.md).
 
 ---
 
 ## 1. Resumen ejecutivo
 
-Mini-Harbiz integrado en el CRM para la nutricionista Laura. Cubre:
+Mini-Harbiz integrado en el CRM, nacido para la nutricionista Laura y hoy
+(13/08/2026) un módulo más que se le da a cualquier cliente. Cubre:
 
-- **Catálogo de alimentos** local con macros por 100 g + búsqueda
-  externa contra OpenFoodFacts (OFF) e import idempotente al catálogo.
-- **Plantillas de plan** reutilizables (estructura de comidas, opciones
-  intercambiables, alimentos con 3 modos de cantidad).
+- **Catálogo de alimentos** local con macros por 100 g: los 497 del catálogo
+  base (`seed-foods-base-catalog.js`) más los propios de la nutricionista.
+  **Histórico (hasta 18/07/2026):** además había búsqueda externa contra
+  OpenFoodFacts (OFF) e import idempotente al catálogo; se retiró entero en
+  Nutrinotas (las filas importadas conservan `source='openfoodfacts'`).
+- **Recetario** (8.2, 22/07/2026): recetas con ingredientes, foto y pasos,
+  clasificadas (tipo, etiquetas, alérgenos, preferencias, duración, raciones).
+- **Plantillas de plan** reutilizables (estructura de comidas por día de la
+  semana, opciones intercambiables, alimentos con 3 modos de cantidad y
+  recetas congeladas dentro).
 - **Asignación a paciente** con deep-copy independiente: editar la
   plantilla NO afecta a los planes ya asignados.
 - **UI Harbiz-like** (modal grande con acordeón de comidas + pills de
   opciones + tabla de alimentos + macros calculados al vuelo).
-- **Tab "Plan"** en la ficha del paciente con plan activo + histórico
-  colapsable + acción "Re-aplicar plantilla origen".
+- **Pestaña "Pautas"** (antes "Plan") en la ficha del paciente con plan activo
+  + histórico colapsable + acción "Re-aplicar plantilla origen".
 - **Sin kcal**: solo proteínas, carbohidratos, grasas y fibra (en g).
   Decisión cerrada en C0 — Laura no las muestra al paciente.
-- **Sin portal cliente**: la entrega del plan se hace en PDF por
-  WhatsApp (sprint futuro). El flag `plans.visible_to_client` queda en
-  BD por compatibilidad pero su toggle UI se retiró en C4.
+- **Sin portal cliente**: la pauta se entrega en **PDF** (`plans/[id]/pdf`)
+  y por **correo** con el PDF adjunto (`plans/[id]/send-email`, sub-sprint
+  8.3). El flag `plans.visible_to_client` queda en BD por compatibilidad pero
+  su toggle UI se retiró en C4.
 
-Otros tenants: NO disponible. Las tablas `foods/plans/plan_meals/…`
-solo existen en `crm_nutri_laura`. Replicar a otro tenant requiere
-re-ejecutar los scripts de migración cambiando el slug.
+Otros tenants: se activa con `scripts/enable-module.js <slug> nutricion`
+(§2), que crea las nueve tablas y siembra el catálogo base.
+
+> **Histórico (hasta 13/08/2026):** «NO disponible. Las tablas
+> `foods/plans/plan_meals/…` solo existen en `crm_nutri_laura`. Replicar a
+> otro tenant requiere re-ejecutar los scripts de migración cambiando el
+> slug.» Era verdad hasta que `migrate-nutricion-base` entró en
+> `_module-migrations.js`.
 
 ---
 
@@ -199,7 +217,11 @@ ni rompe la BD.
 
 ## 3. Arquitectura BD
 
-Schema `crm_nutri_laura`:
+En el schema de cada tenant con el módulo (`crm_{slug}`): **nueve tablas**.
+Las cinco de abajo son el cimiento (C1/C2, hoy las crea
+`migrate-nutricion-base`); las columnas marcadas «(post-sprint)» y las cuatro
+tablas del recetario llegaron después y las añaden las otras migraciones de
+§9.
 
 ### `foods` — catálogo de alimentos (C1)
 
@@ -234,6 +256,9 @@ taza/vaso/lata, valores estándar.
 | `client_id` | UUID | NULL para plantillas (sin FK física, como Booking) |
 | `visible_to_client` | BOOLEAN DEFAULT FALSE | columna muerta tras C4 (toggle UI retirado) |
 | `assigned_at`, `archived_at` | TIMESTAMPTZ NULL | |
+| `day_comments` (post-sprint) | JSONB NOT NULL DEFAULT `{}` | comentarios por día `{ "1": "lunes…", … "7": … }` (`migrate-nutricion-day-comments`, 22/07) |
+| `show_macros` (post-sprint) | BOOLEAN NOT NULL DEFAULT FALSE | si el PDF del paciente imprime P/H/G/fibra; apagado a propósito (`migrate-nutricion-show-macros`, 22/07; ver «PDF del menú») |
+| `team_member_id` (post-sprint) | UUID NULL → `team_members.id` ON DELETE SET NULL | nutricionista que hizo el plan (`migrate-plan-team`, 23/07) |
 | timestamps | | |
 
 CHECK `plans_type_client_chk` garantiza coherencia entre `type` y
@@ -250,9 +275,11 @@ OR
 
 ### `plan_meals` — comidas dentro del plan (C2)
 
-`{id, plan_id, name, description, order, timestamps}`.
+`{id, plan_id, name, description, order, weekday, timestamps}`.
 
-FK `plan_id` → `plans.id` ON DELETE CASCADE.
+FK `plan_id` → `plans.id` ON DELETE CASCADE. `weekday` (post-sprint,
+`migrate-nutricion-week-recipe-media`, 22/07) es SMALLINT NULL con CHECK 1-7
+(1=Lunes … 7=Domingo); NULL = comida sin día (planes pre-rework).
 
 ### `plan_meal_options` — opciones intercambiables (C2)
 
@@ -286,6 +313,57 @@ OR
 (unit='free'      AND amount NULL     AND household_* NULL)
 ```
 
+### Las cuatro tablas del recetario (8.2, `migrate-nutricion-recipes`)
+
+Aditivas: la estructura de arriba sigue funcionando sola; una opción puede
+llevar alimentos sueltos, recetas congeladas, o las dos cosas.
+
+#### `recipes` — catálogo de recetas
+
+| Columna | Tipo | Notas |
+| ------- | ---- | ----- |
+| `id` | UUID PK | |
+| `name` | VARCHAR(255) NOT NULL | |
+| `description` | TEXT | |
+| `created_by` | UUID NULL | `master.users.id`, sin FK física |
+| `is_archived` | BOOLEAN NOT NULL DEFAULT FALSE | soft delete; índice |
+| `photo_path` | VARCHAR(500) NULL | foto en disco bajo `UPLOADS_ROOT` (`lib/nutricion/recipePhotoStorage.js`); `migrate-nutricion-week-recipe-media` |
+| `steps` | JSONB NOT NULL DEFAULT `[]` | pasos de preparación, en orden; misma migración |
+| `external_id` | VARCHAR(120) NULL | id en Harbiz: lo que hace idempotente `import-harbiz-recetas.js` (`migrate-recetas-clasificacion`) |
+| `recipe_type` | VARCHAR(40) NULL | STRING y no ENUM a propósito; valores en `lib/nutricion/recipes.js` (`TIPOS_RECETA`) |
+| `tags`, `allergens`, `dietary_preferences` | TEXT[] NOT NULL DEFAULT `{}` | etiquetas libres · los 14 alérgenos legales (`ALERGENOS`) · «vegetarian», «vegan»… (`PREFERENCIAS`) |
+| `duration_minutes`, `rations` | INTEGER NULL | |
+| timestamps | | |
+
+#### `recipe_foods` — ingredientes de la receta
+
+`{id, recipe_id → recipes CASCADE, food_id → foods RESTRICT, amount, unit,
+household_label, household_grams, notes, ordering, timestamps}`. Mismo modelo
+de cantidad que `plan_meal_option_foods` (reutiliza el enum `g|household|free`).
+
+#### `plan_meal_option_recipes` — receta CONGELADA dentro de una opción
+
+| Columna | Tipo | Notas |
+| ------- | ---- | ----- |
+| `id` | UUID PK | |
+| `plan_meal_option_id` | UUID → `plan_meal_options.id` ON DELETE CASCADE | |
+| `recipe_id` | UUID NULL → `recipes.id` ON DELETE SET NULL | de dónde vino; `null` si la receta se borró |
+| `name_snapshot` | VARCHAR(255) NOT NULL | |
+| `servings` | NUMERIC(6,2) NOT NULL DEFAULT 1 | la ración es del menú, no de la receta |
+| `steps_snapshot` | JSONB NOT NULL DEFAULT `[]` | congelados el 13/08/2026 (`migrate-nutricion-congelar-receta`, con backfill desde la receta viva) |
+| `photo_path_snapshot` | VARCHAR(500) NULL | idem |
+| `ordering` | INTEGER NOT NULL DEFAULT 0 | |
+| timestamps | | |
+
+#### `plan_meal_option_recipe_foods` — ingrediente congelado del snapshot
+
+`{id, plan_meal_option_recipe_id → … CASCADE, food_id → foods, amount_snapshot,
+unit_snapshot, household_label_snapshot, household_grams_snapshot,
+notes_snapshot, ordering, timestamps}`.
+
+Lo que significa «congelada» y cómo se actualiza a propósito está en
+«Congelado y propagación» (§7).
+
 ---
 
 ## 4. Rutas frontend
@@ -305,7 +383,7 @@ embudo de leads y sus paneles.
 | `/nutricion/recetas` | **Recetario** | `NutricionRecetasModule.jsx` | Catálogo de recetas con foto y pasos (8.2) |
 | `/nutricion/plantillas` | Menús | `NutricionPlantillasModule.jsx` | Grid de cards con preview de comidas + contador de asignaciones, CRUD, duplicar (C3) |
 | `/nutricion/asignados` | **Pautas** | `NutricionAsignadosModule.jsx` | Tabla lg / cards mobile + filtro por plantilla origen + botón "+ Nueva asignación" (C3+C4) |
-| `/clientes/[id]` (tab "Pautas") | — | `ClientPlansPanel.jsx` dentro de `modules/default/ClientDetailModule.jsx` | Plan activo + histórico colapsable + acciones (C4). **Desde el 13/08/2026 la ve cualquier cliente con `nutricion`**, no solo Laura. |
+| `/clientes/[id]` (tab "Pautas") | — | `ClientPlansPanel.jsx` (vive en `modules/nutricion/`; lo montan `modules/default/ClientDetailModule.jsx` y la ficha de Laura) | Plan activo + histórico colapsable + acciones (C4). **Desde el 13/08/2026 la ve cualquier cliente con `nutricion`**, no solo Laura. |
 
 ⚠️ **Quién decide si sale la pestaña Pautas es el SERVIDOR**:
 `app/(dashboard)/clientes/[id]/page.jsx` mira el módulo del tenant y pasa
@@ -323,8 +401,8 @@ consulta de nutrición el módulo Clientes ya se llama «Pacientes»
 (`lib/clients/vocabulario.js`), y había dos entradas con el mismo nombre en el
 mismo sidebar que además no eran lo mismo. Lo que cuelga de `/asignados` son
 las PAUTAS asignadas, no la gente. **Rutas, claves y endpoints intactos**, y
-el cambio viaja a todo tenant con `nutricion` — hoy `nutri_laura` y `demo`—,
-como cualquier cambio de módulo. En `demo` además deshace la ambigüedad de
+el cambio viaja a todo tenant con `nutricion` — entonces `nutri_laura` y
+`demo`; hoy cinco—, como cualquier cambio de módulo. En `demo` además deshace la ambigüedad de
 tener «Pacientes» en Clínica y en Nutrición a la vez.
 
 ⚠️ **Vocabulario de TODO el módulo, cerrado el 04/08/2026** (Rodrigo). Las dos
@@ -373,8 +451,20 @@ con auth pero sin módulo → 403).
 | POST | `/api/nutricion/foods` | Crea food manual. `source='custom'`. |
 | PATCH | `/api/nutricion/foods/[id]` | Editar parcial. Protege `source` (no se puede cambiar). |
 | DELETE | `/api/nutricion/foods/[id]` | Soft delete (`archived_at`). |
+| GET | `/api/nutricion/foods/tags` | Secciones del catálogo con recuento (`[{tag, count}]`, solo alimentos no archivados); alimenta los desplegables de sección. |
 | ~~GET~~ | ~~`/api/nutricion/foods/search-external`~~ | ELIMINADO en Nutrinotas (2026-07-18). |
 | ~~POST~~ | ~~`/api/nutricion/foods/import-external`~~ | ELIMINADO en Nutrinotas (2026-07-18). |
+
+### Recetario (8.2, 22/07/2026; clasificación 04/08; propagación 13/08)
+
+| Método | Path | Notas |
+| ------ | ---- | ----- |
+| GET | `/api/nutricion/recipes` | Lista paginada. Query: `q`, `includeArchived`, filtros de clasificación, `page`, `limit` (≤100). |
+| POST | `/api/nutricion/recipes` | Crea receta con ingredientes (`sanitizeIngredients`) y pasos (`sanitizeSteps`). Audita. |
+| GET | `/api/nutricion/recipes/facetas` | Con qué se puede filtrar: solo los valores que EXISTEN y cuántas recetas tiene cada uno (tipos, etiquetas, alérgenos, preferencias). |
+| GET / PATCH / DELETE | `/api/nutricion/recipes/[id]` | Detalle · editar (ingredientes, pasos, clasificación) · archivar. |
+| POST / GET / DELETE | `/api/nutricion/recipes/[id]/photo` | Foto de la receta en disco (`lib/nutricion/recipePhotoStorage.js`: JPEG/PNG/WebP ≤5 MB, magic bytes). |
+| GET / POST | `/api/nutricion/recipes/[id]/propagate` | `GET`: dónde está usada la receta y qué pautas se han quedado atrás. `POST`: refresca el snapshot solo en los planes que se le pasen (no archivados; no toca `servings` ni `ordering`). Audita `nutricion.recipe.propagated`. Ver §7. |
 
 ### Planes (C2)
 
@@ -388,20 +478,24 @@ con auth pero sin módulo → 403).
 | POST | `/api/nutricion/plans/[id]/duplicate` | Solo plantillas. Deep-copy en transacción. |
 | POST | `/api/nutricion/plans/[id]/assign` | Solo plantillas. Body: `{clientId, nameOverride?}`. 409 si ya hay asignación activa. |
 | POST | `/api/nutricion/plans/[id]/reapply-template` | C4. Solo asignados. Archive viejo + deep-copy plantilla origen. 409 si plantilla origen archivada. |
+| GET | `/api/nutricion/plans/[id]/pdf` | **8.3.** El menú en PDF (`lib/nutricion/menuPdf.js`, descarga `pauta-*.pdf`). Vale para asignados (con paciente en la cabecera) y para plantillas (un menú tipo). Respeta `show_macros`. |
+| POST | `/api/nutricion/plans/[id]/send-email` | **8.3.** Envía la pauta al email del paciente con el PDF adjunto (Resend con la clave del tenant, `lib/outreach/resendConfig.js`). Solo `assigned`; 400 si la ficha no tiene email; **403 en la demo** (`isDemoTenant`); anti-spam en proceso de 30 s por plan. Audita `nutricion.menu_emailed`. |
 
-CRUD anidado de comidas/opciones/alimentos:
+CRUD anidado de comidas/opciones/alimentos/recetas:
 
-| Método | Path |
-| ------ | ---- |
-| POST/PATCH/DELETE | `/api/nutricion/plans/[id]/meals[/[mealId]]` |
-| POST/PATCH/DELETE | `/api/nutricion/plans/[id]/meals/[mealId]/options[/[optionId]]` |
-| POST/PATCH/DELETE | `/api/nutricion/plans/[id]/meals/[mealId]/options/[optionId]/foods[/[foodId]]` |
+| Método | Path | Notas |
+| ------ | ---- | ----- |
+| POST/PATCH/DELETE | `/api/nutricion/plans/[id]/meals[/[mealId]]` | Comidas (C2); `PATCH` acepta también `weekday` desde el rework. |
+| POST/PATCH/DELETE | `/api/nutricion/plans/[id]/meals/[mealId]/options[/[optionId]]` | Opciones (C2). |
+| POST/PATCH/DELETE | `/api/nutricion/plans/[id]/meals/[mealId]/options/[optionId]/foods[/[foodId]]` | Alimentos sueltos (C2). |
+| POST | `/api/nutricion/plans/[id]/meals/[mealId]/options/[optionId]/recipes` | **8.2.** Body `{recipeId, servings?}`. Mete una receta del catálogo en la opción CONGELÁNDOLA (snapshot de nombre, ingredientes, pasos y foto). |
+| PATCH/DELETE | `/api/nutricion/plans/[id]/meals/[mealId]/options/[optionId]/recipes/[pmorId]` | Editar `servings` / `ordering` / nombre del snapshot · quitar la receta de la opción. |
 | POST | `/api/nutricion/plans/[id]/meals/reorder` | **C5**. Reordena TODAS las comidas en una transacción. Body: `{order: [{id, order}]}`. |
 
 Cada endpoint anidado valida pertenencia en cadena
 (`assertMealBelongsToPlan` → `assertOptionBelongsToMeal` →
-`assertFoodLineBelongsToOption`) para impedir manipulación cross-plan
-vía path.
+`assertFoodLineBelongsToOption` / `assertRecipeBelongsToOption`) para impedir
+manipulación cross-plan vía path.
 
 ### Listado por cliente (C4)
 
@@ -558,23 +652,33 @@ Cinco scripts ejecutables en `scripts/`. Todos usan el mismo patrón de
 auth: `SMOKE_PASSWORD` opcional para login HTTP completo, fallback a
 firma JWT directa con `JWT_SECRET`.
 
+**Se renombraron el 19/08/2026** de `smoke-nutri-laura-recetario-*.mjs` a
+`_smoke-nutri-laura-recetario-*.mjs`: con el nombre viejo `scripts/pruebas.mjs`
+(que solo recoge `_smoke-*` y `smoke-test-*`) no las veía y nadie las lanzaba.
+Ahora las clasifica «servidor y base de datos», así que **entran en
+`npm run test:todo`** (con la base local y `npm run dev` en marcha) y **no en
+`npm test`**, que es solo para las ligeras.
+
 | Script | Cubre |
 | ------ | ----- |
-| `smoke-nutri-laura-recetario-c1.mjs` | CRUD foods + OFF online/offline + import idempotente + 401 sin cookie. |
-| `smoke-nutri-laura-recetario-c2.mjs` | Backend planes: CRUD plantilla + meals + options + foods (3 modos) + duplicate + assign + hadAssignments + independencia template/assigned + 401 + **POST /meals/reorder (4 casos)**. |
-| `smoke-nutri-laura-recetario-c3.mjs` | PARTE A: 14 unit tests de `lib/nutricion/macros.js` (sin red). PARTE B: HTTP/BD del backend C3 — accent-insensitive search, `withSummary=true`, recalc macros, transiciones de `unit` con nulls. |
-| `smoke-nutri-laura-recetario-c4.mjs` | Endpoints C4: `/assign` + `/reapply-template` (happy + rechazos) + `GET /api/clients/[id]/plans` + regresión anti-duplicado C2 + 401. |
-| `smoke-nutri-laura-recetario-e2e.mjs` | **C5**. Flujo completo de Laura: catálogo → plantilla → asignación → edición → reapply → histórico → PATCH plantilla con asignaciones. 50 asserts. Self-contained con cleanup robusto. |
+| `_smoke-nutri-laura-recetario-c1.mjs` | CRUD foods + 401 sin cookie. Desde Nutrinotas comprueba que `search-external` / `import-external` responden **404** (OFF retirado), en vez de probar el import. |
+| `_smoke-nutri-laura-recetario-c2.mjs` | Backend planes: CRUD plantilla + meals + options + foods (3 modos) + duplicate + assign + hadAssignments + independencia template/assigned + 401 + **POST /meals/reorder (4 casos)**. |
+| `_smoke-nutri-laura-recetario-c3.mjs` | PARTE A: 14 unit tests de `lib/nutricion/macros.js` (sin red). PARTE B: HTTP/BD del backend C3 — accent-insensitive search, `withSummary=true`, recalc macros, transiciones de `unit` con nulls. |
+| `_smoke-nutri-laura-recetario-c4.mjs` | Endpoints C4: `/assign` + `/reapply-template` (happy + rechazos) + `GET /api/clients/[id]/plans` + regresión anti-duplicado C2 + 401. |
+| `_smoke-nutri-laura-recetario-e2e.mjs` | **C5**. Flujo completo de Laura: catálogo → plantilla → asignación → edición → reapply → histórico → PATCH plantilla con asignaciones. 50 asserts. Self-contained con cleanup robusto. |
 
-Ejecutar (necesitan `npm run dev` en otra terminal):
+Ejecutar: todas de una vez con el runner, o una a una (las cinco necesitan
+`npm run dev` en otra terminal):
 
 ```powershell
-node --env-file=.env.local scripts/smoke-nutri-laura-recetario-c1.mjs
-node --env-file=.env.local scripts/smoke-nutri-laura-recetario-c2.mjs
-node --env-file=.env.local scripts/smoke-nutri-laura-recetario-c3.mjs
-node --env-file=.env.local scripts/smoke-nutri-laura-recetario-c3.mjs --only-unit  # sin dev server
-node --env-file=.env.local scripts/smoke-nutri-laura-recetario-c4.mjs
-node --env-file=.env.local scripts/smoke-nutri-laura-recetario-e2e.mjs
+npm run test:todo   # las cinco, junto con el resto de pruebas pesadas
+
+node --env-file=.env.local scripts/_smoke-nutri-laura-recetario-c1.mjs
+node --env-file=.env.local scripts/_smoke-nutri-laura-recetario-c2.mjs
+node --env-file=.env.local scripts/_smoke-nutri-laura-recetario-c3.mjs
+node --env-file=.env.local scripts/_smoke-nutri-laura-recetario-c3.mjs --only-unit  # sin dev server
+node --env-file=.env.local scripts/_smoke-nutri-laura-recetario-c4.mjs
+node --env-file=.env.local scripts/_smoke-nutri-laura-recetario-e2e.mjs
 ```
 
 Conteo último run (C5):
@@ -597,30 +701,49 @@ en orden: la fila en `master.tenant_modules`, las migraciones del módulo y la
 siembra del catálogo base de alimentos. Los dos scripts C1/C2 de abajo son
 HISTÓRICOS y están atados a `crm_nutri_laura`: no se ejecutan nunca más.
 
+Las **ocho vivas**, en el orden en que las declara el bloque `nutricion` de
+`scripts/_module-migrations.js` (todas aditivas e idempotentes; eligen los
+schemas por EXISTENCIA de tabla, `scripts/_schema-targets.js`, sin mirar
+`status`):
+
 | Script | Sprint | Hace |
 | ------ | ------ | ---- |
 | **`migrate-nutricion-base.js`** | 13/08/2026 | **La primera del módulo.** Crea enums + las CINCO tablas cimiento (`foods`, `plans`, `plan_meals`, `plan_meal_options`, `plan_meal_option_foods`) en cualquier schema, y en una segunda pasada BLINDA las que ya existan: los 2 CHECK y los 3 índices parciales que `sequelize.sync()` no crea. Sustituye a C1+C2 como fuente de esas tablas. |
+| `migrate-nutricion-recipes.js` | 8.2 (22/07) | Las cuatro tablas del recetario: `recipes`, `recipe_foods`, `plan_meal_option_recipes`, `plan_meal_option_recipe_foods`. Puramente aditiva: la estructura antigua sigue funcionando. |
+| `migrate-nutricion-week-recipe-media.js` | rework (22/07) | `plan_meals.weekday` (SMALLINT 1-7, NULL = sin día) + `recipes.photo_path` + `recipes.steps`. |
+| `migrate-nutricion-day-comments.js` | rework (22/07) | `plans.day_comments` JSONB (comentarios por día). |
+| `migrate-nutricion-show-macros.js` | rework (22/07) | `plans.show_macros` BOOLEAN DEFAULT FALSE (decisión clínica, ver «PDF del menú»). |
+| `migrate-recetas-clasificacion.js` | 04/08/2026 | `recipes.external_id`, `recipe_type`, `tags`, `allergens`, `dietary_preferences`, `duration_minutes`, `rations` — lo que hace navegable un recetario de 1.083 recetas. |
+| `migrate-plan-team.js` | 23/07/2026 | `plans.team_member_id` → `team_members` (quién hizo el plan). Sin backfill. |
 | **`migrate-nutricion-congelar-receta.js`** | 13/08/2026 | Añade `steps_snapshot` y `photo_path_snapshot` a `plan_meal_option_recipes` + backfill desde la receta viva. Ver «Congelado y propagación». |
+
+Y aparte de ese bloque:
+
+| Script | Sprint | Hace |
+| ------ | ------ | ---- |
 | **`migrate-auto-asignar-nutricion.js`** | 13/08/2026 | ONE_OFF de MASTER: enciende `featureFlags.autoAsignarEnAlta` a quien ya dependía del auto-marcado (`nutri_laura`). Apagado para el resto a propósito. |
+| `install-unaccent-extension.js` | C3 | `CREATE EXTENSION IF NOT EXISTS unaccent` en la BD principal (es extensión a nivel de BD, no de schema): una vez por base, no por cliente. |
 | `add-nutricion-module-nutri-laura.js` | C1 | **HISTÓRICO, no se ejecuta.** Creaba enums + tabla `foods` + la fila de `tenant_modules` con `uiOverride` y `externalSearchEnabled`, los dos muertos hoy (nadie lee el primero; el segundo era de OpenFoodFacts, retirado el 18/07). Lo que hacía lo hace ahora `migrate-nutricion-base` para cualquier cliente. |
 | `add-nutricion-c2-plans-nutri-laura.js` | C2 | **HISTÓRICO, no se ejecuta.** Creaba las 4 tablas de planes solo en `crm_nutri_laura`. Idem. |
-| `install-unaccent-extension.js` | C3 | `CREATE EXTENSION IF NOT EXISTS unaccent` en la BD principal (es extensión a nivel de BD, no de schema). |
 
-Comando local + producción:
+Comando local + producción — uno solo, que arrastra las ocho en orden y
+siembra el catálogo:
 
 ```powershell
 # Local
-npm run db:add-nutricion-nutri-laura
-npm run db:add-nutricion-c2-nutri-laura
-npm run db:install-unaccent
+node --env-file=.env.local scripts/enable-module.js <slug> nutricion
 ```
 
 ```bash
 # Producción (las vars vienen del entorno del contenedor Docker)
-docker exec -it crm-salamandra-app-1 node scripts/add-nutricion-module-nutri-laura.js
-docker exec -it crm-salamandra-app-1 node scripts/add-nutricion-c2-plans-nutri-laura.js
-docker exec -it crm-salamandra-app-1 node scripts/install-unaccent-extension.js
+docker exec -it crm-salamandra-app-1 node scripts/enable-module.js <slug> nutricion
 ```
+
+> **Histórico (hasta 13/08/2026):** aquí estaban los tres comandos
+> `npm run db:add-nutricion-nutri-laura` / `db:add-nutricion-c2-nutri-laura` /
+> `db:install-unaccent` y sus `docker exec` equivalentes. Los dos primeros
+> estaban atados a `crm_nutri_laura`; el de `unaccent` sigue siendo necesario
+> una vez por base de datos (ya está hecho en local y en producción).
 
 ---
 

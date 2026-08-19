@@ -31,9 +31,15 @@ del CRM. Cada tenant con `moduleKey="clients"` activado en
 `master.tenant_modules` tiene su tabla `crm_{slug}.clients` y endpoints
 bajo `/api/clients/*`.
 
-Tenants que lo usan hoy: `spain_enzymes` (B2B), `nutri_laura` (B2C,
-"pacientes"), `demo`, `retorika` (cuentas mínimas para asociar con
-training).
+Lo tienen **los once tenants** de producción (foto de `master` del
+19/08/2026): es el módulo que está debajo de casi todo lo demás. Quién lo
+usa de verdad se ve en el número de fichas —Aumenta con 1.083, Laura con
+16—, no en esta lista; para la foto del día, `/admin/modulos` o
+`node scripts/inspect-tenant-modules.js <slug>`.
+
+> **Histórico (hasta 08/2026):** este párrafo decía «`spain_enzymes` (B2B),
+> `nutri_laura` (B2C, "pacientes"), `demo`, `retorika`», que era la foto de
+> junio. El módulo se da de fábrica en el alta de cliente desde entonces.
 
 ### Cómo se llama el módulo en cada centro (04/08/2026)
 
@@ -88,14 +94,25 @@ campos. Resumen:
 | `/api/clients/[id]/notes` | GET/POST | Notas internas (ver sección abajo) | JWT |
 | `/api/clients/[id]/notes/[noteId]` | DELETE | Borrar nota | JWT |
 | `/api/clients/[id]/attachments` | GET/POST | Archivos PDF (ver sección abajo) | JWT |
+| `/api/clients/[id]/attachments/[attachmentId]` | PATCH | `{ visibleToClient }`: si el paciente lo ve en su portal (solo adjuntos `source='ficha'`) | JWT + `hasModule(clients)` |
 | `/api/clients/[id]/attachments/[attachmentId]` | DELETE | Borrar attachment (BD + disco) | JWT |
 | `/api/clients/[id]/attachments/[attachmentId]/download` | GET | Stream del PDF | JWT |
+| `/api/clients/[id]/contact-methods` | GET/POST | Emails y teléfonos múltiples con uno principal (`lib/clients/contactMethods.js`) | JWT + `hasModule(clients)` |
+| `/api/clients/[id]/contact-methods/[methodId]` | PATCH/DELETE | Editar / borrar un medio de contacto | JWT + `hasModule(clients)` |
 | `/api/clients/[id]/guardians` | GET/PUT | Padres/tutores de la familia + estado de firma | JWT + `hasModule(clients)` |
 | `/api/clients/[id]/contract` | GET/POST/DELETE | Contrato del Centro de la familia (PDF) | JWT + `hasModule(clients)` |
 | `/api/clients/[id]/contract/download` | GET | Stream del PDF del contrato | JWT + `hasModule(clients)` |
+| `/api/clients/[id]/contract/firmado/[documentoId]` | GET | La COPIA FIRMADA (`documents` con `source='contrato_firmado'` de ESTA ficha); `?ver=1` la abre inline. Cuelga de `clients` y no de `documents_avanzado` a propósito (06/08/2026) | JWT + `hasModule(clients)` |
+| `/api/clients/[id]/comunicaciones` | GET/PUT | Permiso de aviso por canal (`communication_prefs`; ver sección abajo) | JWT + `hasModule(clients)` |
 | `/api/clients/[id]/portal-months` | GET/PUT | Meses abiertos del área privada (bloqueo por impago) | JWT + `hasModule(clients)` |
+| `/api/clients/[id]/portal-user` | GET/POST | ¿Tiene cuenta en la web? / crearle la cuenta en WordPress (`lib/formularios/portalUser.js`, ver «Acceso a la web») | JWT + **solo admin** |
+| `/api/clients/[id]/module-assignments` | GET/PATCH | Marcar «Paciente Nutrición» / «Paciente Clínica» (ver sección abajo) | JWT + `hasModule(clients)` |
+| `/api/clients/[id]/plans` | GET | Pautas (menús) de la ficha: activas + archivadas | JWT + `hasModule(nutricion)` |
 | `/api/clients/[id]/projects` | GET | Proyectos del cliente | JWT + `hasModule(projects)` |
 | `/api/clients/[id]/billing-summary` | GET | Resumen facturas | JWT + `hasModule(billing)` |
+| `/api/clients/waitlist` | GET/POST/PATCH | Lista de espera de ADMISIÓN (`lib/clients/listaEspera.js`; no es la de Citas) | JWT + `hasModule(clients_avanzado)` |
+| `/api/clients/waitlist/[id]` | PATCH | Editar una entrada de la cola, sacarla (`status: "removed"`) o convertirla en cliente (`convertir: true`; la entrada queda `converted` con su `clientId`) | JWT + `hasModule(clients_avanzado)` |
+| `/api/clients/urgentes` | GET/POST | «Fichas a completar» por carpetas (`lib/clients/urgentes.js`; `?soloTotales=1` para el menú) / marcar revisado (`data_reviews`) | JWT + `hasModule(clients_avanzado)` |
 | `/api/clients/export` | GET | XLSX de listado | JWT |
 | `/api/clients/import` | POST | Importar JSON | JWT |
 
@@ -348,12 +365,14 @@ ni de corregirlo desde la ficha.
 ### Default (vanilla)
 
 `modules/default/ClientDetailModule.jsx` — header (back link + nombre + status
-chip + aviso de lista de espera) y, debajo, **seis pestañas** desde el
+chip + aviso de lista de espera) y, debajo, **pestañas** desde el
 12/08/2026 (Rodrigo: «demasiado larga, pero universal, para que el que tenga
-todos los módulos no se líe»). Antes eran CATORCE tarjetas apiladas en una
-columna: en Aumenta la ficha medía varias pantallas y para llegar a la
-facturación había que pasar por delante del contrato, los tutores, los
-consentimientos y las citas.
+todos los módulos no se líe»): nacieron seis y `pestanasDe()` define hoy
+**nueve** (se sumaron Notas/Historia clínica, Documentos y Pautas), de las que
+cada tenant ve solo las que no le quedan vacías. Antes eran CATORCE tarjetas
+apiladas en una columna: en Aumenta la ficha medía varias pantallas y para
+llegar a la facturación había que pasar por delante del contrato, los tutores,
+los consentimientos y las citas.
 
 | Pestaña | Qué lleva | La pregunta que responde |
 | --- | --- | --- |
@@ -548,9 +567,15 @@ comportamiento viejo. Es la misma lección que «Fichas a completar»: lo que
 resuelve el problema de una consulta de una persona no es el default de un centro
 de veinte.
 
-**Backfill** (`scripts/migrate-client-module-assignments.js`, solo `nutri_laura`):
-marca `nutricion` a los clients con plan asignado activo **o** `origin='lead'`.
-Idempotente; no toca los dados de alta a mano.
+**Migración + backfill** (`scripts/migrate-client-module-assignments.js`): corre
+en **todos** los tenants con `clients` (lista leída de `master.tenants` en
+runtime) y hace dos cosas. La fase B, para todos: crea
+`client_module_assignments` y, donde exista `patients`, añade
+`patients.client_id`. La fase C, **solo en `crm_nutri_laura`**: marca
+`nutricion` a los clients con plan asignado activo **o** `origin='lead'`.
+Idempotente; no toca los dados de alta a mano. Está además en el bloque
+`clients` de `scripts/_module-migrations.js`, así que `enable-module.js` la
+arrastra.
 `scripts/backfill-nutricion-assignments.js` (ONE_OFF, 2026-07-27) completa el
 resto: marca `nutricion` a TODOS los clientes no inactivos de los tenants con el
 módulo, para alinear a los creados antes del auto-marcado. Repetible

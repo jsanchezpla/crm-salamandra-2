@@ -35,13 +35,16 @@ registro de sesiones con paciente, coordinaciones (familia, colegio,
 profesionales externos), informes clínicos (evolutivos, admisión, alta)
 y sistema de desempeño + incentivos del equipo de terapeutas.
 
-Implementado **inicialmente como sprint visual** para la demo del
-**9 de junio de 2026** con el equipo de Aumenta. Toda la lógica de
-backend, IA y endpoints está pendiente; las pantallas funcionan con
-datos dummy hardcoded.
+**Histórico (hasta 06/2026):** se implementó **inicialmente como sprint
+visual** para la demo del **9 de junio de 2026** con el equipo de Aumenta, con
+las pantallas sobre datos dummy y sin backend. Hoy todo lo de abajo es real
+(endpoints, IA, PDF, desempeño); lo que queda de la maqueta son dos
+`dummyData.js` que no importa nadie (ver «Componentes»).
 
-Activado **solo en aumenta** vía `master.tenant_modules`
-(`moduleKey='clinica'`).
+Se activa con `scripts/enable-module.js <slug> clinica` (requiere `pacientes`).
+Quién lo tiene NO se lista aquí: `/admin/modulos` o
+`scripts/inspect-tenant-modules.js <slug>`. A 19/08/2026 está encendido en
+`aumenta` (la reina, con datos reales), `demo`, `demo_clinica` y `somos`.
 
 ## Estado: Fase 1 (backend real) — registros clínicos
 
@@ -53,21 +56,37 @@ escriben datos reales (ya no `dummyData.js`).
 **Fase 2 (desempeño/incentivos) también real:** `/equipo/mi-desempeno` y
 `/equipo/direccion` leen de `/api/clinica/performance/*` (scoring por áreas,
 ranking, media de equipo, alertas computadas, aprobación de incentivos con
-auditoría). Áreas definidas en `lib/clinica/performanceAreas.js`.
+auditoría). Áreas por defecto en `lib/clinica/performanceAreas.js`; desde el
+desempeño por roles (`lib/clinica/performanceConfig.js`, `/equipo/desempeno-config`)
+cada tenant puede definir las suyas por rol. Ambas pantallas exigen además
+`team_avanzado` y rol admin.
 
 **Fase 3 (audio → IA) real:** `/pacientes/[id]/sesiones/nueva` sube el audio →
 `POST /api/clinica/sessions/transcribe` (**Whisper de OpenAI** transcribe + **Claude**
 estructura) → la terapeuta revisa/edita → guarda la sesión. Modo demo *canned* en
 local sin claves (auto si faltan claves y `NODE_ENV≠production`, o `CLINICA_FAKE_AI=1`;
-bloqueado en producción). **Ya no queda ninguna pantalla en maqueta.**
+bloqueado en producción). En la demo pública la transcripción se corta antes de
+gastar (`assertNotDemoPaidCall`, `lib/demo/isDemo.js`). **Ya no queda ninguna
+pantalla en maqueta.**
 
-- Endpoints: `/api/pacientes/*` y `/api/clinica/{sessions, sessions/transcribe, reports, coordinations, overview, performance}`.
+- Endpoints: `/api/pacientes/*` (11 `route.js`, ver `pacientes.md`) y
+  `/api/clinica/**` (35 `route.js`): `sessions/**` (5: CRUD, `transcribe`,
+  `prep-files`), `reports/**` (5: CRUD, `desde-sesiones`, `pulir`, `enviar`),
+  `coordinations`, `derivaciones`, `talleres/**` (3), `overview`,
+  `estadisticas/**` (2) y los de gestión de equipo (`performance/**` (9),
+  `productividad/**` (2), `incentive-items/**` (2), `incidencias/**` (2),
+  `bandeja`, `dashboard`), que además de `clinica`/`pacientes` exigen
+  `team_avanzado`. El desglose con qué hace cada uno está en el `## Mapa`.
 - Transcripción: `lib/clinica/whisper.js` (API de OpenAI, clave del tenant). Estructura:
   `lib/clinica/structureSession.js` (Claude, reutiliza el proveedor de Outreach).
 - Serializers: `lib/clinica/serialize.js` (fila Sequelize → forma de la UI).
 - Migración **generalizada** `scripts/migrate-clinica-module.js` (lee `master.tenants`,
-  ya no aumenta-only). Seed `scripts/seed-clinica-demo.js`.
-- IA / audio / PDF / export siguen pendientes (fases posteriores).
+  ya no aumenta-only); la corre `enable-module.js` como parte del bloque `clinica`
+  de `scripts/_module-migrations.js`. Seed `scripts/seed-clinica-demo.js`.
+- Lo que en esta fase quedaba pendiente ya llegó después: PDF del informe
+  (`reportPdf.js`, «Enviar al paciente»), redacción con IA (`pulir`), Excel/PDF
+  de Estadísticas (`estadisticasExport.js`), talleres y coordinaciones con
+  listado propio. Las secciones siguientes lo cuentan.
 
 ## Dónde vive cada pantalla (traslado del 2026-07-27)
 
@@ -81,10 +100,15 @@ Aumenta siguen funcionando.
 Lo que NO cambió (es interno, no lo ve el usuario):
 - los **endpoints** siguen en `/api/clinica/*`,
 - la **lógica** sigue en `lib/clinica/*`,
-- el **gating** sigue siendo `moduleKey: "clinica"` — un tenant con `team` pero
-  sin `clinica` (p. ej. nutri_laura) NO ve estas pantallas.
+- el **gating** sigue exigiendo `clinica` — un tenant con `team` pero
+  sin `clinica` (p. ej. nutri_laura) NO ve estas pantallas. Desde la separación
+  Equipo básico/avanzado (27/07/2026) exigen ADEMÁS `team_avanzado`: en el menú
+  van con `requiresAll: ["team_avanzado", "clinica"]` y sus endpoints lo
+  comprueban.
 
-En `/clinica` se quedan la landing y **Informes**; Pacientes sigue en `/pacientes`.
+En `/clinica` se quedan la landing y **Informes**, y después llegaron
+**Coordinaciones** (listado general), **Talleres** (02/08/2026) y
+**Estadísticas** (solo admin); Pacientes sigue en `/pacientes`.
 Los componentes exclusivos de esas pantallas (`PerformanceEditor`,
 `IncentiveTiersEditor`, `IncentiveItemsEditor`, `IncidenciaModal`) se movieron a
 `app/(dashboard)/equipo/_components/`.
@@ -132,6 +156,10 @@ terapeutas y sus horas/roles se cargan aparte.
   módulo `clinica`). Categorías + subcategorías, responsable (`assignedToId`),
   estados Pendiente/En proceso/Resuelta, prioridad, comentarios (JSONB), paciente
   y cliente-foto opcionales. Taxonomía/serializer en `lib/clinica/incidencias.js`.
+  Desde el sprint Aumenta 2026-07-28 admite **varios responsables**
+  (`IncidenciaAssignee` → `incidencia_assignees`, N-a-N con `team_members`;
+  `assignedToId` queda como espejo del primero) y una `verification` al resolver
+  (resuelta / parcial / no resuelta; `migrate-incidencias-verificacion.js`).
 - API `GET/POST /api/clinica/incidencias` + `GET/PATCH/DELETE
   /api/clinica/incidencias/[id]` (crear/comentar/cambiar estado por cualquier
   usuario del módulo; borrar solo admin). UI `/equipo/incidencias` +
@@ -327,9 +355,24 @@ documentos» de su área privada.
 
 ## Modelos
 
-Cuatro modelos vacíos en `models/tenant/` registrados en `tenantDb.js`.
-**Las FKs apuntan a `patients`, no a `clients`** — ver
-[`docs/modules/pacientes.md`](pacientes.md) para el porqué.
+Diez modelos en `models/tenant/` registrados en `tenantDb.js` (nacieron cuatro
+en el sprint visual; el resto llegó con el Programa de Excelencia y el sprint
+Aumenta 2026-07). **Las FKs apuntan a `patients`, no a `clients`** — ver
+[`docs/modules/pacientes.md`](pacientes.md) para el porqué. Las tres tablas de
+registro (`clinic_sessions`, `clinical_reports`, `coordinations`) guardan
+además `clientId` (`client_id`): foto del pagador tomada del paciente al
+crearse, sin resincronizar (`migrate-clinica-client-link.js`, 23/07/2026).
+
+Los cuatro de siempre, en detalle abajo: `ClinicSession`, `Coordination`,
+`ClinicalReport`, `PerformanceMetric`. Los otros seis, descritos en su sección:
+`Incidencia` + `IncidenciaAssignee` (→ Incidencias), `IncentiveItem`
+(→ Incentivos escritos a mano), `Taller` → `talleres` + `TallerInscripcion` →
+`taller_inscripciones` (actividades de grupo a las que se apunta quien quiere,
+02/08/2026; NO son especialidades), `InterventionPlan` → `intervention_plans`
+(plan de intervención del paciente, uno por paciente, `CASCADE`) y
+`ExternalContact` → `external_contacts` (agenda de profesionales externos del
+paciente; las actas apuntan ahí con `externalContactId`). `Patient` se
+describe en `pacientes.md`.
 
 ### ClinicSession
 
@@ -338,16 +381,22 @@ Tabla: `clinic_sessions`. Registro estructurado de una sesión clínica.
 | Campo | Tipo | Notas |
 | --- | --- | --- |
 | `patientId` | UUID NOT NULL | FK a `patients` (ON DELETE RESTRICT). |
-| `therapistId` | UUID NOT NULL | FK a `team_members`. |
+| `therapistId` | UUID **nullable** | FK a `team_members`. Opcional desde el 02/08/2026 (`migrate-sesion-terapeuta-opcional.js`): al importar cuatro años de Aumenta salieron 4.045 sesiones firmadas por gente que ya no está; una nota sin firma es mejor que una atribuida a otra persona. |
 | `sessionDate` | TIMESTAMPTZ NOT NULL | Fecha y hora de la sesión. |
 | `duration` | INTEGER nullable | Minutos. |
 | `objectives` | JSONB NOT NULL DEFAULT `[]` | Array de objetivos trabajados (chips). |
 | `activities` | TEXT | Actividades realizadas en la sesión. |
 | `performance` | TEXT | Desempeño del paciente. |
 | `observations` | JSONB NOT NULL DEFAULT `{}` | `{ familyComments, nextSessionNotes, homeworkTasks, incidents }`. |
-| `aiTranscription` | TEXT | Transcripción literal (vacía en Sprint 1). |
-| `aiStructured` | JSONB | Resultado IA crudo (vacío en Sprint 1). |
-| `status` | ENUM | `draft`, `published`. Default `published`. |
+| `prepText` | TEXT | Preparación previa (parte 1 del registro en 3 partes). |
+| `prepFiles` | JSONB NOT NULL DEFAULT `[]` | Adjuntos de preparación `[{ name, path, mimeType, size }]`; NO son `documents` (ver «Registro de sesión en 3 partes»). |
+| `parentFeedback` | TEXT | Devolución de la familia (parte 3). |
+| `aiTranscription` | TEXT | Transcripción literal (Whisper). |
+| `aiStructured` | JSONB | Resultado IA crudo (Claude). |
+| `audioDurationSec` | INTEGER nullable | Duración del audio original, en segundos. |
+| `aiReviewedAt` | TIMESTAMPTZ nullable | Cuándo terminó la IA de procesar/estructurar. |
+| `status` | ENUM | `draft`, `ai_pending`, `registered`, `published`. Default **`registered`** (`migrate-clinica-module.js` añade los dos valores nuevos al enum). |
+| `clientId` | UUID nullable | `client_id`: pagador, foto del paciente al crear. |
 
 Índices: `(patient_id, session_date)`, `(therapist_id, session_date)`.
 
@@ -364,10 +413,14 @@ Tabla: `coordinations`. Acta de una reunión de coordinación.
 | `agreements` | JSONB DEFAULT `[]` | Acuerdos alcanzados. |
 | `nextActions` | JSONB DEFAULT `[]` | Próximas actuaciones con responsable. |
 | `relatedPatientId` | UUID nullable | FK a `patients` (ON DELETE SET NULL). |
-| `aiTranscription` | TEXT | Vacío en Sprint 1. En las actas importadas, el texto original entero. |
-| `aiActaGenerated` | TEXT | Acta IA (vacía en Sprint 1). |
+| `scope` | ENUM nullable | `internal` (entre terapeutas del centro) / `external` (colegios, hospitales, otros profesionales). Sprint Aumenta 2026-07-28; las actas antiguas quedan sin clasificar. |
+| `externalEntity` | VARCHAR(200) nullable | Con `external`, con quién («Colegio San José»). |
+| `externalContactId` | UUID nullable | FK a `external_contacts`: a quién pertenece la relación, sin sustituir a `participants` (02/08/2026). |
+| `aiTranscription` | TEXT | Sin IA de actas todavía. En las actas importadas, el texto original entero. |
+| `aiActaGenerated` | TEXT | Acta IA (no se genera hoy). |
 | `createdById` | UUID **nullable** | FK a `team_members`. Quién la registró. |
 | `createdByName` | VARCHAR(200) nullable | Su nombre, cuando no hay ficha a la que apuntar. |
+| `clientId` | UUID nullable | `client_id`: pagador, foto del paciente relacionado. |
 
 #### Quién firma el acta (02/08/2026)
 
@@ -412,38 +465,49 @@ Tabla: `clinical_reports`. Informe clínico generado.
 | --- | --- | --- |
 | `patientId` | UUID NOT NULL | FK a `patients`. |
 | `therapistId` | UUID NOT NULL | FK a `team_members`. |
-| `reportType` | ENUM | `evolution`, `admission`, `discharge`. Default `evolution`. |
+| `reportType` | ENUM | `evolution`, `admission`, `discharge`, `referral`. Default `evolution`. `referral` (Derivación) desde el sprint Aumenta 2026-07-28: la especialidad de destino va en `contentSections.referralSpecialty` (claves de `lib/clinica/derivaciones.js`). `admission` se ETIQUETA «Entrevista inicial» desde ese sprint (el valor en BD no cambia). |
 | `reportDate` | DATEONLY NOT NULL | Fecha de redacción. |
 | `dueDate` | DATEONLY nullable | Fecha límite de entrega. |
-| `deliveredAt` | TIMESTAMPTZ nullable | Marca de entrega real. |
-| `aiGenerated` | TEXT | Texto IA crudo (vacío en Sprint 1). |
-| `contentSections` | JSONB DEFAULT `{}` | `{ motiveOfIntervention, objectives, evolution, achievements, persistentDifficulties, recommendations, continuityProposal }`. |
+| `deliveredAt` | TIMESTAMPTZ nullable | Marca de entrega real (la sella «Enviar al paciente»). |
+| `aiGenerated` | TEXT | Texto IA crudo. «Redactar con IA» NO escribe aquí: devuelve la propuesta y no guarda nada. |
+| `contentSections` | JSONB DEFAULT `{}` | `{ motiveOfIntervention, objectives, evolution, achievements, persistentDifficulties, recommendations, continuityProposal, referralSpecialty?, sourceSessionIds? }`. |
 | `attachments` | JSONB DEFAULT `[]` | URLs/IDs de adjuntos. |
 | `status` | ENUM | `draft`, `reviewed`, `delivered`. Default `draft`. |
+| `deliveredDocumentId` | UUID nullable | FK lógica al `Document` (PDF) que creó «Enviar al paciente»; reenviar lo reemplaza. |
+| `clientId` | UUID nullable | `client_id`: pagador, foto del paciente al crear. |
+
+Índices: `(patient_id, report_date)`, `(therapist_id, report_date)`, `(status, due_date)`.
 
 ### PerformanceMetric
 
 Tabla: `performance_metrics`. Puntuación mensual por terapeuta.
 
 7 áreas (la 5 se omite intencionadamente porque el documento original
-de Aumenta saltó la numeración) + 3 complementos.
+de Aumenta saltó la numeración) + 3 complementos. Desde el **desempeño por
+roles** (29/07/2026, `lib/clinica/performanceConfig.js`) las áreas las define
+cada tenant por rol en `settings.clinica.performanceRoles`; sin config guardada
+se comporta EXACTAMENTE como antes (`LEGACY_ROLE` sintetizado de
+`performanceAreas.js`, umbrales 85/70).
 
 | Campo | Tipo | Notas |
 | --- | --- | --- |
 | `therapistId` | UUID NOT NULL | FK a `team_members`. |
 | `periodMonth` | INTEGER NOT NULL | 1-12. |
 | `periodYear` | INTEGER NOT NULL | 2020-2100. |
-| `area1Score`…`area8Score` | INTEGER nullable | 0-100. Sin `area5Score`. |
+| `roleKey` | VARCHAR(64) nullable | `role_key`: rol de desempeño con el que se evaluó la fila. |
+| `areaScores` | JSONB nullable DEFAULT `{}` | `area_scores`: puntuaciones por clave de área — la fuente de verdad nueva (`migrate-clinica-performance-roles.js`). |
+| `area1Score`…`area8Score` | INTEGER nullable | 0-100. Sin `area5Score`. **Legacy pero se quedan**: se espejan al escribir las claves `area1..area8` y son el fallback de lectura de las filas históricas de Aumenta. |
 | `complementOccupation` | INTEGER nullable | % ocupación clínica (0-100). |
 | `complementSeniority` | INTEGER nullable | Años de antigüedad. |
 | `complementAttendance` | BOOLEAN nullable | Asistencia perfecta. |
-| `totalScore` | INTEGER nullable | 0-100. |
-| `proposedIncentive` | DECIMAL(8,2) | Calculado por IA. |
+| `totalScore` | INTEGER nullable | 0-100. Media PONDERADA de las áreas al guardar (`computeTotalScore`). |
+| `proposedIncentive` | DECIMAL(8,2) | Por **tramos** de `totalScore` (`proposeIncentive`, `settings.clinica.incentiveTiers`), sin IA; el valor guardado es caché, se recalcula en vivo. |
 | `approvedIncentive` | DECIMAL(8,2) | Tras revisión de dirección. |
 | `approvedById` | UUID nullable | FK a `team_members`. |
 | `approvedAt` | TIMESTAMPTZ nullable | Marca de aprobación. |
+| `notes` | TEXT nullable | Notas de la evaluación. |
 
-Índice UNIQUE: `(therapist_id, period_year, period_month)`.
+Índice UNIQUE: `(therapist_id, period_year, period_month)`; además `(period_year, period_month)`.
 
 ## Frontend
 
@@ -451,51 +515,68 @@ Las pantallas del área viven en DOS carpetas desde el traslado del 2026-07-27
 (ver "Dónde vive cada pantalla" arriba). Todas son `"use client"` y leen datos
 REALES de la API (ya no hay datos hardcoded).
 
-**En `app/(dashboard)/clinica/` (2 páginas):**
+**En `app/(dashboard)/clinica/` (5 páginas):**
 
 | Ruta | Propósito |
 | --- | --- |
 | `/clinica` | Landing del módulo. KPIs (sesiones, informes pendientes, coordinaciones, próxima entrega), accesos rápidos a Pacientes e Informes, pacientes recientes. H1: "Área clínica". |
-| `/clinica/informes` | Listado de informes con filtros. Click en fila abre **drawer** con el informe completo. |
+| `/clinica/informes` | Listado de informes con filtros. Click en fila abre **drawer** con el informe completo (`InformeDrawer.jsx`: editor, volcado desde sesiones, IA, envío). |
+| `/clinica/coordinaciones` | Listado GENERAL de coordinaciones del centro con filtros por tipo y ámbito, y alta (`NuevaCoordinacionModal.jsx`). Hasta el sprint 2026-07 solo se veían paciente a paciente. |
+| `/clinica/talleres` | Talleres: actividades de grupo e inscripciones (02/08/2026). |
+| `/clinica/estadisticas` | Estadísticas del centro (solo admin): actividad clínica, agenda y ausencias, captación; Excel y PDF. El dinero vive en Facturación a propósito. |
 
-**En `app/(dashboard)/equipo/` (5 páginas, gestión de equipo):**
+**En `app/(dashboard)/equipo/` (6 páginas, gestión de equipo; menú
+`requiresAll: ["team_avanzado", "clinica"]`):**
 
 | Ruta | Propósito |
 | --- | --- |
-| `/equipo/mi-desempeno` | Scorecard del terapeuta logueado: anillo SVG con puntuación total, 7 áreas semáforo, complementos e histórico de 6 meses. |
+| `/equipo/mi-desempeno` | Scorecard del terapeuta logueado: anillo SVG con puntuación total, áreas semáforo, complementos e histórico de 6 meses. |
 | `/equipo/direccion` | Panel de dirección: KPIs, ranking del equipo, alertas, evolución, "Operativa del mes" y propuesta de incentivos (tramos + escritos). |
 | `/equipo/productividad` | % de horas de intervención directa sobre disponibles, por profesional, y edición de las horas/semana objetivo. |
-| `/equipo/incidencias` | Registro y seguimiento de incidencias (categorías, responsable, estados, comentarios). |
+| `/equipo/incidencias` | Registro y seguimiento de incidencias (categorías, responsables, estados, verificación, comentarios). |
 | `/equipo/bandeja` | "Lo mío pendiente" por terapeuta: informes sin entregar, incidencias asignadas y citas de hoy. |
+| `/equipo/desempeno-config` | Configuración del desempeño por ROLES (solo admin): áreas, pesos, metas y umbrales por rol, desde un preset, en blanco o con propuesta de IA. Sin entrada de menú: se llega desde Dirección y Desempeño. |
 
 Cada página interna lleva un mini-link de vuelta arriba: **"← Volver a Clínica"**
-en `/clinica/informes`, y **"← Volver a Equipo"** en las cinco de `/equipo/*`.
-Las landings no lo llevan (son el destino).
+en `/clinica/informes` (Coordinaciones, Talleres y Estadísticas no lo llevan),
+y **"← Volver a Equipo"** en las seis de `/equipo/*`. Las landings no lo llevan
+(son el destino).
 
 ### Componentes
 
 - `clinica/_components/PreviewBanner.jsx`: **desactivado** (devuelve `null`); se
   conserva por si hiciera falta reactivarlo. Lo siguen importando la landing,
-  Informes y el módulo Pacientes; las 5 páginas movidas a `/equipo/*` ya no.
-- `clinica/_components/dummyData.js`: resto histórico de la maqueta. Las
-  pantallas ya no lo usan.
+  Informes y el módulo Pacientes; las páginas movidas a `/equipo/*` ya no.
+- `clinica/_components/dummyData.js` (y `pacientes/_components/dummyData.js`,
+  que re-exporta de él): resto histórico de la maqueta. **No los importa ninguna
+  página**; sobreviven sin uso.
+- `components/clinica/` (6): `InformeDrawer`, `NuevaCoordinacionModal`,
+  `InterventionPlanSection`, `PatientDocumentsSection`,
+  `PatientExternalContactsSection`, `SpecialtyPicker`. Las piezas de clínica
+  que se montan desde más de una pantalla (informes, ficha del paciente,
+  listado de coordinaciones).
 - `equipo/_components/`: componentes exclusivos de las pantallas de gestión de
-  equipo — `PerformanceEditor`, `IncentiveTiersEditor`, `IncentiveItemsEditor`
-  e `IncidenciaModal`.
+  equipo — `PerformanceEditor`, `IncentiveTiersEditor`, `IncentiveItemsEditor`,
+  `IncidenciaModal` y `performanceIcons`.
 
 ### Sidebar
 
 Las pantallas del área cuelgan de **dos grupos distintos** (`components/layout/Sidebar.jsx`):
 
-**Grupo "Clínica"** (icono heartbeat, gating: módulo `clinica`), se auto-expande
-en `/clinica/*` y `/pacientes/*`:
+**Grupo "Clínica"** (sección «Salud», icono heartbeat, gating: módulo
+`clinica`), se auto-expande en `/clinica/*` y `/pacientes/*`:
 
 - **Pacientes** (`/pacientes`) — primero, es el dato del área clínica.
 - **Informes** (`/clinica/informes`)
+- **Coordinaciones** (`/clinica/coordinaciones`)
+- **Talleres** (`/clinica/talleres`)
+- **Estadísticas** (`/clinica/estadisticas`) — `adminOnly`
 
-**Grupo "Equipo"** (`visibleModules: ["team", "clinica"]`, para que la terapeuta
-lo vea aunque no tenga `team`). Sus 5 hijos llevan `moduleKey: "clinica"`, así
-que un tenant con `team` pero SIN `clinica` (p. ej. nutri_laura) NO los ve:
+**Grupo "Equipo"** (sección «Gestión»; `visibleModules: ["team", "clinica"]`,
+para que la terapeuta lo vea aunque no tenga `team`). Sus 5 hijos clínicos
+llevan `requiresAll: ["team_avanzado", "clinica"]` (separación Equipo
+básico/avanzado del 27/07/2026), así que un tenant con `team` pero SIN
+`clinica` —o sin `team_avanzado`— NO los ve:
 
 - **Desempeño** (`/equipo/mi-desempeno`) — `adminOnly`
 - **Dirección** (`/equipo/direccion`) — `adminOnly`
@@ -503,63 +584,66 @@ que un tenant con `team` pero SIN `clinica` (p. ej. nutri_laura) NO los ve:
 - **Incidencias** (`/equipo/incidencias`) — todo el equipo
 - **Bandeja de trabajo** (`/equipo/bandeja`) — todo el equipo
 
+Los otros hijos del grupo no son de este módulo: **Fichaje** (`fichaje`),
+**Ocupación** (`requiresAll: ["team_avanzado", "citas"]`) y **Actividad**
+(`team_avanzado`). `/equipo/desempeno-config` no tiene entrada de menú.
+
 Ya **no** hay entrada "Pacientes" a nivel raíz: vive dentro de Clínica.
 
 ## Migración
 
-`scripts/migrate-clinica-sprint-1.js`. Solo schema `crm_aumenta`
-(hardcoded). Idempotente. Crea los 4 enums y las 4 tablas, registra
-el módulo en `master.tenant_modules`.
+La viva es **`scripts/migrate-clinica-module.js`**: lee `master.tenants` en
+tiempo de ejecución (regla #12), procesa cualquier tenant con `clinica` o
+`pacientes` activo, crea (IF NOT EXISTS) los enums, `patients` y las cuatro
+tablas base con las FK ya a `patients`, y añade a las tablas existentes las
+columnas que han ido llegando. Idempotente. No hace falta lanzarla a mano: está
+en el bloque `clinica` (y en el de `pacientes`) de
+`scripts/_module-migrations.js`, así que la corre `enable-module.js <slug>
+clinica` junto con las otras trece del bloque (vía `ensure-tenant-schema.js
+<slug>`, que también lanzan el alta desde el panel y la reactivación). En
+producción, si hiciera falta suelta:
+`docker exec crm-salamandra-app-1 node scripts/migrate-clinica-module.js`
+(el hostname `db` solo resuelve dentro de la red Docker).
 
-```bash
-npm run db:migrate:clinica         # local
-npm run db:migrate:clinica:prod    # VPS (vía docker exec, ver más abajo)
-```
-
-**Importante**: tras este sprint, el sprint Pacientes ejecuta una
-migración correctiva que **renombra `clinic_sessions.client_id` →
-`patient_id`** (y equivalentes en `coordinations`, `clinical_reports`).
-Si ves discrepancias entre el modelo y la BD, lo más probable es que
-falte ejecutar `migrate-pacientes-sprint-1.js`.
-
-## Ejecución en producción
-
-El script vive en el contenedor de la app, no en el host del VPS
-(porque el hostname `db` solo resuelve dentro de la red Docker):
-
-```bash
-ssh tu-vps
-cd /opt/crm-salamandra
-git pull
-./deploy.sh                                                          # build + restart contenedores
-docker exec -it crm-salamandra-app-1 node scripts/migrate-clinica-sprint-1.js
-docker exec -it crm-salamandra-app-1 node scripts/migrate-pacientes-sprint-1.js   # importante: después de clinica
-```
+**Histórico (hasta 06/2026):** `scripts/migrate-clinica-sprint-1.js` (solo
+`crm_aumenta`, hardcoded) creó los 4 enums y las 4 tablas de la maqueta con
+`client_id`, y `migrate-pacientes-sprint-1.js` las re-apuntó después a
+`patient_id`. Las dos son ONE_OFF en `_module-migrations.js` y ya se
+ejecutaron: **no usarlas**. Los npm `db:migrate:clinica(:prod)` siguen
+apuntando a la vieja; el `:prod` con `--env-file=.env.production` ni siquiera
+vale desde el host (el patrón es `docker exec`).
 
 ## Tenants
 
-| Tenant | Módulo `clinica` | Notas |
-| --- | --- | --- |
-| `aumenta` | activo | Centro de psicopedagogía infantil. Único tenant con el módulo. |
-| Resto (`demo`, `nutri_laura`, `quality_energy`, `spain_enzymes`, `retorika`, `abarcaia`) | inactivo | No aparece en sidebar. |
+Quién tiene el módulo no se lista aquí (una lista a mano se queda vieja, y la
+que hubo aquí llegó a citar dos clientes ya purgados): `/admin/modulos` o
+`scripts/inspect-tenant-modules.js <slug>`. Lo que sí hay que saber: `aumenta`
+es la reina (datos reales, NO wipear ni sembrar sin permiso); `demo` y
+`demo_clinica` son escaparate y se siembran con `seed-clinica-demo.js`.
 
-`'clinica'` **no** está en `ALL_MODULES` (`scripts/db-sync.js`); se
-gestiona manualmente vía `tenant_modules`. Si se quisiera ofrecer a
-más clientes en el futuro, añadirlo al array global.
+`'clinica'` **no** está en `ALL_MODULES` (`scripts/db-sync.js`): ese array
+solo siembra la demo local. Se activa con `scripts/enable-module.js <slug>
+clinica`, que abre las dos puertas (`tenant_modules` y `users.module_access`).
 
 ## Backlog (Sprint 2+)
 
-- Endpoints CRUD para los 4 modelos.
-- Subida y procesamiento de audio (ver módulo Pacientes para el flujo
-  acordado: el CRM no graba, recibe archivos del móvil de la terapeuta
-  y los pasa por Whisper + OpenAI).
-- Generación IA de informes a partir de N `ClinicSession` del
-  paciente.
-- Generación IA de actas de coordinación.
+> Lista escrita tras el sprint visual. Lo tachado ya está; lo demás sigue
+> abierto.
+
+- ~~Endpoints CRUD para los 4 modelos.~~ **HECHO** (Fase 1; hoy 35 `route.js`).
+- ~~Subida y procesamiento de audio~~ **HECHO** (Fase 3: el CRM no graba,
+  recibe el archivo del móvil de la terapeuta y lo pasa por Whisper + Claude).
+- ~~Generación IA de informes a partir de N `ClinicSession` del
+  paciente.~~ **HECHO** en dos pasos y sin que la IA escriba sola: volcado
+  literal (`desde-sesiones`, 31/07) + redacción (`pulir`, 14/08), ver arriba.
+- Generación IA de actas de coordinación (`aiActaGenerated` sigue vacío).
 - Cálculo automático del desempeño mensual a partir de
-  `ClinicSession`, `ClinicalReport`, asistencia y coordinaciones.
-- Workflow de aprobación de incentivos con auditoría en
-  `master.AuditLog`.
+  `ClinicSession`, `ClinicalReport`, asistencia y coordinaciones. Hoy las
+  puntuaciones las introduce Dirección en el editor; lo único que se trae solo
+  es la ocupación desde Productividad.
+- ~~Workflow de aprobación de incentivos con auditoría en
+  `master.AuditLog`.~~ **HECHO** (`approve`/`approve-all`, auditados como
+  `clinica.performance.*`).
 - ~~Filtrado de vistas por rol~~ **HECHO (2026-07-24)**: las terapeutas son
   rol `user` con `moduleAccess` [calendar, citas, clinica, pacientes] (admón.
   además billing+documents). "Mi desempeño", "Dirección" y "Productividad" son
@@ -569,12 +653,16 @@ más clientes en el futuro, añadirlo al array global.
   módulos por `user.moduleAccess` (espejo de `hasModule`). Login por NOMBRE DE
   USUARIO (p. ej. `arantxa_aumenta` en `users.email`, creado con
   `validate:false`); el formulario de login acepta email o usuario.
-- Descarga PDF de informes con QR / plantilla del centro.
+- ~~Descarga PDF de informes~~ **HECHO** (`reportPdf.js`, «Enviar al
+  paciente»); sin QR ni plantilla del centro todavía.
 
 ## Decisiones cerradas
 
-- **Solo aumenta**: el módulo es específico de Aumenta hasta que un
-  segundo cliente lo necesite. No se contamina `demo` ni otros.
+- ~~**Solo aumenta**: el módulo es específico de Aumenta hasta que un
+  segundo cliente lo necesite.~~ **Superada**: es un módulo más del catálogo
+  (`lib/provisioning/catalogo.js`), `aumenta` es su reina y lo tienen también
+  `demo`, `demo_clinica` y `somos`. Lo que sí se mantiene: un cambio clínico
+  va al base para todos, nunca a un `overrides/aumenta/`.
 - **Sin cuestionarios** (no aplica aquí, sino al módulo Formación de
   Aumenta — ver `training.md`).
 - **Nombres de terapeutas 100% ficticios** (Lorena Vázquez, Patricia
