@@ -333,11 +333,16 @@ despliegue que toque módulos.
     algo intermedio (presets por oficio); se construye cuando lo pida la
     realidad.
 
-**Pruebas**: `npm test` lanza las ~34 pruebas ligeras de `scripts/_smoke-*.mjs`
+**Pruebas**: `npm test` lanza las ~40 pruebas ligeras de `scripts/_smoke-*.mjs`
 (`scripts/pruebas.mjs` las clasifica solo: ligera = no hace `fetch` ni toca
 Sequelize; la marca `// @prueba ligera|pesada` en la cabecera manda si hace
 falta) y se pasa antes de cada push o deploy sin preguntar; `npm run
-test:todo` añade las que piden base de datos y `npm run dev`. **Skills** (usar solas cuando toque): `frontend-design` (React/Tailwind,
+test:todo` añade las que piden base de datos y `npm run dev`. **Una prueba
+nueva de una función de `lib/` se escribe con `node:test` + `node:assert/strict`**
+(dentro de Node 22, cero dependencias; ejemplar `_smoke-citas-dinero.mjs`,
+19/08/2026): prueba lo que DEVUELVE, no cómo está escrito; el runner la lanza
+igual y, si falla, pinta el nombre y el diff. Las regex sobre el código fuente
+quedan para lo que de verdad es texto (¿sigue el `if` donde estaba?). **Skills** (usar solas cuando toque): `frontend-design` (React/Tailwind,
 mobile-first, el CRM en escritorio es prioritario), `xlsx`, `docx`, `pdf`,
 `file-reading`.
 

@@ -104,17 +104,27 @@ Para mirar producción, por SSH y **solo lectura**:
 ssh crm-vps "docker exec crm-salamandra-app-1 <lo que sea>"
 ```
 
-Consultas a la base, sin escribir nada:
+Consultas a la base, sin escribir nada. **El script va por stdin**, en un
+fichero `.mjs` del scratchpad: la variante con `node -e "…"` y el SQL dentro
+se rompe por las comillas (tres capas: PowerShell, ssh, docker) y se perdieron
+15 minutos con ella el 19/08/2026.
+
+```js
+// consulta.mjs — solo lectura, sin datos personales
+const { getMasterDb } = await import("/app/lib/db/masterDb.js");
+const db = getMasterDb();
+const [filas] = await db.query("SELECT slug, status FROM master.tenants ORDER BY slug");
+console.log(JSON.stringify(filas));
+process.exit(0);
+```
 
 ```bash
-ssh crm-vps 'docker exec crm-salamandra-app-1 node -e "
-import(\"/app/lib/db/masterDb.js\").then(async (m) => {
-  const db = m.getMasterDb();
-  const [r] = await db.query(\"SELECT ...\");
-  console.log(JSON.stringify(r));
-  process.exit(0);
-})"'
+ssh crm-vps 'docker exec -i crm-salamandra-app-1 node --input-type=module -' < consulta.mjs
 ```
+
+(El `-i` es lo que deja pasar el stdin; sin él, el contenedor no recibe nada.
+Para un schema de cliente, `db.query("SELECT … FROM crm_<slug>.tabla")` con el
+slug leído de `master.tenants`, nunca escrito a mano.)
 
 ⚠️ **Nunca saques por pantalla filas con datos personales o de salud.** Cuentas,
 nombres de columna y fechas sí; el contenido de una ficha, una sesión clínica o
