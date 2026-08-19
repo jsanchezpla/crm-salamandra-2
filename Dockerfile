@@ -27,10 +27,11 @@ COPY --chown=nextjs:nodejs lib ./lib
 COPY --chown=nextjs:nodejs models ./models
 COPY --chown=nextjs:nodejs scripts ./scripts
 
-# El tablero del back-office lee estos dos ficheros en caliente. Solo estos: el
-# resto de `docs/` es documentación interna que no pinta nada en la aplicación y
-# no tiene por qué viajar a producción.
-COPY --chown=nextjs:nodejs docs/backlog.md docs/resuelto.md ./docs/
+# `docs/` NO viaja: es documentación interna que no pinta nada en la aplicación.
+# Hasta el 19/08/2026 se copiaban `docs/backlog.md` y `docs/resuelto.md` para el
+# tablero del back-office; desde entonces el Registro vive en
+# `master.tablero_documentos` y se publica con `scripts/tablero-doc.js`, sin
+# pasar por la imagen (ver docs/como-apuntar-en-el-tablero.md).
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
