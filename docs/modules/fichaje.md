@@ -21,7 +21,7 @@
 | **Pantallas propias** | ninguna (nunca las ha habido: el módulo es el mismo para todos y solo cambia el lector) |
 | **Scripts** | Activación: `node scripts/enable-module.js <slug> fichaje` (corre `migrate-fichaje-module`, declarada en `scripts/_module-migrations.js`; `scripts/_migration-order.js` la pone DESPUÉS de `migrate-team-fields` porque `fichajes.team_member_id` apunta a `team_members`) · después, `npm run db:check-access`. |
 | | Semilla del escaparate: `scripts/seed-fichaje-demo.js` (el mes en curso y el anterior, con los seis casos que la pantalla detecta; está en la lista de `scripts/reset-demo-tenant.js`), y luego `scripts/demo-golden-snapshot.js demo` para que la foto dorada no lo vacíe. Sin cron ni ONE_OFF. |
-| **Pruebas** | ninguna: ningún `scripts/_smoke-*.mjs` toca el módulo (las funciones de `lib/fichaje/totales.js`, `mapeo.js` y `parseHora.js` son puras y se podrían probar sin base de datos). |
+| **Pruebas** | `scripts/_smoke-fichaje-horas.mjs` (`node:test`, 19/08/2026, en `npm test`): lo que devuelven `parseHora.js` (celdas de ExcelJS, Date en UTC, fracción de día, «8:30»/«8.30»/«8,5»/«7.5» —la regla del punto—, duraciones negativas rechazadas, turno de noche) y `totales.js` (resumen por persona, totales del mes, los seis avisos, rango del periodo). `mapeo.js` y los lectores de `parsers/` siguen sin prueba. |
 | **Decisiones** | — |
 | **En este doc** | La frase que manda sobre todo el módulo · Universal por dentro, de cada cliente por fuera · El Excel de Aumenta, y por qué muerde · Modelo de datos · Identificar a la persona · Pantallas y endpoints · Alta en un cliente · Lo que queda fuera de esta primera versión |
 
@@ -112,6 +112,12 @@ se rechaza si sale negativa.
 Excel (Date con época 1899, texto `13:50`, texto `8:30:00`, fracción de día,
 fórmula) y devuelve siempre `{ok, valor, motivo}` — nunca lanza, nunca devuelve
 un número a medias.
+
+Texto con punto, la regla desde el 19/08/2026 (`trozosDeReloj`): punto + DOS
+dígitos es reloj (`8.30` = 8:30, `8.05`), punto + uno o tres o más es decimal
+(`7.5` = 7 h 30, como promete la plantilla genérica), y la coma es siempre decimal
+(`8,30` = 8,3 h). Antes «7.5» se leía como 7 h 05: 25 minutos de menos por celda;
+lo sacó `_smoke-fichaje-horas.mjs` el día que se escribió.
 
 ---
 
