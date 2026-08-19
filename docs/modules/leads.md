@@ -19,7 +19,7 @@
 | **Modelos** | `Lead` → `leads` (`models/tenant/Lead.model.js`; `stage` es STRING(50), no ENUM; `customFields` y `metadata` JSONB; `convertedProjectId`/`convertedToProjectAt`). Asociaciones en `lib/db/tenantDb.js`: `Lead.belongsTo(Client)` por `clientId` y `Lead.belongsTo(Project)` por `convertedProjectId`. Sin FK a `TeamMember` (`assignedTo` es un UUID suelto). |
 | **Interruptores y parámetros** | Ninguno que lea el código (ni `featureFlags` ni `logicOverrides`). Lo que varía por cliente está escrito en código: `EMBUDOS` en `lib/leads/embudos.js`, `TENANT_TITLE_OVERRIDES` («Interesados») en la página, `TENANT_LABEL_OVERRIDES` en `components/layout/Sidebar.jsx` y las plantillas de export/import por slug (`spain_enzymes` y `nutri_laura`, en `app/api/leads/export/route.js` e `import/template/route.js`). Los `schemaExtensions` que hay en producción (nutri_laura, spain_enzymes) son letrero decorativo: el código no los lee. |
 | **Pantallas propias** | 4, cargadas por el mapa `UI_OVERRIDES` de `app/(dashboard)/leads/page.jsx`: `modules/overrides/aumenta/LeadsModule.jsx`, `modules/overrides/nutri-laura/LeadsModule.jsx`, `modules/overrides/retorika/LeadsModule.jsx`, `modules/overrides/spain-enzymes/LeadsModule.jsx`. Ignoran las props del base: llevan su embudo dentro (copiado en `embudos.js`). Los de `demo` y `sandbox` se borraron el 18/08/2026; `quality-energy` y `abarcaia`, el 12/08. |
-| **Scripts** | Activar: `node scripts/enable-module.js <slug> leads`. Migraciones registradas en `scripts/_module-migrations.js`: `migrate-stage-to-string.js` (MODULES.leads) y `migrate-leads-columnas-proyecto.js` (CORE). Herramientas vivas: `listar-leads.js <slug>` (solo lectura), `mover-leads-a-comerciales.js <slug> <form> [--confirm]` (leads de familias → bandeja de Comerciales), `sincronizar-ui-override.mjs` (el letrero `ui_override`). Seeds: `add-leads-module-demo.js`, `add-leads-module-nutri-laura.js`, `seed-aumenta.js`, `seed-spain-enzymes-data.js`. Frenados: `clear-aumenta-leads.js` (exige `_guard-datos-reales.js`), `cleanup-bad-leads.js` (atado a `quality_energy`, que ya no existe). |
+| **Scripts** | Activar: `node scripts/enable-module.js <slug> leads`. Migraciones registradas en `scripts/_module-migrations.js`: `migrate-stage-to-string.js` (MODULES.leads) y `migrate-leads-columnas-proyecto.js` (CORE). Herramientas vivas: `listar-leads.js <slug>` (solo lectura), `mover-leads-a-comerciales.js <slug> <form> [--confirm]` (leads de familias → bandeja de Comerciales), `sincronizar-ui-override.mjs` (el letrero `ui_override`). Seeds: `add-leads-module-demo.js`, `add-leads-module-nutri-laura.js`, `_hechos/seed-aumenta.js`, `_hechos/seed-spain-enzymes-data.js`. Frenados: `_hechos/clear-aumenta-leads.js` (exige `_guard-datos-reales.js`), `_hechos/cleanup-bad-leads.js` (atado a `quality_energy`, que ya no existe). |
 | **Pruebas** | `scripts/_smoke-leads-etapas.mjs` (en `npm test`; vigila que las etapas de los cuatro overrides, `embudos.js`, `stages.js` y `summary.js` no se separen) · `scripts/_smoke-ui-overrides.mjs` (en `npm test`; los mapas `UI_OVERRIDES` contra el disco) · `scripts/_smoke-lead-conversion-fix.js` (base de datos; conversión lead→cliente en nutri_laura y spain_enzymes). |
 | **Decisiones** | `../decisions/2026-08-01-leads-dos-origenes-un-grupo.md` · `../decisions/2026-08-12-retirada-de-sales.md` · `../decisions/2026-08-12-bajas-abarcaia-quality-healim.md` (se llevó dos overrides) · `../decisions/2026-08-18-la-piramide-invertida-de-leads.md` |
 | **En este doc** | Modelo Lead · Stages · Módulo base vs overrides · Endpoints · Validaciones · Importación / Exportación · Migración y seeds por tenant · Backlog |
@@ -516,11 +516,11 @@ Cada tenant tiene su propio seed que crea schema, fila en
 
 | Slug en `master.tenants` | Seed | uiOverride registrado | moduleAccess admin | Leads creados |
 | --- | --- | --- | --- | ---: |
-| `retorika` | `seed-master.js` + `seed-retorika.js` | (no registra leads) | `["training", "clients"]` | 0 (solo curso) |
-| `aumenta` | `seed-aumenta.js` | `aumenta/LeadsModule` | `["leads"]` | ~40 (⚠️ CRM en uso real: no relanzar sin permiso) |
-| `demo` | `seed-demo.js` + `add-leads-module-demo.js` | (ninguno desde el 18/08/2026: usa el base; el script aún escribe `demo/LeadsModule` y lo corrige `sincronizar-ui-override.mjs`) | `["clients", "leads", ...]` | 35 |
+| `retorika` | `_hechos/seed-master.js` + `_hechos/seed-retorika.js` | (no registra leads) | `["training", "clients"]` | 0 (solo curso) |
+| `aumenta` | `_hechos/seed-aumenta.js` | `aumenta/LeadsModule` | `["leads"]` | ~40 (⚠️ CRM en uso real: no relanzar sin permiso) |
+| `demo` | `_hechos/seed-demo.js` + `add-leads-module-demo.js` | (ninguno desde el 18/08/2026: usa el base; el script aún escribe `demo/LeadsModule` y lo corrige `sincronizar-ui-override.mjs`) | `["clients", "leads", ...]` | 35 |
 | `nutri_laura` | `add-leads-module-nutri-laura.js` | `nutri-laura/LeadsModule` | añade `leads` al admin | 8 de ejemplo (uno por etapa; los reales entran por `/api/public/leads` e import) |
-| `spain_enzymes` | `seed-spain-enzymes.js` (+ `seed-spain-enzymes-data.js`) | `spain-enzymes/LeadsModule` | `["leads"]` | variable |
+| `spain_enzymes` | `_hechos/seed-spain-enzymes.js` (+ `_hechos/seed-spain-enzymes-data.js`) | `spain-enzymes/LeadsModule` | `["leads"]` | variable |
 
 (`seed-quality-energy.js` y `seed-abarcaia.js` se borraron con sus clientes el
 12/08/2026.) Para un cliente nuevo no hace falta seed: `node
@@ -548,8 +548,8 @@ Scripts sueltos que siguen en `scripts/`:
 | `listar-leads.js <slug>` | Lista los leads de un tenant. | Solo lectura. |
 | `mover-leads-a-comerciales.js <slug> <form> [--confirm]` | Leads de familias que entraron por el embudo → bandeja de Comerciales. | Vivo, idempotente. |
 | `sincronizar-ui-override.mjs` | Pone el letrero `ui_override` de `master.tenant_modules` a lo que dicen los mapas `UI_OVERRIDES`. | Vivo; relanzar tras añadir/mover/borrar un override. |
-| `clear-aumenta-leads.js` | `TRUNCATE` de `leads` en aumenta para resembrar. | **Frenado**: exige la bandera de `_guard-datos-reales.js` (aumenta tiene leads reales). |
-| `cleanup-bad-leads.js` | Borraba leads de `crm_quality_energy` con `email IS NULL AND phone IS NULL AND source = 'csv_import'`. | Histórico: hardcodea un schema que **ya no existe**. |
+| `_hechos/clear-aumenta-leads.js` | `TRUNCATE` de `leads` en aumenta para resembrar. | **Frenado**: exige la bandera de `_guard-datos-reales.js` (aumenta tiene leads reales). |
+| `_hechos/cleanup-bad-leads.js` | Borraba leads de `crm_quality_energy` con `email IS NULL AND phone IS NULL AND source = 'csv_import'`. | Histórico: hardcodea un schema que **ya no existe**. |
 
 **Histórico (hasta 12/08/2026):** existieron `migrate-quality-leads.js`
 (`source` y `metadata` en `crm_quality_energy.leads`; sigue listado en
@@ -666,7 +666,7 @@ Solución: documentar la convención explícitamente en `CLAUDE.md`
 (tabla de tenants) y en este fichero. No se refactoriza nada
 (renombrar schemas sería migración mayor; mover carpetas no aporta).
 
-### 5. `cleanup-bad-leads.js` y `migrate-quality-leads.js` ya leen `DATABASE_URL`
+### 5. `_hechos/cleanup-bad-leads.js` y `migrate-quality-leads.js` ya leen `DATABASE_URL`
 
 Antes hardcodeaban la cadena de conexión local
 (`postgresql://postgres:portero_1@localhost:5432/salamandra`). Ahora
@@ -678,7 +678,7 @@ ejemplos de uso local y producción.
 Auditoría adicional: no hay otros scripts con `DATABASE_URL`
 hardcodeada. Sí aparecen 4 scripts con la contraseña de seed
 `Admin1234!` (`db-sync.js`, `reset-demo-password.js`,
-`seed-demo.js`, `seed-master.js`) — son passwords de cuenta admin
+`_hechos/seed-demo.js`, `_hechos/seed-master.js`) — son passwords de cuenta admin
 del demo que se hashean con bcrypt antes de guardar; están marcadas
 como "temporal — cambiar en producción". No es vulnerabilidad de
 configuración, pero conviene revisarlas en un sprint general de

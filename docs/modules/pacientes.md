@@ -19,7 +19,7 @@
 | **Modelos** | `Patient` → `patients` (`models/tenant/Patient.model.js`; hoy con `client_id` al pagador, `care_type` terapia/nutrición, `specialties`, `objectives`, `consents`, `dni`, `address`, `relationship`, y `contract_signed`/`contract_file` como legado) · `ExternalContact` → `external_contacts` · `InterventionPlan` → `intervention_plans`. Las FK de `clinic_sessions`, `clinical_reports` y `coordinations` apuntan aquí, no a `clients`. |
 | **Interruptores y parámetros** | ninguno que lea el código. |
 | **Pantallas propias** | ninguna. |
-| **Scripts** | Activar: `node scripts/enable-module.js <slug> pacientes` (avisa si falta `clients`; `ensure-tenant-schema.js` corre las 7 del bloque `pacientes` de `scripts/_module-migrations.js`: `migrate-clinica-module` (la primera: crea `patients` y las tablas clínicas; desde el 19/08/2026 está también en este bloque), `migrate-patients-clients-phase1`, `migrate-client-module-assignments`, `migrate-patients-multi-per-client`, `migrate-patients-care-type`, `migrate-patients-specialties`, `migrate-documents-patient-link`). Seed: `seed-clinica-demo.js <slug>` (pacientes + clínica; **VACÍA** antes, solo escaparate). Datos, a mano y con dry-run: `backfill-patients-client.js` (paciente → pagador deducido de sus citas/sesiones, `--confirm`; no cruza por nombre a propósito) y `migrate-contract-patient-to-client.js` (contrato del paciente → familia, ya corrido). ONE_OFF de la maqueta, no usar: `migrate-pacientes-sprint-1.js` (solo `crm_aumenta`). |
+| **Scripts** | Activar: `node scripts/enable-module.js <slug> pacientes` (avisa si falta `clients`; `ensure-tenant-schema.js` corre las 7 del bloque `pacientes` de `scripts/_module-migrations.js`: `migrate-clinica-module` (la primera: crea `patients` y las tablas clínicas; desde el 19/08/2026 está también en este bloque), `migrate-patients-clients-phase1`, `migrate-client-module-assignments`, `migrate-patients-multi-per-client`, `migrate-patients-care-type`, `migrate-patients-specialties`, `migrate-documents-patient-link`). Seed: `seed-clinica-demo.js <slug>` (pacientes + clínica; **VACÍA** antes, solo escaparate). Datos, a mano y con dry-run: `backfill-patients-client.js` (paciente → pagador deducido de sus citas/sesiones, `--confirm`; no cruza por nombre a propósito) y `migrate-contract-patient-to-client.js` (contrato del paciente → familia, ya corrido). ONE_OFF de la maqueta, no usar: `_hechos/migrate-pacientes-sprint-1.js` (solo `crm_aumenta`). |
 | **Pruebas** | `scripts/_smoke-alta-progenitores.mjs` — entra en `npm test`, sin base de datos: `normalizarPacientes` (el motivo llega hasta lo que se guarda) y el alta con dos progenitores. Ninguna otra toca `patients`: `_smoke-borrar-paciente.mjs` y `_smoke-paciente-borrado.mjs` son de `clients` (la «paciente» de una consulta de nutrición es un `Client`). |
 | **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` · `../decisions/2026-08-01-alta-de-clientes-por-perfil.md` · `../decisions/2026-08-04-clientes-se-llama-pacientes-en-nutricion.md` |
 | **En este doc** | Decisión arquitectónica: `patients` ≠ `clients` · Estado: Fase 1 (backend real) · Modelo · Frontend · Migración · Decisiones cerradas |
@@ -84,7 +84,7 @@ Para el histórico sin enlace: `scripts/backfill-patients-client.js` (deduce el
 pagador de las citas/sesiones del propio paciente; si hay dos candidatos
 —padres separados— lo lista en vez de adivinar; nunca cruza por nombre).
 
-**Histórico (06/2026):** `migrate-pacientes-sprint-1.js` hizo la migración
+**Histórico (06/2026):** `_hechos/migrate-pacientes-sprint-1.js` hizo la migración
 correctiva tras el sprint Clínica en `crm_aumenta`: dropeó las columnas
 `client_id` originales de las tres tablas clínicas y añadió las `patient_id`.
 
@@ -300,7 +300,7 @@ contrato legado), `migrate-client-module-assignments` (`client_id` + FK),
 son idempotentes. El analizador de orden deduplica las que también están en el
 bloque `clinica`.
 
-**Histórico (hasta 06/2026):** `scripts/migrate-pacientes-sprint-1.js`. Solo
+**Histórico (hasta 06/2026):** `scripts/_hechos/migrate-pacientes-sprint-1.js`. Solo
 schema `crm_aumenta` (hardcoded). Idempotente. ONE_OFF en
 `_module-migrations.js`, ya ejecutado: **no usarlo** (los npm
 `db:migrate:pacientes(:prod)` siguen apuntando a él).
@@ -327,7 +327,7 @@ npm run db:migrate:pacientes:prod    # VPS
 ```
 
 **Orden importa**: ejecutar **después** de
-`migrate-clinica-sprint-1.js`. Si las tablas de Clínica no existen,
+`_hechos/migrate-clinica-sprint-1.js`. Si las tablas de Clínica no existen,
 la fase C las salta con mensaje informativo.
 
 ## Tenants

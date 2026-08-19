@@ -20,8 +20,8 @@
 | | Los `logicOverrides` de `training` que hay en producción (`b2bEnabled`, `quizzesEnabled`, `tutorlmsConnected` en aumenta y nutri_laura) **no los lee ningún código**: son inertes, y `formacionAbierta.js` explica por qué no se leen a propósito. |
 | **Pantallas propias** | ninguna desde el 18/08/2026: la portada de Aumenta (`modules/overrides/aumenta/FormacionOverview.jsx`) se borró y es el base con el interruptor; la de nutri_laura se había borrado antes. `app/(dashboard)/formacion/page.jsx` ya no tiene mapa `UI_OVERRIDES`. |
 | **Scripts** | Activación: `node scripts/enable-module.js <slug> training` (corre `migrate-training-fields`, `migrate-training-archive` y `migrate-course-registrations`, declaradas en `scripts/_module-migrations.js`) · Interruptor: `scripts/formacion-abierta.js` · Cron: `scripts/sync-formacion-nocturno.js` (timer systemd del VPS a las 04:30, vía `docker exec`) |
-| | Altas históricas con datos: `scripts/add-training-module-demo.js`, `add-training-module-nutri-laura.js`, `add-training-module-aumenta.js`, `seed-retorika.js`, `setup-retorika-tenant-local.js` (solo local) · Seeds de prueba: `seed-cuestionarios-demo.js`, `seed-cuestionarios-retorika.js` (solo local), `seed-nutri-laura-training-data.js`, `seed-nutri-laura-course-registrations.js` · ONE_OFF ya ejecutado: `retirar-modulo-cuestionarios.js` (10/08/2026) · Diagnóstico: `test-tutorlms-webhook.js`, `_check-retorika-tables.mjs` |
-| **Pruebas** | `scripts/_smoke-formacion-abierta.mjs` (`@prueba ligera`: entra en `npm test`). Fuera del runner —el nombre no empieza por `_smoke-`— y con servidor en `localhost:3000` + base de datos: `scripts/smoke-training-f2.mjs`, `smoke-training-f3.mjs`, `smoke-retorika-registros.mjs`, `smoke-retorika-check-empresa.mjs`. |
+| | Altas históricas con datos: `scripts/add-training-module-demo.js`, `_hechos/add-training-module-nutri-laura.js`, `add-training-module-aumenta.js`, `_hechos/seed-retorika.js`, `setup-retorika-tenant-local.js` (solo local) · Seeds de prueba: `seed-cuestionarios-demo.js`, `_hechos/seed-cuestionarios-retorika.js` (solo local), `_hechos/seed-nutri-laura-training-data.js`, `_hechos/seed-nutri-laura-course-registrations.js` · ONE_OFF ya ejecutado: `_hechos/retirar-modulo-cuestionarios.js` (10/08/2026) · Diagnóstico: `test-tutorlms-webhook.js`, `_check-retorika-tables.mjs` |
+| **Pruebas** | `scripts/_smoke-formacion-abierta.mjs` (`@prueba ligera`: entra en `npm test`) · `scripts/_smoke-fechas-trimestres-madrid-parseDate.mjs` (`node:test`, 19/08/2026, en `npm test`) en su parte de `lib/training/parseDate.js`: `parseFlexibleDate` con texto —ISO, DD-MM-AAAA y DD/MM/AAAA dan el mismo día y el día va DELANTE («05-12-1985» es el 5 de diciembre, por eso no se usa `new Date(str)`), medianoche UTC sin hora, bisiestos (el 31/02 y el 31/04 no existen), años de 1900 a 2100, el orden de los motivos de rechazo y la forma `{ ok, date }` / `{ ok: false, reason }`—, con Date por componentes UTC (como las entrega ExcelJS) y con serial de Excel (31092 → 14/02/1985; un decimal pierde la hora; desde el serial 61 coincide con Excel), los casos de `_smokeTests()` siguen en verde, y una Date construida en hora LOCAL sí depende de la zona del proceso. Fuera del runner —el nombre no empieza por `_smoke-`— y con servidor en `localhost:3000` + base de datos: `scripts/_hechos/smoke-training-f2.mjs`, `_hechos/smoke-training-f3.mjs`, `smoke-retorika-registros.mjs`, `smoke-retorika-check-empresa.mjs`. |
 | **Decisiones** | `../decisions/2026-08-10-cuestionarios-deja-de-ser-modulo.md` · `../decisions/2026-08-18-la-piramide-invertida-de-leads.md` |
 | **En este doc** | Integraciones externas · Flujo end-to-end de pre-aprobación de usuarios empresa · Modelos · Endpoints internos (con JWT) · Frontend · Seed y configuración inicial · Activación en Aumenta (B2C, sin cuestionarios) · Registros previos al curso (sprint Retorika · junio 2026) |
 
@@ -769,7 +769,7 @@ por webhook o sync.
 `/api/cuestionarios` y `/api/cuestionarios/sync` son alias del
 sub-módulo de quiz. Piden **solo `hasModule("training")`** desde el
 10/08/2026 (antes aceptaban también `cuestionarios`, que era un `moduleKey`
-aparte y dejó de existir ese día: `retirar-modulo-cuestionarios.js`). La
+aparte y dejó de existir ese día: `_hechos/retirar-modulo-cuestionarios.js`). La
 ruta del frontend `/cuestionarios` redirige a `/formacion/cuestionarios`.
 
 | Método y ruta | Propósito | Restricciones |
@@ -880,13 +880,13 @@ viene del propio TutorLMS.
 
 | Script | Propósito |
 | --- | --- |
-| `scripts/seed-retorika.js` | Crea schema `crm_retorika` y siembra el primer curso ("IA y comunicación política", `wpCourseId: 6434`). Idempotente. **Solo añade el curso semilla**; el resto de cursos llegan vía webhook desde WP. |
+| `scripts/_hechos/seed-retorika.js` | Crea schema `crm_retorika` y siembra el primer curso ("IA y comunicación política", `wpCourseId: 6434`). Idempotente. **Solo añade el curso semilla**; el resto de cursos llegan vía webhook desde WP. |
 | `scripts/add-training-module-demo.js` | Activa el módulo `training` en el tenant `demo` y siembra 4 empresas, 8 cursos, ~36 alumnos de empresa + 10 privados, ~55 matrículas. Para demos a clientes potenciales. Idempotente. |
 | `scripts/seed-cuestionarios-demo.js` | Comprueba que la demo tenga `training` (antes ACTIVABA un módulo `cuestionarios`, que dejó de existir el 10/08/2026; un seed no vende módulos) y siembra intentos de quiz realistas (datos pedagógicos sobre comunicación, módulos de Retorika). Útil para mostrar la pestaña Cuestionarios sin necesitar webhooks. |
-| `scripts/add-training-module-nutri-laura.js` | Activa el módulo `training` en `nutri_laura`. Crea las 6 tablas con SQL crudo (sin la legacy `trainings`), registra el módulo sin `uiOverride` (usa el default igual que retorika) y siembra 3 cursos de nutrición. Patrón idéntico al `add-leads-module-nutri-laura.js` por la filosofía de tenant minimal. |
+| `scripts/_hechos/add-training-module-nutri-laura.js` | Activa el módulo `training` en `nutri_laura`. Crea las 6 tablas con SQL crudo (sin la legacy `trainings`), registra el módulo sin `uiOverride` (usa el default igual que retorika) y siembra 3 cursos de nutrición. Patrón idéntico al `add-leads-module-nutri-laura.js` por la filosofía de tenant minimal. |
 | `scripts/add-training-module-aumenta.js` | Activa el módulo `training` en `aumenta`. Las 6 tablas ya existen desde el sync inicial — el script solo registra el módulo con el interruptor «formación abierta» encendido (desde el 18/08/2026; antes, `uiOverride: aumenta/FormacionOverview`) y siembra 6 cursos reales de la web de Aumenta + 15 alumnos B2C + 22 matrículas. Sin cuestionarios (la tabla `quiz_attempts` queda vacía). Ver "Activación en Aumenta" más abajo. |
 
-`seed-master.js` (que crea el tenant retorika) registra el módulo
+`_hechos/seed-master.js` (que crea el tenant retorika) registra el módulo
 `training` con `moduleAccess` admin. La activación inicial del
 módulo en producción se hizo con ese script.
 

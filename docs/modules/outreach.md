@@ -19,7 +19,7 @@
 | **Modelos** | `OutreachLead` → `outreach_leads` · `OutreachContact` → `outreach_contacts` · `OutreachAnalysis` → `outreach_analyses` · `OutreachBusinessLine` → `outreach_business_lines` · `OutreachSettings` → `outreach_settings` (fila única: modelo IA, contexto, regla, contador mensual de Google). **`OutreachLead` no es `Lead`** (`leads`): sin FK entre ellos; `outreach_leads.client_id` es referencia blanda al `Client` convertido. |
 | **Interruptores y parámetros** | `featureFlags` / `logicOverrides`: ninguno que lea el código. Lo configurable vive en `outreach_settings` (modelo, contexto, regla) y en `master.tenants.settings.integrations` (claves de Anthropic, Google Places y Resend, remitente y reply-to), que se pegan en `/configuracion`. |
 | **Pantallas propias** | ninguna. |
-| **Scripts** | Activar: `node scripts/enable-module.js <slug> outreach` (`ensure-tenant-schema.js` corre las 4 del bloque `outreach` de `scripts/_module-migrations.js`: `migrate-outreach-sprint-1`, `migrate-outreach-google-usage`, `migrate-outreach-convert`, `migrate-outreach-website-text`). Los atajos anteriores siguen vivos: `enable-outreach.js` (`npm run db:enable:outreach`) y `setup-outreach.js` (`npm run db:setup:outreach`: activa + migra + siembra de una vez). Seed: `seed-outreach.js <slug>` (líneas de negocio + leads de muestra con análisis `model: 'demo'`; lo lanzan `crear-demos-por-oficio.js` para `demo_agencia` y `rebuild-demo-showcase.js`). `setup-demo-outreach-fake.js` deja la demo con claves ficticias para enseñar el flujo sin gastar. Sin backfills. |
+| **Scripts** | Activar: `node scripts/enable-module.js <slug> outreach` (`ensure-tenant-schema.js` corre las 4 del bloque `outreach` de `scripts/_module-migrations.js`: `migrate-outreach-sprint-1`, `migrate-outreach-google-usage`, `migrate-outreach-convert`, `migrate-outreach-website-text`). Los atajos anteriores siguen vivos: `_hechos/enable-outreach.js` (`npm run db:enable:outreach`) y `_hechos/setup-outreach.js` (`npm run db:setup:outreach`: activa + migra + siembra de una vez). Seed: `seed-outreach.js <slug>` (líneas de negocio + leads de muestra con análisis `model: 'demo'`; lo lanzan `crear-demos-por-oficio.js` para `demo_agencia` y `rebuild-demo-showcase.js`). `_hechos/setup-demo-outreach-fake.js` deja la demo con claves ficticias para enseñar el flujo sin gastar. Sin backfills. |
 | **Pruebas** | `scripts/_smoke-outreach-ai-unit.mjs` — pura (prompt, parseo, `analyzeLead` con el simulado; sin base de datos ni servidor): **entra en `npm test`** desde el 19/08/2026 (antes se llamaba `_outreach-ai-unit.mjs` y `pruebas.mjs`, que solo recoge `_smoke-*` y `smoke-test-*`, no la veía). Las otras tres siguen fuera **a propósito**: `_outreach-smoke.mjs`, `_outreach-e2e.mjs` y `_outreach-ui-check.mjs` piden servidor + base de datos y firman el JWT de `admin@sandbox.local` para el tenant `sandbox`, que no existe ni en local ni en producción; se lanzan a mano, y antes habría que apuntarlas a un tenant que exista. |
 | **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` |
 | **En este doc** | Decisiones de arquitectura · Fuente de datos: Google Maps nativo + email de la web · Dedupe de "Buscar nuevos" (`lib/outreach/persistLeads.js`) · Conversión a cliente · Modelo de datos · API · Reglas de negocio que no se rompen · Puesta en marcha en un tenant |
@@ -376,7 +376,7 @@ Los atajos anteriores siguen vivos y hacen lo mismo por partes:
 `npm run db:enable:outreach -- <slug>` (solo la fila), `npm run
 db:migrate:outreach` + `:usage` + `:convert` + `:website` (las cuatro
 migraciones, una a una), `npm run db:seed:outreach -- <slug>`, y
-`setup-outreach.js` (`npm run db:setup:outreach`: activa + migra + siembra de
+`_hechos/setup-outreach.js` (`npm run db:setup:outreach`: activa + migra + siembra de
 una vez). En producción, nunca `:prod` con `--env-file`: `docker exec`.
 
 Después: cada tenant pega su clave de **Anthropic**, de **Google Places** y de
@@ -423,7 +423,7 @@ del tenant (`lib/outreach/resendConfig.js`, **sin fallback** a
 `RESEND_API_KEY`), y sin ella `enviar-correo` responde **400** antes de
 intentar nada. Para probar sin mandar nada al exterior se guarda en
 Configuración la clave literal `dry-run`: `sendEmail` entonces solo loguea y el
-endpoint devuelve `dryRun: true` sin marcar `sent_at`. (`setup-demo-outreach-fake.js`
+endpoint devuelve `dryRun: true` sin marcar `sent_at`. (`_hechos/setup-demo-outreach-fake.js`
 deja así la demo.)
 
 > **Histórico:** «Sin `RESEND_API_KEY` el envío es dry-run» — era verdad cuando

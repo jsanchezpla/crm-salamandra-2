@@ -15,7 +15,7 @@
 | **Modelos** | `models/master/Tenant.model.js` — todo va en `master.tenants.settings` (JSONB: `brand`, `integrations`, `aiAccess`, `citas`, `clientes`, `contacto`), sin migración · `models/tenant/AiPermission.model.js` (`ai_permissions`: solicitudes y concesiones del candado de IA) · `models/master/AuditLog.model.js` (`master.audit_logs`) recibe cada cambio, sin el valor de los secretos |
 | **Interruptores y parámetros** | ninguno que lea el código (no hay fila en `tenant_modules`). Lo que esta pantalla escribe vive en `master.tenants.settings`, no en `featureFlags`: `integrations.*` (Anthropic, OpenAI, Google Places, Resend, Stripe, WhatsApp, Cloudflare; los secretos cifrados, `anthropicModel` en claro), `aiAccess` (`libre` / `restringido`), `citas.*` (`meetModo`, `recordatoriosCitas`, `agendaCompartida`, `avisosWhatsapp`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `identidadObligatoria`, `formularioUrl`, `portalUrl`, `reservaUrl`, `colorBloqueos`), `clientes.categoriasExternas`, `brand`, `name` |
 | **Pantallas propias** | ninguna (`app/(dashboard)/configuracion/page.jsx` no tiene mapa `UI_OVERRIDES`) |
-| **Scripts** | no hay activación: no es módulo · `encrypt-tenant-secrets.js` (cifra en reposo claves guardadas antes en claro; idempotente) · `migrate-ai-permissions.js` (crea `ai_permissions` en todos los schemas) · `configure-stripe-tenant.js` (claves de Stripe leídas de variables de entorno, nunca de argumentos) · solo lectura: `inspect-tenant-modules.js <slug>` |
+| **Scripts** | no hay activación: no es módulo · `_hechos/encrypt-tenant-secrets.js` (cifra en reposo claves guardadas antes en claro; idempotente) · `migrate-ai-permissions.js` (crea `ai_permissions` en todos los schemas) · `configure-stripe-tenant.js` (claves de Stripe leídas de variables de entorno, nunca de argumentos) · solo lectura: `inspect-tenant-modules.js <slug>` |
 | **Pruebas** | `_smoke-backoffice-ciclo.mjs` (base de datos; el camino del back-office: la clave se guarda cifrada, no se devuelve jamás, a una demo no se le pone) · nada cubre `/api/tenant/settings` ni `/api/ai-permisos` directamente; `_smoke-retencion-viva-o-muerta.mjs` solo usa `secretBox` para sembrar |
 | **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (guard de la demo en escrituras a master, auditoría con resumen) · `../decisions/2026-08-13-ciclo-de-vida-de-un-cliente.md` (`credencialesCliente.js`: nosotros también ponemos las claves, y solo escribimos) |
 | **En este doc** | «Secciones» · «Dónde se guardan las claves (y por qué son seguras)» · «API — `/api/tenant/settings`» · «Ficheros» · «Permisos de IA del equipo (2026-07-27)» · «WhatsApp (Meta Cloud API) — 2026-07-27» · «Enlace de videollamada de las citas — 2026-07-27» |
@@ -286,7 +286,7 @@ en `AuditLog` al cambiarlos.
 
 Las claves se guardan **cifradas** (AES-256-GCM) con `SETTINGS_ENCRYPTION_KEY`.
 Detalle en `lib/crypto/secretBox.js`. Migración para cifrar claves antiguas en
-claro: `scripts/encrypt-tenant-secrets.js` (idempotente). Sin la env var, se
+claro: `scripts/_hechos/encrypt-tenant-secrets.js` (idempotente). Sin la env var, se
 guardan en claro (aviso por stderr) — hay que configurarla en el `.env`.
 
 ## Permisos de IA del equipo (2026-07-27)

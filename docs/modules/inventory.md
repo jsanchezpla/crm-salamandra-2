@@ -20,7 +20,7 @@
 | **Interruptores y parámetros** | ninguno que lea el código |
 | **Pantallas propias** | ninguna (nunca las ha habido: `modules/overrides/spain-enzymes/` es solo de Leads) |
 | **Scripts** | Activación: `node scripts/enable-module.js <slug> inventory` (corre `migrate-inventario-rework` —con «a», 02/08/2026— declarada en `scripts/_module-migrations.js`; necesita antes `migrate-suppliers`, que va con `billing`, porque `stock_entries.supplier_id` apunta a `suppliers`). |
-| | Semilla: el catálogo genérico de las demos lo pone `scripts/seed-sandbox-data.js` (lo llaman `rebuild-demo-showcase.js` y `crear-demos-por-oficio.js`); `scripts/seed-inventario-demo.js` es un extra a mano (material de centro clínico, solo `crm_demo`, `--rehacer` para sustituir). Histórico y NO ejecutar: `scripts/migrate-inventory-rework.js` (sin «a», rework de abril; marcado SUPERADA en el mapa `ONE_OFF` de `_module-migrations.js`). |
+| | Semilla: el catálogo genérico de las demos lo pone `scripts/seed-sandbox-data.js` (lo llaman `rebuild-demo-showcase.js` y `crear-demos-por-oficio.js`); `scripts/seed-inventario-demo.js` es un extra a mano (material de centro clínico, solo `crm_demo`, `--rehacer` para sustituir). Histórico y NO ejecutar: `scripts/_hechos/migrate-inventory-rework.js` (sin «a», rework de abril; marcado SUPERADA en el mapa `ONE_OFF` de `_module-migrations.js`). |
 | **Pruebas** | ninguna: ningún `scripts/_smoke-*.mjs` toca el módulo |
 | **Decisiones** | — |
 | **En este doc** | Visión general · Cómo se mueve el stock · Endpoints · Pantalla · Pedidos · Migración y semilla · Si algo no cuadra · Lo que había antes (hasta el 02/08/2026) |
@@ -178,7 +178,7 @@ un pedido de hace un año no puede cambiar de importe.
   unidades, algún producto bajo mínimo). Solo toca `crm_demo`; idempotente,
   `--rehacer` para borrar y volver a poner. Nadie lo llama desde el rebuild.
 
-⚠️ `scripts/migrate-inventory-rework.js` (sin la «a») es el rework de ABRIL y
+⚠️ `scripts/_hechos/migrate-inventory-rework.js` (sin la «a») es el rework de ABRIL y
 está en `ONE_OFF`: **no se ejecuta**. Creaba justo las tablas que el nuevo
 elimina, así que ejecutarlo devolvería el esquema viejo.
 
