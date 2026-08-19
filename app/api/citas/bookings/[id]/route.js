@@ -15,7 +15,7 @@ import {
 import { logCitasAudit } from "../../../../../lib/citas/audit.js";
 import { findBookingOverlap } from "../../../../../lib/citas/booking.js";
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
-import { veTodaLaAgenda } from "../../../../../lib/citas/visibilidad.js";
+import { veTodaLaAgenda, esSuya } from "../../../../../lib/citas/visibilidad.js";
 import { sendEmail, envioRealizado } from "../../../../../lib/email/resendClient.js";
 import { bookingMeetLinkTemplate } from "../../../../../lib/email/templates/citas/bookingMeetLink.js";
 import { bookingCancelledTemplate } from "../../../../../lib/email/templates/citas/bookingCancelled.js";
@@ -129,10 +129,10 @@ const isHttpUrl = (u) => /^https?:\/\/.+/i.test(String(u).trim());
 // en tenants de schema parcial (p.ej. nutri_laura) la tabla team_members no
 // existe, e incluirla haría un JOIN a una relación inexistente → 500. Ídem
 // `patient`: sólo con módulo Clínica/Pacientes (nutri_laura no tiene patients).
-function bookingIncludes({ EventType, TeamMember, Patient }, hasModule) {
+function bookingIncludes({ EventType, TeamMember, Patient }, tieneModuloElTenant) {
   const inc = [{ model: EventType, as: "eventType" }];
-  if (hasModule("team")) inc.push({ model: TeamMember, as: "teamMember", attributes: ["id", "displayName"] });
-  if ((hasModule("clinica") || hasModule("pacientes")) && Patient) {
+  if (tieneModuloElTenant("team")) inc.push({ model: TeamMember, as: "teamMember", attributes: ["id", "displayName"] });
+  if ((tieneModuloElTenant("clinica") || tieneModuloElTenant("pacientes")) && Patient) {
     inc.push({ model: Patient, as: "patient", attributes: ["id", "firstName", "lastName"] });
   }
   // ⚠️ El BONO no se incluye a propósito. El total de sesiones ya viaja en
@@ -146,13 +146,13 @@ function bookingIncludes({ EventType, TeamMember, Patient }, hasModule) {
 // ───────────────────────────────────────────────────────────────────────────
 // GET /api/citas/bookings/[id]
 // ───────────────────────────────────────────────────────────────────────────
-export const GET = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, { params }, { tenant, tenantModels, hasModule, tenantHasModule }) => {
   try {
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
     const { id } = await params;
     const { Booking } = tenantModels;
     const row = await Booking.findByPk(id, {
-      include: bookingIncludes(tenantModels, hasModule),
+      include: bookingIncludes(tenantModels, tenantHasModule),
     });
     if (!row) return notFound("Cita no encontrada");
     // Acceso: un profesional no-admin solo ve SUS citas, salvo que el tenant
@@ -160,11 +160,14 @@ export const GET = withTenant(async (request, { params }, { tenant, tenantModels
     // calendario (lib/citas/visibilidad.js): ver la cita en el calendario y
     // que al abrirla dijera "no encontrada" parecía un fallo del CRM.
     // Se devuelve 404 (no 403) para no revelar que la cita existe.
-    if (hasModule("team")) {
+    // ⚠️ `tenantHasModule` y NO `hasModule`: la pregunta es si el CENTRO tiene
+    // equipo, no si quien mira puede entrar en la pantalla de Equipo. El porqué,
+    // en lib/citas/visibilidad.js — con `hasModule` esto NO se ejecutaba.
+    if (tenantHasModule("team")) {
       const userRole = request.headers.get("x-user-role") ?? "user";
       if (!veTodaLaAgenda({ tenant, role: userRole })) {
         const myId = await resolveCurrentTeamMemberId(request, tenantModels);
-        if (!myId || row.teamMemberId !== myId) return notFound("Cita no encontrada");
+        if (!esSuya(row, myId)) return notFound("Cita no encontrada");
       }
     }
     // Fuga doble si no se filtra: el importe de la cita Y la tarifa completa del
@@ -198,12 +201,15 @@ export const GET = withTenant(async (request, { params }, { tenant, tenantModels
  * Devuelve un 404 (no un 403) por lo mismo que el GET: no revelar que existe.
  */
 async function noPuedeTocarla(request, ctx, row) {
-  const { tenant, tenantModels, hasModule } = ctx;
-  if (!hasModule("team")) return null;
+  const { tenant, tenantModels, tenantHasModule } = ctx;
+  // ⚠️ `tenantHasModule` y NO `hasModule`: la pregunta es si el CENTRO tiene
+  // equipo, no si quien mira puede entrar en la pantalla de Equipo. El porqué,
+  // en lib/citas/visibilidad.js — con `hasModule` esto NO se ejecutaba.
+  if (!tenantHasModule("team")) return null;
   const role = request.headers.get("x-user-role") ?? "user";
   if (veTodaLaAgenda({ tenant, role })) return null;
   const myId = await resolveCurrentTeamMemberId(request, tenantModels);
-  if (!myId || row.teamMemberId !== myId) return notFound("Cita no encontrada");
+  if (!esSuya(row, myId)) return notFound("Cita no encontrada");
   return null;
 }
 
@@ -212,7 +218,7 @@ async function noPuedeTocarla(request, ctx, row) {
 // ───────────────────────────────────────────────────────────────────────────
 export const PATCH = withTenant(async (request, { params }, ctx) => {
   try {
-    const { tenant, tenantModels, hasModule } = ctx;
+    const { tenant, tenantModels, hasModule, tenantHasModule } = ctx;
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
     const userRole = request.headers.get("x-user-role") ?? "user";
     const userId = request.headers.get("x-user-id");
@@ -256,7 +262,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     // Profesional (team member) asignado — SOLO si el tenant tiene módulo team
     // (sin él no existe team_members y no se puede asignar). Valida existencia
     // para devolver 400 en vez de un 500 por violación de FK / uuid inválido.
-    if (hasModule("team") && "teamMemberId" in body) {
+    if (tenantHasModule("team") && "teamMemberId" in body) {
       const tmId = normId(body.teamMemberId);
       if (tmId) {
         if (!UUID_RE.test(tmId)) return error("teamMemberId inválido");
@@ -611,7 +617,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
 
     // Respuesta con eventType (para que el modal no pierda 'Servicio'/dirección)
     // y el profesional asignado (si el tenant tiene módulo team).
-    await row.reload({ include: bookingIncludes(tenantModels, hasModule) });
+    await row.reload({ include: bookingIncludes(tenantModels, tenantHasModule) });
     // `emailEnviado` permite que el panel confirme "enviado" en vez de callar,
     // y `emailMotivo` que diga POR QUÉ no salió cuando no salió.
     return ok({ ...row.toJSON(), emailEnviado, emailMotivo, whatsappEnviado, whatsappMotivo, avisoCambioHora });
