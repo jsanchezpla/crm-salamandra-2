@@ -479,6 +479,54 @@ Cosas que no se pueden hacer sin que Jorge o Rodrigo elijan. Van como tareas y
 no como una lista suelta a propósito: así aparecen en el tablero. Cuando se
 decida, la respuesta se escribe aquí y la tarea baja a su prioridad.
 
+### El servidor corre en UTC y el CRM se escribió pensando en Madrid: 42 ficheros del servidor usan fechas locales sin zona · todos, producto
+
+**Lo que pasa.** El contenedor de producción no lleva `TZ` y Node corre en UTC
+(`Intl.DateTimeFormat().resolvedOptions().timeZone` → «UTC» dentro de
+`crm-salamandra-app-1`). El código se escribió y se prueba en Windows con
+Europe/Madrid. Todo lo que en el servidor usa `getMonth()`, `getDate()`,
+`getHours()`, `getFullYear()` o `toLocale*()` sin `timeZone` da un resultado
+distinto en producción que en local, y en producción va una o dos horas por
+detrás de Madrid. Caso medido: `lib/citas/portalMeses.js` `mesDe("2026-09-01
+T00:30+02:00")` → «2026-08» en el contenedor: un informe subido el 1 de
+septiembre a las 00:30 cae en «agosto» en el portal de la familia (lo sacó
+`_smoke-citas-portal-meses.mjs`, que por eso pasa igual en cualquier zona).
+
+**Cuánto hay.** 60 ficheros de `lib/` y `app/api` usan fechas locales; 26 fijan
+`timeZone: "Europe/Madrid"` explícitamente (las plantillas de correo de citas lo
+hacen bien: la hora de la cita sale en hora de Madrid); **42 no**. Entre esos 42:
+`lib/billing/generateInvoiceNumber.js` y `generateQuoteNumber.js` (el AÑO del
+número de factura: una factura emitida el 1 de enero entre las 00:00 y la 01:00
+de Madrid lleva la serie del año anterior), `lib/home/summary.js` («hoy» en la
+portada), `lib/clinica/trimestres.js`, los PDF de factura e informe, las
+exportaciones a Excel de facturación/clientes/leads/formación, `morosidad`,
+`operations`, `portal-months`. Ninguno está mal «por dentro»: están escritos
+para una máquina en Madrid.
+
+**Por qué es una decisión.** Dos salidas, y las dos son de producto/operación:
+(a) **`TZ=Europe/Madrid` en `environment:` del servicio `app` del
+`docker-compose.yml`** —NO en `.env.production`, que ese fichero lo comparte el
+contenedor de Postgres y le cambiaría la zona al servidor de base de datos—:
+una línea, arregla los 42 de golpe y hace que local y producción coincidan; el
+contenedor se recrea en el siguiente deploy (`up -d` detecta el cambio de env);
+la base no cambia (los timestamps van con zona) y los 26 que ya fijan Madrid no
+se inmutan; hay que mirar que nada dependa de UTC a propósito (cron de
+recordatorios, retenciones: `caducidadRetencion.js` fija Madrid, buena señal).
+(b) revisar los 42 uno a uno y fijar `timeZone` donde toque: más trabajo, y el
+próximo fichero nuevo vuelve a nacer en UTC. Cuando se decida, (a) es un commit
+en `docker-compose.yml`, el despliegue recrea el contenedor y se comprueba
+`mesDe` dentro.
+
+*Se comprueba*: en el contenedor, `Intl.DateTimeFormat().resolvedOptions()
+.timeZone` → «Europe/Madrid» y `mesDe("2026-09-01T00:30:00+02:00")` → «2026-09»;
+o, si se elige (b), los 42 ficheros con `timeZone` fijada y el grep a cero.
+*Dónde*: `docker-compose.yml` (servicio `app`; hoy solo tiene `env_file`); la lista de los
+42: `grep -rlE "\.(getMonth|getDate|getHours|getDay|getFullYear)\(\)|toLocale"
+lib app/api` menos los que contienen `timeZone`.
+*Comprobado en producción*: 19/08/2026 — ejecutado en el contenedor: TZ «UTC»,
+`mesDe("2026-08-31T23:30:00.000Z")` → «2026-08» (en local, «2026-09»); los 60/26/42
+contados en el código desplegado (`bddc86f`).
+
 ### Si una cita se cancela mientras se está cobrando, el CRM dice «el importe se ha devuelto» y no devuelve nada · `nutri_laura`, producto
 
 **Lo que pasa.** En `POST /api/citas/bookings/[id]/confirm`, si otra petición

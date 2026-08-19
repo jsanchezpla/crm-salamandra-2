@@ -28,6 +28,64 @@ Lo más reciente arriba.
 
 ## 19/08/2026
 
+### 21 acciones de auditoría salían sin frase en Actividad, y el filtro «Configuración» no devolvía nada nunca · todos, producto
+
+**Qué pasaba.** En Equipo → Actividad, 21 acciones que escriben los endpoints
+no tenían frase en `lib/actividad/etiquetas.js` y salían por el traductor
+genérico: «Pack anulado», «Polished report», «Create»… (las del Buzón de ayuda,
+varias de citas —el cobro que falla al confirmar, la carrera cobrada-pero-
+cancelada, pedir otra tarjeta, los bonos—, el aviso por correo a las familias,
+contactos externos y derivaciones de clínica, desempeño, el informe pulido con
+IA, los datos completados desde el portal, tres del panel interno). Y el filtro
+«Configuración» buscaba el prefijo `tenant.` cuando lo que se escribe es
+`configuracion.updated`, que caía en «Otros»; igual `patient.consent.*`,
+`suppliers.*`, `arqueo.*`, `buzon.*` y `provisioning.*`: con frase pero sin
+módulo.
+
+**Qué lo arregló.** Frase propia para las 21 (la de la carrera no promete
+devolución: qué pasa con ese dinero sigue en «Pendiente de una decisión suya»)
+y módulo para los seis prefijos huérfanos. Lo sacó
+`_smoke-actividad-etiquetas.mjs` (`node:test`, 32 `it`) con un cruce que lee
+todos los `action: "x.y"` de `app/api` y `lib`; nació con 21 en su lista de
+deuda, queda vacía, y una acción nueva sin frase pone la prueba en rojo
+diciendo cuál y dónde.
+
+*Se comprueba*: `etiqueta("clinica.report.polished").texto` es una frase en
+español; `prefijosDeModulo("Configuración").prefijos` incluye `configuracion`;
+`npm test` en verde.
+*Dónde*: `lib/actividad/etiquetas.js`, `scripts/_smoke-actividad-etiquetas.mjs`.
+*Comprobado en producción*: 19/08/2026 — antes del despliegue, ejecutado en el
+contenedor, `etiqueta("clinica.report.polished")` daba «Polished report» y
+`prefijosDeModulo("Configuración")` solo `tenant`; lo arregla `29085e6` (19/08)
+y tras desplegar el mismo comando en el contenedor da la frase y
+`configuracion`.
+
+### En el fichaje, un nombre o alias repetido en dos personas casaba en silencio con una de ellas · `aumenta`, producto
+
+**Qué pasaba.** `lib/fichaje/mapeo.js` existe para que el Excel del reloj no
+meta las horas de una persona en la nómina de otra, y tenía justo ese agujero:
+dos personas con el mismo `displayName` casaban EXACTO con la primera del
+array, y el mismo alias guardado en dos personas casaba con la última; sin
+sugerencia, sin aviso y sin verse en el preview (una fila «resuelta» no se
+enseña). Con 15 personas en Aumenta es improbable; el modo de fallo es el peor
+del módulo.
+
+**Qué lo arregló.** Un nombre que apunta a DOS personas es ambiguo:
+`indiceDeNombres` lo devuelve en `ambiguos`, `resolverNombres` lo deja
+pendiente SIN sugerencia y con el motivo, y el modal de importar enseña ese
+motivo en ámbar. Se elige con un clic, el alias se guarda en la elegida y el
+mes siguiente casa solo (hay un `it` de ida y vuelta). Lo sacó
+`_smoke-fichaje-mapeo.mjs` (`node:test`, 56 `it`).
+
+*Se comprueba*: `resolverNombres(["LAURA GARCIA"], dos Lauras García)` deja el
+nombre en `pendientes` con `sugerencia: null` y `motivo`; `npm test` en verde.
+*Dónde*: `lib/fichaje/mapeo.js`, `modules/fichaje/ImportarFichajeModal.jsx`,
+`scripts/_smoke-fichaje-mapeo.mjs`.
+*Comprobado en producción*: 19/08/2026 — antes del despliegue, ejecutado en el
+contenedor, `resolverNombres(["LAURA GARCIA"], dos Lauras)` resolvía a la
+primera y `["ISA"]` con el alias en dos a la última; lo arregla `b2e6825`
+(19/08) y tras desplegar el mismo comando en el contenedor los deja pendientes.
+
 ### «7.5» en una celda de horas del fichaje se leía como 7 h 05, no como 7 h 30 · `aumenta`, producto
 
 **Qué pasaba.** El regex de reloj de `parseHoraDelDia` y `parseDuracion`
