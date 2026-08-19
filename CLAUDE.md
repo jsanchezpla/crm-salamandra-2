@@ -113,7 +113,11 @@ billing, team, leads, training, clients, clinica, citas, nutricion, outreach,
 provisioning, demo, email, ai, pdf, utils…), `models/` (`master/`, `tenant/`),
 `modules/` (UI base por módulo; `modules/overrides/{slug-con-guion}/` solo
 para lo propio de UN cliente), `scripts/` (seeds, migraciones, mantenimiento;
-`_smoke-*.mjs` son las pruebas), `docs/`.
+`_smoke-*.mjs` son las pruebas; lo que ya se ejecutó y no volverá vive en
+`scripts/_hechos/` —criterio y mecánica en su README— y
+`node scripts/_inventario-scripts.mjs` dice qué está vivo y quién lo llama;
+un script sin referencias que se ha leído y sigue vivo lo declara con
+`// @vivo — motivo` en su cabecera), `docs/`.
 
 ---
 
