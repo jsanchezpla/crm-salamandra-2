@@ -77,7 +77,43 @@ comprobarlo resulta que sigue pasando, se queda y se actualiza el sello.
 
 ## P0 — hoy
 
-_Ahora mismo no hay ninguna._
+### La portada enseñaba a cada profesional las citas de todo el equipo, con el nombre del paciente · `nutri_laura`, todos
+
+**Lo que pasaba.** Rocío, que en nutri_laura es usuaria normal y no admin, vio en
+SU portada la cita de supervisión que Laura se había agendado para sí misma. La
+cita estaba BIEN asignada —el reparto no tenía nada que ver—: lo que estaba mal
+era la portada, que listaba las próximas citas de todo el centro, con el nombre
+del paciente, a cualquiera que entrara.
+
+**Por qué se quedó fuera.** El listado de citas y el calendario filtran por
+profesional desde el 28/07 (`lib/citas/visibilidad.js`, hecho justo para que un
+miembro del equipo no vea los datos personales de la agenda ajena). La portada no,
+y su cabecera explicaba el motivo: decía que Booking no tenía clave hacia el
+usuario, así que «lo mío» era inviable. Sí la tiene —`bookings.team_member_id`—
+y el propio listado ya filtraba por ella: la premisa llevaba semanas caducada y
+nadie volvió a mirarla.
+
+**A quién afectaba.** A todo cliente con Citas y Equipo que NO tenga la agenda
+compartida encendida. Aumenta la tiene encendida a propósito desde el 01/08, así
+que para ellos ver la agenda completa es lo pedido, no un fallo. Donde no lo está
+—nutri_laura entre otros— cualquier usuaria veía la agenda entera.
+
+**Ya está arreglado.** La portada usa la misma regla que el listado: admin lo ve
+todo, un cliente con agenda compartida también, y el resto solo lo suyo. Y si no
+se puede resolver quién mira, la agenda sale VACÍA en vez de abierta — un fallo de
+resolución no puede volver a destapar nada. Los ocho casos quedan fijados en
+`scripts/_smoke-portada-agenda.mjs`, que corre sin base de datos y entra en
+`npm test`.
+
+*Se comprueba*: Rocío entra en su portada y ya no le salen las citas de Laura, y
+Laura, que es admin, las sigue viendo todas.
+*Dónde*: `lib/home/summary.js` (`buildAgenda` y `buildHomeSummary`); la regla
+compartida en `lib/citas/visibilidad.js`; la prueba en
+`scripts/_smoke-portada-agenda.mjs`.
+*Comprobado en producción*: 19/08/2026 — la cita del 27/08 está asignada a Laura
+Barbero, Rocío tiene rol `user` y `agendaCompartida` no está puesta en los
+ajustes de nutri_laura, así que no debía verla. **Falta que Rocío lo confirme en su
+pantalla**: eso no lo puedo mirar yo sin su sesión.
 
 ---
 
