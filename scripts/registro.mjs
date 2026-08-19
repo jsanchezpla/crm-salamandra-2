@@ -88,6 +88,11 @@ for (let i = 0; i < argv.length; i++) {
 }
 const [orden, nombre, tercero] = sueltos;
 
+// La base que bajó se apunta POR DESTINO: local y producción llevan cada uno
+// sus versiones, y alternar --local con producción no debe hacer saltar (ni
+// callar) el cerrojo de versión.
+const DESTINO = local ? "local" : `${SSH}/${CONTENEDOR}`;
+
 /* ── Ejecutar tablero-doc.js donde está la base ──────────────────────────── */
 
 const shQuote = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
@@ -148,15 +153,21 @@ function estadoRemoto() {
   return JSON.parse(r.stdout.toString("utf8"));
 }
 
+/** Las versiones que bajamos del destino actual: { backlog: 12, resuelto: 30, bajadoEn }. */
+function basesDe() {
+  return leerVersiones()[DESTINO] ?? {};
+}
+
 function apuntarVersiones(estado) {
-  const v = leerVersiones();
+  const todo = leerVersiones();
+  const v = todo[DESTINO] ?? {};
   for (const n of DOCUMENTOS) {
     if (estado[n]) v[n] = estado[n].version;
   }
   v.bajadoEn = new Date().toISOString();
-  v.desde = local ? "local" : `${SSH}/${CONTENEDOR}`;
+  todo[DESTINO] = v;
   mkdirSync(CARPETA, { recursive: true });
-  writeFileSync(VERSIONES, `${JSON.stringify(v, null, 2)}\n`);
+  writeFileSync(VERSIONES, `${JSON.stringify(todo, null, 2)}\n`);
 }
 
 function exigirDocumento(n) {
@@ -215,7 +226,7 @@ function subir() {
   }
 
   const args = ["publicar", nombre, "--por", userInfo().username];
-  const base = leerVersiones()[nombre];
+  const base = basesDe()[nombre];
   if (base !== undefined) args.push("--base", String(base));
   if (opciones.nota) args.push("--nota", String(opciones.nota));
   if (opciones.forzar) args.push("--forzar");
