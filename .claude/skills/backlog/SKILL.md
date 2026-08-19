@@ -1,22 +1,23 @@
 ---
 name: backlog
-description: Apunta en el Registro las tareas que le dictes. Comprueba una a una si ya están hechas o ya apuntadas, y solo escribe las que sigan pasando —comprobadas contra producción— con el formato del tablero; después commitea y despliega para que se vean en admin.salamandrasolutions.com/admin/tablero. Se lanza a mano con /backlog seguido de las tareas.
+description: Apunta en el Registro las tareas que le dictes. Comprueba una a una si ya están hechas o ya apuntadas, y solo escribe las que sigan pasando —comprobadas contra producción— con el formato del tablero; después lo publica con scripts/registro.mjs (sin commit ni despliegue) para que se vean en admin.salamandrasolutions.com/admin/tablero. Se lanza a mano con /backlog seguido de las tareas.
 ---
 
 # Apuntar tareas en el Registro
 
 Coge las tareas que te dictan, las comprueba contra producción una a una y
-escribe en `docs/backlog.md` **solo las que hagan falta**: ni las que ya están
+escribe en el Registro **solo las que hagan falta**: ni las que ya están
 hechas, ni las que ya están apuntadas, ni las que no se pueden comprobar.
 
 **Lo lanza una persona, siempre**, y eso vale como permiso explícito para
-commitear y desplegar (regla #11 de `CLAUDE.md`). No hay versión automática: el
-fichero mal formateado rompe el tablero **sin dar ningún error**, y apuntar algo
-falso hace perder una tarde.
+publicar el Registro. No hay versión automática: apuntar algo falso hace perder
+una tarde. **No se commitea ni se despliega nada**: desde el 19/08/2026 el
+Registro vive en `master.tablero_documentos` y se publica con
+`scripts/registro.mjs` (Jorge: «los commits son para código»).
 
 Es la hermana de `incidencias-buzon`. La diferencia es de dónde viene el trabajo:
 allí de la bandeja de Ayuda, aquí de lo que te dicta Jorge o Rodrigo. Todo lo
-demás —comprobar, escribir, desplegar— es igual.
+demás —comprobar, escribir, publicar— es igual.
 
 ## Si te lanzan `/backlog` a secas
 
@@ -53,11 +54,16 @@ Lo que de verdad hace falta saber de cada una:
 
 ## Paso 2 — ¿Ya está apuntada?
 
-Lo primero, porque es gratis y evita duplicar. Los títulos de las dos listas
-caben de sobra:
+Lo primero, porque es gratis y evita duplicar. Baja lo publicado (deja la copia
+de trabajo en `docs/registro/`, que está en `.gitignore`) y mira los títulos de
+las dos listas, que caben de sobra:
 
 ```bash
-grep -n '^### ' docs/backlog.md docs/resuelto.md
+node scripts/registro.mjs bajar
+```
+
+```bash
+grep -n '^### ' docs/registro/backlog.md docs/registro/resuelto.md
 ```
 
 Compáralo **por significado, no por palabras**: «el buscador no encuentra por
@@ -70,7 +76,7 @@ tarea escrita por dos personas.
   reescribas por tu cuenta.** Dilo al final, con qué añadirías, y que lo decidan.
   Reescribir un título deja huérfanos su tick y su reparto en el tablero
   (`master.tablero_estado` casa por título normalizado).
-- **Está en `resuelto.md`** → probablemente ya se arregló. Confírmalo en el
+- **Está en `resuelto`** → probablemente ya se arregló. Confírmalo en el
   paso 3 antes de darlo por bueno; puede haber vuelto.
 
 ## Paso 3 — ¿Ya está hecha?
@@ -134,8 +140,8 @@ Cuatro finales, y dos de ellos no escriben nada:
 
 | Lo que sale | Qué haces |
 | --- | --- |
-| **Sigue pasando** | Paso 5 → `docs/backlog.md`. |
-| **Ya está hecha**, con las dos pruebas del paso 3 | Paso 5 → `docs/resuelto.md`. |
+| **Sigue pasando** | Paso 5 → `docs/registro/backlog.md`. |
+| **Ya está hecha**, con las dos pruebas del paso 3 | Paso 5 → `docs/registro/resuelto.md`. |
 | **Ya estaba apuntada** | Nada. Se dice al final. |
 | **No se puede saber** | **NADA.** Ver abajo. |
 
@@ -152,15 +158,16 @@ no se apunta.
 ## Paso 5 — Escribirla
 
 Léete `docs/como-apuntar-en-el-tablero.md` antes de tocar nada. Ese fichero
-manda; esto es solo lo que más se rompe:
+manda; esto es solo lo que más se rompe. Se escribe en la copia de trabajo que
+dejó `bajar` (`docs/registro/backlog.md` o `resuelto.md`), nunca en otro sitio:
 
 - Una tarea es un `###` dentro de una sección `##`. **Las secciones son fijas.**
 - **Nada de `##` ni `###` dentro del cuerpo**: parte la tarea en dos. Para dar
   estructura, negrita al principio del párrafo.
 - **El cliente va detrás del último `·`**, con el slug de base de datos
   (`nutri_laura`, no «Laura»). Si no está en la lista `SLUGS` de
-  `app/api/admin/tablero/route.js`, la tarea sale sin cliente y sin grupo — y si
-  es un cliente nuevo, hay que añadirlo ahí.
+  `lib/tablero/parser.js`, la tarea sale sin cliente y sin grupo — y si es un
+  cliente nuevo, hay que añadirlo ahí (eso sí es código: commit y despliegue).
 - **El cuerpo se pinta tal cual**: los asteriscos y las comillas invertidas se
   VEN en el tablero. Nada de tablas markdown dentro de una tarea.
 - El título dice **qué pasa hoy**, no qué hay que programar.
@@ -194,8 +201,8 @@ demás.
 *Comprobado en producción*: 13/08/2026 — reproducido con tres apellidos reales.
 ```
 
-**Si la tarea ya estaba hecha**, va a `docs/resuelto.md` en vez de al backlog
-(Jorge, 13/08/2026), bajo la sección de **la fecha de hoy** (`## DD/MM/AAAA`, lo
+**Si la tarea ya estaba hecha**, va a `docs/registro/resuelto.md` en vez de al
+backlog (Jorge, 13/08/2026), bajo la sección de **la fecha de hoy** (`## DD/MM/AAAA`, lo
 más reciente arriba; si ya existe la de hoy, dentro de esa). Misma plantilla,
 pero el cuerpo dice **qué lo arregló** y el sello lleva las dos pruebas:
 
@@ -207,59 +214,42 @@ contenedor la ruta desplegada ya devuelve las fichas por apellido.
 Nada de esto entra sin esas dos pruebas. Si solo tienes una, es «no se puede
 saber»: no se escribe.
 
-## Paso 6 — Subirlo y desplegarlo
+## Paso 6 — Publicarlo
 
-`docs/backlog.md` y `docs/resuelto.md` **viajan dentro de la imagen de Docker**.
-Escribirlos y commitearlos NO cambia el tablero: hasta que no se despliega, la
-pantalla enseña lo de la imagen anterior. Es la explicación de casi todos los
-«pues yo lo apunté y no sale».
+**Sin commit, sin build, sin despliegue.** El Registro vive en
+`master.tablero_documentos` y el tablero lee la última versión publicada: en
+cuanto `subir --confirm` termina, la pantalla lo enseña. Nada de esto toca git;
+si hay cambios en el árbol (`git status --short`), no son de esta skill y se
+dejan donde están.
 
-**Una sola vez al final**, con todas las tareas de la tanda dentro. Nada de un
-commit y un despliegue por tarea.
+**Una sola vez al final**, con todas las tareas de la tanda dentro. Nada de una
+publicación por tarea.
 
-1. **Enseña lo que has escrito** antes de commitear.
-2. Mira que no te lleves nada ajeno: `git status --short`. **Commitea solo
-   `docs/backlog.md` y `docs/resuelto.md`**, nunca `git add .`. Si hay más
-   cambios en el árbol, dilo y déjalos donde están.
-3. **Sincronizar Y COMPROBAR SOLAPE** (regla #11 de `CLAUDE.md`). `master` es
-   compartido y el socio sube sin que nada avise:
-
-   ```bash
-   git fetch origin && git diff --name-only HEAD origin/master
-   ```
-
-   Si en esa lista no hay nada de lo que tocas, `git pull --ff-only` y sigue.
-   **Si aparece `docs/backlog.md` o `docs/resuelto.md`, PARA Y PREGUNTA.** Es el
-   solape más probable que existe en este repo —son los dos ficheros donde
-   escriben las dos personas y las dos skills— y un `pull --rebase` a ciegas los
-   fusionaría en silencio. Que dos tareas distintas no den conflicto de texto no
-   significa que sean compatibles: puede que el otro esté sellando como resuelta
-   justo la que tú vas a apuntar.
-4. `npm run build` en verde. Ya no hay CI que lo pare.
-5. Commit y push a `master`:
+1. **Enseña lo que has escrito** antes de subirlo.
+2. **Ensayo**, un documento cada vez (solo los que hayas tocado):
 
 ```bash
-git commit -m "docs(registro): apuntar el buscador de pacientes de aumenta"
+node scripts/registro.mjs subir backlog --nota "apuntar el buscador de pacientes de aumenta"
 ```
 
-   Conventional Commits y trailer `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
-   **Nunca `push --force` ni `reset --hard` sobre master.**
-
-6. Desplegar:
-
-```bash
-ssh crm-vps 'cd /opt/crm-salamandra && ./deploy.sh'
-```
-
-7. **Verifícalo dentro del contenedor**, no en el repo local, que ya sabes que
-   está bien:
-
-```bash
-ssh crm-vps "docker exec crm-salamandra-app-1 grep -n 'buscador de pacientes' docs/backlog.md"
-```
-
-Si el tablero dice «No se han podido leer: backlog.md», es exactamente esto: el
-fichero no llegó a la imagen.
+   Lee lo que dice: qué tareas **entran** y cuáles **salen** (si sale alguna que
+   no has cerrado tú, para), y los avisos. Los frenos
+   (`docs/como-apuntar-en-el-tablero.md` §2): un error de formato se arregla;
+   **«la versión publicada ya no es la que bajaste»** quiere decir que el socio
+   publicó mientras escribías — vuelve a `bajar`, aplica tu cambio encima y
+   repite. Es el equivalente de antes de «si `docs/backlog.md` aparece en el
+   diff con origin/master, PARA Y PREGUNTA»; aquí no hace falta preguntar porque
+   el script no deja pisar nada. **No uses `--forzar`** salvo que te lo pidan.
+3. **Publicar**, el mismo comando con `--confirm`. La `--nota` es lo que se
+   leerá en `historial` dentro de seis meses: una frase que diga qué se apuntó o
+   qué se cerró, con la referencia si la hay.
+4. Si has tocado los dos (un cierre sale de `backlog` y entra en `resuelto`),
+   se suben **los dos seguidos**, `resuelto` primero y `backlog` después, para
+   que no haya un momento en que la tarea no esté en ninguno.
+5. **Verifícalo**: `node scripts/registro.mjs estado` dice la versión nueva, con
+   tu nombre y tu nota; y en el tablero la cabecera la enseña. Si `estado` sigue
+   diciendo la versión de antes, no se publicó (mira el código de salida y lo
+   que dijo el ensayo).
 
 ## Al terminar, di
 
@@ -270,4 +260,4 @@ Una línea por tarea que te dictaron, sin saltarte ninguna:
 - **Qué ya estaba apuntada**, y si se ha quedado corta.
 - **Qué no has podido comprobar**, qué miraste y qué falta. Es lo más importante
   de las cuatro y lo que se pierde si no se dice.
-- Si el despliegue ha terminado y lo has visto en el contenedor.
+- Qué versión has publicado de cada documento (lo que dijo `estado`).

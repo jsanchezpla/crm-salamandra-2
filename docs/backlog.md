@@ -26,8 +26,10 @@ direcciones, y por el mismo motivo:
   comportamiento nuevo. Si no se puede comprobar, la tarea se queda con una nota
   de qué se intentó.
 
-Lo que se cierra pasa a `resuelto.md` **en el mismo commit**, con cómo se
+Lo que se cierra pasa a Resuelto **en la misma publicación**, con cómo se
 comprobó. Así no hay un momento en que algo no esté en ninguno de los dos.
+El Registro se baja, se edita y se sube con `scripts/registro.mjs` (manual en
+`docs/como-apuntar-en-el-tablero.md`): sin commit ni despliegue.
 
 ### Cada tarea lleva su sello
 
@@ -42,7 +44,7 @@ cuatro con el cliente equivocado. **Escribir la tarea y comprobarla son el mismo
 acto**: una tarea sin comprobar no es un aviso, es ruido que alguien va a creerse.
 
 Cuando lo que se comprueba es que el problema **ya no pasa**, la tarea no se
-edita: se mueve a `resuelto.md`.
+edita: se mueve a Resuelto.
 
 ### Cómo se añade una tarea
 
@@ -61,7 +63,8 @@ Con estos datos y nada más:
 ### Cómo se quita
 
 Solo cuando **se ha comprobado contra producción**, no cuando el código está
-subido. Se borra la tarea entera; el historial vive en git, no aquí. Si al
+subido. Se borra la tarea entera; el historial vive en las versiones del
+Registro (`registro.mjs historial`), no aquí. Si al
 comprobarlo resulta que sigue pasando, se queda y se actualiza el sello.
 
 ### Prioridades

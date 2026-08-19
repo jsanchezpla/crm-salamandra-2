@@ -35,10 +35,11 @@ actualiza el doc.
 
 Sin doc dedicado: `calendar`, `orders`, `provisioning` (`lib/provisioning/`).
 `docs/base/` es una foto técnica del 07/08/2026 (léela con su aviso);
-`docs/refactor-base-override/` está **superado** (18/08). Backlog: antes de
-apuntar nada, `docs/como-apuntar-en-el-tablero.md` — `docs/backlog.md` y
-`docs/resuelto.md` viajan en la imagen de Docker: sin desplegar, el tablero no
-cambia.
+`docs/refactor-base-override/` está **superado** (18/08). **Registro** (backlog
+y resuelto): desde el 19/08/2026 vive en `master.tablero_documentos`, NO en el
+repo; se baja, se edita y se publica con `node scripts/registro.mjs
+bajar|subir` (copia de trabajo en `docs/registro/`, gitignored), sin commit ni
+despliegue. Antes de apuntar nada, `docs/como-apuntar-en-el-tablero.md`.
 
 ---
 
@@ -123,8 +124,9 @@ passwordHash, role, tenantId, `moduleAccess`), `TenantModule` (moduleKey,
 enabled, uiOverride, logicOverrides, featureFlags, schemaExtensions),
 `AuditLog`, `BuzonAviso`/`BuzonMensaje`/`BuzonAdjunto` (el cliente nos escribe
 a NOSOTROS; en master y **sin FK** a propósito, para sobrevivir a su baja —ver
-`docs/modules/buzon.md`), `TableroEstado` (tick y reparto del tablero, encima
-de lo que dicen `backlog.md`/`resuelto.md`).
+`docs/modules/buzon.md`), `TableroDocumento` (el TEXTO del Registro: backlog y
+resuelto, una fila por versión, append-only) y `TableroEstado` (tick, reparto y
+solución, encima del texto, casados por título normalizado).
 
 **Tenant** (`models/tenant/`): `Client`, `Contact`, `Lead` (oportunidad
 comercial), `Project`/`Task` (Kanban), `Ticket*`/`SupportSettings` (helpdesk
@@ -265,8 +267,10 @@ despliegue que toque módulos.
     enseñar qué se commiteó. **Antes de nada, sincronizar**: `git fetch origin
     && git diff --name-only HEAD origin/master`; si ningún fichero es tuyo,
     `git pull --ff-only`; **si alguno coincide, PARA Y PREGUNTA** (dos personas
-    empujan a `master`; el solape más probable son `docs/backlog.md` y
-    `docs/resuelto.md`). Prohibido reescribir historia (`push --force`,
+    empujan a `master`). **Los commits son para código** (Jorge, 19/08/2026):
+    apuntar en el Registro no pasa por git, va por `scripts/registro.mjs`, y
+    el solape entre dos personas lo frena el propio script por versión.
+    Prohibido reescribir historia (`push --force`,
     `reset --hard` sobre lo subido): se arregla con commit nuevo o `revert`.
     Housekeeping local (`fetch`, `pull`, `branch -d` de fusionadas) sí, cuando
     lo pidan.

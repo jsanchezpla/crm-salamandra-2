@@ -4,8 +4,8 @@ Lo que ya está hecho, de quién era, cuándo se cerró y cómo se comprobó.
 
 Existe por dos motivos. Uno, para no volver a arreglar lo mismo: cuando algo
 reaparece, aquí está qué se hizo la vez anterior y por qué. Y dos, para poder
-mirar atrás y ver qué se ha entregado a cada cliente sin reconstruirlo del
-historial de git.
+mirar atrás y ver qué se ha entregado a cada cliente sin reconstruirlo de
+ningún historial.
 
 ---
 
@@ -19,8 +19,10 @@ cierra — se queda en el backlog con una nota de qué se intentó.
 Cada entrada lleva **cómo se comprobó**, no solo que se comprobó. Esa línea es
 la que permite repetir la verificación dentro de seis meses.
 
-Cuando una tarea sale de `backlog.md`, entra aquí **en el mismo commit**. Así no
-hay un momento en que algo no esté en ninguno de los dos ficheros.
+Cuando una tarea sale del backlog, entra aquí **en la misma publicación**. Así no
+hay un momento en que algo no esté en ninguno de los dos documentos. El Registro
+se baja, se edita y se sube con `scripts/registro.mjs` (manual en
+`docs/como-apuntar-en-el-tablero.md`): sin commit ni despliegue.
 
 Lo más reciente arriba.
 

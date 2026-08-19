@@ -145,9 +145,13 @@ build en el VPS y lo dejaría a medias.
   ```
   Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
   ```
-- Si el despliegue **cierra una tarea del Registro**, la tarea sale de
-  `docs/backlog.md` y entra en `docs/resuelto.md` **en el mismo commit**
-  (`docs/como-apuntar-en-el-tablero.md`).
+- Si el despliegue **cierra una tarea del Registro**, el cierre ya NO va en el
+  commit (desde el 19/08/2026 el Registro vive en `master.tablero_documentos`,
+  no en el repo): después de comprobar el arreglo en el contenedor (paso 9), la
+  tarea sale de `backlog` y entra en `resuelto` con el hash del commit en el
+  sello, y se publica con `node scripts/registro.mjs subir … --confirm`
+  (`docs/como-apuntar-en-el-tablero.md` §2 y §6). Lo mismo si el despliegue
+  trae algo que estaba apuntado «sin desplegar».
 
 ### 6. Empujar
 
@@ -221,10 +225,12 @@ encuentra y parece que el despliegue ha fallado cuando lo que falla es el grep.
 Busca un identificador (`id="algo-concreto"`) o una frase entera de una sola
 pieza. Pasó el 17/08/2026.
 
-Y si el despliegue cambió el Registro, con la tarea concreta:
+El Registro ya no viaja en la imagen (19/08/2026): un despliegue no lo cambia.
+Si el despliegue cierra una tarea, se publica después con `registro.mjs` (paso
+5) y se comprueba con:
 
 ```bash
-ssh crm-vps 'docker exec crm-salamandra-app-1 grep -n "un trozo del título" docs/backlog.md docs/resuelto.md'
+node scripts/registro.mjs estado
 ```
 
 ### 10. Los chequeos de después
