@@ -28,6 +28,48 @@ Lo más reciente arriba.
 
 ## 19/08/2026
 
+### «7.5» en una celda de horas del fichaje se leía como 7 h 05, no como 7 h 30 · `aumenta`, producto
+
+**Qué pasaba.** El regex de reloj de `parseHoraDelDia` y `parseDuracion`
+(`lib/fichaje/parseHora.js`) admitía el punto con uno o dos dígitos detrás y lo
+atrapaba antes que la rama decimal: «7.5» era 7:05, 25 minutos de menos por
+celda, mientras el comentario del fichero y la plantilla genérica prometían
+«7:30, 7,5 o 7.5». A Aumenta no le mordía (su reloj da celdas Date/número):
+mentía la plantilla que se descarga.
+
+**Qué lo arregló.** `trozosDeReloj`, un solo sitio con la regla del punto:
+punto + dos dígitos es reloj («8.30», «8.05»); punto + uno o tres o más es
+decimal («7.5», «8.333»); la coma es siempre decimal. Lo sacó
+`_smoke-fichaje-horas.mjs` (`node:test`, 120 `it`) el día que se escribió y
+ahora lo fija.
+
+*Se comprueba*: `parseDuracion("7.5")` → 450 y `parseHoraDelDia("8.5")` → 510;
+`npm test` en verde.
+*Dónde*: `lib/fichaje/parseHora.js` (`trozosDeReloj`),
+`scripts/_smoke-fichaje-horas.mjs`.
+*Comprobado en producción*: 19/08/2026 — antes del despliegue, ejecutado en el
+contenedor, `parseDuracion("7.5")` daba 425; lo arregla `39a4f1b` (19/08) y
+tras desplegar el mismo comando en el contenedor da 450.
+
+### «24:00» pasaba la validación de disponibilidad y se guardaba como «24:00:00» · producto
+
+**Qué pasaba.** `normalizeTime` (`lib/citas/validation.js`) no miraba el
+rango: «24:00», «10:60», «99:99» salían como «24:00:00», «10:60:00»… Los tres
+endpoints de disponibilidad lo daban por bueno, y como `timeToMinutes` devuelve
+null para esas cadenas, la guarda «endTime debe ser mayor que startTime»
+comparaba contra null y dejaba pasar un tramo 24:00→10:00.
+
+**Qué lo arregló.** `normalizeTime` se apoya ahora en `timeToMinutes`: solo
+devuelve horas que la otra entiende, y hay un `it` que exige que las dos digan
+lo mismo de la misma cadena. Lo sacó `_smoke-citas-validation.mjs`
+(`node:test`, 51 `it`).
+
+*Se comprueba*: `normalizeTime("24:00")` → null; `npm test` en verde.
+*Dónde*: `lib/citas/validation.js`, `scripts/_smoke-citas-validation.mjs`.
+*Comprobado en producción*: 19/08/2026 — antes del despliegue, ejecutado en el
+contenedor, `normalizeTime("24:00")` daba «24:00:00»; lo arregla `eb4448f`
+(19/08) y tras desplegar el mismo comando en el contenedor da null.
+
 ### Los volcados de Fichaje se auditan sin frase propia: en Actividad saldrán con el traductor genérico · `aumenta`, producto
 
 **Qué pasaba.** Los endpoints de `/api/fichaje/*` auditaban cinco acciones

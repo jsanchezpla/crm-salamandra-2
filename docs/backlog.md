@@ -405,6 +405,72 @@ devuelve algo o el fichero ya no está; la cabecera de `quienEscribe.js` dice
 tiene `Array.isArray`; los componentes y `dummyData.js` están en el repo
 desplegado (`c7f84d2`).
 
+### Un tipo de cita con un nombre muy largo se guarda con un slug que acaba en guion · producto
+
+**Lo que pasa.** `slugify` (`lib/citas/validation.js`) quita los guiones de
+los extremos ANTES de cortar a 64 caracteres, así que un nombre de más de 63
+letras seguido de otra palabra («a…a b») deja un slug de 64 que termina en «-».
+Ese slug no pasa `isValidSlug`, pero `POST /api/citas/event-types` solo valida
+el slug cuando lo escribe la persona: el que genera a partir del nombre se
+guarda sin mirarlo. La URL pública del tipo queda con el guion colgando y, si
+alguien lo edita a mano después, la validación lo rechaza sin que se entienda
+por qué.
+
+**Cuánto duele.** Nadie hoy: hace falta un nombre de tipo de cita de 64+
+caracteres, y los de Laura y los de las demos no llegan. Es un borde, pero es
+el borde de una URL pública.
+
+*Se comprueba*: `slugify("a".repeat(63) + " b")` no acaba en guion y pasa
+`isValidSlug`; el `it` correspondiente en `_smoke-citas-validation.mjs` en
+verde.
+*Dónde*: `lib/citas/validation.js` (`slugify`: cortar antes de quitar los
+guiones de los extremos, o volver a quitarlos después); de paso,
+`slugify(null)` devuelve «null» como texto (hoy los llamadores pasan antes por
+`normalizeString`, así que no se da).
+*Comprobado en producción*: 19/08/2026 — ejecutado en el contenedor el código
+desplegado: `slugify(63 a + " b")` → 64 caracteres terminado en «-»,
+`isValidSlug` → false.
+
+### Cabos sueltos que sacaron las pruebas `node:test` del 19/08: comentarios que no casan con el código y bordes sin guarda · producto
+
+**Lo que pasa.** Al escribir las seis primeras pruebas que comprueban lo que
+DEVUELVEN las funciones de `lib/` (no cómo están escritas) salieron cosas que
+no valen una tarea cada una y que no son un fallo visible hoy:
+- `lib/nutricion/macros.js`: la cabecera dice que se redondea a dos decimales
+  solo en `computeFoodMacros` y «se mantienen como número en los niveles
+  superiores», pero `round2` se aplica en todos (receta, escalado, opción,
+  plan): tres ingredientes de 0,333 g dan 0,99 y ×10 raciones 9,9, no 9,99.
+  Es una centésima de gramo, pero o se quita el redondeo de los niveles de
+  arriba o se cambia el comentario.
+- `lib/support/sla.js`: `DEFAULT_SLA` está congelado solo por fuera
+  (`Object.isFrozen(DEFAULT_SLA.critical)` es false): un `DEFAULT_SLA.critical
+  .firstResponseHours = 99` por error cambiaría el plazo de todos los tenants
+  sin ajustes propios. Congelar también cada prioridad.
+- `lib/fichaje/totales.js`: el comentario de `sin_fichajes` dice «va el
+  último» entre los errores, pero el `sort` compara `fecha || ""` y ese aviso
+  no tiene fecha, así que sale el PRIMERO. Y `resumirPorPersona` suma filas con
+  `deletedAt` (480 minutos de una fila dada de baja) aunque `suma()` diga
+  «ignorando las dadas de baja»; hoy no se ve porque el endpoint filtra
+  `deletedAt: null` en la consulta.
+- `lib/citas/validation.js`: `timeToMinutes("10:3x")` → 603 (`parseInt` lee
+  hasta la primera letra); `normalizeTime` se apoya en él desde el 19/08.
+- `lib/support/sla.js`: `computeDueDates("low", {}, "no es fecha")` devuelve
+  dos `Invalid Date` en vez de null (los llamadores pasan `createdAt`, así que
+  no se da).
+
+**Cuánto duele.** Nada en producción. Es para cuando se toque cada fichero, y
+cada punto lleva ya su `it` posible en la prueba del módulo.
+
+*Se comprueba*: cada punto, o corregido en el código con su `it` en verde, o el
+comentario cambiado para que diga lo que el código hace.
+*Dónde*: los ficheros de la lista; las pruebas son `_smoke-nutricion-macros`,
+`_smoke-support-sla`, `_smoke-fichaje-horas` y `_smoke-citas-validation`.
+*Comprobado en producción*: 19/08/2026 — ejecutado en el contenedor el código
+desplegado: `computeRecipeMacros` → 0,99 y `scaleMacros(…, 10)` → 9,9;
+`Object.isFrozen(DEFAULT_SLA.critical)` → false; `avisosDelMes` saca
+`sin_fichajes` el primero; `resumirPorPersona` cuenta 480 de una fila con
+`deletedAt`; `timeToMinutes("10:3x")` → 603.
+
 ---
 
 ## Pendiente de una decisión suya
