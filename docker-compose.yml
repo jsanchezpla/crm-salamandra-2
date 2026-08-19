@@ -19,6 +19,14 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env.production
+    environment:
+      # El CRM se escribió y se prueba en Europe/Madrid; sin esto el contenedor
+      # corre en UTC y 42 ficheros del servidor que usan fechas locales sin zona
+      # (el año del número de factura, el «hoy» de la portada, los trimestres,
+      # PDFs, exportaciones) iban una o dos horas por detrás. Va AQUÍ y no en
+      # .env.production porque ese fichero lo comparte el contenedor de Postgres
+      # y le cambiaría la zona al servidor de base de datos (19/08/2026).
+      - TZ=Europe/Madrid
     depends_on:
       db:
         condition: service_healthy
