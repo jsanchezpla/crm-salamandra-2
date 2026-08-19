@@ -1,5 +1,29 @@
 # Módulo de Equipo & RRHH (`team`)
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es
+> este mismo commit). Si algo no cuadra, manda el código: corrige esta tabla.
+> **Quién tiene el módulo NO se lista aquí** (una lista a mano se queda
+> vieja): `/admin/modulos` en el back-office o
+> `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `team` · requiere — (funciona solo) · `team_avanzado` requiere `team` y, según la pantalla, `clinica` (Desempeño, Dirección, Productividad, Incidencias, Bandeja) o `citas` (Ocupación); solo Actividad va con `team_avanzado` a secas (`lib/provisioning/dependencias.js`) · `fichaje` requiere `team` y es módulo aparte (`fichaje.md`) |
+| **Reina** | — · sin reina declarada; las siete pantallas de `team_avanzado` y su `adminOnly` nacieron a petición de Aumenta (comentarios en `components/layout/Sidebar.jsx`) |
+| **Pantallas** | `team`: `/equipo` → `app/(dashboard)/equipo/page.jsx` (plantilla, drawer de alta/edición, horario, «Acceso al CRM»; al no admin le pinta `MiEquipo`) · `team_avanzado`: `/equipo/mi-desempeno`, `/equipo/desempeno-config`, `/equipo/direccion`, `/equipo/productividad`, `/equipo/incidencias`, `/equipo/bandeja` (con `clinica`), `/equipo/ocupacion` (con `citas`), `/equipo/actividad` → `app/(dashboard)/equipo/<carpeta>/page.jsx`, con sus piezas en `app/(dashboard)/equipo/_components/` · `fichaje`: `/equipo/fichaje` · el grupo del menú se ve con `team` O `clinica` (`visibleModules`) |
+| **Endpoints** | `app/api/team/**` — 12 `route.js`: `route.js` (listado/alta), `[id]` (detalle, edición, baja lógica), `modules` y `[id]/modules`, `[id]/access` (+ `password`: el login del miembro, escribe en `master.users`), `[id]/hours` (horario), `me` y `me/documents` (+ `[id]`) (autoservicio; gate `team` O `clinica` a nivel de tenant), `[id]/billing-summary` (gatea `billing`), `[id]/projects` (gatea `projects`) · `team_avanzado` — 18 `route.js` con `hasModule("team_avanzado")`: `app/api/actividad`, `app/api/clinica/performance/**`, `app/api/clinica/productividad/**`, `app/api/clinica/incidencias/**`, `app/api/clinica/incentive-items/**`, `app/api/clinica/dashboard`, `app/api/clinica/bandeja` y `app/api/citas/informe-ocupacion` · `app/api/auth/me` (`enabledModules`) · Públicos: ninguno |
+| **Lógica** | `lib/team/`: `serializeTeamMember.js` (BD → API; oculta coste y salario a quien no es admin) · `access.js` (crear, cambiar y quitar el login y su `moduleAccess`) · `currentTeamMember.js` (qué `TeamMember` es el usuario logueado) · Actividad: `lib/actividad/etiquetas.js` (acción de auditoría → frase) · las pantallas avanzadas tiran de `lib/clinica/` |
+| **UI** | `components/team/`: `AccessSection.jsx` («Acceso al CRM»), `CredentialsModal.jsx` (la contraseña una sola vez), `TeamHoursEditor.jsx` (horario; también en `/mi-horario`, de Citas), `MiEquipo.jsx` (mini-módulo del no admin) · `components/billing/EmployeeBillingSection.jsx` embebido en la ficha · no hay `modules/team/` |
+| **Modelos** | `TeamMember` (`team_members`), `TeamMemberHours` (`team_member_hours`), `TeamMemberModule` (`team_member_modules`, espejo informativo de `moduleAccess`); en `master`: `User` (`users`; `module_access` es la segunda puerta) y `AuditLog` (`audit_logs`, lo que lee Actividad) · `team_avanzado` lee modelos de Clínica y Citas: `PerformanceMetric`, `IncentiveItem`, `Incidencia`, `IncidenciaAssignee`, `Booking` |
+| **Interruptores y parámetros** | ninguno que lea el código (ni `featureFlags` ni `logicOverrides`); lo que decide es el rol (fresco de BD en `access`), `visibleModules: ["team", "clinica"]` y `requiresAll` de `components/layout/Sidebar.jsx`, y `users.module_access` |
+| **Pantallas propias** | ninguna (letrero `ui_override` vacío en producción) |
+| **Scripts** | activar: `node scripts/enable-module.js <slug> team` (y `team_avanzado`); `MODULES.team` de `scripts/_module-migrations.js`: `migrate-team-fields`, `migrate-rename-therapist-to-employee`, `migrate-team-modules-salary`, `migrate-team-members-avatar-color`, `migrate-team-specialties`, `migrate-team-weekly-hours`, `migrate-team-member-hours` (+ CORE `migrate-team-members-block-color`); lo de `team_avanzado` va en `MODULES.clinica` (`migrate-incidencias-module`, `migrate-incentive-items`, `migrate-clinica-performance-roles`) · seeds: `seed-team-demo.js` (`npm run db:seed:team`), `seed-aumenta-equipo-real.js` (el equipo real de Aumenta, 24/07/2026: no relanzar) · accesos: `check-module-access.js` (`npm run db:check-access`), `grant-module-access.js` (ojo: `[]` = «no tocar», al revés que el gate) · Actividad: `migrate-audit-logs-index.js` (master, ONE_OFF ya corrido), `podar-audit-logs.js` (retención) · `npm run db:check-links` (`team_member_id` en `plans`, `interactions`, `client_notes`…) |
+| **Pruebas** | ninguna propia del módulo; las que nombran `TeamMember` son de Citas (`_smoke-horario-profesional.mjs`, `_smoke-bloqueos-quien-ve.mjs`, `_smoke-citas-sin-profesional.mjs`) |
+| **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` · `../decisions/2026-07-28-repaso-de-seguridad.md` (el rol fresco de `withTenant`, de lo que viven los endpoints de `access`) · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` |
+| **En este doc** | Modelos · Filtrado de campos sensibles · Eventos de auditoría · Endpoints · Frontend · Migración y backfill · Actividad (registro legible) — 2026-07-27 |
+
 > Documentación de detalle. Referencia rápida en `CLAUDE.md` (sección
 > "Módulos del CRM"). Si encuentras una discrepancia con el código,
 > prevalece el código: actualiza este fichero.

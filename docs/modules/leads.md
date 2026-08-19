@@ -1,5 +1,29 @@
 # Módulo de Leads / Comercial (`leads`)
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es este
+> mismo commit). Si algo no cuadra, manda el código: corrige esta tabla. **Quién
+> tiene el módulo NO se lista aquí** (una lista a mano se queda vieja):
+> `/admin/modulos` en el back-office o
+> `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `leads` · requiere — (es `formularios` quien lo requiere a él; la clave `sales` se retiró el 12/08/2026) |
+| **Reina** | — (ni el doc ni `lib/leads/embudos.js` nombran una; desde el 18/08/2026 el base es el override de aumenta parametrizado, y a aumenta solo le queda propio el rosa `#FF1F96`) |
+| **Pantallas** | El embudo: `/leads` → `app/(dashboard)/leads/page.jsx` (server component: resuelve `UI_OVERRIDES` por `x-tenant` y le pasa al base `stages`, `titulo` y `sujeto`). El PADRE del grupo en el menú: `/leads/estadisticas` → `app/(dashboard)/leads/estadisticas/page.jsx` (mira `leads` y `formularios` juntos). Públicas: ninguna página en este repo — el formulario vive en la web del cliente y pega en el endpoint público de abajo. |
+| **Endpoints** | `app/api/leads/**` — 8 `route.js`: `route.js` (GET lista, con `desglose=1` por etapa · POST), `[id]/route.js` (GET · PATCH · DELETE, los dos últimos auditados), `[id]/convert-to-project/route.js` (POST; exige además `projects`), `estadisticas/route.js` (GET), `export/route.js` (GET Excel), `import/route.js` (POST JSON), `import/excel/route.js` (POST .xlsx), `import/template/route.js` (GET plantilla). Mutaciones solo admin/superadmin. Público: `app/api/public/leads/route.js` (OPTIONS+POST; tenant por cabecera `x-tenant`, CORS `*`, límite 30/min, `sanearCustomFields`). Sin webhooks. |
+| **Lógica** | `lib/leads/`: `stages.js` (las 15 etapas canónicas, `ALLOWED_STAGES` + `STAGE_LABELS`: la whitelist de PATCH, import y export), `embudos.js` (qué etapas ofrece cada cliente: `EMBUDOS` por slug de BD, `EMBUDO_POR_DEFECTO` de cinco, `GANADAS`/`PERDIDAS`, `etapasDe()`, `tieneEtapaGanada()`), `estadisticas.js` (las cifras de `/leads/estadisticas`: profesionales + comerciales, `calcularEstadisticas`). Fuera: `lib/home/summary.js` cuenta los abiertos para la portada con su propia `CLOSED_STAGES`. |
+| **UI** | `modules/leads/LeadsModule.jsx` (el base, `"use client"`, 779 líneas: tarjetas por etapa, filtro por motivo, buscador, panel lateral; color de `var(--color-primary)`). La pantalla de estadísticas lleva sus piezas dentro. No hay `components/leads/`. |
+| **Modelos** | `Lead` → `leads` (`models/tenant/Lead.model.js`; `stage` es STRING(50), no ENUM; `customFields` y `metadata` JSONB; `convertedProjectId`/`convertedToProjectAt`). Asociaciones en `lib/db/tenantDb.js`: `Lead.belongsTo(Client)` por `clientId` y `Lead.belongsTo(Project)` por `convertedProjectId`. Sin FK a `TeamMember` (`assignedTo` es un UUID suelto). |
+| **Interruptores y parámetros** | Ninguno que lea el código (ni `featureFlags` ni `logicOverrides`). Lo que varía por cliente está escrito en código: `EMBUDOS` en `lib/leads/embudos.js`, `TENANT_TITLE_OVERRIDES` («Interesados») en la página, `TENANT_LABEL_OVERRIDES` en `components/layout/Sidebar.jsx` y las plantillas de export/import por slug (`spain_enzymes`). Los `schemaExtensions` que hay en producción (nutri_laura, spain_enzymes) son letrero decorativo: el código no los lee. |
+| **Pantallas propias** | 4, cargadas por el mapa `UI_OVERRIDES` de `app/(dashboard)/leads/page.jsx`: `modules/overrides/aumenta/LeadsModule.jsx`, `modules/overrides/nutri-laura/LeadsModule.jsx`, `modules/overrides/retorika/LeadsModule.jsx`, `modules/overrides/spain-enzymes/LeadsModule.jsx`. Ignoran las props del base: llevan su embudo dentro (copiado en `embudos.js`). Los de `demo` y `sandbox` se borraron el 18/08/2026; `quality-energy` y `abarcaia`, el 12/08. |
+| **Scripts** | Activar: `node scripts/enable-module.js <slug> leads`. Migraciones registradas en `scripts/_module-migrations.js`: `migrate-stage-to-string.js` (MODULES.leads) y `migrate-leads-columnas-proyecto.js` (CORE). Herramientas vivas: `listar-leads.js <slug>` (solo lectura), `mover-leads-a-comerciales.js <slug> <form> [--confirm]` (leads de familias → bandeja de Comerciales), `sincronizar-ui-override.mjs` (el letrero `ui_override`). Seeds: `add-leads-module-demo.js`, `add-leads-module-nutri-laura.js`, `seed-aumenta.js`, `seed-spain-enzymes-data.js`. Frenados: `clear-aumenta-leads.js` (exige `_guard-datos-reales.js`), `cleanup-bad-leads.js` (atado a `quality_energy`, que ya no existe). |
+| **Pruebas** | `scripts/_smoke-leads-etapas.mjs` (en `npm test`; vigila que las etapas de los cuatro overrides, `embudos.js`, `stages.js` y `summary.js` no se separen) · `scripts/_smoke-ui-overrides.mjs` (en `npm test`; los mapas `UI_OVERRIDES` contra el disco) · `scripts/_smoke-lead-conversion-fix.js` (base de datos; conversión lead→cliente en nutri_laura y spain_enzymes). |
+| **Decisiones** | `../decisions/2026-08-01-leads-dos-origenes-un-grupo.md` · `../decisions/2026-08-12-retirada-de-sales.md` · `../decisions/2026-08-12-bajas-abarcaia-quality-healim.md` (se llevó dos overrides) · `../decisions/2026-08-18-la-piramide-invertida-de-leads.md` |
+| **En este doc** | Modelo Lead · Stages · Módulo base vs overrides · Endpoints · Validaciones · Importación / Exportación · Migración y seeds por tenant · Backlog |
+
 > Documentación de detalle. Referencia rápida en `CLAUDE.md` (sección
 > "Módulos del CRM"). Si encuentras una discrepancia con el código,
 > prevalece el código: actualiza este fichero.

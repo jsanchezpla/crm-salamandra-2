@@ -1,5 +1,30 @@
 # Módulo Fichaje (`fichaje`)
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es este mismo commit). Si algo no cuadra, manda el código: corrige esta tabla. **Quién tiene el módulo NO se lista aquí** (una lista a mano se queda vieja): `/admin/modulos` en el back-office o `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `fichaje` · requiere `team` (`lib/provisioning/catalogo.js`; las jornadas cuelgan de `team_members`). A propósito NO requiere `team_avanzado`. En el menú es `adminOnly` (`components/layout/Sidebar.jsx`). |
+| **Reina** | `aumenta`: el doc la llama «tenant de referencia». El módulo se escribió sobre su Excel real de marzo de 2026 y el único lector a medida que existe es el suyo (`lib/fichaje/parsers/aumenta.js`). |
+| **Pantallas** | `app/(dashboard)/equipo/fichaje/page.jsx` (`/equipo/fichaje`): server component que hace `notFound()` si el rol no es admin/superadmin o el tenant no tiene `fichaje` (segunda de las tres puertas), y monta `modules/fichaje/FichajeModule.jsx`. |
+| **Endpoints** | `app/api/fichaje/**` — 7 `route.js`, todos con `hasModule("fichaje")` + solo admin/superadmin: `route.js` (GET del mes con filas + resumen + avisos; POST alta manual), `[id]/route.js` (PATCH corregir, DELETE baja blanda), `export/route.js` (xlsx con los mismos totales que la pantalla). |
+| | `import/preview/route.js` (no escribe nada), `import/route.js` (commit en una transacción; en la demo devuelve 403 por `lib/demo/isDemo.js`), `imports/route.js` (histórico de volcados), `imports/[id]/revertir/route.js`. Sin públicos ni webhooks. |
+| **Lógica** | `lib/fichaje/importar.js` (`previsualizar`, `aplicar`, `revertir`, `hashDeFichero`: las tres garantías del volcado) · `mapeo.js` (nombre del Excel → persona del CRM, exacto o sugerencia; alias en `team_members.custom_fields.fichajeNombres`) · `totales.js` (`resumirPorPersona`, `totalesDelMes`, `avisosDelMes`, `rangoDelPeriodo`: puras, nada se guarda) · `parseHora.js` (las cinco formas en que llega una hora en un Excel) |
+| | `lib/fichaje/parsers/index.js` (`POR_TENANT`: qué lector usa cada cliente; `parserDeTenant`, `describirParser`) · `parsers/aumenta.js` (el Excel de Aumenta, por semanas) · `parsers/generico.js` (`Persona · Fecha · Entrada · Salida · Horas · Nota`, el de quien no tiene lector propio). Los festivos los pide a `lib/citas/festivos.js` si el tenant tiene Citas. |
+| | Auditoría desde los endpoints: `fichaje.volcado`, `fichaje.corregido`, `fichaje.creado_a_mano`, `fichaje.dado_de_baja`, `fichaje.volcado_deshecho`, siempre con resumen y nunca la fila. **Hoy sin frase propia en `lib/actividad/etiquetas.js`** (ni el prefijo `fichaje` está en su mapa de módulos): salen con el traductor genérico en Equipo → Actividad. |
+| **UI** | `modules/fichaje/FichajeModule.jsx` (lista por persona, día a día debajo, avisos `error`/`revisar`) · `ImportarFichajeModal.jsx` (preview → mapeo → aplicar) · `CorregirFichajeModal.jsx`. No hay `components/fichaje/`. |
+| **Modelos** | `models/tenant/Fichaje.model.js` (`fichajes`: un TRAMO, `tipo` trabajo/pausa/ausencia/festivo, `origen` import/manual/corregido, `minutosOriginal`, `deletedAt`; FK a `team_members` **RESTRICT**). |
+| | `models/tenant/FichajeImport.model.js` (`fichaje_imports`: el lote, con `periodo`, `fileHash`, `status` applied/superseded/reverted y `resumen`, la foto de los totales del día que se pagó). Asociaciones en `lib/db/tenantDb.js`, bloque `TeamMember.hasMany(Fichaje…)`. |
+| **Interruptores y parámetros** | ninguno que lea el código. Lo que cambia por cliente es el LECTOR del Excel, y se declara en `lib/` (`POR_TENANT` en `lib/fichaje/parsers/index.js`), no en `featureFlags`. |
+| **Pantallas propias** | ninguna (nunca las ha habido: el módulo es el mismo para todos y solo cambia el lector) |
+| **Scripts** | Activación: `node scripts/enable-module.js <slug> fichaje` (corre `migrate-fichaje-module`, declarada en `scripts/_module-migrations.js`; `scripts/_migration-order.js` la pone DESPUÉS de `migrate-team-fields` porque `fichajes.team_member_id` apunta a `team_members`) · después, `npm run db:check-access`. |
+| | Semilla del escaparate: `scripts/seed-fichaje-demo.js` (el mes en curso y el anterior, con los seis casos que la pantalla detecta; está en la lista de `scripts/reset-demo-tenant.js`), y luego `scripts/demo-golden-snapshot.js demo` para que la foto dorada no lo vacíe. Sin cron ni ONE_OFF. |
+| **Pruebas** | ninguna: ningún `scripts/_smoke-*.mjs` toca el módulo (las funciones de `lib/fichaje/totales.js`, `mapeo.js` y `parseHora.js` son puras y se podrían probar sin base de datos). |
+| **Decisiones** | — |
+| **En este doc** | La frase que manda sobre todo el módulo · Universal por dentro, de cada cliente por fuera · El Excel de Aumenta, y por qué muerde · Modelo de datos · Identificar a la persona · Pantallas y endpoints · Alta en un cliente · Lo que queda fuera de esta primera versión |
+
 Control horario: se vuelca el Excel del reloj de fichar cada mes y queda el
 registro por persona y día, con horas extra, avisos y correcciones justificadas.
 

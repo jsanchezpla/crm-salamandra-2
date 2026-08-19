@@ -1,5 +1,29 @@
 # Buzón — que un cliente pueda abrirnos una incidencia
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es
+> este mismo commit). Si algo no cuadra, manda el código: corrige esta tabla.
+> **Quién tiene el módulo NO se lista aquí** (una lista a mano se queda
+> vieja): `/admin/modulos` en el back-office o
+> `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | sin moduleKey: lo tienen todos (`/ayuda` y `/api/ayuda` van con `withTenant` y sin `hasModule`); el lado nuestro se abre por host (`ADMIN_HOST`) con `candadoBuzon` |
+| **Reina** | — · no es de ningún cliente: es nuestra bandeja |
+| **Pantallas** | cliente: `/ayuda` → `app/(dashboard)/ayuda/page.jsx` (monta `modules/buzon/AyudaModule.jsx`; resuelve `esDemo` en servidor con `esSlugDemo`) · nosotros: `/admin/buzon` → `app/admin/buzon/page.jsx` (la bandeja; `?aviso=<id>` abre ese hilo) y la campana de la barra en `app/admin/layout.jsx` (`components/admin/CampanaBuzon.jsx`) · el punto del menú lo pinta `components/layout/Sidebar.jsx` (`EVENTO_SIN_VER`) y la portada `app/(dashboard)/page.jsx` (`sinVerDeUsuario`) |
+| **Endpoints** | cliente: `app/api/ayuda/**` — 4 `route.js` (`route.js` GET/POST, `[id]`, `[id]/mensajes`, `adjuntos/[adjuntoId]`) · nosotros: `app/api/admin/buzon/**` — 5 `route.js` (`route.js`, `pendientes`, `[id]`, `[id]/mensajes`, `adjuntos/[adjuntoId]`) · Públicos: ninguno (para escribir hay que estar dentro del CRM) |
+| **Lógica** | `lib/buzon/`: `buzon.js` (qué es un aviso válido, estados, `serializarAviso`, `LIMITES`, `tipoParaVerEnPantalla`, los dos eventos) · `buzonStore.js` (el único que toca las tablas; `whereSinVer` / `wherePendienteNuestro`) · `buzonStorage.js` (las capturas en disco) · `quienEscribe.js` (la foto de quién escribe) · `candadoBackoffice.js` (`candadoBuzon`: comprueba el host a mano) · `avisarPorCorreo.js` (el correo a nosotros, con el Resend de `salamandra_solutions`) · `avisarEnSuCrm.js` (la campana en el schema del cliente: el único sitio del back-office que lo abre) · guard de demo: `lib/demo/isDemo.js`; rate limit: `lib/utils/rateLimit.js` |
+| **UI** | `modules/buzon/AyudaModule.jsx` (formulario, lista e hilo del cliente; `leerRespuesta()` traduce el 413) · `components/admin/CampanaBuzon.jsx` (la campana del panel) · la bandeja vive en la propia página `app/admin/buzon/page.jsx` |
+| **Modelos** | en `models/master/`: `BuzonAviso` (`buzon_avisos`; `numero` sale de `master.buzon_numero_seq`), `BuzonMensaje` (`buzon_mensajes`), `BuzonAdjunto` (`buzon_adjuntos`); sin FK a `tenants` ni a `users` (UUID sueltos + foto de texto) · registrados en `lib/db/masterDb.js` |
+| **Interruptores y parámetros** | ninguno que lea el código; lo que gatea es el host (`ADMIN_HOST`) + `candadoBuzon`, el guard de la demo y el rate limit por persona; los topes viven en `LIMITES` de `lib/buzon/buzon.js` |
+| **Pantallas propias** | ninguna |
+| **Scripts** | sin `enable-module.js` (no hay módulo) · `scripts/migrate-buzon.js` (`npm run db:migrate:buzon`; master, idempotente, a mano en cada despliegue que traiga columna nueva; en el VPS `docker exec crm-salamandra-app-1 node scripts/migrate-buzon.js`) · `scripts/podar-buzon.js` (retención: resueltos con más de dos años; simula sin `--confirm`; sin cron) · `scripts/buzon-triaje.mjs` (la herramienta de la skill `incidencias-buzon`: lista, marca o contesta por tubería dentro del contenedor) |
+| **Pruebas** | en `npm test`: `scripts/_smoke-buzon.mjs` (`// @prueba ligera`; estados, recorte de notas internas, las dos parejas de fechas) · con base de datos: `scripts/_smoke-ayuda-a-salamandra.mjs` (el camino `/ayuda` → master → correo; por defecto no manda nada) |
+| **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (guard de la demo, auditoría con resumen) · `../decisions/2026-08-12-bajas-abarcaia-quality-healim.md` (por qué vive en `master`: sobrevive a la baja) |
+| **En este doc** | Las cuatro cosas que suenan parecido · Por qué vive en `master` · Tablas (`master`) · Estados · Quién ve qué · Endpoints · Adjuntos · Cuando le contestamos se entera DENTRO de su CRM |
+
 **Estado:** implementado el 13/08/2026. Sin `moduleKey`: lo tienen todos los
 clientes y todos sus usuarios.
 

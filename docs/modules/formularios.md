@@ -1,5 +1,29 @@
 # Módulo Formularios
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es este
+> mismo commit). Si algo no cuadra, manda el código: corrige esta tabla. **Quién
+> tiene el módulo NO se lista aquí** (una lista a mano se queda vieja):
+> `/admin/modulos` en el back-office o
+> `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `formularios` · requiere `leads` (y `clients`, según `lib/provisioning/catalogo.js`). En el menú se llama «Leads Comerciales» desde el 01/08/2026 |
+| **Reina** | — (el doc solo dice «primer tenant: `nutri_laura`», y `portalUser.js`/`registroWeb.js` nacieron para su WordPress; el formulario de familias de Aumenta llegó el 08/08/2026) |
+| **Pantallas** | La bandeja: `/formularios` → `app/(dashboard)/formularios/page.jsx` (`UI_OVERRIDES` vacío a propósito). El padre del grupo, `/leads/estadisticas` (`app/(dashboard)/leads/estadisticas/page.jsx`), le suma su bloque «Bandeja». Públicas: ninguna página en este repo — el formulario lo pinta la web del cliente (WordPress) leyendo la definición del endpoint público de abajo. |
+| **Endpoints** | `app/api/formularios/**` — 3 `route.js`: `route.js` (GET bandeja + recuentos), `[id]/route.js` (GET · PATCH descartar/recuperar/anotar · DELETE, solo descartadas), `[id]/accept/route.js` (GET ¿ya hay ficha? · POST aceptar → ficha, paciente y tutor si hay `pacientes`, alta en WordPress fuera de la transacción, auditoría solo con ids). Público: `app/api/public/c/[tenantSlug]/formularios/[formSlug]/route.js` (GET definición · POST solicitud; límite dentro del handler). Desde WordPress, firmados HMAC: `app/api/public/c/[tenantSlug]/registro-web/route.js` (hoy no-op: responde 200 sin crear nada desde el 05/08/2026) y `registro-web/sync/route.js` (puesta al día en lote, sí crea). Comparte `portalUser.js` con `app/api/clients/[id]/portal-user/route.js` (GET ¿tiene cuenta? · POST darle cuenta). |
+| **Lógica** | `lib/formularios/`: `fields.js` (el contrato de las preguntas: `TIPOS`, `DESTINOS_FICHA`, `DESTINOS_FAMILIA`, `validarRespuestas`, `formPublico`, `infoAdicional`), `accept.js` (solicitud → ficha: `aceptarSolicitud`, `clienteDesdeSolicitud`, `pacienteDesdeSolicitud`, `buscarClienteExistente`), `antispam.js` (`puntuarSpam` honeypot+tiempo, `buscarDuplicadoReciente`), `portalUser.js` (alta del usuario en WordPress con HMAC de subclave derivada; `resolverUrlWordpress`, `consultarUsuarioPortal`, `crearUsuarioPortal`), `registroWeb.js` (firma del aviso de WordPress, `asegurarSolicitudDeAlta`), `edadDeclarada.js` (¿cuadra la edad del formulario con la fecha de nacimiento?). Fuera: `lib/citas/puertaFormulario.js` (la agenda pública exige solicitud aceptada) y `lib/leads/estadisticas.js` (el bloque de comerciales). |
+| **UI** | `modules/formularios/FormulariosModule.jsx` (bandeja, detalle, aceptar o enlazar con ficha existente; 619 líneas) y `components/clients/ClientCuentaWebSection.jsx` («Acceso a la web» en la ficha: ¿tiene cuenta? / darle cuenta). No hay `components/formularios/`. |
+| **Modelos** | `Form` → `forms` (`models/tenant/Form.model.js`; las preguntas en `fields` JSONB) y `FormSubmission` → `form_submissions` (`models/tenant/FormSubmission.model.js`; `answers` JSONB con enunciado, `client_id` como candado, `handled_by_team_id`). Asociaciones en `lib/db/tenantDb.js`: `FormSubmission.belongsTo(Form)` y `FormSubmission.belongsTo(TeamMember)`. |
+| **Interruptores y parámetros** | Ninguno propio que lea el código. Al aceptar, `applyAutoAssignments` (`lib/clients/moduleAssignments.js`) lee `nutricion.autoAsignarEnAlta` del módulo Nutrición. Los parámetros del módulo van en la fila del formulario, `forms.settings`: `notifyEmails`, `privacyUrl`, `privacyVersion`, `wordpressUrl` (`retentionDays` solo lo escriben los seeds; nadie lo lee). |
+| **Pantallas propias** | Ninguna: el mapa `UI_OVERRIDES` de `app/(dashboard)/formularios/page.jsx` está vacío (el módulo pinta las preguntas que traiga cada formulario). |
+| **Scripts** | Activar: `node scripts/enable-module.js <slug> formularios` (crea `forms` y `form_submissions`: `migrate-formularios-module.js` y `migrate-formsubmission-team.js`, registradas en `scripts/_module-migrations.js`) y después `grant-module-access.js <slug> formularios`. Seeds de DATOS (nombran tenant): `seed-formulario-nutri-laura.js [slug]`, `seed-formulario-aumenta.js <slug>`. Herramientas: `mover-leads-a-comerciales.js <slug> <form> [--confirm]` (leads de familias → bandeja, idempotente), `backfill-origen-formulario.js [--confirm]` (`customFields.origen` → `origin` en las fichas nacidas de una solicitud; ya lanzado, repetible). |
+| **Pruebas** | En `npm test`: `scripts/_smoke-aceptar-solicitud.mjs` (`accept.js` y `fields.js`, sin base) y `_smoke-menor-firma.mjs` (`edadDeclarada.js`); más las de Citas que leen la bandeja con un `FormSubmission` falso (`_smoke-puerta-descartada`, `_smoke-puerta-profesional`, `_smoke-aviso-admision`, `_smoke-paciente-borrado`). Con base de datos: `_smoke-formulario-cita.mjs` (`fields.js` desde un tipo de cita). Con servidor y base: `_smoke-dni-formulario.mjs` (formulario público → aceptar → `Client.taxId`, por HTTP) y `_smoke-puerta-formulario.mjs` (sin solicitud aceptada no hay cita). |
+| **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` (`form_submissions.handled_by_team_id`) · `../decisions/2026-08-01-leads-dos-origenes-un-grupo.md` |
+| **En este doc** | La decisión de fondo: las preguntas son DATOS · No todo formulario de la web es de este módulo · Tablas · Endpoints · Antispam · Aceptar: qué pasa exactamente · Alta en WordPress (`lib/formularios/portalUser.js`) · Puesta en marcha de un tenant |
+
 **moduleKey:** `formularios` · **Estado:** implementado (2026-07-22) ·
 **Primer tenant:** `nutri_laura`
 

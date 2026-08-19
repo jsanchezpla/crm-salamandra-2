@@ -1,5 +1,29 @@
 # Módulo Outreach (Captación)
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es
+> este mismo commit). Si algo no cuadra, manda el código: corrige esta tabla.
+> **Quién tiene el módulo NO se lista aquí** (una lista a mano se queda
+> vieja): `/admin/modulos` en el back-office o
+> `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `outreach` · requiere — (nada obligatorio en `lib/provisioning/catalogo.js`; solo avisa de que necesita las claves de IA y de Google del propio cliente). «Convertir en cliente» pide además `clients` (`tenantHasModule` en el endpoint). |
+| **Reina** | — · ninguna declarada en doc ni código. Nació del proyecto interno «Salamandra Outreach» y sus pruebas apuntan al tenant `sandbox` de local. |
+| **Pantallas** | `app/(dashboard)/outreach/` (3, envoltorios de una línea sobre `modules/outreach/`): `/outreach` (lista, filtros, «Buscar nuevos», alta manual), `/outreach/[id]` (ficha: contactos, análisis por línea de negocio, correo modelo, convertir en cliente), `/outreach/configuracion` (líneas de negocio y ajustes de IA). Entrada de menú «Captación» en `components/layout/Sidebar.jsx`. |
+| **Endpoints** | `app/api/outreach/**` (11 `route.js`): `leads` (listar/alta manual), `leads/[id]` (ficha/editar/borrar), `leads/buscar-nuevos` (⚡ **Google Places** con la clave del tenant + visita de webs; Páginas Amarillas/LinkedIn vía webhook n8n), `leads/[id]/analizar` (⚡ **Claude**: scoring por línea + correo modelo), `leads/[id]/enviar-correo` (✉ **Resend** con la clave del tenant; marca `sent_at` solo si de verdad sale), `leads/[id]/convertir-cliente`, `leads/bulk-delete`, `google-usage`, `business-lines` + `business-lines/[id]`, `settings`. Los tres marcados pasan por `assertNotDemoPaidCall` (`lib/demo/isDemo.js`). Todos exigen `hasModule("outreach")`; líneas, ajustes y borrados, rol admin. |
+| **Lógica** | `lib/outreach/` (11): `analysis/index.js` (`analyzeLead`: Claude o el simulado), `analysis/anthropic.js` (proveedor Claude; lo reutiliza medio CRM: Clínica, Proyectos, Soporte, Citas, Calendario, asistente), `analysis/fake.js` (`OUTREACH_FAKE_AI=1`, nunca en producción), `analysis/prompt.js` (system prompt desde las líneas de negocio del tenant), `analysis/schema.js` (parseo defensivo del JSON), `analysis/models.js` (modelos admitidos; reexporta `lib/ai/anthropicModel.js`); `googlePlaces.js` (Text Search; errores → `QUOTA`/`BAD_KEY`/`UNREACHABLE`), `enrichWebsite.js` (email de la web con filtro por dominio), `persistLeads.js` (dedupe por nombre+ubicación+fuente), `scraping.js` (webhook HMAC a n8n para PA/LinkedIn), `resendConfig.js` (clave de Resend del tenant, cifrada; remitente y reply-to del tenant o del `.env`). Fuera: `lib/ai/anthropicKey.js` (BYOK, sin clave → 503) y `lib/email/resendClient.js` (envío, dry-run y reintentos). |
+| **UI** | `modules/outreach/` (8): `OutreachModule.jsx` (lista, orden, filtros, drawer «Buscar nuevos»), `OutreachLeadDetail.jsx` (ficha, chips de líneas a analizar, `EmailDraft`), `OutreachSettingsModule.jsx` (líneas de negocio + modelo/contexto/regla), `SectorPicker.jsx` + `sectores.json` (27 categorías, 286 tipos), `IntegrationGate.jsx` + `useIntegrations.js` (deshabilita lo que cuesta API si falta la clave; fail-open), `scores.js` (tramos y colores del score). Sin `components/outreach/`. |
+| **Modelos** | `OutreachLead` → `outreach_leads` · `OutreachContact` → `outreach_contacts` · `OutreachAnalysis` → `outreach_analyses` · `OutreachBusinessLine` → `outreach_business_lines` · `OutreachSettings` → `outreach_settings` (fila única: modelo IA, contexto, regla, contador mensual de Google). **`OutreachLead` no es `Lead`** (`leads`): sin FK entre ellos; `outreach_leads.client_id` es referencia blanda al `Client` convertido. |
+| **Interruptores y parámetros** | `featureFlags` / `logicOverrides`: ninguno que lea el código. Lo configurable vive en `outreach_settings` (modelo, contexto, regla) y en `master.tenants.settings.integrations` (claves de Anthropic, Google Places y Resend, remitente y reply-to), que se pegan en `/configuracion`. |
+| **Pantallas propias** | ninguna. |
+| **Scripts** | Activar: `node scripts/enable-module.js <slug> outreach` (`ensure-tenant-schema.js` corre las 4 del bloque `outreach` de `scripts/_module-migrations.js`: `migrate-outreach-sprint-1`, `migrate-outreach-google-usage`, `migrate-outreach-convert`, `migrate-outreach-website-text`). Los atajos anteriores siguen vivos: `enable-outreach.js` (`npm run db:enable:outreach`) y `setup-outreach.js` (`npm run db:setup:outreach`: activa + migra + siembra de una vez). Seed: `seed-outreach.js <slug>` (líneas de negocio + leads de muestra con análisis `model: 'demo'`; lo lanzan `crear-demos-por-oficio.js` para `demo_agencia` y `rebuild-demo-showcase.js`). `setup-demo-outreach-fake.js` deja la demo con claves ficticias para enseñar el flujo sin gastar. Sin backfills. |
+| **Pruebas** | Ninguna `_smoke-*`: las cuatro suyas se llaman `scripts/_outreach-*.mjs` y **`npm test` no las ve** (`pruebas.mjs` solo recoge `_smoke-*` y `smoke-test-*`). `_outreach-ai-unit.mjs` es pura (prompt, parseo, `analyzeLead` con el simulado; sin base de datos ni servidor); `_outreach-smoke.mjs`, `_outreach-e2e.mjs` y `_outreach-ui-check.mjs` piden servidor + base de datos y el tenant local `sandbox`. |
+| **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` |
+| **En este doc** | Decisiones de arquitectura · Fuente de datos: Google Maps nativo + email de la web · Dedupe de "Buscar nuevos" (`lib/outreach/persistLeads.js`) · Conversión a cliente · Modelo de datos · API · Reglas de negocio que no se rompen · Puesta en marcha en un tenant |
+
 `moduleKey`: `outreach` · Ruta: `/outreach` · API: `/api/outreach/*`
 
 Captación de leads en frío: empresas rastreadas de fuentes públicas, guardadas,

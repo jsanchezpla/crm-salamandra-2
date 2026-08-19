@@ -1,5 +1,28 @@
 # Módulo Soporte (`support`)
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es este
+> mismo commit). Si algo no cuadra, manda el código: corrige esta tabla. **Quién
+> tiene el módulo NO se lista aquí** (una lista a mano se queda vieja):
+> `/admin/modulos` en el back-office o `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `support` · requiere — (`lib/provisioning/catalogo.js` no le pone dependencias). Sin él, `/soporte` no da 404: la API responde 403 y la pantalla degrada a un enlace a `/ayuda` (el Buzón, que es otro doc: `buzon.md`). |
+| **Reina** | — (el doc no nombra ninguna). |
+| **Pantallas** | Panel: `app/(dashboard)/soporte/page.jsx` (`/soporte`, el único `page.jsx`; bandeja, detalle, informes y configuración son vistas dentro; deep-links `?ticket=` y `?client=`). Se llega desde la llave inglesa del pie del sidebar (`components/layout/Sidebar.jsx`), sin entrada de menú propia. Públicas (portal del cliente final): `app/widget/c/[tenantSlug]/soporte/page.jsx` (abrir ticket) y `app/widget/c/[tenantSlug]/soporte/t/[token]/page.jsx` (seguimiento y respuesta). |
+| **Endpoints** | `app/api/tickets/**` — 11 `route.js` con `hasModule("support")`: raíz (bandeja y alta), `[id]`, `[id]/messages`, `[id]/ai`, `categories` (+ `[id]`), `templates` (+ `[id]`), `settings`, `stats`, `attachments/[attachmentId]`. Públicos: `app/api/public/c/[tenantSlug]/soporte/**` — 3 (`soporte`, `t/[token]`, `t/[token]/attachments/[attachmentId]`), con `withPublicTenant` + `enforceRateLimit`. Webhook: `app/api/webhooks/resend-inbound/route.js` (correo entrante de Resend, firma svix a mano; encamina por `soporte-{slug}@…`). |
+| **Lógica** | `lib/support/` (6): `sla.js` (plazos por prioridad, `computeDueDates`, estado por hito), `notify.js` (campana + emails por Resend, `captureAddress`, reply-to; guard de demo), `serialize.js` (forma de la API y del portal, `ticketRef`), `context.js` (settings, rol admin, autor efectivo), `ai.js` (resumen/borrador/clasificación con la clave BYOK), `ticketStorage.js` (adjuntos en `uploads/support/{slug}/{ticketId}/`, 10 MB). Fuera: `lib/email/templates/soporte/{ticketClient,ticketTeam}.js`, `lib/notifications/alerts.js` (`syncSupportAlerts`, tipo `ticket_sla`), `lib/demo/isDemo.js` (`demoForcesFakeAi`, `isDemoTenant`). |
+| **UI** | `modules/support/`: `SupportModule.jsx` (bandeja + fallback sin módulo), `TicketDetail.jsx` (drawer: hilo, propiedades, composer, SLA por ticket), `NewTicketModal.jsx`, `SupportReports.jsx`, `SupportConfig.jsx` (portal, SLA, avisos, correo, IA, categorías, plantillas), `supportUi.js` (etiquetas y colores). Sin `components/support/`. |
+| **Modelos** | `models/tenant/`: `Ticket` (`tickets`), `TicketMessage` (`ticket_messages`), `TicketAttachment` (`ticket_attachments`), `TicketCategory` (`ticket_categories`), `TicketTemplate` (`ticket_templates`), `SupportSettings` (`support_settings`, una fila). El nº TK lo pone la secuencia `ticket_number_seq` de cada schema, no la app. |
+| **Interruptores y parámetros** | ninguno que lea el código. Lo configurable vive en `support_settings` (`slaEnabled`, `slaConfig`, `portalEnabled`, `portalIntro`, `autoClassify`, `notifyEmails`, `supportEmail`) y en dos variables de plataforma, `RESEND_INBOUND_DOMAIN` + `RESEND_WEBHOOK_SECRET` (las DOS, o no hay dirección de captura). |
+| **Pantallas propias** | ninguna (`app/(dashboard)/soporte/page.jsx` tiene el mapa `UI_OVERRIDES` vacío; en producción ningún `support` lleva `ui_override`). |
+| **Scripts** | Activación: `node scripts/enable-module.js <slug> support` (corre `migrate-support-module.js`, la única de `MODULES.support` en `scripts/_module-migrations.js`: crea por módulo activo y blinda por existencia de `tickets`). Seed: `seed-support-demo.js` (solo demo; después `demo-golden-snapshot.js` para que el reset del login la conserve). Comprobar el correo: `check-resend-tenant.mjs` (solo lectura, cliente a cliente) y `check-resend.mjs` (la cuenta de plataforma). |
+| **Pruebas** | `scripts/_smoke-correo-entrante.mjs` (firma svix, encaminado, alta por correo, hilo, `TK-0042` en el asunto, duplicados, reapertura) — necesita servidor y base de datos, NO entra en `npm test`. Ninguna ligera. |
+| **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (auditoría con RESUMEN: los tickets llevan datos personales; guard de la demo en los envíos) · `../decisions/2026-08-10-las-listas-copiadas-a-mano-mienten.md` (la tarea falsa «`support` solo en local» salió de la tabla de módulos). |
+| **En este doc** | Modelos (`models/tenant/`) · SLA (`lib/support/sla.js`) · Flujo de estados · API interna (`app/api/tickets/*`, gate `hasModule("support")`) · Portal público (`/widget/c/{slug}/soporte`) · UI dashboard (`modules/support/`) · Conversación por CORREO (bidireccional, 2026-07-27 tarde) · Campana y emails |
+
 Helpdesk con el que el TENANT atiende a **sus** clientes: tickets numerados
 (TK-0042), hilo de conversación con notas internas, adjuntos, categorías,
 plantillas de respuesta, SLA con avisos, informes, IA a demanda y un portal

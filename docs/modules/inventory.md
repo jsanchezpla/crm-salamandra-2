@@ -1,5 +1,30 @@
 # Módulo de Inventario (`inventory`)
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es este mismo commit). Si algo no cuadra, manda el código: corrige esta tabla. **Quién tiene el módulo NO se lista aquí** (una lista a mano se queda vieja): `/admin/modulos` en el back-office o `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `inventory` · requiere — (`lib/provisioning/catalogo.js` no le pone `requiere`; `lib/provisioning/dependencias.js`: sin `team` las entradas y ajustes no quedan firmados, sin `orders` el stock solo baja por ajuste manual). Es Pedidos quien descuenta al vender; Facturación solo avisa. |
+| **Reina** | — (ni el doc ni el código nombran una; en producción ningún cliente real tiene todavía un producto dado de alta) |
+| **Pantallas** | `app/(dashboard)/inventario/page.jsx` (`/inventario`: lista con stock y unidad, filtro por categoría y bajo mínimo, ficha con el histórico de movimientos, alta de entrada con proveedor de desplegable, ajuste con motivo). Toda la pantalla vive en esa página. |
+| | Los proveedores se dan de alta en `app/(dashboard)/facturacion/proveedores/page.jsx` (`/facturacion/proveedores`), que es de Facturación: entidad compartida. |
+| **Endpoints** | `app/api/inventory/**` — 4 `route.js`, todos con `hasModule("inventory")`: `products`, `products/[id]`, `entries`, `stock-movements`. |
+| | Tocan el stock desde otros módulos: `app/api/orders/[id]/complete/route.js` (descuenta al completar un pedido, si el tenant tiene `inventory`) y `app/api/billing/invoices/[id]/issue/route.js` (solo AVISA, vía `applyStockMovementsForInvoice`). `app/api/proveedores/**` (2) se abre con `billing` **o** `inventory`. Sin públicos ni webhooks. |
+| **Lógica** | `lib/inventory/stock.js` (`stockDe`, `stockDeVarios`, `bajoMinimo`, `moverStock`: el ÚNICO sitio que escribe en `stock_movements`) · `lib/inventory/applyStockMovementsForInvoice.js` (avisa si una factura lleva productos y no viene de un pedido; ya no descuenta) |
+| | Auditoría desde los endpoints: `inventory.entry.created`, `inventory.product.updated`, `inventory.product.deactivated`, `inventory.product.deleted`, `inventory.stock.adjusted`, con sus frases en `lib/actividad/etiquetas.js`. |
+| **UI** | ninguna carpeta propia: no existen `modules/inventory/` ni `components/inventory/`; la pantalla está entera en `app/(dashboard)/inventario/page.jsx` (con `components/ui/HelpTooltip.jsx`) |
+| **Modelos** | `models/tenant/`: `Product` (`products`, con `unit`: ud/kg/g/l/ml/caja/paquete) · `StockEntry` (`stock_entries`) · `StockMovement` (`stock_movements`, el libro mayor: tipos `entrada`/`salida`/`ajuste`/`pedido`). |
+| | Compartidos con otros módulos: `Supplier` (`suppliers`, con Gastos), `OrderLine.productId` (`order_lines`, Pedidos), `Cost` (`costs`, a través de `StockEntry.costId`), `TeamMember` (quién firma el movimiento). Asociaciones en `lib/db/tenantDb.js`, bloque `Product.hasMany(StockEntry…)`. |
+| **Interruptores y parámetros** | ninguno que lea el código |
+| **Pantallas propias** | ninguna (nunca las ha habido: `modules/overrides/spain-enzymes/` es solo de Leads) |
+| **Scripts** | Activación: `node scripts/enable-module.js <slug> inventory` (corre `migrate-inventario-rework` —con «a», 02/08/2026— declarada en `scripts/_module-migrations.js`; necesita antes `migrate-suppliers`, que va con `billing`, porque `stock_entries.supplier_id` apunta a `suppliers`). |
+| | Semilla: el catálogo genérico de las demos lo pone `scripts/seed-sandbox-data.js` (lo llaman `rebuild-demo-showcase.js` y `crear-demos-por-oficio.js`); `scripts/seed-inventario-demo.js` es un extra a mano (material de centro clínico, solo `crm_demo`, `--rehacer` para sustituir). Histórico y NO ejecutar: `scripts/migrate-inventory-rework.js` (sin «a», rework de abril; marcado SUPERADA en el mapa `ONE_OFF` de `_module-migrations.js`). |
+| **Pruebas** | ninguna: ningún `scripts/_smoke-*.mjs` toca el módulo |
+| **Decisiones** | — |
+| **En este doc** | Visión general · Cómo se mueve el stock · Endpoints · Pantalla · Pedidos · Migración y semilla · Si algo no cuadra · Lo que había antes (hasta el 02/08/2026) |
+
 > Documentación de detalle del módulo. Referencia rápida en
 > `CLAUDE.md` (sección "Módulos del CRM"). Si encuentras una discrepancia entre
 > este documento y el código, **prevalece el código**: actualiza este fichero.

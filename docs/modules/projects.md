@@ -1,5 +1,29 @@
 # Módulo Proyectos & Servicios (#3)
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es
+> este mismo commit). Si algo no cuadra, manda el código: corrige esta tabla.
+> **Quién tiene el módulo NO se lista aquí** (una lista a mano se queda
+> vieja): `/admin/modulos` en el back-office o
+> `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `projects` · requiere — (`lib/provisioning/dependencias.js`: se vende solo; sin `team` los tableros funcionan pero solo el admin edita y no hay miembros ni asignados) |
+| **Reina** | — · el doc no declara ninguna |
+| **Pantallas** | `/proyectos` → `app/(dashboard)/proyectos/page.jsx` (listado, alta y «crear con IA») · `/proyectos/[id]` → `app/(dashboard)/proyectos/[id]/page.jsx` (pestañas Resumen · Equipo · Fases · Configuración, botón «Abrir tablero», reorganizar con IA) · `/proyectos/[id]/board` → `app/(dashboard)/proyectos/[id]/board/page.jsx` (Kanban \| Lista) |
+| **Endpoints** | `app/api/projects/**` — 19 `route.js`: `route.js`, `[id]`, `[id]/phases` (+ `[phaseId]`, `reorder`), `[id]/milestones` (+ `[milestoneId]`), `[id]/columns` (+ `[columnId]`, `reorder`, `[columnId]/reorder-tasks`), `[id]/members` (+ `[memberId]`), `[id]/board`, `[id]/tasks`, IA: `ai/generate`, `ai/create`, `[id]/ai/edit`, `[id]/ai/apply` · `app/api/tasks/[id]/**` — 2 (`route.js`, `move`) · `app/api/project-templates/**` — 2 · gateados por `projects` en otros módulos: `app/api/clients/[id]/projects`, `app/api/team/[id]/projects`, `app/api/leads/[id]/convert-to-project`; `app/api/calendar/tasks` mezcla hitos y tarjetas vía `lib/calendar/projectEvents.js` · Públicos: ninguno |
+| **Lógica** | `lib/projects/`: `projectAuth.js` (admin o lead del proyecto) · `serializeProject.js` (oculta presupuesto a quien no es admin/lead) · `serializeTask.js` (`assigneeLinks` → `assignees`) · `generateProjectCode.js` (`PRY-YYYY-NNNN`) · `createDefaultBoardColumns.js` (las 4 columnas) · `taskPriority.js` (enum, etiquetas, orden) · `checklist.js` (normaliza items) · `ai/` (`prompts.js`, `parsePlan.js`, `editOps.js`, `fake.js`: modo demo sin coste) · fuera de la carpeta: `lib/calendar/projectEvents.js` |
+| **UI** | `components/projects/`: `KanbanBoard.jsx`, `BoardColumn.jsx`, `TaskCard.jsx`, `TaskDrawer.jsx`, `ProjectListView.jsx`, `PriorityBadge.jsx`, `StatusBadge.jsx`, `AiProjectModal.jsx`, `AiEditModal.jsx`; huérfanos (nadie los importa): `ClientProjectsSection.jsx`, `EmployeeProjectsSection.jsx`, `ConvertLeadToProjectButton.jsx` · no hay `modules/projects/` |
+| **Modelos** | `Project` (`projects`), `Phase` (`phases`), `Milestone` (`milestones`), `BoardColumn` (`board_columns`), `Task` (`tasks`), `TaskAssignee` (`task_assignees`), `ProjectMember` (`project_members`), `ProjectTemplate` (`project_templates`); `Lead.convertedProjectId` vive en `leads` |
+| **Interruptores y parámetros** | ninguno que lea el código (ni `featureFlags` ni `logicOverrides`); lo que varía es por rol (`lib/projects/projectAuth.js`) y por tener `team` |
+| **Pantallas propias** | ninguna (letrero `ui_override` vacío en producción) |
+| **Scripts** | activar: `node scripts/enable-module.js <slug> projects` (arrastra `MODULES.projects` de `scripts/_module-migrations.js`: `migrate-projects-sprint-1.js`, `migrate-projects-sprint-2.js`, `migrate-projects-task-priority.js`; atajos `npm run db:migrate:projects-1`, `-2`, `-priority`) · seed: `scripts/seed-projects-demo.js` (`npm run db:seed:projects-demo`, idempotente) · `scripts/verify-projects-sprint-2.js` (comprobación post-migración) · `scripts/cleanup-projects-code-indexes.js` (índices `projects_code_key*` duplicados; aborta contra prod) |
+| **Pruebas** | `scripts/smoke-test-kanban.mjs` (`npm run smoke:kanban`; 13 pasos HTTP contra `demo`, necesita `npm run dev` y base de datos: entra en `npm run test:todo`, no en `npm test`) · ninguna ligera |
+| **Decisiones** | — (ninguna propia; la transversal `../decisions/2026-07-28-repaso-de-seguridad.md` aplica como a todos) |
+| **En este doc** | 3. Arquitectura BD · 4. Rutas frontend · 5. Endpoints REST · 6. Helpers / libs · 7. Decisiones arquitectónicas · 8. Migraciones y seeds · 11. Backlog técnico |
+
 > Estado: **Sprint 1 implementado y desplegado** + **Sprint 2 (Kanban) en local pendiente de deploy**.
 > Tenants con módulo activo: `demo`, `aumenta`.
 > Documentación generada al cierre del Sprint 2 (Kanban funcional + endpoints

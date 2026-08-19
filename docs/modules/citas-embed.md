@@ -1,5 +1,25 @@
 # Módulo Citas — Embed de landing pública en WordPress
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es este mismo commit). Si algo no cuadra, manda el código: corrige esta tabla. **Quién tiene el módulo NO se lista aquí** (una lista a mano se queda vieja): `/admin/modulos` en el back-office o `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `citas` · requiere — · este doc es el WIDGET público y el portal SSO de ese módulo: el mapa completo está en `citas.md`; aquí solo lo que toca a lo embebido |
+| **Reina** | — · el widget y el portal se hicieron para `nutri_laura` (WordPress en tunutrilaura.com); el único snippet de WordPress escrito es el suyo |
+| **Pantallas** | públicas, todas en `app/widget/c/[tenantSlug]/`: `page.jsx` → `/widget/c/<slug>` (reserva: tipo, día y hora), `book/page.jsx` → `/book`, `cancel/[token]/page.jsx`, `mi-perfil/page.jsx` (el portal «Mi perfil»; `/mis-citas` redirige ahí desde `next.config.mjs`), `pagar/[token]/page.jsx` (volver a meter la tarjeta); `layout.jsx` (marca del tenant, `robots: noindex`); las puertas y hooks en `_components/` (`AuthGate.jsx` con `useWidgetAuth`, `useCitasPortalSession.js`, `useAdmision.js`, `PuertaScreen`, `BienvenidaGate`, `ContratoGate`, `ContratoFormulario`, `DatosGate`, `ComunicacionesGate`, `ConsentimientoImagenGate`, `MisDocumentos`, `PasoTarjeta`, `SignaturePad`). `soporte/*` es del módulo Soporte |
+| **Endpoints** | `app/api/public/c/[tenantSlug]/` (sin JWT, rate-limited): agenda anónima `info`, `event-types`, `availability` (+`month`), `book`, `booking/[token]`, `cancel/[token]`, `pagar/[token]` (8); portal con `Authorization: Bearer` bajo `citas-portal/` (13; la lista completa en `citas.md`) · La CSP `frame-ancestors` la pone `middleware.js` (`applyWidgetCspHeaders`: por tenant desde `WIDGET_FRAME_ANCESTORS`; sin entrada, `*`) |
+| **Lógica** | `lib/citas/ssoToken.js` (verifica el `wpsso` que firma WordPress; acepta una lista de secretos para rotar), `portalSession.js` (el `sessionToken` del CRM), `portalRateLimit.js`, `quienPregunta.js` (¿anónimo o con sesión?), `puertaIdentidad.js` / `puertaFormulario.js` / `puertaContrato.js` / `puertaValoracion.js` / `puertaReserva.js` (lo que `/book` corta), `tiposVisibles.js`, `slots.js`, `cancelBooking.js`, `clientBookingSerializer.js`, `portalContract.js`, `portalDocumentos.js`, `portalClient.js`, `bienvenida.js`, `tokenPago.js`; el contexto de tenant sin JWT es `lib/tenant/publicTenantContext.js` |
+| **UI** | todo vive dentro de `app/widget/c/[tenantSlug]/` (arriba); no usa `modules/` ni `components/`. El snippet de WordPress: `docs/modules/citas-portal-wordpress-snippet.php` (shortcodes `[crm_reservar_cita]` y `[crm_mis_citas]`, `crm_render_iframe`) |
+| **Modelos** | los de `citas.md`; aquí se leen `EventType`, `Availability`, `Booking`, `SessionPack`, `ClientNotice`, `ContractTemplate`, `ContractSignature` y `Client` |
+| **Interruptores y parámetros** | `featureFlags.autoConfirmPublicBookings` (`book/route.js`). En `tenant.settings`: `widget.sso.enabled` (abre `citas-portal/*`; lo leen esas rutas y `lib/citas/portalContract.js`), `widget.auth.required` / `.loginUrl` (legado, `lib/citas/puertaIdentidad.js`), y las puertas de `settings.citas.*` (`identidadObligatoria`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `reservaOnlineCerrada`; ver `citas.md`). Entorno: `WIDGET_SSO_SECRETS` (JSON slug → secreto o lista), `CITAS_PORTAL_SESSION_SECRET`, `WIDGET_FRAME_ANCESTORS` |
+| **Pantallas propias** | ninguna: el widget es el mismo para todos y cambia por `settings` |
+| **Scripts** | `configure-portal-citas.js <slug>` (enciende `widget.sso`; sustituye a `configure-nutri-laura-citas-portal.js`, que sigue en disco), `configure-nutri-laura-widget-auth.js` (el gate `?wpa=1`, legado), `dev-mint-wpsso.js <slug> <email>` (fabrica un `wpsso` de prueba sin WordPress), `comprobar-citas.js` (solo lectura: Stripe, Resend, precios y salas; NO mira los secretos del SSO) |
+| **Pruebas** | En `npm test` (sin base ni servidor): `_smoke-puerta-identidad.mjs`, `_smoke-tipos-visibles.mjs`, `_smoke-tipos-ocultos.mjs`, `_smoke-bienvenida.mjs`. Con base de datos y `npm run dev` (`npm run test:todo`): `_smoke-puerta-formulario.mjs`, `_smoke-puerta-valoracion.mjs`, `_smoke-valoracion-inicial.mjs`, `_smoke-avisos-cliente.mjs`, `_smoke-book-autorizacion.mjs`, `_smoke-pedir-tarjeta.mjs`, `_smoke-webhook-retencion.mjs` (montan la sesión con `lib/citas/portalSession.js` y pegan a `/api/public/c/…`) |
+| **Decisiones** | — (las del módulo, en `citas.md`) |
+| **En este doc** | Qué es · Endpoints públicos que consume · Snippet para WordPress (Sprint 1) · Portal "Mis citas" (SSO WordPress) — Sprint 2 · TODO Sprint 2 · Verificación manual rápida |
+
 > **Sprint 1 (landing pública)** — generado 2026-05-29.
 > Reemplaza este doc con la versión Sprint 2 cuando lleguen emails de Resend
 > y restricción de dominio.

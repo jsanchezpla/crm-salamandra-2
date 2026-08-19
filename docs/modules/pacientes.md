@@ -1,5 +1,29 @@
 # Módulo Pacientes (`pacientes`)
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es
+> este mismo commit). Si algo no cuadra, manda el código: corrige esta tabla.
+> **Quién tiene el módulo NO se lista aquí** (una lista a mano se queda
+> vieja): `/admin/modulos` en el back-office o
+> `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `pacientes` · requiere `clients` (el paciente cuelga de la familia que paga; `lib/provisioning/catalogo.js` y `lib/provisioning/dependencias.js`, que además marca `team` y `citas` como parciales: sin ellos la ficha pierde el desplegable de terapeuta y las citas). Sus endpoints abren con `pacientes` **o** `clinica`; `clinica` lo exige como obligatorio. |
+| **Reina** | `aumenta` — 1.174 pacientes en producción, hijos de 1.083 familias (`clients`): es el centro donde el paciente NO es quien paga, que es la razón de que exista esta tabla aparte de `clients`. |
+| **Pantallas** | `app/(dashboard)/pacientes/` (3): `/pacientes` (listado paginado con KPIs, búsqueda por nombre y filtros por terapeuta y estado; alta con especialidades), `/pacientes/[id]` (ficha: datos, consentimientos, contactos externos, plan de intervención, sesiones, informes, coordinaciones, documentos, facturación), `/pacientes/[id]/sesiones/nueva` (subir audio → transcribir → revisar → guardar). En el menú es el primer hijo del grupo «Clínica» (`components/layout/Sidebar.jsx`), no una entrada raíz. `pacientes/_components/dummyData.js` es resto de la maqueta: no lo importa ninguna página. |
+| **Endpoints** | `app/api/pacientes/**` (11 `route.js`): `pacientes` (listar/crear), `[id]` (ficha/editar/borrar), `[id]/plan` (plan de intervención), `[id]/contactos/**` (2, agenda de profesionales externos), `[id]/documents/**` (3, adjuntos del paciente), `[id]/contract` (solo descarga los PDF legado que la migración no pudo mover), `contract-template/**` (2, contrato estándar del centro). Ninguno gasta IA. El registro clínico del paciente (sesiones, informes, coordinaciones) va por `app/api/clinica/**` (ver `clinica.md`). También crean o leen pacientes: `app/api/clients/route.js` (el alta de la familia crea a los suyos en la misma transacción), `app/api/clients/[id]/module-assignments/route.js`, `app/api/formularios/[id]/accept/route.js` y `app/api/citas/bookings/**` (una cita apunta a `patient_id`). |
+| **Lógica** | No hay `lib/pacientes/`: vive en `lib/clinica/` — `serialize.js` (`serializePatient`, etiquetas de estado y `care_type`), `specialties.js` (taxonomía compartida con Equipo), `consents.js` (consentimientos RGPD con traza legal), `contractStorage.js` (PDF legado por paciente), `patientClient.js` (de qué cliente es un paciente), `audit.js` — y en `lib/clients/`: `formularioAlta.js` (`normalizarPacientes`, perfil `salud`), `moduleAssignments.js` (`syncClinicPatient`). |
+| **UI** | Sin `modules/pacientes/` ni `components/pacientes/`. Las piezas están en `components/clinica/` (`SpecialtyPicker.jsx`, `PatientDocumentsSection.jsx`, `PatientExternalContactsSection.jsx`, `InterventionPlanSection.jsx`, `NuevaCoordinacionModal.jsx`) y en `components/clients/` (`PacientesDelAlta.jsx`, `ClientPatientsSection.jsx`: los pacientes vistos desde la ficha de la familia). |
+| **Modelos** | `Patient` → `patients` (`models/tenant/Patient.model.js`; hoy con `client_id` al pagador, `care_type` terapia/nutrición, `specialties`, `objectives`, `consents`, `dni`, `address`, `relationship`, y `contract_signed`/`contract_file` como legado) · `ExternalContact` → `external_contacts` · `InterventionPlan` → `intervention_plans`. Las FK de `clinic_sessions`, `clinical_reports` y `coordinations` apuntan aquí, no a `clients`. |
+| **Interruptores y parámetros** | ninguno que lea el código. |
+| **Pantallas propias** | ninguna. |
+| **Scripts** | Activar: `node scripts/enable-module.js <slug> pacientes` (avisa si falta `clients`; `ensure-tenant-schema.js` corre las 6 del bloque `pacientes` de `scripts/_module-migrations.js`: `migrate-patients-clients-phase1`, `migrate-client-module-assignments`, `migrate-patients-multi-per-client`, `migrate-patients-care-type`, `migrate-patients-specialties`, `migrate-documents-patient-link`. ⚠️ La tabla `patients` la crea `migrate-clinica-module`, que está solo en el bloque `clinica`). Seed: `seed-clinica-demo.js <slug>` (pacientes + clínica; **VACÍA** antes, solo escaparate). Datos, a mano y con dry-run: `backfill-patients-client.js` (paciente → pagador deducido de sus citas/sesiones, `--confirm`; no cruza por nombre a propósito) y `migrate-contract-patient-to-client.js` (contrato del paciente → familia, ya corrido). ONE_OFF de la maqueta, no usar: `migrate-pacientes-sprint-1.js` (solo `crm_aumenta`). |
+| **Pruebas** | `scripts/_smoke-alta-progenitores.mjs` — entra en `npm test`, sin base de datos: `normalizarPacientes` (el motivo llega hasta lo que se guarda) y el alta con dos progenitores. Ninguna otra toca `patients`: `_smoke-borrar-paciente.mjs` y `_smoke-paciente-borrado.mjs` son de `clients` (la «paciente» de una consulta de nutrición es un `Client`). |
+| **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` · `../decisions/2026-08-01-alta-de-clientes-por-perfil.md` · `../decisions/2026-08-04-clientes-se-llama-pacientes-en-nutricion.md` |
+| **En este doc** | Decisión arquitectónica: `patients` ≠ `clients` · Estado: Fase 1 (backend real) · Modelo · Frontend · Migración · Decisiones cerradas |
+
 > Documentación de detalle. Referencia rápida en `CLAUDE.md`. Si
 > encuentras una discrepancia con el código, **prevalece el código**:
 > actualiza este fichero.

@@ -1,5 +1,25 @@
 # Emails transaccionales
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es este mismo commit). Si algo no cuadra, manda el código: corrige esta tabla. **Quién tiene el módulo NO se lista aquí** (una lista a mano se queda vieja): `/admin/modulos` en el back-office o `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | sin moduleKey: es infraestructura transversal y la tienen todos. Quien la usa hoy: `citas`, `billing`, `formularios`, `nutricion`, `outreach`, `support` (también el correo ENTRANTE), `configuracion` y el Buzón (`docs/modules/buzon.md`) |
+| **Reina** | — |
+| **Pantallas** | ninguna propia. Las claves se pegan en Configuración → tarjeta «Resend» (`app/(dashboard)/configuracion/page.jsx` → `/configuracion`, `modules/config/ConfigModule.jsx`; es UNIVERSAL, regla #14: sale en todos los clientes usen o no correo). El back-office `/admin` (`app/admin/page.jsx`) enseña el remitente de cada cliente vía `app/api/admin/configuraciones/route.js` |
+| **Endpoints** | ninguno de envío propio: `sendEmail` se llama DESDE los módulos — `app/api/citas/bookings/route.js`, `bookings/[id]/route.js` (+`confirm`, `reject`, `pedir-tarjeta`), `citas/avisos`, `billing/invoices/[id]/send`, `formularios/[id]/accept`, `nutricion/plans/[id]/send-email`, `outreach/leads/[id]/enviar-correo`, `outreach/leads/buscar-nuevos`, `tickets/[id]/messages`, y los públicos `public/c/[tenantSlug]/book` y `public/c/[tenantSlug]/formularios/[formSlug]` · Guardar las claves: `app/api/tenant/settings/route.js` · **Webhook ENTRANTE**: `app/api/webhooks/resend-inbound/route.js` (Soporte: `soporte-<slug>@RESEND_INBOUND_DOMAIN`, firmado con `RESEND_WEBHOOK_SECRET`; en producción aún sin dar de alta en Resend) |
+| **Lógica** | `lib/email/resendClient.js` (`sendEmail`: nunca lanza, dry-run sin clave, 1 reintento en 5xx; `envioRealizado`: traduce la respuesta a `{salio, motivo}`) · `lib/email/templates/layout.js` (`renderLayout`, HTML de tablas con la marca del tenant) · `lib/outreach/resendConfig.js` (`getTenantResendConfig`: la clave POR CLIENTE —BYOK— desde `settings.integrations`, descifrada con `lib/crypto/secretBox.js`; from/reply-to con respaldo `OUTREACH_FROM_EMAIL`/`OUTREACH_REPLY_TO`) · `lib/demo/isDemo.js` (guard obligatorio en todo endpoint del dashboard que envíe) · envíos que viven en `lib/`: `lib/citas/recordatorios.js`, `lib/citas/notificarCancelacion.js`, `lib/payments/entityHooks.js`, `lib/support/notify.js`, `lib/buzon/avisarPorCorreo.js`, `lib/configuracion/avisoCambio.js` |
+| **UI** | `modules/config/ConfigModule.jsx` (tarjeta Resend: clave, remitente, reply-to). No hay `modules/email/` ni `components/email/`; las plantillas son HTML de servidor |
+| **Modelos** | ninguno propio: no hay `email_send_log` (sigue en «Pendientes para producción»); lo único que queda escrito es lo que cada módulo apunte (`bookings.reminder_sent_at`, `client_notices.email_status`…) y la salida por stdout/stderr |
+| **Interruptores y parámetros** | ninguno que lea el código en `featureFlags`/`logicOverrides`. Por cliente, en `tenant.settings.integrations`: `resendApiKey` (cifrada en reposo), `resendFromEmail`, `resendReplyTo`. Entorno: `RESEND_API_KEY` y `RESEND_FROM_EMAIL` (el respaldo GLOBAL de `sendEmail`; en producción la clave va vacía a propósito, así que sin clave del cliente el envío es dry-run), `OUTREACH_FROM_EMAIL`, `OUTREACH_REPLY_TO`, `RESEND_INBOUND_DOMAIN`, `RESEND_WEBHOOK_SECRET`, `APP_PUBLIC_URL` (los enlaces del recordatorio, en `scripts/enviar-recordatorios.js`) |
+| **Pantallas propias** | ninguna |
+| **Scripts** | Diagnóstico (solo lectura): `check-resend-tenant.mjs <slug>` (la clave del CLIENTE: dominios y estado, sin imprimirla), `check-resend.mjs` (la del entorno), `comprobar-citas.js` (dice si a un cliente le falta clave o remitente) · `encrypt-tenant-secrets.js` (cifra en reposo las claves ya guardadas, `resendApiKey` incluida) · Cron: `enviar-recordatorios.js` (`scripts/deploy/crm-recordatorios.timer`, cada hora) |
+| **Pruebas** | En `npm test`: `_smoke-checkpoint2-emails.mjs` (las tres plantillas de citas en dry-run, sin base). Con base de datos: `_smoke-checkpoint2-e2e.mjs`; con base y `npm run dev` (`npm run test:todo`): `_smoke-correo-entrante.mjs` (el webhook entrante, con cuerpos firmados como los firma Resend), `_smoke-enlace-videollamada.mjs` (que «Guardar y enviar» no mienta), `_smoke-avisos-cliente.mjs` (el aviso se guarda aunque el correo no salga, y registra qué pasó con él) |
+| **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (el guard de la demo en lo que envía correo: la demo es pública y salía por nuestro dominio) |
+| **En este doc** | Resumen · Configuración · Templates disponibles · Layout compartido · Añadir un template nuevo · Errores y reintentos |
+
 ## Resumen
 
 Envío de emails transaccionales con [Resend](https://resend.com).
