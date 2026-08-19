@@ -240,225 +240,134 @@ y `somos`; Aumenta sigue con 0 tickets.
 
 ---
 
+### La tarjeta de Stripe de Configuración pide dar de alta solo una parte de los eventos que el CRM necesita · producto, `nutri_laura`
+
+**Lo que pasa.** La tarjeta «Stripe» de `/configuracion`
+(`modules/config/ConfigModule.jsx`, línea ~145) dice al cliente: «Selecciona
+estos eventos: checkout.session.completed, checkout.session.expired,
+checkout.session.async_payment_succeeded, checkout.session.async_payment_failed
+y charge.refunded». El webhook del CRM vive de más que eso:
+`scripts/comprobar-stripe.js` lista también
+`payment_intent.amount_capturable_updated` («SIN ESTE la cita no entra en la
+lista de espera»: es el que avisa de que la retención ha quedado hecha),
+`payment_intent.succeeded`, `payment_intent.canceled`,
+`payment_intent.payment_failed` y los `invoice.*` del pago a plazos. Un cliente
+que configure Stripe siguiendo la pantalla deja fuera el evento que hace
+funcionar la reserva con retención.
+
+**Cuánto duele.** Hoy nadie: el único cliente con Stripe es nutri_laura y su
+webhook se dio de alta a mano con la lista buena (`comprobar-stripe.js` lo
+verifica). Morderá al siguiente que lo haga solo desde la pantalla, que es
+justo para lo que la pantalla existe (regla #14: la configuración es
+universal).
+
+*Se comprueba*: el texto de la tarjeta lista los mismos eventos que
+`scripts/comprobar-stripe.js` (o remite a él), y un tenant nuevo que los siga
+pasa `comprobar-stripe.js` sin avisos.
+*Dónde*: `modules/config/ConfigModule.jsx:145`; la lista buena en
+`scripts/comprobar-stripe.js:36-40` y siguientes.
+*Comprobado en producción*: 19/08/2026 — la cadena con la lista corta está en
+el bundle desplegado (`.next/static` y `.next/server/chunks/ssr`, `c7f84d2`).
+
+---
+
 ## P3 — deuda
 
-### Los volcados de Fichaje se auditan sin frase propia: en Actividad saldrán con el traductor genérico · `aumenta`, producto
+### Las tres pruebas de Captación con servidor apuntan a `sandbox`, que no existe · producto
 
-**Lo que pasa.** Los siete endpoints de `/api/fichaje/*` auditan cinco acciones
-(`fichaje.volcado`, `fichaje.corregido`, `fichaje.creado_a_mano`,
-`fichaje.dado_de_baja`, `fichaje.volcado_deshecho`), pero ninguna tiene frase
-en `lib/actividad/etiquetas.js` ni el prefijo `fichaje` está en su mapa de
-módulos. En Equipo → Actividad saldrán con el traductor genérico, que dice la
-clave y poco más. El doc del módulo (`docs/modules/fichaje.md`) afirma que las
-frases están; no están.
+**Lo que pasa.** `scripts/_outreach-smoke.mjs`, `_outreach-e2e.mjs` y
+`_outreach-ui-check.mjs` firman el JWT para el tenant `sandbox`, que no existe
+ni en local ni en producción. Por eso, cuando el 19/08 se renombraron las
+demás pruebas de Captación y Nutrición a `_smoke-*` para que `npm test` las
+viera, estas tres se quedaron fuera a propósito: meterlas en el runner solo
+habría puesto `npm run test:todo` en rojo.
 
-**Cuánto duele.** Hoy nada: Aumenta tiene el módulo encendido y todavía no ha
-volcado ningún Excel (0 acciones `fichaje.*` en `master.audit_logs`). El día que
-lo haga, el primer volcado del mes saldrá en Actividad como una clave en crudo.
+**Cuánto duele.** La parte con servidor de Captación (buscar nuevos, analizar,
+convertir en cliente) sigue sin red automática. Hoy nadie ha perdido nada.
 
-*Se comprueba*: `grep -n fichaje lib/actividad/etiquetas.js` devuelve las cinco
-entradas y el prefijo en MODULOS; y tras un volcado en la demo, Equipo →
-Actividad lo cuenta con su frase.
-*Dónde*: `lib/actividad/etiquetas.js` (mapa de módulos y entradas),
-`app/api/fichaje/import/route.js` y hermanos.
-*Comprobado en producción*: 19/08/2026 — en el contenedor `etiquetas.js` tiene
-cero menciones a fichaje, y en master.audit_logs no hay ninguna acción
-`fichaje.*` todavía.
+*Se comprueba*: las tres se llaman `_smoke-outreach-*.mjs`, apuntan a `demo`
+(que tiene `outreach` con 11 leads sembrados) y pasan con `npm run test:todo`.
+*Dónde*: `scripts/_outreach-smoke.mjs`, `_outreach-e2e.mjs`,
+`_outreach-ui-check.mjs` (el slug y el JWT de `admin@sandbox.local`).
+*Comprobado en producción*: 19/08/2026 — en el contenedor los tres ficheros
+siguen con `sandbox`; la unitaria (`_smoke-outreach-ai-unit.mjs`) ya entra en
+`npm test`.
 
-### Activar «pacientes» sin «clinica» correría ALTERs sobre una tabla que no existe · producto
+### Dos pruebas de cobro esperan una devolución que el CRM ya no hace · `nutri_laura`, producto
 
-**Lo que pasa.** La tabla `patients` solo la crea `migrate-clinica-module.js`,
-que en `scripts/_module-migrations.js` está únicamente en el bloque `clinica`.
-El bloque `pacientes` tiene seis migraciones y todas son ALTER sobre `patients`
-(`migrate-patients-clients-phase1`, `-multi-per-client`, `-care-type`,
-`-specialties`, `migrate-client-module-assignments`,
-`migrate-documents-patient-link`). Un `enable-module.js <slug> pacientes` en un
-cliente que no tenga `clinica` se las encontraría sin tabla.
+**Lo que pasa.** `scripts/_smoke-cancelar-retencion.mjs` (paso 3: «una cita ya
+cobrada se sigue devolviendo», espera `refunded`) y
+`scripts/_smoke-carreras-cobro.mjs` (caso 2: «cancela mientras se cobra → se le
+devuelve») se escribieron con la regla de julio. Desde el 07/08/2026 (Rodrigo)
+`lib/citas/politicaReembolso.js` dice que el CRM no devuelve dinero nunca —solo
+suelta retenciones—, y lo fija `_smoke-no-se-devuelve.mjs`. Las dos pruebas
+viejas fallarían hoy; necesitan servidor y claves `sk_test_`, así que
+probablemente nadie las ha lanzado desde entonces.
 
-**Cuánto duele.** Hoy nada, por el orden de las dependencias: `clinica` exige
-`pacientes` y no al revés, y en producción ningún cliente tiene `pacientes` sin
-`clinica` (comprobado). Morderá el día que se venda Pacientes suelto — que es
-justo el caso 1 de la escalera, el que no debería abrir ningún fichero.
+**Cuánto duele.** Son pruebas, no producción: lo que duele es que la red de
+cobros tiene dos hilos que contradicen la regla, y el día que alguien las lance
+no sabrá cuál de las dos miente.
 
-*Se comprueba*: `node scripts/enable-module.js <slug> pacientes --dry-run` en un
-tenant sin `clinica` lista la creación de `patients` antes de los ALTER (o el
-bloque `pacientes` de `_module-migrations.js` lleva la migración que la crea).
-*Dónde*: `scripts/_module-migrations.js:270` (bloque `pacientes`),
-`scripts/migrate-clinica-module.js`.
-*Comprobado en producción*: 19/08/2026 — en el contenedor el bloque `pacientes`
-no incluye `migrate-clinica-module`; en master no hay ningún tenant con
-`pacientes` encendido y `clinica` apagado.
+*Se comprueba*: las dos pasan con `npm run test:todo` y sus pasos esperan
+`released`/sin devolución donde antes esperaban `refunded`.
+*Dónde*: `scripts/_smoke-cancelar-retencion.mjs` (paso 3),
+`scripts/_smoke-carreras-cobro.mjs` (caso 2); la regla en
+`lib/citas/politicaReembolso.js`.
+*Comprobado en producción*: 19/08/2026 — en el contenedor los dos ficheros
+siguen esperando `refunded` (dos veces cada uno).
 
-### Nueve pruebas no las ve `npm test` por cómo se llaman · producto
+### El proveedor de un gasto existe en la base de datos pero no se puede poner desde el CRM · `aumenta`, producto
 
-**Lo que pasa.** `scripts/pruebas.mjs` recoge solo `_smoke-*.mjs`, `_smoke-*.js`
-y `smoke-test-*.mjs`. Fuera quedan las cuatro de Captación
-(`_outreach-ai-unit.mjs`, `_outreach-smoke.mjs`, `_outreach-e2e.mjs`,
-`_outreach-ui-check.mjs`) y las cinco de Nutrición
-(`smoke-nutri-laura-recetario-{c1,c2,c3,c4,e2e}.mjs`). `_outreach-ai-unit.mjs`
-es pura (prompt, parseo, el simulado de IA): entraría en `npm test` con solo
-renombrarla. Las otras ocho piden servidor y base de datos, y las tres de
-Captación con servidor firman el JWT para el tenant `sandbox`, que no existe ni
-en local ni en producción: hoy fallarían aunque el runner las viera.
+**Lo que pasa.** `Cost.supplierId` está en el modelo, en la columna
+`costs.supplier_id`, en la asociación de Sequelize y lo rellenó la importación
+de la contabilidad de Aumenta; `DELETE /api/proveedores/[id]` lo mira para no
+borrar un proveedor con gastos. Pero `POST` y `PATCH /api/billing/costs` no lo
+aceptan y la pantalla de Gastos (`/facturacion/costes`) no lo pide: un gasto
+nuevo nace sin proveedor, y el proveedor «compartido entre Gastos e Inventario»
+del doc solo funciona de Inventario para dentro.
 
-**Cuánto duele.** Es una red con agujeros: Captación y Nutrición pueden romperse
-sin que `npm test` se entere, y los docs de los dos módulos ya dicen que sus
-pruebas «están». Nadie ha perdido nada todavía.
+**Cuánto duele.** Aumenta tiene los gastos importados con su proveedor y a
+partir de ahí los nuevos van sin él: la lista de proveedores deja de cuadrar
+con los gastos sin que nadie se entere.
 
-*Se comprueba*: `node scripts/pruebas.mjs --listar` enseña la unitaria de
-Captación entre las ligeras; y las ocho pesadas, o están en `npm run test:todo`
-con un tenant que exista, o están borradas con su motivo.
-*Dónde*: `scripts/pruebas.mjs:78` (el `startsWith`), `scripts/_outreach-*.mjs`,
-`scripts/smoke-nutri-laura-recetario-*.mjs`.
-*Comprobado en producción*: 19/08/2026 — en el contenedor, el patrón del runner
-y los nueve ficheros están tal cual se describe.
+*Se comprueba*: dar de alta un gasto en `/facturacion/costes` permite elegir
+proveedor y `GET /api/billing/costs` lo devuelve.
+*Dónde*: `app/api/billing/costs/route.js` y `[id]/route.js` (whitelist del
+body), `app/(dashboard)/facturacion/costes/page.jsx`; el modelo
+`models/tenant/Cost.model.js` ya lo tiene.
+*Comprobado en producción*: 19/08/2026 — el bundle desplegado de
+`/api/billing/costs` no contiene `supplierId`; `billing` encendido en aumenta
+(14.243 facturas) y seis tenants más.
 
-### Los docs de Leads, Formularios y Analíticas describen overrides y endpoints que ya no existen · documentación
+### Restos vistos en la revisión de docs del 19/08: código que nadie importa y comentarios que mienten · producto
 
-**Lo que pasa.** `docs/modules/leads.md` habla de siete overrides y de
-quality-energy, abarcaia y Referidos (borrados el 12/08), niega endpoints que
-existen (convertir un lead en proyecto, el rate limit del público, la auditoría
-de PATCH/DELETE), dice «12 stages» cuando son 15 y «leads o sales», y no
-menciona `/leads/estadisticas`. `formularios.md` sigue titulado «Formularios»
-(en el menú es Leads Comerciales desde el 01/08), le faltan el DELETE de
-descartadas y los endpoints firmados `registro-web`, y describe el canje SSO
-dejando solicitudes, que se quitó el 05/08. `analytics.md` manda usar `--force`
-en `enable-module.js` sin hacer falta y cita la regla 14 para los secretos (es
-la 15). 27 puntos, uno a uno, en `docs/revision-docs-2026-08-19.md`.
+**Lo que pasa.** Al verificar los docs contra el código salieron cabos que no
+son de doc y no valían una tarea cada uno:
+- `components/projects/ClientProjectsSection.jsx`,
+  `EmployeeProjectsSection.jsx` y `ConvertLeadToProjectButton.jsx` no los
+  importa nadie (sus endpoints sí existen).
+- `app/(dashboard)/clinica/_components/dummyData.js` y
+  `app/(dashboard)/pacientes/_components/dummyData.js` son restos de la
+  maqueta y nadie los importa.
+- La cabecera de `lib/buzon/quienEscribe.js` dice que lo usan «los tres
+  endpoints del cliente»; lo importan dos.
+- `scripts/dev-mint-wpsso.js` lee `WIDGET_SSO_SECRETS` como objeto
+  slug → secreto y no contempla la forma lista (rotación del 12/08): con
+  lista firmaría con «a,b».
+- `docs/modules/citas-portal-wordpress-snippet.php` monta `/mis-citas`, que
+  hoy es un redirect a `mi-perfil` (funciona, pero enseña la URL vieja).
 
-**Cuánto duele.** Quien vaya a tocar Leads leyendo el doc programa contra un
-módulo que no existe: es justo lo que las cabeceras «Mapa» del 19/08 evitan en
-las 30 primeras líneas, pero el resto del doc sigue debajo contradiciéndolas.
+**Cuánto duele.** Nada en producción. Es limpieza para cuando se toque cada
+zona; si se hace de una vez, que sea un commit por punto.
 
-*Se comprueba*: las secciones leads.md, formularios.md y analytics.md de
-`docs/revision-docs-2026-08-19.md` están borradas porque cada punto se corrigió
-en su doc.
-*Dónde*: `docs/modules/leads.md`, `docs/modules/formularios.md`,
-`docs/modules/analytics.md`.
-*Comprobado en producción*: 19/08/2026 — cada punto verificado contra el código
-desplegado (commit f1039ea, el mismo que HEAD).
-
-### Los docs de Clínica y Pacientes siguen diciendo «solo Aumenta» y describen la maqueta · documentación
-
-**Lo que pasa.** `clinica.md` lista 6 endpoints cuando hay 35 y «cuatro
-modelos» cuando hay 10; sus tablas de modelos van por detrás del código
-(`therapistId` ya es opcional, el `status` de sesión tiene cuatro valores, faltan
-`clientId`, `prepText`, `scope`, `deliveredDocumentId`…); presenta la migración
-ONE_OFF de la maqueta como la viva y cuenta quality_energy y abarcaia entre los
-tenants. `pacientes.md` dice que `clients` «no se usa en el flujo clínico» y que
-la vinculación está «pendiente» cuando `patients.client_id`, la sección de
-pacientes en la ficha y el backfill existen desde julio; su tabla del modelo no
-tiene ocho columnas que sí están; habla de «4 tabs» y de la maqueta. Y los dos
-dicen «activado solo en aumenta»: lo tienen también demo, demo_clinica y somos.
-Detalle en `docs/revision-docs-2026-08-19.md`.
-
-**Cuánto duele.** Es el módulo de la reina: la próxima vez que Aumenta pida algo
-clínico, el doc por el que manda empezar CLAUDE.md cuenta la versión de junio.
-
-*Se comprueba*: las secciones clinica.md y pacientes.md de
-`docs/revision-docs-2026-08-19.md` están borradas porque cada punto se corrigió
-en su doc.
-*Dónde*: `docs/modules/clinica.md`, `docs/modules/pacientes.md`.
-*Comprobado en producción*: 19/08/2026 — cada punto verificado contra el código
-desplegado (f1039ea = HEAD); los tenants, contra master.
-
-### Los docs de Citas, widget, Pagos y Correo describen reglas que cambiaron este mes · documentación
-
-**Lo que pasa.** `pagos.md` dedica una sección entera al reembolso automático
-(≥24 h, cancela la profesional) que desde el 07/08 no existe: el CRM no devuelve
-dinero nunca, solo suelta retenciones; dice que «pedir otra tarjeta» no está
-construido (lo está, con tres pruebas), que `checkout.js` no tiene llamantes
-(lo llama `/book`), y no cuenta los plazos, los bonos ni el vigilante de
-retenciones. `citas.md` repite tres veces que `Booking` no tiene FK a `Client`
-(la tiene, más paciente, profesional y bono), describe un override de Laura y un
-`ClientBookingsPanel` en `overrides/` que no existen, y lista una migración de
-quince. `citas-embed.md` habla de CSP abierta, del gate `?wpa=1` y de
-`/mis-citas`, todo cambiado. `emails.md` conoce 3 plantillas de 16 y no menciona
-que la clave de Resend es por cliente (BYOK). Detalle en
-`docs/revision-docs-2026-08-19.md`.
-
-**Cuánto duele.** Es donde hay dinero: alguien que lea pagos.md puede prometerle
-a una paciente una devolución que el CRM no va a hacer.
-
-*Se comprueba*: las secciones citas.md, citas-embed.md, pagos.md y emails.md de
-`docs/revision-docs-2026-08-19.md` están borradas porque cada punto se corrigió
-en su doc.
-*Dónde*: `docs/modules/{citas,citas-embed,pagos,emails}.md`.
-*Comprobado en producción*: 19/08/2026 — cada punto verificado contra el código
-desplegado (f1039ea = HEAD).
-
-### Los docs de Facturación e Inventario hablan de FIFO, lotes y pantallas que no están · documentación
-
-**Lo que pasa.** `billing.md` dice que «enviar factura» es informativo (manda
-el PDF por Resend), que las líneas disparan un descuento FIFO sobre
-`InboundBatch` (modelo que no existe desde el 02/08: hoy solo avisa), que cada
-línea se escribe a mano (el editor elige producto de Inventario); lista 10
-páginas de 17 y deja fuera presupuestos, exportaciones, morosidad, arqueo y
-proveedores; y su backlog sigue pidiendo el PDF y los presupuestos, que existen.
-`inventory.md` apunta a `seed-inventario-demo.js` como la siembra de la demo
-(ya la hace `seed-sandbox-data.js`) y `lib/provisioning/catalogo.js` describe
-el módulo con «lotes, fórmulas». Detalle en `docs/revision-docs-2026-08-19.md`.
-
-**Cuánto duele.** Facturación es el módulo con 14.243 facturas reales de
-Aumenta; un doc que describe el flujo anterior es peor que ninguno.
-
-*Se comprueba*: las secciones billing.md e inventory.md de
-`docs/revision-docs-2026-08-19.md` están borradas porque cada punto se corrigió
-en su doc (y `catalogo.js` ya no habla de fórmulas).
-*Dónde*: `docs/modules/billing.md`, `docs/modules/inventory.md`,
-`lib/provisioning/catalogo.js:68`.
-*Comprobado en producción*: 19/08/2026 — cada punto verificado contra el código
-desplegado (f1039ea = HEAD).
-
-### Los docs de Equipo, Proyectos, Soporte y Buzón se quedaron en su primera versión · documentación
-
-**Lo que pasa.** `team.md` dice «una sola página, un solo modelo» (hay 10
-páginas bajo /equipo y 3 modelos), que «no hace permisos por módulo» (los hace
-desde el 27/07), que Actividad va sin moduleKey (va con `team_avanzado`), y le
-faltan cinco campos y cinco endpoints. `projects.md` sigue «pendiente de
-deploy» (está en cinco clientes), describe 6 pestañas (son 4) y no menciona la
-IA de Proyectos ni el calendario. `support.md` dice que sin módulo sale un
-mailto (desde el 13/08 enlaza al Buzón) y usa el tenant `sandbox` de ejemplo,
-que no existe. `buzon.md` solo tiene dos omisiones (`quienEscribe.js` y la
-herramienta de triaje). Detalle en `docs/revision-docs-2026-08-19.md`.
-
-**Cuánto duele.** Poco cada una; juntas, es la mitad del CRM contada de memoria.
-
-*Se comprueba*: las secciones team.md, projects.md, support.md y buzon.md de
-`docs/revision-docs-2026-08-19.md` están borradas porque cada punto se corrigió
-en su doc.
-*Dónde*: `docs/modules/{team,projects,support,buzon}.md`.
-*Comprobado en producción*: 19/08/2026 — cada punto verificado contra el código
-desplegado (f1039ea = HEAD).
-
-### Los docs de Clientes, Nutrición, Formación, Documentos, Configuración y Captación listan menos de lo que hay · documentación
-
-**Lo que pasa.** `clients.md` recoge 17 endpoints de 26 y «seis pestañas» de
-nueve. `nutricion.md` aún describe OpenFoodFacts, «solo nutri_laura», un
-esquema sin las cuatro tablas del recetario y una sección de migraciones que
-omite seis vivas y enseña como comando dos históricos. `training.md` cuenta
-«siete modelos» (nueve), cita como vivo el override de Aumenta borrado el 18/08,
-dice que `/api/cuestionarios` acepta `cuestionarios` y que el módulo no audita
-(audita tres acciones). `documents.md` sigue «sin desplegar», con el modelo
-viejo, «todos con hasModule(documents)» cuando 7 de 9 exigen el avanzado, y una
-cuota por featureFlags que no existe. `configuracion.md` habla de un
-`always: true` que no está en el Sidebar, de «dos tarjetas» y «cuatro
-interruptores» (son siete tarjetas y diez interruptores), y de 7 endpoints con
-`vetoAi` (son 11). `outreach.md` sigue «falta desplegar» (está en cinco
-clientes) y dice que sin `RESEND_API_KEY` el envío es dry-run (la clave es por
-cliente). Detalle en `docs/revision-docs-2026-08-19.md`.
-
-**Cuánto duele.** Son los docs de las dos reinas (Laura en nutrición, la ficha
-de Aumenta en clientes) y el de Configuración, que es por donde entra cada
-cliente nuevo.
-
-*Se comprueba*: las secciones clients.md, nutricion.md, training.md,
-documents.md, configuracion.md y outreach.md de
-`docs/revision-docs-2026-08-19.md` están borradas porque cada punto se corrigió
-en su doc.
-*Dónde*: `docs/modules/{clients,nutricion,training,documents,configuracion,outreach}.md`.
-*Comprobado en producción*: 19/08/2026 — cada punto verificado contra el código
-desplegado (f1039ea = HEAD).
+*Se comprueba*: `grep -rl` de cada componente fuera de su propio fichero
+devuelve algo o el fichero ya no está; la cabecera de `quienEscribe.js` dice
+«dos»; `dev-mint-wpsso.js` acepta la lista; el snippet monta `mi-perfil`.
+*Dónde*: los ficheros de la lista.
+*Comprobado en producción*: 19/08/2026 — en el contenedor
+`quienEscribe.js` sigue diciendo «tres endpoints» y `dev-mint-wpsso.js` no
+tiene `Array.isArray`; los componentes y `dummyData.js` están en el repo
+desplegado (`c7f84d2`).
 
 ---
 
@@ -467,6 +376,58 @@ desplegado (f1039ea = HEAD).
 Cosas que no se pueden hacer sin que Jorge o Rodrigo elijan. Van como tareas y
 no como una lista suelta a propósito: así aparecen en el tablero. Cuando se
 decida, la respuesta se escribe aquí y la tarea baja a su prioridad.
+
+### Si una cita se cancela mientras se está cobrando, el CRM dice «el importe se ha devuelto» y no devuelve nada · `nutri_laura`, producto
+
+**Lo que pasa.** En `POST /api/citas/bookings/[id]/confirm`, si otra petición
+cancela la cita en el instante en que se está capturando el cobro, el endpoint
+llama a `reembolsarCitaSiProcede` y responde 409 «La cita dejó de estar
+disponible mientras se procesaba el cobro. El importe se ha devuelto». Desde el
+07/08/2026 esa función no devuelve nunca (`lib/citas/politicaReembolso.js`),
+así que el mensaje miente: el dinero se ha cobrado por una cita que ya no
+existe y nadie lo devuelve.
+
+**Por qué es una decisión y no un arreglo.** La regla «no se devuelve nunca» se
+pensó para cancelaciones de la paciente; este caso es distinto: hemos cobrado
+NOSOTROS por algo que ya estaba cancelado. Caben dos salidas y las dos son de
+producto: (a) que este caso sea la única excepción y se devuelva (la función ya
+sabe hacerlo), o (b) mantener «nunca» y cambiar el mensaje para que diga la
+verdad y alguien lo resuelva a mano desde Stripe. Es una carrera de milisegundos
+y con 10 citas en Laura es improbable, pero el mensaje actual es falso.
+
+*Se comprueba*: `_smoke-carreras-cobro.mjs` (caso «cancela mientras se cobra»)
+pasa con la regla elegida y el texto del 409 dice lo que pasa de verdad.
+*Dónde*: `app/api/citas/bookings/[id]/confirm/route.js` (bloque
+`CANCELADA_A_MEDIAS`), `lib/citas/reembolsoCita.js`,
+`lib/citas/politicaReembolso.js`.
+*Comprobado en producción*: 19/08/2026 — la cadena «importe se ha devuelto»
+está en el bundle desplegado (`.next/server/chunks`), y `decidirReembolso`
+devuelve siempre `false`.
+
+### El correo de cancelación (y otros cuatro) no miran si la familia ha pedido que no se le escriba · `nutri_laura`, `aumenta`, producto
+
+**Lo que pasa.** `citaPuedeAvisar` (las preferencias de comunicación de la
+ficha, `lib/clients/comunicaciones.js`) lo consultan el cambio de hora, el
+enlace de videollamada, el recordatorio, los avisos, `/book` y `/confirm`.
+No lo consultan `bookingCancelled`, `bookingRejected`, `pedirTarjeta`,
+`solicitudAceptada` ni el `bookingReceived` que sale del webhook de Stripe.
+
+**Por qué es una decisión.** Puede ser a propósito: una cancelación o un «no te
+hemos podido cobrar» es transaccional, y no avisar puede ser peor que avisar a
+quien pidió silencio. Pero la ficha promete «por dónde se le escribe a cada
+familia», y hoy esa promesa tiene cinco agujeros. Hay que decir cuáles de esos
+cinco son transaccionales (se mandan siempre) y cuáles respetan la preferencia.
+
+*Se comprueba*: cada plantilla de la lista, o pasa por `citaPuedeAvisar`, o
+está en una lista de «transaccionales» con su motivo en
+`lib/clients/comunicaciones.js`.
+*Dónde*: `lib/citas/notificarCancelacion.js`,
+`app/api/citas/bookings/[id]/reject/route.js`,
+`app/api/citas/bookings/[id]/pedir-tarjeta/route.js`,
+`app/api/formularios/[id]/accept/route.js`,
+`app/api/webhooks/stripe/[tenantSlug]/route.js`.
+*Comprobado en producción*: 19/08/2026 — verificado contra el código
+desplegado (`c7f84d2`): ninguno de los cinco pasa por `citaPuedeAvisar`.
 
 ### ¿Qué es «ganado» en el embudo de Aumenta? · `aumenta`, `sandbox`
 

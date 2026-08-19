@@ -26,6 +26,190 @@ Lo más reciente arriba.
 
 ---
 
+## 19/08/2026
+
+### Los volcados de Fichaje se auditan sin frase propia: en Actividad saldrán con el traductor genérico · `aumenta`, producto
+
+**Qué pasaba.** Los endpoints de `/api/fichaje/*` auditaban cinco acciones
+(`fichaje.volcado`, `fichaje.corregido`, `fichaje.creado_a_mano`,
+`fichaje.dado_de_baja`, `fichaje.volcado_deshecho`) y
+`lib/actividad/etiquetas.js` no tenía ni el módulo ni las frases: en Equipo →
+Actividad habrían salido como una clave en crudo.
+
+**Qué lo arregla.** El módulo «Fichaje» en el mapa de prefijos y las cinco
+frases en el catálogo (`36b070d`). Sin víctima: Aumenta aún no ha volcado
+ningún Excel (0 acciones `fichaje.*` en `master.audit_logs`).
+
+*Se comprueba*: `etiqueta("fichaje.volcado")` devuelve «Volcó el Excel del
+reloj de fichar de un mes», módulo «Fichaje».
+*Dónde*: `lib/actividad/etiquetas.js`.
+*Comprobado en producción*: 19/08/2026 — con `c7f84d2` desplegado, dentro del
+contenedor `etiquetas.js` tiene las cinco entradas y `etiqueta("fichaje.volcado")`
+devuelve la frase.
+
+### Activar «pacientes» sin «clinica» correría ALTERs sobre una tabla que no existe · producto
+
+**Qué pasaba.** La tabla `patients` solo la creaba `migrate-clinica-module`,
+que estaba únicamente en el bloque `clinica` de `scripts/_module-migrations.js`;
+el bloque `pacientes` eran seis ALTER sobre esa tabla.
+
+**Qué lo arregla.** `migrate-clinica-module` entra también en el bloque
+`pacientes` (`a42a67b`): el script ya estaba escrito para «clinica O
+pacientes», como `migrate-patients-care-type` ya estaba en los dos bloques; el
+analizador de orden deduplica. Para un tenant con solo `pacientes`, la que crea
+la tabla queda la 7.ª y los ALTER en la 19.ª–20.ª. No había mordido a nadie:
+en producción ningún tenant tiene `pacientes` sin `clinica`.
+
+*Se comprueba*: `node scripts/check-migration-order.js` coherente y
+`migrationsFor(["clients","team","pacientes"])` lista `migrate-clinica-module`
+antes que `migrate-patients-clients-phase1`.
+*Dónde*: `scripts/_module-migrations.js` (bloque `pacientes`).
+*Comprobado en producción*: 19/08/2026 — con `c7f84d2` desplegado, el bloque
+`pacientes` del contenedor lleva `migrate-clinica-module`; la migración ya
+estaba aplicada en los cuatro tenants con `pacientes` (todos con `clinica`),
+así que el despliegue no ejecutó nada nuevo.
+
+### Nueve pruebas no las ve `npm test` por cómo se llaman · producto
+
+**Qué pasaba.** `scripts/pruebas.mjs` solo recoge `_smoke-*` y `smoke-test-*`;
+las cuatro de Captación (`_outreach-*`) y las cinco de Nutrición
+(`smoke-nutri-laura-recetario-*`) existían y nadie las lanzaba.
+
+**Qué lo arregla** (`28e8bf1`). `_outreach-ai-unit.mjs` →
+`_smoke-outreach-ai-unit.mjs`, pura, entra en `npm test` (tenía una aserción
+vieja con Opus como modelo por defecto; ahora compara con `DEFAULT_MODEL`).
+Las cinco de Nutrición → `_smoke-nutri-laura-recetario-*`, clasificadas
+«servidor y base de datos», entran en `npm run test:todo`.
+`_smoke-correo-entrante.mjs` deja de apuntar por defecto a `sandbox`.
+
+**Lo que queda fuera, a propósito.** `_outreach-smoke.mjs`, `_outreach-e2e.mjs`
+y `_outreach-ui-check.mjs` firman el JWT para `sandbox`, que no existe: en el
+runner solo pondrían `test:todo` en rojo. Tienen su propia tarea en P3.
+
+*Se comprueba*: `node scripts/pruebas.mjs --listar` enseña `outreach-ai-unit`
+entre las ligeras y las cinco `nutri-laura-recetario-*` entre las pesadas;
+`npm test` 36/36.
+*Dónde*: `scripts/pruebas.mjs:78`, los seis ficheros renombrados.
+*Comprobado en producción*: 19/08/2026 — con `c7f84d2` desplegado, los seis
+ficheros están en el contenedor y `pruebas.mjs --listar` los ve.
+
+### Los docs de Leads, Formularios y Analíticas describen overrides y endpoints que ya no existen · documentación
+
+**Qué lo arregla.** `c7f84d2`: `leads.md` habla de cuatro overrides (los siete
+y quality/abarcaia/Referidos, como histórico), recoge `convert-to-project`, el
+rate limit y la auditoría del público, 15 etapas, `desglose=1`, las dos
+migraciones, `/leads/estadisticas` y las plantillas por tenant (`spain_enzymes`
+Y `nutri_laura`, que la lista no sabía). `formularios.md` se titula Leads
+Comerciales, recoge el DELETE de descartadas y los endpoints `registro-web`, y
+cuenta el canje SSO como retirado el 05/08. `analytics.md` sin `--force` y con
+la regla #15. Comentarios de `Sidebar.jsx` y `_smoke-leads-etapas.mjs` al día.
+
+*Se comprueba*: cada punto de la sección de estos docs en la revisión del
+19/08 está en el doc como lo hace el código; `docs/revision-docs-2026-08-19.md`
+ya no existe.
+*Dónde*: `docs/modules/{leads,formularios,analytics}.md`.
+*Comprobado en producción*: 19/08/2026 — verificado punto a punto contra el
+código desplegado (`c7f84d2`); los docs no viajan en la imagen, viven en
+`master` y en el checkout del VPS.
+
+### Los docs de Clínica y Pacientes siguen diciendo «solo Aumenta» y describen la maqueta · documentación
+
+**Qué lo arregla.** `c7f84d2`: los dos docs dicen dónde está el módulo (aumenta,
+demo, demo_clinica, somos), `clinica.md` recoge los 35 endpoints, los 10
+modelos con sus tablas al día, las 5+6 páginas, el sidebar con `requiresAll`
+y la migración viva (`migrate-clinica-module`, con `sprint-1` como histórico);
+`pacientes.md` cuenta el enlace paciente↔cliente (`patients.client_id` del
+16/07, `ClientPatientsSection`, `PacientesDelAlta`, backfill), el modelo
+completo, la ficha de seis pestañas y que `enable-module.js <slug> pacientes`
+corre siete migraciones con la que crea la tabla la primera. De paso: `[id]`
+no tiene DELETE (ningún `Patient.destroy` en la API), y el doc lo dice.
+
+*Se comprueba*: ídem. *Dónde*: `docs/modules/{clinica,pacientes}.md`.
+*Comprobado en producción*: 19/08/2026 — contra el código desplegado
+(`c7f84d2`); tenants contra master.
+
+### Los docs de Citas, widget, Pagos y Correo describen reglas que cambiaron este mes · documentación
+
+**Qué lo arregla.** `c7f84d2`: `pagos.md` dice la regla del 07/08 («soltar,
+nunca devolver», §4 reescrita, fase 4 y §7 con el texto viejo como histórico),
+recoge `checkout.js` (bonos y plazos desde `/book`), «pedir otra tarjeta», la
+lista de espera que se mantiene, 20 min de ventana, las 19 pruebas de cobro,
+plazos, bonos, vigilante y `stripe_webhook_events`. `citas.md` recoge las FK de
+`Booking`, el correo de cancelación, las tablas de endpoints completas, el
+default con lista de espera (el override de Laura como histórico) y las 15
+migraciones. `citas-embed.md`: CSP por tenant, `?wpa=1` retirado, `mi-perfil`,
+13 endpoints del portal, `configure-portal-citas.js`. `emails.md`: BYOK, 16
+plantillas, correo entrante, receta de plantilla nueva. Cabecera de
+`lib/email/resendClient.js` y URL de `dev-mint-wpsso.js` al día.
+
+**Lo que salió y no era de doc** (apuntado en el backlog): dos pruebas de
+cobro siguen esperando devoluciones; el 409 de `confirm` dice «el importe se
+ha devuelto» sin devolver; cinco plantillas no miran `citaPuedeAvisar`; la
+tarjeta de Stripe pide una lista corta de eventos.
+
+*Se comprueba*: ídem. *Dónde*: `docs/modules/{citas,citas-embed,pagos,emails}.md`.
+*Comprobado en producción*: 19/08/2026 — contra el código desplegado
+(`c7f84d2`).
+
+### Los docs de Facturación e Inventario hablan de FIFO, lotes y pantallas que no están · documentación
+
+**Qué lo arregla.** `c7f84d2`: `billing.md` con el envío real de facturas por
+Resend, el FIFO sobre `InboundBatch` como histórico (hoy solo avisa; Pedidos
+descuenta), el editor que elige producto de Inventario, las 17 páginas, los
+endpoints que faltaban (quotes, pdf, bulk-pdf, partners, 7 exports, morosidad,
+operations, arqueo y proveedores fuera de `/api/billing`), los modelos al día
+y secciones para `Quote`, `Supplier`, `CashPoint`/`CashClose`; migración sin
+filtro de `status` y comandos con `docker exec`; backlog sin PDF ni
+Presupuestos (existen). `inventory.md` con la siembra real de la demo,
+Proveedores y la auditoría `inventory.*`; `lib/provisioning/catalogo.js` ya no
+describe Inventario con «lotes, fórmulas».
+
+**Lo que salió y no era de doc** (apuntado en el backlog): `Cost.supplierId`
+no lo aceptan los endpoints de gastos ni la pantalla.
+
+*Se comprueba*: ídem. *Dónde*: `docs/modules/{billing,inventory}.md`,
+`lib/provisioning/catalogo.js:68`.
+*Comprobado en producción*: 19/08/2026 — contra el código desplegado
+(`c7f84d2`); el texto nuevo de `catalogo.js` está en el contenedor.
+
+### Los docs de Equipo, Proyectos, Soporte y Buzón se quedaron en su primera versión · documentación
+
+**Qué lo arregla.** `c7f84d2`: `team.md` con diez páginas y tres modelos, los
+cinco campos y cinco endpoints que faltaban, los permisos por módulo (sí los
+hace), Actividad con `team_avanzado`, migración sin `status`. `projects.md`
+desplegado y en cinco clientes, activación con `enable-module.js`, cuatro
+pestañas, la IA de Proyectos (§5.5) y el calendario, SQL sin `status`, §12 como
+histórico. `support.md` con el fallback al Buzón, el pie del sidebar actual,
+`[attachmentId]`, `demo` en vez de `sandbox`, la deuda de `enable-module.js`
+cerrada. `buzon.md` con `quienEscribe.js` y la herramienta de triaje.
+
+*Se comprueba*: ídem. *Dónde*: `docs/modules/{team,projects,support,buzon}.md`.
+*Comprobado en producción*: 19/08/2026 — contra el código desplegado
+(`c7f84d2`).
+
+### Los docs de Clientes, Nutrición, Formación, Documentos, Configuración y Captación listan menos de lo que hay · documentación
+
+**Qué lo arregla.** `c7f84d2`: `clients.md` con los 26 endpoints, nueve
+pestañas y la migración de asignaciones en todos los tenants; `nutricion.md`
+con 24 endpoints, cinco tenants, OpenFoodFacts como histórico, el esquema con
+el recetario, §5 completa, §8 con las pruebas renombradas y `test:todo`, §9
+con las ocho migraciones y `enable-module.js`; `training.md` con nueve
+modelos, los rótulos en dos sitios (el override de Aumenta borrado el 18/08),
+`/api/cuestionarios` solo `training`, `CRM_WEBHOOK_SECRETS`, la auditoría que
+sí hace, seis componentes, seis rutas públicas y cuatro endpoints más;
+`documents.md` en producción, §2 con `enable-module.js`, modelo completo y
+MIME libre, gates básico/avanzado; `configuracion.md` con el engranaje solo
+admin, ocho tarjetas, GET/PATCH completos, diez interruptores, `vetoAi` en 11;
+`outreach.md` en producción, regla #15, Resend por cliente (dry-run solo con
+la clave literal `dry-run`), `enable-module.js`, y su fila de pruebas con
+`_smoke-outreach-ai-unit.mjs` dentro de `npm test`. Comentarios de
+`dependencias.js` y `enviar-correo/route.js` al día.
+
+*Se comprueba*: ídem.
+*Dónde*: `docs/modules/{clients,nutricion,training,documents,configuracion,outreach}.md`.
+*Comprobado en producción*: 19/08/2026 — contra el código desplegado
+(`c7f84d2`).
+
 ## 17/08/2026
 
 ### «Convertidos» ya no sale donde el embudo no puede ganar a nadie · `aumenta`, `demo`, `sandbox`
