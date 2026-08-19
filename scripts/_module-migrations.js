@@ -268,6 +268,12 @@ export const MODULES = {
   calendar: ["migrate-calendar-citas-fks"],
 
   pacientes: [
+    // La tabla `patients` la crea migrate-clinica-module (que ya está escrita
+    // para «clinica O pacientes»); sin ella aquí, activar `pacientes` suelto
+    // corría las seis de abajo —todas ALTER sobre patients— sin tabla. Está
+    // también en el bloque `clinica`, como migrate-patients-care-type: el
+    // analizador de orden deduplica (19/08/2026).
+    "migrate-clinica-module",
     "migrate-patients-clients-phase1",
     "migrate-client-module-assignments",
     "migrate-patients-multi-per-client",
