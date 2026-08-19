@@ -68,7 +68,8 @@ export const ONE_OFF = {
   // e «ilegibles y sin arista declarada». No es la primera vez que pasa —los
   // commits 74fc6d2 y be465f5 arreglaron lo mismo— así que el despiste es del
   // flujo, no de nadie: una migración de MASTER no cae sola en ningún módulo.
-  "migrate-tablero-estado": "MASTER, no toca schemas de tenant: crea `master.tablero_estado`, donde el Registro guarda el tick y el reparto de cada tarea (el TEXTO sigue en los .md del repo). Se corre a mano una vez, idempotente",
+  "migrate-tablero-estado": "MASTER, no toca schemas de tenant: crea `master.tablero_estado`, donde el Registro guarda el tick y el reparto de cada tarea. Se corre a mano una vez, idempotente",
+  "migrate-tablero-documentos": "MASTER, no toca schemas de tenant: crea `master.tablero_documentos`, donde vive el TEXTO del Registro (backlog y resuelto, una fila por versión) desde el 19/08/2026, cuando dejó de viajar en la imagen de Docker. Solo crea tabla e índice; el texto lo carga `tablero-doc.js publicar` cuando se le dice. Se corre a mano una vez, idempotente",
   "migrate-paquetes-modulos": "MASTER, no toca schemas de tenant: crea `master.paquetes_modulos` y siembra los dos paquetes que hasta ahora estaban escritos en `catalogo.js`. Se corre a mano con `npm run db:migrate:paquetes`; idempotente, y la semilla NO restaura lo que se haya borrado después",
   "migrate-auto-asignar-nutricion":
     "MASTER, no toca schemas de tenant: enciende `featureFlags.autoAsignarEnAlta` en la fila de `nutricion` de quien ya dependía del auto-marcado (nutri_laura). El flag nace apagado para todos los demás a propósito — antes, tener el módulo bastaba para que TODA ficha nueva se marcara como paciente de nutrición. Se corre a mano una vez, idempotente",

@@ -1,31 +1,32 @@
 import { DataTypes } from "sequelize";
 
 /**
- * Estado que el Registro pone ENCIMA de una tarea de los ficheros.
+ * Estado que el Registro pone ENCIMA de una tarea del texto publicado.
  *
- * POR QUÉ UNA TABLA, SI EL BACKLOG ES UN FICHERO (12/08/2026, decisión de Rodrigo)
- * `docs/backlog.md` y `docs/resuelto.md` siguen siendo la fuente del TEXTO de
- * cada tarea, y se editan en el repositorio junto al código que las resuelve.
- * Lo que no cabía ahí es el estado que se cambia en caliente desde el móvil
- * —«esto es tuyo», «esto ya está»—, porque los dos ficheros viajan DENTRO de la
- * imagen de Docker: cualquier cosa que la pantalla escribiera en ellos la
- * borraría el siguiente despliegue, sin dar ningún error.
+ * POR QUÉ UNA TABLA APARTE DEL TEXTO (12/08/2026, decisión de Rodrigo)
+ * Nació cuando el texto del Registro eran dos `.md` que viajaban DENTRO de la
+ * imagen de Docker: lo que la pantalla escribiera en ellos lo borraría el
+ * siguiente despliegue. El estado que se cambia en caliente desde el móvil
+ * —«esto es tuyo», «esto ya está»— necesitaba vivir en la base. Desde el
+ * 19/08/2026 el TEXTO también vive en master (`tablero_documentos`, una fila
+ * por versión), y el reparto sigue teniendo sentido por otro motivo: el texto
+ * se publica entero, versión a versión, y el tick o el reparto de una tarea no
+ * tienen por qué crear una versión nueva del documento.
  *
- * Por eso el reparto es: el texto en el repo, el estado aquí. Una tarea marcada
- * desde la pantalla se pinta en Resuelto sin tocar los `.md`, y al desmarcarla
- * vuelve a Pendiente.
+ * Una tarea marcada desde la pantalla se pinta en Resuelto sin tocar el texto,
+ * y al desmarcarla vuelve a Pendiente.
  *
  * ⚠️ LA CLAVE ES EL TÍTULO NORMALIZADO, y eso tiene una consecuencia que hay que
- * saber: si alguien reescribe el título de una tarea en el fichero, esta fila se
- * queda huérfana y la tarea vuelve a salir donde diga el fichero. Es el precio
+ * saber: si alguien reescribe el título de una tarea en el texto, esta fila se
+ * queda huérfana y la tarea vuelve a salir donde diga el texto. Es el precio
  * de no meter identificadores dentro del markdown, que lo volvería ilegible y
  * obligaría a inventarlos a mano al escribir una tarea nueva. Una fila huérfana
  * no molesta a nadie: simplemente no casa con ninguna tarea.
  *
  * `resuelta` es un booleano NULLABLE a propósito, y son tres estados distintos:
- *   null   → manda el fichero (la tarea está donde esté escrita)
- *   true   → marcada aquí: sale en Resuelto aunque siga en `backlog.md`
- *   false  → reabierta aquí: sale en Pendiente aunque esté en `resuelto.md`
+ *   null   → manda el texto (la tarea está donde esté escrita)
+ *   true   → marcada aquí: sale en Resuelto aunque siga en el backlog
+ *   false  → reabierta aquí: sale en Pendiente aunque esté en resuelto
  * Una tarea solo asignada, sin tocar el tick, se queda en `null` y no se mueve.
  */
 export function defineTableroEstado(sequelize) {
@@ -65,13 +66,9 @@ export function defineTableroEstado(sequelize) {
       /**
        * Cómo se arregla, en texto libre, escrito desde la pantalla (14/08/2026).
        *
-       * Vive aquí por el mismo motivo que el tick y el reparto: `docs/backlog.md`
-       * viaja DENTRO de la imagen de Docker, así que lo que la pantalla
-       * escribiera en él se lo llevaría el siguiente despliegue sin dar ningún
-       * error. Que la solución NO esté en el fichero tiene además una
-       * consecuencia buena — es una nota entre nosotros dos, no la tarea, y
-       * cuando se arregla de verdad lo que queda escrito en `resuelto.md` es lo
-       * que se hizo, no lo que se pensaba hacer.
+       * Vive aquí y no en el texto del Registro a propósito: es una nota entre
+       * nosotros dos, no la tarea, y cuando se arregla de verdad lo que queda
+       * escrito en resuelto es lo que se hizo, no lo que se pensaba hacer.
        */
       solucion: {
         type: DataTypes.TEXT,

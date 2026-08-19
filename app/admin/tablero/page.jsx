@@ -8,10 +8,11 @@
  * mover también `/api/admin/tablero`.
  *
  * POR QUÉ EXISTE (09/08/2026)
- * `docs/backlog.md` y `docs/resuelto.md` son la fuente y están bien, pero nadie
- * entra al repositorio a mirar qué hay que hacer. Esta pantalla los enseña donde
- * Jorge y Rodrigo ya entran. Es para LEER: se escribe en el repo, en el mismo
- * commit que el arreglo, y aquí se ve.
+ * El Registro (backlog y resuelto) es la fuente y está bien, pero nadie entra al
+ * repositorio a mirar qué hay que hacer. Esta pantalla lo enseña donde Jorge y
+ * Rodrigo ya entran. Es para LEER: el texto se publica con
+ * `scripts/registro.mjs` (desde el 19/08/2026 vive en `master.tablero_documentos`,
+ * antes en dos `.md` que viajaban dentro de la imagen de Docker), y aquí se ve.
  *
  * DOS PESTAÑAS Y NO DOS PANTALLAS. Lo pendiente y lo resuelto son la misma
  * pregunta mirada desde dos lados —«¿qué le debemos a este cliente?» y «¿qué le
@@ -35,9 +36,8 @@
  *
  * YA NO ES SOLO DE LEER (12/08/2026, Rodrigo)
  * Dos cosas se pueden tocar desde aquí: de quién es cada tarea y si ya está.
- * Van a `master.tablero_estado`, NO a los ficheros —viajan dentro de la imagen
- * de Docker y el siguiente despliegue se llevaría por delante lo que
- * escribiéramos—, y se pintan encima de lo que dicen los `.md`.
+ * Van a `master.tablero_estado`, aparte del texto, y se pintan encima de lo que
+ * dice la versión publicada.
  *
  * El tick MUEVE la tarea de pestaña, así que después de guardarlo hay que volver
  * a pedir los datos: es el endpoint quien decide de qué lado cae cada una, y
@@ -49,9 +49,9 @@
  * que es lo que hace que sirva: el error no es dudar, es la fila de al lado.
  *
  * Marcar aquí NO cierra una tarea de verdad: eso sigue siendo moverla a
- * `resuelto.md` en el commit que la arregla. El tick es para ponerse de acuerdo
- * entre los dos, y por eso lo marcado a mano se pinta en su propio bloque en vez
- * de mezclarse con lo cerrado en el repositorio.
+ * Resuelto y publicar el Registro, con cómo se comprobó. El tick es para ponerse
+ * de acuerdo entre los dos, y por eso lo marcado a mano se pinta en su propio
+ * bloque en vez de mezclarse con lo cerrado y publicado.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -65,8 +65,8 @@ const TONOS = [
   { casa: /decisión|decision/i, color: "var(--ok)", etiqueta: "lo decidís vosotros" },
   // Los dos bloques que inventa el endpoint para lo que se mueve con el tick.
   // Llevan etiqueta propia para que se vea de un vistazo que eso NO está cerrado
-  // en el repositorio: está marcado a mano y le falta su commit.
-  { casa: /^Marcadas desde el Registro/i, color: "var(--ok)", etiqueta: "sin commit" },
+  // en el Registro publicado: está marcado a mano y le falta su publicación.
+  { casa: /^Marcadas desde el Registro/i, color: "var(--ok)", etiqueta: "sin publicar" },
   { casa: /^Reabiertas desde el Registro/i, color: "#B45309", etiqueta: "reabierta aquí" },
 ];
 
@@ -80,12 +80,20 @@ function tonoDe(titulo) {
  * es quien llama por teléfono.
  */
 const NO_ES_CLIENTE = new Set([
-  "todos", "producto", "interno", "documentación", "varios", "sin asignar",
+  "todos",
+  "producto",
+  "interno",
+  "documentación",
+  "varios",
+  "sin asignar",
 ]);
 
 function Etiqueta({ children, color }) {
   return (
-    <span className="text-[10px] uppercase tracking-[0.18em]" style={{ color: color ?? "var(--tenue)" }}>
+    <span
+      className="text-[10px] uppercase tracking-[0.18em]"
+      style={{ color: color ?? "var(--tenue)" }}
+    >
       {children}
     </span>
   );
@@ -174,7 +182,9 @@ function ConfirmarTick({ tarea, resuelta, ocupada, fallo, onConfirmar, onCancela
   // cuando hidrata un nodo que ya venía del servidor, y entonces el foco se
   // queda en el body — comprobado en el navegador, no supuesto.
   const cancelar = useRef(null);
-  useEffect(() => { cancelar.current?.focus(); }, []);
+  useEffect(() => {
+    cancelar.current?.focus();
+  }, []);
 
   useEffect(() => {
     const alPulsar = (e) => {
@@ -236,8 +246,8 @@ function ConfirmarTick({ tarea, resuelta, ocupada, fallo, onConfirmar, onCancela
             la otra. Al reabrir no hay nada que aclarar. */}
         {!resuelta && (
           <p className="mt-2 text-[11.5px] leading-relaxed" style={{ color: "var(--tenue)" }}>
-            No la cierra en el repositorio. Eso sigue siendo moverla a <code>resuelto.md</code> en el
-            commit que la arregla.
+            No la cierra del todo. Eso sigue siendo moverla a Resuelto y publicar el Registro, con
+            cómo se comprobó.
           </p>
         )}
 
@@ -256,7 +266,11 @@ function ConfirmarTick({ tarea, resuelta, ocupada, fallo, onConfirmar, onCancela
             onClick={onCancelar}
             disabled={ocupada}
             className="text-[12px] px-3 py-1.5 rounded transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2"
-            style={{ background: "var(--panel-alto)", color: "var(--dim)", border: "1px solid var(--line)" }}
+            style={{
+              background: "var(--panel-alto)",
+              color: "var(--dim)",
+              border: "1px solid var(--line)",
+            }}
           >
             Cancelar
           </button>
@@ -271,6 +285,63 @@ function ConfirmarTick({ tarea, resuelta, ocupada, fallo, onConfirmar, onCancela
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** «19/08 16:40» en hora de Madrid, que es donde se lee. */
+function cuando(iso) {
+  if (!iso) return null;
+  try {
+    return new Intl.DateTimeFormat("es-ES", {
+      timeZone: "Europe/Madrid",
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(iso));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * De dónde sale el texto de cada pestaña (19/08/2026).
+ *
+ * Una línea por documento: «Pendiente · v12 · 19/08 16:40 · jorge · «apuntar el
+ * buscador»». Existe porque con el texto en una tabla ya no hay commit que
+ * mirar para saber si lo que se ve es lo último: la versión y la hora son esa
+ * respuesta. Y si sale «leído del fichero», en producción significa que nadie
+ * ha publicado todavía — se pinta en ámbar para que no pase por bueno.
+ */
+function Procedencia({ documentos }) {
+  if (!documentos) return null;
+  const filas = [
+    ["Pendiente", documentos.backlog],
+    ["Resuelto", documentos.resuelto],
+  ].filter(([, m]) => m);
+  if (!filas.length) return null;
+  return (
+    <div className="mt-4 space-y-0.5">
+      {filas.map(([nombre, m]) => (
+        <p
+          key={nombre}
+          className="text-[11px] tabular-nums"
+          style={{ color: m.origen === "base" ? "var(--tenue)" : "#B45309" }}
+        >
+          <span className="uppercase tracking-[0.14em]">{nombre}</span>
+          {m.origen === "base" ? (
+            <>
+              {" · "}v{m.version}
+              {cuando(m.publicadoEn) && <> · {cuando(m.publicadoEn)}</>}
+              {m.publicadoPor && <> · {m.publicadoPor}</>}
+              {m.nota && <> · «{m.nota}»</>}
+            </>
+          ) : (
+            <> · leído del fichero {m.ruta ? <code>{m.ruta}</code> : null}, sin versión publicada</>
+          )}
+        </p>
+      ))}
     </div>
   );
 }
@@ -331,7 +402,9 @@ export default function TableroPage() {
   // `resuelta` es de qué lado venía. Null = no hay modal abierto.
   const [confirmando, setConfirmando] = useState(null);
 
-  useEffect(() => { document.title = "Registro — Salamandra"; }, []);
+  useEffect(() => {
+    document.title = "Registro — Salamandra";
+  }, []);
 
   const cargar = useCallback(
     () =>
@@ -346,7 +419,9 @@ export default function TableroPage() {
     []
   );
 
-  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
 
   /**
    * Guarda un cambio y vuelve a pedir el tablero entero.
@@ -424,9 +499,9 @@ export default function TableroPage() {
   /**
    * El tick, con la fuente delante.
    *
-   * Solo se guarda lo que se DESVÍA del repositorio: marcar una tarea que ya
-   * está en `resuelto.md` no necesita fila (vuelve a `null`, «manda el
-   * fichero»), y lo mismo al devolver a pendiente una que está en `backlog.md`.
+   * Solo se guarda lo que se DESVÍA del Registro publicado: marcar una tarea que
+   * ya está en Resuelto no necesita fila (vuelve a `null`, «manda el texto»), y
+   * lo mismo al devolver a pendiente una que está en el backlog.
    * Así el estado guardado no acumula filas que no dicen nada.
    */
   function alternarTick(t, estaResuelta) {
@@ -504,8 +579,7 @@ export default function TableroPage() {
       });
   }, [visibles, agrupacion]);
 
-  const cuantas = (clave) =>
-    (datos?.[clave] ?? []).reduce((n, s) => n + s.tareas.length, 0);
+  const cuantas = (clave) => (datos?.[clave] ?? []).reduce((n, s) => n + s.tareas.length, 0);
 
   if (error) {
     return (
@@ -514,7 +588,9 @@ export default function TableroPage() {
           <div style={{ fontFamily: "var(--admin-display)" }} className="text-3xl mb-3">
             No se puede mostrar
           </div>
-          <p className="text-[13px]" style={{ color: "var(--dim)" }}>{error}</p>
+          <p className="text-[13px]" style={{ color: "var(--dim)" }}>
+            {error}
+          </p>
         </div>
       </main>
     );
@@ -523,7 +599,10 @@ export default function TableroPage() {
   if (!datos) {
     return (
       <main className="min-h-screen flex items-center justify-center">
-        <span className="text-[12px] tracking-[0.2em] uppercase animate-pulse" style={{ color: "var(--tenue)" }}>
+        <span
+          className="text-[12px] tracking-[0.2em] uppercase animate-pulse"
+          style={{ color: "var(--tenue)" }}
+        >
           Leyendo el registro
         </span>
       </main>
@@ -543,9 +622,15 @@ export default function TableroPage() {
           <span style={{ fontStyle: "italic", color: "var(--ok)" }}>que hacer</span>
         </h1>
 
+        {/* De dónde sale el texto: la versión publicada, con fecha y quién. Si
+            en producción se está leyendo de un fichero, es que nadie ha
+            publicado todavía, y eso hay que verlo sin abrir nada. */}
+        <Procedencia documentos={datos.documentos} />
+
         {datos.faltan?.length > 0 && (
           <p className="mt-4 text-[12px]" style={{ color: "var(--alerta)" }}>
-            No se han podido leer: {datos.faltan.join(", ")}. El registro está incompleto.
+            No se ha podido leer: {datos.faltan.join(", ")}. Ni hay versión publicada ni fichero de
+            respaldo — el registro está incompleto.
           </p>
         )}
 
@@ -605,7 +690,11 @@ export default function TableroPage() {
           onChange={(e) => setFiltro(e.target.value)}
           placeholder="Filtrar por cliente — p. ej. «aumenta», «nutri_laura»"
           className="mt-4 w-full max-w-md rounded-lg px-3 py-2 text-[13px] outline-none"
-          style={{ background: "var(--panel)", border: "1px solid var(--line)", color: "var(--text)" }}
+          style={{
+            background: "var(--panel)",
+            border: "1px solid var(--line)",
+            color: "var(--text)",
+          }}
         />
       </header>
 
@@ -645,7 +734,10 @@ export default function TableroPage() {
                       Gira 90° al abrir, para que también se lea el estado.
                     */}
                     <svg
-                      viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
                       aria-hidden="true"
                       className="shrink-0 mt-[4px] w-3 h-3 transition-transform group-open:rotate-90"
                       style={{ color: "var(--apagado)" }}
@@ -731,13 +823,26 @@ export default function TableroPage() {
                         autoFocus
                         placeholder="Cómo se arregla. Lo que sepas ahora vale: dónde está, qué hay que tocar, con qué se comprueba."
                         className="w-full rounded px-3 py-2 text-[12.5px] leading-relaxed outline-none"
-                        style={{ background: "var(--panel-alto)", border: "1px solid var(--line)", color: "var(--text)" }}
+                        style={{
+                          background: "var(--panel-alto)",
+                          border: "1px solid var(--line)",
+                          color: "var(--text)",
+                        }}
                       />
                       <div className="mt-2 flex items-center gap-2 flex-wrap">
-                        <BotonTarjeta onClick={() => guardarSolucion(t)} ocupada={guardando === t.clave} destacado>
+                        <BotonTarjeta
+                          onClick={() => guardarSolucion(t)}
+                          ocupada={guardando === t.clave}
+                          destacado
+                        >
                           {guardando === t.clave ? "Guardando…" : "Guardar"}
                         </BotonTarjeta>
-                        <BotonTarjeta onClick={() => { setEditando(null); setBorrador(""); }}>
+                        <BotonTarjeta
+                          onClick={() => {
+                            setEditando(null);
+                            setBorrador("");
+                          }}
+                        >
                           Cancelar
                         </BotonTarjeta>
                         {/* Vaciar el cuadro y guardar la borra: se dice, porque
@@ -752,7 +857,10 @@ export default function TableroPage() {
                   ) : (
                     <div className="mt-3 ml-[15px] flex items-center gap-2 flex-wrap">
                       <BotonTarjeta
-                        onClick={() => { setEditando(t.clave); setBorrador(t.solucion ?? ""); }}
+                        onClick={() => {
+                          setEditando(t.clave);
+                          setBorrador(t.solucion ?? "");
+                        }}
                         ocupada={guardando === t.clave}
                       >
                         {t.solucion ? "Editar solución" : "Solución"}
@@ -767,8 +875,8 @@ export default function TableroPage() {
 
                   {t.tocadaPor && t.marcada !== null && (
                     <p className="mt-2 ml-[15px] text-[11px]" style={{ color: "var(--tenue)" }}>
-                      {t.marcada ? "Marcada" : "Reabierta"} aquí por {t.tocadaPor} — sin pasar por el
-                      repositorio.
+                      {t.marcada ? "Marcada" : "Reabierta"} aquí por {t.tocadaPor} — sin publicarlo
+                      en el Registro.
                     </p>
                   )}
                 </details>
@@ -779,12 +887,13 @@ export default function TableroPage() {
       </div>
 
       <p className="mt-10 text-[11px] leading-relaxed" style={{ color: "var(--tenue)" }}>
-        El texto de cada tarea sale de <code>docs/backlog.md</code> y <code>docs/resuelto.md</code>, que se
-        editan en el repositorio junto al código que resuelve cada cosa. Nada entra ni sale sin
-        comprobarse contra producción.
+        El texto de cada tarea es la última versión publicada del Registro (
+        <code>node scripts/registro.mjs bajar</code>, editar, <code>subir</code>; el manual es{" "}
+        <code>docs/como-apuntar-en-el-tablero.md</code>). Nada entra ni sale sin comprobarse contra
+        producción, y cada versión queda guardada con quién y por qué.
         <br />
         El tick y el reparto sí se guardan desde aquí, pero aparte: marcar una tarea la mueve de
-        pestaña para que los dos sepáis por dónde va, y no sustituye a cerrarla en su commit.
+        pestaña para que los dos sepáis por dónde va, y no sustituye a cerrarla y publicarla.
       </p>
 
       {/* Fuera de la lista a propósito: dentro del `<details>` heredaría el clic
