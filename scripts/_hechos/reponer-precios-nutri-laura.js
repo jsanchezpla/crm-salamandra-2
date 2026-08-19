@@ -40,8 +40,8 @@
  *   docker exec crm-salamandra-app-1 node scripts/reponer-precios-nutri-laura.js --aplicar
  */
 
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { logCitasAudit } from "../lib/citas/audit.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { logCitasAudit } from "../../lib/citas/audit.js";
 
 const APLICAR = process.argv.includes("--aplicar");
 const SLUG = "nutri_laura";

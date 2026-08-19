@@ -6,7 +6,7 @@
  * Uso: node scripts/add-calendar-module-demo.js
  */
 
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
 
 const DEMO_SLUG = "demo";
 const DEMO_ADMIN_EMAIL = "admin@demo.salamandra";

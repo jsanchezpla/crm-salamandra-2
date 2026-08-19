@@ -8,7 +8,7 @@
  */
 
 import { Sequelize } from "sequelize";
-import { getTenantDb } from "../lib/db/tenantDb.js";
+import { getTenantDb } from "../../lib/db/tenantDb.js";
 
 const SLUG = "retorika";
 

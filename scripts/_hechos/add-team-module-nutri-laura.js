@@ -24,9 +24,9 @@
 
 import { Sequelize } from "sequelize";
 import { randomUUID } from "node:crypto";
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { closeAllConnections } from "../lib/db/tenantDb.js";
-import { invalidateTenantCache } from "../lib/tenant/tenantResolver.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { closeAllConnections } from "../../lib/db/tenantDb.js";
+import { invalidateTenantCache } from "../../lib/tenant/tenantResolver.js";
 
 const SLUG = "nutri_laura";
 const SCHEMA = `crm_${SLUG}`;

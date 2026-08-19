@@ -4,7 +4,7 @@
  * Uso: node --env-file=.env.local scripts/check-tenant-brand.js
  */
 
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
 
 async function main() {
   getMasterDb();

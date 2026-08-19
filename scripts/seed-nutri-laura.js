@@ -1,3 +1,4 @@
+// @vivo — Alta inicial de un cliente vivo, ya hecha: crea crm_nutri_laura, las 3 tablas de citas por SQL, el tenant y su admin, activa `citas` y siembra 2… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * seed-nutri-laura.js — Inicializa el tenant Nutri Laura
  *

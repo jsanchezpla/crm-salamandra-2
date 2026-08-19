@@ -3,7 +3,7 @@
  * tras corregir dos errores del seed inicial (unit enum + wpUserId).
  * Limpia la nutrición sembrada a medias antes de recrearla.
  */
-import { getTenantDb, closeAllConnections } from "../lib/db/tenantDb.js";
+import { getTenantDb, closeAllConnections } from "../../lib/db/tenantDb.js";
 
 const SLUG = "sandbox";
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }

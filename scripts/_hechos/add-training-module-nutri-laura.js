@@ -40,8 +40,8 @@
  */
 
 import { Sequelize } from "sequelize";
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { getTenantDb, closeAllConnections } from "../lib/db/tenantDb.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { getTenantDb, closeAllConnections } from "../../lib/db/tenantDb.js";
 
 const SLUG = "nutri_laura";
 const SCHEMA = `crm_${SLUG}`;

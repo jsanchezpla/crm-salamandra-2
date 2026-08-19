@@ -1,3 +1,4 @@
+// @vivo — Herramienta de inspección de solo lectura nacida el 17/08/2026 (¿existe el cliente?, módulos, usuarios, integraciones puestas sin enseñarlas,… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * foto-tenant.mjs — todo lo que se suele preguntar de un cliente, de un vistazo
  * y en SOLO LECTURA.

@@ -15,7 +15,7 @@
  * Uso VPS:   docker compose exec app node scripts/update-nutri-laura-eventtype-notice.js
  */
 
-import { getTenantDb } from "../lib/db/tenantDb.js";
+import { getTenantDb } from "../../lib/db/tenantDb.js";
 
 const SLUG = "nutri_laura";
 const DEFAULT_HOURS = 3;

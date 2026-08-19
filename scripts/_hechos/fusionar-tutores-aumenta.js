@@ -26,7 +26,7 @@
  *   docker exec crm-salamandra-app-1 node scripts/fusionar-tutores-aumenta.js --confirm
  */
 
-import { getTenantDb } from "../lib/db/tenantDb.js";
+import { getTenantDb } from "../../lib/db/tenantDb.js";
 
 const args = process.argv.slice(2);
 const CONFIRM = args.includes("--confirm");

@@ -1,3 +1,4 @@
+// @vivo — Seed de la demo (4 proyectos + 2 plantillas + tasks Sprint 2, idempotente por marcador customFields.seed) cuya vida depende SOLO de… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * seed-projects-demo.js
  *

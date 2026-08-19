@@ -1,3 +1,4 @@
+// @vivo — «Smoke HTTP del Sprint 2 Proyectos (Kanban). (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * smoke-test-kanban.mjs — Smoke HTTP del Sprint 2 Proyectos (Kanban).
  *

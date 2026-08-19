@@ -1,3 +1,4 @@
+// @vivo — Su cabecera se reescribió ayer (18/08) para dejarlo expresamente como extra opcional a mano (catálogo de centro clínico encima del genérico),… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * seed-inventario-demo.js — llena el almacén del tenant `demo` (02/08/2026).
  *

@@ -28,7 +28,7 @@
  */
 
 import { Sequelize } from "sequelize";
-import { acotarSlugs } from "./_solo-este-tenant.js";
+import { acotarSlugs } from "../_solo-este-tenant.js";
 
 // ⛔ ESTA MIGRACIÓN ESTÁ SUPERADA Y NO DEBE EJECUTARSE (candado del 18/08/2026).
 //

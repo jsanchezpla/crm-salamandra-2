@@ -8,8 +8,8 @@
  *
  * Uso: node --env-file=.env.local scripts/update-aumenta-brand.js
  */
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { invalidateTenantCache } from "../lib/tenant/tenantResolver.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { invalidateTenantCache } from "../../lib/tenant/tenantResolver.js";
 
 const SLUG = "aumenta";
 const NEW_BRAND = {

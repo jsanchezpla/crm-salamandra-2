@@ -1,3 +1,4 @@
+// @vivo — Utilidad de desarrollo/demo para una función que sigue existiendo (lib/calendar/reorganizeWeek.js, /api/calendar/reorganize, botón «Reorganizar… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * seed-calendar-demo.js — Semana "saturada" de tareas de calendario para el
  * escaparate (demo). Sirve para probar la IA de "Reorganizar la semana": deja

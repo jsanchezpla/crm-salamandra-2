@@ -1,3 +1,4 @@
+// @vivo — Importación de la agenda de Organízate (commit 83cfa6f, 02/08/2026); citas.md la da por «ya ejecutada» y las 12.030 futuras están en producción. (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * import-aumenta-citas.js — la agenda de Organízate.
  *

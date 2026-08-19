@@ -1,3 +1,4 @@
+// @vivo — Seed de la demo (5 TeamMembers, upsert por displayName, vincula Ana García al admin@demo.salamandra) que solo tiene quien lo llame en… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * seed-team-demo.js — Seed del módulo Equipo (#6) para tenant `demo`.
  *

@@ -1,3 +1,4 @@
+// @vivo — Nació para las dos suscripciones del 07/08/2026 y la cabecera dice que «el código ya está arreglado… esto es solo para las que quedaron mal», pero… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * arreglar-suscripciones-sin-tope.js — repara suscripciones de pago fraccionado
  * a las que nunca se les llegó a poner el tope de cuotas.

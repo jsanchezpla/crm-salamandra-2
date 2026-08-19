@@ -172,7 +172,7 @@ async function login() {
 let modelsLib = null;
 async function loadModels() {
   if (modelsLib) return modelsLib;
-  const { getTenantDb } = await import("../lib/db/tenantDb.js");
+  const { getTenantDb } = await import("../../lib/db/tenantDb.js");
   const { sequelize, models } = getTenantDb(TENANT_SLUG);
   modelsLib = { sequelize, models };
   return modelsLib;
@@ -233,7 +233,7 @@ async function runHttpSmoke(authed) {
     }
 
     // Verificar archivos físicos
-    const { getClientDir } = await import("../lib/clients/attachmentStorage.js");
+    const { getClientDir } = await import("../../lib/clients/attachmentStorage.js");
     const dir = getClientDir(TENANT_SLUG, clientId);
     const files = await fs.readdir(dir);
     assert(files.length === 2, "2 archivos físicos en disco", `encontrados ${files.length} en ${dir}`);
@@ -455,7 +455,7 @@ async function runHttpSmoke(authed) {
   // ── 15) Borrar cliente → GC del directorio ───────────────────────────────
   header("15) DELETE cliente → GC físico de uploads/{slug}/clients/{id}/");
   if (authed) {
-    const { getClientDir } = await import("../lib/clients/attachmentStorage.js");
+    const { getClientDir } = await import("../../lib/clients/attachmentStorage.js");
     const dir = getClientDir(TENANT_SLUG, clientId);
     const beforeExisted = await fs.access(dir).then(() => true).catch(() => false);
     const r = await fetch(`${BASE_URL}/api/clients/${clientId}`, { method: "DELETE", headers: { Cookie: cookies } });
@@ -500,7 +500,7 @@ async function main() {
     }
   } finally {
     if (spawned) await stopServerIfSpawned();
-    const { closeAllConnections } = await import("../lib/db/tenantDb.js");
+    const { closeAllConnections } = await import("../../lib/db/tenantDb.js");
     await closeAllConnections().catch(() => {});
   }
 

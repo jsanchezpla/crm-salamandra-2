@@ -10,10 +10,10 @@
 
 import { Sequelize } from "sequelize";
 import bcrypt from "bcrypt";
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { getTenantDb } from "../lib/db/tenantDb.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { getTenantDb } from "../../lib/db/tenantDb.js";
 
-import { exigirTenantDePruebas } from "./_guard-datos-reales.js";
+import { exigirTenantDePruebas } from "../_guard-datos-reales.js";
 
 const SLUG = "aumenta";
 const SCHEMA = `crm_${SLUG}`;

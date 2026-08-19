@@ -8,8 +8,8 @@
  */
 
 import { randomUUID } from "crypto";
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { getTenantDb } from "../lib/db/tenantDb.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { getTenantDb } from "../../lib/db/tenantDb.js";
 
 const DEMO_SLUG = "demo";
 

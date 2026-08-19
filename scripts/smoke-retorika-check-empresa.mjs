@@ -1,3 +1,4 @@
+// @vivo — «Smoke del endpoint POST /api/webhooks/retorika/check-empresa-user. (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * smoke-retorika-check-empresa.mjs — Smoke del endpoint
  *   POST /api/webhooks/retorika/check-empresa-user

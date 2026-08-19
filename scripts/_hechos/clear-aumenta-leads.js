@@ -11,10 +11,10 @@
  * la bandera de `_guard-datos-reales.js`.
  */
 
-import { getMasterDb } from "../lib/db/masterDb.js";
-import { getTenantDb } from "../lib/db/tenantDb.js";
-import { closeAllConnections } from "../lib/db/tenantDb.js";
-import { exigirTenantDePruebas } from "./_guard-datos-reales.js";
+import { getMasterDb } from "../../lib/db/masterDb.js";
+import { getTenantDb } from "../../lib/db/tenantDb.js";
+import { closeAllConnections } from "../../lib/db/tenantDb.js";
+import { exigirTenantDePruebas } from "../_guard-datos-reales.js";
 
 const SLUG = "aumenta";
 

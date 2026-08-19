@@ -1,3 +1,4 @@
+// @vivo — Genérico por slug, con `--apagar`, `--sin/--con-cancelacion`, `--sin/--con-reserva` y `--dry-run`; nació para el «segundo centro» (Aumenta)… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * configure-portal-citas.js — enciende (o apaga) el área privada de citas de UN cliente.
  *

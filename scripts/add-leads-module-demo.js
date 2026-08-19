@@ -1,3 +1,4 @@
+// @vivo — Por sí solo sería un parche de activación viejo (escribe aún `uiOverride: demo/LeadsModule`, borrado el 18/08; lo corrige… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * add-leads-module-demo.js
  *

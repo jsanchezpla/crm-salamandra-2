@@ -13,11 +13,11 @@
  */
 
 import { Op } from "sequelize";
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { getTenantDb } from "../lib/db/tenantDb.js";
-import { calculateInvoice } from "../lib/billing/calculateInvoice.js";
-import { assignInvoiceNumber } from "../lib/billing/generateInvoiceNumber.js";
-import { updateInvoiceStatus } from "../lib/billing/updateInvoiceStatus.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { getTenantDb } from "../../lib/db/tenantDb.js";
+import { calculateInvoice } from "../../lib/billing/calculateInvoice.js";
+import { assignInvoiceNumber } from "../../lib/billing/generateInvoiceNumber.js";
+import { updateInvoiceStatus } from "../../lib/billing/updateInvoiceStatus.js";
 
 const SLUG = "spain_enzymes";
 const SEED_MARKER = "[seed-billing-spain]";

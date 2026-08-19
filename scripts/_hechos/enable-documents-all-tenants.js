@@ -10,9 +10,9 @@
  *   npm run db:enable:documents:prod   (VPS — ver docs/modules/documents.md)
  */
 
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { invalidateTenantCache } from "../lib/tenant/tenantResolver.js";
-import { MODULE_KEYS } from "../lib/tenant/moduleKeys.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { invalidateTenantCache } from "../../lib/tenant/tenantResolver.js";
+import { MODULE_KEYS } from "../../lib/tenant/moduleKeys.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 

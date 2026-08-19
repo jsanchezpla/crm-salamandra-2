@@ -1,3 +1,4 @@
+// @vivo — Herramienta genérica de mantenimiento: recibe --email y --tenant, descubre las tablas en information_schema cada vez («una lista escrita a mano… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * borrar-rastro-paciente.js — quitar de un cliente todo rastro de un paciente.
  *

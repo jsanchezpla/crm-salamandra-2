@@ -12,9 +12,9 @@
  * Uso VPS:    docker exec crm-salamandra-app-1 node scripts/encrypt-tenant-secrets.js
  */
 
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { invalidateTenantCache } from "../lib/tenant/tenantResolver.js";
-import { encryptSecret, isEncrypted } from "../lib/crypto/secretBox.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { invalidateTenantCache } from "../../lib/tenant/tenantResolver.js";
+import { encryptSecret, isEncrypted } from "../../lib/crypto/secretBox.js";
 
 if (!process.env.SETTINGS_ENCRYPTION_KEY?.trim()) {
   process.stderr.write("\n✗ SETTINGS_ENCRYPTION_KEY no configurada. Ponla antes de cifrar.\n\n");

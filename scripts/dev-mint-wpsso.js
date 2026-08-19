@@ -1,3 +1,4 @@
+// @vivo — Utilidad de DESARROLLO genérica (slug + email, `--expired`) que firma un `wpsso` como lo haría WordPress para probar `/widget/c/<slug>/mi-perfil`… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * dev-mint-wpsso.js — genera un token `wpsso` de PRUEBA (como lo firmaría
  * WordPress) para probar el portal «Mi perfil» (`/widget/c/<slug>/mi-perfil`;

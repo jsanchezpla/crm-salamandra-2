@@ -1,3 +1,4 @@
+// @vivo — Hace falta para levantar un ENTORNO NUEVO: crea la extensión unaccent a nivel de base de datos (una vez por base, no por tenant), y… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * install-unaccent-extension.js
  *

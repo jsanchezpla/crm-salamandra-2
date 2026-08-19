@@ -17,8 +17,8 @@
  * Uso VPS:    docker compose exec app node scripts/configure-nutri-laura-widget-auth.js
  */
 
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { invalidateTenantCache } from "../lib/tenant/tenantResolver.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { invalidateTenantCache } from "../../lib/tenant/tenantResolver.js";
 
 const SLUG = "nutri_laura";
 

@@ -42,7 +42,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { Op } from "sequelize";
-import { getTenantDb } from "../lib/db/tenantDb.js";
+import { getTenantDb } from "../../lib/db/tenantDb.js";
 
 const args = process.argv.slice(2);
 const CONFIRM = args.includes("--confirm");

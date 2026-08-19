@@ -14,9 +14,9 @@
  * Uso: node --env-file=.env.local scripts/seed-cuestionarios-retorika.js
  */
 
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { getTenantDb } from "../lib/db/tenantDb.js";
-import { exigirTenantDePruebas } from "./_guard-datos-reales.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { getTenantDb } from "../../lib/db/tenantDb.js";
+import { exigirTenantDePruebas } from "../_guard-datos-reales.js";
 
 const TENANT_SLUG = "retorika";
 

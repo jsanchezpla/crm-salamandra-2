@@ -27,7 +27,7 @@
  *   node --env-file=.env.local scripts/limpiar-importacion-aumenta.js --confirm
  */
 
-import { getTenantDb } from "../lib/db/tenantDb.js";
+import { getTenantDb } from "../../lib/db/tenantDb.js";
 
 const args = process.argv.slice(2);
 const CONFIRM = args.includes("--confirm");

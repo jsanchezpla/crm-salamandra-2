@@ -13,7 +13,7 @@
  * Uso: node --env-file=.env.local scripts/setup-demo-outreach-fake.js
  */
 import { Sequelize } from "sequelize";
-import { encryptSecret } from "../lib/crypto/secretBox.js";
+import { encryptSecret } from "../../lib/crypto/secretBox.js";
 
 const s = new Sequelize(process.env.DATABASE_URL, { dialect: "postgres", logging: false });
 

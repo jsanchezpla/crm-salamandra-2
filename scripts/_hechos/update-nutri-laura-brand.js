@@ -8,8 +8,8 @@
  * Uso VPS:    docker compose exec app node scripts/update-nutri-laura-brand.js
  */
 
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { invalidateTenantCache } from "../lib/tenant/tenantResolver.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { invalidateTenantCache } from "../../lib/tenant/tenantResolver.js";
 
 const SLUG = "nutri_laura";
 

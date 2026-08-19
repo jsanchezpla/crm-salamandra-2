@@ -11,7 +11,7 @@
  * Uso local:  node --env-file=.env.local scripts/update-nutri-laura-eventtype-colors.js
  */
 
-import { getTenantDb } from "../lib/db/tenantDb.js";
+import { getTenantDb } from "../../lib/db/tenantDb.js";
 
 const SLUG = "nutri_laura";
 

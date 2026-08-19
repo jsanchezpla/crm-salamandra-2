@@ -1,3 +1,4 @@
+// @vivo — Utilidad de desarrollo que sigue sirviendo: firma una sesión de admin para abrir pantallas en local sin teclear contraseña, y se niega a correr… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * dev-token-admin.js — firma una sesión de admin para probar el CRM en local.
  *

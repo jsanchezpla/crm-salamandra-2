@@ -8,7 +8,7 @@
  * Uso VPS:    docker compose exec app node scripts/seed-spain-enzymes-data.js
  */
 
-import { getTenantDb, closeAllConnections } from "../lib/db/tenantDb.js";
+import { getTenantDb, closeAllConnections } from "../../lib/db/tenantDb.js";
 
 const SLUG = "spain_enzymes";
 

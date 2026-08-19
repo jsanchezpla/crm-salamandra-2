@@ -11,7 +11,7 @@
  * Uso local:  node --env-file=.env.local scripts/add-showcase-modules-demo.js
  * Uso VPS:    docker exec crm-salamandra-app-1 node scripts/add-showcase-modules-demo.js
  */
-import { getMasterModels } from "../lib/db/masterDb.js";
+import { getMasterModels } from "../../lib/db/masterDb.js";
 
 const SLUG = "demo";
 // `referidos` estaba aquí y se cayó el 12/08/2026 con el módulo entero.

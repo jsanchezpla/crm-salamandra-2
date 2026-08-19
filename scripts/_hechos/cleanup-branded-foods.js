@@ -31,7 +31,7 @@
  */
 
 import { Sequelize } from "sequelize";
-import { byTable } from "./_schema-targets.js";
+import { byTable } from "../_schema-targets.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }

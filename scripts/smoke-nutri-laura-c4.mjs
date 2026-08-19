@@ -1,3 +1,4 @@
+// @vivo — «Smoke HTTP end-to-end del Checkpoint 4 del sprint nutri_laura [...] Idempotente: limpia preventivamente y al final». (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * smoke-nutri-laura-c4.mjs — Smoke HTTP end-to-end del Checkpoint 4 del
  * sprint nutri_laura. Cubre los 15 pasos del spec C4:

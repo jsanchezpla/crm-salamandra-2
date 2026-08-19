@@ -25,8 +25,8 @@
  * Uso VPS:    docker compose exec app node scripts/seed-nutri-laura-course-registrations.js
  */
 
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { getTenantDb, closeAllConnections } from "../lib/db/tenantDb.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { getTenantDb, closeAllConnections } from "../../lib/db/tenantDb.js";
 
 const SLUG = "nutri_laura";
 

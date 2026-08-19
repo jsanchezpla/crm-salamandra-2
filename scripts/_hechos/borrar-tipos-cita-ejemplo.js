@@ -29,7 +29,7 @@
  *   … --tenant demo    → otro tenant (por defecto, aumenta)
  */
 
-import { getTenantDb } from "../lib/db/tenantDb.js";
+import { getTenantDb } from "../../lib/db/tenantDb.js";
 
 const args = process.argv.slice(2);
 const CONFIRM = args.includes("--confirm");

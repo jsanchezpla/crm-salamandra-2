@@ -1,3 +1,4 @@
+// @vivo — Es la única receta para crear NUESTRO tenant (schema crm_salamandra_solutions + fila en master + admin con moduleAccess ["all"] + 5 tenant_modules… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * seed-salamandra.js — Crea el tenant "Salamandra Solutions"
  *

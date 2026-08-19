@@ -34,8 +34,8 @@
 import { readFileSync } from "node:fs";
 import crypto from "node:crypto";
 import path from "node:path";
-import { getTenantDb } from "../lib/db/tenantDb.js";
-import { saveRecipePhoto, validatePhotoMagicBytes, MAX_PHOTO_SIZE_BYTES } from "../lib/nutricion/recipePhotoStorage.js";
+import { getTenantDb } from "../../lib/db/tenantDb.js";
+import { saveRecipePhoto, validatePhotoMagicBytes, MAX_PHOTO_SIZE_BYTES } from "../../lib/nutricion/recipePhotoStorage.js";
 
 const args = process.argv.slice(2);
 const CONFIRM = args.includes("--confirm");

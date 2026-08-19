@@ -1,3 +1,4 @@
+// @vivo — Utilidad de DESARROLLO genérica por slug para ver, poner (euros → céntimos con redondeo) o quitar (`--quitar`) el precio del primer tipo de cita y… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * dev-precio-cita.js — pone o quita el precio de un tipo de cita, para poder
  * probar el flujo de cobro en local sin entrar al CRM.

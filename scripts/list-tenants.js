@@ -1,3 +1,4 @@
+// @vivo — Herramienta de inspección genérica, solo lectura: lista todos los tenants con estado y módulos activos. (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * list-tenants.js — Lista TODOS los tenants con sus módulos activos (SOLO LECTURA).
  *

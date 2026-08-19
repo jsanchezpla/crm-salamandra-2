@@ -7,7 +7,7 @@
  */
 
 import bcrypt from "bcrypt";
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
 
 const SLUG = "retorika";
 const ADMIN_EMAIL = "admin@retorika.es";

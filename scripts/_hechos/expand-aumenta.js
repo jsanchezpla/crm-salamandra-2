@@ -17,11 +17,11 @@
  */
 
 import { Sequelize } from "sequelize";
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { getTenantDb, closeAllConnections } from "../lib/db/tenantDb.js";
-import { invalidateTenantCache } from "../lib/tenant/tenantResolver.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { getTenantDb, closeAllConnections } from "../../lib/db/tenantDb.js";
+import { invalidateTenantCache } from "../../lib/tenant/tenantResolver.js";
 
-import { exigirTenantDePruebas } from "./_guard-datos-reales.js";
+import { exigirTenantDePruebas } from "../_guard-datos-reales.js";
 
 const SLUG = "aumenta";
 const SCHEMA = `crm_${SLUG}`;

@@ -1,3 +1,4 @@
+// @vivo — Herramienta de mantenimiento genérica por `<email>`: «Resetea la password de un usuario admin en master.users. (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * reset-tenant-admin-password.js
  *

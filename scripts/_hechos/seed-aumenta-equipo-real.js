@@ -30,8 +30,8 @@
  */
 
 import bcrypt from "bcrypt";
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { getTenantDb } from "../lib/db/tenantDb.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { getTenantDb } from "../../lib/db/tenantDb.js";
 
 const SLUG = "aumenta";
 const SCHEMA = `crm_${SLUG}`;

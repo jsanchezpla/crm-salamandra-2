@@ -32,8 +32,8 @@
  * Uso VPS: docker compose exec -T app node scripts/backfill-origen-formulario.js --confirm
  */
 
-import { getMasterDb } from "../lib/db/masterDb.js";
-import { getTenantDb, closeAllConnections } from "../lib/db/tenantDb.js";
+import { getMasterDb } from "../../lib/db/masterDb.js";
+import { getTenantDb, closeAllConnections } from "../../lib/db/tenantDb.js";
 
 const confirmar = process.argv.includes("--confirm");
 

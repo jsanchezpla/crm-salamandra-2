@@ -27,7 +27,7 @@
  *   docker exec crm-salamandra-app-1 node scripts/retirar-modulo-cuestionarios.js
  */
 
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
 
 const CLAVE = "cuestionarios";
 const APLICAR = process.argv.includes("--aplicar");

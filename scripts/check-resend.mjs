@@ -1,3 +1,4 @@
+// @vivo — Diagnóstico de la cuenta de plataforma (RESEND_API_KEY / OUTREACH_RESEND_API_KEY del entorno) con envío de prueba opcional; esa clave la sigue… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * check-resend.mjs — Diagnóstico de la cuenta de Resend.
  *

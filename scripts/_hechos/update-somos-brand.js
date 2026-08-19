@@ -29,8 +29,8 @@
  * Uso VPS:    docker exec crm-salamandra-app-1 node scripts/update-somos-brand.js
  */
 
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { invalidateTenantCache } from "../lib/tenant/tenantResolver.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { invalidateTenantCache } from "../../lib/tenant/tenantResolver.js";
 
 const SLUG = "somos";
 

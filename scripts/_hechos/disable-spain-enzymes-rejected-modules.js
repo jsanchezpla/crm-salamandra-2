@@ -27,8 +27,8 @@
  * Uso VPS:    docker compose exec app node scripts/disable-spain-enzymes-rejected-modules.js
  */
 
-import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
-import { closeAllConnections } from "../lib/db/tenantDb.js";
+import { getMasterDb, getMasterModels } from "../../lib/db/masterDb.js";
+import { closeAllConnections } from "../../lib/db/tenantDb.js";
 
 const SLUG = "spain_enzymes";
 const MODULES_TO_DISABLE = ["orders", "billing", "inventory"];

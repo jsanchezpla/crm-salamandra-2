@@ -28,8 +28,8 @@
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { getTenantDb } from "../lib/db/tenantDb.js";
-import { etiquetaDe } from "./_organizate-historial.js";
+import { getTenantDb } from "../../lib/db/tenantDb.js";
+import { etiquetaDe } from "../_organizate-historial.js";
 
 const args = process.argv.slice(2);
 const SLUG = args.includes("--tenant") ? args[args.indexOf("--tenant") + 1] : "aumenta";

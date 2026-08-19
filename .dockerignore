@@ -8,3 +8,7 @@ README.md
 .vscode
 .claude
 .agents
+
+# Lo que ya se ejecutó y no volverá (ver scripts/_hechos/README.md): no viaja a
+# la imagen. El inventario es `node scripts/_inventario-scripts.mjs`.
+scripts/_hechos
