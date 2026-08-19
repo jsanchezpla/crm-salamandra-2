@@ -41,20 +41,26 @@ flowchart LR
 | --- | --- |
 | [`base/`](base/) | **Cómo funciona el CRM por dentro**: arquitectura, resolución de tenant, mecanismo de overrides, acceso a módulos, convenciones, patrones, despliegue, y una ficha técnica por módulo con su inventario de ficheros. |
 | [`modules/`](modules/) | **Qué hace cada módulo**: negocio, endpoints, reglas de validación, decisiones de implementación. Es el detalle funcional. |
-| [`decisions/`](decisions/) | Decisiones arquitectónicas históricas, con su porqué. |
-| [`refactor-base-override/`](refactor-base-override/) | Trabajo en curso: refactor que da a cada tenant un override propio por módulo. Diagnóstico, plan y estado del loop. |
+| [`decisions/`](decisions/) | **El porqué de las reglas de `CLAUDE.md`**, una decisión fechada por fichero (desde el 19/08/2026: `CLAUDE.md` guarda la regla, aquí vive la historia). Índice en su README. |
+| [`refactor-base-override/`](refactor-base-override/) | **Histórico, superado el 18/08/2026** por la regla #16 (los overrides se encogen, no se clonan). Se conserva por el diagnóstico y el método de testing; no retomar el loop. |
 | [`qa/`](qa/) | Sprints de QA y sus hallazgos. |
 | [`integrations/`](integrations/) | Integraciones con terceros. |
 | [`tutoriales/`](tutoriales/) | Guías paso a paso. |
 
 ## Atajos
 
-**Voy a tocar un módulo** → [`base/{modulo}.md`](base/) para saber qué
-ficheros lo forman, y [`modules/{modulo}.md`](modules/) para saber qué hace.
+**Voy a tocar un módulo** → el `## Mapa` al principio de
+[`modules/{modulo}.md`](modules/) (dónde vive cada cosa, verificado el
+19/08/2026) y luego el resto del doc para saber qué hace;
+[`base/{modulo}.md`](base/) para el inventario fino de ficheros (foto del
+07/08, ver su aviso).
 
-**Voy a crear un override de tenant** →
-[`base/routing-overrides.md`](base/routing-overrides.md). Sin excepción: el
-mecanismo tiene trampas que no dan error, solo dejan de funcionar en silencio.
+**Un cliente pide algo** → la escalera de la **regla #16 de `CLAUDE.md`**
+antes de abrir un fichero: alta sin código → palabras → dato en `lib/` →
+interruptor → parámetro → y solo al final pantalla propia. Si acaba en
+override, [`base/routing-overrides.md`](base/routing-overrides.md) para el
+mecanismo, que tiene trampas que no dan error, solo dejan de funcionar en
+silencio.
 
 **Alguien no ve un módulo que sí tiene contratado** →
 [`base/module-access.md`](base/module-access.md). Son tres puertas y casi

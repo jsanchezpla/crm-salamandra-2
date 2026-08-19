@@ -7,6 +7,20 @@ Generada el **2026-08-07** contra el commit `030a35e`, verificada contra
 código y contra la BD local. Si el código y esta doc discrepan, **manda el
 código**: actualiza la doc.
 
+> ⚠️ **Léela sabiendo dos cosas (19/08/2026).** (1) Es una FOTO del 07/08 y ya
+> no cuadra en varios sitios: las fichas de módulo hablan de tenants que se
+> dieron de baja (`abarcaia`, `quality_energy`, `healim`), de «8 overrides» de
+> Leads (quedan 4) y de `cuestionarios` y `referidos` como módulos (ya no lo
+> son). Las columnas «Tenants» de sus tablas son listas a mano: **la verdad de
+> quién tiene qué está en `/admin/modulos`**. (2) Su consejo de «clonar el base
+> para hacer un override» es de ANTES de la regla #16 de `CLAUDE.md` (18/08):
+> hoy los overrides se encogen y lo genérico va al base gateado por módulo o
+> interruptor. Para saber dónde vive el código de un módulo HOY, empieza por el
+> `## Mapa` de `docs/modules/<modulo>.md`, verificado el 19/08/2026; estas
+> fichas siguen valiendo para el inventario fino de ficheros y para
+> `routing-overrides.md`, `tenant-resolver.md`, `module-access.md`,
+> `patterns.md` y `deploy.md`, que no han envejecido.
+
 ---
 
 ## Empieza por aquí
