@@ -1,5 +1,5 @@
 /**
- * smoke-nutri-laura-recetario-c2.mjs — Smoke HTTP del Sprint Recetario C2.
+ * _smoke-nutri-laura-recetario-c2.mjs — Smoke HTTP del Sprint Recetario C2.
  *
  * 19 casos cubriendo:
  *

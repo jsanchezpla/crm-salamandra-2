@@ -1,5 +1,5 @@
 /**
- * smoke-nutri-laura-recetario-e2e.mjs — Smoke END-TO-END del sprint Recetario.
+ * _smoke-nutri-laura-recetario-e2e.mjs — Smoke END-TO-END del sprint Recetario.
  *
  * Cierre C5: ejercita el flujo completo de Laura en un único script
  * (catálogo → plantilla → asignación → edición → reapply → histórico),

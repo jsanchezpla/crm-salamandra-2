@@ -1,5 +1,5 @@
 /**
- * smoke-nutri-laura-recetario-c3.mjs — Smoke del Sprint Recetario C3.
+ * _smoke-nutri-laura-recetario-c3.mjs — Smoke del Sprint Recetario C3.
  *
  * C3 es principalmente UI; este smoke cubre las DOS partes que SÍ se
  * pueden testear sin un navegador headless:
@@ -21,15 +21,15 @@
  *
  * Uso:
  *   # PARTE A (sin red, sin servidor)
- *   node scripts/smoke-nutri-laura-recetario-c3.mjs --only-unit
+ *   node scripts/_smoke-nutri-laura-recetario-c3.mjs --only-unit
  *
  *   # Smoke completo (requiere dev server + .env.local)
  *   npm run dev          # otra terminal
- *   node --env-file=.env.local scripts/smoke-nutri-laura-recetario-c3.mjs
+ *   node --env-file=.env.local scripts/_smoke-nutri-laura-recetario-c3.mjs
  *
  *   # Con auth HTTP completa
  *   $env:SMOKE_PASSWORD = "<password admin nutri_laura>"
- *   node --env-file=.env.local scripts/smoke-nutri-laura-recetario-c3.mjs
+ *   node --env-file=.env.local scripts/_smoke-nutri-laura-recetario-c3.mjs
  */
 
 const BASE_URL = "http://localhost:3000";

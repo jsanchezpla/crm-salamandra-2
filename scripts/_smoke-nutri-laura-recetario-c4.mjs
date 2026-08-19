@@ -1,5 +1,5 @@
 /**
- * smoke-nutri-laura-recetario-c4.mjs — Smoke del Sprint Recetario C4.
+ * _smoke-nutri-laura-recetario-c4.mjs — Smoke del Sprint Recetario C4.
  *
  * C4 añade dos endpoints + dos UIs (modal de asignación y tab Plan en
  * ficha de paciente). Aquí cubrimos la PARTE de integración HTTP/BD

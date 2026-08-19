@@ -1,9 +1,10 @@
 // Pruebas del módulo de análisis sin servidor ni API key.
-// Uso: node scripts/_outreach-ai-unit.mjs
+// Uso: node scripts/_smoke-outreach-ai-unit.mjs (entra en `npm test` desde el 19/08/2026; antes se llamaba _outreach-ai-unit.mjs y el runner no la veía)
 import { buildSystemPrompt, buildUserMessage } from "../lib/outreach/analysis/prompt.js";
 import { parseAnalysis } from "../lib/outreach/analysis/schema.js";
 import { analyzeLead } from "../lib/outreach/analysis/index.js";
 import { normalizeCompany } from "../lib/outreach/scraping.js";
+import { DEFAULT_MODEL } from "../lib/outreach/analysis/models.js";
 
 let fails = 0;
 function check(name, cond, extra = "") {
@@ -87,7 +88,7 @@ const res2 = await analyzeLead({
   lead: LEAD, businessLines: active, settings: { aiModel: "gpt-4o" }, companyName: "X",
   complete: async () => JSON.stringify({ solutions: {}, agencia: {} }),
 });
-check("un modelo no admitido cae al de por defecto", res2.model === "claude-opus-4-8");
+check("un modelo no admitido cae al de por defecto", res2.model === DEFAULT_MODEL);
 
 try {
   await analyzeLead({ lead: LEAD, businessLines: [], settings: {}, companyName: "X", complete: async () => "{}" });

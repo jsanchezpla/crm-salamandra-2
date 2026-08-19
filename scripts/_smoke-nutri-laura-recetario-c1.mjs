@@ -1,5 +1,5 @@
 /**
- * smoke-nutri-laura-recetario-c1.mjs — Smoke HTTP del Sprint nutri-laura
+ * _smoke-nutri-laura-recetario-c1.mjs — Smoke HTTP del Sprint nutri-laura
  * Recetario, Checkpoint C1 (catálogo de alimentos + OpenFoodFacts).
  *
  * 12 casos:
@@ -25,7 +25,7 @@
  *      pasos admin caen a Sequelize directo (no se ejerce el path HTTP,
  *      pero se valida el contrato del lib + BD).
  *   3) Lanza:
- *        node --env-file=.env.local scripts/smoke-nutri-laura-recetario-c1.mjs
+ *        node --env-file=.env.local scripts/_smoke-nutri-laura-recetario-c1.mjs
  *
  * Idempotente: limpia preventivamente y al final.
  */
