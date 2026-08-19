@@ -55,6 +55,13 @@
  * `scripts/_smoke-*.mjs`, `scripts/_smoke-*.js` y `scripts/smoke-test-*.mjs`.
  * Todas terminan igual —`process.exit(0)` si va bien, `1` si algo falla—, que
  * es lo único que este runner necesita saber de ellas.
+ *
+ * Desde el 19/08/2026 las pruebas nuevas de funciones de `lib/` se escriben con
+ * `node:test` + `node:assert/strict` (dentro de Node, sin dependencias; la
+ * primera fue `_smoke-citas-dinero.mjs`). Ejecutadas con `node fichero` salen
+ * con 1 si algo falla, así que aquí entran igual; lo único que este runner hace
+ * distinto con ellas es lanzarlas con `--test-reporter=spec`, para que el fallo
+ * se lea (ver `clasificar`).
  */
 
 import { readdirSync, readFileSync, existsSync } from "node:fs";
@@ -94,6 +101,14 @@ function clasificar(ruta) {
 
   const lanzar = cabecera.match(/@prueba-lanzar\s+([^\n]+)/);
   const extras = lanzar ? lanzar[1].trim().split(/\s+/) : [];
+
+  // Las escritas con `node:test` (desde el 19/08/2026, `_smoke-citas-dinero.mjs`
+  // la primera) sacan TAP cuando no hay terminal: 200 líneas de «ok» que
+  // entierran el único «not ok». Con el reporter `spec` el fallo sale con su
+  // nombre y su diff, que es lo que este runner pinta al final.
+  if (/from\s+"node:test"/.test(texto) && !extras.some((e) => e.startsWith("--test-reporter"))) {
+    extras.push("--test-reporter=spec");
+  }
 
   const marca = cabecera.match(/@prueba\s+(ligera|pesada)/);
   if (marca) return { pesada: marca[1] === "pesada", motivo: "marcada a mano", extras };
