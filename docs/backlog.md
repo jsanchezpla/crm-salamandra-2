@@ -77,43 +77,79 @@ comprobarlo resulta que sigue pasando, se queda y se actualiza el sello.
 
 ## P0 — hoy
 
-### La portada enseñaba a cada profesional las citas de todo el equipo, con el nombre del paciente · `nutri_laura`, todos
+### Quitarle a una profesional el acceso al módulo Equipo le abría la agenda entera · `nutri_laura`, todos
 
-**Lo que pasaba.** Rocío, que en nutri_laura es usuaria normal y no admin, vio en
-SU portada la cita de supervisión que Laura se había agendado para sí misma. La
-cita estaba BIEN asignada —el reparto no tenía nada que ver—: lo que estaba mal
-era la portada, que listaba las próximas citas de todo el centro, con el nombre
-del paciente, a cualquiera que entrara.
+**Lo que pasaba.** Rocío, usuaria normal de nutri_laura, veía **en su pantalla de
+Citas** las 10 citas del centro con el nombre del paciente —entre ellas la
+supervisión que Laura se había agendado para sí misma— y podía además moverlas y
+cancelarlas.
 
-**Por qué se quedó fuera.** El listado de citas y el calendario filtran por
-profesional desde el 28/07 (`lib/citas/visibilidad.js`, hecho justo para que un
-miembro del equipo no vea los datos personales de la agenda ajena). La portada no,
-y su cabecera explicaba el motivo: decía que Booking no tenía clave hacia el
-usuario, así que «lo mío» era inviable. Sí la tiene —`bookings.team_member_id`—
-y el propio listado ya filtraba por ella: la premisa llevaba semanas caducada y
-nadie volvió a mirarla.
+**El primer diagnóstico fue el equivocado, y merece quedar escrito.** El aviso
+decía «le sale en sus citas» y se leyó como la portada. La portada TAMBIÉN filtraba
+mal y se arregló (`c9bf61d`), pero no era lo que se estaba contando; y por la misma
+causa que sigue, ese arreglo no le servía a Rocío para nada.
 
-**A quién afectaba.** A todo cliente con Citas y Equipo que NO tenga la agenda
-compartida encendida. Aumenta la tiene encendida a propósito desde el 01/08, así
-que para ellos ver la agenda completa es lo pedido, no un fallo. Donde no lo está
-—nutri_laura entre otros— cualquier usuaria veía la agenda entera.
+**La causa.** `hasModule(key)` cruza DOS cosas: que el TENANT tenga el módulo y que
+el USUARIO lo tenga en su `moduleAccess`. El filtro de la agenda vivía DENTRO de un
+`if (hasModule("team"))`. El `moduleAccess` de Rocío es `["citas","clients",
+"nutricion"]` —sin `team`, que es justo por lo que no ve el menú de Equipo—, así que
+para ella ese `if` era falso y el `where.teamMemberId` no se ponía NUNCA.
 
-**Ya está arreglado.** La portada usa la misma regla que el listado: admin lo ve
-todo, un cliente con agenda compartida también, y el resto solo lo suyo. Y si no
-se puede resolver quién mira, la agenda sale VACÍA en vez de abierta — un fallo de
-resolución no puede volver a destapar nada. Los ocho casos quedan fijados en
-`scripts/_smoke-portada-agenda.mjs`, que corre sin base de datos y entra en
-`npm test`.
+> **Quitarle permisos era lo que le daba los datos.** Un control de acceso que al
+> cerrarse abre es peor que no tenerlo, porque nadie lo va a auditar.
 
-*Se comprueba*: Rocío entra en su portada y ya no le salen las citas de Laura, y
-Laura, que es admin, las sigue viendo todas.
-*Dónde*: `lib/home/summary.js` (`buildAgenda` y `buildHomeSummary`); la regla
-compartida en `lib/citas/visibilidad.js`; la prueba en
-`scripts/_smoke-portada-agenda.mjs`.
-*Comprobado en producción*: 19/08/2026 — la cita del 27/08 está asignada a Laura
-Barbero, Rocío tiene rol `user` y `agendaCompartida` no está puesta en los
-ajustes de nutri_laura, así que no debía verla. **Falta que Rocío lo confirme en su
-pantalla**: eso no lo puedo mirar yo sin su sesión.
+**Dónde estaba abierto.** Leer: el calendario, el listado y la lista de espera, y el
+detalle de una cita. Escribir: `noPuedeTocarla` —la puerta de editar, mover y
+cancelar— contestaba «puede» por el mismo camino. La portada, igual. Y de paso salió
+otra puerta que faltaba entera: `/api/citas/sin-profesional` no miraba el rol ni
+para listar las citas sin asignar ni para repartirlas en bloque (la pestaña es
+`adminOnly` en el menú, pero una pantalla escondida no es una puerta cerrada).
+
+**A quién afectaba.** A cualquier cliente con Citas y Equipo **sin** agenda
+compartida cuyos usuarios no tengan `team` en su `moduleAccess`. Aumenta la tiene
+compartida a propósito desde el 01/08 —ver la agenda entera es lo pedido allí—, así
+que este arreglo no les cambia nada.
+
+**Ya está arreglado.** Los ocho sitios preguntan ahora con `tenantHasModule`
+(«¿tiene el CENTRO equipo?») en vez de `hasModule` («¿puede esta persona entrar en
+la pantalla de Equipo?»). La historia completa está en la cabecera de
+`lib/citas/visibilidad.js`, y `scripts/_smoke-citas-visibilidad.mjs` (nueva) lee el
+código de los cuatro ficheros y falla si reaparece `hasModule("team")`, si alguno se
+construye el filtro a mano en vez de usar la regla compartida, o si la cola sin
+profesional se queda sin puerta. Se probó reventando el arreglo de siete maneras
+distintas: las siete las caza.
+
+Y de paso la regla dejó de estar copiada en cuatro sitios: el trozo de `where`
+(`soloLoSuyo`) y la comprobación de una en una (`esSuya`) viven en
+`lib/citas/visibilidad.js` y las usan el listado, el calendario, el detalle, la
+puerta de editar/mover/cancelar y la portada. Tenían que decir lo mismo y no había
+nada que lo garantizara: ahora lo dicen porque son la misma función, y hay una
+prueba de que coinciden.
+
+**Qué ve exactamente ahora** (decisión de Jorge, 19/08/2026: «tan solo que no vea
+las de Laura, el resto que sí las vea»). Una profesional ve SUS citas **y las que
+no son de nadie**. En nutri_laura eso no es un detalle: de las 10 citas, 5 son
+«Acompañamiento mensual» **sin profesional** —entran por la web sin asignar, y son
+justo el servicio que hace Rocío—. Filtrarlas también la habría dejado viendo 3 de
+8, convencida de que el CRM le había perdido las citas. Lo único que se cierra son
+las citas de OTRA persona, que son las que llevan el nombre de un paciente que no
+le toca. Es la misma excepción que ya hacía la rama de dirección al filtrar por
+profesional: «para no perderlas de vista». **No hay que repartir nada antes de
+desplegar.**
+
+*Se comprueba*: Rocío entra en Citas y ve las suyas y las que no son de nadie; ya
+no le sale la supervisión de Laura del 27/08 ni la puede abrir por su enlace ni
+moverla; Laura, que es admin, las sigue viendo todas.
+*Dónde*: `app/api/citas/bookings/route.js`, `bookings/calendar/route.js`,
+`bookings/[id]/route.js`, `sin-profesional/route.js` y `lib/home/summary.js`; la
+regla y su porqué en `lib/citas/visibilidad.js`; las pruebas en
+`scripts/_smoke-citas-visibilidad.mjs` y `scripts/_smoke-portada-agenda.mjs`.
+*Comprobado en producción*: 19/08/2026 — se pidió la agenda de esa semana **con la
+sesión de Rocío** y el servidor le devolvió 3 citas que no eran suyas, con el
+`teamMemberName` vacío: esa es la huella de que el `include` del equipo tampoco se
+aplicaba, o sea que el bloque entero se saltaba. `agendaCompartida` no está en los
+ajustes de nutri_laura y su `moduleAccess` no lleva `team`.
+*Pendiente*: desplegar, y que Rocío lo confirme en su pantalla.
 
 ---
 
