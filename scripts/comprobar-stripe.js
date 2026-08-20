@@ -15,7 +15,9 @@
  *   2. hay un webhook apuntando a NOSOTROS, y está activo;
  *   3. ese webhook escucha los eventos que necesitamos —sobre todo
  *      `payment_intent.amount_capturable_updated`, que es el que avisa de que
- *      el dinero ha quedado retenido—;
+ *      el dinero ha quedado retenido—. La lista NO se escribe aquí: vive en
+ *      `lib/payments/eventosWebhook.js`, la misma que enseña la tarjeta de
+ *      Stripe en Configuración, para que no puedan divergir;
  *   4. su versión de API es la misma que usa nuestro SDK: si divergen, los
  *      eventos llegan con otra forma y las pruebas NO lo detectan, porque
  *      construyen los eventos con la versión del SDK.
@@ -28,28 +30,9 @@
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
 import { getTenantDb } from "../lib/db/tenantDb.js";
 import { getStripe, getTenantStripeConfig, STRIPE_API_VERSION } from "../lib/payments/stripeConfig.js";
+import { EVENTOS_WEBHOOK_STRIPE } from "../lib/payments/eventosWebhook.js";
 
 const SLUG = process.argv[2];
-
-/** Los que el CRM necesita de verdad, con por qué duele que falten. */
-const EVENTOS = [
-  ["payment_intent.amount_capturable_updated", "el dinero ha quedado retenido: SIN ESTE la cita no entra en la lista de espera"],
-  ["payment_intent.succeeded", "el cobro se ha hecho efectivo"],
-  ["payment_intent.canceled", "la retención se ha soltado"],
-  ["payment_intent.payment_failed", "el banco ha rechazado"],
-  ["charge.refunded", "se ha devuelto el dinero"],
-  ["checkout.session.completed", "flujo antiguo de Checkout"],
-  ["checkout.session.async_payment_succeeded", "flujo antiguo de Checkout"],
-  ["checkout.session.async_payment_failed", "flujo antiguo de Checkout"],
-  ["checkout.session.expired", "flujo antiguo de Checkout"],
-  // Pago a plazos (05/08/2026). La PRIMERA cuota llega como
-  // `checkout.session.completed`, así que sin estos dos la compra parece
-  // funcionar perfectamente y son los meses 2 y 3 los que se cobran a ciegas:
-  // el dinero entra, el CRM no lo apunta y el cerrojo que cancela al llegar al
-  // total nunca corre.
-  ["invoice.paid", "una cuota del pago fraccionado se ha cobrado: SIN ESTE las cuotas siguientes se cobran sin que el CRM se entere"],
-  ["invoice.payment_failed", "una cuota ha sido rechazada por el banco"],
-];
 
 const w = (s) => process.stdout.write(s);
 let problemas = 0;
@@ -144,11 +127,11 @@ async function main() {
 
     const suyos = new Set(ep.enabled_events ?? []);
     const todos = suyos.has("*");
-    const faltan = EVENTOS.filter(([e]) => !todos && !suyos.has(e));
+    const faltan = EVENTOS_WEBHOOK_STRIPE.filter(({ evento }) => !todos && !suyos.has(evento));
     if (!faltan.length) {
-      bien("Eventos", todos ? "escucha TODOS (*)" : `los ${EVENTOS.length} que hacen falta`);
+      bien("Eventos", todos ? "escucha TODOS (*)" : `los ${EVENTOS_WEBHOOK_STRIPE.length} que hacen falta`);
     } else {
-      for (const [e, porque] of faltan) mal(`Falta ${e.split(".").pop()}`, `${e} — ${porque}`);
+      for (const { evento, porque } of faltan) mal(`Falta ${evento.split(".").pop()}`, `${evento} — ${porque}`);
     }
 
     if (ep.api_version === versionSdk) {
