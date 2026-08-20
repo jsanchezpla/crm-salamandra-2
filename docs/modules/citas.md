@@ -796,6 +796,11 @@ Conceptualmente son operaciones distintas:
   monta la misma plantilla en su `sendCancellationEmail`. (A diferencia del
   aviso de cambio de hora y del enlace de videollamada, este NO mira las
   preferencias de comunicación de la familia: se manda igual.)
+  ⚠️ La misma plantilla no es el mismo correo: `notificarCancelacion.js` le
+  pasa `esBono` y el panel no, así que cancelar desde el panel la sesión de un
+  bono sale SIN el «tu programa sigue activo» que sí lleva por los otros
+  caminos (divergencia del 06/08/2026, sin resolver; juntarlas cambia lo que
+  recibe la familia y lo decide Jorge).
 
 Ambas marcan `status="cancelled"` y rellenan `cancelledAt` +
 `cancellationReason`, pero el endpoint y el email asociado distinguen
