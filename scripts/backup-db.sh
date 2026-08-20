@@ -41,6 +41,26 @@
 # ⚠️ UNA COPIA NUNCA RESTAURADA ES UNA HIPÓTESIS. Prueba el procedimiento
 #    entero en local al menos una vez.
 #
+#    ENSAYADO EL 20/08/2026, y no salió a la primera. La copia de esa noche se
+#    restauró entera en una base local vacía: 19,6 s, cero errores, 1.391 tablas
+#    y los recuentos idénticos a producción (la única que difería era la tabla
+#    tocada después de las 03:15). Los modelos del CRM la leyeron sin retoques.
+#    Pero el procedimiento de arriba, tal cual, ABORTA DOS VECES antes de
+#    llegar ahí. Quien restaure con prisa tiene que saber esto:
+#
+#      1) El volcado empieza por \restrict (protección que pg_dump 16.13 ya
+#         escribe). Un psql más VIEJO que el pg_dump que lo hizo no entiende
+#         esa orden y, con ON_ERROR_STOP=1, se para en la línea 5. Restaura
+#         con psql >= 16.10 / 17.6, o quítale esa línea y la de cierre.
+#      2) El volcado asigna la propiedad a crm_user. Si ese rol no existe en
+#         el destino, se para en la 27: CREATE ROLE crm_user; antes de nada.
+#      3) Si un intento falla a mitad, la base destino queda a medias y el
+#         siguiente muere con «ya existe el esquema». Tírala y créala de
+#         nuevo: no se restaura encima de un intento fallido.
+#
+#    Lo que NO hace falta: que las versiones de servidor coincidan. Se restauró
+#    un volcado de PostgreSQL 16.13 en un servidor 17.2 sin una sola queja.
+#
 # ─── COPIA FUERA DEL SERVIDOR ────────────────────────────────────────────────
 # Sin DESTINO_REMOTO configurado, todo esto vive en el MISMO disco que la base:
 # protege de un borrado accidental o de una migración que salga mal, NO de la
