@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import { eurosToCents, centsToEuros, formatMoney } from "../../../../lib/payments/money.js";
+import { slugify } from "../../../../lib/citas/validation.js";
 import {
   TIPOS as TIPOS_PREGUNTA,
   ETIQUETA_TIPO,
@@ -48,16 +49,6 @@ const EMPTY_FORM = {
   active: true,
   order: 0,
 };
-
-function slugify(name) {
-  return String(name)
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
-}
 
 /**
  * ConstructorPreguntas — las preguntas que se contestan al reservar esta cita.

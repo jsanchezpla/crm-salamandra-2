@@ -157,6 +157,42 @@ describe("slugify: del nombre de un tipo de cita a su URL pública", () => {
     assert.equal(slugify("a".repeat(64)).length, 64);
     assert.equal(slugify("a".repeat(10)).length, 10);
   });
+  it("el corte nunca deja el guion colgando: 63 letras y otra palabra no acaban en «-»", () => {
+    const cortado = slugify(`${"a".repeat(63)} b`);
+    assert.equal(cortado, "a".repeat(63));
+    assert.equal(cortado.length, 63);
+    assert.equal(isValidSlug(cortado), true);
+  });
+  it("lo mismo con un nombre largo de verdad: se corta por donde caiga y sigue siendo un slug válido", () => {
+    for (const nombre of [
+      "Valoración psicopedagógica completa con informe y devolución a la familia",
+      `${"palabra ".repeat(12)}final`,
+      `${"a".repeat(62)} bc`,
+      `${"a".repeat(64)} b`,
+      `${"a".repeat(65)} b`,
+    ]) {
+      const s = slugify(nombre);
+      assert.ok(s.length <= 64, `«${s}» pasa de 64`);
+      assert.equal(isValidSlug(s), true, `slugify(«${nombre}») = «${s}»`);
+    }
+  });
+  it("los símbolos de cabeza no gastan sitio: se quitan antes del corte", () => {
+    assert.equal(slugify(`--${"a".repeat(70)}`).length, 64);
+  });
+  it("sin nada que rescatar devuelve «» (el endpoint responde «No se pudo generar slug»)", () => {
+    assert.equal(slugify(""), "");
+    assert.equal(slugify("   "), "");
+    assert.equal(slugify("---"), "");
+    assert.equal(slugify("😀"), "");
+    assert.equal(slugify("¿¡?!"), "");
+  });
+  it("null y undefined son «», no la palabra «null»: los llamadores pasan por normalizeString, pero esto no depende de ellos", () => {
+    assert.equal(slugify(null), "");
+    assert.equal(slugify(undefined), "");
+  });
+  it("un número del body llega como texto: 2026 → «2026»", () => {
+    assert.equal(slugify(2026), "2026");
+  });
   it("lo que produce con un nombre corriente pasa isValidSlug (es el slug que se guarda sin más)", () => {
     for (const nombre of [
       "Sesión Inicial",
@@ -171,13 +207,6 @@ describe("slugify: del nombre de un tipo de cita a su URL pública", () => {
         `slugify(«${nombre}») = «${slugify(nombre)}»`
       );
     }
-  });
-  it("sin nada que rescatar devuelve «» (el endpoint responde «No se pudo generar slug»)", () => {
-    assert.equal(slugify(""), "");
-    assert.equal(slugify("   "), "");
-    assert.equal(slugify("---"), "");
-    assert.equal(slugify("😀"), "");
-    assert.equal(slugify("¿¡?!"), "");
   });
 });
 
