@@ -32,9 +32,11 @@
  * desconocido se ignora en la suma y solo queda null si nadie lo aporta; 0 en
  * el catálogo es 0, no desconocido); que cada nivel suma exactamente lo que
  * devuelve el de abajo (opción = líneas sueltas + recetas × raciones; comida =
- * SU opción por defecto, no la suma de todas; plan = sus comidas); que las
- * cantidades que llegan de la base como texto («150.00») valen igual que un
- * número; y que nada toca lo que le dan.
+ * SU opción por defecto, no la suma de todas; plan = sus comidas); que TODOS
+ * los niveles redondean a dos decimales, de manera que el total de la pauta es
+ * la suma de las cifras que se ven encima (0,33 + 0,33 + 0,33 = 0,99, y no
+ * 0,999); que las cantidades que llegan de la base como texto («150.00») valen
+ * igual que un número; y que nada toca lo que le dan.
  *
  * Sin kcal: el helper no las calcula a propósito (solo P / H / G / fibra).
  */
@@ -657,5 +659,86 @@ describe("computePlanMacros: el plan suma sus comidas, cada una por su opción p
     const plan = congelar(planDeLaura());
     computePlanMacros(plan);
     assert.deepEqual(plan, planDeLaura());
+  });
+});
+
+describe("el redondeo a dos decimales lo hacen TODOS los niveles, no solo la línea", () => {
+  // Un alimento con 33,3 g de proteína por 100 g: cada gramo aporta 0,333.
+  const TRES_TERCIOS = {
+    id: "f-tercios",
+    name: "Alimento de 33,3 por 100",
+    proteinPer100: 33.3,
+    carbsPer100: 0,
+    fatPer100: 0,
+    fiberPer100: 0,
+  };
+  const receta = () => ({
+    servings: 1,
+    ingredients: [gramos(TRES_TERCIOS, 1), gramos(TRES_TERCIOS, 1), gramos(TRES_TERCIOS, 1)],
+  });
+
+  it("tres ingredientes de 0,333 g suman 0,99 g, no 0,999: la receta redondea también", () => {
+    assert.equal(computeFoodMacros(gramos(TRES_TERCIOS, 1)).protein, 0.33);
+    assert.equal(computeRecipeMacros(receta()).protein, 0.99);
+  });
+
+  it("y × 10 raciones son 9,9 g, no 9,99: el escalado parte de la receta ya redondeada", () => {
+    assert.equal(computeOptionMacros({ recipes: [{ ...receta(), servings: 10 }] }).protein, 9.9);
+  });
+
+  // Con 0,33 el redondeo de la receta y el de la opción no se ven: 0,33 × 3 da
+  // 0,99 clavado en coma flotante. Con 0,07 sí — 0,07 × 3 es
+  // 0,21000000000000002 —, y por eso los dos `it` de abajo usan este alimento.
+  const SIETE = {
+    id: "f-siete",
+    name: "Alimento de 7 por 100",
+    proteinPer100: 7,
+    carbsPer100: 0,
+    fatPer100: 0,
+    fiberPer100: 0,
+  };
+
+  it("la receta redondea SU suma: tres líneas de 0,07 g dan 0,21 clavado", () => {
+    const tres = { ingredients: [gramos(SIETE, 1), gramos(SIETE, 1), gramos(SIETE, 1)] };
+    assert.equal(computeRecipeMacros(tres).protein, 0.21);
+  });
+
+  it("y la opción redondea la suya, que mezcla líneas sueltas con recetas", () => {
+    const unaRacion = { servings: 1, ingredients: [gramos(SIETE, 1)] };
+    const opcion = { foods: [gramos(SIETE, 1)], recipes: [unaRacion, unaRacion] };
+    assert.equal(computeOptionMacros(opcion).protein, 0.21);
+  });
+
+  it("el total es la SUMA DE LO QUE SE VE encima: la pauta cuadra aunque pierda décimas", () => {
+    const plan = {
+      meals: [
+        { options: [{ isDefault: true, foods: receta().ingredients }] },
+        { options: [{ isDefault: true, foods: [gramos(TRES_TERCIOS, 1)] }] },
+      ],
+    };
+    const comidas = plan.meals.map(computeMealMacros);
+    assert.deepEqual(
+      comidas.map((m) => m.protein),
+      [0.99, 0.33]
+    );
+    assert.equal(computePlanMacros(plan).protein, 1.32);
+  });
+
+  it("ningún nivel devuelve más de dos decimales, por muchas líneas y raciones que haya", () => {
+    const opcion = {
+      foods: [gramos(TRES_TERCIOS, 7), gramos(TRES_TERCIOS, 13)],
+      recipes: [{ ...receta(), servings: 2.5 }],
+    };
+    const plan = { meals: [{ options: [{ ...opcion, isDefault: true }] }] };
+    for (const valor of [
+      computeFoodMacros(gramos(TRES_TERCIOS, 7)).protein,
+      computeRecipeMacros(receta()).protein,
+      scaleMacros(computeRecipeMacros(receta()), 2.5).protein,
+      computeOptionMacros(opcion).protein,
+      computeMealMacros(plan.meals[0]).protein,
+      computePlanMacros(plan).protein,
+    ]) {
+      assert.equal(Math.round(valor * 100) / 100, valor, `${valor} tiene más de dos decimales`);
+    }
   });
 });

@@ -80,6 +80,15 @@ describe("SLA_PRIORITIES y DEFAULT_SLA: las cuatro prioridades y sus horas de f�
     });
     assert.equal("urgent" in DEFAULT_SLA, false);
   });
+  it("y congelado por DENTRO: tampoco se puede cambiar el plazo de una prioridad ya existente", () => {
+    for (const p of SLA_PRIORITIES) {
+      assert.equal(Object.isFrozen(DEFAULT_SLA[p]), true, p);
+      assert.throws(() => {
+        DEFAULT_SLA[p].resolutionHours = 999;
+      }, `${p} tendría que estar congelada`);
+    }
+    assert.deepEqual(DEFAULT_SLA, DE_FABRICA);
+  });
 });
 
 describe("effectiveSla: lo de fábrica más lo que el tenant haya ajustado", () => {
@@ -208,6 +217,26 @@ describe("computeDueDates: las fechas objetivo de un ticket, contadas desde el a
       computeDueDates("low", {}, "2026-08-19T10:00:00.000Z"),
       computeDueDates("low", {}, ALTA)
     );
+  });
+  it("un `from` que no se puede leer cuenta desde AHORA: nunca dos Invalid Date", () => {
+    for (const roto of ["no es fecha", "", NaN, {}, null]) {
+      const antes = Date.now();
+      const dues = computeDueDates("low", {}, roto);
+      const despues = Date.now();
+      const cual = JSON.stringify(String(roto));
+      assert.ok(dues.firstResponseDueAt instanceof Date, cual);
+      assert.equal(Number.isNaN(dues.firstResponseDueAt.getTime()), false, cual);
+      assert.ok(dues.firstResponseDueAt.getTime() >= antes + 24 * 3600_000, cual);
+      assert.ok(dues.firstResponseDueAt.getTime() <= despues + 24 * 3600_000, cual);
+      assert.equal((dues.resolutionDueAt - dues.firstResponseDueAt) / 3600_000, 96, cual);
+    }
+  });
+  it("con el `from` roto, `null` sigue queriendo decir una sola cosa: el tenant tiene el SLA apagado", () => {
+    assert.deepEqual(computeDueDates("low", { slaEnabled: false }, "no es fecha"), {
+      firstResponseDueAt: null,
+      resolutionDueAt: null,
+    });
+    assert.notEqual(computeDueDates("low", {}, "no es fecha").firstResponseDueAt, null);
   });
   it("devuelve instancias de Date (se guardan tal cual en el ticket)", () => {
     const dues = computeDueDates("medium", {}, ALTA);

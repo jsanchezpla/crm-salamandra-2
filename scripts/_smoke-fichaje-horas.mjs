@@ -27,6 +27,12 @@
  * hay horario previsto. Cada una de esas frases es aquí un `it`. Si alguien
  * toca un redondeo o un signo, la prueba que falla lleva la regla en el nombre.
  *
+ * Dos de esas frases no eran ciertas y se arreglaron el 20/08/2026, cuando esta
+ * misma prueba las miró de cerca: un tramo dado de baja SÍ sumaba minutos (solo
+ * lo tapaba el `deletedAt: null` de los dos endpoints), y el aviso de «sin
+ * ningún fichaje este mes», que no lleva fecha, salía el PRIMERO de la lista en
+ * vez de detrás de los días concretos que hay que arreglar.
+ *
  * Forma: `node:test` + `node:assert/strict`, como `_smoke-citas-dinero.mjs`.
  * Aserciones sobre lo que DEVUELVEN las funciones, nunca sobre el texto del
  * código. Las entradas imitan lo que de verdad llega desde los dos lectores
@@ -624,6 +630,27 @@ describe("resumirPorPersona: el resumen del mes por persona", () => {
     assert.equal(ana.minutosPrevistos, 480);
     assert.equal(ana.filas, 2);
   });
+  it("un tramo dado de baja NO suma: ni minutos, ni día, ni fila (lo que se borró no se paga)", () => {
+    const filas = [
+      tramo({ id: "1", fecha: "2026-03-02", minutos: 480, deletedAt: "2026-03-05T10:00:00.000Z" }),
+      tramo({ id: "2", fecha: "2026-03-03", minutos: 420 }),
+    ];
+    const ana = porId(resumirPorPersona(filas, EQUIPO), "ana");
+    assert.equal(ana.minutos, 420);
+    assert.equal(ana.minutosPrevistos, 480);
+    assert.equal(ana.dias, 1);
+    assert.equal(ana.filas, 1);
+  });
+  it("una fila dada de baja tampoco cuenta como corrección ni deja a la persona con horas fantasma", () => {
+    const filas = [
+      tramo({ id: "1", origen: "manual", deletedAt: "2026-03-05T10:00:00.000Z" }),
+    ];
+    const ana = porId(resumirPorPersona(filas, EQUIPO), "ana");
+    assert.equal(ana.correcciones, 0);
+    assert.equal(ana.minutos, 0);
+    assert.equal(ana.extras, 0);
+    assert.equal(totalesDelMes(resumirPorPersona(filas, EQUIPO)).personasConFichajes, 0);
+  });
   it("sin equipo, lista vacía (aunque haya fichajes)", () => {
     assert.deepEqual(resumirPorPersona([tramo()], []), []);
   });
@@ -817,6 +844,33 @@ describe("avisosDelMes: dónde mirar, separado en error y revisar", () => {
     assert.deepEqual(
       avisosDelMes(filas, EQUIPO).map((a) => `${a.fecha} ${a.nombre}`),
       ["2026-03-03 Beatriz", "2026-03-10 Ana", "2026-03-10 Beatriz"]
+    );
+  });
+  it("«sin_fichajes» va DETRÁS de los errores con fecha: primero los días que se pueden arreglar hoy", () => {
+    const filas = [
+      tramo({ id: "1", teamMemberId: "ana", fecha: "2026-03-02", salidaAt: null }),
+      tramo({ id: "2", teamMemberId: "ana", fecha: "2026-03-10", entradaAt: null }),
+    ];
+    assert.deepEqual(tipos(avisosDelMes(filas, EQUIPO)), [
+      "sin_salida",
+      "sin_entrada",
+      "sin_fichajes",
+    ]);
+  });
+  it("y sigue yendo delante de los «revisar», que son de otra gravedad", () => {
+    const filas = [tramo({ id: "1", teamMemberId: "ana", minutos: 800 })];
+    assert.deepEqual(tipos(avisosDelMes(filas, EQUIPO)), ["sin_fichajes", "jornada_larga"]);
+  });
+  it("varios «sin_fichajes» a la vez se ordenan entre ellos por nombre", () => {
+    const equipo = [
+      { id: "z", displayName: "Zoe" },
+      { id: "a", displayName: "Álvaro" },
+      { id: "ana", displayName: "Ana" },
+    ];
+    const avisos = avisosDelMes([tramo({ teamMemberId: "ana", salidaAt: null })], equipo);
+    assert.deepEqual(
+      avisos.map((a) => `${a.tipo} ${a.nombre}`),
+      ["sin_salida Ana", "sin_fichajes Álvaro", "sin_fichajes Zoe"]
     );
   });
   it("la fecha del aviso es la de la fila, como texto «AAAA-MM-DD»", () => {

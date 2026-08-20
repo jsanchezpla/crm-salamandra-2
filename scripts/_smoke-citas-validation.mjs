@@ -359,6 +359,19 @@ describe("timeToMinutes: HH:MM (o HH:MM:SS) a minutos desde medianoche", () => {
     assert.equal(timeToMinutes(":30"), null);
     assert.equal(timeToMinutes("10:"), null);
   });
+  it("basura pegada a los dígitos NO se lee a medias: «10:3x» no son las 10:03 (20/08/2026)", () => {
+    assert.equal(timeToMinutes("10:3x"), null);
+    assert.equal(timeToMinutes("1a:30"), null);
+    assert.equal(timeToMinutes("10:30abc"), null);
+    assert.equal(timeToMinutes("0x10:30"), null);
+    assert.equal(timeToMinutes("10:1e1"), null);
+    assert.equal(timeToMinutes("+10:30"), null);
+    assert.equal(timeToMinutes("10.5:30"), null);
+  });
+  it("los espacios de alrededor siguen sin molestar, y los segundos con decimales de la base tampoco", () => {
+    assert.equal(timeToMinutes("  10:30  "), 630);
+    assert.equal(timeToMinutes("10:30:00.000"), 630);
+  });
   it("sirve para comparar tramos: el fin tiene que ser mayor que el inicio", () => {
     assert.ok(timeToMinutes("10:00") < timeToMinutes("10:30"));
     assert.ok(timeToMinutes("09:00:00") < timeToMinutes("14:00:00"));
@@ -395,8 +408,13 @@ describe("normalizeTime: lo que se guarda es siempre HH:MM:SS", () => {
     assert.equal(normalizeTime("23:59"), "23:59:00");
     assert.equal(normalizeTime("00:00"), "00:00:00");
   });
+  it("una hora con basura pegada tampoco se guarda: «10:3x» no acaba en la tabla como «10:03:00»", () => {
+    assert.equal(normalizeTime("10:3x"), null);
+    assert.equal(normalizeTime("1a:30"), null);
+    assert.equal(normalizeTime("0x10:30"), null);
+  });
   it("las dos funciones dicen lo mismo de la misma cadena: si una la rechaza, la otra también", () => {
-    for (const s of ["24:00", "10:60", "9:5", "23:59", "ab:cd", "10", "", null]) {
+    for (const s of ["24:00", "10:60", "9:5", "23:59", "ab:cd", "10", "", null, "10:3x", "1a:30", "10:30abc"]) {
       assert.equal(
         normalizeTime(s) === null,
         timeToMinutes(s) === null,
