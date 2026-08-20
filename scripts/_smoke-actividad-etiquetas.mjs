@@ -441,7 +441,7 @@ describe("CRUCE: cada acción que escriben los endpoints y la lógica tiene fras
     }
   });
 
-  it("la frase de la carrera «cobrada pero ya cancelada» no promete una devolución (decisión pendiente en el Registro)", () => {
+  it("la frase de la carrera «cobrada pero ya cancelada» no promete una devolución (desde el 20/08/2026 se devuelve, pero es best-effort)", () => {
     assert.doesNotMatch(etiqueta("citas.booking_confirm_tarde").texto, /devol/i);
   });
 });

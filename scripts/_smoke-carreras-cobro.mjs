@@ -11,8 +11,10 @@
  * probando a mano. Aquí se fuerzan a propósito:
  *
  *   1. Dos confirmaciones simultáneas -> UN solo cobro, nunca dos.
- *   2. El paciente cancela MIENTRAS se le está cobrando -> se le devuelve el
- *      dinero y la cita NO resucita como confirmada.
+ *   2. El paciente cancela MIENTRAS se le está cobrando -> su dinero queda
+ *      resuelto (la retención suelta, o el cobro devuelto: es la única
+ *      excepción a «no se devuelve nunca», porque se le cobró una cita que ya
+ *      estaba cancelada) y la cita NO resucita como confirmada.
  *   3. Una cita que se queda pegada en 'capturing' (proceso muerto a mitad) ->
  *      el vigilante le pregunta a Stripe y la desatasca.
  *
@@ -113,10 +115,16 @@ async function main() {
     return { cita, ps };
   }
 
-  /** Lo que Stripe dice que se ha cobrado de verdad, en céntimos. */
+  /**
+   * Lo que Stripe dice que se ha cobrado de verdad, en céntimos, y lo que se ha
+   * devuelto. `amount_received` NO baja al devolver —el cobro ocurrió—, así que
+   * para saber si el dinero ha vuelto hay que mirar el cargo.
+   */
   async function cobradoEnStripe(piId) {
     const pi = await stripe.paymentIntents.retrieve(piId);
-    return { estado: pi.status, recibido: pi.amount_received ?? 0 };
+    const cargoId = typeof pi.latest_charge === "string" ? pi.latest_charge : pi.latest_charge?.id;
+    const devuelto = cargoId ? (await stripe.charges.retrieve(cargoId)).amount_refunded ?? 0 : 0;
+    return { estado: pi.status, recibido: pi.amount_received ?? 0, devuelto };
   }
 
   try {
@@ -156,24 +164,39 @@ async function main() {
         body: JSON.stringify({ reason: "Me ha surgido algo" }),
       });
       const rConf = await confirmando;
-      ok(`confirmar respondió ${rConf.status}, cancelar respondió ${rc.status}`);
+      const cuerpoConf = await rConf.json().catch(() => null);
+      ok(`confirmar respondió ${rConf.status} («${cuerpoConf?.error ?? "sin mensaje"}»), ` +
+        `cancelar respondió ${rc.status}`);
 
       await b.cita.reload();
       const cB = await cobradoEnStripe(b.ps.stripePaymentIntentId);
 
-      // Lo intolerable es una sola cosa: que se quede su dinero sin darle cita.
-      const seQuedaronConSuDinero =
-        b.cita.status === "cancelled" && cB.recibido > 0 && b.cita.paymentStatus !== "refunded";
-      esperar(!seQuedaronConSuDinero,
-        `no se queda dinero de una cita cancelada (cita '${b.cita.status}'/'${b.cita.paymentStatus}', ` +
+      // Gane quien gane la carrera, el dinero no puede quedarse en el aire:
+      // 'authorized' o 'capturing' es dinero comprometido en la tarjeta de
+      // alguien con la cita ya resuelta y sin nadie que vaya a liquidarlo.
+      const enElAire = ["authorized", "capturing"].includes(b.cita.paymentStatus);
+      esperar(!enElAire,
+        `el dinero queda resuelto, no en el aire (cita '${b.cita.status}'/'${b.cita.paymentStatus}', ` +
         `Stripe: ${cB.estado}, cobrado ${cB.recibido})`);
 
-      // Y si acabó confirmada, tiene que estar cobrada; si acabó cancelada, no.
+      // Si acabó confirmada, tiene que estar cobrada. Si acabó cancelada caben
+      // TRES finales, y uno devuelve el dinero (`lib/citas/politicaReembolso.js`,
+      // la excepción del 20/08/2026):
+      //   'void'     — dio tiempo a soltar la retención: no se cobró nada.
+      //   'refunded' — ganó la captura, y como se cobró una cita ya cancelada
+      //                el CRM la devuelve entera. Es el final que se busca.
+      //   'paid'     — ganó la captura y la devolución falló (Stripe no
+      //                contestó). Queda para hacerla a mano, y el 409 lo dice.
       if (b.cita.status === "confirmed") {
         esperar(b.cita.paymentStatus === "paid", `confirmada Y cobrada (es '${b.cita.paymentStatus}')`);
       } else {
-        esperar(["void", "refunded"].includes(b.cita.paymentStatus),
-          `cancelada y sin dinero retenido (es '${b.cita.paymentStatus}')`);
+        esperar(["void", "refunded", "paid"].includes(b.cita.paymentStatus),
+          `cancelada, con la retención suelta, el cobro devuelto o pendiente de devolver a mano ` +
+          `(es '${b.cita.paymentStatus}')`);
+        const cobradoEsperado = b.cita.paymentStatus === "void" ? 0 : PRECIO;
+        const devueltoEsperado = b.cita.paymentStatus === "refunded" ? PRECIO : 0;
+        esperar(cB.recibido === cobradoEsperado && cB.devuelto === devueltoEsperado,
+          `y Stripe cuadra con eso (${cB.estado}, cobrado ${cB.recibido}, devuelto ${cB.devuelto})`);
       }
     }
 
