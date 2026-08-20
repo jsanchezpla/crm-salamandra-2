@@ -1,7 +1,7 @@
 import { Op } from "sequelize";
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
 import { avisarCitaPorWhatsapp } from "../../../../../lib/citas/avisosWhatsapp.js";
-import { citaPuedeAvisar } from "../../../../../lib/clients/comunicaciones.js";
+import { citaPuedeAvisar, esCorreoTransaccional } from "../../../../../lib/clients/comunicaciones.js";
 import { notifyUsers } from "../../../../../lib/notifications/notifyUsers.js";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, noContent, serverError } from "../../../../../lib/utils/apiResponse.js";
@@ -41,6 +41,10 @@ async function sendCancellationEmail({ tenant, tenantModels, booking, reason }) 
   try {
     if (!booking.clientEmail) return;
     if (new Date(booking.scheduledAt).getTime() <= Date.now()) return;
+    // Esta copia manda el MISMO correo que `lib/citas/notificarCancelacion.js`,
+    // así que pregunta a la misma lista: el día que `bookingCancelled` deje de
+    // ser transaccional tiene que callarse por los dos sitios a la vez.
+    if (!esCorreoTransaccional("bookingCancelled")) return;
 
     const { EventType } = tenantModels;
     const et = await EventType.findByPk(booking.eventTypeId, { attributes: ["name"] });

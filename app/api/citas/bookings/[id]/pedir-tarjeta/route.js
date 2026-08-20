@@ -7,6 +7,7 @@ import { firmarTokenPago } from "../../../../../../lib/citas/tokenPago.js";
 import { sendEmail } from "../../../../../../lib/email/resendClient.js";
 import { pedirTarjetaTemplate } from "../../../../../../lib/email/templates/citas/pedirTarjeta.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
+import { esCorreoTransaccional } from "../../../../../../lib/clients/comunicaciones.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -134,6 +135,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     // esperando una respuesta que nadie va a dar.
     let correoOk = true;
     try {
+      if (!esCorreoTransaccional("pedirTarjeta")) throw new Error("NO_DECLARADO_TRANSACCIONAL");
       const tpl = pedirTarjetaTemplate({
         tenantName: tenant.name,
         brand: tenant.settings?.brand,
@@ -157,7 +159,11 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       correoOk = !!envio?.ok && !envio?.dryRun;
     } catch (mailErr) {
       correoOk = false;
-      process.stderr.write(`[citas:pedir-tarjeta] email falló: ${mailErr.message}\n`);
+      if (mailErr.message === "NO_DECLARADO_TRANSACCIONAL") {
+        process.stdout.write(`[citas:pedir-tarjeta] sin correo: la plantilla ya no es transaccional\n`);
+      } else {
+        process.stderr.write(`[citas:pedir-tarjeta] email falló: ${mailErr.message}\n`);
+      }
     }
 
     await logCitasAudit({
