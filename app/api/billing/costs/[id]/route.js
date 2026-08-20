@@ -2,17 +2,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { logBillingAudit, resumenImporte, datosPeticion } from "../../../../../lib/billing/audit.js";
 import { ok, noContent, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { camposGasto } from "../../../../../lib/billing/camposGasto.js";
-
-
-function round2(n) { return Math.round(Number(n) * 100) / 100; }
-
-function computeCostTotals({ taxBase, vatRate }) {
-  const base = round2(Number(taxBase ?? 0));
-  const rate = round2(Number(vatRate ?? 0));
-  const taxAmount = round2(base * (rate / 100));
-  const total = round2(base + taxAmount);
-  return { taxBase: base, vatRate: rate, taxAmount, total };
-}
+import { computeCostTotals } from "../../../../../lib/billing/totalesGasto.js";
 
 export const GET = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
   try {
