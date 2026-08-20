@@ -84,10 +84,74 @@ NOMBRE_DB="${NOMBRE_DB:-salamandra}"
 RETENCION_DIAS="${RETENCION_DIAS:-14}"
 MINIMO_BYTES="${MINIMO_BYTES:-100000}" # por debajo de esto, el volcado es basura
 DESTINO_REMOTO="${DESTINO_REMOTO:-}"   # vacío = solo copia local (ver cabecera)
+CONTENEDOR_APP="${CONTENEDOR_APP:-crm-salamandra-app-1}"
+LOG_COPIA="${LOG_COPIA:-/var/log/crm-backup.log}"
+AVISAR="${AVISAR:-1}"                  # 0 = no mandar correo (para probar en seco)
+ok_remoto=0                            # se declara aquí porque el parte semanal lo lee
 
 marca=$(date +%Y%m%d-%H%M)
 destino="$DIR_BACKUPS/auto-$marca.sql.gz"
 destino_uploads="$DIR_BACKUPS/uploads-$marca.tar.gz"
+
+# ─── El correo ───────────────────────────────────────────────────────────────
+# Un fallo que solo se escribe en un log no lo lee nadie: hasta el 20/08/2026
+# esta copia podía llevar semanas rota sin que nos enterásemos. Ahora escribe a
+# info@salamandrasolutions.com por el mismo camino que el buzón — las
+# credenciales de Resend de salamandra_solutions, que viven en la base y no en
+# el entorno (ver la cabecera de scripts/avisar-copia.mjs).
+#
+# BEST-EFFORT SIEMPRE, y por eso todo lleva `|| true`: si la app está caída o
+# Resend no contesta, la COPIA no puede fallar por culpa del correo. Una copia
+# buena sin aviso sigue siendo una copia buena.
+avisar() {
+  [ "${AVISAR}" = "1" ] || return 0
+  if ! printf '%s\n' "$3" | docker exec -i "$CONTENEDOR_APP" \
+      node scripts/avisar-copia.mjs --asunto "$1" --tipo "$2" 2>&1; then
+    echo "[$(date '+%F %T')] ⚠️ No se pudo mandar el correo de aviso (¿está levantada la app?)."
+  fi
+  return 0
+}
+
+# Lo que se manda cuando algo falla. Sin datos de nadie: rutas, tamaños y el
+# final del registro, que es lo que hace falta para saber por dónde empezar.
+cuerpo_de_fallo() {
+  echo "Servidor: $(hostname) · $(date '+%F %T %Z')"
+  echo "Motivo: $1"
+  echo ""
+  echo "Últimas líneas de $LOG_COPIA:"
+  tail -n 25 "$LOG_COPIA" 2>/dev/null || echo "(no se ha podido leer el registro)"
+  echo ""
+  echo "Disco:"
+  df -h "$DIR_BACKUPS" | tail -2
+}
+
+# El parte de los lunes. Existe para que el SILENCIO signifique algo: si el
+# servidor muere del todo tampoco llega el correo de fallo, así que hace falta
+# uno que se espere cada semana (Jorge, 20/08/2026).
+cuerpo_semanal() {
+  echo "Servidor: $(hostname) · $(date '+%F %T %Z')"
+  echo "Retención: $RETENCION_DIAS días."
+  echo ""
+  echo "Copias de la base guardadas:     $(find "$DIR_BACKUPS" -name 'auto-*.sql.gz' -type f | wc -l)"
+  echo "Copias de ficheros guardadas:    $(find "$DIR_BACKUPS" -name 'uploads-*.tar.gz' -type f | wc -l)"
+  echo "Ocupan en total:                 $(du -sh "$DIR_BACKUPS" | cut -f1)"
+  echo "La de esta noche:                $(basename "$destino") ($(du -h "$destino" 2>/dev/null | cut -f1))"
+  echo ""
+  if [ -z "$DESTINO_REMOTO" ]; then
+    echo "Copia FUERA del servidor: NO HAY. Todo vive en el mismo disco que la base:"
+    echo "protege de un borrado accidental, no de perder el servidor."
+  elif [ "$ok_remoto" = "1" ]; then
+    echo "Copia fuera del servidor: OK → $DESTINO_REMOTO"
+  else
+    echo "Copia fuera del servidor: FALLÓ esta noche → $DESTINO_REMOTO"
+  fi
+  echo ""
+  echo "Disco:"
+  df -h "$DIR_BACKUPS" | tail -2
+  echo ""
+  echo "Últimas líneas del registro:"
+  tail -n 12 "$LOG_COPIA" 2>/dev/null || echo "(no se ha podido leer el registro)"
+}
 
 # Un fallo NO puede pasar desapercibido: el `set -e` mataría el script sin dejar
 # más rastro que una línea en un log que nadie lee. Esta trampa garantiza que la
@@ -95,6 +159,7 @@ destino_uploads="$DIR_BACKUPS/uploads-$marca.tar.gz"
 fallo() {
   echo "[$(date '+%F %T')] ❌ LA COPIA HA FALLADO (línea $1). Revísalo: los datos"
   echo "[$(date '+%F %T')]    de hoy NO están respaldados."
+  avisar "❌ La copia del CRM ha fallado" fallo "$(cuerpo_de_fallo "se cortó en la línea $1 de backup-db.sh")" || true
 }
 trap 'fallo $LINENO' ERR
 
@@ -108,6 +173,7 @@ tmp="$destino.parcial"
 if ! docker exec "$CONTENEDOR_DB" pg_dump -U "$USUARIO_DB" "$NOMBRE_DB" | gzip > "$tmp"; then
   echo "[$(date '+%F %T')] ERROR: pg_dump falló. Se descarta el fichero parcial."
   rm -f "$tmp"
+  avisar "❌ La copia del CRM ha fallado" fallo "$(cuerpo_de_fallo 'pg_dump no terminó bien')" || true
   exit 1
 fi
 
@@ -115,6 +181,7 @@ tam=$(stat -c%s "$tmp" 2>/dev/null || echo 0)
 if [ "$tam" -lt "$MINIMO_BYTES" ]; then
   echo "[$(date '+%F %T')] ERROR: el volcado pesa $tam bytes (mínimo $MINIMO_BYTES). Se descarta."
   rm -f "$tmp"
+  avisar "❌ La copia del CRM ha fallado" fallo "$(cuerpo_de_fallo "el volcado pesaba $tam bytes, por debajo del mínimo")" || true
   exit 1
 fi
 
@@ -173,6 +240,7 @@ if [ -n "$DESTINO_REMOTO" ]; then
   else
     echo "[$(date '+%F %T')] ⚠️ FALLÓ la copia externa. La local SÍ está hecha,"
     echo "[$(date '+%F %T')]    pero hoy no hay nada fuera del servidor."
+    avisar "⚠️ La copia del CRM no ha salido del servidor" fallo "$(cuerpo_de_fallo "rclone/rsync no pudo sincronizar con $DESTINO_REMOTO")" || true
   fi
 else
   echo "[$(date '+%F %T')] ⚠️ Sin DESTINO_REMOTO: las copias están en el MISMO disco"
@@ -181,3 +249,9 @@ fi
 
 trap - ERR
 echo "[$(date '+%F %T')] ✅ Copia completada."
+
+# El parte de los lunes, vaya bien o mal. No es adorno: sin un correo que se
+# espera, el silencio no distingue «todo en orden» de «el servidor no existe».
+if [ "$(date +%u)" = "1" ]; then
+  avisar "Copia del CRM: parte semanal" resumen "$(cuerpo_semanal)" || true
+fi
