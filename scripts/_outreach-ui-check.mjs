@@ -1,70 +1,133 @@
-// Verificación end-to-end de la UI de Outreach.
-// Inyecta un JWT firmado como cookie (no necesita la contraseña del admin).
-// Uso: node --env-file=.env.local scripts/_outreach-ui-check.mjs
-import puppeteer from "puppeteer";
-import { SignJWT } from "jose";
+/**
+ * _outreach-ui-check.mjs — las tres pantallas de Captación se pintan.
+ *
+ * Abre lista, ficha y configuración con una sesión de admin inyectada como
+ * cookie, y comprueba lo que un 200 no dice: que hay contenido de verdad
+ * (título y filas) y que la consola del navegador no ha escupido ni un error.
+ * Una pantalla puede responder 200 y estar en blanco.
+ *
+ * `puppeteer` NO es dependencia del repo (nadie quiere un Chromium de 300 MB en
+ * el `npm ci` del despliegue): si no está instalado, la prueba comprueba lo que
+ * puede sin navegador —que la sesión vale y que hay una empresa que abrir— y lo
+ * dice en voz alta en vez de fingir que ha mirado las pantallas.
+ *
+ * Requiere el servidor de desarrollo levantado. Va contra `demo` salvo que se
+ * le pase otro slug: es el tenant que tiene empresas sembradas, y sin una
+ * empresa no hay ficha que abrir.
+ *
+ * Uso: node --env-file=.env.local scripts/_outreach-ui-check.mjs [slug]
+ */
+
+import { mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
+import { signAccessToken } from "../lib/auth/jwt.js";
 
-const BASE = "http://localhost:3000";
-const OUT = "C:/Users/jorge/AppData/Local/Temp/claude/C--dev-salamandra-crm-salamandra-2/172dfe3e-dfc3-4598-aa5b-eb425c093156/scratchpad/outreach";
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const SLUG = process.argv[2] || "demo";
+const BASE = process.env.SMOKE_BASE_URL || "http://localhost:3000";
+const CAPTURAS = join(tmpdir(), "smoke-outreach-ui");
 
-getMasterDb();
-const { User } = getMasterModels();
-const user = await User.findOne({ where: { email: "admin@sandbox.local" } });
-const token = await new SignJWT({ userId: user.id, email: user.email, role: user.role, tenantSlug: "sandbox" })
-  .setProtectedHeader({ alg: "HS256" })
-  .setIssuedAt()
-  .setExpirationTime("15m")
-  .sign(new TextEncoder().encode(process.env.JWT_SECRET));
+let fallos = 0;
+const ok = (m) => process.stdout.write(`  ✓ ${m}\n`);
+const mal = (m) => { fallos++; process.stderr.write(`  ✗ ${m}\n`); };
+const paso = (m) => process.stdout.write(`\n▶ ${m}\n`);
+const esperar = (c, m, detalle = "") => (c ? ok(m) : mal(`${m}${detalle ? ` — ${detalle}` : ""}`));
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Un lead cualquiera para la ficha
-const leadRes = await fetch(`http://127.0.0.1:3000/api/outreach/leads?q=dental`, {
-  headers: { cookie: `access_token=${token}` },
-});
-const leadId = (await leadRes.json())?.data?.items?.[0]?.id;
-if (!leadId) { console.error("✗ No se pudo obtener un lead para la ficha"); process.exit(1); }
+async function main() {
+  process.stdout.write(`\n═══ UI: pantallas de Captación (${SLUG}) ═══\n`);
 
-const browser = await puppeteer.launch({ args: ["--no-sandbox"] });
-const page = await browser.newPage();
-await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 2 });
-await page.setCookie({ name: "access_token", value: token, domain: "localhost", path: "/" });
+  getMasterDb();
+  const { Tenant, User } = getMasterModels();
+  const tenant = await Tenant.findOne({ where: { slug: SLUG } });
+  if (!tenant) throw new Error(`no existe el tenant ${SLUG}`);
+  const admin = await User.findOne({ where: { tenantId: tenant.id, role: "admin" } });
+  if (!admin) throw new Error(`el tenant ${SLUG} no tiene ningún usuario admin`);
 
-const errors = [];
-page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
-page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
-
-const shots = [
-  ["lista", "/outreach"],
-  ["ficha", `/outreach/${leadId}`],
-  ["configuracion", "/outreach/configuracion"],
-];
-
-for (const [file, path] of shots) {
-  const resp = await page.goto(BASE + path, { waitUntil: "networkidle0", timeout: 45000 });
-  await page.evaluateHandle("document.fonts.ready");
-  await sleep(1200);
-  const box = await page.evaluate(() => {
-    const el = document.querySelector("main");
-    if (!el) return null;
-    const r = el.getBoundingClientRect();
-    return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) };
+  const token = await signAccessToken({
+    userId: admin.id, email: admin.email, role: admin.role, tenantSlug: SLUG,
   });
-  await page.screenshot({
-    path: `${OUT}/${file}.png`,
-    clip: box ? { x: box.x, y: box.y, width: Math.min(box.width, 1440 - box.x), height: Math.min(box.height, 900 - box.y) } : undefined,
-  });
-  // Cuenta de filas / paneles para comprobar que hay contenido real
-  const info = await page.evaluate(() => ({
-    rows: document.querySelectorAll("tbody tr").length,
-    h1: document.querySelector("h1")?.textContent ?? "",
-    sections: document.querySelectorAll("section").length,
-  }));
-  console.log(`${resp.status() < 400 ? "✓" : "✗"} ${path} → ${resp.status()} · h1="${info.h1}" · filas=${info.rows} · secciones=${info.sections}`);
+  process.stdout.write(`  · sesión firmada para ${admin.email} (rol ${admin.role})\n`);
+
+  paso("Una empresa que abrir en la ficha");
+  const res = await fetch(`${BASE}/api/outreach/leads`, { headers: { Cookie: `access_token=${token}` } });
+  const leadId = (await res.json())?.data?.items?.[0]?.id ?? null;
+  esperar(res.status === 200, "el listado contesta con la sesión firmada", String(res.status));
+  esperar(Boolean(leadId), "hay al menos una empresa sembrada");
+  if (!leadId) {
+    process.stdout.write(`\n═══ ${fallos} fallo(s) ═══\n\n`);
+    process.exit(1);
+  }
+
+  let puppeteer;
+  try {
+    ({ default: puppeteer } = await import("puppeteer"));
+  } catch {
+    process.stdout.write(
+      "\n  · puppeteer no está instalado: no se miran las pantallas.\n" +
+        "    Para verlas: npm i -D puppeteer && node --env-file=.env.local scripts/_outreach-ui-check.mjs\n\n"
+    );
+    process.exit(fallos ? 1 : 0);
+  }
+
+  mkdirSync(CAPTURAS, { recursive: true });
+  const navegador = await puppeteer.launch({ args: ["--no-sandbox"] });
+  const pagina = await navegador.newPage();
+  await pagina.setViewport({ width: 1440, height: 900, deviceScaleFactor: 2 });
+  await pagina.setCookie({ name: "access_token", value: token, domain: "localhost", path: "/" });
+
+  const errores = [];
+  pagina.on("console", (m) => { if (m.type() === "error") errores.push(m.text()); });
+  pagina.on("pageerror", (e) => errores.push("pageerror: " + e.message));
+
+  const pantallas = [
+    ["lista", "/outreach"],
+    ["ficha", `/outreach/${leadId}`],
+    ["configuracion", "/outreach/configuracion"],
+  ];
+
+  try {
+    paso("Las tres pantallas");
+    for (const [nombre, ruta] of pantallas) {
+      const resp = await pagina.goto(BASE + ruta, { waitUntil: "networkidle0", timeout: 45000 });
+      await pagina.evaluateHandle("document.fonts.ready");
+      await dormir(1200);
+      const caja = await pagina.evaluate(() => {
+        const el = document.querySelector("main");
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) };
+      });
+      await pagina.screenshot({
+        path: join(CAPTURAS, `${nombre}.png`),
+        clip: caja
+          ? { x: caja.x, y: caja.y, width: Math.min(caja.width, 1440 - caja.x), height: Math.min(caja.height, 900 - caja.y) }
+          : undefined,
+      });
+      const info = await pagina.evaluate(() => ({
+        filas: document.querySelectorAll("tbody tr").length,
+        h1: document.querySelector("h1")?.textContent ?? "",
+        secciones: document.querySelectorAll("section").length,
+      }));
+      esperar(
+        resp.status() < 400 && info.h1.trim().length > 0,
+        `${ruta} → ${resp.status()} · h1="${info.h1}" · filas=${info.filas} · secciones=${info.secciones}`,
+        String(resp.status())
+      );
+    }
+
+    esperar(errores.length === 0, "ni un error en la consola del navegador", errores.slice(0, 8).map((e) => e.slice(0, 200)).join(" | "));
+  } finally {
+    await navegador.close();
+  }
+
+  process.stdout.write(`  · capturas en ${CAPTURAS}\n`);
+  process.stdout.write(fallos ? `\n═══ ${fallos} fallo(s) ═══\n\n` : "\n═══ Todo en orden ═══\n\n");
+  process.exit(fallos ? 1 : 0);
 }
 
-console.log(errors.length === 0 ? "\n✓ Sin errores de consola" : `\n✗ ${errors.length} errores de consola:`);
-errors.slice(0, 8).forEach((e) => console.log("  -", e.slice(0, 200)));
-
-await browser.close();
-process.exit(0);
+main().catch((err) => {
+  process.stderr.write(`\n✗ ${err.stack || err.message}\n\n`);
+  process.exit(1);
+});
