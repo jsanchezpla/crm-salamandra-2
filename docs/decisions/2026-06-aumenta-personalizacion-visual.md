@@ -178,6 +178,13 @@ Los datos dummy de Pacientes están alineados con los de Clínica:
   **re-exporta** desde el de Pacientes. Editar terapeutas: un único
   fichero.
 
+> ⚠️ **Esa última línea dejó de ser verdad y se borró el 20/08/2026.** Los dos
+> `dummyData.js` ya no existen: las terapeutas son el equipo real del tenant
+> (`GET /api/team`), y el paciente guarda `mainTherapistId` apuntando a un
+> `TeamMember`. No hay ningún fichero que editar — se da de alta o de baja gente
+> en `/equipo`. Se deja escrito lo de arriba porque es lo que se decidió en junio,
+> pero no se siga como instrucción.
+
 ## Orden de ejecución en producción
 
 Cuando se despliegue todo a producción:

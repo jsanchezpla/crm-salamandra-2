@@ -12,7 +12,7 @@
 | --- | --- |
 | **moduleKey** | `pacientes` · requiere `clients` (el paciente cuelga de la familia que paga; `lib/provisioning/catalogo.js` y `lib/provisioning/dependencias.js`, que además marca `team` y `citas` como parciales: sin ellos la ficha pierde el desplegable de terapeuta y las citas). Sus endpoints abren con `pacientes` **o** `clinica`; `clinica` lo exige como obligatorio. |
 | **Reina** | `aumenta` — 1.174 pacientes en producción, hijos de 1.083 familias (`clients`): es el centro donde el paciente NO es quien paga, que es la razón de que exista esta tabla aparte de `clients`. |
-| **Pantallas** | `app/(dashboard)/pacientes/` (3): `/pacientes` (listado paginado con KPIs, búsqueda por nombre y filtros por terapeuta y estado; alta con especialidades), `/pacientes/[id]` (ficha: datos, consentimientos, contactos externos, plan de intervención, sesiones, informes, coordinaciones, documentos, facturación), `/pacientes/[id]/sesiones/nueva` (subir audio → transcribir → revisar → guardar). En el menú es el primer hijo del grupo «Clínica» (`components/layout/Sidebar.jsx`), no una entrada raíz. `pacientes/_components/dummyData.js` es resto de la maqueta: no lo importa ninguna página. |
+| **Pantallas** | `app/(dashboard)/pacientes/` (3): `/pacientes` (listado paginado con KPIs, búsqueda por nombre y filtros por terapeuta y estado; alta con especialidades), `/pacientes/[id]` (ficha: datos, consentimientos, contactos externos, plan de intervención, sesiones, informes, coordinaciones, documentos, facturación), `/pacientes/[id]/sesiones/nueva` (subir audio → transcribir → revisar → guardar). En el menú es el primer hijo del grupo «Clínica» (`components/layout/Sidebar.jsx`), no una entrada raíz. Ya no hay `pacientes/_components/`: su único fichero, el `dummyData.js` de la maqueta, se borró el 20/08/2026 por no importarlo ninguna página (ver «Coherencia con sprint Clínica»). |
 | **Endpoints** | `app/api/pacientes/**` (11 `route.js`): `pacientes` (listar/crear), `[id]` (ficha/editar; no hay DELETE), `[id]/plan` (plan de intervención), `[id]/contactos/**` (2, agenda de profesionales externos), `[id]/documents/**` (3, adjuntos del paciente), `[id]/contract` (solo descarga los PDF legado que la migración no pudo mover), `contract-template/**` (2, contrato estándar del centro). Ninguno gasta IA. El registro clínico del paciente (sesiones, informes, coordinaciones) va por `app/api/clinica/**` (ver `clinica.md`). También crean o leen pacientes: `app/api/clients/route.js` (el alta de la familia crea a los suyos en la misma transacción), `app/api/clients/[id]/module-assignments/route.js`, `app/api/formularios/[id]/accept/route.js` y `app/api/citas/bookings/**` (una cita apunta a `patient_id`). |
 | **Lógica** | No hay `lib/pacientes/`: vive en `lib/clinica/` — `serialize.js` (`serializePatient`, etiquetas de estado y `care_type`), `specialties.js` (taxonomía compartida con Equipo), `consents.js` (consentimientos RGPD con traza legal), `contractStorage.js` (PDF legado por paciente), `patientClient.js` (de qué cliente es un paciente), `audit.js` — y en `lib/clients/`: `formularioAlta.js` (`normalizarPacientes`, perfil `salud`), `moduleAssignments.js` (`syncClinicPatient`). |
 | **UI** | Sin `modules/pacientes/` ni `components/pacientes/`. Las piezas están en `components/clinica/` (`SpecialtyPicker.jsx`, `PatientDocumentsSection.jsx`, `PatientExternalContactsSection.jsx`, `InterventionPlanSection.jsx`, `NuevaCoordinacionModal.jsx`) y en `components/clients/` (`PacientesDelAlta.jsx`, `ClientPatientsSection.jsx`: los pacientes vistos desde la ficha de la familia). |
@@ -210,7 +210,8 @@ datos reales.
 ### Particularidades del listado
 
 **Histórico (hasta 06/2026):** los KPIs se derivaban del array `PATIENTS` de
-`dummyData.js`. Hoy los tres de estado vienen de `resumen` (`GET
+`dummyData.js` (fichero borrado el 20/08/2026). Hoy los tres de estado vienen
+de `resumen` (`GET
 /api/pacientes` agrega por `status` sobre todos los pacientes que cumplen el
 filtro, no solo la página: sin eso, al paginar el centro «tenía 50 activos»), y
 el total es el de verdad desde la paginación del 02/08/2026 (antes pedía 300
@@ -346,17 +347,36 @@ pacientes`, que abre las dos puertas (`tenant_modules` y `users.module_access`).
 ## Coherencia con sprint Clínica
 
 **Histórico (hasta 06/2026):** los datos dummy de Pacientes estaban
-**alineados con los de Clínica**. Los dos `dummyData.js` siguen en el repo sin
-que nadie los importe:
+**alineados con los de Clínica** para que la demo del 9 de junio contase una
+sola historia: Diego Martín (`p-1`, 8 años, CEIP Las Acacias, 3º Primaria) era
+el paciente del informe extenso de `/clinica/informes`, y su terapeuta
+principal **Lorena Vázquez** (`t-1`) la protagonista del dashboard
+`/equipo/mi-desempeno` con 87/100. La costura que lo mantenía alineado era un
+array `THERAPISTS` en `clinica/_components/dummyData.js` que
+`pacientes/_components/dummyData.js` re-exportaba, de modo que se tocaban las
+terapeutas en un único fichero.
 
-- Diego Martín (`p-1`, 8 años, CEIP Las Acacias, 3º Primaria) es el
-  paciente del informe extenso de `/clinica/informes`.
-- Su terapeuta principal **Lorena Vázquez** (`t-1`) es la
-  protagonista del dashboard `/equipo/mi-desempeno` con 87/100.
-- El array de terapeutas (`THERAPISTS`) se **importa desde
-  `clinica/_components/dummyData.js`** vía re-export en
-  `pacientes/_components/dummyData.js`. Cambiar terapeutas: editar
-  un único fichero.
+**Los dos ficheros se borraron el 20/08/2026** y con ellos esa instrucción, que
+llevaba meses siendo falsa: aquí ya no hay nada que editar. **Hoy las
+terapeutas son el equipo de verdad del tenant.** Tanto el listado como la
+ficha las piden a `GET /api/team?status=active&limit=200` y pintan el
+`displayName` de cada `TeamMember`; lo que se guarda en el paciente es
+`mainTherapistId`, una FK a esa persona, no un nombre suelto. Para cambiar las
+terapeutas que salen en el filtro y en el desplegable de alta se da de alta o
+de baja gente en `/equipo`, y no se toca código.
+
+Dos detalles que conviene saber porque no son obvios leyendo la pantalla:
+
+- **El listado aguanta sin `team`.** Si la llamada no trae nada —el tenant no
+  tiene el módulo, o falla— las opciones del filtro se derivan de los propios
+  pacientes cargados: se agrupan los `p.therapist` que vengan del servidor. Se
+  filtra por quien ya tiene pacientes, que es lo útil, en vez de quedarse con
+  un desplegable vacío.
+- **La ficha no lo hace.** El desplegable «Terapeuta principal» solo se dibuja
+  si la lista de equipo trae a alguien; sin `team` desaparece de la edición
+  (por eso `lib/provisioning/dependencias.js` marca `team` como dependencia
+  parcial de `pacientes`). El nombre de la terapeuta ya asignada sí se sigue
+  viendo, porque viene serializado con el paciente.
 
 ## Backlog (Sprint 2+)
 

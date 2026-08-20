@@ -15,7 +15,7 @@
 | **Pantallas** | `app/(dashboard)/clinica/` (5): `/clinica` (landing con KPIs), `/clinica/informes`, `/clinica/coordinaciones`, `/clinica/talleres`, `/clinica/estadisticas` (solo admin; Excel y PDF) · Pacientes en `app/(dashboard)/pacientes/` (3, ver `pacientes.md`) · gestión de equipo en `app/(dashboard)/equipo/` (6, menú `requiresAll: ["team_avanzado", "clinica"]`): `/equipo/mi-desempeno`, `/equipo/direccion`, `/equipo/productividad`, `/equipo/incidencias`, `/equipo/bandeja` y `/equipo/desempeno-config` (sin entrada de menú: se llega desde Dirección y Desempeño); sus piezas exclusivas en `equipo/_components/` (`PerformanceEditor`, `IncentiveTiersEditor`, `IncentiveItemsEditor`, `IncidenciaModal`, `performanceIcons`). Las URL viejas `/clinica/{mi-desempeno,…}` redirigen desde `next.config.mjs`. |
 | **Endpoints** | `app/api/clinica/**` (35 `route.js`): `sessions/**` (5; `sessions/transcribe` ⚡ **Whisper + Claude**), `reports/**` (5; `reports/[id]/pulir` ⚡ **Claude**, `reports/[id]/desde-sesiones` volcado sin IA, `reports/[id]/enviar` genera el PDF y lo publica en `documents`), `coordinations`, `derivaciones` (catálogo, PUT solo admin), `talleres/**` (3), `overview`, `estadisticas/**` (2, solo admin) y los de equipo, que exigen `team_avanzado`: `performance/**` (9; `performance/config/ai` ⚡ **Claude** propone áreas por rol; `performance/planes` es la excepción, solo clínica), `productividad/**` (2), `incentive-items/**` (2), `incidencias/**` (2), `bandeja`, `dashboard`. Los tres ⚡ pasan por `lib/demo/isDemo.js` (`assertNotDemoPaidCall` / `demoForcesFakeAi`). |
 | **Lógica** | `lib/clinica/` (26): `serialize.js` (fila Sequelize → forma de la UI: `serializePatient/Session/Report/Coordination/Performance/RankingRow`), `whisper.js` (audio → texto, REST de OpenAI con la clave del tenant), `structureSession.js` (texto → registro estructurado, Claude), `redactarInforme.js` (borrador desde las sesiones, sin IA) + `pulirInforme.js` (redacción IA que no pisa ni inventa: `verificarSinInventar`, `avisosDePerdida`), `reportPdf.js` (el PDF que recibe la familia), `prepFiles.js` (adjuntos de preparación, fuera de `documents`), `estadisticas.js` + `estadisticasExport.js` (cifras del centro y su Excel/PDF), `incentives.js` / `incentiveItems.js` / `performanceAreas.js` / `performanceConfig.js` / `performancePresets.js` / `productivity.js` / `productivityQuery.js` / `period.js` (desempeño e incentivos), `incidencias.js` (taxonomía y serializer), `derivaciones.js` / `specialties.js` / `trimestres.js` (catálogos), `consents.js` (RGPD con traza), `contractStorage.js` (PDF legado del paciente), `patientClient.js` (de qué pagador es un paciente), `audit.js`. Fuera de la carpeta: `lib/notifications/alerts.js` (`syncClinicaAlerts`: informe vencido, incidencia asignada → campanita). |
-| **UI** | Sin `modules/clinica/`. `components/clinica/` (6): `InformeDrawer.jsx` (aquí se escribe y se pule el informe), `NuevaCoordinacionModal.jsx` (alta desde el listado y desde la ficha), `InterventionPlanSection.jsx`, `PatientDocumentsSection.jsx`, `PatientExternalContactsSection.jsx`, `SpecialtyPicker.jsx`. `app/(dashboard)/clinica/_components/PreviewBanner.jsx` devuelve `null` y `dummyData.js` es resto de la maqueta (no lo importa ninguna página). |
+| **UI** | Sin `modules/clinica/`. `components/clinica/` (6): `InformeDrawer.jsx` (aquí se escribe y se pule el informe), `NuevaCoordinacionModal.jsx` (alta desde el listado y desde la ficha), `InterventionPlanSection.jsx`, `PatientDocumentsSection.jsx`, `PatientExternalContactsSection.jsx`, `SpecialtyPicker.jsx`. En `app/(dashboard)/clinica/_components/` ya solo queda `PreviewBanner.jsx`, que devuelve `null`; el `dummyData.js` de la maqueta se borró el 20/08/2026 (no lo importaba ninguna página — ver «Componentes»). |
 | **Modelos** | `ClinicSession` → `clinic_sessions` · `ClinicalReport` → `clinical_reports` · `Coordination` → `coordinations` · `PerformanceMetric` → `performance_metrics` · `Incidencia` → `incidencias` + `IncidenciaAssignee` → `incidencia_assignees` · `IncentiveItem` → `incentive_items` · `Taller` → `talleres` + `TallerInscripcion` → `taller_inscripciones` · `InterventionPlan` → `intervention_plans` · `ExternalContact` → `external_contacts`. Las FK clínicas apuntan a `patients` (ver `pacientes.md`) y las tres tablas de registro guardan además `client_id`, foto del pagador al crearse. |
 | **Interruptores y parámetros** | `featureFlags` / `logicOverrides`: ninguno que lea el código. Lo que sí lee es `master.tenants.settings.clinica.*`: `incentiveTiers` (`lib/clinica/incentives.js`), `performanceRoles` (`lib/clinica/performanceConfig.js`), `referralSpecialties` (`lib/clinica/derivaciones.js`) y `trimestreConJulio` (`lib/clinica/trimestres.js`); los cuatro se escriben desde sus endpoints (solo admin) e invalidan la caché del tenant. |
 | **Pantallas propias** | ninguna (`modules/overrides/*/` no tiene nada de clínica y ningún `UI_OVERRIDES` la carga). |
@@ -38,8 +38,9 @@ y sistema de desempeño + incentivos del equipo de terapeutas.
 **Histórico (hasta 06/2026):** se implementó **inicialmente como sprint
 visual** para la demo del **9 de junio de 2026** con el equipo de Aumenta, con
 las pantallas sobre datos dummy y sin backend. Hoy todo lo de abajo es real
-(endpoints, IA, PDF, desempeño); lo que queda de la maqueta son dos
-`dummyData.js` que no importa nadie (ver «Componentes»).
+(endpoints, IA, PDF, desempeño) y de la maqueta **ya no queda nada**: los dos
+`dummyData.js` que sobrevivían sin que nadie los importara se borraron el
+20/08/2026 (ver «Componentes»).
 
 Se activa con `scripts/enable-module.js <slug> clinica` (requiere `pacientes`).
 Quién lo tiene NO se lista aquí: `/admin/modulos` o
@@ -51,7 +52,8 @@ Quién lo tiene NO se lista aquí: `/admin/modulos` o
 Los **registros clínicos** (sesiones, informes, coordinaciones) y **Pacientes**
 tienen backend real: endpoints CRUD + persistencia + KPIs computados. Las páginas
 `/clinica` (landing), `/clinica/informes`, `/pacientes` y `/pacientes/[id]` leen y
-escriben datos reales (ya no `dummyData.js`).
+escriben datos reales (los `dummyData.js` de la maqueta dejaron de usarse
+entonces y se borraron del repo el 20/08/2026).
 
 **Fase 2 (desempeño/incentivos) también real:** `/equipo/mi-desempeno` y
 `/equipo/direccion` leen de `/api/clinica/performance/*` (scoring por áreas,
@@ -349,9 +351,10 @@ documentos» de su área privada.
 - No hay cálculo automático del desempeño ni de incentivos.
 - No hay auditoría (`master.AuditLog` no recibe eventos).
 - No hay envío de informes a familias.
-- El dummy data de la landing y el panel de Dirección está hardcoded a
-  6 terapeutas + Diego Martín; cambiar el equipo real exige editar
-  `dummyData.js`.
+- El dummy data de la landing y el panel de Dirección estaba hardcoded a
+  6 terapeutas + Diego Martín, y cambiar el equipo exigía editar
+  `dummyData.js`. **Esto ya no aplica de ninguna manera**: el equipo sale del
+  módulo `team` desde la Fase 1 y ese fichero se borró el 20/08/2026.
 
 ## Modelos
 
@@ -547,9 +550,17 @@ y **"← Volver a Equipo"** en las seis de `/equipo/*`. Las landings no lo lleva
 - `clinica/_components/PreviewBanner.jsx`: **desactivado** (devuelve `null`); se
   conserva por si hiciera falta reactivarlo. Lo siguen importando la landing,
   Informes y el módulo Pacientes; las páginas movidas a `/equipo/*` ya no.
-- `clinica/_components/dummyData.js` (y `pacientes/_components/dummyData.js`,
-  que re-exporta de él): resto histórico de la maqueta. **No los importa ninguna
-  página**; sobreviven sin uso.
+- `clinica/_components/dummyData.js` y `pacientes/_components/dummyData.js`
+  (este último re-exportaba del primero): **borrados el 20/08/2026**. Eran el
+  resto histórico de la maqueta de junio —el array `THERAPISTS` con seis
+  terapeutas inventadas, sesiones y KPIs de mentira— y llevaban desde la Fase 1
+  sin que ninguna página los importara. Se anotaron varias revisiones como
+  «sobreviven sin uso», que es exactamente el problema: cada repaso del módulo
+  costaba abrirlos para confirmar que no hacían nada. Al borrar el de
+  `pacientes/` desapareció también su carpeta `_components/`, que no contenía
+  otra cosa. Si alguien busca esos nombres: no hay nada que reactivar, los
+  datos de verdad vienen de la base y las terapeutas de `team` (ver
+  `pacientes.md`).
 - `components/clinica/` (6): `InformeDrawer`, `NuevaCoordinacionModal`,
   `InterventionPlanSection`, `PatientDocumentsSection`,
   `PatientExternalContactsSection`, `SpecialtyPicker`. Las piezas de clínica

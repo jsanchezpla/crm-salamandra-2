@@ -15,7 +15,7 @@
 | **Pantallas** | `/proyectos` → `app/(dashboard)/proyectos/page.jsx` (listado, alta y «crear con IA») · `/proyectos/[id]` → `app/(dashboard)/proyectos/[id]/page.jsx` (pestañas Resumen · Equipo · Fases · Configuración, botón «Abrir tablero», reorganizar con IA) · `/proyectos/[id]/board` → `app/(dashboard)/proyectos/[id]/board/page.jsx` (Kanban \| Lista) |
 | **Endpoints** | `app/api/projects/**` — 19 `route.js`: `route.js`, `[id]`, `[id]/phases` (+ `[phaseId]`, `reorder`), `[id]/milestones` (+ `[milestoneId]`), `[id]/columns` (+ `[columnId]`, `reorder`, `[columnId]/reorder-tasks`), `[id]/members` (+ `[memberId]`), `[id]/board`, `[id]/tasks`, IA: `ai/generate`, `ai/create`, `[id]/ai/edit`, `[id]/ai/apply` · `app/api/tasks/[id]/**` — 2 (`route.js`, `move`) · `app/api/project-templates/**` — 2 · gateados por `projects` en otros módulos: `app/api/clients/[id]/projects`, `app/api/team/[id]/projects`, `app/api/leads/[id]/convert-to-project`; `app/api/calendar/tasks` mezcla hitos y tarjetas vía `lib/calendar/projectEvents.js` · Públicos: ninguno |
 | **Lógica** | `lib/projects/`: `projectAuth.js` (admin o lead del proyecto) · `serializeProject.js` (oculta presupuesto a quien no es admin/lead) · `serializeTask.js` (`assigneeLinks` → `assignees`) · `generateProjectCode.js` (`PRY-YYYY-NNNN`) · `createDefaultBoardColumns.js` (las 4 columnas) · `taskPriority.js` (enum, etiquetas, orden) · `checklist.js` (normaliza items) · `ai/` (`prompts.js`, `parsePlan.js`, `editOps.js`, `fake.js`: modo demo sin coste) · fuera de la carpeta: `lib/calendar/projectEvents.js` |
-| **UI** | `components/projects/`: `KanbanBoard.jsx`, `BoardColumn.jsx`, `TaskCard.jsx`, `TaskDrawer.jsx`, `ProjectListView.jsx`, `PriorityBadge.jsx`, `StatusBadge.jsx`, `AiProjectModal.jsx`, `AiEditModal.jsx`; huérfanos (nadie los importa): `ClientProjectsSection.jsx`, `EmployeeProjectsSection.jsx`, `ConvertLeadToProjectButton.jsx` · no hay `modules/projects/` |
+| **UI** | `components/projects/` (9, todos importados): `KanbanBoard.jsx`, `BoardColumn.jsx`, `TaskCard.jsx`, `TaskDrawer.jsx`, `ProjectListView.jsx`, `PriorityBadge.jsx`, `StatusBadge.jsx`, `AiProjectModal.jsx`, `AiEditModal.jsx` · ya no hay huérfanos: los tres del Sprint 1 (`ClientProjectsSection.jsx`, `EmployeeProjectsSection.jsx`, `ConvertLeadToProjectButton.jsx`) se borraron el 20/08/2026 (ver §4) · no hay `modules/projects/` |
 | **Modelos** | `Project` (`projects`), `Phase` (`phases`), `Milestone` (`milestones`), `BoardColumn` (`board_columns`), `Task` (`tasks`), `TaskAssignee` (`task_assignees`), `ProjectMember` (`project_members`), `ProjectTemplate` (`project_templates`); `Lead.convertedProjectId` vive en `leads` |
 | **Interruptores y parámetros** | ninguno que lea el código (ni `featureFlags` ni `logicOverrides`); lo que varía es por rol (`lib/projects/projectAuth.js`) y por tener `team` |
 | **Pantallas propias** | ninguna (letrero `ui_override` vacío en producción) |
@@ -44,10 +44,12 @@ partir del Sprint 2, **tareas (Task) con tablero drag-and-drop**.
 Integraciones internas:
 
 - **Leads** → conversión `lead → project` (Sprint 1):
-  `POST /api/leads/[id]/convert-to-project` existe; el botón
-  `ConvertLeadToProjectButton.jsx` sigue sin cablear (ver §4).
-- **Clientes** → `GET /api/clients/[id]/projects` existe; la sección
-  `ClientProjectsSection.jsx` sigue sin cablear en la ficha (ver §4).
+  `POST /api/leads/[id]/convert-to-project` existe y responde, pero **hoy no
+  hay ningún botón que lo llame**: el que se dibujó en el Sprint 1 se borró el
+  20/08/2026 sin haber llegado a cablearse (ver §4).
+- **Clientes** → `GET /api/clients/[id]/projects` existe, pero **la ficha de
+  cliente no lo pinta**: la sección que iba a hacerlo corrió la misma suerte
+  (ver §4).
 - **Equipo** → asignación de TeamMembers como `lead`/`member`/`viewer` y
   asignación N-a-N de tareas individuales; `GET /api/team/[id]/projects`.
 - **Calendario** (27/07/2026) → `lib/calendar/projectEvents.js` mezcla en el
@@ -205,14 +207,25 @@ Lista** (`role="tablist"`). Ambas vistas comparten los filtros de la toolbar
 (search/asignado/etiqueta) y muestran las mismas tareas. El Kanban queda
 exactamente igual que antes.
 
-### Componentes legacy Sprint 1 que siguen sin cablear
+### Componentes legacy Sprint 1: borrados el 20/08/2026
 
-3 componentes en `components/projects/` siguen huérfanos (nadie los importa,
-comprobado el 19/08/2026): `ClientProjectsSection.jsx`,
-`EmployeeProjectsSection.jsx`, `ConvertLeadToProjectButton.jsx`. Sus endpoints
-sí existen (`/api/clients/[id]/projects`, `/api/team/[id]/projects`,
-`/api/leads/[id]/convert-to-project`). Apuntado al backlog Sprint 3; no se
-borran hasta decidir si se cablean.
+Durante un año `components/projects/` arrastró tres componentes que **no
+importaba nadie**: `ClientProjectsSection.jsx` (proyectos del cliente en su
+ficha), `EmployeeProjectsSection.jsx` (proyectos de una persona en `/equipo`)
+y `ConvertLeadToProjectButton.jsx` (el botón «convertir lead en proyecto»).
+Se dibujaron en el Sprint 1, nunca se cablearon a ninguna pantalla y el doc
+los fue anotando cada revisión como «huérfanos, no se borran hasta decidir si
+se cablean». El 20/08/2026 se decidió: **se borraron**. Un componente que
+lleva un año sin que ninguna página lo importe no es una funcionalidad
+pendiente, es código muerto que hay que leer y descartar en cada repaso.
+
+Lo que NO se borró son sus endpoints, que siguen vivos y devolviendo datos:
+`GET /api/clients/[id]/projects`, `GET /api/team/[id]/projects` y
+`POST /api/leads/[id]/convert-to-project`. O sea que la funcionalidad sigue
+estando a un componente de distancia: el día que se quiera de verdad, se
+escribe la UI contra el endpoint que ya existe, que es lo barato, en vez de
+resucitar un JSX de hace un año contra un `lib/` que ha cambiado por debajo.
+Si alguien busca esos nombres dentro de seis meses, esto es lo que pasó.
 
 ---
 
@@ -512,10 +525,13 @@ Ejecutar tras `npm run dev`:
   `tasks.assignee_id` cuando ningún consumidor la lea.
 - **WIP limit visual** — `BoardColumn` ya muestra `N/LIMIT` y marca rojo si
   supera; añadir bloqueo de drop para que dnd-kit rechace cards entrantes.
-- **Cablear los 3 componentes huérfanos** Sprint 1:
-  `ClientProjectsSection.jsx` en `/clientes/[id]`,
-  `EmployeeProjectsSection.jsx` en `/equipo`,
-  `ConvertLeadToProjectButton.jsx` en `LeadsModule` (default + overrides).
+- **Pintar los proyectos donde se esperan**, contra endpoints que ya existen:
+  los del cliente en `/clientes/[id]` (`/api/clients/[id]/projects`), los de
+  una persona en `/equipo` (`/api/team/[id]/projects`) y el botón «convertir
+  en proyecto» en `LeadsModule` (`/api/leads/[id]/convert-to-project`). Los
+  tres componentes del Sprint 1 que iban a hacerlo se borraron el 20/08/2026
+  por llevar un año sin que nadie los importara (§4): esto se escribe de
+  nuevo cuando se pida, no se rescata de git.
 - **UI reorder de fases y columnas** — `/phases/reorder` y `/columns/reorder`
   existen en API pero la UI no los llama.
 - **Comentarios en tareas** — nuevo modelo `TaskComment` + endpoints + UI en
