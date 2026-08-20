@@ -5,7 +5,9 @@
  * Registra DOS shortcodes, ambos SOLO para usuarios logueados:
  *   [crm_reservar_cita]  → widget de reserva (con el email de la cuenta
  *                          autorrellenado y bloqueado).
- *   [crm_mis_citas]      → portal "Mis citas" (ver / cancelar citas propias).
+ *   [crm_mis_citas]      → portal «Mi perfil» (ver / cancelar citas propias).
+ *                          El shortcode conserva el nombre viejo porque ya está
+ *                          puesto en las páginas; la ruta del CRM sí es la nueva.
  *
  * Instalación (Code Snippets tipo PHP o mu-plugin):
  *   1. Pega este código SIN la línea `<?php` si tu gestor de snippets ya
@@ -13,7 +15,7 @@
  *   2. El secreto debe ser EXACTAMENTE el mismo que WIDGET_SSO_SECRETS[nutri_laura]
  *      del `.env.production` del CRM.
  *   3. Coloca [crm_reservar_cita] en la página de reservas y [crm_mis_citas]
- *      en la página de "mis citas".
+ *      en la del área privada (en tunutrilaura.com, /mi-perfil/).
  *
  * ── CAMBIOS DEL 05/08/2026 (Rodrigo) ────────────────────────────────────────
  * 1) ANCHO. El widget salía encajonado con media pantalla en blanco. La culpa
@@ -29,7 +31,7 @@
  *    salida para quien entra por primera vez: si no es paciente todavía, no
  *    tiene cuenta ni la va a tener. Ahora debajo va el formulario de siempre
  *    para pedir la primera cita, que es lo que esa persona venía a hacer.
- *    Solo en [crm_reservar_cita]: en «Mis citas» no pinta nada.
+ *    Solo en [crm_reservar_cita]: en «Mi perfil» no pinta nada.
  *
  * ⚠️ PENDIENTE (Jorge): el secreto está aquí a la vista y ha pasado por un
  * chat, así que hay que darlo por comprometido. Cuando se rote, lo suyo es
@@ -176,7 +178,7 @@ function crm_login_gate_html($con_formulario = false) {
         . $boton
         . '</div>';
 
-    // Sin formulario (p. ej. "Mis citas"): solo el acceso, centrado.
+    // Sin formulario (p. ej. «Mi perfil»): solo el acceso, centrado.
     if (!$con_formulario) {
         return '<div class="crm-gate" style="max-width:560px;margin:0 auto">'
             . crm_gate_css() . $acceso . '</div>';
@@ -317,9 +319,15 @@ function crm_reservar_cita_shortcode() {
 }
 add_shortcode('crm_reservar_cita', 'crm_reservar_cita_shortcode');
 
-// Mis citas: /widget/c/{tenant}/mis-citas?wpsso=...
+// Mi perfil: /widget/c/{tenant}/mi-perfil?wpsso=...
 // Aquí NO va el formulario: quien viene a ver sus citas ya es paciente.
+//
+// El nombre del shortcode sigue siendo `crm_mis_citas` a propósito: está puesto
+// en las páginas de la web y renombrarlo las dejaría en blanco. Lo que cambia es
+// la ruta del CRM: `/mis-citas` fue el primer nombre del portal y desde el
+// 27/07/2026 es `/mi-perfil` (redirect permanente en `next.config.mjs`, así que
+// la vieja seguía funcionando; se pone la buena para no pagar el salto).
 function crm_mis_citas_shortcode() {
-    return crm_render_iframe('/mis-citas', '', 'Mis citas', false);
+    return crm_render_iframe('/mi-perfil', '', 'Mi perfil', false);
 }
 add_shortcode('crm_mis_citas', 'crm_mis_citas_shortcode');
