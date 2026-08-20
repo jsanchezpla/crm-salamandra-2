@@ -10,15 +10,15 @@
 | **Reina** | `nutri_laura` (Laura): el módulo nació como su «mini-Harbiz» (§1 de este doc) y su consulta define el default del módulo (CLAUDE.md, «tenants reina») |
 | **Pantallas** | `app/(dashboard)/nutricion/{alimentos,recetas,plantillas,asignados}/page.jsx` → `/nutricion/alimentos` (Alimentos), `/nutricion/recetas` (Recetario), `/nutricion/plantillas` (Menús), `/nutricion/asignados` (Pautas) · pestaña «Pautas» de la ficha: `app/(dashboard)/clientes/[id]/page.jsx` decide en el servidor (`conNutricion`) → `/clientes/[id]` · baldosa «Recetario» de la portada: `app/(dashboard)/page.jsx` |
 | **Endpoints** | `app/api/nutricion/**` — 24 `route.js` (`foods` 3, `recipes` 5 —incl. `[id]/photo`, `[id]/propagate`, `facetas`—, `plans` 16 —incl. `[id]/pdf`, `[id]/send-email`, `[id]/assign`, `[id]/duplicate`, `[id]/reapply-template`, `meals/**`—) · fuera de la carpeta: `app/api/clients/[id]/plans/route.js` (pautas de una ficha) y `app/api/clients/[id]/module-assignments/route.js` (marcar «Paciente Nutrición») · públicos: ninguno |
-| **Lógica** | `lib/nutricion/`: `foods.js` (catálogo: slug, medidas caseras, búsqueda con `unaccent`), `plans.js` (árbol del plan, `loadPlanTree`, deep-copy, `sanitizeFoodLine`, `UUID_RE`), `recipes.js` (recetario: include, serializer, ingredientes), `macros.js` (P/C/G/fibra, sin kcal), `menuPdf.js` (PDF de la pauta con pdfkit y Poppins de `lib/pdf/fonts.js`), `recipePhotoStorage.js` (foto de receta en disco, ≤5 MB) · fuera de la carpeta: `lib/clients/moduleAssignments.js` (auto-marcado «Paciente Nutrición», `AUTO_ASSIGN_FLAG`), `lib/clients/vocabulario.js` («Pacientes» donde el cliente ES el paciente), `lib/email/templates/nutricion/menuEmail.js` (correo de la pauta), `lib/actividad/etiquetas.js` (frases `nutricion.*` de la auditoría) |
+| **Lógica** | `lib/nutricion/`: `foods.js` (catálogo: slug, medidas caseras, búsqueda con `unaccent`), `plans.js` (árbol del plan, `loadPlanTree`, deep-copy, `sanitizeFoodLine`, `UUID_RE`), `recipes.js` (recetario: include, serializer, ingredientes), `macros.js` (P/C/G/fibra, sin kcal; redondeo a 2 decimales en TODOS los niveles —regla escrita el 20/08/2026, §6—), `menuPdf.js` (PDF de la pauta con pdfkit y Poppins de `lib/pdf/fonts.js`), `recipePhotoStorage.js` (foto de receta en disco, ≤5 MB) · fuera de la carpeta: `lib/clients/moduleAssignments.js` (auto-marcado «Paciente Nutrición», `AUTO_ASSIGN_FLAG`), `lib/clients/vocabulario.js` («Pacientes» donde el cliente ES el paciente), `lib/email/templates/nutricion/menuEmail.js` (correo de la pauta), `lib/actividad/etiquetas.js` (frases `nutricion.*` de la auditoría) |
 | **UI** | `modules/nutricion/` (12 ficheros): `NutricionFoodsModule.jsx`, `NutricionRecetasModule.jsx`, `NutricionPlantillasModule.jsx`, `NutricionAsignadosModule.jsx`, `PlanEditorModal.jsx` (editor con autosave), `AssignPlanModal.jsx`, `RecipeEditModal.jsx`, `RecipePickerModal.jsx`, `FoodEditModal.jsx`, `PropagarRecetaPanel.jsx`, `ClientPlansPanel.jsx` (pestaña Pautas; la montan `modules/default/ClientDetailModule.jsx` y la ficha de Laura), `foodSections.js` · no hay `components/nutricion/`; el menú plegable «Nutrición» está en `components/layout/Sidebar.jsx` |
 | **Modelos** | `models/tenant/`: `Food` (`foods`), `Plan` (`plans`), `PlanMeal` (`plan_meals`), `PlanMealOption` (`plan_meal_options`), `PlanMealOptionFood` (`plan_meal_option_foods`), `Recipe` (`recipes`), `RecipeFood` (`recipe_foods`), `PlanMealOptionRecipe` (`plan_meal_option_recipes`), `PlanMealOptionRecipeFood` (`plan_meal_option_recipe_foods`) — las nueve tablas · comparte con Clientes `ClientModuleAssignment` (`client_module_assignments`) para el marcado «Paciente Nutrición» |
 | **Interruptores y parámetros** | `featureFlags.autoAsignarEnAlta` — lo lee `lib/clients/moduleAssignments.js` (`AUTO_ASSIGN_FLAG`) y lo respeta `backfill-nutricion-assignments.js`; en producción solo `nutri_laura` lo tiene a `true` (Aumenta no lo tiene puesto = apagado) · `featureFlags.externalSearchEnabled` está puesto en `nutri_laura` pero **ningún código lo lee**: solo lo escribe `scripts/_hechos/add-nutricion-module-nutri-laura.js` (histórico, OpenFoodFacts retirado) · `logicOverrides`: ninguno |
 | **Pantallas propias** | ninguna. Las cuatro páginas de `/nutricion/*` llevan un mapa `UI_OVERRIDES` con `nutri_laura`, pero apunta al MÓDULO BASE (`modules/nutricion/…`), el mismo componente que el valor por defecto: **mapa vacío de facto**, y por eso ni `sincronizar-ui-override.mjs` ni `/admin/modulos` lo cuentan. Lo de Laura en `modules/overrides/nutri-laura/` es su ficha (`ClientDetailModule.jsx`, que importa `ClientPlansPanel` del base) y su embudo de leads, no nutrición |
 | **Scripts** | activar: `node scripts/enable-module.js <slug> nutricion` (fila en `tenant_modules` + las 8 migraciones que declara `scripts/_module-migrations.js` + siembra) · migraciones vivas, en ese orden: `migrate-nutricion-base.js` (las cinco tablas cimiento), `migrate-nutricion-recipes.js`, `migrate-nutricion-week-recipe-media.js`, `migrate-nutricion-day-comments.js`, `migrate-nutricion-show-macros.js`, `migrate-recetas-clasificacion.js`, `migrate-plan-team.js`, `migrate-nutricion-congelar-receta.js`; aparte `install-unaccent-extension.js` (extensión de BD, una vez por base) · seed: `seed-foods-base-catalog.js` (497 alimentos de `scripts/data/foods-base-catalog.mjs`, idempotente por slug) · datos y one-off, a mano: `migrate-auto-asignar-nutricion.js` (MASTER: enciende el flag a nutri_laura), `backfill-nutricion-assignments.js` (marca fichas previas; exige el flag), `_hechos/import-harbiz-recetas.js` (las 1.083 recetas de Laura, `--confirm`), `_hechos/cleanup-branded-foods.js` (archiva las marcas de OFF) · históricos que no se ejecutan: `_hechos/add-nutricion-module-nutri-laura.js`, `_hechos/add-nutricion-c2-plans-nutri-laura.js` |
-| **Pruebas** | `scripts/_smoke-nutri-laura-recetario-{c1,c2,c3,c4,e2e}.mjs` (renombradas el 19/08/2026: antes sin el `_` y el runner no las veía) — piden base de datos y `npm run dev`; `scripts/pruebas.mjs` las clasifica «servidor y base de datos», así que entran en **`npm run test:todo`** y NO en `npm test` (c3 con `--only-unit` prueba `macros.js` sin servidor, a mano) · `_smoke-piezas-ficha.mjs` (`@prueba ligera`, en `npm test`) fija qué paneles ve la consulta de nutrición en la ficha · `_smoke-nutricion-macros.mjs` (`node:test`, 19/08/2026, en `npm test`): lo que devuelve `lib/nutricion/macros.js` en los seis niveles (alimento por 100 g y por medida casera, receta, escalado por raciones, opción, comida = SOLO la opción por defecto, plan) |
+| **Pruebas** | `scripts/_smoke-nutri-laura-recetario-{c1,c2,c3,c4,e2e}.mjs` (renombradas el 19/08/2026: antes sin el `_` y el runner no las veía) — piden base de datos y `npm run dev`; `scripts/pruebas.mjs` las clasifica «servidor y base de datos», así que entran en **`npm run test:todo`** y NO en `npm test` (c3 con `--only-unit` prueba `macros.js` sin servidor, a mano) · `_smoke-piezas-ficha.mjs` (`@prueba ligera`, en `npm test`) fija qué paneles ve la consulta de nutrición en la ficha · `_smoke-nutricion-macros.mjs` (`node:test`, 19/08/2026, en `npm test`): lo que devuelve `lib/nutricion/macros.js` en los seis niveles (alimento por 100 g y por medida casera, receta, escalado por raciones, opción, comida = SOLO la opción por defecto, plan) y, desde el 20/08/2026, que los SEIS redondean a dos decimales (los tres ingredientes de 0,333 g que suman 0,99, el ×10 raciones que da 9,9, y que ningún nivel devuelve un tercer decimal) |
 | **Decisiones** | `../decisions/2026-07-nutricion-refactor-sprint-8.md`, `../decisions/2026-07-nutricion-8.2-runbook.md`, `../decisions/2026-07-nutricion-8.3-menu-pdf-email.md` (las del sprint) · `../decisions/2026-07-23-conexion-cliente-equipo.md` (`plans.team_member_id`) · `../decisions/2026-07-28-repaso-de-seguridad.md` (la edición granular del menú no se audita) · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` (`enable-module.js` siembra las nueve tablas y los 497 alimentos) · `../decisions/2026-08-01-alta-de-clientes-por-perfil.md` (perfil `salud`) · `../decisions/2026-08-04-clientes-se-llama-pacientes-en-nutricion.md` (Recetario / Pautas) · `../decisions/2026-08-12-migraciones-sin-filtrar-por-status.md` (seed y backfill sí miran `status`) |
-| **En este doc** | «2. Activación del módulo» · «3. Arquitectura BD» · «4. Rutas frontend» · «5. Endpoints REST» · «7. Decisiones arquitectónicas cerradas» (Congelado y propagación) · «8. Tests / Smokes» · «9. Migrations» · «PDF del menú — rediseño del 2026-07-22 (segunda pasada)» |
+| **En este doc** | «2. Activación del módulo» · «3. Arquitectura BD» · «4. Rutas frontend» · «5. Endpoints REST» · «6. Helper de macros» (el redondeo a dos decimales de todos los niveles) · «7. Decisiones arquitectónicas cerradas» (Congelado y propagación) · «8. Tests / Smokes» · «9. Migrations» · «PDF del menú — rediseño del 2026-07-22 (segunda pasada)» |
 
 Estado: **todo el módulo está desplegado.** Comprobado el 12/08/2026 dentro del
 contenedor: los endpoints de `/api/nutricion/*` y las cuatro pantallas eran
@@ -520,7 +520,9 @@ Sin kcal nunca. Operación sobre el árbol serializado del plan.
 | Helper | Devuelve |
 | ------ | -------- |
 | `computeFoodMacros(line)` | `{protein, carbs, fat, fiber}` g absolutos. |
-| `computeOptionMacros(option)` | Suma de los foods de la opción. |
+| `computeRecipeMacros(receta)` | Suma de los ingredientes de una receta (una ración). |
+| `scaleMacros(macros, raciones)` | Multiplica por las raciones. Parte de lo YA redondeado, ver más abajo. |
+| `computeOptionMacros(option)` | Suma de los foods de la opción **y de sus recetas × raciones** (las recetas entraron en el sprint 8.2; la tabla decía solo «los foods» y se corrigió el 20/08/2026). |
 | `computeMealMacros(meal)` | Macros de la opción `isDefault=true` (o, en su defecto, la de menor `order`). |
 | `computePlanMacros(plan)` | Suma de las comidas (sus defaults). |
 | `normalizeForSearch(s)` | (C3) Lowercase + strip diacríticos para fallback JS de búsqueda. |
@@ -535,6 +537,31 @@ Conversión por modo (en `computeFoodMacros`):
 
 Líneas con macro `null` se ignoran en sumas; si TODAS las líneas son
 `null` para un macro, el resultado de ese macro es `null`.
+
+### El redondeo a dos decimales lo hacen TODOS los niveles (20/08/2026)
+
+La cabecera de `macros.js` prometía que solo se redondeaba en
+`computeFoodMacros` y que los niveles de arriba mantenían el número entero
+«porque los redondeos finales los hace el frontend al mostrar». No era verdad:
+redondean también la receta (`computeRecipeMacros`), el escalado por raciones
+(`scaleMacros`), la opción y el plan — y la comida, que devuelve tal cual la de
+su opción por defecto, hereda el redondeo de esta. **Lo que se corrigió fue el
+comentario, no el código**: el redondeo en cascada se queda, y ahora está
+escrito como regla en los dos sitios.
+
+Cuesta exactitud, y se sabe cuánta. Un alimento con 33,3 g de proteína por 100 g
+aporta 0,333 g por gramo, que se guarda como **0,33**; tres ingredientes así
+suman **0,99 g y no 0,999**, y esa misma receta a **10 raciones da 9,9 g y no
+9,99**, porque el escalado parte de la receta ya redondeada. Se paga a gusto:
+estas cifras son las que se ven en el editor y las que salen en el PDF que
+recibe la paciente cuando el menú tiene `show_macros`, y un total que no fuese
+la suma exacta de las líneas de encima parecería un error de la consulta por
+más preciso que fuera. Décimas de gramo no cambian una dieta; que los números
+cuadren delante del paciente, sí.
+
+Lo fija `_smoke-nutricion-macros.mjs`, que exige el 0,99, el 9,9 y que **ningún
+nivel devuelva jamás un tercer decimal**, por muchas líneas y raciones que
+lleve la opción.
 
 ---
 

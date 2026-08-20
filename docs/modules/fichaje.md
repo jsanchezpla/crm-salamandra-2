@@ -11,7 +11,7 @@
 | **Pantallas** | `app/(dashboard)/equipo/fichaje/page.jsx` (`/equipo/fichaje`): server component que hace `notFound()` si el rol no es admin/superadmin o el tenant no tiene `fichaje` (segunda de las tres puertas), y monta `modules/fichaje/FichajeModule.jsx`. |
 | **Endpoints** | `app/api/fichaje/**` — 7 `route.js`, todos con `hasModule("fichaje")` + solo admin/superadmin: `route.js` (GET del mes con filas + resumen + avisos; POST alta manual), `[id]/route.js` (PATCH corregir, DELETE baja blanda), `export/route.js` (xlsx con los mismos totales que la pantalla). |
 | | `import/preview/route.js` (no escribe nada), `import/route.js` (commit en una transacción; en la demo devuelve 403 por `lib/demo/isDemo.js`), `imports/route.js` (histórico de volcados), `imports/[id]/revertir/route.js`. Sin públicos ni webhooks. |
-| **Lógica** | `lib/fichaje/importar.js` (`previsualizar`, `aplicar`, `revertir`, `hashDeFichero`: las tres garantías del volcado) · `mapeo.js` (nombre del Excel → persona del CRM: exacto con UNA persona, sugerencia, o pendiente sin sugerencia si el nombre o el alias apuntan a DOS —19/08/2026, antes casaba en silencio con la primera/última—; alias en `team_members.custom_fields.fichajeNombres`) · `totales.js` (`resumirPorPersona`, `totalesDelMes`, `avisosDelMes`, `rangoDelPeriodo`: puras, nada se guarda) · `parseHora.js` (las cinco formas en que llega una hora en un Excel) |
+| **Lógica** | `lib/fichaje/importar.js` (`previsualizar`, `aplicar`, `revertir`, `hashDeFichero`: las tres garantías del volcado) · `mapeo.js` (nombre del Excel → persona del CRM: exacto con UNA persona, sugerencia, o pendiente sin sugerencia si el nombre o el alias apuntan a DOS —19/08/2026, antes casaba en silencio con la primera/última—; alias en `team_members.custom_fields.fichajeNombres`) · `totales.js` (`resumirPorPersona`, `totalesDelMes`, `avisosDelMes`, `rangoDelPeriodo`: puras, nada se guarda; desde el 20/08/2026 un tramo con `deletedAt` tampoco suma en `resumirPorPersona` —lo ignoraba solo `avisosDelMes`— y el aviso «sin fichajes», que no lleva fecha, se ordena DETRÁS de los errores con día) · `parseHora.js` (las cinco formas en que llega una hora en un Excel) |
 | | `lib/fichaje/parsers/index.js` (`POR_TENANT`: qué lector usa cada cliente; `parserDeTenant`, `describirParser`) · `parsers/aumenta.js` (el Excel de Aumenta, por semanas) · `parsers/generico.js` (`Persona · Fecha · Entrada · Salida · Horas · Nota`, el de quien no tiene lector propio). Los festivos los pide a `lib/citas/festivos.js` si el tenant tiene Citas. |
 | | Auditoría desde los endpoints: `fichaje.volcado`, `fichaje.corregido`, `fichaje.creado_a_mano`, `fichaje.dado_de_baja`, `fichaje.volcado_deshecho`, siempre con resumen y nunca la fila. Con frase propia y módulo «Fichaje» en `lib/actividad/etiquetas.js` desde el 19/08/2026 (antes salían por el traductor genérico); lo vigila `_smoke-actividad-etiquetas.mjs`. |
 | **UI** | `modules/fichaje/FichajeModule.jsx` (lista por persona, día a día debajo, avisos `error`/`revisar`) · `ImportarFichajeModal.jsx` (preview → mapeo → aplicar) · `CorregirFichajeModal.jsx`. No hay `components/fichaje/`. |
@@ -21,7 +21,7 @@
 | **Pantallas propias** | ninguna (nunca las ha habido: el módulo es el mismo para todos y solo cambia el lector) |
 | **Scripts** | Activación: `node scripts/enable-module.js <slug> fichaje` (corre `migrate-fichaje-module`, declarada en `scripts/_module-migrations.js`; `scripts/_migration-order.js` la pone DESPUÉS de `migrate-team-fields` porque `fichajes.team_member_id` apunta a `team_members`) · después, `npm run db:check-access`. |
 | | Semilla del escaparate: `scripts/seed-fichaje-demo.js` (el mes en curso y el anterior, con los seis casos que la pantalla detecta; está en la lista de `scripts/reset-demo-tenant.js`), y luego `scripts/demo-golden-snapshot.js demo` para que la foto dorada no lo vacíe. Sin cron ni ONE_OFF. |
-| **Pruebas** | `scripts/_smoke-fichaje-horas.mjs` (`node:test`, 19/08/2026, en `npm test`): lo que devuelven `parseHora.js` (celdas de ExcelJS, Date en UTC, fracción de día, «8:30»/«8.30»/«8,5»/«7.5» —la regla del punto—, duraciones negativas rechazadas, turno de noche) y `totales.js` (resumen por persona, totales del mes, los seis avisos, rango del periodo). · `scripts/_smoke-fichaje-mapeo.mjs` (`node:test`, 19/08/2026, en `npm test`): `mapeo.js` —exacto, alias de `custom_fields.fichajeNombres`, sugerencia, «APELLIDO, NOMBRE», dos personas con el mismo nombre de pila→nadie, el mismo nombre o alias en dos personas→pendiente sin sugerencia—. · `scripts/_smoke-fichaje-parsers.mjs` (`node:test`, 19/08/2026, en `npm test`): los dos lectores de `parsers/`, con libros de ExcelJS fabricados a mano (sin abrir ningún fichero, fechas en UTC) —`aumenta.js`: `diasDeLaHoja` saca los días del nombre de la hoja («02-6», «9-13»), el periodo lo pone quien importa y el primer día tiene que caer en lunes, los bloques van de nombre a nombre y una anotación en la columna de nombres («BAJA», «MÉDICO», una con día L bajo un nombre) no es una persona, los minutos se recalculan de las horas reales y el total del Excel solo vale cuando no hay horas (y se dice de dónde salió), «M-1»/«M-2» son dos tramos del mismo día; `generico.js`: la cabecera se busca por NOMBRE en las diez primeras filas, una fila de otro mes se rechaza, dos filas del mismo día son dos tramos; y desde el 19/08, en los dos, una salida anterior a la entrada ENTRA como jornada que cruza la medianoche (turno de noche) pero con un aviso en el preview de que la salida es anterior a la entrada (lo más probable: celdas cambiadas)—. |
+| **Pruebas** | `scripts/_smoke-fichaje-horas.mjs` (`node:test`, 19/08/2026, en `npm test`): lo que devuelven `parseHora.js` (celdas de ExcelJS, Date en UTC, fracción de día, «8:30»/«8.30»/«8,5»/«7.5» —la regla del punto—, duraciones negativas rechazadas, turno de noche) y `totales.js` (resumen por persona, totales del mes, los seis avisos, rango del periodo; y desde el 20/08/2026 que un tramo dado de baja no aporta ni minutos ni día ni corrección, y que el aviso «sin fichajes» sale detrás de los errores con fecha y delante de los `revisar`). · `scripts/_smoke-fichaje-mapeo.mjs` (`node:test`, 19/08/2026, en `npm test`): `mapeo.js` —exacto, alias de `custom_fields.fichajeNombres`, sugerencia, «APELLIDO, NOMBRE», dos personas con el mismo nombre de pila→nadie, el mismo nombre o alias en dos personas→pendiente sin sugerencia—. · `scripts/_smoke-fichaje-parsers.mjs` (`node:test`, 19/08/2026, en `npm test`): los dos lectores de `parsers/`, con libros de ExcelJS fabricados a mano (sin abrir ningún fichero, fechas en UTC) —`aumenta.js`: `diasDeLaHoja` saca los días del nombre de la hoja («02-6», «9-13»), el periodo lo pone quien importa y el primer día tiene que caer en lunes, los bloques van de nombre a nombre y una anotación en la columna de nombres («BAJA», «MÉDICO», una con día L bajo un nombre) no es una persona, los minutos se recalculan de las horas reales y el total del Excel solo vale cuando no hay horas (y se dice de dónde salió), «M-1»/«M-2» son dos tramos del mismo día; `generico.js`: la cabecera se busca por NOMBRE en las diez primeras filas, una fila de otro mes se rechaza, dos filas del mismo día son dos tramos; y desde el 19/08, en los dos, una salida anterior a la entrada ENTRA como jornada que cruza la medianoche (turno de noche) pero con un aviso en el preview de que la salida es anterior a la entrada (lo más probable: celdas cambiadas)—. |
 | **Decisiones** | — |
 | **En este doc** | La frase que manda sobre todo el módulo · Universal por dentro, de cada cliente por fuera · El Excel de Aumenta, y por qué muerde · Modelo de datos · Identificar a la persona · Pantallas y endpoints · Alta en un cliente · Lo que queda fuera de esta primera versión |
 
@@ -143,6 +143,19 @@ decía el sistema el día que se pagó.
 **No se guarda ningún total.** Se cuentan al leer, en `lib/fichaje/totales.js`,
 como el stock del inventario se suma de sus movimientos.
 
+⚠️ **Un tramo dado de baja no suma, y la garantía está en la FUNCIÓN, no en la
+consulta** (20/08/2026). `resumirPorPersona` se salta ella misma las filas con
+`deletedAt`, igual que ya hacía `avisosDelMes`: lo que se borró no se paga, ni
+en minutos, ni en días, ni en el recuento de correcciones, ni para decidir si
+alguien tiene fichajes este mes. Los dos endpoints que la llaman (`GET
+/api/fichaje` y `/api/fichaje/export`) filtran `deletedAt: null` en la consulta,
+así que esto nunca se vio en pantalla; pero hasta esa fecha el `where` era la
+ÚNICA garantía, y una función que decide horas de nómina no puede depender de
+que el tercero que la llame se acuerde de escribirlo —el informe que se añada
+mañana, o el smoke que le pasa filas a mano—. La baja blanda existe justamente
+para que la fila se conserve sin contar; ahora las dos funciones lo entienden
+igual.
+
 ### Los dos cerrojos contra el duplicado
 
 1. **Índice UNIQUE parcial** `fichajes_import_unico` sobre
@@ -198,6 +211,17 @@ contestan la pregunta de fin de mes, que es «cuántas horas le pago a cada una 
 hay algo raro». Encima van los **avisos**, separados en lo que casi seguro está
 mal (`error`) y lo que es raro pero puede ser correcto (`revisar`) — mezclarlos
 hace que no se mire ninguno.
+
+**El orden de esa lista es lo que se lee** (20/08/2026): la pantalla la pinta
+tal cual sale de `avisosDelMes`. Primero los `error` con fecha —los días
+concretos que se pueden arreglar hoy: una entrada sin salida, una salida sin
+entrada—; detrás, «Sin ningún fichaje este mes», que no lleva fecha porque es
+de la persona y no de una fila (y varios de esos se ordenan entre ellos por
+nombre); y al final los `revisar`, que son de otra gravedad. Hasta esa fecha el
+«sin fichajes» salía el PRIMERO —al no tener fecha, su cadena vacía ganaba la
+comparación por día—, justo al revés de lo que prometía su propio comentario:
+la lista arrancaba por lo único que no se arregla en la pantalla, sino hablando
+con el cliente o mapeando un nombre.
 
 ```
 GET    /api/fichaje?mes=YYYY-MM        filas + resumen + avisos
