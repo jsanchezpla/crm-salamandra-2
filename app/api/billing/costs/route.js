@@ -1,8 +1,9 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { logBillingAudit, resumenImporte, datosPeticion } from "../../../../lib/billing/audit.js";
-import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
+import { ok, created, error, forbidden, notFound, serverError } from "../../../../lib/utils/apiResponse.js";
 import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
+import { camposGasto } from "../../../../lib/billing/camposGasto.js";
 
 function round2(n) { return Math.round(Number(n) * 100) / 100; }
 
@@ -18,7 +19,7 @@ function computeCostTotals({ taxBase, vatRate }) {
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const { Cost, TeamMember, Client } = tenantModels;
+    const { Cost, TeamMember, Client, Supplier } = tenantModels;
     const { searchParams } = new URL(request.url);
 
     const where = {};
@@ -27,6 +28,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     if (searchParams.get("employeeId")) where.employeeId = searchParams.get("employeeId");
     if (searchParams.get("partnerId")) where.partnerId = searchParams.get("partnerId");
     if (searchParams.get("clientId")) where.clientId = searchParams.get("clientId");
+    if (searchParams.get("supplierId")) where.supplierId = searchParams.get("supplierId");
     if (searchParams.get("from") || searchParams.get("to")) {
       where.incurredAt = {};
       if (searchParams.get("from")) where.incurredAt[Op.gte] = searchParams.get("from");
@@ -43,6 +45,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       total: "total",
       "employee.displayName": [{ model: TeamMember, as: "employee" }, "displayName"],
       "client.name": [{ model: Client, as: "client" }, "name"],
+      "supplier.name": [{ model: Supplier, as: "supplier" }, "name"],
     };
     const order = parseSortOrder(
       searchParams.get("sortBy"),
@@ -56,6 +59,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       include: [
         { model: TeamMember, as: "employee", attributes: ["id", "displayName"] },
         { model: Client, as: "client", attributes: ["id", "name"] },
+        { model: Supplier, as: "supplier", attributes: ["id", "name"] },
       ],
       order,
     });
@@ -70,43 +74,41 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const { Cost, TeamMember } = tenantModels;
+    const { Cost, TeamMember, Supplier } = tenantModels;
     const userId = request.headers.get("x-user-id");
     const body = await request.json();
 
-    const {
-      type, category, description, taxBase, vatRate = 21, vatDeductible = true,
-      incurredAt, employeeId, partnerId, clientId, inventoryProductId, attachmentUrl,
-    } = body;
+    const campos = camposGasto(body);
+    const { taxBase, vatRate = 21 } = body;
 
-    if (!type) return error("type es obligatorio");
-    if (!category) return error("category es obligatorio");
-    if (!description) return error("description es obligatorio");
+    if (!campos.type) return error("type es obligatorio");
+    if (!campos.category) return error("category es obligatorio");
+    if (!campos.description) return error("description es obligatorio");
     if (taxBase == null || Number(taxBase) <= 0) return error("taxBase debe ser mayor que 0");
-    if (!incurredAt) return error("incurredAt es obligatorio (YYYY-MM-DD)");
+    if (!campos.incurredAt) return error("incurredAt es obligatorio (YYYY-MM-DD)");
+
+    // El proveedor tiene que ser de ESTE tenant: `Supplier` sale de
+    // `tenantModels`, así que un id de otro cliente no aparece aquí.
+    if (campos.supplierId) {
+      const proveedor = await Supplier.findByPk(campos.supplierId, { attributes: ["id"] });
+      if (!proveedor) return notFound("Proveedor no encontrado");
+    }
 
     const totals = computeCostTotals({ taxBase, vatRate });
 
     // Empleado por defecto: el TeamMember cuyo userId coincide con el del
     // solicitante. employeeId del body siempre prevalece.
-    let resolvedEmployeeId = employeeId || null;
+    let resolvedEmployeeId = campos.employeeId || null;
     if (!resolvedEmployeeId && userId) {
       const me = await TeamMember.findOne({ where: { userId }, attributes: ["id"] });
       if (me) resolvedEmployeeId = me.id;
     }
 
     const cost = await Cost.create({
-      type,
-      category,
-      description,
+      ...campos,
       ...totals,
-      vatDeductible: !!vatDeductible,
-      incurredAt,
+      vatDeductible: campos.vatDeductible ?? true,
       employeeId: resolvedEmployeeId,
-      partnerId: partnerId || null,
-      clientId: clientId || null,
-      inventoryProductId: inventoryProductId || null,
-      attachmentUrl: attachmentUrl || null,
     });
 
     await logBillingAudit({

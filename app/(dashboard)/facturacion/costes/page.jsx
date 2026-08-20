@@ -25,7 +25,7 @@ function emptyForm(defaultVat = 21) {
     type: "other", category: "fixed", description: "",
     taxBase: "", vatRate: defaultVat, vatDeductible: true,
     incurredAt: new Date().toISOString().slice(0, 10),
-    employeeId: "", partnerId: "", clientId: "",
+    employeeId: "", partnerId: "", clientId: "", supplierId: "",
   };
 }
 
@@ -58,6 +58,7 @@ export default function CostesPage() {
 
   const [employees, setEmployees] = useState([]);
   const [clients, setClients] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [settings, setSettings] = useState(null);
   const [me, setMe] = useState(null);
   /*
@@ -83,6 +84,9 @@ export default function CostesPage() {
     fetch("/api/auth/me", { cache: "no-store" }).then((r) => r.json()).then((j) => j.ok && setMe(j.data)).catch(() => {});
     fetch("/api/team?status=all&limit=200", { cache: "no-store" }).then((r) => r.json()).then((j) => setEmployees(j.data?.members ?? [])).catch(() => {});
     fetch("/api/clients?limit=200", { cache: "no-store" }).then((r) => r.json()).then((j) => setClients(j.data?.clients ?? [])).catch(() => {});
+    // Solo los activos: la lista sirve para ELEGIR, y aquí no se dan de alta
+    // proveedores (eso vive en Facturación → Proveedores).
+    fetch("/api/proveedores", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j?.ok) setSuppliers(j.data?.suppliers ?? []); }).catch(() => {});
     fetch("/api/billing/settings", { cache: "no-store" }).then((r) => r.json()).then((j) => setSettings(j.data)).catch(() => {});
   }, []);
 
@@ -110,7 +114,7 @@ export default function CostesPage() {
     return costs.filter((c) => {
       const hay = [
         c.description, c.type, c.category,
-        c.employee?.displayName, c.client?.name,
+        c.employee?.displayName, c.client?.name, c.supplier?.name,
         c.taxBase?.toString(), c.total?.toString(),
       ].filter(Boolean).join(" ").toLowerCase();
       return hay.includes(search);
@@ -120,6 +124,22 @@ export default function CostesPage() {
   const totalBase = filtered.reduce((s, c) => s + Number(c.taxBase || 0), 0);
   const totalVat = filtered.reduce((s, c) => s + Number(c.taxAmount || 0), 0);
   const totalAll = filtered.reduce((s, c) => s + Number(c.total || 0), 0);
+
+  // Dar de baja a un proveedor conserva sus gastos a propósito, y
+  // `/api/proveedores` solo devuelve los activos: al editar uno de esos gastos
+  // el desplegable no encontraría su valor y saldría el placeholder, como si el
+  // gasto no tuviera proveedor, mientras la columna de la tabla sí lo enseña.
+  const opcionesProveedor = useMemo(() => {
+    const opciones = [
+      { value: "", label: "— Sin proveedor —" },
+      ...suppliers.map((s) => ({ value: s.id, label: s.name })),
+    ];
+    const actual = costs.find((c) => c.id === editingId)?.supplier;
+    if (actual && !suppliers.some((s) => s.id === actual.id)) {
+      opciones.push({ value: actual.id, label: `${actual.name} (de baja)` });
+    }
+    return opciones;
+  }, [suppliers, costs, editingId]);
 
   function openCreate() {
     setEditingId(null);
@@ -134,6 +154,7 @@ export default function CostesPage() {
       taxBase: Number(c.taxBase ?? 0), vatRate: Number(c.vatRate ?? 0),
       vatDeductible: !!c.vatDeductible, incurredAt: c.incurredAt?.slice(0, 10) ?? "",
       employeeId: c.employeeId ?? "", partnerId: c.partnerId ?? "", clientId: c.clientId ?? "",
+      supplierId: c.supplierId ?? "",
     });
     setShowForm(true);
     setFormError(null);
@@ -149,7 +170,7 @@ export default function CostesPage() {
         taxBase: Number(form.taxBase), vatRate: Number(form.vatRate),
         vatDeductible: !!form.vatDeductible, incurredAt: form.incurredAt,
         employeeId: form.employeeId || null, partnerId: form.partnerId || null,
-        clientId: form.clientId || null,
+        clientId: form.clientId || null, supplierId: form.supplierId || null,
       };
       const url = editingId ? `/api/billing/costs/${editingId}` : "/api/billing/costs";
       const method = editingId ? "PATCH" : "POST";
@@ -245,7 +266,7 @@ export default function CostesPage() {
       {/* Tabla */}
       <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[820px]">
+          <table className="w-full text-sm min-w-[940px]">
             <thead>
               <tr className="border-b border-neutral-100">
                 <SortableTh k="incurredAt" label="Fecha" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
@@ -253,6 +274,7 @@ export default function CostesPage() {
                 <SortableTh k="category" label="Categoría" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                 <SortableTh k="description" label="Descripción" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                 <SortableTh k="employee.displayName" label="Empleado" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+                <SortableTh k="supplier.name" label="Proveedor" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                 <SortableTh k="taxBase" label="Base" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
                 <SortableTh k="taxAmount" label="IVA" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
                 <SortableTh k="total" label="Total" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
@@ -261,10 +283,10 @@ export default function CostesPage() {
             </thead>
             <tbody>
               {loading && filtered.length === 0 && (
-                <tr><td colSpan={puedeFacturar ? 9 : 8} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
+                <tr><td colSpan={puedeFacturar ? 10 : 9} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
               )}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={puedeFacturar ? 9 : 8} className="text-center py-12 text-xs text-neutral-400">{search || filterType || filterCategory ? "Sin costes que coincidan con los filtros" : "Sin costes registrados"}</td></tr>
+                <tr><td colSpan={puedeFacturar ? 10 : 9} className="text-center py-12 text-xs text-neutral-400">{search || filterType || filterCategory ? "Sin costes que coincidan con los filtros" : "Sin costes registrados"}</td></tr>
               )}
               {filtered.map((c) => (
                 <tr key={c.id} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">
@@ -277,6 +299,7 @@ export default function CostesPage() {
                   </td>
                   <td className="px-4 py-3 text-neutral-700 max-w-[260px] truncate">{c.description}</td>
                   <td className="px-4 py-3 text-xs text-neutral-500">{c.employee?.displayName ?? "—"}</td>
+                  <td className="px-4 py-3 text-xs text-neutral-500 max-w-[160px] truncate">{c.supplier?.name ?? "—"}</td>
                   <td className="px-4 py-3 text-right text-neutral-700 tabular">{fmtMoney(c.taxBase)}</td>
                   <td className="px-4 py-3 text-right text-neutral-500 tabular text-xs">
                     {fmtMoney(c.taxAmount)} <span className="text-neutral-300">({Number(c.vatRate)}%)</span>
@@ -351,6 +374,14 @@ export default function CostesPage() {
                   <Select value={form.clientId} onChange={(v) => setForm((f) => ({ ...f, clientId: v }))} className={inputCls} options={[{ value: "", label: "—" }, ...clients.map((c) => ({ value: c.id, label: c.name }))]} />
                 </FormRow>
               </div>
+              <FormRow label="Proveedor (opcional)">
+                <Select value={form.supplierId} onChange={(v) => setForm((f) => ({ ...f, supplierId: v }))} className={inputCls} options={opcionesProveedor} />
+                {suppliers.length === 0 && (
+                  <span className="text-[11px] text-neutral-400">
+                    No hay proveedores dados de alta. Se crean en <Link href="/facturacion/proveedores" className="underline hover:text-neutral-600">Facturación → Proveedores</Link>.
+                  </span>
+                )}
+              </FormRow>
               <FormRow label="Socio (quién se lo desgrava)">
                 <Select value={form.partnerId} onChange={(v) => setForm((f) => ({ ...f, partnerId: v }))} className={inputCls} options={[{ value: "", label: "Sin asignar" }, ...(settings?.partners ?? []).map((p) => ({ value: p.id, label: p.name }))]} />
               </FormRow>

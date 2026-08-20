@@ -13,13 +13,13 @@
 | **Reina** | — (el doc no nombra ninguna). |
 | **Pantallas** | `app/(dashboard)/facturacion/**` — 17 `page.jsx` bajo `/facturacion`, con la barra de pestañas de `app/(dashboard)/facturacion/layout.jsx`. Operativa: `/facturacion` (Panel), `/facturacion/presupuestos` (+ `/[id]`), `/facturacion/facturas`, `/facturacion/cobros` (incluye Morosidad), `/facturacion/recurrentes`, `/facturacion/costes` (Gastos), `/facturacion/proveedores`, `/facturacion/arqueo`. Finanzas: `/facturacion/resumen` (KPIs), `/facturacion/analitica` (índice), `/facturacion/analitica/socios`, `/facturacion/analitica/clientes`, `/facturacion/analitica/empleados`, `/facturacion/analitica/iva`, `/facturacion/cumplimiento` (Verifactu/Factura-e, solo informativo). Config: `/facturacion/configuracion`. Piezas comunes en `app/(dashboard)/facturacion/_components/` (`PeriodPicker`, `Kpi`, `StatusBadge`, `tableSort`). Sin páginas públicas ni portal. |
 | **Endpoints** | `app/api/billing/**` — 38 `route.js`, todos con `hasModule("billing")`: `invoices` (8: lista, `[id]`, `issue`, `send`, `cancel`, `rectify`, `pdf`, `bulk-pdf`), `quotes` (4: lista, `[id]`, `accept`, `convert`), `costs` (2), `payments` (2), `recurring` (2), `series` (2), `rates` (2, legacy), `settings` (1), `analytics` (6: raíz, `iva`, `iva/export`, `clients`, `employees`, `partners`), `exports` (7 Excel: `by-client`, `by-employee`, `by-partner`, `expenses`, `payments`, `quotes`, `recurring`), `morosidad` (1), `operations` (1, el Panel). Fuera de esa raíz pero con la misma puerta: `app/api/arqueo/{cajas,cierres}` (2), `app/api/proveedores/**` (2), `app/api/clients/[id]/billing-summary`, `app/api/team/[id]/billing-summary`, `app/api/orders/[id]/complete`. Sin endpoints públicos ni webhooks (Verifactu/Facturantia NO está integrado). |
-| **Lógica** | `lib/billing/` (16 ficheros): `calculateInvoice.js` (líneas e IVA por línea), `generateInvoiceNumber.js` (número correlativo con `FOR UPDATE`), `generateQuoteNumber.js` (serie P, no fiscal), `updateInvoiceStatus.js` (paidAmount → estado), `invoiceStatus.js` (`overdue` en lectura), `invoiceScope.js` (qué facturas cuentan en todo agregado), `billingSummary.js` (KPIs en base imponible), `buildIvaReport.js` (Libro IVA, 303 e IRPF), `irpf.js`, `nifCliente.js` (NIF de facturación vs el de la ficha), `patientLink.js` (factura↔paciente), `invoicePdf.js` (pdfkit), `exportXlsx.js` (Excel), `parseSort.js` (orden whitelisted), `audit.js` (auditoría del dinero), `getApplicableRate.js` (tarifas legacy). Correo: `lib/email/templates/billing/invoiceSent.js`. Aviso de almacén al emitir: `lib/inventory/applyStockMovementsForInvoice.js`. |
+| **Lógica** | `lib/billing/` (17 ficheros): `calculateInvoice.js` (líneas e IVA por línea), `generateInvoiceNumber.js` (número correlativo con `FOR UPDATE`), `generateQuoteNumber.js` (serie P, no fiscal), `updateInvoiceStatus.js` (paidAmount → estado), `invoiceStatus.js` (`overdue` en lectura), `invoiceScope.js` (qué facturas cuentan en todo agregado), `billingSummary.js` (KPIs en base imponible), `buildIvaReport.js` (Libro IVA, 303 e IRPF), `irpf.js`, `nifCliente.js` (NIF de facturación vs el de la ficha), `patientLink.js` (factura↔paciente), `invoicePdf.js` (pdfkit), `exportXlsx.js` (Excel), `parseSort.js` (orden whitelisted), `camposGasto.js` (qué campos del cuerpo acepta un gasto, compartido por el POST y el PATCH de `/costs`), `audit.js` (auditoría del dinero), `getApplicableRate.js` (tarifas legacy). Correo: `lib/email/templates/billing/invoiceSent.js`. Aviso de almacén al emitir: `lib/inventory/applyStockMovementsForInvoice.js`. |
 | **UI** | Sin `modules/billing/`: las pantallas viven en las páginas. `components/billing/`: `ClientBillingSection.jsx` (ficha de cliente), `PatientBillingSection.jsx` (ficha de paciente), `EmployeeBillingSection.jsx` (drawer de Equipo), `PatientReparto.jsx` (reparto de cuota entre pagadores), `ExportButtons.jsx` (Excel + ZIP de PDF). |
 | **Modelos** | `models/tenant/`: `Invoice` (`invoices`), `Quote` (`quotes`), `Payment` (`payments`), `Cost` (`costs`), `Supplier` (`suppliers`), `RecurringInvoice` (`recurring_invoices`), `InvoiceSeries` (`invoice_series`), `TenantBillingSettings` (`tenant_billing_settings`, una fila), `Rate` (`rates`, legacy), `CashPoint` (`cash_points`), `CashClose` (`cash_closes`). |
 | **Interruptores y parámetros** | ninguno que lea el código (los `featureFlags`/`logicOverrides` de `billing` en `master.tenant_modules` no los mira nadie). |
 | **Pantallas propias** | ninguna (`app/(dashboard)/facturacion/**` no tiene mapa `UI_OVERRIDES`; en producción ningún `billing` lleva `ui_override`). |
 | **Scripts** | Activación: `node scripts/enable-module.js <slug> billing` — corre las 11 migraciones de `MODULES.billing` en `scripts/_module-migrations.js` (`migrate-suppliers`, `migrate-arqueo`, `migrate-impuestos-y-arqueo`, `migrate-billing-rework`, `migrate-billing-fix-kind-enum`, `migrate-billing-quotes`, `migrate-billing-correction-reason`, `migrate-billing-tax-regime`, `migrate-billing-vat-exempt`, `migrate-billing-irpf-partners`, `migrate-rename-therapist-to-employee`); el NIF de facturación va en CORE (`migrate-client-fiscal-taxid`). Seeds: `seed-billing-demo.js` (`npm run db:seed:billing-demo`, solo demo) y `_hechos/seed-billing-spain-enzymes.js`. ONE_OFF ya ejecutado: `_hechos/import-aumenta-contabilidad.js` (proveedores, gastos, facturas y cierres de Aumenta). |
-| **Pruebas** | `scripts/_smoke-fechas-trimestres-madrid-parseDate.mjs` (`node:test`, 19/08/2026, en `npm test`) en su parte de `lib/billing/invoiceStatus.js`: `effectiveStatus` pasa `issued`/`sent`/`partially_paid` a `overdue` el día DESPUÉS del vencimiento y no el mismo, cobrada entera no vence (con 0,0049 € de margen por redondeo), los importes DECIMAL en texto se comparan como números, 0 € o sin vencimiento no vence, los estados terminales se devuelven tal cual y el `overdue` persistido a mano prevalece, «hoy» puede ser `YYYY-MM-DD`, ISO con hora o Date; `withEffectiveStatus(List)` devuelve copias sin tocar el original; y fija como SOSPECHOSO que el «hoy» en Date se cuenta en UTC y no en Madrid, que un `dueDate` que llegue como Date nunca vence y que un «hoy» vacío tampoco. Lo rozan `scripts/_smoke-alta-progenitores.mjs` (fija `lib/billing/nifCliente.js`) y `scripts/_smoke-paquetes.mjs` (que `billing` exige `clients`); las tres entran en `npm test` y ninguna necesita base de datos. |
+| **Pruebas** | `scripts/_smoke-campos-gasto.mjs` (`node:test`, 20/08/2026, en `npm test`) fija `lib/billing/camposGasto.js`: `supplierId` entra, el desplegable vacío lo borra en vez de guardar `""`, una clave que no viene no se inventa, y `taxAmount`/`total` no se aceptan nunca del cuerpo. `scripts/_smoke-fechas-trimestres-madrid-parseDate.mjs` (`node:test`, 19/08/2026, en `npm test`) en su parte de `lib/billing/invoiceStatus.js`: `effectiveStatus` pasa `issued`/`sent`/`partially_paid` a `overdue` el día DESPUÉS del vencimiento y no el mismo, cobrada entera no vence (con 0,0049 € de margen por redondeo), los importes DECIMAL en texto se comparan como números, 0 € o sin vencimiento no vence, los estados terminales se devuelven tal cual y el `overdue` persistido a mano prevalece, «hoy» puede ser `YYYY-MM-DD`, ISO con hora o Date; `withEffectiveStatus(List)` devuelve copias sin tocar el original; y fija como SOSPECHOSO que el «hoy» en Date se cuenta en UTC y no en Madrid, que un `dueDate` que llegue como Date nunca vence y que un «hoy» vacío tampoco. Lo rozan `scripts/_smoke-alta-progenitores.mjs` (fija `lib/billing/nifCliente.js`) y `scripts/_smoke-paquetes.mjs` (que `billing` exige `clients`); las tres entran en `npm test` y ninguna necesita base de datos. |
 | **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (el envío de facturas por correo desde la demo; auditar lo que mueve dinero) · `../decisions/2026-08-13-ciclo-de-vida-de-un-cliente.md` (la baja aparta y no destruye: las facturas se conservan por ley). |
 | **En este doc** | Visión general · Modelos · Estados de factura y transiciones · Lógica de cálculos KPI · Numeración correlativa · Libro IVA y Modelo 303 · Endpoints · Páginas frontend |
 
@@ -85,13 +85,9 @@ Es un módulo opcional por tenant. Todos los endpoints validan
   enlace que sí existe entre los dos módulos va por el otro lado:
   `StockEntry.costId` → `Cost` (la entrada de mercancía apunta al gasto que la
   pagó) y `Supplier`, compartido (ver `docs/modules/inventory.md`).
-- **Proveedor en el gasto desde la UI**: `Cost.supplierId` existe (modelo,
-  columna, asociación `Cost.belongsTo(Supplier)`), lo rellenó el import de
-  Aumenta y lo cuenta `DELETE /api/proveedores/[id]` para negarse a borrar un
-  proveedor con gastos; pero **ni `POST/PATCH /api/billing/costs` lo aceptan ni
-  la pantalla de Gastos lo pide** (comprobado 19/08/2026). Hasta que se
-  conecte, «cuánto llevamos gastado con este proveedor» solo responde para los
-  gastos importados.
+- **Proveedor en el Excel de gastos**: el gasto ya lleva proveedor (ver «Ya
+  implementado»), pero `GET /api/billing/exports/expenses` no incluye la
+  columna ni el filtro `supplierId` (20/08/2026).
 
 ## Ya implementado (correcciones de doc previa)
 
@@ -102,6 +98,14 @@ Cosas que versiones antiguas de este doc daban por NO hechas y **sí existen**:
 - **Presupuestos** convertibles a factura (`/api/billing/quotes/[id]/convert`).
 - **IRPF** por factura y **rectificativas** con edición de importe (parcial por
   diferencias / anulación total).
+- **Proveedor en el gasto** (20/08/2026): `POST` y `PATCH /costs` aceptan
+  `supplierId` (opcional; se comprueba que el proveedor sea de este tenant
+  antes de guardarlo), el `GET` lo devuelve con `supplier` y la pantalla de
+  Gastos lo pide en un desplegable, lo enseña en una columna y deja ordenar por
+  él. La lista de campos que aceptan los dos endpoints está en
+  `lib/billing/camposGasto.js` (una sola, antes estaba escrita dos veces y en
+  ninguna aparecía `supplierId`), con prueba en
+  `scripts/_smoke-campos-gasto.mjs`.
 
 ## Configuración fiscal (sprint 2026-07-21)
 
@@ -194,7 +198,7 @@ Fichero: `models/tenant/Cost.model.js`. Tabla: `costs`.
 | `employeeId` | UUID nullable | FK a `TeamMember` (quien lo registró o a quien se imputa). |
 | `partnerId` | STRING nullable | Socio que se desgrava el gasto; id de `TenantBillingSettings.partners`. Filtro `partnerId` en `GET /costs` y en el Excel de gastos. |
 | `clientId` | UUID nullable | FK a `Client` para imputar costes a un cliente concreto. |
-| `supplierId` | UUID nullable | FK a `Supplier` (`as: "supplier"`, `ON DELETE SET NULL`). A quién se le pagó. **Hoy solo lo escribe el import de Aumenta**: los endpoints de `/costs` y la pantalla de Gastos aún no lo exponen (ver «Lo que NO hace»). |
+| `supplierId` | UUID nullable | FK a `Supplier` (`as: "supplier"`, `ON DELETE SET NULL`). A quién se le pagó. Opcional a propósito (una tasa o un recibo suelto no tienen ficha). Lo escriben el import de Aumenta y, desde el 20/08/2026, `POST`/`PATCH /costs` y la pantalla de Gastos. Filtro `supplierId` y orden `supplier.name` en `GET /costs`. |
 | `projectId` | UUID nullable | FK durmiente a `Project` (asociada, sin uso en UI). |
 | `inventoryProductId` | UUID nullable | **Durmiente**: sin asociación, endpoints ni UI. |
 | `attachmentUrl` | STRING nullable | URL del justificante. |
@@ -806,10 +810,10 @@ explícitas.
 
 | Método y ruta | Propósito | Restricciones |
 | --- | --- | --- |
-| `GET /costs` | Listado con filtros (`type`, `category`, `employeeId`, `clientId`, `from`, `to`) y orden whitelisted. | — |
-| `POST /costs` | Crea coste; recalcula `taxAmount`/`total` desde `taxBase × vatRate`. Si no se indica `employeeId`, usa el `TeamMember` cuyo `userId` coincide con el del solicitante. | — |
-| `GET /costs/[id]` | Detalle con `employee` y `client`. | — |
-| `PATCH /costs/[id]` | Edita y recalcula totales si cambian `taxBase`/`vatRate`. | Solo admin/superadmin. |
+| `GET /costs` | Listado con filtros (`type`, `category`, `employeeId`, `partnerId`, `clientId`, `supplierId`, `from`, `to`) y orden whitelisted (incluye `supplier.name`). Devuelve `employee`, `client` y `supplier`. | — |
+| `POST /costs` | Crea coste; recalcula `taxAmount`/`total` desde `taxBase × vatRate`. Si no se indica `employeeId`, usa el `TeamMember` cuyo `userId` coincide con el del solicitante. Campos aceptados en `lib/billing/camposGasto.js`; `supplierId` opcional y comprobado contra `Supplier` del tenant (404 si no existe). | — |
+| `GET /costs/[id]` | Detalle con `employee`, `client` y `supplier`. | — |
+| `PATCH /costs/[id]` | Edita (mismos campos aceptados que el POST, con la misma comprobación del proveedor) y recalcula totales si cambian `taxBase`/`vatRate`. | Solo admin/superadmin. |
 | `DELETE /costs/[id]` | Borra. | Solo admin/superadmin. |
 
 ### Payments
@@ -907,7 +911,7 @@ el `ExportButtons.jsx` (Excel + ZIP de PDF) que llevan varias de ellas.
 | `/facturacion/presupuestos` (+ `/[id]`) | Listado de presupuestos con filtros y Excel; ficha con líneas, línea de tiempo (enviado / visto / aceptado / rechazado), «Aceptar» y «Convertir en factura». |
 | `/facturacion/facturas` | Listado paginado, filtro por estado y búsqueda libre. Drawer con detalle, edición de borrador (con desplegable de producto del almacén si hay Inventario), acciones (Emitir, **Enviar** por email con el PDF, Cancelar, Eliminar, Rectificar) y descarga del PDF. |
 | `/facturacion/cobros` | Listado de cobros con filtros (método, estado) y Excel. Drawer para registrar cobro nuevo (selector de facturas pendientes, calcula automáticamente el importe restante; también cobro sin factura con `periodMonth`). Incluye el bloque de **Morosidad** del mes (`GET /morosidad`). |
-| `/facturacion/costes` | «Gastos»: listado con filtros (tipo, categoría, socio, fechas) y Excel. Drawer de alta/edición con preview de IVA y socio. Borrado inline. |
+| `/facturacion/costes` | «Gastos»: listado con filtros (tipo, categoría, socio, fechas) y Excel; columna de proveedor, ordenable. Drawer de alta/edición con preview de IVA, socio y proveedor (desplegable de `/api/proveedores`, opcional; los proveedores se dan de alta en su pantalla, no aquí). Borrado inline. |
 | `/facturacion/proveedores` | Alta, edición y baja de proveedores (`/api/proveedores`). Está aquí y no en Inventario porque es donde se usa: al registrar un gasto. |
 | `/facturacion/arqueo` | Cajas y cierres de caja: vista previa del esperado, conteo, diferencia y notas; filtro «solo descuadres». |
 | `/facturacion/recurrentes` | Listado con activar/pausar y Excel. **Banda ámbar prominente** avisando de que las facturas NO se emiten automáticamente. |
@@ -1091,11 +1095,9 @@ Pendiente de sprints futuros, en orden vagamente sugerido:
 - **Limpieza de costes legacy del db-seed antiguo**: hay costes (~38.845 €
   según la nota del prompt original) sin marcador `[seed-billing-demo]` que
   inflan los fijos del demo. Borrarlos al regenerar el seed o filtrarlos.
-- **Proveedor en el gasto desde la UI**: `Cost.supplierId` existe y está
-  asociado, pero `POST/PATCH /costs` y la pantalla de Gastos no lo exponen
-  (19/08/2026). Sin eso, el `totalGastado` de la ficha del proveedor solo suma
-  lo importado. Y decidir qué hacer con `Cost.inventoryProductId` (borrarla:
-  ya no apunta a nada).
+- **Proveedor en el Excel de gastos**: la pantalla y los endpoints ya lo llevan
+  (20/08/2026), el export `expenses` no. Y decidir qué hacer con
+  `Cost.inventoryProductId` (borrarla: ya no apunta a nada).
 - **Motor n8n de RecurringInvoice**: cron + webhook + emisión automática
   cuando llegue `nextRunAt`. Hoy todo es manual.
 - **Integración Verifactu / Facturantia**: rellenar `facturantiaId`,
