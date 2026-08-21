@@ -13,8 +13,9 @@
  * de fuera: el formulario de familias que Aumenta tiene en su WordPress pega
  * contra `/api/public/.../formularios/...` y quien reserva una cita contesta
  * desde el widget. Ninguna de las dos pantallas es nuestra, así que lo que
- * decide qué es obligatorio, qué se limpia (HTML, espacios, prefijo +34, la
- * letra del DNI) y qué sube a la ficha de cliente es lo que DEVUELVEN estas
+ * decide qué es obligatorio, qué se limpia (HTML, espacios, el prefijo +34 o
+ * 0034, la coma decimal, la letra del DNI) y qué sube a la ficha es lo que
+ * DEVUELVEN estas
  * funciones. Hasta hoy solo las cubrían dos smokes con `check()` para las
  * preguntas de la cita y una que pide base de datos para el formulario: las
  * reglas finas —qué cuenta como consentimiento aceptado, que un pasaporte pase
@@ -303,10 +304,24 @@ describe("normalizarTelefono: un móvil español son 9 dígitos, se escriba como
     assert.equal(normalizarTelefono(600112233), "600112233");
   });
 
-  it("SOSPECHOSO: el prefijo internacional escrito «0034» no se quita y el teléfono se rechaza", () => {
-    // Hoy solo se reconoce «+34» o «34» delante; «0034 600 112 233» son 13
-    // dígitos y sale null. Es la misma persona que con «+34» entraría.
-    assert.equal(normalizarTelefono("0034 600 112 233"), null);
+  it("el prefijo internacional escrito «0034» se quita igual que «+34»: es la misma persona con el mismo número", () => {
+    // Hasta el 21/08/2026 solo se reconocía «+34» o «34» delante: «0034 600 112
+    // 233» se quedaba en 13 dígitos, salía null y el formulario público
+    // respondía «El teléfono debe tener 9 dígitos.» sin guardar nada — ni la
+    // solicitud, ni el rastro, ni el lead. El `00` es el prefijo de salida de
+    // toda la vida: es lo que llevan impreso las tarjetas de visita y lo que
+    // sale al copiar un contacto de la agenda del móvil.
+    assert.equal(normalizarTelefono("0034 600 112 233"), "600112233");
+    assert.equal(normalizarTelefono("0034600112233"), "600112233");
+    assert.equal(normalizarTelefono("00 34 600112233"), "600112233");
+    assert.equal(normalizarTelefono("(0034) 600-112-233"), "600112233");
+  });
+
+  it("el «00» solo abre paso al 34: ni otro país ni un 00 suelto se cuelan como españoles", () => {
+    assert.equal(normalizarTelefono("0033612345678"), null);
+    assert.equal(normalizarTelefono("00600112233"), null);
+    assert.equal(normalizarTelefono("003400112233"), null);
+    assert.equal(normalizarTelefono("0034"), null);
   });
 });
 
@@ -553,6 +568,16 @@ describe("validarRespuestas (formulario): teléfono", () => {
     assert.equal(error1(tel, "12345"), "El teléfono debe tener 9 dígitos.");
     assert.equal(error1(tel, "llámame"), "El teléfono debe tener 9 dígitos.");
   });
+
+  it("con «0034» delante el envío ENTRA, no se cae: se guarda a 9 dígitos y sube a destinos.phone", () => {
+    // El de arriba es el mismo caso visto desde `normalizarTelefono`; este es el
+    // que se notaba en la web del cliente, porque un solo error tumba el POST
+    // completo y la solicitud no llega a guardarse.
+    const r = valida(tel, "0034 600 112 233");
+    assert.equal(r.ok, true);
+    assert.equal(r.answers[0].value, "600112233");
+    assert.deepEqual(r.destinos, { phone: "600112233" });
+  });
 });
 
 describe("validarRespuestas (formulario): DNI / NIE del tutor", () => {
@@ -607,8 +632,40 @@ describe("validarRespuestas (formulario): número", () => {
     assert.equal(error1(edad, "Infinity"), '"La pregunta" tiene que ser un número.');
   });
 
-  it("SOSPECHOSO: la coma decimal española («6,5») se rechaza como «no es un número» (las preguntas de la cita sí la admiten)", () => {
-    assert.equal(error1(edad, "6,5"), '"La pregunta" tiene que ser un número.');
+  it("la coma decimal española («6,5») es un número, igual que en las preguntas de la cita: se guarda con punto", () => {
+    // Hasta el 21/08/2026 `Number("6,5")` daba NaN y esto respondía «"…" tiene
+    // que ser un número.», mientras `lib/citas/preguntasCita.js` —el otro
+    // validador del MISMO cuerpo público, escrito por la misma persona en el
+    // mismo formulario— devolvía 6.5. Un peso, una altura o unas horas con coma
+    // es lo que teclea cualquiera en España.
+    assert.equal(guardado(edad, "6,5"), "6.5");
+    assert.equal(guardado({ type: "number" }, "0,5"), "0.5");
+    assert.equal(guardado({ type: "number" }, "-1,5"), "-1.5");
+  });
+
+  it("la coma se traduce ANTES de mirar min y max: «99,5» no cuela en un max de 99", () => {
+    assert.match(error1(edad, "99,5"), /no puede ser mayor que 99/);
+    assert.match(error1(edad, "-0,5"), /no puede ser menor que 0/);
+  });
+
+  it("un punto de miles («1.000,5») sigue sin ser un número: ambiguo se pregunta, no se adivina", () => {
+    assert.equal(error1(edad, "1.000,5"), '"La pregunta" tiene que ser un número.');
+    assert.equal(error1(edad, "1,000.5"), '"La pregunta" tiene que ser un número.');
+    assert.equal(error1(edad, "1,2,3"), '"La pregunta" tiene que ser un número.');
+  });
+
+  it("el formulario y las preguntas de la cita dicen LO MISMO de cada número: son dos puertas del mismo cuerpo público", () => {
+    // La razón de ser del arreglo de la coma: dos validadores donde uno acepta
+    // lo que el otro rechaza acaban en una persona que no entiende por qué su
+    // peso vale al reservar y no vale al pedir cita.
+    for (const v of ["6,5", "6.5", " 06 ", "0,5", "-1,5", "1e2", "1.000,5", "1,000.5", "1,2,3", "seis", "Infinity"]) {
+      const form = valida({ type: "number" }, v);
+      const cita = validarRespuestasCita([{ id: "p", label: "P", type: "numero" }], { p: v });
+      assert.equal(form.ok, cita.ok, `discrepan en si «${v}» es un número`);
+      if (form.ok) {
+        assert.equal(form.answers[0].value, String(cita.respuestas[0].valor), `discrepa el valor de «${v}»`);
+      }
+    }
   });
 
   it("por debajo del min o por encima del max no pasa; los extremos sí", () => {
@@ -834,6 +891,19 @@ describe("el formulario de familias de Aumenta, de punta a punta", () => {
       r.errores.map((e) => e.key),
       ["motivo", "consentimiento"]
     );
+  });
+
+  it("la misma madre escribiendo el teléfono con «0034» y la edad con coma: entra igual, y normalizado", () => {
+    // Los dos bordes del 21/08/2026 juntos y sobre el formulario de verdad: es
+    // así como se perdía la solicitud entera, no en un campo suelto.
+    const r = validarRespuestas(FORM_FAMILIAS, {
+      ...RESPUESTA_MADRE,
+      telefono: "0034 600 111 222",
+      edadPeque: "6,5",
+    });
+    assert.equal(r.ok, true);
+    assert.equal(r.destinos.phone, "600111222");
+    assert.equal(r.destinos.patientAge, "6.5");
   });
 
   it("una edad de 999 no pasa (max 99) en vez de llegar a la ficha", () => {
