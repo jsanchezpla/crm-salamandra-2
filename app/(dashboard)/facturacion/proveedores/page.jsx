@@ -14,6 +14,9 @@ export default function ProveedoresPage() {
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+  // Lo que contestó el servidor al dar de baja: no es un error, es el motivo de
+  // que el proveedor siga en la lista (ver lib/billing/bajaProveedor.js).
+  const [avisoMsg, setAvisoMsg] = useState(null);
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -101,20 +104,29 @@ export default function ProveedoresPage() {
   }
 
   async function darDeBaja(s) {
-    // El endpoint decide: si tiene gastos asociados lo desactiva, y si no lo
-    // borra de verdad. Aquí solo se avisa de lo que va a pasar.
-    if (!confirm(`¿Dar de baja a «${s.name}»?\n\nSi tiene gastos asociados se conserva el histórico y solo deja de aparecer en las listas.`)) return;
+    // El endpoint decide: si algo cuelga del proveedor —gastos o entradas de
+    // almacén, cada cosa según los módulos de este centro— lo desactiva; si no
+    // cuelga nada, lo borra de verdad. Aquí NO se enumera qué se mira: el aviso
+    // saldría igual en un centro sin Inventario, y sería prometer una
+    // comprobación que nadie hace. Quien lo sabe es el servidor, y lo dice
+    // luego en `mensaje` (lib/billing/bajaProveedor.js).
+    if (!confirm(`¿Dar de baja a «${s.name}»?\n\nSi tiene algo a su nombre en el histórico, no se borra: solo deja de aparecer en las listas. Te digo después qué ha pasado.`)) return;
+    setAvisoMsg(null);
     try {
       const r = await fetch(`/api/proveedores/${s.id}`, { method: "DELETE" });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "No se pudo dar de baja");
       await cargar();
+      // Después de `cargar()`: si se pusiera antes, el mensaje se vería junto a
+      // una lista todavía sin refrescar.
+      if (j.data?.mensaje) setAvisoMsg(`«${s.name}» — ${j.data.mensaje}`);
     } catch (e) {
       setErrorMsg(e.message);
     }
   }
 
   async function reactivar(s) {
+    setAvisoMsg(null);
     try {
       const r = await fetch(`/api/proveedores/${s.id}`, {
         method: "PUT",
@@ -170,6 +182,13 @@ export default function ProveedoresPage() {
 
       {errorMsg && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700">{errorMsg}</div>
+      )}
+
+      {avisoMsg && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-[12.5px] text-neutral-700">
+          <span>{avisoMsg}</span>
+          <button onClick={() => setAvisoMsg(null)} className="text-neutral-400 hover:text-neutral-600 shrink-0" aria-label="Cerrar el aviso">×</button>
+        </div>
       )}
 
       <div className="rounded-xl border border-neutral-200 bg-white overflow-hidden">

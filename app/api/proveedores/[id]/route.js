@@ -1,6 +1,7 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, notFound, error } from "../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion, resumen } from "../../../../lib/utils/auditoria.js";
+import { decidirBajaProveedor } from "../../../../lib/billing/bajaProveedor.js";
 import { Op } from "sequelize";
 
 function puede(hasModule) {
@@ -72,19 +73,32 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
  * borrarlo dejaría el histórico sin nombre. Si de verdad no tiene nada colgando,
  * se borra de verdad — un proveedor creado por error no debe quedarse para
  * siempre en la lista de inactivos.
+ *
+ * Se cuentan las DOS cosas que cuelgan de un proveedor, cada una gateada por su
+ * módulo. Hasta el 21/08/2026 solo se miraban los gastos, y como
+ * `StockEntry.supplierId` no tiene clave foránea, borrarlo dejaba las entradas
+ * de almacén apuntando a un proveedor inexistente sin que nada avisara. El
+ * porqué y la redacción del mensaje, en `lib/billing/bajaProveedor.js`.
  */
 export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   if (!puede(hasModule)) return forbidden();
 
-  const { Supplier, Cost } = tenantModels;
+  const { Supplier, Cost, StockEntry } = tenantModels;
   const { id } = await params;
 
   const supplier = await Supplier.findByPk(id);
   if (!supplier) return notFound("Proveedor no encontrado");
 
-  const usos = hasModule("billing") ? await Cost.count({ where: { supplierId: id } }) : 0;
+  // `null` = ese módulo no está, así que no se ha mirado (no es lo mismo que 0).
+  const decision = decidirBajaProveedor({
+    gastos: hasModule("billing") ? await Cost.count({ where: { supplierId: id } }) : null,
+    entradas: hasModule("inventory") ? await StockEntry.count({ where: { supplierId: id } }) : null,
+  });
 
-  if (usos > 0) {
+  if (!decision.borrar) {
+    // El resumen se toma ANTES de desactivar: si no, el `before` guardaría el
+    // `active: false` que acaba de escribirse y el rastro no diría nada.
+    const antes = resumen(supplier, ["name", "taxId", "active"]);
     await supplier.update({ active: false });
     await auditar({
       tenantId: tenant.id,
@@ -92,9 +106,14 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
       action: "suppliers.deactivated",
       entity: "Supplier",
       entityId: supplier.id,
-      before: resumen(supplier, ["name", "taxId", "active"]),
+      before: antes,
     });
-    return ok({ desactivado: true, usos, mensaje: `Dado de baja: tiene ${usos} gasto(s) asociados` });
+    return ok({
+      desactivado: true,
+      usos: decision.usos,
+      desglose: decision.desglose,
+      mensaje: decision.mensaje,
+    });
   }
 
   await auditar({
@@ -106,5 +125,5 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
     before: resumen(supplier, ["name", "taxId", "active"]),
   });
   await supplier.destroy();
-  return ok({ eliminado: true });
+  return ok({ eliminado: true, mensaje: decision.mensaje });
 });
