@@ -1,7 +1,7 @@
 import { Op } from "sequelize";
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
 import { avisarCitaPorWhatsapp } from "../../../../../lib/citas/avisosWhatsapp.js";
-import { citaPuedeAvisar, esCorreoTransaccional } from "../../../../../lib/clients/comunicaciones.js";
+import { citaPuedeAvisar } from "../../../../../lib/clients/comunicaciones.js";
 import { notifyUsers } from "../../../../../lib/notifications/notifyUsers.js";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, noContent, serverError } from "../../../../../lib/utils/apiResponse.js";
@@ -18,62 +18,17 @@ import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamM
 import { veTodaLaAgenda, esSuya } from "../../../../../lib/citas/visibilidad.js";
 import { sendEmail, envioRealizado } from "../../../../../lib/email/resendClient.js";
 import { bookingMeetLinkTemplate } from "../../../../../lib/email/templates/citas/bookingMeetLink.js";
-import { bookingCancelledTemplate } from "../../../../../lib/email/templates/citas/bookingCancelled.js";
 import { bookingRescheduledTemplate } from "../../../../../lib/email/templates/citas/bookingRescheduled.js";
+import { emailCancelacionAlCliente } from "../../../../../lib/citas/notificarCancelacion.js";
 import { getTenantResendConfig } from "../../../../../lib/outreach/resendConfig.js";
 import { reembolsarCitaSiProcede } from "../../../../../lib/citas/reembolsoCita.js";
 import { tieneRetencionPendiente } from "../../../../../lib/citas/cobroCita.js";
 
-/**
- * Email de cancelación al paciente (2026-07-22). Hasta hoy el motivo se
- * guardaba en BD pero NO se avisaba al paciente — el módulo de citas es
- * anterior a la llegada de Resend y este correo nunca se escribió.
- *
- * Clave de envío como en Captación (BYOK): la Resend key del tenant
- * (Configuración → Correo, cifrada en reposo) si la tiene; si no, la global
- * del CRM (RESEND_API_KEY del entorno) — así los tenants sin clave propia no
- * se quedan mudos. Best-effort: un fallo de email JAMÁS rompe la cancelación.
- *
- * Solo se avisa de citas FUTURAS: cancelar un registro antiguo (limpieza de
- * historial) no debe mandarle a nadie un "tu cita ha sido cancelada".
+/*
+ * Aquí vivía una segunda copia del «tu cita ha sido cancelada», y era la que se
+ * callaba lo del bono. Desde el 21/08/2026 el panel llama a la de siempre,
+ * `emailCancelacionAlCliente`; el porqué, en la cabecera de esa lib.
  */
-async function sendCancellationEmail({ tenant, tenantModels, booking, reason }) {
-  try {
-    if (!booking.clientEmail) return;
-    if (new Date(booking.scheduledAt).getTime() <= Date.now()) return;
-    // Esta copia manda el MISMO correo que `lib/citas/notificarCancelacion.js`,
-    // así que pregunta a la misma lista: el día que `bookingCancelled` deje de
-    // ser transaccional tiene que callarse por los dos sitios a la vez.
-    if (!esCorreoTransaccional("bookingCancelled")) return;
-
-    const { EventType } = tenantModels;
-    const et = await EventType.findByPk(booking.eventTypeId, { attributes: ["name"] });
-    const tpl = bookingCancelledTemplate({
-      tenantName: tenant.name,
-      brand: tenant.settings?.brand,
-      clientName: booking.clientName,
-      eventTypeName: et?.name ?? "tu cita",
-      scheduledAt: booking.scheduledAt,
-      reason: reason ?? null,
-    });
-    const resend = getTenantResendConfig({ tenant });
-    const envio = await sendEmail({
-      to: booking.clientEmail,
-      subject: tpl.subject,
-      html: tpl.html,
-      text: tpl.text,
-      // undefined → sendEmail cae a RESEND_FROM_EMAIL / RESEND_API_KEY globales
-      from: resend.fromEmail || undefined,
-      replyTo: resend.replyTo || undefined,
-      apiKey: resend.apiKey || undefined,
-    });
-    // Nadie ve esta respuesta, pero un aviso de cancelación que no sale tiene
-    // que dejar rastro en el log en vez de perderse.
-    envioRealizado(envio, `citas:cancelled ${booking.id}`);
-  } catch (mailErr) {
-    process.stderr.write(`[citas:cancelled] email fail: ${mailErr.message}\n`);
-  }
-}
 
 /**
  * Aviso de que la cita se ha movido de día u hora.
@@ -496,7 +451,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
 
       // Cancelación → avisar al paciente con el motivo (best-effort).
       if (row.status === "cancelled") {
-        await sendCancellationEmail({
+        await emailCancelacionAlCliente({
           tenant,
           tenantModels,
           booking: row,
@@ -807,7 +762,7 @@ export const DELETE = withTenant(async (request, { params }, ctx) => {
     });
 
     // Avisar al paciente con el motivo (best-effort, solo citas futuras).
-    await sendCancellationEmail({
+    await emailCancelacionAlCliente({
       tenant,
       tenantModels,
       booking: row,
