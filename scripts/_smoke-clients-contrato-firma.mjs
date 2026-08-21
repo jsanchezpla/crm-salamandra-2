@@ -25,13 +25,17 @@
  *   · `letraDocumentoCorrecta`: DNI y NIE con su letra; lo que no lo parece
  *     (pasaporte) no se juzga —rechazarlo dejaría sin firmar a una extranjera—;
  *   · `edadEn` / `esMenor`: años cumplidos contados en fecha UTC, y «no lo sé»
- *     cuenta como mayor a propósito;
+ *     cuenta como mayor a propósito —incluida una fecha FUTURA, que hasta el
+ *     21/08/2026 daba años en negativo y le exigía a una adulta el
+ *     consentimiento de su tutor (el defecto que sacó esta misma prueba);
  *   · `camposDe` / `bloquesDe` / `serializarPlantilla`: la plantilla JSONB se
  *     normaliza con sus valores por defecto y viaja al portal ya resuelta
  *     contra la ficha (lo que la ficha tiene no se vuelve a preguntar);
  *   · `validarDatos`: qué entra, qué se rechaza y con qué frase, que lo que la
- *     plantilla no declara se tira, y que el DNI deja de ser obligatorio por
- *     edad con la fecha que SE ESTÁ ESCRIBIENDO antes que con la guardada;
+ *     plantilla no declara se tira, que una fecha de nacimiento futura no llega
+ *     ni a la ficha (y la de la firma sí puede ir por delante), y que el DNI
+ *     deja de ser obligatorio por edad con la fecha que SE ESTÁ ESCRIBIENDO
+ *     antes que con la guardada;
  *   · `documentosQueAplican` / `situacionDocumentos`: el consentimiento
  *     parental solo sale para menores, y el contrato no está completo hasta
  *     que TODOS los firmantes han firmado TODO lo que les aplica;
@@ -76,6 +80,9 @@ const ANO = new Date().getUTCFullYear();
 const NACIDA_HACE = (n) => `${ANO - n}-01-01`;
 const MENOR = NACIDA_HACE(10);
 const MAYOR = NACIDA_HACE(40);
+// El dedo en el año al teclear («2086» por «1986»): sesenta años por delante,
+// lo bastante lejos para que siga siendo futuro con cualquier zona horaria.
+const FUTURA = NACIDA_HACE(-60);
 
 /* ── Una plantilla como la de tunutrilaura, reducida ─────────────────────── */
 
@@ -258,20 +265,31 @@ describe("edadEn: años cumplidos en la fecha de referencia, contados en UTC", (
     assert.equal(edadEn("1990-05-14", new Date(Number.NaN)), null);
   });
 
-  it("una fecha de nacimiento FUTURA da una edad negativa, no null", () => {
-    // SOSPECHOSO: «2030-01-01» vista desde 2026 da -4 (y esMenor → true, ver
-    // abajo). `edadDesde` de formularioAlta devuelve null fuera de 0..120; aquí
-    // no hay tope, así que un año tecleado de más («2990») convierte a una
-    // adulta en menor y le pide consentimiento del tutor.
-    assert.equal(edadEn("2030-01-01", REF), -4);
+  it("una fecha de nacimiento FUTURA no da una edad negativa: es «no lo sé» (null)", () => {
+    // Hasta el 21/08/2026 devolvía -4, y `esMenor` lo leía como menor de 18:
+    // una adulta que se equivocaba de siglo al teclear («2086» por «1986») se
+    // quedaba pidiendo el consentimiento de su tutor, que es justo lo que el
+    // comentario de `esMenor` dice que quiere evitar. Ahora, como `edadDesde`
+    // de formularioAlta, fuera de 0..120 no hay edad.
+    assert.equal(edadEn("2030-01-01", REF), null);
+    assert.equal(edadEn("2086-05-14", REF), null);
+    assert.equal(edadEn("2026-08-05", REF), null); // el día siguiente ya cuenta
+  });
+
+  it("por arriba también hay tope: más de 120 años no es una edad", () => {
+    assert.equal(edadEn("1906-01-01", REF), 120);
+    assert.equal(edadEn("1900-01-01", REF), null);
   });
 
   it("referencia null NO cuenta como «hoy»: cuenta desde 1970", () => {
-    // SOSPECHOSO: el valor por defecto solo entra con undefined; con null,
-    // `new Date(null)` es el 1 de enero de 1970 y una nacida en 1990 tiene -21.
-    // Nadie pasa null hoy (los llamadores omiten el argumento), pero es una
-    // trampa a un `??` de distancia.
-    assert.equal(edadEn("1990-05-14", null), -21);
+    // SOSPECHOSO (sigue): el valor por defecto solo entra con undefined; con
+    // null, `new Date(null)` es el 1 de enero de 1970. Para una nacida en 1990
+    // el tope de 0..120 lo tapa —sale null, «no lo sé»—, pero una nacida en
+    // 1960 sale con 10 años y pasaría por menor. Nadie pasa null hoy (los
+    // llamadores omiten el argumento), pero es una trampa a un `??` de
+    // distancia.
+    assert.equal(edadEn("1990-05-14", null), null);
+    assert.equal(edadEn("1960-01-01", null), 10);
   });
 });
 
@@ -296,10 +314,12 @@ describe("esMenor: menor de 18 el día que firma; «no lo sé» cuenta como mayo
     assert.equal(esMenor("2026-13-45", REF), false);
   });
 
-  it("una fecha de nacimiento futura sale como menor", () => {
-    // SOSPECHOSO: consecuencia de la edad negativa de edadEn. Lo esperable
-    // sería tratarla como «no lo sé» (mayor), igual que una fecha ilegible.
-    assert.equal(esMenor("2030-01-01", REF), true);
+  it("una fecha de nacimiento futura NO sale como menor: se trata como «no lo sé»", () => {
+    // Hasta el 21/08/2026 salía `true` —consecuencia de la edad negativa de
+    // edadEn— y el portal le exigía a una adulta el consentimiento de su tutor.
+    // Ahora vale lo mismo que una fecha ilegible: mayor.
+    assert.equal(esMenor("2030-01-01", REF), false);
+    assert.equal(esMenor("2086-05-14", REF), false);
   });
 });
 
@@ -776,6 +796,104 @@ describe("validarDatos: lo que manda el portal contra la plantilla", () => {
         error: "«Fecha» no es una fecha real",
       });
     });
+
+    describe("una fecha de NACIMIENTO no puede estar en el futuro", () => {
+      const NACIMIENTO = {
+        key: "fechaNacimiento",
+        label: "Fecha de nacimiento",
+        type: "date",
+        ficha: "cliente.birthDate",
+      };
+      const p = { fields: [NACIMIENTO] };
+
+      it("un año tecleado de más se rechaza en la puerta, con su frase", () => {
+        // Hasta el 21/08/2026 entraba: el día existe, así que se guardaba en
+        // `signerData` y en la ficha, y `esMenor` la contaba como menor de 18
+        // (edad negativa). La adulta se quedaba pidiendo el consentimiento de
+        // un tutor y sin poder terminar de firmar.
+        assert.deepEqual(validarDatos(p, { fechaNacimiento: "2086-05-14" }, null, REF), {
+          error: "«Fecha de nacimiento» no puede ser una fecha futura",
+        });
+      });
+
+      it("el corte es el día siguiente: hoy vale (una recién nacida), mañana no", () => {
+        assert.deepEqual(validarDatos(p, { fechaNacimiento: "2026-08-04" }, null, REF), {
+          datos: { fechaNacimiento: "2026-08-04" },
+        });
+        assert.deepEqual(validarDatos(p, { fechaNacimiento: "2026-08-05" }, null, REF), {
+          error: "«Fecha de nacimiento» no puede ser una fecha futura",
+        });
+      });
+
+      it("sin `momento`, el «hoy» es el reloj: los llamadores de verdad no lo pasan", () => {
+        assert.deepEqual(validarDatos(p, { fechaNacimiento: FUTURA }), {
+          error: "«Fecha de nacimiento» no puede ser una fecha futura",
+        });
+        assert.deepEqual(validarDatos(p, { fechaNacimiento: MAYOR }), {
+          datos: { fechaNacimiento: MAYOR },
+        });
+      });
+
+      it("se reconoce por su destino en la ficha (cliente o tutor) o por su clave", () => {
+        const comoSeLlame = [
+          { key: "x", ficha: "cliente.birthDate" },
+          { key: "x", ficha: "tutor.birthDate" },
+          { key: "fechaNacimiento" },
+          { key: "birthDate" },
+          { key: "fnac" }, // las tres claves que ya mira `nacimientoDeclarado`
+        ];
+        for (const campo of comoSeLlame) {
+          assert.deepEqual(
+            validarDatos(
+              { fields: [{ label: "F", type: "date", ...campo }] },
+              { [campo.key]: "2086-05-14" },
+              null,
+              REF
+            ),
+            { error: "«F» no puede ser una fecha futura" },
+            JSON.stringify(campo)
+          );
+        }
+      });
+
+      it("la fecha de la FIRMA sí puede ir por delante: un reloj adelantado no puede impedir firmar", () => {
+        const firma = { fields: [{ key: "fechaFirma", label: "Fecha de la firma", type: "date" }] };
+        assert.deepEqual(validarDatos(firma, { fechaFirma: "2026-08-05" }, null, REF), {
+          datos: { fechaFirma: "2026-08-05" },
+        });
+      });
+
+      it("una fecha futura que YA está en la ficha no bloquea la firma: no la puso quien firma ni puede quitarla", () => {
+        // El endpoint de firma valida `{ ...body.datos, ...datosDeFicha(...) }`
+        // (sign/route.js): lo de la ficha PISA lo que mande el navegador, para
+        // que el DNI del contrato sea el del CRM. Con la comprobación de fecha
+        // futura recién puesta, una ficha que arrastraba la fecha mala de este
+        // mismo fallo devolvía 422 en el PRIMER documento y dejaba a la
+        // paciente sin poder firmar nada —y nombrando un campo que el portal ni
+        // le enseña (`camposQueFaltan` la ve llena) ni la dejaría sobrescribir
+        // (`actualizacionDeFicha` solo tapa huecos)—. Eso lo arregla el centro
+        // en la ficha, no quien firma.
+        assert.deepEqual(validarDatos(p, { fechaNacimiento: FUTURA }, { birthDate: FUTURA }, REF), {
+          datos: { fechaNacimiento: FUTURA },
+        });
+      });
+
+      it("pero lo que se TECLEA sí se juzga, aunque la ficha arrastre otra fecha futura", () => {
+        // Lo declarado es lo único que llegaría a escribirse, así que es lo
+        // único que se puede —y se debe— parar en la puerta.
+        assert.deepEqual(
+          validarDatos(p, { fechaNacimiento: "2099-01-01" }, { birthDate: FUTURA }, REF),
+          {
+            error: "«Fecha de nacimiento» no puede ser una fecha futura",
+          }
+        );
+        // Y con el hueco vacío en la ficha, que es el caso de «Completa tus
+        // datos», se rechaza igual que siempre.
+        assert.deepEqual(validarDatos(p, { fechaNacimiento: FUTURA }, { birthDate: null }, REF), {
+          error: "«Fecha de nacimiento» no puede ser una fecha futura",
+        });
+      });
+    });
   });
 
   describe("DNI / NIE", () => {
@@ -1036,6 +1154,21 @@ describe("documentosQueAplican: el consentimiento parental solo sale para menore
           birthDate: MAYOR,
         })
       ),
+      ["paciente"]
+    );
+  });
+
+  it("una fecha de nacimiento FUTURA no convierte a una adulta en menor: sin consentimiento", () => {
+    // El caso que se colaba: la fecha entraba por el formulario, se guardaba en
+    // la ficha y en `signerData`, y a partir de ahí el portal le exigía el
+    // consentimiento del tutor. `validarDatos` ya no la deja pasar, pero las
+    // que se guardaron antes siguen ahí: aquí se fija que tampoco muerden.
+    assert.deepEqual(
+      claves(documentosQueAplican([PACIENTE, PARENTAL], [], { birthDate: FUTURA })),
+      ["paciente"]
+    );
+    assert.deepEqual(
+      claves(documentosQueAplican([PACIENTE, PARENTAL], [{ signerData: { fnac: FUTURA } }], null)),
       ["paciente"]
     );
   });
