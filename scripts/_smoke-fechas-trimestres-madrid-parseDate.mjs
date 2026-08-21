@@ -41,9 +41,14 @@
  * zona. Por eso se lanza dos veces: con la zona de la máquina y con TZ=UTC.
  *
  * Lo que hoy devuelve algo raro se deja escrito tal cual y marcado SOSPECHOSO,
- * no se arregla aquí: `trimesterOf(null)` cae en el 2º trimestre de 1969,
- * `effectiveStatus` cuenta el «hoy» en UTC (no en Madrid), un `dueDate` que
- * llegue como Date nunca vence y un «hoy» vacío («») tampoco vence nada.
+ * no se arregla aquí: `trimesterOf(null)` cae en el 2º trimestre de 1969, un
+ * `dueDate` que llegue como Date nunca vence y un «hoy» vacío («») tampoco
+ * vence nada.
+ *
+ * Uno de esos SOSPECHOSO sí se arregló, el 21/08/2026: `effectiveStatus`
+ * contaba el «hoy» en UTC y no en Madrid, así que entre las 00:00 y las 02:00
+ * una factura vencida ayer aún no salía como vencida. Su `it` sigue aquí, ya
+ * volteado, porque el borde existió y la prueba es lo que impide que vuelva.
  */
 
 import { describe, it } from "node:test";
@@ -464,14 +469,22 @@ describe("effectiveStatus: emitida, sin cobrar del todo y con el vencimiento pas
       "issued"
     );
   });
-  it("cuando «hoy» es una Date, el día es el de UTC y no el de Madrid: a las 00:30 de Madrid la factura de ayer aún no vence", () => {
-    // SOSPECHOSO: `todayIsoDate` usa `toISOString()`, que es UTC. Da lo mismo en qué zona corra el
-    // proceso (por eso este `it` pasa igual con TZ=UTC), pero entre las 00:00 y las 02:00 de Madrid
-    // en verano (01:00 en invierno) una factura que venció ayer sigue sin salir como vencida: el
-    // día de negocio es el de Madrid (`madridToday` existe para eso). Dos horas de retraso, nada más.
+  it("cuando «hoy» es una Date, el día es el de MADRID y no el de UTC: a las 00:30 de Madrid la factura de ayer ya vence", () => {
+    // Este borde existió al revés (arreglado el 21/08/2026): `todayIsoDate` usaba `toISOString()`,
+    // que es UTC, y entre las 00:00 y las 02:00 de Madrid en verano (01:00 en invierno) una factura
+    // vencida ayer seguía sin salir como vencida — dos horas cada noche, y en los tres sitios que
+    // llaman sin pasar «hoy»: listado, ficha y resumen de facturación. El día de negocio es el de
+    // Madrid, así que ahora se lee con `madridToday`. Sigue sin depender de la zona del PROCESO
+    // (Intl lleva la zona escrita): por eso este `it` pasa igual con TZ=UTC.
     const madrugadaDel20 = new Date("2026-08-19T22:30:00Z"); // 00:30 del 20/08 en Madrid
-    assert.equal(effectiveStatus(facturaVencida(), madrugadaDel20), "issued");
+    assert.equal(effectiveStatus(facturaVencida(), madrugadaDel20), "overdue");
     assert.equal(effectiveStatus(facturaVencida(), new Date("2026-08-20T00:00:00Z")), "overdue");
+    // El corte es la medianoche de Madrid: a las 23:59 del 19 todavía no vence.
+    assert.equal(effectiveStatus(facturaVencida(), new Date("2026-08-19T21:59:59Z")), "issued");
+    // Y en invierno (+01:00) el corte cae una hora más tarde en UTC, no a medianoche UTC.
+    const enInvierno = facturaVencida({ dueDate: "2026-01-15" });
+    assert.equal(effectiveStatus(enInvierno, new Date("2026-01-15T22:59:59Z")), "issued");
+    assert.equal(effectiveStatus(enInvierno, new Date("2026-01-15T23:30:00Z")), "overdue");
   });
   it("un dueDate que llegue como Date nunca vence (se compara «Wed Aug 19» con «2026-08-20»)", () => {
     // SOSPECHOSO: `String(dueDate).slice(0, 10)` de una Date es «Wed Aug 19», y una letra siempre

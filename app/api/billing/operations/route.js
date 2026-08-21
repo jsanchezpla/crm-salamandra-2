@@ -2,6 +2,7 @@ import { Op, fn, col, literal } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { getKpisForPeriod } from "../../../../lib/billing/billingSummary.js";
+import { madridToday } from "../../../../lib/utils/madridDate.js";
 
 function round2(n) { return Math.round(Number(n) * 100) / 100; }
 
@@ -32,10 +33,21 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     // Facturado / Cobrado del periodo (base imponible, reutiliza los KPIs)
     const kpis = await getKpisForPeriod({ tenantModels, from, to });
 
-    const today = new Date().toISOString().slice(0, 10);
-    const in7 = new Date();
-    in7.setDate(in7.getDate() + 7);
-    const in7str = in7.toISOString().slice(0, 10);
+    // El día se lee en MADRID, no en UTC (21/08/2026). `toISOString()` da el día
+    // UTC corra el proceso donde corra, así que entre las 00:00 y las 02:00 de
+    // Madrid en verano (01:00 en invierno) este panel se quedaba en el día de
+    // ayer: una factura vencida anoche salía «vencida» en el listado, en la ficha
+    // y en el resumen —los tres pasan por `effectiveStatus`— y este panel decía
+    // «0 vencidas» de la misma factura. Antes los cuatro sitios estaban mal IGUAL
+    // y al menos coincidían; al arreglar `lib/billing/invoiceStatus.js` esa misma
+    // tarde, dejar este en UTC habría puesto a dos pantallas a contradecirse.
+    const today = madridToday();
+    // Los siete días se cuentan sobre el día de Madrid ya elegido, como
+    // CALENDARIO y no como instante: sumar 7×86.400.000 ms cruza un cambio de
+    // hora y se desvía sesenta minutos, que junto a la medianoche cambia el día.
+    // `Date.UTC` con el día desbordado resuelve fin de mes y fin de año solo.
+    const [aa, mm, dd] = today.split("-").map(Number);
+    const in7str = new Date(Date.UTC(aa, mm - 1, dd + 7)).toISOString().slice(0, 10);
 
     // Pipeline de presupuestos (estado actual). Tolerante a que la tabla
     // `quotes` aún no exista (migración no aplicada): degrada a 0.

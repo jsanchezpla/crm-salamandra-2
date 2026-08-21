@@ -683,11 +683,11 @@ const facturas = (...estados) => ({
 });
 
 describe("cuotasPagadasDe: se cuentan las cobradas de verdad", () => {
-  it("pide a Stripe solo las paid de esa suscripción, hasta 24, y las cuenta", async () => {
+  it("pide a Stripe solo las paid de esa suscripción, la página entera (100), y las cuenta", async () => {
     const stripe = conStripe({ "invoices.list": facturas("paid", "paid", "paid") });
     assert.equal(await cuotasPagadasDe(ctxConStripe(), "sub_1"), 3);
     assert.deepEqual(stripe.llamadas, [
-      ["invoices.list", { subscription: "sub_1", status: "paid", limit: 24 }],
+      ["invoices.list", { subscription: "sub_1", status: "paid", limit: 100 }],
     ]);
   });
 
@@ -823,39 +823,53 @@ describe("frenarSiYaEstaPagado: el segundo cerrojo, por si el calendario no lleg
     );
   });
 
-  // SOSPECHOSO (aceptado en el propio fichero): el recuento pide `limit: 24`
-  // pero el modelo admite planes de hasta 36 meses (`EventType.instalmentMonths`
-  // max 36). Con un plan de 25 o más cuotas Y el calendario sin poner, este
-  // segundo cerrojo no llega nunca al total: contesta «cuota 24 de 25» en cada
-  // webhook y no cancela. El comentario de `cuotasPagadasDe` lo da por bueno
-  // («un fraccionado real son 3-6; el cerrojo bueno sigue siendo el schedule»).
-  // Se fija aquí para que, si alguien sube el máximo del modelo o baja el
-  // límite, se vea que el segundo cerrojo se queda corto.
-  it("con un plan de más de 24 cuotas y sin calendario, el recuento se queda en 24 y NO frena (límite conocido)", async () => {
+  // Este borde existió al revés (arreglado el 21/08/2026): el recuento pedía
+  // `limit: 24` «porque un fraccionado real son 3-6», pero el modelo admite
+  // planes de hasta 36 meses (`EventType.instalmentMonths`, min 2 max 36, y la
+  // API de tipos de cita valida lo mismo: lo mete un admin desde la pantalla).
+  // Con 25 cuotas o más Y el calendario sin poner, este segundo cerrojo no
+  // llegaba nunca al total: contestaba «cuota 24 de 25» en cada webhook y no
+  // cancelaba, o sea que se le seguía cobrando a la paciente pasado el plan.
+  // Ahora se pide la página entera de Stripe (100), que cubre el máximo del
+  // modelo con margen. Lo que esto fija es el `limit` que se le pide a Stripe:
+  // si alguien vuelve a bajarlo, se pone rojo. Lo que NO puede ver es el máximo
+  // del modelo (leer `EventType` arrastraría Sequelize y esta prueba dejaría de
+  // ser ligera): el 36 de aquí abajo es una copia a mano, así que subir ese
+  // máximo por encima de 100 —que obligaría a paginar— no lo canta nadie. Está
+  // dicho también en `cuotasPagadasDe`.
+  it("con un plan de más de 24 cuotas y sin calendario, el recuento llega al total y SÍ frena", async () => {
     const treintaPagadas = Array.from({ length: 30 }, (_, i) => ({
       id: `in_${i}`,
       status: "paid",
     }));
+    // Un Stripe que respeta el `limit`, como el de verdad.
+    const paginado = ({ limit }) => ({ data: treintaPagadas.slice(0, limit) });
+
     const stripe = conStripe({
-      // Un Stripe que respeta el `limit`, como el de verdad.
-      "invoices.list": ({ limit }) => ({ data: treintaPagadas.slice(0, limit) }),
+      "invoices.list": paginado,
+      "subscriptions.retrieve": { id: "sub_30", status: "active", schedule: null },
+      "subscriptions.cancel": {},
     });
-    assert.equal(
-      await frenarSiYaEstaPagado(ctxConStripe(), { subscriptionId: "sub_30", cuotas: 25 }),
-      "cuota 24 de 25"
+    const { resultado } = await capturandoStderr(() =>
+      frenarSiYaEstaPagado(ctxConStripe(), { subscriptionId: "sub_30", cuotas: 25 })
     );
+    assert.equal(resultado, "plan completo (30/25) — cancelado");
+    assert.deepEqual(stripe.llamadas[2], ["subscriptions.cancel", "sub_30"]);
+
+    // A mitad de un plan del máximo del modelo (36) informa con el número de
+    // verdad, 30, no con el del límite.
+    conStripe({ "invoices.list": paginado });
     assert.equal(
-      await frenarSiYaEstaPagado(ctxConStripe(), { subscriptionId: "sub_30", cuotas: 30 }),
-      "cuota 24 de 30"
+      await frenarSiYaEstaPagado(ctxConStripe(), { subscriptionId: "sub_30", cuotas: 36 }),
+      "cuota 30 de 36"
     );
-    assert.deepEqual(stripe.nombres(), ["invoices.list", "invoices.list"]);
-    // Hasta 24 cuotas el cerrojo sí llega al total.
-    conStripe({ "invoices.list": ({ limit }) => ({ data: treintaPagadas.slice(0, limit) }) });
-    assert.equal(
-      await cuotasPagadasDe(ctxConStripe(), "sub_30"),
-      24,
-      "24 es lo máximo que cuenta, haya las que haya"
-    );
+
+    // Y lo que se le pide a Stripe es la página entera: 100, no 24.
+    const contando = conStripe({ "invoices.list": paginado });
+    assert.equal(await cuotasPagadasDe(ctxConStripe(), "sub_30"), 30);
+    assert.deepEqual(contando.llamadas, [
+      ["invoices.list", { subscription: "sub_30", status: "paid", limit: 100 }],
+    ]);
   });
 });
 
