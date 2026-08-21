@@ -475,15 +475,21 @@ describe("validarSeleccion: la puerta — dice qué falta y NO lo arregla", () =
     });
   });
 
-  // SOSPECHOSO: si `seleccion` no es un array (un body con `"modulos":
-  // "clients"`), no filtra ni devuelve 422: revienta con TypeError. El alta
-  // (`altaTenant.js`) le pasa `body.modulos` tal cual, así que ese body acaba
-  // en un 500 del endpoint en vez de en «Elige al menos un módulo». La edición
-  // (`cicloVida.js`) sí comprueba `Array.isArray` antes. Hoy la pantalla siempre
-  // manda un array; se deja escrito lo que hace.
-  it("con una cadena en vez de un array revienta con TypeError en vez de tratarla como vacía (SOSPECHOSO)", () => {
-    assert.throws(() => validarSeleccion("clients"), TypeError);
-    assert.throws(() => completarSeleccion("clients"), TypeError);
+  // Hasta el 21/08/2026 esto reventaba con TypeError: `(seleccion || [])` deja
+  // pasar cualquier cosa que no sea `null`, y una cadena no tiene `.filter`.
+  // Un body con `"modulos": "clients"` acababa en un 500 del endpoint de alta
+  // —el route pasa `body.modulos` tal cual y su `catch` lo convierte en
+  // serverError— en vez de en el 422 «Elige al menos un módulo» que ya existía
+  // dos líneas más abajo. La edición (`cicloVida.js`) sí comprobaba
+  // `Array.isArray` antes; el alta no. Se cerró en la propia puerta, para las
+  // tres que entran por ahí a la vez.
+  it("lo que no es un array (una cadena, un objeto, un número) se trata como selección vacía, no revienta", () => {
+    const vacioValidar = { modulos: [], problemas: [] };
+    const vacioCompletar = { modulos: [], anadidos: [], sinResolver: [] };
+    for (const raro of ["clients", { clients: true }, 42, true]) {
+      assert.deepEqual(validarSeleccion(raro), vacioValidar);
+      assert.deepEqual(completarSeleccion(raro), vacioCompletar);
+    }
   });
 
   it("los módulos devueltos van en el orden del catálogo, no en el que llegaron", () => {

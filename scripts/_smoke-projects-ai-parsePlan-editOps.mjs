@@ -484,10 +484,13 @@ describe("normalizePlan: asignados y miembros se filtran contra el equipo", () =
     );
   });
 
-  it("SOSPECHOSO: el mismo uuid en MAYÚSCULAS pasa la regex pero no casa con el equipo y se pierde", () => {
-    // SOSPECHOSO: UUID_RE lleva /i, pero la comprobación contra el equipo es
-    // exacta; un id que el modelo devuelva en mayúsculas (o el navegador) se
-    // descarta como si fuera de otro. Se fija lo de hoy.
+  it("el mismo uuid en MAYÚSCULAS casa con el equipo, y lo que sale es el id de la base (en minúsculas)", () => {
+    // Hasta el 21/08/2026 se perdía: UUID_RE lleva /i, pero la comprobación
+    // contra el equipo era exacta, así que un id que el modelo devolviera en
+    // mayúsculas —copia los del prompt y no garantiza la caja— se descartaba
+    // como si fuera de otro. Y sin un solo warning: el plan salía sin asignar
+    // y no había forma de saber por qué. Lo que se devuelve es el id CANÓNICO,
+    // no el que escribió el modelo: es lo que acaba en la FK.
     const p = normalizePlan(
       {
         name: "P",
@@ -496,8 +499,36 @@ describe("normalizePlan: asignados y miembros se filtran contra el equipo", () =
       },
       { teamMembers: EQUIPO }
     );
-    assert.deepEqual(p.phases[0].tasks[0].assigneeIds, [BEA]);
-    assert.deepEqual(p.members, []);
+    assert.deepEqual(p.phases[0].tasks[0].assigneeIds, [ANA, BEA]);
+    assert.deepEqual(p.members, [{ teamMemberId: ANA, role: "lead" }]);
+
+    // Y sigue sin colar a quien no es del equipo, esté en la caja que esté.
+    const q = normalizePlan(
+      {
+        name: "P",
+        phases: [{ name: "A", tasks: [{ title: "T", assigneeIds: [NADIE.toUpperCase()] }] }],
+        members: [{ teamMemberId: NADIE.toUpperCase() }],
+      },
+      { teamMembers: EQUIPO }
+    );
+    assert.deepEqual(q.phases[0].tasks[0].assigneeIds, []);
+    assert.deepEqual(q.members, []);
+  });
+
+  it("el mismo uuid dos veces en distinta caja cuenta como una sola persona", () => {
+    const p = normalizePlan(
+      {
+        name: "P",
+        phases: [{ name: "A", tasks: [{ title: "T", assigneeIds: [ANA, ANA.toUpperCase()] }] }],
+        members: [
+          { teamMemberId: ANA, role: "lead" },
+          { teamMemberId: ANA.toUpperCase(), role: "member" },
+        ],
+      },
+      { teamMembers: EQUIPO }
+    );
+    assert.deepEqual(p.phases[0].tasks[0].assigneeIds, [ANA]);
+    assert.deepEqual(p.members, [{ teamMemberId: ANA, role: "lead" }]);
   });
 
   it("miembros: sin duplicados (gana el primero), role lead o member («viewer» cae a member), con espacios", () => {
@@ -574,12 +605,12 @@ describe("normalizePlan: hitos", () => {
     assert.equal(normalizePlan({ name: "P", milestones: dieciseis }).milestones.length, 15);
   });
 
-  it("SOSPECHOSO: si una fase anterior se descartó por no tener nombre, phaseIndex apunta a la fase equivocada", () => {
-    // SOSPECHOSO: phaseIndex se comprueba contra la lista YA filtrada, no contra
-    // la que el modelo escribió. Con phases [sin nombre, B, C]: el hito de B
-    // (índice 1) acaba colgado de C, y el de C (índice 2) se pierde. Se fija lo
-    // de hoy; lo esperable sería que el índice se tradujera (o se anulara) al
-    // descartar la fase.
+  it("si una fase anterior se descartó por no tener nombre, el phaseIndex de los hitos se traduce y cada uno sigue en la suya", () => {
+    // Hasta el 21/08/2026 el índice se comparaba contra la lista YA filtrada:
+    // con phases [sin nombre, B, C] el hito de B (índice 1) acababa colgado de
+    // C y el de C (índice 2) se perdía. No era un descarte visible: era un hito
+    // bien formado, en la fase equivocada, guardado en la base. Ahora el índice
+    // que escribió el modelo se traduce al de la lista resultante.
     const p = normalizePlan({
       name: "P",
       phases: [{ tasks: [] }, { name: "B" }, { name: "C" }],
@@ -595,8 +626,32 @@ describe("normalizePlan: hitos", () => {
     assert.deepEqual(
       p.milestones.map((m) => [m.name, m.phaseIndex]),
       [
-        ["de B", 1], // hoy: 1 = «C»
-        ["de C", null], // hoy: se pierde
+        ["de B", 0], // «B» quedó la primera
+        ["de C", 1],
+      ]
+    );
+  });
+
+  it("un hito que apuntaba a la fase descartada se queda sin fase, no se cuelga de la de al lado", () => {
+    const p = normalizePlan({
+      name: "P",
+      phases: [{ name: "A" }, { tasks: [] }, { name: "C" }],
+      milestones: [
+        { name: "de la que no está", dueDate: "2026-09-01", phaseIndex: 1 },
+        { name: "de C", dueDate: "2026-09-01", phaseIndex: 2 },
+        { name: "de A", dueDate: "2026-09-01", phaseIndex: 0 },
+      ],
+    });
+    assert.deepEqual(
+      p.phases.map((f) => f.name),
+      ["A", "C"]
+    );
+    assert.deepEqual(
+      p.milestones.map((m) => [m.name, m.phaseIndex]),
+      [
+        ["de la que no está", null],
+        ["de C", 1],
+        ["de A", 0],
       ]
     );
   });
@@ -1129,6 +1184,46 @@ describe("normalizeOperations · createTask", () => {
     });
   });
 
+  it("los asignados en MAYÚSCULAS casan con el equipo y se guardan con el id de la base", () => {
+    // El mismo fallo de caja que en addMember/removeMember, pero por la puerta
+    // MUDA: aquí no hay warning que lo cuente. Antes del 21/08/2026 la tarea se
+    // creaba sin nadie asignado y en la vista previa no salía el «asignada a».
+    //
+    // Y esto fija además que las DOS mitades del filtro sigan de acuerdo: si
+    // `filtraAsignados` volviera a buscar exacto mientras el recuento de
+    // «desconocidos» busca en minúsculas, un `updateTask` con el id en
+    // mayúsculas dejaría `assigneeIds: []` —o sea, BORRARÍA los asignados que
+    // tenía la tarea— sin un solo aviso. Peor que el fallo original.
+    const creada = una({ op: "createTask", title: "T", assigneeIds: [ANA.toUpperCase()] });
+    assert.deepEqual(creada.warnings, []);
+    assert.deepEqual(creada.op.assigneeIds, [ANA]);
+    assert.equal(creada.op.description, "Crear la tarea «T», asignada a Ana");
+
+    const editada = una({
+      op: "updateTask",
+      taskId: "t1",
+      changes: { assigneeIds: [ANA.toUpperCase(), ` ${BEA.toUpperCase()} `] },
+    });
+    assert.deepEqual(editada.warnings, []);
+    assert.deepEqual(editada.op.changes.assigneeIds, [ANA, BEA]);
+    assert.equal(
+      editada.op.description,
+      "Actualizar la tarea «Maquetar portada»: asignados → Ana, Bea"
+    );
+
+    // El mismo uuid en dos cajas es una sola persona, no dos filas de FK.
+    assert.deepEqual(
+      una({ op: "createTask", title: "T", assigneeIds: [ANA, ANA.toUpperCase()] }).op.assigneeIds,
+      [ANA]
+    );
+
+    // Y quien no es del equipo sigue sin colar, venga en la caja que venga.
+    assert.deepEqual(
+      una({ op: "createTask", title: "T", assigneeIds: [NADIE.toUpperCase()] }).op.assigneeIds,
+      []
+    );
+  });
+
   it("la checklist se corta a 15 pasos", () => {
     const { op } = una({
       op: "createTask",
@@ -1393,20 +1488,44 @@ describe("normalizeOperations · addMember / removeMember", () => {
     ]);
   });
 
-  it("SOSPECHOSO: un miembro del proyecto que ya no está en `team` (inactivo) no se puede quitar, y el motivo miente", () => {
-    // SOSPECHOSO: loadProjectSnapshot carga en `team` solo a la plantilla
-    // ACTIVA, pero `members` trae a todos los miembros del proyecto. Quien
-    // causó baja sigue siendo miembro, y sin embargo removeMember lo descarta
-    // diciendo «no es miembro del proyecto». Lo esperable: poder quitarlo (está
-    // en members) o, al menos, un motivo que no mienta. Se fija lo de hoy.
+  it("a un miembro del proyecto que ya no está en `team` (causó baja) SÍ se le puede quitar", () => {
+    // Hasta el 21/08/2026 no se podía, y el motivo era falso: loadProjectSnapshot
+    // carga en `team` solo a la plantilla ACTIVA, pero `members` trae a todos
+    // los miembros del proyecto, así que quien causaba baja seguía siendo
+    // miembro y se le descartaba diciendo «no es miembro del proyecto». Es el
+    // caso corriente —alguien se va y hay que sacarlo de los proyectos—, o sea
+    // el único que no funcionaba. Ahora manda `members`, que es la lista que
+    // responde a la pregunta.
     const snap = {
       ...SNAP,
       members: [...SNAP.members, { teamMemberId: NADIE, name: "Dani (baja)", role: "member" }],
     };
     const { op, warnings } = una({ op: "removeMember", teamMemberId: NADIE }, snap);
-    assert.equal(op, null);
-    assert.deepEqual(warnings, [
-      "Se ha descartado una operación «removeMember»: la persona indicada no es miembro del proyecto",
+    assert.deepEqual(op, {
+      op: "removeMember",
+      teamMemberId: NADIE,
+      description: "Quitar a Dani (baja) del proyecto",
+    });
+    assert.deepEqual(warnings, []);
+  });
+
+  it("addMember y removeMember aceptan el uuid en MAYÚSCULAS y guardan el id de la base", () => {
+    // Mismo fallo de caja que en normalizePlan: UUID_RE lleva /i y las
+    // búsquedas contra el equipo eran exactas (21/08/2026).
+    assert.deepEqual(una({ op: "removeMember", teamMemberId: BEA.toUpperCase() }).op, {
+      op: "removeMember",
+      teamMemberId: BEA,
+      description: "Quitar a Bea del proyecto",
+    });
+    assert.deepEqual(una({ op: "addMember", teamMemberId: CARLOS.toUpperCase() }).op, {
+      op: "addMember",
+      teamMemberId: CARLOS,
+      role: "member",
+      description: "Añadir a Carlos al proyecto como miembro",
+    });
+    // Y quien YA es miembro se sigue rechazando aunque llegue en otra caja.
+    assert.deepEqual(una({ op: "addMember", teamMemberId: ANA.toUpperCase() }).warnings, [
+      "Se ha descartado una operación «addMember»: Ana ya es miembro del proyecto",
     ]);
   });
 });
