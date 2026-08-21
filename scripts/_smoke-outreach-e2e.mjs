@@ -20,16 +20,31 @@
  *
  * Requiere el servidor de desarrollo levantado. El recorrido completo pide
  * además `OUTREACH_FAKE_AI=1`, la clave de Resend del tenant puesta a
- * `dry-run`, un lead sin analizar cuyo nombre contenga «Ledesma» y un n8n
- * falso escuchando en `SMOKE_N8N_FALSO`.
+ * `dry-run` y un lead sin analizar cuyo nombre contenga «Ledesma».
+ *
+ * El n8n falso ya NO hay que acordarse de levantarlo: esta prueba arranca
+ * `scripts/_fake-n8n.mjs` cuando llega al paso de scraping y lo mata al salir
+ * (le hereda su entorno, que es de donde saca el secreto para verificar la
+ * firma). Lo que sí tiene que traer el `npm run dev` en su propio `.env.local`,
+ * porque es el CRM quien llama al webhook:
+ *
+ *   OUTREACH_SCRAPING_WEBHOOK_URL=http://127.0.0.1:5999/webhook/scraping
+ *   OUTREACH_WEBHOOK_SECRET=<cualquier cosa, la misma que vea esta prueba>
+ *
+ * Sin ellas `buscar-nuevos` contesta 503 («no está configurado») y el paso
+ * falla diciéndolo.
  *
  * Uso: node --env-file=.env.local scripts/_smoke-outreach-e2e.mjs [slug]
  */
 
+import { spawn } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
 import { signAccessToken } from "../lib/auth/jwt.js";
 import { esSlugDemo } from "../lib/demo/isDemo.js";
 
+const AQUI = dirname(fileURLToPath(import.meta.url));
 const SLUG = process.argv[2] || "demo";
 const BASE = process.env.SMOKE_BASE_URL || "http://localhost:3000";
 const N8N_FALSO = process.env.SMOKE_N8N_FALSO || "http://127.0.0.1:5999";
@@ -39,6 +54,7 @@ const ok = (m) => process.stdout.write(`  ✓ ${m}\n`);
 const mal = (m) => { fallos++; process.stderr.write(`  ✗ ${m}\n`); };
 const paso = (m) => process.stdout.write(`\n▶ ${m}\n`);
 const esperar = (c, m, detalle = "") => (c ? ok(m) : mal(`${m}${detalle ? ` — ${detalle}` : ""}`));
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // `buscar-nuevos` no devuelve un `duplicates`: parte «ya lo teníamos» en tres
 // según lo que se hizo con la fila vieja (`lib/outreach/persistLeads.js`), y
@@ -46,6 +62,54 @@ const esperar = (c, m, detalle = "") => (c ? ok(m) : mal(`${m}${detalle ? ` — 
 const yaLoTeniamos = (d) => (d?.refreshed ?? 0) + (d?.keptAnalyzed ?? 0) + (d?.keptClient ?? 0);
 
 let cabeceras = {};
+
+// ── El n8n falso, arrancado y parado por la propia prueba ───────────────────
+// Antes había que levantarlo a mano y, como no existía en el repo, la rama de
+// scraping no la podía pasar nadie. Ahora es `scripts/_fake-n8n.mjs` y lo
+// levanta esto: hereda el entorno (de ahí saca `OUTREACH_WEBHOOK_SECRET`, sin
+// el cual se niega a arrancar) y muere con la prueba.
+
+async function n8nResponde() {
+  try {
+    return (await fetch(`${N8N_FALSO}/last`)).ok;
+  } catch {
+    return false; // el puerto está libre
+  }
+}
+
+function matar(hijo) {
+  try {
+    hijo.kill();
+  } catch { /* ya estaba muerto */ }
+}
+
+/** Devuelve `{ listo, motivo, parar }`. Si ya había uno escuchando, lo reutiliza y NO lo mata. */
+async function arrancarN8nFalso() {
+  if (await n8nResponde()) return { listo: true, motivo: "ya estaba levantado", parar: async () => {} };
+
+  const hijo = spawn(process.execPath, [join(AQUI, "_fake-n8n.mjs")], { stdio: ["ignore", "pipe", "pipe"] });
+  let salida = "";
+  let muerto = false;
+  hijo.stdout.on("data", (d) => (salida += d));
+  hijo.stderr.on("data", (d) => (salida += d));
+  hijo.on("exit", () => (muerto = true));
+
+  const parar = async () => {
+    matar(hijo);
+    await dormir(200);
+  };
+
+  const limite = Date.now() + 10_000;
+  while (Date.now() < limite) {
+    // Si se ha muerto (falta el secreto, puerto ocupado…) lo dice él mismo por
+    // stderr: se devuelve tal cual en vez de un «no contesta» que no explica nada.
+    if (muerto) return { listo: false, motivo: salida.trim() || `salió con código ${hijo.exitCode}`, parar: async () => {} };
+    if (await n8nResponde()) return { listo: true, motivo: "", parar };
+    await dormir(200);
+  }
+  await parar();
+  return { listo: false, motivo: `no llegó a escuchar en 10 s. ${salida.trim()}`.trim(), parar: async () => {} };
+}
 
 async function pedir(ruta, opts = {}) {
   const r = await fetch(BASE + ruta, { ...opts, headers: { ...cabeceras, ...(opts.headers || {}) } });
@@ -154,37 +218,51 @@ async function elFlujoCompleto() {
   });
   esperar(sinQuery.status === 422, "sin sector ni ubicación → 422", String(sinQuery.status));
 
-  const cuerpo = JSON.stringify({ sector: "Ópticas", location: "Salamanca", sources: ["paginas_amarillas"] });
-  const scr = await pedir("/api/outreach/leads/buscar-nuevos", { method: "POST", body: cuerpo });
-  esperar(scr.status === 200, "buscar nuevos → 200", JSON.stringify(scr.body));
-  const d = scr.body?.data;
-  esperar(d?.inserted === 1, "inserta la empresa nueva", `inserted=${d?.inserted}`);
-  esperar(yaLoTeniamos(d) === 1, "detecta el duplicado que ya teníamos", JSON.stringify(d));
-  esperar(d?.ignored === 1, "descarta la empresa sin nombre", `ignored=${d?.ignored}`);
-
-  const otraVez = await pedir("/api/outreach/leads/buscar-nuevos", { method: "POST", body: cuerpo });
-  const d2 = otraVez.body?.data;
-  esperar(
-    d2?.inserted === 0 && yaLoTeniamos(d2) === 2,
-    "re-scrapear no duplica nada",
-    JSON.stringify(d2)
-  );
-
-  let recibido = null;
-  try {
-    recibido = await (await fetch(`${N8N_FALSO}/last`)).json();
-  } catch {
-    mal(`no contesta el n8n falso en ${N8N_FALSO}: sin él no se puede comprobar la firma`);
+  const n8n = await arrancarN8nFalso();
+  if (!n8n.listo) {
+    mal(`no hay n8n falso en ${N8N_FALSO}, así que la firma no la comprueba nadie: ${n8n.motivo}`);
+    return;
   }
-  if (recibido) {
-    esperar(recibido.hadSignature === true, "n8n recibió la firma HMAC");
-    esperar(recibido.signatureOk === true, "la firma HMAC es correcta");
+  if (n8n.motivo) ok(`n8n falso: ${n8n.motivo}`);
+
+  try {
+    const cuerpo = JSON.stringify({ sector: "Ópticas", location: "Salamanca", sources: ["paginas_amarillas"] });
+    const scr = await pedir("/api/outreach/leads/buscar-nuevos", { method: "POST", body: cuerpo });
+    esperar(scr.status === 200, "buscar nuevos → 200", JSON.stringify(scr.body));
+    const d = scr.body?.data;
+    esperar(d?.inserted === 1, "inserta la empresa nueva", `inserted=${d?.inserted}`);
+    esperar(yaLoTeniamos(d) === 1, "detecta el duplicado que ya teníamos", JSON.stringify(d));
+    esperar(d?.ignored === 1, "descarta la empresa sin nombre", `ignored=${d?.ignored}`);
+
+    const otraVez = await pedir("/api/outreach/leads/buscar-nuevos", { method: "POST", body: cuerpo });
+    const d2 = otraVez.body?.data;
     esperar(
-      recibido.payload?.sector === "Ópticas" &&
-        recibido.payload?.location === "Salamanca" &&
-        recibido.payload?.sources?.[0] === "paginas_amarillas",
-      "n8n recibió sector, ubicación y fuentes"
+      d2?.inserted === 0 && yaLoTeniamos(d2) === 2,
+      "re-scrapear no duplica nada",
+      JSON.stringify(d2)
     );
+
+    // El falso ya rechaza (401) lo que llega sin firma o con una que no cuadra,
+    // así que un 200 arriba ya dice que la firma iba bien; esto lo deja escrito.
+    let recibido = null;
+    try {
+      recibido = await (await fetch(`${N8N_FALSO}/last`)).json();
+    } catch {
+      mal(`el n8n falso ha dejado de contestar en ${N8N_FALSO}`);
+    }
+    if (recibido) {
+      esperar(recibido.recibido === true, "n8n recibió la llamada del CRM");
+      esperar(recibido.hadSignature === true, "n8n recibió la firma HMAC");
+      esperar(recibido.signatureOk === true, "la firma HMAC es correcta");
+      esperar(
+        recibido.payload?.sector === "Ópticas" &&
+          recibido.payload?.location === "Salamanca" &&
+          recibido.payload?.sources?.[0] === "paginas_amarillas",
+        "n8n recibió sector, ubicación y fuentes"
+      );
+    }
+  } finally {
+    await n8n.parar();
   }
 
   const insertada = (await pedir("/api/outreach/leads?q=Mirador")).body?.data?.items?.[0];

@@ -6,10 +6,20 @@
  * (título y filas) y que la consola del navegador no ha escupido ni un error.
  * Una pantalla puede responder 200 y estar en blanco.
  *
- * `puppeteer` NO es dependencia del repo (nadie quiere un Chromium de 300 MB en
- * el `npm ci` del despliegue): si no está instalado, la prueba comprueba lo que
- * puede sin navegador —que la sesión vale y que hay una empresa que abrir— y lo
- * dice en voz alta en vez de fingir que ha mirado las pantallas.
+ * ── `puppeteer` NO ENTRA EN EL REPO (Jorge, 20/08/2026) ─────────────────────
+ * Decisión tomada, no olvido: son ~300 MB de Chromium en el `npm ci` de cada
+ * despliegue largo, y lo que esto comprueba —que tres pantallas se pintan sin
+ * errores de consola— no lo justifica. Consecuencias, para que nadie las
+ * redescubra:
+ *
+ *   · Esto es HERRAMIENTA DE MANO, no prueba del runner. Por eso se llama
+ *     `_outreach-ui-check` y no `_smoke-*`: con ese prefijo entraría en
+ *     `npm run test:todo` y, sin puppeteer instalado, saldría VERDE sin haber
+ *     mirado ni una pantalla. Ya pasó el 20/08/2026 y se deshizo el mismo día.
+ *   · Sin puppeteer instalado comprueba lo que puede sin navegador —que la
+ *     sesión vale y que hay una empresa que abrir— y lo dice en voz alta.
+ *   · El día que alguien quiera verlas de verdad, se instala SUELTO y sin
+ *     tocar `package.json`:  npm i puppeteer --no-save
  *
  * Requiere el servidor de desarrollo levantado. Va contra `demo` salvo que se
  * le pase otro slug: es el tenant que tiene empresas sembradas, y sin una
@@ -66,7 +76,10 @@ async function main() {
   } catch {
     process.stdout.write(
       "\n  · puppeteer no está instalado: no se miran las pantallas.\n" +
-        "    Para verlas: npm i -D puppeteer && node --env-file=.env.local scripts/_outreach-ui-check.mjs\n\n"
+        "    Decidido el 20/08/2026 que NO entra en package.json (~300 MB de Chromium\n" +
+        "    en cada despliegue). Para verlas hoy, instalándolo suelto:\n" +
+        "      npm i puppeteer --no-save\n" +
+        "      node --env-file=.env.local scripts/_outreach-ui-check.mjs\n\n"
     );
     process.exit(fallos ? 1 : 0);
   }
