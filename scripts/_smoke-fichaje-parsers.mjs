@@ -538,20 +538,35 @@ describe("parse (Aumenta): bloques por persona y anotaciones en la columna de no
     assert.deepEqual(r.nombres, ["ÁLVARO", "ARACELI", "BEA"]);
     assert.equal(r.filas.length, 20);
   });
-  it("una anotación en una semana que se sale del mes lleva una fecha que no existe", async () => {
-    // SOSPECHOSO: la fecha de la anotación se calcula con rango.desde + índice
-    // del día SIN comprobar que quepa en el mes (la jornada de esa misma fila
-    // sí se comprueba y se salta con aviso). En «30-31» de marzo, una anotación
-    // en J sale como «2026-03-33». Hoy va al preview y al resumen del lote, no
-    // a una columna DATE, así que no revienta: solo enseña un día imposible.
+  it("una anotación en una semana que se sale del mes NO se guarda con una fecha que no existe: se descarta, y la fila ya avisa de que se salta", async () => {
+    // Nació de que la fecha de la anotación se calculaba con rango.desde +
+    // índice del día SIN comprobar que cupiera en el mes, mientras la jornada
+    // de esa MISMA fila sí lo comprobaba y se saltaba con aviso: en «30-31» de
+    // marzo la anotación en J salía como «2026-03-33». No se quedaba en
+    // pantalla —el resumen del lote se persiste (`importar.js`)—, así que el
+    // día imposible acababa escrito en el registro del import.
     const filas = [
       ...bloque("ARACELI", SEMANA_ENTERA.slice(0, 2)),
       filaAumenta({ nombre: "MÉDICO", dia: "J" }),
     ];
     const r = await parseAumenta(libro(semana("30-31", filas)), { periodo: MARZO });
+    assert.deepEqual(r.anotaciones, []);
+    // No se pierde en silencio: la misma fila sale con su «Fila saltada».
+    assert.equal(r.avisos.length, 1);
+    assert.match(r.avisos[0].texto, /el J de la hoja «30-31» caería en el día 33/);
+    assert.match(r.avisos[0].texto, /Fila saltada/);
+  });
+  it("la anotación de un día que SÍ cabe en el mes se sigue guardando con su fecha", async () => {
+    // El reverso del `it` anterior: lo que se descarta es el día imposible, no
+    // las anotaciones de las hojas que se salen del mes.
+    const filas = [
+      ...bloque("ARACELI", SEMANA_ENTERA.slice(0, 2)),
+      filaAumenta({ nombre: "MÉDICO", dia: "M" }),
+    ];
+    const r = await parseAumenta(libro(semana("30-31", filas)), { periodo: MARZO });
     assert.deepEqual(
       r.anotaciones.map((a) => [a.texto, a.fecha]),
-      [["MÉDICO", "2026-03-33"]]
+      [["MÉDICO", "2026-03-31"]]
     );
   });
 });
@@ -629,6 +644,11 @@ describe("parse (Aumenta): de dónde salen los minutos de cada jornada", () => {
     );
   });
   it("un total del Excel de cero o negativo (la fórmula restando contra una salida vacía) no cuenta: sin horas, la fila se descarta en silencio", async () => {
+    // Es el límite del `it` de abajo («un total que no se entiende … SALE»): lo
+    // que hay en estas celdas lo escribió la FÓRMULA del Excel, no una persona,
+    // y un cero o una fecha anterior a la época son su forma de decir «este día
+    // está en blanco». Sacarlos al preview llenaría de rojo un fichero
+    // correcto. Solo el TEXTO que no se entiende bloquea la fila.
     const filas = [
       filaAumenta({ nombre: "ARACELI", dia: "L", horasFich: 0 }),
       filaAumenta({ dia: "M", horasFich: new Date(Date.UTC(1899, 11, 29, 8, 4)) }),
@@ -639,23 +659,76 @@ describe("parse (Aumenta): de dónde salen los minutos de cada jornada", () => {
     assert.deepEqual(r.nombres, ["ARACELI"]);
     assert.deepEqual(r.avisos, [NI_UNA_JORNADA]);
   });
-  it("un total que no se entiende («abc», «8 horas») sin horas se descarta en silencio, igual que un día no trabajado", async () => {
-    // SOSPECHOSO: la cabecera promete «lo que no ha entendido, y por qué», y
-    // `parseDuracion` devuelve el motivo («no parece una duración»), pero la
-    // fila se trata como vacía ANTES de mirar si había algo que no se entendió:
-    // el error «no se ha podido leer ninguna hora» que escribe el lector no
-    // puede salir nunca (sin entrada ni salida ni total la fila ya se ha
-    // descartado). Un «8 horas» tecleado en la columna de total desaparece sin
-    // que el preview diga nada.
+  it("un total que no se entiende («abc», «8 horas») sin horas NO se descarta: la fila SALE con el error, y dice qué celda no se entendió", async () => {
+    // Nació de que la fila se trataba como vacía ANTES de mirar si había algo
+    // que no se entendió, así que el error «no se ha podido leer ninguna hora»
+    // que el lector escribe no podía salir nunca. Quien teclea «8 horas» en la
+    // casilla del total es la persona del centro rellenando su Excel, y lo que
+    // desaparecía sin un solo aviso era una jornada del control horario: lo que
+    // se paga y lo que se enseña en una inspección.
     const filas = [
       filaAumenta({ nombre: "ARACELI", dia: "L", horasFich: "abc" }),
       filaAumenta({ dia: "M", horasFich: "8 horas" }),
       filaAumenta({ dia: "X", horasFich: "8:00" }),
     ];
     const r = await parseAumenta(libro(semana("02-6", filas)), { periodo: MARZO });
-    assert.deepEqual(resumen(r.filas), [["ARACELI", "2026-03-04", "X", 480]]);
+    assert.deepEqual(resumen(r.filas), [
+      ["ARACELI", "2026-03-02", "L", null],
+      ["ARACELI", "2026-03-03", "M", null],
+      ["ARACELI", "2026-03-04", "X", 480],
+    ]);
+    assert.deepEqual(
+      r.filas.map((f) => f.errores),
+      [
+        ["no se ha podido leer ninguna hora (el total de horas dice «abc»)"],
+        ["no se ha podido leer ninguna hora (el total de horas dice «8 horas»)"],
+        [],
+      ]
+    );
+    // Es un error DE LA FILA, que la bloquea en el preview, no un aviso suelto.
     assert.deepEqual(r.avisos, []);
-    assert.ok(r.filas.every((f) => !f.errores.includes("no se ha podido leer ninguna hora")));
+  });
+  it("lo mismo en las columnas de entrada y salida: un texto que no se entiende no hace desaparecer el día", async () => {
+    // La misma causa, en las otras dos celdas de las que salen los minutos.
+    const filas = [
+      filaAumenta({ nombre: "ARACELI", dia: "L", entrada: "de 9 a 2", salida: "por la tarde" }),
+    ];
+    const r = await parseAumenta(libro(semana("02-6", filas)), { periodo: MARZO });
+    assert.deepEqual(
+      r.filas.map((f) => [f.entrada, f.salida, f.minutos, f.errores]),
+      [
+        [
+          null,
+          null,
+          null,
+          [
+            "no se ha podido leer ninguna hora (la entrada dice «de 9 a 2», la salida dice «por la tarde»)",
+          ],
+        ],
+      ]
+    );
+  });
+  it("el texto que no se entiende se RECORTA en el error: una celda enorme no convierte el preview en varios megas", async () => {
+    // El error de la fila viaja al preview dentro del `motivo` de la fila
+    // bloqueada (`lib/fichaje/importar.js`), y de ahí al JSON de la respuesta.
+    // Una celda de Excel admite 32.767 caracteres y el preview manda hasta 200
+    // filas bloqueadas con tres celdas cada una: sin recortar, un texto pegado
+    // por error en la columna del total pesaba medio mega en quince filas
+    // (medido el 21/08/2026). `parseHoraDelDia` ya recorta su propio motivo.
+    const enorme = "texto pegado sin querer ".repeat(200);
+    const filas = [filaAumenta({ nombre: "ARACELI", dia: "L", horasFich: enorme })];
+    const r = await parseAumenta(libro(semana("02-6", filas)), { periodo: MARZO });
+    assert.deepEqual(r.filas[0].errores, [
+      "no se ha podido leer ninguna hora (el total de horas dice «texto pegado sin querer texto pegado sin…»)",
+    ]);
+    // Y lo corto se sigue enseñando entero, sin puntos suspensivos.
+    const corto = await parseAumenta(
+      libro(semana("02-6", [filaAumenta({ nombre: "ARACELI", dia: "L", horasFich: "8 horas" })])),
+      { periodo: MARZO }
+    );
+    assert.deepEqual(corto.filas[0].errores, [
+      "no se ha podido leer ninguna hora (el total de horas dice «8 horas»)",
+    ]);
   });
   it("una fila sin entrada, sin salida y sin total es un día no trabajado: se descarta sin aviso", async () => {
     const filas = [
@@ -798,11 +871,13 @@ describe("parse (Aumenta): de dónde salen los minutos de cada jornada", () => {
       ]
     );
   });
-  it("un horario previsto con la salida antes que la entrada suma 24 h sin avisar", async () => {
-    // SOSPECHOSO: una errata en las columnas de horario (09:00 → 08:00) da 1380
-    // minutos previstos y nada lo marca: las «extras» del mes se calcularían
-    // contra 23 h previstas ese día. En las horas REALES el mismo caso sí se
-    // señala con cruzaMedianoche.
+  it("un horario previsto con la salida antes que la entrada suma 24 h, pero AVISA, igual que en las horas reales", async () => {
+    // Nació de que `minutosPrevistos` tiraba el `cruzaMedianoche` que devuelve
+    // `minutosEntre`, mientras las horas REALES sí lo convertían en aviso. La
+    // errata es la misma —dos celdas cambiadas en el Excel del reloj— y lo que
+    // sale mal son las horas extra del mes, que se restan contra los previstos
+    // (`lib/fichaje/totales.js`) y se guardan en la fila (`minutosPrevistos`).
+    // Un horario de noche es legítimo, así que la fila entra: avisada, no rota.
     const filas = [
       filaAumenta({
         nombre: "ARACELI",
@@ -816,6 +891,47 @@ describe("parse (Aumenta): de dónde salen los minutos de cada jornada", () => {
     const r = await parseAumenta(libro(semana("02-6", filas)), { periodo: MARZO });
     assert.equal(r.filas[0].minutosPrevistos, 1380);
     assert.deepEqual(r.filas[0].errores, []);
+    assert.equal(r.avisos.length, 1);
+    assert.equal(r.avisos[0].nivel, "aviso");
+    assert.match(r.avisos[0].texto, /^ARACELI: el L de la hoja «02-6» \(fila 2\)/);
+    assert.match(
+      r.avisos[0].texto,
+      /la salida prevista \(08:00\) anterior a la entrada prevista \(09:00\)/
+    );
+    assert.match(r.avisos[0].texto, /un horario de 23h cruzando la medianoche/);
+  });
+  it("un horario previsto normal no avisa de nada, y un horario de noche de verdad («22:00 → 06:00») avisa una sola vez", async () => {
+    // El reverso: el aviso es del cruce, no de tener horario. Y la fila con
+    // horario Y horas reales cruzando la medianoche saca sus DOS avisos, uno
+    // por cada par de celdas, porque son dos erratas distintas de arreglar.
+    const filas = [
+      filaAumenta({
+        nombre: "ARACELI",
+        dia: "L",
+        entradaPrev: "08:30",
+        salidaPrev: "17:00",
+        entrada: "08:30",
+        salida: "17:00",
+      }),
+      filaAumenta({
+        dia: "M",
+        entradaPrev: "22:00",
+        salidaPrev: "06:00",
+        entrada: "22:00",
+        salida: "06:00",
+      }),
+    ];
+    const r = await parseAumenta(libro(semana("02-6", filas)), { periodo: MARZO });
+    assert.deepEqual(
+      r.filas.map((f) => [f.minutos, f.minutosPrevistos]),
+      [
+        [510, 510],
+        [480, 480],
+      ]
+    );
+    assert.equal(r.avisos.length, 2);
+    assert.match(r.avisos[0].texto, /el M .* tiene la salida \(06:00\) anterior a la entrada/);
+    assert.match(r.avisos[1].texto, /el M .* la salida prevista \(06:00\) anterior/);
   });
   it("la misma hora como Date de ExcelJS, fracción de día, texto o fórmula da los mismos minutos y el mismo «HH:MM»", async () => {
     const filas = [
@@ -1070,20 +1186,41 @@ describe("parse (genérico): una fila, un tramo", () => {
     );
     assert.deepEqual(r.avisos, []);
   });
-  it("una fila sin persona cuya fecha son solo espacios NO se salta: sale como fila con errores", async () => {
-    // SOSPECHOSO: la fila vacía se detecta con `fechaBruta === ""` sin recortar,
-    // así que un espacio olvidado en la celda de Fecha de una fila en blanco la
-    // convierte en una fila de error en el preview («falta la persona», «falta
-    // la fecha», «no hay horas…») y cuenta en rowsError. La persona sí se
-    // recorta antes de mirarla; la fecha no.
-    const wb = plantilla([[null, "   "]]);
-    const r = await parseGenerico(wb, { periodo: MARZO });
-    assert.equal(r.filas.length, 1);
-    assert.deepEqual(r.filas[0].errores, [
-      "falta la persona",
-      "falta la fecha",
-      "no hay horas ni total del que sacar la jornada",
+  it("una fila sin persona cuya fecha son solo espacios SÍ se salta: es una fila en blanco, no tres errores", async () => {
+    // Nació de que la fila vacía se detectaba con `fechaBruta === ""` sin
+    // recortar, mientras la persona sí se recortaba antes de mirarla. Un Excel
+    // con espacios sueltos en las filas del final es lo normal, y lo que veía
+    // quien importa era un preview con errores inventados («falta la persona»,
+    // «falta la fecha», «no hay horas…») que además contaban en `rowsError`:
+    // justo lo que hace desconfiar del lote entero.
+    const wb = plantilla([
+      ["Ana", "2026-03-02", "08:00", "16:00"],
+      [null, "   "],
+      [null, "\t "],
+      ["Ana", "2026-03-03", "08:00", "16:00"],
     ]);
+    const r = await parseGenerico(wb, { periodo: MARZO });
+    assert.deepEqual(
+      r.filas.map((f) => f.fila),
+      [2, 5]
+    );
+    assert.deepEqual(r.avisos, []);
+  });
+  it("pero los espacios solo tapan la fila si TAMPOCO hay persona: con una de las dos, la fila sale con su error", async () => {
+    // El límite: recortar es para reconocer la fila en blanco, no para perdonar
+    // una fecha que falta en una fila que sí lleva a alguien.
+    const wb = plantilla([
+      [null, "2026-03-02", "08:00", "16:00"],
+      ["Ana", "   ", "08:00", "16:00"],
+    ]);
+    const r = await parseGenerico(wb, { periodo: MARZO });
+    assert.deepEqual(
+      r.filas.map((f) => [f.fila, f.nombreExcel, f.fecha, f.errores]),
+      [
+        [2, "", "2026-03-02", ["falta la persona"]],
+        [3, "Ana", null, ["falta la fecha"]],
+      ]
+    );
   });
   it("con entrada y salida los minutos salen de las horas (y la columna Horas se ignora); sin ellas, de Horas: «7:30», «7,5», «7.5» y 8 son lo que dicen", async () => {
     const wb = plantilla([
