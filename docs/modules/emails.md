@@ -16,7 +16,7 @@
 | **Interruptores y parámetros** | ninguno que lea el código en `featureFlags`/`logicOverrides`. Por cliente, en `tenant.settings.integrations`: `resendApiKey` (cifrada en reposo), `resendFromEmail`, `resendReplyTo`. Entorno: `RESEND_API_KEY` y `RESEND_FROM_EMAIL` (el respaldo GLOBAL de `sendEmail`; en producción la clave va vacía a propósito, así que sin clave del cliente el envío es dry-run), `OUTREACH_FROM_EMAIL`, `OUTREACH_REPLY_TO`, `RESEND_INBOUND_DOMAIN`, `RESEND_WEBHOOK_SECRET`, `APP_PUBLIC_URL` (los enlaces del recordatorio, en `scripts/enviar-recordatorios.js`) |
 | **Pantallas propias** | ninguna |
 | **Scripts** | Diagnóstico (solo lectura): `check-resend-tenant.mjs <slug>` (la clave del CLIENTE: dominios y estado, sin imprimirla), `check-resend.mjs` (la del entorno), `comprobar-citas.js` (dice si a un cliente le falta clave o remitente) · `_hechos/encrypt-tenant-secrets.js` (cifra en reposo las claves ya guardadas, `resendApiKey` incluida) · Cron: `enviar-recordatorios.js` (`scripts/deploy/crm-recordatorios.timer`, cada hora) |
-| **Pruebas** | En `npm test`: `_smoke-checkpoint2-emails.mjs` (las tres plantillas de citas en dry-run, sin base). Con base de datos: `_smoke-checkpoint2-e2e.mjs`; con base y `npm run dev` (`npm run test:todo`): `_smoke-correo-entrante.mjs` (el webhook entrante, con cuerpos firmados como los firma Resend), `_smoke-enlace-videollamada.mjs` (que «Guardar y enviar» no mienta), `_smoke-avisos-cliente.mjs` (el aviso se guarda aunque el correo no salga, y registra qué pasó con él) |
+| **Pruebas** | En `npm test`: `scripts/_smoke-plantillas-resto-layout.mjs` (`node:test`, 21/08/2026, ligera; 111 comprobaciones) sobre `lib/email/templates/layout.js` —que lo usan TODAS— y las **seis plantillas que no son de citas** (`billing/invoiceSent`, `buzon/avisoNuevo`, `configuracion/cambioAplicado`, `nutricion/menuEmail`, `soporte/ticketClient`, `soporte/ticketTeam`). Fija lo que DEVUELVEN: que un tenant sin `settings.brand` (los recién dados de alta) recibe el correo entero con la paleta Salamandra y no un `style="background:undefined"`, que `safeColor` no deja que un «color» guardado a mano se salga del `style="…"` y se convierta en HTML (dos inyecciones reales), que el `html` y el `text` dicen lo mismo, que cada condicional («si no hay vencimiento», «si no hay credenciales», «si no hay respuesta»…) se apaga en las DOS versiones, y que un nombre con `<` sale escapado. Seis rarezas cosméticas quedan fijadas tal cual con `it` marcados `// SOSPECHOSO`. · Las **diez plantillas de `templates/citas/`** las cubren `scripts/_smoke-plantillas-citas-reserva.mjs` (los cinco del ciclo de una cita: reserva recibida, confirmada, rechazada, cancelada y cambiada de fecha) y `scripts/_smoke-plantillas-citas-resto.mjs` (`bookingMeetLink`, `bookingReminder`, `pedirTarjeta`, `avisoCliente`, `solicitudAceptada`); las dos son de `node:test`, ligeras y del 21/08/2026, y **se documentan en `citas.md`**. Con esas tres, las **16 plantillas** del repo y el layout quedan cubiertas. · `_smoke-checkpoint2-emails.mjs` (las tres plantillas de citas en dry-run, sin base). Con base de datos: `_smoke-checkpoint2-e2e.mjs`; con base y `npm run dev` (`npm run test:todo`): `_smoke-correo-entrante.mjs` (el webhook entrante, con cuerpos firmados como los firma Resend), `_smoke-enlace-videollamada.mjs` (que «Guardar y enviar» no mienta), `_smoke-avisos-cliente.mjs` (el aviso se guarda aunque el correo no salga, y registra qué pasó con él) |
 | **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (el guard de la demo en lo que envía correo: la demo es pública y salía por nuestro dominio) |
 | **En este doc** | Resumen · Configuración · Templates disponibles · Layout compartido · Añadir un template nuevo · Errores y reintentos |
 
@@ -182,6 +182,16 @@ Los tres primeros son los de la Fase 1; el resto llegó entre el 27/07 y el
 `bookingRescheduled`, `bookingMeetLink`, `bookingReminder` y `avisoCliente`.
 **No lo miran**: `bookingRejected`, `bookingCancelled`, `pedirTarjeta`,
 `solicitudAceptada` y el `bookingReceived` que sale del webhook de Stripe.
+
+⚠️ **El repaso de escapado del 10/08/2026 se cerró del todo el 21/08/2026.**
+Aquel día se escaparon los datos que teclea una persona (motivo de cancelación,
+enlace de videollamada, dirección) porque salen disparados al correo del
+paciente desde el dominio verificado del centro. Quedó uno fuera: `pedirTarjeta.js`
+metía el enlace de pago **crudo dentro del `href`** del botón, y era el único
+`href="${…}"` sin escapar de todo `lib/email`. Ahí una comilla no rompe el
+marcado, lo **amplía** (`" onmouseover="…`). Ya va escapado, y lo vigila
+`_smoke-plantillas-citas-resto.mjs`. La versión de **texto plano** sigue sin
+escapar a propósito: ahí no hay marcado que romper y escapar la haría ilegible.
 
 ### Otros módulos
 

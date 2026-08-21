@@ -16,7 +16,7 @@
 | **Interruptores y parámetros** | `featureFlags.autoAsignarEnAlta` — lo lee `lib/clients/moduleAssignments.js` (`AUTO_ASSIGN_FLAG`) y lo respeta `backfill-nutricion-assignments.js`; en producción solo `nutri_laura` lo tiene a `true` (Aumenta no lo tiene puesto = apagado) · `featureFlags.externalSearchEnabled` está puesto en `nutri_laura` pero **ningún código lo lee**: solo lo escribe `scripts/_hechos/add-nutricion-module-nutri-laura.js` (histórico, OpenFoodFacts retirado) · `logicOverrides`: ninguno |
 | **Pantallas propias** | ninguna. Las cuatro páginas de `/nutricion/*` llevan un mapa `UI_OVERRIDES` con `nutri_laura`, pero apunta al MÓDULO BASE (`modules/nutricion/…`), el mismo componente que el valor por defecto: **mapa vacío de facto**, y por eso ni `sincronizar-ui-override.mjs` ni `/admin/modulos` lo cuentan. Lo de Laura en `modules/overrides/nutri-laura/` es su ficha (`ClientDetailModule.jsx`, que importa `ClientPlansPanel` del base) y su embudo de leads, no nutrición |
 | **Scripts** | activar: `node scripts/enable-module.js <slug> nutricion` (fila en `tenant_modules` + las 8 migraciones que declara `scripts/_module-migrations.js` + siembra) · migraciones vivas, en ese orden: `migrate-nutricion-base.js` (las cinco tablas cimiento), `migrate-nutricion-recipes.js`, `migrate-nutricion-week-recipe-media.js`, `migrate-nutricion-day-comments.js`, `migrate-nutricion-show-macros.js`, `migrate-recetas-clasificacion.js`, `migrate-plan-team.js`, `migrate-nutricion-congelar-receta.js`; aparte `install-unaccent-extension.js` (extensión de BD, una vez por base) · seed: `seed-foods-base-catalog.js` (497 alimentos de `scripts/data/foods-base-catalog.mjs`, idempotente por slug) · datos y one-off, a mano: `migrate-auto-asignar-nutricion.js` (MASTER: enciende el flag a nutri_laura), `backfill-nutricion-assignments.js` (marca fichas previas; exige el flag), `_hechos/import-harbiz-recetas.js` (las 1.083 recetas de Laura, `--confirm`), `_hechos/cleanup-branded-foods.js` (archiva las marcas de OFF) · históricos que no se ejecutan: `_hechos/add-nutricion-module-nutri-laura.js`, `_hechos/add-nutricion-c2-plans-nutri-laura.js` |
-| **Pruebas** | `scripts/_smoke-nutri-laura-recetario-{c1,c2,c3,c4,e2e}.mjs` (renombradas el 19/08/2026: antes sin el `_` y el runner no las veía) — piden base de datos y `npm run dev`; `scripts/pruebas.mjs` las clasifica «servidor y base de datos», así que entran en **`npm run test:todo`** y NO en `npm test` (c3 con `--only-unit` prueba `macros.js` sin servidor, a mano) · `_smoke-piezas-ficha.mjs` (`@prueba ligera`, en `npm test`) fija qué paneles ve la consulta de nutrición en la ficha · `_smoke-nutricion-macros.mjs` (`node:test`, 19/08/2026, en `npm test`): lo que devuelve `lib/nutricion/macros.js` en los seis niveles (alimento por 100 g y por medida casera, receta, escalado por raciones, opción, comida = SOLO la opción por defecto, plan) y, desde el 20/08/2026, que los SEIS redondean a dos decimales (los tres ingredientes de 0,333 g que suman 0,99, el ×10 raciones que da 9,9, y que ningún nivel devuelve un tercer decimal) |
+| **Pruebas** | `scripts/_smoke-nutri-laura-recetario-{c1,c2,c3,c4,e2e}.mjs` (renombradas el 19/08/2026: antes sin el `_` y el runner no las veía) — piden base de datos y `npm run dev`; `scripts/pruebas.mjs` las clasifica «servidor y base de datos», así que entran en **`npm run test:todo`** y NO en `npm test` (c3 con `--only-unit` prueba `macros.js` sin servidor, a mano) · `_smoke-piezas-ficha.mjs` (`@prueba ligera`, en `npm test`) fija qué paneles ve la consulta de nutrición en la ficha · `_smoke-nutricion-macros.mjs` (`node:test`, 19/08/2026, en `npm test`): lo que devuelve `lib/nutricion/macros.js` en los seis niveles (alimento por 100 g y por medida casera, receta, escalado por raciones, opción, comida = SOLO la opción por defecto, plan) y, desde el 20/08/2026, que los SEIS redondean a dos decimales (los tres ingredientes de 0,333 g que suman 0,99, el ×10 raciones que da 9,9, y que ningún nivel devuelve un tercer decimal) · `scripts/_smoke-pdf-menu.mjs` (`node:test`, 21/08/2026, ligera, en `npm test`; 41 casos): el PDF de la pauta semanal (`lib/nutricion/menuPdf.js`) generado de verdad y abierto por dentro con un lector de PDF mínimo hecho con `node:zlib` —descomprime los flujos, ordena las páginas por `/Kids` y saca su `/MediaBox`, de donde sale «apaisada»—: la estructura de tres partes (portada-calendario apaisada + días en vertical + recetario), que las cifras de macros impresas son las que se le pasaron, el recetario sin repetir, `menuPdfFilename`, y los bordes (cantidades raras, textos que no caben en una hoja, foto ausente, caracteres que la tipografía no tiene). Nació del fallo del 21/08/2026: `switchToPortrait` MUTABA la constante `LANDSCAPE` del módulo, así que la portada-calendario solo salía apaisada en el PRIMER PDF de cada proceso —en un servidor que vive semanas, todos menos el primero salían mal—; lo vigila «la portada apaisada sigue apaisada en el segundo PDF del proceso», que genera DOS y mira los dos. Cinco costuras quedan fijadas con un `it` marcado `// SOSPECHOSO` (ver abajo) · El correo de la pauta en PDF (`menuEmail`) se prueba en `scripts/_smoke-plantillas-resto-layout.mjs` |
 | **Decisiones** | `../decisions/2026-07-nutricion-refactor-sprint-8.md`, `../decisions/2026-07-nutricion-8.2-runbook.md`, `../decisions/2026-07-nutricion-8.3-menu-pdf-email.md` (las del sprint) · `../decisions/2026-07-23-conexion-cliente-equipo.md` (`plans.team_member_id`) · `../decisions/2026-07-28-repaso-de-seguridad.md` (la edición granular del menú no se audita) · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` (`enable-module.js` siembra las nueve tablas y los 497 alimentos) · `../decisions/2026-08-01-alta-de-clientes-por-perfil.md` (perfil `salud`) · `../decisions/2026-08-04-clientes-se-llama-pacientes-en-nutricion.md` (Recetario / Pautas) · `../decisions/2026-08-12-migraciones-sin-filtrar-por-status.md` (seed y backfill sí miran `status`) |
 | **En este doc** | «2. Activación del módulo» · «3. Arquitectura BD» · «4. Rutas frontend» · «5. Endpoints REST» · «6. Helper de macros» (el redondeo a dos decimales de todos los niveles) · «7. Decisiones arquitectónicas cerradas» (Congelado y propagación) · «8. Tests / Smokes» · «9. Migrations» · «PDF del menú — rediseño del 2026-07-22 (segunda pasada)» |
 
@@ -679,6 +679,11 @@ Cinco scripts ejecutables en `scripts/`. Todos usan el mismo patrón de
 auth: `SMOKE_PASSWORD` opcional para login HTTP completo, fallback a
 firma JWT directa con `JWT_SECRET`.
 
+Aparte, **dos pruebas ligeras** que sí entran en `npm test` y no necesitan nada
+encendido: `_smoke-nutricion-macros.mjs` (`lib/nutricion/macros.js`) y
+`_smoke-pdf-menu.mjs` (el PDF de la pauta, 21/08/2026). Ver la fila **Pruebas**
+del Mapa.
+
 **Se renombraron el 19/08/2026** de `smoke-nutri-laura-recetario-*.mjs` a
 `_smoke-nutri-laura-recetario-*.mjs`: con el nombre viejo `scripts/pruebas.mjs`
 (que solo recoge `_smoke-*` y `smoke-test-*`) no las veía y nadie las lanzaba.
@@ -901,6 +906,30 @@ ruta de respaldo que renderiza fluyendo y sin tarjeta (`renderDayFlowing`,
 documento. Como la portada abre el PDF en horizontal, todas las páginas que
 pdfkit añadía solo (desbordamiento, `ensureSpace`) salían apaisadas. Por eso
 `switchToPortrait(doc)` reescribe `doc.options` en cuanto termina la portada.
+
+⚠️ **Y por eso al construir el documento se le pasa una COPIA de la constante,
+nunca la constante** (21/08/2026). pdfkit guarda la referencia tal cual en
+`doc.options`, y `switchToPortrait` la **muta**: como el objeto era la constante
+`LANDSCAPE` del módulo, el primer menú semanal del proceso la dejaba puesta en
+vertical y **todos los siguientes salían con la portada-calendario en A4
+vertical**. En un servidor que vive semanas, eso son todos menos el primero, y
+nadie del centro lo ve hasta que lo dice la paciente. Lo vigila
+`_smoke-pdf-menu.mjs`, que genera dos PDF seguidos y mira los dos.
+
+### Cinco costuras del PDF fijadas «tal como están» (21/08/2026)
+
+`_smoke-pdf-menu.mjs` las deja escritas con un `it` marcado `// SOSPECHOSO`.
+**Ninguna es alcanzable hoy** con los datos que produce el editor, pero el día
+que alguien las toque a propósito el rojo le explica qué pasaba:
+
+- un plan **sin días** explica cada receta dos veces en el recetario;
+- un `weekday` que no sea 1..7 hace **desaparecer** la comida del documento;
+- un nombre de opción vacío o nulo se pega detrás del ordinal («Opción 1 · null»);
+- una cantidad que no es un número imprime «NaN g»;
+- el recorte a 60 caracteres del nombre del adjunto (`menuPdfFilename`) va
+  DESPUÉS de quitar los guiones de los extremos, así que si el corte cae en un
+  separador queda un guion colgando («pauta-xxx-.pdf»). Es feo y no rompe nada;
+  arreglarlo cambiaría el nombre de ficheros que ya se mandaron por correo.
 
 ### Tipografía
 

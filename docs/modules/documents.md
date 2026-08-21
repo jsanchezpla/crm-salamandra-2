@@ -16,7 +16,7 @@
 | **Interruptores y parámetros** | ninguno que lea el código (ni `hasFeatureFlag` ni `getLogicOverride` en `app/api/documents/**` ni en `lib/documents/`). Los límites son constantes de `documentStorage.js` (`MAX_FILE_SIZE_BYTES`, `TENANT_QUOTA_BYTES`); la «cuota por tenant vía featureFlags» del backlog no existe |
 | **Pantallas propias** | ninguna (`app/(dashboard)/documentos/page.jsx` no tiene mapa `UI_OVERRIDES`; en producción el letrero `ui_override` no tiene ninguna fila de documents) |
 | **Scripts** | activar: `node scripts/enable-module.js <slug> documents` (o `documents_avanzado`; las dos claves comparten las cinco migraciones que declara `scripts/_module-migrations.js`) · migraciones vivas, en orden: `migrate-documents-sprint-1.js` (tablas), `migrate-documents-client-link.js` (`client_id`), `migrate-documents-transversal.js` (archivo central: MIME libre, `source`), `migrate-documents-patient-link.js` (`patient_id`), `migrate-documents-client-portal.js` (`client_visible`, `uploaded_by_client`) · MASTER one-off: `migrate-documents-avanzado.js` (reparte básico/avanzado; idempotente) · datos, a mano: `_hechos/migrate-attachments-to-documents.js` (adjuntos viejos → archivo central), `migrate-contract-patient-to-client.js` (`--confirm`), `seed-contrato-tunutrilaura.js` (clausulado de Laura en `contract_templates`) · histórico: `_hechos/enable-documents-all-tenants.js` (da `documents` a TODOS los tenants; anterior a `enable-module.js` y al reparto básico/avanzado; sigue detrás de `npm run db:enable:documents`) |
-| **Pruebas** | `smoke-test-documents.mjs` (servidor + base de datos; 21 checks del archivo; entra en `npm run test:todo` y en `npm run smoke:documents`) · `_smoke-contrato-estructurado.mjs` (base de datos; usa `lib/documents/contratoFirmadoPdf.js`) · `_smoke-piezas-ficha.mjs` (`@prueba ligera`, en `npm test`: con `documents_avanzado` la ficha no monta su panel Documentos) |
+| **Pruebas** | `smoke-test-documents.mjs` (servidor + base de datos; 21 checks del archivo; entra en `npm run test:todo` y en `npm run smoke:documents`) · `_smoke-contrato-estructurado.mjs` (base de datos; usa `lib/documents/contratoFirmadoPdf.js`) · `_smoke-piezas-ficha.mjs` (`@prueba ligera`, en `npm test`: con `documents_avanzado` la ficha no monta su panel Documentos) · `_smoke-pdf-contrato.mjs` (`node:test`, `@prueba ligera`, 21/08/2026, en `npm test`; 43 comprobaciones): abre el PDF que devuelve `lib/documents/contratoFirmadoPdf.js` y lo lee **por dentro** —descomprime los flujos y traduce los glifos con el CMap `/ToUnicode` que pdfkit ya mete en el propio documento—, así que comprueba el TEXTO y no el tamaño, que era lo único que se miraba antes (un PDF de 20 KB con el clausulado equivocado pesa exactamente lo mismo que uno con el bueno). Fija: el clausulado ÍNTEGRO de los bloques aceptados y **ninguno** de los que no se aceptaron, los datos declarados que se imprimen, la traza de la firma (fecha clavada a Europe/Madrid, IP, navegador, versión del documento), un pie del centro por página y ni uno de más en un documento de varias, y que ni un PNG corrupto ni una plantilla a medias dejan a nadie sin su copia. También fija `contratoPdfFilename`. |
 | **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` (`documents.client_id`) · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` (`documents` en nutri_laura: el tenant lo tenía y su usuaria no lo veía) · `../decisions/2026-08-18-la-piramide-invertida-de-leads.md` (el panel Documentos de la ficha pasa a `components/clients/` y lo decide `documents_avanzado`) |
 | **En este doc** | «Básico vs avanzado (01/08/2026)» · «2. Activación del módulo» · «3. Arquitectura BD (schema `crm_{slug}`)» · «4. Storage layout — `lib/documents/documentStorage.js`» · «5. Endpoints REST» · «6. Seguridad» · «9. Sprint 2 (implementado) — UI» · «11. Revisión adversarial (post-Sprint 1)» |
 
@@ -330,6 +330,31 @@ cascada de carpeta, AuditLog).
 - 🟡 GC de directorios/archivos huérfanos en `uploads/` (cronjob) — heredado de clients (no Sprint 1).
 - 🟡 `UPLOADS_ROOT` (código) vs `UPLOADS_HOST_DIR` (compose): documentado en `.env.production.example`.
 - 🟡 Preview DOCX/XLSX server-side (conversión LibreOffice headless) — no Sprint 1.
+
+### 10.1 El PDF firmado: siete cosas fijadas «tal como están» (21/08/2026)
+
+`_smoke-pdf-contrato.mjs` deja siete `it` marcados `// SOSPECHOSO`. **Ninguno
+muerde hoy** —todos dependen de un camino que los llamadores actuales no
+recorren—, pero la prueba dice dónde mirar el día que muerdan, y si alguien los
+cambia a propósito el rojo le explica qué pasaba antes:
+
+- la fecha del recuadro de firma («En Barcelona, a …») depende de la zona de la
+  máquina, mientras la constancia va clavada a Europe/Madrid: en un documento
+  firmado, dos fechas del mismo acto podrían no coincidir. Hoy no se nota porque
+  producción corre en `Europe/Madrid` desde el 19/08/2026;
+- una aceptación sin `acceptedAt` imprime «Aceptado el » y se queda a medias (la
+  rama buena está muerta: `validarAceptaciones` siempre pone la hora);
+- sin título, la cabecera lo llama «Contrato firmado» y la constancia usa la
+  CLAVE de la plantilla: dos nombres para el mismo documento;
+- una `version` 0 desaparece del nombre del documento (`version ? …` trata el 0
+  como «no hay versión»);
+- un `signerData` que llegue como LISTA cuela `length` como si fuera un dato
+  declarado;
+- un `secondSignatureLabel` que no sea texto **tumba** la generación
+  (`toUpperCase()` a pelo, sin pasar por el `texto()` que protege al título);
+- `contratoPdfFilename` lanza `RangeError` con una fecha ilegible (`toISOString()`
+  sin comprobar), aunque su único llamador lo envuelve en un `.catch(() => null)`.
+
 ---
 
 ## 11. Revisión adversarial (post-Sprint 1)

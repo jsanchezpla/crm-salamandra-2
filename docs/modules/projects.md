@@ -20,7 +20,7 @@
 | **Interruptores y parámetros** | ninguno que lea el código (ni `featureFlags` ni `logicOverrides`); lo que varía es por rol (`lib/projects/projectAuth.js`) y por tener `team` |
 | **Pantallas propias** | ninguna (letrero `ui_override` vacío en producción) |
 | **Scripts** | activar: `node scripts/enable-module.js <slug> projects` (arrastra `MODULES.projects` de `scripts/_module-migrations.js`: `migrate-projects-sprint-1.js`, `migrate-projects-sprint-2.js`, `migrate-projects-task-priority.js`; atajos `npm run db:migrate:projects-1`, `-2`, `-priority`) · seed: `scripts/seed-projects-demo.js` (`npm run db:seed:projects-demo`, idempotente) · `scripts/_hechos/verify-projects-sprint-2.js` (comprobación post-migración) · `scripts/cleanup-projects-code-indexes.js` (índices `projects_code_key*` duplicados; aborta contra prod) |
-| **Pruebas** | `scripts/smoke-test-kanban.mjs` (`npm run smoke:kanban`; 13 pasos HTTP contra `demo`, necesita `npm run dev` y base de datos: entra en `npm run test:todo`, no en `npm test`) · ligera, en `npm test`: `scripts/_smoke-projects-ai-parsePlan-editOps.mjs` (`node:test`, 19/08/2026; importa la lib con el gancho `_abrir-lib-hooks.mjs` porque `lib/utils/errors.js` arrastra `next/server`): lo que devuelven `lib/projects/ai/parsePlan.js` y `editOps.js`, los DOS únicos filtros entre el texto de la IA y el schema del tenant —`normalizePlan` lanza `ValidationError` con el mensaje para el usuario si lo que manda el modelo no es un plan, con los topes (12 fases, 60 tareas, 15 hitos, 15 pasos de checklist, 10 etiquetas), fechas y horas estimadas, asignados y miembros filtrados contra el equipo; `buildProjectSnapshot` con la forma exacta del prompt (200 tareas); `normalizeOperations` por cada operación (`updateProject`, `createPhase`, `updatePhase`/`deletePhase`, `createTask`, `updateTask`, `deleteTask`, `addMember`/`removeMember`) con qué se descarta en silencio, qué avisando y la etiqueta en español de la vista previa; desde el 19/08 un campo inválido («el lunes que viene», «mañana», una descripción que no es texto) se IGNORA avisando en vez de entrar como `null` y borrar lo que había —solo `null` explícito quita—; el plan y la propuesta del modo demo (`fake.js`) pasan sin perder nada ni un aviso—. `loadProjectSnapshot` lee de la base y no se prueba |
+| **Pruebas** | `scripts/smoke-test-kanban.mjs` (`npm run smoke:kanban`; 13 pasos HTTP contra `demo`, necesita `npm run dev` y base de datos: entra en `npm run test:todo`, no en `npm test`) · ligera, en `npm test`: `scripts/_smoke-projects-ai-parsePlan-editOps.mjs` (`node:test`, 19/08/2026; importa la lib con el gancho `_abrir-lib-hooks.mjs` porque `lib/utils/errors.js` arrastra `next/server`): lo que devuelven `lib/projects/ai/parsePlan.js` y `editOps.js`, los DOS únicos filtros entre el texto de la IA y el schema del tenant —`normalizePlan` lanza `ValidationError` con el mensaje para el usuario si lo que manda el modelo no es un plan, con los topes (12 fases, 60 tareas, 15 hitos, 15 pasos de checklist, 10 etiquetas), fechas y horas estimadas, asignados y miembros filtrados contra el equipo **sin importar la caja del uuid**; `buildProjectSnapshot` con la forma exacta del prompt (200 tareas); `normalizeOperations` por cada operación (`updateProject`, `createPhase`, `updatePhase`/`deletePhase`, `createTask`, `updateTask`, `deleteTask`, `addMember`/`removeMember`) con qué se descarta en silencio, qué avisando y la etiqueta en español de la vista previa; desde el 19/08 un campo inválido («el lunes que viene», «mañana», una descripción que no es texto) se IGNORA avisando en vez de entrar como `null` y borrar lo que había —solo `null` explícito quita—; desde el 21/08/2026 también **la traducción del `phaseIndex` cuando se descarta una fase** (cada hito sigue en la suya y el que apuntaba a la descartada se queda sin fase), **que el mismo uuid en mayúsculas casa con el equipo y lo que se guarda es el id de la base** (y dos veces en distinta caja cuenta como una sola persona), y **que a un miembro que causó baja en el equipo SÍ se le puede quitar del proyecto**; el plan y la propuesta del modo demo (`fake.js`) pasan sin perder nada ni un aviso—. `loadProjectSnapshot` lee de la base y no se prueba |
 | **Decisiones** | — (ninguna propia; la transversal `../decisions/2026-07-28-repaso-de-seguridad.md` aplica como a todos) |
 | **En este doc** | 3. Arquitectura BD · 4. Rutas frontend · 5. Endpoints REST · 6. Helpers / libs · 7. Decisiones arquitectónicas · 8. Migraciones y seeds · 11. Backlog técnico |
 
@@ -287,6 +287,37 @@ dinero ni necesita clave, y por eso la demo pública funciona de punta a punta.
 
 UI: `AiProjectModal.jsx` (listado, «Crear con IA») y `AiEditModal.jsx` (ficha,
 «Reorganizar con IA»). Lógica en `lib/projects/ai/` (§6).
+
+#### Tres bordes de los filtros, cerrados el 21/08/2026
+
+Los dos filtros (`normalizePlan` y `normalizeOperations`) son lo único que hay
+entre el texto que devuelve el modelo y el schema del tenant. Tres cosas se
+colaban por ahí, y las tres fallaban **calladas**: no había aviso que mirar.
+
+1. **El `phaseIndex` de los hitos se TRADUCE.** Los hitos apuntan a su fase por
+   posición, pero `normalizePlan` descarta fases por el camino (una sin nombre,
+   o las que pasen del tope de 12) y el índice se comparaba contra la lista ya
+   filtrada. Con fases `[sin nombre, B, C]`, el hito de B acababa colgado de C y
+   el de C se perdía: un hito bien formado, en la fase equivocada, guardado en la
+   base. Ahora se traduce el índice original al de la lista final, y lo que
+   apuntaba a una fase descartada queda en `null` —hito sin fase—, que es la
+   única lectura honesta.
+2. **Los ids del equipo se buscan en minúsculas y se guarda SIEMPRE el id
+   canónico de la base.** `UUID_RE` lleva `/i`, pero las comprobaciones contra el
+   equipo eran exactas: un uuid que el modelo devolviera en mayúsculas pasaba la
+   regex, no casaba con nadie y se descartaba sin un solo aviso. El plan salía
+   sin asignar y no había forma de saber por qué. Afecta a `assigneeIds` y
+   `members` de `normalizePlan`, y a `filtraAsignados`, `addMember` y
+   `removeMember` de `normalizeOperations`. Lo que acaba en la FK es el valor de
+   la base, no la variante que escribió el modelo.
+3. **`removeMember` se valida contra `members` (los miembros DEL PROYECTO), no
+   contra `team`.** `loadProjectSnapshot` carga el equipo con `status: "active"`,
+   así que a quien causaba baja no se le podía sacar de sus proyectos, y encima
+   se le contestaba «la persona indicada no es miembro del proyecto», que era
+   falso: el propio snapshot lo llevaba en `members`. Es el caso corriente
+   —alguien se va y hay que sacarlo de los proyectos— y era el único que no
+   funcionaba. A quien de verdad no es miembro se le sigue descartando con esa
+   misma frase, que ahí sí es cierta.
 
 ---
 

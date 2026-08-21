@@ -33,6 +33,7 @@ decisión se supera, la nueva lo dice y enlaza a la anterior.
 | 13/08 | [El ciclo de vida de un cliente](2026-08-13-ciclo-de-vida-de-un-cliente.md) — cuatro piezas de `lib/provisioning/`; la baja aparta, destruir es SSH | provisioning |
 | 13/08 | [Sincronizar antes de commitear](2026-08-13-sincronizar-antes-de-commitear.md) — dos personas en `master`; si un fichero coincide, parar y preguntar | flujo de trabajo |
 | 18/08 | [La pirámide invertida de Leads](2026-08-18-la-piramide-invertida-de-leads.md) — de dónde sale la escalera (regla #16); qué encogió; el letrero `ui_override` | leads, clients, training, overrides |
+| 21/08 | [El borrado no viaja](2026-08-21-el-borrado-no-viaja.md) — la copia externa SUMA (`rclone copy`, no `sync`) y caduca sola a los 90 días, con cinco frenos para que no pueda vaciar el destino | copias, VPS |
 
 Otras decisiones con su propio doc fuera de esta carpeta:
 `docs/sprint-aumenta-2026-07.md` (las pantallas del sprint de Aumenta),
