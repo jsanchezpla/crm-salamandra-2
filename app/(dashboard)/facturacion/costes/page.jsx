@@ -5,6 +5,7 @@ import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
+import { paramsFiltrosGasto, urlConFiltros } from "@/lib/billing/filtrosGasto.js";
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 
@@ -45,6 +46,7 @@ export default function CostesPage() {
 
   const [filterType, setFilterType] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
+  const [filterSupplier, setFilterSupplier] = useState("");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
   const [searchInput, setSearchInput] = useState("");
@@ -90,20 +92,29 @@ export default function CostesPage() {
     fetch("/api/billing/settings", { cache: "no-store" }).then((r) => r.json()).then((j) => setSettings(j.data)).catch(() => {});
   }, []);
 
+  // Los filtros que la pantalla OFRECE de verdad, juntos: de aquí salen tanto la
+  // consulta de la tabla como el enlace del Excel, para que no puedan discrepar
+  // (ver lib/billing/filtrosGasto.js).
+  const filtros = useMemo(() => ({
+    type: filterType,
+    category: filterCategory,
+    supplierId: filterSupplier,
+    from: filterFrom,
+    to: filterTo,
+  }), [filterType, filterCategory, filterSupplier, filterFrom, filterTo]);
+
+  const hayFiltros = Boolean(filterType || filterCategory || filterSupplier || filterFrom || filterTo);
+
   const load = useCallback(async () => {
     setLoading(true); setErrorMsg(null);
     try {
-      const params = new URLSearchParams({ sortBy: sortKey, sortDir });
-      if (filterType) params.set("type", filterType);
-      if (filterCategory) params.set("category", filterCategory);
-      if (filterFrom) params.set("from", filterFrom);
-      if (filterTo) params.set("to", filterTo);
+      const params = paramsFiltrosGasto(filtros, { sortBy: sortKey, sortDir });
       const res = await fetch(`/api/billing/costs?${params}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
       setCosts(Array.isArray(json.data) ? json.data : []);
     } catch (e) { setErrorMsg(e.message); } finally { setLoading(false); }
-  }, [filterType, filterCategory, filterFrom, filterTo, sortKey, sortDir]);
+  }, [filtros, sortKey, sortDir]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -140,6 +151,17 @@ export default function CostesPage() {
     }
     return opciones;
   }, [suppliers, costs, editingId]);
+
+  // El FILTRO se llena de la misma carga (`/api/proveedores`, solo activos) y
+  // aquí los de baja NO hacen falta: a diferencia del formulario, este
+  // desplegable nace vacío y solo llega a valer lo que alguien elija de esta
+  // lista, así que nunca se queda con un id sin opción que enseñar. A los gastos
+  // de un proveedor dado de baja se llega igual por el buscador de al lado, que
+  // mira el nombre del proveedor de cada fila.
+  const opcionesFiltroProveedor = useMemo(() => ([
+    { value: "", label: "Todos los proveedores" },
+    ...suppliers.map((s) => ({ value: s.id, label: s.name })),
+  ]), [suppliers]);
 
   function openCreate() {
     setEditingId(null);
@@ -200,12 +222,9 @@ export default function CostesPage() {
   const previewVat = Math.round(previewBase * Number(form.vatRate) / 100 * 100) / 100;
   const previewTotal = Math.round((previewBase + previewVat) * 100) / 100;
 
-  const exportParams = new URLSearchParams();
-  if (filterType) exportParams.set("type", filterType);
-  if (filterCategory) exportParams.set("category", filterCategory);
-  if (filterFrom) exportParams.set("from", filterFrom);
-  if (filterTo) exportParams.set("to", filterTo);
-  const exportUrl = `/api/billing/exports/expenses${exportParams.toString() ? `?${exportParams}` : ""}`;
+  // El Excel se baja con los MISMOS filtros que hay puestos en la tabla (sin la
+  // búsqueda libre, que se aplica en cliente sobre lo ya cargado).
+  const exportUrl = urlConFiltros("/api/billing/exports/expenses", paramsFiltrosGasto(filtros));
 
   return (
     <div className="p-4 lg:p-8 max-w-6xl mx-auto">
@@ -251,10 +270,14 @@ export default function CostesPage() {
         />
         <Select value={filterType} onChange={(v) => setFilterType(v)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" options={[{ value: "", label: "Todos los tipos" }, ...Object.entries(TYPE_LABELS).map(([k, label]) => ({ value: k, label }))]} />
         <Select value={filterCategory} onChange={(v) => setFilterCategory(v)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" options={[{ value: "", label: "Todas las categorías" }, ...Object.entries(CATEGORY_LABELS).map(([k, label]) => ({ value: k, label }))]} />
+        {/* Sin proveedores dados de alta el desplegable solo tendría el «Todos»: se calla. */}
+        {suppliers.length > 0 && (
+          <Select value={filterSupplier} onChange={(v) => setFilterSupplier(v)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" options={opcionesFiltroProveedor} />
+        )}
         <input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" />
         <input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" />
-        {(filterType || filterCategory || filterFrom || filterTo || searchInput) && (
-          <button onClick={() => { setFilterType(""); setFilterCategory(""); setFilterFrom(""); setFilterTo(""); setSearchInput(""); }}
+        {(hayFiltros || searchInput) && (
+          <button onClick={() => { setFilterType(""); setFilterCategory(""); setFilterSupplier(""); setFilterFrom(""); setFilterTo(""); setSearchInput(""); }}
             className="text-xs text-neutral-400 hover:text-neutral-600 px-2 py-1.5 transition-colors">Limpiar</button>
         )}
       </div>
@@ -286,7 +309,7 @@ export default function CostesPage() {
                 <tr><td colSpan={puedeFacturar ? 10 : 9} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
               )}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={puedeFacturar ? 10 : 9} className="text-center py-12 text-xs text-neutral-400">{search || filterType || filterCategory ? "Sin costes que coincidan con los filtros" : "Sin costes registrados"}</td></tr>
+                <tr><td colSpan={puedeFacturar ? 10 : 9} className="text-center py-12 text-xs text-neutral-400">{search || hayFiltros ? "Sin costes que coincidan con los filtros" : "Sin costes registrados"}</td></tr>
               )}
               {filtered.map((c) => (
                 <tr key={c.id} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">
