@@ -8,7 +8,9 @@
 #
 # QUÉ HACE: un pg_dump comprimido de TODA la base (todos los tenants + master)
 # MÁS los ficheros subidos (uploads/), con rotación por antigüedad y, si está
-# configurado, copia a un destino FUERA del servidor. Es idempotente.
+# configurado, copia a un destino FUERA del servidor — una copia que SUMA y
+# nunca borra allí, con su propia caducidad, más larga que la de casa (ver
+# «COPIA FUERA DEL SERVIDOR»). Es idempotente.
 #
 # INSTALACIÓN EN EL VPS (una sola vez, como root):
 #   chmod +x /opt/crm-salamandra/scripts/backup-db.sh
@@ -72,6 +74,48 @@
 #
 # Se detecta solo cuál usar por el formato. Si falla, el script NO aborta: la
 # copia local ya está hecha y es mejor tenerla que perderla por un fallo de red.
+#
+# EL BORRADO NO VIAJA (Jorge, 21/08/2026). Hasta hoy este bloque hacía `rclone
+# sync` (y `rsync --delete`): el destino ESPEJABA los 14 días locales. O sea que
+# si algo borrase las copias del servidor —un disco que se va, un script, una
+# persona—, a las 03:15 de la noche siguiente ese borrado habría VIAJADO y se
+# habrían perdido también las de fuera. Una copia de seguridad que se puede
+# borrar desde la máquina que protege no es una copia de seguridad.
+#
+# Ahora se sube con `rclone copy` (y rsync SIN `--delete`): esta copia solo
+# suma. Lo que ya llegó allí no lo borra este script pase lo que pase aquí, y no
+# hace falta que el proveedor tenga versionado ni papelera activados.
+#
+# A cambio el destino crecería sin fin, así que tiene su PROPIA caducidad, más
+# larga que la de casa: 14 días en el servidor (RETENCION_DIAS), 90 fuera
+# (RETENCION_REMOTA_DIAS). Los 14 cubren el susto que se ve el mismo día —un
+# borrado, una migración que sale mal—; los 90 cubren el que NO se ve enseguida:
+# una corrupción que aparece cuando alguien busca una factura de hace dos meses,
+# un borrado silencioso que nadie nota. Además dejan 76 noches de margen entre
+# que una copia desaparece del servidor y desaparece de fuera. El precio no
+# decide el plazo: ~143 MB por noche × 90 ≈ 13 GB, céntimos al mes en B2. Lo
+# decide cuánto tardamos en enterarnos de que algo faltaba.
+#
+# Esa caducidad la hace SOLO la rama rclone, y con la mano muy floja: no borra
+# si algún ajuste no es un número entero, ni si la subida de esta noche falló (no
+# se tira lo viejo si no ha entrado nada nuevo), ni si el destino no contesta, ni
+# si contesta que está vacío, ni si el borrado dejaría menos de MINIMO_REMOTO
+# ficheros, ni si se llevaría de una noche más del MAXIMO_BORRADO_PCT % de lo que
+# hay allí —nada de eso es limpieza, es una avería: se frena y manda correo—, y
+# solo mira `auto-*.sql.gz` y `uploads-*.tar.gz` de la RAÍZ del destino, nunca lo
+# que otro haya dejado ahí. En la rama rsync no se caduca nada: este script no
+# manda órdenes de borrado a la otra máquina. Que el otro servidor tenga su
+# propia limpieza, o su disco se llenará.
+#
+# POR QUÉ DOS FRENOS Y NO UNO (21/08/2026, al repasar el cambio). El freno del
+# mínimo, solo, es casi inalcanzable: si se caduca a R días y hay una copia por
+# noche, siempre sobreviven 2·R ficheros, así que un mínimo de 4 únicamente salta
+# con R=0 o R=1. Medido: con 90 noches fuera (180 ficheros) y un
+# RETENCION_REMOTA_DIAS puesto a 3 por un dedo gordo, se borraban 176 de 180 sin
+# una queja y el registro decía «OK copia externa». De ahí el freno por
+# PROPORCIÓN: en régimen normal caen 2 de ~180 cada noche (~1 %); si de golpe se
+# fuera más de la mitad, no es la caducidad trabajando, es un ajuste mal puesto,
+# un reloj loco o el destino equivocado. Se para y se pregunta.
 
 set -euo pipefail
 
@@ -84,10 +128,14 @@ NOMBRE_DB="${NOMBRE_DB:-salamandra}"
 RETENCION_DIAS="${RETENCION_DIAS:-14}"
 MINIMO_BYTES="${MINIMO_BYTES:-100000}" # por debajo de esto, el volcado es basura
 DESTINO_REMOTO="${DESTINO_REMOTO:-}"   # vacío = solo copia local (ver cabecera)
+RETENCION_REMOTA_DIAS="${RETENCION_REMOTA_DIAS:-90}" # días FUERA del servidor; a propósito > RETENCION_DIAS
+MINIMO_REMOTO="${MINIMO_REMOTO:-4}"    # nunca dejar el destino con menos ficheros que esto (2 noches)
+MAXIMO_BORRADO_PCT="${MAXIMO_BORRADO_PCT:-50}" # % del destino que puede irse en UNA noche
 CONTENEDOR_APP="${CONTENEDOR_APP:-crm-salamandra-app-1}"
 LOG_COPIA="${LOG_COPIA:-/var/log/crm-backup.log}"
 AVISAR="${AVISAR:-1}"                  # 0 = no mandar correo (para probar en seco)
 ok_remoto=0                            # se declara aquí porque el parte semanal lo lee
+modo_remoto=""                         # rclone|rsync — lo fija el bloque externo; el parte semanal lo lee
 
 marca=$(date +%Y%m%d-%H%M)
 destino="$DIR_BACKUPS/auto-$marca.sql.gz"
@@ -130,7 +178,14 @@ cuerpo_de_fallo() {
 # uno que se espere cada semana (Jorge, 20/08/2026).
 cuerpo_semanal() {
   echo "Servidor: $(hostname) · $(date '+%F %T %Z')"
-  echo "Retención: $RETENCION_DIAS días."
+  # La retención de fuera solo se nombra si de verdad hay algo fuera Y es este
+  # script quien lo caduca: decir «90 días fuera» sin destino, o con un destino
+  # rsync donde no se borra nada, es contarle al lector una limpieza que no pasa.
+  if [ "$modo_remoto" = "rclone" ]; then
+    echo "Retención: $RETENCION_DIAS días aquí · $RETENCION_REMOTA_DIAS días fuera del servidor."
+  else
+    echo "Retención: $RETENCION_DIAS días aquí."
+  fi
   echo ""
   echo "Copias de la base guardadas:     $(find "$DIR_BACKUPS" -name 'auto-*.sql.gz' -type f | wc -l)"
   echo "Copias de ficheros guardadas:    $(find "$DIR_BACKUPS" -name 'uploads-*.tar.gz' -type f | wc -l)"
@@ -142,6 +197,12 @@ cuerpo_semanal() {
     echo "protege de un borrado accidental, no de perder el servidor."
   elif [ "$ok_remoto" = "1" ]; then
     echo "Copia fuera del servidor: OK → $DESTINO_REMOTO"
+    if [ "$modo_remoto" = "rclone" ]; then
+      echo "(solo suma: un borrado aquí NO viaja allí; allí caduca a los $RETENCION_REMOTA_DIAS días)"
+    else
+      echo "(solo suma: un borrado aquí NO viaja allí; allí NO se caduca nada —"
+      echo "este script no borra en otra máquina: la limpieza la pone ese servidor)"
+    fi
   else
     echo "Copia fuera del servidor: FALLÓ esta noche → $DESTINO_REMOTO"
   fi
@@ -151,6 +212,105 @@ cuerpo_semanal() {
   echo ""
   echo "Últimas líneas del registro:"
   tail -n 12 "$LOG_COPIA" 2>/dev/null || echo "(no se ha podido leer el registro)"
+}
+
+# Cuenta líneas NO vacías de un texto. `wc -l` no vale: una lista vacía tiene
+# cero ficheros, y aquí confundir cero con uno significaría borrar de más.
+contar_lineas() {
+  local n=0 linea
+  while IFS= read -r linea; do
+    if [ -n "$linea" ]; then n=$((n + 1)); fi
+  done <<<"$1"
+  echo "$n"
+}
+
+# ─── Caducidad en el destino externo ─────────────────────────────────────────
+# La subida es `rclone copy`: allí no se borra nada, así que el destino crecería
+# sin fin y hace falta caducar por edad. Esta es la ÚNICA parte del script que
+# borra algo que ya está fuera del servidor, y está escrita para que EN LA DUDA
+# NO BORRE. Cinco frenos, cualquiera de ellos la para en seco (ver cabecera):
+#
+#   0. si algún ajuste no es un número entero → no borra y avisa. En un camino
+#      que borra copias, un `[ 0 -lt abc ]` no es un error de tipos: es el
+#      último freno desarmado en silencio (bash lo da por falso y sigue);
+#   1. solo se llama si la subida de esta noche salió bien;
+#   2. si el destino no se deja listar → no borra;
+#   3. si el destino dice que está vacío → no borra (destino vacío = avería);
+#   4. si el borrado dejaría menos de $MINIMO_REMOTO ficheros → no borra y avisa;
+#   5. si se llevaría más del $MAXIMO_BORRADO_PCT % de lo que hay → no borra y
+#      avisa. Este es el que pilla de verdad un RETENCION_REMOTA_DIAS mal
+#      puesto: el del mínimo solo salta con 0 o 1 días (ver cabecera);
+#   6. solo mira auto-*.sql.gz y uploads-*.tar.gz, y solo en la RAÍZ del destino
+#      (--max-depth 1), igual que la rotación local respeta las manuales. El
+#      censo y el borrado tienen que mirar EXACTAMENTE lo mismo: `lsf` no baja a
+#      las subcarpetas y `delete` sí, así que sin ese tope los frenos contarían
+#      una cosa y el borrado se llevaría otra.
+#
+# Y todo best-effort: si el borrado falla, se anota y ya. Allí sobra, no falta.
+caducar_en_destino() {
+  local edad="${RETENCION_REMOTA_DIAS}d"
+  local filtros=(--max-depth 1 --include "auto-*.sql.gz" --include "uploads-*.tar.gz")
+  local todo viejo n_todo n_viejo n_quedan ajuste
+
+  for ajuste in RETENCION_REMOTA_DIAS MINIMO_REMOTO MAXIMO_BORRADO_PCT; do
+    if ! [[ "${!ajuste-}" =~ ^[0-9]+$ ]]; then
+      echo "[$(date '+%F %T')] ⛔ $ajuste vale '${!ajuste-}', que no es un número entero."
+      echo "[$(date '+%F %T')]    NO se caduca nada en $DESTINO_REMOTO: con un ajuste que no se"
+      echo "[$(date '+%F %T')]    entiende, los frenos no valen y esto borra copias de seguridad."
+      avisar "⚠️ La caducidad de la copia externa está mal configurada" fallo \
+        "$(cuerpo_de_fallo "$ajuste vale '${!ajuste-}' y no es un número entero; no se ha caducado nada en $DESTINO_REMOTO")" || true
+      return 0
+    fi
+  done
+
+  if ! todo=$(rclone lsf --files-only "${filtros[@]}" "$DESTINO_REMOTO" 2>/dev/null); then
+    echo "[$(date '+%F %T')] ⚠️ No se pudo listar $DESTINO_REMOTO. NO se caduca nada allí."
+    return 0
+  fi
+  n_todo=$(contar_lineas "$todo")
+  if [ "$n_todo" -eq 0 ]; then
+    echo "[$(date '+%F %T')] ⚠️ El destino externo contesta que está VACÍO. NO se borra nada allí."
+    return 0
+  fi
+
+  if ! viejo=$(rclone lsf --files-only --min-age "$edad" "${filtros[@]}" "$DESTINO_REMOTO" 2>/dev/null); then
+    echo "[$(date '+%F %T')] ⚠️ No se pudo saber qué hay viejo en $DESTINO_REMOTO. NO se caduca nada."
+    return 0
+  fi
+  n_viejo=$(contar_lineas "$viejo")
+  if [ "$n_viejo" -eq 0 ]; then
+    echo "[$(date '+%F %T')] Caducidad externa: nada de más de $RETENCION_REMOTA_DIAS días ($n_todo fichero(s) allí)."
+    return 0
+  fi
+
+  n_quedan=$((n_todo - n_viejo))
+  if [ "$n_quedan" -lt "$MINIMO_REMOTO" ]; then
+    echo "[$(date '+%F %T')] ⛔ Caducar a $RETENCION_REMOTA_DIAS días dejaría $n_quedan de $n_todo fichero(s)"
+    echo "[$(date '+%F %T')]    en $DESTINO_REMOTO (mínimo $MINIMO_REMOTO). NO se borra nada: esto no es"
+    echo "[$(date '+%F %T')]    limpieza, es que algo va mal."
+    avisar "⚠️ La caducidad de la copia externa se ha frenado sola" fallo \
+      "$(cuerpo_de_fallo "caducar a $RETENCION_REMOTA_DIAS días en $DESTINO_REMOTO habría dejado $n_quedan de $n_todo ficheros; se abortó el borrado")" || true
+    return 0
+  fi
+
+  # Freno por proporción. En régimen normal se van 2 de ~180 cada noche; que se
+  # vaya más de la mitad de golpe no es caducidad, es un accidente.
+  if [ $((n_viejo * 100)) -gt $((n_todo * MAXIMO_BORRADO_PCT)) ]; then
+    echo "[$(date '+%F %T')] ⛔ Caducar a $RETENCION_REMOTA_DIAS días se llevaría $n_viejo de $n_todo fichero(s)"
+    echo "[$(date '+%F %T')]    de $DESTINO_REMOTO en una sola noche (tope: $MAXIMO_BORRADO_PCT %). NO se borra"
+    echo "[$(date '+%F %T')]    nada: eso no es la caducidad haciendo su trabajo, es que algo va mal."
+    avisar "⚠️ La caducidad de la copia externa se ha frenado sola" fallo \
+      "$(cuerpo_de_fallo "caducar a $RETENCION_REMOTA_DIAS días en $DESTINO_REMOTO se habría llevado $n_viejo de $n_todo ficheros de una noche (tope $MAXIMO_BORRADO_PCT %); se abortó el borrado")" || true
+    return 0
+  fi
+
+  if rclone delete --min-age "$edad" "${filtros[@]}" "$DESTINO_REMOTO"; then
+    echo "[$(date '+%F %T')] Caducidad externa: $n_viejo copia(s) de más de $RETENCION_REMOTA_DIAS días borradas; quedan $n_quedan."
+  else
+    echo "[$(date '+%F %T')] ⚠️ Falló el borrado por edad en $DESTINO_REMOTO. Se queda para mañana:"
+    echo "[$(date '+%F %T')]    allí sobra sitio, no falta copia."
+  fi
+  return 0
 }
 
 # Un fallo NO puede pasar desapercibido: el `set -e` mataría el script sin dejar
@@ -221,15 +381,31 @@ echo "[$(date '+%F %T')] Copias automáticas guardadas: $total · espacio: $(du 
 #
 # Un fallo aquí NO aborta el script: la copia local ya está hecha, y perderla
 # por un problema de red sería peor que quedarse sin la remota de hoy.
+#
+# Esto SUMA, no espeja: ni `sync` ni `--delete`, para que un borrado de aquí no
+# viaje allí (ver «EL BORRADO NO VIAJA» en la cabecera). Lo que sobre fuera lo
+# quita la caducidad propia del destino, no el reflejo de lo que pase aquí.
 if [ -n "$DESTINO_REMOTO" ]; then
-  echo "[$(date '+%F %T')] Sincronizando fuera del servidor → $DESTINO_REMOTO"
+  echo "[$(date '+%F %T')] Copiando fuera del servidor → $DESTINO_REMOTO"
   ok_remoto=0
   case "$DESTINO_REMOTO" in
     *:/*|*@*:*)  # usuario@host:/ruta → rsync
-      rsync -az --delete "$DIR_BACKUPS/" "$DESTINO_REMOTO/" && ok_remoto=1 || true
+      modo_remoto="rsync"
+      # SIN --delete a propósito. `--exclude` para no subir volcados a medias.
+      rsync -az --exclude '*.parcial' "$DIR_BACKUPS/" "$DESTINO_REMOTO/" && ok_remoto=1 || true
+      if [ "$ok_remoto" = "1" ]; then
+        echo "[$(date '+%F %T')] ⚠️ Destino rsync: aquí NO se caduca nada — este script no manda"
+        echo "[$(date '+%F %T')]    órdenes de borrado a otra máquina. Que el otro servidor tenga"
+        echo "[$(date '+%F %T')]    su propia limpieza, o su disco se llenará."
+      fi
       ;;
     *:*)         # remoto:bucket de rclone
-      rclone sync "$DIR_BACKUPS" "$DESTINO_REMOTO" && ok_remoto=1 || true
+      modo_remoto="rclone"
+      # `copy`, NUNCA `sync`: `sync` borraría allí lo que falte aquí.
+      rclone copy --exclude '*.parcial' "$DIR_BACKUPS" "$DESTINO_REMOTO" && ok_remoto=1 || true
+      # Solo se caduca si lo de esta noche llegó: nada viejo se tira si no ha
+      # entrado nada nuevo.
+      if [ "$ok_remoto" = "1" ]; then caducar_en_destino; fi
       ;;
     *)
       echo "[$(date '+%F %T')] ⚠️ DESTINO_REMOTO no parece ni rsync ni rclone: '$DESTINO_REMOTO'"
@@ -240,7 +416,7 @@ if [ -n "$DESTINO_REMOTO" ]; then
   else
     echo "[$(date '+%F %T')] ⚠️ FALLÓ la copia externa. La local SÍ está hecha,"
     echo "[$(date '+%F %T')]    pero hoy no hay nada fuera del servidor."
-    avisar "⚠️ La copia del CRM no ha salido del servidor" fallo "$(cuerpo_de_fallo "rclone/rsync no pudo sincronizar con $DESTINO_REMOTO")" || true
+    avisar "⚠️ La copia del CRM no ha salido del servidor" fallo "$(cuerpo_de_fallo "rclone/rsync no pudo copiar a $DESTINO_REMOTO")" || true
   fi
 else
   echo "[$(date '+%F %T')] ⚠️ Sin DESTINO_REMOTO: las copias están en el MISMO disco"
