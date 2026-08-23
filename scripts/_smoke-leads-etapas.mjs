@@ -85,10 +85,17 @@
  */
 
 import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { ALLOWED_STAGES, STAGE_LABELS } from "../lib/leads/stages.js";
 import { GANADAS, PERDIDAS, etapasDe } from "../lib/leads/embudos.js";
 
-const RAIZ = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+// `fileURLToPath` y no `new URL(...).pathname`: una URL trae el camino
+// ESCAPADO, así que una carpeta con un espacio llega como `%20` y el
+// `readdirSync` de más abajo se estrella con un ENOENT que no dice nada del
+// espacio. Pasa de verdad — un clon en `C:\Claude Code` —, y es el mismo modo
+// que ya usan `pruebas.mjs` y `_smoke-piezas-ficha.mjs`.
+const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 let fallos = 0;
 const avisos = [];
