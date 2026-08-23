@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import Link from "next/link";
 import Select from "../../components/ui/Select.jsx";
+import ConectarWhatsapp from "./ConectarWhatsapp.jsx";
 import { ANTHROPIC_MODELS } from "../../lib/ai/anthropicModel.js";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "../../lib/citas/coloresBloqueo.js";
 
@@ -430,11 +431,25 @@ export default function ConfigModule() {
             onSave={(value) => patchTenant({ whatsappToken: value }, "Token de WhatsApp guardado")}
             onClear={() => patchTenant({ whatsappToken: null }, "Token de WhatsApp eliminado")}
             extra={
-              <WhatsappPhoneField
-                value={cfg.integrations?.whatsapp?.phoneNumberId ?? ""}
-                isAdmin={isAdmin}
-                onSave={(v) => patchTenant({ whatsappPhoneNumberId: v }, "Número de WhatsApp guardado")}
-              />
+              <>
+                <ConectarWhatsapp
+                  isAdmin={isAdmin}
+                  conectado={!!cfg.integrations?.whatsapp?.phoneNumberId}
+                  numero={cfg.integrations?.whatsapp?.numero}
+                  conectadoAt={cfg.integrations?.whatsapp?.conectadoAt}
+                  onConectado={async () => {
+                    const r = await fetch("/api/tenant/settings", { cache: "no-store" });
+                    const j = await r.json().catch(() => null);
+                    if (j?.ok) setCfg(j.data);
+                    flash("WhatsApp conectado");
+                  }}
+                />
+                <WhatsappPhoneField
+                  value={cfg.integrations?.whatsapp?.phoneNumberId ?? ""}
+                  isAdmin={isAdmin}
+                  onSave={(v) => patchTenant({ whatsappPhoneNumberId: v }, "Número de WhatsApp guardado")}
+                />
+              </>
             }
           />
           <ApiKeyCard

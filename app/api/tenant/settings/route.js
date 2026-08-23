@@ -279,6 +279,10 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
       whatsapp: {
         ...ks(integ.whatsappToken),
         phoneNumberId: integ.whatsappPhoneNumberId ?? null,
+        // Puestos por el botón "Conectar mi WhatsApp" (Embedded Signup). Sirven
+        // para poder enseñar "conectado: +34 6XX…" en vez de un id opaco.
+        numero: integ.whatsappNumero ?? null,
+        conectadoAt: integ.whatsappConectadoAt ?? null,
       },
       resend: {
         ...ks(integ.resendApiKey),
@@ -644,6 +648,8 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
       whatsapp: {
         ...keyStatus(settings.integrations.whatsappToken),
         phoneNumberId: settings.integrations.whatsappPhoneNumberId ?? null,
+        numero: settings.integrations.whatsappNumero ?? null,
+        conectadoAt: settings.integrations.whatsappConectadoAt ?? null,
       },
       resend: {
         ...keyStatus(settings.integrations.resendApiKey),
