@@ -223,14 +223,83 @@ BYOK como el resto: cada tenant pone su cuenta de WhatsApp Business en
 Configuración. Dos campos en `settings.integrations`:
 `whatsappToken` (CIFRADO, patrón `applyKey`) y `whatsappPhoneNumberId` (plano).
 Resolver: `lib/whatsapp/whatsappConfig.js` → `getTenantWhatsappConfig(ctx)`,
-`tenantTieneWhatsapp(ctx)` y `enviarWhatsapp(ctx, {telefono, texto})` (Cloud API
-v21, best-effort: devuelve `{ok:false,error}` y NUNCA lanza).
+`tenantTieneWhatsapp(ctx)`, `enviarWhatsapp(ctx, {telefono, texto})` (texto
+libre, **solo válido dentro de la ventana de 24 h**) y
+`enviarWhatsappPlantilla(ctx, {telefono, plantilla, parametros, clientId})`
+(plantilla aprobada, válida siempre). Cloud API v21, best-effort: devuelven
+`{ok:false,error}` y NUNCA lanzan.
 
-⚠️ Estado: la INFRAESTRUCTURA está lista y probada (guardado cifrado, descifrado
-y envío), pero todavía NO hay ningún flujo del CRM que dispare mensajes solos.
-Enganchar los avisos (recordatorio de cita, menú de nutrición, aviso de ticket)
-es el paso siguiente. Ojo con la regla de Meta: el primer mensaje a alguien que
-no ha escrito en 24h exige plantilla aprobada.
+Estado a 17/08/2026: los tres avisos de cita ya salen por plantilla
+(`docs/modules/citas.md` → «Los tres avisos van por PLANTILLA»), y lo enviado y
+lo recibido se guarda en `whatsapp_messages`. Pendiente: los avisos de nutrición
+y de soporte, y una pantalla que enseñe el hilo en la ficha.
+
+### Mensajes ENTRANTES (webhook)
+
+`app/api/webhooks/whatsapp/[tenantSlug]` recibe lo que escriben los pacientes,
+los acuses de entrega y —al conectar la coexistencia— los 180 días de historial.
+Una URL POR CLIENTE (`override_callback_uri` por cuenta de WhatsApp), con el
+slug en la ruta: el destino lo fija nuestra configuración en Meta, no el
+contenido de la petición.
+
+Dos variables de entorno, NUESTRAS y no del tenant, porque siendo Tech Provider
+todas las cuentas cuelgan de la misma app: `WHATSAPP_APP_SECRET` (firma cada
+webhook) y `WHATSAPP_WEBHOOK_SECRET` (del que se DERIVA el token de
+verificación de cada cliente, `verifyTokenFor(slug)`, para no tener que guardar
+un secreto más por tenant). Sin las dos, el endpoint responde 503 y no toca la
+base. Detalle en `lib/whatsapp/webhookAuth.js` e `inbox.js`.
+
+Ejercitado por `scripts/_smoke-webhook-whatsapp.mjs` (23/08/2026), que firma los
+payloads igual que los firma Meta y fija las cuatro propiedades que fallan en
+silencio: que la firma es la única llave y va sobre los **bytes exactos** del
+cuerpo, que el tenant lo decide el slug de la URL y no el payload (el token de
+un cliente no abre la puerta de otro, y lo entregado en uno no aparece en el
+schema del otro), que un reintento de Meta no duplica el hilo, y a qué ficha se
+cuelga cada conversación —incluido que un número compartido por dos fichas se
+deja **sin asignar** en vez de adivinar—. También los acuses de entrega, con el
+`read` que no retrocede a `delivered` cuando llegan desordenados.
+
+Se escribió a la vez que su primer hallazgo: un mensaje **saliente** del
+historial no siempre trae `to`, y se guardaba con el teléfono en blanco y sin
+ficha. No se perdía, pero desaparecía del hilo del paciente, que es el único
+sitio donde alguien lo va a buscar. Ahora se cae al wa_id del hilo, que Meta ya
+manda y el endpoint tiraba.
+
+### El botón «Conectar mi WhatsApp» (Embedded Signup)
+
+`modules/config/ConectarWhatsapp.jsx` abre la ventana de Meta y
+`POST /api/whatsapp/conectar` remata: canjea el código por el token permanente
+del cliente, suscribe nuestra app a SU cuenta con SU `override_callback_uri`, y
+lo guarda cifrado. La lógica contra Meta, en `lib/whatsapp/embeddedSignup.js`.
+
+Es lo que hace vendible la integración: sin esto, cada cliente tendría que
+crearse una app en developers.facebook.com y sacar un token de un usuario del
+sistema. Y sobre todo, **es la única vía que conserva sus conversaciones**: la
+alta manual de un número obliga a borrar su cuenta de WhatsApp y se la saca del
+móvil. Por eso el flujo pide `featureType: "whatsapp_business_app_onboarding"`
+(coexistencia) — quitar esa línea cambia el flujo por el destructivo.
+
+Cosas que muerden y que ya están contempladas:
+
+- **El código canjeable vive 30 segundos.** Se manda al servidor y se canjea en
+  la misma petición. Si esto se mueve a una cola, deja de funcionar.
+- **El orden es canjear → suscribir → guardar.** Guardar antes de suscribir
+  dejaría al cliente «conectado» mandando mensajes y sin recibir nada, en
+  silencio. Si algo falla a mitad, no se guarda y se puede reintentar.
+- **No se puede conectar desde local**: `baseUrlWebhook` exige https y rechaza
+  localhost. Esa URL se queda GUARDADA en Meta, y registrar `localhost:3000`
+  como destino de los mensajes de un cliente real fallaría después y en
+  silencio.
+- El dominio del CRM tiene que estar en «Allowed domains» y «Valid OAuth
+  redirect URIs» de la app de Meta, o el `postMessage` no llega y el botón dice
+  que faltan datos.
+- Variables: `NEXT_PUBLIC_META_APP_ID` y `NEXT_PUBLIC_META_CONFIG_ID` (públicas,
+  van al navegador). Sin ellas el botón no aparece y queda el pegado a mano.
+
+⚠️ **Nada de esto se puede probar de verdad hasta ser Tech Provider**: sin la
+configuración de Embedded Signup no existe `config_id` y no hay ventana que
+abrir. El código está escrito contra la documentación y probado con las
+respuestas de Meta simuladas.
 
 ## Enlace de videollamada de las citas — 2026-07-27
 
