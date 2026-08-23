@@ -331,14 +331,78 @@ columna: en Aumenta la ficha medía varias pantallas y para llegar a la
 facturación había que pasar por delante del contrato, los tutores, los
 consentimientos y las citas.
 
+> La tabla decía «seis pestañas» y listaba seis; en el código hay OCHO. Se le
+> habían quedado fuera **Pautas** (13/08/2026, con el módulo Nutrición) y
+> **WhatsApp** (17/08/2026). Corregido el 17/08/2026 — la lista buena es `TABS`
+> en `modules/default/ClientDetailModule.jsx`.
+
 | Pestaña | Qué lleva | La pregunta que responde |
 | --- | --- | --- |
 | **Datos** | Datos del cliente (vista/edición) · Contactos · Datos fiscales · Acceso a la web | quién es y cómo se le escribe |
 | **Interacciones** | Historial de interacciones | qué se ha hablado con esta persona |
+| **WhatsApp** | El hilo de WhatsApp, de lectura | qué se le ha dicho por WhatsApp y si llegó |
 | **Servicio** | Módulos asignados · Pacientes · Consulta externa · Profesional de referencia | qué se le presta y quién se lo presta |
 | **Contrato y avisos** | Tutores · Contrato · Comunicaciones · Meses del portal | qué ha firmado y qué ha consentido |
 | **Citas** | Sus citas | su agenda |
+| **Pautas** | El menú que sigue (módulo Nutrición) | qué está comiendo |
 | **Facturación** | Resumen y facturas | su dinero |
+
+**WhatsApp** (`ClientWhatsappSection`, endpoint `GET /api/clients/[id]/whatsapp`)
+lee `whatsapp_messages` — la Cloud API no guarda conversaciones, así que lo que
+no esté en esa tabla no está en ningún sitio. Enseña quién dijo qué, marca con
+un sello «CRM» lo que mandó el sistema (frente a lo que escribió la profesional
+desde su móvil), y el acuse de entrega de cada aviso con su motivo cuando falla
+— eso último es lo que hay que poder enseñar cuando alguien pregunta por qué no
+le llegó el recordatorio.
+
+**Es de solo lectura a propósito.** Con la coexistencia el número sigue vivo en
+el móvil de la profesional: ahí contesta ella, gratis y sin ventana de 24 h. Una
+caja de respuesta aquí funcionaría solo si el paciente hubiera escrito hace
+menos de un día y fallaría el resto del tiempo, que es justo cuando alguien
+confiaría en ella.
+
+⚠️ La ficha de nutri_laura (`modules/overrides/nutri-laura/`) pinta sus pestañas
+a mano y no usa `PanelPestana`, así que allí la sección avisa por `onEstado` y
+la pestaña se filtra con `hayWhatsapp`. Y el panel va **montado siempre**
+(oculto con `hidden`), no `tab === "whatsapp" && …`: si solo se montara al abrir
+su pestaña, la pestaña no aparecería nunca — no se puede abrir lo que no está.
+
+## WhatsApp sin asignar (17/08/2026)
+
+`/clientes/whatsapp` — los mensajes que llegan de números que **no están en
+ninguna ficha**. `whatsapp_messages` los guarda a propósito (un familiar, un
+número nuevo, alguien que aún no es paciente: tirarlos sería el fallo que el
+módulo viene a evitar), pero hasta esta pantalla el único sitio donde se veían
+era la ficha de un cliente — o sea que **se estaban guardando para nadie**.
+
+- Una fila por **NÚMERO**, no por mensaje: lo que se decide es «esta
+  conversación es de esta persona», y eso se decide una vez aunque haya veinte
+  mensajes debajo. La consulta agrupa con funciones de ventana, así que es UNA
+  llamada a la base y no una por conversación.
+- Gatea por **`clients` a secas**, no por `clients_avanzado`: «Fichas a
+  completar» resuelve el problema de un centro con miles de huecos importados y
+  esto resuelve uno que tiene cualquiera que use WhatsApp. Tampoco se gatea por
+  ningún módulo de WhatsApp porque no existe: es una integración universal
+  (regla #14).
+- **La entrada del menú se esconde cuando no hay nada** (`waSueltos` en
+  `Sidebar.jsx`), igual que «Fichas a completar». Aquí el criterio del `null` va
+  al revés: mientras no se sepa, NO se enseña — la mayoría de clientes no tienen
+  WhatsApp y para ellos estaría siempre a cero.
+
+⚠️ **Asignar tiene que ser definitivo, o esto es una noria.** Además de
+enganchar los mensajes sueltos, el número se guarda en la ficha como
+`ClientContactMethod` (kind `phone`, etiqueta «WhatsApp», **nunca principal**) y
+`buscarClientePorTelefono` mira ahora también esa tabla. Sin eso, el siguiente
+mensaje del mismo número volvería a caer en la bandeja y habría que asignarlo
+otra vez cada semana.
+
+El principal NO se toca nunca: es el que usan facturación, los avisos de cita y
+el acceso al portal, y un número que apareció en un mensaje no puede desplazar
+al que la persona dio en su alta. Solo se tocan los mensajes con `client_id`
+NULL: reasignar en lote lo que alguien ya decidió sería pisarle el trabajo.
+
+La asignación queda **auditada** (`whatsapp.conversacion_asignada`): no es
+destructivo ni mueve dinero, pero decide quién puede LEER una conversación.
 
 El patrón (pestañas + `TabButton`) es el que ya usaba nutri_laura; aquí no se
 inventó nada, se generalizó.

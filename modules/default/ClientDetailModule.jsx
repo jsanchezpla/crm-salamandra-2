@@ -22,6 +22,7 @@ import ClientGuardiansSection from "../../components/clients/ClientGuardiansSect
 import ClientPortalMonthsSection from "../../components/clients/ClientPortalMonthsSection.jsx";
 import ClientComunicacionesSection from "../../components/clients/ClientComunicacionesSection.jsx";
 import ClientCitasSection from "../../components/clients/ClientCitasSection.jsx";
+import ClientWhatsappSection from "../../components/clients/ClientWhatsappSection.jsx";
 import ClientBonosSection from "../../components/clients/ClientBonosSection.jsx";
 import ClientConsultaExternaSection from "../../components/clients/ClientConsultaExternaSection.jsx";
 import ClientProfesionalSection from "../../components/clients/ClientProfesionalSection.jsx";
@@ -58,6 +59,10 @@ import ClientPlansPanel from "../nutricion/ClientPlansPanel.jsx";
 const TABS = [
   { key: "datos", label: "Datos" },
   { key: "interacciones", label: "Interacciones" },
+  // El hilo de WhatsApp, junto a Interacciones porque son lo mismo: el registro
+  // de lo que se ha hablado con esta persona. Se esconde solo si no hay ningún
+  // mensaje, así que en un centro sin WhatsApp la pestaña no existe.
+  { key: "whatsapp", label: "WhatsApp" },
   { key: "servicio", label: "Servicio" },
   { key: "contrato", label: "Contrato y avisos" },
   { key: "citas", label: "Citas" },
@@ -685,6 +690,14 @@ export default function ClientDetailModule({
               )}
             </div>
           </div>
+        </PanelPestana>
+
+        {/* Sin un solo mensaje, la sección devuelve null y esta pestaña
+            desaparece del menú sola. No hace falta gatearla por módulo: WhatsApp
+            no es un módulo, es una integración que cualquier cliente puede
+            conectar (regla #14). */}
+        <PanelPestana clave="whatsapp" activo={tab === "whatsapp"} onEstado={marcarPanel}>
+          <ClientWhatsappSection clientId={id} />
         </PanelPestana>
 
         <PanelPestana clave="servicio" activo={tab === "servicio"} onEstado={marcarPanel}>

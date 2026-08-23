@@ -47,6 +47,7 @@ import ClientBookingsPanel from "./ClientBookingsPanel.jsx";
 import ClientPlansPanel from "../../nutricion/ClientPlansPanel.jsx";
 import ClientModulesSection from "../../../components/clients/ClientModulesSection.jsx";
 import ClientCitasSection from "../../../components/clients/ClientCitasSection.jsx";
+import ClientWhatsappSection from "../../../components/clients/ClientWhatsappSection.jsx";
 import ClientBonosSection from "../../../components/clients/ClientBonosSection.jsx";
 import ClientConsultaExternaSection from "../../../components/clients/ClientConsultaExternaSection.jsx";
 import ClientCuentaWebSection from "../../../components/clients/ClientCuentaWebSection.jsx";
@@ -67,6 +68,10 @@ const TABS = [
   // cambia el nombre visible, y SOLO en nutri_laura (el resto de tenants usa
   // modules/default/ClientDetailModule.jsx, donde siguen siendo "Notas").
   { key: "notes", label: "Historia clínica" },
+  // El hilo de WhatsApp, pegado a la historia clínica porque es lo mismo leído
+  // de otra forma: lo que se ha hablado con la paciente. A diferencia del resto,
+  // esta pestaña SOLO sale si hay mensajes (ver `hayWhatsapp` más abajo).
+  { key: "whatsapp", label: "WhatsApp" },
   { key: "attachments", label: "Documentos" },
   // "Sesiones", no "Citas": en la consulta cada cita ES una sesión de
   // seguimiento. Sigue siendo la agenda del módulo `citas` por debajo.
@@ -113,6 +118,14 @@ export default function NutriLauraClientDetailModule() {
   const [clientError, setClientError] = useState(null);
 
   const [tab, setTab] = useState("info");
+
+  // Esta ficha pinta sus pestañas a mano (no usa `PanelPestana`, que en la ficha
+  // por defecto deduce solo si un panel está vacío mirando el DOM), así que el
+  // hilo de WhatsApp tiene que avisar de si tiene algo. Sin mensajes, la pestaña
+  // no sale: una consulta que aún no ha conectado WhatsApp no debe ver una
+  // pestaña vacía en todas las fichas.
+  const [hayWhatsapp, setHayWhatsapp] = useState(false);
+  const pestanas = TABS.filter((t) => t.key !== "whatsapp" || hayWhatsapp);
 
   // Edición inline en el padre — preserva state al cambiar tabs.
   const [editMode, setEditMode] = useState(false);
@@ -325,7 +338,7 @@ export default function NutriLauraClientDetailModule() {
       {/* ── Tabs ───────────────────────────────────────────────────────────── */}
       <div className="border-b border-gray-100 bg-white">
         <div className="px-4 lg:px-8 flex items-center gap-1 overflow-x-auto whitespace-nowrap">
-          {TABS.map((t) => (
+          {pestanas.map((t) => (
             <TabButton
               key={t.key}
               active={tab === t.key}
@@ -365,6 +378,13 @@ export default function NutriLauraClientDetailModule() {
         )}
 
         {tab === "notes" && <ClientNotesPanel clientId={id} />}
+
+        {/* Montado SIEMPRE (solo oculto), no `tab === "whatsapp" && …`: es él
+            quien dice si hay mensajes, y si solo se montara al abrir su pestaña
+            la pestaña no aparecería nunca — no se puede abrir lo que no está. */}
+        <div className={tab === "whatsapp" ? undefined : "hidden"}>
+          <ClientWhatsappSection clientId={id} onEstado={setHayWhatsapp} />
+        </div>
 
         {tab === "attachments" && <ClientAttachmentsPanel clientId={id} />}
 

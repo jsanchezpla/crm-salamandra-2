@@ -59,6 +59,11 @@ const navigation = [
           // familias, no el de una consulta que conoce a sus pacientes por el
           // nombre. La pantalla y el endpoint gatean igual.
           { key: "clients-urgentes", label: "Fichas a completar", href: "/clientes/urgentes", moduleKey: "clients_avanzado" },
+          // WhatsApp de números que no están en ninguna ficha (17/08/2026). SIN
+          // `moduleKey`: WhatsApp no es un módulo, es una integración universal
+          // (regla #14). Lo que la esconde es no tener trabajo — ver
+          // `waSueltos` abajo —, así que quien no use WhatsApp no la ve nunca.
+          { key: "clients-whatsapp", label: "WhatsApp sin asignar", href: "/clientes/whatsapp" },
         ],
         badge: null,
         icon: (
@@ -459,6 +464,32 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
   const [urgentes, setUrgentes] = useState(null);
   const tieneClientesAvanzado = enabledModules.has("clients_avanzado");
 
+  /**
+   * Conversaciones de WhatsApp sin ficha. Mismo criterio que arriba: una lista
+   * de trabajo vacía no es una entrada de menú, y aquí importa más todavía —
+   * la mayoría de los clientes no tienen WhatsApp conectado y para ellos esto
+   * estaría siempre a cero.
+   *
+   * `null` = todavía no se sabe, y entonces NO se enseña. Aquí el error cae del
+   * lado contrario que en «Fichas a completar»: allí esconder la lista de
+   * trabajo de Aumenta por una petición lenta sería grave, y aquí enseñar una
+   * entrada vacía a los ocho clientes que no usan WhatsApp, solo ruido.
+   */
+  const [waSueltos, setWaSueltos] = useState(null);
+  const tieneClientes = enabledModules.has("clients");
+
+  useEffect(() => {
+    if (!tieneClientes) return undefined;
+    let vivo = true;
+    fetch("/api/whatsapp/sin-asignar?soloTotales=1", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (vivo && j?.ok) setWaSueltos(j.data.total ?? 0);
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [tieneClientes]);
+
   useEffect(() => {
     if (!tieneClientesAvanzado) return undefined;
     let vivo = true;
@@ -555,6 +586,8 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
     if (ocultosDelTenant.includes(child.key)) return false;
     // Una lista de trabajo terminada deja de ser una entrada de menú.
     if (child.key === "clients-urgentes" && urgentes && urgentes.total === 0) return false;
+    // Sin conversaciones sueltas (o sin saberlo todavía), no hay entrada.
+    if (child.key === "clients-whatsapp" && !waSueltos) return false;
     if (child.adminOnly && !isAdminRole) return false;
     const exigidos = child.requiresAll || (child.moduleKey ? [child.moduleKey] : []);
     return exigidos.every((k) => {
@@ -722,7 +755,9 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
                               const cuenta =
                                 child.key === "clients-urgentes" && urgentes?.bloquea
                                   ? urgentes.bloquea
-                                  : null;
+                                  : child.key === "clients-whatsapp" && waSueltos
+                                    ? waSueltos
+                                    : null;
                               return (
                                 <Link
                                   key={child.key}
