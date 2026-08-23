@@ -1,3 +1,4 @@
+-- @vivo — Consulta SQL de solo lectura (md5 de estructura y de recuentos por schema) guardada a propósito como herramienta repetible: el commit que la creó… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 -- Huella de TODOS los schemas: estructura (tablas, columnas, tipos, nullabilidad,
 -- defaults) y contenido (filas por tabla). Solo lectura.
 --

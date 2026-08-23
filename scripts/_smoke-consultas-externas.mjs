@@ -1,3 +1,4 @@
+// @prueba ligera — de sequelize solo importa `Op`, que es un símbolo; no abre ninguna conexión.
 /**
  * _smoke-consultas-externas.mjs — quién ve a los pacientes de acuerdos con
  * empresas (07/08/2026, Rodrigo). Lógica pura, sin base de datos:

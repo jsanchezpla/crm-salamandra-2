@@ -123,7 +123,7 @@ export const POST = withTenant(async (request, _routeContext, ctx) => {
   await auditar({
     tenantId: ctx.tenant.id,
     userId,
-    action: "whatsapp.conectado",
+    action: "configuracion.whatsapp_conectado",
     entity: "Tenant",
     entityId: ctx.tenant.id,
     before: { whatsapp: ctx.tenant.settings?.integrations?.whatsappPhoneNumberId ? "conectado" : "sin conectar" },

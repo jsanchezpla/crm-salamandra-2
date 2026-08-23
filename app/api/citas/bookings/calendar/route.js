@@ -3,7 +3,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, error, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 import { noEsCarritoAbandonado } from "../../../../../lib/citas/booking.js";
-import { veTodaLaAgenda } from "../../../../../lib/citas/visibilidad.js";
+import { veTodaLaAgenda, soloLoSuyo } from "../../../../../lib/citas/visibilidad.js";
 
 const STATUS_COLOR_DIM = {
   cancelled: "#9ca3af",
@@ -11,7 +11,6 @@ const STATUS_COLOR_DIM = {
   completed: "#475569",
 };
 
-const NADIE = "00000000-0000-0000-0000-000000000000";
 
 /**
  * GET /api/citas/bookings/calendar?start=ISO&end=ISO
@@ -29,7 +28,7 @@ const NADIE = "00000000-0000-0000-0000-000000000000";
  * profesional asignado; si no, el color del tipo de cita. Las
  * canceladas/no_show/completadas van apagadas.
  */
-export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule, tenantHasModule }) => {
   try {
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
 
@@ -58,7 +57,10 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
       if (ids.length > 0) where.eventTypeId = { [Op.in]: ids };
     }
 
-    const teamOn = hasModule("team");
+    // ⚠️ `tenantHasModule` y NO `hasModule`: la pregunta es si el CENTRO tiene
+    // equipo, no si quien mira puede entrar en la pantalla de Equipo. El porqué,
+    // en lib/citas/visibilidad.js — con `hasModule` esto NO se ejecutaba.
+    const teamOn = tenantHasModule("team");
     if (teamOn) {
       const userRole = request.headers.get("x-user-role") ?? "user";
       // Con agenda compartida, una terapeuta ve —y filtra— la agenda entera
@@ -76,9 +78,10 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
           }
         }
       } else {
-        // Un profesional solo ve SU agenda. Si no tiene ficha de equipo, nada.
+        // Un profesional ve SU agenda y las citas que no son de nadie (la regla
+        // entera, con su porqué, en lib/citas/visibilidad.js).
         const myId = await resolveCurrentTeamMemberId(request, tenantModels);
-        where.teamMemberId = myId ?? NADIE;
+        where.teamMemberId = soloLoSuyo(myId);
       }
     }
 

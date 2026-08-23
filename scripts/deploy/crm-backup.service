@@ -11,6 +11,19 @@ Type=oneshot
 #   · rsync:   Environment="DESTINO_REMOTO=usuario@otro-vps:/backups/salamandra"
 # Descomenta UNA de las dos y ajusta el destino. Ver la cabecera de backup-db.sh.
 #Environment="DESTINO_REMOTO=b2:salamandra-backups"
+#
+# Esa copia SUMA y no espeja: un borrado aquí NO viaja allí, así que lo de fuera
+# sobrevive a que alguien vacíe /opt/crm-salamandra/backups. Por eso el destino
+# tiene su propia caducidad, más larga que los 14 días locales — 90 por defecto.
+# Solo hace falta tocarlo si el proveedor cobra por sitio y aprieta:
+#Environment="RETENCION_REMOTA_DIAS=90"
+#
+# Ese número se toca con cuidado: bajarlo de golpe manda al borrado todo lo que
+# quede fuera de la nueva ventana. El script se frena solo si una noche se
+# llevaría más de la mitad de lo que hay allí (o si el valor no es un número
+# entero): no borra nada y manda correo. Si has bajado la retención a propósito
+# y quieres que se aplique, sube el tope una noche con
+# Environment="MAXIMO_BORRADO_PCT=100", deja que corra y vuelve a quitarlo.
 ExecStart=/opt/crm-salamandra/scripts/backup-db.sh
 StandardOutput=append:/var/log/crm-backup.log
 StandardError=append:/var/log/crm-backup.log

@@ -1,14 +1,41 @@
 # Módulo Soporte (`support`)
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es este
+> mismo commit). Si algo no cuadra, manda el código: corrige esta tabla. **Quién
+> tiene el módulo NO se lista aquí** (una lista a mano se queda vieja):
+> `/admin/modulos` en el back-office o `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `support` · requiere — (`lib/provisioning/catalogo.js` no le pone dependencias). Sin él, `/soporte` no da 404: la API responde 403 y la pantalla degrada a un enlace a `/ayuda` (el Buzón, que es otro doc: `buzon.md`). |
+| **Reina** | — (el doc no nombra ninguna). |
+| **Pantallas** | Panel: `app/(dashboard)/soporte/page.jsx` (`/soporte`, el único `page.jsx`; bandeja, detalle, informes y configuración son vistas dentro; deep-links `?ticket=` y `?client=`). Se llega desde la llave inglesa del pie del sidebar (`components/layout/Sidebar.jsx`), sin entrada de menú propia. Públicas (portal del cliente final): `app/widget/c/[tenantSlug]/soporte/page.jsx` (abrir ticket) y `app/widget/c/[tenantSlug]/soporte/t/[token]/page.jsx` (seguimiento y respuesta). |
+| **Endpoints** | `app/api/tickets/**` — 11 `route.js` con `hasModule("support")`: raíz (bandeja y alta), `[id]`, `[id]/messages`, `[id]/ai`, `categories` (+ `[id]`), `templates` (+ `[id]`), `settings`, `stats`, `attachments/[attachmentId]`. Públicos: `app/api/public/c/[tenantSlug]/soporte/**` — 3 (`soporte`, `t/[token]`, `t/[token]/attachments/[attachmentId]`), con `withPublicTenant` + `enforceRateLimit`. Webhook: `app/api/webhooks/resend-inbound/route.js` (correo entrante de Resend, firma svix a mano; encamina por `soporte-{slug}@…`). |
+| **Lógica** | `lib/support/` (6): `sla.js` (plazos por prioridad, `computeDueDates`, estado por hito; desde el 20/08/2026 `DEFAULT_SLA` está congelado también por dentro y un `from` ilegible cuenta desde AHORA en vez de dar `Invalid Date`), `notify.js` (campana + emails por Resend, `captureAddress`, reply-to; guard de demo), `serialize.js` (forma de la API y del portal, `ticketRef`), `context.js` (settings, rol admin, autor efectivo), `ai.js` (resumen/borrador/clasificación con la clave BYOK), `ticketStorage.js` (adjuntos en `uploads/support/{slug}/{ticketId}/`, 10 MB). Fuera: `lib/email/templates/soporte/{ticketClient,ticketTeam}.js`, `lib/notifications/alerts.js` (`syncSupportAlerts`, tipo `ticket_sla`), `lib/demo/isDemo.js` (`demoForcesFakeAi`, `isDemoTenant`). |
+| **UI** | `modules/support/`: `SupportModule.jsx` (bandeja + fallback sin módulo), `TicketDetail.jsx` (drawer: hilo, propiedades, composer, SLA por ticket), `NewTicketModal.jsx`, `SupportReports.jsx`, `SupportConfig.jsx` (portal, SLA, avisos, correo, IA, categorías, plantillas), `supportUi.js` (etiquetas y colores). Sin `components/support/`. |
+| **Modelos** | `models/tenant/`: `Ticket` (`tickets`), `TicketMessage` (`ticket_messages`), `TicketAttachment` (`ticket_attachments`), `TicketCategory` (`ticket_categories`), `TicketTemplate` (`ticket_templates`), `SupportSettings` (`support_settings`, una fila). El nº TK lo pone la secuencia `ticket_number_seq` de cada schema, no la app. |
+| **Interruptores y parámetros** | ninguno que lea el código. Lo configurable vive en `support_settings` (`slaEnabled`, `slaConfig`, `portalEnabled`, `portalIntro`, `autoClassify`, `notifyEmails`, `supportEmail`) y en dos variables de plataforma, `RESEND_INBOUND_DOMAIN` + `RESEND_WEBHOOK_SECRET` (las DOS, o no hay dirección de captura). |
+| **Pantallas propias** | ninguna (`app/(dashboard)/soporte/page.jsx` tiene el mapa `UI_OVERRIDES` vacío; en producción ningún `support` lleva `ui_override`). |
+| **Scripts** | Activación: `node scripts/enable-module.js <slug> support` (corre `migrate-support-module.js`, la única de `MODULES.support` en `scripts/_module-migrations.js`: crea por módulo activo y blinda por existencia de `tickets`). Seed: `seed-support-demo.js` (solo demo; después `demo-golden-snapshot.js` para que el reset del login la conserve). Comprobar el correo: `check-resend-tenant.mjs` (solo lectura, cliente a cliente) y `check-resend.mjs` (la cuenta de plataforma). |
+| **Pruebas** | `scripts/_smoke-correo-entrante.mjs` (firma svix, encaminado, alta por correo, hilo, `TK-0042` en el asunto, duplicados, reapertura) — necesita servidor y base de datos, NO entra en `npm test` · `scripts/_smoke-support-sla.mjs` (`node:test`, 19/08/2026, en `npm test`): lo que devuelve `lib/support/sla.js` (plazos por prioridad con `from` fijo, `effectiveSla` sobre los ajustes del tenant sin tocar `DEFAULT_SLA`, los cinco estados de `slaState`, `isSlaBreached`; desde el 20/08/2026 también que las cuatro prioridades de `DEFAULT_SLA` están congeladas —escribir en ellas revienta— y que con un `from` roto salen dos fechas de verdad contadas desde ahora, mientras `null` sigue queriendo decir solo «SLA apagado») · `scripts/_smoke-support-serialize-buzon.mjs` (`node:test`, 20/08/2026, en `npm test`) en su mitad de soporte: `lib/support/serialize.js` —la vista pública del portal fijada campo a campo con un `deepEqual`, para que cualquier campo que se cuele reviente en rojo: ni notas internas del hilo, ni correo o teléfono del solicitante, ni plazos del SLA, ni `portalToken` salen por `serializePortalTicket`; y la forma exacta de lo que ve el equipo (`serializeTicket`, mensajes, adjuntos, categorías, plantillas, ajustes) con sus defaults—; su otra mitad es del Buzón (ver `buzon.md`) · `scripts/_smoke-plantillas-resto-layout.mjs` (`node:test`, 21/08/2026, ligera, en `npm test`) fija los dos correos de ticket —`soporte/ticketClient` y `soporte/ticketTeam`— y sus variantes por `kind`: cada una con su asunto y su titular, un `kind` desconocido (o ninguno) cae en la variante genérica y no en blanco, el número y el asunto del ticket salen en las DOS versiones, y la respuesta solo se pega en el `kind` `reply` —respetando los saltos de línea— sin dejar una cita vacía si falta |
+| **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (auditoría con RESUMEN: los tickets llevan datos personales; guard de la demo en los envíos) · `../decisions/2026-08-10-las-listas-copiadas-a-mano-mienten.md` (la tarea falsa «`support` solo en local» salió de la tabla de módulos). |
+| **En este doc** | Modelos (`models/tenant/`) · SLA (`lib/support/sla.js`) · Flujo de estados · API interna (`app/api/tickets/*`, gate `hasModule("support")`) · Portal público (`/widget/c/{slug}/soporte`) · UI dashboard (`modules/support/`) · Conversación por CORREO (bidireccional, 2026-07-27 tarde) · Campana y emails |
+
 Helpdesk con el que el TENANT atiende a **sus** clientes: tickets numerados
 (TK-0042), hilo de conversación con notas internas, adjuntos, categorías,
 plantillas de respuesta, SLA con avisos, informes, IA a demanda y un portal
 público para el cliente final. Implementado 2026-07-27 (fases 1–3 completas).
 
 **No confundir con:**
-- El canal tenant→Salamandra: cuando el tenant NO tiene el módulo, `/soporte`
-  degrada a la tarjeta de contacto (mailto a info@salamandrasolutions.com). La
-  llave inglesa del pie del sidebar la ve todo el mundo, con o sin módulo.
+- El canal tenant→Salamandra, que es el **Buzón** (`/ayuda`, `buzon.md`) y lo
+  tienen todos. Cuando el tenant NO tiene el módulo `support`, `/soporte` no da
+  404: la API responde 403 y la pantalla degrada a `ContactoSalamandra()`, que
+  explica que Soporte es otra cosa y enlaza a `/ayuda` (hasta el 13/08/2026 era
+  un `mailto:` a info@salamandrasolutions.com, y era el único camino hacia
+  nosotros). La llave inglesa del pie del sidebar la ve todo el mundo, con o
+  sin módulo.
 - `Incidencia` (Clínica): helpdesk interno del Programa de Excelencia.
 
 ## Modelos (`models/tenant/`)
@@ -38,6 +65,27 @@ respuesta PÚBLICA del equipo. Estados por hito: `pending`/`breached`/`met`/
 `missed`/`none`. **v1 asume que el reloj NO se pausa en `waiting`** (pausarlo
 exige acumular intervalos; se hará si un tenant lo pide).
 
+**`null` en un `dueAt` quiere decir UNA sola cosa: este tenant tiene el SLA
+apagado** (20/08/2026). De ahí sale la regla del borde: un `from` que no se
+puede leer —una cadena que no es fecha, un `NaN`, un objeto— cuenta desde
+AHORA, y el ticket nace con sus dos plazos igual. Antes se devolvían dos
+`Invalid Date`, que es lo peor de las dos opciones: la columna acaba en NULL de
+todos modos, pero sin que nadie lo haya decidido, y entonces el ticket queda
+sin objetivo en silencio. Y **lo que no vence no se ve**: no cuenta en el aviso
+rojo de vencidos de la bandeja, no entra en `syncSupportAlerts` (`ticket_sla`)
+y no aparece en el % de cumplimiento de los informes. Un ticket que sí tiene
+SLA no puede desaparecer de esas tres listas por una fecha mal formada.
+
+**`DEFAULT_SLA` está congelado hasta el fondo** (20/08/2026). `Object.freeze`
+no baja a las prioridades, así que hasta esa fecha `DEFAULT_SLA.critical` era
+un objeto escribible: una asignación despistada en cualquiera de los sitios que
+lo leen —`effectiveSla` lo usa de base en CADA llamada— habría cambiado el
+plazo de todos los tenants sin ajustes propios, en caliente, dentro del proceso
+vivo y sin dejar rastro en ninguna tabla ni en el `audit_log`. Los ajustes de
+un tenant se escriben en `support_settings.sla_config`, nunca aquí. Las cuatro
+prioridades llevan ahora su propio `Object.freeze` y `_smoke-support-sla.mjs`
+comprueba que escribir en ellas revienta.
+
 ## Flujo de estados
 
 `open` ⇄ `in_progress` → respuesta pública ⇒ `waiting` → el cliente responde
@@ -63,7 +111,8 @@ estado dejan nota `system` (interna) en el hilo con quién y cuándo.
 - `categories`, `templates`, `settings` — CRUD/ajustes (escritura solo admin).
 - `GET /api/tickets/stats?months=N` — serie mensual, tiempos medios, % SLA,
   por categoría y por responsable.
-- `GET /api/tickets/attachments/[id]` — descarga por stream (attachment+nosniff).
+- `GET /api/tickets/attachments/[attachmentId]` — descarga por stream
+  (attachment+nosniff).
 
 Roles: cabecera `x-user-role` (`ADMIN_ROLES`). Asignación = `TeamMember.id`
 (mismo criterio que `Incidencia.assignedToId`); el aviso resuelve su User
@@ -100,10 +149,14 @@ se quedaba en "Cargando"), `TicketDetail` (drawer regla #13, hilo + propiedades
 + composer respuesta/nota con plantillas y Borrador IA), `NewTicketModal`,
 `SupportReports` (KPIs + barras CSS), `SupportConfig` (portal, SLA, avisos,
 IA, categorías, plantillas). Sin módulo → la API responde 403 y la UI degrada
-a la tarjeta de contacto con Salamandra.
+a `ContactoSalamandra()`, que enlaza al Buzón (`/ayuda`).
 
-Pie del sidebar (pedido del socio 2026-07-27): **Soporte · Configuración ·
-Cerrar sesión**, en ese orden.
+Pie del sidebar: **Ayuda · Soporte · Configuración (solo admin) · Cerrar
+sesión**, en ese orden. Los tres últimos los pidió el socio el 2026-07-27;
+Ayuda entró la primera el 13/08/2026 porque la ve todo el mundo y no depende
+de ningún módulo. Son dos iconos distintos a propósito: la llave inglesa es el
+helpdesk del cliente hacia SUS clientes; el interrogante, su línea con
+nosotros.
 
 ## Conversación por CORREO (bidireccional, 2026-07-27 tarde)
 
@@ -167,8 +220,12 @@ asunto mandando sobre el remitente, el remitente del equipo, el duplicado y la
 reapertura.
 
 ```bash
-node --env-file=.env.local scripts/_smoke-correo-entrante.mjs sandbox
+node --env-file=.env.local scripts/_smoke-correo-entrante.mjs demo
 ```
+
+(El argumento es el slug de un tenant local con el módulo; el valor por defecto
+del script sigue siendo `sandbox`, que ya no existe en ningún entorno, así que
+hay que pasarlo.)
 
 ## SLA por ticket
 
@@ -210,6 +267,8 @@ el módulo).
 - El reloj SLA no se pausa en `waiting` (ver arriba).
 - Adjuntos del correo entrante: solo se importan si el webhook los trae inline
   (base64). Si Resend manda solo referencias, se anota en el hilo sin importar.
-- `scripts/enable-module.js` no arranca en Node puro local por la cadena
-  `tenantResolver → lib/utils/errors.js → next/server` (preexistente). Rodeo
-  usado: fila en `master.tenant_modules` a mano + `ensure-tenant-schema.js`.
+- (Resuelto.) `scripts/enable-module.js` ya arranca en Node puro local: no
+  importa `tenantResolver`, solo `masterDb`, `moduleKeys` y
+  `_module-migrations`. El rodeo de «fila a mano + `ensure-tenant-schema.js`»
+  que hizo falta el 27/07 ya no aplica: la activación es
+  `node --env-file=.env.local scripts/enable-module.js <slug> support`.

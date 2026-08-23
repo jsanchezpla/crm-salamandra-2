@@ -1,3 +1,4 @@
+// @vivo — Utilidad de DESARROLLO genérica por slug (default nutri_laura) para dejar una cita con tarjeta retenida (o soltada con `--soltar`) y mirar la… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * dev-cita-retenida.js — deja una solicitud REAL con la tarjeta retenida, para
  * poder mirar la lista de espera de la profesional con datos de verdad.

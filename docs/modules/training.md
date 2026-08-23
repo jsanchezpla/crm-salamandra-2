@@ -1,5 +1,30 @@
 # Módulo de Formación & Conocimiento (`training`)
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es este mismo commit). Si algo no cuadra, manda el código: corrige esta tabla. **Quién tiene el módulo NO se lista aquí** (una lista a mano se queda vieja): `/admin/modulos` en el back-office o `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `training` · requiere — (`lib/provisioning/catalogo.js` no le pone `requiere`; `lib/provisioning/dependencias.js` lo da como el más independiente del CRM: lo que necesita es su WordPress). Cuestionarios va DENTRO desde el 10/08/2026: no existe la clave `cuestionarios`. |
+| **Reina** | `retorika`, de hecho aunque el doc no use la palabra: el módulo se implementó para su academia (WordPress + TutorLMS + WooCommerce), la portada «completa» es la suya y `app/api/external/retorika/*` lleva su slug a fuego. |
+| **Pantallas** | `app/(dashboard)/formacion/page.jsx` (`/formacion`, la portada con el interruptor «formación abierta») · `formacion/cursos/page.jsx` y `formacion/cursos/[id]/page.jsx` (`/formacion/cursos`, `/formacion/cursos/[id]` con la pestaña Registros del curso) · `formacion/empresas/page.jsx` y `formacion/empresas/[id]/page.jsx` (`/formacion/empresas`, `/formacion/empresas/[id]`) |
+| | `formacion/usuarios/page.jsx` (`/formacion/usuarios`, las PERSONAS: «Alumnos») · `formacion/alumnos/page.jsx` (`/formacion/alumnos`, las INSCRIPCIONES: «Matrículas») · `formacion/cuestionarios/page.jsx` (`/formacion/cuestionarios`) · `app/(dashboard)/cuestionarios/page.jsx` (`/cuestionarios`, solo redirige a la anterior) |
+| **Endpoints** | `app/api/training/**` — 28 `route.js` con JWT y `hasModule("training")`: `courses`, `companies` (+ `[id]/courses`, `bulk`), `users` (+ `import`, `import/preview`, `import/template`, `export`, `[id]/restore`), `enrollments` (+ `export`), `quiz-attempts` (+ `stats`, `quizzes-list`, `courses-list`, `companies-list`), `course-registrations` (+ `stats`, `export`), `sync` (botón «Sincronizar con la web») y `sync-status` · `app/api/cuestionarios/**` — 3, alias de quiz-attempts + `sync` (pull desde TutorLMS) |
+| | **Webhooks y públicos, sin JWT**: `app/api/webhooks/tutorlms/**` (5: `course`, `enrollment`, `quiz-attempt`, `sync`, `sync-courses`; HMAC por tenant) · `app/api/webhooks/retorika/**` (3: `registro-curso`, `registro-curso/check`, `check-empresa-user`; Origin allowlist o HMAC) · `app/api/external/retorika/**` (3: `alumnos`, `alumnos/[email]`, `cursos`; API key y slug fijo) · `app/api/cursos-empresas/codigos-cursos/[email]/route.js` y `app/api/usuarios/register/empresa/route.js` (solo `x-tenant`, con rate limit) |
+| **Lógica** | `lib/training/`: `webhookAuth.js` (firma HMAC por tenant, `CRM_WEBHOOK_SECRETS`) · `syncWordpress.js` (pedirle a WordPress que lo mande todo: lo comparten el botón y el repaso nocturno) · `formacionAbierta.js` (el interruptor y las palabras de la portada) · `registrationLabels.js` (diccionarios del formulario de registro previo) · `parseDate.js` (fechas de los Excel de import) · `audit.js` (auditoría de los registros de curso) |
+| **UI** | `modules/training/FormacionOverview.jsx` (la portada, una para todos) · `modules/cuestionarios/CuestionariosModule.jsx` + `CuestionariosDashboard.jsx` · `modules/default/CursoDetailModule.jsx` + `CourseRegistrationsList.jsx`, `CourseRegistrationStats.jsx`, `CourseRegistrationDetail.jsx` (la ficha de curso) |
+| | `components/training/`: `TrainingTable.jsx`, `TrainingBadge.jsx` (`TypeBadge`, `ActiveBadge`), `EditCourseDrawer.jsx`, `CreateEmployeeDrawer.jsx`, `ArchiveUserDialog.jsx`, `HardDeleteUserDialog.jsx`. Las pantallas de listado (`cursos`, `empresas`, `usuarios`, `alumnos`) van enteras en su `page.jsx`. |
+| **Modelos** | `models/tenant/`: `Course` (`courses`) · `Company` (`companies`) · `CompanyCourse` (`company_courses`) · `TrainingUser` (`training_users`) · `CourseEnrollment` (`course_enrollments`) · `QuizAttempt` (`quiz_attempts`) · `CourseRegistration` (`course_registrations`) · `TrainingSyncLog` (`training_sync_log`) · `Training` (`trainings`, legacy: se define y no lo usa nadie). Asociaciones en `lib/db/tenantDb.js`, bloque `Company.hasMany(TrainingUser…)` |
+| **Interruptores y parámetros** | `featureFlags.formacionAbierta` del módulo `training`: lo leen `app/(dashboard)/formacion/page.jsx` y `components/layout/Sidebar.jsx` a través de `lib/training/formacionAbierta.js`; se enciende con `scripts/formacion-abierta.js <slug> --encender`. |
+| | Los `logicOverrides` de `training` que hay en producción (`b2bEnabled`, `quizzesEnabled`, `tutorlmsConnected` en aumenta y nutri_laura) **no los lee ningún código**: son inertes, y `formacionAbierta.js` explica por qué no se leen a propósito. |
+| **Pantallas propias** | ninguna desde el 18/08/2026: la portada de Aumenta (`modules/overrides/aumenta/FormacionOverview.jsx`) se borró y es el base con el interruptor; la de nutri_laura se había borrado antes. `app/(dashboard)/formacion/page.jsx` ya no tiene mapa `UI_OVERRIDES`. |
+| **Scripts** | Activación: `node scripts/enable-module.js <slug> training` (corre `migrate-training-fields`, `migrate-training-archive` y `migrate-course-registrations`, declaradas en `scripts/_module-migrations.js`) · Interruptor: `scripts/formacion-abierta.js` · Cron: `scripts/sync-formacion-nocturno.js` (timer systemd del VPS a las 04:30, vía `docker exec`) |
+| | Altas históricas con datos: `scripts/add-training-module-demo.js`, `_hechos/add-training-module-nutri-laura.js`, `add-training-module-aumenta.js`, `_hechos/seed-retorika.js`, `setup-retorika-tenant-local.js` (solo local) · Seeds de prueba: `seed-cuestionarios-demo.js`, `_hechos/seed-cuestionarios-retorika.js` (solo local), `_hechos/seed-nutri-laura-training-data.js`, `_hechos/seed-nutri-laura-course-registrations.js` · ONE_OFF ya ejecutado: `_hechos/retirar-modulo-cuestionarios.js` (10/08/2026) · Diagnóstico: `test-tutorlms-webhook.js`, `_check-retorika-tables.mjs` |
+| **Pruebas** | `scripts/_smoke-formacion-abierta.mjs` (`@prueba ligera`: entra en `npm test`) · `scripts/_smoke-fechas-trimestres-madrid-parseDate.mjs` (`node:test`, 19/08/2026, en `npm test`) en su parte de `lib/training/parseDate.js`: `parseFlexibleDate` con texto —ISO, DD-MM-AAAA y DD/MM/AAAA dan el mismo día y el día va DELANTE («05-12-1985» es el 5 de diciembre, por eso no se usa `new Date(str)`), medianoche UTC sin hora, bisiestos (el 31/02 y el 31/04 no existen), años de 1900 a 2100, el orden de los motivos de rechazo y la forma `{ ok, date }` / `{ ok: false, reason }`—, con Date por componentes UTC (como las entrega ExcelJS) y con serial de Excel (31092 → 14/02/1985; un decimal pierde la hora; desde el serial 61 coincide con Excel), los casos de `_smokeTests()` siguen en verde, y una Date construida en hora LOCAL sí depende de la zona del proceso. · `scripts/_smoke-training-registration-labels.mjs` (`node:test`, 20/08/2026, en `npm test`): los rótulos del Registro previo (`lib/training/registrationLabels.js`, los que pintan el drawer de la matrícula, el panel de stats y el export CSV) —un slug del form de WordPress conocido sale con su rótulo humano y uno desconocido sale CRUDO sin reventar (WP puede añadirlo antes que el diccionario; si esa caída se pierde, un slug nuevo tumbaría el CSV de las 526 inscripciones de Retorika), null es celda en blanco en el CSV; cada escala `*_ORDER` cubre exactamente las categorías de su diccionario (una fuera del orden desaparecería del panel en silencio) y las preguntas del diagnóstico comparten claves con sus títulos completos—. Fuera del runner —el nombre no empieza por `_smoke-`— y con servidor en `localhost:3000` + base de datos: `scripts/_hechos/smoke-training-f2.mjs`, `_hechos/smoke-training-f3.mjs`, `smoke-retorika-registros.mjs`, `smoke-retorika-check-empresa.mjs`. |
+| **Decisiones** | `../decisions/2026-08-10-cuestionarios-deja-de-ser-modulo.md` · `../decisions/2026-08-18-la-piramide-invertida-de-leads.md` |
+| **En este doc** | Integraciones externas · Flujo end-to-end de pre-aprobación de usuarios empresa · Modelos · Endpoints internos (con JWT) · Frontend · Seed y configuración inicial · Activación en Aumenta (B2C, sin cuestionarios) · Registros previos al curso (sprint Retorika · junio 2026) |
+
 > Documentación de detalle. Referencia rápida en `CLAUDE.md` (sección
 > "Módulos del CRM"). Si encuentras una discrepancia con el código,
 > prevalece el código: actualiza este fichero.
@@ -37,7 +62,7 @@ portada y en las métricas:
 
 Antes había **tres pares de palabras para las mismas dos cosas**: el menú y las
 tarjetas decían «Usuarios» y «Alumnos por curso», las métricas de la portada
-decían «Usuarios» y «Matrículas», y el override de Aumenta decía «Alumnos». La
+decían «Usuarios» y «Matrículas», y el override de Aumenta (hoy borrado) decía «Alumnos». La
 prueba de que no se entendía estaba escrita en la propia ayuda de Empresas, en
 mayúsculas: «IMPORTANTE: los alumnos de empresa se importan desde aquí» — porque
 quien quería dar de alta alumnos entraba en «Usuarios», que es donde no se hace.
@@ -48,10 +73,12 @@ están en `/formacion/usuarios` y las matrículas en `/formacion/alumnos`.
 Cambiarlas rompería enlaces guardados por cinco clientes a cambio de nada. Mismo
 criterio que en Nutrición, donde `/nutricion/asignados` se llama «Pautas».
 
-⚠️ **Los rótulos viven en TRES sitios y tienen que decir lo mismo**:
-`components/layout/Sidebar.jsx` (el menú), `modules/training/FormacionOverview.jsx`
-(tarjetas y métricas) y `modules/overrides/aumenta/FormacionOverview.jsx`. Que se
-desincronizaran es exactamente lo que creó el problema.
+⚠️ **Los rótulos viven en DOS sitios y tienen que decir lo mismo**:
+`components/layout/Sidebar.jsx` (el menú) y `modules/training/FormacionOverview.jsx`
+(tarjetas y métricas, con las palabras de formación abierta en
+`lib/training/formacionAbierta.js`). Que se desincronizaran es exactamente lo
+que creó el problema. Hasta el 18/08/2026 eran tres: el tercero era
+`modules/overrides/aumenta/FormacionOverview.jsx`, borrado ese día.
 
 ## El ancho de las pantallas no se escribe a mano
 
@@ -78,9 +105,16 @@ Confirmado leyendo el código:
   (informes de progreso, tasa de aprobados, etc.). La página
   `/formacion/empresas/[id]` solo muestra el listado de cursos
   asignados.
-- **No registra eventos en `master.AuditLog`**. Crear/editar cursos,
-  empresas, alumnos o matrículas es silencioso.
-- **No tiene rate limiting** en webhooks ni en endpoints externos.
+- **Casi no registra eventos en `master.AuditLog`**. Crear/editar cursos,
+  empresas, alumnos o matrículas es silencioso. Lo único que audita son
+  `training.course_registration.created` (el formulario previo al curso,
+  `lib/training/audit.js`) y `training.sync_manual` /
+  `training.sync_manual_fallida` (el botón «Sincronizar con la web»); las
+  tres tienen frase en `lib/actividad/etiquetas.js`.
+- **No tiene rate limiting** en los webhooks de TutorLMS ni en
+  `/api/external/retorika/*`. Sí lo llevan los públicos sin secreto
+  (`codigos-cursos`, `register/empresa`, `check-empresa-user`,
+  `registro-curso`): ver la tabla de «Endpoints externos públicos».
 
 ## Integraciones externas
 
@@ -286,7 +320,7 @@ pre-aprobado pero no activo) es deliberada: hasta que no entra,
 
 ### Endpoints externos públicos (sin JWT)
 
-Cuatro rutas que no pasan por el middleware (porque están listadas
+Seis rutas que no pasan por el middleware (porque están listadas
 como public en `middleware.js` o no requieren cookie):
 
 | Ruta | Auth alternativa | Rate limit | Riesgo |
@@ -315,8 +349,16 @@ rate limit ahí podría romper sus batches legítimos.
 
 ## Modelos
 
-Siete modelos en `models/tenant/`. Asociaciones en
-`lib/db/tenantDb.js:99-111`.
+Nueve modelos en `models/tenant/`: los siete de abajo (`Course`,
+`CourseEnrollment`, `Company`, `CompanyCourse`, `TrainingUser`, `QuizAttempt` y
+el legacy `Training`) más dos que llegaron con sprints posteriores y se
+describen en su sección: `TrainingSyncLog` (`training_sync_log`, sprint F3 —
+ver «Sincronización con TutorLMS») y `CourseRegistration`
+(`course_registrations`, sprint Retorika junio 2026 — ver «Registros previos
+al curso»). Se definen en `lib/db/tenantDb.js` (bloque `defineTraining` …
+`defineCourseRegistration`, hoy líneas 139-163) y las asociaciones van en el
+bloque `Company.hasMany(TrainingUser…)` (hoy 462-483); las líneas se mueven,
+el nombre del bloque no.
 
 ### Course
 
@@ -443,8 +485,8 @@ Solo se modifica vía webhook (`/quiz-attempt`) o pull (`/cuestionarios/sync`).
 Tabla: `trainings`. Modelo legacy del primer diseño antes del rework
 con TutorLMS. Tiene `userId`, `trainingUserId`, `courseId`, `status`,
 `certificateUrl`, etc. **No tiene asociaciones declaradas** en
-`tenantDb.js` (no aparece en las líneas 99-111 de asociaciones de
-formación, aunque sí se define el modelo en línea 47). Se conserva el
+`tenantDb.js` (no aparece en el bloque de asociaciones de formación,
+aunque sí se define el modelo —`defineTraining`, hoy línea 139—). Se conserva el
 modelo y la tabla pero ningún flujo de la app lo lee ni lo escribe.
 Candidato a borrar tras una verificación con producción.
 
@@ -465,6 +507,7 @@ autenticado del tenant.
 | `PATCH /api/training/courses/[id]` | Alias de PUT (la UI nueva del sprint F3 usa PATCH; misma whitelist y validaciones). | Solo admin/superadmin. |
 | `DELETE /api/training/courses/[id]` | **Hard delete**. | Solo admin/superadmin. |
 | `GET /api/training/sync-status` | Última fila del log `training_sync_log` para este tenant + metadatos de UX (`syncEnabled`, `syncUrl`). Ver "Sincronización con TutorLMS" más abajo. | `hasModule(...)` |
+| `POST /api/training/sync` | El botón «Sincronizar con la web» (05/08/2026): le pide al WordPress del cliente que mande TODOS sus cursos y matrículas (`lib/training/syncWordpress.js`, firmado con `WIDGET_SSO_SECRETS`). Audita `training.sync_manual` / `_fallida`. Ver «Un botón y un repaso nocturno». | Solo admin/superadmin; vetado en la demo (`assertNotDemoPaidCall`). |
 
 No hay `GET /api/training/courses/[id]` individual; el detalle se
 obtiene del listado.
@@ -545,11 +588,11 @@ Belén desde el wp-admin de Retorika:
    el INSERT falla, NO rompe la respuesta — el sync funcional ya
    está hecho.
 
-El secret HMAC compartido vive en `CRM_WEBHOOK_SECRET` (legacy
-`RETORIKA_WEBHOOK_SECRET` aceptado como fallback; ver "Decisión / Secret
-HMAC fuera del repo"). El meta del curso
-de TutorLMS que vincula con WooCommerce es
-`_tutor_course_product_id`.
+El secret HMAC es **por tenant** desde el 26/07/2026: `CRM_WEBHOOK_SECRETS`
+(JSON `{slug: secret}`), con el global `CRM_WEBHOOK_SECRET` (legacy
+`RETORIKA_WEBHOOK_SECRET`) solo como fallback para quien aún no tenga
+entrada propia; ver "WordPress + TutorLMS (webhooks entrantes)". El meta del
+curso de TutorLMS que vincula con WooCommerce es `_tutor_course_product_id`.
 
 **Tabla `training_sync_log`** (sprint F3, multi-tenant):
 
@@ -596,6 +639,7 @@ Migración: la tabla `training_sync_log` y el enum
 | `GET /api/training/companies/[id]` | Detalle con `courses` incluidos. | `hasModule(...)` |
 | `GET /api/training/companies/[id]/courses` | Atajo: solo los cursos asignados. | `hasModule(...)` |
 | `POST /api/training/companies/[id]/courses` | Asigna un curso a la empresa (idempotente). | Solo admin/superadmin. |
+| `POST /api/training/companies/[id]/courses/bulk` | Asigna VARIOS cursos en una transacción: body `{ courseIds: [...], propagateToActive? }`. Idempotente por la UNIQUE; con `propagateToActive` materializa las matrículas de los empleados ya activos, como el single-course. | Solo admin/superadmin. |
 | `DELETE /api/training/companies/[id]/courses/[courseId]` | Desasigna. | Solo admin/superadmin. |
 
 **No hay PATCH ni DELETE de Company**. Una empresa creada por error no
@@ -609,6 +653,8 @@ se puede editar ni borrar desde la API. Hay que tocar BD a mano.
 | `GET /api/training/users/[id]` | Detalle individual del empleado, incluyendo `archivedAt`. NO filtra por archivado: útil para que el drawer muestre el detalle de un archivado. | `hasModule(...)` |
 | `POST /api/training/users` | **Crear empleado individual** desde UI (formulario en la ficha de empresa). Body: `{ companyId, email, name?, lastName?, birthDate?, nif? }`. Se crea con `type='company'` y `active=false` (pre-aprobado, mismo flujo que el import). Email único: si ya existe y está archivado → reactiva y reasigna a la empresa; si existe activo → 409. | Solo admin/superadmin. |
 | `POST /api/training/users/import` | Carga masiva desde Excel. Resuelve empresa por nombre o `externalId`. Auto-detecta `type` (con companyId → `company`, sin → `private`). Default `active`: `false` para `type=company` (pre-aprobado, pendiente de activación vía `register/empresa`); `true` para `type=private`. **Reactiva archivados**: si encuentra un email con `archivedAt != null`, lo restaura (`archivedAt = null`) y cuenta como `updated`. | Solo admin/superadmin. |
+| `POST /api/training/users/import/preview` | MISMA entrada que `/import`, pero **no escribe nada**: parsea, valida y devuelve `{ totalRows, valid, newCount, updateCount, errors, preview }` para que el admin vea qué se va a crear/actualizar/saltar antes de confirmar. | Solo admin/superadmin. |
+| `GET /api/training/users/import/template` | Plantilla Excel del import (hoja «Empleados» con cabeceras y 3 filas de ejemplo + hoja «Instrucciones»), generada al vuelo con exceljs. | `hasModule(...)` |
 | `DELETE /api/training/users/[id]` | **Soft delete** por defecto: marca `archivedAt = NOW()`. Conserva la fila, matrículas y cuestionarios. Idempotente (si ya estaba archivado devuelve 200 con `noop:true`). Con `?hard=true`: **borrado físico** en transacción — borra `CourseEnrollment` + `CourseRegistration` con `trainingUserId = id` y luego la fila de `training_users`. `QuizAttempt` se conserva (no tiene FK; se asocia por email/wpUserId). Irreversible. | Solo admin/superadmin. |
 | `POST /api/training/users/[id]/restore` | Restaura un empleado archivado (`archivedAt = NULL`). No toca `active` ni `type`. Idempotente. | Solo admin/superadmin. |
 | `GET /api/training/users/export` | Excel con todos los usuarios filtrados. | `hasModule(...)` |
@@ -721,9 +767,9 @@ por webhook o sync.
 ### Cuestionarios (alias)
 
 `/api/cuestionarios` y `/api/cuestionarios/sync` son alias del
-sub-módulo de quiz. Aceptan tanto `hasModule("training")` como
-`hasModule("cuestionarios")` — porque algunos tenants antiguos tienen
-el módulo registrado con el nombre `cuestionarios` por separado. La
+sub-módulo de quiz. Piden **solo `hasModule("training")`** desde el
+10/08/2026 (antes aceptaban también `cuestionarios`, que era un `moduleKey`
+aparte y dejó de existir ese día: `_hechos/retirar-modulo-cuestionarios.js`). La
 ruta del frontend `/cuestionarios` redirige a `/formacion/cuestionarios`.
 
 | Método y ruta | Propósito | Restricciones |
@@ -738,7 +784,7 @@ Resumen rápido (detalle en "Integraciones externas"):
 
 | Método y ruta | Auth | Tenant resuelto |
 | --- | --- | --- |
-| `POST /api/webhooks/tutorlms/course` | HMAC SHA256 (`RETORIKA_WEBHOOK_SECRET` env) + `hasModule("training")` | `x-tenant` header / subdominio |
+| `POST /api/webhooks/tutorlms/course` | HMAC SHA256 con el secreto DEL TENANT (`CRM_WEBHOOK_SECRETS`, JSON `{slug: secret}`; fallback global `CRM_WEBHOOK_SECRET` / legacy `RETORIKA_WEBHOOK_SECRET`) + `hasModule("training")` | `x-tenant` header / subdominio |
 | `POST /api/webhooks/tutorlms/enrollment` | idem | idem |
 | `POST /api/webhooks/tutorlms/quiz-attempt` | idem | idem |
 | `POST /api/webhooks/tutorlms/sync` | idem | idem |
@@ -773,17 +819,33 @@ Resumen rápido (detalle en "Integraciones externas"):
 ## Frontend
 
 Páginas bajo `app/(dashboard)/formacion/`. Componentes compartidos en
-`components/training/` (`TrainingTable`, `TypeBadge`, `ActiveBadge`).
+`components/training/` (seis ficheros): `TrainingTable.jsx`,
+`TrainingBadge.jsx` (exporta `TypeBadge` y `ActiveBadge`),
+`EditCourseDrawer.jsx`, `CreateEmployeeDrawer.jsx`, `ArchiveUserDialog.jsx` y
+`HardDeleteUserDialog.jsx`.
 
-El overview (`/formacion`) usa el mismo patrón de override por tenant
-que el módulo de leads: `app/(dashboard)/formacion/page.jsx` selecciona
-entre `modules/training/FormacionOverview.jsx` (default, copy orientado
-a Retorika con WP + TutorLMS) y los overrides de `modules/overrides/{slug}/FormacionOverview.jsx`.
-Hoy solo `aumenta` tiene override propio. `nutri_laura` y `retorika` usan
-el default (las 5 secciones). El override antiguo de `nutri_laura` (copy
-nutricional B2C sin "Empresas" ni "Cuestionarios") se eliminó cuando Laura
-decidió usar la UI completa. Las páginas internas (`/formacion/cursos`,
-`/formacion/usuarios`, etc.) son comunes a todos los tenants.
+El overview (`/formacion`) es **una sola portada para todos**
+(`modules/training/FormacionOverview.jsx`) **con un interruptor**
+(18/08/2026): `featureFlags.formacionAbierta` del módulo `training`,
+declarado en `lib/training/formacionAbierta.js`. Encendido —«formación
+abierta», el centro que vende cursos a personas una a una: Aumenta— la
+portada se pinta sin Empresas ni Cuestionarios (tarjetas y cifra), sin el
+botón «Sincronizar con la web», y con las palabras de formación abierta; el
+menú lateral esconde Empresas y Cuestionarios por el MISMO interruptor
+(`Sidebar.jsx`, `hijosOcultosSegunModulos`), así que portada y menú no pueden
+contradecirse. Apagado —lo normal— es la portada completa de siempre
+(Retorika, Laura, la demo). Se enciende con
+`scripts/formacion-abierta.js <slug> --encender`, sin código ni despliegue.
+Las frases que solo son de un cliente (el párrafo de Aumenta sobre su centro)
+viven en `TEXTOS_POR_TENANT` de la página, no en el componente.
+
+Hasta ese día Aumenta tenía la portada en `modules/overrides/aumenta/`: la
+base recortada y copiada, y cada arreglo se hacía dos veces. El override
+antiguo de `nutri_laura` (copy nutricional B2C) se había eliminado antes,
+cuando Laura decidió usar la UI completa: por eso **Laura NO lleva el
+interruptor** aunque sus `logicOverrides` digan `b2bEnabled: false` (ver
+abajo). Las páginas internas (`/formacion/cursos`, `/formacion/usuarios`,
+etc.) son comunes a todos los tenants.
 
 | Ruta | Función |
 | --- | --- |
@@ -818,13 +880,13 @@ viene del propio TutorLMS.
 
 | Script | Propósito |
 | --- | --- |
-| `scripts/seed-retorika.js` | Crea schema `crm_retorika` y siembra el primer curso ("IA y comunicación política", `wpCourseId: 6434`). Idempotente. **Solo añade el curso semilla**; el resto de cursos llegan vía webhook desde WP. |
+| `scripts/_hechos/seed-retorika.js` | Crea schema `crm_retorika` y siembra el primer curso ("IA y comunicación política", `wpCourseId: 6434`). Idempotente. **Solo añade el curso semilla**; el resto de cursos llegan vía webhook desde WP. |
 | `scripts/add-training-module-demo.js` | Activa el módulo `training` en el tenant `demo` y siembra 4 empresas, 8 cursos, ~36 alumnos de empresa + 10 privados, ~55 matrículas. Para demos a clientes potenciales. Idempotente. |
-| `scripts/seed-cuestionarios-demo.js` | Activa el módulo `cuestionarios` en demo y siembra intentos de quiz realistas (datos pedagógicos sobre comunicación, módulos de Retorika). Útil para mostrar la pestaña Cuestionarios sin necesitar webhooks. |
-| `scripts/add-training-module-nutri-laura.js` | Activa el módulo `training` en `nutri_laura`. Crea las 6 tablas con SQL crudo (sin la legacy `trainings`), registra el módulo sin `uiOverride` (usa el default igual que retorika) y siembra 3 cursos de nutrición. Patrón idéntico al `add-leads-module-nutri-laura.js` por la filosofía de tenant minimal. |
-| `scripts/add-training-module-aumenta.js` | Activa el módulo `training` en `aumenta`. Las 6 tablas ya existen desde el sync inicial — el script solo registra el módulo con `uiOverride: aumenta/FormacionOverview` y siembra 6 cursos reales de la web de Aumenta + 15 alumnos B2C + 22 matrículas. Sin cuestionarios (la tabla `quiz_attempts` queda vacía). Ver "Activación en Aumenta" más abajo. |
+| `scripts/seed-cuestionarios-demo.js` | Comprueba que la demo tenga `training` (antes ACTIVABA un módulo `cuestionarios`, que dejó de existir el 10/08/2026; un seed no vende módulos) y siembra intentos de quiz realistas (datos pedagógicos sobre comunicación, módulos de Retorika). Útil para mostrar la pestaña Cuestionarios sin necesitar webhooks. |
+| `scripts/_hechos/add-training-module-nutri-laura.js` | Activa el módulo `training` en `nutri_laura`. Crea las 6 tablas con SQL crudo (sin la legacy `trainings`), registra el módulo sin `uiOverride` (usa el default igual que retorika) y siembra 3 cursos de nutrición. Patrón idéntico al `add-leads-module-nutri-laura.js` por la filosofía de tenant minimal. |
+| `scripts/add-training-module-aumenta.js` | Activa el módulo `training` en `aumenta`. Las 6 tablas ya existen desde el sync inicial — el script solo registra el módulo con el interruptor «formación abierta» encendido (desde el 18/08/2026; antes, `uiOverride: aumenta/FormacionOverview`) y siembra 6 cursos reales de la web de Aumenta + 15 alumnos B2C + 22 matrículas. Sin cuestionarios (la tabla `quiz_attempts` queda vacía). Ver "Activación en Aumenta" más abajo. |
 
-`seed-master.js` (que crea el tenant retorika) registra el módulo
+`_hechos/seed-master.js` (que crea el tenant retorika) registra el módulo
 `training` con `moduleAccess` admin. La activación inicial del
 módulo en producción se hizo con ese script.
 
@@ -868,25 +930,20 @@ conectado.
 - **0 empresas** (`companies` vacío).
 - **0 cuestionarios** (`quiz_attempts` vacío).
 
-### Override de UI: `aumenta/FormacionOverview`
+### La portada de Aumenta: «formación abierta» (antes un override)
 
-`modules/overrides/aumenta/FormacionOverview.jsx`. Diferencias frente
-a la landing `default`:
+Hasta el 18/08/2026, `modules/overrides/aumenta/FormacionOverview.jsx`: la
+portada base recortada (3 KPIs en vez de 4, 3 secciones en vez de 5, sin
+sincronizar con la web, sin pedir `/api/training/companies`) y con su copy
+(«Formación — cursos para familias y profesionales»). **Borrado ese día**: la
+portada base hace exactamente eso con `abierta = true`, que la página resuelve
+de `featureFlags.formacionAbierta` (encendido en Aumenta con
+`scripts/formacion-abierta.js aumenta --encender`; el script de alta
+`add-training-module-aumenta.js` ya lo deja encendido y sin `uiOverride`).
+Sus frases siguen siendo suyas: `TEXTOS_POR_TENANT.aumenta` en la página.
 
-- **3 KPIs en vez de 4**: Cursos activos, Alumnos, Matrículas — los mismos
-  rótulos que el overview base desde el 13/08/2026 (sin
-  "Empresas").
-- **3 secciones en vez de 5**: Cursos, Alumnos, Matrículas (sin "Empresas" ni
-  "Cuestionarios"). Decía «Matrículas por curso», con apellido, y bastaba para
-  que Aumenta leyera algo distinto que los demás: desde el 13/08/2026 son las
-  mismas palabras en los tres sitios.
-- **Copy editorial adaptado**: título "Formación — cursos para
-  familias y profesionales".
-- **Sin endpoint a `/api/training/companies`** (la card de empresas
-  no existe).
-
-Registrado en `app/(dashboard)/formacion/page.jsx` en el map
-`UI_OVERRIDES`. Tenant decide por `x-tenant` header.
+Lo único que Aumenta gana con la mudanza son los «?» de ayuda de la portada
+base (con textos de formación abierta), que su override no tenía.
 
 ### `logicOverrides` en `master.tenant_modules`
 
@@ -894,19 +951,24 @@ Registrado en `app/(dashboard)/formacion/page.jsx` en el map
 { "b2bEnabled": false, "quizzesEnabled": false, "tutorlmsConnected": false }
 ```
 
-Estos flags hoy son **indicativos** (los lee solo el override de UI).
-No hay validación de backend que los consulte.
+Banderas de junio de 2026 que **no lee nadie** — ni antes (el override las
+ignoraba: iba a fuego) ni ahora. Y **no se usan a propósito para decidir la
+portada**: `nutri_laura` también lleva `b2bEnabled: false` y
+`tutorlmsConnected: false` y ve la portada completa porque lo pidió; leerlas le
+habría quitado Empresas y el botón de sincronizar sin que nadie lo pidiera. Se
+conservan porque están en producción; el interruptor de verdad es
+`featureFlags.formacionAbierta`.
 
 ### Cuestionarios para Aumenta
 
 Decisión cerrada: **Aumenta no usa cuestionarios** en su flujo
 formativo. La tabla `quiz_attempts` existe en `crm_aumenta` desde el
-sync inicial pero queda vacía. El override de UI no muestra la
-sección. Si en el futuro Aumenta los quisiera, basta con:
-
-1. Cambiar `logicOverrides.quizzesEnabled = true`.
-2. Añadir la sección "Cuestionarios" al override
-   `aumenta/FormacionOverview.jsx`.
+sync inicial pero queda vacía, y con «formación abierta» la portada y el
+menú no enseñan la sección. Si en el futuro Aumenta los quisiera —junto con
+Empresas y la sincronización, que van en el mismo interruptor— basta con
+`scripts/formacion-abierta.js aumenta --apagar`; si los quisiera SOLOS,
+habría que partir el interruptor en dos, que es un cambio de una línea en
+`lib/training/formacionAbierta.js`.
 
 ## Integraciones con otros módulos del CRM
 
@@ -917,7 +979,10 @@ sección. Si en el futuro Aumenta los quisiera, basta con:
 - **Auth (master.User)**: sin enlace. El alumno (`TrainingUser`) **no
   tiene login** en el CRM; es una entidad puramente analítica que
   refleja a un usuario que vive en WordPress.
-- **Audit (master.AuditLog)**: el módulo no escribe ningún evento.
+- **Audit (master.AuditLog)**: tres eventos y nada más —
+  `training.course_registration.created` (formulario previo al curso) y
+  `training.sync_manual` / `training.sync_manual_fallida` (botón de
+  sincronizar). Cursos, empresas, alumnos y matrículas siguen sin auditarse.
 - **n8n**: sin integración explícita. Los webhooks vienen
   directamente de TutorLMS (un plugin WP), no de n8n.
 
@@ -965,8 +1030,9 @@ Detectado durante la documentación, en orden vagamente sugerido:
 
 - **PATCH y DELETE de Company** (hoy no se pueden editar ni borrar
   desde API).
-- **POST/PATCH/DELETE individuales de TrainingUser** (hoy solo
-  import/export Excel).
+- ~~**POST/PATCH/DELETE individuales de TrainingUser**~~ — POST (crear
+  empleado), DELETE (archivar / `?hard=true`) y `restore` ya existen (ver
+  «Users»); queda sin PATCH individual.
 - **Auditoría** mínima de operaciones (al menos webhooks y delete de
   curso).
 - **Filtrado de NIF y birthDate** según rol (RGPD).
@@ -1103,9 +1169,9 @@ Hoy no hay nada.
 `models/tenant/Training.model.js` define una tabla con FK a `userId`
 (que ni siquiera existe como `TeamMember.id` ni `User.id` claramente),
 `courseId` y `trainingUserId`. La definición se carga en `tenantDb.js`
-(línea ~47) pero **no aparece en las asociaciones de formación**
-(líneas 99-111) ni en ningún endpoint. Es un esquema huérfano del
-primer diseño.
+(`defineTraining`, hoy línea 139) pero **no aparece en las asociaciones de
+formación** (bloque `Company.hasMany(TrainingUser…)`, hoy 462-483) ni en
+ningún endpoint. Es un esquema huérfano del primer diseño.
 
 Verificar en producción si la tabla `trainings` tiene filas. Si está
 vacía: borrar modelo + DROP TABLE en migración. Si tiene filas:
@@ -1116,8 +1182,8 @@ investigar de dónde vinieron.
 Mismas dos rutas (`GET` listado y `GET` detalle) implementadas dos
 veces. La pestaña frontend `/formacion/cuestionarios` carga el
 módulo `CuestionariosModule.jsx` que **podría** estar usando una u
-otra (verificar). El módulo `cuestionarios` como `moduleKey` en
-master existe como alias. Decisión a tomar: unificar bajo
+otra (verificar). El `moduleKey` `cuestionarios` **ya no existe** en master
+(10/08/2026): los tres alias piden `training`. Decisión a tomar: unificar bajo
 `/api/training/quiz-attempts` (más coherente con la ruta del módulo)
 o bajo `/api/cuestionarios` (más legible para el alias). Hoy
 funcionan en paralelo, lo cual añade superficie de bug.
@@ -1169,9 +1235,12 @@ Alumno logueado en WP de Retorika
 
 **Variables env requeridas** (`.env.production`):
 ```
-CRM_WEBHOOK_SECRET=<32+ bytes random, mismo en los WP conectados>
+CRM_WEBHOOK_SECRETS={"retorika":"<32+ bytes random, el mismo en SU wp-config.php>", ...}
 ```
-(El nombre viejo `RETORIKA_WEBHOOK_SECRET` sigue aceptándose como fallback.)
+Es el mismo helper que los webhooks de TutorLMS (`verifyWebhookSignature`,
+secreto por tenant desde el 26/07/2026); el global `CRM_WEBHOOK_SECRET` (y el
+nombre viejo `RETORIKA_WEBHOOK_SECRET`) siguen aceptándose como fallback para
+quien no tenga entrada propia.
 
 Sin esta variable, las firmas HMAC se rechazan automáticamente y todo el
 flujo cae a fail-open en el WP (degradación elegante; el alumno entra al

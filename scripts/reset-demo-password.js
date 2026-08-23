@@ -1,3 +1,4 @@
+// @vivo — Utilidad de desarrollo local de 36 líneas: devuelve al admin de la demo (`admin@demo.salamandra`) la contraseña canónica `Admin1234!` que ponen… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * reset-demo-password.js — Resetea la contraseña del admin del tenant demo
  *

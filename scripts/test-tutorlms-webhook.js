@@ -1,3 +1,4 @@
+// @vivo — «Verificación funcional del helper de HMAC en /api/webhooks/tutorlms/*. (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * test-tutorlms-webhook.js
  *

@@ -168,8 +168,8 @@ async function main() {
       esperar(piB.status === "canceled", `confirmado en Stripe (es '${piB.status}')`);
     }
 
-    // ── Que lo de siempre siga funcionando ──────────────────────────────────
-    paso("3. Una cita YA COBRADA se sigue devolviendo, no soltando");
+    // ── Lo COBRADO no se suelta ni se devuelve ──────────────────────────────
+    paso("3. Una cita YA COBRADA no se devuelve: lo pagado sigue pagado");
     const c = await conTarjetaRetenida(8);
     if (c) {
       // Se confirma (y por tanto se cobra) antes de cancelar.
@@ -183,13 +183,16 @@ async function main() {
         method: "DELETE", headers: authHeaders,
       });
       await c.cita.reload();
-      esperar(c.cita.paymentStatus === "refunded",
-        `ahora sí se DEVUELVE, no se suelta (es '${c.cita.paymentStatus}')`);
+      // El CRM no devuelve dinero desde el 07/08/2026 (`lib/citas/politicaReembolso.js`):
+      // lo que se cancela es la sesión, no la compra; el importe se queda y el
+      // centro decide qué hacer con él a mano desde Stripe.
+      esperar(c.cita.paymentStatus === "paid",
+        `sigue cobrada, aquí no hay retención que soltar (es '${c.cita.paymentStatus}')`);
       const piC = await stripe.paymentIntents.retrieve(c.ps.stripePaymentIntentId);
       const devuelto = piC.latest_charge
         ? (await stripe.charges.retrieve(typeof piC.latest_charge === "string" ? piC.latest_charge : piC.latest_charge.id)).amount_refunded
         : 0;
-      esperar(devuelto === PRECIO, `y por el importe íntegro (${devuelto})`);
+      esperar(devuelto === 0, `y Stripe no ha devuelto ni un céntimo (${devuelto})`);
     }
   } finally {
     paso("Limpieza");
@@ -207,7 +210,7 @@ async function main() {
   }
 
   process.stdout.write(
-    fallos === 0 ? "\n✓ TODO CORRECTO — cancelar suelta el dinero por todas las vías\n\n"
+    fallos === 0 ? "\n✓ TODO CORRECTO — cancelar suelta la retención por todas las vías, y lo cobrado no se devuelve\n\n"
                  : `\n✗ ${fallos} comprobaciones fallidas\n\n`
   );
   process.exit(fallos === 0 ? 0 : 1);

@@ -38,11 +38,25 @@ async function main() {
       asignado_a  VARCHAR(40),
       resuelta    BOOLEAN,
       tocada_por  VARCHAR(255),
+      -- Cómo se arregla, escrito a mano desde la pantalla. Va AQUÍ y no en
+      -- docs/backlog.md porque ese fichero viaja dentro de la imagen de Docker:
+      -- lo que la pantalla escribiera en él se lo llevaría el siguiente
+      -- despliegue, y sin dar ningún error. Mismo motivo que el tick y el
+      -- reparto, que ya viven aquí por esto.
+      solucion    TEXT,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
-  process.stdout.write("✓ master.tablero_estado\n");
+
+  // La tabla ya existía en producción desde el 10/08, así que el CREATE de
+  // arriba no la toca: la columna hay que añadirla aparte o el Registro
+  // desplegado se encontraría un 42703 al guardar (14/08/2026).
+  await s.query(`
+    ALTER TABLE master.tablero_estado
+      ADD COLUMN IF NOT EXISTS solucion TEXT
+  `);
+  process.stdout.write("✓ master.tablero_estado (con `solucion`)\n");
 
   const [filas] = await s.query("SELECT count(*)::int AS n FROM master.tablero_estado");
   process.stdout.write(`  · ${filas[0].n} tarea(s) con estado guardado\n`);

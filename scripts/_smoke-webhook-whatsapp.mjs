@@ -1,3 +1,7 @@
+// @prueba pesada — entrega webhooks al servidor de desarrollo y comprueba por
+// Sequelize qué filas han quedado; necesita `npm run dev`, la base local y las
+// dos variables del webhook en .env.local.
+
 /**
  * _smoke-webhook-whatsapp.mjs — la puerta de entrada de WhatsApp, cerrada.
  *

@@ -1,5 +1,15 @@
 # Refactor base/override — carpeta de trabajo
 
+> ⚠️ **SUPERADO el 18/08/2026. No retomar este loop.** El plan de aquí (clonar
+> los 40 pares tenant × módulo, opción A del 07/08) es exactamente lo que la
+> regla #16 de `CLAUDE.md` prohíbe desde el 18/08: los overrides se ENCOGEN por
+> oportunidad y nada nuevo entra en `modules/overrides/` salvo comportamiento
+> propio de un cliente. El porqué, medido, en
+> [`docs/decisions/2026-08-18-la-piramide-invertida-de-leads.md`](../decisions/2026-08-18-la-piramide-invertida-de-leads.md).
+> La carpeta se conserva como histórico: el diagnóstico (`f0-diagnostico.md`) y
+> el método de testing siguen siendo útiles; el `state.json` («lista para F2»)
+> no.
+
 Traza del refactor arquitectural que da a cada tenant un override propio de
 los módulos que usa. Todo lo que genera el loop vive aquí.
 

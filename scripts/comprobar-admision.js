@@ -1,3 +1,4 @@
+// @vivo — Herramienta de diagnóstico SOLO LECTURA, genérica por slug (o todos los tenants con la puerta encendida), que corre la lógica REAL de… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * comprobar-admision.js — ¿quién de los ACEPTADOS no puede reservar? (SOLO LECTURA)
  *

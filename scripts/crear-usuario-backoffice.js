@@ -1,3 +1,4 @@
+// @vivo — Herramienta genérica por email para crear/marcar (`soloBackoffice`) o desmarcar (`--quitar`) la cuenta que entra a admin.salamandrasolutions.com,… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * crear-usuario-backoffice.js — la cuenta con la que se entra al panel interno.
  *

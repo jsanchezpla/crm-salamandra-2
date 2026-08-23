@@ -1,5 +1,29 @@
 # Módulo Outreach (Captación)
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es
+> este mismo commit). Si algo no cuadra, manda el código: corrige esta tabla.
+> **Quién tiene el módulo NO se lista aquí** (una lista a mano se queda
+> vieja): `/admin/modulos` en el back-office o
+> `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `outreach` · requiere — (nada obligatorio en `lib/provisioning/catalogo.js`; solo avisa de que necesita las claves de IA y de Google del propio cliente). «Convertir en cliente» pide además `clients` (`tenantHasModule` en el endpoint). |
+| **Reina** | — · ninguna declarada en doc ni código. Nació del proyecto interno «Salamandra Outreach»; sus pruebas con servidor van contra `demo` (11 leads sembrados) salvo que se les pase otro slug. |
+| **Pantallas** | `app/(dashboard)/outreach/` (3, envoltorios de una línea sobre `modules/outreach/`): `/outreach` (lista, filtros, «Buscar nuevos», alta manual), `/outreach/[id]` (ficha: contactos, análisis por línea de negocio, correo modelo, convertir en cliente), `/outreach/configuracion` (líneas de negocio y ajustes de IA). Entrada de menú «Captación» en `components/layout/Sidebar.jsx`. |
+| **Endpoints** | `app/api/outreach/**` (11 `route.js`): `leads` (listar/alta manual), `leads/[id]` (ficha/editar/borrar), `leads/buscar-nuevos` (⚡ **Google Places** con la clave del tenant + visita de webs; Páginas Amarillas/LinkedIn vía webhook n8n), `leads/[id]/analizar` (⚡ **Claude**: scoring por línea + correo modelo), `leads/[id]/enviar-correo` (✉ **Resend** con la clave del tenant; marca `sent_at` solo si de verdad sale), `leads/[id]/convertir-cliente`, `leads/bulk-delete`, `google-usage`, `business-lines` + `business-lines/[id]`, `settings`. Los tres marcados pasan por `assertNotDemoPaidCall` (`lib/demo/isDemo.js`). Todos exigen `hasModule("outreach")`; líneas, ajustes y borrados, rol admin. |
+| **Lógica** | `lib/outreach/` (11): `analysis/index.js` (`analyzeLead`: Claude o el simulado), `analysis/anthropic.js` (proveedor Claude; lo reutiliza medio CRM: Clínica, Proyectos, Soporte, Citas, Calendario, asistente), `analysis/fake.js` (`OUTREACH_FAKE_AI=1`, nunca en producción), `analysis/prompt.js` (system prompt desde las líneas de negocio del tenant), `analysis/schema.js` (parseo defensivo del JSON), `analysis/models.js` (modelos admitidos; reexporta `lib/ai/anthropicModel.js`); `googlePlaces.js` (Text Search; errores → `QUOTA`/`BAD_KEY`/`UNREACHABLE`), `enrichWebsite.js` (email de la web con filtro por dominio), `persistLeads.js` (dedupe por nombre+ubicación+fuente), `scraping.js` (webhook HMAC a n8n para PA/LinkedIn), `resendConfig.js` (clave de Resend del tenant, cifrada; remitente y reply-to del tenant o del `.env`). Fuera: `lib/ai/anthropicKey.js` (BYOK, sin clave → 503) y `lib/email/resendClient.js` (envío, dry-run y reintentos). |
+| **UI** | `modules/outreach/` (8): `OutreachModule.jsx` (lista, orden, filtros, drawer «Buscar nuevos»), `OutreachLeadDetail.jsx` (ficha, chips de líneas a analizar, `EmailDraft`), `OutreachSettingsModule.jsx` (líneas de negocio + modelo/contexto/regla), `SectorPicker.jsx` + `sectores.json` (27 categorías, 286 tipos), `IntegrationGate.jsx` + `useIntegrations.js` (deshabilita lo que cuesta API si falta la clave; fail-open), `scores.js` (tramos y colores del score). Sin `components/outreach/`. |
+| **Modelos** | `OutreachLead` → `outreach_leads` · `OutreachContact` → `outreach_contacts` · `OutreachAnalysis` → `outreach_analyses` · `OutreachBusinessLine` → `outreach_business_lines` · `OutreachSettings` → `outreach_settings` (fila única: modelo IA, contexto, regla, contador mensual de Google). **`OutreachLead` no es `Lead`** (`leads`): sin FK entre ellos; `outreach_leads.client_id` es referencia blanda al `Client` convertido. |
+| **Interruptores y parámetros** | `featureFlags` / `logicOverrides`: ninguno que lea el código. Lo configurable vive en `outreach_settings` (modelo, contexto, regla) y en `master.tenants.settings.integrations` (claves de Anthropic, Google Places y Resend, remitente y reply-to), que se pegan en `/configuracion`. |
+| **Pantallas propias** | ninguna. |
+| **Scripts** | Activar: `node scripts/enable-module.js <slug> outreach` (`ensure-tenant-schema.js` corre las 4 del bloque `outreach` de `scripts/_module-migrations.js`: `migrate-outreach-sprint-1`, `migrate-outreach-google-usage`, `migrate-outreach-convert`, `migrate-outreach-website-text`). Los atajos anteriores siguen vivos: `_hechos/enable-outreach.js` (`npm run db:enable:outreach`) y `_hechos/setup-outreach.js` (`npm run db:setup:outreach`: activa + migra + siembra de una vez). Seed: `seed-outreach.js <slug>` (líneas de negocio + leads de muestra con análisis `model: 'demo'`; lo lanzan `crear-demos-por-oficio.js` para `demo_agencia` y `rebuild-demo-showcase.js`). `_hechos/setup-demo-outreach-fake.js` deja la demo con claves ficticias para enseñar el flujo sin gastar. Sin backfills. |
+| **Pruebas** | `scripts/_smoke-outreach-ai-unit.mjs` — pura (prompt, parseo, `analyzeLead` con el simulado; sin base de datos ni servidor): **entra en `npm test`** desde el 19/08/2026 (antes se llamaba `_outreach-ai-unit.mjs` y `pruebas.mjs`, que solo recoge `_smoke-*` y `smoke-test-*`, no la veía). **DOS** entran en **`npm run test:todo`** desde el 20/08/2026: renombradas a `_smoke-outreach-smoke.mjs` y `_smoke-outreach-e2e.mjs`, firman la sesión con `signAccessToken` para el admin que exista en el tenant (`demo` por defecto, o el slug que se les pase) en vez del `admin@sandbox.local` de un `sandbox` que no existe. Qué fija cada una: `_smoke-outreach-smoke.mjs`, que las puertas de la API contestan y validan (alta duplicada → 422, modelo de IA no admitido → 422 y sin guardarse); `_smoke-outreach-e2e.mjs`, que en una demo `analizar`, `enviar-correo` y `buscar-nuevos` responden **403** por `assertNotDemoPaidCall` sin tocar la ficha, y con cualquier otro slug el flujo entero (IA simulada con `OUTREACH_FAKE_AI=1`, Resend en dry-run que no marca `sentAt` y dedupe del scraping). La firma HMAC de ese e2e **ya la comprueba alguien** desde el 21/08/2026: `scripts/_fake-n8n.mjs`, el n8n de mentira que faltaba (hermano de `_fake-stripe*.mjs`, pero servidor HTTP porque el CRM habla con n8n por HTTP). Lo **arranca y lo para la propia prueba** al llegar al paso de scraping —heredándole el entorno—, así que no hay que acordarse de levantar nada; si ya hay uno escuchando, lo reutiliza y no lo mata. Verifica de verdad: sin `x-outreach-signature` o con una que no cuadre responde **401** (el CRM lo traduce a 502 y la prueba lo ve), y sin `OUTREACH_WEBHOOK_SECRET` **se niega a arrancar** en vez de decir que sí a todo. Devuelve tres empresas fijas, una por cada rama del dedupe (una se inserta, una es copia exacta de la que siembra `seed-outreach.js` y otra viene sin nombre): de ahí salen los `inserted 1 · ya lo teníamos 1 · ignored 1` que fija el e2e. Lo que sigue haciendo falta a mano es que el `npm run dev` arranque con `OUTREACH_SCRAPING_WEBHOOK_URL=http://127.0.0.1:5999/webhook/scraping` y `OUTREACH_WEBHOOK_SECRET` en su `.env.local` (es el CRM quien llama al webhook, no la prueba); sin ellas `buscar-nuevos` contesta 503 y el paso falla diciéndolo. Su parte dura —cuándo una firma vale y cuándo no, y las tres empresas— la fija `scripts/_smoke-fake-n8n.mjs`, **ligera y en `npm test`**: un falso relajado dejaría la prueba grande en verde sin mirar nada. La tercera, `_outreach-ui-check.mjs` (las tres pantallas se pintan con contenido y sin errores de consola), **NO es del runner: es herramienta de mano** — `node --env-file=.env.local scripts/_outreach-ui-check.mjs [slug]`. Llegó a llamarse `_smoke-outreach-ui-check.mjs` un rato el 20/08/2026 y **se deshizo el mismo día**: con el prefijo entraba en `test:todo`, pero `puppeteer` **no es dependencia del repo**, así que sin él se saltaba el navegador y salía en **VERDE sin haber mirado ni una pantalla** (`process.exit(0)`), y como el runner solo enseña la salida de las que fallan, nadie se enteraba. Una prueba que no se lanza y sale verde es peor que una que falla: miente en el sitio donde se mira para decidir si algo está bien. **Decidido el 20/08/2026 (Jorge): `puppeteer` NO entra en `package.json`** —son ~300 MB de Chromium en el `npm ci` de cada despliegue largo y lo que comprueba (que tres pantallas se pintan sin errores de consola) no lo justifica hoy—, así que esto no es un olvido: se queda como herramienta de mano, sin prefijo `_smoke-`, y el día que alguien quiera mirar las pantallas se instala **suelto y sin tocar `package.json`**: `npm i puppeteer --no-save` y luego `node --env-file=.env.local scripts/_outreach-ui-check.mjs [slug]`. Sin él, el script dice en voz alta que no ha mirado ninguna pantalla. Las tres piden `npm run dev`. |
+| **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` |
+| **En este doc** | Decisiones de arquitectura · Fuente de datos: Google Maps nativo + email de la web · Dedupe de "Buscar nuevos" (`lib/outreach/persistLeads.js`) · Conversión a cliente · Modelo de datos · API · Reglas de negocio que no se rompen · Puesta en marcha en un tenant |
+
 `moduleKey`: `outreach` · Ruta: `/outreach` · API: `/api/outreach/*`
 
 Captación de leads en frío: empresas rastreadas de fuentes públicas, guardadas,
@@ -25,8 +49,16 @@ el CRM.
 | Orden por columnas y filtros (ubicación, email, analizado, score) | **Hecho** |
 | "Buscar nuevos" con Páginas Amarillas / LinkedIn (vía n8n) | **Pendiente** (flujo n8n sin montar) |
 
-Todo verificado en local contra el tenant `sandbox`. **Falta desplegar en
-producción** (correr las migraciones) y que cada tenant pegue sus claves.
+**En producción** (foto de `master` del 19/08/2026) en cinco tenants:
+`aumenta`, `demo` (11 leads), `demo_agencia` (11), `salamandra_solutions` (40:
+somos nosotros, captando) y `somos`. Lo que cada uno puede hacer depende de las
+claves que haya pegado en `/configuracion` (Anthropic, Google Places, Resend).
+
+> **Histórico (hasta 08/2026):** «Todo verificado en local contra el tenant
+> `sandbox`. Falta desplegar en producción (correr las migraciones) y que cada
+> tenant pegue sus claves.» `sandbox` no existe hoy ni en local ni en
+> producción, y desde el 20/08/2026 tampoco queda en las pruebas: las tres con
+> servidor van contra `demo` (ver Mapa → Pruebas).
 
 > Las claves de IA (**Anthropic** y **Google Places**) ya **no** son secrets
 > globales del `.env`: se configuran **por tenant** en el módulo
@@ -303,6 +335,13 @@ cabecera `x-outreach-signature: <hmac-sha256-hex del cuerpo>` firmada con
 lo envuelva: `empresas`/`companies`/`results`); alias ES/EN por campo; lo no
 mapeado va a `raw_data`. **Google Maps ya no pasa por aquí.**
 
+Para probar este contrato sin n8n hay un n8n de mentira en el repo,
+`scripts/_fake-n8n.mjs`: verifica la firma (401 si falta o no cuadra) y
+responde con tres empresas fijas. Lo arranca sola la prueba e2e; a mano,
+`node --env-file=.env.local scripts/_fake-n8n.mjs` con
+`OUTREACH_SCRAPING_WEBHOOK_URL=http://127.0.0.1:5999/webhook/scraping` y el
+mismo `OUTREACH_WEBHOOK_SECRET` en el `.env.local` del `npm run dev`.
+
 ---
 
 ## Reglas de negocio que no se rompen
@@ -319,28 +358,38 @@ mapeado va a `raw_data`. **Google Maps ya no pasa por aquí.**
 
 ## Puesta en marcha en un tenant
 
+Un solo comando desde el 01/08/2026 — abre las DOS puertas (la fila en
+`master.tenant_modules` y el `module_access` de los admin; usuarios normales
+con `--grant-users`) y corre las **cuatro** migraciones del bloque `outreach`
+de `scripts/_module-migrations.js` (`migrate-outreach-sprint-1`,
+`-google-usage`, `-convert`, `-website-text`), idempotentes:
+
 ```powershell
-# 1. Activar el módulo
-npm run db:enable:outreach -- <slug>
+# Local
+node --env-file=.env.local scripts/enable-module.js <slug> outreach
 
-# 2. Crear las tablas (idempotente, lee la lista de master.tenants)
-npm run db:migrate:outreach
-
-# 3. Migraciones incrementales (contador de Google + conversión a cliente +
-#    website a TEXT para URLs largas de Google)
-npm run db:migrate:outreach:usage
-npm run db:migrate:outreach:convert
-npm run db:migrate:outreach:website
-
-# 4. (Opcional) Datos de muestra
-npm run db:seed:outreach -- <slug>
+# (Opcional) Datos de muestra: líneas de negocio + leads con análisis `model: 'demo'`
+node --env-file=.env.local scripts/seed-outreach.js <slug>
 ```
 
-En producción, la variante `:prod` de cada una, o
-`docker exec crm-salamandra-app-1 node scripts/migrate-outreach-*.js`.
+```bash
+# Producción: dentro del contenedor (las vars vienen del entorno Docker)
+docker exec crm-salamandra-app-1 node scripts/enable-module.js <slug> outreach
+```
 
-Después: cada tenant pega su clave de **Anthropic** y de **Google Places** en
-`/configuracion` → Inteligencia Artificial.
+Y `npm run db:check-access` para comprobar que los usuarios lo ven.
+
+Los atajos anteriores siguen vivos y hacen lo mismo por partes:
+`npm run db:enable:outreach -- <slug>` (solo la fila), `npm run
+db:migrate:outreach` + `:usage` + `:convert` + `:website` (las cuatro
+migraciones, una a una), `npm run db:seed:outreach -- <slug>`, y
+`_hechos/setup-outreach.js` (`npm run db:setup:outreach`: activa + migra + siembra de
+una vez). En producción, nunca `:prod` con `--env-file`: `docker exec`.
+
+Después: cada tenant pega su clave de **Anthropic**, de **Google Places** y de
+**Resend** en `/configuracion` → Inteligencia Artificial. Sin ellas el módulo se
+abre, pero las acciones que cuestan API quedan deshabilitadas (ver «Bloqueo en
+la UI»).
 
 > **Postgres 12 (local):** la migración base usa `gen_random_uuid()` (nativa
 > desde PG13); en local la aporta `pgcrypto`, y si no, omite el `DEFAULT`
@@ -363,9 +412,10 @@ Después: cada tenant pega su clave de **Anthropic** y de **Google Places** en
 | `OUTREACH_FAKE_AI` | Entorno | `=1` activa el analizador simulado (solo fuera de producción) |
 
 Los secrets de entorno se ponen en `.env.local` y en el `.env.production` del VPS
-por SSH. **Nunca por chat** (regla #14). Las claves de IA por-tenant las pega el
-propio cliente en la UI (BYOK) y se guardan en BD (enmascaradas en la API, nunca
-al cliente).
+por SSH. **Nunca por chat** (regla #15 de CLAUDE.md). Las claves de IA por-tenant las pega el
+propio cliente en la UI (BYOK) —o se las ponemos nosotros desde el back-office,
+`lib/provisioning/credencialesCliente.js`— y se guardan en BD cifradas
+(enmascaradas en la API, nunca al cliente).
 
 ---
 
@@ -373,8 +423,18 @@ al cliente).
 
 `OUTREACH_FAKE_AI=1` sustituye Claude por un analizador determinista con contenido
 `[SIMULADO]`; los análisis se guardan con `model = "fake"`. Ignorado en
-`NODE_ENV=production`. Sin `RESEND_API_KEY` el envío es dry-run (`dryRun: true`,
-no marca `sent_at`).
+`NODE_ENV=production`.
+
+Para el correo no hay variable de entorno que valga: la clave de Resend es la
+del tenant (`lib/outreach/resendConfig.js`, **sin fallback** a
+`RESEND_API_KEY`), y sin ella `enviar-correo` responde **400** antes de
+intentar nada. Para probar sin mandar nada al exterior se guarda en
+Configuración la clave literal `dry-run`: `sendEmail` entonces solo loguea y el
+endpoint devuelve `dryRun: true` sin marcar `sent_at`. (`_hechos/setup-demo-outreach-fake.js`
+deja así la demo.)
+
+> **Histórico:** «Sin `RESEND_API_KEY` el envío es dry-run» — era verdad cuando
+> la clave era global del `.env`.
 
 ---
 

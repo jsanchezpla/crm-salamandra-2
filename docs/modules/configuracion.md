@@ -1,13 +1,45 @@
 # Módulo Configuración
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es este mismo commit). Si algo no cuadra, manda el código: corrige esta tabla. **Quién tiene el módulo NO se lista aquí** (una lista a mano se queda vieja): `/admin/modulos` en el back-office o `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | sin moduleKey: lo tienen todos. La página no lleva `hasModule`; el enlace del sidebar es el icono de engranaje del pie (`components/layout/Sidebar.jsx`) y solo lo ven `admin`/`superadmin`, y `GET` y `PATCH` de `/api/tenant/settings` exigen ese rol (fresco de BD, vía `withTenant`) |
+| **Reina** | — |
+| **Pantallas** | `app/(dashboard)/configuracion/page.jsx` → `/configuracion` (una sola página; dentro, secciones de Facturación, IA, integraciones, Citas y Captación) · el back-office la complementa desde `app/admin/page.jsx` (ficha de Custodia, `/admin`): nosotros también podemos poner las claves |
+| **Endpoints** | `app/api/tenant/settings/route.js` (GET/PATCH, 1) · `app/api/ai-permisos/**` (2: `route.js`, `[id]/route.js`, el candado de IA) · `app/api/admin/configuraciones/route.js` (1, back-office: pone credenciales sin leerlas nunca) · la pantalla reutiliza además `app/api/billing/settings`, `app/api/outreach/settings`, `app/api/outreach/business-lines/**` y `app/api/clinica/derivaciones` · públicos: ninguno |
+| **Lógica** | `lib/configuracion/avisoCambio.js` (recibo por correo de cada cambio, enviado con la cuenta de Salamandra) · `lib/crypto/secretBox.js` (AES-256-GCM, prefijo `enc:v1:`) · resolvers que LEEN lo que aquí se guarda: `lib/ai/anthropicKey.js`, `lib/ai/anthropicModel.js` (`ANTHROPIC_MODELS`, Sonnet por defecto), `lib/ai/openaiKey.js`, `lib/ai/aiAccess.js` (`vetoAi`, candado `settings.aiAccess`), `lib/outreach/resendConfig.js`, `lib/payments/stripeConfig.js`, `lib/analytics/cloudflareConfig.js`, `lib/whatsapp/whatsappConfig.js`, `lib/citas/videollamada.js` (`settings.citas.meetModo`), `lib/citas/coloresBloqueo.js` · back-office: `lib/provisioning/credencialesCliente.js` (solo escribir), `lib/provisioning/contactoCliente.js` (`settings.contacto`) · plantilla del recibo: `lib/email/templates/configuracion/cambioAplicado.js` |
+| **UI** | `modules/config/ConfigModule.jsx` (2.464 líneas, todo en un fichero: `ApiKeyCard`, `AiPermissionsCard`, las tarjetas de Citas, `CompanyDescriptionSection`…) · no hay `components/config/`; usa `components/ui/Select.jsx` y `components/ui/HelpTooltip.jsx` |
+| **Modelos** | `models/master/Tenant.model.js` — todo va en `master.tenants.settings` (JSONB: `brand`, `integrations`, `aiAccess`, `citas`, `clientes`, `contacto`), sin migración · `models/tenant/AiPermission.model.js` (`ai_permissions`: solicitudes y concesiones del candado de IA) · `models/master/AuditLog.model.js` (`master.audit_logs`) recibe cada cambio, sin el valor de los secretos |
+| **Interruptores y parámetros** | ninguno que lea el código (no hay fila en `tenant_modules`). Lo que esta pantalla escribe vive en `master.tenants.settings`, no en `featureFlags`: `integrations.*` (Anthropic, OpenAI, Google Places, Resend, Stripe, WhatsApp, Cloudflare; los secretos cifrados, `anthropicModel` en claro), `aiAccess` (`libre` / `restringido`), `citas.*` (`meetModo`, `recordatoriosCitas`, `agendaCompartida`, `avisosWhatsapp`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `identidadObligatoria`, `formularioUrl`, `portalUrl`, `reservaUrl`, `colorBloqueos`), `clientes.categoriasExternas`, `brand`, `name` |
+| **Pantallas propias** | ninguna (`app/(dashboard)/configuracion/page.jsx` no tiene mapa `UI_OVERRIDES`) |
+| **Scripts** | no hay activación: no es módulo · `_hechos/encrypt-tenant-secrets.js` (cifra en reposo claves guardadas antes en claro; idempotente) · `migrate-ai-permissions.js` (crea `ai_permissions` en todos los schemas) · `configure-stripe-tenant.js` (claves de Stripe leídas de variables de entorno, nunca de argumentos) · solo lectura: `inspect-tenant-modules.js <slug>` |
+| **Pruebas** | `_smoke-backoffice-ciclo.mjs` (base de datos; el camino del back-office: la clave se guarda cifrada, no se devuelve jamás, a una demo no se le pone) · `scripts/_smoke-plantillas-resto-layout.mjs` (`node:test`, 21/08/2026, ligera, en `npm test`) fija el recibo de cambio de configuración (`configuracion/cambioAplicado`): que el asunto avisa distinto según haya tocado o no una credencial, que traduce las tres acciones (puesta / cambiada / borrada) y que **NUNCA lleva el valor de una credencial**, solo qué pasó con ella · nada cubre `/api/tenant/settings` ni `/api/ai-permisos` directamente; `_smoke-retencion-viva-o-muerta.mjs` solo usa `secretBox` para sembrar |
+| **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (guard de la demo en escrituras a master, auditoría con resumen) · `../decisions/2026-08-13-ciclo-de-vida-de-un-cliente.md` (`credencialesCliente.js`: nosotros también ponemos las claves, y solo escribimos) |
+| **En este doc** | «Secciones» · «Dónde se guardan las claves (y por qué son seguras)» · «API — `/api/tenant/settings`» · «Ficheros» · «Permisos de IA del equipo (2026-07-27)» · «WhatsApp (Meta Cloud API) — 2026-07-27» · «Enlace de videollamada de las citas — 2026-07-27» |
+
 Ruta: `/configuracion` · API: `/api/tenant/settings` · UI: `modules/config/ConfigModule.jsx`
 
-Página de ajustes del tenant. No es un módulo con `moduleKey` propio: la entrada
-del sidebar (sección **Ajustes**) es **siempre visible** para cualquier tenant
-(como "Inicio"), mediante el flag `always: true` en `components/layout/Sidebar.jsx`.
+Página de ajustes del tenant. No es un módulo con `moduleKey` propio: la tienen
+todos los tenants. **Histórico (hasta 27/07/2026):** era una entrada del menú,
+sección «Ajustes», con `always: true`; ese flag ya no existe. Hoy el enlace es
+el **icono de engranaje del pie** del sidebar (`components/layout/Sidebar.jsx`,
+«Ayuda · Soporte · Configuración · Cerrar sesión», decisión del socio del
+27/07) y **solo lo ven `admin` / `superadmin`**; `GET` y `PATCH` de
+`/api/tenant/settings` exigen ese mismo rol (fresco de BD, vía `withTenant`): el
+GET expone pistas enmascaradas de las claves, así que no es para cualquiera.
 
-Su razón de ser principal hoy: dar de alta, en autoservicio, las **claves de IA
-por tenant** (BYOK) que consume el módulo Outreach.
+Nació (07/2026) para dar de alta, en autoservicio, las **claves de IA por
+tenant** (BYOK) que consumía el módulo Outreach. Hoy es la pantalla donde el
+cliente pone TODO lo que es suyo y no del CRM: las credenciales de cada
+servicio externo (Anthropic, OpenAI, WhatsApp, Google Places, Cloudflare,
+Resend, Stripe), el candado de IA del equipo, los **diez** interruptores y las
+URLs del módulo Citas, las empresas de las consultas externas y las
+derivaciones de Clínica. Todo se guarda en `master.tenants.settings` (JSONB) y
+cada cambio deja su fila en `AuditLog` y un recibo por correo al cliente
+(`lib/configuracion/avisoCambio.js`).
 
 ---
 
@@ -25,17 +57,37 @@ tipos de IVA, etc.
 Solo aparece si el tenant tiene el módulo `billing` (si el GET responde 403, la
 sección se oculta).
 
-### 2. Inteligencia Artificial (BYOK)
+### 2. Inteligencia Artificial e integraciones (BYOK)
 
-Dos tarjetas con **alta guiada** de la clave (tutorial de pasos + botón a la
-plataforma + campo para pegar la clave), estilo autoservicio con fricción:
+Bajo el rótulo «Inteligencia Artificial» van **ocho tarjetas** `ApiKeyCard`
+con **alta guiada** de la clave (tutorial de pasos + botón a la plataforma +
+campo para pegar la clave), estilo autoservicio con fricción (`AI_PROVIDERS`
+en `modules/config/ConfigModule.jsx`). Nacieron dos (Anthropic y Google
+Places, 07/2026); hoy:
 
 | Tarjeta | Clave | La usa | Plataforma |
 | ------- | ----- | ------ | ---------- |
-| **Anthropic (Claude)** | `anthropicApiKey` | Análisis IA de Outreach (`/analizar`) + resumen/estructura de sesiones clínicas | console.anthropic.com |
+| **Anthropic (Claude)** | `anthropicApiKey` (+ selector `anthropicModel`) | La IA de TODO el CRM: Outreach (`/analizar`), sesiones e informes clínicos, Proyectos, Soporte, Citas, Calendario, asistente | console.anthropic.com |
 | **OpenAI (Whisper)** | `openaiApiKey` | Transcripción de audio de sesiones clínicas (voz → texto) con la API de Whisper | platform.openai.com |
-| **Google Cloud (Places)** | `googlePlacesApiKey` | `"Buscar nuevos"` de Google Maps | console.cloud.google.com |
-| **Resend (correo captación)** | `resendApiKey` (+ `resendFromEmail`, `resendReplyTo`) | Enviar el correo modelo en frío | resend.com |
+| **WhatsApp (Meta Cloud API)** | `whatsappToken` (+ `whatsappPhoneNumberId`, en claro) | Avisos de cita por WhatsApp (`lib/whatsapp/whatsappConfig.js`); ver más abajo | developers.facebook.com |
+| **Google Cloud (Places)** | `googlePlacesApiKey` | `"Buscar nuevos"` de Google Maps (Outreach) | console.cloud.google.com |
+| **Cloudflare (visitas de la web)** | `cloudflareApiToken` (+ `cloudflareAccountId`, `cloudflareSiteTag`, en claro; `ready` solo con las piezas) | Módulo Analíticas (`lib/analytics/cloudflareConfig.js`). El token se valida por FORMA al pegarlo (≥30 caracteres `[A-Za-z0-9_-]`) | dash.cloudflare.com |
+| **Resend (correo)** | `resendApiKey` (+ `resendFromEmail`, `resendReplyTo`, tarjeta «Remitente del correo») | El correo que sale del CRM en nombre del cliente: correo modelo de Outreach, pautas de nutrición, avisos de citas… (`lib/outreach/resendConfig.js`) | resend.com |
+| **Stripe — clave secreta** | `stripeSecretKey` (+ `stripePublishableKey`, en claro, tarjeta «Clave publicable de Stripe») | Cobrar por adelantado las citas con precio (`lib/payments/stripeConfig.js`); `ready` y `liveMode` se deducen de las claves | dashboard.stripe.com |
+| **Stripe — secreto del webhook** | `stripeWebhookSecret` | Lo que nos avisa de que un pago se ha completado; sin él el paciente paga y su cita no se confirma (la tarjeta enseña la URL del webhook) | dashboard.stripe.com |
+
+Y, después de las tarjetas de clave y en la misma página, lo que NO es una
+credencial: la tarjeta **«Permisos de IA del equipo»** (`AiPermissionsCard`,
+candado `aiAccess`), los **diez interruptores de Citas** con sus tres URLs y el
+color de los bloqueos (`RecordatoriosCard`, `AgendaCompartidaCard`,
+`AvisosWhatsappCard`, `BloqueoImpagoCard`, `CancelacionCard`,
+`ReservaOnlineCard`, `PuertaAdmisionCard`, `PuertaContratoCard`,
+`PuertaCajaCard`, `PuertaIdentidadCard`, `AreaPrivadaCard`,
+`PaginaReservasCard`, `ColorBloqueosCard`, `VideollamadaCard`), las empresas
+de las consultas externas (`CategoriasExternasCard`,
+`settings.clientes.categoriasExternas`) y las derivaciones de Clínica
+(`DerivacionesCard`, que lee y escribe `/api/clinica/derivaciones` y se
+esconde sola con el 403 de quien no tiene Clínica).
 
 > **Transcripción de audio (sesiones clínicas):** Claude NO transcribe audio, así que
 > el paso voz→texto lo hace la **API de Whisper de OpenAI** (clave `openaiApiKey`,
@@ -91,10 +143,25 @@ elegir qué líneas analizar para esa empresa (ver `docs/modules/outreach.md`).
 
 ## Dónde se guardan las claves (y por qué son seguras)
 
-Las claves viven en **`master.tenants.settings.integrations`** (JSONB):
+Las claves viven en **`master.tenants.settings.integrations`** (JSONB), junto
+al resto de lo que guarda esta pantalla:
 
 ```json
-{ "brand": { ... }, "integrations": { "anthropicApiKey": "...", "googlePlacesApiKey": "..." } }
+{
+  "brand": { ... },
+  "integrations": {
+    "anthropicApiKey": "enc:v1:…", "anthropicModel": "claude-sonnet-…",
+    "openaiApiKey": "enc:v1:…", "googlePlacesApiKey": "enc:v1:…",
+    "whatsappToken": "enc:v1:…", "whatsappPhoneNumberId": "…",
+    "cloudflareApiToken": "enc:v1:…", "cloudflareAccountId": "…", "cloudflareSiteTag": "…",
+    "resendApiKey": "enc:v1:…", "resendFromEmail": "…", "resendReplyTo": "…",
+    "stripeSecretKey": "enc:v1:…", "stripeWebhookSecret": "enc:v1:…", "stripePublishableKey": "pk_…"
+  },
+  "aiAccess": "libre",
+  "citas": { "meetModo": "manual", "recordatorios": false, "…": "…" },
+  "clientes": { "categoriasExternas": [] },
+  "contacto": { ... }
+}
 ```
 
 Son **secretos**, y se protegen así:
@@ -146,16 +213,25 @@ del alta, que es el USUARIO con el que entra.
 
 ## API — `/api/tenant/settings`
 
+Los dos métodos exigen **rol admin/superadmin** (fresco de BD). El PATCH lleva
+además `assertNotDemoMasterWrite`: la demo es pública y da sesión de admin a
+cualquiera.
+
 | Método | Qué hace |
 | ------ | -------- |
-| `GET` | Devuelve `{ name, slug, plan, brand, integrations: { anthropic:{configured,hint}, googlePlaces:{configured,hint} } }`. Nunca la clave en claro |
-| `PATCH` | **Admin.** Acepta `name`, `brand`, `anthropicApiKey`, `anthropicModel`, `openaiApiKey`, `googlePlacesApiKey`, `resendApiKey` (+ `resendFromEmail`/`resendReplyTo`). Invalida la caché de tenant |
+| `GET` | Devuelve `name`, `slug`, `plan`, `readOnly` (la demo), `brand`, `aiAccess`, `meetModo`, `salasVideollamada`, los diez booleanos de Citas (`recordatoriosCitas`, `agendaCompartida`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `avisosWhatsapp`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `identidadObligatoria`), `formularioUrl`, `portalUrl`, `reservaUrl`, `colorBloqueos`, `categoriasExternas` e `integrations: { anthropic:{configured,hint,model}, googlePlaces, openai, cloudflare:{…,accountId,siteTag,ready}, whatsapp:{…,phoneNumberId}, resend:{…,fromEmail,replyTo}, stripe:{…,publishableKey,webhook,ready,liveMode} }`. Cada clave, solo `{ configured, hint }`; nunca en claro, y **en la demo ni la pista** (`hint: null`) |
+| `PATCH` | Acepta `name`, `brand`; los secretos `anthropicApiKey`, `openaiApiKey`, `googlePlacesApiKey`, `resendApiKey`, `whatsappToken`, `cloudflareApiToken`, `stripeSecretKey`, `stripeWebhookSecret` (cifrados con `applyKey`; **500 si falta `SETTINGS_ENCRYPTION_KEY`**, para no guardar nunca uno en claro); los planos `anthropicModel` (lista cerrada), `resendFromEmail`, `resendReplyTo`, `whatsappPhoneNumberId`, `cloudflareAccountId`, `cloudflareSiteTag`, `stripePublishableKey`; `aiAccess` (`libre`/`restringido`); `meetModo` (`manual`/`automatico`); los diez booleanos de Citas; `formularioUrl`, `portalUrl`, `reservaUrl` (solo http(s) absolutas: se le sirven a un tercero en un enlace); `colorBloqueos` (hex); `categoriasExternas` (lista, se guarda limpia y deduplicada). Calcula el diff, audita `configuracion.updated` (sin el valor de los secretos), manda el recibo por correo e invalida la caché de tenant |
 
 Semántica de las claves en `PATCH`:
 
 - `undefined` → no se toca (permite guardar la marca sin perder la clave).
 - `null` o `""` → se borra.
 - string → se fija (trim).
+
+⚠️ **Lo que el PATCH guarda lo tiene que DEVOLVER** (05/08/2026): la pantalla
+hace `setCfg({...c, ...data})`, así que un interruptor que se guarde pero no
+vuelva en la respuesta se queda pintado con el valor viejo. Pasó con las cuatro
+puertas de la agenda: Rodrigo encendió tres sin que la pantalla lo enseñara.
 
 No hay migración: `settings` es JSONB, ya existe en `master.tenants`.
 
@@ -166,21 +242,43 @@ No hay migración: `settings` es JSONB, ya existe en `master.tenants`.
 > analítica de visitas tiene que poder conectarlo sin que nadie toque código.
 > Verificado el 01/08: ninguna tarjeta lleva `hasModule`.
 
-Interruptores de Citas que viajan por el mismo `PATCH` (todos booleanos, todos
-**apagados** por defecto): `recordatoriosCitas`, `agendaCompartida` y
-`avisosWhatsapp` (avisos de cita también por WhatsApp) y `portalBloqueoImpago` (sprint Aumenta 2026-07, punto 2.3 — los documentos del
-área privada se abren mes a mes al registrar el cobro de ese mes; detalle en
-`docs/modules/citas.md`). Los cuatro quedan anotados en `AuditLog` al cambiarlos.
+Interruptores de Citas que viajan por el mismo `PATCH` — **diez**, todos
+booleanos y todos **apagados** por defecto (los dos «en negativo» lo están para
+leerse con `=== true` como sus hermanos: apagado = se puede anular / se reserva
+online, que es como se comportó siempre):
+
+| Interruptor | `settings.citas.*` | Qué hace |
+| --- | --- | --- |
+| `recordatoriosCitas` | `recordatorios` | Correo la víspera de la cita (`lib/citas/recordatorios.js`) |
+| `agendaCompartida` | `agendaCompartida` | Todo el equipo ve la agenda completa, con los datos del paciente (`lib/citas/visibilidad.js`). Aumenta la tiene encendida desde el 01/08 |
+| `avisosWhatsapp` | `avisosWhatsapp` | Los avisos de cita también por WhatsApp (necesita la tarjeta de Meta) |
+| `portalBloqueoImpago` | `portalBloqueoImpago` | Sprint Aumenta 2026-07, punto 2.3: el área privada se abre mes a mes al registrar el cobro |
+| `cancelacionBloqueada` | `cancelacionBloqueada` | La familia NO puede anular sus citas (`lib/citas/cancelacion.js`) |
+| `reservaOnlineCerrada` | `reservaOnlineCerrada` | El centro no da cita por internet (`lib/citas/puertaReserva.js`) |
+| `formularioObligatorio` | `formularioObligatorio` (+ `formularioUrl`) | Puerta de admisión: solo reserva quien tiene el formulario aceptado |
+| `contratoObligatorio` | `contratoObligatorio` | Puerta de contratos (04/08): sin firmar no se reserva, salvo la valoración inicial (`lib/citas/puertaContrato.js`) |
+| `soloConPago` | `soloConPago` | Puerta de caja (05/08): desde la agenda pública solo lo que se cobra (`lib/citas/tiposVisibles.js`) |
+| `identidadObligatoria` | `identidadObligatoria` | Puerta de identidad (05/08): sin cuenta no se reserva (`exigeIdentidad`) |
+
+Con ellos viajan `meetModo` (ver «Enlace de videollamada»), las URLs de la web
+del cliente (`formularioUrl`, `portalUrl`, `reservaUrl`) y `colorBloqueos`. El
+detalle de cada puerta está en `docs/modules/citas.md`; todos quedan anotados
+en `AuditLog` al cambiarlos.
 
 ---
 
 ## Ficheros
 
 - `app/(dashboard)/configuracion/page.jsx` — página (renderiza el módulo).
-- `modules/config/ConfigModule.jsx` — UI (facturación + IA + tarjetas de clave).
-- `app/api/tenant/settings/route.js` — GET/PATCH, enmascarado y `invalidateTenantCache`.
+- `modules/config/ConfigModule.jsx` — UI (facturación + IA + tarjetas de clave +
+  interruptores de Citas + candado de IA + empresas externas + derivaciones;
+  todo en un fichero).
+- `app/api/tenant/settings/route.js` — GET/PATCH, enmascarado, diff para la
+  auditoría, recibo por correo e `invalidateTenantCache`.
+- `lib/configuracion/avisoCambio.js` — el recibo por correo de cada cambio.
 - `app/(dashboard)/layout.jsx` — elimina `settings.integrations` antes del cliente.
-- `components/layout/Sidebar.jsx` — entrada "Configuración" (`always: true`).
+- `components/layout/Sidebar.jsx` — el engranaje del pie (solo admin); ya no es
+  una entrada del menú ni lleva `always: true`.
 
 ---
 
@@ -188,7 +286,7 @@ Interruptores de Citas que viajan por el mismo `PATCH` (todos booleanos, todos
 
 Las claves se guardan **cifradas** (AES-256-GCM) con `SETTINGS_ENCRYPTION_KEY`.
 Detalle en `lib/crypto/secretBox.js`. Migración para cifrar claves antiguas en
-claro: `scripts/encrypt-tenant-secrets.js` (idempotente). Sin la env var, se
+claro: `scripts/_hechos/encrypt-tenant-secrets.js` (idempotente). Sin la env var, se
 guardan en claro (aviso por stderr) — hay que configurarla en el `.env`.
 
 ## Permisos de IA del equipo (2026-07-27)
@@ -204,10 +302,13 @@ puede **Revocar**. El solicitante recibe la decisión por la campana.
 
 Piezas:
 - Gate: `lib/ai/aiAccess.js` → `vetoAi(ctx, request, accion)` (estilo RETURN,
-  no throw: varios handlers de IA tienen try/catch propio). Está en los 7
-  endpoints de IA: clinica/transcribe, outreach analizar y buscar-nuevos,
-  tickets/[id]/ai, assistant (Salamandrobot), calendar/reorganize y
-  citas suggest-slots. Todo uso PERMITIDO audita `ai.uso` en master.
+  no throw: varios handlers de IA tienen try/catch propio). Está en los **11**
+  endpoints de IA (eran 7 el 27/07): `clinica/sessions/transcribe`,
+  `clinica/reports/[id]/pulir`, `clinica/performance/config/ai`, `outreach`
+  `analizar` y `buscar-nuevos`, `tickets/[id]/ai`, `assistant`
+  (Salamandrobot), `calendar/reorganize`, `citas/bookings/[id]/suggest-slots`,
+  `projects/ai/generate` y `projects/[id]/ai/edit`. Todo uso PERMITIDO audita
+  `ai.uso` en master. Un endpoint de IA nuevo lo lleva o se salta el candado.
 - Panel: `GET /api/ai-permisos` + `PATCH /api/ai-permisos/[id]`
   (decision: conceder-general | conceder-una-vez | denegar | revocar).
   Solo admin con rol fresco de BD; PATCH vetado en la demo.
@@ -229,10 +330,19 @@ libre, **solo válido dentro de la ventana de 24 h**) y
 (plantilla aprobada, válida siempre). Cloud API v21, best-effort: devuelven
 `{ok:false,error}` y NUNCA lanzan.
 
-Estado a 17/08/2026: los tres avisos de cita ya salen por plantilla
-(`docs/modules/citas.md` → «Los tres avisos van por PLANTILLA»), y lo enviado y
-lo recibido se guarda en `whatsapp_messages`. Pendiente: los avisos de nutrición
-y de soporte, y una pantalla que enseñe el hilo en la ficha.
+**Histórico (hasta 01/08/2026):** la infraestructura estaba lista pero ningún
+flujo mandaba mensajes solo. Desde ese día los **avisos de cita** salen también
+por WhatsApp si el interruptor `avisosWhatsapp` está encendido y la familia no
+ha dicho que no (`lib/citas/avisosWhatsapp.js`: lo comparten «Guardar y
+enviar», la confirmación de la cita y el recordatorio de la víspera). Iban como
+texto libre, y por eso se caían fuera de la ventana de 24 h.
+
+Estado a 23/08/2026: los tres avisos de cita salen ya por **plantilla aprobada**
+(`docs/modules/citas.md` → «Los tres avisos van por PLANTILLA»), así que valen
+también fuera de esa ventana; lo enviado y lo recibido se guarda en
+`whatsapp_messages`, y el hilo se ve en la ficha del cliente y en la bandeja de
+sin asignar (`docs/modules/clients.md`). Pendiente: los avisos de nutrición y de
+soporte, y la descarga de adjuntos.
 
 ### Mensajes ENTRANTES (webhook)
 

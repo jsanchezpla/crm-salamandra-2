@@ -1,9 +1,18 @@
+// @vivo — Utilidad de DESARROLLO genérica (slug + email, `--expired`) que firma un `wpsso` como lo haría WordPress para probar `/widget/c/<slug>/mi-perfil`… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * dev-mint-wpsso.js — genera un token `wpsso` de PRUEBA (como lo firmaría
- * WordPress) para probar el portal "Mis citas" en local sin WordPress.
+ * WordPress) para probar el portal «Mi perfil» (`/widget/c/<slug>/mi-perfil`;
+ * `/mis-citas` fue su primer nombre y hoy redirige ahí) en local sin WordPress.
  *
- * Firma un JWT HS256 con WIDGET_SSO_SECRETS[slug], payload { email, tenant },
- * exp +5 min (o pasado con --expired). Imprime el token y la URL del iframe.
+ * Firma un JWT HS256 con el secreto de WIDGET_SSO_SECRETS[slug], payload
+ * { email, tenant }, exp +5 min (o pasado con --expired). Imprime el token y la
+ * URL del iframe.
+ *
+ * El secreto NO se lee aquí: lo da `getWidgetSsoSecret` (`lib/citas/ssoToken.js`),
+ * el mismo que usa producción. Desde la rotación del 12/08/2026 el valor del
+ * JSON puede ser un string suelto O una lista `["<nuevo>","<viejo>"]`, y para
+ * FIRMAR vale solo el primero; leyendo el JSON a mano, una lista se convertía en
+ * la cadena "nuevo,viejo" y el token salía firmado con algo que no acepta nadie.
  *
  * Uso:
  *   node --env-file=.env.local scripts/dev-mint-wpsso.js nutri_laura test@x.com
@@ -11,6 +20,8 @@
  */
 
 import { SignJWT } from "jose";
+
+import { getWidgetSsoSecret } from "../lib/citas/ssoToken.js";
 
 async function main() {
   const [slug, email, ...rest] = process.argv.slice(2);
@@ -20,20 +31,11 @@ async function main() {
   }
   const expired = rest.includes("--expired");
 
-  const raw = process.env.WIDGET_SSO_SECRETS;
-  if (!raw) {
-    process.stderr.write("✗ Falta WIDGET_SSO_SECRETS en la env.\n");
-    process.exit(1);
-  }
-  let secret;
-  try {
-    secret = JSON.parse(raw)[slug];
-  } catch {
-    process.stderr.write("✗ WIDGET_SSO_SECRETS no es JSON válido.\n");
-    process.exit(1);
-  }
+  const secret = getWidgetSsoSecret(slug);
   if (!secret) {
-    process.stderr.write(`✗ No hay secreto para "${slug}" en WIDGET_SSO_SECRETS.\n`);
+    process.stderr.write(
+      `✗ Sin secreto para "${slug}": falta WIDGET_SSO_SECRETS, no es JSON válido o no trae ese slug.\n`
+    );
     process.exit(1);
   }
 
@@ -49,7 +51,7 @@ async function main() {
 
   const base = process.env.APP_BASE_URL || "http://localhost:3000";
   process.stdout.write(`\nwpsso (${expired ? "CADUCADO" : "válido 5 min"}):\n${token}\n\n`);
-  process.stdout.write(`URL:\n${base}/widget/c/${slug}/mis-citas?wpsso=${encodeURIComponent(token)}\n\n`);
+  process.stdout.write(`URL:\n${base}/widget/c/${slug}/mi-perfil?wpsso=${encodeURIComponent(token)}\n\n`);
   process.exit(0);
 }
 

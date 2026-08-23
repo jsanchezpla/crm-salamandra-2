@@ -1,3 +1,4 @@
+// @vivo — Slug a fuego (`const SLUG = "nutri_laura"`) y ya sustituido por `configure-portal-citas.js <slug>`, cuya cabecera lo dice textualmente; citas.md y… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * configure-nutri-laura-citas-portal.js
  *

@@ -1,3 +1,4 @@
+// @vivo — Es una herramienta genérica por `<slug> <slug-formulario> [--confirm]`, idempotente («un lead ya movido se reconoce por su id en las notas y se… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * mover-leads-a-comerciales.js — pasa los leads de FAMILIAS a la bandeja de
  * Comerciales, que es donde tienen que estar desde que el formulario se partió

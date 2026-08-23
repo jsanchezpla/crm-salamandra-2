@@ -1,3 +1,4 @@
+// @vivo — Es la forma documentada de cambiar el contrato que firman las pacientes de Laura (cliente vivo) sin desplegar: idempotente por key, con version a… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * seed-contrato-tunutrilaura.js
  *

@@ -297,6 +297,8 @@ export default function CitasModule() {
   const [avisoResultado, setAvisoResultado] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
+  // Su id de usuario, para poder encontrar SU ficha de equipo y rotularla.
+  const [viewerUserId, setViewerUserId] = useState(null);
   const [visibleTmIds, setVisibleTmIds] = useState(null); // null = todos los profesionales
   const [patients, setPatients] = useState([]); // vacío si el tenant no tiene Clínica/Pacientes
   const [festivosAbierto, setFestivosAbierto] = useState(false);
@@ -360,7 +362,10 @@ export default function CitasModule() {
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => setViewerIsAdmin(["admin", "superadmin"].includes(j?.data?.role)))
+      .then((j) => {
+        setViewerIsAdmin(["admin", "superadmin"].includes(j?.data?.role));
+        setViewerUserId(j?.data?.id ?? null);
+      })
       .catch(() => {});
   }, []);
 
@@ -422,6 +427,17 @@ export default function CitasModule() {
       .then((j) => setTeamMembers(j?.data?.members ?? []))
       .catch(() => {});
   }, []);
+
+  /**
+   * La ficha de equipo de quien mira (19/08/2026, Jorge).
+   *
+   * No filtra nada: el servidor ya acota a una profesional no-admin a SUS citas,
+   * tanto en el listado como en el calendario (`lib/citas/visibilidad.js`). Lo que
+   * faltaba era DECIRLO: su pantalla no llevaba ninguna señal de estar acotada, así
+   * que no había forma de distinguir «estas son todas» de «estas son las tuyas».
+   * Rocío dio por suyas unas citas que no lo eran.
+   */
+  const miFichaDeEquipo = teamMembers.find((m) => m.userId === viewerUserId) ?? null;
 
   // Pacientes para asignar la cita (sólo tenants con módulo Clínica/Pacientes:
   // si el endpoint responde 403, `patients` queda vacío y el selector se oculta).
@@ -1426,6 +1442,25 @@ export default function CitasModule() {
                   searchable={teamMembers.length > 8}
                 />
               </div>
+            </div>
+          )}
+
+          {/* Y si no es admin, su nombre fijo en el mismo sitio: no se elige
+              porque no hay nada que elegir, ve su agenda y solo su agenda. */}
+          {!viewerIsAdmin && miFichaDeEquipo && (
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[11px] uppercase tracking-wider text-neutral-400">Profesional</span>
+              <span
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] text-neutral-600 bg-neutral-50 border border-neutral-200"
+                title="Ves tu agenda. Para ver la de otra persona hace falta dirección."
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                  style={{ background: miFichaDeEquipo.avatarColor ?? "#3F6E5B" }}
+                />
+                {miFichaDeEquipo.displayName}
+                <span className="text-neutral-400">· solo tus citas</span>
+              </span>
             </div>
           )}
         </div>

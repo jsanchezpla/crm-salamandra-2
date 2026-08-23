@@ -16,6 +16,7 @@ import { sendEmail, envioRealizado } from "../../../../../lib/email/resendClient
 import { solicitudAceptadaTemplate } from "../../../../../lib/email/templates/citas/solicitudAceptada.js";
 import { getTenantResendConfig } from "../../../../../lib/outreach/resendConfig.js";
 import { reservaOnlineCerrada } from "../../../../../lib/citas/puertaReserva.js";
+import { esCorreoTransaccional } from "../../../../../lib/clients/comunicaciones.js";
 
 /**
  * A dónde se le manda a reservar. Se prefiere el ÁREA PRIVADA del cliente
@@ -175,6 +176,7 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
       avisoAlPaciente = "silenciado";
     } else if (client.email) {
       try {
+        if (!esCorreoTransaccional("solicitudAceptada")) throw new Error("NO_DECLARADO_TRANSACCIONAL");
         const cfg = getTenantResendConfig({ tenant });
         const tpl = solicitudAceptadaTemplate({
           tenantName: tenant.name,
@@ -197,8 +199,13 @@ export const POST = withTenant(async (request, ctx, { tenant, tenantModels, tena
         });
         avisoAlPaciente = envioRealizado(envio, `formularios:aceptada ${client.id}`).motivo;
       } catch (err) {
-        process.stderr.write(`[formularios:aceptada] email fail: ${err.message}\n`);
-        avisoAlPaciente = "error";
+        if (err.message === "NO_DECLARADO_TRANSACCIONAL") {
+          // Silencio decidido, no avería: la bandeja no debe pintarlo en rojo.
+          avisoAlPaciente = "silenciado";
+        } else {
+          process.stderr.write(`[formularios:aceptada] email fail: ${err.message}\n`);
+          avisoAlPaciente = "error";
+        }
       }
     }
 

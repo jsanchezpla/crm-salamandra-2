@@ -13,7 +13,7 @@ import { enlaceCancelacion } from "../../../../lib/citas/cancelacion.js";
 import { findBookingOverlap, noEsCarritoAbandonado } from "../../../../lib/citas/booking.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
 import { meetUrlInicial } from "../../../../lib/citas/videollamada.js";
-import { veTodaLaAgenda } from "../../../../lib/citas/visibilidad.js";
+import { veTodaLaAgenda, soloLoSuyo } from "../../../../lib/citas/visibilidad.js";
 import { cargarFestivos, esFestivo } from "../../../../lib/citas/festivos.js";
 import { duracionDeContacto } from "../../../../lib/citas/slots.js";
 import { citaPuedeAvisar } from "../../../../lib/clients/comunicaciones.js";
@@ -24,7 +24,6 @@ import { cargarAusencias, minutosOcupados } from "../../../../lib/citas/ausencia
 import { getMadridParts } from "../../../../lib/citas/slots.js";
 import { asignarSesion } from "../../../../lib/citas/packs.js";
 
-const NADIE = "00000000-0000-0000-0000-000000000000";
 
 const VALID_STATUS = new Set(["pending", "confirmed", "completed", "cancelled", "no_show"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -46,7 +45,7 @@ async function resolvePatientId(body, tenantModels, hasModule) {
 // ───────────────────────────────────────────────────────────────────────────
 // GET /api/citas/bookings — listado paginado
 // ───────────────────────────────────────────────────────────────────────────
-export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule, tenantHasModule }) => {
   try {
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
 
@@ -127,11 +126,14 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
     // el calendario; sin esto, la lista/lista de espera filtraba los datos
     // personales de las citas de todo el equipo). El jefe (admin) ve todo, y
     // un tenant con agenda compartida enseña la de todos (lib/citas/visibilidad.js).
-    if (hasModule("team")) {
+    // ⚠️ `tenantHasModule` y NO `hasModule`: la pregunta es si el CENTRO tiene
+    // equipo, no si quien mira puede entrar en la pantalla de Equipo. El porqué,
+    // en lib/citas/visibilidad.js — con `hasModule` esto NO se ejecutaba.
+    if (tenantHasModule("team")) {
       const userRole = request.headers.get("x-user-role") ?? "user";
       if (!veTodaLaAgenda({ tenant, role: userRole })) {
         const myId = await resolveCurrentTeamMemberId(request, tenantModels);
-        where.teamMemberId = myId ?? NADIE;
+        where.teamMemberId = soloLoSuyo(myId);
       }
     }
 
@@ -143,7 +145,7 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
     const include = [
       { model: EventType, as: "eventType", attributes: ["id", "name", "slug", "color", "sessionsCount"] },
     ];
-    if (hasModule("team")) {
+    if (tenantHasModule("team")) {
       include.push({ model: TeamMember, as: "teamMember", attributes: ["id", "displayName"] });
     }
     if ((hasModule("clinica") || hasModule("pacientes")) && Patient) {
@@ -183,7 +185,7 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
 //   - SÍ valida solapamiento con otros bookings activos
 //   - SÍ valida que modality esté en EventType.modalities
 // ───────────────────────────────────────────────────────────────────────────
-export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
+export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule, tenantHasModule }) => {
   try {
     if (!hasModule("citas")) return forbidden("Módulo citas no activo");
     const userRole = request.headers.get("x-user-role") ?? "user";
@@ -307,7 +309,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // teamMemberId solo si el tenant tiene módulo team; valida existencia. Se
     // resuelve ANTES del solape porque el solape es POR PROFESIONAL.
     let teamMemberId = null;
-    if (hasModule("team")) {
+    if (tenantHasModule("team")) {
       const tmId = typeof body.teamMemberId === "string" && body.teamMemberId.trim()
         ? body.teamMemberId.trim()
         : null;

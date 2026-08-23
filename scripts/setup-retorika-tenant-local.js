@@ -1,3 +1,4 @@
+// @vivo — «Inicializa el tenant retorika en LOCAL desde cero — sin tocar producción [...] IDEMPOTENTE [...] Aborta si NODE_ENV === production». (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * setup-retorika-tenant-local.js
  *

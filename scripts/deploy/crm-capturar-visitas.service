@@ -1,0 +1,24 @@
+[Unit]
+Description=Captura diaria de las visitas de la web (modulo Analiticas del CRM)
+Documentation=file:///opt/crm-salamandra/docs/modules/analytics.md
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+
+# 1. Los clientes reales: copiar de Cloudflare lo que tenga, antes de que caduque.
+ExecStart=/usr/bin/docker exec crm-salamandra-app-1 node scripts/capturar-visitas-web.js
+
+# 2. La demo publica: resembrar sus visitas inventadas para que la ventana
+#    termine SIEMPRE en hoy. Sin esto la siembra envejece: el rango "Hoy" sale a
+#    cero al dia siguiente y los demas se van vaciando dia a dia (pasado el
+#    2026-08-01, con la siembra hecha el 31 de julio).
+#
+#    `-` delante: si la resiembra de la demo falla, NO debe marcar la unidad como
+#    fallida ni tapar el resultado del paso 1, que es el que toca datos de
+#    clientes reales e irrecuperables.
+ExecStart=-/usr/bin/docker exec crm-salamandra-app-1 node scripts/seed-analiticas-demo.js
+
+StandardOutput=append:/var/log/crm-capturar-visitas.log
+StandardError=append:/var/log/crm-capturar-visitas.log

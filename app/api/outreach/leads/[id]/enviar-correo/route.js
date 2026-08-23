@@ -27,9 +27,12 @@ async function auditLog(data) {
  * llegan editados desde la UI, no se leen de BD, para que lo que se envía sea
  * exactamente lo que la persona ha revisado.
  *
- * `sentAt` se marca ÚNICAMENTE tras un envío real. En dry-run (sin
- * RESEND_API_KEY) se devuelve `dryRun: true` y no se toca la BD: marcar el
- * correo como enviado sin haberlo enviado sería mentirle al comercial.
+ * `sentAt` se marca ÚNICAMENTE tras un envío real. La clave de Resend es la del
+ * TENANT (`lib/outreach/resendConfig.js`, cifrada; sin fallback al `.env`):
+ * sin ella se responde 400 antes de intentar nada. Si el tenant guardó la
+ * clave literal `dry-run`, `sendEmail` no manda nada al exterior y aquí se
+ * devuelve `dryRun: true` sin tocar la BD: marcar el correo como enviado sin
+ * haberlo enviado sería mentirle al comercial.
  */
 export const POST = withTenant(async (request, { params }, ctx) => {
   if (!ctx.hasModule("outreach")) throw new ForbiddenError();

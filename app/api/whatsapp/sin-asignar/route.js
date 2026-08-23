@@ -150,7 +150,7 @@ export const POST = withTenant(async (request, _routeContext, ctx) => {
   await auditar({
     tenantId: ctx.tenant.id,
     userId,
-    action: "whatsapp.conversacion_asignada",
+    action: "client.whatsapp_asignado",
     entity: "Client",
     entityId: ficha.id,
     before: { cliente: null },

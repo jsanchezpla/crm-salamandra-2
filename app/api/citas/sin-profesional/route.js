@@ -3,6 +3,7 @@ import { ok, forbidden, error } from "../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { noEsCarritoAbandonado } from "../../../../lib/citas/booking.js";
 import { Op } from "sequelize";
+import { veTodaLaAgenda } from "../../../../lib/citas/visibilidad.js";
 
 /**
  * Citas SIN profesional asignado, agrupadas por departamento.
@@ -37,8 +38,30 @@ function departamentoDe(texto) {
   return null;
 }
 
-export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+/**
+ * ¿Quién puede ver y repartir esta cola? (19/08/2026)
+ *
+ * Faltaba la puerta: los dos handlers solo miraban `hasModule("citas")`, así que
+ * cualquier usuario con Citas podía LISTAR las citas sin asignar —con el nombre
+ * del paciente— y además ASIGNARLAS en bloque a cualquiera. La pestaña del menú
+ * es `adminOnly`, pero una pantalla escondida no es una puerta cerrada: la URL
+ * se teclea.
+ *
+ * Se usa la regla del módulo (`lib/citas/visibilidad.js`) y no un `esAdmin` a
+ * mano, para que Aumenta NO cambie: allí la agenda es compartida a propósito, así
+ * que `veTodaLaAgenda` sigue siendo `true` para todo el equipo y sus 1.827 citas
+ * se reparten igual que ayer. Donde la agenda NO se comparte —nutri_laura— esto
+ * queda para dirección, que es de quien es la decisión de a quién se le asigna.
+ */
+function noPuedeRepartir(request, tenant) {
+  const role = request.headers.get("x-user-role") ?? "user";
+  return veTodaLaAgenda({ tenant, role }) ? null : forbidden("Esta pantalla es de dirección");
+}
+
+export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("citas")) return forbidden();
+  const veto = noPuedeRepartir(request, tenant);
+  if (veto) return veto;
 
   const { Booking, EventType, Patient } = tenantModels;
   const { searchParams } = new URL(request.url);
@@ -118,6 +141,8 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
  */
 export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   if (!hasModule("citas")) return forbidden();
+  const veto = noPuedeRepartir(request, tenant);
+  if (veto) return veto;
 
   const { Booking, TeamMember } = tenantModels;
   const body = await request.json();

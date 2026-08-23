@@ -1,5 +1,25 @@
 # Módulo Citas
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es este mismo commit). Si algo no cuadra, manda el código: corrige esta tabla. **Quién tiene el módulo NO se lista aquí** (una lista a mano se queda vieja): `/admin/modulos` en el back-office o `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `citas` · requiere — (en `lib/provisioning/catalogo.js` no depende de nadie; es `documents` quien lo requiere a él). Comparte la capa de cobro con Pagos (`docs/modules/pagos.md`) y el portal de la familia con Documentos y Formularios; el widget público tiene su doc aparte: `citas-embed.md` |
+| **Reina** | — · no está declarada. El módulo nació para `nutri_laura` (Fase 1: el widget, el portal SSO, las puertas y el cobro son suyos); `aumenta` es quien más lo usa por dentro (12.030 citas importadas) |
+| **Pantallas** | `app/(dashboard)/citas/page.jsx` → `/citas` (calendario + lista de espera + alta manual) · `citas/tipos/` → `/citas/tipos` · `citas/disponibilidad/` → `/citas/disponibilidad` · `citas/bloqueos/` → `/citas/bloqueos` · `citas/sin-profesional/` → `/citas/sin-profesional` (el menú exige además `team`) · `mi-horario/page.jsx` → `/mi-horario` (cuelga del menú Citas) · `equipo/ocupacion/page.jsx` → `/equipo/ocupacion` (`requiresAll: team_avanzado + citas`, solo admin) · los interruptores en Configuración → Citas (`app/(dashboard)/configuracion/`). **Públicas** (`app/widget/c/[tenantSlug]/`): `page.jsx` → `/widget/c/<slug>` (tipo, día y hora), `book/` (datos + confirmación), `cancel/[token]/`, `mi-perfil/` (portal de la familia; `/mis-citas` redirige ahí desde `next.config.mjs`), `pagar/[token]/` (volver a meter la tarjeta); las puertas del portal viven en `_components/` (`ContratoGate`, `DatosGate`, `BienvenidaGate`, `useCitasPortalSession`…). `soporte/*` NO es de citas |
+| **Endpoints** | `app/api/citas/**` — 23 `route.js`: `event-types`, `availability` (+`bulk`), `bookings` (+`[id]`, `confirm`, `reject`, `pedir-tarjeta`, `reschedule-request`, `suggest-slots`, `calendar`), `reschedule-requests`, `packs`, `blocked-days`, `bloqueos`, `avisos`, `clientes`, `sin-profesional`, `informe-ocupacion` · Configuración → Citas se guarda en `app/api/tenant/settings/route.js`. **Públicos** (`app/api/public/c/[tenantSlug]/`, 21 de citas): agenda anónima `info`, `event-types`, `availability` (+`month`), `book`, `booking/[token]`, `cancel/[token]`, `pagar/[token]`; portal con sesión SSO bajo `citas-portal/` (13: `session`, `bookings`, `cancel/[id]`, `admision`, `avisos`, `comunicaciones`, `consentimiento-imagen`, `mis-datos`, `documents` (+`[id]`), `contract` (+`sign`, `documento`)). `formularios/[formSlug]`, `registro-web` y `soporte/*` NO son de citas. **Webhook**: `app/api/webhooks/stripe/[tenantSlug]/route.js` (cobros y devoluciones; `lib/payments/entityHooks.js` → `citaPagada`) |
+| **Lógica** | `lib/citas/` (45 ficheros). Huecos: `booking.js` (qué cita OCUPA su hueco, única fuente), `slots.js`, `ausencias.js`, `horarioProfesional.js`, `festivos.js`, `validation.js`. Puertas de la agenda pública: `puertaIdentidad.js`, `puertaFormulario.js` (+`avisoAdmisionRota.js`), `puertaContrato.js`, `puertaValoracion.js`, `puertaReserva.js`, `tiposVisibles.js`, `quienPregunta.js`. Dinero: `cobroCita.js`, `reembolsoCita.js`, `caducidadRetencion.js`, `packs.js` (bonos), `politicaReembolso.js`, `dinero.js`, `tokenPago.js`, `consentimientoRetencion.js` (con `lib/payments/`: `autorizacion.js`, `fraccionado.js`, `entityHooks.js`). Portal: `ssoToken.js`, `portalSession.js`, `portalRateLimit.js`, `portalClient.js`, `portalContract.js`, `portalDocumentos.js`, `portalMeses.js`, `bienvenida.js`. Avisos: `recordatorios.js`, `notificarCancelacion.js`, `avisosWhatsapp.js` (+`lib/whatsapp/whatsappConfig.js`), plantillas en `lib/email/templates/citas/` (10). Otros: `visibilidad.js` (agenda compartida), `cancelBooking.js`/`cancelacion.js`, `rescheduleRequests.js`, `suggestSlots.js` (IA), `videollamada.js`, `preguntasCita.js`, `valoracionInicial.js`, `coloresBloqueo.js`, `googleCalendar.js`, `audit.js` |
+| **UI** | `modules/default/CitasModule.jsx` (2.595 líneas: calendario FullCalendar, lista de espera, alta manual) · `components/citas/` (`BuscadorPaciente`, `ModalFestivos`, `PanelVacaciones`) · en la ficha de cliente, `components/clients/` (`ClientCitasSection`, `ClientBookingsPanel`, `ClientBonosSection`) · `components/team/TeamHoursEditor.jsx` (Mi horario) · `components/ui/Dialogo.jsx` (sustituyó a los diálogos del navegador). No hay `modules/citas/` |
+| **Modelos** | `models/tenant/`: `EventType`→`event_types`, `Availability`→`availabilities`, `Booking`→`bookings` (con `client_id`, `patient_id`, `team_member_id`, `pack_id`), `BookingChangeRequest`→`booking_change_requests`, `SessionPack`→`session_packs`, `BlockedDay`→`blocked_days`, `TeamBlock`→`team_blocks`, `ClientNotice`→`client_notices`, `ContractTemplate`→`contract_templates`, `ContractSignature`→`contract_signatures`; compartidos con Pagos: `PaymentSession`→`payment_sessions`, `StripeWebhookEvent`→`stripe_webhook_events`. Se registran y asocian en `lib/db/tenantDb.js` |
+| **Interruptores y parámetros** | `featureFlags`: solo `autoConfirmPublicBookings` (lo lee `app/api/public/c/[tenantSlug]/book/route.js`; ausente = `true`). `logicOverrides`: ninguno que lea el código. ⚠️ Los interruptores por cliente de este módulo NO van en `tenant_modules` sino en `tenant.settings.citas.*` (Configuración → Citas): `identidadObligatoria`, `formularioObligatorio` (+`formularioUrl`), `contratoObligatorio`, `soloConPago`, `recordatorios`, `avisosWhatsapp`, `agendaCompartida`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `meetModo`, `colorBloqueos`, `avisoFaltas`, `portalUrl`/`reservaUrl`… (los leen `lib/citas/puerta*.js`, `visibilidad.js`, `recordatorios.js`, `portalMeses.js`, `avisosWhatsapp.js`…); y `settings.widget.sso.enabled` / `settings.widget.auth.*` (portal SSO). Entorno: `WIDGET_SSO_SECRETS`, `CITAS_PORTAL_SESSION_SECRET`, `WIDGET_FRAME_ANCESTORS` (widget y portal), `APP_PUBLIC_URL` (enlaces del recordatorio) |
+| **Pantallas propias** | ninguna: `UI_OVERRIDES = {}` en `app/(dashboard)/citas/page.jsx` (el override de nutri_laura se fundió en el default el 22/07/2026); solo `TENANT_TITLE_OVERRIDES` rotula «Agenda» en nutri_laura |
+| **Scripts** | Activación: `node scripts/enable-module.js <slug> citas` (corre las 15 migraciones de `MODULES.citas` en `scripts/_module-migrations.js`, más las CORE que tocan citas —`migrate-sprint-aumenta-2026-07`, `migrate-contrato-estructurado`, `migrate-payments-sprint-1`…—; sin seed de fábrica) · Comprobar (solo lectura): `comprobar-citas.js` (¿le funcionan las citas a este cliente?), `comprobar-stripe.js`, `inspeccionar-cita-cobro.js`, `check-links.js` (citas sin ficha) · Configurar: `configure-portal-citas.js <slug>` (enciende el portal; sustituye a `configure-nutri-laura-citas-portal.js`, que sigue en disco), `_hechos/configure-nutri-laura-widget-auth.js`, `configure-stripe-tenant.js`, `seed-contrato-tunutrilaura.js` (clausulado de Laura en `contract_templates`) · Cron (systemd en el VPS, cada hora): `enviar-recordatorios.js` (`scripts/deploy/crm-recordatorios.timer`) y `vigilar-retenciones.js` (`crm-retenciones.timer`) · Mantenimiento (ensayan por defecto): `borrar-citas-por-nombre.js`, `_hechos/borrar-tipos-cita-ejemplo.js`, `reasignar-ausencias-sin-persona.js` · Desarrollo: `dev-mint-wpsso.js`, `dev-precio-cita.js`, `dev-cita-retenida.js` · Ya ejecutados (importación de Aumenta, 08/2026): `_hechos/import-aumenta-tipos-cita.js`, `import-aumenta-citas.js` |
+| **Pruebas** | Es el módulo con más: los 55 `scripts/_smoke-*.mjs` que nombra esta fila (contados el 21/08/2026; todos existen). Entran en `npm test` (sin base ni servidor; `scripts/pruebas.mjs` lo deduce sola, o van marcadas `// @prueba ligera`): `_smoke-citas-dinero` (`node:test`, 19/08/2026: lo que devuelve `lib/citas/dinero.js`, la primera escrita así), `_smoke-citas-validation` (`node:test`: `lib/citas/validation.js`, lo que entra por el widget y los tipos de cita), `_smoke-clients-comunicaciones` (`node:test`, en clients: `citaPuedeAvisar` con un `Client` de mentira), `_smoke-citas-portal-meses` (`node:test`: `lib/citas/portalMeses.js`, qué meses ve la familia en el portal, con un `Payment` de mentira), `_smoke-citas-slots` (`node:test`, 19/08/2026: lo que devuelve `lib/citas/slots.js` —los huecos de la agenda pública avanzan de `duration` en `duration`, los descansos se restan POR DENTRO del bloque, la antelación mínima se mide desde `now`, una cita tapa medio-abierto `[inicio, fin)`, un festivo no da huecos, `dayHasAnySlot` dice lo mismo que el generador; el offset de Madrid (+01:00 invierno / +02:00 verano, también los días del cambio de hora) se resuelve con `Intl` y la prueba lanza la misma lib en procesos hijos con TZ=UTC, Tokio, Los Ángeles y Kiritimati exigiendo la MISMA huella: nada depende de la zona del proceso; y desde el 19/08 una duración que no es un entero ≥ 1 devuelve vacío en vez de colgar Node—), `_smoke-formularios-fields-preguntas` (`node:test`, 19/08/2026, de formularios: su mitad de `lib/citas/preguntasCita.js` —cuatro tipos de pregunta y no más, `normalizarPreguntas` desde el panel o JSONB sin guardar nada roto, `validarRespuestas` de quien reserva, `paquetePreguntas` que va a `bookings.form_answers`—), `_smoke-citas-tipos-visibilidad` (`node:test`, 20/08/2026: `lib/citas/tiposVisibles.js` y `lib/citas/visibilidad.js` con modelos de mentira —el público solo ve los tipos no ocultos y la «Supervisión profesional» solo quien viene marcado como profesional; un bono VIVO destapa su tipo oculto y solo el suyo, contándose desde sus propias citas: las futuras descuentan, cancelar con 24 h o más devuelve la sesión, cancelar tarde la gasta y la falta justificada no; `puedeReservar` es la puerta de verdad de `/book` aunque el id se mande a mano, y todos los rechazos dicen la MISMA frase para no chivar el catálogo; `soloConPago` exige un true booleano y la valoración inicial se salta la caja; y en la agenda dirección ve todo, el equipo solo lo suyo más las citas sin asignar salvo `agendaCompartida`, con `esSuya` y `soloLoSuyo` obligadas a decir EXACTAMENTE lo mismo—), `_smoke-citas-portal-contrato` (`node:test`, 20/08/2026: `lib/citas/portalContract.js` con modelos falsos —sin contrato subido ni plantilla activa el portal NO se bloquea (el fallo del 31/07); las plantillas estructuradas mandan sobre el PDF estándar, que queda solo como descarga, y la firma «simple» de antes no vale al activarlas: se vuelve a pedir firma; a la menor el consentimiento parental le sale PRIMERO y en los huecos de ficha gana la definición del documento que NO es solo de menores; con dos tutores firmantes no está completo hasta que firman los dos; quien entra con el correo de la ficha es el titular aunque figure como tutor sin firma (el callejón del 06/08); el contrato en papel completa cualquier camino y una tabla sin migrar (42P01) no tumba el portal—), `_smoke-citas-cancelacion-aviso` (`node:test`, 20/08/2026: cuándo se CALLA el «tu cita ha sido cancelada» —`porQueNoSeAvisa` devuelve qué puerta lo paró: sin correo, cita pasada o plantilla fuera de `CORREOS_TRANSACCIONALES`, y la falta de correo se mira antes que la fecha—; que el correo se monte en UN solo sitio desde que se fundieron las dos copias (el panel delega en `emailCancelacionAlCliente` y no deja etiqueta de log propia); y que la sesión de un bono siga diciendo «tu programa sigue activo»), `_smoke-plantillas-citas-reserva` (`node:test`, 21/08/2026, ligera, 99 comprobaciones: los cinco correos del ciclo de una cita —`lib/email/templates/citas/booking{Received,Confirmed,Rejected,Cancelled,Rescheduled}.js`—: que el asunto es el suyo y distinto de los otros cuatro, que el HTML y el texto plano cuentan lo mismo, que los condicionales aparecen cuando toca y **CALLAN** cuando no (`esBono` → «tu programa sigue activo» en cancelación y rechazo; `retenido` solo si es un entero de céntimos positivo; `cobro` «cobrada»/«sin_cobrar»/silencio; las DOS fechas del cambio de día, la vieja antes que la nueva), que los importes salen en euros desde céntimos (3500 → 35,00 €) y que ni un nombre, ni un servicio, ni un motivo, ni una dirección salen del HTML sin escapar —mientras el texto plano se queda crudo a propósito—; seis bordes conocidos quedan fijados tal como están hoy con un `it` marcado `// SOSPECHOSO`), `_smoke-plantillas-citas-resto` (`node:test`, 21/08/2026, ligera, 86 comprobaciones: lo que DEVUELVEN las otras cinco plantillas de `lib/email/templates/citas/` —`bookingMeetLink`, `bookingReminder`, `pedirTarjeta`, `avisoCliente` y `solicitudAceptada`—: el asunto, que el html y el texto plano digan lo mismo, y los condicionales que se rompen solos (el recordatorio reparte el enlace de cancelación en las tres modalidades cuando el centro deja anular y no promete nada cuando no lo deja; `solicitudAceptada` con `reservaCerrada` cambia de asunto y NO reparte el enlace de reserva aunque se lo pasen; `pedirTarjeta` convierte céntimos en euros y distingue «rechazada» de «caducada»); ahí vive el arreglo del 21/08/2026 —el `href` del botón de pago iba crudo dentro del atributo y ahora va escapado—, y nueve comportamientos raros pero reales quedan fijados con un `it` marcado `// SOSPECHOSO`), `_smoke-puerta-identidad`, `-puerta-contrato`, `-puerta-descartada`*, `-puerta-profesional`*, `-paciente-borrado`*, `-aviso-admision`, `-tipos-ocultos`, `-tipos-visibles`, `-tipos-profesionales`, `-preguntas-cita`, `-packs-sesiones`, `-fraccionado`, `-pedir-otra-tarjeta`, `-no-se-devuelve`, `-ausencias`, `-descansos`, `-horario-profesional`, `-bienvenida`, `-menor-firma`, `-checkpoint2-emails` (* = marcadas a mano). Necesitan base de datos —y casi todas `npm run dev`— (`npm run test:todo`): `-puerta-formulario`, `-puerta-valoracion`, `-valoracion-inicial`, `-bloqueos-quien-ve`, `-citas-sin-profesional`, `-avisos-cliente`, `-enlace-videollamada`, `-dinero-solo-direccion`, `-ocupa-hueco`, `-packs-reserva`, `-formulario-cita`, `-contrato-estructurado`, `-campana`, `-checkpoint2-e2e`, y las de cobro `-autorizacion`, `-book-autorizacion`, `-confirmar-cobrar`, `-cancelar-retencion`, `-carreras-cobro`, `-pedir-tarjeta`, `-webhook-retencion`, `-vigilar-retenciones`, `-fraccionado-reloj`, `-retencion-viva-o-muerta` (falsea Stripe con `_fake-stripe-loader.mjs`) |
+| **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` (`bookings.client_id`: la cita enlaza con la ficha por FK, ya no solo por correo) · `../decisions/2026-07-28-repaso-de-seguridad.md` (rol fresco de BD en el informe de ocupación; guard de la demo en lo que manda correo) |
+| **En este doc** | Puerta de identidad · Puerta de admisión · Puerta de contratos y valoración inicial · Tipos de cita ocultos y asignados a dedo · Estados y transiciones · Endpoints · Contrato del Centro en el portal · UI |
+
 ## Resumen
 
 Módulo de agendamiento de citas con calendario, tipos de cita (EventType),
@@ -7,8 +27,13 @@ bloques de disponibilidad (Availability) y reservas (Booking). Tiene una
 landing pública embebible (`/widget/c/[tenantSlug]`) que crea reservas
 sin auth + endpoints admin bajo `/api/citas/*`.
 
-Tenants que lo usan hoy: `nutri_laura` (única con flujo activo en
-producción tras Fase 1).
+Quién lo tiene se mira en `/admin/modulos` (una lista a mano se queda vieja).
+Foto de producción del 19/08/2026: seis clientes — `aumenta` (12.030 citas,
+importadas de Organízate; quien más lo usa por dentro), `nutri_laura` (10; para
+quien se hizo el flujo público entero: widget, portal SSO, puertas y cobro),
+`demo`, `demo_clinica`, `demo_nutricion` y `somos`.
+**Histórico (hasta 07/2026):** `nutri_laura` era la única con flujo activo tras
+la Fase 1.
 
 ---
 
@@ -289,7 +314,7 @@ independientes**:
 | Freno | Dónde vive | Para qué |
 | --- | --- | --- |
 | El calendario | En Stripe | Aunque el CRM esté caído un mes, deja de cobrar en la cuota N |
-| El recuento | `frenarSiYaEstaPagado`, en cada `invoice.paid` | Si el calendario no llegó a crearse (la llamada falló), cuenta las facturas pagadas y cancela al llegar al total |
+| El recuento | `frenarSiYaEstaPagado`, en cada `invoice.paid` | Si el calendario no llegó a crearse (la llamada falló), cuenta las facturas pagadas y cancela al llegar al total. Le pide a Stripe la **página entera** (`limit: 100`), no 24 como hasta el 21/08/2026: el tope del producto son 36 cuotas (`EventType.instalmentMonths`, min 2 max 36), así que con 24 el recuento no llegaba nunca al total en los planes de 25 meses o más —contestaba «cuota 24 de N» en cada webhook y no cancelaba—, o sea que el segundo freno dejaba de existir justo en los planes largos. Si algún día el máximo del modelo sube por encima de 100, habrá que paginar |
 
 El segundo existe porque el primero se pone en una llamada de red que puede
 fallar. Sin él, un fallo de 200 ms deja a alguien pagando 130 €/mes sin fin.
@@ -603,8 +628,10 @@ algo falta, así que sirve de comprobación tras cada despliegue que toque citas
 
 ## Informe de ocupación y ausencias (2026-07-27)
 
-`/equipo/ocupacion` (hijo adminOnly del grupo Equipo, `moduleKey: citas`):
-cuántas citas hubo en el mes, cuántas se atendieron, cuántas se cancelaron y a
+`/equipo/ocupacion` (hijo adminOnly del grupo Equipo, `requiresAll:
+["team_avanzado", "citas"]` en `Sidebar.jsx`; el endpoint exige las dos cosas
+y rol admin fresco de BD — es una pantalla de Equipo avanzado que depende de
+Citas y no de `clinica`): cuántas citas hubo en el mes, cuántas se atendieron, cuántas se cancelaron y a
 cuántas NO SE PRESENTÓ NADIE, por profesional, más el reparto por tipo de cita.
 El estado `no_show` existía desde el principio pero no se agregaba en ninguna
 pantalla: había que contarlo cita a cita.
@@ -693,11 +720,25 @@ mandar correos a pacientes reales.
   filtrable por EventType.
 - `Booking` — reserva concreta con snapshot de duración/meetUrl,
   `cancellationToken` (UUID público para cancelar desde email),
-  `status` ENUM `pending|confirmed|completed|cancelled|no_show`.
+  `status` ENUM `pending|confirmed|completed|cancelled|no_show`, y los
+  enlaces reales `clientId` (ficha), `patientId`, `teamMemberId`
+  (profesional) y `packId` + `sessionNumber` (bono). Más los campos de
+  dinero (`paymentStatus`, `amount`, `holdExpiresAt`,
+  `authorizationExpiresAt`, `paymentSessionId`; ver `pagos.md`),
+  `formAnswers` y `reminderSentAt`.
 
-Asociaciones: `EventType.hasMany(Booking)`. **`Booking` NO tiene FK a
-`Client`** — el cruce con la ficha del paciente es por `clientEmail`
-(decisión arquitectónica explícita).
+Asociaciones (en `lib/db/tenantDb.js`): `EventType.hasMany(Booking)`,
+`Client.hasMany(Booking)`, `Patient.hasMany(Booking)`,
+`TeamMember.hasMany(Booking)`, `SessionPack.hasMany(Booking)`,
+`Booking.hasMany(BookingChangeRequest)` y `Booking.hasMany(ClientNotice)`.
+**`Booking` tiene FK a `Client` desde el 22/07/2026** (`bookings.client_id`,
+`migrate-booking-client-link`; decisión en
+`../decisions/2026-07-23-conexion-cliente-equipo.md`): `/book` la enlaza al
+crearla si el correo ya tiene ficha, y el alta manual la pone a dedo.
+`clientEmail` se conserva y sigue siendo la llave del **portal** (la sesión SSO
+identifica por correo; mucha gente reserva sin ficha) y de los bonos.
+**Histórico (hasta 22/07/2026):** el cruce con la ficha era solo por
+`clientEmail`, y así se quedaron huérfanas durante meses las citas de Aumenta.
 
 ## Estados y transiciones
 
@@ -728,6 +769,7 @@ Tabla de transiciones permitidas:
 |---|---|---|---|
 | (creación pública) | flag `autoConfirmPublicBookings=true` (default) | `confirmed` | `POST /api/public/c/[slug]/book` |
 | (creación pública) | flag `autoConfirmPublicBookings=false` (nutri_laura) | `pending` | `POST /api/public/c/[slug]/book` |
+| (creación pública) | el tipo tiene **precio** o la cita es **sesión de un bono** | `pending` **siempre**, mande lo que mande el flag (con precio: hasta que la tarjeta responda; con bono: salvo que la ficha tenga «citas autoconfirmadas») | `POST /api/public/c/[slug]/book` |
 | (creación admin) | siempre | `confirmed` | `POST /api/citas/bookings` |
 | `pending` | confirmar | `confirmed` | `PATCH /api/citas/bookings/[id]/confirm` |
 | `pending` | rechazar | `cancelled` | `PATCH /api/citas/bookings/[id]/reject` |
@@ -764,9 +806,25 @@ Conceptualmente son operaciones distintas:
   de cita").
 - **Cancelar confirmada**: Laura tenía la cita en agenda y se cae —
   enfermedad, viaje, paciente avisa que no puede. Es PATCH base con
-  `{ status: "cancelled" }` o `DELETE`. (Hoy NO dispara email
-  automático; pendiente backlog si quieres "tu cita ha sido cancelada"
-  como template separado.)
+  `{ status: "cancelled" }` o `DELETE`. **Sí dispara email** (desde el
+  27/07/2026): `bookingCancelled` («Tu cita ha sido cancelada»), solo si la
+  cita es FUTURA y solo cuando cancela el CENTRO — si cancela el propio
+  paciente desde su enlace o su portal, a él no se le escribe (ya lo sabe) y
+  al centro le llega un aviso a la campana. El correo lo manda siempre
+  `emailCancelacionAlCliente` (`lib/citas/notificarCancelacion.js`): la usan
+  `cancelBooking.js` —enlace del correo y portal—, `lib/clients/borrarRastro.js`
+  y el PATCH/DELETE del panel. (A diferencia del aviso de cambio de hora y del
+  enlace de videollamada, este NO mira las preferencias de comunicación de la
+  familia: se manda igual.)
+  **Estuvo escrito dos veces** (06/08 → 21/08/2026): el panel guardaba su copia
+  dentro del route (`sendCancellationEmail`) y esa copia no pasaba `esBono`, así
+  que cancelar desde el panel la sesión de un bono salía SIN el «tu programa
+  sigue activo» que sí llevaba por los otros caminos. El 20/08/2026 Jorge
+  decidió que ese párrafo también debe salir desde el panel, y con eso las dos
+  copias se fundieron en una. Desde entonces las cancelaciones del panel lo
+  llevan, y todas dejan la misma etiqueta de log: `citas:cancelada` (el panel
+  escribía `citas:cancelled`, así que buscar por una sola en el VPS dejaba
+  fuera la mitad).
 
 Ambas marcan `status="cancelled"` y rellenan `cancelledAt` +
 `cancellationReason`, pero el endpoint y el email asociado distinguen
@@ -859,7 +917,16 @@ Vive en `master.tenant_modules.feature_flags` del módulo `citas`.
 
 Hoy solo `nutri_laura` tiene el flag en `false` (script
 `scripts/migrate-booking-pending.js` lo aplica como parte de la
-migración). Otros tenants conservan el comportamiento histórico.
+migración; comprobado en producción el 19/08/2026). Otros tenants conservan
+el comportamiento histórico.
+
+Dos cosas que mandan SOBRE el flag, en `/book` (ver la tabla de transiciones):
+una cita **con precio** o **sesión de un bono** nace `pending` aunque el flag
+diga `true` (con tarjeta de por medio decide la profesional; la sesión de bono
+es de quien más pide y la nutricionista quiere verlas una a una, 07/08/2026);
+y al revés, la ficha de la paciente puede tener «citas autoconfirmadas»
+(`Client.autoConfirmBookings`, 06/08/2026), que la exime de la bandeja
+del centro — solo exime, nunca salta el precio ni las puertas.
 
 ## Endpoints
 
@@ -867,12 +934,14 @@ migración). Otros tenants conservan el comportamiento histórico.
 
 | Ruta | Método | Descripción |
 |---|---|---|
-| `/api/public/c/[tenantSlug]/info` | GET | Metadatos del tenant + branding |
-| `/api/public/c/[tenantSlug]/event-types` | GET | Tipos de cita activos |
-| `/api/public/c/[tenantSlug]/availability` | GET | Slots disponibles |
-| `/api/public/c/[tenantSlug]/book` | POST | Crear booking (lee flag autoConfirm) |
+| `/api/public/c/[tenantSlug]/info` | GET | Metadatos del tenant + branding + qué puertas están encendidas |
+| `/api/public/c/[tenantSlug]/event-types` | GET | Tipos de cita activos y online; con `Authorization: Bearer` opcional añade los ocultos con bono |
+| `/api/public/c/[tenantSlug]/availability` | GET | Slots disponibles de un día |
+| `/api/public/c/[tenantSlug]/availability/month` | GET | Días del mes con al menos un hueco |
+| `/api/public/c/[tenantSlug]/book` | POST | Crear booking (lee flag autoConfirm; pasa las puertas; con precio, retención; con bono, Checkout) |
 | `/api/public/c/[tenantSlug]/booking/[token]` | GET | Detalle desde token |
 | `/api/public/c/[tenantSlug]/cancel/[token]` | POST | Cancelar desde token |
+| `/api/public/c/[tenantSlug]/pagar/[token]` | GET | Lo que necesita la página «vuelve a meter tu tarjeta»: servicio, hora, importe y `clientSecret` de SU retención nueva (token de 7 días; ver `pagos.md`) |
 
 ### Portal de la familia (sesión SSO, `Authorization: Bearer`)
 
@@ -881,6 +950,11 @@ migración). Otros tenants conservan el comportamiento histórico.
 | `/api/public/c/[tenantSlug]/citas-portal/session` | POST | Canjea el `wpsso` de WordPress por sesión del portal |
 | `/api/public/c/[tenantSlug]/citas-portal/bookings` | GET | Citas de quien ha entrado |
 | `/api/public/c/[tenantSlug]/citas-portal/cancel/[id]` | POST | Cancelar su cita |
+| `/api/public/c/[tenantSlug]/citas-portal/admision` | GET | ¿Puede reservar ya? Su estado ante la puerta de admisión, para avisar ANTES de elegir hora (05/08) |
+| `/api/public/c/[tenantSlug]/citas-portal/avisos` | GET/POST | Los avisos del centro publicados en su área privada; POST los marca leídos (solo los suyos) |
+| `/api/public/c/[tenantSlug]/citas-portal/comunicaciones` | GET/POST | Qué le puede escribir el centro (correo de citas, WhatsApp, novedades); guarda la respuesta con fecha, IP y navegador |
+| `/api/public/c/[tenantSlug]/citas-portal/consentimiento-imagen` | GET/POST | Consentimiento de imagen, por paciente; el «no» también se guarda |
+| `/api/public/c/[tenantSlug]/citas-portal/mis-datos` | GET/POST | «Completa tus datos» antes de firmar: solo los huecos de la ficha |
 | `/api/public/c/[tenantSlug]/citas-portal/documents` | GET/POST | «Mis documentos» (cerrado si falta firmar el contrato) |
 | `/api/public/c/[tenantSlug]/citas-portal/documents/[id]` | GET | Descarga de un documento suyo |
 | `/api/public/c/[tenantSlug]/citas-portal/contract` | GET | Estado del contrato + la plantilla que toca firmar (ver abajo) |
@@ -1015,6 +1089,15 @@ plantilla apunta a una columna nueva del cliente, hay que añadirla ahí.**
   (`situacionDocumentos`), no en `portalContract.js`: no depende de HTTP ni de
   la sesión, y así se prueba sin levantar el servidor
   (`scripts/_smoke-contrato-estructurado.mjs`).
+- **Una fecha de nacimiento futura no convierte a una adulta en menor**
+  (21/08/2026): un dedo en el año al teclearla en el portal (19→20) daba una
+  edad negativa, `esMenor` la contaba como menor y el portal le exigía el
+  consentimiento del tutor sin dejarla terminar de firmar. Ahora `edadEn`
+  devuelve `null` fuera de 0..120 —que aguas abajo es «mayor» y «pídele el
+  DNI», los dos lados seguros— y `validarDatos` rechaza la fecha antes de
+  guardarla. Cubre también las fechas futuras que ya estuvieran guardadas en
+  fichas o en firmas anteriores: esas no bloquean la firma (no las puso quien
+  firma ni puede quitarlas), pero tampoco la hacen menor.
 - Migración: `scripts/migrate-contrato-estructurado.js`.
 
 ## Bloqueo mensual por impago (sprint Aumenta 2026-07, 2.3)
@@ -1046,7 +1129,7 @@ y el interruptor lo avisa.
 | Ruta | Método | Descripción |
 |---|---|---|
 | `/api/citas/event-types` | GET/POST | Listar / crear EventType |
-| `/api/citas/event-types/[id]` | GET/PATCH | CRUD individual |
+| `/api/citas/event-types/[id]` | GET/PATCH/DELETE | CRUD individual |
 | `/api/citas/availability` | GET/POST | Listar / crear bloque |
 | `/api/citas/availability/[id]` | GET/PATCH/DELETE | CRUD bloque |
 | `/api/citas/availability/bulk` | POST | Operación masiva |
@@ -1054,8 +1137,16 @@ y el interruptor lo avisa.
 | `/api/citas/bookings` | POST | Crear booking manual (default `confirmed`) |
 | `/api/citas/bookings/[id]` | GET/PATCH/DELETE | CRUD. PATCH bloquea regresión a `pending`. DELETE cancela; **`?hard=true` la borra de verdad** (ver «Borrar una cita del todo») |
 | `/api/citas/bookings/[id]/confirm` | PATCH | Transición `pending → confirmed`. Idempotente. Valida solapamiento. Dispara `bookingConfirmed` |
-| `/api/citas/bookings/[id]/reject` | PATCH | Transición `pending → cancelled`. Acepta `cancellationReason` en body. Dispara `bookingRejected` |
+| `/api/citas/bookings/[id]/reject` | PATCH | Transición `pending → cancelled`. Acepta `cancellationReason` en body. Dispara `bookingRejected` y suelta la retención si la hay |
+| `/api/citas/bookings/[id]/pedir-tarjeta` | POST | Retención NUEVA + correo con enlace para volver a meter la tarjeta (ver «Cuando el dinero se pierde» y `pagos.md`) |
+| `/api/citas/bookings/[id]/reschedule-request` | POST | Una profesional PROPONE mover la cita: crea una solicitud pendiente, la cita no se toca |
+| `/api/citas/bookings/[id]/suggest-slots` | POST | IA: propone 3 horarios para reprogramar (solo admin; ámbito `professional` o `company`) |
+| `/api/citas/reschedule-requests` | GET | Solicitudes de cambio de hora pendientes (admin), con el contador para el globito |
+| `/api/citas/reschedule-requests/[id]` | PATCH | El centro aprueba o rechaza; al aprobar, mueve la cita de verdad (transacción + lock por profesional) |
 | `/api/citas/bookings/calendar` | GET | JSON FullCalendar para la vista mensual |
+| `/api/citas/avisos` | GET/POST | Avisos del centro a un cliente: salen por correo Y quedan en su portal (ver «Decirle algo al cliente») |
+| `/api/citas/sin-profesional` | GET/POST | Citas sin profesional, agrupadas por departamento; POST las asigna en lote a una profesional |
+| `/api/citas/informe-ocupacion` | GET | Informe de ocupación y ausencias del mes (`?periodo=YYYY-MM`; exige `team_avanzado` + admin) |
 | `/api/citas/clientes` | GET | A quién se le puede poner una cita (surte al buscador del alta manual). `?q=`, `?limit=`, `?todos=1` |
 | `/api/citas/packs` | GET | Los bonos VIVOS de alguien (`?clientId=` y/o `?email=`): activos y con sesiones libres. Lo pide el alta manual para poner el tipo de cita |
 | `/api/citas/packs` | POST | Dar un bono a mano (solo admin) |
@@ -1075,12 +1166,18 @@ y el interruptor lo avisa.
 
 ## UI
 
-### Default (vanilla)
+### Default (para todos)
 
-`modules/default/CitasModule.jsx` — calendario FullCalendar con modal
-"Nueva cita manual" + modal detalle con acciones marcar completada / no
-asistió / cancelar. Sin tabs ni lista de espera (los otros tenants no
-usan `pending` hoy).
+`modules/default/CitasModule.jsx` (2.595 líneas) — es la ÚNICA pantalla de
+Citas: `UI_OVERRIDES = {}` en `app/(dashboard)/citas/page.jsx`, solo cambia
+el rótulo («Agenda» en nutri_laura). Dos pestañas: **Calendario**
+(FullCalendar con modal «Nueva cita manual» + modal de detalle con marcar
+completada / no asistió / cancelar / eliminar / cambiar hora / enlace de
+videollamada) y **Lista de espera** (las `pending`: confirmar —y cobrar, si
+hay retención—, rechazar, pedir otra tarjeta; globito con las que faltan por
+atender), más las solicitudes de cambio de hora para dirección.
+**Histórico (hasta 22/07/2026):** el default no tenía lista de espera; la
+tenía solo el override de nutri_laura, que ese día se fundió en el default.
 
 #### Repaso del 12/08/2026 (Rodrigo)
 
@@ -1238,51 +1335,71 @@ cazarla.
 node --env-file=.env.local scripts/_smoke-bloqueos-quien-ve.mjs
 ```
 
-### Override nutri_laura
+### Override nutri_laura — **Histórico (hasta 22/07/2026)**
 
-`modules/overrides/nutri-laura/CitasModule.jsx` — dos tabs:
-
-1. **Lista de espera** (tab default si hay pendings):
-   - Cards por solicitud con nombre, contacto, servicio, fecha
-     propuesta, modalidad y respuesta al formulario.
-   - Acciones "Confirmar" (dialog "¿Confirmar cita con {nombre} el
-     {fecha}?") y "Rechazar" (textarea opcional para motivo).
-   - Tras la acción, la fila desaparece y los emails salen automáticos.
-2. **Calendario**: vista FullCalendar simplificada. Modal de detalle
-   solo lectura — la edición pasa por el flujo de lista de espera o
-   por el detalle base.
-
-Badge contador de pendientes en el tab.
+`modules/overrides/nutri-laura/CitasModule.jsx` **ya no existe**. Fue la
+primera pantalla con lista de espera (cards por solicitud, Confirmar /
+Rechazar con motivo, badge de pendientes, calendario simplificado) y el
+22/07/2026 se fundió en el default: hoy Laura ve la misma pantalla que
+todos, con el rótulo «Agenda» por `TENANT_TITLE_OVERRIDES`.
 
 ### Citas desde la ficha del paciente
 
-Como complemento al módulo `/citas`, la **tab Citas del detalle de cliente**
-(`/clientes/:id` → tab "Citas" en el override nutri_laura) lista los
-bookings de ese paciente concreto y permite confirmar/rechazar
-inline cualquier `pending`. Cruce por `clientEmail` (Booking no tiene FK
-a Client).
+Como complemento al módulo `/citas`, la ficha de cliente (`/clientes/:id`)
+lista las citas de esa persona y permite confirmar/rechazar inline
+cualquier `pending`. Cruce por `clientId` (el enlace real, desde el
+22/07/2026) **y** por `clientEmail` (las citas anteriores al enlace, o de
+quien reserva sin ficha).
 
-Componente: `modules/overrides/nutri-laura/ClientBookingsPanel.jsx`.
-Endpoints usados: idénticos a esta página (`GET /api/citas/bookings?clientEmail=`,
-`PATCH .../confirm`, `PATCH .../reject`). Detalle del flujo y permisos en
-[`docs/modules/clients.md`](./clients.md#override-nutri_laura).
+Componente: `components/clients/ClientBookingsPanel.jsx` (desde el
+18/08/2026; antes vivía en `modules/overrides/nutri-laura/`). Lo monta la
+ficha por defecto como pestaña «Sesiones» allí donde lo decide
+`lib/clients/piezasFicha.js` (tiene `citas` y NO `clinica`, que ya llama
+«Sesiones» a otra cosa), y la ficha de Laura con sus palabras; confirmar y
+rechazar lo puede hacer cualquiera del equipo (06/08). Además,
+`ClientCitasSection.jsx` (el interruptor «citas autoconfirmadas» de esa
+paciente) y `ClientBonosSection.jsx` (bonos), en `components/clients/`.
+Endpoints usados: los de esta página (`GET
+/api/citas/bookings?clientId=&clientEmail=`, `PATCH .../confirm`,
+`PATCH .../reject`). Detalle en [`docs/modules/clients.md`](./clients.md).
 
 ## Integración Google Calendar / Meet — **Fase 2 (no implementado)**
 
-El campo `Booking.meetUrl` es un snapshot del `EventType.meetUrl`
-configurado manualmente (URL Meet estática). Para Fase 2 la integración
-generará Meet links reales vía Google Calendar API por cita y los
-emails llevarán el link dinámico. Variables env placeholder ya
+`Booking.meetUrl` lo decide `lib/citas/videollamada.js` según
+`settings.citas.meetModo`: en **manual** (por defecto) la cita nace sin
+enlace y la profesional lo pega y lo manda con «Guardar y enviar»; en
+**automático** hereda la sala fija del `EventType.meetUrl` (snapshot). Para
+Fase 2 la integración generará Meet links reales vía Google Calendar API por
+cita y los emails llevarán el link dinámico. Variables env placeholder ya
 añadidas a `.env.production.example` (`GOOGLE_CLIENT_ID`,
 `GOOGLE_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`,
 `GOOGLE_TOKEN_ENCRYPTION_KEY`).
 
-## Migraciones aplicadas (sprint Fase 1)
+## Migraciones
 
-- `scripts/migrate-booking-pending.js`: añade `'pending'` al enum
-  `enum_bookings_status` en todos los tenants con módulo citas
-  habilitado. Setea `featureFlags.autoConfirmPublicBookings=false` en
-  `nutri_laura.citas`. Idempotente.
+Las del módulo están registradas en `MODULES.citas` de
+`scripts/_module-migrations.js` (15 a 19/08/2026) y las corre
+`enable-module.js <slug> citas` (y `ensure-tenant-schema` al reactivar); el
+orden real lo calcula `scripts/_migration-order.js` (`npm run
+db:check-migration-order` lo audita): `migrate-vacaciones` (bloqueos por
+persona, `team_blocks`),
+`migrate-citas-sprint-1` (las tablas base), `migrate-calendar-citas-fks`,
+`migrate-booking-pending`, `migrate-booking-client-link`
+(`bookings.client_id`), `migrate-booking-change-requests`,
+`migrate-booking-reminder` (`reminder_sent_at`),
+`migrate-booking-authorization` (retención: enum de `payment_status` +
+`authorization_expires_at`), `migrate-booking-email-opcional`,
+`migrate-team-member-hours`, `migrate-avisos-cliente` (`client_notices`),
+`migrate-citas-tipos-ocultos` (`is_hidden`), `migrate-packs-sesiones`
+(bonos, plazos, `form_questions`), `migrate-valoracion-inicial` y
+`migrate-preguntas-cita`. Además tocan citas varias CORE
+(`migrate-payments-sprint-1`, `migrate-contrato-estructurado`,
+`migrate-sprint-aumenta-2026-07`…).
+
+**Histórico (sprint Fase 1):** la primera fue `migrate-booking-pending`
+(añade `'pending'` al enum `enum_bookings_status` y pone
+`featureFlags.autoConfirmPublicBookings=false` en `nutri_laura.citas`;
+idempotente).
 
 ## Backlog
 
@@ -1291,9 +1408,10 @@ añadidas a `.env.production.example` (`GOOGLE_CLIENT_ID`,
   email no se envía).
 - Reintentos persistentes para emails fallidos (apuntar a `email_send_log`
   o n8n cola).
-- Email "tu cita ha sido cancelada" cuando se cancela una confirmada
-  (hoy solo el reject manda email).
-- FK física `Booking.clientId → clients.id` opcional, con merge por
-  email al crear bookings desde formulario público (decisión
-  arquitectónica pendiente: hoy hay `clientEmail` libre).
-- Integración Google Calendar real (Fase 2).
+- Integración Google Calendar real (Fase 2): hoy hay dos modos de enlace
+  (`lib/citas/videollamada.js`, manual por defecto; «automático» reutiliza la
+  sala fija del tipo) y un «Añadir a Google Calendar»
+  (`lib/citas/googleCalendar.js`), pero nadie crea salas llamando a Google.
+
+Hechos y quitados de aquí: el correo «tu cita ha sido cancelada» (27/07) y
+la FK `Booking.clientId → clients.id` (22/07).

@@ -1,3 +1,4 @@
+// @vivo — Herramienta de diagnóstico genérica por <slug> <búsqueda>, solo lectura, que cruza Booking + payment_sessions + estado real en Stripe + auditoría… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * inspeccionar-cita-cobro.js — radiografía de una cita con cobro problemático.
  *

@@ -1,3 +1,4 @@
+// @vivo — Herramienta de mantenimiento genérica por <slug> <moduleKey> con --revoke y --dry-run: da o quita una clave en master.users.module_access de todos… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * grant-module-access.js — dar (o quitar) acceso a un módulo a los usuarios de
  * un tenant.

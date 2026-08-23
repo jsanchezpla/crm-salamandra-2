@@ -85,3 +85,9 @@ backup-pre-*.sql
 # Ficheros subidos por los usuarios (contratos firmados, informes clínicos,
 # adjuntos). En producción es un bind mount; en local se crea al probar.
 uploads/
+
+# La copia de trabajo del Registro (backlog y resuelto), que se baja de
+# producción con `node scripts/registro.mjs bajar`, se edita y se sube con
+# `subir`. NO es la fuente: la fuente es `master.tablero_documentos`. Desde el
+# 19/08/2026 el Registro no viaja en el repo ni en la imagen de Docker.
+docs/registro/

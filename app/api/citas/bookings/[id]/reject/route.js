@@ -7,6 +7,7 @@ import { sendEmail, envioRealizado } from "../../../../../../lib/email/resendCli
 import { bookingRejectedTemplate } from "../../../../../../lib/email/templates/citas/bookingRejected.js";
 import { reembolsarCitaSiProcede } from "../../../../../../lib/citas/reembolsoCita.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
+import { esCorreoTransaccional } from "../../../../../../lib/clients/comunicaciones.js";
 
 
 /**
@@ -97,6 +98,7 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
 
     // Email best-effort.
     try {
+      if (!esCorreoTransaccional("bookingRejected")) throw new Error("NO_DECLARADO_TRANSACCIONAL");
       const { subject, html, text } = bookingRejectedTemplate({
         tenantName: tenant.name,
         brand: tenant.settings?.brand,
@@ -121,7 +123,11 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       });
       envioRealizado(envio, `citas:reject ${row.id}`);
     } catch (mailErr) {
-      process.stderr.write(`[citas:reject] email-rejected fail: ${mailErr.message}\n`);
+      if (mailErr.message === "NO_DECLARADO_TRANSACCIONAL") {
+        process.stdout.write(`[citas:reject] ${row.id}: sin correo, la plantilla ya no es transaccional\n`);
+      } else {
+        process.stderr.write(`[citas:reject] email-rejected fail: ${mailErr.message}\n`);
+      }
     }
 
     return ok(citaSegunRol(row.toJSON(), request.headers.get("x-user-role")));

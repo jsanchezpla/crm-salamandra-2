@@ -200,20 +200,67 @@ async function main() {
   });
 
   // ── 5. INVENTARIO ───────────────────────────────────────────────────────────
-  let outbound = [];
+  //
+  // Reescrito el 18/08/2026. Este bloque seguía creando `InboundProduct`,
+  // `InboundBatch` y `OutboundProduct`: tres modelos que el rework del
+  // 02/08/2026 BORRÓ. Y como `tryModule` se traga lo que salga mal, no reventaba
+  // el sembrado — pintaba una ✗ entre veinte ✓ y seguía adelante.
+  //
+  // Lo que costaba, comprobado en la demo local antes de tocar una línea:
+  //   · el almacén de las CUATRO demos quedaba vacío;
+  //   · y los 22 pedidos salían sin UNA SOLA LÍNEA, porque cada línea apunta al
+  //     catálogo y el catálogo no llegaba a existir.
+  //
+  // En producción no se veía porque su demo se sembró ANTES del rework y nadie
+  // la ha reconstruido desde entonces (22 pedidos con 42 líneas, comprobado el
+  // 18/08). Era una mina bajo el escaparate, no un problema ya resuelto: habría
+  // estallado en la primera reconstrucción, que es justo cuando nadie mira.
+  //
+  // El catálogo es genérico y lo comparten las cuatro demos (decisión de Jorge,
+  // 18/08/2026), que hasta hoy no tenían ninguno.
+  let catalogo = [];
   await tryModule("Inventario", async () => {
-    const { InboundProduct, InboundBatch, OutboundProduct, Asset } = models;
-    const inNames = ["Papel premium", "Tinta cian", "Cartón kraft", "Material formativo", "Componente A"];
-    for (const nm of inNames) {
-      const p = await InboundProduct.create({ name: nm, tags: ["material"], notes: null });
-      const kg = rand(20, 200, 2);
-      await InboundBatch.create({ inboundProductId: p.id, supplier: pick(["Proveedor Norte", "Distribuciones Sur", "Import Global"]), lot: `LOT-${rand(1000, 9999)}`, entryDate: daysAgo(rand(10, 180)), kg, kgRemaining: rand(5, kg, 2), packaging: pick(["caja 50u", "pallet", "saco 25kg"]), purchasePrice: rand(50, 500, 2) });
+    const { Product, Supplier, StockEntry, StockMovement, Asset } = models;
+
+    const proveedores = [];
+    for (const nm of ["Suministros Norte", "Distribuciones Sur", "Import Global"]) {
+      proveedores.push(await Supplier.create({ name: nm, active: true }));
     }
-    const outNames = [{ name: "Pack Consultoría Básico", price: 350 }, { name: "Kit Diseño Premium", price: 780 }, { name: "Licencia Mantenimiento", price: 120 }, { name: "Bono 10 horas", price: 650 }];
-    for (const o of outNames) outbound.push(await OutboundProduct.create({ name: o.name, tags: ["servicio"], defaultSalePrice: o.price }));
+
+    // `salida` va puesta A MANO y no al azar para que tres productos queden por
+    // debajo de su mínimo: el aviso de bajo mínimo es media pantalla del módulo,
+    // y una demo donde no salta nunca no lo enseña.
+    const PRODUCTOS = [
+      { name: "Folios A4 80g", sku: "A4-80", category: "Oficina", unit: "paquete", purchasePrice: 3.95, salePrice: 6.5, minStock: 8, entrada: 30, salida: 26 },
+      { name: "Tóner láser negro", sku: "TN-NEG", category: "Oficina", unit: "ud", purchasePrice: 48, salePrice: 79, minStock: 4, entrada: 12, salida: 3 },
+      { name: "Carpeta archivador", sku: "ARCH-1", category: "Oficina", unit: "ud", purchasePrice: 2.4, salePrice: 4.5, minStock: 20, entrada: 24, salida: 12 },
+      { name: "Caja de bolígrafos (50 u)", sku: "BOLI-50", category: "Oficina", unit: "caja", purchasePrice: 11, salePrice: 18, minStock: 3, entrada: 9, salida: 2 },
+      { name: "Cable HDMI 2 m", sku: "HDMI-2", category: "Material técnico", unit: "ud", purchasePrice: 6.2, salePrice: 12, minStock: 5, entrada: 14, salida: 0 },
+      { name: "Gel hidroalcohólico", sku: "GEL-1L", category: "Material fungible", unit: "l", purchasePrice: 4.1, salePrice: 7.5, minStock: 10, entrada: 18, salida: 13 },
+    ];
+
+    let movimientos = 0;
+    for (const p of PRODUCTOS) {
+      const prod = await Product.create({ name: p.name, sku: p.sku, category: p.category, unit: p.unit, purchasePrice: p.purchasePrice, salePrice: p.salePrice, minStock: p.minStock, active: true });
+      catalogo.push(prod);
+
+      const entrada = await StockEntry.create({ productId: prod.id, supplierId: pick(proveedores).id, entryDate: daysAgo(rand(20, 120)), quantity: p.entrada, unitCost: p.purchasePrice, lot: `L-${rand(1000, 9999)}` });
+      // El stock es la SUMA de los movimientos (no hay columna de saldo), así
+      // que una entrada de mercancía tiene que dejar el suyo o no cuenta para
+      // nada. Y las salidas van en NEGATIVO, por lo mismo.
+      await StockMovement.create({ productId: prod.id, quantity: p.entrada, type: "entrada", reason: `Entrada · lote ${entrada.lot}`, entryId: entrada.id, movedAt: entrada.entryDate });
+      movimientos++;
+      if (p.salida) {
+        await StockMovement.create({ productId: prod.id, quantity: -p.salida, type: "salida", reason: pick(["Consumo interno", "Entregado a un cliente", "Reposición de oficina"]), movedAt: daysAgo(rand(1, 15)) });
+        movimientos++;
+      }
+    }
+    await StockMovement.create({ productId: catalogo[0].id, quantity: -1, type: "ajuste", reason: "Recuento: un paquete dañado", movedAt: daysAgo(2) });
+    movimientos++;
+
     const assets = [{ type: "hardware", name: "MacBook Pro 14\"", value: 2400 }, { type: "hardware", name: "Monitor LG 27\"", value: 350 }, { type: "software", name: "Adobe Creative Cloud", value: 600 }, { type: "license", name: "Figma Organization", value: 540 }];
     for (const a of assets) await Asset.create({ type: a.type, name: a.name, serialNumber: `SN-${rand(1000, 9999)}`, status: pick(["available", "assigned"]), assignedTo: Math.random() < 0.6 ? pick(equipo)?.id : null, purchaseDate: daysAgo(rand(30, 800)), value: a.value });
-    return `${inNames.length} inbound · ${outbound.length} outbound · ${assets.length} activos`;
+    return `${catalogo.length} productos · ${movimientos} movimientos · ${assets.length} activos`;
   });
 
   // ── 6. FACTURACIÓN (con IRPF + socio) ───────────────────────────────────────
@@ -269,7 +316,11 @@ async function main() {
     let n = 0;
     for (let i = 0; i < 22; i++) {
       const nLines = rand(1, 3); let subtotal = 0; const lines = [];
-      for (let j = 0; j < nLines; j++) { const op = pick(outbound); if (!op) continue; const qty = rand(1, 5); const unit = Number(op.defaultSalePrice); const lt = +(unit * qty).toFixed(2); subtotal += lt; lines.push({ outboundProductId: op.id, productName: op.name, quantity: qty, unitPrice: unit, lineTotal: lt }); }
+      // `productId` y `salePrice`, no `outboundProductId` ni `defaultSalePrice`:
+      // el rework del 02/08/2026 fusionó el catálogo de salida en `Product` y
+      // renombró la columna. Sequelize se traga en silencio un atributo que no
+      // existe, así que esto no daba error — daba pedidos vacíos.
+      for (let j = 0; j < nLines; j++) { const op = pick(catalogo); if (!op) continue; const qty = rand(1, 5); const unit = Number(op.salePrice); const lt = +(unit * qty).toFixed(2); subtotal += lt; lines.push({ productId: op.id, productName: op.name, quantity: qty, unitPrice: unit, lineTotal: lt }); }
       const transport = rand(0, 30, 2);
       const order = await Order.create({ clientId: pick(clientes).id, status: pick(["draft", "confirmed", "preparing", "shipped", "completed"]), subtotal: +subtotal.toFixed(2), transportAmount: transport, total: +(subtotal + transport).toFixed(2), scheduledDate: daysAgo(rand(-20, 5)), notes: null });
       for (const ld of lines) await OrderLine.create({ orderId: order.id, ...ld });

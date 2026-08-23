@@ -1,6 +1,6 @@
 ---
 name: incidencias-buzon
-description: Tría las incidencias que los clientes nos mandan desde Ayuda — solo las de tipo «algo no funciona», nunca dudas ni mejoras. Comprueba contra producción si el fallo sigue pasando; si sigue, lo apunta en el backlog del Registro y lo despliega; si ya está arreglado y puede probarlo, le contesta al cliente. Se lanza a mano con /incidencias-buzon, opcionalmente con una referencia (/incidencias-buzon AV-0007).
+description: Tría las incidencias que los clientes nos mandan desde Ayuda — solo las de tipo «algo no funciona», nunca dudas ni mejoras. Comprueba contra producción si el fallo sigue pasando; si sigue, lo apunta en el backlog del Registro y lo publica con scripts/registro.mjs (sin commit ni despliegue); si ya está arreglado y puede probarlo, le contesta al cliente. Se lanza a mano con /incidencias-buzon, opcionalmente con una referencia (/incidencias-buzon AV-0007).
 ---
 
 # Triaje de incidencias del buzón
@@ -11,9 +11,10 @@ lo convierte en una de tres cosas: una tarea del Registro, una respuesta al
 cliente diciéndole que ya está arreglado, o una pregunta para Jorge o Rodrigo.
 
 **Lo lanza una persona**, siempre. No hay versión automática, y es a propósito:
-cada aviso exige decidir si el fallo es real, de quién es y qué prioridad tiene,
-y se escribe en un fichero que mal formateado rompe el tablero **sin dar ningún
-error**. La campana del panel ya avisa de cuándo hace falta lanzarla.
+cada aviso exige decidir si el fallo es real, de quién es y qué prioridad tiene.
+La campana del panel ya avisa de cuándo hace falta lanzarla. Apuntar en el
+Registro **no commitea ni despliega nada**: desde el 19/08/2026 vive en
+`master.tablero_documentos` y se publica con `scripts/registro.mjs`.
 
 ## Lo que NO entra
 
@@ -55,10 +56,15 @@ texto de relleno.
 
 ## Paso 2 — ¿Está ya apuntado?
 
-Antes de nada, busca la referencia en los dos ficheros:
+Antes de nada, baja el Registro publicado (deja la copia de trabajo en
+`docs/registro/`, gitignored) y busca la referencia en los dos documentos:
 
 ```bash
-grep -n "AV-0007" docs/backlog.md docs/resuelto.md
+node scripts/registro.mjs bajar
+```
+
+```bash
+grep -n "AV-0007" docs/registro/backlog.md docs/registro/resuelto.md
 ```
 
 Si aparece, ya está triado: no lo toques y pasa al siguiente. **Toda tarea que
@@ -97,17 +103,18 @@ Los tres finales:
 
 ## Paso 4 — Apuntarlo en el Registro
 
-Léete `docs/como-apuntar-en-el-tablero.md` antes de escribir. Resumen de lo que
-más se rompe, pero el que manda es ese fichero:
+Léete `docs/como-apuntar-en-el-tablero.md` antes de escribir. Se escribe en la
+copia de trabajo que dejó `bajar` (`docs/registro/backlog.md`). Resumen de lo
+que más se rompe, pero el que manda es ese fichero:
 
 - Una tarea es un `###` dentro de una sección `##`. **Las secciones son fijas**:
   `P0 — hoy`, `P1 — esta semana`, `P2 — cuando se pueda`, `P3 — deuda`,
-  `Pendiente de una decisión suya`. Inventar una la pinta en gris y sin urgencia.
+  `Pendiente de una decisión suya`. Inventar una la frena `subir`.
 - **Nada de `##` ni `###` dentro del cuerpo**: parte la tarea en dos. Para dar
   estructura, negrita al principio del párrafo.
 - **El cliente va detrás del último `·`**, con el slug de base de datos
   (`nutri_laura`, no «Laura»). Si no está en la lista de `SLUGS` de
-  `app/api/admin/tablero/route.js`, la tarea sale sin cliente y sin grupo.
+  `lib/tablero/parser.js`, la tarea sale sin cliente y sin grupo.
 - **El cuerpo se pinta tal cual**: los asteriscos y las comillas invertidas se
   VEN en el tablero. Nada de tablas markdown.
 - El título dice **qué pasa hoy**, no qué hay que programar.
@@ -191,42 +198,35 @@ Cómo se escribe la respuesta:
 Si estaba arreglado, el aviso se marca **`resuelto`**, no `en_curso`:
 `-e TRIAJE_ESTADO=resuelto`.
 
-## Paso 6 — Subirlo y desplegarlo
+## Paso 6 — Publicarlo
 
-`docs/backlog.md` **viaja dentro de la imagen de Docker**. Escribirlo y
-commitearlo NO cambia el tablero: hasta que no se despliega, la pantalla enseña
-lo de la imagen anterior. Es la explicación de casi todos los «pues yo lo apunté
-y no sale».
+**Sin commit, sin build, sin despliegue.** El Registro vive en
+`master.tablero_documentos` y el tablero lee la última versión publicada: en
+cuanto `subir --confirm` termina, la pantalla lo enseña. Nada de esto toca git.
 
-1. Enseña lo que has escrito antes de commitear.
-2. **Sincroniza Y COMPRUEBA SOLAPE** (regla #11 de `CLAUDE.md`). `master` es
-   compartido y el socio sube sin que nada avise:
-
-   ```bash
-   git fetch origin && git diff --name-only HEAD origin/master
-   ```
-
-   Si no hay nada tuyo en esa lista, `git pull --ff-only` y sigue. **Si aparece
-   `docs/backlog.md` o `docs/resuelto.md`, PARA Y PREGUNTA**: es el solape más
-   probable del repo, porque ahí escriben las dos personas y las dos skills. Que
-   no dé conflicto de texto no significa que sea compatible — puede que el otro
-   esté cerrando justo lo que tú vas a apuntar.
-3. `npm run build` en verde.
-4. Commit (Conventional Commits, trailer `Co-Authored-By`) y push a `master`.
-5. `ssh crm-vps 'cd /opt/crm-salamandra && ./deploy.sh'`.
-6. **Verifícalo dentro del contenedor**, no en el repo, que ya sabes que está
-   bien:
+1. Enseña lo que has escrito antes de subirlo.
+2. **Ensayo**:
 
 ```bash
-ssh crm-vps "docker exec crm-salamandra-app-1 grep -n 'AV-0007' docs/backlog.md"
+node scripts/registro.mjs subir backlog --nota "AV-0007: la ficha no se abre desde la lista (aumenta)"
 ```
 
-Si el tablero dice «No se han podido leer: backlog.md», es exactamente esto: el
-fichero no llegó a la imagen.
+   Lee qué **entra** y qué **sale** (si sale algo que tú no has cerrado, para) y
+   los avisos. Si dice **«la versión publicada ya no es la que bajaste»**, el
+   socio publicó mientras escribías: vuelve a `bajar`, aplica tu cambio encima y
+   repite. Es el equivalente de antes de «si `docs/backlog.md` aparece en el
+   diff con origin/master, PARA Y PREGUNTA»; aquí el script no deja pisar nada.
+   **No uses `--forzar`** salvo que te lo pidan.
+3. **Publicar**: el mismo comando con `--confirm`. La `--nota` lleva la
+   referencia `AV-000X`: es lo que se leerá en `historial`.
+4. **Verifícalo**: `node scripts/registro.mjs estado` dice la versión nueva con
+   tu nota, y el tablero la enseña en la cabecera. Si sigue diciendo la de
+   antes, no se publicó.
 
 ## Al terminar, di
 
-- Qué has apuntado y en qué sección, con su referencia.
+- Qué has apuntado y en qué sección, con su referencia, y qué versión del
+  Registro has publicado.
 - A quién le has contestado y qué le has dicho.
 - **Qué no has podido decidir y por qué** — esto es lo más importante de las
   tres, y es lo que se pierde si no se dice.

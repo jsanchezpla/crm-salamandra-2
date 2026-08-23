@@ -35,7 +35,7 @@ import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
 import { getTenantDb, closeAllConnections } from "../lib/db/tenantDb.js";
 import { captureAddress } from "../lib/support/notify.js";
 
-const SLUG = process.argv[2] || "sandbox";
+const SLUG = process.argv[2] || "demo"; // antes «sandbox», que no existe ni en local ni en prod (19/08/2026)
 const BASE = process.env.SMOKE_BASE_URL || "http://localhost:3000";
 const RUTA = "/api/webhooks/resend-inbound";
 

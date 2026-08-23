@@ -1,3 +1,4 @@
+// @prueba-lanzar --import ./scripts/_fake-stripe-loader.mjs
 /**
  * _smoke-retencion-viva-o-muerta.mjs — el trozo que faltaba de «pedirle otra
  * tarjeta».

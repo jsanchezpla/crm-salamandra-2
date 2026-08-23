@@ -1,3 +1,4 @@
+// @vivo — Es el arranque de un ENTORNO NUEVO: crea los schemas master y crm_demo, sincroniza las tablas de master y de la demo y crea tenant demo + admin +… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * db-sync.js — Inicialización de la base de datos
  *

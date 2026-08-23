@@ -1,0 +1,14 @@
+[Unit]
+Description=Captura diaria de visitas web del CRM (03:40)
+
+[Timer]
+# Cloudflare solo conserva 7 dias: lo que no se copie aqui se pierde para
+# siempre. A las 03:40 UTC, despues del backup de las 03:15 y con el dia
+# anterior ya cerrado.
+OnCalendar=*-*-* 03:40:00
+# Si el servidor estaba apagado a esa hora, se ejecuta al arrancar. El script
+# pide siempre los ultimos 7 dias, asi que una pasada tardia rellena el hueco.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

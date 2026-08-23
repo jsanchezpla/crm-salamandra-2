@@ -1,5 +1,29 @@
 # Buzón — que un cliente pueda abrirnos una incidencia
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es
+> este mismo commit). Si algo no cuadra, manda el código: corrige esta tabla.
+> **Quién tiene el módulo NO se lista aquí** (una lista a mano se queda
+> vieja): `/admin/modulos` en el back-office o
+> `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | sin moduleKey: lo tienen todos (`/ayuda` y `/api/ayuda` van con `withTenant` y sin `hasModule`); el lado nuestro se abre por host (`ADMIN_HOST`) con `candadoBuzon` |
+| **Reina** | — · no es de ningún cliente: es nuestra bandeja |
+| **Pantallas** | cliente: `/ayuda` → `app/(dashboard)/ayuda/page.jsx` (monta `modules/buzon/AyudaModule.jsx`; resuelve `esDemo` en servidor con `esSlugDemo`) · nosotros: `/admin/buzon` → `app/admin/buzon/page.jsx` (la bandeja; `?aviso=<id>` abre ese hilo) y la campana de la barra en `app/admin/layout.jsx` (`components/admin/CampanaBuzon.jsx`) · el punto del menú lo pinta `components/layout/Sidebar.jsx` (`EVENTO_SIN_VER`) y la portada `app/(dashboard)/page.jsx` (`sinVerDeUsuario`) |
+| **Endpoints** | cliente: `app/api/ayuda/**` — 4 `route.js` (`route.js` GET/POST, `[id]`, `[id]/mensajes`, `adjuntos/[adjuntoId]`) · nosotros: `app/api/admin/buzon/**` — 5 `route.js` (`route.js`, `pendientes`, `[id]`, `[id]/mensajes`, `adjuntos/[adjuntoId]`) · Públicos: ninguno (para escribir hay que estar dentro del CRM) |
+| **Lógica** | `lib/buzon/`: `buzon.js` (qué es un aviso válido, estados, `serializarAviso`, `LIMITES`, `tipoParaVerEnPantalla`, los dos eventos) · `buzonStore.js` (el único que toca las tablas; `whereSinVer` / `wherePendienteNuestro`) · `buzonStorage.js` (las capturas en disco) · `quienEscribe.js` (la foto de quién escribe) · `candadoBackoffice.js` (`candadoBuzon`: comprueba el host a mano) · `avisarPorCorreo.js` (el correo a nosotros, con el Resend de `salamandra_solutions`) · `avisarEnSuCrm.js` (la campana en el schema del cliente: el único sitio del back-office que lo abre) · guard de demo: `lib/demo/isDemo.js`; rate limit: `lib/utils/rateLimit.js` |
+| **UI** | `modules/buzon/AyudaModule.jsx` (formulario, lista e hilo del cliente; `leerRespuesta()` traduce el 413) · `components/admin/CampanaBuzon.jsx` (la campana del panel) · la bandeja vive en la propia página `app/admin/buzon/page.jsx` |
+| **Modelos** | en `models/master/`: `BuzonAviso` (`buzon_avisos`; `numero` sale de `master.buzon_numero_seq`), `BuzonMensaje` (`buzon_mensajes`), `BuzonAdjunto` (`buzon_adjuntos`); sin FK a `tenants` ni a `users` (UUID sueltos + foto de texto) · registrados en `lib/db/masterDb.js` |
+| **Interruptores y parámetros** | ninguno que lea el código; lo que gatea es el host (`ADMIN_HOST`) + `candadoBuzon`, el guard de la demo y el rate limit por persona; los topes viven en `LIMITES` de `lib/buzon/buzon.js` |
+| **Pantallas propias** | ninguna |
+| **Scripts** | sin `enable-module.js` (no hay módulo) · `scripts/migrate-buzon.js` (`npm run db:migrate:buzon`; master, idempotente, a mano en cada despliegue que traiga columna nueva; en el VPS `docker exec crm-salamandra-app-1 node scripts/migrate-buzon.js`) · `scripts/podar-buzon.js` (retención: resueltos con más de dos años; simula sin `--confirm`; sin cron) · `scripts/buzon-triaje.mjs` (la herramienta de la skill `incidencias-buzon`: lista, marca o contesta por tubería dentro del contenedor) |
+| **Pruebas** | en `npm test`: `scripts/_smoke-buzon.mjs` (`// @prueba ligera`; estados, recorte de notas internas, las dos parejas de fechas) · `scripts/_smoke-support-serialize-buzon.mjs` (`node:test`, 20/08/2026, en `npm test`) en su mitad del buzón: `lib/buzon/buzon.js` —las referencias `AV-000X` (`referencia`); la tabla ENTERA de `estadoTrasMensaje` (4 estados × 2 autores): contestar nosotros deja «esperando» salvo en resuelto, y si escribe el cliente un aviso resuelto se REABRE a «en curso», la pelota vuelve a nuestro tejado; la lista blanca de `tipoParaVerEnPantalla` (el SVG no se enseña en línea: puede llevar script y una de las pantallas es el back-office); `serializarAdjunto` decide el botón «Ver» por la extensión GUARDADA y no expone la ruta del disco; `serializarAviso(..., { para: "cliente" })` le manda al cliente EXACTAMENTE sus campos, ni uno más, fijado con `deepEqual`; y los vocabularios cerrados (tipos, estados con su color, asignables, topes)— · el correo de aviso hacia NOSOTROS (`buzon/avisoNuevo`, incluida la referencia `AV-####` calculada del número cuando la fila no la trae, y los interrogantes en vez de «undefined» cuando no hay número) se prueba en `scripts/_smoke-plantillas-resto-layout.mjs` (`node:test`, 21/08/2026, en `npm test`) · con base de datos: `scripts/_smoke-ayuda-a-salamandra.mjs` (el camino `/ayuda` → master → correo; por defecto no manda nada) |
+| **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (guard de la demo, auditoría con resumen) · `../decisions/2026-08-12-bajas-abarcaia-quality-healim.md` (por qué vive en `master`: sobrevive a la baja) |
+| **En este doc** | Las cuatro cosas que suenan parecido · Por qué vive en `master` · Tablas (`master`) · Estados · Quién ve qué · Endpoints · Adjuntos · Cuando le contestamos se entera DENTRO de su CRM |
+
 **Estado:** implementado el 13/08/2026. Sin `moduleKey`: lo tienen todos los
 clientes y todos sus usuarios.
 
@@ -115,6 +139,19 @@ del cliente (o el alta). Sin ese relleno los avisos anteriores contarían como
 pasa si no: `master.audit_logs` sí tiene FK con `ON DELETE SET NULL`, y por eso
 `scripts/borrar-tenant.js` necesita una sección entera para que el histórico no
 se quede sin atribución al dar de baja a alguien.
+
+La foto de la persona la hace **`lib/buzon/quienEscribe.js`** en los dos POST
+del lado del cliente (`/api/ayuda` y `/api/ayuda/[id]/mensajes`), y está aparte
+porque la parte importante —de dónde sale el correo— es justo la que se hace mal
+si cada endpoint la resuelve por su cuenta: `ctx.user` **no tiene email**
+(`loadUserAccess` solo carga `id`, `role` y `moduleAccess`), así que
+`ctx.user.email` compila, no da error y guarda `null` para siempre. La fuente
+buena es la cabecera `x-user-email` que inyecta el middleware, y si el token no
+la trae, `master.users`. Importa más aquí que en otros sitios: el correo es lo
+ÚNICO que nos deja contestar a alguien cuyo cliente ya no exista, que es
+precisamente el caso para el que se diseñó el buzón. El nombre es un extra
+(sale de su ficha de equipo si la tiene); que un tenant no tenga tabla de equipo
+no puede impedir que nos avise.
 
 ## Estados
 
@@ -314,6 +351,35 @@ El evento del panel viaja **sin número** (un «vuelve a mirar») y el del CRM *
 delante y no hace falta preguntar nada; aquí la bandeja no la sabe —lo suyo es el
 recuento por estado, que es otra cosa— y la campana la pide a su endpoint, que es
 una consulta pequeña.
+
+## Triaje desde la terminal (skill `incidencias-buzon`)
+
+Además del panel, hay una vía para que Claude tríe el buzón: la skill
+`incidencias-buzon` (`.claude/skills/incidencias-buzon/SKILL.md`), que se lanza
+a mano con `/incidencias-buzon` (opcionalmente con una referencia, `AV-0007`).
+Solo mira los avisos de tipo «algo no funciona» —nunca dudas ni mejoras—,
+comprueba contra producción si el fallo sigue pasando, y si sigue lo apunta en
+el backlog del Registro y lo despliega; si ya está arreglado y puede probarlo,
+le contesta al cliente.
+
+Su herramienta es **`scripts/buzon-triaje.mjs`**, y conviene saber tres cosas:
+
+- **Se ejecuta por tubería dentro del contenedor**, no con `docker exec node
+  scripts/…`: `ssh crm-vps 'docker exec -i -e TRIAJE_ACCION=listar
+  crm-salamandra-app-1 node --input-type=module' < scripts/buzon-triaje.mjs`.
+  Así corre siempre la versión del repo local sin esperar a desplegar, y los
+  parámetros van por variables de entorno (`TRIAJE_ACCION` = `listar` |
+  `marcar` | `responder`, `TRIAJE_REF`, `TRIAJE_ESTADO`, `TRIAJE_TEXTO`,
+  `TRIAJE_AUTOR`) porque la entrada estándar ya la ocupa el script. En local:
+  `node --env-file=.env.local --input-type=module - < scripts/buzon-triaje.mjs`.
+- **Es un script y no cuatro órdenes dentro de la skill** porque contestar son
+  DOS cosas: guardar el mensaje (`anadirMensaje`) y encenderle la campana en su
+  CRM (`avisarEnSuCrm`). El endpoint del panel hace las dos; una skill que
+  escribiera en la base por su cuenta se dejaría la segunda el día que nadie se
+  acuerde.
+- **`marcar` y `responder` no escriben sin `TRIAJE_CONFIRMAR=1`**: enseñan lo
+  que harían y salen. `responder` le manda un mensaje a una persona de carne y
+  hueso que no se puede desenviar.
 
 ## Lo que NO hace
 

@@ -1,27 +1,19 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { logBillingAudit, resumenImporte, datosPeticion } from "../../../../../lib/billing/audit.js";
 import { ok, noContent, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
-
-
-function round2(n) { return Math.round(Number(n) * 100) / 100; }
-
-function computeCostTotals({ taxBase, vatRate }) {
-  const base = round2(Number(taxBase ?? 0));
-  const rate = round2(Number(vatRate ?? 0));
-  const taxAmount = round2(base * (rate / 100));
-  const total = round2(base + taxAmount);
-  return { taxBase: base, vatRate: rate, taxAmount, total };
-}
+import { camposGasto } from "../../../../../lib/billing/camposGasto.js";
+import { computeCostTotals } from "../../../../../lib/billing/totalesGasto.js";
 
 export const GET = withTenant(async (_request, { params }, { tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
-    const { Cost, TeamMember, Client } = tenantModels;
+    const { Cost, TeamMember, Client, Supplier } = tenantModels;
     const { id } = await params;
     const cost = await Cost.findByPk(id, {
       include: [
         { model: TeamMember, as: "employee", attributes: ["id", "displayName"] },
         { model: Client, as: "client", attributes: ["id", "name"] },
+        { model: Supplier, as: "supplier", attributes: ["id", "name"] },
       ],
     });
     if (!cost) return notFound("Coste no encontrado");
@@ -35,20 +27,19 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
 
-    const { Cost } = tenantModels;
+    const { Cost, Supplier } = tenantModels;
     const { id } = await params;
     const cost = await Cost.findByPk(id);
     if (!cost) return notFound("Coste no encontrado");
 
     const body = await request.json();
-    const allowed = [
-      "type", "category", "description", "incurredAt",
-      "employeeId", "partnerId", "clientId", "inventoryProductId",
-      "attachmentUrl", "vatDeductible",
-    ];
-    const updates = {};
-    for (const k of allowed) {
-      if (k in body) updates[k] = body[k];
+    const updates = camposGasto(body);
+
+    // El proveedor tiene que ser de ESTE tenant: `Supplier` sale de
+    // `tenantModels`, así que un id de otro cliente no aparece aquí.
+    if (updates.supplierId) {
+      const proveedor = await Supplier.findByPk(updates.supplierId, { attributes: ["id"] });
+      if (!proveedor) return notFound("Proveedor no encontrado");
     }
 
     // Si cambian taxBase o vatRate, recalcular taxAmount y total

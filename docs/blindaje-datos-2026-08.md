@@ -16,6 +16,8 @@
 | Un fallo dejaba una línea en un log que nadie lee | `trap ... ERR` que escribe **«LA COPIA HA FALLADO»** y avisa de que los datos de hoy no están respaldados |
 | Instrucciones de restauración que fallan en silencio | `-v ON_ERROR_STOP=1` obligatorio, y el paso de restaurar ficheros |
 | Rotación solo de `auto-*.sql.gz` | Rota también `uploads-*.tar.gz` |
+| El destino externo era un espejo (`rclone sync` / `rsync --delete`): un borrado en el servidor viajaba fuera la noche siguiente | La copia externa **SUMA** (`rclone copy`, rsync sin `--delete`): lo que ya llegó fuera no lo borra el script pase lo que pase en el servidor |
+| Sin caducidad propia fuera (era el reflejo de los 14 días locales) | Caducidad propia en destino, `RETENCION_REMOTA_DIAS=90` (a propósito más larga que los 14 locales), con cinco frenos para que no pueda vaciar el destino |
 
 Los 134 MB de `uploads/` son contratos **firmados**, informes clínicos y
 adjuntos. No se regeneran: restaurar solo la base deja las fichas apuntando a
@@ -23,6 +25,40 @@ papeles que no existen.
 
 Un fallo de la copia externa **no aborta** el script: la local ya está hecha y
 perderla por un problema de red sería peor.
+
+### El borrado no viaja (21/08/2026)
+
+Una copia de seguridad que se puede borrar desde la máquina que protege no es
+una copia de seguridad: con `sync`, un fallo de disco, un script o una persona
+que vaciase `/opt/crm-salamandra/backups` habría borrado también las copias de
+fuera a las 03:15 de la noche siguiente. Ahora la copia externa **solo añade**,
+y lo que sobra allí lo quita su propia caducidad a los 90 días: los 14 locales
+cubren el susto que se ve el mismo día, los 90 el que no se ve —una corrupción
+que aparece cuando alguien busca una factura de hace dos meses— y dejan 76
+noches de margen para darse cuenta.
+
+Esa caducidad no puede vaciar el destino. No borra:
+
+- si alguno de sus tres ajustes no es un número entero (un `[ 0 -lt abc ]` en un
+  camino que borra copias es el último freno desarmado en silencio);
+- si la subida de esa noche falló —no se tira lo viejo si no ha entrado nada
+  nuevo—;
+- si el destino no contesta, o contesta que está vacío (destino vacío = avería);
+- si el borrado dejaría menos de `MINIMO_REMOTO` (4) ficheros;
+- si se llevaría de una noche más del `MAXIMO_BORRADO_PCT` (50 %) de lo que hay
+  allí. Este es el que pilla de verdad un `RETENCION_REMOTA_DIAS` mal puesto: el
+  del mínimo solo salta con 0 o 1 días, porque con una copia por noche siempre
+  sobreviven 2·R ficheros. Medido en el ensayo: con 90 noches fuera (180
+  ficheros) y la retención puesta a 3 por un dedo gordo, se borraban 176 de 180
+  sin una queja y el registro decía «OK copia externa».
+
+En los tres últimos casos se frena y **manda correo**. Y solo toca
+`auto-*.sql.gz` y `uploads-*.tar.gz` de la raíz del destino: nunca las copias
+manuales `pre-deploy-*` ni lo que otro haya dejado ahí.
+
+En la rama **rsync no se caduca nada**: el script no manda órdenes de borrado a
+otra máquina. Que el otro servidor tenga su propia limpieza, o su disco se
+llenará.
 
 ## 2. Las copias ya no las puede borrar git
 
@@ -107,7 +143,9 @@ declare**. `costs.amount` y `costs.month` están así a propósito
    lo único que protege de perder el servidor entero, y es la única tarea que
    no se puede hacer desde el repo. Una vez elegido:
    `rclone config` en el VPS, descomentar la línea `Environment=` de
-   `crm-backup.service` y `systemctl daemon-reload`.
+   `crm-backup.service` y `systemctl daemon-reload`. **Ya no hace falta que el
+   proveedor tenga versionado ni papelera activados** (21/08/2026): el borrado
+   no viaja, así que lo de fuera sobrevive a que se vacíe el servidor.
 2. **Desplegar**, para que los frenos lleguen al servidor. Hasta entonces, los
    scripts peligrosos siguen sin freno **en producción**, que es donde importa.
 3. **Reinstalar la unidad de systemd** tras el despliegue:

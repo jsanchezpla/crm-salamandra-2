@@ -1,3 +1,4 @@
+// @vivo — «Smoke completo Sprint Retorika Registros. (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * smoke-retorika-registros.mjs — Smoke completo Sprint Retorika Registros.
  *

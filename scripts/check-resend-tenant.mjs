@@ -1,3 +1,4 @@
+// @vivo — Diagnóstico genérico y de solo lectura del correo BYOK de cada cliente (descifra la clave en memoria, lista dominios y estado, nunca la imprime)… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * check-resend-tenant.mjs — ¿el correo de este cliente está de verdad montado?
  *

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { vocabularioCliente } from "../../lib/clients/vocabulario.js";
 import { EVENTO_SIN_VER } from "../../lib/buzon/buzon.js";
+import { esFormacionAbierta, HIJOS_OCULTOS_FORMACION_ABIERTA } from "../../lib/training/formacionAbierta.js";
 
 const navigation = [
   // Áreas reorganizadas 2026-07-27 (pedido del socio): Inicio suelto arriba y
@@ -77,7 +78,8 @@ const navigation = [
         label: "Leads",
         // El padre son las ESTADÍSTICAS (01/08/2026): es lo único que mira los
         // dos orígenes a la vez. El embudo de siempre no se mueve de /leads —
-        // tiene ocho overrides por tenant colgando— y pasa a ser un hijo.
+        // tiene overrides por tenant colgando (cuatro hoy: aumenta, nutri-laura,
+        // retorika y spain-enzymes; eran ocho)— y pasa a ser un hijo.
         href: "/leads/estadisticas",
         badge: null,
         // Leads tiene DOS orígenes y se llaman por su origen (01/08/2026):
@@ -410,28 +412,37 @@ const navigation = [
 ];
 
 // Overrides de label de sidebar por tenant. Solo cambia el texto visible;
-// el moduleKey en BD/backend no se toca.
+// el moduleKey en BD/backend no se toca. (`sandbox` salió de aquí el
+// 18/08/2026 con su override de Leads: es el tenant local de pruebas «sin
+// override», y con la pantalla base diciendo «Leads Profesionales» un menú que
+// dijera «Interesados» sería una incoherencia gratuita.)
 const TENANT_LABEL_OVERRIDES = {
   aumenta: { leads: "Interesados" },
-  sandbox: { leads: "Interesados" },
 };
 
 /**
- * Hijos que un tenant concreto NO ve, por `key`. Mismo espíritu que
+ * Hijos que un tenant NO ve, por `key`. Mismo espíritu que
  * `TENANT_LABEL_OVERRIDES`: cambia lo que se enseña, no lo que se puede.
  *
- * Nació con los hijos de Formación (12/08/2026). La portada de Aumenta esconde
- * a propósito **Empresas** y **Cuestionarios** —es psicopedagogía, su formación
- * es B2C: no hay empresas que matricular ni se evalúa con tests— y su override
- * lo dice desde que se escribió. Sin esto, colgar las cinco pantallas del menú
- * le habría devuelto por el lateral las dos que su propia pantalla le quita.
+ * Nació con los hijos de Formación (12/08/2026) como una lista por slug: la
+ * portada de Aumenta escondía a propósito **Empresas** y **Cuestionarios** —es
+ * psicopedagogía, su formación es B2C: no hay empresas que matricular ni se
+ * evalúa con tests— y sin esto, colgar las cinco pantallas del menú le habría
+ * devuelto por el lateral las dos que su propia pantalla le quita.
+ *
+ * Desde el 18/08/2026 ya no es una lista por slug: lo decide el mismo
+ * interruptor que la portada, `featureFlags.formacionAbierta` del módulo
+ * `training` (`lib/training/formacionAbierta.js`). Así el menú y la portada no
+ * pueden volver a contradecirse, y un centro B2C nuevo lo tiene de fábrica al
+ * encender el interruptor, sin que nadie se acuerde de este fichero.
  *
  * NO es una barrera: el endpoint sigue siendo la puerta. Es no ofrecer una
  * pantalla que a ese cliente no le dice nada.
  */
-const TENANT_HIDDEN_CHILDREN = {
-  aumenta: ["formacion-empresas", "formacion-cuestionarios"],
-};
+function hijosOcultosSegunModulos(modules) {
+  const training = modules.find((m) => m.moduleKey === "training" && m.enabled);
+  return esFormacionAbierta(training?.featureFlags) ? HIJOS_OCULTOS_FORMACION_ABIERTA : [];
+}
 
 export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClose }) {
   const pathname = usePathname();
@@ -580,7 +591,7 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
   // tenant (p.ej. Comerciales/Referidos bajo Leads: solo salen donde el módulo
   // está activo). `requiresAll`: el hijo necesita TODOS esos módulos (p.ej.
   // Desempeño = avanzado + clínica).
-  const ocultosDelTenant = TENANT_HIDDEN_CHILDREN[tenant?.slug] ?? [];
+  const ocultosDelTenant = hijosOcultosSegunModulos(modules);
 
   const puedeVerHijo = (child) => {
     if (ocultosDelTenant.includes(child.key)) return false;

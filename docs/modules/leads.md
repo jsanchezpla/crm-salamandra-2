@@ -1,5 +1,29 @@
 # Módulo de Leads / Comercial (`leads`)
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es este
+> mismo commit). Si algo no cuadra, manda el código: corrige esta tabla. **Quién
+> tiene el módulo NO se lista aquí** (una lista a mano se queda vieja):
+> `/admin/modulos` en el back-office o
+> `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `leads` · requiere — (es `formularios` quien lo requiere a él; la clave `sales` se retiró el 12/08/2026) |
+| **Reina** | — (ni el doc ni `lib/leads/embudos.js` nombran una; desde el 18/08/2026 el base es el override de aumenta parametrizado, y a aumenta solo le queda propio el rosa `#FF1F96`) |
+| **Pantallas** | El embudo: `/leads` → `app/(dashboard)/leads/page.jsx` (server component: resuelve `UI_OVERRIDES` por `x-tenant` y le pasa al base `stages`, `titulo` y `sujeto`). El PADRE del grupo en el menú: `/leads/estadisticas` → `app/(dashboard)/leads/estadisticas/page.jsx` (mira `leads` y `formularios` juntos). Públicas: ninguna página en este repo — el formulario vive en la web del cliente y pega en el endpoint público de abajo. |
+| **Endpoints** | `app/api/leads/**` — 8 `route.js`: `route.js` (GET lista, con `desglose=1` por etapa · POST), `[id]/route.js` (GET · PATCH · DELETE, los dos últimos auditados), `[id]/convert-to-project/route.js` (POST; exige además `projects`), `estadisticas/route.js` (GET), `export/route.js` (GET Excel), `import/route.js` (POST JSON), `import/excel/route.js` (POST .xlsx), `import/template/route.js` (GET plantilla). Mutaciones solo admin/superadmin. Público: `app/api/public/leads/route.js` (OPTIONS+POST; tenant por cabecera `x-tenant`, CORS `*`, límite 30/min, `sanearCustomFields`). Sin webhooks. |
+| **Lógica** | `lib/leads/`: `stages.js` (las 15 etapas canónicas, `ALLOWED_STAGES` + `STAGE_LABELS`: la whitelist de PATCH, import y export), `embudos.js` (qué etapas ofrece cada cliente: `EMBUDOS` por slug de BD, `EMBUDO_POR_DEFECTO` de cinco, `GANADAS`/`PERDIDAS`, `etapasDe()`, `tieneEtapaGanada()`), `estadisticas.js` (las cifras de `/leads/estadisticas`: profesionales + comerciales, `calcularEstadisticas`). Fuera: `lib/home/summary.js` cuenta los abiertos para la portada con su propia `CLOSED_STAGES`. |
+| **UI** | `modules/leads/LeadsModule.jsx` (el base, `"use client"`, 779 líneas: tarjetas por etapa, filtro por motivo, buscador, panel lateral; color de `var(--color-primary)`). La pantalla de estadísticas lleva sus piezas dentro. No hay `components/leads/`. |
+| **Modelos** | `Lead` → `leads` (`models/tenant/Lead.model.js`; `stage` es STRING(50), no ENUM; `customFields` y `metadata` JSONB; `convertedProjectId`/`convertedToProjectAt`). Asociaciones en `lib/db/tenantDb.js`: `Lead.belongsTo(Client)` por `clientId` y `Lead.belongsTo(Project)` por `convertedProjectId`. Sin FK a `TeamMember` (`assignedTo` es un UUID suelto). |
+| **Interruptores y parámetros** | Ninguno que lea el código (ni `featureFlags` ni `logicOverrides`). Lo que varía por cliente está escrito en código: `EMBUDOS` en `lib/leads/embudos.js`, `TENANT_TITLE_OVERRIDES` («Interesados») en la página, `TENANT_LABEL_OVERRIDES` en `components/layout/Sidebar.jsx` y las plantillas de export/import por slug (`spain_enzymes` y `nutri_laura`, en `app/api/leads/export/route.js` e `import/template/route.js`). Los `schemaExtensions` que hay en producción (nutri_laura, spain_enzymes) son letrero decorativo: el código no los lee. |
+| **Pantallas propias** | 4, cargadas por el mapa `UI_OVERRIDES` de `app/(dashboard)/leads/page.jsx`: `modules/overrides/aumenta/LeadsModule.jsx`, `modules/overrides/nutri-laura/LeadsModule.jsx`, `modules/overrides/retorika/LeadsModule.jsx`, `modules/overrides/spain-enzymes/LeadsModule.jsx`. Ignoran las props del base: llevan su embudo dentro (copiado en `embudos.js`). Los de `demo` y `sandbox` se borraron el 18/08/2026; `quality-energy` y `abarcaia`, el 12/08. |
+| **Scripts** | Activar: `node scripts/enable-module.js <slug> leads`. Migraciones registradas en `scripts/_module-migrations.js`: `migrate-stage-to-string.js` (MODULES.leads) y `migrate-leads-columnas-proyecto.js` (CORE). Herramientas vivas: `listar-leads.js <slug>` (solo lectura), `mover-leads-a-comerciales.js <slug> <form> [--confirm]` (leads de familias → bandeja de Comerciales), `sincronizar-ui-override.mjs` (el letrero `ui_override`). Seeds: `add-leads-module-demo.js`, `add-leads-module-nutri-laura.js`, `_hechos/seed-aumenta.js`, `_hechos/seed-spain-enzymes-data.js`. Frenados: `_hechos/clear-aumenta-leads.js` (exige `_guard-datos-reales.js`), `_hechos/cleanup-bad-leads.js` (atado a `quality_energy`, que ya no existe). |
+| **Pruebas** | `scripts/_smoke-leads-etapas.mjs` (en `npm test`; vigila que las etapas de los cuatro overrides, `embudos.js`, `stages.js` y `summary.js` no se separen) · `scripts/_smoke-leads-stages-embudos.mjs` (`node:test`, 20/08/2026, en `npm test`): lo que DEVUELVEN `lib/leads/stages.js` y `embudos.js` —las quince etapas canónicas, cada una con su rótulo y sin repetidas (`isValidStage` decide el 422 del PATCH y `STAGE_LABELS` es lo que sale en el Excel); el embudo por defecto son CINCO etapas, no quince; el embudo exacto de cada uno de los cuatro clientes con embudo propio, y en particular que aumenta NO tiene etapa de ganado: su «Convertidos» sería un 0 que no puede subir y por eso `tieneEtapaGanada` se lo tapa en `/leads/estadisticas`; y un slug desconocido —también «nutri-laura» con guión en vez de «nutri_laura» con guión bajo— cae EN SILENCIO al embudo por defecto, sin error— · `scripts/_smoke-ui-overrides.mjs` (en `npm test`; los mapas `UI_OVERRIDES` contra el disco) · `scripts/_smoke-lead-conversion-fix.js` (base de datos; conversión lead→cliente en nutri_laura y spain_enzymes). |
+| **Decisiones** | `../decisions/2026-08-01-leads-dos-origenes-un-grupo.md` · `../decisions/2026-08-12-retirada-de-sales.md` · `../decisions/2026-08-12-bajas-abarcaia-quality-healim.md` (se llevó dos overrides) · `../decisions/2026-08-18-la-piramide-invertida-de-leads.md` |
+| **En este doc** | Modelo Lead · Stages · Módulo base vs overrides · Endpoints · Validaciones · Importación / Exportación · Migración y seeds por tenant · Backlog |
+
 > Documentación de detalle. Referencia rápida en `CLAUDE.md` (sección
 > "Módulos del CRM"). Si encuentras una discrepancia con el código,
 > prevalece el código: actualiza este fichero.
@@ -10,20 +34,28 @@ Un lead es una oportunidad comercial. El módulo cubre: alta manual desde
 el dashboard, alta pública desde formularios web (sin autenticación),
 import desde Excel/CSV, export a Excel, gestión de stages y notas. Es el
 módulo más maduro del CRM y el que tiene **más overrides por tenant**:
-siete al cierre de este documento, todos consumiendo el mismo modelo
-`Lead` y los mismos endpoints, pero pintando UI radicalmente distinta.
+cuatro hoy (`aumenta`, `nutri-laura`, `retorika`, `spain-enzymes`; llegó a
+haber siete), todos consumiendo el mismo modelo `Lead` y los mismos
+endpoints, pero pintando UI radicalmente distinta. Desde el 01/08/2026 es
+además un GRUPO del menú con dos orígenes: este embudo («Profesionales») y
+la bandeja del módulo `formularios` («Comerciales»), con `/leads/estadisticas`
+como padre que mira los dos juntos.
 
-Adicionalmente, el tenant `abarcaia` tiene activado un sub-módulo
-`referidos` (también basado en `Lead`, filtrado por
-`customFields.source = "referido_abarcaia"`).
+**Histórico (hasta 12/08/2026):** el tenant `abarcaia` tenía un sub-módulo
+`referidos` (también sobre `Lead`, filtrado por
+`customFields.source = "referido_abarcaia"`). Se fue entero con la baja del
+cliente: ni el módulo, ni `/api/referidos`, ni `/api/public/referidos`, ni la
+pantalla existen hoy.
 
 ## Lo que NO hace (por ahora)
 
 Confirmado leyendo el código:
 
-- **Conversión de lead `won` a Cliente o Proyecto**: hoy `won` solo es
-  un valor de `stage`. No hay endpoint ni lógica que cree un `Client` o
-  un `Project` a partir de un lead ganado.
+- **Conversión de lead `won` a Cliente**: no hay endpoint ni lógica que
+  cree un `Client` a partir de un lead ganado (spain-enzymes hace una
+  conversión parcial desde su frontend). La conversión a **Proyecto sí
+  existe**: `POST /api/leads/[id]/convert-to-project` (exige además el
+  módulo `projects`; ver «Endpoints» e «Integraciones»).
 - **Email automático al lead** al crearse o cambiar de stage. No hay
   envío desde backend: quien quiera avisar a un lead abre su cliente de
   correo a mano. (Hubo un botón "Aceptar promoción" con `mailto:` en la
@@ -36,16 +68,18 @@ Confirmado leyendo el código:
   zona, etc.). El campo `assignedTo` existe pero se setea siempre a
   mano.
 - **Scoring / cualificación automática**.
-- **Captcha en formularios públicos**. `/api/public/leads` y
-  `/api/public/referidos` aceptan POST sin autenticación ni captcha;
-  solo CORS abierto y `x-tenant` como header. Riesgo de spam.
+- **Captcha en el formulario público**. `/api/public/leads` acepta POST
+  sin autenticación ni captcha; solo CORS abierto, `x-tenant` como header
+  y un límite de 30 peticiones/min por IP. Riesgo de spam.
 - **Webhook a n8n** al crear o cambiar de stage. Búsqueda en `app/api/leads`
   y `modules/` no encuentra ninguna referencia a n8n ni `webhook`.
-- **AuditLog**: el módulo no registra ningún evento en `master.AuditLog`.
-  Crear, editar, importar masivamente o borrar (hard delete) es
-  silencioso. Contrasta con `team` y `billing`, que sí auditan.
+- **AuditLog completo**: se auditan `lead.updated` y `lead.deleted`
+  (`PATCH`/`DELETE /api/leads/[id]`) y `project.lead_converted`
+  (`convert-to-project`), con resumen de `name`, `email`, `stage`, `value`.
+  Siguen siendo silenciosos el alta (`POST /api/leads`), el alta pública y
+  los dos imports masivos.
 - **Soft delete**. `DELETE /api/leads/[id]` ejecuta `lead.destroy()` —
-  borrado físico irrecuperable.
+  borrado físico irrecuperable (queda auditado, pero no se recupera).
 
 ## Modelo Lead
 
@@ -69,11 +103,15 @@ Fichero: `models/tenant/Lead.model.js`. Tabla: `leads`.
 | `customFields` | JSONB, default `{}` | Bolsa de extensión. Cada tenant guarda claves distintas; ver "Módulo base vs overrides". |
 | `source` | STRING nullable | Origen del lead (`csv_import`, `excel_import`, etc.). |
 | `metadata` | JSONB, default `{}` | Para Retorika almacena `{ promo: "pack-ia" }`. |
+| `convertedProjectId` | UUID nullable | FK a `Project`. Lo rellena `POST /api/leads/[id]/convert-to-project`; el frontend enseña «Ver proyecto vinculado» en vez del botón de conversión. |
+| `convertedToProjectAt` | DATE nullable | Cuándo se convirtió. |
 
-Asociación (en `lib/db/tenantDb.js`):
+Asociaciones (en `lib/db/tenantDb.js`):
 
 - `Client.hasMany(Lead, { foreignKey: "clientId", as: "leads" })` y la
   inversa `Lead.belongsTo(Client, { as: "client" })`.
+- `Project.hasMany(Lead, { foreignKey: "convertedProjectId", as: "convertedFromLeads" })`
+  y la inversa `Lead.belongsTo(Project, { as: "convertedProject" })`.
 
 No existe asociación `Lead → TeamMember`: aunque `assignedTo` es un
 UUID, no hay `belongsTo` en el código. Si más adelante se quiere
@@ -92,15 +130,22 @@ Los 15 stages aceptados:
 
 - **Estándar**: `new`, `contacted`, `qualified`, `proposal`,
   `negotiation`, `won`, `lost`.
-- **Extendidos** (overrides quality-energy y abarcaia):
-  `in_progress`, `demo_scheduled`, `demo_done`, `closed_yes`,
+- **Extendidos** (nacieron en los overrides de quality-energy y abarcaia,
+  borrados el 12/08/2026; se conservan porque `STAGE_MAP` del import los
+  sigue mapeando y porque quitar una etapa de la whitelist es un cambio de
+  DATO): `in_progress`, `demo_scheduled`, `demo_done`, `closed_yes`,
   `closed_no`.
 - **Extendidos nutrición** (override nutri_laura):
   `consulta_agendada`, `consulta_realizada`, `paciente`.
 
-Antes del fix, `PATCH` solo permitía los 7 estándar y descartaba
-silenciosamente los 5 extendidos, lo que rompía el cambio de stage
-desde la UI de QE y abarcaia. Ahora cualquier endpoint los acepta y
+Lo que cada cliente OFRECE en su pantalla es un subconjunto de esa lista y
+se declara en `lib/leads/embudos.js` (`EMBUDOS` por slug de BD,
+`EMBUDO_POR_DEFECTO` de cinco para quien no tiene override); lo vigila
+`scripts/_smoke-leads-etapas.mjs`.
+
+**Histórico:** antes del fix, `PATCH` solo permitía los 7 estándar y
+descartaba silenciosamente los 5 extendidos, lo que rompía el cambio de
+stage desde la UI de QE y abarcaia. Ahora cualquier endpoint los acepta y
 las etiquetas humanas vienen del mismo `STAGE_LABELS`. Ver
 "Incoherencias resueltas".
 
@@ -114,21 +159,20 @@ Lee `x-tenant` del request, busca un override en un mapa
 
 ```jsx
 const UI_OVERRIDES = {
-  quality_energy: QECLeadsModule,
   retorika: RetorikaLeadsModule,
   aumenta: AumentaLeadsModule,
-  abarcaia: AbarcaIALeadsModule,
-  demo: DemoLeadsModule,
   spain_enzymes: SpainEnzymesLeadsModule,
   nutri_laura: NutriLauraLeadsModule,
 };
 ```
 
-`TenantModule.uiOverride` (campo registrado por los seeds) **no se
-consulta**: existe la columna en BD, los seeds escriben valores tipo
-`"quality-energy/LeadsModule"`, pero ningún componente la lee. Es
-infraestructura preparada para resolución dinámica que de momento se
-sustituye con `import` + `switch` en código. Ver "Incoherencias".
+(`quality_energy` y `abarcaia` se fueron con sus clientes el 12/08/2026;
+`demo` y `sandbox` el 18/08/2026, ver «Módulo base» más abajo.)
+
+`TenantModule.uiOverride` **no se consulta**: es un LETRERO que solo enseña
+`/admin/modulos`, y se mantiene fiel al código con
+`scripts/sincronizar-ui-override.mjs` (ver CLAUDE.md, «En Leads la pirámide
+está al revés»).
 
 Todos los overrides siguen el mismo patrón funcional (estado en React,
 panel lateral de detalle, debounced search, fetch a `/api/leads`); lo
@@ -146,26 +190,49 @@ que cambia es:
 
 | Slug | Líneas | Stages que muestra | `customFields` que lee | Particularidades |
 | --- | ---: | --- | --- | --- |
-| (base) | 80 | 7 estándar | ninguno | Tabla mínima sin filtros, sin edición, sin panel. Fallback. |
-| `aumenta` | 568 | `new`, `contacted`, `lost` | (ninguno extra; usa `motivo`/`servicio`/`curso`/`taller`/`mensaje` del modelo) | Filtro por `motivo`. Brand rosa `#FF1F96`. |
-| `demo` | 579 | `new`, `contacted`, `lost` | (ninguno extra; igual a aumenta) | Clon casi literal de `aumenta` sin brand. |
-| `retorika` | 568 | `new`, `contacted`, `qualified`, `won`, `lost` | `mensaje` (con fallback al campo del modelo) | Sin import inline ni bulk. |
-| `spain-enzymes` | 1025 | `new`, `contacted`, `qualified`, `won`, `lost` | `empresa`, `pais`, `ciudad`, `asunto`, `prioridad` | CSV import inline, bulk ops, conversión a Cliente parcial (`company`, `country`, `city`, `topic`). Drawer en portal. |
-| `quality-energy` | 1744 | `new`, `contacted`, **`in_progress`**, **`demo_scheduled`**, **`demo_done`**, **`closed_yes`**, **`closed_no`** | `cargo`, `empresa_actual`, `zona`/`zone`, `linkedin`, `utmSource`, `utmMedium`, `utmCampaign` | Excluye en cliente los leads `referido_abarcaia`. Cargos `Autónomo`/`Trabajador por cuenta ajena`. CSV import. Bulk ops. **PATCH de stage falla silencioso** (ver bug). |
-| `nutri-laura` | ~1230 | `new`, `contacted`, **`consulta_agendada`**, **`consulta_realizada`**, **`paciente`**, `lost` | `edad`, `motivo`, `info_adicional`, `utmSource`, `utmMedium`, `utmCampaign` | Embudo nutricional. Stages pintan transición de "lead" a "paciente activo". `motivo` e `info_adicional` son texto libre (no usan el ENUM legacy `motivo` del modelo, ver `/api/public/leads`). CSV import + bulk ops. |
-| `abarcaia` | 1965 | mismos 7 que QE | `cargo`, `empresa_actual`, `zona`/`zone`, `linkedin`, `instagram_user`, `prioridad`, `respuesta`, `demo_agendada`, `fecha_demo`, `utmSource`, `utmMedium`, `utmCampaign` | Excluye en cliente los leads `referido_abarcaia`. `fecha_demo` con fecha+hora separadas. Cálculo automático de prioridad por proximidad de la demo. Link a Instagram. CSV import. Bulk ops. **Mismo bug de PATCH**. |
+| (base) | 779 | las que declare `lib/leads/embudos.js` (5 por defecto) | (usa `motivo`/`servicio`/`curso`/`taller`/`mensaje` del modelo) | **Es el de aumenta parametrizado** (18/08/2026): tarjetas por etapa, filtro por motivo, buscador, ofertas de empleo, panel lateral. Color de marca del tenant. Lo ven somos, gm_alvar_alonso y las cuatro demos. |
+| `aumenta` | 671 | `new`, `contacted`, `lost` | (ninguno extra; usa `motivo`/`servicio`/`curso`/`taller`/`mensaje` del modelo) | Filtro por `motivo`. Brand rosa `#FF1F96`. Idéntico al base salvo el color: se conserva a propósito. |
+| ~~`demo`~~ | — | — | — | **Borrado el 18/08/2026**: era una copia anterior del de aumenta sin nada propio. La demo usa el base con el embudo por defecto. |
+| `retorika` | 582 | `new`, `contacted`, `qualified`, `won`, `lost` | `mensaje` (con fallback al campo del modelo) | Sin import inline ni bulk. |
+| `spain-enzymes` | 1062 | `new`, `contacted`, `qualified`, `won`, `lost` | `empresa`, `pais`, `ciudad`, `asunto`, `prioridad` | CSV import inline, bulk ops, conversión a Cliente parcial (`company`, `country`, `city`, `topic`). Drawer en portal. |
+| `nutri-laura` | 1877 | `new`, `contacted`, **`consulta_agendada`**, **`consulta_realizada`**, **`paciente`**, `lost` | `edad`, `motivo`, `info_adicional`, `utmSource`, `utmMedium`, `utmCampaign` | Embudo nutricional. Stages pintan transición de "lead" a "paciente activo". `motivo` e `info_adicional` son texto libre (no usan el ENUM legacy `motivo` del modelo, ver `/api/public/leads`). CSV import + bulk ops. |
+
+(Líneas contadas el 19/08/2026.) **Histórico (hasta 12/08/2026):** había
+además `quality-energy` (1.744 líneas) y `abarcaia` (1.965), con un embudo
+propio de siete etapas (`new`, `contacted`, `in_progress`, `demo_scheduled`,
+`demo_done`, `closed_yes`, `closed_no`), CSV import, bulk ops y, en abarcaia,
+prioridad calculada por la cercanía de la demo. Se borraron con la baja de
+los dos clientes (`../decisions/2026-08-12-bajas-abarcaia-quality-healim.md`).
+Sus cinco etapas extendidas siguen en `ALLOWED_STAGES`, y el parámetro
+`excluirOrigen` de `GET /api/leads` nació para ellos.
 
 ### Módulo base — `modules/leads/LeadsModule.jsx`
 
-Tabla simple con cuatro columnas (Nombre/Título, Email, Teléfono,
-Estado). Las etiquetas de etapa las importa de `lib/leads/stages.js`,
-la fuente única que ya usan el PATCH, el import y el export (hasta el
-10/08/2026 tenía su propia copia, desincronizada: decía «Cualificado /
-Ganado / Perdido» donde la fuente dice «En seguimiento / Convertido /
-Descartado»). Fetch a `/api/leads` sin filtros. Sin edición, sin panel,
-sin import. Sirve únicamente como fallback si el slug del tenant no
-está en `UI_OVERRIDES`: hoy no lo renderiza nadie, porque todos los
-tenants con `leads` tienen su entrada en el mapa.
+**Desde el 18/08/2026 es el override de aumenta promocionado y
+parametrizado** (antes era una tabla de 94 líneas sin filtros ni panel que
+veían, en producción, somos, gm_alvar_alonso y las tres demos por oficio: los
+clientes más nuevos tenían la peor pantalla). Recibe de la página tres props:
+
+- `stages` — el embudo del tenant, resuelto en el servidor con
+  `etapasDe(slug)` de `lib/leads/embudos.js` (`EMBUDO_POR_DEFECTO` = las
+  cinco estándar para quien no tenga override) y rotulado con `STAGE_LABELS`.
+- `titulo` y `sujeto` — «Leads Profesionales» / «leads» salvo
+  `TENANT_TITLE_OVERRIDES` («Interesados» en aumenta).
+
+El color sale de `var(--color-primary)` (la marca del tenant) y
+`color-mix` para los tonos, así que no lleva ningún hex de nadie. Lo que
+añade sobre el override de aumenta: estilo para las 15 etapas canónicas con
+gris de fallback, aviso ámbar en el panel si el lead está en una etapa que
+el embudo no ofrece, bloque «Mensaje» para leads sin motivo, botón «Ofertas
+de empleo» solo si hay alguna, panel bajo la barra móvil (regla 13) y el
+tooltip del tope de 200. Lo vigila `scripts/_smoke-leads-etapas.mjs`.
+
+**La demo lo usa desde el 18/08/2026** con el embudo por defecto (cinco
+etapas): es el escaparate, y enseña lo que verá quien compre. Su override
+—una copia anterior del de aumenta— y el de `sandbox` —la misma recoloreada,
+para un tenant que no existe en ningún entorno— se borraron ese día sin
+tocar un dato: los dos llamaban a los mismos tres endpoints con los mismos
+cuerpos que el base.
 
 ### Override `aumenta` — `modules/overrides/aumenta/LeadsModule.jsx`
 
@@ -178,14 +245,6 @@ campos legacy del modelo (`tipo_usuario`, `motivo`, `servicio`,
 público. Un helper `getDetalle(lead)` decide qué texto mostrar según
 `motivo`. Filtro adicional `?motivo=` que viaja al backend (lo soporta
 `GET /api/leads`).
-
-### Override `demo` — `modules/overrides/demo/LeadsModule.jsx`
-
-Tenant interno de pruebas. **Es prácticamente una copia del override
-`aumenta`** (mismos stages, mismo `MOTIVO_LABEL`, mismo
-`getDetalle`, misma estructura), sin la paleta rosa. Útil para
-demostraciones a clientes interesados en el caso de uso "centro de
-formación".
 
 ### Override `retorika` — `modules/overrides/retorika/LeadsModule.jsx`
 
@@ -209,40 +268,6 @@ un lead, copia `empresa→company`, `pais→country`, `ciudad→city`,
 `asunto→topic` al crear el cliente (la lógica se llama desde el
 override pero el endpoint de Clients es el responsable final). Drawer
 en portal con `createPortal`.
-
-### Override `quality-energy` — `modules/overrides/quality-energy/LeadsModule.jsx`
-
-Sector: energética (asesores comerciales).
-
-Stages **no estándar** de 7 valores: `new`, `contacted`, `in_progress`,
-`demo_scheduled`, `demo_done`, `closed_yes`, `closed_no`. Cargos:
-`Autónomo` / `Trabajador por cuenta ajena`. Lee
-`customFields.cargo`, `empresa_actual`, `zona`/`zone`, `linkedin` y los
-parámetros UTM. Excluye en cliente los leads marcados como
-`source: "referido_abarcaia"` (vestigio de cuando el módulo `referidos`
-vivía en este tenant; ver "Migraciones por tenant").
-
-CSV import inline, bulk ops. **El cambio de stage desde la UI no
-funciona** para los stages no estándar — el backend los descarta
-silenciosamente (ver "Incoherencias").
-
-### Override `abarcaia` — `modules/overrides/abarcaia/LeadsModule.jsx`
-
-El override más grande (1.965 líneas). Sector: captación de
-comerciales / partners para AbarcaIA.
-
-Mismos 7 stages no estándar que QE. `customFields` superset:
-`cargo`, `empresa_actual`, `zona`/`zone`, `linkedin`,
-`instagram_user`, `prioridad`, `respuesta`, `demo_agendada`,
-`fecha_demo`, más `utmSource`/`utmMedium`/`utmCampaign`. Editor
-separado de fecha y hora para `fecha_demo`. La prioridad se calcula
-sola desde la cercanía de la demo (`calculatePriority`: `< 3 días`
-→ alta, `≤ 6 días` → media, en otro caso baja). Link directo al
-perfil de Instagram. CSV import + bulk ops. Mismo bug de PATCH de
-stage que QE.
-
-También excluye los leads `referido_abarcaia` del listado principal
-(esos los gestiona el sub-módulo Referidos, ver siguiente sección).
 
 ### Override `nutri-laura` — `modules/overrides/nutri-laura/LeadsModule.jsx`
 
@@ -287,35 +312,21 @@ de Laura puede enviar:
 
 con header `x-tenant: nutri_laura`.
 
-### Sub-módulo Referidos (solo `abarcaia`)
+### Sub-módulo Referidos — retirado
 
-Fichero: `modules/overrides/quality-energy/ReferidosModule.jsx`
-(sí, está en la carpeta de quality-energy por razones históricas).
-
-El componente exportado se llama `AbarcaIAReferidosModule` y consume
-`/api/referidos`, que devuelve solo leads con
-`customFields.source = "referido_abarcaia"`. El formulario web público
-correspondiente vive en `/api/public/referidos` y guarda los leads con
-ese `source` y un `codigo_referido` opcional (UPPERCASE) en
-`customFields`.
-
-Stages mostrados: 5 estándar (`new`, `contacted`, `qualified`, `won`,
-`lost`). `customFields` específicos: `codigo_referido`, `fecha_envio`.
-`PATCH /api/referidos/[id]` solo permite cambiar `stage` y `notes` (el
-endpoint es muy restrictivo).
-
-El `moduleAccess` del usuario admin de abarcaia incluye `["leads", "referidos"]`
-(ver `scripts/seed-abarcaia.js`). El admin del tenant
-quality-energy **ya no** tiene `referidos` activado: el script
-`scripts/remove-abarcaia-from-quality.js` lo limpió en su día (ver
-"Migraciones por tenant").
+**Histórico (hasta 12/08/2026):** `abarcaia` tenía un sub-módulo `referidos`
+(`ReferidosModule.jsx`, `/referidos`, `GET /api/referidos`,
+`PATCH /api/referidos/[id]`, `POST /api/public/referidos`) que listaba los
+leads con `customFields.source = "referido_abarcaia"`. Se retiró entero con la
+baja del cliente; el Sidebar conserva un comentario que lo recuerda. Hoy no
+queda ni código ni `moduleKey`.
 
 ## Frontend — rutas
 
 | Ruta | Estado | Función |
 | --- | --- | --- |
-| `/leads` | activa | Lista de leads. Server component que selecciona el override según `x-tenant`. Es la única ruta enlazada desde el sidebar. |
-| `/referidos` | activa (solo abarcaia) | Lista de referidos de AbarcaIA. Importa `AbarcaIAReferidosModule` directamente, sin selección por tenant. |
+| `/leads/estadisticas` | activa | **Padre del grupo «Leads» en el sidebar** (01/08/2026): cifras de captación de un periodo (por defecto 12 meses) mirando los DOS orígenes —el embudo de Profesionales y, si el tenant tiene `formularios`, la bandeja de Comerciales—. `"use client"`, pide a `GET /api/leads/estadisticas`. |
+| `/leads` | activa | El embudo («Profesionales» en el menú). Server component que selecciona el override según `x-tenant` y, si no hay, monta el base con `stages`, `titulo` y `sujeto`. |
 
 ## Endpoints
 
@@ -329,48 +340,50 @@ cualquier autenticado del tenant.
 
 | Método y ruta | Propósito | Restricciones |
 | --- | --- | --- |
-| `GET /api/leads` | Listado con filtros `stage`, `search`, `empresa`, `motivo`, `promo`, `limit` (max 200), `offset`. Devuelve `{ leads, total }`. | `hasModule("leads")`. |
+| `GET /api/leads` | Listado con filtros `stage`, `search`, `empresa`, `motivo`, `promo`, `limit` (max 200), `offset`. Con `desglose=1` añade el reparto por etapa contado en BD con el mismo `where` **sin la etapa** (y `excluirOrigen=<source>` resta los de ese `customFields.source`). Devuelve `{ leads, total, desglose, totalSinEtapa }` (los dos últimos `null` si no se pide). | `hasModule("leads")`. |
 | `POST /api/leads` | Crear lead. Acepta tanto `mensaje` como `message` (alias). Mete `promo` en `metadata`. | Solo admin/superadmin. |
 | `GET /api/leads/[id]` | Detalle. | `hasModule(...)`. |
-| `PATCH /api/leads/[id]` | Actualiza campos whitelisted. Acepta los 12 stages (`ALLOWED_STAGES`). Hace merge de `customFields`. | Solo admin/superadmin. |
-| `DELETE /api/leads/[id]` | **Hard delete** (`destroy()`). Sin auditoría. | Solo admin/superadmin. |
-| `GET /api/leads/export` | Descarga Excel. Plantilla por tenant: `spain_enzymes` y `abarcaia` tienen layout propio; resto cae a `DEFAULT_CONFIG`. | `hasModule(...)`. |
-| `POST /api/leads/import` | Importación masiva JSON. Max 1.000. Acepta los 12 stages. Sin transacción global: errores se acumulan en `results.errors` por fila. | Solo admin/superadmin. |
+| `PATCH /api/leads/[id]` | Actualiza campos whitelisted (incl. `clientId`, que se valida contra `clients` o se descarta). Acepta los 15 stages (`ALLOWED_STAGES`). Hace merge de `customFields`. Audita `lead.updated`. | Solo admin/superadmin. |
+| `DELETE /api/leads/[id]` | **Hard delete** (`destroy()`). Audita `lead.deleted` con el resumen previo. | Solo admin/superadmin. |
+| `POST /api/leads/[id]/convert-to-project` | Crea un `Project` (código generado, columnas Kanban por defecto, el creador como `lead` del proyecto si tiene `TeamMember`), rellena `convertedProjectId`/`convertedToProjectAt` y pasa el lead a `won` salvo que ya esté en `won`/`closed_yes`. 422 si ya estaba convertido. Audita `project.lead_converted`. | `hasModule("leads")` **y** `hasModule("projects")`. |
+| `GET /api/leads/estadisticas` | Cifras de captación (`?desde=&hasta=`, por defecto 12 meses): embudo de profesionales, bandeja de comerciales (`null` sin `formularios`) y entrada por mes. Lógica en `lib/leads/estadisticas.js`. | `hasModule("leads")`; no es solo admin. |
+| `GET /api/leads/export` | Descarga Excel. Plantilla por tenant: `spain_enzymes` y `nutri_laura` tienen layout propio; resto cae a `DEFAULT_CONFIG`. | `hasModule(...)`. |
+| `POST /api/leads/import` | Importación masiva JSON. Max 1.000. Acepta los 15 stages. Sin transacción global: errores se acumulan en `results.errors` por fila. | Solo admin/superadmin. |
 | `POST /api/leads/import/excel` | Importación masiva desde `.xlsx`. Mapping de cabeceras multilenguaje (`HEADER_MAP`). Mismo límite y mismas reglas que el JSON. | Solo admin/superadmin. |
-| `GET /api/leads/import/template` | Descarga plantilla `.xlsx` con cabeceras + ejemplo + helpers. Layout por tenant (`spain_enzymes`, `abarcaia`, default). | `hasModule(...)`. |
-| `GET /api/referidos` | Lista de leads filtrados por `customFields.source = "referido_abarcaia"`. | `hasModule(...)`. |
-| `PATCH /api/referidos/[id]` | Solo permite cambiar `stage` y `notes`. Verifica que el lead sea efectivamente un referido antes de aplicar. | Solo admin/superadmin. |
+| `GET /api/leads/import/template` | Descarga plantilla `.xlsx` con cabeceras + ejemplo + helpers. Layout por tenant (`spain_enzymes`, `nutri_laura`, default). | `hasModule(...)`. |
 
-### Públicos sin autenticación
+### Público sin autenticación
 
 | Método y ruta | Propósito |
 | --- | --- |
-| `OPTIONS /api/public/leads` y `POST /api/public/leads` | Crear lead desde formulario web. CORS abierto (`Access-Control-Allow-Origin: *`). Tenant resuelto por header `x-tenant`. Acepta múltiples convenciones: `nombre`+`apellidos` o `name`, `telefono` o `phone`. Funde `empresa` en `customFields`. |
-| `OPTIONS /api/public/referidos` y `POST /api/public/referidos` | Crear referido. Hardcodea `customFields.source = "referido_abarcaia"` y normaliza `codigo_referido` a uppercase. Mismas convenciones de naming. |
+| `OPTIONS /api/public/leads` y `POST /api/public/leads` | Crear lead desde formulario web. CORS abierto (`Access-Control-Allow-Origin: *`). Tenant resuelto por header `x-tenant`. Acepta múltiples convenciones: `nombre`+`apellidos` o `name`, `telefono` o `phone`. Funde `empresa` en `customFields`. Al guardar avisa por la CAMPANA a los admins del tenant (`notifyAdmins`, tipo `lead_recibido`, sin el mensaje ni el motivo; 08/08/2026). |
 
-Mismas reglas en ambos: rechazan si el body no trae nombre ni email
-(`fullName || email`); validan que el módulo (`leads` o `sales`) esté
-activo; si el tenant no se resuelve devuelven `404 "Tenant no
+Reglas: rechaza si el body no trae nombre ni email (`fullName || email`);
+valida que el módulo `leads` esté activo (la clave `sales` se retiró el
+12/08/2026); si el tenant no se resuelve devuelve `404 "Tenant no
 encontrado"`.
 
-#### Riesgos y protecciones de los endpoints públicos
+#### Riesgos y protecciones del endpoint público
 
-- **No hay rate limiting**. Un atacante puede crear leads arbitrarios
-  contra cualquier tenant cuyo slug conozca.
-- **CORS `*`**: cualquier origen puede llamarlos. Aceptable para
+- **Rate limiting: 30 peticiones/min por IP** (`enforceRateLimit`, clave
+  `public-leads`, `lib/utils/rateLimit.js`); el 429 lleva las cabeceras
+  CORS para que se lea desde la landing.
+- **CORS `*`**: cualquier origen puede llamarlo. Aceptable para
   formularios públicos, pero implica que un script malicioso en
   cualquier web puede enviar leads.
-- **No hay captcha** ni protección de spam.
+- **No hay captcha** ni protección de spam más allá del límite.
 - **Tenant resolver desde header**: el cliente decide el `x-tenant`.
   Si conoces los slugs (no son secretos: aparecen en URLs públicas),
-  puedes elegir destino. Un atacante puede inundar a un tenant con
-  basura.
-- Sanitización mínima: `.trim()` y `.toLowerCase()` en email. No hay
-  validación de longitud máxima por campo, ni filtrado de payloads
-  HTML/JS para prevenir inyección si los datos se renderizan después.
+  puedes elegir destino dentro del límite por minuto.
+- Sanitización: `.trim()` y `.toLowerCase()` en email; topes de longitud
+  por campo (`name`/`title` 200, `email` 160, `phone` 40, `servicio`/
+  `curso`/`taller` 200, `mensaje` 4000) y `sanearCustomFields`
+  (`lib/utils/publicInput.js`, recorta `customFields` a 8 KB de JSON;
+  23/07/2026). No hay filtrado de payloads HTML/JS: los datos se pintan
+  como texto en React.
 
-Pendiente en backlog: rate limiting, captcha o token compartido entre
-formulario web y CRM.
+Pendiente en backlog: captcha o token compartido entre formulario web y
+CRM.
 
 ## Filtros y búsqueda
 
@@ -382,29 +395,35 @@ formulario web y CRM.
 - `promo`: usa `metadata @> '{"promo": ...}'` (JSONB contains).
 - `search`: `iLike` sobre `name`, `email`, `phone`, `title`.
 - `limit` (cap 200), `offset`.
+- `desglose=1`: devuelve además `desglose` (`{ etapa: n }`) y
+  `totalSinEtapa`, contados en BD con los mismos filtros **menos `stage`**
+  (12/08/2026: antes cada pantalla contaba con un `reduce` sobre la lista ya
+  filtrada y al pulsar una etapa las demás caían a cero). Opcional
+  `excluirOrigen=<source>` (`[a-z0-9_]{1,40}`): se cuenta dos veces con `@>`
+  y se resta, en vez de un `NOT` que con `custom_fields` a NULL borraría
+  filas en silencio.
 - Orden fijo: `createdAt DESC`. No hay `sortBy` whitelisted como en
   billing/team.
 
 `GET /api/leads/export` acepta `stage`, `empresa`, `search` y replica
 los filtros antes de generar el Excel.
 
-`GET /api/referidos` acepta solo `stage`, `search`, `limit`, `offset`
-y siempre añade el filtro `customFields @> '{"source": "referido_abarcaia"}'`.
-
 ## Validaciones
 
 - `POST /api/leads`: requiere **`name` o `title`** (al menos uno).
   Email se normaliza a minúsculas; si llega `""` se guarda `null`. No
   se comprueba unicidad del email — **se permiten duplicados**.
-- `POST /api/public/leads` y `/api/public/referidos`: requieren
-  **`name` o `email`**. Mismo comportamiento de normalización.
+- `POST /api/public/leads`: requiere **`name` o `email`**. Mismo
+  comportamiento de normalización, más los topes de longitud y el saneo
+  de `customFields` de «Riesgos y protecciones».
 - `PATCH /api/leads/[id]`: whitelist explícita (`name`, `phone`,
   `email`, `title`, `stage`, `probability`, `value`,
-  `expectedCloseDate`, `assignedTo`, `notes`, `customFields`,
+  `expectedCloseDate`, `assignedTo`, `notes`, `customFields`, `clientId`,
   `tipo_usuario`, `motivo`, `servicio`, `curso`, `taller`, `mensaje`).
-  Cualquier otra clave se ignora. `stage` no estándar se descarta
-  silenciosamente. `customFields` se mergea con el existente, no se
-  sobrescribe.
+  Cualquier otra clave se ignora. `stage` fuera de `ALLOWED_STAGES` se
+  descarta silenciosamente. `clientId` se valida contra `clients` (`null`
+  o `""` desvincula; un UUID que no exista se descarta). `customFields` se
+  mergea con el existente, no se sobrescribe.
 - `POST /api/leads/import` y `/excel`: rechaza filas sin `name` ni
   `email` ni `phone` (las cuenta como `skipped`). Convierte el `stage`
   legible (ej. "Demo agendada") al canónico (`demo_scheduled`) usando
@@ -416,15 +435,16 @@ y siempre añade el filtro `customFields @> '{"source": "referido_abarcaia"}'`.
 
 ### Plantilla de import (`GET /api/leads/import/template`)
 
-Plantilla por tenant. Tres ficheros distintos:
+Plantilla por tenant (`TENANT_TEMPLATES` por slug de BD). Tres layouts:
 
 - `spain_enzymes`: 10 columnas (Nombre, Empresa, Email, Teléfono,
   País, Ciudad, Asunto, Mensaje, Estado, Prioridad).
-- `abarcaia`: 14 columnas (Nombre, Email, Teléfono, Cargo,
-  Empresa actual, Ubicación, LinkedIn, Usuario Instagram, Estado,
-  Respuesta, Demo Agendada, Fecha Demo, Prioridad, Notas).
+- `nutri_laura`: 8 columnas (Nombre, Email, Teléfono, Edad, Motivo,
+  Info adicional, Estado, Notas).
 - Default: 6 columnas (Nombre, Email, Teléfono, Empresa, Estado,
   Notas).
+
+(`abarcaia` tenía la suya, 14 columnas; se fue con el cliente el 12/08/2026.)
 
 Cada plantilla incluye una fila de ejemplo y otra de helpers (texto
 en gris) explicando el formato esperado de cada campo.
@@ -448,28 +468,43 @@ en gris) explicando el formato esperado de cada campo.
 Genera un único Excel con una hoja "Leads". Cabeceras en verde
 (`#1B3A2D`), filas alternas con fondo gris claro. Nombre de fichero
 `leads_AAAA-MM-DD.xlsx`. Stages se traducen al label castellano
-mediante `STAGE_LABELS` (incluye los 12 stages, los 7 estándar y los
-5 no estándar de QE/abarcaia).
+mediante `STAGE_LABELS` (las 15: los 7 estándar, los 5 extendidos
+heredados de QE/abarcaia y los 3 de nutrición). Columnas por tenant:
+`spain_enzymes` (11, con Recibido), `nutri_laura` (9) y `DEFAULT_CONFIG`
+(7, con Fecha).
 
 ## Integraciones con otros módulos
 
-- **Auth**: la mayoría de endpoints requieren JWT vía middleware. Los
-  tres endpoints de `/api/public/*` lo evitan explícitamente (CORS).
+- **Auth**: la mayoría de endpoints requieren JWT vía middleware. El
+  público `/api/public/leads` lo evita explícitamente (CORS + límite por
+  IP).
 - **Equipo (#6)**: campo `assignedTo` (UUID) sin asociación Sequelize
   ni validación. Si en el futuro se quiere "leads del comercial X",
   hay que añadir `Lead.belongsTo(TeamMember, ...)` y validar
   existencia al setear.
 - **Clientes (#1)**: `Lead.clientId` permite vincular un lead a un
-  cliente existente. La conversión "lead ganado → cliente nuevo" no
-  está automatizada; spain-enzymes hace una conversión parcial desde
-  el frontend (copiando algunos `customFields` al body del POST de
-  Clients), pero el resto de tenants no.
-- **Audit (master.AuditLog)**: el módulo **no audita** ningún evento.
-  Cualquier acción es silenciosa.
+  cliente existente (se edita por `PATCH`, validado contra `clients`). La
+  conversión "lead ganado → cliente nuevo" no está automatizada;
+  spain-enzymes hace una conversión parcial desde el frontend (copiando
+  algunos `customFields` al body del POST de Clients), pero el resto de
+  tenants no.
+- **Proyectos (#3)**: `POST /api/leads/[id]/convert-to-project` crea el
+  proyecto a partir del lead (nombre, descripción desde `notes`,
+  presupuesto desde `value`, `clientId` heredado), con sus columnas Kanban
+  por defecto, y deja la huella en `convertedProjectId` /
+  `convertedToProjectAt`. Exige `projects` activo.
+- **Formularios (Leads Comerciales)**: no comparten tabla ni FK. Se
+  encuentran solo en `/leads/estadisticas` (`lib/leads/estadisticas.js`
+  lee `leads` y `form_submissions`) y en `scripts/mover-leads-a-comerciales.js`
+  (leads de familias que entraron por el embudo → bandeja).
+- **Audit (master.AuditLog)**: `lead.updated`, `lead.deleted`
+  (`lib/utils/auditoria.js`, resumen `name`/`email`/`stage`/`value`) y
+  `project.lead_converted`. Alta, alta pública e imports siguen sin
+  auditar.
+- **Notificaciones**: el alta pública avisa por la campana a los admins
+  (`notifyAdmins`, tipo `lead_recibido`).
 - **n8n**: sin integración. El `metadata` JSONB y el campo `source`
   pueden alimentar webhooks futuros pero hoy no hay nada conectado.
-- **Próximos**: Proyectos (#3) — un lead ganado debería poder
-  convertirse en `Project`. Hoy no existe ese flujo.
 
 ## Migración y seeds por tenant
 
@@ -481,75 +516,90 @@ Cada tenant tiene su propio seed que crea schema, fila en
 
 | Slug en `master.tenants` | Seed | uiOverride registrado | moduleAccess admin | Leads creados |
 | --- | --- | --- | --- | ---: |
-| `retorika` | `seed-master.js` + `seed-retorika.js` | (no registra leads) | `["training", "clients"]` | 0 (solo curso) |
-| `aumenta` | `seed-aumenta.js` | `aumenta/LeadsModule` | `["leads"]` | ~40 |
-| `quality_energy` | `seed-quality-energy.js` | `quality-energy/LeadsModule` | `["leads"]` | ~40 (stages estándar; el override pinta otros) |
-| `abarcaia` | `seed-abarcaia.js` | `abarcaia/LeadsModule` | `["leads", "referidos"]` | 0 (datos vienen de import o público) |
-| `demo` | `seed-demo.js` + `add-leads-module-demo.js` | `demo/LeadsModule` | `["clients", "leads", ...]` | 35 |
-| `spain_enzymes` | `seed-spain-enzymes.js` (+ `seed-spain-enzymes-data.js`) | `spain-enzymes/LeadsModule` | `["leads"]` | variable |
+| `retorika` | `_hechos/seed-master.js` + `_hechos/seed-retorika.js` | (no registra leads) | `["training", "clients"]` | 0 (solo curso) |
+| `aumenta` | `_hechos/seed-aumenta.js` | `aumenta/LeadsModule` | `["leads"]` | ~40 (⚠️ CRM en uso real: no relanzar sin permiso) |
+| `demo` | `_hechos/seed-demo.js` + `add-leads-module-demo.js` | (ninguno desde el 18/08/2026: usa el base; el script aún escribe `demo/LeadsModule` y lo corrige `sincronizar-ui-override.mjs`) | `["clients", "leads", ...]` | 35 |
+| `nutri_laura` | `add-leads-module-nutri-laura.js` | `nutri-laura/LeadsModule` | añade `leads` al admin | 8 de ejemplo (uno por etapa; los reales entran por `/api/public/leads` e import) |
+| `spain_enzymes` | `_hechos/seed-spain-enzymes.js` (+ `_hechos/seed-spain-enzymes-data.js`) | `spain-enzymes/LeadsModule` | `["leads"]` | variable |
+
+(`seed-quality-energy.js` y `seed-abarcaia.js` se borraron con sus clientes el
+12/08/2026.) Para un cliente nuevo no hace falta seed: `node
+scripts/enable-module.js <slug> leads` enciende el módulo, corre sus
+migraciones y abre el `module_access` a los admin.
 
 Los slugs en `master.tenants` que llevan más de una palabra usan
-**underscore**, no guión: `quality_energy`, `spain_enzymes`. CLAUDE.md
-los lista con guión en algunas partes (ver "Incoherencias detectadas"
-y revisar antes de iterar sobre slugs).
+**underscore**, no guión: `nutri_laura`, `spain_enzymes`. Las carpetas de
+`modules/overrides/` usan guión (ver "Incoherencias resueltas", punto 4).
 
-### Scripts de mantenimiento
+### Migraciones y scripts de mantenimiento
 
-Histórico de scripts ad-hoc que aún viven en `scripts/` por si hace
-falta repetir:
+Hay **dos migraciones registradas en `scripts/_module-migrations.js`** que
+tocan `leads` y corren con `enable-module.js` o con el disparador general:
 
-| Script | Para qué sirvió | Estado |
+| Script | Qué hace | Dónde está registrada |
 | --- | --- | --- |
-| `cleanup-bad-leads.js` | Borra leads de `crm_quality_energy` con `email IS NULL AND phone IS NULL AND source = 'csv_import'` (basura del import). | Útil, idempotente, hardcodea slug `quality_energy` y password local. |
-| `migrate-quality-leads.js` | Añade `source` y `metadata` a `crm_quality_energy.leads` (esas columnas no existían antes en el modelo). | Histórico, ya no debería ser necesario; el modelo actual ya las define. Hardcodea credenciales locales. |
-| `clear-aumenta-leads.js`, `clear-quality-leads.js`, `clear-abarcaia-leads.js` | `TRUNCATE` de `leads` por tenant para resembrar de cero. | Útil cuando se quieren reseed desde formulario público. |
-| `remove-abarcaia-from-quality.js` | Limpió leads y referidos de AbarcaIA que vivían en `crm_quality_energy` y desactivó el módulo `referidos` en QE. | Histórico (one-shot). Dejó AbarcaIA como tenant separado con su propio CRM. Explica por qué `ReferidosModule.jsx` vive en `modules/overrides/quality-energy/` aunque solo lo use abarcaia. |
+| `migrate-stage-to-string.js` | `leads.stage` de ENUM a `VARCHAR(50)` (para admitir las etapas extendidas). | `MODULES.leads` |
+| `migrate-leads-columnas-proyecto.js` | Añade `converted_project_id` y `converted_to_project_at`. Va en **CORE** y no en `projects` porque el modelo `Lead` las declara para todos: un tenant con `leads` y sin `projects` se quedaba sin ellas y `Lead.create` moría con 42703 (le pasó a abarcaia del 05/05 al 10/08/2026). | `CORE` |
 
-No existe un script de migración multi-tenant tipo
-`migrate-leads-fields.js` (al estilo de `migrate-team-fields.js` o
-`migrate-billing-rework.js`). Los cambios al modelo `Lead` se han ido
-haciendo con `sequelize.sync({ alter: true })` durante los seeds, por
-eso aparecen scripts ad-hoc para tenants concretos cuando hace falta
-algo más fino.
+Scripts sueltos que siguen en `scripts/`:
+
+| Script | Para qué sirve | Estado |
+| --- | --- | --- |
+| `listar-leads.js <slug>` | Lista los leads de un tenant. | Solo lectura. |
+| `mover-leads-a-comerciales.js <slug> <form> [--confirm]` | Leads de familias que entraron por el embudo → bandeja de Comerciales. | Vivo, idempotente. |
+| `sincronizar-ui-override.mjs` | Pone el letrero `ui_override` de `master.tenant_modules` a lo que dicen los mapas `UI_OVERRIDES`. | Vivo; relanzar tras añadir/mover/borrar un override. |
+| `_hechos/clear-aumenta-leads.js` | `TRUNCATE` de `leads` en aumenta para resembrar. | **Frenado**: exige la bandera de `_guard-datos-reales.js` (aumenta tiene leads reales). |
+| `_hechos/cleanup-bad-leads.js` | Borraba leads de `crm_quality_energy` con `email IS NULL AND phone IS NULL AND source = 'csv_import'`. | Histórico: hardcodea un schema que **ya no existe**. |
+
+**Histórico (hasta 12/08/2026):** existieron `migrate-quality-leads.js`
+(`source` y `metadata` en `crm_quality_energy.leads`; sigue listado en
+`ONE_OFF` de `_module-migrations.js` como «atada a quality_energy»),
+`clear-quality-leads.js`, `clear-abarcaia-leads.js` y
+`remove-abarcaia-from-quality.js` (sacó los leads y referidos de AbarcaIA de
+`crm_quality_energy`). Se fueron con los dos clientes.
 
 ## Backlog
 
 Detectado durante la documentación (en orden vagamente sugerido):
 
-- **Conversión de lead `won` a `Client` o `Project`** (cuando exista
-  módulo Proyectos). spain-enzymes hace una conversión parcial; el
-  resto no.
+- **Conversión de lead `won` a `Client`**. spain-enzymes hace una
+  conversión parcial desde el frontend; el resto no. (La conversión a
+  `Project` ya existe: `POST /api/leads/[id]/convert-to-project`.)
 - **Pipeline visual tipo Kanban** de stages (drag-and-drop entre
   columnas).
-- **Email automático** al crear o cambiar stage (hoy solo `mailto:`
-  manual desde la UI legacy).
+- **Email automático** al crear o cambiar stage (hoy solo la campana
+  interna en el alta pública).
 - **Asignación automática a comercial** según reglas (round-robin,
   zona, UTM).
 - **Scoring / cualificación automática** (probability poblada
   automáticamente desde valor, fecha esperada, comportamiento).
-- **Captcha y rate limiting** en `/api/public/leads` y
-  `/api/public/referidos`.
-- **AuditLog** para acciones del módulo (mínimo: import masivo, hard
-  delete, cambios de stage).
-- **Soft delete** o al menos confirmación + auditoría en DELETE.
+- **Captcha** en `/api/public/leads` (el rate limiting, 30/min por IP, ya
+  está).
+- **AuditLog** para lo que falta: alta (`POST`), alta pública e imports
+  masivos (PATCH, DELETE y la conversión a proyecto ya auditan).
+- **Soft delete** en DELETE (hoy borrado físico auditado).
 - **Webhook a n8n** al crear lead o cambiar stage (especialmente
   útil para alertas de stage `won` o `closed_yes`).
 - **Asociación Sequelize `Lead.belongsTo(TeamMember, ...)`** para
   filtrar y validar `assignedTo`.
-- **Eliminar el override `demo`** o convertirlo en un alias de
-  `aumenta` (es prácticamente idéntico).
-- **Mover `ReferidosModule.jsx`** de
-  `modules/overrides/quality-energy/` a
-  `modules/overrides/abarcaia/` para que coincida con el tenant que
-  realmente lo usa.
+- ~~**Eliminar el override `demo`** o convertirlo en un alias de
+  `aumenta` (es prácticamente idéntico).~~ Hecho el 18/08/2026: borrado, y
+  la demo usa el base.
+- ~~**Mover `ReferidosModule.jsx`** a `modules/overrides/abarcaia/`.~~
+  Sin objeto: el módulo Referidos se retiró entero el 12/08/2026.
 - **Validación de unicidad de email** al crear lead (al menos como
   warning), o detección de duplicados al importar.
 
 ## Incoherencias resueltas en este sprint
 
-Cinco de las nueve incoherencias detectadas durante la documentación
-inicial se arreglaron en el mini-sprint posterior. Las cuatro
-restantes están listadas como tareas concretas en "Backlog".
+**Histórico (sprint de abril-mayo de 2026):** cinco de las nueve
+incoherencias detectadas durante la documentación inicial se arreglaron en
+el mini-sprint posterior. Se conserva tal cual porque explica de dónde
+salen `lib/leads/stages.js` y el guard de admin; los tenants y scripts que
+nombra (`quality_energy`, `abarcaia`, `referidos`,
+`migrate-quality-leads.js`) **ya no existen** desde el 12/08/2026, y la
+lista canónica pasó de 12 a 15 etapas al añadir las tres de nutrición para
+`nutri_laura`.
 
 ### 1. PATCH ya acepta los 12 stages (era BUG funcional)
 
@@ -616,7 +666,7 @@ Solución: documentar la convención explícitamente en `CLAUDE.md`
 (tabla de tenants) y en este fichero. No se refactoriza nada
 (renombrar schemas sería migración mayor; mover carpetas no aporta).
 
-### 5. `cleanup-bad-leads.js` y `migrate-quality-leads.js` ya leen `DATABASE_URL`
+### 5. `_hechos/cleanup-bad-leads.js` y `migrate-quality-leads.js` ya leen `DATABASE_URL`
 
 Antes hardcodeaban la cadena de conexión local
 (`postgresql://postgres:portero_1@localhost:5432/salamandra`). Ahora
@@ -628,7 +678,7 @@ ejemplos de uso local y producción.
 Auditoría adicional: no hay otros scripts con `DATABASE_URL`
 hardcodeada. Sí aparecen 4 scripts con la contraseña de seed
 `Admin1234!` (`db-sync.js`, `reset-demo-password.js`,
-`seed-demo.js`, `seed-master.js`) — son passwords de cuenta admin
+`_hechos/seed-demo.js`, `_hechos/seed-master.js`) — son passwords de cuenta admin
 del demo que se hashean con bcrypt antes de guardar; están marcadas
 como "temporal — cambiar en producción". No es vulnerabilidad de
 configuración, pero conviene revisarlas en un sprint general de
@@ -636,42 +686,32 @@ seeds.
 
 ## Backlog (incoherencias no resueltas en este sprint)
 
-Documentadas como tareas concretas para iteraciones futuras:
+Lo que quedó de aquel sprint, puesto al día el 19/08/2026:
 
-- **Decidir el destino de `TenantModule.uiOverride`**. Hoy los seeds
-  escriben valores tipo `"quality-energy/LeadsModule"` pero ningún
-  componente lo lee — la resolución de override está hardcodeada en
-  `app/(dashboard)/leads/page.jsx`. Opciones: (a) implementar
-  `getUiOverride()` en `getTenantContext` y resolver dinámicamente,
-  (b) borrar la columna y los strings que la rellenan. Mientras
-  tanto, añadir un nuevo tenant con override sigue exigiendo editar
-  el page.jsx.
+- ~~**Decidir el destino de `TenantModule.uiOverride`**.~~ Decidido el
+  18/08/2026: es un LETRERO que solo enseña `/admin/modulos`; el código
+  sigue resolviendo por el mapa `UI_OVERRIDES` de
+  `app/(dashboard)/leads/page.jsx`, y `scripts/sincronizar-ui-override.mjs`
+  mantiene la columna fiel a esos mapas. Añadir un tenant con override sigue
+  exigiendo editar el page.jsx (y, por la regla #16 de CLAUDE.md, es el
+  último peldaño).
 
-- **Mover `ReferidosModule.jsx`** de `modules/overrides/quality-energy/`
-  a `modules/overrides/abarcaia/` para que coincida con el tenant que
-  realmente lo usa. Actualizar imports en
-  `app/(dashboard)/referidos/page.jsx` y borrar el comentario obsoleto
-  ("Solo quality-energy usa este módulo").
+- ~~**Mover `ReferidosModule.jsx`** a `modules/overrides/abarcaia/`.~~
+  ~~**Re-seed o re-diseño de stages en `quality_energy`**.~~ Sin objeto:
+  los dos clientes se dieron de baja y su código se borró el 12/08/2026.
 
-- **Re-seed o re-diseño de stages en `quality_energy`**. El seed
-  siembra leads con stages estándar (`qualified`, `won`) que el
-  override no muestra como filtros (usa `in_progress`,
-  `demo_scheduled`, `demo_done`, `closed_yes`, `closed_no`). UX
-  inconsistente: un usuario filtra por "Demo agendada" y solo ve los
-  leads importados, no los seedeados. Decisión de negocio.
+- ~~**Auditoría en DELETE**.~~ Hecha: `lead.deleted` (y `lead.updated`).
+  Queda el **soft delete** (flag o paranoid mode de Sequelize) como
+  mejora.
 
-- **Soft delete o auditoría en DELETE**. Hoy `DELETE /api/leads/[id]`
-  ejecuta `lead.destroy()` sin huella. Mínimo: registrar en
-  `master.AuditLog`. Mejor: soft delete con flag o paranoid mode de
-  Sequelize.
-
-- **Captcha y rate limiting** en `/api/public/leads` y
-  `/api/public/referidos` (ya estaba en el backlog general).
+- ~~**Rate limiting**~~ hecho (30/min por IP). Queda el **captcha** en
+  `/api/public/leads`.
 
 - **Asociación Sequelize `Lead.belongsTo(TeamMember)`** para validar
   `assignedTo` y permitir filtros por comercial.
 
-- **Conversión de lead `won` a `Client` o `Project`** automática.
+- **Conversión de lead `won` a `Client`** automática (a `Project` ya
+  existe).
 
-- **Eliminar el override `demo`** o convertirlo en alias de `aumenta`
-  (es prácticamente idéntico).
+- ~~**Eliminar el override `demo`** o convertirlo en alias de `aumenta`
+  (es prácticamente idéntico).~~ Hecho el 18/08/2026.

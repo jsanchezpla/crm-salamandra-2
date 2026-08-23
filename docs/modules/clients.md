@@ -1,5 +1,29 @@
 # Módulo Clientes
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es
+> este mismo commit). Si algo no cuadra, manda el código: corrige esta tabla.
+> **Quién tiene el módulo NO se lista aquí** (una lista a mano se queda
+> vieja): `/admin/modulos` en el back-office o
+> `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `clients` · requiere — (`lib/provisioning/dependencias.js`: funciona solo) · `clients_avanzado` requiere `clients`: la lista de espera de admisión y «Fichas a completar» |
+| **Reina** | — · sin reina declarada; lo más parecido es `lib/clients/piezasFicha.js`: «Aumenta no cambia» (Jorge, 18/08/2026), la ficha base tiene la forma de Aumenta |
+| **Pantallas** | `/clientes` → `app/(dashboard)/clientes/page.jsx` (+ `ClientesClient.jsx`: listado y alta; resuelve perfil y rótulo en servidor) · `/clientes/[id]` → `app/(dashboard)/clientes/[id]/page.jsx` (elige la ficha por `UI_OVERRIDES` y resuelve perfil, piezas y textos en servidor) · `clients_avanzado`: `/clientes/lista-espera` → `app/(dashboard)/clientes/lista-espera/page.jsx` (+ `ListaEsperaClient.jsx`) y `/clientes/urgentes` → `app/(dashboard)/clientes/urgentes/page.jsx` (+ `FichasACompletarClient.jsx`), las dos con `notFound()` sin el módulo |
+| **Endpoints** | `app/api/clients/**` — 26 `route.js`: `route.js` (listado/alta), `export`, `import`, `[id]` y debajo `notes` (+ `[noteId]`), `attachments` (+ `[attachmentId]`, `download`), `interactions`, `contact-methods` (+ `[methodId]`), `guardians`, `contract` (+ `download`, `firmado/[documentoId]`), `comunicaciones`, `portal-months`, `portal-user`, `module-assignments`, `plans` (Pautas), `projects` (gatea `projects`), `billing-summary` (gatea `billing`); `clients_avanzado`: `waitlist` (+ `[id]`) y `urgentes` · Públicos: ninguno propio (el portal de la familia, `app/api/public/c/[tenantSlug]/citas-portal/**`, es de Citas y escribe `communication_prefs` y las firmas del contrato) |
+| **Lógica** | `lib/clients/` (17 ficheros): `formularioAlta.js` (qué se pregunta en el alta, perfil salud/comercial) · `vocabulario.js` (Clientes/Pacientes) · `piezasFicha.js` (qué paneles monta la ficha) · `moduleAssignments.js` (Paciente Nutrición/Clínica, auto-marcado) · `clientContract.js` + `guardians.js` + `contratoFirma.js` + `datosFicha.js` (contrato del centro, tutores, datos y firma) · `comunicaciones.js` (permiso de aviso por canal) · `contactMethods.js` (emails/teléfonos múltiples con principal) · `consultaExterna.js` (quién ve a los pacientes de empresas) · `listaEspera.js` + `urgentes.js` (`clients_avanzado`) · `attachmentStorage.js` + `signatureStorage.js` (disco) · `avisoBorrado.js` + `borrarRastro.js` (borrar una ficha) |
+| **UI** | `modules/default/ClientDetailModule.jsx` (ficha base: pestañas que se esconden vacías, `PanelPestana`) · `components/clients/`: paneles compartidos `ClientNotesPanel.jsx`, `ClientAttachmentsPanel.jsx`, `ClientBookingsPanel.jsx`; secciones `ClientContractSection.jsx`, `ClientGuardiansSection.jsx`, `ClientComunicacionesSection.jsx`, `ClientContactMethodsSection.jsx`, `ClientModulesSection.jsx`, `ClientProfesionalSection.jsx`, `ClientCuentaWebSection.jsx`, `ClientConsultaExternaSection.jsx`, `ClientPortalMonthsSection.jsx`, `ClientFiscalSection.jsx`, `ClientPatientsSection.jsx`, `ClientCitasSection.jsx`, `ClientBonosSection.jsx`; alta: `PacientesDelAlta.jsx`, `ProgenitoresDelAlta.jsx`, `FacturacionDelAlta.jsx` · Pautas: `modules/nutricion/ClientPlansPanel.jsx` |
+| **Modelos** | `Client` (`clients`), `Contact` (`contacts`), `Interaction` (`interactions`, legacy), `ClientNote` (`client_notes`), `ClientAttachment` (`client_attachments`), `ClientContactMethod` (`client_contact_methods`), `ClientModuleAssignment` (`client_module_assignments`), `ContractSignature` (`contract_signatures`); `clients_avanzado`: `WaitlistEntry` (`waitlist_entries`), `DataReview` (`data_reviews`) |
+| **Interruptores y parámetros** | `featureFlags` propios: ninguno; `lib/clients/moduleAssignments.js` lee `nutricion.autoAsignarEnAlta` (auto-marcado en el alta, apagado por defecto). `logicOverrides`: nadie los lee. `schemaExtensions` de `clients` en nutri_laura (edad, motivo, info_adicional): letrero decorativo, el código no lo lee. Reglas por MÓDULOS (peldaño 2): `piezasFicha.js` (Notas si no `clinica`; Documentos si no `documents_avanzado`; Citas si `citas` y no `clinica`), `vocabulario.js` (Pacientes si `nutricion` y no `pacientes`/`clinica`), `formularioAlta.js` (perfil `salud` con `pacientes`/`clinica`/`nutricion`), `avisoBorrado.js` (la frase de borrado). Rótulo por slug: `TENANT_TITLE_OVERRIDES` en `app/(dashboard)/clientes/[id]/page.jsx` (nutri_laura → «Paciente») |
+| **Pantallas propias** | `modules/overrides/nutri-laura/ClientDetailModule.jsx` (cabecera + tarjeta + 5 pestañas; los paneles vienen de `components/clients/`), cargado por `UI_OVERRIDES` de `app/(dashboard)/clientes/[id]/page.jsx`. Es la única: el letrero `ui_override` en producción dice `nutri-laura/ClientDetailModule` y lo mantiene `scripts/sincronizar-ui-override.mjs` |
+| **Scripts** | activar: `node scripts/enable-module.js <slug> clients` (y `clients_avanzado`); arrastra `MODULES.clients` de `scripts/_module-migrations.js` (12: `migrate-client-attachments-and-notes`, `migrate-client-module-assignments`, `migrate-client-communication-prefs`, `migrate-client-birthdate`, `migrate-consultas-externas`, `migrate-nutricionista-asignada`, `migrate-data-reviews`, `migrate-interactions-notes-team`, `migrate-patients-clients-phase1` y las tres `migrate-documents-*`) más las CORE que tocan `clients` (`migrate-sprint-aumenta-2026-07`, `migrate-waitlist-therapist`, `migrate-client-fiscal-taxid`, `migrate-citas-autoconfirmadas-por-paciente`) · `migrate-clients-avanzado.js` (master, una vez, ya corrido) · ONE_OFF ya ejecutados: `migrate-contract-patient-to-client.js`, `migrate-auto-asignar-nutricion.js`, `backfill-nutricion-assignments.js`, `backfill-patients-client.js` · herramientas vivas: `borrar-rastro-paciente.js`, `comprobar-admision.js` (solo lectura), `_hechos/fusionar-tutores-aumenta.js` y `corregir-emails-importados.js` (importación de Aumenta; simulan sin `--confirm`) · `npm run db:check-links` y `npm run db:check-access` (`package.json`) |
+| **Pruebas** | en `npm test`: `scripts/_smoke-clients-contactos.mjs` (`node:test`, 19/08/2026: `contactMethods.js`, el espejo del correo/teléfono principal con un `ClientContactMethod` de mentira), `_smoke-clients-lista-espera.mjs` (`node:test`: `listaEspera.js` con modelos de mentira), `scripts/_smoke-clients-comunicaciones.mjs` (`node:test`, 19/08/2026: las cuatro decisiones de `lib/clients/comunicaciones.js` y `citaPuedeAvisar` con un `Client` de mentira), `_smoke-piezas-ficha.mjs` (`// @prueba ligera`; la forma de Aumenta), `_smoke-consultas-externas.mjs` (`// @prueba ligera`), `_smoke-alta-progenitores.mjs` (`formularioAlta` + `clientContract`), `_smoke-datos-edad.mjs`, `_smoke-datos-antes-de-firmar.mjs` y `_smoke-menor-firma.mjs` (`datosFicha` + `contratoFirma`, con `check()`), `scripts/_smoke-clients-contrato-firma.mjs` (`node:test`, 19/08/2026: lo que devuelve `lib/clients/contratoFirma.js` —`letraDocumentoCorrecta` solo juzga la letra de lo que parece DNI o NIE, un pasaporte pasa; `edadEn`/`esMenor` cuentan años cumplidos en UTC, con el día del cumpleaños y el 29 de febrero, y «no lo sé» cuenta como mayor a propósito, y desde el 21/08/2026 una fecha de nacimiento **FUTURA** también cuenta como «no lo sé»: `edadEn` acota el resultado a 0..120 —el mismo tope que `edadDesde` de `formularioAlta.js`— en vez de devolver años en negativo, que `esMenor` leía como «menor de 18» y le pedía a una adulta el consentimiento de su tutor; y `validarDatos` la rechaza ya en la puerta con «"Fecha de nacimiento" no puede ser una fecha futura», reconociendo el campo por su destino (`cliente.birthDate`, `tutor.birthDate`) o por su clave (`fechaNacimiento`/`birthDate`/`fnac`) —la fecha de la FIRMA queda fuera a propósito: un desfase de reloj entre navegador y servidor dejaría a alguien sin poder firmar, y una fecha futura que YA estuviera guardada en la ficha tampoco bloquea la firma, porque quien firma ni la puso ni puede quitarla—; `camposDe`/`bloquesDe`/`serializarPlantilla` normalizan la plantilla JSONB y la mandan al portal ya resuelta contra la ficha; `validarDatos` dice qué entra y con qué frase se rechaza, tira lo que la plantilla no declara, y el DNI deja de ser obligatorio por edad con la fecha de nacimiento que SE ESTÁ ESCRIBIENDO antes que con la guardada; desde el 19/08 una fecha que no existe —31 de febrero, 31 de abril, 29/02 en año no bisiesto— se rechaza como «no es una fecha real» en vez de llegar a la ficha y tumbar Postgres; `documentosQueAplican`/`situacionDocumentos`: el consentimiento parental solo sale para menores y el contrato no está completo hasta que TODOS los firmantes han firmado TODO lo que les aplica; `validarAceptaciones`: cada anexo se acepta por separado con id, título y hora—), `scripts/_smoke-clients-module-assignments.mjs` (`node:test`, 20/08/2026: `lib/clients/moduleAssignments.js` con modelos falsos —qué casillas de módulo se pintan en la ficha; el auto-marcado de «Paciente Nutrición» en el alta lo decide el flag `nutricion.autoAsignarEnAlta`, no tener el módulo: con el flag apagado, o sin función de flags siquiera, NO se marca nada y ni se toca la tabla; `clinica` no se auto-asigna JAMÁS (quien paga no siempre asiste); `profesional_salud` es una marca gateada por `citas`, no un módulo: la pone el lead leído en el servidor —no el navegador— y es la que abre los tipos de cita de profesionales; y una tabla sin migrar (42P01) nunca tumba un alta ni una conversión—), `_smoke-borrar-paciente.mjs` (`borrarRastro`), `_smoke-ui-overrides.mjs` (cuenta la ficha de Laura) — las sin marca las clasifica el runner por texto · con base de datos: `_smoke-contrato-estructurado.mjs`, `_smoke-lead-conversion-fix.js` |
+| **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` · `../decisions/2026-08-01-alta-de-clientes-por-perfil.md` · `../decisions/2026-08-04-clientes-se-llama-pacientes-en-nutricion.md` · `../decisions/2026-08-04-fichas-a-completar-cuelga-de-clients-avanzado.md` · `../decisions/2026-08-18-la-piramide-invertida-de-leads.md` |
+| **En este doc** | Modelo `Client` · Endpoints · Contrato del Centro (sprint Aumenta 2026-07, punto 1.1) · Comunicaciones: por dónde se le escribe a cada familia (01/08/2026) · Archivos adjuntos · UI · Asignación de clientes a módulos (Nutrición / Clínica) |
+
 ## Resumen
 
 Módulo genérico para gestionar clientes (o "pacientes", según el tenant)
@@ -7,9 +31,15 @@ del CRM. Cada tenant con `moduleKey="clients"` activado en
 `master.tenant_modules` tiene su tabla `crm_{slug}.clients` y endpoints
 bajo `/api/clients/*`.
 
-Tenants que lo usan hoy: `spain_enzymes` (B2B), `nutri_laura` (B2C,
-"pacientes"), `demo`, `retorika` (cuentas mínimas para asociar con
-training).
+Lo tienen **los once tenants** de producción (foto de `master` del
+19/08/2026): es el módulo que está debajo de casi todo lo demás. Quién lo
+usa de verdad se ve en el número de fichas —Aumenta con 1.083, Laura con
+16—, no en esta lista; para la foto del día, `/admin/modulos` o
+`node scripts/inspect-tenant-modules.js <slug>`.
+
+> **Histórico (hasta 08/2026):** este párrafo decía «`spain_enzymes` (B2B),
+> `nutri_laura` (B2C, "pacientes"), `demo`, `retorika`», que era la foto de
+> junio. El módulo se da de fábrica en el alta de cliente desde entonces.
 
 ### Cómo se llama el módulo en cada centro (04/08/2026)
 
@@ -64,14 +94,25 @@ campos. Resumen:
 | `/api/clients/[id]/notes` | GET/POST | Notas internas (ver sección abajo) | JWT |
 | `/api/clients/[id]/notes/[noteId]` | DELETE | Borrar nota | JWT |
 | `/api/clients/[id]/attachments` | GET/POST | Archivos PDF (ver sección abajo) | JWT |
+| `/api/clients/[id]/attachments/[attachmentId]` | PATCH | `{ visibleToClient }`: si el paciente lo ve en su portal (solo adjuntos `source='ficha'`) | JWT + `hasModule(clients)` |
 | `/api/clients/[id]/attachments/[attachmentId]` | DELETE | Borrar attachment (BD + disco) | JWT |
 | `/api/clients/[id]/attachments/[attachmentId]/download` | GET | Stream del PDF | JWT |
+| `/api/clients/[id]/contact-methods` | GET/POST | Emails y teléfonos múltiples con uno principal (`lib/clients/contactMethods.js`) | JWT + `hasModule(clients)` |
+| `/api/clients/[id]/contact-methods/[methodId]` | PATCH/DELETE | Editar / borrar un medio de contacto | JWT + `hasModule(clients)` |
 | `/api/clients/[id]/guardians` | GET/PUT | Padres/tutores de la familia + estado de firma | JWT + `hasModule(clients)` |
 | `/api/clients/[id]/contract` | GET/POST/DELETE | Contrato del Centro de la familia (PDF) | JWT + `hasModule(clients)` |
 | `/api/clients/[id]/contract/download` | GET | Stream del PDF del contrato | JWT + `hasModule(clients)` |
+| `/api/clients/[id]/contract/firmado/[documentoId]` | GET | La COPIA FIRMADA (`documents` con `source='contrato_firmado'` de ESTA ficha); `?ver=1` la abre inline. Cuelga de `clients` y no de `documents_avanzado` a propósito (06/08/2026) | JWT + `hasModule(clients)` |
+| `/api/clients/[id]/comunicaciones` | GET/PUT | Permiso de aviso por canal (`communication_prefs`; ver sección abajo) | JWT + `hasModule(clients)` |
 | `/api/clients/[id]/portal-months` | GET/PUT | Meses abiertos del área privada (bloqueo por impago) | JWT + `hasModule(clients)` |
+| `/api/clients/[id]/portal-user` | GET/POST | ¿Tiene cuenta en la web? / crearle la cuenta en WordPress (`lib/formularios/portalUser.js`, ver «Acceso a la web») | JWT + **solo admin** |
+| `/api/clients/[id]/module-assignments` | GET/PATCH | Marcar «Paciente Nutrición» / «Paciente Clínica» (ver sección abajo) | JWT + `hasModule(clients)` |
+| `/api/clients/[id]/plans` | GET | Pautas (menús) de la ficha: activas + archivadas | JWT + `hasModule(nutricion)` |
 | `/api/clients/[id]/projects` | GET | Proyectos del cliente | JWT + `hasModule(projects)` |
 | `/api/clients/[id]/billing-summary` | GET | Resumen facturas | JWT + `hasModule(billing)` |
+| `/api/clients/waitlist` | GET/POST/PATCH | Lista de espera de ADMISIÓN (`lib/clients/listaEspera.js`; no es la de Citas) | JWT + `hasModule(clients_avanzado)` |
+| `/api/clients/waitlist/[id]` | PATCH | Editar una entrada de la cola, sacarla (`status: "removed"`) o convertirla en cliente (`convertir: true`; la entrada queda `converted` con su `clientId`) | JWT + `hasModule(clients_avanzado)` |
+| `/api/clients/urgentes` | GET/POST | «Fichas a completar» por carpetas (`lib/clients/urgentes.js`; `?soloTotales=1` para el menú) / marcar revisado (`data_reviews`) | JWT + `hasModule(clients_avanzado)` |
 | `/api/clients/export` | GET | XLSX de listado | JWT |
 | `/api/clients/import` | POST | Importar JSON | JWT |
 
@@ -324,28 +365,51 @@ ni de corregirlo desde la ficha.
 ### Default (vanilla)
 
 `modules/default/ClientDetailModule.jsx` — header (back link + nombre + status
-chip + aviso de lista de espera) y, debajo, **seis pestañas** desde el
+chip + aviso de lista de espera) y, debajo, **pestañas** desde el
 12/08/2026 (Rodrigo: «demasiado larga, pero universal, para que el que tenga
-todos los módulos no se líe»). Antes eran CATORCE tarjetas apiladas en una
-columna: en Aumenta la ficha medía varias pantallas y para llegar a la
-facturación había que pasar por delante del contrato, los tutores, los
-consentimientos y las citas.
-
-> La tabla decía «seis pestañas» y listaba seis; en el código hay OCHO. Se le
-> habían quedado fuera **Pautas** (13/08/2026, con el módulo Nutrición) y
-> **WhatsApp** (17/08/2026). Corregido el 17/08/2026 — la lista buena es `TABS`
-> en `modules/default/ClientDetailModule.jsx`.
+todos los módulos no se líe»): nacieron seis y `pestanasDe()` define hoy
+**diez** (se sumaron Notas/Historia clínica, Documentos, Pautas y WhatsApp), de
+las que cada tenant ve solo las que no le quedan vacías. Antes eran CATORCE
+tarjetas apiladas en una columna: en Aumenta la ficha medía varias pantallas y
+para llegar a la facturación había que pasar por delante del contrato, los
+tutores, los consentimientos y las citas.
 
 | Pestaña | Qué lleva | La pregunta que responde |
 | --- | --- | --- |
 | **Datos** | Datos del cliente (vista/edición) · Contactos · Datos fiscales · Acceso a la web | quién es y cómo se le escribe |
 | **Interacciones** | Historial de interacciones | qué se ha hablado con esta persona |
 | **WhatsApp** | El hilo de WhatsApp, de lectura | qué se le ha dicho por WhatsApp y si llegó |
+| **Notas** / **Historia clínica** ⁽¹⁾ | Entradas de texto con autor y fecha (`client_notes`) | el diario de esta persona |
 | **Servicio** | Módulos asignados · Pacientes · Consulta externa · Profesional de referencia | qué se le presta y quién se lo presta |
 | **Contrato y avisos** | Tutores · Contrato · Comunicaciones · Meses del portal | qué ha firmado y qué ha consentido |
-| **Citas** | Sus citas | su agenda |
-| **Pautas** | El menú que sigue (módulo Nutrición) | qué está comiendo |
+| **Documentos** ⁽¹⁾ | Sus ficheros (`client_attachments`), «que lo vea en su portal», firmas documento a documento | sus papeles |
+| **Citas** | Interruptor de autoconfirmar · Bonos · y, ⁽¹⁾, la lista de sus citas con Confirmar/Rechazar | su agenda |
+| **Pautas** | El menú que sigue (solo con `nutricion`) | qué come |
 | **Facturación** | Resumen y facturas | su dinero |
+
+⁽¹⁾ **Las tres piezas que vinieron de la ficha de Laura (18/08/2026).**
+Vivían en `modules/overrides/nutri-laura/` sobre tablas y endpoints que tiene
+TODO el mundo (`client_notes`, `client_attachments`, `bookings`; gateados solo
+por `clients` y `citas`). Pasaron a `components/clients/` (`ClientNotesPanel`,
+`ClientAttachmentsPanel`, `ClientBookingsPanel`) y las monta esta ficha **para
+quien diga `lib/clients/piezasFicha.js`**, por módulos y con la condición
+negativa como en `vocabulario.js`:
+
+| Pieza | Se monta si | Por qué la negativa |
+| --- | --- | --- |
+| Notas / Historia clínica | `clients` y **no** `clinica` | en un centro clínico la historia clínica son las sesiones e informes del módulo `clinica`, no notas en la ficha de la familia |
+| Documentos | `clients` y **no** `documents_avanzado` | el archivo avanzado ya cuelga cada fichero de su ficha (`documents.client_id`) |
+| Lista de citas | `citas` y **no** `clinica` | un centro clínico ya llama «Sesiones» a `clinic_sessions`; y **Aumenta no cambia** (decisión de Jorge, 18/08/2026) |
+
+Con eso, en producción: aumenta, somos y `demo` **no ven ninguna** (misma
+forma que hoy); `demo_nutricion` ve las tres y las llama Historia clínica /
+Documentos / Sesiones del paciente (vocabulario de paciente); `demo_agencia`,
+`gm_alvar_alonso`, `retorika`, `spain_enzymes` y `salamandra_solutions` ven
+Notas y Documentos; `demo_clinica` solo Documentos. Lo vigila
+`scripts/_smoke-piezas-ficha.mjs` (`npm test`), que tiene escrita la forma de
+Aumenta y falla si gana una pestaña. Los textos («el cliente» / «el paciente»)
+salen de `textosPiezas(vocab)` y llegan a los paneles por la prop `textos`; la
+página lo resuelve todo de una vez con `fichaSegunModulos(tieneModulo)`.
 
 **WhatsApp** (`ClientWhatsappSection`, endpoint `GET /api/clients/[id]/whatsapp`)
 lee `whatsapp_messages` — la Cloud API no guarda conversaciones, así que lo que
@@ -442,10 +506,18 @@ claves, paneles, tablas y endpoints siguen siendo los de siempre —
 | Tab | Componente | Endpoints leídos | Notas |
 |---|---|---|---|
 | Datos (antes "Información") | `PatientCard` + delete inline | `GET/PUT/DELETE /api/clients/:id` | Edición inline; `editMode`/`editForm` viven en el padre para sobrevivir cambios de tab |
-| Historia clínica (antes "Notas") | `ClientNotesPanel.jsx` | `GET/POST /api/clients/:id/notes`, `DELETE /api/clients/:id/notes/:noteId` | Paginación incremental "Cargar más" (limit 50). Sin restricción de borrado por autor (Laura es única usuaria) |
-| Documentos (antes "Adjuntos") | `ClientAttachmentsPanel.jsx` | `GET/POST /api/clients/:id/attachments`, `DELETE`, `GET .../download` | Drop zone + validación frontend (PDF, ≤10MB, ≤50 archivos) |
-| Sesiones (antes "Citas") | `ClientBookingsPanel.jsx` | `GET /api/citas/bookings?clientId=&clientEmail=`, `PATCH .../confirm`, `PATCH .../reject` | En la consulta cada cita ES una sesión de seguimiento. Confirm/Reject inline para `pending` con mini-modal opcional para motivo |
-| Pautas (antes "Plan") | `ClientPlansPanel.jsx` | `GET /api/clients/:id/plans`, `POST /api/nutricion/plans/:id/reapply-template` | Plan activo + histórico archivado (Recetario C4) |
+| Historia clínica (antes "Notas") | `components/clients/ClientNotesPanel.jsx` ⁽²⁾ | `GET/POST /api/clients/:id/notes`, `DELETE /api/clients/:id/notes/:noteId` | Paginación incremental "Cargar más" (limit 50). Sin restricción de borrado por autor (Laura es única usuaria) |
+| Documentos (antes "Adjuntos") | `components/clients/ClientAttachmentsPanel.jsx` ⁽²⁾ | `GET/POST /api/clients/:id/attachments`, `DELETE`, `GET .../download`, `PATCH` (visibilidad), `GET /contract` (firmas) | Drop zone + validación frontend (cualquier tipo, ≤25MB, ≤50 archivos); «que la paciente lo vea»; tarjeta Firmas |
+| Sesiones (antes "Citas") | `components/clients/ClientBookingsPanel.jsx` ⁽²⁾ | `GET /api/citas/bookings?clientId=&clientEmail=`, `PATCH .../confirm`, `PATCH .../reject` | En la consulta cada cita ES una sesión de seguimiento. Confirm/Reject inline para `pending` con mini-modal opcional para motivo |
+| Pautas (antes "Plan") | `ClientPlansPanel.jsx` (`modules/nutricion/`) | `GET /api/clients/:id/plans`, `POST /api/nutricion/plans/:id/reapply-template` | Plan activo + histórico archivado (Recetario C4) |
+
+⁽²⁾ **Desde el 18/08/2026 los tres paneles son compartidos** (ver la ficha
+default, arriba): esta ficha los importa de `components/clients/` y les pasa
+sus palabras de siempre por la prop `textos` (`TEXTOS_LAURA`: «la paciente»,
+«Sesiones del paciente»…), así que Laura ve lo mismo que veía. Lo que queda de
+propio en `modules/overrides/nutri-laura/ClientDetailModule.jsx` es la
+cabecera de paciente (edad, DNI, contacto, lead de origen), la tarjeta de
+datos con su edición y el reparto en cinco pestañas.
 
 **Permisos**: el detalle hace gate por `me.role ∈ {admin, superadmin, employee}`
 fetcheando `/api/auth/me` al montar. Sin rol válido → "Sin acceso".
@@ -454,12 +526,13 @@ fetcheando `/api/auth/me` al montar. Sin rol válido → "Sin acceso".
 seguimiento…), edad/email/teléfono inline, link "↳ Lead origen" si
 `client.leadId` (o `customFields.leadId` por compat).
 
-**`InteractionsLegacySection`**: archivado en
+**`InteractionsLegacySection`**: estuvo archivado en
 `modules/overrides/nutri-laura/_InteractionsLegacySection.jsx` (con prefijo
-`_` para indicar no-importado). La tabla `interactions` no existe en
-`crm_nutri_laura`, así que la sección desapareció del tab Información. Si
-en el futuro se decide crearla, restaurar el import. El backend
-`GET /api/clients/:id` tolera la tabla missing con try/catch del 42P01 —
+`_` para indicar no-importado) y **se borró el 18/08/2026**: nadie lo importaba
+desde junio, y su equivalente vivo es la tarjeta «Historial de interacciones»
+de la ficha default. La tabla `interactions` no existe en `crm_nutri_laura`
+(ni en `crm_retorika`), así que la sección desapareció del tab Información. El
+backend `GET /api/clients/:id` tolera la tabla missing con try/catch del 42P01 —
 otros tenants donde la tabla SÍ existe siguen recibiendo el array poblado
 para el default module.
 
@@ -552,9 +625,15 @@ comportamiento viejo. Es la misma lección que «Fichas a completar»: lo que
 resuelve el problema de una consulta de una persona no es el default de un centro
 de veinte.
 
-**Backfill** (`scripts/migrate-client-module-assignments.js`, solo `nutri_laura`):
-marca `nutricion` a los clients con plan asignado activo **o** `origin='lead'`.
-Idempotente; no toca los dados de alta a mano.
+**Migración + backfill** (`scripts/migrate-client-module-assignments.js`): corre
+en **todos** los tenants con `clients` (lista leída de `master.tenants` en
+runtime) y hace dos cosas. La fase B, para todos: crea
+`client_module_assignments` y, donde exista `patients`, añade
+`patients.client_id`. La fase C, **solo en `crm_nutri_laura`**: marca
+`nutricion` a los clients con plan asignado activo **o** `origin='lead'`.
+Idempotente; no toca los dados de alta a mano. Está además en el bloque
+`clients` de `scripts/_module-migrations.js`, así que `enable-module.js` la
+arrastra.
 `scripts/backfill-nutricion-assignments.js` (ONE_OFF, 2026-07-27) completa el
 resto: marca `nutricion` a TODOS los clientes no inactivos de los tenants con el
 módulo, para alinear a los creados antes del auto-marcado. Repetible

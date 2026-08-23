@@ -1,0 +1,10 @@
+[Unit]
+Description=Lanza el repaso nocturno de Formacion cada madrugada
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

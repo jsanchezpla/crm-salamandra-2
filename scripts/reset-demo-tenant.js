@@ -1,3 +1,4 @@
+// @vivo — Cabecera: «Reset reproducible del tenant `demo` para sprints de QA» — TRUNCATE + cadena de 8 seeds + 4 cuentas de prueba, con alias… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * reset-demo-tenant.js
  *

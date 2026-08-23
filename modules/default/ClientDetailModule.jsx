@@ -28,7 +28,11 @@ import ClientConsultaExternaSection from "../../components/clients/ClientConsult
 import ClientProfesionalSection from "../../components/clients/ClientProfesionalSection.jsx";
 import ClientPatientsSection from "../../components/clients/ClientPatientsSection.jsx";
 import ClientCuentaWebSection from "../../components/clients/ClientCuentaWebSection.jsx";
+import ClientNotesPanel from "../../components/clients/ClientNotesPanel.jsx";
+import ClientAttachmentsPanel from "../../components/clients/ClientAttachmentsPanel.jsx";
+import ClientBookingsPanel from "../../components/clients/ClientBookingsPanel.jsx";
 import ClientPlansPanel from "../nutricion/ClientPlansPanel.jsx";
+import { PIEZAS_NINGUNA, textosPiezas } from "../../lib/clients/piezasFicha.js";
 
 /**
  * ── LA FICHA VA POR PESTAÑAS (12/08/2026, Rodrigo) ─────────────────────────
@@ -55,26 +59,47 @@ import ClientPlansPanel from "../nutricion/ClientPlansPanel.jsx";
  * un cliente de solo Citas tendría cuatro pestañas que no enseñan nada. Por eso
  * cada panel se mide a sí mismo y la pestaña desaparece si dentro no queda nada
  * (ver `PanelPestana`).
+ *
+ * ── LAS TRES PIEZAS QUE VINIERON DE LA FICHA DE LAURA (18/08/2026) ─────────
+ * «Notas» (o «Historia clínica»), «Documentos» y la lista de citas con
+ * Confirmar/Rechazar dentro de «Citas». Vivían en
+ * `modules/overrides/nutri-laura/` sobre tablas y endpoints que tiene todo el
+ * mundo; ahora están en `components/clients/` y las monta esta ficha PARA
+ * QUIEN DIGA `lib/clients/piezasFicha.js` (por módulos: en un centro clínico
+ * o con archivo avanzado ya existen por otro lado, y Aumenta no cambia). Las
+ * decide la PÁGINA y llegan por `piezas`; sus palabras («el cliente» / «el
+ * paciente») por `textos`. Sin la pieza no se monta nada, y la pestaña se
+ * esconde sola como las demás.
  */
-const TABS = [
-  { key: "datos", label: "Datos" },
-  { key: "interacciones", label: "Interacciones" },
-  // El hilo de WhatsApp, junto a Interacciones porque son lo mismo: el registro
-  // de lo que se ha hablado con esta persona. Se esconde solo si no hay ningún
-  // mensaje, así que en un centro sin WhatsApp la pestaña no existe.
-  { key: "whatsapp", label: "WhatsApp" },
-  { key: "servicio", label: "Servicio" },
-  { key: "contrato", label: "Contrato y avisos" },
-  { key: "citas", label: "Citas" },
-  // "Pautas" — el menú que sigue esta persona (13/08/2026). Vivía SOLO en la
-  // ficha de nutri_laura, así que cualquier otro centro con Nutrición tenía las
-  // cuatro pantallas de /nutricion y ningún sitio desde donde asignar un menú a
-  // alguien: se veía en la demo, que lleva `nutricion` activo y no tenía esta
-  // pestaña. Va después de Citas y antes del dinero, junto al resto de lo que
-  // se le presta al paciente.
-  { key: "pautas", label: "Pautas" },
-  { key: "facturacion", label: "Facturación" },
-];
+function pestanasDe(textos) {
+  return [
+    { key: "datos", label: "Datos" },
+    { key: "interacciones", label: "Interacciones" },
+    // El hilo de WhatsApp, pegado a Interacciones por el mismo criterio que
+    // ordena a las dos de al lado: esto es lo que se ha hablado CON esta
+    // persona, solo que por otro canal; Notas es el diario SOBRE ella. Se
+    // esconde sola si no hay ningún mensaje, así que en un centro que no ha
+    // conectado WhatsApp la pestaña no existe — y no hace falta gatearla por
+    // módulo, que WhatsApp es una integración universal (regla #14).
+    { key: "whatsapp", label: "WhatsApp" },
+    // Notas / Historia clínica: el diario de esta persona. Detrás de
+    // Interacciones, que es el diario de lo que se ha hablado CON ella.
+    { key: "notas", label: textos.notas.pestana },
+    { key: "servicio", label: "Servicio" },
+    { key: "contrato", label: "Contrato y avisos" },
+    // Sus ficheros, después del papeleo firmado y antes de la agenda.
+    { key: "documentos", label: textos.documentos.pestana },
+    { key: "citas", label: "Citas" },
+    // "Pautas" — el menú que sigue esta persona (13/08/2026). Vivía SOLO en la
+    // ficha de nutri_laura, así que cualquier otro centro con Nutrición tenía las
+    // cuatro pantallas de /nutricion y ningún sitio desde donde asignar un menú a
+    // alguien: se veía en la demo, que lleva `nutricion` activo y no tenía esta
+    // pestaña. Va después de Citas y antes del dinero, junto al resto de lo que
+    // se le presta al paciente.
+    { key: "pautas", label: "Pautas" },
+    { key: "facturacion", label: "Facturación" },
+  ];
+}
 
 const STATUSES = [
   { key: "new", label: "Nuevo" },
@@ -187,7 +212,13 @@ export default function ClientDetailModule({
   conPacientes = false,
   conFacturacion = false,
   conNutricion = false,
+  // Qué paneles de consulta se montan (`lib/clients/piezasFicha.js`) y con qué
+  // palabras. Sin ellos —la página no pudo decidir— no se monta ninguno.
+  piezas = PIEZAS_NINGUNA,
+  textos: textosProp,
 }) {
+  const textos = textosProp ?? textosPiezas();
+  const TABS = pestanasDe(textos);
   const { id } = useParams();
   const router = useRouter();
   const [client, setClient] = useState(null);
@@ -693,11 +724,17 @@ export default function ClientDetailModule({
         </PanelPestana>
 
         {/* Sin un solo mensaje, la sección devuelve null y esta pestaña
-            desaparece del menú sola. No hace falta gatearla por módulo: WhatsApp
-            no es un módulo, es una integración que cualquier cliente puede
-            conectar (regla #14). */}
+            desaparece del menú sola. No lleva `piezas`: no es una pieza que la
+            página decida, es una integración que cualquier cliente puede
+            conectar mañana (regla #14). */}
         <PanelPestana clave="whatsapp" activo={tab === "whatsapp"} onEstado={marcarPanel}>
           <ClientWhatsappSection clientId={id} />
+        </PanelPestana>
+
+        {/* Notas / Historia clínica (`client_notes`). Solo si la página lo
+            decidió: sin la pieza, el panel queda vacío y la pestaña se va. */}
+        <PanelPestana clave="notas" activo={tab === "notas"} onEstado={marcarPanel}>
+          {piezas.notas && <ClientNotesPanel clientId={id} textos={textos.notas} />}
         </PanelPestana>
 
         <PanelPestana clave="servicio" activo={tab === "servicio"} onEstado={marcarPanel}>
@@ -727,6 +764,12 @@ export default function ClientDetailModule({
           <ClientPortalMonthsSection clientId={id} />
         </PanelPestana>
 
+        {/* Documentos de esta persona (`client_attachments`), con «que lo vea
+            en su portal» y las firmas documento a documento. */}
+        <PanelPestana clave="documentos" activo={tab === "documentos"} onEstado={marcarPanel}>
+          {piezas.documentos && <ClientAttachmentsPanel clientId={id} textos={textos.documentos} />}
+        </PanelPestana>
+
         <PanelPestana clave="citas" activo={tab === "citas"} onEstado={marcarPanel}>
           <ClientCitasSection clientId={id} />
 
@@ -736,6 +779,13 @@ export default function ClientDetailModule({
               el motor entero —tabla, endpoint, descuento— y ningún sitio donde
               dar uno. Se pinta sola solo si el centro tiene Citas. */}
           <ClientBonosSection clientId={id} />
+
+          {/* Y sus citas, con Confirmar/Rechazar desde aquí (18/08/2026, la
+              tercera pieza de la ficha de Laura). Debajo del interruptor y de
+              los bonos: primero cómo entran, luego cuáles hay. */}
+          {piezas.sesiones && (
+            <ClientBookingsPanel clientId={id} clientEmail={client.email} textos={textos.sesiones} />
+          )}
         </PanelPestana>
 
         {/* Sin el módulo no se pinta NADA aquí dentro, y entonces `PanelPestana`

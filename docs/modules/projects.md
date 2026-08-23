@@ -1,9 +1,37 @@
 # Módulo Proyectos & Servicios (#3)
 
-> Estado: **Sprint 1 implementado y desplegado** + **Sprint 2 (Kanban) en local pendiente de deploy**.
-> Tenants con módulo activo: `demo`, `aumenta`.
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es
+> este mismo commit). Si algo no cuadra, manda el código: corrige esta tabla.
+> **Quién tiene el módulo NO se lista aquí** (una lista a mano se queda
+> vieja): `/admin/modulos` en el back-office o
+> `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `projects` · requiere — (`lib/provisioning/dependencias.js`: se vende solo; sin `team` los tableros funcionan pero solo el admin edita y no hay miembros ni asignados) |
+| **Reina** | — · el doc no declara ninguna |
+| **Pantallas** | `/proyectos` → `app/(dashboard)/proyectos/page.jsx` (listado, alta y «crear con IA») · `/proyectos/[id]` → `app/(dashboard)/proyectos/[id]/page.jsx` (pestañas Resumen · Equipo · Fases · Configuración, botón «Abrir tablero», reorganizar con IA) · `/proyectos/[id]/board` → `app/(dashboard)/proyectos/[id]/board/page.jsx` (Kanban \| Lista) |
+| **Endpoints** | `app/api/projects/**` — 19 `route.js`: `route.js`, `[id]`, `[id]/phases` (+ `[phaseId]`, `reorder`), `[id]/milestones` (+ `[milestoneId]`), `[id]/columns` (+ `[columnId]`, `reorder`, `[columnId]/reorder-tasks`), `[id]/members` (+ `[memberId]`), `[id]/board`, `[id]/tasks`, IA: `ai/generate`, `ai/create`, `[id]/ai/edit`, `[id]/ai/apply` · `app/api/tasks/[id]/**` — 2 (`route.js`, `move`) · `app/api/project-templates/**` — 2 · gateados por `projects` en otros módulos: `app/api/clients/[id]/projects`, `app/api/team/[id]/projects`, `app/api/leads/[id]/convert-to-project`; `app/api/calendar/tasks` mezcla hitos y tarjetas vía `lib/calendar/projectEvents.js` · Públicos: ninguno |
+| **Lógica** | `lib/projects/`: `projectAuth.js` (admin o lead del proyecto) · `serializeProject.js` (oculta presupuesto a quien no es admin/lead) · `serializeTask.js` (`assigneeLinks` → `assignees`) · `generateProjectCode.js` (`PRY-YYYY-NNNN`) · `createDefaultBoardColumns.js` (las 4 columnas) · `taskPriority.js` (enum, etiquetas, orden) · `checklist.js` (normaliza items) · `ai/` (`prompts.js`, `parsePlan.js`, `editOps.js`, `fake.js`: modo demo sin coste) · fuera de la carpeta: `lib/calendar/projectEvents.js` |
+| **UI** | `components/projects/` (9, todos importados): `KanbanBoard.jsx`, `BoardColumn.jsx`, `TaskCard.jsx`, `TaskDrawer.jsx`, `ProjectListView.jsx`, `PriorityBadge.jsx`, `StatusBadge.jsx`, `AiProjectModal.jsx`, `AiEditModal.jsx` · ya no hay huérfanos: los tres del Sprint 1 (`ClientProjectsSection.jsx`, `EmployeeProjectsSection.jsx`, `ConvertLeadToProjectButton.jsx`) se borraron el 20/08/2026 (ver §4) · no hay `modules/projects/` |
+| **Modelos** | `Project` (`projects`), `Phase` (`phases`), `Milestone` (`milestones`), `BoardColumn` (`board_columns`), `Task` (`tasks`), `TaskAssignee` (`task_assignees`), `ProjectMember` (`project_members`), `ProjectTemplate` (`project_templates`); `Lead.convertedProjectId` vive en `leads` |
+| **Interruptores y parámetros** | ninguno que lea el código (ni `featureFlags` ni `logicOverrides`); lo que varía es por rol (`lib/projects/projectAuth.js`) y por tener `team` |
+| **Pantallas propias** | ninguna (letrero `ui_override` vacío en producción) |
+| **Scripts** | activar: `node scripts/enable-module.js <slug> projects` (arrastra `MODULES.projects` de `scripts/_module-migrations.js`: `migrate-projects-sprint-1.js`, `migrate-projects-sprint-2.js`, `migrate-projects-task-priority.js`; atajos `npm run db:migrate:projects-1`, `-2`, `-priority`) · seed: `scripts/seed-projects-demo.js` (`npm run db:seed:projects-demo`, idempotente) · `scripts/_hechos/verify-projects-sprint-2.js` (comprobación post-migración) · `scripts/cleanup-projects-code-indexes.js` (índices `projects_code_key*` duplicados; aborta contra prod) |
+| **Pruebas** | `scripts/smoke-test-kanban.mjs` (`npm run smoke:kanban`; 13 pasos HTTP contra `demo`, necesita `npm run dev` y base de datos: entra en `npm run test:todo`, no en `npm test`) · ligera, en `npm test`: `scripts/_smoke-projects-ai-parsePlan-editOps.mjs` (`node:test`, 19/08/2026; importa la lib con el gancho `_abrir-lib-hooks.mjs` porque `lib/utils/errors.js` arrastra `next/server`): lo que devuelven `lib/projects/ai/parsePlan.js` y `editOps.js`, los DOS únicos filtros entre el texto de la IA y el schema del tenant —`normalizePlan` lanza `ValidationError` con el mensaje para el usuario si lo que manda el modelo no es un plan, con los topes (12 fases, 60 tareas, 15 hitos, 15 pasos de checklist, 10 etiquetas), fechas y horas estimadas, asignados y miembros filtrados contra el equipo **sin importar la caja del uuid**; `buildProjectSnapshot` con la forma exacta del prompt (200 tareas); `normalizeOperations` por cada operación (`updateProject`, `createPhase`, `updatePhase`/`deletePhase`, `createTask`, `updateTask`, `deleteTask`, `addMember`/`removeMember`) con qué se descarta en silencio, qué avisando y la etiqueta en español de la vista previa; desde el 19/08 un campo inválido («el lunes que viene», «mañana», una descripción que no es texto) se IGNORA avisando en vez de entrar como `null` y borrar lo que había —solo `null` explícito quita—; desde el 21/08/2026 también **la traducción del `phaseIndex` cuando se descarta una fase** (cada hito sigue en la suya y el que apuntaba a la descartada se queda sin fase), **que el mismo uuid en mayúsculas casa con el equipo y lo que se guarda es el id de la base** (y dos veces en distinta caja cuenta como una sola persona), y **que a un miembro que causó baja en el equipo SÍ se le puede quitar del proyecto**; el plan y la propuesta del modo demo (`fake.js`) pasan sin perder nada ni un aviso—. `loadProjectSnapshot` lee de la base y no se prueba |
+| **Decisiones** | — (ninguna propia; la transversal `../decisions/2026-07-28-repaso-de-seguridad.md` aplica como a todos) |
+| **En este doc** | 3. Arquitectura BD · 4. Rutas frontend · 5. Endpoints REST · 6. Helpers / libs · 7. Decisiones arquitectónicas · 8. Migraciones y seeds · 11. Backlog técnico |
+
+> Estado: **Sprint 1 y Sprint 2 (Kanban) desplegados en producción**, y después
+> la Vista de Lista con prioridad (12/07/2026), el calendario (27/07/2026) y la
+> IA de Proyectos (31/07/2026, con el `/ai/apply` que faltaba el 12/08). En
+> producción lo tienen cinco clientes (foto del 19/08/2026: `aumenta`, `demo`,
+> `demo_agencia`, `salamandra_solutions`, `somos`); quién lo tiene se mira en
+> `/admin/modulos`, no aquí.
 > Documentación generada al cierre del Sprint 2 (Kanban funcional + endpoints
-> Task + fixes preexistentes).
+> Task + fixes preexistentes) y retocada después.
 
 ---
 
@@ -15,10 +43,22 @@ partir del Sprint 2, **tareas (Task) con tablero drag-and-drop**.
 
 Integraciones internas:
 
-- **Leads** → conversión `lead → project` (Sprint 1).
-- **Clientes** → sección embebible `/clientes/[id]` listando sus proyectos.
+- **Leads** → conversión `lead → project` (Sprint 1):
+  `POST /api/leads/[id]/convert-to-project` existe y responde, pero **hoy no
+  hay ningún botón que lo llame**: el que se dibujó en el Sprint 1 se borró el
+  20/08/2026 sin haber llegado a cablearse (ver §4).
+- **Clientes** → `GET /api/clients/[id]/projects` existe, pero **la ficha de
+  cliente no lo pinta**: la sección que iba a hacerlo corrió la misma suerte
+  (ver §4).
 - **Equipo** → asignación de TeamMembers como `lead`/`member`/`viewer` y
-  asignación N-a-N de tareas individuales.
+  asignación N-a-N de tareas individuales; `GET /api/team/[id]/projects`.
+- **Calendario** (27/07/2026) → `lib/calendar/projectEvents.js` mezcla en el
+  feed `/api/calendar/tasks` los `dueDate` de las tarjetas y los hitos como
+  eventos de solo lectura visual (clic → enlace al proyecto; arrastrar → PATCH
+  del `dueDate` real). Solo si el tenant tiene `projects`; nunca tumba el
+  calendario si falla.
+- **IA** (31/07/2026) → crear un proyecto entero desde un texto y reorganizar
+  uno existente (ver §5.5).
 - **Costes / Facturas** → FK durmiente `project_id` declarada (Sprint 1),
   sin lógica activa hasta Sprint 4.
 
@@ -27,21 +67,23 @@ Integraciones internas:
 ## 2. Activación del módulo
 
 Por defecto **inactivo**. Se activa por tenant en `master.tenant_modules`
-(`moduleKey = "projects"`, `enabled = true`). Hoy:
+(`moduleKey = "projects"`, `enabled = true`), y la vía es el script, no un
+INSERT a mano:
 
-| Tenant   | Sprint 1 | Sprint 2 |
-|----------|----------|----------|
-| `demo`   | Local + prod | Local (pendiente deploy)  |
-| `aumenta`| Local + prod | Local (pendiente deploy)  |
-| (resto)  | No        | No                        |
+```bash
+node --env-file=.env.local scripts/enable-module.js <slug> projects
+# VPS: docker exec crm-salamandra-app-1 node scripts/enable-module.js <slug> projects
+```
+
+Abre las DOS puertas (la fila en `tenant_modules` y `"projects"` en el
+`module_access` de los admin; `--grant-users` para el resto) y arrastra las
+tres migraciones de `MODULES.projects` en `scripts/_module-migrations.js`, que
+es lo que un INSERT a secas se dejaba atrás (incidente del 2026-07-21). Después,
+`npm run db:check-access` para comprobar que lo ven. Quién lo tiene hoy: en
+`/admin/modulos`, no aquí (una lista a mano se queda vieja).
 
 El seed `seed-projects-demo.js` activa el módulo en `demo` automáticamente
-(idempotente). Para activarlo en otro tenant:
-
-```sql
-INSERT INTO master.tenant_modules (id, tenant_id, module_key, enabled, ...)
-VALUES (gen_random_uuid(), '<tenant_id>', 'projects', true, ...);
-```
+(idempotente).
 
 > Recuerda: `hasModule("projects")` cruza tenant + `User.moduleAccess` desde
 > commit `09678fc`. Cualquier usuario del tenant que vaya a usar Projects
@@ -112,16 +154,22 @@ limpieza manual antes de reintentar.
 
 | URL                          | Estado | Componente principal                       |
 |------------------------------|--------|--------------------------------------------|
-| `/proyectos`                 | S1     | `app/(dashboard)/proyectos/page.jsx`       |
-| `/proyectos/[id]`            | S1     | `app/(dashboard)/proyectos/[id]/page.jsx` (6 tabs) |
-| `/proyectos/[id]/board`      | **S2** | `app/(dashboard)/proyectos/[id]/board/page.jsx` (Kanban dedicado) |
+| `/proyectos`                 | S1     | `app/(dashboard)/proyectos/page.jsx` (listado, alta y «Crear con IA») |
+| `/proyectos/[id]`            | S1     | `app/(dashboard)/proyectos/[id]/page.jsx` (4 tabs) |
+| `/proyectos/[id]/board`      | **S2** | `app/(dashboard)/proyectos/[id]/board/page.jsx` (Kanban \| Lista) |
 
 ### Tabs en `/proyectos/[id]`
 
-- Resumen, Equipo, Fases, Hitos — Sprint 1.
-- **Tablero** — Sprint 1 era placeholder. Sprint 2 lo sustituye por
-  `BoardSummary` (mini resumen de columnas con count + botón "Abrir tablero").
-- Configuración — Sprint 1, sin cambios en S2.
+Hoy son **cuatro** (`TABS` de la página): **Resumen · Equipo · Fases ·
+Configuración**. Lo que el Sprint 1 tenía como pestañas propias se recolocó:
+
+- **Hitos** viven en Resumen (KPI «Hitos» + tarjeta «Próximos hitos»); se
+  gestionan desde la API (`/milestones`).
+- **Tablero** ya no es pestaña: es el botón «Abrir tablero» de la cabecera,
+  que lleva a `/proyectos/[id]/board`. Al lado, «Reorganizar con IA» (solo
+  admin o lead) abre `AiEditModal`.
+- Configuración incluye `ColumnsManager` (columnas del Kanban, marcar la de
+  «hecho» con `isDoneColumn`) y el archivado (solo admin).
 
 ### Componentes Sprint 2 (`components/projects/`)
 
@@ -141,6 +189,17 @@ limpieza manual antes de reintentar.
   `SORT_LEVELS`. Ordenación/etiquetas de prioridad centralizadas en
   `lib/projects/taskPriority.js`.
 
+### Otros componentes (`components/projects/`)
+
+- `StatusBadge.jsx` y `PriorityBadge.jsx` — badges del estado y la prioridad
+  del PROYECTO (exportan `STATUS_OPTIONS` / `PRIORITY_OPTIONS`); los usan el
+  listado, la ficha y `AiProjectModal`.
+- `AiProjectModal.jsx` — drawer «Crear con IA» del listado: texto libre →
+  vista previa del plan (fases, tareas, hitos, miembros) editable → confirmar.
+- `AiEditModal.jsx` — drawer «Reorganizar con IA» de la ficha: instrucción →
+  propuesta de operaciones, cada una desmarcable → aplicar.
+  Ver §5.5.
+
 ### Toggle Kanban | Lista
 
 En `/proyectos/[id]/board` la cabecera tiene un toggle segmentado **Kanban |
@@ -148,11 +207,25 @@ Lista** (`role="tablist"`). Ambas vistas comparten los filtros de la toolbar
 (search/asignado/etiqueta) y muestran las mismas tareas. El Kanban queda
 exactamente igual que antes.
 
-### Componentes legacy Sprint 1 que siguen sin cablear
+### Componentes legacy Sprint 1: borrados el 20/08/2026
 
-3 componentes en `components/projects/` siguen huérfanos (no se importan
-desde ninguna page): `ClientProjectsSection.jsx`, `EmployeeProjectsSection.jsx`,
-`ConvertLeadToProjectButton.jsx`. Apuntado al backlog Sprint 3.
+Durante un año `components/projects/` arrastró tres componentes que **no
+importaba nadie**: `ClientProjectsSection.jsx` (proyectos del cliente en su
+ficha), `EmployeeProjectsSection.jsx` (proyectos de una persona en `/equipo`)
+y `ConvertLeadToProjectButton.jsx` (el botón «convertir lead en proyecto»).
+Se dibujaron en el Sprint 1, nunca se cablearon a ninguna pantalla y el doc
+los fue anotando cada revisión como «huérfanos, no se borran hasta decidir si
+se cablean». El 20/08/2026 se decidió: **se borraron**. Un componente que
+lleva un año sin que ninguna página lo importe no es una funcionalidad
+pendiente, es código muerto que hay que leer y descartar en cada repaso.
+
+Lo que NO se borró son sus endpoints, que siguen vivos y devolviendo datos:
+`GET /api/clients/[id]/projects`, `GET /api/team/[id]/projects` y
+`POST /api/leads/[id]/convert-to-project`. O sea que la funcionalidad sigue
+estando a un componente de distancia: el día que se quiera de verdad, se
+escribe la UI contra el endpoint que ya existe, que es lo barato, en vez de
+resucitar un JSX de hace un año contra un `lib/` que ha cambiado por debajo.
+Si alguien busca esos nombres dentro de seis meses, esto es lo que pasó.
 
 ---
 
@@ -198,6 +271,54 @@ mantener invariantes de orden.
 | `task.deleted`                      | Task        | DELETE /api/tasks/[id]                                          |
 | `project.column.tasks_reordered`    | BoardColumn | PATCH /api/projects/[id]/columns/[columnId]/reorder-tasks       |
 
+### 5.5 IA de Proyectos (31/07/2026; `/ai/apply` el 12/08/2026)
+
+Cuatro endpoints, todos con `hasModule("projects")`. Dos preguntan a la IA y
+no escriben nada; los otros dos escriben lo que una persona ha revisado y no
+llaman a la IA. La separación es a propósito: el paso que escribe no gasta
+dinero ni necesita clave, y por eso la demo pública funciona de punta a punta.
+
+| URL | Verbo | Qué hace |
+|-----|-------|----------|
+| `/api/projects/ai/generate` | POST | `{ prompt (10..4000), clientId? }` → **vista previa** de un proyecto entero (fases, tareas, hitos, miembros). BYOK del tenant (`lib/ai/anthropicKey.js`), `vetoAi`; sin clave → 503. En la demo responde SIMULADO (`demoForcesFakeAi` → `lib/projects/ai/fake.js`). Responde `{ plan, fake }`. |
+| `/api/projects/ai/create` | POST | `{ plan, clientId?, status? }` → materializa el plan en UNA transacción (proyecto, columnas por defecto, fases, hitos, tareas a «Por hacer», miembros). El plan se **re-normaliza** con `normalizePlan`: nunca se confía en lo que manda el navegador. Audita `project.created` con `aiGenerated: true`. |
+| `/api/projects/[id]/ai/edit` | POST | `{ instruction }` → **propuesta** de operaciones sobre el proyecto (mover/crear/borrar tareas, fases, miembros…) a partir de un snapshot del estado (`buildProjectSnapshot`). Solo admin o lead. Mismo BYOK/veto/demo que `generate`. |
+| `/api/projects/[id]/ai/apply` | POST | `{ operations }` (máx. 100) → aplica las que el usuario dejó marcadas. Las operaciones vuelven a pasar por `normalizeOperations` contra un snapshot **recién leído de BD** (lo que ya no existe se descarta y se cuenta en `skipped`; nadie puede colar ids de otro proyecto). Solo admin o lead. Audita `project.ai_reorganized` con un RESUMEN (hay nombres de tareas y personas). **No existía hasta el 12/08**: el modal lo pedía y recibía 404. |
+
+UI: `AiProjectModal.jsx` (listado, «Crear con IA») y `AiEditModal.jsx` (ficha,
+«Reorganizar con IA»). Lógica en `lib/projects/ai/` (§6).
+
+#### Tres bordes de los filtros, cerrados el 21/08/2026
+
+Los dos filtros (`normalizePlan` y `normalizeOperations`) son lo único que hay
+entre el texto que devuelve el modelo y el schema del tenant. Tres cosas se
+colaban por ahí, y las tres fallaban **calladas**: no había aviso que mirar.
+
+1. **El `phaseIndex` de los hitos se TRADUCE.** Los hitos apuntan a su fase por
+   posición, pero `normalizePlan` descarta fases por el camino (una sin nombre,
+   o las que pasen del tope de 12) y el índice se comparaba contra la lista ya
+   filtrada. Con fases `[sin nombre, B, C]`, el hito de B acababa colgado de C y
+   el de C se perdía: un hito bien formado, en la fase equivocada, guardado en la
+   base. Ahora se traduce el índice original al de la lista final, y lo que
+   apuntaba a una fase descartada queda en `null` —hito sin fase—, que es la
+   única lectura honesta.
+2. **Los ids del equipo se buscan en minúsculas y se guarda SIEMPRE el id
+   canónico de la base.** `UUID_RE` lleva `/i`, pero las comprobaciones contra el
+   equipo eran exactas: un uuid que el modelo devolviera en mayúsculas pasaba la
+   regex, no casaba con nadie y se descartaba sin un solo aviso. El plan salía
+   sin asignar y no había forma de saber por qué. Afecta a `assigneeIds` y
+   `members` de `normalizePlan`, y a `filtraAsignados`, `addMember` y
+   `removeMember` de `normalizeOperations`. Lo que acaba en la FK es el valor de
+   la base, no la variante que escribió el modelo.
+3. **`removeMember` se valida contra `members` (los miembros DEL PROYECTO), no
+   contra `team`.** `loadProjectSnapshot` carga el equipo con `status: "active"`,
+   así que a quien causaba baja no se le podía sacar de sus proyectos, y encima
+   se le contestaba «la persona indicada no es miembro del proyecto», que era
+   falso: el propio snapshot lo llevaba en `members`. Es el caso corriente
+   —alguien se va y hay que sacarlo de los proyectos— y era el único que no
+   funcionaba. A quien de verdad no es miembro se le sigue descartando con esa
+   misma frase, que ahí sí es cierta.
+
 ---
 
 ## 6. Helpers / libs
@@ -212,6 +333,20 @@ mantener invariantes de orden.
 - `createDefaultBoardColumns.js` — siembra 4 columnas por defecto.
 - **Sprint 2:** `serializeTask.js` — mapper BD→API; normaliza include
   `assigneeLinks → assignees`.
+- `taskPriority.js` — enum, etiquetas en español, orden y estilos de la
+  prioridad de tarea (Vista de Lista, 12/07/2026).
+- `checklist.js` — `normalizeChecklistItems`: garantiza `{ id, text, done }` con
+  `id` único en cada item del checklist JSONB. Es el arreglo del bug «marcar uno
+  marca todos» (items sin `id` o con `id` duplicado). Se usa al cargar en el
+  drawer y al persistir en POST/PATCH (y en `ai/create` y `ai/apply`).
+- `ai/` — `prompts.js` (`buildGeneratePrompts`, `buildEditPrompts`),
+  `parsePlan.js` (`normalizePlan`), `editOps.js` (`buildProjectSnapshot`,
+  `loadProjectSnapshot`, `normalizeOperations`), `fake.js` (`fakeProjectPlan`,
+  `fakeEditOps`: el modo demo sin coste, mismo contrato que la IA real).
+
+Fuera de la carpeta: `lib/calendar/projectEvents.js` — `fetchProjectEvents`,
+lo que el feed del calendario mezcla con sus tareas (§1). Vive en `calendar`
+porque es el calendario quien lo llama; devuelve `[]` si no hay módulo.
 
 ---
 
@@ -306,17 +441,26 @@ Comandos npm:
 
 ```bash
 npm run db:migrate:projects-2          # local
-npm run db:migrate:projects-2:prod     # producción
+# producción: docker exec crm-salamandra-app-1 node scripts/migrate-projects-sprint-2.js
+# (el atajo `:prod` sigue en package.json pero lleva `--env-file=.env.production`,
+#  que el contenedor no tiene: dentro ya hay DATABASE_URL por env_file)
 
 npm run db:seed:projects-demo          # idempotente
 ```
 
-Detección de tenants en la migración:
+Normalmente no hace falta lanzarlas a mano: las tres están en
+`MODULES.projects` de `scripts/_module-migrations.js` y las arrastra
+`enable-module.js` (§2) y `ensure-tenant-schema.js`.
+
+Detección de tenants en la migración (**sin filtrar por `status`**, regla 12:
+el estado decide quién entra, no qué forma tiene su schema; el
+`t.status = 'active'` se barrió el 12/08/2026):
 
 ```sql
 SELECT t.slug FROM master.tenants t
 JOIN master.tenant_modules tm ON tm.tenant_id = t.id
-WHERE t.status = 'active' AND tm.module_key = 'projects' AND tm.enabled = TRUE;
+WHERE tm.module_key = 'projects' AND tm.enabled = TRUE
+ORDER BY t.slug;
 ```
 
 **Resultado esperado en local** (al ejecutar `db:migrate:projects-2`):
@@ -387,7 +531,7 @@ Ejecutar tras `npm run dev`:
 
 | Caso | Pasos | Esperado |
 |------|-------|----------|
-| Abrir tablero desde tab | `/proyectos/<id>` → tab Tablero → "Abrir tablero" | Navega a `/proyectos/<id>/board` con Kanban poblado |
+| Abrir tablero desde la ficha | `/proyectos/<id>` → botón "Abrir tablero" de la cabecera | Navega a `/proyectos/<id>/board` con Kanban poblado |
 | Drag task entre columnas | Drag de una card a otra columna | Card se mueve, persiste tras refresh, AuditLog `task.moved` |
 | Drag intra-columna | Drag arriba/abajo en misma columna | Order persiste; los demás cards se reordenan |
 | Crear task | Click "+ Añadir tarea" en una columna | Drawer modo create; al guardar aparece la card al final |
@@ -412,10 +556,13 @@ Ejecutar tras `npm run dev`:
   `tasks.assignee_id` cuando ningún consumidor la lea.
 - **WIP limit visual** — `BoardColumn` ya muestra `N/LIMIT` y marca rojo si
   supera; añadir bloqueo de drop para que dnd-kit rechace cards entrantes.
-- **Cablear los 3 componentes huérfanos** Sprint 1:
-  `ClientProjectsSection.jsx` en `/clientes/[id]`,
-  `EmployeeProjectsSection.jsx` en `/equipo`,
-  `ConvertLeadToProjectButton.jsx` en `LeadsModule` (default + overrides).
+- **Pintar los proyectos donde se esperan**, contra endpoints que ya existen:
+  los del cliente en `/clientes/[id]` (`/api/clients/[id]/projects`), los de
+  una persona en `/equipo` (`/api/team/[id]/projects`) y el botón «convertir
+  en proyecto» en `LeadsModule` (`/api/leads/[id]/convert-to-project`). Los
+  tres componentes del Sprint 1 que iban a hacerlo se borraron el 20/08/2026
+  por llevar un año sin que nadie los importara (§4): esto se escribe de
+  nuevo cuando se pida, no se rescata de git.
 - **UI reorder de fases y columnas** — `/phases/reorder` y `/columns/reorder`
   existen en API pero la UI no los llama.
 - **Comentarios en tareas** — nuevo modelo `TaskComment` + endpoints + UI en
@@ -476,17 +623,13 @@ Ejecutar tras `npm run dev`:
 
 | Checkpoint | Local | Producción | Notas                                                       |
 |------------|-------|------------|-------------------------------------------------------------|
-| S2-1 BD + modelos | 2026-06-29 | — | migrate + task_assignees + índices + FK + fix Project.code |
-| S2-2 Endpoints REST | 2026-06-29 | — | 8 endpoints + serializeTask                                |
-| S2-3 Frontend Kanban | 2026-06-29 | — | KanbanBoard + BoardColumn + TaskCard + TaskDrawer + /board |
-| S2-4 Seed + smoke + docs | 2026-06-29 | — | seed extendido + 13 pasos smoke + docs/modules/projects.md |
+| S2-1 BD + modelos | 2026-06-29 | desplegado | migrate + task_assignees + índices + FK + fix Project.code |
+| S2-2 Endpoints REST | 2026-06-29 | desplegado | 8 endpoints + serializeTask                                |
+| S2-3 Frontend Kanban | 2026-06-29 | desplegado | KanbanBoard + BoardColumn + TaskCard + TaskDrawer + /board |
+| S2-4 Seed + smoke + docs | 2026-06-29 | desplegado | seed extendido + 13 pasos smoke + docs/modules/projects.md |
 
-> Pasos para subir a producción cuando Jorge dé el ok:
-> 1. `git pull` en VPS, `deploy.sh` (con `--full` por nuevas deps @dnd-kit).
-> 2. `docker exec -it crm-salamandra-app-1 npm run db:migrate:projects-2:prod`
->    (la migración detecta solo demo+aumenta porque son los únicos con módulo
->    `projects` activo).
-> 3. Opcional: `db:seed:projects-demo:prod` si se quiere refrescar el demo
->    con tasks de ejemplo. Idempotente vía marker.
-> 4. Smoke producción: `SMOKE_PASSWORD=... npm run smoke:kanban` apuntando
->    a la URL de prod (cambiar `BASE_URL` en el script o exportar env).
+> **Histórico:** el Sprint 2 entró en `master` el 01/07/2026 (`aa70a99`) y se
+> desplegó con `deploy.sh --full` (deps `@dnd-kit`) y la migración dentro del
+> contenedor. Hoy producción lleva el mismo commit que local y el módulo está
+> en cinco clientes (ver la cabecera); los pasos de subida que había aquí ya no
+> describen nada pendiente.

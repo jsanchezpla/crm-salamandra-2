@@ -1,3 +1,4 @@
+// @prueba ligera — nombra a Sequelize solo dentro de un comentario; no toca la base de datos.
 /**
  * _smoke-buzon.mjs — las reglas del buzón, fijadas.
  *

@@ -1,3 +1,4 @@
+// @vivo — Su única vía de uso viva es reset-demo-tenant.js (QA local, bloqueado en prod), que lo lanza por join(__dirname, "seed-billing-demo.js") y cuyo… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * seed-billing-demo.js
  *

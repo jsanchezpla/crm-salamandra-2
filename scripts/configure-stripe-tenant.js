@@ -1,3 +1,4 @@
+// @vivo — Genérico por slug; guarda (cifradas con `lib/crypto/secretBox.js`) o borra (`--borrar`) las claves de Stripe de un tenant leyéndolas de la env, y… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * configure-stripe-tenant.js — guarda las claves de Stripe de un tenant.
  *

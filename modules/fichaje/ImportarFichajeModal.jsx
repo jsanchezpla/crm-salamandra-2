@@ -130,20 +130,30 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
               {/* ── Paso 1 ─────────────────────────────────────────────── */}
               <div className="grid sm:grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-[11px] uppercase tracking-wider text-gray-400 block mb-1">Mes</span>
+                  <span className="text-[11px] uppercase tracking-wider text-gray-400 block mb-1">
+                    Mes
+                  </span>
                   <input
                     type="month"
                     value={periodo}
-                    onChange={(e) => { setPeriodo(e.target.value); setPreview(null); }}
+                    onChange={(e) => {
+                      setPeriodo(e.target.value);
+                      setPreview(null);
+                    }}
                     className="w-full px-3 py-2 text-sm rounded-md border border-gray-200"
                   />
                 </label>
                 <label className="block">
-                  <span className="text-[11px] uppercase tracking-wider text-gray-400 block mb-1">Fichero</span>
+                  <span className="text-[11px] uppercase tracking-wider text-gray-400 block mb-1">
+                    Fichero
+                  </span>
                   <input
                     type="file"
                     accept=".xlsx"
-                    onChange={(e) => { setFile(e.target.files?.[0] || null); setPreview(null); }}
+                    onChange={(e) => {
+                      setFile(e.target.files?.[0] || null);
+                      setPreview(null);
+                    }}
                     className="w-full text-sm file:mr-2 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:bg-gray-100 file:text-sm"
                   />
                 </label>
@@ -172,26 +182,33 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
                     <strong>{preview.totales.personas}</strong> personas ·{" "}
                     {formatearMinutos(preview.totales.minutos)} en total.
                     {preview.totales.bloqueadas > 0 && (
-                      <span className="text-amber-700"> · {preview.totales.bloqueadas} sin poder entrar</span>
+                      <span className="text-amber-700">
+                        {" "}
+                        · {preview.totales.bloqueadas} sin poder entrar
+                      </span>
                     )}
                   </div>
 
                   {preview.ficheroRepetido && (
                     <Aviso tono="ambar">
                       Este fichero exacto ya se volcó
-                      {preview.ficheroRepetido.fecha ? ` el ${new Date(preview.ficheroRepetido.fecha).toLocaleDateString("es-ES")}` : ""}.
-                      Si lo vuelves a aplicar, se reemplaza el mes con lo mismo.
+                      {preview.ficheroRepetido.fecha
+                        ? ` el ${new Date(preview.ficheroRepetido.fecha).toLocaleDateString("es-ES")}`
+                        : ""}
+                      . Si lo vuelves a aplicar, se reemplaza el mes con lo mismo.
                     </Aviso>
                   )}
 
                   {preview.reemplazo.hayVolcadoPrevio && (
                     <Aviso tono="ambar">
                       Ya hay un volcado de este mes. Al aplicar se darán de baja sus{" "}
-                      <strong>{preview.reemplazo.filasQueSeReemplazan}</strong> jornadas y entrarán las nuevas.
+                      <strong>{preview.reemplazo.filasQueSeReemplazan}</strong> jornadas y entrarán
+                      las nuevas.
                       {preview.reemplazo.correccionesQueSobreviven > 0 && (
                         <>
-                          {" "}Las <strong>{preview.reemplazo.correccionesQueSobreviven}</strong> corregidas a mano
-                          se conservan.
+                          {" "}
+                          Las <strong>{preview.reemplazo.correccionesQueSobreviven}</strong>{" "}
+                          corregidas a mano se conservan.
                         </>
                       )}
                     </Aviso>
@@ -200,10 +217,12 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
                   {/* Lo que BLOQUEA */}
                   {pendientes.length > 0 && (
                     <section>
-                      <h3 className="text-sm font-medium text-gray-900 mb-1">¿Quién es cada uno?</h3>
+                      <h3 className="text-sm font-medium text-gray-900 mb-1">
+                        ¿Quién es cada uno?
+                      </h3>
                       <p className="text-xs text-gray-500 mb-3">
-                        Estos nombres del Excel no casan con nadie del equipo. Hay que decirlo una vez:
-                        el mes que viene ya se reconocen solos. Ninguna fila se importa a ojo.
+                        Estos nombres del Excel no casan con nadie del equipo. Hay que decirlo una
+                        vez: el mes que viene ya se reconocen solos. Ninguna fila se importa a ojo.
                       </p>
                       <ul className="space-y-2">
                         {pendientes.map((p) => (
@@ -211,16 +230,29 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
                             <span className="text-sm text-gray-900 w-40 truncate">{p.nombre}</span>
                             <select
                               value={mapeos[p.nombre] || ""}
-                              onChange={(e) => setMapeos((m) => ({ ...m, [p.nombre]: e.target.value }))}
+                              onChange={(e) =>
+                                setMapeos((m) => ({ ...m, [p.nombre]: e.target.value }))
+                              }
                               className="flex-1 px-2 py-1.5 text-sm rounded-md border border-gray-200"
                             >
                               <option value="">— elegir persona —</option>
                               {preview.equipo.map((e2) => (
-                                <option key={e2.id} value={e2.id}>{e2.nombre}</option>
+                                <option key={e2.id} value={e2.id}>
+                                  {e2.nombre}
+                                </option>
                               ))}
                             </select>
                             {p.sugerencia && !mapeos[p.nombre] && (
-                              <span className="text-[11px] text-gray-400 hidden sm:inline">{p.sugerencia.motivo}</span>
+                              <span className="text-[11px] text-gray-400 hidden sm:inline">
+                                {p.sugerencia.motivo}
+                              </span>
+                            )}
+                            {/* Nombre ambiguo (dos personas se llaman así): sin sugerencia a propósito,
+                                se dice por qué para que no parezca que el CRM no lo ha visto. */}
+                            {!p.sugerencia && p.motivo && !mapeos[p.nombre] && (
+                              <span className="text-[11px] text-amber-600 hidden sm:inline">
+                                {p.motivo}
+                              </span>
                             )}
                           </li>
                         ))}
@@ -229,12 +261,16 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
                   )}
 
                   {preview.bloqueadas.length > 0 && (
-                    <Detalle titulo={`${preview.totales.bloqueadas} filas que no se pueden importar`}>
+                    <Detalle
+                      titulo={`${preview.totales.bloqueadas} filas que no se pueden importar`}
+                    >
                       <ul className="text-xs text-gray-600 space-y-1 max-h-40 overflow-y-auto">
                         {preview.bloqueadas.map((b, i) => (
                           <li key={i}>
-                            <span className="text-gray-400">{b.hoja} f{b.fila}</span> · {b.nombreExcel} ·{" "}
-                            {b.fecha} — {b.motivo}
+                            <span className="text-gray-400">
+                              {b.hoja} f{b.fila}
+                            </span>{" "}
+                            · {b.nombreExcel} · {b.fecha} — {b.motivo}
                           </li>
                         ))}
                       </ul>
@@ -242,7 +278,9 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
                   )}
 
                   {preview.anotaciones?.length > 0 && (
-                    <Detalle titulo={`${preview.anotaciones.length} anotaciones escritas en el Excel`}>
+                    <Detalle
+                      titulo={`${preview.anotaciones.length} anotaciones escritas en el Excel`}
+                    >
                       <ul className="text-xs text-gray-600 space-y-1">
                         {preview.anotaciones.map((a, i) => (
                           <li key={i}>
@@ -256,7 +294,9 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
                   {preview.avisosDelFichero?.length > 0 && (
                     <div className="space-y-1">
                       {preview.avisosDelFichero.map((a, i) => (
-                        <Aviso key={i} tono={a.nivel === "error" ? "rojo" : "ambar"}>{a.texto}</Aviso>
+                        <Aviso key={i} tono={a.nivel === "error" ? "rojo" : "ambar"}>
+                          {a.texto}
+                        </Aviso>
                       ))}
                     </div>
                   )}
@@ -306,7 +346,9 @@ function Aviso({ tono, children }) {
 function Detalle({ titulo, children }) {
   return (
     <details className="rounded-lg border border-gray-100">
-      <summary className="px-4 py-2.5 text-sm text-gray-700 cursor-pointer select-none">{titulo}</summary>
+      <summary className="px-4 py-2.5 text-sm text-gray-700 cursor-pointer select-none">
+        {titulo}
+      </summary>
       <div className="px-4 pb-3">{children}</div>
     </details>
   );

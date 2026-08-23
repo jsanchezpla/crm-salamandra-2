@@ -1,3 +1,4 @@
+// @vivo — Configuración viva de un cliente vivo (sus 82 solicitudes entran por este formulario): la forma documentada de cambiar una pregunta sin desplegar,… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * seed-formulario-nutri-laura.js
  *

@@ -1,5 +1,29 @@
 # Módulo Analíticas (`analytics`)
 
+## Mapa
+
+> Verificado contra el código el 19/08/2026 (lo desplegado en producción es este
+> mismo commit). Si algo no cuadra, manda el código: corrige esta tabla. **Quién
+> tiene el módulo NO se lista aquí** (una lista a mano se queda vieja):
+> `/admin/modulos` en el back-office o
+> `node scripts/inspect-tenant-modules.js <slug>`.
+
+| | |
+| --- | --- |
+| **moduleKey** | `analytics` · requiere — |
+| **Reina** | `spain_enzymes` — «tenant de referencia» según este doc: el único cliente real con credenciales de Cloudflare y visitas de verdad; el resto ve «sin configurar» y las demos, visitas inventadas |
+| **Pantallas** | `/analiticas` → `app/(dashboard)/analiticas/page.jsx` (lee el rol y baja `esAdmin` como booleano). Las credenciales se pegan en Configuración → Integraciones (`/configuracion`, tarjeta «Cloudflare (visitas de la web)» de `modules/config/ConfigModule.jsx`) o desde el back-office (`lib/provisioning/credencialesCliente.js`). Públicas: ninguna. |
+| **Endpoints** | `app/api/analiticas/route.js` — 1 `route.js`: `GET /api/analiticas?dias=` (1, 7, 30, 90, 180 o 365), gateado por `hasModule("analytics")`; rangos cortos contra Cloudflare con caché de 5 min (`lib/tenant/tenantCache.js`), largos contra `web_visits_daily`; en las demos todo sale de la tabla (`isDemoTenant`, sin llamar a Cloudflare). Las credenciales las guarda `app/api/tenant/settings/route.js` (transversal). Sin públicos ni webhooks. |
+| **Lógica** | `lib/analytics/`: `cloudflareConfig.js` (`getTenantCloudflareConfig`: las credenciales del tenant, BYOK, token descifrado con `lib/crypto/secretBox.js`), `cloudflareRum.js` (`consultarRum` contra la GraphQL Analytics API, `MAX_DIAS_RUM = 7`, `CloudflareAnalyticsError` extiende `AppError` para que el mensaje llegue a pantalla), `historico.js` (`consultarHistorico` y `primerDiaGuardado`: los rangos largos desde nuestra copia). |
+| **UI** | `modules/analytics/AnaliticasModule.jsx` (toda la interfaz: KPIs, mapa, serie, listas; SVG a mano, sin librerías) y `modules/analytics/worldMap.js` (**generado**: 174 países en SVG, no se edita). No hay `components/analytics/`. |
+| **Modelos** | `WebVisitDaily` → `web_visits_daily` (`models/tenant/WebVisitDaily.model.js`; una fila por `(fecha, dimension, valor)`, índice único `web_visits_daily_unique`; registrado en `lib/db/tenantDb.js`). |
+| **Interruptores y parámetros** | Ninguno que lea el código. Lo que varía por cliente son sus credenciales en `tenant.settings.integrations`: `cloudflareApiToken` (secreto, cifrado), `cloudflareAccountId`, `cloudflareSiteTag`. |
+| **Pantallas propias** | Ninguna: `app/(dashboard)/analiticas/page.jsx` no tiene mapa `UI_OVERRIDES`. |
+| **Scripts** | Activar: `node scripts/enable-module.js <slug> analytics` (crea `web_visits_daily` porque `migrate-web-visits-daily.js` está registrada en `scripts/_module-migrations.js`). `capturar-visitas-web.js` (la copia diaria de los últimos 7 días, idempotente; timer de systemd `crm-capturar-visitas` en el VPS, 03:40 UTC), `check-cloudflare-analytics.js <slug> [dias]` (diagnóstico de solo lectura, no imprime el token), `seed-analiticas-demo.js` (un año de visitas inventadas para las demos). |
+| **Pruebas** | Ninguna `_smoke-*` toca el módulo. Lo más parecido es `scripts/check-cloudflare-analytics.js` (necesita base de datos y credenciales reales). |
+| **Decisiones** | `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` (el caso de `analytics` en spain_enzymes: módulo activo y el admin sin verlo por `module_access`) |
+| **En este doc** | Qué es y qué NO es · Piezas · Credenciales (por tenant) · Alta en un tenant · El mapa · Detalles que conviene saber · Histórico propio: por qué el CRM copia las visitas |
+
 Visitas de la web del cliente, medidas con **Cloudflare Web Analytics**.
 Estado: **implementado** (2026-07-31). Tenant de referencia: `spain_enzymes`.
 
@@ -83,8 +107,8 @@ pantalla de tokens personalizados: `Cuenta` · `Account Analytics` · `Leer`
 (comprobado en el panel el 2026-07-31 — el desplegable del medio solo ofrece
 esa opción al escribir «Analytics»). No puede tocar DNS, dominios ni nada más.
 
-> **El token no se pide ni se pega nunca por chat ni por correo** (regla 14 de
-> CLAUDE.md). Lo crea el cliente o el administrador en Cloudflare y lo pega
+> **El token no se pide ni se pega nunca por chat ni por correo** (regla 15 de
+> CLAUDE.md, «Secrets de producción»). Lo crea el cliente o el administrador en Cloudflare y lo pega
 > directamente en la pantalla de Configuración, que lo cifra en reposo.
 > Si un token se ha visto en un canal no seguro, se revoca en Cloudflare y se
 > crea otro.
@@ -94,17 +118,20 @@ esa opción al escribir «Analytics»). No puede tocar DNS, dominios ni nada má
 ## Alta en un tenant
 
 ```bash
-docker exec crm-salamandra-app-1 node scripts/enable-module.js <slug> analytics --force
+docker exec crm-salamandra-app-1 node scripts/enable-module.js <slug> analytics
 ```
 
-`--force` es necesario **la primera vez**: `analytics` no está en `MODULE_KEYS`,
-así que `enable-module.js` lo trata como clave desconocida (protección contra
-typos). A partir de que un tenant lo tenga, ya aparece como conocido y el
-`--force` sobra.
+Sin `--force`: `enable-module.js` da por conocida cualquier clave que esté en
+`MODULE_KEYS`, en `MODULES` de `scripts/_module-migrations.js` o ya en uso en
+`master.tenant_modules`, y `analytics` está en la segunda lista desde que tiene
+migración. (**Histórico:** hasta que existió `migrate-web-visits-daily` el alta
+exigía `--force` la primera vez, porque la clave no aparecía en ningún sitio.)
 
 Desde que existe el histórico, el módulo **sí tiene migración**
 (`migrate-web-visits-daily`, registrada en `scripts/_module-migrations.js`), así
-que el alta crea también la tabla `web_visits_daily`.
+que el alta crea también la tabla `web_visits_daily` y abre el
+`module_access` a los admin del tenant (la segunda puerta, ver
+`../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md`).
 
 Después, comprobar la conexión:
 

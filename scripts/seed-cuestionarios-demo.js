@@ -1,3 +1,4 @@
+// @vivo — Mismo caso que seed-billing-demo: solo lo lanza reset-demo-tenant.js (por nombre dentro de scripts/); el escaparate ya siembra quiz_attempts con… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * seed-cuestionarios-demo.js
  *

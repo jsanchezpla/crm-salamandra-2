@@ -1,3 +1,4 @@
+// @vivo — «Smoke HTTP del Sprint 2 Proyectos (Kanban). (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * smoke-test-kanban.mjs — Smoke HTTP del Sprint 2 Proyectos (Kanban).
  *
@@ -352,6 +353,12 @@ async function main() {
     await step12AuditLog();
     await step13Cleanup();
   } catch (e) {
+    // Contar el corte como fallo (18/08/2026). Antes solo se imprimía, y como
+    // el código de salida sale de `counts.fail`, reventar en el primer paso
+    // —el servidor apagado, sin ir más lejos— terminaba en VERDE: «pass=0
+    // fail=0» y salida 0. Una prueba que no ha podido probar nada no puede
+    // decir que todo está bien; es peor que una que falla, porque no avisa.
+    counts.fail++;
     process.stderr.write(`\n  ✗ Falló: ${e.message}\n`);
   } finally {
     process.stdout.write("\n════════════════════════════════════════════════════\n");

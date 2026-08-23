@@ -1,3 +1,4 @@
+// @vivo — La cabecera lo declara «Script de un solo uso — NO añadir al package.json», solo local (aborta si la URL huele a prod) y ya corrido en local; la… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * cleanup-projects-code-indexes.js — borra índices duplicados
  * projects_code_key* acumulados por sync({alter:true}) cuando el modelo

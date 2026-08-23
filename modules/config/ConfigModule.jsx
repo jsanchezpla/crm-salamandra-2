@@ -7,6 +7,7 @@ import Select from "../../components/ui/Select.jsx";
 import ConectarWhatsapp from "./ConectarWhatsapp.jsx";
 import { ANTHROPIC_MODELS } from "../../lib/ai/anthropicModel.js";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "../../lib/citas/coloresBloqueo.js";
+import { EVENTOS_WEBHOOK_STRIPE } from "../../lib/payments/eventosWebhook.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -143,7 +144,7 @@ const AI_PROVIDERS = {
     steps: [
       'En Stripe, ve a "Desarrolladores" → "Webhooks" → "Añadir punto de conexión".',
       "Pega como URL la dirección que aparece justo debajo de este recuadro.",
-      'Selecciona estos eventos: checkout.session.completed, checkout.session.expired, checkout.session.async_payment_succeeded, checkout.session.async_payment_failed y charge.refunded.',
+      "Marca TODOS los eventos de la lista que sale debajo de esa dirección: cada uno avisa de algo distinto y el que falte es un cobro del que el CRM no se entera.",
       'Crea el punto de conexión y copia su "Secreto de firma" (empieza por whsec_).',
       "Pégalo abajo y pulsa Guardar.",
     ],
@@ -503,7 +504,12 @@ export default function ConfigModule() {
             isAdmin={isAdmin}
             onSave={(value) => patchTenant({ stripeWebhookSecret: value }, "Secreto del webhook guardado")}
             onClear={() => patchTenant({ stripeWebhookSecret: null }, "Secreto del webhook eliminado")}
-            extra={<UrlWebhook slug={cfg.slug} />}
+            extra={
+              <>
+                <UrlWebhook slug={cfg.slug} />
+                <EventosWebhook />
+              </>
+            }
           />
 
           {/* La clave PUBLICABLE. No es un secreto —viaja al navegador de cada
@@ -2024,6 +2030,56 @@ function UrlWebhook({ slug }) {
           {copiado ? "Copiada" : "Copiar"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Los eventos que hay que marcar en el punto de conexión.
+ *
+ * Salen de `lib/payments/eventosWebhook.js` —la misma lista que comprueba
+ * `scripts/comprobar-stripe.js`— y no de un texto escrito aquí: cuando estaban
+ * escritos a mano, esta pantalla pedía cinco de los once que el webhook trata.
+ */
+function EventosWebhook() {
+  const [copiado, setCopiado] = useState(false);
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(EVENTOS_WEBHOOK_STRIPE.map((e) => e.evento).join("\n"));
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      /* sin portapapeles: quedan visibles para buscarlos a mano */
+    }
+  }
+
+  return (
+    <div className="mt-4 pt-4 border-t border-neutral-100">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="text-xs text-neutral-500">
+          Y estos son los <strong>{EVENTOS_WEBHOOK_STRIPE.length} eventos</strong> que hay que marcar.
+          Si falta alguno, ese cobro ocurre en Stripe y el CRM no se entera.
+        </div>
+        <button
+          type="button"
+          onClick={copiar}
+          className="shrink-0 text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-600 hover:border-neutral-400 transition"
+        >
+          {copiado ? "Copiados" : "Copiar"}
+        </button>
+      </div>
+      <ul className="space-y-1">
+        {EVENTOS_WEBHOOK_STRIPE.map(({ evento, porque }) => (
+          <li
+            key={evento}
+            className="text-[12px] bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2"
+          >
+            <code className="text-neutral-700 break-all">{evento}</code>
+            <span className="block text-[11px] text-neutral-400 mt-0.5">{porque}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

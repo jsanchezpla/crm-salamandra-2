@@ -1,3 +1,4 @@
+// @prueba ligera — se fabrica un sequelize de mentira; no abre ninguna conexión.
 /**
  * _smoke-puerta-descartada.mjs — descartar SÍ cuenta, y se puede reintentar
  * tres veces (12/08/2026, Rodrigo).

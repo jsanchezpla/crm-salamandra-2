@@ -1,3 +1,4 @@
+// @vivo — Único seed que llena el módulo Soporte de la demo (4 categorías, 2 plantillas, 8 tickets con hilo y SLA, solo si crm_demo no tiene tickets) y el… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * seed-support-demo.js — datos de ejemplo del módulo Soporte para el tenant
  * DEMO (escaparate con datos FALSOS, ver CLAUDE.md). Crea categorías,

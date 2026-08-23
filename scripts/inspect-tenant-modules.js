@@ -1,3 +1,4 @@
+// @vivo — Herramienta de inspección genérica por slug (default «aumenta»), solo lectura: clasifica tenant_modules en activos sin/con override y deshabilitados. (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * inspect-tenant-modules.js — Radiografía de módulos de un tenant (SOLO LECTURA)
  *

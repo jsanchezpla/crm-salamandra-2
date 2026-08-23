@@ -1,3 +1,4 @@
+// @vivo — Radiografía solo lectura de los leads de cualquier tenant por slug (recuentos por tipo, etapa, motivo; --detalle sin correo ni mensaje). (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * listar-leads.js — radiografía SOLO LECTURA de los leads de un cliente.
  *

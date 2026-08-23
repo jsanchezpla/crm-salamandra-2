@@ -1,3 +1,4 @@
+// @vivo — Extra del escaparate fuera de la cadena pero hecho para sobrevivirla: se adaptó a resolver terapeutas y tipos de cita en runtime precisamente… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * seed-demo-familia-pagador.js — escenario de demostración para el tenant `demo`:
  * un CLIENTE PAGADOR con VARIOS PACIENTES, cada uno con sus propias citas.

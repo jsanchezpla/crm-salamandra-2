@@ -1,3 +1,4 @@
+// @vivo — Diagnóstico genérico por slug, solo lectura, de una integración viva (Analytics con credenciales por cliente): dice en qué eslabón falla sin abrir… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * check-cloudflare-analytics.js — comprueba que un tenant puede leer sus
  * visitas de Cloudflare. SOLO LECTURA: no escribe nada, en ninguna base.

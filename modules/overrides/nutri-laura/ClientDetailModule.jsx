@@ -4,22 +4,32 @@
  * ClientDetailModule (override nutri_laura) — ficha de paciente con tabs.
  *
  * Tabs:
- *   1. Datos — PatientCard editable inline + historial legacy collapsible.
+ *   1. Datos — PatientCard editable inline.
  *   2. Historia clínica — timeline interno (ClientNotesPanel). Se llamaba
  *      "Notas"; renombrada en la UI de nutri_laura (la clave y la tabla siguen
  *      siendo `notes` / `client_notes`).
- *   3. Documentos — PDFs del paciente (ClientAttachmentsPanel).
- *   4. Sesiones — bookings del paciente con confirm/reject (ClientBookingsPanel).
+ *   3. Documentos — ficheros de la paciente (ClientAttachmentsPanel).
+ *   4. Sesiones — bookings de la paciente con confirm/reject (ClientBookingsPanel).
  *   5. Pautas — planes de menú asignados (ClientPlansPanel).
+ *
+ * ⚠️ LOS TRES PANELES YA NO VIVEN AQUÍ (18/08/2026). Nacieron en esta carpeta
+ * y eran «el override»; en realidad eran la ficha entera, sobre tablas y
+ * endpoints que tiene TODO el mundo. Pasaron a `components/clients/` y los
+ * monta también la ficha por defecto —a quien decida
+ * `lib/clients/piezasFicha.js`—. Esta ficha los sigue montando IGUAL, con sus
+ * palabras de siempre pasadas por `textos` (abajo, `TEXTOS_LAURA`): lo que
+ * Laura ve no cambió con la mudanza. Lo que queda aquí de propio es la
+ * cabecera de paciente, la tarjeta de datos y el reparto en cinco pestañas.
  *
  * Decisiones clave:
  *   - editMode + editForm viven en este componente padre, NO en PatientCard.
  *     Cambiar de tab desmonta InfoTab pero el state sobrevive aquí, así que
  *     al volver a Información los inputs reaparecen con lo que el usuario
  *     tenía escrito (regla #1 del Checkpoint 3: no romper edición inline).
- *   - InteractionsLegacySection archivado a `_InteractionsLegacySection.jsx`:
- *     la tabla `interactions` no existe en crm_nutri_laura, así que la sección
- *     se quitó del render. El backend tolera la tabla missing (try/catch en
+ *   - La tabla `interactions` no existe en crm_nutri_laura, así que esta ficha
+ *     no tiene sección de interacciones (la que había, archivada como
+ *     `_InteractionsLegacySection.jsx`, se borró el 18/08/2026: nadie la
+ *     importaba desde junio). El backend tolera la tabla missing (try/catch en
  *     GET /api/clients/:id) y otros tenants siguen recibiendo el array para
  *     su default module.
  *   - Permisos: la ficha la abre CUALQUIERA del equipo que tenga el módulo
@@ -41,9 +51,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
-import ClientNotesPanel from "./ClientNotesPanel.jsx";
-import ClientAttachmentsPanel from "./ClientAttachmentsPanel.jsx";
-import ClientBookingsPanel from "./ClientBookingsPanel.jsx";
+import ClientNotesPanel from "../../../components/clients/ClientNotesPanel.jsx";
+import ClientAttachmentsPanel from "../../../components/clients/ClientAttachmentsPanel.jsx";
+import ClientBookingsPanel from "../../../components/clients/ClientBookingsPanel.jsx";
 import ClientPlansPanel from "../../nutricion/ClientPlansPanel.jsx";
 import ClientModulesSection from "../../../components/clients/ClientModulesSection.jsx";
 import ClientCitasSection from "../../../components/clients/ClientCitasSection.jsx";
@@ -80,6 +90,34 @@ const TABS = [
   // visible en nutri_laura.
   { key: "plan", label: "Pautas" },
 ];
+
+/**
+ * Las palabras de Laura en los tres paneles compartidos: LAS MISMAS que llevaban
+ * escritas cuando eran suyos (18/08/2026). En su consulta la paciente es «la
+ * paciente» —en femenino, que es como habla ella— y las citas son sesiones.
+ * Los paneles por defecto dicen «el cliente»; esto es lo que hace que la
+ * mudanza no le cambie ni una letra.
+ */
+const TEXTOS_LAURA = {
+  notas: {
+    titulo: "Nueva entrada de historia clínica",
+    placeholder: "Evolución, observaciones, acuerdos de la sesión… (uso interno, no lo ve la paciente)",
+    boton: "Añadir entrada",
+    vacio: "La historia clínica está vacía. Escribe la primera entrada arriba.",
+  },
+  documentos: {
+    limite: "archivos por paciente",
+    loSubio: "Lo subió la paciente",
+    loVe: "La paciente lo ve",
+    queLoVea: "Que la paciente lo vea",
+    faltaFirma: "la paciente",
+  },
+  sesiones: {
+    titulo: "Sesiones del paciente",
+    vacio: "Este paciente no tiene citas registradas.",
+    avisoRechazo: "El paciente recibirá un email automático con tu motivo (si lo escribes).",
+  },
+};
 
 const STATUSES = [
   { key: "new", label: "Nuevo" },
@@ -377,7 +415,7 @@ export default function NutriLauraClientDetailModule() {
           />
         )}
 
-        {tab === "notes" && <ClientNotesPanel clientId={id} />}
+        {tab === "notes" && <ClientNotesPanel clientId={id} textos={TEXTOS_LAURA.notas} />}
 
         {/* Montado SIEMPRE (solo oculto), no `tab === "whatsapp" && …`: es él
             quien dice si hay mensajes, y si solo se montara al abrir su pestaña
@@ -386,12 +424,10 @@ export default function NutriLauraClientDetailModule() {
           <ClientWhatsappSection clientId={id} onEstado={setHayWhatsapp} />
         </div>
 
-        {tab === "attachments" && <ClientAttachmentsPanel clientId={id} />}
+        {tab === "attachments" && <ClientAttachmentsPanel clientId={id} textos={TEXTOS_LAURA.documentos} />}
 
         {tab === "bookings" && (
-          <>
-            <ClientBookingsPanel clientId={id} clientEmail={client.email} />
-          </>
+          <ClientBookingsPanel clientId={id} clientEmail={client.email} textos={TEXTOS_LAURA.sesiones} />
         )}
 
         {tab === "plan" && <ClientPlansPanel clientId={id} />}

@@ -11,6 +11,7 @@ import {
   estaEsperandoAlPaciente,
 } from "../../../../../../lib/citas/cobroCita.js";
 import { reembolsarCitaSiProcede } from "../../../../../../lib/citas/reembolsoCita.js";
+import { MOTIVO_COBRO_DE_CITA_CANCELADA } from "../../../../../../lib/citas/politicaReembolso.js";
 import { sendEmail } from "../../../../../../lib/email/resendClient.js";
 import { avisarCitaPorWhatsapp } from "../../../../../../lib/citas/avisosWhatsapp.js";
 import { citaPuedeAvisar } from "../../../../../../lib/clients/comunicaciones.js";
@@ -223,7 +224,9 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       //
       // Se relee dentro de una transacción: si ya no está en pie, no se
       // confirma y se devuelve el dinero, que es lo único honesto cuando has
-      // cobrado por algo que la otra parte ya había cancelado.
+      // cobrado por algo que la otra parte ya había cancelado. Esa devolución
+      // es LA excepción a «no se devuelve nunca» y vive con su porqué en
+      // `lib/citas/politicaReembolso.js` (20/08/2026, Jorge), no aquí.
       // OJO con qué cuenta como "ya no está en pie". La primera versión de esta
       // guarda exigía `status === 'pending'` y devolvía el dinero en cuanto no
       // lo fuera — incluida la cita que otra petición simultánea acababa de
@@ -246,10 +249,13 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
 
       if (!sigueEnPie) {
         await row.reload();
+        const dev = await reembolsarCitaSiProcede(ctx, row, {
+          quienCancela: "profesional",
+          motivo: MOTIVO_COBRO_DE_CITA_CANCELADA,
+        });
         process.stderr.write(
-          `[citas:confirm] booking=${row.id} COBRADA PERO YA NO ESTABA EN PIE (${row.status}) — se devuelve\n`
+          `[citas:confirm] booking=${row.id} COBRADA PERO YA NO ESTABA EN PIE (${row.status}) — ${dev.motivo}\n`
         );
-        const dev = await reembolsarCitaSiProcede(ctx, row, { quienCancela: "profesional" });
         await logCitasAudit({
           tenantId: tenant.id,
           userId,
@@ -257,11 +263,20 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
           entity: "Booking",
           entityId: row.id,
           before: { status: estadoAnterior },
-          after: { status: row.status, cobrado: cobro.importe ?? null, devolucion: dev },
+          after: {
+            status: row.status,
+            cobrado: cobro.importe ?? null,
+            devuelto: dev.reembolsado ? dev.importe : null,
+            desenlace: dev.motivo,
+            ...(dev.error ? { error: dev.error } : {}),
+          },
           ip,
         });
+        // El mensaje lo dicta lo que ha pasado con el dinero, no lo que
+        // esperábamos que pasara: la devolución es best-effort y hasta el
+        // 20/08/2026 esta frase prometía un importe que no volvía nunca.
         return error(
-          "La cita dejó de estar disponible mientras se procesaba el cobro. El importe se ha devuelto.",
+          `La cita dejó de estar disponible mientras se procesaba el cobro. ${dev.motivo}.`,
           409,
           { code: "CANCELADA_A_MEDIAS" }
         );

@@ -19,11 +19,19 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * QUÉ CUENTA COMO «A MEDIDA», y por qué se distinguen cuatro cosas
  * No es lo mismo que un cliente tenga una PANTALLA propia (que hay que mantener
  * aparte cada vez que se toca la base) que un ajuste de comportamiento o un
- * campo extra. Se separan porque el coste de cada una es muy distinto:
- *   · pantalla  — un fichero entero en modules/overrides/, se queda atrás solo
- *   · lógica    — el módulo se comporta distinto para ese cliente
- *   · pruebas   — features en marcha que quizá no deberían seguir encendidas
- *   · campos    — datos extra en su schema
+ * campo extra. Se separan porque el coste de cada una es muy distinto, y desde
+ * el 18/08/2026 son los peldaños de la escalera de la regla #16 (CLAUDE.md):
+ *   · pantalla     — peldaño 5: un fichero en modules/overrides/, se queda
+ *                    atrás solo cada vez que se toca la base
+ *   · lógica       — peldaño 4: un parámetro (logicOverrides), el módulo se
+ *                    comporta distinto para ese cliente
+ *   · interruptor  — peldaño 3: un «esto sí / esto no» (featureFlags), p. ej.
+ *                    «formación abierta» en Aumenta
+ *   · campos       — datos extra en su schema (schemaExtensions)
+ * Los peldaños 1 y 2 (palabras y datos por cliente que viven en el CÓDIGO:
+ * «Interesados», los embudos de Leads, las columnas del Excel) NO salen aquí:
+ * la imagen de producción no lleva el código, y una lista copiada a mano
+ * mentiría en una semana. Se ven en el repo (regla #16 dice dónde).
  *
  * NO devuelve el CONTENIDO de esas personalizaciones, solo si las hay: dentro
  * puede haber configuración sensible del cliente, y para saber a quién hay que
@@ -119,10 +127,16 @@ export const GET = withTenant(async (_request, _ctx, ctx) => {
     // veinte, que es justo lo que esta pantalla viene a distinguir.
     clientes.sort((a, b) => b.modulos.length - a.modulos.length);
 
+    // Dos números para las pantallas propias, porque responden a preguntas
+    // distintas (18/08/2026): CUÁNTAS hay que mantener (ficheros: 5 el día que
+    // se escribió esto) y a CUÁNTOS clientes afectan (4). Contar solo clientes
+    // escondía que Laura tiene dos.
+    const pantallasPropias = clientes.reduce((n, c) => n + c.aMedida.filter((m) => m.pantalla).length, 0);
     return ok({
       clientes,
       totales: {
         clientes: clientes.length,
+        pantallasPropias,
         conPantallaPropia: clientes.filter((c) => c.aMedida.some((m) => m.pantalla)).length,
         personalizaciones: clientes.reduce((n, c) => n + c.aMedida.length, 0),
       },

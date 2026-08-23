@@ -49,26 +49,22 @@ import { computeOrder } from "./_migration-order.js";
  * muévanse a MODULES y a ORDER.
  */
 export const ONE_OFF = {
-  "migrate-quality-leads": "atada a quality_energy",
-  "migrate-pacientes-sprint-1": "cabecera: «solo aumenta»",
-  "migrate-clinica-sprint-1": "cabecera: «solo aumenta»",
-  "migrate-attachments-to-documents": "migración de DATOS (mueve ficheros+filas), se corre a mano una vez, no la ejecuta el disparador",
+  "migrate-quality-leads": "atada a quality_energy",
   "backfill-nutricion-assignments": "DATOS: marca «Paciente Nutrición» a los clientes previos al auto-marcado (2026-07-27); repetible, se corre a mano",
   "backfill-patients-client": "DATOS: enlaza pacientes con su ficha de pagador a partir de sus citas/sesiones; dry-run por defecto, se corre a mano con --confirm",
   "migrate-contract-patient-to-client": "DATOS: mueve el contrato del paciente a la familia (sprint 2026-07, 1.1); copia el PDF a `documents` y apunta clients.contract_document_id; dry-run por defecto, se corre a mano con --confirm",
   "podar-audit-logs": "MANTENIMIENTO del schema MASTER: retención del registro de auditoría; dry-run por defecto, lo lanza un temporizador semanal",
   "migrate-documents-avanzado": "MASTER, no toca schemas de tenant: reparte el módulo Documentos en básico/avanzado y da el avanzado a quien ya tenía Documentos, para que nadie pierda el archivo por el cambio de nomenclatura. Se corre a mano una vez, idempotente",
   "migrate-audit-logs-index": "índice en el schema MASTER (audit_logs), no por-tenant; idempotente, se corre a mano una vez",
-  "migrate-clients-avanzado": "MASTER, no toca schemas de tenant: saca la lista de espera de admisión de `clients` a `clients_avanzado` y se la da solo a quien admite por cola (aumenta, demo). Se corre a mano una vez, idempotente",
-  "migrate-inventory-rework":
-    "SUPERADA (02/08/2026). Es el rework de abril: creaba inbound_products, outbound_products, formulas y client_outbound_aliases, que son exactamente las tablas que `migrate-inventario-rework` (con «a») elimina. Ejecutarla en un tenant nuevo le devolvería el esquema viejo. Se conserva como histórico, NO se ejecuta.",
+  "migrate-clients-avanzado": "MASTER, no toca schemas de tenant: saca la lista de espera de admisión de `clients` a `clients_avanzado` y se la da solo a quien admite por cola (aumenta, demo). Se corre a mano una vez, idempotente",
   "migrate-usuario-backoffice": "MASTER, no toca schemas de tenant: añade `solo_backoffice` a `master.users` para separar las cuentas del panel interno de las del CRM. Se corre a mano con `npm run db:migrate:backoffice`; aditiva, con default false, idempotente",
   // Faltaba desde que se escribió (12/08/2026) y dejaba `check-migration-order`
   // en rojo con dos incoherencias: «sin módulo asignado (nadie las ejecutaría)»
   // e «ilegibles y sin arista declarada». No es la primera vez que pasa —los
   // commits 74fc6d2 y be465f5 arreglaron lo mismo— así que el despiste es del
   // flujo, no de nadie: una migración de MASTER no cae sola en ningún módulo.
-  "migrate-tablero-estado": "MASTER, no toca schemas de tenant: crea `master.tablero_estado`, donde el Registro guarda el tick y el reparto de cada tarea (el TEXTO sigue en los .md del repo). Se corre a mano una vez, idempotente",
+  "migrate-tablero-estado": "MASTER, no toca schemas de tenant: crea `master.tablero_estado`, donde el Registro guarda el tick y el reparto de cada tarea. Se corre a mano una vez, idempotente",
+  "migrate-tablero-documentos": "MASTER, no toca schemas de tenant: crea `master.tablero_documentos`, donde vive el TEXTO del Registro (backlog y resuelto, una fila por versión) desde el 19/08/2026, cuando dejó de viajar en la imagen de Docker. Solo crea tabla e índice; el texto lo carga `tablero-doc.js publicar` cuando se le dice. Se corre a mano una vez, idempotente",
   "migrate-paquetes-modulos": "MASTER, no toca schemas de tenant: crea `master.paquetes_modulos` y siembra los dos paquetes que hasta ahora estaban escritos en `catalogo.js`. Se corre a mano con `npm run db:migrate:paquetes`; idempotente, y la semilla NO restaura lo que se haya borrado después",
   "migrate-auto-asignar-nutricion":
     "MASTER, no toca schemas de tenant: enciende `featureFlags.autoAsignarEnAlta` en la fila de `nutricion` de quien ya dependía del auto-marcado (nutri_laura). El flag nace apagado para todos los demás a propósito — antes, tener el módulo bastaba para que TODA ficha nueva se marcara como paciente de nutrición. Se corre a mano una vez, idempotente",
@@ -268,6 +264,12 @@ export const MODULES = {
   calendar: ["migrate-calendar-citas-fks"],
 
   pacientes: [
+    // La tabla `patients` la crea migrate-clinica-module (que ya está escrita
+    // para «clinica O pacientes»); sin ella aquí, activar `pacientes` suelto
+    // corría las seis de abajo —todas ALTER sobre patients— sin tabla. Está
+    // también en el bloque `clinica`, como migrate-patients-care-type: el
+    // analizador de orden deduplica (19/08/2026).
+    "migrate-clinica-module",
     "migrate-patients-clients-phase1",
     "migrate-client-module-assignments",
     "migrate-patients-multi-per-client",

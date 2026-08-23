@@ -4,6 +4,7 @@ import DefaultClientDetailModule from "../../../../modules/default/ClientDetailM
 import NutriLauraClientDetailModule from "../../../../modules/overrides/nutri-laura/ClientDetailModule.jsx";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { perfilDeAlta, PERFIL_COMERCIAL } from "../../../../lib/clients/formularioAlta.js";
+import { fichaSegunModulos, PIEZAS_NINGUNA, textosPiezas } from "../../../../lib/clients/piezasFicha.js";
 
 const UI_OVERRIDES = {
   nutri_laura: NutriLauraClientDetailModule,
@@ -31,13 +32,20 @@ export default async function ClienteDetailPage() {
   let conPacientes = false;
   let conFacturacion = false;
   let conNutricion = false;
+  // Qué paneles de consulta monta la ficha (Notas, Documentos, la lista de
+  // citas) y con qué palabras: `lib/clients/piezasFicha.js`, por módulos. Ante
+  // la duda, ninguno: una pestaña de menos se echa de menos; una de más en el
+  // cliente equivocado —Aumenta— es un cambio que nadie pidió.
+  let piezas = PIEZAS_NINGUNA;
+  let textos = textosPiezas();
   try {
     const { Tenant, TenantModule } = getMasterModels();
     const tenant = tenantSlug ? await Tenant.findOne({ where: { slug: tenantSlug } }) : null;
     if (tenant) {
       const filas = await TenantModule.findAll({ where: { tenantId: tenant.id } });
       const activos = new Set(filas.filter((f) => f.enabled).map((f) => f.moduleKey));
-      perfil = perfilDeAlta((k) => activos.has(k));
+      const tieneModulo = (k) => activos.has(k);
+      perfil = perfilDeAlta(tieneModulo);
       conPacientes = activos.has("pacientes");
       conFacturacion = activos.has("billing");
       // Decide si la ficha lleva pestaña "Pautas". Se resuelve AQUÍ, en el
@@ -46,9 +54,11 @@ export default async function ClienteDetailPage() {
       // vería la pestaña con «Módulo nutricion no activo» dentro. Es el mismo
       // patrón que `conFacturacion`.
       conNutricion = activos.has("nutricion");
+      ({ piezas, textos } = fichaSegunModulos(tieneModulo));
     }
   } catch {
     perfil = PERFIL_COMERCIAL;
+    piezas = PIEZAS_NINGUNA;
   }
 
   // Falso positivo de react-hooks/static-components: es el override de UI por
@@ -62,6 +72,8 @@ export default async function ClienteDetailPage() {
       conPacientes={conPacientes}
       conFacturacion={conFacturacion}
       conNutricion={conNutricion}
+      piezas={piezas}
+      textos={textos}
     />
   );
 }

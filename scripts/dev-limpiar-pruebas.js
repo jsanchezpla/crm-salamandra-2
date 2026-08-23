@@ -1,3 +1,4 @@
+// @vivo — Utilidad de DESARROLLO genérica por slug (con `--dry`) que borra solo las citas/cobros con prefijos `smoke…`/`ui-…`@example.com que dejan los… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * dev-limpiar-pruebas.js — borra las citas y cobros de prueba que dejan los
  * smoke tests y las pruebas a mano en el navegador.

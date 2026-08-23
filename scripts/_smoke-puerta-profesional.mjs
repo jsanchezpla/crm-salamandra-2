@@ -1,3 +1,4 @@
+// @prueba ligera — importa `Op` y se fabrica un sequelize de mentira; no abre ninguna conexión.
 /**
  * _smoke-puerta-profesional.mjs — el profesional no hace el formulario del
  * paciente (12/08/2026, Rodrigo).

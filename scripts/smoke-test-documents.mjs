@@ -1,3 +1,4 @@
+// @vivo — «Smoke HTTP del Sprint 1 del módulo Documents. (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * smoke-test-documents.mjs — Smoke HTTP del Sprint 1 del módulo Documents.
  *

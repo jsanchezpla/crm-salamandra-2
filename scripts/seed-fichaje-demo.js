@@ -1,3 +1,4 @@
+// @vivo — Es LA semilla de Fichaje de las demos: seed-sandbox-data.js no siembra fichajes, este recorre todas las demos con el módulo (lista de master en… (leído el 19/08/2026; ver scripts/_hechos/README.md)
 /**
  * seed-fichaje-demo.js — un mes de fichaje inventado para el escaparate.
  *
