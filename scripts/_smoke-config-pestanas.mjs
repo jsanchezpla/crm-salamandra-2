@@ -42,6 +42,7 @@ import {
   avisoDePestana,
   avisoDeTarjeta,
   esPestanaValida,
+  etiquetaDeModulo,
   tarjetasDe,
 } from "../lib/configuracion/pestanas.js";
 
@@ -230,6 +231,41 @@ test("la pantalla monta lo que el mapa declara, y nada más", async (t) => {
         `la zona ${p.clave} existe en el mapa pero no se pinta en ConfigModule`
       );
     }
+  });
+});
+
+test("la etiqueta «de qué módulo es esto»", async (t) => {
+  // En «Módulos» conviven Clínica, Clientes y una que vale para todos, y sin
+  // rotularlas no se entiende qué pinta cada una junto a la otra.
+  await t.test("solo se rotula la zona Módulos", () => {
+    const conEtiqueta = PESTANAS.filter((p) => p.etiquetarModulo).map((p) => p.clave);
+    assert.deepEqual(conEtiqueta, ["modulos"]);
+  });
+
+  await t.test("toda tarjeta tiene etiqueta: ninguna se queda en blanco", () => {
+    // Un hueco sin etiqueta donde las demás la llevan se lee como un olvido.
+    for (const clave of Object.keys(TARJETAS)) {
+      const e = etiquetaDeModulo(clave);
+      assert.ok(e && e.trim(), `${clave} se quedaría sin rótulo`);
+    }
+  });
+
+  await t.test("las tres de Módulos dicen lo que son", () => {
+    assert.equal(etiquetaDeModulo("derivaciones"), "Clínica o Pacientes");
+    assert.equal(etiquetaDeModulo("consultasExternas"), "Clientes");
+    assert.equal(etiquetaDeModulo("permisosIa"), "Todo el CRM");
+  });
+
+  await t.test("la etiqueta NO depende de lo contratado: es qué es, no si sirve", () => {
+    // A diferencia del aviso, que sí mira los módulos del cliente.
+    assert.equal(etiquetaDeModulo("stripe"), "Citas");
+    assert.equal(etiquetaDeModulo("openai"), "Clínica");
+    // Y se rotulan también las que se esconden solas: cuando se ven, se ven.
+    assert.equal(etiquetaDeModulo("descripcionEmpresa"), "Captación");
+  });
+
+  await t.test("una tarjeta que no existe no inventa rótulo", () => {
+    assert.equal(etiquetaDeModulo("no_existe"), null);
   });
 });
 

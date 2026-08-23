@@ -14,6 +14,7 @@ import {
   avisoDePestana,
   avisoDeTarjeta,
   esPestanaValida,
+  etiquetaDeModulo,
 } from "../../lib/configuracion/pestanas.js";
 
 const inputCls =
@@ -298,7 +299,12 @@ export default function ConfigModule({ modulos = null }) {
   // Dentro de una zona ya resumida arriba no se repite el aviso tarjeta a
   // tarjeta: se atenúan igual, pero callando.
   const enZona = (clave, children) => (
-    <Tarjeta clave={clave} tieneModulo={tieneModulo} callado={!!avisoZona}>
+    <Tarjeta
+      clave={clave}
+      tieneModulo={tieneModulo}
+      callado={!!avisoZona}
+      etiquetar={!!zona.etiquetarModulo}
+    >
       {children}
     </Tarjeta>
   );
@@ -1330,24 +1336,37 @@ function CategoriasExternasCard({ categorias, readOnly, onChange }) {
         ))}
       </div>
 
+      {/* Rodrigo, 23/08/2026: «no hay una forma de añadir, al igual que sí que
+          hay en el elemento de encima». La había —este campo y su botón—, pero
+          no se leía como tal: el botón iba en negro al 40 % con el campo vacío,
+          que es aspecto de botón roto, y nada decía para qué servía el hueco.
+          Ahora lleva su etiqueta y el MISMO botón verde que «Guardar catálogo»
+          justo encima, para que las dos tarjetas se parezcan en lo que hacen. */}
       {!readOnly && (
-        <div className="mt-3 flex gap-2">
-          <input
-            value={nueva}
-            onChange={(e) => setNueva(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); anadir(); } }}
-            placeholder="Nombre de la empresa"
-            maxLength={80}
-            className="flex-1 border border-neutral-200 rounded-md px-2.5 py-1.5 text-sm"
-          />
-          <button
-            type="button"
-            onClick={anadir}
-            disabled={!nueva.trim()}
-            className="text-xs px-3 py-1.5 rounded-md bg-[#0F0F0F] text-white hover:bg-[#222] disabled:opacity-40 shrink-0"
-          >
-            Añadir
-          </button>
+        <div className="mt-4">
+          <label className="block text-[11px] font-medium text-neutral-500 mb-1">Añadir una empresa</label>
+          <div className="flex gap-2">
+            <input
+              value={nueva}
+              onChange={(e) => setNueva(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); anadir(); } }}
+              placeholder="Nombre de la empresa"
+              maxLength={80}
+              className="flex-1 border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-400"
+            />
+            <button
+              type="button"
+              onClick={anadir}
+              disabled={!nueva.trim()}
+              className="text-xs font-medium px-3 py-2 rounded-lg text-white disabled:opacity-50 shrink-0"
+              style={{ background: "var(--color-primary, #1B3A2D)" }}
+            >
+              Añadir
+            </button>
+          </div>
+          <p className="text-[11px] text-neutral-400 mt-1.5">
+            Escribe el nombre y pulsa Añadir (o Intro). Se guarda al momento.
+          </p>
         </div>
       )}
     </div>
@@ -2768,13 +2787,20 @@ function BotonZona({ activa, onClick, children }) {
  * envuelve nada: sería un aviso flotando solo, sin la tarjeta a la que se
  * refiere.
  */
-function Tarjeta({ clave, tieneModulo, callado = false, children }) {
+function Tarjeta({ clave, tieneModulo, callado = false, etiquetar = false, children }) {
   if (!children) return null;
   const aviso = avisoDeTarjeta(clave, tieneModulo);
-  if (!aviso) return children;
+  // De qué módulo es. No depende de lo contratado: es qué ES la tarjeta.
+  const etiqueta = etiquetar ? etiquetaDeModulo(clave) : null;
+  if (!aviso && !etiqueta) return children;
   return (
-    <div className="opacity-60 hover:opacity-100 focus-within:opacity-100 transition-opacity">
-      {!callado && <p className="text-[11px] text-neutral-500 mb-1.5">{aviso}</p>}
+    <div className={aviso ? "opacity-60 hover:opacity-100 focus-within:opacity-100 transition-opacity" : undefined}>
+      {etiqueta && (
+        <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-1.5">
+          {etiqueta}
+        </p>
+      )}
+      {aviso && !callado && <p className="text-[11px] text-neutral-500 mb-1.5">{aviso}</p>}
       {children}
     </div>
   );
