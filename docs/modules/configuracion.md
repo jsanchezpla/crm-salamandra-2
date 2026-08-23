@@ -70,6 +70,27 @@ sale también qué módulo hace útil cada tarjeta, y eso es una regla por módu
 URL (`?zona=conexiones`) para poder enlazar «mira esto» a un sitio concreto;
 lo que llegue raro cae en la primera.
 
+### Cada ajuste dice de qué módulo es
+
+Encima de cada tarjeta va el módulo del que depende: `CLÍNICA` sobre la clave de
+OpenAI, `ANALÍTICAS` sobre Cloudflare, `CITAS` sobre el cobro online. Sale de
+`etiquetaDeModulo()`, o sea del mismo `TARJETAS` que decide el aviso: no hay una
+segunda lista que pueda quedarse vieja.
+
+**Las universales no llevan rótulo, y eso es información.** Con el rótulo en
+todas las zonas, no llevarlo significa «vale para todo el CRM» — así que
+Anthropic, Resend, el remitente, WhatsApp y los permisos de IA salen limpios.
+Nació al revés (solo en «Módulos», y las universales decían «Todo el CRM» para
+que su hueco no pareciera un olvido); al extenderlo a toda la pantalla el
+23/08/2026 eso pasó a ser ruido que no distinguía nada.
+
+⚠️ La única excepción es `fiscal`, marcada con `rotulo: false`: su sección ya se
+titula «Facturación» con la misma tipografía que el rótulo, y serían dos líneas
+seguidas diciendo lo mismo.
+
+El rótulo **no** depende de lo contratado —es qué ES la tarjeta, no si te
+sirve—, a diferencia del aviso de abajo, que sí.
+
 ### Atenuar NO es desactivar
 
 Una tarjeta cuyo módulo no está contratado sale **al 60 % y con una frase** que

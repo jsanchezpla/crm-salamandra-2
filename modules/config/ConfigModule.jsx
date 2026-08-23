@@ -299,12 +299,7 @@ export default function ConfigModule({ modulos = null }) {
   // Dentro de una zona ya resumida arriba no se repite el aviso tarjeta a
   // tarjeta: se atenúan igual, pero callando.
   const enZona = (clave, children) => (
-    <Tarjeta
-      clave={clave}
-      tieneModulo={tieneModulo}
-      callado={!!avisoZona}
-      etiquetar={!!zona.etiquetarModulo}
-    >
+    <Tarjeta clave={clave} tieneModulo={tieneModulo} callado={!!avisoZona}>
       {children}
     </Tarjeta>
   );
@@ -2787,11 +2782,13 @@ function BotonZona({ activa, onClick, children }) {
  * envuelve nada: sería un aviso flotando solo, sin la tarjeta a la que se
  * refiere.
  */
-function Tarjeta({ clave, tieneModulo, callado = false, etiquetar = false, children }) {
+function Tarjeta({ clave, tieneModulo, callado = false, children }) {
   if (!children) return null;
   const aviso = avisoDeTarjeta(clave, tieneModulo);
-  // De qué módulo es. No depende de lo contratado: es qué ES la tarjeta.
-  const etiqueta = etiquetar ? etiquetaDeModulo(clave) : null;
+  // De qué módulo es, en TODAS las zonas. No depende de lo contratado: es qué
+  // ES la tarjeta, no si le sirve. Las universales no llevan rótulo — con esto
+  // en todas partes, no llevarlo ya significa «vale para todo el CRM».
+  const etiqueta = etiquetaDeModulo(clave);
   if (!aviso && !etiqueta) return children;
   return (
     <div className={aviso ? "opacity-60 hover:opacity-100 focus-within:opacity-100 transition-opacity" : undefined}>

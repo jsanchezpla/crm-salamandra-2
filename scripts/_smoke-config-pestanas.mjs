@@ -235,33 +235,48 @@ test("la pantalla monta lo que el mapa declara, y nada más", async (t) => {
 });
 
 test("la etiqueta «de qué módulo es esto»", async (t) => {
-  // En «Módulos» conviven Clínica, Clientes y una que vale para todos, y sin
-  // rotularlas no se entiende qué pinta cada una junto a la otra.
-  await t.test("solo se rotula la zona Módulos", () => {
-    const conEtiqueta = PESTANAS.filter((p) => p.etiquetarModulo).map((p) => p.clave);
-    assert.deepEqual(conEtiqueta, ["modulos"]);
-  });
-
-  await t.test("toda tarjeta tiene etiqueta: ninguna se queda en blanco", () => {
-    // Un hueco sin etiqueta donde las demás la llevan se lee como un olvido.
-    for (const clave of Object.keys(TARJETAS)) {
+  await t.test("TODA tarjeta con módulo lleva rótulo, en cualquier zona", () => {
+    // Rodrigo, 23/08/2026: «que salga a qué módulo pertenece cada configuración
+    // cuando no pertenecen a todo el CRM». O sea, en las seis zonas, no solo en
+    // «Módulos», que es donde nació.
+    for (const [clave, tarjeta] of Object.entries(TARJETAS)) {
+      if (!tarjeta.requiere || tarjeta.rotulo === false) continue;
       const e = etiquetaDeModulo(clave);
-      assert.ok(e && e.trim(), `${clave} se quedaría sin rótulo`);
+      assert.ok(e && e.trim(), `${clave} (zona ${tarjeta.pestana}) se queda sin rótulo`);
     }
   });
 
-  await t.test("las tres de Módulos dicen lo que son", () => {
+  await t.test("las universales NO llevan rótulo: su ausencia ya lo dice", () => {
+    // Con el rótulo en todas partes, no llevarlo significa «vale para todo el
+    // CRM». Repetirlo sobre Anthropic, Resend y el remitente sería ruido.
+    for (const clave of ["anthropic", "resend", "remitente", "whatsapp", "permisosIa"]) {
+      assert.equal(TARJETAS[clave].requiere, null, `${clave} debería ser universal`);
+      assert.equal(etiquetaDeModulo(clave), null, `${clave} no debería llevar rótulo`);
+    }
+  });
+
+  await t.test("cada zona rotula lo que toca", () => {
     assert.equal(etiquetaDeModulo("derivaciones"), "Clínica o Pacientes");
     assert.equal(etiquetaDeModulo("consultasExternas"), "Clientes");
-    assert.equal(etiquetaDeModulo("permisosIa"), "Todo el CRM");
+    assert.equal(etiquetaDeModulo("openai"), "Clínica");        // Conexiones
+    assert.equal(etiquetaDeModulo("cloudflare"), "Analíticas"); // Conexiones
+    assert.equal(etiquetaDeModulo("recordatorios"), "Citas");   // Agenda
+    assert.equal(etiquetaDeModulo("areaPrivada"), "Citas");     // Portal
+    // El que canta en «Reserva online», donde las demás son de Citas.
+    assert.equal(etiquetaDeModulo("puertaAdmision"), "Comerciales (formularios)");
   });
 
   await t.test("la etiqueta NO depende de lo contratado: es qué es, no si sirve", () => {
     // A diferencia del aviso, que sí mira los módulos del cliente.
     assert.equal(etiquetaDeModulo("stripe"), "Citas");
-    assert.equal(etiquetaDeModulo("openai"), "Clínica");
     // Y se rotulan también las que se esconden solas: cuando se ven, se ven.
     assert.equal(etiquetaDeModulo("descripcionEmpresa"), "Captación");
+  });
+
+  await t.test("«Facturación» no se rotula: su sección ya se titula igual", () => {
+    // Serían dos líneas seguidas diciendo lo mismo con la misma tipografía.
+    assert.equal(TARJETAS.fiscal.rotulo, false);
+    assert.equal(etiquetaDeModulo("fiscal"), null);
   });
 
   await t.test("una tarjeta que no existe no inventa rótulo", () => {
