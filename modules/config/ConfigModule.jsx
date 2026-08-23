@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import Link from "next/link";
 import Select from "../../components/ui/Select.jsx";
@@ -8,6 +8,13 @@ import ConectarWhatsapp from "./ConectarWhatsapp.jsx";
 import { ANTHROPIC_MODELS } from "../../lib/ai/anthropicModel.js";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "../../lib/citas/coloresBloqueo.js";
 import { EVENTOS_WEBHOOK_STRIPE } from "../../lib/payments/eventosWebhook.js";
+import {
+  PESTANAS,
+  PESTANA_POR_DEFECTO,
+  avisoDePestana,
+  avisoDeTarjeta,
+  esPestanaValida,
+} from "../../lib/configuracion/pestanas.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -152,9 +159,41 @@ const AI_PROVIDERS = {
   },
 };
 
-export default function ConfigModule() {
+/**
+ * `modulos` viene de la página (servidor): la lista de moduleKeys activos, o
+ * `null` si no se pudo averiguar. Sirve solo para ATENUAR y explicar las
+ * tarjetas cuyo módulo no está contratado — todas se siguen pudiendo rellenar,
+ * porque la Configuración es universal (regla #14).
+ */
+export default function ConfigModule({ modulos = null }) {
   const [me, setMe] = useState(null);
   const isAdmin = me?.role === "admin" || me?.role === "superadmin";
+
+  // `null` = no se sabe, y entonces no se avisa de nada: un aviso falso manda a
+  // alguien a pedir un módulo que ya tiene.
+  const tieneModulo = useMemo(() => {
+    if (!Array.isArray(modulos)) return null;
+    const activos = new Set(modulos);
+    return (k) => activos.has(k);
+  }, [modulos]);
+
+  // La pestaña abierta viaja en la URL (?zona=conexiones) para poder enlazar
+  // «mira esto» a un sitio concreto en vez de «baja hasta que lo veas». Se
+  // valida contra el catálogo: lo que llegue raro cae en la primera.
+  const [pestana, setPestana] = useState(PESTANA_POR_DEFECTO);
+  useEffect(() => {
+    const pedida = new URLSearchParams(window.location.search).get("zona");
+    if (esPestanaValida(pedida)) setPestana(pedida);
+  }, []);
+  const irA = useCallback((clave) => {
+    setPestana(clave);
+    const url = new URL(window.location.href);
+    url.searchParams.set("zona", clave);
+    // `replaceState` y no `push`: cambiar de pestaña no es navegar, y llenar el
+    // historial obligaría a dar seis veces atrás para salir de Configuración.
+    window.history.replaceState(null, "", url);
+    window.scrollTo({ top: 0 });
+  }, []);
 
   const [cfg, setCfg] = useState(null); // /api/tenant/settings
   const [billing, setBilling] = useState(null); // /api/billing/settings (o null si no hay módulo)
@@ -254,6 +293,16 @@ export default function ConfigModule() {
     );
   }
 
+  const zona = PESTANAS.find((p) => p.clave === pestana) ?? PESTANAS[0];
+  const avisoZona = avisoDePestana(pestana, tieneModulo);
+  // Dentro de una zona ya resumida arriba no se repite el aviso tarjeta a
+  // tarjeta: se atenúan igual, pero callando.
+  const enZona = (clave, children) => (
+    <Tarjeta clave={clave} tieneModulo={tieneModulo} callado={!!avisoZona}>
+      {children}
+    </Tarjeta>
+  );
+
   return (
     <div className="p-4 lg:p-8 max-w-4xl mx-auto space-y-5">
       <div>
@@ -272,8 +321,33 @@ export default function ConfigModule() {
             configuración — nosotros incluidos.
           </HelpTooltip>
         </h1>
-        <p className="text-xs text-neutral-400 mt-1">Empresa, facturación e inteligencia artificial</p>
+        <p className="text-xs text-neutral-400 mt-1">{zona?.resumen}</p>
       </div>
+
+      {/* ── Las seis zonas ───────────────────────────────────────────────────
+          Hasta el 23/08/2026 esto era UNA columna de 28 tarjetas, y todo lo que
+          hay debajo —de la clave de Anthropic a las puertas de la agenda—
+          colgaba del mismo bloque titulado «Inteligencia Artificial». El
+          reparto vive en `lib/configuracion/pestanas.js` y no aquí, porque de
+          él sale también qué tarjeta depende de qué módulo, y eso es una regla
+          por módulos, no una decisión de pintura. */}
+      <div className="border-b border-neutral-100 -mx-4 lg:-mx-8 px-4 lg:px-8">
+        <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
+          {PESTANAS.map((p) => (
+            <BotonZona key={p.clave} activa={p.clave === pestana} onClick={() => irA(p.clave)}>
+              {p.titulo}
+            </BotonZona>
+          ))}
+        </div>
+      </div>
+
+      {/* Cuando TODA la zona depende del mismo módulo se dice una vez aquí, en
+          vez de repetir la misma frase en cada tarjeta. */}
+      {avisoZona && (
+        <div className="px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-lg text-xs text-neutral-600">
+          {avisoZona}
+        </div>
+      )}
 
       {errorMsg && <div className="px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{errorMsg}</div>}
       {okMsg && <div className="px-4 py-3 bg-emerald-50 border border-emerald-100 rounded-lg text-xs text-emerald-700">{okMsg}</div>}
@@ -283,527 +357,645 @@ export default function ConfigModule() {
         </div>
       )}
 
-      {/* ── Descripción de empresa (alimenta Captación) ──────────────────── */}
-      <CompanyDescriptionSection isAdmin={isAdmin} flash={flash} onError={setErrorMsg} />
-
-      {/* ── Facturación ──────────────────────────────────────────────────── */}
-      {billing && (
-        <Section title="Facturación" right={<Link href="/facturacion/configuracion" className="text-[11px] font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">Config. completa →</Link>}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Razón social">
-              <input disabled={!isAdmin} value={billing.fiscalName ?? ""} onChange={(e) => setBillingField("fiscalName", e.target.value)} className={inputCls} />
-            </Field>
-            <Field label="NIF / CIF">
-              <input disabled={!isAdmin} value={billing.taxId ?? ""} onChange={(e) => setBillingField("taxId", e.target.value)} className={inputCls} />
-            </Field>
-            <Field label="Dirección" full>
-              <input disabled={!isAdmin} value={billing.fiscalAddress ?? ""} onChange={(e) => setBillingField("fiscalAddress", e.target.value)} className={inputCls} />
-            </Field>
-            <Field label="Ciudad">
-              <input disabled={!isAdmin} value={billing.fiscalCity ?? ""} onChange={(e) => setBillingField("fiscalCity", e.target.value)} className={inputCls} />
-            </Field>
-            <Field label="Código postal">
-              <input disabled={!isAdmin} value={billing.fiscalZip ?? ""} onChange={(e) => setBillingField("fiscalZip", e.target.value)} className={inputCls} />
-            </Field>
-            <Field label="País (ISO 2)">
-              <input disabled={!isAdmin} maxLength={2} value={billing.fiscalCountry ?? ""} onChange={(e) => setBillingField("fiscalCountry", e.target.value.toUpperCase())} className={inputCls} />
-            </Field>
-            <Field label="IVA por defecto">
-              <Select disabled={!isAdmin} value={Number(billing.defaultVatRate)} onChange={(v) => setBillingField("defaultVatRate", Number(v))} options={(billing.availableVatRates ?? [21, 10, 4, 0]).map((v) => ({ value: Number(v), label: `${v}%` }))} className={inputCls} />
-            </Field>
-            <Field label="Exención de IVA" full>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" disabled={!isAdmin} checked={!!billing.vatExempt} onChange={(e) => setBillingField("vatExempt", e.target.checked)} className="h-4 w-4 accent-[var(--color-primary,#1B3A2D)]" />
-                <span className="text-sm text-neutral-700">Mis servicios están exentos de IVA (no repercuto IVA)</span>
-              </label>
-              {billing.vatExempt ? (
-                <div className="mt-2">
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Nota legal de exención (aparece en la factura)</label>
-                  <textarea disabled={!isAdmin} rows={2} value={billing.vatExemptNote ?? ""} onChange={(e) => setBillingField("vatExemptNote", e.target.value)} className={inputCls} />
-                  <p className="text-[11px] text-neutral-400 mt-1">Con esto activo, las nuevas facturas nacen a IVA 0 y llevan esta nota. El «IVA por defecto» de arriba se ignora.</p>
-                </div>
-              ) : (
-                <p className="text-[11px] text-neutral-400 mt-1">Actívalo si nunca repercutes IVA (p. ej. sanidad/educación): las facturas saldrán sin IVA con su nota legal.</p>
-              )}
-            </Field>
-            <Field label="¿Cómo facturas? (régimen fiscal)" full>
-              {/* 3 regímenes. Solo "Autónomo profesional" aplica retención de
-                  IRPF (−15% por defecto); "Autónomo" a secas (actividad
-                  empresarial) factura sin retención, igual que una SL. */}
-              {(() => {
-                const regime = ["company", "autonomo", "freelance"].includes(billing.taxRegime) ? billing.taxRegime : "company";
-                const btnCls = (active) =>
-                  `px-3 py-1.5 rounded-lg text-sm border transition disabled:opacity-60 ${
-                    active ? "border-transparent text-white" : "border-neutral-200 text-neutral-500 hover:bg-neutral-50"
-                  }`;
-                const btnStyle = (active) => (active ? { backgroundColor: "var(--color-primary, #1B3A2D)" } : undefined);
-                return (
-                  <>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {/* company/autonomo NO tocan defaultIrpfRate: se conserva
-                          el % que tuviera el tenant (saveBilling ya manda 0 al
-                          guardar si el régimen no es freelance), así volver a
-                          "Autónomo profesional" recupera el % personalizado. */}
-                      <button
-                        type="button"
-                        disabled={!isAdmin}
-                        onClick={() => setBillingField("taxRegime", "company")}
-                        className={btnCls(regime === "company")}
-                        style={btnStyle(regime === "company")}
-                      >
-                        Empresa / SL
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!isAdmin}
-                        onClick={() => setBillingField("taxRegime", "autonomo")}
-                        className={btnCls(regime === "autonomo")}
-                        style={btnStyle(regime === "autonomo")}
-                      >
-                        Autónomo (sin −15%)
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!isAdmin}
-                        onClick={() => { setBillingField("taxRegime", "freelance"); if (!(Number(billing.defaultIrpfRate) > 0)) setBillingField("defaultIrpfRate", 15); }}
-                        className={btnCls(regime === "freelance")}
-                        style={btnStyle(regime === "freelance")}
-                      >
-                        Autónomo profesional (−15% IRPF)
-                      </button>
-                      {regime === "freelance" && (
-                        <div className="flex items-center gap-1.5">
-                          <input disabled={!isAdmin} type="number" min="0" max="100" step="0.01" value={billing.defaultIrpfRate ?? 15} onChange={(e) => setBillingField("defaultIrpfRate", e.target.value)} className={`${inputCls} w-20`} />
-                          <span className="text-xs text-neutral-500">% IRPF</span>
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-neutral-400 mt-1">
-                      {regime === "freelance"
-                        ? "Se restará este IRPF por defecto en tus facturas (ajustable en cada factura)."
-                        : regime === "autonomo"
-                          ? "Autónomo con actividad empresarial: factura SIN retención de IRPF."
-                          : "Sin retención de IRPF por defecto (lo habitual en SL / empresa)."}
-                    </p>
-                  </>
-                );
-              })()}
-            </Field>
-            <Field label="Días de vencimiento">
-              <input disabled={!isAdmin} type="number" min="0" value={billing.defaultPaymentTermsDays ?? 30} onChange={(e) => setBillingField("defaultPaymentTermsDays", e.target.value)} className={inputCls} />
-            </Field>
-          </div>
-          {isAdmin && (
-            <div className="flex justify-end mt-4">
-              <PrimaryButton onClick={saveBilling}>Guardar facturación</PrimaryButton>
-            </div>
-          )}
-        </Section>
-      )}
-
-      {/* ── Inteligencia Artificial ──────────────────────────────────────── */}
-      <div>
-        <h2 className="eyebrow mb-1">Inteligencia Artificial</h2>
-        <p className="text-xs text-neutral-400 mb-3">
-          Conecta las credenciales del tenant. Se guardan cifradas del lado del servidor y nunca se muestran enteras.
-        </p>
+      {pestana === "empresa" && (
         <div className="space-y-4">
-          <ApiKeyCard
-            provider={AI_PROVIDERS.anthropic}
-            status={cfg.integrations?.anthropic}
-            isAdmin={isAdmin}
-            onSave={(value) => patchTenant({ anthropicApiKey: value }, "Clave de Anthropic guardada")}
-            onClear={() => patchTenant({ anthropicApiKey: null }, "Clave de Anthropic eliminada")}
-            models={ANTHROPIC_MODELS}
-            currentModel={cfg.integrations?.anthropic?.model}
-            onModelChange={(v) => patchTenant({ anthropicModel: v }, "Modelo de IA actualizado")}
-          />
-          <ApiKeyCard
-            provider={AI_PROVIDERS.openai}
-            status={cfg.integrations?.openai}
-            isAdmin={isAdmin}
-            onSave={(value) => patchTenant({ openaiApiKey: value }, "Clave de OpenAI guardada")}
-            onClear={() => patchTenant({ openaiApiKey: null }, "Clave de OpenAI eliminada")}
-          />
-          <ApiKeyCard
-            provider={AI_PROVIDERS.whatsapp}
-            status={cfg.integrations?.whatsapp}
-            isAdmin={isAdmin}
-            onSave={(value) => patchTenant({ whatsappToken: value }, "Token de WhatsApp guardado")}
-            onClear={() => patchTenant({ whatsappToken: null }, "Token de WhatsApp eliminado")}
-            extra={
-              <>
-                <ConectarWhatsapp
-                  isAdmin={isAdmin}
-                  conectado={!!cfg.integrations?.whatsapp?.phoneNumberId}
-                  numero={cfg.integrations?.whatsapp?.numero}
-                  conectadoAt={cfg.integrations?.whatsapp?.conectadoAt}
-                  onConectado={async () => {
-                    const r = await fetch("/api/tenant/settings", { cache: "no-store" });
-                    const j = await r.json().catch(() => null);
-                    if (j?.ok) setCfg(j.data);
-                    flash("WhatsApp conectado");
-                  }}
-                />
-                <WhatsappPhoneField
-                  value={cfg.integrations?.whatsapp?.phoneNumberId ?? ""}
-                  isAdmin={isAdmin}
-                  onSave={(v) => patchTenant({ whatsappPhoneNumberId: v }, "Número de WhatsApp guardado")}
-                />
-              </>
-            }
-          />
-          <ApiKeyCard
-            provider={AI_PROVIDERS.googlePlaces}
-            status={cfg.integrations?.googlePlaces}
-            isAdmin={isAdmin}
-            onSave={(value) => patchTenant({ googlePlacesApiKey: value }, "Clave de Google guardada")}
-            onClear={() => patchTenant({ googlePlacesApiKey: null }, "Clave de Google eliminada")}
-          />
-          <ApiKeyCard
-            provider={AI_PROVIDERS.cloudflare}
-            status={cfg.integrations?.cloudflare}
-            isAdmin={isAdmin}
-            onSave={(value) => patchTenant({ cloudflareApiToken: value }, "Token de Cloudflare guardado")}
-            onClear={() => patchTenant({ cloudflareApiToken: null }, "Token de Cloudflare eliminado")}
-            extra={
-              <CloudflareIdsField
-                accountId={cfg.integrations?.cloudflare?.accountId ?? ""}
-                siteTag={cfg.integrations?.cloudflare?.siteTag ?? ""}
-                ready={cfg.integrations?.cloudflare?.ready}
-                isAdmin={isAdmin}
-                onSaveAccount={(v) => patchTenant({ cloudflareAccountId: v }, "Cuenta de Cloudflare guardada")}
-                onSaveSite={(v) => patchTenant({ cloudflareSiteTag: v }, "Sitio de Cloudflare guardado")}
-              />
-            }
-          />
-          <ApiKeyCard
-            provider={AI_PROVIDERS.resend}
-            status={cfg.integrations?.resend}
-            isAdmin={isAdmin}
-            onSave={(value) => patchTenant({ resendApiKey: value }, "Clave de Resend guardada")}
-            onClear={() => patchTenant({ resendApiKey: null }, "Clave de Resend eliminada")}
-          />
+          {enZona(
+            "fiscal",
+             billing && (
+              <Section title="Facturación" right={<Link href="/facturacion/configuracion" className="text-[11px] font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">Config. completa →</Link>}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Razón social">
+                    <input disabled={!isAdmin} value={billing.fiscalName ?? ""} onChange={(e) => setBillingField("fiscalName", e.target.value)} className={inputCls} />
+                  </Field>
+                  <Field label="NIF / CIF">
+                    <input disabled={!isAdmin} value={billing.taxId ?? ""} onChange={(e) => setBillingField("taxId", e.target.value)} className={inputCls} />
+                  </Field>
+                  <Field label="Dirección" full>
+                    <input disabled={!isAdmin} value={billing.fiscalAddress ?? ""} onChange={(e) => setBillingField("fiscalAddress", e.target.value)} className={inputCls} />
+                  </Field>
+                  <Field label="Ciudad">
+                    <input disabled={!isAdmin} value={billing.fiscalCity ?? ""} onChange={(e) => setBillingField("fiscalCity", e.target.value)} className={inputCls} />
+                  </Field>
+                  <Field label="Código postal">
+                    <input disabled={!isAdmin} value={billing.fiscalZip ?? ""} onChange={(e) => setBillingField("fiscalZip", e.target.value)} className={inputCls} />
+                  </Field>
+                  <Field label="País (ISO 2)">
+                    <input disabled={!isAdmin} maxLength={2} value={billing.fiscalCountry ?? ""} onChange={(e) => setBillingField("fiscalCountry", e.target.value.toUpperCase())} className={inputCls} />
+                  </Field>
+                  <Field label="IVA por defecto">
+                    <Select disabled={!isAdmin} value={Number(billing.defaultVatRate)} onChange={(v) => setBillingField("defaultVatRate", Number(v))} options={(billing.availableVatRates ?? [21, 10, 4, 0]).map((v) => ({ value: Number(v), label: `${v}%` }))} className={inputCls} />
+                  </Field>
+                  <Field label="Exención de IVA" full>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" disabled={!isAdmin} checked={!!billing.vatExempt} onChange={(e) => setBillingField("vatExempt", e.target.checked)} className="h-4 w-4 accent-[var(--color-primary,#1B3A2D)]" />
+                      <span className="text-sm text-neutral-700">Mis servicios están exentos de IVA (no repercuto IVA)</span>
+                    </label>
+                    {billing.vatExempt ? (
+                      <div className="mt-2">
+                        <label className="block text-[11px] font-medium text-neutral-500 mb-1">Nota legal de exención (aparece en la factura)</label>
+                        <textarea disabled={!isAdmin} rows={2} value={billing.vatExemptNote ?? ""} onChange={(e) => setBillingField("vatExemptNote", e.target.value)} className={inputCls} />
+                        <p className="text-[11px] text-neutral-400 mt-1">Con esto activo, las nuevas facturas nacen a IVA 0 y llevan esta nota. El «IVA por defecto» de arriba se ignora.</p>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-neutral-400 mt-1">Actívalo si nunca repercutes IVA (p. ej. sanidad/educación): las facturas saldrán sin IVA con su nota legal.</p>
+                    )}
+                  </Field>
+                  <Field label="¿Cómo facturas? (régimen fiscal)" full>
+                    {/* 3 regímenes. Solo "Autónomo profesional" aplica retención de
+                        IRPF (−15% por defecto); "Autónomo" a secas (actividad
+                        empresarial) factura sin retención, igual que una SL. */}
+                    {(() => {
+                      const regime = ["company", "autonomo", "freelance"].includes(billing.taxRegime) ? billing.taxRegime : "company";
+                      const btnCls = (active) =>
+                        `px-3 py-1.5 rounded-lg text-sm border transition disabled:opacity-60 ${
+                          active ? "border-transparent text-white" : "border-neutral-200 text-neutral-500 hover:bg-neutral-50"
+                        }`;
+                      const btnStyle = (active) => (active ? { backgroundColor: "var(--color-primary, #1B3A2D)" } : undefined);
+                      return (
+                        <>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {/* company/autonomo NO tocan defaultIrpfRate: se conserva
+                                el % que tuviera el tenant (saveBilling ya manda 0 al
+                                guardar si el régimen no es freelance), así volver a
+                                "Autónomo profesional" recupera el % personalizado. */}
+                            <button
+                              type="button"
+                              disabled={!isAdmin}
+                              onClick={() => setBillingField("taxRegime", "company")}
+                              className={btnCls(regime === "company")}
+                              style={btnStyle(regime === "company")}
+                            >
+                              Empresa / SL
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!isAdmin}
+                              onClick={() => setBillingField("taxRegime", "autonomo")}
+                              className={btnCls(regime === "autonomo")}
+                              style={btnStyle(regime === "autonomo")}
+                            >
+                              Autónomo (sin −15%)
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!isAdmin}
+                              onClick={() => { setBillingField("taxRegime", "freelance"); if (!(Number(billing.defaultIrpfRate) > 0)) setBillingField("defaultIrpfRate", 15); }}
+                              className={btnCls(regime === "freelance")}
+                              style={btnStyle(regime === "freelance")}
+                            >
+                              Autónomo profesional (−15% IRPF)
+                            </button>
+                            {regime === "freelance" && (
+                              <div className="flex items-center gap-1.5">
+                                <input disabled={!isAdmin} type="number" min="0" max="100" step="0.01" value={billing.defaultIrpfRate ?? 15} onChange={(e) => setBillingField("defaultIrpfRate", e.target.value)} className={`${inputCls} w-20`} />
+                                <span className="text-xs text-neutral-500">% IRPF</span>
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-neutral-400 mt-1">
+                            {regime === "freelance"
+                              ? "Se restará este IRPF por defecto en tus facturas (ajustable en cada factura)."
+                              : regime === "autonomo"
+                                ? "Autónomo con actividad empresarial: factura SIN retención de IRPF."
+                                : "Sin retención de IRPF por defecto (lo habitual en SL / empresa)."}
+                          </p>
+                        </>
+                      );
+                    })()}
+                  </Field>
+                  <Field label="Días de vencimiento">
+                    <input disabled={!isAdmin} type="number" min="0" value={billing.defaultPaymentTermsDays ?? 30} onChange={(e) => setBillingField("defaultPaymentTermsDays", e.target.value)} className={inputCls} />
+                  </Field>
+                </div>
+                {isAdmin && (
+                  <div className="flex justify-end mt-4">
+                    <PrimaryButton onClick={saveBilling}>Guardar facturación</PrimaryButton>
+                  </div>
+                )}
+              </Section>
+            ) 
 
-          {/* ── Cobro online ────────────────────────────────────────────────
-              Hasta ahora estas claves solo se podían meter con un script por
-              SSH, lo que convertía "activar el cobro" en una tarea nuestra. */}
-          <EstadoCobro status={cfg.integrations?.stripe} />
-          <ApiKeyCard
-            provider={AI_PROVIDERS.stripeSecret}
-            status={cfg.integrations?.stripe}
-            isAdmin={isAdmin}
-            onSave={(value) => patchTenant({ stripeSecretKey: value }, "Clave de Stripe guardada")}
-            onClear={() => patchTenant({ stripeSecretKey: null }, "Clave de Stripe eliminada")}
-          />
-          <ApiKeyCard
-            provider={AI_PROVIDERS.stripeWebhook}
-            // El webhook solo tiene un sí/no: su valor no se devuelve nunca, ni
-            // enmascarado, porque no aporta nada y es un secreto de firma.
-            status={{ configured: !!cfg.integrations?.stripe?.webhook, hint: null }}
-            isAdmin={isAdmin}
-            onSave={(value) => patchTenant({ stripeWebhookSecret: value }, "Secreto del webhook guardado")}
-            onClear={() => patchTenant({ stripeWebhookSecret: null }, "Secreto del webhook eliminado")}
-            extra={
-              <>
-                <UrlWebhook slug={cfg.slug} />
-                <EventosWebhook />
-              </>
-            }
-          />
-
-          {/* La clave PUBLICABLE. No es un secreto —viaja al navegador de cada
-              paciente— y por eso va en un campo normal y a la vista, no en una
-              tarjeta de secreto enmascarada.
-
-              Faltaba (03/08/2026): el endpoint la aceptaba y el widget la
-              necesita para pintar el formulario de tarjeta, pero no había dónde
-              escribirla. Al pasar de claves de prueba a claves reales había que
-              cambiarla por SSH, que es justo lo que estas tarjetas venían a
-              quitar. */}
-          <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-            <h3 className="font-display text-lg text-[var(--ink-900)]">Clave publicable de Stripe</h3>
-            <p className="text-xs text-neutral-500 mt-1">
-              La que empieza por <code>pk_</code>. Sin ella el paciente no llega a ver el formulario de
-              tarjeta. Tiene que ser del mismo entorno que la clave secreta: las dos de prueba
-              (<code>pk_test_</code> + <code>sk_test_</code>) o las dos reales
-              (<code>pk_live_</code> + <code>sk_live_</code>).
-            </p>
-            <div className="mt-4">
-              <Field label="Clave publicable (pk_…)">
-                <input
-                  disabled={!isAdmin}
-                  value={cfg.integrations?.stripe?.publishableKey ?? ""}
-                  onChange={(e) => setStripeField("publishableKey", e.target.value)}
-                  placeholder="pk_live_..."
-                  className={inputCls}
-                />
-              </Field>
-            </div>
-            {isAdmin && (
-              <div className="flex justify-end mt-3">
-                <PrimaryButton
-                  onClick={() =>
-                    patchTenant(
-                      { stripePublishableKey: cfg.integrations?.stripe?.publishableKey ?? "" },
-                      "Clave publicable guardada"
-                    )
-                  }
-                >
-                  Guardar clave publicable
-                </PrimaryButton>
-              </div>
-            )}
-          </div>
-
-          {/* Remitente + reply-to del correo de captación (no son secretos). */}
-          <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-            <h3 className="font-display text-lg text-[var(--ink-900)]">Remitente del correo</h3>
-            <p className="text-xs text-neutral-500 mt-1">
-              De qué dirección salen <strong>todos</strong> los correos que manda el CRM en tu nombre
-              —confirmaciones y recordatorios de cita, enlaces de videollamada, captación— y a dónde
-              llegan las respuestas. Tiene que ser de un dominio verificado en tu cuenta de Resend.
-            </p>
-            {/* Se llamaba «Remitente del correo de captación», y por eso se
-                quedaba vacío: quien no usa Outreach daba por hecho que no le
-                tocaba. De aquí salen TODOS los correos del cliente. */}
-            {cfg.integrations?.resend?.configured && !(cfg.integrations?.resend?.fromEmail ?? "").trim() && (
-              <p className="text-[11px] font-medium text-amber-700 mt-2">
-                Tienes la clave de Resend puesta pero no hay remitente: sin una dirección desde la que
-                enviar, <strong>el CRM no manda ningún correo</strong>. Rellena el campo de abajo.
-              </p>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-              <Field label="Remitente (from)">
-                <input
-                  disabled={!isAdmin}
-                  value={cfg.integrations?.resend?.fromEmail ?? ""}
-                  onChange={(e) => setResendField("fromEmail", e.target.value)}
-                  placeholder="hola@tudominio.com"
-                  className={inputCls}
-                />
-              </Field>
-              <Field label="Responder a (reply-to)">
-                <input
-                  disabled={!isAdmin}
-                  value={cfg.integrations?.resend?.replyTo ?? ""}
-                  onChange={(e) => setResendField("replyTo", e.target.value)}
-                  placeholder="info@tudominio.com"
-                  className={inputCls}
-                />
-              </Field>
-            </div>
-            {isAdmin && (
-              <div className="flex justify-end mt-3">
-                <PrimaryButton
-                  onClick={() =>
-                    patchTenant(
-                      {
-                        resendFromEmail: cfg.integrations?.resend?.fromEmail ?? "",
-                        resendReplyTo: cfg.integrations?.resend?.replyTo ?? "",
-                      },
-                      "Remitente guardado"
-                    )
-                  }
-                >
-                  Guardar remitente
-                </PrimaryButton>
-              </div>
-            )}
-          </div>
-
-          {isAdmin && (
-            <RecordatoriosCard
-              activo={!!cfg.recordatoriosCitas}
-              readOnly={!!cfg.readOnly}
-              onChange={(v) => patchTenant({ recordatoriosCitas: v }, v ? "Recordatorios activados" : "Recordatorios desactivados")}
-            />
           )}
 
-          {isAdmin && (
-            <CategoriasExternasCard
-              categorias={cfg.categoriasExternas}
-              readOnly={!!cfg.readOnly}
-              onChange={(lista) => patchTenant({ categoriasExternas: lista }, "Empresas actualizadas")}
-            />
-          )}
-
-          {isAdmin && (
-            <AgendaCompartidaCard
-              activo={!!cfg.agendaCompartida}
-              readOnly={!!cfg.readOnly}
-              onChange={(v) => patchTenant({ agendaCompartida: v }, v ? "Todo el equipo verá la agenda completa" : "Cada profesional volverá a ver solo su agenda")}
-            />
-          )}
-
-          {isAdmin && (
-            <ColorBloqueosCard
-              color={cfg.colorBloqueos}
-              readOnly={!!cfg.readOnly}
-              onGuardar={(v) => patchTenant({ colorBloqueos: v }, "Color de los bloqueos guardado")}
-            />
-          )}
-
-          {isAdmin && (
-            <BloqueoImpagoCard
-              activo={!!cfg.portalBloqueoImpago}
-              readOnly={!!cfg.readOnly}
-              onChange={(v) =>
-                patchTenant(
-                  { portalBloqueoImpago: v },
-                  v
-                    ? "Los documentos del portal se abrirán al registrar el cobro de cada mes"
-                    : "Las familias vuelven a ver toda su documentación"
-                )
-              }
-            />
-          )}
-
-          {isAdmin && (
-            <ReservaOnlineCard
-              activo={!!cfg.reservaOnlineCerrada}
-              readOnly={!!cfg.readOnly}
-              onChange={(v) =>
-                patchTenant(
-                  { reservaOnlineCerrada: v },
-                  v
-                    ? "La agenda pública queda cerrada"
-                    : "Vuelve a poder pedirse cita por internet"
-                )
-              }
-            />
-          )}
-
-          {isAdmin && (
-            <CancelacionCard
-              activo={!!cfg.cancelacionBloqueada}
-              readOnly={!!cfg.readOnly}
-              onChange={(v) =>
-                patchTenant(
-                  { cancelacionBloqueada: v },
-                  v
-                    ? "Las citas se anularán solo desde el centro"
-                    : "Las familias vuelven a poder anular sus citas"
-                )
-              }
-            />
-          )}
-
-          {isAdmin && (
-            <AvisosWhatsappCard
-              activo={!!cfg.avisosWhatsapp}
-              readOnly={!!cfg.readOnly}
-              configurado={!!cfg.integrations?.whatsapp?.configured}
-              onChange={(v) =>
-                patchTenant(
-                  { avisosWhatsapp: v },
-                  v ? "Los avisos de cita saldrán también por WhatsApp" : "Los avisos vuelven a ir solo por correo"
-                )
-              }
-            />
-          )}
-
-          {isAdmin && (
-            <PuertaAdmisionCard
-              key={cfg.formularioUrl ?? ""}
-              activo={!!cfg.formularioObligatorio}
-              url={cfg.formularioUrl ?? ""}
-              readOnly={!!cfg.readOnly}
-              onChange={(v) =>
-                patchTenant(
-                  { formularioObligatorio: v },
-                  v
-                    ? "Ahora solo puede reservar quien tenga la solicitud aceptada"
-                    : "Vuelve a poder reservar cualquiera con el enlace de la agenda"
-                )
-              }
-              onGuardarUrl={(v) => patchTenant({ formularioUrl: v }, "Dirección del formulario guardada")}
-            />
-          )}
-
-          {isAdmin && (
-            <PuertaContratoCard
-              activo={!!cfg.contratoObligatorio}
-              readOnly={!!cfg.readOnly}
-              onChange={(v) =>
-                patchTenant(
-                  { contratoObligatorio: v },
-                  v
-                    ? "Ahora hace falta tener los contratos firmados para reservar"
-                    : "Vuelve a poderse reservar sin haber firmado nada"
-                )
-              }
-            />
-          )}
-
-          {isAdmin && (
-            <PuertaIdentidadCard
-              activo={!!cfg.identidadObligatoria}
-              readOnly={!!cfg.readOnly}
-              onChange={(v) =>
-                patchTenant(
-                  { identidadObligatoria: v },
-                  v
-                    ? "Ahora hay que tener cuenta en tu web para poder pedir cita"
-                    : "Vuelve a poderse reservar sin cuenta"
-                )
-              }
-            />
-          )}
-
-          {isAdmin && (
-            <PuertaCajaCard
-              activo={!!cfg.soloConPago}
-              readOnly={!!cfg.readOnly}
-              onChange={(v) =>
-                patchTenant(
-                  { soloConPago: v },
-                  v
-                    ? "Desde la agenda pública ya solo se puede reservar pagando"
-                    : "Vuelven a poderse reservar online las citas sin precio"
-                )
-              }
-            />
-          )}
-
-          {isAdmin && (
-            <AreaPrivadaCard
-              key={cfg.portalUrl ?? ""}
-              url={cfg.portalUrl ?? ""}
-              readOnly={!!cfg.readOnly}
-              onGuardar={(v) => patchTenant({ portalUrl: v }, "Dirección del área privada guardada")}
-            />
-          )}
-
-          {isAdmin && (
-            <PaginaReservasCard
-              key={cfg.reservaUrl ?? ""}
-              url={cfg.reservaUrl ?? ""}
-              readOnly={!!cfg.readOnly}
-              onGuardar={(v) => patchTenant({ reservaUrl: v }, "Dirección de la página de reservas guardada")}
-            />
-          )}
-
-          {isAdmin && <DerivacionesCard />}
-
-          {isAdmin && (
-            <VideollamadaCard
-              meetModo={cfg.meetModo}
-              salas={cfg.salasVideollamada ?? []}
-              readOnly={!!cfg.readOnly}
-              onChange={(v) => patchTenant({ meetModo: v }, v === "automatico" ? "Las citas online heredarán el enlace del tipo de cita" : "El enlace de videollamada se pondrá a mano en cada cita")}
-            />
-          )}
-
-          {isAdmin && (
-            <AiPermissionsCard
-              aiAccess={cfg.aiAccess}
-              readOnly={!!cfg.readOnly}
-              onToggle={(v) => patchTenant({ aiAccess: v }, v === "restringido" ? "La IA ahora requiere tu permiso" : "La IA vuelve a ser libre para el equipo")}
-            />
+          {enZona(
+            "descripcionEmpresa",
+            <CompanyDescriptionSection isAdmin={isAdmin} flash={flash} onError={setErrorMsg} />
           )}
         </div>
-      </div>
+      )}
+
+      {pestana === "conexiones" && (
+        <div className="space-y-4">
+          {enZona(
+            "anthropic",
+            <ApiKeyCard
+              provider={AI_PROVIDERS.anthropic}
+              status={cfg.integrations?.anthropic}
+              isAdmin={isAdmin}
+              onSave={(value) => patchTenant({ anthropicApiKey: value }, "Clave de Anthropic guardada")}
+              onClear={() => patchTenant({ anthropicApiKey: null }, "Clave de Anthropic eliminada")}
+              models={ANTHROPIC_MODELS}
+              currentModel={cfg.integrations?.anthropic?.model}
+              onModelChange={(v) => patchTenant({ anthropicModel: v }, "Modelo de IA actualizado")}
+            />
+          )}
+
+          {enZona(
+            "openai",
+            <ApiKeyCard
+              provider={AI_PROVIDERS.openai}
+              status={cfg.integrations?.openai}
+              isAdmin={isAdmin}
+              onSave={(value) => patchTenant({ openaiApiKey: value }, "Clave de OpenAI guardada")}
+              onClear={() => patchTenant({ openaiApiKey: null }, "Clave de OpenAI eliminada")}
+            />
+          )}
+
+          {enZona(
+            "googlePlaces",
+            <ApiKeyCard
+              provider={AI_PROVIDERS.googlePlaces}
+              status={cfg.integrations?.googlePlaces}
+              isAdmin={isAdmin}
+              onSave={(value) => patchTenant({ googlePlacesApiKey: value }, "Clave de Google guardada")}
+              onClear={() => patchTenant({ googlePlacesApiKey: null }, "Clave de Google eliminada")}
+            />
+          )}
+
+          {enZona(
+            "resend",
+            <ApiKeyCard
+              provider={AI_PROVIDERS.resend}
+              status={cfg.integrations?.resend}
+              isAdmin={isAdmin}
+              onSave={(value) => patchTenant({ resendApiKey: value }, "Clave de Resend guardada")}
+              onClear={() => patchTenant({ resendApiKey: null }, "Clave de Resend eliminada")}
+            />
+
+          )}
+
+          {enZona(
+            "remitente",
+            <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
+              <h3 className="font-display text-lg text-[var(--ink-900)]">Remitente del correo</h3>
+              <p className="text-xs text-neutral-500 mt-1">
+                De qué dirección salen <strong>todos</strong> los correos que manda el CRM en tu nombre
+                —confirmaciones y recordatorios de cita, enlaces de videollamada, captación— y a dónde
+                llegan las respuestas. Tiene que ser de un dominio verificado en tu cuenta de Resend.
+              </p>
+              {/* Se llamaba «Remitente del correo de captación», y por eso se
+                  quedaba vacío: quien no usa Outreach daba por hecho que no le
+                  tocaba. De aquí salen TODOS los correos del cliente. */}
+              {cfg.integrations?.resend?.configured && !(cfg.integrations?.resend?.fromEmail ?? "").trim() && (
+                <p className="text-[11px] font-medium text-amber-700 mt-2">
+                  Tienes la clave de Resend puesta pero no hay remitente: sin una dirección desde la que
+                  enviar, <strong>el CRM no manda ningún correo</strong>. Rellena el campo de abajo.
+                </p>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                <Field label="Remitente (from)">
+                  <input
+                    disabled={!isAdmin}
+                    value={cfg.integrations?.resend?.fromEmail ?? ""}
+                    onChange={(e) => setResendField("fromEmail", e.target.value)}
+                    placeholder="hola@tudominio.com"
+                    className={inputCls}
+                  />
+                </Field>
+                <Field label="Responder a (reply-to)">
+                  <input
+                    disabled={!isAdmin}
+                    value={cfg.integrations?.resend?.replyTo ?? ""}
+                    onChange={(e) => setResendField("replyTo", e.target.value)}
+                    placeholder="info@tudominio.com"
+                    className={inputCls}
+                  />
+                </Field>
+              </div>
+              {isAdmin && (
+                <div className="flex justify-end mt-3">
+                  <PrimaryButton
+                    onClick={() =>
+                      patchTenant(
+                        {
+                          resendFromEmail: cfg.integrations?.resend?.fromEmail ?? "",
+                          resendReplyTo: cfg.integrations?.resend?.replyTo ?? "",
+                        },
+                        "Remitente guardado"
+                      )
+                    }
+                  >
+                    Guardar remitente
+                  </PrimaryButton>
+                </div>
+              )}
+            </div>
+
+          )}
+
+          {enZona(
+            "cloudflare",
+            <ApiKeyCard
+              provider={AI_PROVIDERS.cloudflare}
+              status={cfg.integrations?.cloudflare}
+              isAdmin={isAdmin}
+              onSave={(value) => patchTenant({ cloudflareApiToken: value }, "Token de Cloudflare guardado")}
+              onClear={() => patchTenant({ cloudflareApiToken: null }, "Token de Cloudflare eliminado")}
+              extra={
+                <CloudflareIdsField
+                  accountId={cfg.integrations?.cloudflare?.accountId ?? ""}
+                  siteTag={cfg.integrations?.cloudflare?.siteTag ?? ""}
+                  ready={cfg.integrations?.cloudflare?.ready}
+                  isAdmin={isAdmin}
+                  onSaveAccount={(v) => patchTenant({ cloudflareAccountId: v }, "Cuenta de Cloudflare guardada")}
+                  onSaveSite={(v) => patchTenant({ cloudflareSiteTag: v }, "Sitio de Cloudflare guardado")}
+                />
+              }
+            />
+          )}
+
+          {enZona(
+            "whatsapp",
+            <ApiKeyCard
+              provider={AI_PROVIDERS.whatsapp}
+              status={cfg.integrations?.whatsapp}
+              isAdmin={isAdmin}
+              onSave={(value) => patchTenant({ whatsappToken: value }, "Token de WhatsApp guardado")}
+              onClear={() => patchTenant({ whatsappToken: null }, "Token de WhatsApp eliminado")}
+              extra={
+                <>
+                  <ConectarWhatsapp
+                    isAdmin={isAdmin}
+                    conectado={!!cfg.integrations?.whatsapp?.phoneNumberId}
+                    numero={cfg.integrations?.whatsapp?.numero}
+                    conectadoAt={cfg.integrations?.whatsapp?.conectadoAt}
+                    onConectado={async () => {
+                      const r = await fetch("/api/tenant/settings", { cache: "no-store" });
+                      const j = await r.json().catch(() => null);
+                      if (j?.ok) setCfg(j.data);
+                      flash("WhatsApp conectado");
+                    }}
+                  />
+                  <WhatsappPhoneField
+                    value={cfg.integrations?.whatsapp?.phoneNumberId ?? ""}
+                    isAdmin={isAdmin}
+                    onSave={(v) => patchTenant({ whatsappPhoneNumberId: v }, "Número de WhatsApp guardado")}
+                  />
+                </>
+              }
+            />
+          )}
+
+          {enZona(
+            "stripe",
+            <>
+                      {/* ── Cobro online ────────────────────────────────────────────────
+                          Hasta ahora estas claves solo se podían meter con un script por
+                          SSH, lo que convertía "activar el cobro" en una tarea nuestra. */}
+                      <EstadoCobro status={cfg.integrations?.stripe} />
+                      <ApiKeyCard
+                        provider={AI_PROVIDERS.stripeSecret}
+                        status={cfg.integrations?.stripe}
+                        isAdmin={isAdmin}
+                        onSave={(value) => patchTenant({ stripeSecretKey: value }, "Clave de Stripe guardada")}
+                        onClear={() => patchTenant({ stripeSecretKey: null }, "Clave de Stripe eliminada")}
+                      />
+                      <ApiKeyCard
+                        provider={AI_PROVIDERS.stripeWebhook}
+                        // El webhook solo tiene un sí/no: su valor no se devuelve nunca, ni
+                        // enmascarado, porque no aporta nada y es un secreto de firma.
+                        status={{ configured: !!cfg.integrations?.stripe?.webhook, hint: null }}
+                        isAdmin={isAdmin}
+                        onSave={(value) => patchTenant({ stripeWebhookSecret: value }, "Secreto del webhook guardado")}
+                        onClear={() => patchTenant({ stripeWebhookSecret: null }, "Secreto del webhook eliminado")}
+                        extra={
+                          <>
+                            <UrlWebhook slug={cfg.slug} />
+                            <EventosWebhook />
+                          </>
+                        }
+                      />
+
+                      {/* La clave PUBLICABLE. No es un secreto —viaja al navegador de cada
+                          paciente— y por eso va en un campo normal y a la vista, no en una
+                          tarjeta de secreto enmascarada.
+
+                          Faltaba (03/08/2026): el endpoint la aceptaba y el widget la
+                          necesita para pintar el formulario de tarjeta, pero no había dónde
+                          escribirla. Al pasar de claves de prueba a claves reales había que
+                          cambiarla por SSH, que es justo lo que estas tarjetas venían a
+                          quitar. */}
+                      <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
+                        <h3 className="font-display text-lg text-[var(--ink-900)]">Clave publicable de Stripe</h3>
+                        <p className="text-xs text-neutral-500 mt-1">
+                          La que empieza por <code>pk_</code>. Sin ella el paciente no llega a ver el formulario de
+                          tarjeta. Tiene que ser del mismo entorno que la clave secreta: las dos de prueba
+                          (<code>pk_test_</code> + <code>sk_test_</code>) o las dos reales
+                          (<code>pk_live_</code> + <code>sk_live_</code>).
+                        </p>
+                        <div className="mt-4">
+                          <Field label="Clave publicable (pk_…)">
+                            <input
+                              disabled={!isAdmin}
+                              value={cfg.integrations?.stripe?.publishableKey ?? ""}
+                              onChange={(e) => setStripeField("publishableKey", e.target.value)}
+                              placeholder="pk_live_..."
+                              className={inputCls}
+                            />
+                          </Field>
+                        </div>
+                        {isAdmin && (
+                          <div className="flex justify-end mt-3">
+                            <PrimaryButton
+                              onClick={() =>
+                                patchTenant(
+                                  { stripePublishableKey: cfg.integrations?.stripe?.publishableKey ?? "" },
+                                  "Clave publicable guardada"
+                                )
+                              }
+                            >
+                              Guardar clave publicable
+                            </PrimaryButton>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Remitente + reply-to del correo de captación (no son secretos). */}
+            </>
+          )}
+        </div>
+      )}
+
+      {pestana === "agenda" && (
+        <div className="space-y-4">
+          {enZona(
+            "recordatorios",
+             isAdmin && (
+              <RecordatoriosCard
+                activo={!!cfg.recordatoriosCitas}
+                readOnly={!!cfg.readOnly}
+                onChange={(v) => patchTenant({ recordatoriosCitas: v }, v ? "Recordatorios activados" : "Recordatorios desactivados")}
+              />
+            ) 
+
+          )}
+
+          {enZona(
+            "agendaCompartida",
+             isAdmin && (
+              <AgendaCompartidaCard
+                activo={!!cfg.agendaCompartida}
+                readOnly={!!cfg.readOnly}
+                onChange={(v) => patchTenant({ agendaCompartida: v }, v ? "Todo el equipo verá la agenda completa" : "Cada profesional volverá a ver solo su agenda")}
+              />
+            ) 
+
+          )}
+
+          {enZona(
+            "colorBloqueos",
+             isAdmin && (
+              <ColorBloqueosCard
+                color={cfg.colorBloqueos}
+                readOnly={!!cfg.readOnly}
+                onGuardar={(v) => patchTenant({ colorBloqueos: v }, "Color de los bloqueos guardado")}
+              />
+            ) 
+
+          )}
+
+          {enZona(
+            "videollamada",
+             isAdmin && (
+              <VideollamadaCard
+                meetModo={cfg.meetModo}
+                salas={cfg.salasVideollamada ?? []}
+                readOnly={!!cfg.readOnly}
+                onChange={(v) => patchTenant({ meetModo: v }, v === "automatico" ? "Las citas online heredarán el enlace del tipo de cita" : "El enlace de videollamada se pondrá a mano en cada cita")}
+              />
+            ) 
+          )}
+
+          {enZona(
+            "avisosWhatsapp",
+             isAdmin && (
+              <AvisosWhatsappCard
+                activo={!!cfg.avisosWhatsapp}
+                readOnly={!!cfg.readOnly}
+                configurado={!!cfg.integrations?.whatsapp?.configured}
+                irAConexiones={() => irA("conexiones")}
+                onChange={(v) =>
+                  patchTenant(
+                    { avisosWhatsapp: v },
+                    v ? "Los avisos de cita saldrán también por WhatsApp" : "Los avisos vuelven a ir solo por correo"
+                  )
+                }
+              />
+            ) 
+
+          )}
+        </div>
+      )}
+
+      {pestana === "reservas" && (
+        <div className="space-y-4">
+          {enZona(
+            "reservaOnline",
+             isAdmin && (
+              <ReservaOnlineCard
+                activo={!!cfg.reservaOnlineCerrada}
+                readOnly={!!cfg.readOnly}
+                onChange={(v) =>
+                  patchTenant(
+                    { reservaOnlineCerrada: v },
+                    v
+                      ? "La agenda pública queda cerrada"
+                      : "Vuelve a poder pedirse cita por internet"
+                  )
+                }
+              />
+            ) 
+
+          )}
+
+          {enZona(
+            "cancelacion",
+             isAdmin && (
+              <CancelacionCard
+                activo={!!cfg.cancelacionBloqueada}
+                readOnly={!!cfg.readOnly}
+                onChange={(v) =>
+                  patchTenant(
+                    { cancelacionBloqueada: v },
+                    v
+                      ? "Las citas se anularán solo desde el centro"
+                      : "Las familias vuelven a poder anular sus citas"
+                  )
+                }
+              />
+            ) 
+
+          )}
+
+          {enZona(
+            "puertaAdmision",
+             isAdmin && (
+              <PuertaAdmisionCard
+                key={cfg.formularioUrl ?? ""}
+                activo={!!cfg.formularioObligatorio}
+                url={cfg.formularioUrl ?? ""}
+                readOnly={!!cfg.readOnly}
+                onChange={(v) =>
+                  patchTenant(
+                    { formularioObligatorio: v },
+                    v
+                      ? "Ahora solo puede reservar quien tenga la solicitud aceptada"
+                      : "Vuelve a poder reservar cualquiera con el enlace de la agenda"
+                  )
+                }
+                onGuardarUrl={(v) => patchTenant({ formularioUrl: v }, "Dirección del formulario guardada")}
+              />
+            ) 
+
+          )}
+
+          {enZona(
+            "puertaContrato",
+             isAdmin && (
+              <PuertaContratoCard
+                activo={!!cfg.contratoObligatorio}
+                readOnly={!!cfg.readOnly}
+                onChange={(v) =>
+                  patchTenant(
+                    { contratoObligatorio: v },
+                    v
+                      ? "Ahora hace falta tener los contratos firmados para reservar"
+                      : "Vuelve a poderse reservar sin haber firmado nada"
+                  )
+                }
+              />
+            ) 
+
+          )}
+
+          {enZona(
+            "puertaIdentidad",
+             isAdmin && (
+              <PuertaIdentidadCard
+                activo={!!cfg.identidadObligatoria}
+                readOnly={!!cfg.readOnly}
+                onChange={(v) =>
+                  patchTenant(
+                    { identidadObligatoria: v },
+                    v
+                      ? "Ahora hay que tener cuenta en tu web para poder pedir cita"
+                      : "Vuelve a poderse reservar sin cuenta"
+                  )
+                }
+              />
+            ) 
+
+          )}
+
+          {enZona(
+            "puertaCaja",
+             isAdmin && (
+              <PuertaCajaCard
+                activo={!!cfg.soloConPago}
+                readOnly={!!cfg.readOnly}
+                onChange={(v) =>
+                  patchTenant(
+                    { soloConPago: v },
+                    v
+                      ? "Desde la agenda pública ya solo se puede reservar pagando"
+                      : "Vuelven a poderse reservar online las citas sin precio"
+                  )
+                }
+              />
+            ) 
+
+          )}
+
+          {enZona(
+            "paginaReservas",
+             isAdmin && (
+              <PaginaReservasCard
+                key={cfg.reservaUrl ?? ""}
+                url={cfg.reservaUrl ?? ""}
+                readOnly={!!cfg.readOnly}
+                onGuardar={(v) => patchTenant({ reservaUrl: v }, "Dirección de la página de reservas guardada")}
+              />
+            ) 
+          )}
+        </div>
+      )}
+
+      {pestana === "portal" && (
+        <div className="space-y-4">
+          {enZona(
+            "areaPrivada",
+             isAdmin && (
+              <AreaPrivadaCard
+                key={cfg.portalUrl ?? ""}
+                url={cfg.portalUrl ?? ""}
+                readOnly={!!cfg.readOnly}
+                onGuardar={(v) => patchTenant({ portalUrl: v }, "Dirección del área privada guardada")}
+              />
+            ) 
+          )}
+
+          {enZona(
+            "bloqueoImpago",
+             isAdmin && (
+              <BloqueoImpagoCard
+                activo={!!cfg.portalBloqueoImpago}
+                readOnly={!!cfg.readOnly}
+                onChange={(v) =>
+                  patchTenant(
+                    { portalBloqueoImpago: v },
+                    v
+                      ? "Los documentos del portal se abrirán al registrar el cobro de cada mes"
+                      : "Las familias vuelven a ver toda su documentación"
+                  )
+                }
+              />
+            ) 
+
+          )}
+        </div>
+      )}
+
+      {pestana === "modulos" && (
+        <div className="space-y-4">
+          {enZona(
+            "derivaciones",
+            isAdmin && <DerivacionesCard /> 
+          )}
+
+          {enZona(
+            "consultasExternas",
+             isAdmin && (
+              <CategoriasExternasCard
+                categorias={cfg.categoriasExternas}
+                readOnly={!!cfg.readOnly}
+                onChange={(lista) => patchTenant({ categoriasExternas: lista }, "Empresas actualizadas")}
+              />
+            ) 
+
+          )}
+
+          {enZona(
+            "permisosIa",
+             isAdmin && (
+              <AiPermissionsCard
+                aiAccess={cfg.aiAccess}
+                readOnly={!!cfg.readOnly}
+                onToggle={(v) => patchTenant({ aiAccess: v }, v === "restringido" ? "La IA ahora requiere tu permiso" : "La IA vuelve a ser libre para el equipo")}
+              />
+            ) 
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1266,7 +1458,7 @@ function DerivacionesCard() {
   );
 }
 
-function AvisosWhatsappCard({ activo, readOnly, configurado, onChange }) {
+function AvisosWhatsappCard({ activo, readOnly, configurado, onChange, irAConexiones }) {
   return (
     <div className="bg-white border border-neutral-200 rounded-xl p-5">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -1289,9 +1481,19 @@ function AvisosWhatsappCard({ activo, readOnly, configurado, onChange }) {
         </button>
       </div>
       <div className="mt-1 text-[11px] font-medium">
+        {/* El aviso de «falta conectar» decía «abajo», y dejó de ser verdad el
+            23/08/2026: al repartir la pantalla en zonas, WhatsApp se fue a
+            «Conexiones» y este interruptor se quedó en «Agenda». Va un botón
+            que cambia de zona y no un <Link>: navegar a la misma página no
+            remonta el componente, así que la pestaña no cambiaría y el enlace
+            no haría nada. */}
         {!configurado ? (
           <span className="text-amber-700">
-            Falta conectar WhatsApp abajo (token y número): mientras tanto no sale ningún mensaje.
+            Falta conectar WhatsApp en{" "}
+            <button type="button" onClick={irAConexiones} className="underline hover:no-underline font-medium">
+              Conexiones
+            </button>{" "}
+            (token y número): mientras tanto no sale ningún mensaje.
           </span>
         ) : activo ? (
           <span className="text-emerald-700">Activos: cada aviso de cita va por correo y por WhatsApp.</span>
@@ -2041,8 +2243,22 @@ function UrlWebhook({ slug }) {
  * `scripts/comprobar-stripe.js`— y no de un texto escrito aquí: cuando estaban
  * escritos a mano, esta pantalla pedía cinco de los once que el webhook trata.
  */
+/**
+ * Los eventos que hay que marcar en Stripe.
+ *
+ * Va PLEGADO (23/08/2026): son once filas con su explicación y medían más de
+ * media pantalla, en una zona —Conexiones— que ya es la más larga de las seis.
+ * Es una lista que se consulta UNA vez, el día que se crea el punto de conexión
+ * en Stripe, y que después estorba para siempre a quien solo venía a cambiar
+ * una clave.
+ *
+ * El botón de copiar se queda FUERA del plegado a propósito: es lo que de
+ * verdad se usa —se pegan los once de golpe en Stripe— y esconderlo detrás de
+ * un clic obligaría a desplegar la lista para no leerla.
+ */
 function EventosWebhook() {
   const [copiado, setCopiado] = useState(false);
+  const [abierto, setAbierto] = useState(false);
 
   async function copiar() {
     try {
@@ -2061,25 +2277,37 @@ function EventosWebhook() {
           Y estos son los <strong>{EVENTOS_WEBHOOK_STRIPE.length} eventos</strong> que hay que marcar.
           Si falta alguno, ese cobro ocurre en Stripe y el CRM no se entera.
         </div>
-        <button
-          type="button"
-          onClick={copiar}
-          className="shrink-0 text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-600 hover:border-neutral-400 transition"
-        >
-          {copiado ? "Copiados" : "Copiar"}
-        </button>
-      </div>
-      <ul className="space-y-1">
-        {EVENTOS_WEBHOOK_STRIPE.map(({ evento, porque }) => (
-          <li
-            key={evento}
-            className="text-[12px] bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2"
+        <div className="shrink-0 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setAbierto((v) => !v)}
+            aria-expanded={abierto}
+            className="text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-600 hover:border-neutral-400 transition"
           >
-            <code className="text-neutral-700 break-all">{evento}</code>
-            <span className="block text-[11px] text-neutral-400 mt-0.5">{porque}</span>
-          </li>
-        ))}
-      </ul>
+            {abierto ? "Ocultar la lista" : "Ver la lista"}
+          </button>
+          <button
+            type="button"
+            onClick={copiar}
+            className="text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-600 hover:border-neutral-400 transition"
+          >
+            {copiado ? "Copiados" : "Copiar"}
+          </button>
+        </div>
+      </div>
+      {abierto && (
+        <ul className="space-y-1">
+          {EVENTOS_WEBHOOK_STRIPE.map(({ evento, porque }) => (
+            <li
+              key={evento}
+              className="text-[12px] bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2"
+            >
+              <code className="text-neutral-700 break-all">{evento}</code>
+              <span className="block text-[11px] text-neutral-400 mt-0.5">{porque}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -2506,6 +2734,52 @@ function AddBusinessLine({ onAdd, onCancel }) {
 }
 
 // ── Helpers de estilo (mismos que la config de facturación) ──────────────────
+/** Una zona del menú de arriba. Mismo gesto que las pestañas de la ficha. */
+function BotonZona({ activa, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={activa ? "page" : undefined}
+      className={`px-3 py-2.5 text-sm border-b-2 -mb-px transition-colors ${
+        activa
+          ? "border-[var(--color-primary,#1B3A2D)] text-[var(--ink-900)] font-medium"
+          : "border-transparent text-neutral-400 hover:text-neutral-700"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Envuelve una tarjeta y, si su módulo no está contratado, la atenúa y lo dice.
+ *
+ * **No la desactiva**, y eso es deliberado: la Configuración es universal
+ * (regla #14) y un cliente tiene que poder dejar puesta su clave de Stripe hoy
+ * y contratar Citas el mes que viene. Por eso vuelve a opacidad entera al pasar
+ * por encima o al escribir dentro — atenuada es «esto todavía no hace nada»,
+ * no «esto no se toca».
+ *
+ * `callado` la atenúa sin repetir el texto: se usa cuando la zona entera ya lo
+ * ha dicho una vez arriba.
+ *
+ * Si `children` no pinta nada (un `isAdmin && …` que vale `false`), no se
+ * envuelve nada: sería un aviso flotando solo, sin la tarjeta a la que se
+ * refiere.
+ */
+function Tarjeta({ clave, tieneModulo, callado = false, children }) {
+  if (!children) return null;
+  const aviso = avisoDeTarjeta(clave, tieneModulo);
+  if (!aviso) return children;
+  return (
+    <div className="opacity-60 hover:opacity-100 focus-within:opacity-100 transition-opacity">
+      {!callado && <p className="text-[11px] text-neutral-500 mb-1.5">{aviso}</p>}
+      {children}
+    </div>
+  );
+}
+
 function Section({ title, right, children }) {
   return (
     <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">

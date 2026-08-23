@@ -8,17 +8,17 @@
 | --- | --- |
 | **moduleKey** | sin moduleKey: lo tienen todos. La página no lleva `hasModule`; el enlace del sidebar es el icono de engranaje del pie (`components/layout/Sidebar.jsx`) y solo lo ven `admin`/`superadmin`, y `GET` y `PATCH` de `/api/tenant/settings` exigen ese rol (fresco de BD, vía `withTenant`) |
 | **Reina** | — |
-| **Pantallas** | `app/(dashboard)/configuracion/page.jsx` → `/configuracion` (una sola página; dentro, secciones de Facturación, IA, integraciones, Citas y Captación) · el back-office la complementa desde `app/admin/page.jsx` (ficha de Custodia, `/admin`): nosotros también podemos poner las claves |
+| **Pantallas** | `app/(dashboard)/configuracion/page.jsx` → `/configuracion` (una página con **seis zonas en pestañas** desde el 23/08/2026: Empresa, Conexiones, Agenda, Reserva online, Portal del cliente y Módulos; la abierta viaja en `?zona=`). La página es de SERVIDOR y resuelve ahí los módulos del tenant, que el componente es `"use client"` y no puede preguntarlos · el back-office la complementa desde `app/admin/page.jsx` (ficha de Custodia, `/admin`): nosotros también podemos poner las claves |
 | **Endpoints** | `app/api/tenant/settings/route.js` (GET/PATCH, 1) · `app/api/ai-permisos/**` (2: `route.js`, `[id]/route.js`, el candado de IA) · `app/api/admin/configuraciones/route.js` (1, back-office: pone credenciales sin leerlas nunca) · la pantalla reutiliza además `app/api/billing/settings`, `app/api/outreach/settings`, `app/api/outreach/business-lines/**` y `app/api/clinica/derivaciones` · públicos: ninguno |
-| **Lógica** | `lib/configuracion/avisoCambio.js` (recibo por correo de cada cambio, enviado con la cuenta de Salamandra) · `lib/crypto/secretBox.js` (AES-256-GCM, prefijo `enc:v1:`) · resolvers que LEEN lo que aquí se guarda: `lib/ai/anthropicKey.js`, `lib/ai/anthropicModel.js` (`ANTHROPIC_MODELS`, Sonnet por defecto), `lib/ai/openaiKey.js`, `lib/ai/aiAccess.js` (`vetoAi`, candado `settings.aiAccess`), `lib/outreach/resendConfig.js`, `lib/payments/stripeConfig.js`, `lib/analytics/cloudflareConfig.js`, `lib/whatsapp/whatsappConfig.js`, `lib/citas/videollamada.js` (`settings.citas.meetModo`), `lib/citas/coloresBloqueo.js` · back-office: `lib/provisioning/credencialesCliente.js` (solo escribir), `lib/provisioning/contactoCliente.js` (`settings.contacto`) · plantilla del recibo: `lib/email/templates/configuracion/cambioAplicado.js` |
-| **UI** | `modules/config/ConfigModule.jsx` (2.464 líneas, todo en un fichero: `ApiKeyCard`, `AiPermissionsCard`, las tarjetas de Citas, `CompanyDescriptionSection`…) · no hay `components/config/`; usa `components/ui/Select.jsx` y `components/ui/HelpTooltip.jsx` |
+| **Lógica** | `lib/configuracion/pestanas.js` (**el reparto en zonas y qué módulo hace útil cada tarjeta**) · `lib/configuracion/avisoCambio.js` (recibo por correo de cada cambio, enviado con la cuenta de Salamandra) · `lib/crypto/secretBox.js` (AES-256-GCM, prefijo `enc:v1:`) · resolvers que LEEN lo que aquí se guarda: `lib/ai/anthropicKey.js`, `lib/ai/anthropicModel.js` (`ANTHROPIC_MODELS`, Sonnet por defecto), `lib/ai/openaiKey.js`, `lib/ai/aiAccess.js` (`vetoAi`, candado `settings.aiAccess`), `lib/outreach/resendConfig.js`, `lib/payments/stripeConfig.js`, `lib/analytics/cloudflareConfig.js`, `lib/whatsapp/whatsappConfig.js`, `lib/citas/videollamada.js` (`settings.citas.meetModo`), `lib/citas/coloresBloqueo.js` · back-office: `lib/provisioning/credencialesCliente.js` (solo escribir), `lib/provisioning/contactoCliente.js` (`settings.contacto`) · plantilla del recibo: `lib/email/templates/configuracion/cambioAplicado.js` |
+| **UI** | `modules/config/ConfigModule.jsx` (un fichero: `BotonZona`, `Tarjeta` —atenúa y explica—, `ApiKeyCard`, `AiPermissionsCard`, las tarjetas de Citas, `CompanyDescriptionSection`…) · no hay `components/config/`; usa `components/ui/Select.jsx` y `components/ui/HelpTooltip.jsx` |
 | **Modelos** | `models/master/Tenant.model.js` — todo va en `master.tenants.settings` (JSONB: `brand`, `integrations`, `aiAccess`, `citas`, `clientes`, `contacto`), sin migración · `models/tenant/AiPermission.model.js` (`ai_permissions`: solicitudes y concesiones del candado de IA) · `models/master/AuditLog.model.js` (`master.audit_logs`) recibe cada cambio, sin el valor de los secretos |
 | **Interruptores y parámetros** | ninguno que lea el código (no hay fila en `tenant_modules`). Lo que esta pantalla escribe vive en `master.tenants.settings`, no en `featureFlags`: `integrations.*` (Anthropic, OpenAI, Google Places, Resend, Stripe, WhatsApp, Cloudflare; los secretos cifrados, `anthropicModel` en claro), `aiAccess` (`libre` / `restringido`), `citas.*` (`meetModo`, `recordatoriosCitas`, `agendaCompartida`, `avisosWhatsapp`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `identidadObligatoria`, `formularioUrl`, `portalUrl`, `reservaUrl`, `colorBloqueos`), `clientes.categoriasExternas`, `brand`, `name` |
 | **Pantallas propias** | ninguna (`app/(dashboard)/configuracion/page.jsx` no tiene mapa `UI_OVERRIDES`) |
 | **Scripts** | no hay activación: no es módulo · `_hechos/encrypt-tenant-secrets.js` (cifra en reposo claves guardadas antes en claro; idempotente) · `migrate-ai-permissions.js` (crea `ai_permissions` en todos los schemas) · `configure-stripe-tenant.js` (claves de Stripe leídas de variables de entorno, nunca de argumentos) · solo lectura: `inspect-tenant-modules.js <slug>` |
-| **Pruebas** | `_smoke-backoffice-ciclo.mjs` (base de datos; el camino del back-office: la clave se guarda cifrada, no se devuelve jamás, a una demo no se le pone) · `scripts/_smoke-plantillas-resto-layout.mjs` (`node:test`, 21/08/2026, ligera, en `npm test`) fija el recibo de cambio de configuración (`configuracion/cambioAplicado`): que el asunto avisa distinto según haya tocado o no una credencial, que traduce las tres acciones (puesta / cambiada / borrada) y que **NUNCA lleva el valor de una credencial**, solo qué pasó con ella · nada cubre `/api/tenant/settings` ni `/api/ai-permisos` directamente; `_smoke-retencion-viva-o-muerta.mjs` solo usa `secretBox` para sembrar |
+| **Pruebas** | `scripts/_smoke-config-pestanas.mjs` (`node:test`, 23/08/2026, ligera, en `npm test`): el reparto en zonas, que ninguna tarjeta se cae ni se duplica, y que el aviso «necesita el módulo X» solo sale cuando falta de verdad · `_smoke-backoffice-ciclo.mjs` (base de datos; el camino del back-office: la clave se guarda cifrada, no se devuelve jamás, a una demo no se le pone) · `scripts/_smoke-plantillas-resto-layout.mjs` (`node:test`, 21/08/2026, ligera, en `npm test`) fija el recibo de cambio de configuración (`configuracion/cambioAplicado`): que el asunto avisa distinto según haya tocado o no una credencial, que traduce las tres acciones (puesta / cambiada / borrada) y que **NUNCA lleva el valor de una credencial**, solo qué pasó con ella · nada cubre `/api/tenant/settings` ni `/api/ai-permisos` directamente; `_smoke-retencion-viva-o-muerta.mjs` solo usa `secretBox` para sembrar |
 | **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (guard de la demo en escrituras a master, auditoría con resumen) · `../decisions/2026-08-13-ciclo-de-vida-de-un-cliente.md` (`credencialesCliente.js`: nosotros también ponemos las claves, y solo escribimos) |
-| **En este doc** | «Secciones» · «Dónde se guardan las claves (y por qué son seguras)» · «API — `/api/tenant/settings`» · «Ficheros» · «Permisos de IA del equipo (2026-07-27)» · «WhatsApp (Meta Cloud API) — 2026-07-27» · «Enlace de videollamada de las citas — 2026-07-27» |
+| **En este doc** | «Las seis zonas (2026-08-23)» · «Secciones» · «Dónde se guardan las claves (y por qué son seguras)» · «API — `/api/tenant/settings`» · «Ficheros» · «Permisos de IA del equipo (2026-07-27)» · «WhatsApp (Meta Cloud API) — 2026-07-27» · «Enlace de videollamada de las citas — 2026-07-27» |
 
 Ruta: `/configuracion` · API: `/api/tenant/settings` · UI: `modules/config/ConfigModule.jsx`
 
@@ -40,6 +40,69 @@ URLs del módulo Citas, las empresas de las consultas externas y las
 derivaciones de Clínica. Todo se guarda en `master.tenants.settings` (JSONB) y
 cada cambio deja su fila en `AuditLog` y un recibo por correo al cliente
 (`lib/configuracion/avisoCambio.js`).
+
+---
+
+## Las seis zonas (2026-08-23)
+
+Hasta esta fecha era **una sola columna de 27 tarjetas**, y peor repartida de lo
+que parecía: desde la clave de Anthropic hasta las cuatro puertas de la agenda,
+todo colgaba del mismo bloque titulado «Inteligencia Artificial». La API de
+Claude y el interruptor de «reserva online cerrada» acababan pegados sin tener
+nada que ver, y encontrar algo era bajar con la rueda hasta reconocerlo de
+vista (Rodrigo, 23/08/2026: «un scroll larguísimo, y no está realmente
+ordenado»).
+
+El reparto es por PREGUNTA, no por orden de llegada:
+
+| Zona | La pregunta que responde | Tarjetas |
+| --- | --- | --- |
+| **Empresa** | ¿Quién eres? | Datos fiscales · Descripción de empresa y líneas de negocio |
+| **Conexiones** | ¿Con qué te conectas? | Anthropic, OpenAI, Google Places, Resend (+ remitente), Cloudflare, WhatsApp · Cobro online con Stripe |
+| **Agenda** | ¿Cómo funciona tu agenda? | Recordatorios · Agenda compartida · Color de bloqueos · Videollamada · Avisos por WhatsApp |
+| **Reserva online** | ¿Qué puede reservar la gente sola? | Reserva abierta/cerrada · Cancelación · Las cuatro puertas · Página de reservas |
+| **Portal del cliente** | ¿Qué ve luego en su área? | Área privada · Bloqueo por impago |
+| **Módulos** | Lo que solo aplica a algunos | Derivaciones · Empresas de consultas externas · Permisos de IA |
+
+El reparto vive en **`lib/configuracion/pestanas.js`**, no en el JSX: de ahí
+sale también qué módulo hace útil cada tarjeta, y eso es una regla por módulos
+(regla #16, peldaño 2), no una decisión de pintura. La zona abierta viaja en la
+URL (`?zona=conexiones`) para poder enlazar «mira esto» a un sitio concreto;
+lo que llegue raro cae en la primera.
+
+### Atenuar NO es desactivar
+
+Una tarjeta cuyo módulo no está contratado sale **al 60 % y con una frase** que
+dice de cuál depende — y vuelve a opacidad entera al pasar por encima o al
+escribir dentro. **Se sigue pudiendo rellenar**, y eso es deliberado: la
+Configuración es universal (regla #14) y un cliente tiene que poder dejar
+puesta su clave de Stripe hoy y contratar Citas el mes que viene. Atenuada
+significa «esto todavía no hace nada», no «esto no se toca».
+
+Cuando la zona ENTERA cuelga del mismo módulo (Agenda y Portal son de `citas` de
+arriba abajo) se dice **una vez arriba** en lugar de repetir la misma frase en
+cada tarjeta: si no, el aviso interesante —una tarjeta suelta que pide otra
+cosa— se perdería entre cinco iguales.
+
+⚠️ **Las dependencias no son las que parecen**, y por eso se verificaron una a
+una contra quien LEE cada credencial, no por dónde caía en la pantalla:
+
+- **Stripe cuelga de `citas`, no de `billing`.** Todo lo que cobra pasa por
+  `hasModule("citas")` y no genera factura (`pagos.md`). Es la que más se
+  presta a error, porque «cobrar» suena a Facturación.
+- **Whisper (OpenAI) solo lo usa Clínica**: su único consumidor es
+  `/api/clinica/sessions/transcribe`.
+- **La puerta de admisión depende de `formularios`**, no de `citas`: exigir el
+  formulario antes de reservar solo tiene efecto si hay bandeja donde caiga.
+- **Anthropic y WhatsApp son universales** — ocho endpoints de seis módulos el
+  primero, integración universal el segundo — y no avisan nunca.
+
+Si la consulta de módulos falla, la página manda `null` y **no se avisa de
+nada**: decirle a alguien que le falta un módulo que ya tiene lo manda a pedir
+lo que ya pagó. Lo fija `scripts/_smoke-config-pestanas.mjs`, que además
+comprueba contra el fuente que cada tarjeta declarada se monta exactamente una
+vez — el modo de fallar de un reordenado de 27 bloques es perder uno, y no da
+error: simplemente deja de estar.
 
 ---
 
