@@ -638,10 +638,30 @@ del propio negocio (Meta Cloud API, BYOK: credenciales y gasto del cliente).
 - Nunca lanza: el correo sigue siendo el canal principal y un WhatsApp que falla
   no puede tumbar la cita. El PATCH del enlace devuelve `whatsappEnviado` y
   `whatsappMotivo` para poder explicarlo en pantalla.
-- ⚠️ Meta cobra por conversación iniciada por el negocio y, fuera de la ventana
-  de 24 h, exige **plantilla aprobada**: los textos planos los rechaza. Hasta
-  tener plantillas dadas de alta, esto sirve para responder dentro de esa
-  ventana.
+
+### Los tres avisos van por PLANTILLA (17/08/2026)
+
+Salían como texto libre, y eso solo vale **dentro de las 24 h siguientes al
+último mensaje del paciente**: fuera de esa ventana Meta los rechazaba con el
+error 131047 y la persona no recibía nada — que es justo el caso de un
+recordatorio de la víspera. Ahora los tres van como plantilla aprobada, que se
+puede mandar siempre.
+
+- Catálogo en `lib/whatsapp/plantillas.js`: `cita_confirmada`, `cita_enlace` y
+  `cita_recordatorio`, con su idioma, su cuerpo y sus variables. **Es la fuente
+  del alta**: hay que darlas en WhatsApp Manager con ese nombre y ese texto
+  exactos. No hay copia del texto en `avisosWhatsapp.js` a propósito.
+- Envío: `enviarWhatsappPlantilla(ctx, {telefono, plantilla, parametros, clientId})`.
+  `enviarWhatsapp` (texto libre) sigue existiendo para responder dentro de la
+  ventana, pero ya no lo usa ningún aviso.
+- Dos cambios de redacción **impuestos por Meta**, no elegidos: los textos
+  terminan en una coletilla fija (una plantilla no puede acabar en variable) y
+  donde antes no había enlace ahora va «Te esperamos en la consulta» (un
+  parámetro vacío hace que Meta rechace el envío entero).
+- `tipo: "enlace"` sin `meetUrl` devuelve `sin_enlace` y no llama a Meta.
+- Todo lo que sale queda registrado en `whatsapp_messages` con el texto ya
+  montado y colgado de la ficha (`booking.clientId`), para que el hilo del
+  paciente no tenga huecos donde ha escrito el CRM.
 
 ## Recordatorio de cita (2026-07-27)
 
