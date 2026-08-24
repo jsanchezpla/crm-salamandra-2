@@ -227,9 +227,13 @@ body {
   --fc-page-bg-color: transparent;
   --fc-neutral-bg-color: var(--ink-100);
   --fc-neutral-text-color: var(--ink-500);
-  --fc-non-business-color: color-mix(in srgb, var(--ink-200) 35%, transparent);
-  --fc-today-bg-color: color-mix(in srgb, var(--color-primary, #1B3A2D) 5%, transparent);
-  --fc-highlight-color: color-mix(in srgb, var(--color-primary, #1B3A2D) 7%, transparent);
+  --fc-non-business-color: var(--ink-100);
+  /* Hoy y la selección llevan la marca del cliente MUY diluida, y eso solo se
+     puede calcular en el navegador porque `--color-primary` la pone el layout
+     en tiempo de ejecución. El respaldo va escrito a mano, y es a propósito:
+     ver la nota del `@supports` de abajo. */
+  --fc-today-bg-color: var(--ink-100);
+  --fc-highlight-color: var(--ink-150);
   --fc-event-bg-color: var(--color-primary, #1B3A2D);
   --fc-event-border-color: var(--color-primary, #1B3A2D);
   --fc-event-text-color: #fff;
@@ -239,6 +243,30 @@ body {
      por persona o por tipo de cita, así que si fuera del color del cliente se
      confundiría con ellos, y es justo la que hay que encontrar de un vistazo. */
   --fc-now-indicator-color: #e11d48;
+}
+
+/* ⚠️ EL `@supports` LO ESCRIBIMOS NOSOTROS, Y NO SOBRA (24/08/2026).
+ *
+ * Un `color-mix()` que lleva un `var()` dentro no se puede resolver al compilar,
+ * así que el minificador escribe un respaldo para navegadores viejos… quedándose
+ * con el PRIMER color a pelo y tirando el porcentaje. La primera versión de esto
+ * acabó en producción como:
+ *
+ *     .fc{--fc-today-bg-color:var(--color-primary,#1b3a2d)}
+ *
+ * o sea, la celda de hoy MACIZA del color del cliente con el número encima sin
+ * leerse, para cualquiera con un navegador sin `color-mix` (Chrome anterior a
+ * 111, Safari a 16.2). Se vio mirando el CSS DENTRO del contenedor, no en local.
+ *
+ * Poniendo nosotros la rama, el respaldo es el que elegimos —un gris cálido del
+ * sistema, que es lo que se querría si no hubiera marca— y el minificador solo
+ * puede añadir el suyo AQUÍ dentro, donde ya no manda.
+ */
+@supports (color: color-mix(in srgb, red, red)) {
+  .fc {
+    --fc-today-bg-color: color-mix(in srgb, var(--color-primary, #1B3A2D) 5%, transparent);
+    --fc-highlight-color: color-mix(in srgb, var(--color-primary, #1B3A2D) 7%, transparent);
+  }
 }
 
 .fc { font-family: inherit; }
@@ -262,7 +290,18 @@ body {
 }
 .fc .fc-daygrid-day-number { font-size: 0.72rem; color: var(--ink-500); padding: 4px 6px; }
 .fc .fc-day-today .fc-daygrid-day-number { color: var(--color-primary, #1B3A2D); font-weight: 700; }
-.fc .fc-day-today { background: color-mix(in srgb, var(--color-primary, #1B3A2D) 5%, transparent) !important; }
+/* ⚠️ El fondo del día de hoy NO se escribe aquí, y no es un olvido: sale de
+   `--fc-today-bg-color`, unas líneas más arriba. Costó un despliegue aprenderlo
+   (24/08/2026). Un `color-mix()` con un `var()` dentro no se puede resolver al
+   compilar, así que el minificador escribe DOS reglas: la buena y un respaldo
+   para navegadores viejos… y ese respaldo se queda con el color a pelo, sin el
+   5%. En el contenedor salía literalmente:
+       .fc .fc-day-today{background:var(--color-primary,#1b3a2d)!important}
+   o sea, la celda de hoy MACIZA del color del cliente y el número encima sin
+   leerse. Dentro de una variable no pasa: un valor que el navegador no sabe
+   parsear la invalida y la celda se queda sin teñir, que es degradar bien.
+   Y de paso la regla de la librería (`.fc .fc-daygrid-day.fc-day-today`) es más
+   fina que la que había aquí: tiñe el día, no la celda de la cabecera. */
 .fc-theme-standard td, .fc-theme-standard th { border-color: var(--ink-150); }
 .fc-theme-standard .fc-scrollgrid { border-color: var(--ink-200); }
 .fc .fc-event {
@@ -274,7 +313,8 @@ body {
 .fc .fc-list-event-title a { font-size: 0.8rem; color: var(--ink-900); }
 .fc .fc-list-day-cushion { background: var(--ink-100); }
 .fc .fc-timegrid-slot-label-cushion { font-size: 0.67rem; color: var(--ink-400); }
-.fc .fc-highlight { background: color-mix(in srgb, var(--color-primary, #1B3A2D) 7%, transparent); }
+/* El resaltado de una selección, igual: lo pinta la librería leyendo
+   `--fc-highlight-color`, por el mismo motivo que el día de hoy. */
 .fc .fc-daygrid-event-dot { border-color: currentColor; }
 .fc .fc-toolbar.fc-header-toolbar { margin-bottom: 1rem; }
 
