@@ -62,6 +62,21 @@ export default function CorreoModule() {
   const [elegidos, setElegidos] = useState(() => new Map());
   const [pegados, setPegados] = useState("");
 
+  // «Escribirle» desde una ficha llega aquí con `?destinatario=`. Se mete en la
+  // lista y ya está: quien viene de una ficha quiere escribirle a esa persona,
+  // no volver a buscarla en un desplegable de 183.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("destinatario");
+    if (!q || !EMAIL_RE.test(q)) return;
+    const email = q.trim().toLowerCase();
+    setElegidos((prev) => {
+      if (prev.has(email)) return prev;
+      const m = new Map(prev);
+      m.set(email, { email, nombre: null, detalle: null, fuente: "contratantes" });
+      return m;
+    });
+  }, []);
+
   const [asunto, setAsunto] = useState("");
   const [cuerpo, setCuerpo] = useState("");
   const [enviando, setEnviando] = useState(false);

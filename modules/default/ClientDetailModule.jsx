@@ -74,6 +74,11 @@ import { PIEZAS_NINGUNA, textosPiezas } from "../../lib/clients/piezasFicha.js";
 function pestanasDe(textos) {
   return [
     { key: "datos", label: "Datos" },
+    // Las PERSONAS de esta ficha (24/08/2026). Va justo detrás de Datos porque
+    // es lo que se mira antes de escribir: en un ayuntamiento no se escribe «al
+    // ayuntamiento», se escribe al concejal de Cultura. Se esconde sola si no
+    // hay ninguna, así que a un centro que no las use no le aparece.
+    { key: "personas", label: "Personas" },
     { key: "interacciones", label: "Interacciones" },
     // El hilo de WhatsApp, pegado a Interacciones por el mismo criterio que
     // ordena a las dos de al lado: esto es lo que se ha hablado CON esta
@@ -640,6 +645,10 @@ export default function ClientDetailModule({
           <ClientCuentaWebSection clientId={id} />
         </PanelPestana>
 
+        <PanelPestana clave="personas" activo={tab === "personas"} onEstado={marcarPanel}>
+          <ClientPersonasSection clientId={id} />
+        </PanelPestana>
+
         <PanelPestana clave="interacciones" activo={tab === "interacciones"} onEstado={marcarPanel}>
           {/* Historial de interacciones */}
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col" style={{ minHeight: "400px" }}>
@@ -846,6 +855,161 @@ const MARGEN_CARGA = 900;
  * se quedaría en una, y volverían de una en una. Un panel que se llena ANTES
  * (mutación del DOM) se declara lleno al instante, sin esperar.
  */
+/**
+ * Las PERSONAS de una ficha: quién es quién dentro de esa organización.
+ *
+ * Nace el 24/08/2026 con los contratantes de Laura Úbeda. En un ayuntamiento no
+ * se escribe «al ayuntamiento»: se escribe al concejal de Cultura, y el técnico
+ * de sonido de una sala no es la misma persona que quien firma el contrato.
+ *
+ * Si no hay ninguna NO PINTA NADA, y entonces `PanelPestana` esconde la pestaña
+ * sola —cuenta hijos del DOM— así que a un centro que no las use no le aparece.
+ */
+function ClientPersonasSection({ clientId }) {
+  const [personas, setPersonas] = useState(null);
+  const [abriendo, setAbriendo] = useState(false);
+  const [form, setForm] = useState({ name: "", role: "", email: "", phone: "" });
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState(null);
+
+  const cargar = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/clients/${clientId}/contactos`, { cache: "no-store" });
+      const json = await res.json();
+      setPersonas(res.ok ? (json?.data?.contactos ?? []) : []);
+    } catch {
+      setPersonas([]);
+    }
+  }, [clientId]);
+
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
+
+  const crear = async () => {
+    setGuardando(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/contactos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "No se ha podido guardar");
+      setForm({ name: "", role: "", email: "", phone: "" });
+      setAbriendo(false);
+      await cargar();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  // Todavía cargando, o vacío y sin el formulario abierto: nada que pintar.
+  if (personas === null) return null;
+  if (!personas.length && !abriendo) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+        <p className="text-sm text-gray-500 mb-3">
+          Nadie con nombre y cargo en esta ficha todavía.
+        </p>
+        <button
+          type="button"
+          onClick={() => setAbriendo(true)}
+          className="text-sm font-medium underline text-gray-700 hover:text-gray-900"
+        >
+          Añadir una persona
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <span className="text-[13px] font-semibold text-gray-700">
+          Personas y buzones
+          <span className="ml-2 text-xs font-normal text-gray-400">({personas.length})</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => setAbriendo((v) => !v)}
+          className="text-xs underline text-gray-500 hover:text-gray-800"
+        >
+          {abriendo ? "Cancelar" : "Añadir"}
+        </button>
+      </div>
+
+      {abriendo && (
+        <div className="p-4 border-b border-gray-100 bg-gray-50/50 space-y-2">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+              placeholder="Nombre y apellidos"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            />
+            <input
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+              placeholder="Cargo (Concejal de Cultura, técnico…)"
+              value={form.role}
+              onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+            />
+            <input
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+              placeholder="Correo"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            />
+            <input
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+              placeholder="Teléfono"
+              value={form.phone}
+              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+            />
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+          <button
+            type="button"
+            onClick={crear}
+            disabled={guardando || !form.name.trim()}
+            className="px-3 py-1.5 rounded-lg text-white text-sm font-medium disabled:opacity-40"
+            style={{ backgroundColor: "var(--color-primary)" }}
+          >
+            {guardando ? "Guardando…" : "Guardar"}
+          </button>
+        </div>
+      )}
+
+      <ul className="divide-y divide-gray-100">
+        {personas.map((p) => (
+          <li key={p.id} className="px-5 py-3 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-gray-900 truncate">
+                {p.name}
+                {p.role && <span className="ml-2 text-xs font-normal text-gray-500">{p.role}</span>}
+              </div>
+              <div className="text-xs text-gray-400 truncate">
+                {[p.email, p.phone].filter(Boolean).join(" · ") || "sin datos de contacto"}
+              </div>
+            </div>
+            {p.email && (
+              <a
+                href={`/correo?destinatario=${encodeURIComponent(p.email)}`}
+                className="text-xs underline text-gray-500 hover:text-gray-800 shrink-0"
+              >
+                Escribirle
+              </a>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function PanelPestana({ clave, activo, onEstado, children }) {
   const ref = useRef(null);
 
