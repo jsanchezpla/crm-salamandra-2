@@ -53,6 +53,10 @@ import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
  *   titulo   string            «Leads Profesionales» por defecto.
  *   sujeto   string            cómo se llama a un lead en los textos: «leads»
  *                              por defecto, «interesados» en aumenta.
+ *   descripcion string         la línea bajo el título. Por defecto habla de la
+ *                              web, que es de donde vienen los leads de casi
+ *                              todos; con `booking` no vienen de ahí —los manda
+ *                              la representante— y decirlo sería mentir.
  */
 
 // ─── Estilos por etapa ────────────────────────────────────────────────────────
@@ -78,6 +82,15 @@ const STAGE_STYLE = {
   consulta_agendada: { bg: "bg-teal-100 text-teal-700", dot: "bg-teal-400" },
   consulta_realizada: { bg: "bg-lime-100 text-lime-700", dot: "bg-lime-500" },
   paciente: { bg: "bg-green-100 text-green-700", dot: "bg-green-500" },
+  // Booking (24/08/2026). El embudo va de frío a cerrado, así que los colores
+  // van de azul a verde: propuesta enviada (sky) → han respondido (cyan) →
+  // negociando (amber, que es donde se decide) → fecha cerrada (green, es el
+  // ganado) → actuación realizada (emerald, ya pasó).
+  propuesta_enviada: { bg: "bg-sky-100 text-sky-700", dot: "bg-sky-400" },
+  respuesta_recibida: { bg: "bg-cyan-100 text-cyan-700", dot: "bg-cyan-400" },
+  negociando_cache: { bg: "bg-amber-100 text-amber-700", dot: "bg-amber-400" },
+  fecha_confirmada: { bg: "bg-green-100 text-green-700", dot: "bg-green-500" },
+  actuacion_realizada: { bg: "bg-emerald-100 text-emerald-700", dot: "bg-emerald-500" },
 };
 const STAGE_STYLE_FALLBACK = { bg: "bg-gray-100 text-gray-600", dot: "bg-gray-400" };
 const estiloDe = (key) => STAGE_STYLE[key] ?? STAGE_STYLE_FALLBACK;
@@ -146,7 +159,12 @@ function JobBadge() {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function LeadsModule({ stages, titulo = "Leads Profesionales", sujeto = "leads" }) {
+export default function LeadsModule({
+  stages,
+  titulo = "Leads Profesionales",
+  sujeto = "leads",
+  descripcion = "Usuarios que han pedido información desde la web.",
+}) {
   const [leads, setLeads] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -257,7 +275,7 @@ export default function LeadsModule({ stages, titulo = "Leads Profesionales", su
                 </HelpTooltip>
               </h1>
               <p className="text-gray-500 text-sm mt-0.5">
-                Usuarios que han pedido información desde la web.{" "}
+                {descripcion}{" "}
                 <span className="font-semibold" style={{ color: COLOR_MARCA }}>
                   {total} en total
                 </span>

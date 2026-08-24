@@ -147,6 +147,27 @@ const navigation = [
           </svg>
         ),
       },
+      // Correo a mano, a mucha gente a la vez (24/08/2026, Rodrigo). Hasta hoy
+      // el CRM solo mandaba correos AUTOMÁTICOS —una factura, un recordatorio—
+      // o de uno en uno desde Captación; escribirle a cincuenta ayuntamientos
+      // había que hacerlo fuera.
+      //
+      // No tiene módulo propio: no es algo que se venda, es una herramienta que
+      // necesita cualquiera que tenga a quién escribir. `visibleModules` es el
+      // OR que hace falta —Clientes O Captación—, y es la misma condición que
+      // comprueba el endpoint, así que el menú y la API no pueden discrepar.
+      {
+        key: "correo",
+        label: "Correo",
+        href: "/correo",
+        visibleModules: ["clients", "outreach"],
+        badge: null,
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+          </svg>
+        ),
+      },
       // Visitas de la web (Cloudflare Web Analytics). Va en Comercial y no en un
       // área propia porque se lee junto a Leads: el embudo empieza en la visita
       // y acaba en el formulario. Reincorporado con página real (ver el aviso de

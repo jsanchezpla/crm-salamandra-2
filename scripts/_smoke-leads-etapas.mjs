@@ -286,7 +286,10 @@ check(
 check(
   "la página resuelve las etapas con etapasDe() de embudos.js",
   /import\s*\{[^}]*\betapasDe\b[^}]*\}\s*from\s*["'][^"']*lib\/leads\/embudos\.js["']/.test(txtPaginaLeads) &&
-    /etapasDe\(tenantSlug\)/.test(txtPaginaLeads),
+    // El segundo argumento (`tieneModulo`) entró el 24/08/2026 con el embudo de
+    // `booking`, que se decide por módulo y no por slug. Se acepta con y sin él
+    // para no atar esta comprobación a la firma exacta.
+    /etapasDe\(tenantSlug\s*(?:,[^)]*)?\)/.test(txtPaginaLeads),
   "sin eso el módulo base pintaría un embudo que el servidor no conoce"
 );
 check(

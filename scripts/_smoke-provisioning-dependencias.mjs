@@ -82,6 +82,10 @@ const NO_SE_VENDEN_SOLOS = [
   "team_avanzado",
   "clients_avanzado",
   "documents_avanzado",
+  // Booking (24/08/2026) va aquí y no en PIERDEN_ALGO aunque no traiga pantallas
+  // propias: exige Clientes y Leads porque lo que hace es reetiquetarlos. Sin
+  // ellos no es que pierda algo, es que no hay módulo.
+  "booking",
   "documents",
 ];
 
@@ -232,8 +236,15 @@ describe("textoNecesita: la columna «Necesita» de la tabla", () => {
     assert.equal(textoNecesita("orders"), "clients + billing");
   });
 
-  it("un requisito con dos claves a la vez también va con «+»: Documentos = citas + clients", () => {
-    assert.equal(textoNecesita("documents"), "citas + clients");
+  // El ejemplo era Documentos (citas + clients) hasta el 24/08/2026, cuando
+  // dejó de exigir Citas. Se cambia a Leads comerciales, que sigue siendo un
+  // requisito de dos claves a la vez.
+  it("un requisito con dos claves a la vez también va con «+»: Leads comerciales = clients + leads", () => {
+    assert.equal(textoNecesita("formularios"), "clients + leads");
+  });
+
+  it("Documentos ya no arrastra Citas: su única obligatoria es Clientes", () => {
+    assert.equal(textoNecesita("documents"), "clients");
   });
 
   it("una alternativa va entre paréntesis y con «o»: Equipo avanzado = team + (clinica o citas)", () => {
@@ -392,10 +403,16 @@ describe("validarSeleccion: la puerta — dice qué falta y NO lo arregla", () =
     );
   });
 
-  it("dice solo lo que falta, no el requisito entero: Documentos con Clientes → faltan [citas] aunque claves sea [citas, clients]", () => {
-    const [p] = validarSeleccion(["documents", "clients"]).problemas;
-    assert.deepEqual(p.claves, ["citas", "clients"]);
-    assert.deepEqual(p.faltan, ["citas"]);
+  // Mismo cambio de ejemplo que arriba: Documentos ya no sirve de caso porque
+  // con Clientes ya no le falta nada.
+  it("dice solo lo que falta, no el requisito entero: Leads comerciales con Clientes → faltan [leads] aunque claves sea [clients, leads]", () => {
+    const [p] = validarSeleccion(["formularios", "clients"]).problemas;
+    assert.deepEqual(p.claves, ["clients", "leads"]);
+    assert.deepEqual(p.faltan, ["leads"]);
+  });
+
+  it("Documentos con Clientes ya no se queja: Citas pasó a ser integración, no requisito", () => {
+    assert.deepEqual(validarSeleccion(["documents", "clients"]).problemas, []);
   });
 
   it("con alternativa no falta ninguna en concreto, falta elegir: faltan son las dos y cualquiera es true", () => {
@@ -543,10 +560,14 @@ describe("completarSeleccion: el botón «añadir también …» (completa caden
     });
   });
 
-  it("Documentos avanzado → añade Documentos y, por él, Citas y Clientes (transitivo, dos saltos)", () => {
+  // Hasta el 24/08/2026 este caso arrastraba TAMBIÉN Citas, porque Documentos
+  // básico la exigía. Dejó de exigirla (Rodrigo: «puede venir bien y estar
+  // integrado, pero no depender de ello»), así que la cadena es más corta y
+  // quien quiere un archivo de documentos ya no se lleva una agenda de propina.
+  it("Documentos avanzado → añade Documentos y, por él, Clientes (transitivo, dos saltos, SIN Citas)", () => {
     const r = completarSeleccion(["documents_avanzado"]);
-    assert.deepEqual(r.modulos, ["clients", "documents", "documents_avanzado", "citas"]);
-    assert.deepEqual(r.anadidos, ["clients", "documents", "citas"]);
+    assert.deepEqual(r.modulos, ["clients", "documents", "documents_avanzado"]);
+    assert.deepEqual(r.anadidos, ["clients", "documents"]);
     assert.deepEqual(r.sinResolver, []);
   });
 
@@ -813,7 +834,9 @@ describe("matrizCompleta / sinEstudiar: la tabla del back-office, lo más roto a
         pesos.filter((p) => p === 1).length,
         pesos.filter((p) => p === 2).length,
       ],
-      [11, 7, 4]
+      // 12 rojos desde el 24/08/2026: entró `booking`, que exige Clientes y
+      // Leads. Los ámbar y verdes no se mueven.
+      [12, 7, 4]
     );
   });
 

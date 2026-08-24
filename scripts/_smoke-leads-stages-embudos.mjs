@@ -52,7 +52,7 @@ const SLUGS_CON_EMBUDO_PROPIO = ["aumenta", "nutri_laura", "retorika", "spain_en
 const CINCO_POR_DEFECTO = ["new", "contacted", "qualified", "won", "lost"];
 
 describe("la lista canónica: quince etapas, cada una con su rótulo", () => {
-  it("son quince y en este orden: siete estándar, cinco heredadas del import y tres de nutrición", () => {
+  it("son veinte y en este orden: siete estándar, cinco del import, tres de nutrición y cinco de booking", () => {
     assert.deepEqual(ALLOWED_STAGES, [
       "new",
       "contacted",
@@ -69,6 +69,11 @@ describe("la lista canónica: quince etapas, cada una con su rótulo", () => {
       "consulta_agendada",
       "consulta_realizada",
       "paciente",
+      "propuesta_enviada",
+      "respuesta_recibida",
+      "negociando_cache",
+      "fecha_confirmada",
+      "actuacion_realizada",
     ]);
   });
 
@@ -97,12 +102,17 @@ describe("la lista canónica: quince etapas, cada una con su rótulo", () => {
       consulta_agendada: "Consulta agendada",
       consulta_realizada: "Consulta realizada",
       paciente: "Paciente activo",
+      propuesta_enviada: "Propuesta enviada",
+      respuesta_recibida: "Han respondido",
+      negociando_cache: "Negociando caché",
+      fecha_confirmada: "Fecha cerrada",
+      actuacion_realizada: "Actuación realizada",
     });
   });
 });
 
 describe("isValidStage: la puerta que decide si el PATCH guarda o responde 422", () => {
-  it("acepta las quince permitidas, una a una", () => {
+  it("acepta las veinte permitidas, una a una", () => {
     for (const etapa of ALLOWED_STAGES) {
       assert.equal(isValidStage(etapa), true, `rechaza «${etapa}», que está en la lista`);
     }
@@ -137,8 +147,17 @@ describe("isValidStage: la puerta que decide si el PATCH guarda o responde 422",
 });
 
 describe("GANADAS y PERDIDAS: qué cierra un embudo", () => {
-  it("ganadas son won, closed_yes y paciente — tres nombres de ganado de tres embudos distintos", () => {
-    assert.deepEqual([...GANADAS].sort(), ["closed_yes", "paciente", "won"]);
+  // Booking añadió dos el 24/08/2026. `actuacion_realizada` cuenta como ganada
+  // porque va DESPUÉS de cerrar la fecha: si no, la conversión bajaría el día
+  // del concierto, que es justo cuando el trabajo salió bien.
+  it("ganadas son won, closed_yes, paciente y las dos de booking — cinco nombres de ganado de cuatro embudos", () => {
+    assert.deepEqual([...GANADAS].sort(), [
+      "actuacion_realizada",
+      "closed_yes",
+      "fecha_confirmada",
+      "paciente",
+      "won",
+    ]);
   });
 
   it("perdidas son lost y closed_no", () => {
@@ -202,20 +221,21 @@ describe("etapasDe: el embudo de cada cliente (foto del 18/08/2026)", () => {
     assert.deepEqual(etapasDe(""), CINCO_POR_DEFECTO);
   });
 
-  // SOSPECHOSO: `EMBUDOS` es un objeto literal (hereda de Object.prototype) y el
-  // `??` de `etapasDe` solo caza null/undefined. Un slug que coincida con una
-  // propiedad heredada escrita toda en minúsculas —«constructor» y «__proto__»
-  // pasan la regex [a-z0-9_] de los slugs— NO cae al embudo por defecto:
-  // devuelve la función o el prototipo heredados, y `tieneEtapaGanada` revienta
-  // con TypeError. Lo esperable sería EMBUDO_POR_DEFECTO en los dos. Hoy ningún
-  // tenant se llama así y nadie provisiona slugs que no sean nuestros, por eso
-  // se fija lo que DEVUELVE HOY; si alguien lo arregla (Object.create(null),
-  // Object.hasOwn…), este it se pone rojo: cámbialo entonces por el por defecto.
-  it("la trampa del prototipo: «constructor» y «__proto__» son slugs legales pero hoy NO caen al por defecto", () => {
-    assert.equal(etapasDe("constructor"), Object);
-    assert.equal(etapasDe("__proto__"), Object.prototype);
-    assert.throws(() => tieneEtapaGanada("constructor"), TypeError);
-    assert.throws(() => tieneEtapaGanada("__proto__"), TypeError);
+  // ARREGLADO el 24/08/2026. Este it fijaba una trampa conocida: `EMBUDOS` es un
+  // objeto literal y el `??` de `etapasDe` solo cazaba null/undefined, así que
+  // un slug que coincidiera con una propiedad heredada en minúsculas
+  // —«constructor» y «__proto__» pasan la regex [a-z0-9_] de los slugs—
+  // devolvía la función o el prototipo, y `tieneEtapaGanada` reventaba con
+  // TypeError. El propio comentario decía: «lo esperable sería
+  // EMBUDO_POR_DEFECTO en los dos; si alguien lo arregla, cámbialo».
+  //
+  // Se arregló de paso al añadir el embudo de `booking`, que obligaba a tocar
+  // esa misma línea: ahora es `Object.prototype.hasOwnProperty.call`.
+  it("la trampa del prototipo, cerrada: «constructor» y «__proto__» caen al por defecto como cualquier otro slug", () => {
+    assert.deepEqual(etapasDe("constructor"), CINCO_POR_DEFECTO);
+    assert.deepEqual(etapasDe("__proto__"), CINCO_POR_DEFECTO);
+    assert.equal(tieneEtapaGanada("constructor"), true);
+    assert.equal(tieneEtapaGanada("__proto__"), true);
   });
 
   it("toda etapa de todo embudo la acepta el PATCH (si no, botón en pantalla que responde 422)", () => {
