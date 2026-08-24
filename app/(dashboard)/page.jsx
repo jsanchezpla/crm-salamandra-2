@@ -123,8 +123,32 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-full bg-[var(--color-accent)]">
+      {/*
+      ── LA PORTADA VA CENTRADA DESDE EL 24/08/2026 ──────────────────────────
+      Sus secciones llevaban `max-w-6xl` SIN `mx-auto` desde que nacieron
+      (`git log -S"mx-auto"` sobre este fichero no devuelve nada: nunca estuvo),
+      así que el contenido se pegaba al margen izquierdo y amontonaba TODO el
+      blanco a la derecha: medido en producción a 1.920, 0 px a la izquierda y
+      596 a la derecha, o sea el 35% del ancho útil.
+
+      Se centra y NO se toca ningún tamaño, que era la condición: medido antes y
+      después, las tarjetas no se mueven ni un píxel (Acceso rápido sigue en 352,
+      Resumen en 341). Lo único que cambia de sitio es el titular en serif, que
+      se va 274 px a la derecha con todo lo demás.
+
+      Lo que NO se hizo, a propósito: subirla a 1.280 como los listados. Medido,
+      la tarjeta de Acceso rápido pasaría de 352 a 395 px con ~190 muertos a la
+      derecha del texto — que es exactamente la queja de Rodrigo del 14/08 («cajas
+      grandes con el texto pegado a la izquierda») reproducida. Aquí el margen se
+      arregla centrando, no ensanchando.
+
+      ⚠️ El `max-w-6xl mx-auto` está repetido CUATRO veces y en DOS ficheros: las
+      tres secciones de aquí y la de `components/home/HomeSummary.jsx`. Si se
+      toca uno, se tocan los cuatro o la portada se desalinea sola. La deriva ya
+      empezó: dos usan `px-5` y una `px-6`.
+      */}
       {/* Hero editorial */}
-      <section className="px-5 lg:px-12 pt-7 lg:pt-16 pb-8 lg:pb-10 max-w-6xl">
+      <section className="px-5 lg:px-12 pt-7 lg:pt-16 pb-8 lg:pb-10 max-w-6xl mx-auto">
         <div className="eyebrow mb-3 lg:mb-5 fade-up" style={{ animationDelay: "60ms" }}>
           {today}
         </div>
@@ -148,7 +172,7 @@ export default async function HomePage() {
           que espera algo de él. Solo sale si hay algo — una portada con un hueco
           fijo de avisos se convierte en un hueco vacío que nadie mira. */}
       {sinLeer.length > 0 && (
-        <section className="px-5 lg:px-12 pb-8 max-w-6xl">
+        <section className="px-5 lg:px-12 pb-8 max-w-6xl mx-auto">
           <a
             href="/ayuda"
             className="block border border-[var(--ink-200)] rounded-[var(--radius-card)] px-5 py-4 hover:border-[var(--ink-300)] transition-colors bg-[var(--color-card,#fff)]"
@@ -171,7 +195,7 @@ export default async function HomePage() {
 
       {/* Bloque de accesos rápidos */}
       {visibleLinks.length > 0 && (
-        <section className="px-6 lg:px-12 pb-20 max-w-6xl">
+        <section className="px-6 lg:px-12 pb-20 max-w-6xl mx-auto">
           <div className="border-t border-[var(--ink-200)] pt-10">
             <div className="eyebrow mb-6">Acceso rápido</div>
             <div

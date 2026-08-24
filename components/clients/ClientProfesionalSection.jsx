@@ -121,7 +121,7 @@ export default function ClientProfesionalSection({ clientId }) {
   const sinHorario = actual != null && actual.tieneHorario === false;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6 max-w-5xl">
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6">
       <div className="px-5 py-4 border-b border-gray-100">
         <span className="text-sm font-semibold text-gray-700">Profesional de referencia</span>
       </div>

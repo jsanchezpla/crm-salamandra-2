@@ -112,7 +112,7 @@ export default function ClientContactMethodsSection({ clientId }) {
   const groups = ["email", "phone"];
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6 max-w-5xl">
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6">
       <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
         <span className="text-sm font-semibold text-gray-700">Contactos</span>
         <span className="text-xs text-gray-400">El principal accede al portal y recibe avisos</span>

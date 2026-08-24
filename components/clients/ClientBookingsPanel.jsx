@@ -182,14 +182,14 @@ export default function ClientBookingsPanel({ clientId, clientEmail, textos: tex
   // aunque la ficha no tenga correo. Antes esta pantalla se rendía aquí.
   if (!clientId && !clientEmail) {
     return (
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-6 text-center text-xs text-gray-500 max-w-3xl">
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-6 text-center text-xs text-gray-500">
         No se pueden listar las citas de esta ficha.
       </div>
     );
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden max-w-4xl">
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-2">
         <div>
           <div className="text-sm font-semibold text-gray-700">{textos.titulo}</div>

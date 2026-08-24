@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { vocabularioCliente } from "../../lib/clients/vocabulario.js";
 import { EVENTO_SIN_VER } from "../../lib/buzon/buzon.js";
 import { esFormacionAbierta, HIJOS_OCULTOS_FORMACION_ABIERTA } from "../../lib/training/formacionAbierta.js";
+import { esSlugDemo } from "../../lib/demo/demos.js";
 
 const navigation = [
   // Áreas reorganizadas 2026-07-27 (pedido del socio): Inicio suelto arriba y
@@ -34,6 +35,39 @@ const navigation = [
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955a1.126 1.126 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+          </svg>
+        ),
+      },
+      /*
+       * ── AYUDA SUBE AL MENÚ (24/08/2026) ─────────────────────────────────
+       * Era un interrogante de 16 px sin rótulo, al 30% de opacidad, en el pie
+       * del sidebar y en fila con otros tres iconos mudos. Medido: 24×24 px de
+       * caja clicable, el elemento más pequeño de la portada —una tarjeta de
+       * acceso rápido es 163 veces mayor— y 2,51:1 de contraste, por debajo del
+       * 3:1 que pide la WCAG para un control sin texto. En móvil, además,
+       * dentro del cajón.
+       *
+       * El resultado, medido: el Buzón se desplegó el 13/08 y once días después
+       * `master.buzon_avisos` tenía DOS avisos, los dos nuestros y del día de la
+       * prueba. Cero de los diez clientes vivos. Mientras, la última incidencia
+       * real entró por WhatsApp al móvil de Jorge.
+       *
+       * `always: true` es la bandera que el filtro de abajo ya soportaba y que
+       * no usaba ningún item: Ayuda no es un módulo que se contrate, es nuestra
+       * puerta y la ve todo el mundo.
+       *
+       * ⚠️ El icono del pie SE QUEDA. No es un duplicado gratuito: quien ya
+       * sabe dónde estaba lo sigue encontrando ahí, y quitarlo obligaría a
+       * recolocar los otros tres. Si algún día molesta, se quita ese, no este.
+       */
+      {
+        key: "ayuda",
+        label: "Ayuda",
+        href: "/ayuda",
+        always: true,
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
           </svg>
         ),
       },
@@ -687,6 +721,11 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
               (enabledModules.has(key) || enabledModules.size === 0) && userCanSee(key);
             const visibleItems = section.items.filter((item) => {
               if (item.adminOnly && !isAdminRole) return false;
+              // Las cuatro demos son PÚBLICAS y dan sesión de admin a cualquiera
+              // (lib/demo/isDemo.js). Una fila «Ayuda» ahí sería una puerta a
+              // Salamandra delante de un visitante anónimo, y encima el endpoint
+              // corta la demo igual: sería un enlace que no lleva a ningún sitio.
+              if (item.key === "ayuda" && esSlugDemo(tenant?.slug)) return false;
               if (item.key === "inicio" || item.always) return true;
               const keys = item.visibleModules || [item.key];
               return keys.some(canSeeModule);

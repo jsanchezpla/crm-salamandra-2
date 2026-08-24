@@ -33,7 +33,7 @@ import { useCallback, useEffect, useState } from "react";
  * Lo que NO la esconde es que la web no conteste: eso es «no he podido
  * preguntar», que es distinto de «no tiene cuenta» y se dice tal cual.
  */
-export default function ClientCuentaWebSection({ clientId, className = "mt-6 max-w-5xl" }) {
+export default function ClientCuentaWebSection({ clientId, className = "mt-6" }) {
   const [oculto, setOculto] = useState(false);
   const [estado, setEstado] = useState(null); // { ok, mensaje } del último intento
   const [creando, setCreando] = useState(false);

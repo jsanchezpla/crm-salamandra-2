@@ -389,7 +389,25 @@ export default function NutriLauraClientDetailModule() {
       </div>
 
       {/* ── Body ───────────────────────────────────────────────────────────── */}
+      {/*
+        El `max-w-5xl` (1.024 px) es el mismo que el del módulo base desde el
+        24/08/2026, y entra aquí porque Jorge lo pidió: esta ficha era la que
+        peor estaba de todo el CRM, saltando entre CINCO anchos según la pestaña
+        (Datos 1.636, WhatsApp 1.024, Sesiones 896, Historia clínica /
+        Documentos / Pautas 768). Ahora mide siempre lo mismo.
+
+        Sin `mx-auto`, igual que el base: la cabecera de paciente y las pestañas
+        están fuera de este cuerpo, así que centrar solo esto las desalinearía.
+
+        ⚠️ LO QUE ESTO LE CAMBIA A LAURA, dicho aquí para que no se descubra
+        mirando: su pestaña Datos es una rejilla de dos columnas, y esas columnas
+        pasan de 806 px a ~500. El reparto en dos columnas lo pidió Rodrigo el
+        07/08/2026 porque «la parte derecha está completamente vacía»; sigue
+        habiendo dos columnas, pero más estrechas. Se hizo con permiso explícito
+        de Jorge (24/08/2026) y sabiendo esto.
+      */}
       <div className="flex-1 overflow-auto px-4 lg:px-8 py-6">
+        <div className="max-w-5xl">
         {tab === "info" && (
           <InfoTab
             client={client}
@@ -431,6 +449,7 @@ export default function NutriLauraClientDetailModule() {
         )}
 
         {tab === "plan" && <ClientPlansPanel clientId={id} />}
+        </div>
       </div>
     </div>
   );

@@ -119,7 +119,7 @@ export default function ClientBonosSection({ clientId, onCambio }) {
   const lista = bonos.filter((b) => b.estado !== "anulado");
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6 max-w-5xl">
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6">
       <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
         <span className="text-sm font-semibold text-gray-700">Bonos de sesiones</span>
         {esAdmin && (

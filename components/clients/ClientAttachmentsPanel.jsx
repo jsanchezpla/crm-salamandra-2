@@ -189,7 +189,7 @@ export default function ClientAttachmentsPanel({ clientId, textos: textosProp })
   const limitReached = items.length >= MAX_FILES;
 
   return (
-    <div className="space-y-4 max-w-3xl">
+    <div className="space-y-4">
     <FirmasPendientes clientId={clientId} faltaFirma={textos.faltaFirma} />
 
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">

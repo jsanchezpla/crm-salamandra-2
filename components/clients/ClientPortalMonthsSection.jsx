@@ -69,7 +69,7 @@ export default function ClientPortalMonthsSection({ clientId }) {
   if (loading || !datos?.activo) return null;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6 max-w-5xl">
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6">
       <div className="px-5 py-4 border-b border-gray-100">
         <span className="text-sm font-semibold text-gray-700 inline-flex items-center gap-1.5">
           Acceso al portal por meses

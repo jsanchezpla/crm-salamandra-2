@@ -94,7 +94,7 @@ export default function ClientWhatsappSection({ clientId, onEstado }) {
   if (!mensajes || mensajes.length === 0) return null;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden max-w-5xl">
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-100">
         <span className="text-[13px] font-semibold text-gray-700">WhatsApp</span>
         <p className="text-[11px] text-gray-400 mt-1">

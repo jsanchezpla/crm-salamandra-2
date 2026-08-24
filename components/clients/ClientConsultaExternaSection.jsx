@@ -130,9 +130,12 @@ export default function ClientConsultaExternaSection({ clientId }) {
   if (cargando || esAdmin !== true) return null;
 
   return (
-    // `mt-6 max-w-5xl` como el resto de tarjetas de la ficha: sin ellas esta se
-    // pegaba a la de arriba y además salía más ancha que sus vecinas.
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6 max-w-5xl">
+    // El `mt-6` es para que no se pegue a la tarjeta de arriba. El ancho ya NO
+    // se decide aquí (24/08/2026): lo pone el contenedor de la pestaña, en
+    // modules/default/ClientDetailModule.jsx. Antes cada tarjeta llevaba el suyo
+    // copiado a mano —eran veintiuna— y por eso la ficha cambiaba de ancho según
+    // la pestaña que pulsaras.
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6">
       <div className="px-5 py-4 border-b border-gray-100">
         <span className="text-sm font-semibold text-gray-700">Consulta externa</span>
       </div>

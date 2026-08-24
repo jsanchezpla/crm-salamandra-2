@@ -444,7 +444,7 @@ export default function ClientDetailModule({
         <PanelPestana clave="datos" activo={tab === "datos"} onEstado={marcarPanel}>
 
           {/* Datos del cliente */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden max-w-5xl">
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
               <span className="text-[13px] font-semibold text-gray-700">Datos del cliente</span>
               {/* Botones en su propia fila, debajo del título (evita que el
@@ -642,7 +642,7 @@ export default function ClientDetailModule({
 
         <PanelPestana clave="interacciones" activo={tab === "interacciones"} onEstado={marcarPanel}>
           {/* Historial de interacciones */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col max-w-5xl" style={{ minHeight: "400px" }}>
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col" style={{ minHeight: "400px" }}>
             <div className="px-5 py-4 border-b border-gray-100 shrink-0">
               <span className="text-[13px] font-semibold text-gray-700">
                 Historial de interacciones
@@ -866,8 +866,32 @@ function PanelPestana({ clave, activo, onEstado, children }) {
     };
   }, [clave, onEstado]);
 
+  /*
+   * ── EL ANCHO DE LA FICHA SE DECIDE AQUÍ, Y EN NINGÚN OTRO SITIO ───────────
+   * (24/08/2026). Antes lo decidía cada tarjeta con su `max-w-` escrito a mano
+   * —VEINTIUNA, entre 768 y 1.024— y el resultado era que la ficha cambiaba de
+   * ancho según la pestaña que pulsaras: medido en un monitor de 1.920, seis
+   * pestañas a 1.024, Documentos y Pautas a 768, y Facturación a 1.636.
+   *
+   * `max-w-5xl` son 1.024 px, que es el ancho que quince de esas veintiuna ya
+   * llevaban: o sea, lo que el CRM ya había decidido sin decirlo. Para Aumenta
+   * —1.083 fichas, la pantalla que más abre— esto solo encoge Facturación; sus
+   * otras seis pestañas no se mueven un píxel.
+   *
+   * ⚠️ SIN `mx-auto`, Y ES A PROPÓSITO. El nombre del cliente y la barra de
+   * pestañas viven FUERA de este cuerpo (líneas 399 y 431), a lo ancho de la
+   * pantalla y empezando en x=252. Centrar solo lo de aquí dentro dejaría las
+   * tarjetas 306 px a la derecha del nombre del cliente, que se lee como roto.
+   * Si algún día se quiere centrar, hay que darle el mismo contenedor a la
+   * cabecera y a las pestañas EN EL MISMO COMMIT.
+   *
+   * ⚠️ Y las clases van en ESTE div, no en uno nuevo por dentro: el escondido
+   * automático de las pestañas vacías mira `el.childElementCount` sobre este
+   * mismo nodo (unas líneas más arriba), así que envolver a los hijos dejaría
+   * el contador en 1 para siempre y no volvería a esconderse ninguna.
+   */
   return (
-    <div ref={ref} className={activo ? undefined : "hidden"}>
+    <div ref={ref} className={activo ? "max-w-5xl" : "hidden"}>
       {children}
     </div>
   );

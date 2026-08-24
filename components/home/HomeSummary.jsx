@@ -375,7 +375,7 @@ export default function HomeSummary({ blocks, admin, vocab = VOCABULARIO_CLIENTE
   if (present.length === 0) return null;
 
   return (
-    <section className="px-5 lg:px-12 pb-4 max-w-6xl">
+    <section className="px-5 lg:px-12 pb-4 max-w-6xl mx-auto">
       <div className="border-t border-[var(--ink-200)] pt-10">
         <div className="eyebrow mb-6">Resumen de hoy</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start">

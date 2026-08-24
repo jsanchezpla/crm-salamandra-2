@@ -68,7 +68,7 @@ export default function ClientComunicacionesSection({ clientId }) {
   if (loading || !available) return null;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6 max-w-5xl">
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6">
       <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
         <span className="text-sm font-semibold text-gray-700">Comunicaciones</span>
         <span className="text-[11px] text-gray-400">

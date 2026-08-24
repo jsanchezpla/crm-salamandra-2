@@ -144,7 +144,7 @@ export default function ClientPlansPanel({ clientId }) {
   }
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="space-y-4">
       {/* Plan activo */}
       {active ? (
         <ActivePlanCard

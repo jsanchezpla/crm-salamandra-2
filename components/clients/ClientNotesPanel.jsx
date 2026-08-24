@@ -136,7 +136,7 @@ export default function ClientNotesPanel({ clientId, textos: textosProp }) {
   const hasMore = notes.length < total;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden max-w-3xl">
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       {/* Composer */}
       <div className="px-5 py-4 border-b border-gray-100">
         <div className="text-sm font-semibold text-gray-700 mb-2">
