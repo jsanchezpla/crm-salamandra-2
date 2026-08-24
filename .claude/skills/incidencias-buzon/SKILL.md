@@ -108,8 +108,11 @@ copia de trabajo que dejó `bajar` (`docs/registro/backlog.md`). Resumen de lo
 que más se rompe, pero el que manda es ese fichero:
 
 - Una tarea es un `###` dentro de una sección `##`. **Las secciones son fijas**:
-  `P0 — hoy`, `P1 — esta semana`, `P2 — cuando se pueda`, `P3 — deuda`,
-  `Pendiente de una decisión suya`. Inventar una la frena `subir`.
+  `Alta`, `Media`, `Baja`, `Pendiente de una decisión suya` y `Sin comprobar`
+  (24/08/2026; antes eran `P0`…`P3`, que se siguen leyendo pero ya no se
+  escriben). Inventar una la frena `subir`. **`Sin comprobar` no la uses**: es
+  para lo que se apunta desde el móvil sin mirarlo, y aquí las incidencias vienen
+  comprobadas o no vienen.
 - **Nada de `##` ni `###` dentro del cuerpo**: parte la tarea en dos. Para dar
   estructura, negrita al principio del párrafo.
 - **El cliente va detrás del último `·`**, con el slug de base de datos

@@ -39,7 +39,12 @@ Sin doc dedicado: `calendar`, `orders`, `provisioning` (`lib/provisioning/`).
 y resuelto): desde el 19/08/2026 vive en `master.tablero_documentos`, NO en el
 repo; se baja, se edita y se publica con `node scripts/registro.mjs
 bajar|subir` (copia de trabajo en `docs/registro/`, gitignored), sin commit ni
-despliegue. Antes de apuntar nada, `docs/como-apuntar-en-el-tablero.md`.
+despliegue. Desde el 24/08 **también se escribe desde `/admin/tablero`**
+(apuntar, cambiar prioridad, reescribir, cerrar, borrar y colgar capturas), por
+la MISMA puerta: mismos frenos, misma versión, mismo historial. Secciones:
+`Alta`/`Media`/`Baja` + `Pendiente de una decisión suya` + `Sin comprobar` (las
+viejas `P0`…`P3` se leen, no se escriben). Antes de apuntar nada,
+`docs/como-apuntar-en-el-tablero.md`.
 
 ---
 
@@ -129,8 +134,11 @@ enabled, uiOverride, logicOverrides, featureFlags, schemaExtensions),
 `AuditLog`, `BuzonAviso`/`BuzonMensaje`/`BuzonAdjunto` (el cliente nos escribe
 a NOSOTROS; en master y **sin FK** a propósito, para sobrevivir a su baja —ver
 `docs/modules/buzon.md`), `TableroDocumento` (el TEXTO del Registro: backlog y
-resuelto, una fila por versión, append-only) y `TableroEstado` (tick, reparto y
-solución, encima del texto, casados por título normalizado).
+resuelto, una fila por versión, append-only), `TableroEstado` (tick, reparto y
+solución, encima del texto, casados por título normalizado) y `TableroAdjunto`
+(capturas; cuelgan de la **ficha** `<!--id:…-->` escrita dentro del texto, NO
+del título, para que no queden huérfanas; sin FK, las caduca
+`podar-tablero-adjuntos.js`).
 
 **Tenant** (`models/tenant/`): `Client`, `Contact`, `Lead` (oportunidad
 comercial), `Project`/`Task` (Kanban), `Ticket*`/`SupportSettings` (helpdesk

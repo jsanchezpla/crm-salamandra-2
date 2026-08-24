@@ -39,8 +39,8 @@ function check(etiqueta, real, esperado) {
 const tarea = (titulo) => ({ titulo, quien: null, quienes: [], cuerpo: "" });
 
 const PENDIENTE = [
-  { titulo: "P0 — hoy", tareas: [tarea("El acceso SSH admite contraseña")] },
-  { titulo: "P1 — esta semana", tareas: [tarea("No se puede cerrar sesión"), tarea("Pedirle otra tarjeta")] },
+  { titulo: "Alta", tareas: [tarea("El acceso SSH admite contraseña")] },
+  { titulo: "Media", tareas: [tarea("No se puede cerrar sesión"), tarea("Pedirle otra tarjeta")] },
 ];
 const RESUELTO = [{ titulo: "12/08/2026", tareas: [tarea("Los trece de Aumenta ven lo que tienen que ver")] }];
 
@@ -53,8 +53,8 @@ process.stdout.write("\n▶ Sin nada guardado, manda el fichero\n");
 {
   const r = repartirPorEstado(PENDIENTE, RESUELTO, new Map());
   check("pendiente, igual que el fichero", titulos(r.pendiente), [
-    ["P0 — hoy", ["El acceso SSH admite contraseña"]],
-    ["P1 — esta semana", ["No se puede cerrar sesión", "Pedirle otra tarjeta"]],
+    ["Alta", ["El acceso SSH admite contraseña"]],
+    ["Media", ["No se puede cerrar sesión", "Pedirle otra tarjeta"]],
   ]);
   check("resuelto, igual que el fichero", titulos(r.resuelto), [
     ["12/08/2026", ["Los trece de Aumenta ven lo que tienen que ver"]],
@@ -85,8 +85,8 @@ process.stdout.write("\n▶ La solución escrita a mano viaja con la tarea\n");
   // cierre. Si algún día alguien la usa para marcar, esto lo caza.
   check("escribirla no la marca", conSolucion.marcada, null);
   check("ni la saca de Pendiente", titulos(r.pendiente), [
-    ["P0 — hoy", ["El acceso SSH admite contraseña"]],
-    ["P1 — esta semana", ["No se puede cerrar sesión", "Pedirle otra tarjeta"]],
+    ["Alta", ["El acceso SSH admite contraseña"]],
+    ["Media", ["No se puede cerrar sesión", "Pedirle otra tarjeta"]],
   ]);
 }
 
@@ -98,14 +98,14 @@ process.stdout.write("\n▶ El tick mueve de pestaña\n");
     guardado([["Pedirle otra tarjeta", { asignadoA: "jorge", resuelta: true, tocadaPor: "rodrigo@x" }]])
   );
   check("sale de Pendiente", titulos(r.pendiente), [
-    ["P0 — hoy", ["El acceso SSH admite contraseña"]],
-    ["P1 — esta semana", ["No se puede cerrar sesión"]],
+    ["Alta", ["El acceso SSH admite contraseña"]],
+    ["Media", ["No se puede cerrar sesión"]],
   ]);
   check("entra en Resuelto, en su bloque y arriba", titulos(r.resuelto), [
     [SECCION_MARCADAS, ["Pedirle otra tarjeta"]],
     ["12/08/2026", ["Los trece de Aumenta ven lo que tienen que ver"]],
   ]);
-  check("y se acuerda de dónde venía", r.resuelto[0].tareas[0].deSeccion, "P1 — esta semana");
+  check("y se acuerda de dónde venía", r.resuelto[0].tareas[0].deSeccion, "Media");
   check("con su dueño puesto", r.resuelto[0].tareas[0].asignadoA, "jorge");
 }
 
@@ -131,7 +131,7 @@ process.stdout.write("\n▶ Asignar no mueve nada\n");
     guardado([["No se puede cerrar sesión", { asignadoA: "rodrigo", resuelta: null }]])
   );
   check("sigue en su sitio", titulos(r.pendiente)[1], [
-    "P1 — esta semana",
+    "Media",
     ["No se puede cerrar sesión", "Pedirle otra tarjeta"],
   ]);
   check("con dueño", r.pendiente[1].tareas[0].asignadoA, "rodrigo");

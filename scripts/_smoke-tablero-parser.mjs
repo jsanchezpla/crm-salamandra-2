@@ -34,6 +34,8 @@ import {
   SLUGS,
   SECCIONES_BACKLOG,
   DOCUMENTOS,
+  seccionDeHoy,
+  marcaDeFicha,
 } from "../lib/tablero/parser.js";
 import { prepararPublicacion, normalizar, MAX_BYTES } from "../lib/tablero/documentos.js";
 
@@ -60,10 +62,10 @@ Esto NO es una tarea.
 
 ---
 
-## P0 — hoy
+## Alta
 
 ${TAREA_COMPLETA("El buscador no encuentra por apellido")}
-## P1 — esta semana
+## Media
 
 ${TAREA_COMPLETA("Los correos salen en UTC", "`nutri_laura`, todos")}
 ${TAREA_COMPLETA("Una de producto", "producto")}
@@ -98,7 +100,7 @@ describe("trocear: secciones y tareas, tal como las pinta el tablero", () => {
     const s = trocear(BACKLOG_BIEN);
     assert.deepEqual(
       s.map((x) => x.titulo),
-      ["P0 — hoy", "P1 — esta semana", "Pendiente de una decisión suya"]
+      ["Alta", "Media", "Pendiente de una decisión suya"]
     );
     assert.equal(contarTareas(BACKLOG_BIEN), 4);
   });
@@ -118,7 +120,7 @@ describe("trocear: secciones y tareas, tal como las pinta el tablero", () => {
   });
 
   it("un «·» sin nombre conocido detrás NO parte el título", () => {
-    const [s] = trocear("## P0 — hoy\n\n### Una cosa · otra cosa\n\nCuerpo.\n");
+    const [s] = trocear("## Alta\n\n### Una cosa · otra cosa\n\nCuerpo.\n");
     assert.equal(s.tareas[0].titulo, "Una cosa · otra cosa");
     assert.equal(s.tareas[0].quien, null);
     assert.deepEqual(s.tareas[0].quienes, []);
@@ -131,7 +133,7 @@ describe("trocear: secciones y tareas, tal como las pinta el tablero", () => {
 
   it("el cuerpo se guarda tal cual, recortado por los extremos", () => {
     const [s] = trocear(
-      "## P0 — hoy\n\n### T · aumenta\n\n**Lo que pasa.** X.\n\n*Se comprueba*: Y.\n\n"
+      "## Alta\n\n### T · aumenta\n\n**Lo que pasa.** X.\n\n*Se comprueba*: Y.\n\n"
     );
     assert.equal(s.tareas[0].cuerpo, "**Lo que pasa.** X.\n\n*Se comprueba*: Y.");
   });
@@ -147,7 +149,7 @@ describe("trocear: secciones y tareas, tal como las pinta el tablero", () => {
 
   it("un «###» antes de la primera sección no se pinta, pero trocearTodo lo devuelve como huérfana", () => {
     const texto =
-      "### Suelta · aumenta\n\nCuerpo.\n\n## P0 — hoy\n\n### Dentro · aumenta\n\nCuerpo.\n";
+      "### Suelta · aumenta\n\nCuerpo.\n\n## Alta\n\n### Dentro · aumenta\n\nCuerpo.\n";
     assert.equal(contarTareas(texto), 1);
     const { huerfanas } = trocearTodo(texto);
     assert.deepEqual(
@@ -212,7 +214,7 @@ describe("comprobar: lo que NO se publica (errores)", () => {
 
   it("una tarea antes de la primera sección, con su línea", () => {
     const r = comprobar(
-      "### Suelta · aumenta\n\nx\n\n## P0 — hoy\n\n" + TAREA_COMPLETA("Dentro"),
+      "### Suelta · aumenta\n\nx\n\n## Alta\n\n" + TAREA_COMPLETA("Dentro"),
       "backlog"
     );
     assert.ok(r.errores.some((e) => /antes de la primera sección/.test(e) && /línea 1/.test(e)));
@@ -221,12 +223,14 @@ describe("comprobar: lo que NO se publica (errores)", () => {
   it("en backlog, una sección que no es de las fijas", () => {
     const r = comprobar("## P5 — algún día\n\n" + TAREA_COMPLETA("T"), "backlog");
     assert.ok(r.errores.some((e) => /«P5 — algún día»/.test(e) && /no es de las fijas/.test(e)));
+    // Tres prioridades con color y DOS salas de espera sin él. El orden importa:
+    // es el que usa la pantalla para pintar los bloques de arriba abajo.
     assert.deepEqual(SECCIONES_BACKLOG, [
-      "P0 — hoy",
-      "P1 — esta semana",
-      "P2 — cuando se pueda",
-      "P3 — deuda",
+      "Alta",
+      "Media",
+      "Baja",
       "Pendiente de una decisión suya",
+      "Sin comprobar",
     ]);
   });
 
@@ -274,7 +278,7 @@ describe("comprobar: lo que NO se publica (errores)", () => {
 
   it("dos tareas con el mismo título en la misma sección", () => {
     const r = comprobar(
-      "## P0 — hoy\n\n" + TAREA_COMPLETA("Igual") + TAREA_COMPLETA("Igual"),
+      "## Alta\n\n" + TAREA_COMPLETA("Igual") + TAREA_COMPLETA("Igual"),
       "backlog"
     );
     assert.ok(r.errores.some((e) => /mismo título/.test(e) && /«Igual»/.test(e)));
@@ -282,9 +286,9 @@ describe("comprobar: lo que NO se publica (errores)", () => {
 
   it("el mismo título en DOS secciones distintas no es error", () => {
     const r = comprobar(
-      "## P0 — hoy\n\n" +
+      "## Alta\n\n" +
         TAREA_COMPLETA("Igual") +
-        "## P1 — esta semana\n\n" +
+        "## Media\n\n" +
         TAREA_COMPLETA("Igual"),
       "backlog"
     );
@@ -294,7 +298,7 @@ describe("comprobar: lo que NO se publica (errores)", () => {
 
 describe("comprobar: lo que se publica pero se dice (avisos)", () => {
   it("en backlog, una tarea sin *Se comprueba*, sin sello o sin cliente reconocido", () => {
-    const texto = "## P2 — cuando se pueda\n\n### Sin nada · nadie\n\nSolo texto.\n";
+    const texto = "## Baja\n\n### Sin nada · nadie\n\nSolo texto.\n";
     const r = comprobar(texto, "backlog");
     assert.deepEqual(r.errores, []);
     assert.equal(r.avisos.length, 1);
@@ -303,9 +307,121 @@ describe("comprobar: lo que se publica pero se dice (avisos)", () => {
     assert.match(r.avisos[0], /cliente reconocido/);
   });
 
+  /*
+   * El alias de las secciones viejas es lo que permite desplegar el cambio de
+   * nombres sin tener que reescribir el documento publicado en el mismo minuto.
+   * Si esto pasara a ser un error, la pantalla se quedaría vacía en producción
+   * hasta que alguien republicara — y republicar a la fuerza para tapar un
+   * despliegue es justo lo que no se hace en este repo.
+   */
+  it("una sección con el nombre viejo (P0…P3) avisa, pero NO impide publicar", () => {
+    const r = comprobar("## P2 — cuando se pueda\n\n" + TAREA_COMPLETA("Vieja"), "backlog");
+    assert.deepEqual(r.errores, []);
+    assert.equal(r.avisos.length, 1);
+    assert.match(r.avisos[0], /nombre de antes/);
+    assert.match(r.avisos[0], /«Media»/);
+  });
+
+  it("las cuatro viejas saben en cuál caen hoy, y P0 y P1 caen en la misma", () => {
+    assert.equal(seccionDeHoy("P0 — hoy"), "Alta");
+    assert.equal(seccionDeHoy("P1 — esta semana"), "Alta");
+    assert.equal(seccionDeHoy("P2 — cuando se pueda"), "Media");
+    assert.equal(seccionDeHoy("P3 — deuda"), "Baja");
+    // Una sección que ya está en su nombre de hoy se devuelve tal cual, y una
+    // desconocida también: `seccionDeHoy` traduce, no valida.
+    assert.equal(seccionDeHoy("Sin comprobar"), "Sin comprobar");
+    assert.equal(seccionDeHoy("Lo que sea"), "Lo que sea");
+  });
+
   it("en resuelto no se avisa de esas tres líneas: las entradas viejas no las llevan", () => {
     const r = comprobar("## 10/08/2026\n\n### Vieja · demo\n\nSolo texto.\n", "resuelto");
     assert.deepEqual(r.avisos, []);
+  });
+});
+
+/* ── La ficha: el identificador del que cuelgan los adjuntos ──────────────── */
+
+describe("la ficha de una tarea (<!--id:…-->)", () => {
+  const CON_FICHA = `## Alta
+
+### Con ficha · \`aumenta\`
+
+${marcaDeFicha("k7m2p9")}
+
+**Lo que pasa.** Algo.
+
+*Se comprueba*: así.
+*Comprobado en producción*: 24/08/2026 — visto.
+`;
+
+  it("se saca del cuerpo: en pantalla no se ve, porque el cuerpo se pinta tal cual", () => {
+    const t = trocear(CON_FICHA)[0].tareas[0];
+    assert.equal(t.id, "k7m2p9");
+    assert.doesNotMatch(t.cuerpo, /<!--/, "la marca se ha quedado dentro del cuerpo");
+    assert.match(t.cuerpo, /^\*\*Lo que pasa\.\*\*/, "el cuerpo tiene que empezar por su texto");
+  });
+
+  it("una tarea sin ficha no es un error: las escritas antes del 24/08/2026 no la llevan", () => {
+    const t = trocear("## Alta\n\n" + TAREA_COMPLETA("Sin ficha"))[0].tareas[0];
+    assert.equal(t.id, null);
+    assert.deepEqual(comprobar("## Alta\n\n" + TAREA_COMPLETA("Sin ficha"), "backlog").errores, []);
+  });
+
+  /*
+   * Este es el error que de verdad va a pasar: se copia una tarea entera para
+   * escribir otra parecida y se copia también su ficha. Sin este freno, las dos
+   * tareas enseñarían las capturas de la otra.
+   */
+  it("dos tareas con la misma ficha NO se publican", () => {
+    const dos =
+      "## Alta\n\n### Una · `aumenta`\n\n" +
+      marcaDeFicha("abc123") +
+      "\n\nx\n\n### Otra · `demo`\n\n" +
+      marcaDeFicha("abc123") +
+      "\n\ny\n";
+    const r = comprobar(dos, "backlog");
+    assert.equal(r.errores.length, 1);
+    assert.match(r.errores[0], /«abc123» está en dos tareas/);
+    assert.match(r.errores[0], /«Una»/);
+    assert.match(r.errores[0], /«Otra»/);
+  });
+
+  it("la misma ficha en secciones distintas también se caza: se mira todo el documento", () => {
+    const dos =
+      "## Alta\n\n### Una · `aumenta`\n\n" +
+      marcaDeFicha("abc123") +
+      "\n\nx\n\n## Baja\n\n### Otra · `demo`\n\n" +
+      marcaDeFicha("abc123") +
+      "\n\ny\n";
+    assert.equal(comprobar(dos, "backlog").errores.length, 1);
+  });
+});
+
+/* ── Dónde acaba una tarea, que es lo que el editor necesita para cortarla ── */
+
+describe("lineaFin: hasta dónde llega el bloque de una tarea", () => {
+  it("acaba en su última línea escrita, no en el hueco que la separa de la siguiente", () => {
+    //  1 ## Alta
+    //  2
+    //  3 ### Una · `aumenta`
+    //  4
+    //  5 Cuerpo.
+    //  6
+    //  7 ### Otra · `demo`
+    //  8
+    //  9 Otro.
+    const texto = "## Alta\n\n### Una · `aumenta`\n\nCuerpo.\n\n### Otra · `demo`\n\nOtro.\n";
+    const [una, otra] = trocear(texto)[0].tareas;
+    assert.equal(una.linea, 3);
+    assert.equal(una.lineaFin, 5, "se está comiendo la línea en blanco de separación");
+    assert.equal(otra.linea, 7);
+    assert.equal(otra.lineaFin, 9);
+  });
+
+  it("la última tarea del documento acaba en su texto, no en el final del fichero", () => {
+    const texto = "## Alta\n\n### Una · `aumenta`\n\nCuerpo.\n\n\n\n";
+    const [una] = trocear(texto)[0].tareas;
+    assert.equal(una.lineaFin, 5);
   });
 });
 
@@ -313,19 +429,19 @@ describe("comprobar: lo que se publica pero se dice (avisos)", () => {
 
 describe("diferenciaDeTitulos: qué entra y qué sale entre dos versiones", () => {
   it("una tarea nueva entra; una cerrada sale; el resto no se nombra", () => {
-    const antes = "## P0 — hoy\n\n" + TAREA_COMPLETA("A") + TAREA_COMPLETA("B");
-    const despues = "## P0 — hoy\n\n" + TAREA_COMPLETA("A") + TAREA_COMPLETA("C");
+    const antes = "## Alta\n\n" + TAREA_COMPLETA("A") + TAREA_COMPLETA("B");
+    const despues = "## Alta\n\n" + TAREA_COMPLETA("A") + TAREA_COMPLETA("C");
     assert.deepEqual(diferenciaDeTitulos(antes, despues), { entran: ["C"], salen: ["B"] });
   });
 
   it("cambiar solo la cola del cliente no cuenta como entrar ni salir", () => {
-    const antes = "## P0 — hoy\n\n" + TAREA_COMPLETA("A", "aumenta");
-    const despues = "## P0 — hoy\n\n" + TAREA_COMPLETA("A", "aumenta, demo");
+    const antes = "## Alta\n\n" + TAREA_COMPLETA("A", "aumenta");
+    const despues = "## Alta\n\n" + TAREA_COMPLETA("A", "aumenta, demo");
     assert.deepEqual(diferenciaDeTitulos(antes, despues), { entran: [], salen: [] });
   });
 
   it("sin versión anterior, todo entra", () => {
-    assert.deepEqual(diferenciaDeTitulos(null, "## P0 — hoy\n\n" + TAREA_COMPLETA("A")), {
+    assert.deepEqual(diferenciaDeTitulos(null, "## Alta\n\n" + TAREA_COMPLETA("A")), {
       entran: ["A"],
       salen: [],
     });
@@ -437,7 +553,7 @@ describe("prepararPublicacion: los frenos antes de escribir", () => {
 
   it("si salen más del 30 % de las tareas, frena («parece medio fichero») salvo con forzar", () => {
     const dosDeCuatro =
-      "## P0 — hoy\n\n" +
+      "## Alta\n\n" +
       TAREA_COMPLETA("El buscador no encuentra por apellido") +
       TAREA_COMPLETA("Otra");
     const sin = prepararPublicacion({
@@ -468,7 +584,7 @@ describe("prepararPublicacion: los frenos antes de escribir", () => {
   });
 
   it("un texto por encima del tope de bytes no entra", () => {
-    const enorme = "## P0 — hoy\n\n" + TAREA_COMPLETA("T") + "x".repeat(MAX_BYTES);
+    const enorme = "## Alta\n\n" + TAREA_COMPLETA("T") + "x".repeat(MAX_BYTES);
     const r = prepararPublicacion({ nombre: "backlog", contenido: enorme, actual: null });
     assert.ok(r.errores.some((e) => /tope/.test(e)));
   });

@@ -1,14 +1,18 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
-import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
-import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
+import { ok, error, serverError } from "../../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { RESPONSABLES, repartirPorEstado } from "../../../../lib/tablero/estado.js";
 import { trocear } from "../../../../lib/tablero/parser.js";
 import { ultimaVersion } from "../../../../lib/tablero/documentos.js";
-
-const ADMIN_ROLES = new Set(["admin", "superadmin"]);
+import { candadoTablero as candado } from "../../../../lib/tablero/candado.js";
+// La lista blanca de lo que se puede enseñar en pantalla vive en el Buzón y se
+// IMPORTA en vez de copiarse: es una lista blanca de seguridad (el SVG está
+// fuera a propósito, lleva scripts dentro), y dos copias de una lista blanca
+// acaban siendo dos listas distintas, con la vieja aceptando lo que la nueva ya
+// rechaza. Es una función pura sobre una extensión; no arrastra nada del Buzón.
+import { tipoParaVerEnPantalla } from "../../../../lib/buzon/buzon.js";
 
 /**
  * El Registro: lo que falta y lo que ya está.
@@ -37,15 +41,11 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * para ponerse de acuerdo entre los dos; la publicación es lo que deja
  * constancia.
  *
- * Mismos tres candados que el resto del back-office.
+ * Mismos tres candados que el resto del back-office. Desde el 24/08/2026 viven
+ * en `lib/tablero/candado.js`, porque los necesitan también los endpoints que
+ * escriben tareas y los que sirven capturas: tres copias de un control de acceso
+ * es como se llega a que a una de ellas le falte el tercer `if`.
  */
-function candado(ctx) {
-  if (!ctx.hasModule("provisioning"))
-    return forbidden("Este panel es solo para Salamandra Solutions");
-  if (!ADMIN_ROLES.has(ctx.user?.role)) return forbidden("Solo admin");
-  if (isDemoTenant(ctx)) return forbidden("No disponible en la demo");
-  return null;
-}
 
 /**
  * La versión actual de un documento del Registro, con de dónde salió.
@@ -117,15 +117,79 @@ async function estadosGuardados() {
   }
 }
 
+/**
+ * Las capturas de cada tarea, por ficha.
+ *
+ * Se piden TODAS de golpe y se reparten aquí en vez de una consulta por tarea:
+ * son 137 tareas y hoy cero capturas, así que una consulta por tarea serían 137
+ * viajes para no traer nada.
+ *
+ * Nunca lanza, por lo mismo que el estado: si la tabla todavía no existe —el
+ * despliegue va por delante de la migración— el Registro se pinta como siempre,
+ * sin capturas, en vez de responder un 500 y quedarse en blanco.
+ *
+ * La RUTA en disco no sale de aquí. La pantalla pide cada captura por su id.
+ */
+async function capturasGuardadas() {
+  try {
+    const { TableroAdjunto } = getMasterModels();
+    const filas = await TableroAdjunto.findAll({
+      // `ruta` se pide para poder decidir `verComo` a partir de la extensión que
+      // guardamos nosotros, y NO sale en la respuesta: una ruta de disco en el
+      // JSON es una invitación a construir la siguiente a mano.
+      attributes: ["id", "ficha", "nombre", "ruta", "bytes", "subidoPor", "createdAt"],
+      order: [["createdAt", "ASC"]],
+    });
+    const mapa = new Map();
+    for (const f of filas) {
+      if (!mapa.has(f.ficha)) mapa.set(f.ficha, []);
+      mapa.get(f.ficha).push({
+        id: f.id,
+        nombre: f.nombre,
+        bytes: f.bytes,
+        subidoPor: f.subidoPor,
+        creadaEn: f.createdAt,
+        /*
+         * Si se puede ver en pantalla, y CON QUÉ TIPO. Lo dice el servidor y no
+         * lo adivina la pantalla, y esa es toda la gracia: es la misma lista
+         * blanca con la que se sirve el fichero (`tipoParaVerEnPantalla`), así
+         * que no puede haber una pantalla que pinte un `<img>` de algo que el
+         * servidor va a mandar como descarga. Ese fallo ya estaba escrito y
+         * duraba lo que tardara alguien en subir un `.avif`: la lista de la
+         * pantalla lo aceptaba y la del servidor no.
+         *
+         * Y NO se manda el `mime` que declaró el navegador de quien la subió:
+         * es texto que escribe quien sube, y aquí decide cómo se pinta.
+         */
+        verComo: tipoParaVerEnPantalla(f.ruta),
+      });
+    }
+    return mapa;
+  } catch (err) {
+    process.stderr.write(`[tablero] sin capturas guardadas: ${err.message}\n`);
+    return new Map();
+  }
+}
+
+/** Le pega a cada tarea las suyas, dejando el resto del reparto como estaba. */
+function conCapturas(secciones, capturas) {
+  if (secciones === null) return null;
+  return secciones.map((s) => ({
+    ...s,
+    tareas: s.tareas.map((t) => ({ ...t, capturas: (t.id && capturas.get(t.id)) || [] })),
+  }));
+}
+
 export const GET = withTenant(async (_request, _ctx, ctx) => {
   try {
     const veto = candado(ctx);
     if (veto) return veto;
 
-    const [backlog, resuelto, estados] = await Promise.all([
+    const [backlog, resuelto, estados, capturas] = await Promise.all([
       leer("backlog"),
       leer("resuelto"),
       estadosGuardados(),
+      capturasGuardadas(),
     ]);
 
     const repartidas = repartirPorEstado(
@@ -135,7 +199,8 @@ export const GET = withTenant(async (_request, _ctx, ctx) => {
     );
 
     return ok({
-      ...repartidas,
+      pendiente: conCapturas(repartidas.pendiente, capturas),
+      resuelto: conCapturas(repartidas.resuelto, capturas),
       responsables: RESPONSABLES,
       // De dónde salió cada documento (versión, fecha, quién, o el fichero de
       // respaldo). La pantalla lo pinta: un Registro leído del fichero en

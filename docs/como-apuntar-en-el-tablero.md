@@ -17,9 +17,19 @@ por ese mismo troceador **antes** de guardarlo y se niega si no casa.
 
 El TEXTO de cada tarea vive en **`master.tablero_documentos`**, en producción:
 dos documentos, `backlog` y `resuelto`, en el mismo markdown de siempre, **una
-fila por versión**. El tablero lee la versión más alta de cada uno. No hay
-formulario para escribir una tarea desde la pantalla: se escribe en un fichero
-local, se sube, y ya está.
+fila por versión**. El tablero lee la versión más alta de cada uno.
+
+**Desde el 24/08/2026 hay DOS puertas para escribirlo, y son la misma puerta**:
+el script de siempre (`registro.mjs bajar` → editar → `subir`) y la propia
+pantalla (`/admin/tablero`: apuntar, cambiar de prioridad, reescribir, cerrar y
+borrar). Las dos pasan por `prepararPublicacion`, o sea por los mismos frenos de
+formato, el mismo freno por versión y el mismo historial. Lo que cambia es
+cuándo conviene cada una:
+
+| | Cuándo |
+| --- | --- |
+| **La pantalla** | Sobre la marcha, y desde el móvil. Una tarea suelta, subirle la prioridad, colgarle una captura, cerrarla. |
+| **`registro.mjs`** | Cuando se toca mucho texto de golpe, se reordena, o se quiere ver el documento entero antes de publicar. |
 
 | Documento | Sale en la pestaña | Qué es |
 | --- | --- | --- |
@@ -36,12 +46,24 @@ blame` (lo sustituye `historial`, con quién y por qué publicó cada versión) 
 diff de git que delataba un `###` mal puesto (lo sustituye la comprobación de
 `subir`).
 
-### Lo que SÍ se toca desde la pantalla (12/08/2026)
+### Lo que se toca desde la pantalla
 
-Tres cosas, y ninguna es el texto: **de quién es cada tarea** (Rodrigo o
-Jorge), **un tick** que la manda a Resuelto —quitándolo, vuelve a Pendiente— y
-**la solución** escrita a mano. Van a `master.tablero_estado`, aparte, y se
-pintan ENCIMA del texto publicado.
+Hay que distinguir **dos grupos**, porque no se guardan en el mismo sitio ni
+significan lo mismo.
+
+**Lo que NO toca el texto** (12/08/2026), y vive en `master.tablero_estado`
+pintado ENCIMA de lo publicado: **de quién es cada tarea** (Rodrigo o Jorge),
+**un tick** que la manda a Resuelto —quitándolo, vuelve a Pendiente— y **la
+solución** escrita a mano.
+
+**Lo que SÍ reescribe el texto y publica una versión** (24/08/2026): apuntar una
+tarea, moverla de sección —que es cambiarle la prioridad—, reescribirla,
+cerrarla y borrarla. Cada una de esas cinco deja su línea en el historial con
+quién y por qué, igual que si se hubiera hecho con el script.
+
+Y con eso, **el tick sigue significando exactamente lo que significaba**: un
+acuerdo entre los dos, no un cierre. Ahora que cerrar de verdad se puede hacer
+desde la misma tarjeta, la diferencia importa más, no menos.
 
 Tres cosas que hay que saber antes de fiarse del tick:
 
@@ -51,9 +73,13 @@ Tres cosas que hay que saber antes de fiarse del tick:
 - **Solo se guarda lo que se desvía del texto.** Marcar una tarea que ya está en
   Resuelto no crea ninguna fila. Cuando alguien la cierra de verdad y publica,
   el apaño desaparece solo.
-- **La clave es el título normalizado.** Si reescribes el título de una tarea,
-  su tick, su reparto y su solución se quedan huérfanos y la tarea vuelve a
-  salir donde diga el texto. No da error; simplemente deja de casar.
+- **La clave es el título normalizado.** Si reescribes el título de una tarea a
+  mano (bajando el Registro y editando el markdown), su tick, su reparto y su
+  solución se quedan huérfanos y la tarea vuelve a salir donde diga el texto. No
+  da error; simplemente deja de casar.
+  **Reescribirla DESDE LA PANTALLA sí les mueve la clave** (24/08/2026), así que
+  esa vía no pierde nada. Y las capturas no se pierden por ninguna de las dos:
+  cuelgan de la ficha (§4.6), no del título.
 
 ---
 
@@ -212,15 +238,37 @@ Listas con `-` y bloques de código sí se pueden usar sin problema.
 
 ### 4.3 Las secciones son fijas — no se inventan
 
-En `backlog` hay estas y solo estas (`subir` frena cualquier otra):
+En `backlog` hay estas y solo estas (`subir` frena cualquier otra). **Tres
+prioridades con color, y dos salas de espera sin él** (24/08/2026, Jorge):
 
 | Sección | Se pinta | Qué significa |
 | --- | --- | --- |
-| `## P0 — hoy` | rojo, «hoy» | Está pasando ahora y cuesta dinero, clientes o datos. |
-| `## P1 — esta semana` | ámbar, «esta semana» | Un cliente se lo va a encontrar ya, o le bloquea algo. |
-| `## P2 — cuando se pueda` | gris, «cuando se pueda» | Mejora clara, sin fecha. |
-| `## P3 — deuda` | tenue, «deuda» | Deuda o limpieza. También los fallos reales que hoy nadie puede ver. |
-| `## Pendiente de una decisión suya` | verde, «lo decidís vosotros» | No se puede hacer sin que Jorge o Rodrigo elijan. |
+| `## Alta` | **rojo** | Está pasando ahora, o un cliente se lo encuentra esta semana. |
+| `## Media` | **ámbar** | Mejora clara, sin fecha. |
+| `## Baja` | **verde** | Deuda o limpieza. También los fallos reales que hoy nadie puede ver. |
+| `## Pendiente de una decisión suya` | gris | No se puede hacer sin que Jorge o Rodrigo elijan. |
+| `## Sin comprobar` | gris | Apuntado sobre la marcha. **Nadie lo ha visto en producción.** |
+
+Las dos últimas no llevan color a propósito: **no son prioridades, son salas de
+espera**. Una tarea ahí no espera turno, espera otra cosa —una decisión, o que
+alguien vaya a mirarlo—. Darles color las metería en la carrera con las que sí
+esperan turno.
+
+**«Sin comprobar» es lo que hace posible apuntar desde el móvil.** La regla de
+siempre —«si no puedes comprobarlo, no lo apuntes», §6— se escribió cuando
+apuntar costaba bajar el Registro, editarlo y publicarlo. Aplicada a una tarea
+que se apunta en diez segundos desde el coche, obligaría a no apuntar nada, y lo
+que se piensa al colgar con un cliente se quedaría otra vez en un WhatsApp. Aquí
+entra, pero entra **diciendo** que nadie la ha verificado, y no se mezcla con lo
+que sí. Salir de esta sección es moverla a una prioridad, y ese gesto es
+exactamente el de haberla comprobado.
+
+**Antes eran cuatro numeradas** (`P0 — hoy`, `P1 — esta semana`, `P2 — cuando se
+pueda`, `P3 — deuda`). El troceador **las sigue entendiendo** y las pinta con su
+color de hoy (P0 y P1 → Alta, P2 → Media, P3 → Baja), avisando al publicar. Eso
+es para que el documento ya escrito no se quedara en blanco el día del
+despliegue; **al escribir no se aceptan**, y lo que queda de ellas se irá
+reescribiendo solo según se toque cada bloque.
 
 La sección `## Cómo se usa esto` se descarta a propósito (sus apartados son
 `###` y se colaban como tareas falsas, inflando la cuenta). No metas tareas ahí.
@@ -237,6 +285,48 @@ verticales.
 ### 4.5 Dos tareas con el mismo título en la misma sección
 
 React las usa como clave. `subir` frena. Cambia una de las dos.
+
+### 4.6 La ficha: `<!--id:k7m2p9-->` (24/08/2026)
+
+Una línea suelta dentro del cuerpo, que **el tablero no enseña** —se saca del
+cuerpo al trocear— y que en el markdown crudo no estorba. Es el identificador
+estable de la tarea: sobrevive a que le cambien el título, a que se mueva de
+sección y a que se cierre y pase a `resuelto`.
+
+**Existe por las capturas, y solo por ellas.** Todo lo demás (tick, reparto,
+solución) casa por título normalizado, y esa herida está asumida: una fila
+huérfana no casa con nada y no molesta. Un FICHERO huérfano sí molesta —queda en
+disco, no lo alcanza nadie, nadie lo va a borrar— y encima puede llevar datos de
+un paciente dentro.
+
+Tres cosas que hay que saber:
+
+- **No se escribe a mano.** La pone el tablero: una tarea creada desde la
+  pantalla nace con ella, y una tarea vieja la gana la primera vez que se la
+  reescribe o se le cuelga una captura desde ahí.
+- **Si copias un bloque para escribir otra tarea parecida, BÓRRALE la línea.**
+  Dos tareas con la misma ficha enseñarían cada una las capturas de la otra;
+  `subir` lo frena como error, pero el error se comete al copiar.
+- Las tareas escritas antes del 24/08/2026 no la llevan y no pasa nada. Todo lo
+  de siempre sigue funcionando por título.
+
+### 4.7 Las capturas (24/08/2026)
+
+Se cuelgan desde la tarjeta, hasta **3 por tarea y 10 MB cada una** (el número
+sale de que nginx corta el cuerpo de la petición en 30 MB; pasarse devuelve una
+página de error de nginx y en pantalla se ve como «no ha pasado nada»). Cuelgan
+de la ficha, no del título.
+
+⚠️ **Pueden llevar datos de un paciente dentro y no se recortan** (Jorge,
+24/08/2026): una captura recortada de la pantalla que falla deja de ser la
+prueba de lo que falla. Las tres consecuencias, que no son negociables:
+
+- no salen nunca del back-office —los tres candados de siempre, incluido el que
+  las apaga en las demos, que dan sesión de admin a cualquier visitante—;
+- **viven lo que viva la tarea**: cuando la tarea deja de estar escrita en los
+  dos documentos, `scripts/podar-tablero-adjuntos.js` las borra (con 30 días de
+  gracia, por si la tarea se restaura de una versión anterior);
+- no se pegan en un chat ni se sacan por pantalla en un volcado de un script.
 
 ---
 
@@ -282,10 +372,13 @@ sello — ya no van en el mismo sitio, y por eso el hash importa más que antes.
 
 Cuando Rodrigo o Jorge digan «apunta esto en el backlog»:
 
-1. **Comprobarlo contra producción primero.** Si no se ha podido, no se apunta
-   (§6): se dice qué se miró y qué falta.
+1. **Comprobarlo contra producción primero.** Si no se ha podido, **no se apunta
+   desde aquí** (§6): se dice qué se miró y qué falta. La sección «Sin
+   comprobar» es para que Jorge o Rodrigo apunten sobre la marcha desde el móvil,
+   **no** para que Claude se salte la comprobación: quien tiene una terminal y
+   acceso a producción no tiene excusa para no mirarlo.
 2. `node scripts/registro.mjs bajar` y abrir `docs/registro/backlog.md`. Elegir
-   sección: P0 / P1 / P2 / P3 / decisión.
+   sección: Alta / Media / Baja / decisión.
 3. Escribir la tarea con la plantilla del §3, respetando el `· slug` del §4.1.
 4. Si lo que se apunta es un **cierre**, quitarla de `backlog.md` y añadirla a
    `resuelto.md` bajo la fecha de hoy; se suben los dos.

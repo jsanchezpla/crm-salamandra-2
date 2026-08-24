@@ -177,11 +177,18 @@ comprobado, y la explicas al final:
 
 | | |
 | --- | --- |
-| Está pasando ahora y cuesta dinero, clientes o datos | **P0 — hoy** |
-| Un cliente se lo encuentra esta semana, o le bloquea algo | **P1 — esta semana** |
-| Mejora clara, sin fecha | **P2 — cuando se pueda** |
-| Deuda, limpieza, o un fallo real que hoy nadie puede ver | **P3 — deuda** |
+| Está pasando ahora y cuesta dinero, clientes o datos — o un cliente se lo encuentra esta semana | **Alta** |
+| Mejora clara, sin fecha | **Media** |
+| Deuda, limpieza, o un fallo real que hoy nadie puede ver | **Baja** |
 | No se puede hacer sin que Jorge o Rodrigo elijan | **Pendiente de una decisión suya** |
+
+Tres prioridades y una sala de espera, desde el 24/08/2026 (antes eran `P0`…`P3`;
+el troceador las sigue leyendo, pero **al escribir no se aceptan**).
+
+⚠️ Hay una quinta sección, **`Sin comprobar`**, y **esta skill no la usa nunca**.
+Es para que Jorge o Rodrigo apunten algo desde el móvil sin haber ido a mirarlo a
+producción. Tú tienes terminal y acceso: si no lo has comprobado, la respuesta
+sigue siendo **no apuntarlo** y decir qué falta (paso 4).
 
 Plantilla. Las tres últimas líneas no son opcionales:
 

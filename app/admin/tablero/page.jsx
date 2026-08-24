@@ -56,24 +56,24 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { anchoPanel } from "@/components/admin/anchoPanel.js";
+import { seccionDeHoy } from "@/lib/tablero/parser.js";
+import { tonoDe } from "@/components/admin/tableroTonos.js";
+import {
+  Capturas,
+  ModalApuntar,
+  ModalBorrar,
+  ModalCerrar,
+  ModalEditar,
+  SelectorSeccion,
+  moverTareaA,
+} from "@/components/admin/TableroEditor.jsx";
 
-/** Cuánto corre cada bloque, por su título. Lo que no case, en gris. */
-const TONOS = [
-  { casa: /^P0/i, color: "var(--alerta)", etiqueta: "hoy" },
-  { casa: /^P1/i, color: "#B45309", etiqueta: "esta semana" },
-  { casa: /^P2/i, color: "var(--dim)", etiqueta: "cuando se pueda" },
-  { casa: /^P3/i, color: "var(--tenue)", etiqueta: "deuda" },
-  { casa: /decisión|decision/i, color: "var(--ok)", etiqueta: "lo decidís vosotros" },
-  // Los dos bloques que inventa el endpoint para lo que se mueve con el tick.
-  // Llevan etiqueta propia para que se vea de un vistazo que eso NO está cerrado
-  // en el Registro publicado: está marcado a mano y le falta su publicación.
-  { casa: /^Marcadas desde el Registro/i, color: "var(--ok)", etiqueta: "sin publicar" },
-  { casa: /^Reabiertas desde el Registro/i, color: "#B45309", etiqueta: "reabierta aquí" },
-];
-
-function tonoDe(titulo) {
-  return TONOS.find((t) => t.casa.test(titulo)) ?? { color: "var(--tenue)", etiqueta: null };
-}
+/*
+ * DE QUÉ COLOR VA CADA BLOQUE — se mudó a `components/admin/tableroTonos.js` el
+ * 24/08/2026. No fue por ordenar: el selector de prioridad de las tarjetas tiene
+ * que pintar sus botones con EXACTAMENTE los mismos colores que la lista, y con
+ * dos listas eso dura hasta el primer cambio de color.
+ */
 
 /**
  * Los que no son un cliente. Agrupando por cliente van DESPUÉS de los clientes
@@ -403,6 +403,23 @@ export default function TableroPage() {
   // `resuelta` es de qué lado venía. Null = no hay modal abierto.
   const [confirmando, setConfirmando] = useState(null);
 
+  /*
+   * ── ESCRIBIR EN EL REGISTRO DESDE AQUÍ (24/08/2026) ──────────────────────
+   * Hasta hoy esta pantalla solo leía: apuntar o mover una tarea era bajar el
+   * Registro, editar el markdown y publicar con `registro.mjs`, o sea que hacía
+   * falta el ordenador con el repo y la llave del VPS. Se nota en el propio
+   * historial: 16 versiones publicadas por dos usuarios de máquina.
+   *
+   * Cada uno de estos cuatro guarda la tarea que tiene el modal abierto. Se
+   * mantienen separados del `confirmando` del tick a propósito: el tick NO toca
+   * el documento y esto sí, y mezclarlos llevaría a un modal que unas veces
+   * guarda una fila y otras publica una versión de 40 KB.
+   */
+  const [apuntando, setApuntando] = useState(false);
+  const [reescribiendo, setReescribiendo] = useState(null);
+  const [cerrandoTarea, setCerrandoTarea] = useState(null);
+  const [borrando, setBorrando] = useState(null);
+
   useEffect(() => {
     document.title = "Registro — Salamandra";
   }, []);
@@ -516,6 +533,34 @@ export default function TableroPage() {
     const { tarea, resuelta } = confirmando;
     if (await alternarTick(tarea, resuelta)) setConfirmando(null);
   }
+
+  /**
+   * Cambiar una tarea de sección, que es cambiarle la prioridad.
+   *
+   * Sin confirmación a propósito: es reversible con otro clic y es el gesto que
+   * más se va a hacer desde el móvil. Publica una versión igual, y eso se acepta.
+   */
+  async function moverA(t, seccion) {
+    setGuardando(t.clave);
+    setFallo(null);
+    try {
+      await moverTareaA(t, seccion);
+      await cargar();
+    } catch (e) {
+      setFallo(e.message);
+    } finally {
+      setGuardando(null);
+    }
+  }
+
+  /** Cerrar el modal que sea y recargar: el documento ha cambiado por debajo. */
+  const trasEscribir = useCallback(async () => {
+    setApuntando(false);
+    setReescribiendo(null);
+    setCerrandoTarea(null);
+    setBorrando(null);
+    await cargar();
+  }, [cargar]);
 
   const secciones = datos?.[pestaña] ?? [];
 
@@ -686,17 +731,42 @@ export default function TableroPage() {
           </div>
         </div>
 
-        <input
-          value={filtro}
-          onChange={(e) => setFiltro(e.target.value)}
-          placeholder="Filtrar por cliente — p. ej. «aumenta», «nutri_laura»"
-          className="mt-4 w-full max-w-md rounded-lg px-3 py-2 text-[13px] outline-none"
-          style={{
-            background: "var(--panel)",
-            border: "1px solid var(--line)",
-            color: "var(--text)",
-          }}
-        />
+        <div className="mt-4 flex items-center gap-3 flex-wrap">
+          <input
+            value={filtro}
+            onChange={(e) => setFiltro(e.target.value)}
+            placeholder="Filtrar por cliente — p. ej. «aumenta», «nutri_laura»"
+            className="flex-1 min-w-[240px] max-w-md rounded-lg px-3 py-2 text-[13px] outline-none"
+            style={{
+              background: "var(--panel)",
+              border: "1px solid var(--line)",
+              color: "var(--text)",
+            }}
+          />
+          {/*
+            APUNTAR (24/08/2026). Va aquí arriba y con color porque es lo que la
+            pantalla no podía hacer: el tablero se hizo para mirarlo desde el
+            móvil —desde ahí se reparte y se marca— pero lo que se piensa en el
+            coche no entraba en el Registro, se quedaba en un WhatsApp.
+
+            No sale en la pestaña de Resuelto: ahí no se apunta nada, y un botón
+            que abre un formulario para escribir en el otro documento sería una
+            trampa.
+          */}
+          {pestaña === "pendiente" && (
+            <button
+              type="button"
+              onClick={() => {
+                setFallo(null);
+                setApuntando(true);
+              }}
+              className="px-3.5 py-2 rounded-lg text-[13px] transition-colors cursor-pointer"
+              style={{ background: "var(--ok)", color: "#fff", border: "1px solid var(--ok)" }}
+            >
+              Apuntar una tarea
+            </button>
+          )}
+        </div>
       </header>
 
       {grupos.length === 0 && (
@@ -798,6 +868,20 @@ export default function TableroPage() {
                   >
                     {t.cuerpo}
                   </div>
+                  {/* Las capturas, justo debajo del cuerpo: son la prueba de lo
+                      que dice el texto, no un anexo. Van antes que la solución
+                      por lo mismo — primero qué pasa, después qué se hace.
+                      ⚠️ Pueden llevar datos de un paciente y no se recortan
+                      (Jorge, 24/08/2026): una captura recortada de la pantalla
+                      que falla deja de ser la prueba de lo que falla. */}
+                  <Capturas
+                    tarea={t}
+                    documento={t.fuente ?? "backlog"}
+                    ocupada={guardando === t.clave}
+                    onCambio={cargar}
+                    onFallo={setFallo}
+                  />
+
                   {/* La solución escrita a mano. Se enseña SIEMPRE que exista, y
                       no escondida detrás del botón: para eso se escribió. */}
                   {t.solucion && editando !== t.clave && (
@@ -812,6 +896,36 @@ export default function TableroPage() {
                         Solución propuesta
                       </span>
                       {t.solucion}
+                    </div>
+                  )}
+
+                  {/*
+                    LA PRIORIDAD, EN LA PROPIA TARJETA (24/08/2026).
+                    La prioridad ES la sección del documento, así que cambiarla
+                    obligaba a bajar el Registro, cortar y pegar el bloque entero
+                    y publicar una versión: hacía falta el ordenador con el repo.
+                    Y se nota en el historial — la v10 se publicó, entre otras
+                    cosas, «para bajar a P3 la del embudo de Aumenta», o sea que
+                    un cambio de prioridad se coló dentro de una publicación que
+                    iba a otra cosa.
+
+                    Solo en Pendiente: en Resuelto la sección es una fecha y no
+                    hay prioridad que cambiar.
+                  */}
+                  {pestaña === "pendiente" && t.seccion && (
+                    <div className="mt-3 ml-[15px] flex items-center gap-2 flex-wrap">
+                      <span
+                        className="text-[10px] uppercase tracking-[0.16em]"
+                        style={{ color: "var(--tenue)" }}
+                      >
+                        Prioridad
+                      </span>
+                      <SelectorSeccion
+                        seccion={seccionDeHoy(t.seccion)}
+                        ocupada={guardando === t.clave}
+                        onElegir={(s) => moverA(t, s)}
+                        compacto
+                      />
                     </div>
                   )}
 
@@ -871,6 +985,50 @@ export default function TableroPage() {
                       <BotonTarjeta onClick={() => copiar(t)}>
                         {copiada === t.clave ? "Copiado ✓" : "Copiar"}
                       </BotonTarjeta>
+
+                      {/*
+                        Los tres que TOCAN EL DOCUMENTO. Van detrás de los dos
+                        de siempre y no destacados: los de arriba son gestos de
+                        todos los días, estos publican una versión del Registro.
+
+                        «Cerrar» y «Borrar» están pegados y significan cosas
+                        opuestas —una deja la tarea escrita en Resuelto y la otra
+                        la quita sin rastro—, así que los dos preguntan antes, y
+                        el modal de borrar lo dice con esas palabras. Es el mismo
+                        problema que ya obligó a poner confirmación en el tick el
+                        17/08: el fallo no es dudar, es la fila de al lado.
+                      */}
+                      {pestaña === "pendiente" && (
+                        <>
+                          <BotonTarjeta
+                            onClick={() => {
+                              setFallo(null);
+                              setReescribiendo(t);
+                            }}
+                            ocupada={guardando === t.clave}
+                          >
+                            Reescribir
+                          </BotonTarjeta>
+                          <BotonTarjeta
+                            onClick={() => {
+                              setFallo(null);
+                              setCerrandoTarea(t);
+                            }}
+                            ocupada={guardando === t.clave}
+                          >
+                            Cerrar
+                          </BotonTarjeta>
+                          <BotonTarjeta
+                            onClick={() => {
+                              setFallo(null);
+                              setBorrando(t);
+                            }}
+                            ocupada={guardando === t.clave}
+                          >
+                            Borrar
+                          </BotonTarjeta>
+                        </>
+                      )}
                     </div>
                   )}
 
@@ -888,13 +1046,18 @@ export default function TableroPage() {
       </div>
 
       <p className="mt-10 text-[11px] leading-relaxed" style={{ color: "var(--tenue)" }}>
-        El texto de cada tarea es la última versión publicada del Registro (
-        <code>node scripts/registro.mjs bajar</code>, editar, <code>subir</code>; el manual es{" "}
-        <code>docs/como-apuntar-en-el-tablero.md</code>). Nada entra ni sale sin comprobarse contra
-        producción, y cada versión queda guardada con quién y por qué.
+        El texto de cada tarea es la última versión publicada del Registro. Apuntar, mover,
+        reescribir, cerrar y borrar se hace desde aquí y publica una versión nueva, con tu nombre y
+        el motivo; para editar a mano sigue estando{" "}
+        <code>node scripts/registro.mjs bajar</code> / <code>subir</code>, y el manual es{" "}
+        <code>docs/como-apuntar-en-el-tablero.md</code>. Las dos puertas son la misma: mismos frenos
+        de formato, misma versión, mismo historial.
         <br />
-        El tick y el reparto sí se guardan desde aquí, pero aparte: marcar una tarea la mueve de
-        pestaña para que los dos sepáis por dónde va, y no sustituye a cerrarla y publicarla.
+        Lo apuntado sobre la marcha cae en <strong>Sin comprobar</strong> hasta que alguien lo vea en
+        producción; darle prioridad es justo el gesto de haberlo comprobado.
+        <br />
+        El tick y el reparto se guardan aparte y no tocan el documento: marcar una tarea la mueve de
+        pestaña para que los dos sepáis por dónde va, y no sustituye a cerrarla.
       </p>
 
       {/* Fuera de la lista a propósito: dentro del `<details>` heredaría el clic
@@ -908,6 +1071,32 @@ export default function TableroPage() {
           onConfirmar={confirmarTick}
           onCancelar={() => setConfirmando(null)}
         />
+      )}
+
+      {/* Los cuatro que escriben en el documento. Fuera de la lista por lo mismo
+          que el de arriba: dentro del `<details>` heredarían el clic que
+          despliega la tarjeta. */}
+      {apuntando && <ModalApuntar onHecho={trasEscribir} onCerrar={() => setApuntando(false)} />}
+      {reescribiendo && (
+        <ModalEditar
+          tarea={reescribiendo}
+          /* La versión que tenemos delante. El servidor la exige SOLO para
+             reescribir, que es lo único que sustituye texto escrito por una
+             persona: si alguien publicó mientras tanto, lo rechaza y lo dice. */
+          version={datos.documentos?.backlog?.version}
+          onHecho={trasEscribir}
+          onCerrar={() => setReescribiendo(null)}
+        />
+      )}
+      {cerrandoTarea && (
+        <ModalCerrar
+          tarea={cerrandoTarea}
+          onHecho={trasEscribir}
+          onCerrar={() => setCerrandoTarea(null)}
+        />
+      )}
+      {borrando && (
+        <ModalBorrar tarea={borrando} onHecho={trasEscribir} onCerrar={() => setBorrando(null)} />
       )}
     </main>
   );
