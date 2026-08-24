@@ -596,7 +596,15 @@ export default function TableroPage() {
       return visibles.map((s) => {
         const tono = tonoDe(s.titulo);
         return {
-          titulo: s.titulo,
+          /*
+           * El nombre de HOY, no el que esté escrito en el documento. Mientras
+           * el texto publicado siga en `P0`…`P3`, la cabecera decía «P1 — esta
+           * semana» y la etiqueta de cada fila «ALTA»: la misma cosa con dos
+           * nombres, en la misma pantalla. `seccionDeHoy` deja pasar tal cual lo
+           * que ya está en su nombre nuevo y los dos bloques que se inventa el
+           * endpoint («Marcadas desde el Registro» y su pareja).
+           */
+          titulo: seccionDeHoy(s.titulo),
           etiqueta: tono.etiqueta,
           color: tono.color,
           tareas: s.tareas.map((t) => ({ ...t, tono, deSeccion: null })),
@@ -831,12 +839,31 @@ export default function TableroPage() {
                     />
                     <span className="flex-1 min-w-0">
                       <span className="text-[14px]">{t.titulo}</span>
-                      {/* Agrupando por cliente, la urgencia deja de estar en la
-                          cabecera del bloque, así que se dice aquí. */}
-                      {t.deSeccion && t.tono.etiqueta && (
+                      {/*
+                        LA PRIORIDAD, EN LA FILA Y SIN ABRIR NADA (24/08/2026,
+                        Jorge: «que no haya que meterse dentro de ella para
+                        verla»).
+
+                        Antes esta etiqueta solo salía agrupando por CLIENTE
+                        —cuando la cabecera del bloque dejaba de decir la
+                        urgencia— y agrupando por urgencia se fiaba de la barrita
+                        de 3 px de la izquierda. Tres píxeles de color no son una
+                        etiqueta: hay que saberse el código para leerlos, y la
+                        pregunta que se hace mirando esta lista es exactamente
+                        «¿cuál corre prisa?».
+
+                        Ahora va SIEMPRE, con el color de su prioridad y en una
+                        cajita, para que se lea de un vistazo en la fila cerrada.
+                        `t.seccion` es dónde está escrita de verdad; `deSeccion`
+                        solo lo llevan las que el tick ha movido de lado.
+                      */}
+                      {t.tono.etiqueta && (
                         <span
-                          className="ml-2 text-[10px] uppercase tracking-[0.14em] whitespace-nowrap"
-                          style={{ color: t.tono.color }}
+                          className="ml-2 text-[10px] uppercase tracking-[0.14em] whitespace-nowrap px-1.5 py-0.5 rounded"
+                          style={{
+                            color: t.tono.color,
+                            border: `1px solid ${t.tono.color}`,
+                          }}
                         >
                           {t.tono.etiqueta}
                         </span>

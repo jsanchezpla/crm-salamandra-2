@@ -28,6 +28,7 @@ import { dirname, join } from "node:path";
 
 import { comprobar, trocear, seccionDeHoy } from "../lib/tablero/parser.js";
 import { tipoParaVerEnPantalla } from "../lib/buzon/buzon.js";
+import { extensionPorContenido } from "../lib/documents/documentStorage.js";
 import { claveDeTarea } from "../lib/tablero/estado.js";
 import {
   ErrorDeEdicion,
@@ -508,6 +509,50 @@ describe("lo que se puede subir y lo que se puede enseñar dicen lo mismo", () =
         `«${tipo}» se puede elegir pero la lista blanca del servidor no lo enseña: saldría una miniatura rota.`
       );
     }
+  });
+
+  /*
+   * ── EL FALLO DEL .jfif (24/08/2026) ───────────────────────────────────────
+   * La primera captura que se colgó de verdad salió pintada como «fichero» en
+   * vez de como imagen. Era un JPEG normal —`mime: image/jpeg`, 347 KB— que
+   * Chrome en Windows había guardado como `.jfif`. Como la extensión salía del
+   * NOMBRE, se guardó `.jfif`, y `jfif` no estaba en la lista blanca.
+   *
+   * Dos cosas lo arreglan y las dos se prueban aquí: la lista conoce ahora los
+   * nombres del JPEG, y la extensión sale de los BYTES y no del nombre. La
+   * segunda es la que cierra la clase: cubre también el fichero sin extensión y
+   * el que alguien renombró.
+   */
+  it("un JPEG se reconoce por los bytes, se llame .jfif, .jpe o como sea", () => {
+    const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    assert.equal(extensionPorContenido(JPEG), "jpg");
+    // Y los tres nombres del JPEG se enseñan en pantalla, para que las capturas
+    // ya guardadas con el nombre viejo no se queden sin verse.
+    for (const ext of ["jpg", "jpeg", "jfif", "jpe"]) {
+      assert.equal(tipoParaVerEnPantalla(`tablero/abc123/x.${ext}`), "image/jpeg", `falla .${ext}`);
+    }
+  });
+
+  it("los otros cuatro tipos también salen de los bytes", () => {
+    const casos = [
+      ["png", Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])],
+      ["gif", Buffer.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0, 0, 0, 0, 0, 0])],
+      ["webp", Buffer.concat([Buffer.from("RIFF"), Buffer.alloc(4), Buffer.from("WEBP")])],
+      ["pdf", Buffer.from("%PDF-1.7 xxxxxxx")],
+    ];
+    for (const [ext, bytes] of casos) {
+      assert.equal(extensionPorContenido(bytes), ext);
+      assert.ok(tipoParaVerEnPantalla(`x.${ext}`), `.${ext} tendría que poder verse`);
+    }
+  });
+
+  it("lo que no se reconoce NO se inventa: se queda con el nombre que traía", () => {
+    // Un ZIP no es ninguno de los cinco. Devolver `null` es lo que hace que el
+    // que llama caiga a la extensión del nombre en vez de guardar un `.jpg` que
+    // no lo es — y servir un ZIP como imagen sería peor que no verlo.
+    assert.equal(extensionPorContenido(Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0, 0, 0, 0, 0])), null);
+    assert.equal(extensionPorContenido(Buffer.from("hola")), null, "un fichero corto no puede afirmar nada");
+    assert.equal(extensionPorContenido(null), null);
   });
 
   it("el SVG no se puede elegir: lleva scripts dentro y se ejecutarían en nuestro origen", () => {
