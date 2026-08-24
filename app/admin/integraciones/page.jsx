@@ -55,6 +55,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { anchoPanel } from "@/components/admin/anchoPanel.js";
 
 // Respaldos estables para mientras no ha llegado la respuesta. Escribir `?? []`
 // dentro del componente crea un array nuevo en cada render y hace que los
@@ -426,7 +427,7 @@ export default function IntegracionesPage() {
   const elegido = datos.porCliente.find((c) => c.slug === cliente);
 
   return (
-    <main className="min-h-screen px-6 lg:px-12 py-10 lg:py-14 max-w-[1000px] mx-auto">
+    <main className={anchoPanel()}>
       <header className="mb-8">
         <Etiqueta>Salamandra · panel interno</Etiqueta>
         <h1

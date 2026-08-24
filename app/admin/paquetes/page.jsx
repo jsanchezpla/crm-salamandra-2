@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { anchoPanel } from "@/components/admin/anchoPanel.js";
 
 /**
  * Paquetes — lo que se vende con un nombre.
@@ -249,7 +250,7 @@ export default function PaquetesPage() {
   }
 
   return (
-    <main className="min-h-screen px-6 lg:px-12 py-10 lg:py-14 max-w-[1000px] mx-auto">
+    <main className={anchoPanel()}>
       <Etiqueta>Salamandra · panel interno</Etiqueta>
       <h1
         className="text-[42px] lg:text-[58px] leading-[0.95] tracking-tight mt-2"

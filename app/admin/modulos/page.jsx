@@ -27,6 +27,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { anchoPanel } from "@/components/admin/anchoPanel.js";
 
 /** Marca de un tipo de personalización, con su explicación al pasar el ratón. */
 function Marca({ texto, titulo, fuerte = false }) {
@@ -115,7 +116,7 @@ export default function ModulosPage() {
   }
 
   return (
-    <main className="min-h-screen px-6 lg:px-12 py-10 lg:py-14 max-w-[1180px] mx-auto">
+    <main className={anchoPanel()}>
       <header className="mb-8">
         <Etiqueta>Salamandra · panel interno</Etiqueta>
         <h1

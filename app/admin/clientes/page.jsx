@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CredentialsModal from "@/components/team/CredentialsModal.jsx";
+import { MAX_ANCHO_PANEL } from "@/components/admin/anchoPanel.js";
 
 /**
  * Alta de clientes — el panel interno de Salamandra Solutions.
@@ -1094,7 +1095,9 @@ export default function AltaClientesPage() {
   }
 
   return (
-    <div className="p-4 lg:p-8 max-w-5xl mx-auto my-6 lg:my-10 rounded-xl bg-[#FAF9F7] text-neutral-800 shadow-[0_2px_40px_rgba(0,0,0,0.5)]">
+    <div
+      className={`p-4 lg:p-8 ${MAX_ANCHO_PANEL} mx-auto my-6 lg:my-10 rounded-xl bg-[#FAF9F7] text-neutral-800 shadow-[0_2px_40px_rgba(0,0,0,0.5)]`}
+    >
       <div className="flex items-end justify-between gap-4 flex-wrap mb-6">
         <div>
           <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-[0.18em] mb-1.5">

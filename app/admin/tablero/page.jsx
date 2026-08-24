@@ -55,6 +55,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { anchoPanel } from "@/components/admin/anchoPanel.js";
 
 /** Cuánto corre cada bloque, por su título. Lo que no case, en gris. */
 const TONOS = [
@@ -610,7 +611,7 @@ export default function TableroPage() {
   }
 
   return (
-    <main className="min-h-screen px-6 lg:px-12 py-10 lg:py-14 max-w-[900px] mx-auto">
+    <main className={anchoPanel()}>
       <header className="mb-8">
         <Etiqueta>Salamandra · panel interno</Etiqueta>
         <h1

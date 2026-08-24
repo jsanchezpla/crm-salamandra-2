@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { anchoPanel } from "@/components/admin/anchoPanel.js";
 
 import { EVENTO_PENDIENTES } from "../../../lib/buzon/buzon.js";
 
@@ -293,7 +294,7 @@ export default function BuzonPage() {
   }
 
   return (
-    <main className="min-h-screen px-6 lg:px-12 py-10 lg:py-14 max-w-[1100px] mx-auto">
+    <main className={anchoPanel()}>
       <Etiqueta>Salamandra · panel interno</Etiqueta>
       <h1
         className="text-[42px] lg:text-[58px] leading-[0.95] tracking-tight mt-2"

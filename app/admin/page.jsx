@@ -29,6 +29,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { anchoPanel } from "@/components/admin/anchoPanel.js";
 
 const GRUPOS = ["Cobros", "Correo", "IA", "Otros"];
 
@@ -255,7 +256,7 @@ export default function CustodiaPage() {
   }
 
   return (
-    <main className="min-h-screen px-6 lg:px-12 py-10 lg:py-14 max-w-[1180px] mx-auto">
+    <main className={anchoPanel()}>
       {/* ── Cabecera ─────────────────────────────────────────────────────── */}
       <header className="mb-10 lg:mb-14">
         <Etiqueta>Salamandra · panel interno</Etiqueta>
