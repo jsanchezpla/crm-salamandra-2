@@ -336,6 +336,32 @@ describe("editarTarea: reescribir en su sitio", () => {
     assert.equal(localizar(texto, { id }).tarea.titulo, "La segunda espera");
   });
 
+  /*
+   * El documento está escrito a mano y los slugs van entre comillas invertidas.
+   * La primera tarea que se tocó desde el tablero en producción salió con «·
+   * aumenta» en vez de «· `aumenta`»: `quien` es la versión LIMPIA, la que se
+   * enseña en pantalla, y se estaba reescribiendo con ella. Una tarea cada vez,
+   * el documento se despeina solo.
+   */
+  it("reescribir una tarea NO le quita las comillas invertidas al cliente", () => {
+    const { texto } = editarTarea(BACKLOG, { id: "aaa111", cuerpo: "**Lo que pasa.** Otra cosa." });
+    assert.match(texto, /### La primera arde · `aumenta`/, "se han caído las comillas del slug");
+  });
+
+  it("cerrar una tarea tampoco: en Resuelto se lee igual que se leía", () => {
+    const r = cerrarTarea(BACKLOG, RESUELTO, {
+      id: "aaa111",
+      comoSeArreglo: "Con un commit.",
+      fecha: new Date(2026, 7, 24),
+    });
+    assert.match(r.resuelto, /### La primera arde · `aumenta`/);
+  });
+
+  it("y si SÍ se manda un cliente nuevo, manda ese", () => {
+    const { texto } = editarTarea(BACKLOG, { id: "aaa111", quien: "`demo`, todos" });
+    assert.match(texto, /### La primera arde · `demo`, todos/);
+  });
+
   it("no se puede renombrar una tarea al título de otra", () => {
     assert.throws(
       () => editarTarea(BACKLOG, { id: "aaa111", titulo: "La tercera también" }),
