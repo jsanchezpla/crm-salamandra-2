@@ -135,28 +135,35 @@ function EmailDraft({ leadId, line, analysis, recipients, onSent, emailReady }) 
             </p>
           )}
 
-          {!emailReady && (
-            <p className="text-xs text-amber-700">
-              Configura la clave de Resend en{" "}
-              <Link href="/configuracion" className="font-semibold underline">
-                Configuración → IA
-              </Link>{" "}
-              para poder enviar correos.
-            </p>
-          )}
+          {/*
+            EL ENVÍO YA NO SALE DE AQUÍ (24/08/2026, Rodrigo: «si tenemos la
+            pantalla de Correo, todo el correo debería darse por ahí»).
 
-          <button
-            onClick={send}
-            disabled={sending || !to || !subject.trim() || !body.trim() || !emailReady}
-            title={emailReady ? undefined : "Configura la clave de Resend en Configuración → IA para enviar correos"}
-            className="px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition"
-            style={{ backgroundColor: "var(--color-primary)" }}
-          >
-            {sending ? "Enviando..." : alreadySent ? "Reenviar" : "Enviar correo"}
-          </button>
-          <p className="text-[11px] text-neutral-400">
-            Se envía exactamente lo que ves aquí. Revísalo antes de confirmar.
-          </p>
+            El correo del CRM se manda desde /correo y en ningún otro sitio, y
+            no es un capricho de orden: en /correo cada envío se apunta en la
+            ficha del cliente, se elige desde qué dirección sale y se respeta
+            quién puede usar cuál. Nada de eso existía en este botón.
+
+            Se comprobó antes de quitarlo: en toda la auditoría de producción
+            había CERO envíos desde Captación (`outreach.email.sent`), así que
+            no se le rompe el flujo a nadie. El endpoint sigue vivo por si
+            alguien lo llamaba desde fuera, pero la pantalla ya no lo ofrece.
+
+            El texto redactado por la IA no se pierde: se copia y se pega.
+          */}
+          <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 space-y-2">
+            <p className="text-xs text-neutral-600">
+              El correo se manda desde la pantalla de <strong>Correo</strong>, que es donde queda
+              apuntado en la ficha del cliente y donde se elige la dirección de envío.
+            </p>
+            <Link
+              href="/correo"
+              className="inline-block px-4 py-2 rounded-lg text-white text-sm font-medium hover:opacity-90 transition"
+              style={{ backgroundColor: "var(--color-primary)" }}
+            >
+              Ir a Correo →
+            </Link>
+          </div>
         </div>
       )}
     </div>

@@ -294,7 +294,13 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
         // tenant no tiene lista propia, `listarRemitentes` devuelve el
         // `fromEmail` de arriba como único remitente: la pantalla no tiene que
         // saber nada de esa compatibilidad.
-        remitentes: listarRemitentes({ tenant: t }),
+        //
+        // Va con `ctx.user` porque desde el 24/08/2026 la lista DEPENDE de
+        // quién pregunta: un remitente asignado a una persona no lo ven las
+        // demás. Esta pantalla es de admin, así que aquí salen todos — pero
+        // pasar el usuario de verdad evita que mañana, si se abre a más gente,
+        // la configuración enseñe lo que el envío no deja usar.
+        remitentes: listarRemitentes({ tenant: t, user: ctx.user }),
       },
       // Cobro online. `ready` = se puede cobrar de verdad: hacen falta AMBOS
       // secretos. Con la clave pero sin el secreto del webhook, el cliente pagaría
@@ -411,7 +417,13 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     if (!Array.isArray(body.remitentes)) {
       throw new ValidationError("«remitentes» tiene que ser una lista");
     }
-    const { remitentes, descartados } = normalizarRemitentes(body.remitentes);
+    // Los PREVIOS van dentro para conservar las claves ya cifradas: quien
+    // renombra un remitente manda el formulario sin la clave (nunca se le
+    // devolvió), y sin esto se quedaría sin poder enviar por él.
+    const { remitentes, descartados } = normalizarRemitentes(
+      body.remitentes,
+      Array.isArray(settings.integrations.remitentes) ? settings.integrations.remitentes : []
+    );
     if (descartados.length) {
       throw new ValidationError(
         `Estas direcciones no son válidas o sobran: ${descartados.join(", ")}`

@@ -28,18 +28,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
 
+// «Captación» salió el 24/08/2026: sus contactos son ahora fichas de
+// Contratante, así que la fuente enseñaría una copia vieja de lo mismo.
 const FUENTES = [
-  { key: "contratantes", label: "Contratantes", pista: "Quien ya es alguien: te contrató o habláis." },
-  { key: "contactos", label: "Personas", pista: "La persona concreta dentro de una ficha." },
+  { key: "contratantes", label: "Contratantes", pista: "La organización: ayuntamiento, sala, festival o medio." },
+  { key: "contactos", label: "Personas", pista: "La persona concreta dentro de una ficha, con su cargo." },
   { key: "propuestas", label: "Propuestas", pista: "Oportunidades abiertas del embudo." },
-  { key: "captacion", label: "Captación", pista: "Correo en frío: aún no se les ha escrito." },
 ];
 
 const COLOR_FUENTE = {
   contratantes: "bg-emerald-100 text-emerald-700",
   contactos: "bg-sky-100 text-sky-700",
   propuestas: "bg-violet-100 text-violet-700",
-  captacion: "bg-amber-100 text-amber-700",
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -49,6 +49,7 @@ export default function CorreoModule() {
   const [remitenteId, setRemitenteId] = useState("");
   const [listo, setListo] = useState(true);
   const [motivo, setMotivo] = useState(null);
+  const [puedeConfigurar, setPuedeConfigurar] = useState(false);
 
   const [fuente, setFuente] = useState("contratantes");
   const [busqueda, setBusqueda] = useState("");
@@ -80,6 +81,7 @@ export default function CorreoModule() {
         setRemitenteId(lista.find((r) => r.porDefecto)?.id ?? lista[0]?.id ?? "");
         setListo(!!json?.data?.listo);
         setMotivo(json?.data?.motivo ?? null);
+        setPuedeConfigurar(!!json?.data?.puedeConfigurar);
       } catch {
         if (vivo) { setListo(false); setMotivo("No se ha podido leer la configuración de correo."); }
       }
@@ -190,7 +192,11 @@ export default function CorreoModule() {
       {!listo && (
         <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <strong className="font-semibold">Todavía no se puede enviar.</strong> {motivo}{" "}
-          Se arregla en <a className="underline" href="/configuracion">Configuración</a>.
+          {puedeConfigurar ? (
+            <>Se arregla en <a className="underline" href="/configuracion">Configuración → Conexiones</a>.</>
+          ) : (
+            <>Lo tiene que resolver quien administre el CRM.</>
+          )}
         </div>
       )}
 
@@ -216,7 +222,9 @@ export default function CorreoModule() {
                 <p className="text-sm text-gray-700 py-2">
                   {remitentes[0] ? (remitentes[0].nombre ? `${remitentes[0].nombre} <${remitentes[0].email}>` : remitentes[0].email) : "—"}
                   <span className="block text-xs text-gray-400 mt-0.5">
-                    Para poder elegir entre varias direcciones, añádelas en Configuración → Conexiones.
+                    {puedeConfigurar
+                      ? "Para elegir entre varias direcciones, añádelas en Configuración → Conexiones."
+                      : "Es la dirección que tienes asignada."}
                   </span>
                 </p>
               )}
@@ -411,6 +419,16 @@ function Resultado({ r }) {
         )}
         {r.fallidos?.length > 0 && <span className="text-red-700 font-semibold">{r.fallidos.length} fallidos</span>}
       </div>
+
+      {r.enviados?.length > 0 && (
+        <p className="text-xs text-gray-500">
+          <strong className="text-gray-700">{r.apuntadosEnFicha ?? 0}</strong> han quedado apuntados en la ficha de
+          su contratante, en la pestaña «Interacciones».
+          {r.enviados.length - (r.apuntadosEnFicha ?? 0) > 0 && (
+            <> Los otros {r.enviados.length - (r.apuntadosEnFicha ?? 0)} eran direcciones sueltas, sin ficha detrás.</>
+          )}
+        </p>
+      )}
 
       {r.simulados?.length > 0 && (
         <p className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">

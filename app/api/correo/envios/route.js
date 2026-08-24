@@ -1,17 +1,19 @@
+import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok } from "../../../../lib/utils/apiResponse.js";
 import { AppError, ForbiddenError, ValidationError } from "../../../../lib/utils/errors.js";
 import { assertNotDemoPaidCall } from "../../../../lib/demo/isDemo.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { sendEmail } from "../../../../lib/email/resendClient.js";
-import { getTenantResendConfig } from "../../../../lib/outreach/resendConfig.js";
 import { esEmail, formatearFrom, resolverRemitente } from "../../../../lib/email/remitentes.js";
 
 /**
  * POST /api/correo/envios — mandar UN mensaje a VARIOS destinatarios.
  *
- * Lo pidió Rodrigo el 24/08/2026: «poder unir la cantidad de correos que quiera
- * y elegir con qué correo quiero mandar el mensaje».
+ * Pedido por Rodrigo el 24/08/2026: «poder unir la cantidad de correos que
+ * quiera y elegir con qué correo quiero mandar el mensaje». Y ese mismo día,
+ * después de verlo funcionando: «cuando se envíe un correo a un contratante
+ * debe quedar reflejado en su ficha de cliente».
  *
  * ── UNO A UNO, NO UN «PARA» CON CIEN DIRECCIONES ───────────────────────────
  * Se manda un correo POR destinatario, aunque cueste más. Meterlos a todos en
@@ -21,31 +23,46 @@ import { esEmail, formatearFrom, resolverRemitente } from "../../../../lib/email
  * antes que 80 correos normales, y aquí lo que se juega es que la propuesta se
  * lea.
  *
+ * ── QUEDA EN LA FICHA ──────────────────────────────────────────────────────
+ * Cada envío que acierta con una ficha de Contratante deja una `Interaction`
+ * de tipo `email` en ella, con el asunto y desde qué dirección salió. Así la
+ * pestaña «Interacciones» de la ficha cuenta la historia completa sin que nadie
+ * tenga que apuntarla a mano — que es justo lo que nadie hace.
+ *
+ * Se casa por correo, mirando tanto el de la ficha como el de sus contactos: en
+ * un ayuntamiento se escribe al de Cultura, no al buzón general, y ese envío
+ * tiene que aparecer igual en la ficha del ayuntamiento.
+ *
  * ── NUNCA REVIENTA A MEDIAS ────────────────────────────────────────────────
  * Un fallo en el destinatario 12 no puede tirar los 40 restantes ni dejar a
  * quien envía sin saber cuáles salieron. Se envían todos, se recoge el
- * resultado de cada uno y se devuelve el desglose. La pantalla enseña
- * «38 enviados, 2 fallaron» con nombre y apellidos de los dos.
+ * resultado de cada uno y se devuelve el desglose.
  *
  * ── EL DRY-RUN NO MIENTE ───────────────────────────────────────────────────
- * `sendEmail` devuelve `{ok:true, dryRun:true}` cuando no hay clave de Resend,
- * y eso ya hizo que una pantalla dijera «enviado» con el buzón vacío (ver el
- * comentario de `lib/email/resendClient.js`). Aquí el dry-run se responde como
- * lo que es: `simulados`, en su propio contador, nunca como enviados.
+ * `sendEmail` devuelve `{ok:true, dryRun:true}` cuando no hay clave, y eso ya
+ * hizo que una pantalla dijera «enviado» con el buzón vacío (03/08/2026). Aquí
+ * el dry-run se responde como lo que es: `simulados`, nunca como enviados. Y
+ * tampoco se apunta en la ficha: una interacción que dice «se le escribió» sin
+ * que saliera nada es peor que no tener ninguna.
  */
 
 const MAX_DESTINATARIOS = 200;
 const MAX_ASUNTO = 200;
 const MAX_CUERPO = 20000;
 
+/** Fecha de hoy en local, que es la que espera `Interaction.date` (DATEONLY). */
+function hoyISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export const POST = withTenant(async (request, _ctxRuta, ctx) => {
-  // Escribir a gente exige tener a quién: sin Clientes ni Captación no hay
-  // agenda que valga y esta pantalla no existe.
-  if (!ctx.hasModule("clients") && !ctx.hasModule("outreach")) throw new ForbiddenError();
+  // Escribir a gente exige tener a quién: sin Clientes no hay agenda que valga.
+  if (!ctx.hasModule("clients")) throw new ForbiddenError();
 
   // La demo pública da sesión de admin a cualquiera y el destinatario, asunto y
   // cuerpo vienen en el body: con una clave de Resend puesta, esto sería un
-  // relé de spam abierto. Mismo guard que el envío de Captación.
+  // relé de spam abierto.
   assertNotDemoPaidCall(ctx, "El envío de correos");
 
   let body;
@@ -88,28 +105,56 @@ export const POST = withTenant(async (request, _ctxRuta, ctx) => {
     );
   }
 
-  // ── Remitente: el elegido, y si no está, se para ──────────────────────────
+  // ── Remitente: el elegido, y si no puede usarlo, se para ──────────────────
   const remitente = resolverRemitente(ctx, remitenteId);
   if (!remitente) {
     throw new ValidationError(
       remitenteId
-        ? "Ese remitente ya no existe. Elige otro en Configuración → Conexiones."
-        : "No hay ningún remitente configurado. Añade uno en Configuración → Conexiones."
+        ? "No puedes enviar desde esa dirección. Elige una de las que tienes asignadas."
+        : "No tienes ninguna dirección de envío asignada. Pídele a administración que te asigne una."
+    );
+  }
+  if (!remitente.apiKey) {
+    throw new AppError(
+      `El remitente ${remitente.email} no tiene clave de Resend configurada. Se pone en Configuración → Conexiones.`,
+      400
     );
   }
 
-  const { apiKey } = getTenantResendConfig(ctx);
-  if (!apiKey) {
-    throw new AppError(
-      "Configura la clave de Resend en Configuración antes de enviar correos.",
-      400
-    );
+  // ── A qué ficha pertenece cada correo ─────────────────────────────────────
+  // Se resuelve ANTES de enviar, en dos consultas, y no una por destinatario:
+  // con 200 destinatarios serían 400 viajes a la base por gusto.
+  const { Client, Contact, Interaction } = ctx.tenantModels;
+  const correos = validos.map((d) => d.email);
+  const fichaDe = new Map();
+  try {
+    const clientes = await Client.findAll({
+      where: { email: { [Op.in]: correos } },
+      attributes: ["id", "email", "name"],
+    });
+    for (const c of clientes) if (c.email) fichaDe.set(c.email.toLowerCase(), { id: c.id, name: c.name });
+
+    const contactos = await Contact.findAll({
+      where: { email: { [Op.in]: correos } },
+      attributes: ["id", "email", "name", "clientId"],
+      include: [{ model: Client, as: "client", attributes: ["id", "name"], required: true }],
+    });
+    // La ficha del cliente manda sobre la del contacto solo si no había ya una:
+    // escribir al de Cultura de un ayuntamiento se apunta en el ayuntamiento.
+    for (const c of contactos) {
+      const k = String(c.email).toLowerCase();
+      if (!fichaDe.has(k)) fichaDe.set(k, { id: c.client.id, name: c.client.name, persona: c.name });
+    }
+  } catch {
+    // Si esto falla el correo SIGUE saliendo: apuntar en la ficha es un extra,
+    // no un requisito para poder escribirle a alguien.
   }
 
   // ── Envío, uno a uno ──────────────────────────────────────────────────────
   const enviados = [];
   const simulados = [];
   const fallidos = [];
+  const apuntados = [];
 
   for (const d of validos) {
     let r;
@@ -120,7 +165,7 @@ export const POST = withTenant(async (request, _ctxRuta, ctx) => {
         text: cuerpo,
         from: formatearFrom(remitente) || undefined,
         replyTo: remitente.replyTo || undefined,
-        apiKey,
+        apiKey: remitente.apiKey,
         tags: [{ name: "module", value: "correo" }],
       });
     } catch (err) {
@@ -129,14 +174,43 @@ export const POST = withTenant(async (request, _ctxRuta, ctx) => {
       r = { ok: false, error: err?.message || "error inesperado" };
     }
 
-    if (!r.ok) fallidos.push({ email: d.email, nombre: d.nombre, motivo: r.error || "desconocido" });
-    else if (r.dryRun) simulados.push({ email: d.email, nombre: d.nombre });
-    else enviados.push({ email: d.email, nombre: d.nombre, id: r.id ?? null });
+    const ficha = fichaDe.get(d.email) ?? null;
+
+    if (!r.ok) {
+      fallidos.push({ email: d.email, nombre: d.nombre, motivo: r.error || "desconocido" });
+      continue;
+    }
+    if (r.dryRun) {
+      simulados.push({ email: d.email, nombre: d.nombre });
+      continue;
+    }
+
+    enviados.push({ email: d.email, nombre: d.nombre, id: r.id ?? null, ficha: ficha?.name ?? null });
+
+    // Solo lo que SALIÓ DE VERDAD se apunta en la ficha.
+    if (ficha) {
+      try {
+        await Interaction.create({
+          clientId: ficha.id,
+          type: "email",
+          date: hoyISO(),
+          createdBy: ctx.user?.email ?? null,
+          content:
+            `Correo enviado desde ${remitente.email}` +
+            (ficha.persona ? ` a ${ficha.persona} <${d.email}>` : ` a ${d.email}`) +
+            `\nAsunto: ${asunto}` +
+            `\n\n${cuerpo}`,
+        });
+        apuntados.push(ficha.name);
+      } catch {
+        // Que no se pueda apuntar no deshace un correo ya enviado.
+      }
+    }
   }
 
   // Auditoría: quién escribió, desde qué dirección, a cuántos. NO se guarda el
   // cuerpo — puede llevar datos de la persona y el registro de auditoría se
-  // consulta para otra cosa. El asunto sí: es lo que permite reconocer el envío.
+  // consulta para otra cosa. El asunto sí: es lo que reconoce el envío.
   try {
     const { AuditLog } = getMasterModels();
     await AuditLog.create({
@@ -153,6 +227,7 @@ export const POST = withTenant(async (request, _ctxRuta, ctx) => {
         enviados: enviados.length,
         simulados: simulados.length,
         fallidos: fallidos.length,
+        apuntadosEnFicha: apuntados.length,
       },
     });
   } catch {
@@ -165,8 +240,11 @@ export const POST = withTenant(async (request, _ctxRuta, ctx) => {
     enviados,
     simulados,
     fallidos,
-    // Direcciones que venían mal escritas y ni se intentaron. Se devuelven para
-    // que quien envía pueda corregirlas, no se tiran en silencio.
+    // Cuántos quedaron reflejados en una ficha. Se devuelve para que la pantalla
+    // pueda decir «38 enviados, 31 apuntados en su ficha»: los 7 que faltan son
+    // direcciones sueltas que no son de nadie, y eso es información útil.
+    apuntadosEnFicha: apuntados.length,
+    // Direcciones que venían mal escritas y ni se intentaron.
     invalidos,
     dryRun: simulados.length > 0 && enviados.length === 0,
   });

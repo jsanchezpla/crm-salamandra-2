@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok } from "../../../../lib/utils/apiResponse.js";
 import { ForbiddenError, ValidationError } from "../../../../lib/utils/errors.js";
+import { rotuloCategoria } from "../../../../lib/booking/categorias.js";
 
 /**
  * GET /api/correo/destinatarios?fuente=…&q=…
@@ -30,7 +31,11 @@ import { ForbiddenError, ValidationError } from "../../../../lib/utils/errors.js
  * que en pantalla siempre se vea de dónde salió cada dirección.
  */
 
-const FUENTES = new Set(["contratantes", "contactos", "propuestas", "captacion"]);
+// `captacion` salió el 24/08/2026 (Rodrigo: «elimina Captación del flujo, todo
+// lo vamos a hacer con la pestaña de correo»). Los 210 contactos que vivían
+// allí son ahora fichas de Contratante, así que la fuente sobraba: seguiría
+// enseñando una copia vieja de lo mismo.
+const FUENTES = new Set(["contratantes", "contactos", "propuestas"]);
 const LIMITE = 500;
 
 /** Filas → destinatarios, sin correos vacíos ni repetidos (gana el primero). */
@@ -60,13 +65,12 @@ export const GET = withTenant(async (request, _ctxRuta, ctx) => {
     contratantes: "clients",
     contactos: "clients",
     propuestas: "leads",
-    captacion: "outreach",
   }[fuente];
   if (!ctx.hasModule(MODULO)) throw new ForbiddenError();
 
   const q = (sp.get("q") || "").trim();
   const like = q ? { [Op.iLike]: `%${q}%` } : null;
-  const { Client, Contact, Lead, OutreachLead } = ctx.tenantModels;
+  const { Client, Contact, Lead } = ctx.tenantModels;
 
   // `email: { [Op.ne]: null }` no basta: en estas tablas el correo vacío se
   // guarda a veces como cadena vacía, y una fila sin correo en la lista es una
@@ -77,7 +81,7 @@ export const GET = withTenant(async (request, _ctxRuta, ctx) => {
   if (fuente === "contratantes") {
     const filas = await Client.findAll({
       where: { ...conCorreo, ...buscar(["name", "email"]) },
-      attributes: ["id", "name", "email", "type"],
+      attributes: ["id", "name", "email", "type", "customFields"],
       order: [["name", "ASC"]],
       limit: LIMITE,
     });
@@ -86,7 +90,11 @@ export const GET = withTenant(async (request, _ctxRuta, ctx) => {
       destinatarios: aDestinatarios(filas, (c) => ({
         email: c.email,
         nombre: c.name,
-        detalle: c.type === "company" ? "Empresa" : "Particular",
+        // La CATEGORÍA en vez de «Empresa / Particular» (24/08/2026): en una
+        // lista de contratantes todos son empresas, así que decirlo no separa
+        // nada. Lo que separa es si es un ayuntamiento o una revista, que es
+        // justo lo que decide qué se le escribe.
+        detalle: rotuloCategoria(c.customFields?.categoria) || (c.type === "company" ? "Empresa" : "Particular"),
       })),
     });
   }
@@ -130,18 +138,5 @@ export const GET = withTenant(async (request, _ctxRuta, ctx) => {
     });
   }
 
-  const filas = await OutreachLead.findAll({
-    where: { ...conCorreo, ...buscar(["name", "email"]) },
-    attributes: ["id", "name", "email", "location"],
-    order: [["name", "ASC"]],
-    limit: LIMITE,
-  });
-  return ok({
-    fuente,
-    destinatarios: aDestinatarios(filas, (o) => ({
-      email: o.email,
-      nombre: o.name,
-      detalle: o.location || null,
-    })),
-  });
+  throw new ValidationError("Fuente desconocida");
 });

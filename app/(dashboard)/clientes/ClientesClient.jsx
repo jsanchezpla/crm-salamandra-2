@@ -10,6 +10,7 @@ import ProgenitoresDelAlta, { PROGENITOR_VACIO } from "../../../components/clien
 import FacturacionDelAlta from "../../../components/clients/FacturacionDelAlta.jsx";
 import { camposCliente, PERFIL_COMERCIAL, PERFIL_SALUD } from "../../../lib/clients/formularioAlta.js";
 import { VOCABULARIO_CLIENTE } from "../../../lib/clients/vocabulario.js";
+import { rotuloCategoria } from "../../../lib/booking/categorias.js";
 import { avisoBorradoSegunModulos } from "../../../lib/clients/avisoBorrado.js";
 import { esAdmin } from "../../../lib/auth/permisos.js";
 import Paginador from "@/components/ui/Paginador.jsx";
@@ -60,6 +61,7 @@ export default function ClientesClient({
   conPacientes = false,
   conListaEspera = false,
   conFacturacion = false,
+  conCategoria = false,
   vocab = VOCABULARIO_CLIENTE,
 }) {
   const router = useRouter();
@@ -519,7 +521,16 @@ export default function ClientesClient({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
-                    <Cabecera clave="nombre" orden={orden} dir={dir} onClick={ordenarPor}>Nombre / Empresa</Cabecera>
+                    <Cabecera clave="nombre" orden={orden} dir={dir} onClick={ordenarPor}>
+                      {conCategoria ? "Contratante" : "Nombre / Empresa"}
+                    </Cabecera>
+                    {/*
+                      Qué es (festival, sala, ayuntamiento, medio…). Solo con
+                      `booking`, y va justo detrás del nombre porque es lo
+                      primero que decide qué se le escribe: a un ayuntamiento un
+                      presupuesto, a una revista una nota de prensa.
+                    */}
+                    {conCategoria && <th className="px-4 py-3 text-left font-medium text-gray-500">Tipo</th>}
                     <Cabecera clave="email" orden={orden} dir={dir} onClick={ordenarPor} className="hidden md:table-cell">Email</Cabecera>
                     <Cabecera clave="telefono" orden={orden} dir={dir} onClick={ordenarPor} className="hidden lg:table-cell">Teléfono</Cabecera>
                     {conEmbudo && (
@@ -550,8 +561,21 @@ export default function ClientesClient({
                       >
                         <td className="px-4 py-3">
                           <div className="font-medium text-gray-900 truncate max-w-[160px]">{client.name || "—"}</div>
-                          <div className="text-xs text-gray-400 truncate max-w-[160px]">{client.customFields?.company || ""}</div>
+                          <div className="text-xs text-gray-400 truncate max-w-[160px]">
+                            {client.customFields?.company || (conCategoria ? client.customFields?.provincia || "" : "")}
+                          </div>
                         </td>
+                        {conCategoria && (
+                          <td className="px-4 py-3">
+                            {client.customFields?.categoria ? (
+                              <span className="inline-block px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 whitespace-nowrap">
+                                {rotuloCategoria(client.customFields.categoria)}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-300">—</span>
+                            )}
+                          </td>
+                        )}
                         <td className="px-4 py-3 hidden md:table-cell">
                           <span className="text-gray-600 truncate max-w-[180px] block">{client.email || "—"}</span>
                         </td>

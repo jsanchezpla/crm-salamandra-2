@@ -54,6 +54,10 @@ export default async function ClientesPage() {
       conListaEspera={activos.has("clients_avanzado")}
       // A nombre de quién se factura: solo tiene sentido donde se factura.
       conFacturacion={activos.has("billing")}
+      // La categoría del contratante (festival / sala / ayuntamiento / medio…)
+      // solo existe con `booking`: en una clínica no significa nada y una
+      // columna de más en una lista de 1.800 familias es ruido puro.
+      conCategoria={activos.has("booking")}
       vocab={vocabularioCliente(tieneModulo)}
     />
   );
