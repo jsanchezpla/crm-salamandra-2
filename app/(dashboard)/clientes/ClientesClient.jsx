@@ -10,7 +10,7 @@ import ProgenitoresDelAlta, { PROGENITOR_VACIO } from "../../../components/clien
 import FacturacionDelAlta from "../../../components/clients/FacturacionDelAlta.jsx";
 import { camposCliente, PERFIL_COMERCIAL, PERFIL_SALUD } from "../../../lib/clients/formularioAlta.js";
 import { VOCABULARIO_CLIENTE } from "../../../lib/clients/vocabulario.js";
-import { rotuloCategoria } from "../../../lib/booking/categorias.js";
+import { CATEGORIAS, rotuloCategoria } from "../../../lib/booking/categorias.js";
 import { avisoBorradoSegunModulos } from "../../../lib/clients/avisoBorrado.js";
 import { esAdmin } from "../../../lib/auth/permisos.js";
 import Paginador from "@/components/ui/Paginador.jsx";
@@ -94,6 +94,9 @@ export default function ClientesClient({
   const [paginas, setPaginas] = useState(1);
   const [loading, setLoading] = useState(true);
   const [activeStatus, setActiveStatus] = useState("all");
+  // Filtro por tipo de contratante (25/08/2026). Va al SERVIDOR, como el resto:
+  // filtrar los 50 de la página daría «3 festivales» con 35 en la base.
+  const [categoria, setCategoria] = useState("all");
   const [search, setSearch] = useState("");
   // Ordenación por columna (04/08/2026). Va al servidor, no se ordena lo que
   // hay pintado: con 1.110 fichas y 50 por página, ordenar la página actual
@@ -139,6 +142,7 @@ export default function ClientesClient({
     setLoading(true);
     const params = new URLSearchParams({ limit: String(POR_PAGINA), page: String(pagina), orden, dir });
     if (activeStatus !== "all") params.set("status", activeStatus);
+    if (categoria !== "all") params.set("categoria", categoria);
     if (search.trim()) params.set("search", search.trim());
     fetch(`/api/clients?${params}`)
       .then((r) => r.json())
@@ -150,7 +154,7 @@ export default function ClientesClient({
         }
       })
       .finally(() => setLoading(false));
-  }, [activeStatus, search, pagina, orden, dir]);
+  }, [activeStatus, categoria, search, pagina, orden, dir]);
 
   /** Pulsar una cabecera ordena por ella; pulsarla otra vez le da la vuelta. */
   function ordenarPor(clave) {
@@ -162,7 +166,7 @@ export default function ClientesClient({
   // Al buscar o cambiar de estado se vuelve a la primera página: quedarse en la
   // 7 tras una búsqueda que devuelve 12 resultados deja la lista vacía sin
   // explicar por qué.
-  useEffect(() => { setPagina(1); }, [activeStatus, search]);
+  useEffect(() => { setPagina(1); }, [activeStatus, categoria, search]);
 
   // Si esto falla, `modulos` se queda en null y el aviso de borrado sale
   // completo. Es lo que se quiere: avisar de más no rompe nada.
@@ -308,6 +312,9 @@ export default function ClientesClient({
     try {
       const params = new URLSearchParams();
       if (activeStatus !== "all") params.set("status", activeStatus);
+      // El Excel sale con lo que se está viendo, filtro de tipo incluido: bajar
+      // «festivales» y recibir los 183 sería una sorpresa cara.
+      if (categoria !== "all") params.set("categoria", categoria);
       if (search.trim()) params.set("search", search.trim());
       const res = await fetch(`/api/clients/export?${params}`);
       const blob = await res.blob();
@@ -480,6 +487,31 @@ export default function ClientesClient({
                 className="w-full bg-white border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[var(--color-primary)] transition-colors shadow-sm"
               />
             </div>
+
+            {/*
+              Filtro por TIPO (25/08/2026, Rodrigo: «poder elegir en un
+              desplegable si quiero ver medio/revista, festival o mánager»).
+
+              Va en desplegable y no en pestañas como el estado: los estados son
+              cinco y caben; los tipos son diez y una fila de diez pestañas se
+              come el ancho y obliga a hacer scroll lateral para llegar al
+              último. Solo sale con `booking`, que es quien tiene categorías.
+            */}
+            {conCategoria && (
+              <select
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+                aria-label="Filtrar por tipo de contratante"
+                className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 shadow-sm focus:outline-none focus:border-[var(--color-primary)] transition-colors shrink-0"
+              >
+                <option value="all">Todos los tipos</option>
+                {CATEGORIAS.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Tabs */}

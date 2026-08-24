@@ -42,6 +42,9 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   const search = searchParams.get("search");
   const status = searchParams.get("status");
   const country = searchParams.get("country");
+  // Qué es el contratante: festival, sala, ayuntamiento, medio… (25/08/2026).
+  // Vive en `customFields.categoria` y solo lo usa quien tiene `booking`.
+  const categoria = searchParams.get("categoria");
   // Filtro por módulo asignado (sprint Clientes↔módulos): clientes con una
   // asignación activa a ese módulo (p.ej. assignedTo=nutricion).
   const assignedTo = searchParams.get("assignedTo");
@@ -51,9 +54,23 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 
   const where = {};
 
-  if (status) where.customFields = { [Op.contains]: { seStatus: status } };
-  if (country && !status) where.customFields = { [Op.contains]: { country } };
-  if (country && status) where.customFields = { [Op.contains]: { seStatus: status, country } };
+  /**
+   * Los filtros que viven dentro de `customFields` se juntan en UN solo
+   * `Op.contains`.
+   *
+   * Antes eran tres `if` encadenados con todas las combinaciones de `status` y
+   * `country` escritas a mano; al entrar el tercer filtro (`categoria`, el
+   * 25/08/2026) eso pasaba de tres ramas a ocho, y la cuarta que entrara, a
+   * dieciséis. Con un objeto que se va rellenando, añadir un filtro es una
+   * línea y no hay combinación que se quede sin escribir.
+   */
+  const enCustomFields = {};
+  if (status) enCustomFields.seStatus = status;
+  if (country) enCustomFields.country = country;
+  if (categoria) enCustomFields.categoria = categoria;
+  if (Object.keys(enCustomFields).length) {
+    where.customFields = { [Op.contains]: enCustomFields };
+  }
 
   if (search) {
     where[Op.or] = [
