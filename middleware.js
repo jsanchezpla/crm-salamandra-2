@@ -67,6 +67,17 @@ const SOLO_ESTO_EN_BACKOFFICE = [
   "/api/auth/login",
   "/api/auth/logout",
   "/api/auth/refresh",
+  /*
+   * Cambiarse la contraseña (24/08/2026). Sin esta línea, la única cuenta de
+   * back-office que existe —la que da de alta y de baja clientes, o sea la de
+   * más alcance del sistema— era la ÚNICA que no podía cambiar la suya: aquí
+   * daba 404, y en el host de los clientes su token de back-office lo rechaza
+   * este mismo fichero.
+   *
+   * Abrirla es seguro porque la ruta comprueba por su cuenta que la cuenta
+   * corresponde al host ANTES de firmar nada, igual que login y refresh.
+   */
+  "/api/auth/password",
   "/_next/",
 ];
 

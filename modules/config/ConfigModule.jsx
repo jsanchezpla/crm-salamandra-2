@@ -281,7 +281,25 @@ export default function ConfigModule({ modulos = null }) {
     }
   }
 
-  if (!cfg) {
+  /*
+   * ── QUIEN NO ES ADMIN VE ESTA PANTALLA, PERO SOLO SU CUENTA (24/08/2026) ──
+   * `GET /api/tenant/settings` es solo de admin a propósito: devuelve pistas
+   * enmascaradas de las claves de IA. Eso no se toca. Pero hasta hoy su 403
+   * dejaba a un no-admin con un cartel rojo y nada más, y con la contraseña
+   * viviendo aquí dentro eso dejaba fuera justo a quien la necesita: de los 24
+   * usuarios de clientes reales, 16 tienen rol `user` — 15 de ellos en Aumenta.
+   *
+   * Así que el 403 deja de ser un error y pasa a ser una respuesta: se pinta la
+   * pantalla con la ÚNICA zona que es suya. El endpoint sigue diciendo que no,
+   * y ni una clave sale de él; lo que cambia es lo que hace la pantalla cuando
+   * se lo dicen.
+   *
+   * Se distingue por el rol y no por el texto del error: leer el mensaje para
+   * decidir es la forma de que un día lo reescriban y esto se rompa en silencio.
+   */
+  const soloSuCuenta = me && !isAdmin;
+
+  if (!cfg && !soloSuCuenta) {
     // Distinguir cargando de error: si el GET de ajustes falla (500/401/offline)
     // hay que mostrar el error, no dejar el spinner colgado para siempre.
     return (
@@ -295,8 +313,19 @@ export default function ConfigModule({ modulos = null }) {
     );
   }
 
-  const zona = PESTANAS.find((p) => p.clave === pestana) ?? PESTANAS[0];
-  const avisoZona = avisoDePestana(pestana, tieneModulo);
+  /*
+   * Para quien no es admin solo existe una zona, y `pestanaViva` la fuerza.
+   *
+   * Es lo que impide que el resto del render se ejecute con `cfg` a null: todos
+   * los bloques de abajo leen `cfg.loQueSea`, y sin este ancla la pantalla se
+   * abriría por «Empresa» —que es la pestaña por defecto— y reventaría antes de
+   * pintar nada. Se ancla aquí, en un sitio, en vez de poner un `cfg?.` en las
+   * doscientas lecturas de abajo.
+   */
+  const pestanasVisibles = soloSuCuenta ? PESTANAS.filter((p) => p.clave === "cuenta") : PESTANAS;
+  const pestanaViva = soloSuCuenta ? "cuenta" : pestana;
+  const zona = PESTANAS.find((p) => p.clave === pestanaViva) ?? PESTANAS[0];
+  const avisoZona = avisoDePestana(pestanaViva, tieneModulo);
   // Dentro de una zona ya resumida arriba no se repite el aviso tarjeta a
   // tarjeta: se atenúan igual, pero callando.
   const enZona = (clave, children) => (
@@ -335,8 +364,8 @@ export default function ConfigModule({ modulos = null }) {
           por módulos, no una decisión de pintura. */}
       <div className="border-b border-neutral-100 -mx-4 lg:-mx-8 px-4 lg:px-8">
         <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
-          {PESTANAS.map((p) => (
-            <BotonZona key={p.clave} activa={p.clave === pestana} onClick={() => irA(p.clave)}>
+          {pestanasVisibles.map((p) => (
+            <BotonZona key={p.clave} activa={p.clave === pestanaViva} onClick={() => irA(p.clave)}>
               {p.titulo}
             </BotonZona>
           ))}
@@ -353,13 +382,29 @@ export default function ConfigModule({ modulos = null }) {
 
       {errorMsg && <div className="px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{errorMsg}</div>}
       {okMsg && <div className="px-4 py-3 bg-emerald-50 border border-emerald-100 rounded-lg text-xs text-emerald-700">{okMsg}</div>}
-      {!isAdmin && (
+      {/* El aviso mandaba a la gente a ninguna parte: decía que no pueden tocar
+          nada y punto. Desde el 24/08/2026 hay una cosa que SÍ es suya —su
+          contraseña—, así que se dice y se enlaza. En esa pestaña no sale, que
+          allí sería mentira. */}
+      {/* `!soloSuCuenta` sobra en la práctica —a un no-admin `pestanaViva` ya le
+          vale siempre «cuenta»— pero se deja porque `me` tarda un instante en
+          llegar, y en ese hueco `isAdmin` es false y el aviso parpadearía. */}
+      {!isAdmin && !soloSuCuenta && pestanaViva !== "cuenta" && (
         <div className="px-4 py-3 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-800">
-          Solo los administradores pueden modificar la configuración.
+          Solo los administradores pueden modificar la configuración. Lo que sí puedes cambiar es tu
+          contraseña, en{" "}
+          <button
+            type="button"
+            onClick={() => irA("cuenta")}
+            className="underline font-semibold cursor-pointer"
+          >
+            Tu cuenta
+          </button>
+          .
         </div>
       )}
 
-      {pestana === "empresa" && (
+      {pestanaViva === "empresa" && (
         <div className="space-y-4">
           {enZona(
             "fiscal",
@@ -486,7 +531,7 @@ export default function ConfigModule({ modulos = null }) {
         </div>
       )}
 
-      {pestana === "conexiones" && (
+      {pestanaViva === "conexiones" && (
         <div className="space-y-4">
           {enZona(
             "anthropic",
@@ -728,7 +773,7 @@ export default function ConfigModule({ modulos = null }) {
         </div>
       )}
 
-      {pestana === "agenda" && (
+      {pestanaViva === "agenda" && (
         <div className="space-y-4">
           {enZona(
             "recordatorios",
@@ -799,7 +844,7 @@ export default function ConfigModule({ modulos = null }) {
         </div>
       )}
 
-      {pestana === "reservas" && (
+      {pestanaViva === "reservas" && (
         <div className="space-y-4">
           {enZona(
             "reservaOnline",
@@ -932,7 +977,7 @@ export default function ConfigModule({ modulos = null }) {
         </div>
       )}
 
-      {pestana === "portal" && (
+      {pestanaViva === "portal" && (
         <div className="space-y-4">
           {enZona(
             "areaPrivada",
@@ -967,7 +1012,7 @@ export default function ConfigModule({ modulos = null }) {
         </div>
       )}
 
-      {pestana === "modulos" && (
+      {pestanaViva === "modulos" && (
         <div className="space-y-4">
           {enZona(
             "derivaciones",
@@ -994,8 +1039,20 @@ export default function ConfigModule({ modulos = null }) {
                 readOnly={!!cfg.readOnly}
                 onToggle={(v) => patchTenant({ aiAccess: v }, v === "restringido" ? "La IA ahora requiere tu permiso" : "La IA vuelve a ser libre para el equipo")}
               />
-            ) 
+            )
           )}
+        </div>
+      )}
+
+      {/*
+        TU CUENTA — la única zona SIN `isAdmin &&` de toda la pantalla, y es a
+        propósito. Las otras seis son de la empresa; esta es de la persona, y
+        justo quien no es admin es quien la necesita: de los 24 usuarios de
+        clientes reales, 16 tienen rol `user` (15 de ellos en Aumenta).
+      */}
+      {pestanaViva === "cuenta" && (
+        <div className="space-y-4">
+          {enZona("contrasena", <ContrasenaCard />)}
         </div>
       )}
     </div>
@@ -2829,5 +2886,212 @@ function PrimaryButton({ onClick, children }) {
       style={{ background: "var(--color-primary, #1B3A2D)" }}>
       {children}
     </button>
+  );
+}
+
+/**
+ * Cambiarte TU contraseña (24/08/2026, Jorge).
+ *
+ * ── POR QUÉ ES LA ÚNICA TARJETA DE ESTA PANTALLA SIN `readOnly` ───────────
+ * Todo lo demás de Configuración es de la EMPRESA, y por eso está en
+ * solo-lectura para quien no es admin. Esto es de la PERSONA. En producción hay
+ * 24 usuarios de clientes reales y 16 tienen rol `user` —15 de ellos en
+ * Aumenta—, o sea que si esta tarjeta heredara el `disabled={!isAdmin}` del
+ * resto dejaría fuera justo a quien viene a servir.
+ *
+ * Hasta hoy nadie podía cambiarse la suya: la única forma era que un admin la
+ * RESTABLECIERA desde Equipo, y eso genera una aleatoria de 12 caracteres. La
+ * que te dan es la que te queda.
+ *
+ * ── LO QUE LA PANTALLA HACE Y LO QUE NO ──────────────────────────────────
+ * No decide nada: manda las tres cosas al servidor y pinta lo que conteste. Las
+ * reglas de qué contraseña vale viven en `lib/auth/contrasena.js` y las aplica
+ * el endpoint; aquí solo se ADELANTAN para no hacer escribir tres campos y
+ * fallar después. Si algún día divergen, manda el servidor.
+ *
+ * El campo de repetir no es un capricho: no hay forma de recuperar una
+ * contraseña en este CRM —el «¿Olvidaste tu contraseña?» del login no lleva a
+ * ninguna parte todavía—, así que una errata al escribirla te deja fuera y hay
+ * que llamar por teléfono.
+ */
+function ContrasenaCard() {
+  const [actual, setActual] = useState("");
+  const [nueva, setNueva] = useState("");
+  const [repetir, setRepetir] = useState("");
+  const [verlas, setVerlas] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [fallo, setFallo] = useState(null);
+  const [hecho, setHecho] = useState(false);
+  /*
+   * Los topes y si esto es una demo los DICE EL SERVIDOR, no se escriben aquí.
+   *
+   * Estaban a mano como valores por defecto de las props y no los pasaba nadie:
+   * o sea, dos sitios con el mismo número esperando a separarse. Es el mismo
+   * fallo que ya costó una imagen rota hoy mismo con las capturas — la pantalla
+   * decidiendo por su cuenta algo que decide el servidor.
+   *
+   * Mientras no llegan, se pinta con los que hay: la tarjeta no se queda en
+   * blanco por una petición lenta, y el botón valida igual al pulsarlo.
+   */
+  const [reglas, setReglas] = useState({ minimo: 10, maximo: 72, enDemo: false });
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/auth/password", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (vivo && j?.ok) setReglas(j.data);
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, []);
+  const { minimo, maximo, enDemo } = reglas;
+
+  /*
+   * Lo que se puede decir ANTES de molestar al servidor.
+   *
+   * El largo se mide en BYTES, igual que lo mide él, y no con el `maxLength` del
+   * input — que cuenta caracteres. No es lo mismo: una tilde ocupa dos bytes y
+   * un emoji cuatro, así que 72 caracteres de tildes son 144 bytes. Con
+   * `maxLength` la pantalla dejaría escribir algo que el servidor rechaza, que
+   * es exactamente la clase de desajuste que se paga en un sitio donde el
+   * mensaje de error llega después de escribir tres campos.
+   */
+  const bytes = new TextEncoder().encode(nueva).length;
+  const corta = nueva.length > 0 && nueva.length < minimo;
+  const larga = bytes > maximo;
+  const noCoinciden = repetir.length > 0 && nueva !== repetir;
+  const puede = actual && nueva && repetir && !corta && !larga && !noCoinciden && !guardando;
+
+  async function guardar() {
+    setGuardando(true);
+    setFallo(null);
+    setHecho(false);
+    try {
+      const r = await fetch("/api/auth/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actual, nueva }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.ok) throw new Error(j?.error || `Error ${r.status}`);
+      setHecho(true);
+      setActual("");
+      setNueva("");
+      setRepetir("");
+    } catch (e) {
+      setFallo(e.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="text-sm font-semibold text-neutral-800">Tu contraseña</div>
+      <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+        {/* El texto decía «se cierran tus sesiones en los demás dispositivos», y
+            eso prometía más de lo que hace: lo que caduca es su token de
+            refresco, así que caen la próxima vez que renueven — hasta un cuarto
+            de hora después. Decirlo mal importa porque quien cambia la
+            contraseña por sospecha necesita saber cuándo queda cerrado. */}
+        La eliges tú. Los demás dispositivos donde tengas la sesión abierta se cerrarán en un cuarto
+        de hora como mucho, pero <strong className="text-neutral-500">aquí sigues dentro</strong>,
+        sin volver a entrar.
+      </p>
+
+      {/* En la demo se dice ANTES, no después de escribir tres campos: la cuenta
+          la comparten todos los visitantes y cambiarla dejaría fuera al resto. */}
+      {enDemo ? (
+        <div className="mt-4 px-3 py-2 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-800 max-w-sm">
+          En la demo no se puede cambiar: esta cuenta la comparte todo el que entra a mirarla.
+        </div>
+      ) : (
+      <div className="mt-4 grid gap-3 max-w-sm">
+        <label className="block">
+          <span className="block text-xs text-neutral-500 mb-1">La de ahora</span>
+          <input
+            type={verlas ? "text" : "password"}
+            autoComplete="current-password"
+            value={actual}
+            onChange={(e) => setActual(e.target.value)}
+            className={inputCls}
+          />
+        </label>
+
+        <label className="block">
+          <span className="block text-xs text-neutral-500 mb-1">La nueva</span>
+          <input
+            type={verlas ? "text" : "password"}
+            autoComplete="new-password"
+            value={nueva}
+            onChange={(e) => setNueva(e.target.value)}
+            className={inputCls}
+          />
+          {/* La regla se dice SIEMPRE, no solo al fallar: es una sola y así
+              nadie escribe tres campos para que le digan que no vale. */}
+          <span
+            className={`block text-[11px] mt-1 ${corta || larga ? "text-red-600" : "text-neutral-400"}`}
+          >
+            {larga
+              ? `Demasiado larga: el tope son ${maximo} caracteres, algo menos si lleva tildes o emojis.`
+              : `Al menos ${minimo} caracteres. Nada de mayúsculas ni símbolos obligatorios: es más seguro que sea larga y que te la puedas acordar.`}
+          </span>
+        </label>
+
+        <label className="block">
+          <span className="block text-xs text-neutral-500 mb-1">La nueva otra vez</span>
+          <input
+            type={verlas ? "text" : "password"}
+            autoComplete="new-password"
+            maxLength={maximo}
+            value={repetir}
+            onChange={(e) => setRepetir(e.target.value)}
+            className={inputCls}
+          />
+          {noCoinciden && (
+            <span className="block text-[11px] mt-1 text-red-600">Las dos no son iguales.</span>
+          )}
+        </label>
+
+        <label className="flex items-center gap-2 text-xs text-neutral-500 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={verlas}
+            onChange={(e) => setVerlas(e.target.checked)}
+            className="h-4 w-4 accent-[var(--color-primary,#1B3A2D)]"
+          />
+          Verlas mientras escribo
+        </label>
+      </div>
+      )}
+
+      {fallo && (
+        <div className="mt-3 px-3 py-2 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600 max-w-sm">
+          {fallo}
+        </div>
+      )}
+      {hecho && (
+        <div className="mt-3 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-lg text-xs text-emerald-700 max-w-sm">
+          Cambiada. La próxima vez entra con la nueva.
+        </div>
+      )}
+
+      <div className="mt-4">
+        {/* Botón propio y no `PrimaryButton`: ese no acepta `disabled`, y aquí
+            hace falta — con los tres campos a medias no se manda nada. Tocarlo
+            a él afectaría a sus veinte usos por un caso. */}
+        <button
+          type="button"
+          onClick={guardar}
+          disabled={!puede || enDemo}
+          className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ background: "var(--color-primary, #1B3A2D)" }}
+        >
+          {guardando ? "Cambiando…" : "Cambiar la contraseña"}
+        </button>
+      </div>
+    </div>
   );
 }

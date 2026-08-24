@@ -224,13 +224,38 @@ test("la pantalla monta lo que el mapa declara, y nada más", async (t) => {
     }
   });
 
-  await t.test("las seis zonas están escritas en el componente", () => {
+  await t.test("todas las zonas están escritas en el componente", () => {
     for (const p of PESTANAS) {
       assert.ok(
-        fuente.includes(`pestana === "${p.clave}"`),
+        fuente.includes(`pestanaViva === "${p.clave}"`),
         `la zona ${p.clave} existe en el mapa pero no se pinta en ConfigModule`
       );
     }
+  });
+
+  /*
+   * `pestanaViva` y no `pestana` a secas (24/08/2026). La diferencia no es
+   * cosmética: para quien no es admin, `pestanaViva` vale siempre «cuenta».
+   *
+   * Eso es lo único que impide que el resto de la pantalla se ejecute con `cfg`
+   * a null —todos los bloques leen `cfg.loQueSea`— porque a un no-admin el GET
+   * de ajustes le responde 403 a propósito, y la pestaña por defecto es
+   * «Empresa». Un bloque que se dejara con `pestana` reventaría la pantalla
+   * justo para las 16 personas que vienen a cambiarse la contraseña.
+   */
+  await t.test("ningún bloque se quedó mirando `pestana` en vez de `pestanaViva`", () => {
+    const sueltos = [...fuente.matchAll(/\{pestana === "([A-Za-z]+)"/g)].map((m) => m[1]);
+    assert.deepEqual(sueltos, [], `estos bloques usan \`pestana\` a secas: ${sueltos.join(", ")}`);
+  });
+
+  await t.test("la zona «cuenta» NO se esconde tras isAdmin: es la de todos", () => {
+    const bloque = fuente.slice(fuente.indexOf('pestanaViva === "cuenta"'));
+    const hastaElCierre = bloque.slice(0, bloque.indexOf("</div>"));
+    assert.doesNotMatch(
+      hastaElCierre,
+      /isAdmin &&/,
+      "la tarjeta de la contraseña se ha gateado por admin, que es justo lo contrario de para quién se hizo"
+    );
   });
 });
 
