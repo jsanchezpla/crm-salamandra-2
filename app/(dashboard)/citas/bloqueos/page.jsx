@@ -65,7 +65,11 @@ export default function CitasBloqueosPage() {
       </div>
 
       <div className="flex-1 overflow-auto px-6 lg:px-10 py-6">
-        <div className="max-w-4xl">
+        {/* 7xl y centrado, como el resto del CRM (24/08/2026): dentro hay una
+            rejilla de CUATRO columnas que a 4xl salían a 200 px, y además el
+            contenedor no llevaba `mx-auto`, así que dejaba 764 px de blanco
+            a la derecha en una pantalla de 1920 y nada a la izquierda. */}
+        <div className="max-w-7xl mx-auto">
           <PanelVacaciones />
         </div>
       </div>

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const SECTIONS = [
   { href: "/facturacion/analitica/iva", label: "Libro IVA · Modelo 303", desc: "Ventas, compras deducibles, diferencia, exportación a Excel" },
@@ -11,7 +12,7 @@ const SECTIONS = [
 
 export default function AnaliticaIndex() {
   return (
-    <div className="p-4 lg:p-8 max-w-5xl mx-auto">
+    <div className={anchoPantalla("listado")}>
       <div className="flex items-end justify-between gap-3 mb-6">
         <div>
           <div className="eyebrow">Finanzas · Analítica</div>
@@ -28,7 +29,13 @@ export default function AnaliticaIndex() {
         <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* TRES columnas en pantalla grande, y va atado a que la pantalla sea
+          `listado` (24/08/2026). Son tres accesos: a dos columnas y 1.280 px
+          cada tarjeta se iba a 602 px para un título y una línea de texto —el
+          «cajas grandes con el texto pegado a la izquierda»— y la tercera se
+          quedaba sola en la segunda fila. A tres caben en una sola fila de
+          ~413 px. Ver components/layout/anchoPantalla.js. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {SECTIONS.map((s) => (
           <Link key={s.href} href={s.href}
             className="bg-white border border-neutral-100 rounded-xl p-4 transition-colors hover:border-[var(--color-primary,#1B3A2D)] block">

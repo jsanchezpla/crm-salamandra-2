@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from "react";
 import TeamHoursEditor from "@/components/team/TeamHoursEditor.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 function fmtCita(iso) {
   try {
@@ -53,7 +54,7 @@ export default function MiHorarioPage() {
   }, [member]);
 
   return (
-    <div className="p-4 lg:p-8 max-w-4xl mx-auto">
+    <div className={anchoPantalla("listado")}>
       <div className="mb-6">
         <div className="eyebrow">Citas · Autoservicio</div>
         <h1 className="font-display text-2xl text-neutral-900 mt-1">Mi horario</h1>

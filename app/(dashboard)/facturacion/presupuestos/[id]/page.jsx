@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import HelpTooltip from "../../../../../components/ui/HelpTooltip.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const STATUS = {
   draft: { label: "Borrador", cls: "bg-neutral-100 text-neutral-600" },
@@ -141,7 +142,7 @@ export default function PresupuestoDetallePage() {
   const st = STATUS[quote.status] ?? STATUS.draft;
 
   return (
-    <div className="p-4 lg:p-8 max-w-5xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       <div>
         <Link href="/facturacion/presupuestos" className="inline-flex items-center gap-1 text-[12px] text-neutral-500 hover:text-neutral-800 mb-2">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>

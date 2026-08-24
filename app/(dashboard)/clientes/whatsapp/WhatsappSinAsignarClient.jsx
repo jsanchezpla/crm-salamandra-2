@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const fmtFecha = (iso) =>
   new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Madrid" });
@@ -58,7 +59,7 @@ export default function WhatsappSinAsignarClient() {
   }, []);
 
   return (
-    <div className="p-4 lg:p-8 max-w-4xl">
+    <div className={anchoPantalla("listado")}>
       <div className="mb-6">
         <Link href="/clientes" className="text-xs text-gray-400 hover:text-gray-700">← Clientes</Link>
         <h1 className="text-xl font-semibold text-gray-900 mt-2">WhatsApp sin asignar</h1>

@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const VACIO = { name: "", phone: "", email: "", notes: "", assignedTherapistId: "" };
 
@@ -133,7 +134,7 @@ export default function ListaEsperaClient() {
   const input = "w-full rounded-md border border-neutral-200 px-2.5 py-1.5 text-sm focus:outline-none focus:border-neutral-400";
 
   return (
-    <div className="p-4 lg:p-8 max-w-5xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <div className="eyebrow">Clientes</div>

@@ -23,6 +23,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const fmt = (v) => {
   if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return v || "—";
@@ -160,7 +161,7 @@ export default function FichasACompletarClient() {
   const todoOk = datos && datos.totalBloquea === 0 && datos.totalCompletar === 0;
 
   return (
-    <div className="p-4 lg:p-8 max-w-4xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       <div>
         <h1 className="text-lg font-semibold text-neutral-800 flex items-center gap-2">
           Fichas a completar

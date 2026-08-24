@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 /**
  * 'AAAA-MM-DD' EN LOCAL. Con `toISOString()` (UTC) el 1 de julio a las 00:00
@@ -117,7 +118,7 @@ export default function EstadisticasPage() {
   const cap = data?.captacion;
 
   return (
-    <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <div className="eyebrow">Clínica</div>

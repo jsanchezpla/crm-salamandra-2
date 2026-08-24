@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Select from "../../../../components/ui/Select.jsx";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const STATUS = {
   draft: { label: "Borrador", cls: "bg-neutral-100 text-neutral-600" },
@@ -141,7 +142,7 @@ export default function PresupuestosPage() {
   const exportUrl = `/api/billing/exports/quotes${exportParams.toString() ? `?${exportParams}` : ""}`;
 
   return (
-    <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="eyebrow">Operativa · Documentos</div>

@@ -9,6 +9,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const STATUS_LABELS = { active: "Activo", inactive: "Inactivo", on_leave: "De baja" };
 
@@ -117,7 +118,7 @@ export default function MiEquipo({ modulos = null }) {
     tieneModulo("team_avanzado") && (tieneModulo("clinica") || tieneModulo("pacientes"));
 
   return (
-    <div className="p-4 lg:p-8 max-w-4xl mx-auto">
+    <div className={anchoPantalla("listado")}>
       <div className="mb-6">
         <div className="eyebrow">Mi espacio</div>
         <h1 className="font-display text-2xl lg:text-4xl text-neutral-900 tracking-tight mt-1">Equipo</h1>

@@ -6,6 +6,7 @@ import PeriodPicker, { computeRange } from "../../_components/PeriodPicker.jsx";
 import { fmtMoney } from "../../_components/Kpi.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 export default function PorSocioPage() {
   const sp = useSearchParams();
@@ -58,7 +59,7 @@ export default function PorSocioPage() {
   }
 
   return (
-    <div className="p-4 lg:p-8 max-w-5xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="eyebrow">Finanzas · Informes</div>

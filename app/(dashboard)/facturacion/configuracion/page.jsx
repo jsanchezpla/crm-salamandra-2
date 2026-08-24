@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Select from "@/components/ui/Select.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -92,7 +93,7 @@ export default function ConfiguracionPage() {
   }
 
   return (
-    <div className="p-4 lg:p-8 max-w-4xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("ajustes")} space-y-5`}>
       <div className="flex items-end justify-between gap-3">
         <div>
           <div className="eyebrow">Finanzas · Configuración</div>

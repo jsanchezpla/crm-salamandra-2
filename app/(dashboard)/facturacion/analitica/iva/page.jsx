@@ -6,6 +6,7 @@ import Link from "next/link";
 import PeriodPicker, { computeRange } from "../../_components/PeriodPicker.jsx";
 import Kpi, { fmtMoney, fmtDate } from "../../_components/Kpi.jsx";
 import HelpTooltip from "../../../../../components/ui/HelpTooltip.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 export default function IvaPage() {
   const sp = useSearchParams();
@@ -28,7 +29,7 @@ export default function IvaPage() {
   }, [from, to]);
 
   return (
-    <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="eyebrow">Finanzas · Fiscalidad</div>

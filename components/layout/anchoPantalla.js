@@ -24,23 +24,35 @@
  * Arreglar una pantalla no arregla nada. Lo que se arregla es que la decisión
  * viva en un sitio y que escribirla a mano deje de ser lo natural.
  *
- * ── SOLO HAY DOS ANCHOS, Y ES A PROPÓSITO ───────────────────────────────────
- * Con tres o más vuelve el problema: quien duda elige mal y nadie lo nota. Los
- * NOMBRES sí son tres, porque son tres preguntas distintas; los VALORES, dos.
+ * ── CUATRO NOMBRES, TRES ANCHOS ─────────────────────────────────────────────
+ * La regla vieja decía «solo dos anchos, y con tres vuelve el problema: quien
+ * duda elige mal y nadie lo nota». La regla sigue siendo buena y el peligro
+ * también, así que conviene decir qué cambió el 24/08/2026 y por qué:
  *
  *   `portada`  (max-w-7xl)  Portada de módulo: rejilla de tarjetas y métricas.
- *   `listado`  (max-w-7xl)  Pantallas con TABLA. El ancho se usa: son columnas
- *                           de verdad y estrecharlas obliga a truncar.
- *   `ficha`    (max-w-3xl)  El detalle de UNA cosa: una empresa, un intento de
- *                           cuestionario, un formulario. Texto seguido, que a
- *                           1.200 px se lee peor, no mejor.
+ *   `listado`  (max-w-7xl)  Muchas cosas a la vez: tabla, o rejilla de fichas.
+ *                           El ancho se usa; estrecharlo obliga a truncar.
+ *   `ficha`    (max-w-3xl)  El detalle de UNA cosa leída como TEXTO: una
+ *                           empresa, un intento de cuestionario. A 1.200 px se
+ *                           lee peor, no mejor.
+ *   `ajustes`  (max-w-4xl)  La pantalla de configuración de un módulo. Un campo
+ *                           de formulario de 1.200 px no se rellena mejor: se
+ *                           rellena peor, y el ojo pierde la etiqueta.
+ *
+ * El cuarto nombre no es una grieta en la regla: es que ese ancho YA existía
+ * copiado a mano en cuatro pantallas (`/configuracion`, y las `configuracion`
+ * de facturación, pedidos y captación). Estaba sin nombre, que es exactamente
+ * la situación que este fichero existe para evitar. Y la pregunta que lo elige
+ * no admite duda —¿es la pantalla de ajustes de un módulo?—, que es lo que hacía
+ * peligroso al tercer ancho: no el número, sino tener que adivinar.
  *
  * `portada` y `listado` valen hoy lo mismo y se mantienen separadas a
  * propósito: responden a preguntas distintas y ya se han separado una vez.
  * Fundirlas obligaría a volver a partirlas el día que una de las dos cambie.
  *
- * Si dudas: ¿es el detalle de una sola cosa? `ficha`. ¿Tiene tabla? `listado`.
- * Si no, `portada`.
+ * Si dudas: ¿es la pantalla de ajustes? `ajustes`. ¿Es el detalle de una sola
+ * cosa, y es texto? `ficha`. ¿Hay muchas cosas a la vez? `listado`. Si no,
+ * `portada`.
  *
  * ── EL VAIVÉN DEL ANCHO DE LA PORTADA, QUE ES LO QUE HAY QUE ENTENDER ───────
  * 4xl → 3xl (14/08/2026, Rodrigo) → 7xl (24/08/2026, Jorge). Parece que se ha
@@ -89,21 +101,49 @@
  * etiqueta mal cerrada en ese cambio no la habría cazado nadie. Devolviendo las
  * clases, cada pantalla cambia UNA línea y sigue siendo su propio `<div>`.
  *
- * ⚠️ HOY SOLO LO USA FORMACIÓN. No se ha aplicado al resto del CRM de golpe a
- * propósito: cambiaría el ancho de cincuenta pantallas de siete clientes en un
- * commit que nadie podría revisar. Lo que sí vale desde ya: **una pantalla nueva
- * usa esto y no escribe `max-w-` a mano**, y la que se toque por otro motivo se
- * pasa de paso.
+ * ── YA NO LO USA SOLO FORMACIÓN (24/08/2026) ───────────────────────────────
+ * Aquí ponía «HOY SOLO LO USA FORMACIÓN; no se ha aplicado al resto del CRM de
+ * golpe a propósito: cambiaría el ancho de cincuenta pantallas de siete
+ * clientes en un commit que nadie podría revisar». El miedo era bueno y sigue
+ * siéndolo; lo que cambió es que Jorge pidió la pasada entera y dijo cómo se
+ * revisa: **en local, sin desplegar, mirándolo él**. Eso es exactamente lo que
+ * faltaba, así que el aviso se cumplió en vez de saltárselo.
+ *
+ * Pasaron 46 contenedores de 42 ficheros. Antes de la pasada, medido en el
+ * navegador a 1600 px, el CRM contestaba a la misma pregunta con CINCO anchos
+ * —896, 1024, 1152, 1280 y sin límite— y dentro de UN módulo:
+ *
+ *     /facturacion              1024      /facturacion/facturas     1280
+ *     /facturacion/cobros       1152      /facturacion/cumplimiento  896
+ *     /facturacion/proveedores  sin tope
+ *
+ * O sea que moverse por la barra de Facturación desplazaba la página de sitio
+ * en cada pestaña. Ahora las 15 pantallas del módulo valen 1280 menos la de
+ * ajustes.
+ *
+ * Lo que NO entró, y no es olvido:
+ *   · La portada `/` es editorial a propósito (titular en serif, columna de
+ *     texto a `max-w-xl`, alineada a la izquierda). Ahí el blanco de la derecha
+ *     es diseño, no descuido.
+ *   · La ficha de cliente. Sus ~18 tarjetas llevan el `max-w-` copiado a mano
+ *     una por una en `components/clients/`, y esos mismos paneles pintan la
+ *     ficha propia de nutri_laura. Arreglarlo es su propio trabajo —con su
+ *     decisión sobre Laura—, no una línea de una pasada.
+ *   · `/proyectos` y `/outreach`, que ya iban a 1400 px.
+ *
+ * Lo que vale desde siempre: **una pantalla nueva usa esto y no escribe
+ * `max-w-` a mano**, y la que se toque por otro motivo se pasa de paso.
  */
 
 const ANCHOS = {
   portada: "max-w-7xl",
   listado: "max-w-7xl",
   ficha: "max-w-3xl",
+  ajustes: "max-w-4xl",
 };
 
 /**
- * @param {"portada"|"listado"|"ficha"} [tipo="portada"]
+ * @param {"portada"|"listado"|"ficha"|"ajustes"} [tipo="portada"]
  * @returns {string} las clases del contenedor raíz de la pantalla
  */
 export function anchoPantalla(tipo = "portada") {

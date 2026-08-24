@@ -8,6 +8,7 @@ import { fmtMoney, fmtPct } from "../../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../../_components/tableSort.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 export default function AnaliticaClientesPage() {
   const sp = useSearchParams();
@@ -55,7 +56,7 @@ export default function AnaliticaClientesPage() {
   }), { billedBase: 0, collectedBase: 0, pending: 0, margin: 0 });
 
   return (
-    <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="eyebrow">Finanzas · Analítica</div>

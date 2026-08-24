@@ -7,6 +7,7 @@ import Select from "@/components/ui/Select.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 import PreviewBanner from "../clinica/_components/PreviewBanner.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const STATUS_STYLES = {
   active: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
@@ -132,7 +133,7 @@ export default function PacientesPage() {
   const inputCls = "w-full px-3 py-2 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400";
 
   return (
-    <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       <PreviewBanner />
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">

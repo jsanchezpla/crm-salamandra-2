@@ -20,6 +20,7 @@ import { EditCourseDrawer } from "../../components/training/EditCourseDrawer.jsx
 import { CourseRegistrationStats } from "./CourseRegistrationStats.jsx";
 import { CourseRegistrationsList } from "./CourseRegistrationsList.jsx";
 import { CourseRegistrationDetail } from "./CourseRegistrationDetail.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 export default function CursoDetailModule({ courseId }) {
   const [me, setMe] = useState(null);
@@ -89,7 +90,7 @@ export default function CursoDetailModule({ courseId }) {
   }
 
   return (
-    <div className="p-4 lg:p-8 max-w-6xl mx-auto">
+    <div className={anchoPantalla("listado")}>
       {/* Cabecera */}
       <div className="mb-5">
         <Link

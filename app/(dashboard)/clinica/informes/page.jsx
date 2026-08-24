@@ -7,6 +7,7 @@ import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import PreviewBanner from "../_components/PreviewBanner.jsx";
 import InformeDrawer from "@/components/clinica/InformeDrawer.jsx";
 import { REPORT_TYPES, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 // Opciones del desplegable derivadas del catálogo compartido: añadir un tipo
 // nuevo (como "Derivación") no debe obligar a tocar cada pantalla.
@@ -125,7 +126,7 @@ export default function InformesPage() {
   const inputCls = "w-full px-3 py-2 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400";
 
   return (
-    <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       <Link href="/clinica" className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3">
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />

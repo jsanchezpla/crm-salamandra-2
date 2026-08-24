@@ -6,6 +6,7 @@ import Link from "next/link";
 import HelpTooltip from "../../../components/ui/HelpTooltip.jsx";
 import PeriodPicker, { computeRange } from "./_components/PeriodPicker.jsx";
 import { fmtMoney } from "./_components/Kpi.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const FUNNEL_BG = ["#5A8A70", "#3F7458", "#2C5C45", "#1B3A2D"];
 
@@ -75,7 +76,7 @@ export default function PanelOperativo() {
     : [];
 
   return (
-    <div className="p-4 lg:p-8 max-w-5xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("portada")} space-y-5`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="eyebrow">Operativa · Ventas y documentos</div>

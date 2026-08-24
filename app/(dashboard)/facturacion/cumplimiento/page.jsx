@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const CALENDAR = [
   { date: "2026", label: "Adaptación", done: true },
@@ -41,7 +42,7 @@ export default function CumplimientoPage() {
   }, []);
 
   return (
-    <div className="p-4 lg:p-8 max-w-4xl mx-auto space-y-6">
+    <div className={`${anchoPantalla("listado")} space-y-6`}>
       <div>
         <div className="eyebrow">Finanzas · Cumplimiento</div>
         <h1 className="font-display text-2xl lg:text-4xl text-[var(--ink-900)] tracking-tight mt-1 flex items-center gap-2 flex-wrap">

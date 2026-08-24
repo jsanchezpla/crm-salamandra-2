@@ -239,7 +239,7 @@ export default function AyudaModule({ esDemo = false }) {
 
   return (
     <div className="min-h-full bg-gray-50">
-      <div className="px-4 lg:px-8 pt-5 lg:pt-7 pb-3">
+      <div className="px-4 lg:px-8 pt-5 lg:pt-7 pb-3 max-w-3xl mx-auto w-full">
         <div className="text-[10px] uppercase tracking-[0.18em] text-gray-400 mb-1">Salamandra Solutions</div>
         <h1 className="text-gray-900 text-xl lg:text-2xl font-semibold">Ayuda</h1>
         <p className="text-sm text-gray-500 mt-1 max-w-2xl leading-relaxed">
@@ -248,7 +248,7 @@ export default function AyudaModule({ esDemo = false }) {
         </p>
       </div>
 
-      <div className="px-4 lg:px-8 pb-10 max-w-3xl">
+      <div className="px-4 lg:px-8 pb-10 max-w-3xl mx-auto w-full">
         {soloLectura && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
             Esto acaba de instalarse y todavía le falta un paso en el servidor. Mientras tanto

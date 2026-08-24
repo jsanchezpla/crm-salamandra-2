@@ -8,6 +8,7 @@ import ConectarWhatsapp from "./ConectarWhatsapp.jsx";
 import { ANTHROPIC_MODELS } from "../../lib/ai/anthropicModel.js";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "../../lib/citas/coloresBloqueo.js";
 import { EVENTOS_WEBHOOK_STRIPE } from "../../lib/payments/eventosWebhook.js";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import {
   PESTANAS,
   PESTANA_POR_DEFECTO,
@@ -284,7 +285,7 @@ export default function ConfigModule({ modulos = null }) {
     // Distinguir cargando de error: si el GET de ajustes falla (500/401/offline)
     // hay que mostrar el error, no dejar el spinner colgado para siempre.
     return (
-      <div className="p-4 lg:p-8 max-w-4xl mx-auto">
+      <div className={anchoPantalla("ajustes")}>
         {loadError ? (
           <div className="px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{loadError}</div>
         ) : (
@@ -305,7 +306,7 @@ export default function ConfigModule({ modulos = null }) {
   );
 
   return (
-    <div className="p-4 lg:p-8 max-w-4xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("ajustes")} space-y-5`}>
       <div>
         <div className="eyebrow">Cuenta · Configuración</div>
         <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] mt-1">

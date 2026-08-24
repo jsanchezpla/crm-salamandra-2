@@ -9,6 +9,7 @@ import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 import Select from "@/components/ui/Select.jsx";
 
 import { nifDeCliente } from "../../../../lib/billing/nifCliente.js";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
 
@@ -361,7 +362,7 @@ export default function FacturasPage() {
   }
 
   return (
-    <div className="p-4 lg:p-8 max-w-7xl mx-auto">
+    <div className={anchoPantalla("listado")}>
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
         <div>
           <div className="eyebrow">Finanzas · Documentos</div>

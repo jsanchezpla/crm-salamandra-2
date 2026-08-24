@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatearMinutos } from "@/lib/fichaje/parseHora.js";
 import ImportarFichajeModal from "./ImportarFichajeModal.jsx";
 import CorregirFichajeModal from "./CorregirFichajeModal.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 
@@ -109,7 +110,7 @@ export default function FichajeModule() {
   const hayPrevisto = (datos?.totales?.minutosPrevistos || 0) > 0;
 
   return (
-    <div className="p-4 lg:p-8 max-w-6xl mx-auto">
+    <div className={anchoPantalla("listado")}>
       {/* ── Cabecera ────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
         <div>

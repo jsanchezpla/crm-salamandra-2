@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import { MAPA_VIEWBOX, MAPA_ALTO, MAPA_ANCHO, PAISES } from "./worldMap.js";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 /**
  * Analíticas — de dónde vienen las visitas de la web del cliente.
@@ -417,7 +418,7 @@ export default function AnaliticasModule({ esAdmin = false }) {
   );
 
   return (
-    <div className="p-4 lg:p-8 max-w-6xl mx-auto">
+    <div className={anchoPantalla("listado")}>
       {/* Cabecera */}
       <div className="mb-6 lg:mb-8">
         <div className="eyebrow mb-1.5 lg:mb-2">Comercial · Analíticas</div>

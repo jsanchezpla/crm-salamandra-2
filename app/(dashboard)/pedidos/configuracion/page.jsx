@@ -76,7 +76,7 @@ export default function PedidosConfiguracionPage() {
         </h1>
       </div>
 
-      <div className="flex-1 overflow-auto px-4 lg:px-10 py-6 max-w-2xl w-full mx-auto">
+      <div className="flex-1 overflow-auto px-4 lg:px-10 py-6 max-w-4xl w-full mx-auto">
         {loading ? (
           <div className="text-sm text-neutral-400">Cargando…</div>
         ) : (

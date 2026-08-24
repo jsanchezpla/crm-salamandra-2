@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 /**
  * Equipo → Ocupación — el informe de agenda que pide quien dirige un centro:
@@ -77,7 +78,7 @@ export default function OcupacionPage() {
   const maxServicio = Math.max(1, ...(datos?.porServicio ?? []).map((s) => s.n));
 
   return (
-    <div className="p-4 lg:p-8 max-w-5xl mx-auto">
+    <div className={anchoPantalla("listado")}>
       <div className="mb-5">
         <div className="eyebrow mb-1.5">Equipo · Agenda</div>
         <h1 className="font-display text-[26px] lg:text-[34px] leading-[1.05] text-[var(--ink-900)] tracking-tight">

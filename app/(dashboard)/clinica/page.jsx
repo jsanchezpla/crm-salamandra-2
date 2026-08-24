@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import PreviewBanner from "./_components/PreviewBanner.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 // Solo lo CLÍNICO: pacientes e informes. Desempeño/Dirección/Productividad/
 // Incidencias/Bandeja son gestión de EQUIPO (los pidió Aumenta para su equipo)
@@ -65,7 +66,7 @@ export default function ClinicaLanding() {
   ];
 
   return (
-    <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("portada")} space-y-5`}>
       <PreviewBanner />
 
       <div className="flex flex-col gap-2">

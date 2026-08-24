@@ -6,6 +6,7 @@ import ContratoServiciosCard from "@/components/documents/ContratoServiciosCard.
 import FileTypeIcon from "@/components/documents/FileTypeIcon.jsx";
 import UploadDropzone from "@/components/documents/UploadDropzone.jsx";
 import PdfPreviewModal from "@/components/documents/PdfPreviewModal.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const MAX_LEVEL = 3; // 0..3 → 4 niveles
 
@@ -175,7 +176,7 @@ export default function DocumentsModule({ avanzado = true }) {
   const empty = !loading && folders.length === 0 && documents.length === 0;
 
   return (
-    <div className="p-4 lg:p-8 max-w-5xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       {/* Header + cuota */}
       <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
         <div>

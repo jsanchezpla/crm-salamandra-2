@@ -13,6 +13,7 @@ import PatientExternalContactsSection from "@/components/clinica/PatientExternal
 import InterventionPlanSection from "@/components/clinica/InterventionPlanSection.jsx";
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
 import { REPORT_TYPES, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const REPORT_TYPE_OPTIONS = REPORT_TYPES.map((value) => ({ value, label: REPORT_TYPE_LABEL[value] }));
 
@@ -417,7 +418,7 @@ export default function PacienteFichaPage() {
   if (loading) return <div className="p-4 lg:p-8 text-neutral-400 text-sm">Cargando ficha…</div>;
   if (notFound || !patient) {
     return (
-      <div className="p-4 lg:p-8 max-w-7xl mx-auto">
+      <div className={anchoPantalla("listado")}>
         <PreviewBanner />
         <div className="bg-white border border-neutral-100 rounded-xl p-10 text-center mt-5">
           <p className="text-sm text-neutral-600">Paciente no encontrado.</p>
@@ -430,7 +431,7 @@ export default function PacienteFichaPage() {
   const s = pStatus(patient.status);
 
   return (
-    <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       <Link href="/pacientes" className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
         Pacientes

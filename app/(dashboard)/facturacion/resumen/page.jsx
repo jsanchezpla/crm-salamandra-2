@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import PeriodPicker, { computeRange } from "../_components/PeriodPicker.jsx";
 import Kpi, { fmtMoney, fmtPct } from "../_components/Kpi.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const MONTH_NAMES_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
@@ -77,7 +78,7 @@ export default function FacturacionResumen() {
   const maxMonth = Math.max(1, ...byMonth.map((m) => m.billedBase));
 
   return (
-    <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="eyebrow">Finanzas · Resumen</div>

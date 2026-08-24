@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 /**
  * Equipo → Actividad — registro legible de lo que ha hecho cada usuario.
@@ -105,7 +106,7 @@ export default function ActividadPage() {
   }, [datos]);
 
   return (
-    <div className="p-4 lg:p-8 max-w-4xl mx-auto">
+    <div className={anchoPantalla("listado")}>
       <div className="mb-6">
         <div className="eyebrow mb-1.5">Equipo · Registro</div>
         <h1 className="font-display text-[26px] lg:text-[34px] leading-[1.05] text-[var(--ink-900)] tracking-tight">

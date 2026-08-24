@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const STATE = { IDLE: "idle", UPLOADED: "uploaded", PROCESSING: "processing", STRUCTURED: "structured" };
 
@@ -161,7 +162,7 @@ export default function NuevaSesionPage() {
   if (loadingPatient) return <div className="p-4 lg:p-8 text-sm text-neutral-400">Cargando…</div>;
   if (!patient) {
     return (
-      <div className="p-4 lg:p-8 max-w-7xl mx-auto">
+      <div className={anchoPantalla("listado")}>
         <div className="bg-white border border-neutral-100 rounded-xl p-10 text-center mt-5">
           <p className="text-sm text-neutral-600">Paciente no encontrado.</p>
           <Link href="/pacientes" className="text-xs text-[var(--color-primary,#1B3A2D)] hover:underline mt-2 inline-block">← Volver al listado</Link>
@@ -171,7 +172,7 @@ export default function NuevaSesionPage() {
   }
 
   return (
-    <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       <nav className="flex items-center gap-1.5 text-xs text-neutral-500">
         <Link href="/pacientes" className="hover:text-[var(--color-primary,#1B3A2D)]">Pacientes</Link>
         <span className="text-neutral-300">/</span>

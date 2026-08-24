@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import NuevaCoordinacionModal from "../../../../components/clinica/NuevaCoordinacionModal.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const TIPOS = [
   { key: "", label: "Todos" },
@@ -57,7 +58,7 @@ export default function CoordinacionesPage() {
   useEffect(() => load(), [load]);
 
   return (
-    <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <div className="eyebrow">Clínica</div>

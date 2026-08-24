@@ -5,6 +5,7 @@ import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import { AreaIcon } from "../_components/performanceIcons.jsx";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const SEMAFORO = {
   green: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
@@ -123,7 +124,7 @@ export default function MiDesempenoPage() {
   const roleName = m?.roleName ?? rolesList.find((r) => r.key === m?.roleKey)?.name ?? null;
 
   return (
-    <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-5">
+    <div className={`${anchoPantalla("listado")} space-y-5`}>
       <Link href="/equipo" className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
         Volver a Equipo

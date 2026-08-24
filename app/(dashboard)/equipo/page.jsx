@@ -10,6 +10,7 @@ import AccessSection, { moduleLabel, suggestUsername } from "@/components/team/A
 import CredentialsModal from "@/components/team/CredentialsModal.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import { COLOR_BLOQUEO_POR_DEFECTO } from "@/lib/citas/coloresBloqueo.js";
+import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const STATUS_LABELS = { active: "Activo", inactive: "Inactivo", on_leave: "De baja" };
 const STATUS_FILTER_OPTIONS = [
@@ -322,7 +323,7 @@ export default function EquipoPage() {
 
   // Mientras resolvemos el rol, no parpadear la UI de gestión.
   if (!me) {
-    return <div className="p-4 lg:p-8 max-w-6xl mx-auto"><p className="text-xs text-neutral-400">Cargando…</p></div>;
+    return <div className={anchoPantalla("portada")}><p className="text-xs text-neutral-400">Cargando…</p></div>;
   }
   // Perfil NO admin (terapeutas): mini-módulo de Equipo (datos + docs + accesos).
   // Se le pasan los módulos que YA trae /api/auth/me (los del tenant cruzados con
@@ -334,7 +335,7 @@ export default function EquipoPage() {
   }
 
   return (
-    <div className="p-4 lg:p-8 max-w-6xl mx-auto">
+    <div className={anchoPantalla("portada")}>
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
         <div>
           <div className="eyebrow">Recursos Humanos</div>
