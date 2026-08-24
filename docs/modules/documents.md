@@ -31,6 +31,31 @@
 > activo en local: `demo`, `sandbox` (vía enable-all-tenants)». `sandbox` ya
 > no existe en ningún entorno.
 
+## Ya no depende de Citas (24/08/2026)
+
+Entre el 10 y el 24/08/2026 el catálogo hacía que `documents` exigiera `citas`
+además de `clients`. Era una decisión de VENTA, no del código: se razonó que lo
+que se vende no es «guardar un PDF» sino «que la familia lo firme», y el área
+privada donde se firma es de Citas.
+
+**Rodrigo la retiró el 24/08/2026**: «el módulo de Documentos no debe depender
+de Citas para ser creado. Puede venir bien y estar integrado, pero no depender
+de ello». El caso que la rompió fue el primero que quiso Documentos para otra
+cosa —`laura_ubeda`, que necesita guardar el rider técnico y el dossier de
+prensa— y que no tiene ni va a tener Citas.
+
+En el código nunca hubo tal dependencia: el único gate de
+`/api/documents/contrato-servicios` siempre fue `DOCUMENTS`. Cómo queda:
+
+- `documents` exige **solo `clients`** (un documento cuelga de una ficha).
+- `citas` pasa a `nivel: "parcial"` en `lib/provisioning/dependencias.js`: es
+  **integración, no requisito**. Con Citas, la familia firma en su área privada,
+  igual que antes. Sin Citas, se sube, se ve y se descarga — que es exactamente
+  lo que quiere quien no atiende familias.
+- `documents_avanzado` sigue exigiendo `documents`, sin cambios.
+
+---
+
 ## Básico vs avanzado (01/08/2026)
 
 Documentos se parte en dos, como Equipo:

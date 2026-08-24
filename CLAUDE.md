@@ -30,6 +30,7 @@ actualiza el doc.
 | `team.md` | `team`, `team_avanzado` | `outreach.md` | `outreach` |
 | `inventory.md` | `inventory` | `support.md` | `support` |
 | `documents.md` | `documents`, `documents_avanzado` | `analytics.md` | `analytics` |
+| `booking.md` | `booking` | — | — |
 | `fichaje.md` | `fichaje` | `configuracion.md` | — (siempre visible) |
 | `emails.md` | — (infra transversal) | `buzon.md` | — (todos, `/ayuda`) |
 
@@ -214,7 +215,7 @@ comercial es `leads`), `referidos` (12/08), `cuestionarios` (10/08: pantalla de
 | `projects` | Kanban | — |
 | `billing` | Facturas, cobros, morosidad, gastos, tarifas, recurrentes, arqueo, Verifactu | FK a equipo = `employeeId`. |
 | `team` / `team_avanzado` | Plantilla, usuarios, roles / Desempeño, Dirección, Productividad, Incidencias, Bandeja, Ocupación, Actividad | Los submenús del avanzado exigen `requiresAll` (avanzado + el módulo que aporta el contenido). |
-| `documents` / `documents_avanzado` | Solo el contrato del centro / archivo completo (carpetas, buscador, cuota) | — |
+| `documents` / `documents_avanzado` | Solo el contrato del centro / archivo completo (carpetas, buscador, cuota) | **Ya NO exige `citas`** (24/08/2026, Rodrigo): era una regla de venta, no del código. Sin Citas se sube, se ve y se descarga, pero no hay área privada donde firmarlo. Sigue exigiendo `clients`. |
 | `inventory` | Productos, entradas, movimientos; `Supplier` compartido con Gastos | — |
 | `training` | Cursos, alumnos, matrículas, empresas, cuestionarios; TutorLMS por webhooks HMAC | Interruptor `formacionAbierta` (`lib/training/formacionAbierta.js`) esconde Empresas y Cuestionarios. |
 | `citas` | Reservas, portal SSO, widget público | Interruptor `autoConfirmPublicBookings`. |
@@ -222,6 +223,8 @@ comercial es `leads`), `referidos` (12/08), `cuestionarios` (10/08: pantalla de
 | `pacientes` / `clinica` | Fichas de paciente / sesiones (audio→Whisper→Claude), informes, coordinaciones (`/clinica/coordinaciones`), estadísticas del centro (`/clinica/estadisticas`, solo dirección) | El cliente es la familia que paga; el paciente, el hijo. Alta con pacientes en la misma transacción. |
 | `nutricion` | Recetario, alimentos, plantillas, Pautas (`/nutricion/asignados`) | Componentes en `modules/nutricion/`; `enable-module.js` siembra 497 alimentos. Interruptor `autoAsignarEnAlta`. |
 | `outreach` | Captación: empresas + scoring con IA | — |
+| `booking` | Contratación de actuaciones (agencias de management y artistas) | **No trae pantallas: cambia las que hay.** Embudo de Leads → `EMBUDO_BOOKING` (`lib/leads/embudos.js`), `/leads` se rotula «Propuestas» y Clientes «Contratantes» (`lib/clients/vocabulario.js`). Requiere `clients` + `leads`. Es el primer módulo que decide vocabulario y embudo, y **se pregunta por módulo, nunca por slug**. Reina: `laura_ubeda`. |
+| — | **Correo** (`/correo`): un mensaje a muchos, eligiendo remitente | Sin `moduleKey`: se ve con `clients` **o** `outreach`. Manda UNO POR DESTINATARIO (nadie ve la lista de los demás). Remitentes en `settings.integrations.remitentes` (`lib/email/remitentes.js`), con caída al `resendFromEmail` de siempre. El dry-run se cuenta como «simulado», nunca como enviado. |
 | `support` | Helpdesk hacia SUS clientes: nº correlativo, SLA, portal público | Correo ENTRANTE aún sin dar de alta en Resend. |
 | `analytics` | Visitas web (Cloudflare) | Credenciales POR CLIENTE; sin ellas, «sin configurar». Vive en el área Comercial del menú. |
 | `fichaje` | Control horario desde el Excel del reloj | Universal por dentro; cada cliente = un lector en `lib/fichaje/parsers/` + línea en `POR_TENANT`. Requiere `team`, NO `team_avanzado`. |

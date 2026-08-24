@@ -14,6 +14,7 @@ import { avisarCambioDeConfiguracion } from "../../../../lib/configuracion/aviso
 import { exigeIdentidad } from "../../../../lib/citas/puertaIdentidad.js";
 import { limpiaColorBloqueo, COLOR_BLOQUEO_POR_DEFECTO } from "../../../../lib/citas/coloresBloqueo.js";
 import { isValidHexColor } from "../../../../lib/citas/validation.js";
+import { listarRemitentes, normalizarRemitentes } from "../../../../lib/email/remitentes.js";
 
 /**
  * /api/tenant/settings — configuración básica del tenant.
@@ -288,6 +289,12 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
         ...ks(integ.resendApiKey),
         fromEmail: integ.resendFromEmail ?? null,
         replyTo: integ.resendReplyTo ?? null,
+        // Los remitentes que puede ELEGIR quien escribe (24/08/2026). No son
+        // secretos —son direcciones— así que van tal cual, sin `ks()`. Si el
+        // tenant no tiene lista propia, `listarRemitentes` devuelve el
+        // `fromEmail` de arriba como único remitente: la pantalla no tiene que
+        // saber nada de esa compatibilidad.
+        remitentes: listarRemitentes({ tenant: t }),
       },
       // Cobro online. `ready` = se puede cobrar de verdad: hacen falta AMBOS
       // secretos. Con la clave pero sin el secreto del webhook, el cliente pagaría
@@ -396,6 +403,23 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     settings.integrations.anthropicModel = body.anthropicModel;
   }
   applyPlain(settings.integrations, "resendReplyTo", body.resendReplyTo);
+
+  // Remitentes elegibles (24/08/2026). No pasa por `applyPlain` porque no es un
+  // string: es una lista que hay que limpiar antes de guardar. `undefined` =
+  // no se tocó; una lista vacía SÍ borra, que es como se quita el último.
+  if (body.remitentes !== undefined) {
+    if (!Array.isArray(body.remitentes)) {
+      throw new ValidationError("«remitentes» tiene que ser una lista");
+    }
+    const { remitentes, descartados } = normalizarRemitentes(body.remitentes);
+    if (descartados.length) {
+      throw new ValidationError(
+        `Estas direcciones no son válidas o sobran: ${descartados.join(", ")}`
+      );
+    }
+    if (remitentes.length) settings.integrations.remitentes = remitentes;
+    else delete settings.integrations.remitentes;
+  }
 
   // WhatsApp Cloud API (Meta): el token es SECRETO (se cifra como el resto de
   // claves); el identificador del número no lo es.

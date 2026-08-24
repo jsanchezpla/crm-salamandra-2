@@ -319,3 +319,73 @@ plain-text para clientes que no renderizan HTML.
   `master.AuditLog` con `action="email.sent"` o tabla dedicada
   permitiría buscar "¿qué emails enviamos a {paciente} la semana
   pasada?".
+
+---
+
+## Escribir a mano, a mucha gente (24/08/2026)
+
+Hasta hoy este documento describía **correo automático**: una factura, un
+recordatorio, un aviso. Lo único parecido a escribir a alguien era el correo
+modelo de Captación, y de uno en uno.
+
+Rodrigo pidió el 24/08/2026 «poder enviar los correos desde el CRM también a la
+gente, poder unir la cantidad de correos que quiera y elegir con qué correo
+quiero mandar el mensaje». De ahí salen dos cosas nuevas.
+
+### 1. Varios remitentes, no uno
+
+`lib/email/remitentes.js`. Antes un cliente tenía UN remitente
+(`integrations.resendFromEmail`), que basta para avisos automáticos porque
+siempre salen «del centro». No basta para escribir a gente: la representante de
+un artista escribe a un ayuntamiento desde `booking@`, a un medio desde
+`prensa@`, y a veces desde su propia dirección porque quiere que le contesten a
+ella.
+
+- Se guardan en `settings.integrations.remitentes`: `[{id, nombre, email, replyTo}]`.
+- **El `id` ES el correo** en minúsculas. No se generan UUID: la dirección ya es
+  única, no cambia sola, y guardar dos veces la misma lista no duplica nada.
+- **El primero es el de por defecto**, por orden. No hay un booleano
+  `porDefecto` guardado, que se podría quedar en dos a la vez.
+- **Compatibilidad**: si no hay lista, `listarRemitentes()` devuelve el
+  `resendFromEmail` de siempre como remitente único. Nadie se queda sin poder
+  mandar por no haber tocado una configuración que hasta hoy no existía.
+- Los envíos automáticos que ya existían **no pasan por aquí**: siguen leyendo
+  `getTenantResendConfig`. Este fichero es solo para el correo que escribe una
+  persona.
+
+`resolverRemitente(ctx, id)` devuelve `null` cuando el id pedido no está en la
+lista, y quien llama responde 422. **Nunca cae al de por defecto**: mandar desde
+una dirección que no era la pedida es peor que no mandar — puede acabar en la
+bandeja equivocada de otra persona.
+
+### 2. La pantalla `/correo`
+
+`modules/correo/CorreoModule.jsx`. Sin `moduleKey` propio: se ve con `clients`
+**o** `outreach` (`visibleModules` en el Sidebar, que es la misma condición que
+comprueban los endpoints).
+
+| Endpoint | Qué hace |
+| --- | --- |
+| `GET /api/correo/remitentes` | Las direcciones elegibles + `listo`/`motivo`. Existe aparte de `/api/tenant/settings` porque aquella es de ADMIN y quien escribe correos no tiene por qué serlo. |
+| `GET /api/correo/destinatarios?fuente=` | Candidatos de UNA fuente: `contratantes` (`clients`), `contactos` (`contacts`), `propuestas` (`leads`), `captacion` (`outreach_leads`). Cada fuente exige SU módulo. |
+| `POST /api/correo/envios` | El envío. |
+
+Tres decisiones del envío que conviene no deshacer:
+
+1. **Un correo POR destinatario**, nunca un «Para» con cien direcciones ni copia
+   oculta. Lo primero enseñaría a cada ayuntamiento la lista de los demás
+   —competidores incluidos— y es un problema de protección de datos; lo segundo
+   va a spam mucho antes que cien correos normales, y aquí lo que se juega es
+   que la propuesta se lea.
+2. **Nunca revienta a medias.** Un fallo en el destinatario 12 no tira los 40
+   restantes: se envían todos y se devuelve el desglose (`enviados`,
+   `simulados`, `fallidos` con motivo, `invalidos`).
+3. **El dry-run no miente.** `sendEmail` devuelve `{ok:true, dryRun:true}` sin
+   clave, y eso ya hizo que una pantalla dijera «enviado» con el buzón vacío
+   (03/08/2026, el enlace de la videollamada). Aquí el dry-run va en su propio
+   contador, `simulados`, y la pantalla lo dice con todas las letras: «simulado
+   no es enviado».
+
+Topes: 200 destinatarios por envío, asunto 200 caracteres, cuerpo 20.000.
+La auditoría (`correo.envio_masivo`) guarda remitente, asunto y recuentos —
+**nunca el cuerpo**, que puede llevar datos de la persona.
