@@ -9,6 +9,7 @@ import { ANTHROPIC_MODELS } from "../../lib/ai/anthropicModel.js";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "../../lib/citas/coloresBloqueo.js";
 import { EVENTOS_WEBHOOK_STRIPE } from "../../lib/payments/eventosWebhook.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
+import CorreoSalidaCard from "./CorreoSalidaCard.jsx";
 import {
   PESTANAS,
   PESTANA_POR_DEFECTO,
@@ -581,14 +582,41 @@ export default function ConfigModule({ modulos = null }) {
 
           )}
 
+          {/*
+            CORREO DE SALIDA (25/08/2026). Varias cuentas de Resend —varios
+            dominios— y varias direcciones dentro de cada una, con quién puede
+            usar cada dirección. Pedido de Rodrigo; antes solo cabía UNA clave y
+            UN remitente, y con eso no entraba ni `booking@` + `prensa@`.
+          */}
           {enZona(
             "remitente",
+            <div className="space-y-4">
+            <CorreoSalidaCard
+              cuentas={cfg.integrations?.resend?.cuentas ?? []}
+              remitentes={cfg.integrations?.resend?.remitentes ?? []}
+              usuarios={cfg.usuarios ?? []}
+              isAdmin={isAdmin}
+              onGuardar={async (payload) => {
+                await patchTenant(payload, "Correo de salida guardado");
+              }}
+            />
+
+            {/*
+              La tarjeta de siempre se queda DEBAJO y en modo heredado: de este
+              remitente único siguen saliendo los avisos AUTOMÁTICOS (citas,
+              facturas, formularios), que no pasan por el selector de arriba.
+              Quitarla dejaría a nueve clientes sin poder tocar su remitente.
+
+              Las dos van dentro del MISMO `enZona` a propósito: son la misma
+              sección de la pantalla, y `_smoke-config-pestanas.mjs` comprueba
+              que cada tarjeta se monte una sola vez.
+            */}
             <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-              <h3 className="font-display text-lg text-[var(--ink-900)]">Remitente del correo</h3>
+              <h3 className="font-display text-lg text-[var(--ink-900)]">Remitente de los avisos automáticos</h3>
               <p className="text-xs text-neutral-500 mt-1">
-                De qué dirección salen <strong>todos</strong> los correos que manda el CRM en tu nombre
-                —confirmaciones y recordatorios de cita, enlaces de videollamada, captación— y a dónde
-                llegan las respuestas. Tiene que ser de un dominio verificado en tu cuenta de Resend.
+                De qué dirección salen los correos que el CRM manda <strong>solo</strong>: confirmaciones y
+                recordatorios de cita, enlaces de videollamada, facturas. Los que escribe una persona desde
+                la pantalla de Correo usan las direcciones de arriba.
               </p>
               {/* Se llamaba «Remitente del correo de captación», y por eso se
                   quedaba vacío: quien no usa Outreach daba por hecho que no le
@@ -637,7 +665,7 @@ export default function ConfigModule({ modulos = null }) {
                 </div>
               )}
             </div>
-
+            </div>
           )}
 
           {enZona(

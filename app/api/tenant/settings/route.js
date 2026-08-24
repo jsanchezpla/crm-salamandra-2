@@ -14,7 +14,12 @@ import { avisarCambioDeConfiguracion } from "../../../../lib/configuracion/aviso
 import { exigeIdentidad } from "../../../../lib/citas/puertaIdentidad.js";
 import { limpiaColorBloqueo, COLOR_BLOQUEO_POR_DEFECTO } from "../../../../lib/citas/coloresBloqueo.js";
 import { isValidHexColor } from "../../../../lib/citas/validation.js";
-import { listarRemitentes, normalizarRemitentes } from "../../../../lib/email/remitentes.js";
+import {
+  listarCuentas,
+  listarRemitentes,
+  normalizarCuentas,
+  normalizarRemitentes,
+} from "../../../../lib/email/remitentes.js";
 
 /**
  * /api/tenant/settings — configuración básica del tenant.
@@ -177,6 +182,24 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
   const brand = t.settings?.brand ?? {};
   const integ = t.settings?.integrations ?? {};
 
+  // Quién puede tener un remitente asignado (25/08/2026). Va aquí y no en un
+  // endpoint aparte porque solo lo usa esta pantalla, que ya es de admin, y
+  // porque pedir dos veces lo mismo para pintar un desplegable es tontería.
+  // Solo id, correo y rol: de aquí no sale ni un hash ni un dato personal.
+  let usuariosDelTenant = [];
+  try {
+    const { User } = getMasterModels();
+    const filas = await User.findAll({
+      where: { tenantId: t.id },
+      attributes: ["id", "email", "role"],
+      order: [["email", "ASC"]],
+    });
+    usuariosDelTenant = filas.map((u) => ({ id: u.id, email: u.email, role: u.role }));
+  } catch {
+    // Sin la lista, la pantalla enseña los remitentes pero no deja asignarlos.
+    // Es peor no ver la configuración entera por un desplegable.
+  }
+
   // Las salas fijas que HEREDARÍAN las citas online al pasar a modo automático.
   // Se enseñan en la tarjeta de videollamada porque el modo automático no
   // valida nada: si el enlace guardado es de ejemplo —a nutri_laura le quedaron
@@ -219,6 +242,7 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // heredado del tipo de cita (tenant con sala de videollamada contratada).
     meetModo: t.settings?.citas?.meetModo === "automatico" ? "automatico" : "manual",
     salasVideollamada,
+    usuarios: usuariosDelTenant,
     // Recordatorio automático la víspera de la cita. Apagado por defecto:
     // encenderlo empieza a mandar correos a pacientes reales.
     recordatoriosCitas: t.settings?.citas?.recordatorios === true,
@@ -301,6 +325,10 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
         // pasar el usuario de verdad evita que mañana, si se abre a más gente,
         // la configuración enseñe lo que el envío no deja usar.
         remitentes: listarRemitentes({ tenant: t, user: ctx.user }),
+        // Las CUENTAS (25/08/2026): una clave de Resend por dominio verificado.
+        // Los remitentes cuelgan de ellas, así que tres direcciones del mismo
+        // dominio comparten una sola clave.
+        cuentas: listarCuentas({ tenant: t, user: ctx.user }),
       },
       // Cobro online. `ready` = se puede cobrar de verdad: hacen falta AMBOS
       // secretos. Con la clave pero sin el secreto del webhook, el cliente pagaría
@@ -410,6 +438,24 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   }
   applyPlain(settings.integrations, "resendReplyTo", body.resendReplyTo);
 
+  // Cuentas de Resend (25/08/2026): una clave por dominio verificado. Van
+  // ANTES que los remitentes a propósito, para que un remitente que llegue en
+  // la misma petición pueda apuntar a una cuenta recién creada.
+  if (body.cuentasResend !== undefined) {
+    if (!Array.isArray(body.cuentasResend)) {
+      throw new ValidationError("«cuentasResend» tiene que ser una lista");
+    }
+    const { cuentas, descartadas } = normalizarCuentas(
+      body.cuentasResend,
+      Array.isArray(settings.integrations.cuentasResend) ? settings.integrations.cuentasResend : []
+    );
+    if (descartadas.length) {
+      throw new ValidationError(`Estas cuentas no son válidas o sobran: ${descartadas.join(", ")}`);
+    }
+    if (cuentas.length) settings.integrations.cuentasResend = cuentas;
+    else delete settings.integrations.cuentasResend;
+  }
+
   // Remitentes elegibles (24/08/2026). No pasa por `applyPlain` porque no es un
   // string: es una lista que hay que limpiar antes de guardar. `undefined` =
   // no se tocó; una lista vacía SÍ borra, que es como se quita el último.
@@ -417,9 +463,9 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     if (!Array.isArray(body.remitentes)) {
       throw new ValidationError("«remitentes» tiene que ser una lista");
     }
-    // Los PREVIOS van dentro para conservar las claves ya cifradas: quien
-    // renombra un remitente manda el formulario sin la clave (nunca se le
-    // devolvió), y sin esto se quedaría sin poder enviar por él.
+    // Los PREVIOS van dentro para conservar lo que la pantalla no devuelve:
+    // a qué cuenta pertenece y a quién está asignado. Quien renombra un
+    // remitente no debería desengancharlo de su cuenta sin querer.
     const { remitentes, descartados } = normalizarRemitentes(
       body.remitentes,
       Array.isArray(settings.integrations.remitentes) ? settings.integrations.remitentes : []
