@@ -843,7 +843,7 @@ export default function CuestionariosModule() {
     // estrecho. Y antes NO tenía ningún límite de ancho — esta pantalla era la
     // única de Formación que iba de lado a lado (ver anchoPantalla.js).
     return (
-      <div className={anchoPantalla("portada")}>
+      <div className={anchoPantalla("ficha")}>
         {loadingDetail ? (
           <p className="text-neutral-400 text-sm py-8 text-center">Cargando detalle…</p>
         ) : attempt ? (

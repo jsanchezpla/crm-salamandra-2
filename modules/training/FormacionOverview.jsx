@@ -287,8 +287,12 @@ export default function FormacionOverview({ abierta = false, textos: textosProp 
         <MetricCard label="Matrículas" value={stats.enrollments} loading={loading} help={METRIC_HELP.Matrículas} />
       </div>
 
-      {/* Accesos rápidos */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Accesos rápidos. TRES columnas en pantalla grande, y no es un capricho:
+          va atado a que la portada sea `max-w-7xl` (24/08/2026). A dos columnas
+          en ese ancho, cada tarjeta se iría a ~590 px para un icono de 40 y dos
+          líneas de texto — el «cajas grandes con el texto pegado a la izquierda»
+          que ya se arregló una vez. Ver components/layout/anchoPantalla.js. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {SECTIONS.map((s) => (
           <div
             key={s.href}

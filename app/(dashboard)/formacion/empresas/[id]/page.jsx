@@ -63,7 +63,7 @@ export default function EmpresaDetailPage({ params }) {
 
   if (loading) {
     return (
-      <div className={anchoPantalla("portada")}>
+      <div className={anchoPantalla("ficha")}>
         <div className="h-8 w-48 bg-neutral-100 rounded animate-pulse mb-4" />
         <div className="h-32 bg-white border border-neutral-100 rounded-xl animate-pulse" />
       </div>
@@ -72,7 +72,7 @@ export default function EmpresaDetailPage({ params }) {
 
   if (error || !company) {
     return (
-      <div className={anchoPantalla("portada")}>
+      <div className={anchoPantalla("ficha")}>
         <div className="px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-600">
           {error || "Empresa no encontrada"}
         </div>
@@ -84,7 +84,7 @@ export default function EmpresaDetailPage({ params }) {
   }
 
   return (
-    <div className={anchoPantalla("portada")}>
+    <div className={anchoPantalla("ficha")}>
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="min-w-0">
