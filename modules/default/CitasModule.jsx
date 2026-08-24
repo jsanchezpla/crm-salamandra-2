@@ -1197,43 +1197,10 @@ export default function CitasModule() {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <style>{`
-        .fc { font-family: inherit; }
-        .fc .fc-button {
-          background: #0F0F0F; border-color: #0F0F0F; color: #FAFAF8;
-          font-size: 0.72rem; font-weight: 500; padding: 0.3rem 0.65rem;
-          border-radius: 0.375rem; text-transform: none; letter-spacing: 0;
-          box-shadow: none !important;
-        }
-        .fc .fc-button:hover:not(:disabled) { background: #222; border-color: #222; }
-        .fc .fc-button-active,
-        .fc .fc-button-primary:not(:disabled).fc-button-active {
-          background: var(--color-primary, #1B3A2D) !important;
-          border-color: var(--color-primary, #1B3A2D) !important;
-        }
-        .fc .fc-button:focus { outline: none; box-shadow: none !important; }
-        .fc .fc-toolbar-title { font-size: 0.95rem; font-weight: 600; color: #111827; }
-        .fc .fc-col-header-cell-cushion {
-          font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
-          letter-spacing: 0.08em; color: #9CA3AF; padding: 6px 4px;
-        }
-        .fc .fc-daygrid-day-number { font-size: 0.72rem; color: #6B7280; padding: 4px 6px; }
-        .fc .fc-day-today .fc-daygrid-day-number { color: var(--color-primary, #1B3A2D); font-weight: 700; }
-        .fc .fc-day-today { background: rgba(27,58,45,0.04) !important; }
-        .fc-theme-standard td, .fc-theme-standard th { border-color: #F0F0F0; }
-        .fc-theme-standard .fc-scrollgrid { border-color: #E8E8E8; }
-        .fc .fc-event {
-          border-radius: 4px; font-size: 0.71rem; font-weight: 500;
-          border: none; padding: 1px 5px; cursor: pointer;
-        }
-        .fc .fc-event:hover { opacity: 0.82; }
-        .fc .fc-more-link { font-size: 0.68rem; color: #9CA3AF; font-weight: 500; }
-        .fc .fc-list-event-title a { font-size: 0.8rem; color: #111827; }
-        .fc .fc-list-day-cushion { background: #F9FAFB; }
-        .fc .fc-timegrid-slot-label-cushion { font-size: 0.67rem; color: #9CA3AF; }
-        .fc .fc-highlight { background: rgba(27,58,45,0.07); }
-        .fc .fc-toolbar.fc-header-toolbar { margin-bottom: 1rem; }
-      `}</style>
+      {/* Los estilos de FullCalendar viven en app/globals.css (24/08/2026).
+          Estaban aquí y en app/(dashboard)/calendario/page.jsx, copiados byte a
+          byte y ya divergiendo en una regla. Al ser CSS global daba igual dónde
+          se declararan, así que la copia que quedó es una. */}
 
       {/* Header */}
       <div className="px-6 lg:px-10 pt-8 pb-5 flex items-end justify-between shrink-0 border-b border-[var(--ink-200)] gap-6 flex-wrap">

@@ -189,6 +189,95 @@ body {
 }
 .fade-in { animation: ink-fade 240ms ease-out both; }
 
+/* ── El calendario, en un solo sitio y con la marca del cliente (24/08/2026) ──
+ *
+ * QUÉ HABÍA AQUÍ ANTES, porque la tarea del Registro lo contaba al revés y
+ * conviene no volver a creérselo: decía que el calendario salía «de fábrica»
+ * (botones azul pizarra, líneas `#ddd`, hoy en amarillo pálido). No era eso.
+ * Tematizado estaba, pero a mano y DOS VECES: `modules/default/CitasModule.jsx`
+ * y `app/(dashboard)/calendario/page.jsx` llevaban cada uno su `<style>` con las
+ * mismas ~20 reglas, byte a byte iguales salvo una línea que ya se había
+ * quedado en solo uno de los dos. El grep del que salió aquella conclusión
+ * buscaba `--fc-` (que sí eran cero) y `.fc-` **en este fichero**, así que no vio
+ * los bloques que viven dentro del JSX.
+ *
+ * DOS COSAS QUE SÍ ESTABAN MAL, y son las que se arreglan:
+ *
+ *   1. El día de HOY y la selección estaban clavados a `rgba(27,58,45,.04)` y
+ *      `.07`, que es el verde de Salamandra por defecto — con `!important`
+ *      encima. O sea que en Aumenta (morado #563EA6) la celda de hoy se teñía de
+ *      VERDE mientras el número de ese mismo día salía morado, porque ese sí
+ *      leía `var(--color-primary)`. Ahora los dos salen de la marca del tenant.
+ *   2. Los grises eran los fríos de Tailwind (#111827, #9CA3AF, #6B7280,
+ *      #F0F0F0, #E8E8E8, #F9FAFB) dentro de un CRM cuyo sistema los retiró a
+ *      propósito por la tinta cálida `--ink-*` («reemplaza el gray-* frío», ahí
+ *      arriba). El calendario era la única pantalla que seguía en la paleta vieja.
+ *
+ * Lo que NO se ha tocado: los tamaños, los espaciados y el contraste entre el
+ * botón inactivo (casi negro) y el activo (la marca). Eso es del tema
+ * «Obsidiana» y está bien: si todos los botones fueran del color del cliente, no
+ * se distinguiría cuál es la vista puesta.
+ *
+ * Y viene de paso el calendario de tareas (`/calendario`): misma librería, y
+ * ahora mismo fichero, así que dejan de poder separarse.
+ */
+.fc {
+  /* Lo que las reglas de abajo no cubren: FullCalendar lo lee de aquí. */
+  --fc-border-color: var(--ink-150);
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: var(--ink-100);
+  --fc-neutral-text-color: var(--ink-500);
+  --fc-non-business-color: color-mix(in srgb, var(--ink-200) 35%, transparent);
+  --fc-today-bg-color: color-mix(in srgb, var(--color-primary, #1B3A2D) 5%, transparent);
+  --fc-highlight-color: color-mix(in srgb, var(--color-primary, #1B3A2D) 7%, transparent);
+  --fc-event-bg-color: var(--color-primary, #1B3A2D);
+  --fc-event-border-color: var(--color-primary, #1B3A2D);
+  --fc-event-text-color: #fff;
+  --fc-more-link-bg-color: var(--ink-150);
+  --fc-more-link-text-color: var(--ink-700);
+  /* La línea de «ahora» NO lleva la marca a propósito: los eventos se pintan
+     por persona o por tipo de cita, así que si fuera del color del cliente se
+     confundiría con ellos, y es justo la que hay que encontrar de un vistazo. */
+  --fc-now-indicator-color: #e11d48;
+}
+
+.fc { font-family: inherit; }
+.fc .fc-button {
+  background: var(--ink-900); border-color: var(--ink-900); color: var(--ink-50);
+  font-size: 0.72rem; font-weight: 500; padding: 0.3rem 0.65rem;
+  border-radius: 0.375rem; text-transform: none; letter-spacing: 0;
+  box-shadow: none !important;
+}
+.fc .fc-button:hover:not(:disabled) { background: var(--ink-800); border-color: var(--ink-800); }
+.fc .fc-button-active,
+.fc .fc-button-primary:not(:disabled).fc-button-active {
+  background: var(--color-primary, #1B3A2D) !important;
+  border-color: var(--color-primary, #1B3A2D) !important;
+}
+.fc .fc-button:focus { outline: none; box-shadow: none !important; }
+.fc .fc-toolbar-title { font-size: 0.95rem; font-weight: 600; color: var(--ink-900); }
+.fc .fc-col-header-cell-cushion {
+  font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--ink-400); padding: 6px 4px;
+}
+.fc .fc-daygrid-day-number { font-size: 0.72rem; color: var(--ink-500); padding: 4px 6px; }
+.fc .fc-day-today .fc-daygrid-day-number { color: var(--color-primary, #1B3A2D); font-weight: 700; }
+.fc .fc-day-today { background: color-mix(in srgb, var(--color-primary, #1B3A2D) 5%, transparent) !important; }
+.fc-theme-standard td, .fc-theme-standard th { border-color: var(--ink-150); }
+.fc-theme-standard .fc-scrollgrid { border-color: var(--ink-200); }
+.fc .fc-event {
+  border-radius: 4px; font-size: 0.71rem; font-weight: 500;
+  border: none; padding: 1px 5px; cursor: pointer;
+}
+.fc .fc-event:hover { opacity: 0.82; }
+.fc .fc-more-link { font-size: 0.68rem; color: var(--ink-400); font-weight: 500; }
+.fc .fc-list-event-title a { font-size: 0.8rem; color: var(--ink-900); }
+.fc .fc-list-day-cushion { background: var(--ink-100); }
+.fc .fc-timegrid-slot-label-cushion { font-size: 0.67rem; color: var(--ink-400); }
+.fc .fc-highlight { background: color-mix(in srgb, var(--color-primary, #1B3A2D) 7%, transparent); }
+.fc .fc-daygrid-event-dot { border-color: currentColor; }
+.fc .fc-toolbar.fc-header-toolbar { margin-bottom: 1rem; }
+
 /* Días cerrados del centro (festivos, puentes, formación) — sprint 2026-07-29.
    Se pintan atenuados en el calendario para que se distinga de un vistazo un
    día sin agenda de un día simplemente vacío. */
