@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { headers } from "next/headers";
 
 import DefaultClientDetailModule from "../../../../modules/default/ClientDetailModule.jsx";
@@ -5,6 +6,27 @@ import NutriLauraClientDetailModule from "../../../../modules/overrides/nutri-la
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { perfilDeAlta, PERFIL_COMERCIAL } from "../../../../lib/clients/formularioAlta.js";
 import { fichaSegunModulos, PIEZAS_NINGUNA, textosPiezas } from "../../../../lib/clients/piezasFicha.js";
+import { vocabularioCliente } from "../../../../lib/clients/vocabulario.js";
+
+/**
+ * Los módulos activos del tenant, UNA vez por petición.
+ *
+ * Estaba escrito dentro de la página; sale aquí porque desde el 24/08/2026 lo
+ * necesita también el `<title>` de la pestaña, y `cache` de React evita que se
+ * pregunten dos veces. Mismo patrón que en la lista de clientes.
+ */
+const modulosActivos = cache(async (slug) => {
+  if (!slug) return new Set();
+  try {
+    const { Tenant, TenantModule } = getMasterModels();
+    const tenant = await Tenant.findOne({ where: { slug } });
+    if (!tenant) return new Set();
+    const filas = await TenantModule.findAll({ where: { tenantId: tenant.id } });
+    return new Set(filas.filter((f) => f.enabled).map((f) => f.moduleKey));
+  } catch {
+    return new Set();
+  }
+});
 
 const UI_OVERRIDES = {
   nutri_laura: NutriLauraClientDetailModule,
@@ -14,10 +36,21 @@ const TENANT_TITLE_OVERRIDES = {
   nutri_laura: "Paciente",
 };
 
+/**
+ * El título de la pestaña del navegador tenía «Cliente» a fuego, con una única
+ * excepción por slug. La lista sí usa el vocabulario del tenant, así que en
+ * Laura Úbeda se leía «Contratantes» en la lista y «Cliente» al abrir una
+ * ficha (24/08/2026). Se resuelve con el MISMO vocabulario que todo lo demás,
+ * que además ya se decide por módulo; el mapa por slug se conserva porque
+ * `nutri_laura` dice «Paciente» en singular por su propio motivo.
+ */
 export async function generateMetadata() {
   const headersList = await headers();
   const slug = headersList.get("x-tenant");
-  return { title: TENANT_TITLE_OVERRIDES[slug] ?? "Cliente" };
+  if (TENANT_TITLE_OVERRIDES[slug]) return { title: TENANT_TITLE_OVERRIDES[slug] };
+  const activos = await modulosActivos(slug);
+  const vocab = vocabularioCliente((k) => activos.has(k));
+  return { title: vocab.singular.charAt(0).toUpperCase() + vocab.singular.slice(1) };
 }
 
 export default async function ClienteDetailPage() {
@@ -39,11 +72,8 @@ export default async function ClienteDetailPage() {
   let piezas = PIEZAS_NINGUNA;
   let textos = textosPiezas();
   try {
-    const { Tenant, TenantModule } = getMasterModels();
-    const tenant = tenantSlug ? await Tenant.findOne({ where: { slug: tenantSlug } }) : null;
-    if (tenant) {
-      const filas = await TenantModule.findAll({ where: { tenantId: tenant.id } });
-      const activos = new Set(filas.filter((f) => f.enabled).map((f) => f.moduleKey));
+    const activos = await modulosActivos(tenantSlug);
+    if (activos.size) {
       const tieneModulo = (k) => activos.has(k);
       perfil = perfilDeAlta(tieneModulo);
       conPacientes = activos.has("pacientes");
