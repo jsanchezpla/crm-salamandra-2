@@ -42,6 +42,26 @@
  *
  * FECHAS: el pie «Asignado: …» se formatea en español. Los instantes van con
  * offset explícito (+02:00) para que la prueba pase igual con `TZ=UTC`.
+ *
+ * ── TRIADAS EL 24/08/2026 ──────────────────────────────────────────────────
+ * Las marcas de este fichero ya están juzgadas con el criterio del Registro:
+ * DEFECTO = con una entrada que alguien puede mandar de verdad, devuelve algo
+ * malo o revienta. TOLERANCIA = solo acepta basura que no tiene camino. Cada
+ * una se comprobó ejecutando la función y siguiendo el dato hasta su columna
+ * o su endpoint; una marca que sigue aquí NO es una marca sin mirar.
+ *
+ * Las otras 5 son TOLERANCIA, y el porqué de cada una está junto a su `it`.
+ * En una frase, por qué ninguna tiene camino de entrada:
+ *    353  (suelta, línea 356) el recorte a 60 deja un gui…
+ *         → La entrada SÍ llega (nombre de plan o de paciente libre de má…
+ *    977  un plan sin días explica la receta DOS veces
+ *         → Reproducido tal cual, pero en producción NINGÚN cliente real …
+ *   1016  un weekday que no es un número de 1 a 7 hace desapare…
+ *         → El agujero existe (mealsOfDay compara con === contra 1..7 y l…
+ *   1032  un nombre de opción vacío o nulo se pega detrás del o…
+ *         → Ni null ni cadena vacía pueden llegar: la columna es NOT NULL…
+ *   1052  una cantidad que no es un número imprime «NaN g»
+ *         → Un texto en `amount` no tiene camino: la columna es numeric (…
  */
 
 import { describe, it } from "node:test";

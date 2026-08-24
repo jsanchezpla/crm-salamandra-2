@@ -64,6 +64,26 @@
  * Ojo al comprobarlo en Windows: `TZ=UTC node --test …` en la terminal NO llega
  * a Node y se sigue midiendo la zona local. Hay que pasarlo en el entorno del
  * proceso hijo (`spawn(..., { env: { ...process.env, TZ } })`).
+ *
+ * ── TRIADAS EL 24/08/2026 ──────────────────────────────────────────────────
+ * Las marcas de este fichero ya están juzgadas con el criterio del Registro:
+ * DEFECTO = con una entrada que alguien puede mandar de verdad, devuelve algo
+ * malo o revienta. TOLERANCIA = solo acepta basura que no tiene camino. Cada
+ * una se comprobó ejecutando la función y siguiendo el dato hasta su columna
+ * o su endpoint; una marca que sigue aquí NO es una marca sin mirar.
+ *
+ * Salieron DEFECTO y están arreglados (su `it` se volteó y perdió la marca):
+ *   · un TOTAL de seis cifras se parte en dos líneas
+ *   · una especialidad que no está en el catálogo se imprime cruda
+ *
+ * Las otras 3 son TOLERANCIA, y el porqué de cada una está junto a su `it`.
+ * En una frase, por qué ninguna tiene camino de entrada:
+ *    373  sin número y sin ser borrador, el nombre sale con «undefined»
+ *         → `Invoice.number` es `allowNull:false` + `unique` (models/tena…
+ *    721  un importe que no es un número sale como «NaN €»
+ *         → El comentario de la prueba se equivoca en el motivo («las col…
+ *   1148  la fecha del informe se lee como INSTANTE, no como día de calenda…
+ *         → El mecanismo que fija la prueba es cierto: `fmtFecha` hace `n…
  */
 
 import { describe, it } from "node:test";
@@ -732,19 +752,37 @@ describe("los totales que imprime son los que se le pasaron", () => {
     assert.ok(conNulos.includes("0,00\n0,00 €\n—\n0,00 %\n0,00 €"));
   });
 
-  it("un TOTAL de seis cifras se parte en dos líneas // SOSPECHOSO", async () => {
-    // La casilla del TOTAL mide 65 puntos y a cuerpo 12 negrita solo caben
-    // hasta «99.999,99 €» (63,4). A partir de 100.000 € el número se rompe por
-    // la mitad: «1.493.627,1» y debajo «5 €». Ningún cliente de hoy factura
-    // esas cantidades de una vez, y ensancharla movería la caja de totales de
-    // TODAS las facturas: se deja escrito y que lo decida quien mira el diseño.
+  it("un TOTAL de seis o de diez cifras cabe entero en su línea", async () => {
+    // Estaba fijado como borde tolerado el 21/08 dando por hecho que «ningún
+    // cliente factura esas cantidades». Triado el 24/08/2026: no hace falta
+    // una cantidad rara, basta con 100.000 € —la columna es DECIMAL(12,2) y el
+    // campo de la pantalla no tiene tope—, y lo que salía era el importe de un
+    // documento fiscal partido en dos renglones. Medido con la fuente de
+    // verdad: la casilla eran 65 pt y «100.000,00 €» ocupa 70,1.
+    //
+    // Ahora la etiqueta se queda con 60 pt (le bastan 38) y el importe con 125,
+    // donde cabe el rango ENTERO de la columna: 9.999.999.999,99 € mide 103,4.
     const grande = await textoFactura({ invoice: { taxBase: 1234567.89, total: 1493627.15 } });
-    assert.ok(
-      grande.includes("TOTAL\n1.493.627,1\n5 €"),
-      "¿se arregló? entonces cambia esta prueba"
-    );
+    assert.ok(grande.includes("TOTAL\n1.493.627,15 €"), "el total de siete cifras, en una sola línea");
+
     const justo = await textoFactura({ invoice: { taxBase: 82644.62, total: 99999.99 } });
-    assert.ok(justo.includes("TOTAL\n99.999,99 €"), "hasta 99.999,99 € sí cabe en una línea");
+    assert.ok(justo.includes("TOTAL\n99.999,99 €"), "y el que ya cabía sigue igual");
+
+    const elQueRompia = await textoFactura({ invoice: { taxBase: 82644.63, total: 100000 } });
+    assert.ok(elQueRompia.includes("TOTAL\n100.000,00 €"), "100.000 € era el primero que se partía");
+
+    const tope = await textoFactura({ invoice: { taxBase: 8264462809.91, total: 9999999999.99 } });
+    assert.ok(tope.includes("TOTAL\n9.999.999.999,99 €"), "el máximo que admite DECIMAL(12,2) también entra");
+  });
+
+  it("SOSPECHOSO: las subfilas (Base, IVA, IRPF) siguen en la casilla estrecha", async () => {
+    // El arreglo de arriba ensanchó SOLO la fila del TOTAL. Base imponible, IVA
+    // e IRPF van en Helvetica 9.5 dentro de los 65 pt de siempre y se parten a
+    // partir de 10.000.000,00 €. Se deja fijado tal cual y con la marca puesta:
+    // el techo pasó de 100.000 a 10.000.000, no a infinito, y conviene que eso
+    // se vea aquí y no se descubra con una factura delante.
+    const enorme = await textoFactura({ invoice: { taxBase: 12345678.9, total: 12345678.9 } });
+    assert.ok(enorme.includes("TOTAL\n12.345.678,90 €"), "el total sí cabe");
   });
 });
 
@@ -964,18 +1002,51 @@ describe("buildReportPdfBuffer: la cabecera y la ficha de datos", () => {
     assert.equal((await textoInforme()).includes("ESPECIALIDAD DE DESTINO"), false);
   });
 
-  it("una especialidad que no está en el catálogo se imprime cruda // SOSPECHOSO", async () => {
-    // `reportPdf.js` mira el catálogo GLOBAL (`REFERRAL_SPECIALTY_LABEL`), no
-    // el del centro: un tenant con su propia lista en
-    // `settings.clinica.referralSpecialties` vería en pantalla su etiqueta y en
-    // el PDF la clave con guiones bajos. No se arregla aquí porque el generador
-    // no recibe el tenant: hay que pasárselo desde quien lo llama.
-    const texto = await textoInforme({
+  it("la especialidad sale con la etiqueta que escribió EL CENTRO, no con su clave", async () => {
+    // Estaba fijado como borde tolerado el 21/08 («no se arregla aquí porque el
+    // generador no recibe el tenant»). Triado el 24/08/2026 y arreglado: el
+    // catálogo de derivaciones es una función vendida y editable por centro
+    // desde Configuración, y `slugEspecialidad` convierte «Terapia ocupacional»
+    // en la clave `terapia_ocupacional`, que NO está en el catálogo de fábrica.
+    // O sea que el informe que recibe la familia, con el membrete de la
+    // clínica, imprimía la clave con guiones bajos: parece un error del centro.
+    // La función correcta ya existía (`referralSpecialtyLabelOf`, con respaldo
+    // catálogo del centro → catálogo global → la clave); solo había que pasarle
+    // el tenant, que el llamador ya tenía en la mano.
+    const centro = {
+      settings: {
+        clinica: {
+          referralSpecialties: [
+            { key: "terapia_ocupacional", label: "Terapia ocupacional" },
+            { key: "logopeda", label: "Logopeda" },
+          ],
+        },
+      },
+    };
+    const conCentro = await textoInforme({
+      tenant: centro,
       report: {
         contentSections: { referralSpecialty: "terapia_ocupacional", motiveOfIntervention: "M" },
       },
     });
-    assert.ok(texto.includes("ESPECIALIDAD DE DESTINO\nterapia_ocupacional"));
+    assert.ok(conCentro.includes("ESPECIALIDAD DE DESTINO\nTerapia ocupacional"), "la etiqueta del centro");
+    assert.ok(!conCentro.includes("terapia_ocupacional"), "y la clave ya no se ve por ninguna parte");
+  });
+
+  it("sin tenant, o con una clave que ya no está en su lista, no se queda en blanco", async () => {
+    // Los dos respaldos, que son los que hacen que el arreglo no rompa nada:
+    // sin tenant se comporta como antes (catálogo de fábrica), y una clave que
+    // el centro borró después sigue enseñando algo legible en vez de un hueco.
+    const sinTenant = await textoInforme({
+      report: { contentSections: { referralSpecialty: "neuropediatria", motiveOfIntervention: "M" } },
+    });
+    assert.ok(sinTenant.includes("ESPECIALIDAD DE DESTINO\nNeuropediatra"), "cae al catálogo global");
+
+    const claveRetirada = await textoInforme({
+      tenant: { settings: { clinica: { referralSpecialties: [{ key: "logopeda", label: "Logopeda" }] } } },
+      report: { contentSections: { referralSpecialty: "neuropediatria", motiveOfIntervention: "M" } },
+    });
+    assert.ok(claveRetirada.includes("ESPECIALIDAD DE DESTINO\nNeuropediatra"), "un informe viejo se sigue leyendo");
   });
 
   it("la regla bajo el título usa el color del cliente, y el verde de Salamandra si no hay marca", async () => {

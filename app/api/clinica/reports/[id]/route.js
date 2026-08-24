@@ -23,7 +23,7 @@ export const GET = withTenant(async (request, rc, ctx) => {
     ],
   });
   if (!r) return notFound("Informe no encontrado");
-  return ok(serializeReport(r));
+  return ok(serializeReport(r, ctx.tenant));
 });
 
 export const PATCH = withTenant(async (request, rc, ctx) => {
@@ -49,7 +49,7 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
     if (updates.status === "delivered" && !r.deliveredAt) updates.deliveredAt = new Date();
     if (updates.status !== "delivered") updates.deliveredAt = null;
   }
-  if (Object.keys(updates).length === 0) return ok(serializeReport(r));
+  if (Object.keys(updates).length === 0) return ok(serializeReport(r, ctx.tenant));
   await r.update(updates);
   await logClinicaAudit({
     tenantId: ctx.tenant.id,
@@ -61,5 +61,5 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
     after: auditSummary(r),
     ip: request.headers.get("x-forwarded-for"),
   });
-  return ok(serializeReport(r));
+  return ok(serializeReport(r, ctx.tenant));
 });

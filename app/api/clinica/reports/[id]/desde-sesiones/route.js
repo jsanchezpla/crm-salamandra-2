@@ -93,7 +93,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
       ],
     });
     return ok({
-      ...serializeReport(informe),
+      ...serializeReport(informe, ctx.tenant),
       // Cuántas líneas ha traído cada apartado: sin esto, pulsar el botón y ver
       // la pantalla casi igual parece que no ha hecho nada.
       aporte: { sesiones: sesiones.length, descartadas: ids.length - sesiones.length, ...aporte },

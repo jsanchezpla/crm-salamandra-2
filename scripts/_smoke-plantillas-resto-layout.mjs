@@ -38,6 +38,29 @@
  *
  * Las plantillas de `lib/email/templates/citas/` tienen su propia prueba: aquí
  * no se tocan.
+ *
+ * ── TRIADAS EL 24/08/2026 ──────────────────────────────────────────────────
+ * Las marcas de este fichero ya están juzgadas con el criterio del Registro:
+ * DEFECTO = con una entrada que alguien puede mandar de verdad, devuelve algo
+ * malo o revienta. TOLERANCIA = solo acepta basura que no tiene camino. Cada
+ * una se comprobó ejecutando la función y siguiendo el dato hasta su columna
+ * o su endpoint; una marca que sigue aquí NO es una marca sin mirar.
+ *
+ * Salieron DEFECTO y están arreglados (su `it` se volteó y perdió la marca):
+ *   · el recorte del texto plano se queda sin los puntos suspensivos
+ *
+ * Las otras 5 son TOLERANCIA, y el porqué de cada una está junto a su `it`.
+ * En una frase, por qué ninguna tiene camino de entrada:
+ *    302  un valor 0 numérico se cae de la tabla, un 5 no
+ *         → El filtro `blocks.filter((b) => b && b.value)` de layout.js:8…
+ *    419  una fecha ilegible imprime «Invalid Date» (el catch no llega a sa…
+ *         → Es cierto que el try/catch de formatDate está muerto (`new Da…
+ *    556  con el asunto vacío quedan dos puntos colgando en el asunto
+ *         → El asunto del correo se monta sin condicional, pero un aviso …
+ *    722  `credenciales: {}` alarma en el asunto sin nada que contar
+ *         → `hayCredenciales = !!credenciales` da true con un objeto vací…
+ *    900  un color rgb() o un nombre CSS tiñen la barra pero NO el borde
+ *         → La regex del borde solo acepta hex y el layout acepta además …
  */
 
 import { describe, it } from "node:test";
@@ -991,13 +1014,24 @@ describe("ticketTeamTemplate", () => {
     nadaDeHtmlCrudo(tpl.html);
   });
 
-  // SOSPECHOSO — el HTML remata el recorte con «…» y el texto plano no: quien
-  // lee en texto plano no distingue un mensaje de 200 caracteres de uno de 900.
-  // Cosmético, se fija tal cual.
-  it("el recorte del texto plano se queda sin los puntos suspensivos // SOSPECHOSO", () => {
+  // Estaba fijado como borde tolerado desde el 21/08 («cosmético»); triado el
+  // 24/08/2026 y arreglado, porque la entrada llega a diario: el `preview` es
+  // el texto del formulario PÚBLICO de soporte, que acepta hasta 8.000
+  // caracteres, así que pasar de 200 es lo normal en una incidencia. Sin el
+  // remate, quien lee en texto plano ve un mensaje cortado a mitad de frase
+  // creyendo que está entero — el fallo «se toca el HTML y se olvida el text»
+  // que vigila la cabecera de este fichero.
+  it("el recorte avisa de que ha cortado en LAS DOS versiones, no solo en el html", () => {
     const tpl = ticketTeamTemplate({ ...INTERNO, kind: "new_portal", preview: "P".repeat(250) });
-    assert.ok(tpl.html.includes("…"));
-    assert.ok(!tpl.text.includes("…"));
+    assert.ok(tpl.html.includes("…"), "el html ya remataba");
+    assert.ok(tpl.text.includes("…"), "y ahora el texto plano también");
+    assert.ok(tpl.text.includes(`${"P".repeat(200)}…`), "el corte sigue siendo a 200, con el remate detrás");
+  });
+
+  it("un preview que cabe entero no se remata: el «…» solo aparece si se ha cortado", () => {
+    const corto = ticketTeamTemplate({ ...INTERNO, kind: "new_portal", preview: "P".repeat(200) });
+    assert.ok(!corto.text.includes("…"), "200 justos caben: no hay nada que anunciar");
+    assert.ok(corto.text.includes("P".repeat(200)));
   });
 });
 

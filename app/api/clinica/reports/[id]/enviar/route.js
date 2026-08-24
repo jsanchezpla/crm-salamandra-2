@@ -73,6 +73,9 @@ export const POST = withTenant(async (request, rc, ctx) => {
         therapistName: report.therapist?.displayName ?? null,
         tenantName: ctx.tenant.name,
         brand: ctx.tenant.settings?.brand ?? {},
+        // Para que la especialidad de derivación salga con la etiqueta que el
+        // centro escribió en Configuración y no con su clave interna.
+        tenant: ctx.tenant,
       });
     } catch (err) {
       process.stderr.write(`[clinica:enviar] PDF falló: ${err.message}\n`);
@@ -140,7 +143,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
         { model: TeamMember, as: "therapist", attributes: ["id", "displayName", "position", "avatarColor"] },
       ],
     });
-    return ok({ ...serializeReport(report), deliveredDocumentId: documentId, deliveredFileName: fileName });
+    return ok({ ...serializeReport(report, ctx.tenant), deliveredDocumentId: documentId, deliveredFileName: fileName });
   } catch (err) {
     return serverError(err);
   }

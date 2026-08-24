@@ -61,6 +61,28 @@
  * entero, esta prueba solo lo caza en una máquina que NO esté en Madrid (en el
  * VPS, sí). Forzar la zona del proceso pediría tocar el entorno, y eso la
  * convertiría en pesada y dejaría de lanzarse.
+ *
+ * ── TRIADAS EL 24/08/2026 ──────────────────────────────────────────────────
+ * Las marcas de este fichero ya están juzgadas con el criterio del Registro:
+ * DEFECTO = con una entrada que alguien puede mandar de verdad, devuelve algo
+ * malo o revienta. TOLERANCIA = solo acepta basura que no tiene camino. Cada
+ * una se comprobó ejecutando la función y siguiendo el dato hasta su columna
+ * o su endpoint; una marca que sigue aquí NO es una marca sin mirar.
+ *
+ * Las otras 6 son TOLERANCIA, y el porqué de cada una está junto a su `it`.
+ * En una frase, por qué ninguna tiene camino de entrada:
+ *    732  una fecha inválida sale como «Invalid Date» en el correo
+ *         → El texto «Invalid Date» solo aparece si scheduledAt no es una…
+ *    741  scheduledAt null no se detecta: sale 1970
+ *         → new Date(null) es 1970, cierto, pero un scheduledAt null no p…
+ *    749  con fecha inválida no hay enlace de Google Calendar
+ *         → Es el comportamiento correcto y además deliberado: googleCale…
+ *    760  online sin enlace: el correo no dice nada del enlace que falta
+ *         → La entrada SÍ es real y frecuente, pero la salida no es mala:…
+ *    770  sin nombre de centro la firma queda «— undefined»
+ *         → tenantName undefined no puede llegar: el nombre sale siempre …
+ *    781  un motivo que no es texto revienta la plantilla
+ *         → Revienta de verdad, pero ningún llamador puede entregar un no…
  */
 
 import { describe, it } from "node:test";

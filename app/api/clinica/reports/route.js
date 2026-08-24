@@ -31,7 +31,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     order: [["reportDate", "DESC"]],
     limit: 300,
   });
-  return ok({ reports: rows.map(serializeReport), total: rows.length });
+  return ok({ reports: rows.map((fila) => serializeReport(fila, ctx.tenant)), total: rows.length });
 });
 
 export const POST = withTenant(async (request, _rc, ctx) => {
@@ -67,5 +67,5 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     after: auditSummary(r),
     ip: request.headers.get("x-forwarded-for"),
   });
-  return created(serializeReport(r));
+  return created(serializeReport(r, ctx.tenant));
 });
