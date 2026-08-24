@@ -50,6 +50,7 @@ export default function CorreoModule() {
   const [listo, setListo] = useState(true);
   const [motivo, setMotivo] = useState(null);
   const [puedeConfigurar, setPuedeConfigurar] = useState(false);
+  const [modoPrueba, setModoPrueba] = useState(false);
 
   const [fuente, setFuente] = useState("contratantes");
   const [busqueda, setBusqueda] = useState("");
@@ -97,6 +98,7 @@ export default function CorreoModule() {
         setListo(!!json?.data?.listo);
         setMotivo(json?.data?.motivo ?? null);
         setPuedeConfigurar(!!json?.data?.puedeConfigurar);
+        setModoPrueba(!!json?.data?.modoPrueba);
       } catch {
         if (vivo) { setListo(false); setMotivo("No se ha podido leer la configuración de correo."); }
       }
@@ -212,6 +214,14 @@ export default function CorreoModule() {
           ) : (
             <>Lo tiene que resolver quien administre el CRM.</>
           )}
+        </div>
+      )}
+
+      {listo && modoPrueba && (
+        <div className="mb-6 rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          <strong className="font-semibold">Modo de prueba.</strong> La clave de Resend está puesta en{" "}
+          <code className="text-xs">dry-run</code>, así que puedes escribir y darle a enviar sin que salga
+          nada al exterior. {puedeConfigurar && "Pon la clave real en Configuración → Conexiones cuando quieras enviar de verdad."}
         </div>
       )}
 

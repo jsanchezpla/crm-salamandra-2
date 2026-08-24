@@ -27,9 +27,16 @@ export const GET = withTenant(async (_request, _ctxRuta, ctx) => {
   const porDefecto = remitentes.length ? resolverRemitente(ctx, null) : null;
   const listo = !!porDefecto?.apiKey;
 
+  // La clave literal `dry-run` hace que `sendEmail` no mande NADA al exterior.
+  // Es útil para probar el flujo sin escribirle a 183 ayuntamientos, pero si no
+  // se dice ANTES, alguien redacta un correo, pulsa enviar y se queda pensando
+  // que salió. El desglose de después ya lo aclara; esto lo aclara a tiempo.
+  const modoPrueba = porDefecto?.apiKey === "dry-run";
+
   return ok({
     remitentes,
     listo,
+    modoPrueba,
     motivo: !remitentes.length
       ? "No tienes ninguna dirección de envío asignada. Pídele a administración que te asigne una."
       : !listo
