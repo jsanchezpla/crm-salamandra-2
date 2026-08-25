@@ -16,10 +16,10 @@
 | **Endpoints** | `app/api/pacientes/**` (11 `route.js`): `pacientes` (listar/crear), `[id]` (ficha/editar; no hay DELETE), `[id]/plan` (plan de intervención), `[id]/contactos/**` (2, agenda de profesionales externos), `[id]/documents/**` (3, adjuntos del paciente), `[id]/contract` (solo descarga los PDF legado que la migración no pudo mover), `contract-template/**` (2, contrato estándar del centro). Ninguno gasta IA. El registro clínico del paciente (sesiones, informes, coordinaciones) va por `app/api/clinica/**` (ver `clinica.md`). También crean o leen pacientes: `app/api/clients/route.js` (el alta de la familia crea a los suyos en la misma transacción), `app/api/clients/[id]/module-assignments/route.js`, `app/api/formularios/[id]/accept/route.js` y `app/api/citas/bookings/**` (una cita apunta a `patient_id`). |
 | **Lógica** | No hay `lib/pacientes/`: vive en `lib/clinica/` — `serialize.js` (`serializePatient`, etiquetas de estado y `care_type`), `specialties.js` (taxonomía compartida con Equipo), `consents.js` (consentimientos RGPD con traza legal), `contractStorage.js` (PDF legado por paciente), `patientClient.js` (de qué cliente es un paciente), `audit.js` — y en `lib/clients/`: `formularioAlta.js` (`normalizarPacientes`, perfil `salud`), `moduleAssignments.js` (`syncClinicPatient`). |
 | **UI** | Sin `modules/pacientes/` ni `components/pacientes/`. Las piezas están en `components/clinica/` (`SpecialtyPicker.jsx`, `PatientDocumentsSection.jsx`, `PatientExternalContactsSection.jsx`, `InterventionPlanSection.jsx`, `NuevaCoordinacionModal.jsx`) y en `components/clients/` (`PacientesDelAlta.jsx`, `ClientPatientsSection.jsx`: los pacientes vistos desde la ficha de la familia). |
-| **Modelos** | `Patient` → `patients` (`models/tenant/Patient.model.js`; hoy con `client_id` al pagador, `care_type` terapia/nutrición, `specialties`, `objectives`, `consents`, `dni`, `address`, `relationship`, y `contract_signed`/`contract_file` como legado) · `ExternalContact` → `external_contacts` · `InterventionPlan` → `intervention_plans`. Las FK de `clinic_sessions`, `clinical_reports` y `coordinations` apuntan aquí, no a `clients`. |
+| **Modelos** | `Patient` → `patients` (`models/tenant/Patient.model.js`; hoy con `client_id` al pagador, `care_type` terapia/nutrición, `specialties`, `objectives`, `consents`, `dni`, `address`, `relationship`, y `contract_signed`/`contract_file` como legado) · `PatientTherapist` → `patient_therapists` (25/08/2026: quién lleva al paciente, uno por fila, con su `specialty`; **sin asociaciones de Sequelize a propósito** —ver abajo—) · `ExternalContact` → `external_contacts` · `InterventionPlan` → `intervention_plans`. Las FK de `clinic_sessions`, `clinical_reports` y `coordinations` apuntan aquí, no a `clients`. |
 | **Interruptores y parámetros** | ninguno que lea el código. |
 | **Pantallas propias** | ninguna. |
-| **Scripts** | Activar: `node scripts/enable-module.js <slug> pacientes` (avisa si falta `clients`; `ensure-tenant-schema.js` corre las 7 del bloque `pacientes` de `scripts/_module-migrations.js`: `migrate-clinica-module` (la primera: crea `patients` y las tablas clínicas; desde el 19/08/2026 está también en este bloque), `migrate-patients-clients-phase1`, `migrate-client-module-assignments`, `migrate-patients-multi-per-client`, `migrate-patients-care-type`, `migrate-patients-specialties`, `migrate-documents-patient-link`). Seed: `seed-clinica-demo.js <slug>` (pacientes + clínica; **VACÍA** antes, solo escaparate). Datos, a mano y con dry-run: `backfill-patients-client.js` (paciente → pagador deducido de sus citas/sesiones, `--confirm`; no cruza por nombre a propósito) y `migrate-contract-patient-to-client.js` (contrato del paciente → familia, ya corrido). ONE_OFF de la maqueta, no usar: `_hechos/migrate-pacientes-sprint-1.js` (solo `crm_aumenta`). |
+| **Scripts** | Activar: `node scripts/enable-module.js <slug> pacientes` (avisa si falta `clients`; `ensure-tenant-schema.js` corre las 7 del bloque `pacientes` de `scripts/_module-migrations.js`: `migrate-clinica-module` (la primera: crea `patients` y las tablas clínicas; desde el 19/08/2026 está también en este bloque), `migrate-patients-clients-phase1`, `migrate-client-module-assignments`, `migrate-patients-multi-per-client`, `migrate-patients-care-type`, `migrate-patients-specialties`, `migrate-documents-patient-link`, `migrate-patients-terapeutas`). Seed: `seed-clinica-demo.js <slug>` (pacientes + clínica; **VACÍA** antes, solo escaparate). Datos, a mano y con dry-run: `backfill-patients-client.js` (paciente → pagador deducido de sus citas/sesiones, `--confirm`; no cruza por nombre a propósito) y `migrate-contract-patient-to-client.js` (contrato del paciente → familia, ya corrido) y `backfill-patients-terapeutas.js` (copia el terapeuta de la ficha a la lista; **opcional**, ver abajo). ONE_OFF de la maqueta, no usar: `_hechos/migrate-pacientes-sprint-1.js` (solo `crm_aumenta`). |
 | **Pruebas** | `scripts/_smoke-alta-progenitores.mjs` — entra en `npm test`, sin base de datos: `normalizarPacientes` (el motivo llega hasta lo que se guarda) y el alta con dos progenitores. Ninguna otra toca `patients`: `_smoke-borrar-paciente.mjs` y `_smoke-paciente-borrado.mjs` son de `clients` (la «paciente» de una consulta de nutrición es un `Client`). |
 | **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` · `../decisions/2026-08-01-alta-de-clientes-por-perfil.md` · `../decisions/2026-08-04-clientes-se-llama-pacientes-en-nutricion.md` |
 | **En este doc** | Decisión arquitectónica: `patients` ≠ `clients` · Estado: Fase 1 (backend real) · Modelo · Frontend · Migración · Decisiones cerradas |
@@ -139,6 +139,66 @@ transcribe → Claude estructura → la terapeuta revisa/edita → se guarda com
   todos).
 - No tiene búsqueda avanzada (solo búsqueda por nombre y filtros
   básicos de terapeuta / estado).
+
+## Un paciente puede tener varios terapeutas (25/08/2026)
+
+Lo pidió Lau (Aumenta, 14/08/2026): «en los pacientes que tienen dos terapias,
+cómo meter a los 2 terapeutas que tiene, porque me sale la opción solo para
+seleccionar 1 y lo llama terapeuta principal». No era hipotético: medido en
+producción, **15 pacientes de Aumenta ya tienen citas repartidas entre dos o
+tres profesionales** (máximo 3), y la ficha obligaba a elegir cuál «contaba».
+
+**El modelo, en tres frases:**
+
+1. `patient_therapists` es la lista COMPLETA (el de referencia incluido), una
+   fila por persona, con su `specialty` —Lau no pidió dos nombres: pidió los dos
+   de un paciente con DOS TERAPIAS, y sin decir cuál da cada una la lista no
+   contesta a lo que preguntó.
+2. `patients.main_therapist_id` **se queda** y dice cuál de ellos es el de
+   referencia: quién firma por defecto y por quién se reparte el cumplimiento
+   del plan. Es el mismo patrón que `lib/clients/contactMethods.js` con los
+   contactos múltiples de un cliente.
+3. Si un paciente NO tiene filas, manda la columna sola.
+
+La tercera es la importante: **por eso esto se desplegó sin tocar un solo
+dato.** Los pacientes que ya tenían terapeuta lo siguen enseñando, y su fila
+aparece la primera vez que alguien edita la ficha. `backfill-patients-terapeutas.js`
+existe para uniformarlo, pero es opcional: el código funciona sin correrlo.
+
+Y la consecuencia buscada: **`lib/clients/urgentes.js` no se toca**.
+«Pacientes sin terapeuta» sigue siendo `main_therapist_id IS NULL` y sigue
+queriendo decir exactamente eso, porque el escritor mantiene el invariante —el
+espejo es el primero de la lista, y null si y solo si la lista queda vacía—.
+
+**Sin asociaciones de Sequelize, a propósito.** El repo tiene el mismo patrón en
+`lib/clinica/incidencias.js` y allí sí usa `belongsToMany` + `setAssignees()`.
+Aquí no, por dos motivos: `set()` borra y recrea TODAS las filas en cada
+guardado, y las nuestras llevan datos propios (`specialty`, `assigned_at`) que
+se perderían en silencio; y un include hacia una tabla de muchos a muchos en el
+listado paginado hace que `findAndCountAll` cuente filas del JOIN en vez de
+pacientes. Se lee con dos consultas planas, como las sesiones.
+
+⚠️ **Esto NO es un permiso.** Que alguien no esté en la lista de un paciente no
+le impide ver su ficha: `/api/pacientes` no tiene reglas de visibilidad y esto
+no las añade. Si algún día se quiere que las tenga, va donde van esas, con su
+prueba (el precedente y el fallo que costó, en `lib/citas/visibilidad.js`).
+
+**Dónde**: `lib/clinica/terapeutas.js` (la regla), `models/tenant/PatientTherapist.model.js`,
+`components/clinica/TerapeutasPicker.jsx` (la pantalla) y
+`scripts/_smoke-clinica-terapeutas.mjs` (29 comprobaciones).
+
+**El alta sigue con un solo desplegable** y es deliberado: crea al paciente con
+su terapeuta de referencia, y el segundo se añade desde la ficha. El rótulo de
+la cabecera cambia solo — «Terapeuta» con uno, «Terapeutas» con varios—, que es
+lo que Lau preguntaba al decir si «principal» se podía cambiar.
+
+⚠️ Una trampa que costó una tarde y que aplica a CUALQUIER consulta cruda del
+repo: el `searchPath` que se le pasa a Sequelize (`lib/db/sequalize.js`) **no
+llega a `sequelize.query()`**. Los modelos cualifican el schema porque lo llevan
+dentro; una consulta cruda sale con el `search_path` de la conexión, que apunta
+a `public`. La sonda `to_regclass('patient_therapists')` devolvía null en todos
+los tenants, la tabla parecía no existir nunca y todo caía al espejo en
+silencio. Va cualificada: `to_regclass('"crm_x"."patient_therapists"')`.
 
 ## Modelo
 

@@ -49,7 +49,7 @@ import { computeOrder } from "./_migration-order.js";
  * muévanse a MODULES y a ORDER.
  */
 export const ONE_OFF = {
-  "migrate-quality-leads": "atada a quality_energy",
+  "migrate-quality-leads": "atada a quality_energy",
   "backfill-nutricion-assignments": "DATOS: marca «Paciente Nutrición» a los clientes previos al auto-marcado (2026-07-27); repetible, se corre a mano",
   "backfill-patients-client": "DATOS: enlaza pacientes con su ficha de pagador a partir de sus citas/sesiones; dry-run por defecto, se corre a mano con --confirm",
   "migrate-contract-patient-to-client": "DATOS: mueve el contrato del paciente a la familia (sprint 2026-07, 1.1); copia el PDF a `documents` y apunta clients.contract_document_id; dry-run por defecto, se corre a mano con --confirm",
@@ -276,6 +276,10 @@ export const MODULES = {
     "migrate-patients-care-type",
     "migrate-patients-specialties",
     "migrate-documents-patient-link",
+    // Varios terapeutas por paciente (25/08/2026, Lau de Aumenta). Solo crea la
+    // tabla `patient_therapists`: `main_therapist_id` se queda y sigue siendo el
+    // de referencia, así que no hay nada que rellenar para que funcione.
+    "migrate-patients-terapeutas",
   ],
 
   clinica: [

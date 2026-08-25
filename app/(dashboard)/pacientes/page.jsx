@@ -239,6 +239,9 @@ export default function PacientesPage() {
               {!loading &&
                 filtered.map((p) => {
                   const t = p.therapist ?? { name: "—", initials: "?", color: "#666" };
+                  const equipo = Array.isArray(p.therapists) ? p.therapists : [];
+                  const otros = Math.max(0, equipo.length - 1);
+                  const nombresTerapeutas = equipo.map((x) => x.displayName).filter(Boolean).join(" · ");
                   const s = statusStyle(p.status);
                   return (
                     <tr key={p.id} className="border-t border-neutral-100 hover:bg-neutral-50/40">
@@ -264,6 +267,20 @@ export default function PacientesPage() {
                         <div className="inline-flex items-center gap-1.5 bg-neutral-50 border border-neutral-100 rounded-full px-2 py-0.5">
                           <div className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-white text-[7px] font-display" style={{ backgroundColor: t.color }}>{t.initials}</div>
                           <span className="text-[11px] text-neutral-700">{t.name}</span>
+                          {/*
+                            Un paciente puede llevar varias terapias con varias
+                            personas (25/08/2026). Aquí se enseña la de referencia
+                            y se avisa de que hay más; los nombres, en su ficha,
+                            que es donde caben.
+                          */}
+                          {otros > 0 && (
+                            <span
+                              className="text-[10px] text-neutral-500 border-l border-neutral-200 pl-1.5"
+                              title={nombresTerapeutas}
+                            >
+                              +{otros}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3 tabular text-neutral-600">{fmtDate(p.lastSession)}</td>

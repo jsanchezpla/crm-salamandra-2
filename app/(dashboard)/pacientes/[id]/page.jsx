@@ -7,12 +7,14 @@ import Select from "@/components/ui/Select.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import PatientBillingSection from "@/components/billing/PatientBillingSection.jsx";
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
+import TerapeutasPicker from "@/components/clinica/TerapeutasPicker.jsx";
 import NuevaCoordinacionModal from "../../../../components/clinica/NuevaCoordinacionModal.jsx";
 import PatientDocumentsSection from "@/components/clinica/PatientDocumentsSection.jsx";
 import PatientExternalContactsSection from "@/components/clinica/PatientExternalContactsSection.jsx";
 import InterventionPlanSection from "@/components/clinica/InterventionPlanSection.jsx";
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
 import { REPORT_TYPES, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
+import { SPECIALTY_LABEL } from "@/lib/clinica/specialties.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const REPORT_TYPE_OPTIONS = REPORT_TYPES.map((value) => ({ value, label: REPORT_TYPE_LABEL[value] }));
@@ -367,7 +369,14 @@ export default function PacienteFichaPage() {
       attendanceFrequency: patient.attendanceFrequency ?? "", referralReason: patient.referralReason ?? "",
       referredBy: patient.referredBy ?? "", objectives: (patient.objectives ?? []).join(", "), status: patient.status ?? "active",
       specialties: patient.specialties ?? [],
-      mainTherapistId: patient.mainTherapistId ?? "",
+      // La lista completa, el de referencia el primero. Si el servidor no la
+      // manda (`null` = «no me la han resuelto»), se cae al de siempre para no
+      // enseñar «sin terapeuta» sobre un paciente que sí tiene uno.
+      therapists: Array.isArray(patient.therapists)
+        ? patient.therapists.map((t) => ({ id: t.teamMemberId, specialty: t.specialty ?? null }))
+        : patient.mainTherapistId
+          ? [{ id: patient.mainTherapistId, specialty: null }]
+          : [],
     });
     setModalError(null);
     setShowEdit(true);
@@ -381,9 +390,13 @@ export default function PacienteFichaPage() {
         ...editForm,
         age: editForm.age === "" ? null : Number(editForm.age),
         objectives: editForm.objectives.split(",").map((s) => s.trim()).filter(Boolean),
-        // "" (sin asignar) → null, o la columna UUID reventaría (22P02).
-        mainTherapistId: editForm.mainTherapistId || null,
+        // Las filas a medio rellenar (persona sin elegir) no se mandan. El
+        // primero de la lista es el de referencia y el servidor pone con él
+        // `main_therapist_id`; NO se manda `mainTherapistId` aparte, o serían dos
+        // caminos escribiendo lo mismo.
+        therapists: (editForm.therapists ?? []).filter((t) => t.id),
       };
+      delete payload.mainTherapistId;
       const r = await fetch(`/api/pacientes/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo guardar");
@@ -430,6 +443,29 @@ export default function PacienteFichaPage() {
 
   const s = pStatus(patient.status);
 
+  /*
+   * Quién lleva al paciente, para la cabecera. `therapists` viene del servidor
+   * con el de referencia el primero; si no viene resuelto (null, que NO es lo
+   * mismo que lista vacía), se cae al de siempre.
+   *
+   * El nombre puede llegar a null si la persona está en la tabla pero no en el
+   * equipo cargado: entonces se cruza con la lista que ya tiene la pantalla.
+   */
+  const terapeutasVisibles = Array.isArray(patient.therapists)
+    ? patient.therapists
+    : patient.therapist
+      ? [{ teamMemberId: patient.mainTherapistId, displayName: patient.therapist.name, specialty: null }]
+      : [];
+  const textoTerapeutas = terapeutasVisibles
+    .map((t) => {
+      const nombre = t.displayName ?? therapists.find((m) => m.id === t.teamMemberId)?.displayName;
+      if (!nombre) return null;
+      const que = t.specialty ? SPECIALTY_LABEL[t.specialty] : null;
+      return que ? `${nombre} (${que})` : nombre;
+    })
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <div className={`${anchoPantalla("listado")} space-y-5`}>
       <Link href="/pacientes" className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit">
@@ -451,7 +487,13 @@ export default function PacienteFichaPage() {
             <p className="text-xs text-neutral-500 mt-0.5">{patient.age != null ? `${patient.age} años` : "—"} · {patient.educationLevel ?? "—"}</p>
             <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
               <Field label="Centro escolar" value={patient.educationCenter} />
-              <Field label="Terapeuta principal" value={patient.therapist?.name} />
+              {/*
+                El rótulo cambia con lo que hay (25/08/2026). Lau preguntó si
+                «Terapeuta principal» se podía cambiar: con varios apuntados la
+                palabra sobra, y con uno solo hablar de «principal» insinúa que
+                hay otro. Así que lo dice la lista, no una etiqueta fija.
+              */}
+              <Field label={terapeutasVisibles.length > 1 ? "Terapeutas" : "Terapeuta"} value={textoTerapeutas} />
               <Field label="Fecha alta" value={fmtDate(patient.enrollmentDate)} />
               <Field label="Frecuencia" value={patient.attendanceFrequency} />
             </div>
@@ -788,17 +830,11 @@ export default function PacienteFichaPage() {
               <textarea className={inputCls} rows={3} placeholder="Motivo de derivación" value={editForm.referralReason} onChange={(e) => setEditForm({ ...editForm, referralReason: e.target.value })} />
               <input className={inputCls} placeholder="Objetivos (separados por comas)" value={editForm.objectives} onChange={(e) => setEditForm({ ...editForm, objectives: e.target.value })} />
               <SpecialtyPicker value={editForm.specialties} onChange={(v) => setEditForm({ ...editForm, specialties: v })} />
-              {therapists.length > 0 && (
-                <div>
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Terapeuta principal</label>
-                  <Select
-                    value={editForm.mainTherapistId}
-                    onChange={(v) => setEditForm({ ...editForm, mainTherapistId: v })}
-                    options={[{ value: "", label: "— Sin asignar —" }, ...therapists.map((t) => ({ value: t.id, label: t.displayName }))]}
-                    className={inputCls}
-                  />
-                </div>
-              )}
+              <TerapeutasPicker
+                value={editForm.therapists ?? []}
+                onChange={(v) => setEditForm({ ...editForm, therapists: v })}
+                equipo={therapists}
+              />
               {modalError && <p className="text-xs text-rose-600">{modalError}</p>}
               <div className="flex justify-end gap-2 pt-1">
                 <button type="button" onClick={() => setShowEdit(false)} disabled={modalBusy} className="px-4 py-2 rounded-lg border border-neutral-200 text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50">Cancelar</button>

@@ -2,7 +2,11 @@ import { fn, col } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound } from "../../../../lib/utils/apiResponse.js";
 import { serializePatient } from "../../../../lib/clinica/serialize.js";
-import { logClinicaAudit } from "../../../../lib/clinica/audit.js";
+import { logClinicaAudit, auditSummary } from "../../../../lib/clinica/audit.js";
+import {
+  terapeutasDe, referenciaDe, conReferencia, listaDe, terapeutasEfectivos,
+  sincronizarTerapeutas,
+} from "../../../../lib/clinica/terapeutas.js";
 import { normalizeConsents } from "../../../../lib/clinica/consents.js";
 import { normalizeSpecialties, deriveCareType } from "../../../../lib/clinica/specialties.js";
 
@@ -11,9 +15,13 @@ const cap = (v, n) => (v == null ? null : String(v).trim().slice(0, n) || null);
 function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
 }
+// ⚠️ `mainTherapistId` ya NO está aquí (25/08/2026): quién lleva al paciente
+// pasó a ser una lista y lo escribe `sincronizarTerapeutas`, que además valida
+// contra las fichas de equipo. Dejarlo en la lista blanca lo habría escrito por
+// los dos caminos, y el último en pasar habría ganado.
 const PATCH_FIELDS = [
   "firstName", "lastName", "age", "birthDate", "educationCenter", "educationLevel",
-  "referralReason", "referredBy", "objectives", "mainTherapistId", "enrollmentDate",
+  "referralReason", "referredBy", "objectives", "enrollmentDate",
   "attendanceFrequency", "status", "dischargeDate", "dischargeReason", "notes",
   "dni", "address", "relationship", "contractSigned", "careType",
 ];
@@ -69,7 +77,12 @@ export const GET = withTenant(async (request, rc, ctx) => {
     where: { patientId: id },
     raw: true,
   });
-  return ok(serializePatient(p, { sessionsCount: Number(agg?.cnt ?? 0), lastSession: agg?.last ?? null }));
+  const equipo = await listaDe(ctx.tenantModels, ctx.tenantSequelize, [id]);
+  return ok(serializePatient(p, {
+    sessionsCount: Number(agg?.cnt ?? 0),
+    lastSession: agg?.last ?? null,
+    therapists: terapeutasEfectivos(p, equipo[id]),
+  }));
 });
 
 export const PATCH = withTenant(async (request, rc, ctx) => {
@@ -131,26 +144,71 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
     });
   }
 
+  /*
+   * ¿Habla el cuerpo de terapeutas? Tiene que preguntarse APARTE de `updates`:
+   * la lista no es una columna de `patients` y no pasa por `PATCH_FIELDS`. Si no
+   * se preguntara, cambiar SOLO los terapeutas caería en el corte de «sin
+   * cambios» de aquí abajo y el endpoint devolvería 200 sin haber escrito nada
+   * ni auditado nada. Es el fallo más caro que puede tener este handler, porque
+   * la pantalla diría «guardado» y no sería verdad.
+   */
+  const tocaTerapeutas =
+    "therapists" in body || "therapistIds" in body || "mainTherapistId" in body;
+
   // Sin cambios: devolver la MISMA forma que el GET (con terapeuta + pagador),
   // no el `p` sin includes (que blanquearía terapeuta/pagador en la respuesta).
-  if (Object.keys(updates).length === 0) {
+  if (Object.keys(updates).length === 0 && !tocaTerapeutas) {
     const full = await loadPatient(ctx.tenantModels, id, ctx.hasModule);
-    return ok(serializePatient(full ?? p));
+    const eq = await listaDe(ctx.tenantModels, ctx.tenantSequelize, [id]);
+    return ok(serializePatient(full ?? p, { therapists: terapeutasEfectivos(full ?? p, eq[id]) }));
   }
 
-  await p.update(updates);
+  // La lista de ANTES hay que leerla antes de tocar nada: no viaja en
+  // `p.toJSON()` —vive en otra tabla— y sin ella la auditoría no sabría decir de
+  // quién a quién se movió el paciente, que es justo lo que hay que poder mirar
+  // cuando alguien pregunta por qué le cambió el reparto.
+  const equipoAntes = tocaTerapeutas
+    ? await listaDe(ctx.tenantModels, ctx.tenantSequelize, [id])
+    : null;
+
+  let movimiento = null;
+  await ctx.tenantSequelize.transaction(async (transaction) => {
+    if (Object.keys(updates).length > 0) await p.update(updates, { transaction });
+    if (tocaTerapeutas) {
+      // `mainTherapistId` suelto sube a esa persona al puesto 0, NO borra al
+      // resto: la pantalla de alta todavía manda ese campo.
+      const base = terapeutasDe(body) ?? terapeutasEfectivos(p, equipoAntes?.[id]).map((t) => ({
+        id: t.teamMemberId,
+        specialty: t.specialty,
+      }));
+      movimiento = await sincronizarTerapeutas({
+        models: ctx.tenantModels,
+        sequelize: ctx.tenantSequelize,
+        paciente: p,
+        entradas: conReferencia(base, referenciaDe(body)),
+        transaction,
+      });
+    }
+  });
+
   await logClinicaAudit({
     tenantId: ctx.tenant.id,
     userId,
     action: "pacientes.updated",
     entity: "Patient",
     entityId: id,
-    before,
-    after: p.toJSON(),
+    // ⚠️ `auditSummary` y no `toJSON()` (25/08/2026). Esto escribe en
+    // `master.audit_log`, que es de TODOS los clientes: la fila entera metía ahí
+    // el motivo de derivación, las notas, el DNI, la dirección y los
+    // consentimientos de un menor. La regla del proyecto es un RESUMEN, y el
+    // helper que lo hace ya existía y ya lo usaba el alta.
+    before: { ...auditSummary(before), therapistIds: movimiento?.antes ?? null },
+    after: { ...auditSummary(p), therapistIds: movimiento?.despues ?? null },
     ip: request.headers.get("x-forwarded-for"),
   });
   // Recarga con terapeuta + pagador para devolver la misma forma que el GET
   // (degrada sin el pagador si el schema del tenant no lo tiene).
   const full = await loadPatient(ctx.tenantModels, id, ctx.hasModule);
-  return ok(serializePatient(full ?? p));
+  const equipo = await listaDe(ctx.tenantModels, ctx.tenantSequelize, [id]);
+  return ok(serializePatient(full ?? p, { therapists: terapeutasEfectivos(full ?? p, equipo[id]) }));
 });

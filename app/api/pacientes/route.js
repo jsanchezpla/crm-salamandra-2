@@ -5,6 +5,10 @@ import { serializePatient } from "../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../lib/clinica/audit.js";
 import { normalizeConsents } from "../../../lib/clinica/consents.js";
 import { normalizeSpecialties, deriveCareType, SPECIALTY_KEYS } from "../../../lib/clinica/specialties.js";
+import {
+  terapeutasDe, referenciaDe, conReferencia, listaDe, terapeutasEfectivos,
+  sincronizarTerapeutas, pacientesDe,
+} from "../../../lib/clinica/terapeutas.js";
 
 const cap = (v, n) => (v == null ? null : String(v).trim().slice(0, n) || null);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,10 +41,30 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const where = {};
   const q = sp.get("q")?.trim();
   if (q) where[Op.or] = [{ firstName: { [Op.iLike]: `%${q}%` } }, { lastName: { [Op.iLike]: `%${q}%` } }];
+  /*
+   * Filtrar por terapeuta mira la LISTA ENTERA, no solo al de referencia
+   * (25/08/2026). Si mirara solo la columna, una terapeuta que se filtra por sí
+   * misma no vería a los pacientes que comparte con otra compañera — que es
+   * justo el caso que hizo falta arreglar.
+   *
+   * Va como `Op.or` DENTRO de un `Op.and` porque el buscador de arriba ya usa
+   * `where[Op.or]`: dos `Op.or` en el mismo objeto se pisan y el segundo se
+   * lleva por delante al primero, en silencio.
+   *
+   * Y sigue mirando `mainTherapistId` además de la tabla: mientras un paciente
+   * no tenga filas, la columna es su lista (`lib/clinica/terapeutas.js`).
+   */
   if (sp.get("therapistId")) {
     const tid = sp.get("therapistId");
     if (!UUID_RE.test(tid)) return error("therapistId inválido", 422);
-    where.mainTherapistId = tid;
+    const suyos = await pacientesDe(ctx.tenantModels, ctx.tenantSequelize, tid);
+    if (suyos === null) {
+      where.mainTherapistId = tid;
+    } else {
+      (where[Op.and] ||= []).push({
+        [Op.or]: [{ mainTherapistId: tid }, { id: { [Op.in]: suyos } }],
+      });
+    }
   }
   // Pacientes de un cliente pagador concreto (sección "Pacientes" de su ficha).
   // Un clientId presente pero malformado NO debe caer al listado completo.
@@ -82,7 +106,16 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     distinct: true,
   });
   const agg = await sessionAgg(ClinicSession, rows.map((r) => r.id));
-  const patients = rows.map((p) => serializePatient(p, agg[p.id] ?? { sessionsCount: 0, lastSession: null }));
+  // Los terapeutas de toda la página en UNA consulta, como las sesiones de
+  // arriba. Con un include hacia la tabla de muchos a muchos, `findAndCountAll`
+  // contaría filas del JOIN y la paginación se iría (lib/clinica/terapeutas.js).
+  const equipos = await listaDe(ctx.tenantModels, ctx.tenantSequelize, rows.map((r) => r.id));
+  const patients = rows.map((p) =>
+    serializePatient(p, {
+      ...(agg[p.id] ?? { sessionsCount: 0, lastSession: null }),
+      therapists: terapeutasEfectivos(p, equipos[p.id]),
+    })
+  );
 
   // Resumen sobre TODOS los pacientes que cumplen el filtro, no solo la página.
   // Sin esto, al paginar los indicadores de la cabecera contarían 50 y dirían
@@ -142,7 +175,10 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     referralReason: body.referralReason?.trim() || null,
     referredBy: body.referredBy?.trim() || null,
     objectives: Array.isArray(body.objectives) ? body.objectives : [],
-    mainTherapistId: body.mainTherapistId || null,
+    // Lo pone `sincronizarTerapeutas` unas líneas más abajo, ya validado contra
+    // las fichas de equipo. Antes entraba `body.mainTherapistId` tal cual: un id
+    // que no fuera UUID llegaba a Postgres y salía un 500 (22P02).
+    mainTherapistId: null,
     enrollmentDate: body.enrollmentDate || null,
     attendanceFrequency: body.attendanceFrequency?.trim() || null,
     status: ["active", "paused", "discharged"].includes(body.status) ? body.status : "active",
@@ -154,15 +190,40 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     consents: normalizeConsents(body.consents, { previous: {}, userId, now: new Date().toISOString() }),
     contractSigned: !!body.contractSigned,
   };
-  const p = await Patient.create(payload);
+  /*
+   * Terapeutas del alta. `therapists`/`therapistIds` es la lista; el
+   * `mainTherapistId` de siempre —que es lo que manda hoy la pantalla de alta—
+   * se aplica ENCIMA con `conReferencia`, que sube a esa persona al puesto 0 sin
+   * echar a nadie. Traducirlo a una lista de uno habría borrado al resto cada
+   * vez que guardara un cliente antiguo de la API.
+   */
+  const pedidos = conReferencia(terapeutasDe(body) ?? [], referenciaDe(body));
+
+  const p = await ctx.tenantSequelize.transaction(async (transaction) => {
+    const nuevo = await Patient.create(payload, { transaction });
+    await sincronizarTerapeutas({
+      models: ctx.tenantModels,
+      sequelize: ctx.tenantSequelize,
+      paciente: nuevo,
+      entradas: pedidos,
+      transaction,
+    });
+    return nuevo;
+  });
+
   await logClinicaAudit({
     tenantId: ctx.tenant.id,
     userId: request.headers.get("x-user-id"),
     action: "pacientes.created",
     entity: "Patient",
     entityId: p.id,
-    after: auditSummary(p),
+    after: { ...auditSummary(p), therapistIds: pedidos.map((e) => e.id) },
     ip: request.headers.get("x-forwarded-for"),
   });
-  return created(serializePatient(p, { sessionsCount: 0, lastSession: null }));
+  const equipo = await listaDe(ctx.tenantModels, ctx.tenantSequelize, [p.id]);
+  return created(serializePatient(p, {
+    sessionsCount: 0,
+    lastSession: null,
+    therapists: terapeutasEfectivos(p, equipo[p.id]),
+  }));
 });
