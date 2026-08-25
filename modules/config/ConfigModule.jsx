@@ -364,7 +364,7 @@ export default function ConfigModule({ modulos = null }) {
           él sale también qué tarjeta depende de qué módulo, y eso es una regla
           por módulos, no una decisión de pintura. */}
       <div className="border-b border-neutral-100 -mx-4 lg:-mx-8 px-4 lg:px-8">
-        <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
+        <div className="flex items-center gap-1 overflow-x-auto overflow-y-hidden whitespace-nowrap">
           {pestanasVisibles.map((p) => (
             <BotonZona key={p.clave} activa={p.clave === pestanaViva} onClick={() => irA(p.clave)}>
               {p.titulo}
