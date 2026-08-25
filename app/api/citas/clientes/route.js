@@ -35,7 +35,28 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const todos = url.searchParams.get("todos") === "1";
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 20, 1), 50);
 
-    const where = { status: { [Op.ne]: "inactive" } };
+    /*
+     * ⚠️ AQUÍ NO SE FILTRA POR ESTADO (25/08/2026, Jorge).
+     *
+     * Hasta hoy esto empezaba por `status <> 'inactive'`, así que una ficha
+     * archivada desaparecía del buscador. Sonaba razonable —quien ya no viene no
+     * tiene por qué salir— hasta que se pudo archivar desde la ficha: se archiva
+     * a una familia, vuelve a los dos meses a pedir hora, recepción teclea el
+     * nombre y no sale nadie. Y como el buscador tiene salida a mano a
+     * propósito, la cita se crea igual pero con `client_id = null`: suelta de su
+     * familia, que es justo el fallo que este buscador vino a arreglar en
+     * julio.
+     *
+     * Ahora salen, marcadas «Archivada» (por eso `status` va en los atributos) y
+     * detrás de las vivas, pero CON CUPO PROPIO — ver abajo, que es la parte
+     * que casi se hace mal.
+     *
+     * Con esto, el único sitio del CRM donde archivar sigue escondiendo una
+     * ficha es «Fichas a completar» (`lib/clients/urgentes.js`), y allí es a
+     * propósito: es justo lo que se pidió, y tiene su casilla para volver a
+     * verlas.
+     */
+    const where = {};
     if (q) {
       const patron = `%${q}%`;
       where[Op.or] = [
@@ -87,17 +108,46 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       where.id = { [Op.in]: idsAsistenciales };
     }
 
-    const filas = await Client.findAll({
-      where,
-      attributes: ["id", "name", "email", "phone"],
-      order: [["name", "ASC"]],
-      limit,
-    });
+    /*
+     * DOS CONSULTAS CON CUPO PROPIO, Y NO UNA ORDENADA.
+     *
+     * La primera versión de esto traía todas juntas con un
+     * `ORDER BY (status = 'inactive') ASC`, para que las archivadas quedaran
+     * detrás. Parecía suficiente hasta hacer la cuenta: el tope es 20 y Aumenta
+     * tiene 1.083 fichas. Recepción teclea «garcía» para darle hora a la
+     * familia que archivó hace dos meses, las coincidencias VIVAS llenan las 20
+     * plazas, y la archivada —que por ese orden va siempre detrás de todas las
+     * vivas— no entra nunca. O sea: el mismo agujero que este cambio venía a
+     * tapar, con más pasos.
+     *
+     * Con cupo propio no compiten. Las vivas se llevan el tope de siempre y las
+     * archivadas tienen sus cinco plazas garantizadas, detrás.
+     */
+    const CUPO_ARCHIVADAS = 5;
+
+    const buscar = (estado, tope) =>
+      Client.findAll({
+        where: { ...where, status: estado },
+        attributes: ["id", "name", "email", "phone", "status"],
+        order: [["name", "ASC"]],
+        limit: tope,
+      });
+
+    const [vivas, archivadas] = await Promise.all([
+      buscar({ [Op.ne]: "inactive" }, limit),
+      buscar("inactive", CUPO_ARCHIVADAS),
+    ]);
 
     return ok({
-      clientes: filas.map((c) => c.toJSON()),
+      clientes: [...vivas, ...archivadas].map((c) => c.toJSON()),
       soloPacientes: Boolean(idsAsistenciales),
       totalPacientes: idsAsistenciales ? idsAsistenciales.length : null,
+      /*
+       * «Hay más de los que caben». Sin esto, una lista llena y una lista
+       * completa se ven igual, y quien no encuentra a alguien tira de la salida
+       * a mano — que es como nacen las citas sin ficha.
+       */
+      hayMas: vivas.length === limit,
     });
   } catch (err) {
     return serverError(err);

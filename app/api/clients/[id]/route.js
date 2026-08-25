@@ -201,10 +201,12 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
    * verdad se archiva un `prospect` y luego se reactiva, vuelve como `active`:
    * el archivo es de ida y vuelta, pero solo recuerda dos estados.)
    *
-   * ⚠️ Archivar tiene un SEGUNDO efecto, que la ficha avisa en su botón: el
-   * buscador del alta manual de citas (`app/api/citas/clientes`) filtra por
-   * `status <> 'inactive'`, así que una familia archivada tampoco sale al ir a
-   * darle hora. Es reversible, pero no es invisible.
+   * Lo único que archivar esconde es «Fichas a completar»
+   * (`lib/clients/urgentes.js`), que es justo lo que se pidió y tiene su
+   * casilla para volver a verlas. En ningún otro sitio desaparece, y hubo que
+   * arreglar un caso para que eso fuera verdad: `app/api/citas/clientes`
+   * filtraba por `status <> 'inactive'` y se llevaba las archivadas del
+   * buscador del alta de citas. Desde el 25/08/2026 las ofrece marcadas.
    *
    * No es de admin: archivar se deshace con un clic. Borrar, que no se deshace,
    * sí lo es (ver el DELETE de abajo).

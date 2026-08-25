@@ -546,15 +546,38 @@ ficha de familia lleva un distintivo «Archivada» en la cabecera y un botón
 enseña el mismo distintivo. Archivar **no es de admin** (se deshace con el mismo
 botón); borrar sí lo es, y eso sigue igual.
 
-⚠️ **Archivar tiene un segundo efecto y hay que decirlo**: el buscador del alta
-manual de citas (`app/api/citas/clientes`) filtra por `status <> 'inactive'`, así
-que una familia archivada tampoco sale al ir a darle hora. Es reversible
-—reactivándola vuelve—, pero no es invisible: si nadie lo avisa, recepción
-teclea el nombre, no encuentra a nadie, usa la salida a mano del buscador y la
-cita nace con `clientId = null`, o sea suelta de su familia. Por eso lo dicen los
-dos `title` (el del botón y el del distintivo) y el docblock de
-`toggleArchivada`. **Queda pendiente de decisión**: la alternativa es que el
-buscador de citas SÍ las ofrezca, con su distintivo, en vez de esconderlas.
+**Archivar no esconde la ficha en ningún sitio**, y hubo que arreglar un caso
+para que eso fuera verdad. `app/api/citas/clientes` —el buscador del alta manual
+de citas— empezaba su `where` por `status <> 'inactive'`, así que una familia
+archivada desaparecía de él. Suena razonable hasta que se junta con la salida a
+mano que ese buscador tiene a propósito: se archiva a una familia, vuelve a los
+dos meses a pedir hora, recepción teclea el nombre, no sale nadie, escribe el
+nombre a mano y **la cita nace con `client_id = null`** — suelta de su ficha, que
+es justo el fallo que ese buscador vino a arreglar en julio de 2026.
+
+Desde el 25/08/2026 las ofrece, marcadas «Archivada» y detrás de las vivas,
+pero **con cupo propio**: dos consultas, las vivas con el tope de siempre (20) y
+las archivadas con cinco plazas garantizadas. La primera versión las ordenaba al
+final en una sola consulta, y la revisión hizo la cuenta: con 1.083 fichas y tope
+20, teclear «garcía» llena las 20 plazas con familias vivas y la archivada no
+entra **nunca** — el mismo agujero, con más pasos. Y el desplegable avisa cuando
+hay más resultados de los que caben, porque una lista llena y una lista completa
+se ven igual, y ahí es donde se tira de la salida a mano.
+
+Con esto, **el único sitio donde archivar sigue escondiendo una ficha es
+«Fichas a completar»** (`lib/clients/urgentes.js`), y allí es a propósito: es lo
+que se pidió, y tiene su casilla «Incluir fichas archivadas». Lo fija
+`scripts/_smoke-citas-buscador-archivadas.mjs`.
+
+⚠️ Esa regla —«solo ahí»— **está escrita aquí y no comprobada por ninguna
+prueba**, y es a propósito. Se intentó un barrido de todo el repo y saca 19
+ficheros que consultan fichas y filtran algo por estado; en casi todos el
+`status` es de otra cosa (una factura, una cita, un pedido, un ticket), y un
+regex por fichero no sabe de quién es cada uno — `active` e `inactive` los usan
+también el paciente, el empleado y el proyecto. Una lista blanca de 19 entradas
+diciendo «este no cuenta» no es una red: es algo que nadie mantiene. Así que la
+prueba comprueba este buscador con nombre y apellidos, y **si algún día se añade
+otro sitio que filtre fichas por estado, hay que acordarse de mirar aquí**.
 
 ⚠️ **La llave del cuerpo es `archivada`, no `status`.** En
 `app/api/clients/[id]` el `body.status` YA está cogido: es el embudo comercial y

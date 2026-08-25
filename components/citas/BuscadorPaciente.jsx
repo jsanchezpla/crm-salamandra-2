@@ -22,6 +22,11 @@ import { useEffect, useState } from "react";
  * llama por teléfono sin ser cliente todavía; un desplegable cerrado dejaría
  * a la usuaria sin poder darle hora, que es peor problema que el que resuelve.
  *
+ * Y esa salida es justo la razón de que las fichas ARCHIVADAS también salgan
+ * (25/08/2026): si no salieran, quien vuelve a los dos meses no se encontraría,
+ * recepción tiraría de la salida a mano y la cita nacería suelta de su ficha —
+ * el fallo que este buscador vino a arreglar. Salen marcadas y al final.
+ *
  * Compartido a propósito entre `modules/default/CitasModule` (Aumenta y demás)
  * y `modules/overrides/nutri-laura/CitasModule`: el comportamiento debe ser el
  * mismo en las dos clínicas.
@@ -46,6 +51,7 @@ export default function BuscadorPaciente({
   const [abierto, setAbierto] = useState(false);
   const [buscando, setBuscando] = useState(false);
   const [soloPacientes, setSoloPacientes] = useState(true);
+  const [hayMas, setHayMas] = useState(false);
 
   // Búsqueda con freno: una petición por pausa al teclear, no por tecla.
   useEffect(() => {
@@ -62,8 +68,9 @@ export default function BuscadorPaciente({
         const datos = j.data || j;
         setResultados(Array.isArray(datos?.clientes) ? datos.clientes : []);
         setSoloPacientes(datos?.soloPacientes !== false);
+        setHayMas(Boolean(datos?.hayMas));
       } catch {
-        if (vivo) setResultados([]);
+        if (vivo) { setResultados([]); setHayMas(false); }
       } finally {
         if (vivo) setBuscando(false);
       }
@@ -145,12 +152,36 @@ export default function BuscadorPaciente({
                   onClick={() => { onElegir(c); setAbierto(false); }}
                   className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0"
                 >
-                  <div className="text-sm text-gray-900 font-medium truncate">{c.name}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm text-gray-900 font-medium truncate">{c.name}</span>
+                    {/* Archivada = dada de baja desde su ficha. Sale igual, y al
+                        final de la lista, para que quien vuelve a los dos meses
+                        se pueda enlazar a SU ficha en vez de acabar en una cita
+                        suelta. El distintivo es el mismo que en Clientes. */}
+                    {c.status === "inactive" && (
+                      <span
+                        className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500"
+                        title="Ficha archivada. Se le puede dar hora igual; si vuelve, reactívala desde su ficha."
+                      >
+                        Archivada
+                      </span>
+                    )}
+                  </div>
                   <div className="text-[11px] text-gray-500 truncate">
                     {[c.email, c.phone].filter(Boolean).join(" · ") || "sin email ni teléfono en la ficha"}
                   </div>
                 </button>
               ))}
+
+              {/* «Hay más de los que caben». Sin esto, una lista llena y una
+                  lista completa se ven igual: quien no encuentra a alguien da
+                  por hecho que no está y escribe el nombre a mano, y así nacen
+                  las citas sin ficha. */}
+              {!buscando && hayMas && (
+                <div className="px-3 py-1.5 text-[10px] text-amber-700 bg-amber-50 border-t border-amber-100">
+                  Hay más fichas que coinciden. Escribe un poco más del nombre.
+                </div>
+              )}
 
               {!buscando && soloPacientes && resultados.length > 0 && (
                 <div className="px-3 py-1.5 text-[10px] text-gray-400 bg-gray-50 sticky bottom-0">

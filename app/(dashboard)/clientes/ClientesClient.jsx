@@ -605,7 +605,7 @@ export default function ClientesClient({
                             {client.status === "inactive" && (
                               <span
                                 className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500"
-                                title="Ficha archivada: se conserva, pero no reclama datos que faltan ni sale en el buscador del alta de citas"
+                                title="Ficha archivada: se conserva y se le puede seguir dando hora; solo deja de reclamar datos que faltan"
                               >
                                 Archivada
                               </span>

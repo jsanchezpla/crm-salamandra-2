@@ -374,11 +374,14 @@ export default function ClientDetailModule({
    * devolver con el mismo botón. No es borrar; borrar es el botón rojo, y ese
    * sí se lleva la historia por delante y solo lo ve un admin.
    *
-   * ⚠️ TIENE UN SEGUNDO EFECTO, y por eso lo dicen los dos `title`: archivar
-   * escribe `clients.status='inactive'`, y el buscador del alta manual de citas
-   * (`app/api/citas/clientes/route.js`) filtra por `status <> 'inactive'`. O
-   * sea que una familia archivada tampoco sale al ir a darle hora. Se deshace
-   * reactivándola, pero quien archiva tiene que saberlo ANTES de pulsar.
+   * ⚠️ Lo ÚNICO que esconde es «Fichas a completar», y eso es lo que se pidió:
+   * una ficha de baja deja de reclamar datos que le faltan (con su casilla
+   * «Incluir fichas archivadas» para volver a verlas). En ningún otro sitio
+   * desaparece — y hubo que arreglar uno para que fuera verdad:
+   * `app/api/citas/clientes` filtraba por `status <> 'inactive'`, así que la
+   * familia archivada tampoco salía al ir a darle hora, y la que volvía a los
+   * dos meses acababa con una cita suelta, sin ficha. Desde el 25/08/2026 ese
+   * buscador las ofrece marcadas y con cupo propio.
    *
    * Sin `confirm()` a propósito: lo que no se puede deshacer se pregunta, y
    * esto se deshace con el mismo clic que lo hizo.
@@ -468,7 +471,7 @@ export default function ClientDetailModule({
           {archivada && (
             <span
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-neutral-200 text-neutral-600"
-              title="Dada de baja. Se conserva entera, pero no reclama datos que faltan ni sale en el buscador del alta de citas."
+              title="Dada de baja. Se conserva entera y se le puede seguir dando hora; solo deja de reclamar datos que faltan."
             >
               <span className="w-1.5 h-1.5 rounded-full bg-neutral-500" />
               Archivada
@@ -549,8 +552,8 @@ export default function ClientDetailModule({
                       disabled={archivando}
                       className="text-xs text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
                       title={archivada
-                        ? "Devolverla a las fichas activas y al buscador de citas"
-                        : "Guardarla sin borrarla: deja de reclamar datos que faltan y de salir en el buscador del alta de citas"}
+                        ? "Devolverla a las fichas activas"
+                        : "Guardarla sin borrarla: deja de reclamar datos que faltan, pero se sigue pudiendo buscar y darle hora"}
                     >
                       {archivando ? "…" : archivada ? "Reactivar ficha" : "Archivar ficha"}
                     </button>
