@@ -61,6 +61,16 @@ async function main() {
 
   for (const schema of schemas) {
     const q = (sql) => s.query(sql.replaceAll("{S}", `"${schema}"`));
+    // Cada schema tiene SOLO las tablas de sus módulos: hay quien lleva
+    // inventario sin pedidos (nutri_laura frenó aquí la primera pasada en
+    // producción, 25/08/2026). Cada sección comprueba la tabla que toca.
+    const tiene = async (tabla) => {
+      const [filas] = await s.query(
+        `SELECT 1 FROM information_schema.tables
+          WHERE table_schema = '${schema}' AND table_name = '${tabla}'`
+      );
+      return filas.length > 0;
+    };
     console.log(`▶ ${schema}`);
 
     // ── 1. Escaparate en products ────────────────────────────────────────
@@ -111,31 +121,38 @@ async function main() {
     console.log("   ✓ product_variants");
 
     // ── 3. La variante en los movimientos y en las líneas ────────────────
-    await q(`
-      ALTER TABLE {S}.stock_movements
-        ADD COLUMN IF NOT EXISTS variant_id UUID
-    `);
-    await q(`
-      ALTER TABLE {S}.order_lines
-        ADD COLUMN IF NOT EXISTS variant_id   UUID,
-        ADD COLUMN IF NOT EXISTS variant_name VARCHAR(120)
-    `);
-    // `variant_name` copiado, como ya se copia `product_name`: la línea de un
-    // pedido de hace dos años tiene que seguir diciendo «Talla M» aunque esa
-    // variante se haya borrado.
-    console.log("   ✓ variant_id en stock_movements y order_lines");
+    if (await tiene("stock_movements")) {
+      await q(`
+        ALTER TABLE {S}.stock_movements
+          ADD COLUMN IF NOT EXISTS variant_id UUID
+      `);
+      console.log("   ✓ variant_id en stock_movements");
+    }
+    if (await tiene("order_lines")) {
+      await q(`
+        ALTER TABLE {S}.order_lines
+          ADD COLUMN IF NOT EXISTS variant_id   UUID,
+          ADD COLUMN IF NOT EXISTS variant_name VARCHAR(120)
+      `);
+      // `variant_name` copiado, como ya se copia `product_name`: la línea de
+      // un pedido de hace dos años tiene que seguir diciendo «Talla M» aunque
+      // esa variante se haya borrado.
+      console.log("   ✓ variant_id y variant_name en order_lines");
+    }
 
     // ── 4. Dirección de envío del pedido ─────────────────────────────────
-    await q(`
-      ALTER TABLE {S}.orders
-        ADD COLUMN IF NOT EXISTS shipping_address JSONB,
-        ADD COLUMN IF NOT EXISTS origin           VARCHAR(20) NOT NULL DEFAULT 'manual',
-        ADD COLUMN IF NOT EXISTS payment_session_id UUID
-    `);
-    // `origin` separa el pedido de la web del que teclea alguien en el CRM.
-    // Es lo que permite mirar «cuánto vendemos online» sin adivinarlo, y lo
-    // mismo que ya hace `SessionPack.origin` con los bonos.
-    console.log("   ✓ orders: shipping_address, origin, payment_session_id");
+    if (await tiene("orders")) {
+      await q(`
+        ALTER TABLE {S}.orders
+          ADD COLUMN IF NOT EXISTS shipping_address JSONB,
+          ADD COLUMN IF NOT EXISTS origin           VARCHAR(20) NOT NULL DEFAULT 'manual',
+          ADD COLUMN IF NOT EXISTS payment_session_id UUID
+      `);
+      // `origin` separa el pedido de la web del que teclea alguien en el
+      // CRM. Es lo que permite mirar «cuánto vendemos online» sin adivinarlo,
+      // y lo mismo que ya hace `SessionPack.origin` con los bonos.
+      console.log("   ✓ orders: shipping_address, origin, payment_session_id");
+    }
 
     console.log("");
   }
