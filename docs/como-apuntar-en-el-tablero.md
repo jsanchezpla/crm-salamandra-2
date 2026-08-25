@@ -80,6 +80,11 @@ Tres cosas que hay que saber antes de fiarse del tick:
   **Reescribirla DESDE LA PANTALLA sí les mueve la clave** (24/08/2026), así que
   esa vía no pierde nada. Y las capturas no se pierden por ninguna de las dos:
   cuelgan de la ficha (§4.6), no del título.
+  Y si hay que reescribir a mano de todos modos —una tanda entera, como los
+  once títulos del 25/08/2026—, hay que MOVER también su fila: un `UPDATE` de
+  `clave` (y de `titulo`) en `master.tablero_estado`, con la clave vieja y la
+  nueva sacadas de `claveDeTarea()`, que es exactamente lo que hace la
+  pantalla. Sin ese paso se pierden el reparto, el tick y la solución escrita.
 
 ---
 
@@ -168,6 +173,28 @@ Línea por línea:
 
 - **El título dice qué pasa hoy, no qué hay que programar.** «El aviso de SLA
   cuenta tickets que no se ven» se entiende siempre; «arreglar contador», no.
+- **Y lo dice en cristiano** (Jorge y Rodrigo, 25/08/2026: «necesitamos que los
+  títulos sean más fáciles de leer y con menos tecnicismos informáticos, sin
+  perder información clave»). El título es lo ÚNICO que se lee en la lista y en
+  el móvil, así que se escribe con las palabras de quien sufre el problema, no
+  con las de quien lo va a arreglar.
+  **Fuera del título**: nombres de librerías y de ficheros, tablas y columnas,
+  rutas, números de línea, jerga (endpoint, schema, override, flag, hasModule) y
+  las marcas que el código se escribe a sí mismo.
+  **Dentro**: la pantalla por su nombre, qué pasa, y el número que duele si cabe
+  — «102 familias» o «casi la mitad de la lista» no son tecnicismos: son la
+  prueba, y son lo que hace que la tarea se priorice sola.
+  **El CUERPO no cambia**: ahí van los tecnicismos, los ficheros y las líneas,
+  que es donde hacen falta. Tres del retitulado del 25/08:
+
+      «Cuatro pantallas pasan de las 1.800 líneas y cada cambio ahí es a ciegas»
+        → «Cuatro pantallas son tan enormes que tocarlas es ir a ciegas»
+
+      «El correo de entrada de Soporte necesita tres cosas que no están en el código»
+        → «El correo de entrada de Soporte todavía no funciona: le faltan tres piezas»
+
+      «Un cobro o un gasto del CRM no guarda ningún rastro del movimiento del banco»
+        → «No se puede saltar de un cobro del CRM al movimiento del banco»
 - **El cliente va detrás de un `·`**, con su slug tal cual está en base de datos
   (con guión bajo). Si son varios, separados por comas. Si es del producto y no
   de un cliente: `· producto`, `· todos` o `· interno`.

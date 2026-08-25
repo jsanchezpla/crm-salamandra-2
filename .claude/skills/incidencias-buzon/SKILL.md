@@ -120,7 +120,14 @@ que más se rompe, pero el que manda es ese fichero:
   `lib/tablero/parser.js`, la tarea sale sin cliente y sin grupo.
 - **El cuerpo se pinta tal cual**: los asteriscos y las comillas invertidas se
   VEN en el tablero. Nada de tablas markdown.
-- El título dice **qué pasa hoy**, no qué hay que programar.
+- El título dice **qué pasa hoy**, no qué hay que programar — y **en cristiano**
+  (Jorge y Rodrigo, 25/08/2026): es lo único que se lee en la lista y en el
+  móvil, así que va con las palabras de quien sufre el problema. Fuera del
+  título los nombres de librerías y ficheros, las tablas, las rutas, las líneas
+  y la jerga (endpoint, schema, override); dentro, la pantalla por su nombre,
+  qué pasa y el número que duele si cabe («102 familias» no es un tecnicismo,
+  es la prueba). **El CUERPO se queda técnico**: ahí sí van los ficheros y las
+  líneas. El detalle y los ejemplos, en `docs/como-apuntar-en-el-tablero.md` §3.
 
 Qué sección:
 
