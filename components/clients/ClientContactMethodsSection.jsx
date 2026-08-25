@@ -33,7 +33,17 @@ function IconPhone() {
   );
 }
 
-export default function ClientContactMethodsSection({ clientId }) {
+/**
+ * `conPortal` (25/08/2026): si el centro tiene ÁREA PRIVADA, o sea módulo
+ * `citas`. Sin él, el subtítulo decía «El principal accede al portal y recibe
+ * avisos» en un CRM que no tiene portal ni manda avisos de cita — se leía en la
+ * ficha de una radio, en el CRM de booking de una cantante.
+ *
+ * Por defecto `false`: si mañana lo monta otra pantalla y se olvida de pasarlo,
+ * el error cae del lado de decir de menos, que se nota menos que prometer un
+ * portal que no existe.
+ */
+export default function ClientContactMethodsSection({ clientId, conPortal = false }) {
   const [methods, setMethods] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -115,7 +125,11 @@ export default function ClientContactMethodsSection({ clientId }) {
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-6">
       <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
         <span className="text-sm font-semibold text-gray-700">Contactos</span>
-        <span className="text-xs text-gray-400">El principal accede al portal y recibe avisos</span>
+        <span className="text-xs text-gray-400">
+          {conPortal
+            ? "El principal accede al portal y recibe avisos"
+            : "El principal es la dirección a la que se escribe por defecto"}
+        </span>
       </div>
       <div className="p-5 space-y-5">
         {groups.map((kind) => {

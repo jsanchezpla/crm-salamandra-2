@@ -635,7 +635,10 @@ export default function ClientDetailModule({
             )}
           </div>
 
-          <ClientContactMethodsSection clientId={id} />
+          {/* `conPortal` sale de la misma pieza que el contrato: el área privada
+              es de Citas, y sin ella el subtítulo prometía un portal que no
+              existe. */}
+          <ClientContactMethodsSection clientId={id} conPortal={piezas.contratoPortal} />
 
           {/* A nombre de quién se factura. Solo donde se factura: al resto le
               sobraría una tarjeta de datos fiscales que nadie va a usar. */}
