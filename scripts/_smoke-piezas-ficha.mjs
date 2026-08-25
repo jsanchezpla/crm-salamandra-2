@@ -87,6 +87,41 @@ const { textos: tC } = fichaSegunModulos(CONSULTORA);
 check("y la pestaña se llama «Notas»", tC.notas.pestana === "Notas", tC.notas.pestana);
 check("y habla de «el cliente»", tC.documentos.queLoVea === "Que el cliente lo vea", tC.documentos.queLoVea);
 
+
+// ── Los cuatro paneles que hasta el 25/08/2026 salían SIEMPRE ──────────────
+// Rodrigo abrió la ficha de una RADIO en el CRM de booking de una cantante y
+// leyó «Padres y tutores», «esta familia», «su historia clínica» y «avisos de
+// mis citas». Ninguno se escondía por módulo.
+
+h("Aumenta CONSERVA los cuatro paneles clínicos (965 fichas suyas tienen tutores)");
+check("aumenta: tutores", pA.tutores === true, JSON.stringify(pA));
+check("aumenta: consulta externa", pA.consultaExterna === true, JSON.stringify(pA));
+check("aumenta: contrato del portal", pA.contratoPortal === true, JSON.stringify(pA));
+check("aumenta: avisos de citas", pA.avisosCitas === true, JSON.stringify(pA));
+
+h("Una agencia de booking (clients + leads + booking) NO ve ninguno");
+const BOOKING = con("clients", "leads", "booking", "billing", "calendar", "team", "documents", "documents_avanzado", "projects");
+const pB = piezasDeFicha(BOOKING);
+check("booking: sin tutores", pB.tutores === false, JSON.stringify(pB));
+check("booking: sin consulta externa", pB.consultaExterna === false, JSON.stringify(pB));
+check("booking: sin contrato del portal", pB.contratoPortal === false, JSON.stringify(pB));
+check("booking: sin avisos de citas", pB.avisosCitas === false, JSON.stringify(pB));
+check("booking: y tampoco Documentos, que ya tiene el archivo avanzado", pB.documentos === false, JSON.stringify(pB));
+
+h("Un centro con Citas pero sin pacientes (nutrición) conserva portal y avisos");
+check("nutrición: contrato del portal", pL.contratoPortal === true, JSON.stringify(pL));
+check("nutrición: avisos de citas", pL.avisosCitas === true, JSON.stringify(pL));
+check("nutrición: SIN tutores (no tiene pacientes)", pL.tutores === false, JSON.stringify(pL));
+check("nutrición: sin consulta externa", pL.consultaExterna === false, JSON.stringify(pL));
+
+h("La consultora tampoco ve nada clínico");
+check("consultora: sin tutores", pC.tutores === false, JSON.stringify(pC));
+check("consultora: sin contrato del portal", pC.contratoPortal === false, JSON.stringify(pC));
+check("consultora: sin avisos de citas", pC.avisosCitas === false, JSON.stringify(pC));
+
+h("Un centro clínico SIN archivo avanzado (demo_clinica) los conserva");
+check("clinica básica: tutores", piezasDeFicha(con("clients","leads","pacientes","clinica","billing","citas","documents","clients_avanzado")).tutores === true);
+
 h("Un centro clínico SIN archivo avanzado (demo_clinica) solo gana Documentos");
 const CLINICA_BASICA = con("clients", "leads", "pacientes", "clinica", "billing", "citas", "documents", "clients_avanzado");
 const pK = piezasDeFicha(CLINICA_BASICA);

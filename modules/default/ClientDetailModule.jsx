@@ -751,8 +751,11 @@ export default function ClientDetailModule({
 
           <ClientPatientsSection clientId={id} />
 
-          {/* Sus citas, ¿entran confirmadas o pasan por la bandeja? (06/08). */}
-          <ClientConsultaExternaSection clientId={id} />
+          {/* Consulta externa: viene por un acuerdo con una empresa y su
+              HISTORIA CLÍNICA se guarda aquí. Solo donde hay clínica: hasta el
+              25/08/2026 salía en TODAS las fichas, así que una radio en el CRM
+              de una cantante leía «su historia clínica». */}
+          {piezas.consultaExterna && <ClientConsultaExternaSection clientId={id} />}
           {/* Con quién lleva el seguimiento (10/08/2026, Rodrigo). Debajo de
               consulta externa: en una externa, quién la lleva es además quién la
               ve, y las dos cosas se leen juntas. */}
@@ -761,13 +764,18 @@ export default function ClientDetailModule({
 
         <PanelPestana clave="contrato" activo={tab === "contrato"} onEstado={marcarPanel}>
           {/* Los tutores son quienes firman; el contrato es de la familia, no del
-              paciente (sprint 2026-07, puntos 1.2 y 1.1). */}
-          <ClientGuardiansSection clientId={id} />
+              paciente (sprint 2026-07, puntos 1.2 y 1.1). Sin `pacientes` no hay
+              menores a los que representar. */}
+          {piezas.tutores && <ClientGuardiansSection clientId={id} />}
 
-          <ClientContractSection clientId={id} />
+          {/* El Contrato de Prestación de Servicios se firma en el ÁREA PRIVADA,
+              y el área privada es de Citas. Sin portal, «Firmas en el portal:
+              0 de 1» no significa nada. */}
+          {piezas.contratoPortal && <ClientContractSection clientId={id} />}
 
-          {/* Por dónde acepta la familia que se le escriba (01/08). */}
-          <ClientComunicacionesSection clientId={id} />
+          {/* Por dónde acepta la familia que se le avise DE SUS CITAS (01/08).
+              Sin Citas no hay avisos que preferir. */}
+          {piezas.avisosCitas && <ClientComunicacionesSection clientId={id} />}
 
           {/* Solo se pinta si el centro tiene el bloqueo por impago encendido. */}
           <ClientPortalMonthsSection clientId={id} />
