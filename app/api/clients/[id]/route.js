@@ -187,6 +187,36 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
   if ("autoConfirmBookings" in body) baseUpdate.autoConfirmBookings = !!body.autoConfirmBookings;
 
   /*
+   * Archivar y reactivar la ficha (25/08/2026, Lau) — la llave es `archivada`,
+   * NO `status`.
+   *
+   * ⚠️ En este endpoint `body.status` YA está cogido: es el embudo comercial y
+   * acaba en `customFields.seStatus` (unas líneas más arriba). La columna de
+   * verdad, `clients.status`, es otra cosa —`active` / `inactive` / `prospect`—
+   * y es la que decide si la ficha está dada de baja. Con la misma llave para
+   * las dos, un guardado del embudo se llevaría por delante el archivo.
+   *
+   * Solo se toca si el valor CAMBIA, para que un `archivada:false` de paso no
+   * ascienda a `active` a un `prospect` que nadie había archivado. (Si de
+   * verdad se archiva un `prospect` y luego se reactiva, vuelve como `active`:
+   * el archivo es de ida y vuelta, pero solo recuerda dos estados.)
+   *
+   * ⚠️ Archivar tiene un SEGUNDO efecto, que la ficha avisa en su botón: el
+   * buscador del alta manual de citas (`app/api/citas/clientes`) filtra por
+   * `status <> 'inactive'`, así que una familia archivada tampoco sale al ir a
+   * darle hora. Es reversible, pero no es invisible.
+   *
+   * No es de admin: archivar se deshace con un clic. Borrar, que no se deshace,
+   * sí lo es (ver el DELETE de abajo).
+   */
+  if ("archivada" in body) {
+    const quiereArchivada = !!body.archivada;
+    if (quiereArchivada !== (client.status === "inactive")) {
+      baseUpdate.status = quiereArchivada ? "inactive" : "active";
+    }
+  }
+
+  /*
    * «Consulta externa» y su empresa (07/08/2026, Rodrigo). Solo si vienen
    * explícitos, como el resto: un guardado de otra sección de la ficha no puede
    * desmarcarlo sin querer — y desmarcarlo significa que el paciente aparece de

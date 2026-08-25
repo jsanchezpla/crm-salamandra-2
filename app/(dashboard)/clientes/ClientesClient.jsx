@@ -592,7 +592,25 @@ export default function ClientesClient({
                         }`}
                       >
                         <td className="px-4 py-3">
-                          <div className="font-medium text-gray-900 truncate max-w-[160px]">{client.name || "—"}</div>
+                          {/* El tope de ancho va en el NOMBRE, no en la fila:
+                              si lo lleva la fila, el distintivo le roba 60 px
+                              al nombre y «María del Carmen Rodríguez» se corta
+                              en «María del…» solo por estar archivada. */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-gray-900 truncate max-w-[160px]">{client.name || "—"}</span>
+                            {/* Archivada = dada de baja (`client.status`, NO el
+                                embudo comercial de la columna «Estado»). Es la
+                                única forma de saber por qué esta ficha no sale
+                                en «Fichas a completar». */}
+                            {client.status === "inactive" && (
+                              <span
+                                className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500"
+                                title="Ficha archivada: se conserva, pero no reclama datos que faltan ni sale en el buscador del alta de citas"
+                              >
+                                Archivada
+                              </span>
+                            )}
+                          </div>
                           <div className="text-xs text-gray-400 truncate max-w-[160px]">
                             {client.customFields?.company || (conCategoria ? client.customFields?.provincia || "" : "")}
                           </div>

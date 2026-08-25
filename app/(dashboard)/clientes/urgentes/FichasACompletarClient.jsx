@@ -18,9 +18,14 @@
  * · Cada fila se puede marcar REVISADA. Hay huecos correctos —un paciente en
  *   lista de espera no tiene terapeuta— y sin poder archivarlos la pantalla no
  *   llega a cero nunca.
+ * · LAS FICHAS ARCHIVADAS NO SALEN (25/08/2026, Lau). Eran 134 de las 171 del
+ *   bloque rojo. La casilla de arriba las devuelve, y el criterio y su excepción
+ *   —quien está de baja pero tiene hora cogida sí sale, marcado— viven en
+ *   `lib/clients/urgentes.js`, no aquí: el total de la carpeta se cuenta con la
+ *   misma regla con la que se traen las filas.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
@@ -85,6 +90,18 @@ function Carpeta({ carpeta, abierta, onToggle, onRevisar, marcando }) {
                     {f.familia && carpeta.entidad === "patient" && (
                       <span className="text-neutral-400"> · {f.familia}</span>
                     )}
+                    {/* Una ficha de baja que aun así sale es la que tiene horas
+                        cogidas en la agenda. Sin decirlo, parece que el filtro
+                        no funciona; dicho, es el aviso de que hay que anular
+                        esas citas o reactivar la ficha. */}
+                    {f.de_baja && (
+                      <span
+                        className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-neutral-100 text-neutral-500 align-middle"
+                        title="La ficha está dada de baja. Sale porque tiene citas reservadas."
+                      >
+                        Archivada
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-neutral-500 whitespace-nowrap">{fmt(f.dato)}</td>
                   <td className="px-4 py-2 text-right">
@@ -117,21 +134,38 @@ export default function FichasACompletarClient() {
   const [cargando, setCargando] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
   const [marcando, setMarcando] = useState(null);
+  const [incluirBajas, setIncluirBajas] = useState(false);
+
+  /**
+   * Número de petición, para que una respuesta vieja no pise a la nueva.
+   *
+   * Esta consulta tarda ~4 s en Aumenta (medido: 3.997 ms). Marcar y desmarcar
+   * la casilla dentro de esos 4 s deja dos peticiones en vuelo, y si la primera
+   * llega la última, la pantalla se queda enseñando las fichas archivadas con
+   * la casilla apagada —justo el estado que este cambio venía a quitar— sin
+   * nada que lo explique. Con el contador, la que ya no es la última se tira.
+   */
+  const peticion = useRef(0);
 
   const cargar = useCallback(async () => {
+    const mia = ++peticion.current;
     setCargando(true);
     try {
-      const r = await fetch("/api/clients/urgentes", { cache: "no-store" });
+      const r = await fetch(`/api/clients/urgentes${incluirBajas ? "?incluirBajas=1" : ""}`, { cache: "no-store" });
       const j = await r.json();
+      if (peticion.current !== mia) return;
       if (!j.ok) throw new Error(j.error || "No se pudo cargar");
       setDatos(j.data);
       setErrorMsg(null);
     } catch (e) {
+      if (peticion.current !== mia) return;
       setErrorMsg(e.message);
     } finally {
-      setCargando(false);
+      // El «Cargando…» solo lo apaga la última: si lo apagara la primera en
+      // llegar, la pantalla diría que ya está mientras la otra sigue viva.
+      if (peticion.current === mia) setCargando(false);
     }
-  }, []);
+  }, [incluirBajas]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -171,13 +205,32 @@ export default function FichasACompletarClient() {
             sentada: se abre una carpeta, se cierran unas cuantas y se deja.
             {" "}
             <strong className="text-white">Las carpetas no se solapan</strong>: cada ficha aparece
-            en una sola, para que no la arregles dos veces.
+            en una sola —la más urgente que le toque—, para que no la arregles dos veces. Si al
+            rellenar ese hueco le queda otro, reaparece en la carpeta que le corresponda.
           </HelpTooltip>
         </h1>
         <p className="text-[12.5px] text-neutral-500 mt-0.5">
           Datos que faltan en las fichas. Lo de arriba rompe algo esta semana; lo de abajo
           se puede ir cerrando poco a poco.
         </p>
+
+        <label className="mt-3 inline-flex items-center gap-2 text-[12px] text-neutral-600 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={incluirBajas}
+            onChange={(e) => setIncluirBajas(e.target.checked)}
+            className="w-3.5 h-3.5 rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)]"
+          />
+          Incluir fichas archivadas
+          <HelpTooltip title="Fichas archivadas" placement="bottom">
+            Las fichas dadas de baja no salen: sus huecos ya no hay que rellenarlos, y estaban
+            enterrando lo que sí hay que mirar esta semana.
+            {" "}
+            <strong className="text-white">Con una excepción</strong>: quien está de baja pero
+            tiene citas reservadas sí aparece, marcado como «Archivada». Ahí el problema no es el
+            dato que falta — es que hay horas cogidas en la agenda de alguien que ya no viene.
+          </HelpTooltip>
+        </label>
       </div>
 
       {errorMsg && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700">{errorMsg}</div>}

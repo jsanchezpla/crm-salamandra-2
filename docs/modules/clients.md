@@ -112,7 +112,7 @@ campos. Resumen:
 | `/api/clients/[id]/billing-summary` | GET | Resumen facturas | JWT + `hasModule(billing)` |
 | `/api/clients/waitlist` | GET/POST/PATCH | Lista de espera de ADMISIÓN (`lib/clients/listaEspera.js`; no es la de Citas) | JWT + `hasModule(clients_avanzado)` |
 | `/api/clients/waitlist/[id]` | PATCH | Editar una entrada de la cola, sacarla (`status: "removed"`) o convertirla en cliente (`convertir: true`; la entrada queda `converted` con su `clientId`) | JWT + `hasModule(clients_avanzado)` |
-| `/api/clients/urgentes` | GET/POST | «Fichas a completar» por carpetas (`lib/clients/urgentes.js`; `?soloTotales=1` para el menú) / marcar revisado (`data_reviews`) | JWT + `hasModule(clients_avanzado)` |
+| `/api/clients/urgentes` | GET/POST | «Fichas a completar» por carpetas (`lib/clients/urgentes.js`; `?soloTotales=1` para el menú, `?incluirBajas=1` para ver también las fichas archivadas) / marcar revisado (`data_reviews`) | JWT + `hasModule(clients_avanzado)` |
 | `/api/clients/export` | GET | XLSX de listado | JWT |
 | `/api/clients/import` | POST | Importar JSON | JWT |
 
@@ -430,6 +430,165 @@ a mano y no usa `PanelPestana`, así que allí la sección avisa por `onEstado` 
 la pestaña se filtra con `hayWhatsapp`. Y el panel va **montado siempre**
 (oculto con `hidden`), no `tab === "whatsapp" && …`: si solo se montara al abrir
 su pestaña, la pestaña no aparecería nunca — no se puede abrir lo que no está.
+
+## «Fichas a completar» no reclama datos de fichas archivadas (25/08/2026)
+
+Lo pidió Lau (Aumenta) el 14/08: la pantalla le sacaba una y otra vez gente que
+ella ya había dado de baja. Medido en producción el 25/08, tenía razón y de
+sobra: de las **171 filas del bloque rojo** —el que tiene que llegar a cero—
+**134 eran bajas**, y en «Sin tutor y sin ningún dato de contacto», **117 de
+118**. En «Familias sin correo», 120 de 265.
+
+**El archivo ya existía.** No hubo que inventar ningún estado: `clients.status`
+tenía 120 fichas en `inactive` y `patients.status` 124 en `paused`, emparejadas
+120 a 120, y las puso el propio `scripts/import-aumenta.js` al traer el
+`activo = false` de Organízate. Lo único que faltaba era que esta pantalla las
+mirase. (`discharged` no lo usa nadie: 0 filas.)
+
+**Qué cuenta como baja**: la familia en `inactive` **o** el paciente en `paused`
+/ `discharged`. Se miran los dos porque hay 4 pacientes en pausa cuya familia
+sigue viva —un hermano que para y otro que sigue—, y con mirar uno solo se
+escapan.
+
+### La excepción: quien tiene hora cogida sigue saliendo
+
+La regla no es «fuera las bajas», es **fuera las bajas que no tengan cita
+futura**. Salió de los datos: hay **11 pacientes en pausa con 304 citas
+confirmadas** del 1/9/2026 al 28/6/2027. Están de baja y tienen el curso entero
+ocupado en la agenda; una de las dos cosas está mal, y esconderlos dejaría esas
+304 horas bloqueadas sin que nadie pudiera enterarse.
+
+Esos siguen saliendo y salen **marcados** (`de_baja` en cada fila → distintivo
+«Archivada» en la pantalla), porque ahí el arreglo no es rellenar un teléfono:
+es anular las citas o reactivar la ficha. En la práctica deja las dos carpetas
+de «con citas» casi como estaban —sus bajas tienen todas hora— y limpia el resto.
+
+La casilla **«Incluir fichas archivadas»** las devuelve (`?incluirBajas=1`). El
+menú (`?soloTotales=1`) **no** la lleva a propósito: su número tiene que ser el
+de la pantalla recién abierta, y la pantalla se abre con las bajas fuera.
+
+## Las carpetas no se solapan, y hasta el 25/08/2026 era mentira
+
+La pantalla promete «cada ficha aparece en una sola, para que no la arregles dos
+veces». Dos carpetas lo cumplían —`sin_tutor` excluía a las mudas, `sin_contacto`
+a las que no tienen tutor— y las otras seis no. Medido en producción:
+**1.965 filas para 1.225 fichas**; 726 fichas salían en dos carpetas y 7 en tres.
+Cinco solapes, cuatro **completos**:
+
+- los 31 de «con citas y sin terapeuta» estaban TODOS entre los 614 de
+  «pacientes sin terapeuta» — por construcción, uno es el otro más un `AND`;
+- las 118 de «sin tutor ni contacto» y las 102 de «sin teléfono ni correo»
+  estaban TODAS entre las 265 de «sin correo»: quien no tiene ni teléfono ni
+  correo, tampoco tiene correo;
+- 482 de los 813 de «activos sin ninguna cita» eran los mismos de «pacientes sin
+  terapeuta»;
+- y 7 salían en las dos carpetas rojas de «con citas» a la vez.
+
+**La regla ahora**: cada ficha sale en la **primera carpeta de `CARPETAS` que le
+aplique**, y en ninguna más. Arriba están las urgentes, así que gana siempre la
+más urgente. Si al rellenar ese hueco le queda otro, reaparece donde toque: es
+una cola, no una lista de todo a la vez.
+
+Y hay una traducción, porque hay carpetas de PACIENTE y carpetas de FAMILIA: el
+hueco de «no hay forma de contacto» es de la familia, pero se enseña desde el
+paciente cuando ese paciente tiene hora cogida, que es lo urgente. Rellenar el
+teléfono tacha las dos filas, así que la familia se calla mientras la esté
+enseñando un hijo (`FAMILIA_YA_SALE_POR_UN_HIJO`).
+
+Las dos reglas juntas, en Aumenta:
+
+| Carpeta | Hoy | Con las dos reglas |
+| --- | --- | --- |
+| Con citas del curso y sin terapeuta | 31 | 31 |
+| Con citas del curso y sin forma de contacto | 22 | 15 |
+| Sin tutor y sin ningún dato de contacto | 118 | **7** |
+| Pacientes sin terapeuta | 614 | 482 |
+| Familias sin tutor (localizables) | 0 | 0 |
+| Familias sin teléfono ni correo | 102 | 92 |
+| Familias sin correo | 265 | **42** |
+| Pacientes activos sin ninguna cita | 813 | 332 |
+| **Bloquea el trabajo** | **171** | **53** |
+| **Ficha incompleta** | **1.794** | **948** |
+| **Filas / fichas distintas** | **1.965 / 1.225** | **1.001 / 1.001** |
+
+**Nadie con un hueco real desaparece**, y está comprobado contra los datos de
+producción antes de desplegar: de las 225 fichas que dejan de verse, 215 están
+de baja y 10 son familias cuyo hueco ya enseña un hijo. **Cero sin explicar y
+cero fichas en dos carpetas.** La única que aparece de nuevas es un paciente
+activo con terapeuta cuya única cita futura estaba anulada, y aparece donde
+tiene que aparecer: en «activos sin ninguna cita».
+
+### Una cita anulada no es «tener hora cogida»
+
+Lo cazó la revisión adversarial previa al despliegue. Cancelar no borra la fila
+—`lib/citas/cancelBooking.js` solo le pone `status='cancelled'`, y el import de
+Aumenta ya trajo canceladas de Organízate—, así que sin filtrar por estado el
+flujo más normal del mundo (dar de baja a alguien **y** anularle las sesiones
+del curso) dejaba la ficha rebotando en la pantalla, marcada «Archivada» y con
+un aviso falso: «tiene horas cogidas en la agenda». Para la agenda ese hueco
+está libre. Las subconsultas que deciden si hay hora cogida llevan ahora
+`b.status NOT IN ('cancelled','no_show')` — la misma lista que `ocupaHuecoWhere`
+de `lib/citas/booking.js`, `lib/home/summary.js` y `caducidadRetencion.js`.
+
+Las columnas de detalle que miran hacia atrás (`última cita`) **no** llevan ese
+filtro a propósito: ahí la pregunta es «¿cuándo se le vio por última vez?», y
+una cita anulada también es una fecha en la que hubo trato.
+
+El solape que queda es **por familia y a propósito**: un paciente sin terapeuta
+cuya familia no tiene correo sale dos veces, una por cada hueco, porque son dos
+arreglos distintos sobre dos fichas distintas. La promesa habla de fichas.
+
+### Archivar y reactivar, desde la ficha
+
+`clients.status` no se veía ni se podía cambiar en ninguna pantalla. Ahora la
+ficha de familia lleva un distintivo «Archivada» en la cabecera y un botón
+**Archivar ficha / Reactivar ficha** junto a Editar; el listado de `/clientes`
+enseña el mismo distintivo. Archivar **no es de admin** (se deshace con el mismo
+botón); borrar sí lo es, y eso sigue igual.
+
+⚠️ **Archivar tiene un segundo efecto y hay que decirlo**: el buscador del alta
+manual de citas (`app/api/citas/clientes`) filtra por `status <> 'inactive'`, así
+que una familia archivada tampoco sale al ir a darle hora. Es reversible
+—reactivándola vuelve—, pero no es invisible: si nadie lo avisa, recepción
+teclea el nombre, no encuentra a nadie, usa la salida a mano del buscador y la
+cita nace con `clientId = null`, o sea suelta de su familia. Por eso lo dicen los
+dos `title` (el del botón y el del distintivo) y el docblock de
+`toggleArchivada`. **Queda pendiente de decisión**: la alternativa es que el
+buscador de citas SÍ las ofrezca, con su distintivo, en vez de esconderlas.
+
+⚠️ **La llave del cuerpo es `archivada`, no `status`.** En
+`app/api/clients/[id]` el `body.status` YA está cogido: es el embudo comercial y
+acaba en `customFields.seStatus`, que es otro campo distinto aunque el nombre lo
+parezca (por eso en la cabecera conviven el distintivo «Nuevo» y el
+«Archivada»). Con la misma llave para las dos, guardar el embudo se llevaría por
+delante el archivo. Y solo se toca si el valor CAMBIA, para no perder `prospect`
+por el camino.
+
+### Dos trampas de las consultas crudas que costaron una tarde
+
+Las dos estaban en `lib/clients/urgentes.js` y las dos son de cualquier
+`sequelize.query()` del repo:
+
+1. **`coalesce(c.status::text, '')`, no `coalesce(c.status, '')`.** `status` es
+   un ENUM: sin el cast, PostgreSQL intenta meter la cadena vacía dentro del
+   enum y revienta en la primera consulta. Y el `coalesce` tampoco sobra: dos
+   carpetas llegan a `clients` por un LEFT JOIN, y sin él un paciente sin
+   familia da `NULL = 'inactive'` → NULL, el `NOT (...)` también sale NULL y la
+   fila se cae por no tener familia. Ese segundo fallo **no daría ningún error**.
+2. **Nunca `SELECT table_name FROM information_schema.tables` para saber si una
+   tabla existe.** El dialecto de Postgres de Sequelize reconoce esa forma como
+   «listar tablas» y le cambia la FORMA al resultado: devuelve los nombres
+   sueltos y repartidos entre los dos huecos de la tupla
+   (`[["bookings"],["patients"]]`), así que `filas.map(f => f.table_name)` da
+   `[undefined]` y el centro se queda sin sus carpetas de pacientes **sin dar
+   ningún error**. Se pregunta con `to_regclass('"crm_x"."tabla"')`, que además
+   obliga a escribir el schema — que es la otra trampa, la del `searchPath`
+   (ver `docs/modules/pacientes.md`).
+
+Lo fija `scripts/_smoke-clients-urgentes-bajas.mjs` (25 comprobaciones), que
+además compara el WHERE del listado con el del recuento carpeta por carpeta —la
+regla de que el número y las filas salgan de la misma fuente— y que cada carpeta
+sigue callándose lo que ya enseña otra por encima.
 
 ## WhatsApp sin asignar (17/08/2026)
 

@@ -44,12 +44,26 @@ export const GET = withTenant(async (request, _rc, ctx) => {
    * `cuerpoDe()`— así que el número del menú y lo que se ve al abrir no pueden
    * discrepar.
    */
-  if (new URL(request.url).searchParams.get("soloTotales") === "1") {
+  const params = new URL(request.url).searchParams;
+
+  /*
+   * `?incluirBajas=1` — enseñar también las fichas archivadas (25/08/2026).
+   *
+   * Por defecto NO salen: ver el porqué y la excepción de quien tiene hora
+   * cogida en la cabecera de `lib/clients/urgentes.js`. La casilla de la
+   * pantalla es lo único que manda este parámetro.
+   *
+   * El menú (`soloTotales`) NO lo lleva a propósito: su número tiene que ser el
+   * de la pantalla recién abierta, y la pantalla se abre con las bajas fuera.
+   */
+  const incluirBajas = params.get("incluirBajas") === "1";
+
+  if (params.get("soloTotales") === "1") {
     const { bloquea, completar } = await cuentasDe(tenantSequelize, esquema);
     return ok({ totalBloquea: bloquea, totalCompletar: completar });
   }
 
-  const carpetas = await carpetasCon(tenantSequelize, esquema, tenantModels.DataReview);
+  const carpetas = await carpetasCon(tenantSequelize, esquema, tenantModels.DataReview, { incluirBajas });
   const bloquea = carpetas.filter((c) => c.bloquea);
   const completar = carpetas.filter((c) => !c.bloquea);
 
@@ -58,6 +72,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     completar,
     totalBloquea: bloquea.reduce((a, c) => a + c.total, 0),
     totalCompletar: completar.reduce((a, c) => a + c.total, 0),
+    incluirBajas,
   });
 });
 

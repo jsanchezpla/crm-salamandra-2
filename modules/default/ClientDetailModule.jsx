@@ -254,6 +254,7 @@ export default function ClientDetailModule({
    * enseña. Recargar es más barato que deshacer un borrado, que no se deshace.
    */
   const [rol, setRol] = useState(null);
+  const [archivando, setArchivando] = useState(false);
 
   useEffect(() => {
     let vivo = true;
@@ -334,7 +335,10 @@ export default function ClientDetailModule({
       });
       const data = await res.json();
       if (data.ok) {
-        setClient(data.data);
+        // Se funde por lo mismo que en `toggleArchivada`: el PUT no devuelve
+        // `listaEspera` ni `bonos`, y sustituir el objeto entero los borraba de
+        // la pantalla hasta la siguiente recarga.
+        setClient((prev) => ({ ...prev, ...data.data }));
         setEditMode(false);
       }
     } finally {
@@ -358,6 +362,48 @@ export default function ClientDetailModule({
       }
     } finally {
       setAddingInteraction(false);
+    }
+  }
+
+  /**
+   * Archivar la ficha, y desarchivarla (25/08/2026, Lau).
+   *
+   * Es lo que ella llamaba «una carpeta o archivo donde se queden almacenados»
+   * los que ya no vienen: la ficha se queda entera —sus facturas, sus informes,
+   * su historia—, deja de reclamar datos en «Fichas a completar» y se puede
+   * devolver con el mismo botón. No es borrar; borrar es el botón rojo, y ese
+   * sí se lleva la historia por delante y solo lo ve un admin.
+   *
+   * ⚠️ TIENE UN SEGUNDO EFECTO, y por eso lo dicen los dos `title`: archivar
+   * escribe `clients.status='inactive'`, y el buscador del alta manual de citas
+   * (`app/api/citas/clientes/route.js`) filtra por `status <> 'inactive'`. O
+   * sea que una familia archivada tampoco sale al ir a darle hora. Se deshace
+   * reactivándola, pero quien archiva tiene que saberlo ANTES de pulsar.
+   *
+   * Sin `confirm()` a propósito: lo que no se puede deshacer se pregunta, y
+   * esto se deshace con el mismo clic que lo hizo.
+   *
+   * ⚠️ Manda `archivada`, no `status`: en este endpoint `status` es el embudo
+   * comercial y acaba en `customFields.seStatus`, que es otro campo distinto.
+   */
+  async function toggleArchivada() {
+    const archivar = client.status !== "inactive";
+    setArchivando(true);
+    try {
+      const res = await fetch(`/api/clients/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archivada: archivar }),
+      });
+      const data = await res.json();
+      // ⚠️ Se FUNDE, no se sustituye. El GET de la ficha devuelve
+      // `{...client, listaEspera, bonos}` y el PUT solo devuelve el cliente:
+      // con `setClient(data.data)` a secas, archivar hacía desaparecer el chip
+      // «En lista de espera» de la misma cabecera —como si archivar la hubiera
+      // sacado de la cola de admisión, que no la saca— hasta recargar.
+      if (data.ok) setClient((prev) => ({ ...prev, ...data.data }));
+    } finally {
+      setArchivando(false);
     }
   }
 
@@ -398,6 +444,9 @@ export default function ClientDetailModule({
 
   const status = client.customFields?.seStatus || "new";
   const st = STATUS_STYLE[status] ?? STATUS_STYLE.new;
+  // ⚠️ `client.status` (la columna) y `seStatus` (el embudo comercial, dos
+  // líneas arriba) NO son lo mismo, aunque el nombre lo parezca.
+  const archivada = client.status === "inactive";
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
@@ -414,6 +463,17 @@ export default function ClientDetailModule({
             <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
             {STATUSES.find((s) => s.key === status)?.label ?? status}
           </span>
+          {/* Ficha archivada: lo primero que hay que ver al abrirla, porque
+              explica por qué no aparece en «Fichas a completar» ni reclama nada. */}
+          {archivada && (
+            <span
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-neutral-200 text-neutral-600"
+              title="Dada de baja. Se conserva entera, pero no reclama datos que faltan ni sale en el buscador del alta de citas."
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-neutral-500" />
+              Archivada
+            </span>
+          )}
           {/* Lista de espera de ADMISIÓN: lo primero que se pregunta al abrir
               la ficha de una familia que aún no tiene plaza. */}
           {client.listaEspera && (
@@ -481,6 +541,18 @@ export default function ClientDetailModule({
                         <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
                       </svg>
                       Editar
+                    </button>
+                    {/* Archivar NO es de admin: se deshace con el mismo botón.
+                        Lo que no se deshace —Eliminar— sí lo es. */}
+                    <button
+                      onClick={toggleArchivada}
+                      disabled={archivando}
+                      className="text-xs text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                      title={archivada
+                        ? "Devolverla a las fichas activas y al buscador de citas"
+                        : "Guardarla sin borrarla: deja de reclamar datos que faltan y de salir en el buscador del alta de citas"}
+                    >
+                      {archivando ? "…" : archivada ? "Reactivar ficha" : "Archivar ficha"}
                     </button>
                     {/* Solo admin (14/08/2026, ver lib/auth/permisos.js). No
                         sale deshabilitado a propósito: un botón apagado es una
