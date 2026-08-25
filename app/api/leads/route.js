@@ -68,9 +68,8 @@ export async function OPTIONS() {
  */
 async function camposConDatos(Lead) {
   const hay = async (where) => (await Lead.count({ where })) > 0;
-  const [motivo, tipoUsuario, detalle] = await Promise.all([
+  const [motivo, detalle] = await Promise.all([
     hay({ motivo: { [Op.ne]: null } }),
-    hay({ tipo_usuario: { [Op.ne]: null } }),
     hay({
       [Op.or]: [
         { servicio: { [Op.ne]: null } },
@@ -79,7 +78,7 @@ async function camposConDatos(Lead) {
       ],
     }),
   ]);
-  return { motivo, tipoUsuario, detalle };
+  return { motivo, detalle };
 }
 
 async function desglosePorEtapa(Lead, whereSinEtapa, excluirOrigen) {

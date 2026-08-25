@@ -57,11 +57,13 @@ export function defineLead(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
-      // Campos de consulta web (Aumenta y similares)
+      // Legado de la web antigua de Aumenta (ciudadano/profesional). La
+      // distinción vive hoy en los MÓDULOS (leads = profesionales,
+      // formularios = comerciales), así que ya no se escribe ni se enseña
+      // (25/08/2026, Rodrigo); la columna queda por los datos históricos.
       tipo_usuario: {
         type: DataTypes.ENUM("ciudadano", "profesional"),
         allowNull: true,
-        defaultValue: "ciudadano",
       },
       motivo: {
         type: DataTypes.ENUM("diagnostico", "servicios", "cursos", "talleres"),

@@ -284,7 +284,7 @@ export default function AumentaLeadsModule() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      {["Nombre y Email", "Motivo", "Detalle", "Tipo", "Estado", "Recibido", ""].map((h) => (
+                      {["Nombre y Email", "Motivo", "Detalle", "Estado", "Recibido", ""].map((h) => (
                         <th
                           key={h}
                           className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide"
@@ -328,21 +328,6 @@ export default function AumentaLeadsModule() {
                           </td>
                           <td className="py-3.5 px-4 max-w-[180px]">
                             <span className="text-sm text-gray-500 truncate block">{getDetalle(lead)}</span>
-                          </td>
-                          <td className="py-3.5 px-4">
-                            {lead.tipo_usuario ? (
-                              <span
-                                className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                                  lead.tipo_usuario === "profesional"
-                                    ? "bg-purple-100 text-purple-700"
-                                    : "bg-gray-100 text-gray-600"
-                                }`}
-                              >
-                                {lead.tipo_usuario === "profesional" ? "Profesional" : "Ciudadano"}
-                              </span>
-                            ) : (
-                              <span className="text-gray-300">—</span>
-                            )}
                           </td>
                           <td className="py-3.5 px-4">
                             <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${style.bg}`}>
@@ -402,17 +387,6 @@ export default function AumentaLeadsModule() {
                             className={`px-2.5 py-1 rounded-full text-xs font-semibold ${MOTIVO_STYLE[lead.motivo] ?? "bg-gray-100 text-gray-600"}`}
                           >
                             {MOTIVO_LABEL[lead.motivo] ?? lead.motivo}
-                          </span>
-                        )}
-                        {lead.tipo_usuario && (
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                              lead.tipo_usuario === "profesional"
-                                ? "bg-purple-100 text-purple-700"
-                                : "bg-gray-100 text-gray-600"
-                            }`}
-                          >
-                            {lead.tipo_usuario === "profesional" ? "Profesional" : "Ciudadano"}
                           </span>
                         )}
                       </div>
@@ -565,12 +539,6 @@ function AumentaLeadPanel({ lead, open, saving, onClose, onStageChange, onNotesC
           <div className="space-y-2">
             <PanelRow label="Email" value={lead.email} href={`mailto:${lead.email}`} />
             <PanelRow label="Teléfono" value={lead.phone} href={`tel:${lead.phone}`} />
-            {lead.tipo_usuario && (
-              <PanelRow
-                label="Tipo"
-                value={lead.tipo_usuario === "profesional" ? "Profesional" : "Ciudadano"}
-              />
-            )}
           </div>
         </div>
 

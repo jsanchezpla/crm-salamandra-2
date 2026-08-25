@@ -38,7 +38,7 @@ import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
  *
  * ── LO QUE NO ES DE NADIE Y POR ESO ESTÁ AQUÍ ──────────────────────────────
  *
- * `motivo`, `servicio`, `curso`, `taller` y `tipo_usuario` NO son campos de
+ * `motivo`, `servicio`, `curso` y `taller` NO son campos de
  * Aumenta: son columnas de `models/tenant/Lead.model.js` para todos los
  * tenants (con su ENUM). Un cliente que no los rellene ve «—», nada más.
  *
@@ -184,7 +184,7 @@ export default function LeadsModule({
   /**
    * Qué campos heredados del embudo de Aumenta usa de verdad este cliente.
    *
-   * `motivo` (diagnóstico / servicios / cursos / talleres), `tipo_usuario`
+   * `motivo` (diagnóstico / servicios / cursos / talleres)
    * (ciudadano / profesional) y su detalle son columnas de `Lead` para todos,
    * y esta tabla las pintaba SIEMPRE. En un CRM de booking eso eran tres
    * columnas fijas en «—» y un filtro «Todos los motivos» que no filtraba nada.
@@ -195,7 +195,7 @@ export default function LeadsModule({
    * tabla no parpadee mientras carga: quien no los use los ve un instante, que
    * es mucho menos malo que ver saltar las columnas.
    */
-  const [campos, setCampos] = useState({ motivo: true, tipoUsuario: true, detalle: true });
+  const [campos, setCampos] = useState({ motivo: true, detalle: true });
 
   // `silencioso` para volver a pedirlo tras un cambio de etapa sin que la lista
   // parpadee con el cargando.
@@ -411,7 +411,6 @@ export default function LeadsModule({
                         // hay, aunque nadie tenga un motivo puesto.
                         ...(campos.motivo || jobCount > 0 ? ["Motivo"] : []),
                         ...(campos.detalle ? ["Detalle"] : []),
-                        ...(campos.tipoUsuario ? ["Tipo"] : []),
                         "Estado",
                         "Recibido",
                         "",
@@ -466,23 +465,6 @@ export default function LeadsModule({
                           {campos.detalle && (
                             <td className="py-3.5 px-4 max-w-[180px]">
                               <span className="text-sm text-gray-500 truncate block">{getDetalle(lead)}</span>
-                            </td>
-                          )}
-                          {campos.tipoUsuario && (
-                            <td className="py-3.5 px-4">
-                              {lead.tipo_usuario ? (
-                                <span
-                                  className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                                    lead.tipo_usuario === "profesional"
-                                      ? "bg-purple-100 text-purple-700"
-                                      : "bg-gray-100 text-gray-600"
-                                  }`}
-                                >
-                                  {lead.tipo_usuario === "profesional" ? "Profesional" : "Ciudadano"}
-                                </span>
-                              ) : (
-                                <span className="text-gray-300">—</span>
-                              )}
                             </td>
                           )}
                           <td className="py-3.5 px-4">
@@ -541,17 +523,6 @@ export default function LeadsModule({
                             className={`px-2.5 py-1 rounded-full text-xs font-semibold ${MOTIVO_STYLE[lead.motivo] ?? "bg-gray-100 text-gray-600"}`}
                           >
                             {MOTIVO_LABEL[lead.motivo] ?? lead.motivo}
-                          </span>
-                        )}
-                        {lead.tipo_usuario && (
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                              lead.tipo_usuario === "profesional"
-                                ? "bg-purple-100 text-purple-700"
-                                : "bg-gray-100 text-gray-600"
-                            }`}
-                          >
-                            {lead.tipo_usuario === "profesional" ? "Profesional" : "Ciudadano"}
                           </span>
                         )}
                       </div>
@@ -729,9 +700,6 @@ function LeadPanel({ lead, open, saving, stages, sujeto, onClose, onStageChange,
           <div className="space-y-2">
             <PanelRow label="Email" value={lead.email} href={lead.email ? `mailto:${lead.email}` : undefined} />
             <PanelRow label="Teléfono" value={lead.phone} href={lead.phone ? `tel:${lead.phone}` : undefined} />
-            {lead.tipo_usuario && (
-              <PanelRow label="Tipo" value={lead.tipo_usuario === "profesional" ? "Profesional" : "Ciudadano"} />
-            )}
           </div>
         </div>
 

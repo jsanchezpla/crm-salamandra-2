@@ -84,7 +84,7 @@ export async function POST(request) {
       phone: cap(phone, 40),
       title: cap(fullName, 200),
       stage: "new",
-      tipo_usuario: tipo_usuario ?? "ciudadano",
+      tipo_usuario: tipo_usuario ?? null,
       motivo: motivoIsEnum ? motivo : null,
       servicio: cap(servicio, 200) ?? null,
       curso: cap(curso, 200) ?? null,
