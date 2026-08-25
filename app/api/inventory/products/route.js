@@ -3,6 +3,7 @@ import { ok, created, forbidden, error } from "../../../../lib/utils/apiResponse
 import { stockDeVarios } from "../../../../lib/inventory/stock.js";
 import { UNIDADES } from "../../../../models/tenant/Product.model.js";
 import { Op } from "sequelize";
+import { camposEscaparateDe, estorbaParaPublicar } from "../../../../lib/tienda/camposEscaparate.js";
 
 /**
  * Productos del almacén (rework 02/08/2026).
@@ -69,6 +70,11 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
 
   const num = (v) => (v === "" || v === null || v === undefined ? null : Number(v));
 
+  // Los campos de escaparate (25/08/2026). Se aceptan en el alta para poder
+  // crear un producto ya publicado de una vez, sin tener que editarlo después.
+  const { campos: escaparate, error: errEscaparate } = camposEscaparateDe(body, { nombre: name });
+  if (errEscaparate) return error(errEscaparate, 422);
+
   const product = await Product.create({
     name,
     sku: body.sku?.trim() || null,
@@ -78,6 +84,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
     salePrice: num(body.salePrice),
     minStock: num(body.minStock),
     notes: body.notes?.trim() || null,
+    ...escaparate,
   });
 
   // Un producto recién creado tiene stock 0 por definición: no hay movimientos.

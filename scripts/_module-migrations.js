@@ -49,14 +49,14 @@ import { computeOrder } from "./_migration-order.js";
  * muévanse a MODULES y a ORDER.
  */
 export const ONE_OFF = {
-  "migrate-quality-leads": "atada a quality_energy",
+  "migrate-quality-leads": "atada a quality_energy",
   "backfill-nutricion-assignments": "DATOS: marca «Paciente Nutrición» a los clientes previos al auto-marcado (2026-07-27); repetible, se corre a mano",
   "backfill-patients-client": "DATOS: enlaza pacientes con su ficha de pagador a partir de sus citas/sesiones; dry-run por defecto, se corre a mano con --confirm",
   "migrate-contract-patient-to-client": "DATOS: mueve el contrato del paciente a la familia (sprint 2026-07, 1.1); copia el PDF a `documents` y apunta clients.contract_document_id; dry-run por defecto, se corre a mano con --confirm",
   "podar-audit-logs": "MANTENIMIENTO del schema MASTER: retención del registro de auditoría; dry-run por defecto, lo lanza un temporizador semanal",
   "migrate-documents-avanzado": "MASTER, no toca schemas de tenant: reparte el módulo Documentos en básico/avanzado y da el avanzado a quien ya tenía Documentos, para que nadie pierda el archivo por el cambio de nomenclatura. Se corre a mano una vez, idempotente",
   "migrate-audit-logs-index": "índice en el schema MASTER (audit_logs), no por-tenant; idempotente, se corre a mano una vez",
-  "migrate-clients-avanzado": "MASTER, no toca schemas de tenant: saca la lista de espera de admisión de `clients` a `clients_avanzado` y se la da solo a quien admite por cola (aumenta, demo). Se corre a mano una vez, idempotente",
+  "migrate-clients-avanzado": "MASTER, no toca schemas de tenant: saca la lista de espera de admisión de `clients` a `clients_avanzado` y se la da solo a quien admite por cola (aumenta, demo). Se corre a mano una vez, idempotente",
   "migrate-usuario-backoffice": "MASTER, no toca schemas de tenant: añade `solo_backoffice` a `master.users` para separar las cuentas del panel interno de las del CRM. Se corre a mano con `npm run db:migrate:backoffice`; aditiva, con default false, idempotente",
   // Faltaba desde que se escribió (12/08/2026) y dejaba `check-migration-order`
   // en rojo con dos incoherencias: «sin módulo asignado (nadie las ejecutaría)»
@@ -366,6 +366,16 @@ export const MODULES = {
     // como histórico de lo que se hizo entonces, pero no se ejecuta.
     "migrate-inventario-rework",
   ],
+
+  /**
+   * Tienda (25/08/2026). Su migración va sobre las tablas de Inventario y
+   * Pedidos, así que se declara TAMBIÉN en `inventory` de arriba… y no: se
+   * declara solo aquí, porque las columnas de escaparate no le hacen falta a
+   * quien tiene almacén y no vende online. `migrate-tienda` es idempotente y
+   * se salta los schemas sin `products`, así que activarla dos veces no rompe.
+   */
+  tienda: ["migrate-tienda"],
+
   documents: ["migrate-documents-sprint-1", "migrate-documents-client-link", "migrate-documents-transversal", "migrate-documents-patient-link", "migrate-documents-client-portal"],
 
   // Documentos AVANZADO (01/08/2026): mismas tablas que el básico —el archivo

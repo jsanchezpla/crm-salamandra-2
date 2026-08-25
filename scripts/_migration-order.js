@@ -39,6 +39,19 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  * alguien se acuerde.
  */
 export const EXTRA_EDGES = [
+  // ── La tienda va DESPUÉS del rework de Inventario (25/08/2026) ────────────
+  // `migrate-tienda` hace ALTER sobre `products`, `stock_movements`,
+  // `order_lines` y `orders`, y las dos primeras las crea el rework. El
+  // analizador no lo ve porque su SQL usa un marcador `{S}` para el schema en
+  // vez del nombre literal, así que la arista se declara aquí.
+  //
+  // Sin ella, en un tenant nuevo la tienda saldría antes y sus ALTER fallarían
+  // con «relation does not exist» a mitad del alta.
+  {
+    before: "migrate-inventario-rework",
+    after: "migrate-tienda",
+    why: "migrate-tienda altera `products` y `stock_movements`, que crea el rework de Inventario. Su SQL usa un marcador de schema y el analizador no puede leerlo.",
+  },
   // ── Rework de Inventario / Arqueo / Proveedores (02/08/2026) ──────────────
   // Las tres deciden por EXISTENCIA de tabla (`if (!tableExists(costs)) return`),
   // así que el analizador no ve un SQL que las ate a nada y las colocaba al

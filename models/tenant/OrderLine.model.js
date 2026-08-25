@@ -24,6 +24,19 @@ export function defineOrderLine(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // La variante vendida y su nombre COPIADO (25/08/2026), igual que ya se
+      // copia el del producto: la línea de un pedido de hace dos años tiene que
+      // seguir diciendo «Talla M» aunque esa talla se haya borrado.
+      variantId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "variant_id",
+      },
+      variantName: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
+        field: "variant_name",
+      },
       productName: {
         type: DataTypes.STRING,
         allowNull: false,

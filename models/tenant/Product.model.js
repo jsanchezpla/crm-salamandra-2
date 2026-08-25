@@ -93,6 +93,62 @@ export function defineProduct(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+
+      /* ── El escaparate (25/08/2026) ────────────────────────────────────
+       *
+       * Lo que le faltaba a un producto para poder VENDERSE en una tienda
+       * pública, además de existir en el almacén.
+       */
+
+      /** La URL de su ficha: /tienda/camiseta-tu-fiesta-de-despedida. */
+      slug: {
+        type: DataTypes.STRING(160),
+        allowNull: true,
+        unique: true,
+      },
+      /** El texto largo de la ficha. `notes` sigue siendo interno. */
+      description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      /** Fotos, en orden. `[{url, alt}]`. La primera es la de portada. */
+      images: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
+      /**
+       * ¿Se ve en la tienda?
+       *
+       * NO es lo mismo que `active`, y confundirlos sería caro: `active` es «lo
+       * seguimos manejando en el almacén», `publicado` es «está a la venta». Un
+       * congelador descatalogado sigue activo —hay que poder darle salida— y no
+       * debe salir en la web. Y al revés: un producto se prepara publicado en
+       * false y se saca cuando está la foto.
+       *
+       * Arranca en `false` para todos, incluidos los que ya existen: activar la
+       * tienda no puede poner a la venta el material de oficina de una clínica.
+       */
+      publicado: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      /**
+       * IVA de ESTE producto, en porcentaje. Nullable = el general del centro.
+       * Va por producto porque no todo lleva el mismo: un libro y un congelador
+       * no tributan igual, y el CRM tiene que valer para los dos.
+       */
+      taxRate: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: true,
+      },
+      /** Orden en el catálogo. Menor = antes. */
+      sortOrder: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      },
     },
     {
       tableName: "products",

@@ -68,6 +68,30 @@ export function defineOrder(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      /* ── Lo que añade la tienda pública (25/08/2026) ─────────────────── */
+
+      /** Dónde se envía. NULL en un pedido de mostrador, que no se manda. */
+      shippingAddress: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        field: "shipping_address",
+      },
+      /**
+       * `manual` = lo tecleó alguien en el CRM · `tienda` = entró por la web.
+       * Separarlos es lo que permite mirar cuánto se vende online sin
+       * adivinarlo, igual que ya hace `SessionPack.origin` con los bonos.
+       */
+      origin: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: "manual",
+      },
+      /** El cobro de Stripe, si vino de la tienda. */
+      paymentSessionId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "payment_session_id",
+      },
       notes: {
         type: DataTypes.TEXT,
         allowNull: true,

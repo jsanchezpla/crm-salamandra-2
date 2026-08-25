@@ -2,6 +2,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, notFound, error } from "../../../../../lib/utils/apiResponse.js";
 import { stockDe } from "../../../../../lib/inventory/stock.js";
 import { UNIDADES } from "../../../../../models/tenant/Product.model.js";
+import { camposEscaparateDe, estorbaParaPublicar } from "../../../../../lib/tienda/camposEscaparate.js";
 import { auditar, datosPeticion, resumen } from "../../../../../lib/utils/auditoria.js";
 
 export const GET = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
@@ -58,6 +59,20 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
   for (const c of ["sku", "category", "notes"]) if (c in body) cambios[c] = body[c]?.trim() || null;
   for (const c of ["purchasePrice", "salePrice", "minStock"]) if (c in body) cambios[c] = num(body[c]);
   if ("active" in body) cambios.active = !!body.active;
+
+  // Los campos de escaparate (25/08/2026): slug, descripción, fotos, publicado
+  // e IVA. Solo entra lo que venga en el body, así que un PATCH que cambia el
+  // precio no borra la descripción por no mandarla.
+  const { campos: escaparate, error: errEscaparate } = camposEscaparateDe(body, { nombre: cambios.name ?? product.name });
+  if (errEscaparate) return error(errEscaparate, 422);
+  Object.assign(cambios, escaparate);
+
+  // Publicar sin precio deja en el escaparate algo que nadie puede comprar, y
+  // el fallo se ve en la web y no aquí. Se para antes.
+  if (cambios.publicado === true) {
+    const estorbo = estorbaParaPublicar({ ...product.toJSON(), ...cambios });
+    if (estorbo) return error(estorbo, 422);
+  }
 
   await product.update(cambios);
   await auditar({

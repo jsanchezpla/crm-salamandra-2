@@ -30,7 +30,7 @@ actualiza el doc.
 | `team.md` | `team`, `team_avanzado` | `outreach.md` | `outreach` |
 | `inventory.md` | `inventory` | `support.md` | `support` |
 | `documents.md` | `documents`, `documents_avanzado` | `analytics.md` | `analytics` |
-| `booking.md` | `booking` | — | — |
+| `booking.md` | `booking` | `tienda.md` | `tienda` |
 | `fichaje.md` | `fichaje` | `configuracion.md` | — (siempre visible) |
 | `emails.md` | — (infra transversal) | `buzon.md` | — (todos, `/ayuda`) |
 
@@ -220,6 +220,7 @@ comercial es `leads`), `referidos` (12/08), `cuestionarios` (10/08: pantalla de
 | `training` | Cursos, alumnos, matrículas, empresas, cuestionarios; TutorLMS por webhooks HMAC | Interruptor `formacionAbierta` (`lib/training/formacionAbierta.js`) esconde Empresas y Cuestionarios. |
 | `citas` | Reservas, portal SSO, widget público | Interruptor `autoConfirmPublicBookings`. |
 | `calendar`, `orders` | Calendario; pedidos | Sin doc. |
+| `tienda` | Ecommerce encima de Inventario: escaparate público (widget + shortcode `[crm_tienda]`), carrito y pago con Stripe | Requiere `inventory`+`orders`+`clients`. Los productos SON los de Inventario (solo añade campos de escaparate y variantes); el pedido nace en `draft` y **solo el webhook** confirma y descuenta stock. Pantalla `/tienda`. Reina: `laura_ubeda`. |
 | `pacientes` / `clinica` | Fichas de paciente / sesiones (audio→Whisper→Claude), informes, coordinaciones (`/clinica/coordinaciones`), estadísticas del centro (`/clinica/estadisticas`, solo dirección) | El cliente es la familia que paga; el paciente, el hijo. Alta con pacientes en la misma transacción. |
 | `nutricion` | Recetario, alimentos, plantillas, Pautas (`/nutricion/asignados`) | Componentes en `modules/nutricion/`; `enable-module.js` siembra 497 alimentos. Interruptor `autoAsignarEnAlta`. |
 | `outreach` | Captación: empresas + scoring con IA | — |

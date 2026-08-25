@@ -86,6 +86,9 @@ const NO_SE_VENDEN_SOLOS = [
   // propias: exige Clientes y Leads porque lo que hace es reetiquetarlos. Sin
   // ellos no es que pierda algo, es que no hay módulo.
   "booking",
+  // Tienda (25/08/2026): exige el trío entero —Inventario, Pedidos y Clientes—
+  // porque no tiene catálogo propio, vende el de Inventario.
+  "tienda",
   "documents",
 ];
 
@@ -834,9 +837,9 @@ describe("matrizCompleta / sinEstudiar: la tabla del back-office, lo más roto a
         pesos.filter((p) => p === 1).length,
         pesos.filter((p) => p === 2).length,
       ],
-      // 12 rojos desde el 24/08/2026: entró `booking`, que exige Clientes y
-      // Leads. Los ámbar y verdes no se mueven.
-      [12, 7, 4]
+      // 13 rojos desde el 25/08/2026: entró `tienda` (exige Inventario, Pedidos
+      // y Clientes) sobre los 12 que dejó `booking`. Ámbar y verdes no se mueven.
+      [13, 7, 4]
     );
   });
 

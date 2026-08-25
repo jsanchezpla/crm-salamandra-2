@@ -34,6 +34,14 @@ export function defineStockMovement(sequelize) {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
+      // La variante concreta que se mueve (25/08/2026). NULL = el producto no
+      // tiene variantes, que es como se movía el stock hasta la tienda: nada de
+      // lo que ya funcionaba cambia.
+      variantId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "variant_id",
+      },
       productId: {
         type: DataTypes.UUID,
         allowNull: false,
