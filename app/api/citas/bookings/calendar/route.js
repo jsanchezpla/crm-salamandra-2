@@ -3,7 +3,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, error, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../../lib/team/currentTeamMember.js";
 import { noEsCarritoAbandonado } from "../../../../../lib/citas/booking.js";
-import { veTodaLaAgenda, soloLoSuyo } from "../../../../../lib/citas/visibilidad.js";
+import { veTodaLaAgenda, soloLoSuyo, filtroDeProfesionales } from "../../../../../lib/citas/visibilidad.js";
 
 const STATUS_COLOR_DIM = {
   cancelled: "#9ca3af",
@@ -15,7 +15,9 @@ const STATUS_COLOR_DIM = {
 /**
  * GET /api/citas/bookings/calendar?start=ISO&end=ISO
  *   &eventTypeIds=csv     (opcional) filtra por tipo de cita
- *   &teamMemberIds=csv    (opcional, SOLO admin) filtra por profesional(es)
+ *   &teamMemberIds=csv    (opcional, SOLO admin) filtra por profesional(es).
+ *                         Admite `sin-asignar` como uno más de la lista, para
+ *                         pedir las citas que aún no son de nadie.
  *
  * Devuelve bookings en formato FullCalendar para el rango pedido.
  *
@@ -67,16 +69,13 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
       // igual que dirección: es lo que pidió Aumenta para cuadrar
       // recuperaciones entre compañeras (lib/citas/visibilidad.js).
       if (veTodaLaAgenda({ tenant, role: userRole })) {
-        // El jefe ve a todos; puede filtrar a uno o varios profesionales. Las
-        // citas SIN profesional asignado (públicas pendientes de repartir) se
-        // mantienen SIEMPRE visibles aunque filtres, para no perderlas de vista.
-        const tmIds = searchParams.get("teamMemberIds");
-        if (tmIds) {
-          const ids = tmIds.split(",").map((s) => s.trim()).filter(Boolean);
-          if (ids.length > 0) {
-            where.teamMemberId = { [Op.or]: [{ [Op.in]: ids }, { [Op.is]: null }] };
-          }
-        }
+        // El jefe ve a todos; puede filtrar a uno o varios profesionales, y
+        // `sin-asignar` es uno más de la lista. Filtrar por una persona enseña
+        // SOLO las suyas: hasta el 25/08/2026 se colaban además las 1.827 sin
+        // profesional, y en una semana de Aumenta eran 70 de las 103 en
+        // pantalla. El porqué entero, en lib/citas/filtros.js.
+        const filtro = filtroDeProfesionales(searchParams.get("teamMemberIds"));
+        if (filtro) where.teamMemberId = filtro;
       } else {
         // Un profesional ve SU agenda y las citas que no son de nadie (la regla
         // entera, con su porqué, en lib/citas/visibilidad.js).

@@ -1179,6 +1179,41 @@ atender), más las solicitudes de cambio de hora para dirección.
 **Histórico (hasta 22/07/2026):** el default no tenía lista de espera; la
 tenía solo el override de nutri_laura, que ese día se fundió en el default.
 
+#### Filtrar por profesional enseña SOLO las suyas (25/08/2026, Rodrigo)
+
+«Estoy seleccionando solo el de una terapeuta y me aparecen solapados otras dos
+aunque están desactivados del menú.» No eran de otras dos: eran **las que no son
+de nadie**. `GET /api/citas/bookings/calendar`, al filtrar por profesional,
+añadía siempre un `OR team_member_id IS NULL` «para no perderlas de vista».
+Medido en producción, semana del 7 al 13 de septiembre, filtrando por la
+profesional con más agenda de Aumenta:
+
+**103 citas en pantalla · 33 suyas · 70 sin profesional.** Dos de cada tres cosas
+que veía no eran suyas — y con nombre de paciente delante. Como los 57 tipos de
+cita de Aumenta **no tienen color** (0 de 57), las 70 caían al verde por defecto
+`#3F6E5B`, que es el mismo que usan las citas de los **3 de 18** miembros del
+equipo sin `avatar_color`: por eso se leían como de otra persona.
+
+La regla ahora, en `lib/citas/filtros.js` (puro, sin dependencias, porque lo
+importan el endpoint **y** el componente de la pantalla):
+
+- Filtrar por personas devuelve `{[Op.in]: ids}` y **nada más**.
+- `sin-asignar` es **una opción más del desplegable de Profesional**. Elegirla
+  enseña la cola de reparto; combinarla con una persona enseña las dos cosas.
+- **No se pierden**: viven en `/citas/sin-profesional`, que está en el menú y
+  existe justo para repartirlas.
+- **Lo que no es un UUID se tira antes de la consulta.** `team_member_id` es
+  `uuid`: mandarle `undefined` no devuelve cero filas, revienta con un 22P02 y
+  deja el calendario en blanco (visto en local ese mismo día, y ya pasaba
+  antes). Si al limpiar no queda nada, vuelve a «todos» — un filtro mal escrito
+  enseña de más, nunca una pantalla vacía.
+
+⚠️ **No confundirlo con `soloLoSuyo`**, que sigue igual: ahí las sin asignar SÍ
+entran a propósito (en nutri_laura son la mitad de la agenda). Un permiso es
+«qué PUEDO ver»; un filtro es «qué HE PEDIDO ver». Lo fija
+`_smoke-citas-filtro-profesional.mjs`, cuya aserción central es que filtrar por
+personas no puede producir ninguna condición que case con `NULL`.
+
 #### Repaso del 12/08/2026 (Rodrigo)
 
 Cinco cosas de la pantalla, todas en el módulo por defecto (o sea, para todos

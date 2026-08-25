@@ -21,6 +21,7 @@ import BuscadorPaciente from "@/components/citas/BuscadorPaciente.jsx";
 import ModalFestivos from "@/components/citas/ModalFestivos.jsx";
 import { formatMoney } from "@/lib/payments/money.js";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "@/lib/citas/coloresBloqueo.js";
+import { SIN_PROFESIONAL, COLOR_CITA_POR_DEFECTO } from "@/lib/citas/filtros.js";
 
 const STATUS_LABELS = {
   pending: "Pendiente",
@@ -1398,12 +1399,24 @@ export default function CitasModule() {
                   aria-label="Filtrar por profesional"
                   value={visibleTmIds}
                   onChange={setVisibleTmIds}
-                  options={teamMembers.map((m) => ({
-                    value: m.id,
-                    label: m.displayName,
-                    // El color casa con el de sus citas en el calendario.
-                    color: m.avatarColor ?? "#3F6E5B",
-                  }))}
+                  options={[
+                    ...teamMembers.map((m) => ({
+                      value: m.id,
+                      label: m.displayName,
+                      // El color casa con el de sus citas en el calendario.
+                      color: m.avatarColor ?? COLOR_CITA_POR_DEFECTO,
+                    })),
+                    /*
+                     * «Sin asignar», una más de la lista (25/08/2026, Rodrigo).
+                     *
+                     * Hasta hoy las citas sin profesional se colaban SIEMPRE al
+                     * filtrar por una persona, sin manera de apagarlas: 70 de
+                     * las 103 que veía en pantalla. Ahora no salen salvo que se
+                     * pidan, y se piden aquí. Repartirlas sigue siendo trabajo
+                     * de «Citas → Sin profesional», que es donde viven.
+                     */
+                    { value: SIN_PROFESIONAL, label: "Sin asignar", color: COLOR_CITA_POR_DEFECTO },
+                  ]}
                   etiquetaTodos="Todos"
                   resumen={(n) => `${n} profesionales`}
                   searchable={teamMembers.length > 8}
