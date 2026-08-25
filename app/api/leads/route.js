@@ -42,6 +42,46 @@ export async function OPTIONS() {
  * veces con `@>` —que es positivo y por tanto seguro con NULL— y se resta. Sale
  * el mismo número y no hay forma de que una fila vieja desaparezca en silencio.
  */
+/**
+ * ¿Este cliente usa de verdad los campos heredados del embudo de Aumenta?
+ *
+ * `motivo` (diagnóstico / servicios / cursos / talleres), `tipo_usuario`
+ * (ciudadano / profesional) y el detalle que cuelga de ellos son columnas de
+ * `Lead` para TODOS los tenants, y la tabla pintaba sus tres columnas siempre.
+ * En un CRM de booking eso son tres columnas fijas en «—» y un filtro «Todos
+ * los motivos» que no filtra nada, con valores —«diagnóstico»— que ahí no
+ * significan nada.
+ *
+ * Se responde con datos y no con módulos a propósito. Se midió en producción
+ * (25/08/2026) y la regla por módulos no valía: `spain_enzymes` y `retorika`
+ * tienen `tipo_usuario` relleno y NINGÚN módulo clínico ni de formación, así
+ * que gatear por módulo les habría escondido un dato que sí usan. Es además el
+ * criterio que este mismo módulo ya aplica a las ofertas de empleo: se enseña
+ * si lo hay, no si lo compraste.
+ *
+ * Va DENTRO del `if (desglose)` porque son tres `count` más y solo las necesita
+ * la pantalla; el exportador y el buscador del panel no las piden.
+ *
+ * Se cuenta sobre TODA la tabla, sin el `where` de los filtros: si se contara
+ * sobre lo filtrado, acotar por etapa haría desaparecer una columna a media
+ * sesión.
+ */
+async function camposConDatos(Lead) {
+  const hay = async (where) => (await Lead.count({ where })) > 0;
+  const [motivo, tipoUsuario, detalle] = await Promise.all([
+    hay({ motivo: { [Op.ne]: null } }),
+    hay({ tipo_usuario: { [Op.ne]: null } }),
+    hay({
+      [Op.or]: [
+        { servicio: { [Op.ne]: null } },
+        { curso: { [Op.ne]: null } },
+        { taller: { [Op.ne]: null } },
+      ],
+    }),
+  ]);
+  return { motivo, tipoUsuario, detalle };
+}
+
 async function desglosePorEtapa(Lead, whereSinEtapa, excluirOrigen) {
   const contar = async (where) => {
     const filas = await Lead.findAll({
@@ -111,6 +151,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   // endpoint —exportar, el buscador del panel— no las necesitan.
   let desglose = null;
   let totalSinEtapa = null;
+  let campos = null;
   if (searchParams.get("desglose") === "1") {
     const excluir = searchParams.get("excluirOrigen");
     // Whitelist estrecha: es un valor que se compara dentro de un JSONB y no
@@ -118,9 +159,10 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const origen = excluir && /^[a-z0-9_]{1,40}$/.test(excluir) ? excluir : null;
     desglose = await desglosePorEtapa(Lead, whereSinEtapa, origen);
     totalSinEtapa = Object.values(desglose).reduce((a, b) => a + b, 0);
+    campos = await camposConDatos(Lead);
   }
 
-  return ok({ leads: rows, total: count, desglose, totalSinEtapa });
+  return ok({ leads: rows, total: count, desglose, totalSinEtapa, campos });
 });
 
 export async function POST(request) {

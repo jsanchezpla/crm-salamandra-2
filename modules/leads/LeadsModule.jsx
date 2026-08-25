@@ -181,6 +181,22 @@ export default function LeadsModule({
   // lista YA filtrada— al pulsar una etapa las demás caerían a cero.
   const [stageCounts, setStageCounts] = useState({});
 
+  /**
+   * Qué campos heredados del embudo de Aumenta usa de verdad este cliente.
+   *
+   * `motivo` (diagnóstico / servicios / cursos / talleres), `tipo_usuario`
+   * (ciudadano / profesional) y su detalle son columnas de `Lead` para todos,
+   * y esta tabla las pintaba SIEMPRE. En un CRM de booking eso eran tres
+   * columnas fijas en «—» y un filtro «Todos los motivos» que no filtraba nada.
+   *
+   * Lo dice el SERVIDOR (`campos` de /api/leads?desglose=1), contando sobre
+   * toda la tabla: calcularlo aquí sobre `leads` —que llega ya filtrado— haría
+   * desaparecer una columna al acotar por etapa. Arranca en `true` para que la
+   * tabla no parpadee mientras carga: quien no los use los ve un instante, que
+   * es mucho menos malo que ver saltar las columnas.
+   */
+  const [campos, setCampos] = useState({ motivo: true, tipoUsuario: true, detalle: true });
+
   // `silencioso` para volver a pedirlo tras un cambio de etapa sin que la lista
   // parpadee con el cargando.
   const fetchLeads = useCallback(
@@ -197,6 +213,7 @@ export default function LeadsModule({
           if (data.ok) {
             setLeads(data.data.leads);
             setStageCounts(data.data.desglose ?? {});
+            if (data.data.campos) setCampos(data.data.campos);
             setTotal(data.data.totalSinEtapa ?? data.data.total);
           }
         })
@@ -271,7 +288,7 @@ export default function LeadsModule({
                 <HelpTooltip title="La lista enseña 200 como mucho" placement="bottom">
                   Se cargan siempre los 200 {sujeto} más recientes, y no hay forma de seguir bajando a
                   partir de ahí. <strong className="text-white">Los anteriores no se han borrado</strong>:
-                  para llegar a uno hay que buscarlo por nombre, email o teléfono, o acotar por motivo.
+                  para llegar a uno hay que buscarlo por nombre, email o teléfono{campos.motivo ? ", o acotar por motivo" : ""}.
                 </HelpTooltip>
               </h1>
               <p className="text-gray-500 text-sm mt-0.5">
@@ -309,20 +326,25 @@ export default function LeadsModule({
 
           {/* Filtros */}
           <div className="flex flex-col lg:flex-row gap-3 mb-4">
-            <Select
-              value={filtroMotivo}
-              onChange={(v) => setFiltroMotivo(v)}
-              options={[
-                { value: "", label: "Todos los motivos" },
-                ...Object.entries(MOTIVO_LABEL).map(([k, v]) => ({ value: k, label: v })),
-              ]}
-              // Por CLASES y no por `style`: `Select` no acepta esa prop (se
-              // perdía en silencio y el borde salía en currentColor). Con la
-              // clase arbitraria el color de marca llega igual.
-              className={`lg:w-52 px-4 py-2.5 rounded-xl border ${
-                filtroMotivo ? "border-[var(--color-primary)]" : "border-gray-200"
-              } bg-white text-gray-700 font-medium focus:outline-none text-sm shadow-sm transition-colors`}
-            />
+            {/* El filtro por motivo solo donde hay motivos: un desplegable
+                «Todos los motivos» con diagnóstico, servicios, cursos y
+                talleres no filtra nada en un CRM de booking. */}
+            {campos.motivo && (
+              <Select
+                value={filtroMotivo}
+                onChange={(v) => setFiltroMotivo(v)}
+                options={[
+                  { value: "", label: "Todos los motivos" },
+                  ...Object.entries(MOTIVO_LABEL).map(([k, v]) => ({ value: k, label: v })),
+                ]}
+                // Por CLASES y no por `style`: `Select` no acepta esa prop (se
+                // perdía en silencio y el borde salía en currentColor). Con la
+                // clase arbitraria el color de marca llega igual.
+                className={`lg:w-52 px-4 py-2.5 rounded-xl border ${
+                  filtroMotivo ? "border-[var(--color-primary)]" : "border-gray-200"
+                } bg-white text-gray-700 font-medium focus:outline-none text-sm shadow-sm transition-colors`}
+              />
+            )}
 
             {hayEmpleo && (
               <button
@@ -382,7 +404,18 @@ export default function LeadsModule({
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      {["Nombre y Email", "Motivo", "Detalle", "Tipo", "Estado", "Recibido", ""].map((h) => (
+                      {[
+                        "Nombre y Email",
+                        // Las ofertas de empleo se pintan en la columna de
+                        // Motivo, así que esa columna también hace falta si las
+                        // hay, aunque nadie tenga un motivo puesto.
+                        ...(campos.motivo || jobCount > 0 ? ["Motivo"] : []),
+                        ...(campos.detalle ? ["Detalle"] : []),
+                        ...(campos.tipoUsuario ? ["Tipo"] : []),
+                        "Estado",
+                        "Recibido",
+                        "",
+                      ].map((h) => (
                         <th
                           key={h}
                           className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide"
@@ -411,37 +444,47 @@ export default function LeadsModule({
                             <div className="font-semibold text-gray-900">{lead.name || "—"}</div>
                             <div className="text-xs text-gray-400">{lead.email || ""}</div>
                           </td>
-                          <td className="py-3.5 px-4">
-                            {isJobLead(lead) ? (
-                              <JobBadge />
-                            ) : lead.motivo ? (
-                              <span
-                                className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${MOTIVO_STYLE[lead.motivo] ?? "bg-gray-100 text-gray-600"}`}
-                              >
-                                {MOTIVO_LABEL[lead.motivo] ?? lead.motivo}
-                              </span>
-                            ) : (
-                              <span className="text-gray-300">—</span>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4 max-w-[180px]">
-                            <span className="text-sm text-gray-500 truncate block">{getDetalle(lead)}</span>
-                          </td>
-                          <td className="py-3.5 px-4">
-                            {lead.tipo_usuario ? (
-                              <span
-                                className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                                  lead.tipo_usuario === "profesional"
-                                    ? "bg-purple-100 text-purple-700"
-                                    : "bg-gray-100 text-gray-600"
-                                }`}
-                              >
-                                {lead.tipo_usuario === "profesional" ? "Profesional" : "Ciudadano"}
-                              </span>
-                            ) : (
-                              <span className="text-gray-300">—</span>
-                            )}
-                          </td>
+                          {/* Las tres columnas heredadas solo se pintan si este
+                              cliente las usa (ver `campos`). Tienen que casar
+                              EXACTAMENTE con las cabeceras de arriba o la tabla
+                              se descuadra. */}
+                          {(campos.motivo || jobCount > 0) && (
+                            <td className="py-3.5 px-4">
+                              {isJobLead(lead) ? (
+                                <JobBadge />
+                              ) : lead.motivo ? (
+                                <span
+                                  className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${MOTIVO_STYLE[lead.motivo] ?? "bg-gray-100 text-gray-600"}`}
+                                >
+                                  {MOTIVO_LABEL[lead.motivo] ?? lead.motivo}
+                                </span>
+                              ) : (
+                                <span className="text-gray-300">—</span>
+                              )}
+                            </td>
+                          )}
+                          {campos.detalle && (
+                            <td className="py-3.5 px-4 max-w-[180px]">
+                              <span className="text-sm text-gray-500 truncate block">{getDetalle(lead)}</span>
+                            </td>
+                          )}
+                          {campos.tipoUsuario && (
+                            <td className="py-3.5 px-4">
+                              {lead.tipo_usuario ? (
+                                <span
+                                  className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                                    lead.tipo_usuario === "profesional"
+                                      ? "bg-purple-100 text-purple-700"
+                                      : "bg-gray-100 text-gray-600"
+                                  }`}
+                                >
+                                  {lead.tipo_usuario === "profesional" ? "Profesional" : "Ciudadano"}
+                                </span>
+                              ) : (
+                                <span className="text-gray-300">—</span>
+                              )}
+                            </td>
+                          )}
                           <td className="py-3.5 px-4">
                             <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${style.bg}`}>
                               {labelDe(lead.stage)}
