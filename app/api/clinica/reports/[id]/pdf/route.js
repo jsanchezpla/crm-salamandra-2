@@ -2,6 +2,7 @@ import { withTenant } from "@/lib/tenant/withTenant.js";
 import { forbidden, notFound, error, serverError } from "@/lib/utils/apiResponse.js";
 import { contentDisposition } from "@/lib/documents/helpers.js";
 import { buildReportPdfBuffer, reportPdfFilename } from "@/lib/clinica/reportPdf.js";
+import { sesionesDelInforme } from "@/lib/clinica/sesionesDelInforme.js";
 
 /**
  * GET /api/clinica/reports/[id]/pdf — ver el PDF del informe SIN entregárselo a
@@ -78,6 +79,9 @@ export const GET = withTenant(async (request, rc, ctx) => {
         // El informe de beca traduce estas claves a los nombres oficiales de la
         // convocatoria en su cabecera (lib/clinica/beca.js).
         patientSpecialties: report.patient?.specialties ?? [],
+        // La portada imprime el periodo y las fechas de estas sesiones; el
+        // contenido literal solo va en el anexo opcional (26/08/2026, Rodrigo).
+        sourceSessions: await sesionesDelInforme(ctx.tenantModels, report),
       });
     } catch (err) {
       process.stderr.write(`[clinica:pdf] PDF falló: ${err.message}\n`);

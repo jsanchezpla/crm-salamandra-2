@@ -5,6 +5,7 @@ import { logClinicaAudit } from "../../../../../../lib/clinica/audit.js";
 import { serializeReport } from "../../../../../../lib/clinica/serialize.js";
 import { clientIdOfPatient } from "../../../../../../lib/clinica/patientClient.js";
 import { buildReportPdfBuffer, reportPdfFilename } from "../../../../../../lib/clinica/reportPdf.js";
+import { sesionesDelInforme } from "../../../../../../lib/clinica/sesionesDelInforme.js";
 import {
   TENANT_QUOTA_BYTES,
   quotaBytesDe,
@@ -80,6 +81,9 @@ export const POST = withTenant(async (request, rc, ctx) => {
         // El informe de beca traduce estas claves a los nombres oficiales de la
         // convocatoria en su cabecera (lib/clinica/beca.js).
         patientSpecialties: report.patient?.specialties ?? [],
+        // La portada imprime el periodo y las fechas de estas sesiones; el
+        // contenido literal solo va en el anexo opcional (26/08/2026, Rodrigo).
+        sourceSessions: await sesionesDelInforme(ctx.tenantModels, report),
       });
     } catch (err) {
       process.stderr.write(`[clinica:enviar] PDF falló: ${err.message}\n`);

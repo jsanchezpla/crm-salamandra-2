@@ -188,7 +188,7 @@ const informeBeca = (extra = {}) => ({
   },
 });
 
-const generar = (report, patientSpecialties) =>
+const generar = (report, patientSpecialties, sourceSessions = []) =>
   buildReportPdfBuffer({
     report,
     patientName: "Leo Prueba",
@@ -196,7 +196,29 @@ const generar = (report, patientSpecialties) =>
     tenantName: "Centro Prueba",
     brand: { primaryColor: "#1B3A2D" },
     patientSpecialties,
+    sourceSessions,
   });
+
+/** Dos sesiones de ejemplo para el periodo y el anexo. */
+const SESIONES = [
+  {
+    sessionDate: "2025-01-16",
+    objectives: ["OBJETIVO LITERAL UNO"],
+    activities: "ACTIVIDAD LITERAL QUE SOLO SALE EN EL ANEXO",
+    performance: "Desempeño literal.",
+    observations: { familyComments: "Comentario familiar literal.", nextSessionNotes: "", homeworkTasks: "", incidents: "" },
+    parentFeedback: "DEVOLUCION LITERAL DE LA FAMILIA",
+    prepText: "PREPARACION INTERNA QUE NUNCA DEBE SALIR",
+  },
+  {
+    sessionDate: "2025-01-23",
+    objectives: [],
+    activities: "Segunda actividad literal.",
+    performance: "",
+    observations: {},
+    parentFeedback: "",
+  },
+];
 
 /* ═══ 1 · La regla de los nombres oficiales (función pura) ═════════════════ */
 
@@ -275,7 +297,67 @@ describe("el PDF del informe de beca", () => {
   });
 });
 
-/* ═══ 3 · Los demás tipos no cambian ═══════════════════════════════════════ */
+/* ═══ 3 · El periodo, las fechas y el anexo (26/08/2026, Rodrigo) ══════════ */
+/* «El informe es el resumen que redacta la terapeuta. El único contenido de
+   las sesiones que debería salir es la fecha; los registros literales, como
+   anexo opcional.» */
+
+describe("de las sesiones, la portada solo dice las fechas", () => {
+  const informeEvolutivo = (extraCs = {}) => ({
+    reportType: "evolution",
+    reportDate: "2025-01-30",
+    contentSections: {
+      motiveOfIntervention: "Redacción de la profesional.",
+      evolution: ["Resumen redactado, no literal."],
+      ...extraCs,
+    },
+  });
+
+  it("con sesiones detrás, imprime periodo y en cuáles se basa — sin su contenido", async () => {
+    const buffer = await generar(informeEvolutivo(), [], SESIONES);
+    const { texto } = abrirPdf(buffer);
+    assert.match(texto, /Periodo/i);
+    assert.match(texto, /del 16 de enero de 2025 al 23 de enero de 2025/);
+    assert.match(texto, /Basado en/i);
+    assert.match(texto, /2 sesiones/);
+    // Las fechas sí; lo literal, NO (el anexo está apagado).
+    assert.doesNotMatch(texto, /ACTIVIDAD LITERAL/);
+    assert.doesNotMatch(texto, /Anexo/);
+  });
+
+  it("sin sesiones, esas filas no se imprimen (ni su rótulo)", async () => {
+    const buffer = await generar(informeEvolutivo(), [], []);
+    const { texto } = abrirPdf(buffer);
+    assert.doesNotMatch(texto, /Periodo/i);
+    assert.doesNotMatch(texto, /Basado en/i);
+  });
+
+  it("con la casilla del anexo, los registros literales van al final — menos la preparación", async () => {
+    const buffer = await generar(informeEvolutivo({ anexarRegistros: true }), [], SESIONES);
+    const { texto } = abrirPdf(buffer);
+    assert.match(texto, /Anexo · Registros de sesión/);
+    assert.match(texto, /Sesión del 16 de enero de 2025/);
+    assert.match(texto, /Sesión del 23 de enero de 2025/);
+    assert.match(texto, /ACTIVIDAD LITERAL QUE SOLO SALE EN EL ANEXO/);
+    assert.match(texto, /DEVOLUCION LITERAL DE LA FAMILIA/);
+    // La preparación es material interno del equipo: JAMÁS en el PDF de la familia.
+    assert.doesNotMatch(texto, /PREPARACION INTERNA/);
+  });
+
+  it("la beca no lleva ni periodo ni anexo, aunque haya sesiones y casilla", async () => {
+    const buffer = await generar(
+      { ...informeBeca({ anexarRegistros: true }) },
+      ["logopedia"],
+      SESIONES
+    );
+    const { texto } = abrirPdf(buffer);
+    assert.doesNotMatch(texto, /Periodo/i);
+    assert.doesNotMatch(texto, /Anexo/);
+    assert.doesNotMatch(texto, /ACTIVIDAD LITERAL/);
+  });
+});
+
+/* ═══ 4 · Los demás tipos no cambian ═══════════════════════════════════════ */
 
 describe("un informe evolutivo sigue exactamente igual", () => {
   it("rótulo de siempre, sus secciones, y sin firma", async () => {

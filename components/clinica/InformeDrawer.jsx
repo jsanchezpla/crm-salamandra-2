@@ -76,6 +76,10 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
     continuityProposal: c.continuityProposal ?? "",
     referralSpecialty: c.referralSpecialty ?? "",
     methodology: c.methodology ?? "",
+    // Anexar al PDF los registros literales de las sesiones (26/08/2026,
+    // Rodrigo): apagado por defecto — el informe es la redacción; de las
+    // sesiones, el PDF solo dice las fechas.
+    anexarRegistros: c.anexarRegistros === true,
   });
   const [sesiones, setSesiones] = useState([]);
   const [elegidas, setElegidas] = useState(new Set(c.sourceSessionIds ?? []));
@@ -131,6 +135,7 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
             continuityProposal: form.continuityProposal.trim(),
             referralSpecialty: form.referralSpecialty || "",
             methodology: form.methodology.trim(),
+            anexarRegistros: !!form.anexarRegistros,
             sourceSessionIds: [...elegidas],
           },
         }),
@@ -346,7 +351,27 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
               Cada línea sale literal de un registro de sesión, con su fecha delante: aquí no se
               inventa nada. «Redactar con IA» convierte ese volcado en prosa y te lo enseña al
               lado para que decidas apartado por apartado — no escribe nada por su cuenta.
+              El volcado es material de trabajo: <span className="font-medium text-neutral-500">al
+              PDF va lo que dejes escrito en los apartados</span>, y de las sesiones solo sus
+              fechas (periodo y en cuáles se basa).
             </p>
+
+            {/* El anexo literal, opt-in (26/08/2026, Rodrigo): el informe
+                principal es la redacción; los registros completos, solo si se
+                piden, en páginas aparte al final del PDF. */}
+            <label className="mt-3 flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.anexarRegistros}
+                onChange={(e) => setForm((f) => ({ ...f, anexarRegistros: e.target.checked }))}
+                className="mt-0.5 w-3.5 h-3.5 rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)]"
+              />
+              <span className="text-[11px] text-neutral-600 leading-snug">
+                <span className="font-medium">Anexar al PDF los registros literales</span> de las
+                sesiones marcadas, en páginas aparte al final. La preparación no va: es material
+                interno.
+              </span>
+            </label>
           </div>
           )}
 
