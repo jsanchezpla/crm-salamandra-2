@@ -3,6 +3,7 @@ import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, created, forbidden } from "../../../lib/utils/apiResponse.js";
 import { ValidationError } from "../../../lib/utils/errors.js";
 import { handleRouteError } from "../../../lib/utils/errors.js";
+import { aceptaEtapa, etapasDe } from "../../../lib/leads/embudos.js";
 import { getTenantContext } from "../../../lib/tenant/tenantResolver.js";
 import { Op } from "sequelize";
 
@@ -211,6 +212,25 @@ export async function POST(request) {
 
     const resolvedMetadata = metadata ?? {};
     if (promo) resolvedMetadata.promo = promo;
+
+    /*
+     * La etapa, contra el embudo de este cliente (26/08/2026).
+     *
+     * Esta puerta no validaba NADA: `stage` entraba del cuerpo tal cual y
+     * `Lead.stage` es un texto de 50 sin enum, así que cabía cualquier cosa. Era
+     * la más abierta de las cuatro por las que puede entrar una etapa.
+     *
+     * Sin `stage` se nace en `new`, que está en todos los embudos.
+     */
+    if (stage !== undefined && stage !== null && !aceptaEtapa(ctx.slug, stage, ctx.hasModule)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `«${stage}» no es una etapa de este embudo. Las suyas: ${etapasDe(ctx.slug, ctx.hasModule).join(", ")}.`,
+        },
+        { status: 422, headers: CORS_HEADERS }
+      );
+    }
 
     const VALID_TIPO_USUARIO = ["ciudadano", "profesional"];
     const VALID_MOTIVO = ["diagnostico", "servicios", "cursos", "talleres"];

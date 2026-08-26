@@ -1,9 +1,8 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { auditar, datosPeticion, resumen } from "../../../../lib/utils/auditoria.js";
-import { ok, noContent, forbidden } from "../../../../lib/utils/apiResponse.js";
+import { ok, noContent, forbidden, error } from "../../../../lib/utils/apiResponse.js";
 import { NotFoundError, ForbiddenError } from "../../../../lib/utils/errors.js";
-import { ALLOWED_STAGES } from "../../../../lib/leads/stages.js";
-import { etapaAlGanar } from "../../../../lib/leads/embudos.js";
+import { aceptaEtapa, etapaAlGanar, etapasDe } from "../../../../lib/leads/embudos.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const ADMIN_DENY = "Solo administradores pueden modificar leads";
@@ -56,8 +55,22 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     if (key in body) updates[key] = body[key];
   }
 
-  if (updates.stage && !ALLOWED_STAGES.includes(updates.stage)) {
-    delete updates.stage;
+  /*
+   * La etapa se valida contra el EMBUDO DE ESTE CLIENTE (26/08/2026), no contra
+   * la lista canónica: aquella dice qué etapas existen en el CRM (veinte), no
+   * cuáles ofrece este embudo (entre cuatro y siete). Con la general, se podía
+   * mover a alguien a una etapa que su pantalla no tiene, y ese lead salía con
+   * su chip pero sin fila — y los contadores de la cabecera dejaban de sumar.
+   *
+   * Y se DICE, en vez de tirarla en silencio como hasta hoy: pedir una etapa,
+   * recibir un 200 y que no haya cambiado nada es de los fallos que se tardan
+   * horas en entender.
+   */
+  if ("stage" in updates && !aceptaEtapa(tenant.slug, updates.stage, hasModule)) {
+    return error(
+      `«${updates.stage}» no es una etapa de este embudo. Las suyas: ${etapasDe(tenant.slug, hasModule).join(", ")}.`,
+      422
+    );
   }
 
   if ("email" in updates) updates.email = updates.email?.trim().toLowerCase() || null;

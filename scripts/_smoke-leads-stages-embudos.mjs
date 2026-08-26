@@ -40,6 +40,7 @@ import { ALLOWED_STAGES, STAGE_LABELS, isValidStage } from "../lib/leads/stages.
 import {
   GANADAS,
   PERDIDAS,
+  aceptaEtapa,
   EMBUDO_BOOKING,
   EMBUDO_POR_DEFECTO,
   etapaAlGanar,
@@ -175,6 +176,70 @@ describe("GANADAS y PERDIDAS: qué cierra un embudo", () => {
     for (const e of [...GANADAS, ...PERDIDAS]) {
       assert.equal(isValidStage(e), true, `«${e}» cierra embudos pero no es una etapa permitida`);
     }
+  });
+});
+
+describe("aceptaEtapa: la puerta de las cuatro entradas (26/08/2026)", () => {
+  /*
+   * Las cuatro puertas por las que puede entrar una etapa —el alta, el PATCH y
+   * los dos importadores— miraban la lista canónica, que dice qué etapas EXISTEN
+   * en el CRM y no cuáles ofrece cada embudo. Con eso se podía dejar a alguien
+   * en una etapa que su pantalla no tiene: chip de color, sin fila donde
+   * ponerse, y los contadores de la cabecera sin sumar el total.
+   */
+  it("cada embudo acepta las suyas y ninguna más", () => {
+    for (const slug of ["aumenta", "nutri_laura", "retorika", "spain_enzymes", "somos"]) {
+      for (const e of etapasDe(slug)) {
+        assert.equal(aceptaEtapa(slug, e), true, `${slug} debería aceptar «${e}»`);
+      }
+      for (const e of ALLOWED_STAGES.filter((x) => !etapasDe(slug).includes(x))) {
+        assert.equal(aceptaEtapa(slug, e), false, `${slug} NO debería aceptar «${e}»`);
+      }
+    }
+  });
+
+  it("las 7 etapas que no ofrece nadie no las acepta nadie", () => {
+    // Medidas el 26/08/2026: existen en la lista canónica y ningún embudo las
+    // ofrece. Eran la puerta abierta en los ocho clientes con leads.
+    const huerfanas = ["proposal", "negotiation", "in_progress", "demo_scheduled", "demo_done", "closed_yes", "closed_no"];
+    for (const slug of ["aumenta", "nutri_laura", "retorika", "spain_enzymes", "somos"]) {
+      for (const e of huerfanas) {
+        assert.equal(aceptaEtapa(slug, e), false, `${slug} aceptó «${e}»`);
+      }
+    }
+  });
+
+  it("el caso que lo destapó: aumenta y «qualified»", () => {
+    // Su pantalla tiene el color de esa etapa y su embudo no la ofrece.
+    assert.equal(aceptaEtapa("aumenta", "qualified"), false);
+    // Y en quien sí la ofrece, sigue entrando.
+    assert.equal(aceptaEtapa("retorika", "qualified"), true);
+  });
+
+  it("una etapa inventada no entra en ningún sitio", () => {
+    for (const basura of ["", null, undefined, "lo_que_sea", "NEW", "ganado", 0]) {
+      assert.equal(aceptaEtapa("aumenta", basura), false, `${basura}`);
+    }
+  });
+
+  it("los espacios de sobra no convierten una etapa buena en mala", () => {
+    assert.equal(aceptaEtapa("aumenta", "  paciente  "), true);
+  });
+
+  it("«new» está en TODOS los embudos: es a donde cae un import que no cuadra", () => {
+    for (const slug of ["aumenta", "nutri_laura", "retorika", "spain_enzymes", "somos"]) {
+      assert.equal(aceptaEtapa(slug, "new"), true, slug);
+    }
+    assert.equal(aceptaEtapa("una_agencia", "new", (k) => k === "booking"), true);
+  });
+
+  it("respeta el embudo de módulo", () => {
+    const esBooking = (k) => k === "booking";
+    assert.equal(aceptaEtapa("una_agencia", "fecha_confirmada", esBooking), true);
+    assert.equal(aceptaEtapa("una_agencia", "won", esBooking), false);
+    // Y sin el módulo, al revés.
+    assert.equal(aceptaEtapa("una_agencia", "fecha_confirmada"), false);
+    assert.equal(aceptaEtapa("una_agencia", "won"), true);
   });
 });
 

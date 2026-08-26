@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTenantContext } from "../../../../../lib/tenant/tenantResolver.js";
 import ExcelJS from "exceljs";
-import { ALLOWED_STAGES as VALID_STAGES } from "../../../../../lib/leads/stages.js";
+import { aceptaEtapa } from "../../../../../lib/leads/embudos.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -169,7 +169,29 @@ export async function POST(request) {
     }
 
     const { Lead } = tenantModels;
-    const results = { imported: 0, skipped: 0, errors: [] };
+    // Ver el comentario gemelo en `app/api/leads/import/route.js`.
+    const results = { imported: 0, skipped: 0, etapasCorregidas: 0, errors: [] };
+    /**
+     * La etapa que le toca a esta fila.
+     *
+     * Se pregunta al EMBUDO DE ESTE CLIENTE y no a la lista canónica: aquella
+     * dice qué etapas existen en el CRM (veinte), no cuáles ofrece este embudo.
+     * Con la general, un Excel podía dejar interesados en una etapa que su
+     * pantalla no tiene: chip de color, sin fila donde ponerse, y los contadores
+     * de la cabecera sin sumar el total.
+     *
+     * Lo que NO se hace es rechazar la fila entera: un import es masivo y tirar
+     * a alguien por una columna de estado sería peor. Entra en «Nuevo» —que está
+     * en todos los embudos— y se CUENTA, para que la respuesta lo diga en vez de
+     * dejar a quien lo lanzó creyendo que respetó su Excel.
+     */
+    const etapaDeLaFila = (etapa) => {
+      if (etapa == null || etapa === "") return "new";
+      if (aceptaEtapa(context.slug, etapa, hasModule)) return etapa;
+      results.etapasCorregidas += 1;
+      return "new";
+    };
+
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -186,7 +208,7 @@ export async function POST(request) {
           phone: row.phone?.trim() || null,
           notes: (row.mensaje || row.notes)?.trim() || null,
           source: row.source?.trim() || "excel_import",
-          stage: VALID_STAGES.includes(row.stage) ? row.stage : "new",
+          stage: etapaDeLaFila(row.stage),
           customFields: {},
         };
 
