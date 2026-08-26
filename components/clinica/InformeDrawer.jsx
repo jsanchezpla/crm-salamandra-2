@@ -60,6 +60,12 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
   const c = report.contentSections ?? {};
   const entregado = report.status === "delivered";
 
+  // El informe de beca (NEAE) solo lleva tres apartados y la firma: motivo de
+  // consulta (el mismo dato que «motivo de intervención», con el rótulo de la
+  // convocatoria), objetivos y metodología. El resto de campos y el bloque de
+  // volcado/IA se esconden en ese tipo (lib/clinica/beca.js).
+  const esBeca = report.type === "beca";
+
   const [form, setForm] = useState({
     motiveOfIntervention: c.motiveOfIntervention ?? "",
     objectives: (c.objectives ?? []).join("\n"),
@@ -69,6 +75,7 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
     recommendations: (c.recommendations ?? []).join("\n"),
     continuityProposal: c.continuityProposal ?? "",
     referralSpecialty: c.referralSpecialty ?? "",
+    methodology: c.methodology ?? "",
   });
   const [sesiones, setSesiones] = useState([]);
   const [elegidas, setElegidas] = useState(new Set(c.sourceSessionIds ?? []));
@@ -123,6 +130,7 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
             recommendations: lineas(form.recommendations),
             continuityProposal: form.continuityProposal.trim(),
             referralSpecialty: form.referralSpecialty || "",
+            methodology: form.methodology.trim(),
             sourceSessionIds: [...elegidas],
           },
         }),
@@ -265,7 +273,17 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
             </div>
           )}
 
-          {/* ── Volcar el contenido de las sesiones ── */}
+          {esBeca && (
+            <div className="bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2.5 text-[11px] text-neutral-600">
+              Este informe es el de la <span className="font-medium">beca de apoyo educativo</span>: lleva
+              solo motivo de consulta, objetivos y metodología, y en el PDF la cabecera dice el
+              servicio con su nombre oficial («Reeducación del lenguaje» o «Reeducación pedagógica
+              y habilidades sociales») y la firma del terapeuta al pie.
+            </div>
+          )}
+
+          {/* ── Volcar el contenido de las sesiones (en la beca no aplica) ── */}
+          {!esBeca && (
           <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-4">
             <div className="eyebrow mb-1">Redactar con las sesiones</div>
             <p className="text-[11px] text-neutral-500 mb-3">
@@ -330,6 +348,7 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
               lado para que decidas apartado por apartado — no escribe nada por su cuenta.
             </p>
           </div>
+          )}
 
           {/* ── La propuesta de la IA, al lado de lo que hay ── */}
           {propuesta && (
@@ -402,34 +421,44 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
             </Campo>
           )}
 
-          <Campo label="Motivo de intervención">
+          <Campo label={esBeca ? "Motivo de consulta" : "Motivo de intervención"}>
             <textarea rows={3} className={TA} value={form.motiveOfIntervention}
               onChange={(e) => setForm((f) => ({ ...f, motiveOfIntervention: e.target.value }))} />
           </Campo>
-          <Campo label="Objetivos terapéuticos" ayuda="Uno por línea.">
+          <Campo label={esBeca ? "Objetivos" : "Objetivos terapéuticos"} ayuda="Uno por línea.">
             <textarea rows={3} className={TA} value={form.objectives}
               onChange={(e) => setForm((f) => ({ ...f, objectives: e.target.value }))} />
           </Campo>
-          <Campo label="Evolución observada" ayuda="Un párrafo por línea; lo volcado viene con su fecha delante.">
-            <textarea rows={7} className={TA} value={form.evolution}
-              onChange={(e) => setForm((f) => ({ ...f, evolution: e.target.value }))} />
-          </Campo>
-          <Campo label="Logros alcanzados" ayuda="Uno por línea.">
-            <textarea rows={3} className={TA} value={form.achievements}
-              onChange={(e) => setForm((f) => ({ ...f, achievements: e.target.value }))} />
-          </Campo>
-          <Campo label="Dificultades que persisten" ayuda="Una por línea.">
-            <textarea rows={3} className={TA} value={form.persistentDifficulties}
-              onChange={(e) => setForm((f) => ({ ...f, persistentDifficulties: e.target.value }))} />
-          </Campo>
-          <Campo label="Recomendaciones" ayuda="Una por línea.">
-            <textarea rows={3} className={TA} value={form.recommendations}
-              onChange={(e) => setForm((f) => ({ ...f, recommendations: e.target.value }))} />
-          </Campo>
-          <Campo label="Propuesta de continuidad">
-            <textarea rows={3} className={TA} value={form.continuityProposal}
-              onChange={(e) => setForm((f) => ({ ...f, continuityProposal: e.target.value }))} />
-          </Campo>
+          {esBeca && (
+            <Campo label="Metodología" ayuda="Cómo se trabaja con el paciente: enfoque, técnicas y frecuencia.">
+              <textarea rows={5} className={TA} value={form.methodology}
+                onChange={(e) => setForm((f) => ({ ...f, methodology: e.target.value }))} />
+            </Campo>
+          )}
+          {!esBeca && (
+            <>
+              <Campo label="Evolución observada" ayuda="Un párrafo por línea; lo volcado viene con su fecha delante.">
+                <textarea rows={7} className={TA} value={form.evolution}
+                  onChange={(e) => setForm((f) => ({ ...f, evolution: e.target.value }))} />
+              </Campo>
+              <Campo label="Logros alcanzados" ayuda="Uno por línea.">
+                <textarea rows={3} className={TA} value={form.achievements}
+                  onChange={(e) => setForm((f) => ({ ...f, achievements: e.target.value }))} />
+              </Campo>
+              <Campo label="Dificultades que persisten" ayuda="Una por línea.">
+                <textarea rows={3} className={TA} value={form.persistentDifficulties}
+                  onChange={(e) => setForm((f) => ({ ...f, persistentDifficulties: e.target.value }))} />
+              </Campo>
+              <Campo label="Recomendaciones" ayuda="Una por línea.">
+                <textarea rows={3} className={TA} value={form.recommendations}
+                  onChange={(e) => setForm((f) => ({ ...f, recommendations: e.target.value }))} />
+              </Campo>
+              <Campo label="Propuesta de continuidad">
+                <textarea rows={3} className={TA} value={form.continuityProposal}
+                  onChange={(e) => setForm((f) => ({ ...f, continuityProposal: e.target.value }))} />
+              </Campo>
+            </>
+          )}
 
           {aviso && <div className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">{aviso}</div>}
           {errorMsg && <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">{errorMsg}</div>}

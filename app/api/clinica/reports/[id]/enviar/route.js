@@ -50,7 +50,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
 
     const report = await ClinicalReport.findByPk(id, {
       include: [
-        { model: Patient, as: "patient", attributes: ["id", "firstName", "lastName", "clientId"] },
+        { model: Patient, as: "patient", attributes: ["id", "firstName", "lastName", "clientId", "specialties"] },
         { model: TeamMember, as: "therapist", attributes: ["id", "displayName"] },
       ],
     });
@@ -76,6 +76,9 @@ export const POST = withTenant(async (request, rc, ctx) => {
         // Para que la especialidad de derivación salga con la etiqueta que el
         // centro escribió en Configuración y no con su clave interna.
         tenant: ctx.tenant,
+        // El informe de beca traduce estas claves a los nombres oficiales de la
+        // convocatoria en su cabecera (lib/clinica/beca.js).
+        patientSpecialties: report.patient?.specialties ?? [],
       });
     } catch (err) {
       process.stderr.write(`[clinica:enviar] PDF falló: ${err.message}\n`);

@@ -32,8 +32,12 @@ export function defineClinicalReport(sequelize) {
       // especialidad destino va en contentSections.referralSpecialty
       // (claves de lib/clinica/derivaciones.js). 'admission' se ETIQUETA
       // "Entrevista inicial" desde ese sprint (el valor en BD no cambia).
+      // 'beca' (informe para la beca NEAE, 26/08/2026): sus apartados y los
+      // nombres oficiales de la cabecera viven en lib/clinica/beca.js; el valor
+      // lo añade al enum de cada schema scripts/migrate-informe-beca.js, que va
+      // ANTES del despliegue.
       reportType: {
-        type: DataTypes.ENUM("evolution", "admission", "discharge", "referral"),
+        type: DataTypes.ENUM("evolution", "admission", "discharge", "referral", "beca"),
         allowNull: false,
         defaultValue: "evolution",
       },

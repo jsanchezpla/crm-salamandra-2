@@ -339,6 +339,9 @@ export const MODULES = {
     "migrate-incentive-items",
     // Desempeño por roles: role_key + area_scores en performance_metrics.
     "migrate-clinica-performance-roles",
+    // El informe para la beca NEAE (26/08/2026, Aumenta): añade 'beca' al enum
+    // de tipos de informe. Sus apartados van en contentSections (JSONB).
+    "migrate-informe-beca",
   ],
 
   // Control horario. Depende de `team_members`, que crea el módulo Equipo: la
