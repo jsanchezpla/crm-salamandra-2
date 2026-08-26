@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import ClientBillingSection from "../../components/billing/ClientBillingSection.jsx";
 import ClientModulesSection from "../../components/clients/ClientModulesSection.jsx";
@@ -16,6 +16,7 @@ import ClientContactMethodsSection from "../../components/clients/ClientContactM
 import ClientFiscalSection from "../../components/clients/ClientFiscalSection.jsx";
 import { camposCliente, PERFIL_COMERCIAL } from "../../lib/clients/formularioAlta.js";
 import { avisoBorradoSegunModulos } from "../../lib/clients/avisoBorrado.js";
+import { enlaceDeVuelta } from "../../lib/clients/volver.js";
 import { esAdmin } from "../../lib/auth/permisos.js";
 import ClientContractSection from "../../components/clients/ClientContractSection.jsx";
 import ClientGuardiansSection from "../../components/clients/ClientGuardiansSection.jsx";
@@ -226,6 +227,16 @@ export default function ClientDetailModule({
   const TABS = pestanasDe(textos);
   const { id } = useParams();
   const router = useRouter();
+  // De dónde se llegó a esta ficha, para que la flecha vuelva ahí en vez de al
+  // listado (26/08/2026, Lau). La regla, en lib/clients/volver.js.
+  const query = useSearchParams();
+  const vuelta = enlaceDeVuelta(query.get("desde"), query.get("carpeta"), {
+    href: "/clientes",
+    // En minúscula porque es lo que decía antes y lo que pide la frase
+    // «← Volver a clientes». El rótulo por módulos no llega hasta aquí:
+    // `textosPiezas()` trae los textos de los paneles, no el plural.
+    texto: "clientes",
+  });
   const [client, setClient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
@@ -434,8 +445,8 @@ export default function ClientDetailModule({
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4">
         <p className="text-gray-500">Cliente no encontrado</p>
-        <Link href="/clientes" className="text-[var(--color-primary)] hover:underline text-sm">
-          ← Volver a clientes
+        <Link href={vuelta.href} className="text-[var(--color-primary)] hover:underline text-sm">
+          ← Volver a {vuelta.texto}
         </Link>
       </div>
     );
@@ -456,7 +467,7 @@ export default function ClientDetailModule({
       {/* Header */}
       <div className="px-4 lg:px-8 pt-6 pb-4 border-b border-gray-100 bg-white">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-1">
-          <Link href="/clientes" className="text-gray-400 hover:text-gray-600 transition-colors shrink-0">
+          <Link href={vuelta.href} title={`Volver a ${vuelta.texto}`} className="text-gray-400 hover:text-gray-600 transition-colors shrink-0">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
             </svg>

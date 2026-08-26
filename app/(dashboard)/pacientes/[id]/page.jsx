@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Select from "@/components/ui/Select.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import PatientBillingSection from "@/components/billing/PatientBillingSection.jsx";
@@ -16,6 +16,7 @@ import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
 import { REPORT_TYPES, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
 import { SPECIALTY_LABEL } from "@/lib/clinica/specialties.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
+import { enlaceDeVuelta } from "@/lib/clients/volver.js";
 
 const REPORT_TYPE_OPTIONS = REPORT_TYPES.map((value) => ({ value, label: REPORT_TYPE_LABEL[value] }));
 
@@ -284,6 +285,14 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
 export default function PacienteFichaPage() {
   const params = useParams();
   const id = params.id;
+  // De dónde se llegó a esta ficha, para que la flecha vuelva ahí. Sin "desde"
+  // en la URL sale el listado de siempre, así que abrir una ficha por las bravas
+  // se comporta igual que hasta hoy.
+  const query = useSearchParams();
+  const vuelta = enlaceDeVuelta(query.get("desde"), query.get("carpeta"), {
+    href: "/pacientes",
+    texto: "Pacientes",
+  });
   const [patient, setPatient] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [reports, setReports] = useState([]);
@@ -454,7 +463,7 @@ export default function PacienteFichaPage() {
         <PreviewBanner />
         <div className="bg-white border border-neutral-100 rounded-xl p-10 text-center mt-5">
           <p className="text-sm text-neutral-600">Paciente no encontrado.</p>
-          <Link href="/pacientes" className="text-xs text-[var(--color-primary,#1B3A2D)] hover:underline mt-2 inline-block">← Volver al listado</Link>
+          <Link href={vuelta.href} className="text-xs text-[var(--color-primary,#1B3A2D)] hover:underline mt-2 inline-block">← Volver a {vuelta.texto}</Link>
         </div>
       </div>
     );
@@ -487,9 +496,13 @@ export default function PacienteFichaPage() {
 
   return (
     <div className={`${anchoPantalla("listado")} space-y-5`}>
-      <Link href="/pacientes" className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit">
+      {/* La flecha vuelve a DE DÓNDE VINISTE, no siempre al listado (26/08/2026,
+          Lau): desde «Fichas a completar» se abren fichas de una en una para
+          tapar huecos, y devolver a /pacientes obliga a entrar otra vez por el
+          menú y a volver a desplegar la carpeta. La regla, en lib/clients/volver.js. */}
+      <Link href={vuelta.href} className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-[var(--color-primary,#1B3A2D)] transition-colors w-fit">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-        Pacientes
+        {vuelta.texto}
       </Link>
 
       <PreviewBanner />

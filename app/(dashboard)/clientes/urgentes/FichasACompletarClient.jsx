@@ -27,6 +27,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { colaDeVuelta } from "@/lib/clients/volver.js";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
@@ -81,8 +83,16 @@ function Carpeta({ carpeta, abierta, onToggle, onRevisar, marcando }) {
               {carpeta.filas.map((f) => (
                 <tr key={f.id} className="border-b border-neutral-50 last:border-0">
                   <td className="px-4 py-2">
+                    {/* El enlace se lleva puesto de dónde sale, para que la
+                        flecha de la ficha vuelva AQUÍ y con esta carpeta
+                        abierta (26/08/2026, Lau). La cola la escribe
+                        `colaDeVuelta`, no esta plantilla, para que el nombre
+                        del parámetro viva en un solo sitio. */}
                     <Link
-                      href={carpeta.entidad === "patient" ? `/pacientes/${f.id}` : `/clientes/${f.id}`}
+                      href={
+                        (carpeta.entidad === "patient" ? `/pacientes/${f.id}` : `/clientes/${f.id}`) +
+                        colaDeVuelta("urgentes", carpeta.key)
+                      }
                       className="font-medium text-[var(--color-primary,#1B3A2D)] hover:underline"
                     >
                       {f.nombre}
@@ -130,7 +140,20 @@ function Carpeta({ carpeta, abierta, onToggle, onRevisar, marcando }) {
 
 export default function FichasACompletarClient() {
   const [datos, setDatos] = useState(null);
-  const [abiertas, setAbiertas] = useState(new Set());
+  /*
+   * La carpeta con la que se vuelve de una ficha nace ABIERTA (26/08/2026).
+   *
+   * Sin esto, la mitad del arreglo se pierde: la flecha te trae de vuelta a
+   * esta pantalla, pero con todas las carpetas cerradas, así que hay que buscar
+   * otra vez por dónde ibas. Se lee de la URL una sola vez —en el valor inicial
+   * del estado— y no en un efecto: si se abriera en un efecto, cerrarla a mano
+   * la volvería a abrir en la siguiente vuelta del render.
+   */
+  const query = useSearchParams();
+  const [abiertas, setAbiertas] = useState(() => {
+    const key = query.get("carpeta");
+    return new Set(key ? [key] : []);
+  });
   const [cargando, setCargando] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
   const [marcando, setMarcando] = useState(null);
