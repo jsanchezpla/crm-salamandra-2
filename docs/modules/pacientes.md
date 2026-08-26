@@ -267,6 +267,36 @@ datos reales.
 | `/pacientes/[id]` | Ficha. Cabecera con avatar, nombre + chip de estado, datos clave (centro, terapeuta, fecha alta, frecuencia), 3 botones («Subir audio», «Nuevo informe», «Editar ficha»). 6 pestañas: Resumen, Plan, Sesiones, Informes, Coordinaciones, Documentos (detalle abajo). |
 | `/pacientes/[id]/sesiones/nueva` | Flujo REAL de subida de audio con 4 estados: sube → `POST /api/clinica/sessions/transcribe` → revisar/editar → `POST /api/clinica/sessions` (+ adjuntos de preparación a `prep-files`). Máx. 25 MB; m4a/mp3/wav/ogg/webm. |
 
+### Lo que se rompió en silencio y se arregló el 26/08/2026 (Lau, Aumenta)
+
+#### «Nuevo informe» tumbaba la ficha entera
+
+«Dentro del paciente, cuando le doy arriba a la derecha a nuevo informe sale
+THIS PAGE COULDN'T LOAD.» Literal: el cartel de fábrica de Next, con la ficha
+perdida y hay que volver a entrar.
+
+El 31/07/2026 el formulario del informe pasó de dos campos a cuatro (se añadió
+elegir en qué sesiones se basa el evolutivo, `sourceSessionIds`). El estado
+inicial se actualizó; los **dos sitios que lo REINICIAN** —el botón de la
+cabecera y el «después de crear»— se quedaron con la copia vieja de dos. Al
+abrir el modal, React leía `reportForm.sourceSessionIds.length` sobre un
+`undefined` y reventaba **en mitad del pintado**; como no hay ningún `error.jsx`
+en toda la aplicación, el golpe sube a la raíz y Next tapa la página.
+
+**Estuvo roto 26 días, desplegado.** En ese tiempo Aumenta creó **0 informes
+clínicos** con 22.045 sesiones registradas y 695 coordinaciones: nadie consiguió
+abrir el modal nunca, y la función que se añadió aquel día no llegó a usarse ni
+una vez. El camino de `/clinica/informes` sí funcionaba (usa `EMPTY_FORM`, una
+sola copia), pero ahí hay que buscar al paciente en una lista y no deja marcar
+sesiones.
+
+Ahora el formulario vacío sale de **una sola función**, `informeVacio()`, y
+cambiar un campo va por updater (`setReportForm((f) => ({ ...f, … }))`) en vez
+de por objeto a mano. Lo vigila `scripts/_smoke-informe-formulario.mjs`, cuya
+aserción principal no es «existe la constante» sino la invariante:
+**todo campo que la pantalla LEE de `reportForm` tiene que existir en el
+formulario vacío**. Así caza también el quinto campo de mañana.
+
 ### Particularidades del listado
 
 **Histórico (hasta 06/2026):** los KPIs se derivaban del array `PATIENTS` de

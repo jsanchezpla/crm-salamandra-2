@@ -19,6 +19,25 @@ import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const REPORT_TYPE_OPTIONS = REPORT_TYPES.map((value) => ({ value, label: REPORT_TYPE_LABEL[value] }));
 
+/**
+ * El formulario de «Nuevo informe», vacío. UNA SOLA COPIA, a propósito.
+ *
+ * Los TRES sitios que lo reinician —el estado inicial, el botón de la cabecera y
+ * el «después de crear»— tienen que dejarlo con los MISMOS campos. Cuando no fue
+ * así, del 31/07/2026 al 26/08/2026, el botón lo dejaba con dos de los cuatro, el
+ * modal leía sourceSessionIds.length sobre un undefined y la ficha ENTERA se caía
+ * con el cartel de fábrica de Next, «This page couldn't load». Estuvo roto 26
+ * días: en ese tiempo Aumenta no consiguió crear ni un informe, con 22.045
+ * sesiones registradas.
+ *
+ * Es una función y no un objeto suelto porque sourceSessionIds es un array que el
+ * modal muta: compartir la misma instancia arrastraría la selección de un informe
+ * al siguiente.
+ *
+ * Lo vigila scripts/_smoke-informe-formulario.mjs.
+ */
+const informeVacio = () => ({ reportType: "evolution", dueDate: "", sourceSessionIds: [], referralSpecialty: "" });
+
 const TABS = [
   { key: "resumen", label: "Resumen" },
   { key: "plan", label: "Plan" },
@@ -289,7 +308,7 @@ export default function PacienteFichaPage() {
   // (sprint 2026-07, punto 3.1). Selección LIBRE: el trimestre natural no
   // siempre es el que toca —hubo bajas, se recuperaron sesiones— y quien sabe
   // cuáles cuentan es la terapeuta.
-  const [reportForm, setReportForm] = useState({ reportType: "evolution", dueDate: "", sourceSessionIds: [], referralSpecialty: "" });
+  const [reportForm, setReportForm] = useState(informeVacio());
   // Catálogo de derivación del centro (editable por cliente desde 2026-07-31).
   const [derivaciones, setDerivaciones] = useState([]);
   const [modalBusy, setModalBusy] = useState(false);
@@ -424,7 +443,7 @@ export default function PacienteFichaPage() {
       const r = await fetch("/api/clinica/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo crear");
-      setShowReport(false); setReportForm({ reportType: "evolution", dueDate: "" }); setActiveTab("informes"); load();
+      setShowReport(false); setReportForm(informeVacio()); setActiveTab("informes"); load();
     } catch (e2) { setModalError(e2.message); } finally { setModalBusy(false); }
   };
 
@@ -503,7 +522,7 @@ export default function PacienteFichaPage() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 7.5m0 0L7.5 12m4.5-4.5v13.5" /></svg>
               Subir audio
             </Link>
-            <button onClick={() => { setModalError(null); setReportForm({ reportType: "evolution", dueDate: "" }); setShowReport(true); }} className="text-xs font-medium px-4 py-2 rounded-lg border border-neutral-200 hover:border-neutral-400 text-neutral-700 inline-flex items-center gap-2">
+            <button onClick={() => { setModalError(null); setReportForm(informeVacio()); setShowReport(true); }} className="text-xs font-medium px-4 py-2 rounded-lg border border-neutral-200 hover:border-neutral-400 text-neutral-700 inline-flex items-center gap-2">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               Nuevo informe
             </button>
@@ -853,8 +872,8 @@ export default function PacienteFichaPage() {
             <p className="text-[11px] text-neutral-400 mb-3">Para {patient.firstName} {patient.lastName}</p>
             <form onSubmit={createReport} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <Select value={reportForm.reportType} onChange={(v) => setReportForm({ ...reportForm, reportType: v })} options={REPORT_TYPE_OPTIONS} className={inputCls} />
-                <input type="date" className={inputCls} value={reportForm.dueDate} onChange={(e) => setReportForm({ ...reportForm, dueDate: e.target.value })} title="Fecha de entrega" />
+                <Select value={reportForm.reportType} onChange={(v) => setReportForm((f) => ({ ...f, reportType: v }))} options={REPORT_TYPE_OPTIONS} className={inputCls} />
+                <input type="date" className={inputCls} value={reportForm.dueDate} onChange={(e) => setReportForm((f) => ({ ...f, dueDate: e.target.value }))} title="Fecha de entrega" />
               </div>
               {/* Derivación: a qué especialista externo se manda. El catálogo lo
                   fija cada centro (Configuración → Derivaciones). */}
@@ -864,7 +883,7 @@ export default function PacienteFichaPage() {
                   <select
                     className={inputCls}
                     value={reportForm.referralSpecialty}
-                    onChange={(e) => setReportForm({ ...reportForm, referralSpecialty: e.target.value })}
+                    onChange={(e) => setReportForm((f) => ({ ...f, referralSpecialty: e.target.value }))}
                   >
                     <option value="">Sin especificar</option>
                     {derivaciones.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
