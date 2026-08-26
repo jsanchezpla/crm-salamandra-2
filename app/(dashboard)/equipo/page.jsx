@@ -9,6 +9,7 @@ import MiEquipo from "@/components/team/MiEquipo.jsx";
 import AccessSection, { moduleLabel, suggestUsername, Requisitos } from "@/components/team/AccessSection.jsx";
 import { cumpleTodo } from "@/lib/auth/contrasena.js";
 import CredentialsModal from "@/components/team/CredentialsModal.jsx";
+import BorrarFichaModal from "@/components/team/BorrarFichaModal.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import { COLOR_BLOQUEO_POR_DEFECTO } from "@/lib/citas/coloresBloqueo.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
@@ -120,6 +121,8 @@ export default function EquipoPage() {
   const [tenantModules, setTenantModules] = useState(null);
   // Credenciales generadas en el alta (se enseñan UNA vez).
   const [credentials, setCredentials] = useState(null);
+  // La ficha para la que está abierto el aviso de borrado definitivo.
+  const [borrando, setBorrando] = useState(null);
 
   // Debounce para búsqueda
   useEffect(() => {
@@ -291,6 +294,13 @@ export default function EquipoPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function fichaBorrada(nombre) {
+    setBorrando(null);
+    closePanel();
+    await load();
+    alert(`Se ha borrado la ficha de ${nombre}.`);
   }
 
   async function handleDeactivate() {
@@ -594,6 +604,15 @@ export default function EquipoPage() {
                           {saving ? "..." : "Desactivar"}
                         </button>
                       )}
+                      {/* Borrar de VERDAD. Solo cuando ya está inactiva: es el
+                          último paso de la baja, no un atajo para saltársela. Que
+                          se pueda o no lo decide el servidor al abrir el aviso. */}
+                      {openMember.status === "inactive" && (
+                        <button onClick={() => setBorrando(openMember)} disabled={saving}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-40">
+                          Borrar ficha
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -876,6 +895,14 @@ export default function EquipoPage() {
           username={credentials.username}
           password={credentials.password}
           onClose={() => setCredentials(null)}
+        />
+      )}
+
+      {borrando && (
+        <BorrarFichaModal
+          member={borrando}
+          onCerrar={() => setBorrando(null)}
+          onBorrada={fichaBorrada}
         />
       )}
     </div>

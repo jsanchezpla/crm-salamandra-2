@@ -13,14 +13,14 @@
 | **moduleKey** | `team` · requiere — (funciona solo) · `team_avanzado` requiere `team` y, según la pantalla, `clinica` (Desempeño, Dirección, Productividad, Incidencias, Bandeja) o `citas` (Ocupación); solo Actividad va con `team_avanzado` a secas (`lib/provisioning/dependencias.js`) · `fichaje` requiere `team` y es módulo aparte (`fichaje.md`) |
 | **Reina** | — · sin reina declarada; las siete pantallas de `team_avanzado` y su `adminOnly` nacieron a petición de Aumenta (comentarios en `components/layout/Sidebar.jsx`) |
 | **Pantallas** | `team`: `/equipo` → `app/(dashboard)/equipo/page.jsx` (plantilla, drawer de alta/edición, horario, «Acceso al CRM»; al no admin le pinta `MiEquipo`) · `team_avanzado`: `/equipo/mi-desempeno`, `/equipo/desempeno-config`, `/equipo/direccion`, `/equipo/productividad`, `/equipo/incidencias`, `/equipo/bandeja` (con `clinica`), `/equipo/ocupacion` (con `citas`), `/equipo/actividad` → `app/(dashboard)/equipo/<carpeta>/page.jsx`, con sus piezas en `app/(dashboard)/equipo/_components/` · `fichaje`: `/equipo/fichaje` · el grupo del menú se ve con `team` O `clinica` (`visibleModules`) |
-| **Endpoints** | `app/api/team/**` — 12 `route.js`: `route.js` (listado/alta), `[id]` (detalle, edición, baja lógica), `modules` y `[id]/modules`, `[id]/access` (+ `password`: el login del miembro, escribe en `master.users`), `[id]/hours` (horario), `me` y `me/documents` (+ `[id]`) (autoservicio; gate `team` O `clinica` a nivel de tenant), `[id]/billing-summary` (gatea `billing`), `[id]/projects` (gatea `projects`) · `team_avanzado` — 18 `route.js` con `hasModule("team_avanzado")`: `app/api/actividad`, `app/api/clinica/performance/**`, `app/api/clinica/productividad/**`, `app/api/clinica/incidencias/**`, `app/api/clinica/incentive-items/**`, `app/api/clinica/dashboard`, `app/api/clinica/bandeja` y `app/api/citas/informe-ocupacion` · `app/api/auth/me` (`enabledModules`) · Públicos: ninguno |
-| **Lógica** | `lib/team/`: `serializeTeamMember.js` (BD → API; oculta coste y salario a quien no es admin) · `access.js` (crear, cambiar y quitar el login y su `moduleAccess`) · `currentTeamMember.js` (qué `TeamMember` es el usuario logueado) · Actividad: `lib/actividad/etiquetas.js` (acción de auditoría → frase) · las pantallas avanzadas tiran de `lib/clinica/` |
-| **UI** | `components/team/`: `AccessSection.jsx` («Acceso al CRM»), `CredentialsModal.jsx` (la contraseña una sola vez), `TeamHoursEditor.jsx` (horario; también en `/mi-horario`, de Citas), `MiEquipo.jsx` (mini-módulo del no admin) · `components/billing/EmployeeBillingSection.jsx` embebido en la ficha · no hay `modules/team/` |
+| **Endpoints** | `app/api/team/**` — 13 `route.js`: `route.js` (listado/alta), `[id]` (detalle, edición, baja lógica), `[id]/borrar` (GET la radiografía, DELETE el borrado definitivo), `modules` y `[id]/modules`, `[id]/access` (+ `password`: el login del miembro, escribe en `master.users`), `[id]/hours` (horario), `me` y `me/documents` (+ `[id]`) (autoservicio; gate `team` O `clinica` a nivel de tenant), `[id]/billing-summary` (gatea `billing`), `[id]/projects` (gatea `projects`) · `team_avanzado` — 18 `route.js` con `hasModule("team_avanzado")`: `app/api/actividad`, `app/api/clinica/performance/**`, `app/api/clinica/productividad/**`, `app/api/clinica/incidencias/**`, `app/api/clinica/incentive-items/**`, `app/api/clinica/dashboard`, `app/api/clinica/bandeja` y `app/api/citas/informe-ocupacion` · `app/api/auth/me` (`enabledModules`) · Públicos: ninguno |
+| **Lógica** | `lib/team/`: `serializeTeamMember.js` (BD → API; oculta coste y salario a quien no es admin) · `access.js` (crear, cambiar y quitar el login y su `moduleAccess`) · `currentTeamMember.js` (qué `TeamMember` es el usuario logueado) · `rastro.js` (qué queda de una persona en el schema y si su ficha se puede borrar) · Actividad: `lib/actividad/etiquetas.js` (acción de auditoría → frase) · las pantallas avanzadas tiran de `lib/clinica/` |
+| **UI** | `components/team/`: `AccessSection.jsx` («Acceso al CRM»), `CredentialsModal.jsx` (la contraseña una sola vez), `BorrarFichaModal.jsx` (el aviso antes de borrar, con la radiografía dentro), `TeamHoursEditor.jsx` (horario; también en `/mi-horario`, de Citas), `MiEquipo.jsx` (mini-módulo del no admin) · `components/billing/EmployeeBillingSection.jsx` embebido en la ficha · no hay `modules/team/` |
 | **Modelos** | `TeamMember` (`team_members`), `TeamMemberHours` (`team_member_hours`), `TeamMemberModule` (`team_member_modules`, espejo informativo de `moduleAccess`); en `master`: `User` (`users`; `module_access` es la segunda puerta) y `AuditLog` (`audit_logs`, lo que lee Actividad) · `team_avanzado` lee modelos de Clínica y Citas: `PerformanceMetric`, `IncentiveItem`, `Incidencia`, `IncidenciaAssignee`, `Booking` |
 | **Interruptores y parámetros** | ninguno que lea el código (ni `featureFlags` ni `logicOverrides`); lo que decide es el rol (fresco de BD en `access`), `visibleModules: ["team", "clinica"]` y `requiresAll` de `components/layout/Sidebar.jsx`, y `users.module_access` |
 | **Pantallas propias** | ninguna (letrero `ui_override` vacío en producción) |
 | **Scripts** | activar: `node scripts/enable-module.js <slug> team` (y `team_avanzado`); `MODULES.team` de `scripts/_module-migrations.js`: `migrate-team-fields`, `migrate-rename-therapist-to-employee`, `migrate-team-modules-salary`, `migrate-team-members-avatar-color`, `migrate-team-specialties`, `migrate-team-weekly-hours`, `migrate-team-member-hours` (+ CORE `migrate-team-members-block-color`); lo de `team_avanzado` va en `MODULES.clinica` (`migrate-incidencias-module`, `migrate-incentive-items`, `migrate-clinica-performance-roles`) · seeds: `seed-team-demo.js` (`npm run db:seed:team`), `_hechos/seed-aumenta-equipo-real.js` (el equipo real de Aumenta, 24/07/2026: no relanzar) · accesos: `check-module-access.js` (`npm run db:check-access`), `grant-module-access.js` (ojo: `[]` = «no tocar», al revés que el gate) · Actividad: `migrate-audit-logs-index.js` (master, ONE_OFF ya corrido), `podar-audit-logs.js` (retención) · `npm run db:check-links` (`team_member_id` en `plans`, `interactions`, `client_notes`…) |
-| **Pruebas** | `scripts/_smoke-actividad-etiquetas.mjs` (`node:test`, 19/08/2026, en `npm test`): `lib/actividad/etiquetas.js` —las frases, el traductor genérico, módulos y prefijos— y un CRUCE que lee todos los `action: "x.y"` de `app/api` y `lib` y exige frase propia (el 19/08 faltaban 21 y ganaron la suya ese día; `DEUDA_CONOCIDA` está vacía): una acción nueva sin frase pone la prueba en rojo; y que ningún prefijo con frase caiga en «Otros» (el filtro «Configuración» buscaba `tenant.*` y se escribe `configuracion.*`) · las que nombran `TeamMember` son de Citas (`_smoke-horario-profesional.mjs`, `_smoke-bloqueos-quien-ve.mjs`, `_smoke-citas-sin-profesional.mjs`) |
+| **Pruebas** | `scripts/_smoke-team-borrar.mjs` (`node:test`, 26/08/2026, en `npm test`): las tres puertas del borrado, que las columnas sin FK sigan declaradas y que ni la pantalla ni el modal decidan por su cuenta · `scripts/_smoke-actividad-etiquetas.mjs` (`node:test`, 19/08/2026, en `npm test`): `lib/actividad/etiquetas.js` —las frases, el traductor genérico, módulos y prefijos— y un CRUCE que lee todos los `action: "x.y"` de `app/api` y `lib` y exige frase propia (el 19/08 faltaban 21 y ganaron la suya ese día; `DEUDA_CONOCIDA` está vacía): una acción nueva sin frase pone la prueba en rojo; y que ningún prefijo con frase caiga en «Otros» (el filtro «Configuración» buscaba `tenant.*` y se escribe `configuracion.*`) · las que nombran `TeamMember` son de Citas (`_smoke-horario-profesional.mjs`, `_smoke-bloqueos-quien-ve.mjs`, `_smoke-citas-sin-profesional.mjs`) |
 | **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` · `../decisions/2026-07-28-repaso-de-seguridad.md` (el rol fresco de `withTenant`, de lo que viven los endpoints de `access`) · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` |
 | **En este doc** | Modelos · Filtrado de campos sensibles · Eventos de auditoría · Endpoints · Frontend · Migración y backfill · Actividad (registro legible) — 2026-07-27 |
 
@@ -48,6 +48,57 @@ sigue siendo único es el serializer.
 - Organigrama visual.
 - Página detalle como ruta propia (`/equipo/[id]`). El detalle vive en el
   drawer del listado, no hay permalink compartible.
+
+## Borrar una ficha de verdad — 2026-08-26
+
+Hasta el 26/08/2026 Equipo solo tenía **baja lógica**: `DELETE /api/team/[id]`
+pone `status = 'inactive'` y revoca el login, pero la fila se queda para
+siempre. Para la persona que trabajó tres años eso es lo correcto —su nombre
+firma sesiones y facturas—, pero para la ficha creada por error deja basura
+en la plantilla.
+
+El borrado de verdad vive en `app/api/team/[id]/borrar/route.js` y **bloquea**
+en vez de avisar. Tres puertas, y las tres las mide el SERVIDOR:
+
+1. La ficha está `inactive`. Es la condición que puso Jorge: primero se da de
+   baja, luego se borra. `on_leave` no vale: esa persona vuelve.
+2. No le cuelga ningún `userId`.
+3. **No queda ni una fila suya en todo el schema.**
+
+La tercera es la interesante. La lista de dónde mirar NO está escrita a mano:
+`lib/team/rastro.js` se la pregunta a `pg_constraint`, y **a todos los schemas
+`crm_%`, no solo al del cliente que se está mirando**. El motivo es que la
+misma columna tiene FK en unos schemas y no en otros —`bookings.team_member_id`
+la tiene en 8 y no en `nutri_laura`— porque el alta de tenant lanza `sync()`
+antes que las migraciones. Qué columnas apuntan a una persona es una propiedad
+del producto; que en un schema falte la FK es un accidente de cómo nació.
+
+Quedan tres columnas que guardan el id de un miembro **sin FK en ningún
+sitio**, y esas van declaradas en `COLUMNAS_SIN_FK` con la medición que las
+justifica: `assets.assigned_to` (3 filas en producción, las 3 de equipo) y las
+dos de `booking_change_requests`. La prueba vigila también el lado contrario:
+que no se cuele en esa lista una columna que en realidad guarda un id de
+`master.users` (`team_blocks.created_by_id`, `documents.owner_user_id`,
+`recipes.created_by`…), porque eso dejaría el botón sin aparecer nunca.
+
+Son **40 columnas** de 34 tablas, y medirlas cuesta ~40 ms por ficha.
+
+Si algo bloquea, **no hay botón**: el modal enseña qué queda («3 facturas»,
+«15 sesiones clínicas») y explica que la ficha se queda inactiva. Sin casilla
+de «sé lo que hago» ni teclear el nombre: delante de 22.000 sesiones eso se
+marca sin leer.
+
+El `DELETE` **vuelve a medir** aunque el navegador ya lo hiciera (el modal
+puede llevar horas abierto), va en transacción y traduce el `23503` de
+PostgreSQL —alguien le colgó algo entre la medición y el borrado— a un 409 en
+cristiano. Queda en auditoría como `team.deleted`, con un resumen (nombre,
+puesto, estado) y nunca la ficha entera.
+
+> ⚠️ Esto solo es seguro desde que `migrate-fks-equipo-alineadas.js` alineó los
+> `ON DELETE` (26/08/2026, mismo día). Antes,
+> `clinical_reports.therapist_id` era `CASCADE` en 8 de los 9 clientes con
+> Clínica: un borrado se habría llevado los informes por delante, sin auditoría
+> ninguna, porque la cascada la ejecuta PostgreSQL.
 
 ## Modelos
 
@@ -232,6 +283,8 @@ Todos se registran en `master.AuditLog` con `entity: "TeamMember"`,
   en sprint billing).
 - `team.status_changed` — cuando cambia `status` (PATCH).
 - `team.deactivated` — al hacer DELETE (soft delete).
+- `team.deleted` — al borrar la ficha de verdad (`DELETE [id]/borrar`); el
+  `before` es un resumen (nombre, puesto, estado), no la fila entera.
 - `team.modules_changed` — al cambiar los módulos marcados del miembro
   (PATCH `[id]/modules`; es el espejo informativo, no el acceso).
 - `team.user_created`, `team.access_changed`, `team.password_reset`,
