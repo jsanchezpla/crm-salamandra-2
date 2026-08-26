@@ -439,10 +439,32 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
               <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
               {report.statusLabel}
             </span>
+            {/*
+              VER EL PDF SIN MANDÁRSELO A NADIE (26/08/2026, Jorge).
+
+              Hasta hoy el PDF solo nacía al pulsar «Enviar al paciente», que
+              además lo publica en el área privada de la familia: la única forma
+              de ver cómo queda un informe era entregárselo a alguien de verdad.
+              Se nota en los números — en Aumenta hay 22.045 sesiones y CERO
+              informes, y pidieron rediseñar un PDF que allí no ha visto nadie.
+
+              Va ANTES de «Guardar» y de «Enviar», que es el orden en que se
+              usan: mirar, corregir, mandar. Y abre en pestaña nueva para no
+              perder lo que se esté escribiendo en este cajón.
+            */}
+            <a
+              href={`/api/clinica/reports/${report.id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Abre el PDF de lo ÚLTIMO GUARDADO, en una pestaña nueva. No lo envía a nadie."
+              className="ml-auto text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400"
+            >
+              Ver PDF
+            </a>
             <button
               onClick={guardar}
               disabled={guardando}
-              className="ml-auto text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-50"
+              className="text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-50"
             >
               {guardando ? "Guardando…" : "Guardar informe"}
             </button>

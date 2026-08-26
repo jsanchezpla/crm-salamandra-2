@@ -757,14 +757,30 @@ export default function PacienteFichaPage() {
             <div className="bg-white border border-dashed border-neutral-200 rounded-xl p-10 text-center"><p className="text-sm text-neutral-600">Sin informes generados.</p></div>
           ) : (
             <div className="bg-white border border-neutral-100 rounded-xl divide-y divide-neutral-100">
+              {/* La fila ya no es UN enlace: lleva dos destinos. El texto abre
+                  el informe donde se edita, y «PDF» abre el documento en una
+                  pestaña sin entregárselo a nadie (26/08/2026). Un <a> dentro
+                  de un <Link> no es HTML válido, así que la fila pasa a ser un
+                  div con los dos enlaces dentro. */}
               {reports.map((r) => (
-                <Link key={r.id} href="/clinica/informes" className="p-4 flex items-center justify-between gap-3 hover:bg-neutral-50/50">
-                  <div className="min-w-0">
+                <div key={r.id} className="p-4 flex items-center justify-between gap-3 hover:bg-neutral-50/50">
+                  <Link href="/clinica/informes" className="min-w-0 flex-1">
                     <div className="font-medium text-[var(--ink-900)] text-sm">Informe {r.typeLabel.toLowerCase()}</div>
                     <div className="text-[10px] text-neutral-400 tabular">{fmtDate(r.reportDate)} · Entrega {fmtDate(r.dueDate)}{r.overdue ? " · vencida" : ""}</div>
+                  </Link>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <a
+                      href={`/api/clinica/reports/${r.id}/pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Abre el PDF en una pestaña nueva. No lo envía a nadie."
+                      className="text-[10px] font-medium text-neutral-600 border border-neutral-200 hover:border-neutral-400 px-2 py-0.5 rounded-full"
+                    >
+                      PDF
+                    </a>
+                    <span className="text-[10px] font-medium text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-full">{r.statusLabel}</span>
                   </div>
-                  <span className="text-[10px] font-medium text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-full">{r.statusLabel}</span>
-                </Link>
+                </div>
               ))}
             </div>
           )
