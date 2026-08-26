@@ -236,6 +236,7 @@ export const MODULES = {
     // solo si existe patients). Si no, un tenant solo-clientes tendría documents
     // sin patient_id y el modelo reventaría con 42703 al leer adjuntos.
     "migrate-documents-patient-link",
+    "migrate-onedrive-archivo",
     // Mismo motivo: el modelo Document referencia client_visible y
     // uploaded_by_client en TODOS los tenants con tabla documents, así que las
     // columnas tienen que existir aunque el tenant no tenga portal de paciente.
@@ -307,6 +308,7 @@ export const MODULES = {
     "migrate-patients-care-type",
     "migrate-patients-specialties",
     "migrate-documents-patient-link",
+    "migrate-onedrive-archivo",
     // Varios terapeutas por paciente (25/08/2026, Lau de Aumenta). Solo crea la
     // tabla `patient_therapists`: `main_therapist_id` se queda y sigue siendo el
     // de referencia, así que no hay nada que rellenar para que funcione.
@@ -334,6 +336,7 @@ export const MODULES = {
     "migrate-patients-care-type",
     "migrate-patients-specialties",
     "migrate-documents-patient-link",
+    "migrate-onedrive-archivo",
     "migrate-incidencias-module",
     "migrate-incidencias-verificacion",
     "migrate-incentive-items",

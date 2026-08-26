@@ -114,6 +114,14 @@ export function definePatient(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // Enlaces externos de la ficha: [{ label, url }] (26/08/2026). El primero
+      // de la casa: la carpeta de OneDrive del paciente con sus fotos y vídeos,
+      // que se quedan allí a propósito (pesan gigas y ya tienen casa).
+      externalLinks: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
       // ── Datos personales (Aumenta) ──────────────────────────────────────
       dni: {
         type: DataTypes.STRING(20),

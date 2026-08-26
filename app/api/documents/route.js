@@ -14,6 +14,7 @@ import {
 import {
   MAX_FILE_SIZE_BYTES,
   TENANT_QUOTA_BYTES,
+  quotaBytesDe,
   isAllowedMime,
   validateMimeMagicBytes,
   getTenantStorageUsage,
@@ -147,9 +148,9 @@ export const POST = withTenant(async (request, _rc, ctx) => {
 
     // Cuota del tenant (bytes reales en disco + este archivo).
     const usage = await getTenantStorageUsage(ctx.slug);
-    if (usage + realSize > TENANT_QUOTA_BYTES) {
+    if (usage + realSize > quotaBytesDe(ctx)) {
       return error(
-        `Cuota de almacenamiento superada (${(TENANT_QUOTA_BYTES / (1024 * 1024 * 1024)).toFixed(0)} GB por tenant)`,
+        `Cuota de almacenamiento superada (${(quotaBytesDe(ctx) / (1024 * 1024 * 1024)).toFixed(0)} GB por tenant)`,
         507
       );
     }

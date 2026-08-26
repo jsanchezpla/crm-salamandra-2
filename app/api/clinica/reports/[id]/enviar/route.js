@@ -7,6 +7,7 @@ import { clientIdOfPatient } from "../../../../../../lib/clinica/patientClient.j
 import { buildReportPdfBuffer, reportPdfFilename } from "../../../../../../lib/clinica/reportPdf.js";
 import {
   TENANT_QUOTA_BYTES,
+  quotaBytesDe,
   getTenantStorageUsage,
   saveDocumentFile,
   deleteDocumentFile,
@@ -86,7 +87,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
     }
 
     const usage = await getTenantStorageUsage(ctx.tenant.slug);
-    if (usage + buffer.length > TENANT_QUOTA_BYTES) return error("Cuota de almacenamiento superada", 507);
+    if (usage + buffer.length > quotaBytesDe(ctx)) return error("Cuota de almacenamiento superada", 507);
 
     // El anterior se lee ANTES de escribir el nuevo (si no, un fallo aquí
     // dejaría el fichero recién creado huérfano en disco).

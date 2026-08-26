@@ -5,6 +5,7 @@ import { serializeDocument, ownerSegmentFor } from "@/lib/documents/helpers.js";
 import {
   MAX_FILE_SIZE_BYTES,
   TENANT_QUOTA_BYTES,
+  quotaBytesDe,
   getTenantStorageUsage,
   saveDocumentFile,
   deleteDocumentFile,
@@ -69,8 +70,8 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     if (buffer.length > MAX_FILE_SIZE_BYTES) return error(`Archivo demasiado grande. Máximo: ${MAX_FILE_SIZE_BYTES / MB} MB`, 413);
 
     const usage = await getTenantStorageUsage(ctx.slug);
-    if (usage + buffer.length > TENANT_QUOTA_BYTES) {
-      return error(`Cuota de almacenamiento superada (${(TENANT_QUOTA_BYTES / (1024 * MB)).toFixed(0)} GB por tenant)`, 507);
+    if (usage + buffer.length > quotaBytesDe(ctx)) {
+      return error(`Cuota de almacenamiento superada (${(quotaBytesDe(ctx) / (1024 * MB)).toFixed(0)} GB por tenant)`, 507);
     }
 
     const documentId = randomUUID();

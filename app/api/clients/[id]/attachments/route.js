@@ -11,6 +11,7 @@ import {
 import {
   MAX_FILE_SIZE_BYTES,
   TENANT_QUOTA_BYTES,
+  quotaBytesDe,
   getTenantStorageUsage,
   saveDocumentFile,
   deleteDocumentFile,
@@ -78,7 +79,8 @@ export const GET = withTenant(async (_request, { params }, { tenantModels, hasMo
 });
 
 export const POST = withTenant(
-  async (request, { params }, { tenant, tenantModels, hasModule }) => {
+  async (request, { params }, ctx) => {
+    const { tenant, tenantModels, hasModule } = ctx;
     try {
       if (!hasModule("clients")) return forbidden("Módulo clients no activo");
       const { id } = await params;
@@ -119,7 +121,7 @@ export const POST = withTenant(
       }
 
       const usage = await getTenantStorageUsage(tenant.slug);
-      if (usage + realSize > TENANT_QUOTA_BYTES) {
+      if (usage + realSize > quotaBytesDe(ctx)) {
         return error(`Cuota de almacenamiento superada`, 507);
       }
 

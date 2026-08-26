@@ -7,6 +7,7 @@ import { extPermitida, listaPrepFiles, nuevoPrepFile, MAX_PREP_FILES } from "../
 import {
   MAX_FILE_SIZE_BYTES,
   TENANT_QUOTA_BYTES,
+  quotaBytesDe,
   getTenantStorageUsage,
   saveDocumentFile,
   deleteDocumentFile,
@@ -70,7 +71,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
     }
 
     const usage = await getTenantStorageUsage(ctx.tenant.slug);
-    if (usage + buffer.length > TENANT_QUOTA_BYTES) return error("Cuota de almacenamiento superada", 507);
+    if (usage + buffer.length > quotaBytesDe(ctx)) return error("Cuota de almacenamiento superada", 507);
 
     const fileId = randomUUID();
     const storagePath = await saveDocumentFile(ctx.tenant.slug, "shared", fileId, buffer, ext);

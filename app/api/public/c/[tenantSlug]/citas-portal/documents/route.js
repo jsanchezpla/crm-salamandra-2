@@ -11,6 +11,7 @@ import { CUPO_PORTAL } from "../../../../../../../lib/citas/portalRateLimit.js";
 import {
   MAX_FILE_SIZE_BYTES,
   TENANT_QUOTA_BYTES,
+  quotaBytesDe,
   getTenantStorageUsage,
   saveDocumentFile,
   deleteDocumentFile,
@@ -150,7 +151,8 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
   }
 }, { rateLimit: CUPO_PORTAL });
 
-export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenantModels, hasModule }) => {
+export const POST = withPublicTenant(async (request, _ctx, ctx) => {
+  const { slug, tenant, tenantModels, hasModule } = ctx;
   try {
     const blocked = gate(tenant, hasModule);
     if (blocked) return blocked;
@@ -199,7 +201,7 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenant, tenan
     if (realSize === 0) return error("El archivo está vacío", 422);
 
     const usage = await getTenantStorageUsage(tenant.slug);
-    if (usage + realSize > TENANT_QUOTA_BYTES) return error("No hay espacio disponible ahora mismo.", 507);
+    if (usage + realSize > quotaBytesDe(ctx)) return error("No hay espacio disponible ahora mismo.", 507);
 
     const documentId = randomUUID();
     const ext = extFromFileName(file.name);

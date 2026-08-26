@@ -5,6 +5,7 @@ import { ok, created, error, forbidden, notFound, serverError } from "../../../.
 import {
   MAX_FILE_SIZE_BYTES,
   TENANT_QUOTA_BYTES,
+  quotaBytesDe,
   getTenantStorageUsage,
   saveDocumentFile,
   deleteDocumentFile,
@@ -37,6 +38,7 @@ function serialize(doc) {
     // equipo): la UI lo etiqueta y decide desde dónde se puede borrar.
     source: doc.source,
     createdAt: doc.createdAt,
+    documentDate: doc.documentDate ?? null,
   };
 }
 
@@ -57,7 +59,8 @@ export const GET = withTenant(async (request, { params }, ctx) => {
     const q = (new URL(request.url).searchParams.get("q") || "").trim();
     if (q) where.fileName = { [Op.iLike]: `%${q}%` };
 
-    const rows = await Document.findAll({ where, order: [["createdAt", "DESC"]], limit: MAX_FILES_PER_PATIENT });
+    const rows = await Document.findAll({ where, // Por la fecha DEL documento: la cronología clínica manda sobre la de subida.
+      order: [["documentDate", "DESC"], ["createdAt", "DESC"]], limit: MAX_FILES_PER_PATIENT });
     return ok({ documents: rows.map((d) => serialize(d.toJSON())), total: rows.length, limit: MAX_FILES_PER_PATIENT });
   } catch (err) {
     return serverError(err);
@@ -103,7 +106,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     }
 
     const usage = await getTenantStorageUsage(ctx.tenant.slug);
-    if (usage + realSize > TENANT_QUOTA_BYTES) return error("Cuota de almacenamiento superada", 507);
+    if (usage + realSize > quotaBytesDe(ctx)) return error("Cuota de almacenamiento superada", 507);
 
     const ext = extFromFileName(file.name);
     const yaTieneExt = /\.[A-Za-z0-9]{1,10}$/.test(name);

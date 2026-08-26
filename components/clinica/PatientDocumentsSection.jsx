@@ -19,8 +19,22 @@ function fmtSize(n) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** «junio 2024» a partir de la fecha del documento. */
+const MES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+function claveMes(d) {
+  const f = d.documentDate ?? d.createdAt;
+  const fecha = f ? new Date(f) : null;
+  if (!fecha || Number.isNaN(fecha.getTime())) return { anio: "Sin fecha", mes: "" };
+  return { anio: String(fecha.getFullYear()), mes: MES[fecha.getMonth()] };
+}
+
 export default function PatientDocumentsSection({ patientId }) {
   const [docs, setDocs] = useState([]);
+  // Enlaces externos de la ficha (la carpeta de OneDrive con fotos y vídeos,
+  // que se quedan allí a propósito: pesan gigas y ya tienen casa).
+  const [enlaces, setEnlaces] = useState([]);
+  // Años plegados: con veinte años de archivo, la lista entera no se lee.
+  const [plegados, setPlegados] = useState(new Set());
   const [q, setQ] = useState("");
   const [template, setTemplate] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -43,6 +57,13 @@ export default function PatientDocumentsSection({ patientId }) {
     [patientId]
   );
 
+  const loadEnlaces = useCallback(() => {
+    return fetch(`/api/pacientes/${patientId}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (j.ok) setEnlaces(j.data?.externalLinks ?? j.data?.patient?.externalLinks ?? []); })
+      .catch(() => {});
+  }, [patientId]);
+
   const loadTemplate = useCallback(() => {
     return fetch(`/api/pacientes/contract-template`, { cache: "no-store" })
       .then((r) => r.json())
@@ -53,7 +74,7 @@ export default function PatientDocumentsSection({ patientId }) {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    Promise.all([loadDocs(), loadTemplate()]).finally(() => { if (alive) setLoading(false); });
+    Promise.all([loadDocs(), loadTemplate(), loadEnlaces()]).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [loadDocs, loadTemplate]);
 
@@ -158,7 +179,14 @@ export default function PatientDocumentsSection({ patientId }) {
       <div className="bg-white border border-neutral-200 rounded-xl p-4">
         <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
           <div className="text-sm font-semibold text-neutral-800">Documentos del paciente</div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {enlaces.map((e, i) => (
+              <a key={i} href={e.url} target="_blank" rel="noreferrer"
+                className="text-xs px-3 py-1.5 rounded-md border border-neutral-300 text-neutral-700 hover:border-neutral-500"
+                title="Se abre en OneDrive; hace falta la sesión del centro">
+                {e.label || "Fotos y vídeos (OneDrive)"}
+              </a>
+            ))}
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -185,8 +213,32 @@ export default function PatientDocumentsSection({ patientId }) {
             {q ? "Ningún documento con ese nombre." : "Este paciente no tiene documentos todavía."}
           </div>
         ) : (
-          <ul className="divide-y divide-neutral-100">
-            {docs.map((d) => (
+          <div>
+            {(() => {
+              // Años → meses → documentos, en el orden en que ya llegan (fecha desc).
+              const grupos = [];
+              for (const d of docs) {
+                const { anio, mes } = claveMes(d);
+                let g = grupos[grupos.length - 1];
+                if (!g || g.anio !== anio) { g = { anio, meses: [] }; grupos.push(g); }
+                let m = g.meses[g.meses.length - 1];
+                if (!m || m.mes !== mes) { m = { mes, docs: [] }; g.meses.push(m); }
+                m.docs.push(d);
+              }
+              return grupos.map((g) => (
+                <div key={g.anio} className="mb-1">
+                  <button type="button"
+                    onClick={() => setPlegados((prev) => { const s2 = new Set(prev); s2.has(g.anio) ? s2.delete(g.anio) : s2.add(g.anio); return s2; })}
+                    className="w-full flex items-center gap-2 py-1.5 text-left">
+                    <span className="text-[11px] text-neutral-400">{plegados.has(g.anio) ? "▸" : "▾"}</span>
+                    <span className="text-sm font-semibold text-neutral-800">{g.anio}</span>
+                    <span className="text-[11px] text-neutral-400">· {g.meses.reduce((a, m) => a + m.docs.length, 0)} documento{g.meses.reduce((a, m) => a + m.docs.length, 0) === 1 ? "" : "s"}</span>
+                  </button>
+                  {!plegados.has(g.anio) && g.meses.map((m) => (
+                    <div key={g.anio + m.mes} className="pl-5 mb-1">
+                      {m.mes && <div className="text-[11px] uppercase tracking-wider text-neutral-400 pt-1">{m.mes}</div>}
+                      <ul className="divide-y divide-neutral-100">
+                        {m.docs.map((d) => (
               <li key={d.id} className="py-2 flex items-center gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 min-w-0">
@@ -217,8 +269,14 @@ export default function PatientDocumentsSection({ patientId }) {
                   </button>
                 )}
               </li>
-            ))}
-          </ul>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              ));
+            })()}
+          </div>
         )}
       </div>
 

@@ -46,6 +46,13 @@ export function defineDocument(sequelize) {
         field: "owner_user_id",
       },
       // Nombre original visible (saneado: sin control chars ni separadores).
+      // La fecha DEL documento (26/08/2026): el informe de junio de 2024 ES de
+      // junio de 2024, entre al CRM cuando entre. La cronología de la ficha
+      // ordena por esta, no por createdAt.
+      documentDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+      },
       fileName: {
         type: DataTypes.STRING(255),
         allowNull: false,

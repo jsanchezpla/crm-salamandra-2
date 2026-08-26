@@ -4,6 +4,7 @@ import { ok, created, error, forbidden, notFound, serverError } from "../../../.
 import {
   MAX_FILE_SIZE_BYTES,
   TENANT_QUOTA_BYTES,
+  quotaBytesDe,
   getTenantStorageUsage,
   saveDocumentFile,
   deleteDocumentFile,
@@ -100,7 +101,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     }
 
     const usage = await getTenantStorageUsage(ctx.tenant.slug);
-    if (usage + realSize > TENANT_QUOTA_BYTES) return error("Cuota de almacenamiento superada", 507);
+    if (usage + realSize > quotaBytesDe(ctx)) return error("Cuota de almacenamiento superada", 507);
 
     const ext = extFromFileName(file.name);
     const yaTieneExt = /\.[A-Za-z0-9]{1,10}$/.test(name);

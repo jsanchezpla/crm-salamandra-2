@@ -104,8 +104,10 @@ PostgreSQL DB: salamandra
   y con lo que el código LEE de verdad (comprobado en producción el 19/08/2026):
   `featureFlags` (interruptores; hoy el código lee TRES: `training.formacionAbierta`,
   `nutricion.autoAsignarEnAlta`, `citas.autoConfirmPublicBookings`),
-  `logicOverrides` (parámetros; **hoy nadie los lee**: los `training` de aumenta
-  y nutri_laura son inertes), `schemaExtensions` (**decorativos**, el código no
+  `logicOverrides` (parámetros; **primer lector real el 26/08/2026**:
+  `documents.quotaBytes` — la cuota de disco por cliente,
+  `lib/documents/documentStorage.js` `quotaBytesDe(ctx)`; los `training` de
+  aumenta y nutri_laura siguen inertes), `schemaExtensions` (**decorativos**, el código no
   los lee) y `uiOverride` (**letrero**: la pantalla la elige el mapa
   `UI_OVERRIDES` de cada página; se mantiene fiel con
   `scripts/sincronizar-ui-override.mjs` y solo la enseña `/admin/modulos`).

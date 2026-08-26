@@ -5,6 +5,7 @@ import { auditar, datosPeticion } from "../../../../../lib/utils/auditoria.js";
 import {
   MAX_FILE_SIZE_BYTES,
   TENANT_QUOTA_BYTES,
+  quotaBytesDe,
   getTenantStorageUsage,
   saveDocumentFile,
   deleteDocumentFile,
@@ -242,7 +243,7 @@ export const POST = withTenant(async (request, rc, ctx) => {
     if (!validateMimeMagicBytes(buffer, PDF_MIME)) return error("El archivo no es un PDF válido", 422);
 
     const usage = await getTenantStorageUsage(ctx.tenant.slug);
-    if (usage + realSize > TENANT_QUOTA_BYTES) return error("Cuota de almacenamiento superada", 507);
+    if (usage + realSize > quotaBytesDe(ctx)) return error("Cuota de almacenamiento superada", 507);
 
     const nameRaw = form.get("name");
     const name = (typeof nameRaw === "string" ? nameRaw.trim() : "").slice(0, 200) || file.name || "Contrato firmado";
