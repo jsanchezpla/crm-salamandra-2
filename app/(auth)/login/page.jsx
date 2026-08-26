@@ -86,7 +86,7 @@ function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <div className="rounded-[var(--radius-control)] bg-white/[0.06] border border-white/[0.12] px-4 py-3 text-[13px] text-white/85">
+        <div className="rounded-[var(--radius-control)] bg-[#1B3A2D]/[0.06] border border-[#1B3A2D]/[0.14] px-4 py-3 text-[13px] text-[#1B3A2D]">
           {error}
         </div>
       )}
@@ -94,7 +94,7 @@ function LoginForm() {
       <div className="space-y-2">
         <label
           htmlFor="email"
-          className="block text-[10px] font-semibold text-white/45 uppercase tracking-[0.16em]"
+          className="block text-[10px] font-semibold text-[#1B3A2D]/50 uppercase tracking-[0.16em]"
         >
           Email o usuario
         </label>
@@ -112,7 +112,7 @@ function LoginForm() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-[var(--radius-control)] bg-white/[0.05] border border-white/[0.12] px-4 py-3.5 text-[15px] text-white placeholder-white/25 focus:outline-none focus:border-white/40 focus:bg-white/[0.08] transition font-mono"
+          className="w-full rounded-[var(--radius-control)] bg-white border border-[#1B3A2D]/[0.16] px-4 py-3.5 text-[15px] text-[#1B3A2D] placeholder-[#1B3A2D]/30 shadow-[0_1px_2px_rgba(27,58,45,0.05)] focus:outline-none focus:border-[#1B3A2D]/45 transition"
           placeholder="tu@empresa.com o usuario"
         />
       </div>
@@ -120,7 +120,7 @@ function LoginForm() {
       <div className="space-y-2">
         <label
           htmlFor="password"
-          className="block text-[10px] font-semibold text-white/45 uppercase tracking-[0.16em]"
+          className="block text-[10px] font-semibold text-[#1B3A2D]/50 uppercase tracking-[0.16em]"
         >
           Contraseña
         </label>
@@ -135,7 +135,7 @@ function LoginForm() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className={`w-full rounded-[var(--radius-control)] bg-white/[0.05] border border-white/[0.12] pl-4 pr-12 py-3.5 text-[15px] text-white placeholder-white/25 focus:outline-none focus:border-white/40 focus:bg-white/[0.08] transition font-mono ${showPassword ? "" : "tracking-widest"}`}
+            className={`w-full rounded-[var(--radius-control)] bg-white border border-[#1B3A2D]/[0.16] pl-4 pr-12 py-3.5 text-[15px] text-[#1B3A2D] placeholder-[#1B3A2D]/30 shadow-[0_1px_2px_rgba(27,58,45,0.05)] focus:outline-none focus:border-[#1B3A2D]/45 transition ${showPassword ? "" : "tracking-widest"}`}
             placeholder={showPassword ? "tu contraseña" : "••••••••"}
           />
           <button
@@ -143,7 +143,7 @@ function LoginForm() {
             onClick={() => setShowPassword((v) => !v)}
             tabIndex={-1}
             aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-md bg-white text-[#1B3A2D] hover:bg-white/90 transition-colors shadow-sm"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-md bg-[#1B3A2D] text-white hover:bg-[#1B3A2D]/90 transition-colors shadow-sm"
           >
             {showPassword ? (
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5">
@@ -160,7 +160,7 @@ function LoginForm() {
       </div>
 
       <div className="flex justify-end">
-        <a className="text-[12px] text-white/30 hover:text-white/70 transition cursor-pointer">
+        <a className="text-[12px] text-[#1B3A2D]/40 hover:text-[#1B3A2D]/80 transition cursor-pointer">
           ¿Olvidaste tu contraseña?
         </a>
       </div>
@@ -168,7 +168,7 @@ function LoginForm() {
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-[var(--radius-control)] bg-white text-[#1B3A2D] px-4 py-4 text-[14px] font-semibold uppercase tracking-[0.16em] hover:bg-white/95 focus:outline-none focus:ring-2 focus:ring-white/30 focus:ring-offset-2 focus:ring-offset-[#1B3A2D] disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-3"
+        className="w-full rounded-[var(--radius-control)] bg-[#1B3A2D] text-white px-4 py-4 text-[14px] font-semibold uppercase tracking-[0.16em] hover:bg-[#1B3A2D]/95 focus:outline-none focus:ring-2 focus:ring-[#1B3A2D]/30 focus:ring-offset-2 focus:ring-offset-[#FAFAF8] disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-3"
       >
         {loading ? (
           <span className="flex items-center gap-2.5">
@@ -189,142 +189,93 @@ function LoginForm() {
       </button>
 
       <div className="flex items-center gap-3 pt-1">
-        <div className="flex-1 h-px bg-white/[0.10]" />
+        <div className="flex-1 h-px bg-[#1B3A2D]/[0.12]" />
         <button
           type="button"
           onClick={handleDemo}
           disabled={demoLoading}
-          className="text-[10px] text-white/55 hover:text-white tracking-[0.16em] uppercase font-mono border border-white/15 hover:border-white/45 rounded-full px-3.5 py-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="text-[10px] text-[#1B3A2D]/60 hover:text-[#1B3A2D] tracking-[0.16em] uppercase font-mono border border-[#1B3A2D]/20 hover:border-[#1B3A2D]/50 rounded-full px-3.5 py-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {demoLoading ? "Entrando…" : "Prueba una demo"}
         </button>
-        <div className="flex-1 h-px bg-white/[0.10]" />
+        <div className="flex-1 h-px bg-[#1B3A2D]/[0.12]" />
       </div>
 
-      <p className="text-center text-[12px] text-white/25">
-        ¿Problemas? <span className="text-white/45 font-mono">info@salamandrasolutions.com</span>
+      <p className="text-center text-[12px] text-[#1B3A2D]/35">
+        ¿Problemas? <span className="text-[#1B3A2D]/55 font-mono">info@salamandrasolutions.com</span>
       </p>
     </form>
   );
 }
 
-const FEATURES = [
-  { label: "Clientes & cuentas" },
-  { label: "Leads & comercial" },
-  { label: "Inventario" },
-  { label: "Facturación Verifactu" },
-  { label: "Formación" },
-  { label: "Multi-tenant SaaS" },
-];
-
 export default function LoginPage() {
   return (
     <div className="min-h-screen grid grid-cols-1 md:grid-cols-2 bg-[#FAFAF8]">
-      {/* Columna izquierda — branding */}
-      <div
-        className="hidden md:flex flex-col justify-between px-12 lg:px-16 py-14 bg-[#FAFAF8] relative overflow-hidden"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at 20% 100%, rgba(27,58,45,0.05), transparent 50%), linear-gradient(rgba(27,58,45,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(27,58,45,0.04) 1px, transparent 1px)",
-          backgroundSize: "100% 100%, 36px 36px, 36px 36px",
-        }}
-      >
-        {/* Logo */}
-        <div className="flex items-center gap-3 fade-up">
-          <div className="w-8 h-8 rounded-md bg-[#1B3A2D] flex items-center justify-center shrink-0 p-[3px]">
-            <img src="/salamandrobot-blanco.png" alt="Salamandra Solutions" className="w-full h-full object-contain" />
-          </div>
-          <span className="font-display text-[17px] tracking-tight text-[#1B3A2D]">Salamandra Solutions</span>
-        </div>
-
-        {/* Headline */}
-        <div>
-          <div
-            className="inline-flex items-center gap-2 bg-[#1B3A2D]/[0.06] border border-[#1B3A2D]/[0.10] rounded-full px-3 py-1 mb-7 fade-up"
-            style={{ animationDelay: "100ms" }}
-          >
-            <div className="w-1.5 h-1.5 rounded-full bg-[#1B3A2D]/45" />
-            <span className="text-[10px] font-semibold text-[#1B3A2D]/65 uppercase tracking-[0.16em]">
-              CRM SaaS · Multi-tenant
-            </span>
-          </div>
-
-          <h1
-            className="font-display-lg text-[clamp(48px,6.2vw,76px)] leading-[0.98] text-[#1B3A2D] mb-7 fade-up"
-            style={{ animationDelay: "180ms" }}
-          >
-            Tu negocio
-            <br />
-            <span className="font-display-italic text-[#1B3A2D]/35">bajo control.</span>
-          </h1>
-
-          <p
-            className="text-[16px] text-[#1B3A2D]/50 leading-relaxed max-w-md fade-up"
-            style={{ animationDelay: "260ms" }}
-          >
-            Gestiona clientes, proyectos, ventas y facturación desde un solo panel.
-            Cada cliente, su espacio. Cada decisión, sus datos.
-          </p>
-        </div>
-
-        {/* Feature list — periódico */}
-        <div className="fade-up" style={{ animationDelay: "340ms" }}>
-          <div className="text-[10px] font-semibold text-[#1B3A2D]/45 uppercase tracking-[0.16em] mb-4">
-            Todo en uno
-          </div>
-          <div className="grid grid-cols-2 gap-x-8 gap-y-2 mb-10 max-w-md">
-            {FEATURES.map((f, i) => (
-              <div key={f.label} className="flex items-baseline gap-3 border-b border-[#1B3A2D]/10 py-2">
-                <span className="font-mono text-[10px] text-[#1B3A2D]/40 tabular">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <span className="text-[13px] text-[#1B3A2D]/85">{f.label}</span>
-              </div>
-            ))}
-          </div>
-          <p className="text-[11px] text-[#1B3A2D]/30 font-mono tracking-wider uppercase">
-            © 2026 · Salamandra Solutions
-          </p>
-        </div>
-      </div>
-
-      {/* Columna derecha — formulario */}
-      <div className="flex items-center justify-center bg-[#1B3A2D] px-6 lg:px-12 py-14 relative overflow-hidden">
-        {/* Decoración de fondo */}
-        <div
-          className="absolute inset-0 opacity-30 pointer-events-none"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 80% 20%, rgba(255,255,255,0.06), transparent 50%)",
-          }}
+      {/* Columna izquierda — marca en verde. La tipografía del nombre es la
+          del hero de salamandrasolutions.com (Poppins), con los pesos que
+          eligió Rodrigo: «Salamandra» en 600 y «Solutions» en 500 casi pleno. */}
+      <div className="hidden md:flex flex-col justify-between px-12 lg:px-16 py-14 bg-[#1B3A2D] relative overflow-hidden">
+        {/* Salamandra gigante de marca de agua, sangrando por la esquina */}
+        <img
+          src="/salamandrobot-blanco.png"
+          alt=""
+          aria-hidden="true"
+          className="absolute w-[640px] max-w-none -right-[140px] -bottom-[170px] opacity-[0.09] -rotate-[8deg] pointer-events-none select-none"
         />
 
-        <div className="w-full max-w-sm relative">
-          {/* Logo mobile */}
+        {/* Logo */}
+        <div className="flex items-center gap-3 relative">
+          <div className="w-8 h-8 rounded-md bg-white/15 flex items-center justify-center shrink-0 p-[3px]">
+            <img src="/salamandrobot-blanco.png" alt="Salamandra Solutions" className="w-full h-full object-contain" />
+          </div>
+          <span className="text-[16px] font-extrabold tracking-[-0.02em] text-white">Salamandra Solutions</span>
+        </div>
+
+        {/* Wordmark */}
+        <div className="relative fade-up">
+          <h1 className="text-[clamp(48px,5.5vw,80px)] leading-[1.05] tracking-[-0.02em] font-semibold text-white">
+            Salamandra
+            <span className="block font-medium text-white/85">Solutions</span>
+          </h1>
+          <p className="mt-6 text-[16px] lg:text-[17px] text-white/60 leading-relaxed max-w-md">
+            El CRM donde tu centro pasa el día: clientes, citas y facturación,
+            cada cosa en su sitio.
+          </p>
+        </div>
+
+        <p className="text-[11px] text-white/35 font-mono tracking-wider uppercase relative">
+          © 2026 · Salamandra Solutions
+        </p>
+      </div>
+
+      {/* Columna derecha — formulario en claro */}
+      <div className="flex items-center justify-center bg-[#FAFAF8] px-6 lg:px-12 py-14">
+        <div className="w-full max-w-sm">
+          {/* Logo mobile (la columna de marca no se ve en móvil) */}
           <div className="flex items-center gap-3 mb-12 md:hidden">
-            <div className="w-8 h-8 rounded-md bg-white/15 flex items-center justify-center shrink-0 p-[3px]">
+            <div className="w-8 h-8 rounded-md bg-[#1B3A2D] flex items-center justify-center shrink-0 p-[3px]">
               <img src="/salamandrobot-blanco.png" alt="Salamandra Solutions" className="w-full h-full object-contain" />
             </div>
-            <span className="font-display text-[16px] tracking-tight text-white">Salamandra Solutions</span>
+            <span className="text-[16px] font-extrabold tracking-[-0.02em] text-[#1B3A2D]">Salamandra Solutions</span>
           </div>
 
           {/* Cabecera */}
           <div className="mb-9 fade-up">
-            <p className="text-[10px] font-semibold text-white/45 uppercase tracking-[0.16em] mb-4">
+            <p className="text-[10px] font-semibold text-[#1B3A2D]/50 uppercase tracking-[0.16em] mb-4">
               Acceso seguro
             </p>
-            <h2 className="font-display-lg text-[44px] text-white leading-[1.02] mb-3">
-              Iniciar <span className="font-display-italic text-white/55">sesión</span>
+            <h2 className="font-display-lg text-[44px] text-[#1B3A2D] leading-[1.02] mb-3">
+              Iniciar sesión
             </h2>
-            <p className="text-[15px] text-white/45">Accede a tu panel de control</p>
+            <p className="text-[15px] text-[#1B3A2D]/50">Accede a tu panel de control</p>
           </div>
 
           <Suspense
             fallback={
               <div className="space-y-5">
-                <div className="h-14 bg-white/[0.06] rounded-[var(--radius-control)] animate-pulse" />
-                <div className="h-14 bg-white/[0.06] rounded-[var(--radius-control)] animate-pulse" />
-                <div className="h-12 bg-white/[0.06] rounded-[var(--radius-control)] animate-pulse" />
+                <div className="h-14 bg-[#1B3A2D]/[0.06] rounded-[var(--radius-control)] animate-pulse" />
+                <div className="h-14 bg-[#1B3A2D]/[0.06] rounded-[var(--radius-control)] animate-pulse" />
+                <div className="h-12 bg-[#1B3A2D]/[0.06] rounded-[var(--radius-control)] animate-pulse" />
               </div>
             }
           >
