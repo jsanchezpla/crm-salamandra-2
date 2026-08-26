@@ -46,7 +46,7 @@ export function suggestUsername(displayName, slug) {
  * Con el campo vacío se pintan los tres en gris, que es lo que hay que ver al
  * abrir el formulario: qué hay que poner, no qué se ha hecho mal.
  */
-function Requisitos({ valor }) {
+export function Requisitos({ valor }) {
   return (
     <ul className="space-y-0.5 mt-0.5">
       {requisitosDe(valor).map((r) => (

@@ -56,14 +56,82 @@ const leer = (rel) => {
 const REL_RESET = "app/api/team/[id]/access/password/route.js";
 const REL_ALTA = "app/api/team/[id]/access/route.js";
 const REL_UI = "components/team/AccessSection.jsx";
+/**
+ * ⚠️ LA SEGUNDA PANTALLA, LA QUE SE OLVIDÓ.
+ *
+ * `POST /api/team/[id]/access` lo llaman DOS sitios: la sección «Acceso al CRM»
+ * de la ficha y —esta— el alta de empleado con la casilla «crear acceso». El
+ * 26/08/2026 se hizo obligatoria la contraseña y solo se actualizó la primera:
+ * la segunda siguió mandando `{ username, modules }` y el alta con acceso
+ * empezó a devolver 422 en producción. Lo encontró una investigación del
+ * borrado, no una prueba, que es justo lo que esta constante viene a arreglar.
+ */
+const REL_DRAWER = "app/(dashboard)/equipo/page.jsx";
 const reset = leer(REL_RESET);
 const alta = leer(REL_ALTA);
 const ui = leer(REL_UI);
+const drawer = leer(REL_DRAWER);
 const LOS_DOS = [[REL_RESET, reset], [REL_ALTA, alta]];
+/** Las DOS pantallas que piden una contraseña para un acceso. */
+const LAS_PANTALLAS = [[REL_UI, ui], [REL_DRAWER, drawer]];
 
-test("los tres ficheros siguen donde estaban", () => {
-  for (const [rel, txt] of [...LOS_DOS, [REL_UI, ui]]) {
+test("los cuatro ficheros siguen donde estaban", () => {
+  for (const [rel, txt] of [...LOS_DOS, ...LAS_PANTALLAS]) {
     assert.ok(txt !== null, `no existe ${rel}: si se movió, hay que actualizar esta prueba`);
+  }
+});
+
+test("TODO el que llame al alta de acceso manda la contraseña", () => {
+  /*
+   * La invariante que faltaba el 26/08/2026 y que costó un 422 en producción:
+   * no basta con que la ficha esté bien, tienen que estarlo TODOS los sitios
+   * que llaman al endpoint. Se busca la llamada por su ruta y se exige que el
+   * cuerpo lleve `password`.
+   */
+  for (const [rel, txt] of LAS_PANTALLAS) {
+    /*
+     * Se busca cada `body: JSON.stringify(...)` y se mira HACIA ATRÁS quién lo
+     * manda. Hacen falta las dos condiciones o salen falsos positivos: la misma
+     * ruta `/access` la usan también el PATCH de módulos (cuerpo sin
+     * contraseña, y está bien así) y el DELETE. Y el cuerpo se lee hasta el fin
+     * de línea, no hasta el primer `)`, porque lleva llamadas dentro
+     * (`enabledKeys()`).
+     */
+    const altas = [];
+    for (const m of txt.matchAll(/body: JSON\.stringify\(([^\n]*)/g)) {
+      const antes = txt.slice(Math.max(0, m.index - 320), m.index);
+      const esAlta = /\/access`/.test(antes) && !/\/access\/password`/.test(antes) && /"POST"/.test(antes);
+      if (esAlta) altas.push(m[1]);
+    }
+    assert.ok(altas.length > 0, `${rel}: no encuentro la llamada a POST /api/team/[id]/access`);
+    for (const cuerpo of altas) {
+      assert.ok(
+        /password/.test(cuerpo),
+        `${rel} llama al alta de acceso SIN contraseña: el servidor la exige desde el 26/08 y devuelve 422 (${cuerpo.trim()})`
+      );
+    }
+  }
+});
+
+test("y ninguna de las dos espera que el servidor se la devuelva", () => {
+  for (const [rel, txt] of LAS_PANTALLAS) {
+    assert.ok(
+      !/data\.password/.test(txt),
+      `${rel} lee la contraseña de la respuesta, y el servidor ya no la manda: saldría vacía en el modal`
+    );
+  }
+});
+
+test("las dos pantallas pintan los MISMOS requisitos", () => {
+  for (const [rel, txt] of LAS_PANTALLAS) {
+    assert.ok(
+      /<Requisitos /.test(txt),
+      `${rel} no pinta los requisitos: quien la escriba no sabrá qué poner hasta fallar`
+    );
+    assert.ok(
+      /cumpleTodo\(/.test(txt),
+      `${rel} no usa cumpleTodo: podría dejar mandar algo que el servidor rechaza`
+    );
   }
 });
 

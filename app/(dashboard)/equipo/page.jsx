@@ -6,7 +6,8 @@ import Select from "@/components/ui/Select.jsx";
 import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 import TeamHoursEditor from "@/components/team/TeamHoursEditor.jsx";
 import MiEquipo from "@/components/team/MiEquipo.jsx";
-import AccessSection, { moduleLabel, suggestUsername } from "@/components/team/AccessSection.jsx";
+import AccessSection, { moduleLabel, suggestUsername, Requisitos } from "@/components/team/AccessSection.jsx";
+import { cumpleTodo } from "@/lib/auth/contrasena.js";
 import CredentialsModal from "@/components/team/CredentialsModal.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import { COLOR_BLOQUEO_POR_DEFECTO } from "@/lib/citas/coloresBloqueo.js";
@@ -69,7 +70,7 @@ const EMPTY_FORM = {
   blockColor: "",
   // Acceso al CRM en el alta (solo modo crear): si crearAcceso, tras crear el
   // empleado se le crea también su usuario de login con estos módulos.
-  crearAcceso: false, accessUsername: "", accessModules: [],
+  crearAcceso: false, accessUsername: "", accessPassword: "", accessModules: [],
 };
 
 // Mensual = bruto anual / pagas (mismo cálculo que el backend).
@@ -222,6 +223,7 @@ export default function EquipoPage() {
     e.preventDefault();
     if (showCreate && form.crearAcceso) {
       if (!form.accessUsername.trim()) { setFormError("Escribe el nombre de usuario para el acceso al CRM"); return; }
+      if (!cumpleTodo(form.accessPassword)) { setFormError("La contraseña del acceso no cumple los requisitos"); return; }
       if (form.accessModules.length === 0) { setFormError("Marca al menos un módulo al que pueda acceder"); return; }
     }
     setSaving(true);
@@ -245,6 +247,7 @@ export default function EquipoPage() {
       // Los campos de acceso no son del empleado: fuera del payload de /api/team.
       delete payload.crearAcceso;
       delete payload.accessUsername;
+      delete payload.accessPassword;
       delete payload.accessModules;
 
       const url = openMember ? `/api/team/${openMember.id}` : "/api/team";
@@ -264,11 +267,13 @@ export default function EquipoPage() {
         try {
           const resAcc = await fetch(`/api/team/${json.data.id}/access`, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username: form.accessUsername, modules: form.accessModules }),
+            body: JSON.stringify({ username: form.accessUsername, modules: form.accessModules, password: form.accessPassword }),
           });
           const jAcc = await resAcc.json();
           if (!resAcc.ok) throw new Error(jAcc.error || "No se pudo crear el usuario");
-          setCredentials({ username: jAcc.data.username, password: jAcc.data.password });
+          // El servidor NO devuelve la contraseña (26/08/2026): se enseña la que
+          // se acaba de escribir aquí.
+          setCredentials({ username: jAcc.data.username, password: form.accessPassword });
           closePanel();
         } catch (accErr) {
           setOpenMember(json.data);
@@ -773,6 +778,7 @@ export default function EquipoPage() {
                             setForm((f) => ({
                               ...f,
                               crearAcceso: on,
+                              accessPassword: on ? f.accessPassword : "",
                               accessUsername: on && !f.accessUsername
                                 ? suggestUsername(f.displayName, me?.tenantSlug)
                                 : f.accessUsername,
@@ -788,6 +794,20 @@ export default function EquipoPage() {
                               onChange={(e) => setForm((f) => ({ ...f, accessUsername: e.target.value }))}
                               className={inputCls + " font-mono"} placeholder={`nombre_${me?.tenantSlug ?? ""}`} />
                           </FormRow>
+                          <FormRow label="Contraseña">
+                            <input
+                              type="text"
+                              autoComplete="off"
+                              spellCheck={false}
+                              value={form.accessPassword}
+                              onChange={(e) => setForm((f) => ({ ...f, accessPassword: e.target.value }))}
+                              className={inputCls + " font-mono"}
+                              placeholder="La que le vayas a dar"
+                            />
+                          </FormRow>
+                          {/* La MISMA lista que la ficha y que Configuración: sale de
+                              lib/auth/contrasena.js, así que no puede prometer otra cosa. */}
+                          <Requisitos valor={form.accessPassword} />
                           <div>
                             <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-1.5">
                               Módulos a los que puede acceder
