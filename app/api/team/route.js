@@ -2,7 +2,7 @@ import { Op } from "sequelize";
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../lib/db/masterDb.js";
-import { serializeTeamMember } from "../../../lib/team/serializeTeamMember.js";
+import { serializeTeamMember, serializeProfesional } from "../../../lib/team/serializeTeamMember.js";
 import { normalizeSpecialties } from "../../../lib/clinica/specialties.js";
 import { limpiaColorBloqueo } from "../../../lib/citas/coloresBloqueo.js";
 import { isValidHexColor } from "../../../lib/citas/validation.js";
@@ -67,13 +67,35 @@ async function logAudit({ tenantId, userId, action, entityId, before, after, ip 
 // ───────────────────────────────────────────────────────────────────────────
 // GET /api/team
 // ───────────────────────────────────────────────────────────────────────────
-export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
+/**
+ * ⚠️ DOS PUERTAS, NO UNA (26/08/2026).
+ *
+ * `tenantHasModule("team")` → ¿el CENTRO tiene equipo? Si no, aquí no hay nada
+ * que contar y es un 403 como siempre.
+ *
+ * `hasModule("team")` → ¿puede ESTA PERSONA entrar en la pantalla de Equipo? Si
+ * no, se le sirve la LISTA RECORTADA: nombres, colores y especialidades, sin
+ * correos, teléfonos, notas ni dinero (lib/team/serializeProfesional).
+ *
+ * El porqué entero está en lib/team/serializeTeamMember.js. En corto: una
+ * docena de pantallas usan este endpoint solo para rellenar un desplegable de
+ * profesionales, y hasta hoy se lo comía un 403 en silencio —las quince
+ * terapeutas de Aumenta veían media plantilla en el filtro de /pacientes, y
+ * cambiaba al pasar de página—. Es el primo hermano del fallo de
+ * lib/citas/visibilidad.js: preguntar por el usuario lo que era del centro.
+ *
+ * Escribir (POST/PATCH/DELETE) NO se toca: sigue pidiendo el módulo y rol de
+ * dirección.
+ */
+export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule, tenantHasModule }) => {
   try {
-    if (!hasModule("team")) return forbidden("Módulo team no activo");
+    if (!tenantHasModule("team")) return forbidden("Módulo team no activo");
 
     const { TeamMember } = tenantModels;
     const userRole = request.headers.get("x-user-role") ?? "user";
     const isAdmin = ADMIN_ROLES.has(userRole);
+    // Quien no tiene el módulo en SUS accesos recibe la lista para desplegables.
+    const listaReducida = !hasModule("team");
 
     const { searchParams } = new URL(request.url);
     const statusParam = searchParams.get("status") ?? "default";
@@ -96,13 +118,11 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
     if (role) where.position = role;
 
     if (q) {
+      // Con la lista recortada NO se busca por correo: devolver un correo está
+      // cerrado, así que poder adivinarlo letra a letra también.
+      const porNombre = { displayName: { [Op.iLike]: `%${q}%` } };
       where[Op.and] = [
-        {
-          [Op.or]: [
-            { displayName: { [Op.iLike]: `%${q}%` } },
-            { email: { [Op.iLike]: `%${q}%` } },
-          ],
-        },
+        listaReducida ? porNombre : { [Op.or]: [porNombre, { email: { [Op.iLike]: `%${q}%` } }] },
       ];
     }
 
@@ -147,14 +167,18 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
 
     return ok({
       members: rows.map((m) => ({
-        ...serializeTeamMember(m, { isAdmin }),
+        ...(listaReducida ? serializeProfesional(m) : serializeTeamMember(m, { isAdmin })),
         tieneHorario: conHorario.has(String(m.id)),
       })),
       total: count,
       limit,
       offset,
       availableRoles,
-      viewerIsAdmin: isAdmin,
+      // Con la lista recortada nadie es «admin» a efectos de esta pantalla: sin
+      // el módulo en sus accesos no entra en Equipo aunque tenga el rol.
+      viewerIsAdmin: isAdmin && !listaReducida,
+      // Que la pantalla pueda decirlo en vez de dar por hecho que lo trae todo.
+      listaReducida,
     });
   } catch (err) {
     return serverError(err);

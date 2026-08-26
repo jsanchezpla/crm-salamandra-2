@@ -267,7 +267,7 @@ datos reales.
 | `/pacientes/[id]` | Ficha. Cabecera con avatar, nombre + chip de estado, datos clave (centro, terapeuta, fecha alta, frecuencia), 3 botones («Subir audio», «Nuevo informe», «Editar ficha»). 6 pestañas: Resumen, Plan, Sesiones, Informes, Coordinaciones, Documentos (detalle abajo). |
 | `/pacientes/[id]/sesiones/nueva` | Flujo REAL de subida de audio con 4 estados: sube → `POST /api/clinica/sessions/transcribe` → revisar/editar → `POST /api/clinica/sessions` (+ adjuntos de preparación a `prep-files`). Máx. 25 MB; m4a/mp3/wav/ogg/webm. |
 
-### Lo que se rompió en silencio y se arregló el 26/08/2026 (Lau, Aumenta)
+### Dos cosas que se rompieron en silencio y se arreglaron el 26/08/2026 (Lau, Aumenta)
 
 #### «Nuevo informe» tumbaba la ficha entera
 
@@ -297,6 +297,31 @@ aserción principal no es «existe la constante» sino la invariante:
 **todo campo que la pantalla LEE de `reportForm` tiene que existir en el
 formulario vacío**. Así caza también el quinto campo de mañana.
 
+#### El filtro «Terapeuta» enseñaba media plantilla, y cambiaba al paginar
+
+«En el filtro de terapeutas, a las cuentas que no son de admin no les aparecen
+todas las terapeutas.»
+
+La pantalla pide `GET /api/team?status=active&limit=200` y **se traga el 403 en
+silencio** (`r.ok ? r.json() : null`). Entonces entra el plan B —derivar la
+lista de los pacientes que tenga cargados— que solo ve **los 50 de la página
+actual, de 1.174**, y solo su terapeuta de referencia. De ahí que salieran pocas
+y que la lista **cambiara al pasar de página**.
+
+El 403 venía de que las 15 cuentas de rol `user` de Aumenta no llevan `team` en
+su `moduleAccess`. Se arregló en el endpoint, no aquí: `GET /api/team` gatea
+ahora por el CENTRO y sirve la **lista recortada** a quien no tenga el módulo en
+sus accesos (`docs/modules/team.md`).
+
+⚠️ **No era solo un filtro.** Ese mismo desplegable es el que asigna terapeuta
+en el alta de paciente (el modal de «Crear paciente»), así que quien no fuera
+dirección solo podía elegir entre los que le salieran: o dejaba el paciente sin
+terapeuta o le ponía a quien tuviera a mano. El agujero no solo escondía,
+**ensuciaba el dato** — y el terapeuta de referencia es lo que cuadra la agenda
+y las estadísticas del centro.
+
+El plan B se queda donde está: sigue haciendo falta para un tenant que tenga
+`pacientes` y NO tenga `team`, donde el 403 es correcto.
 ### Particularidades del listado
 
 **Histórico (hasta 06/2026):** los KPIs se derivaban del array `PATIENTS` de

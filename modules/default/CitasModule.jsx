@@ -298,6 +298,19 @@ export default function CitasModule() {
   const [avisoResultado, setAvisoResultado] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
+  /*
+   * ¿Ve la agenda de TODO el centro? (26/08/2026)
+   *
+   * NO es lo mismo que ser dirección, y confundirlo es lo que dejó a las
+   * quince terapeutas de Aumenta sin filtro por profesional: con la agenda
+   * compartida encendida ven las citas de las dieciocho personas del centro
+   * —eso ya lo decide el servidor— y no tenían nada con que separarlas.
+   *
+   * Lo contesta /api/auth/me con la MISMA función que filtra en el servidor
+   * (lib/citas/visibilidad.js), así que pantalla y servidor no pueden decir
+   * cosas distintas. Arranca en false: hasta saberlo, no se promete de más.
+   */
+  const [veTodaLaAgenda, setVeTodaLaAgenda] = useState(false);
   // Su id de usuario, para poder encontrar SU ficha de equipo y rotularla.
   const [viewerUserId, setViewerUserId] = useState(null);
   const [visibleTmIds, setVisibleTmIds] = useState(null); // null = todos los profesionales
@@ -366,6 +379,7 @@ export default function CitasModule() {
       .then((j) => {
         setViewerIsAdmin(["admin", "superadmin"].includes(j?.data?.role));
         setViewerUserId(j?.data?.id ?? null);
+        setVeTodaLaAgenda(j?.data?.veTodaLaAgenda === true);
       })
       .catch(() => {});
   }, []);
@@ -471,7 +485,7 @@ export default function CitasModule() {
        * preguntar al servidor. Con casillas eso estaba a un clic, y un
        * calendario vacío se lee como «han desaparecido las citas».
        *
-       * El filtro por profesional solo lo usa el jefe: el servidor ya acota
+       * El filtro por profesional lo usa quien ve más de una agenda: el servidor ya acota
        * por su cuenta a un profesional no-admin.
        */
       if (visibleEtIds?.length) params.set("eventTypeIds", visibleEtIds.join(","));
@@ -1391,7 +1405,10 @@ export default function CitasModule() {
             </div>
           </div>
 
-          {viewerIsAdmin && teamMembers.length > 1 && (
+          {/* El filtro es de quien ve más de una agenda, no de quien manda:
+              con agenda compartida una terapeuta ve las de todo el centro y
+              necesita separarlas igual que dirección. */}
+          {veTodaLaAgenda && teamMembers.length > 1 && (
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-[11px] uppercase tracking-wider text-neutral-400">Profesional</span>
               <div className="w-[190px]">
@@ -1425,9 +1442,11 @@ export default function CitasModule() {
             </div>
           )}
 
-          {/* Y si no es admin, su nombre fijo en el mismo sitio: no se elige
-              porque no hay nada que elegir, ve su agenda y solo su agenda. */}
-          {!viewerIsAdmin && miFichaDeEquipo && (
+          {/* Y si solo ve la suya, su nombre fijo en el mismo sitio: no se
+              elige porque no hay nada que elegir. Iba por rol y mentía —con
+              agenda compartida ponía «solo tus citas» encima de las citas de
+              todo el centro—, así que ahora pregunta lo mismo que el filtro. */}
+          {!veTodaLaAgenda && miFichaDeEquipo && (
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-[11px] uppercase tracking-wider text-neutral-400">Profesional</span>
               <span

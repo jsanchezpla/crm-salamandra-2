@@ -1214,6 +1214,46 @@ entran a propósito (en nutri_laura son la mitad de la agenda). Un permiso es
 `_smoke-citas-filtro-profesional.mjs`, cuya aserción central es que filtrar por
 personas no puede producir ninguna condición que case con `NULL`.
 
+#### El filtro por profesional es de quien VE más de una agenda, no de quien manda (26/08/2026, Lau)
+
+«No existe filtro por profesional dentro de las cuentas que no son de admin.»
+Y era literal: el desplegable estaba envuelto en un `if` que exigía rol de
+dirección.
+
+El problema es que **ver la agenda y filtrarla se decidían con preguntas
+distintas**. El servidor decide quién ve qué con `veTodaLaAgenda`
+(`lib/citas/visibilidad.js`), que dice «dirección, o cualquiera si el centro
+tiene `agendaCompartida`». La pantalla decidía quién puede filtrar con «¿eres
+dirección?». En Aumenta —el **único** cliente con la agenda compartida,
+encendida el 28/07 para que las terapeutas se cubran entre sí— eso deja a 15 de
+sus 16 cuentas con las citas de 18 personas mezcladas y sin nada con que
+separarlas. Con 12.030 citas y **0 de 57 tipos con color propio**, a ojo no se
+separan.
+
+Y encima **mentía**: donde tenía que estar el filtro salía una píldora con el
+nombre de quien miraba y el texto «· solo tus citas», encima de la agenda
+entera del centro.
+
+Ahora las dos preguntas son la misma:
+
+- `GET /api/auth/me` devuelve `veTodaLaAgenda`, calculado con la MISMA función
+  que filtra en el servidor. Es un booleano derivado: `settings` entra para
+  calcularlo y **no sale** (lleva las credenciales de integraciones).
+- `modules/default/CitasModule.jsx` enseña el desplegable cuando
+  `veTodaLaAgenda`, y la píldora «solo tus citas» solo cuando NO lo es —que es
+  cuando es verdad—.
+
+El servidor no cambió: `GET /api/citas/bookings/calendar` ya aceptaba
+`teamMemberIds` de cualquiera que viera la agenda completa. Lo que faltaba era
+el sitio donde elegirlo.
+
+⚠️ **Había una segunda cosa encadenada**, y sin ella el arreglo no se ve: el
+`if` pedía además `teamMembers.length > 1`, y a esas cuentas `GET /api/team` les
+devolvía un 403 porque no llevan `team` en sus accesos. Eso se arregló el mismo
+día con la lista recortada (`docs/modules/team.md`).
+
+Lo fija `scripts/_smoke-citas-visibilidad.mjs`, que ahora también comprueba que
+la PANTALLA pregunta lo mismo que el servidor.
 #### Repaso del 12/08/2026 (Rodrigo)
 
 Cinco cosas de la pantalla, todas en el módulo por defecto (o sea, para todos

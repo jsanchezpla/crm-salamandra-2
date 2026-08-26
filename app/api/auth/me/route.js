@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
+import { veTodaLaAgenda } from "../../../../lib/citas/visibilidad.js";
 
 /**
  * GET /api/auth/me
@@ -28,7 +29,9 @@ export async function GET(request) {
 
   const [user, tenant] = await Promise.all([
     User.findByPk(userId, { attributes: ["id", "email", "role", "tenantId", "moduleAccess"] }),
-    Tenant.findOne({ where: { slug: tenantSlug }, attributes: ["id", "slug", "name", "status"] }),
+    // `settings` entra para poder contestar `veTodaLaAgenda` (abajo). NO se
+    // devuelve NUNCA: lleva las credenciales de integraciones del cliente.
+    Tenant.findOne({ where: { slug: tenantSlug }, attributes: ["id", "slug", "name", "status", "settings"] }),
   ]);
 
   if (!user || !tenant || tenant.status !== "active") {
@@ -65,6 +68,22 @@ export async function GET(request) {
         tenantSlug: tenant.slug,
         tenantName: tenant.name,
         enabledModules,
+        /*
+         * ¿Ve la agenda de todo el centro? (26/08/2026)
+         *
+         * La pantalla de Citas decidía esto por ROL, y por eso el filtro por
+         * profesional era solo de dirección. En un centro con la agenda
+         * compartida —Aumenta la tiene desde el 28/07 y es el único— eso deja a
+         * las quince terapeutas con las citas de las dieciocho personas
+         * mezcladas y sin nada con que separarlas, bajo una etiqueta que además
+         * ponía «solo tus citas», que era falsa.
+         *
+         * Se contesta con la MISMA función que usa el servidor para filtrar
+         * (lib/citas/visibilidad.js), para que pantalla y servidor no puedan
+         * decir cosas distintas. Es un booleano derivado: `settings` no sale de
+         * aquí.
+         */
+        veTodaLaAgenda: veTodaLaAgenda({ tenant, role: user.role }),
       },
     },
     { headers: { "Cache-Control": "no-store" } }

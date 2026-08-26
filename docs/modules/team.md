@@ -114,7 +114,9 @@ en el backend antes de serializar el JSON**, nunca solo en el frontend.
 
 Endpoints donde aplica:
 
-- `GET /api/team` → cada miembro pasa por `serializeTeamMember`.
+- `GET /api/team` → cada miembro pasa por `serializeTeamMember`… **salvo que**
+  quien pregunta no tenga `team` en su `moduleAccess`: entonces pasa por
+  `serializeProfesional` (la lista recortada, ver abajo).
 - `GET /api/team/[id]` → idem.
 - `GET /api/team/[id]/billing-summary` → adicionalmente filtra
   `data.employee.monthlySalary` y `data.projectedSalaryCost` cuando el
@@ -123,6 +125,45 @@ Endpoints donde aplica:
   `monthlySalary` y `projectedSalaryCost` solo se serializan para admin,
   y la whitelist de `sortBy` también los excluye para no-admins.
 
+
+### La lista recortada: «quién trabaja aquí» no es «qué cobra quién» (26/08/2026)
+
+`GET /api/team` tiene **dos puertas**, y confundirlas rompió una pantalla:
+
+| La pregunta | Con qué se contesta | Qué devuelve |
+| --- | --- | --- |
+| ¿Tiene el **CENTRO** equipo? | `tenantHasModule("team")` | Si no: 403, como siempre. |
+| ¿Puede **esta persona** abrir la pantalla de Equipo? | `hasModule("team")` | Si no: `serializeProfesional` — `id`, `userId`, `displayName`, `role`, `status`, `avatarUrl`, `avatarColor`, `blockColor`, `specialties`, `specialtyLabels` y `tieneHorario`. **Nada más.** |
+
+Fuera de la lista recortada, declarado en `CAMPOS_FUERA_DE_LA_LISTA`
+(`lib/team/serializeTeamMember.js`): `email`, `phone`, `notes`, `department`,
+`startDate`, `hourlyRate`, `currency`, `hourlyCost`, `annualGross`,
+`paymentPeriods`, `monthlySalary`. El buscador `q` tampoco mira el correo
+cuando la lista va recortada: devolver un correo está cerrado, así que
+adivinarlo letra a letra también.
+
+**De dónde sale.** Las quince terapeutas de Aumenta no llevan `team` en sus
+accesos —no tienen por qué ver los sueldos—, así que recibían un **403 en la
+petición de la LISTA**. Y una docena de pantallas usan este endpoint solo para
+rellenar un desplegable de profesionales, y se comen el 403 en silencio: el
+filtro de terapeutas de `/pacientes` tiene un plan B que se inventa la lista
+con los pacientes que tenga cargados —los 50 de la página, de 1.174—, así que
+salía media plantilla y **cambiaba al pasar de página**. Como ese mismo
+desplegable asigna terapeuta al dar de alta un paciente, el agujero no solo
+escondía: ensuciaba el dato.
+
+Es el **primo hermano** del fallo que cuenta `lib/citas/visibilidad.js`. Allí
+preguntar por el usuario DESTAPABA la agenda de otra profesional; aquí esconde
+la plantilla hasta romper la pantalla. La regla es la misma en los dos sitios:
+«¿existe la tabla / lo tiene el CENTRO?» → `tenantHasModule`; «¿puede esta
+persona abrir esa pantalla?» → `hasModule`.
+
+**Lo que NO se tocó**: `POST`/`PATCH`/`DELETE` siguen pidiendo el módulo en los
+accesos y rol de dirección, y `GET /api/team/[id]` —que devuelve correo,
+teléfono, notas y, para dirección, la retribución— sigue cerrado con
+`hasModule`. Lo vigila `scripts/_smoke-team-lista-profesionales.mjs`, que
+además falla si el serializer completo gana un campo nuevo sin declarar si
+entra o no en el recorte.
 ## Eventos de auditoría
 
 Todos se registran en `master.AuditLog` con `entity: "TeamMember"`,
@@ -156,7 +197,7 @@ aporta el contenido.
 
 | Método y ruta | Propósito | Restricciones |
 | --- | --- | --- |
-| `GET /api/team` | Listado con filtros (`status`, `role`, `q`) y paginación (`limit`, `offset`). Devuelve además `availableRoles` (valores únicos de `position` presentes) y `viewerIsAdmin` (booleano derivado del rol). | Cualquier autenticado del tenant. |
+| `GET /api/team` | Listado con filtros (`status`, `role`, `q`) y paginación (`limit`, `offset`). Devuelve además `availableRoles` (valores únicos de `position` presentes), `viewerIsAdmin` y `listaReducida`. | **Gate de TENANT** (`tenantHasModule("team")`), no del usuario. Quien no lleve `team` en su `moduleAccess` recibe la **lista recortada** (ver abajo). |
 | `POST /api/team` | Crea miembro nuevo. | Solo admin/superadmin. |
 | `GET /api/team/[id]` | Detalle. | Cualquier autenticado del tenant. |
 | `PATCH /api/team/[id]` | Edita; auditoría granular por campo (ver eventos). | Solo admin/superadmin. |

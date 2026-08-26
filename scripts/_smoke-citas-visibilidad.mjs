@@ -187,5 +187,49 @@ check("sin tenant, cierra", veTodaLaAgenda({ tenant: null, role: "user" }) === f
 check("rol raro, cierra", veTodaLaAgenda({ tenant: tenant(false), role: "recepcion" }) === false);
 check("agendaCompartida exige true de verdad", agendaCompartida({ settings: { citas: { agendaCompartida: "si" } } }) === false);
 
+h("La PANTALLA pregunta lo mismo que el servidor (26/08/2026)");
+/*
+ * El filtro por profesional del calendario iba por ROL, no por «ve mas de una
+ * agenda». En Aumenta —el unico cliente con agendaCompartida— eso dejaba a las
+ * quince terapeutas viendo las citas de dieciocho personas mezcladas y sin nada
+ * con que separarlas, bajo una pildora que ademas ponia «solo tus citas».
+ *
+ * La pantalla no puede resolverlo sola: la agenda compartida es del tenant. Se
+ * lo dice /api/auth/me con la MISMA funcion que filtra el servidor.
+ */
+{
+  const ME = "app/api/auth/me/route.js";
+  const CITAS = "modules/default/CitasModule.jsx";
+  const me = fs.readFileSync(path.join(RAIZ, ME), "utf8");
+  const citas = fs.readFileSync(path.join(RAIZ, CITAS), "utf8");
+
+  check(
+    ME + " contesta veTodaLaAgenda con la regla compartida",
+    /veTodaLaAgenda: veTodaLaAgenda\(\{ tenant, role: user\.role \}\)/.test(me) &&
+      /from ".*citas\/visibilidad\.js"/.test(me),
+    "si lo calcula a mano, la pantalla y el servidor acabaran diciendo cosas distintas"
+  );
+  check(
+    ME + " NO devuelve el settings del tenant",
+    !/settings:\s/.test(me.slice(me.indexOf("data: {"))),
+    "settings lleva las credenciales de integraciones del cliente: entra para calcular, no para salir"
+  );
+  check(
+    CITAS + " ensena el filtro a quien ve toda la agenda",
+    citas.includes("{veTodaLaAgenda && teamMembers.length > 1 && ("),
+    "el filtro ha vuelto a ser solo de direccion: con agenda compartida eso es media plantilla sin herramienta"
+  );
+  check(
+    CITAS + " solo pone «solo tus citas» cuando lo es",
+    citas.includes("{!veTodaLaAgenda && miFichaDeEquipo && ("),
+    "la pildora vuelve a ir por rol: mentia encima de la agenda de todo el centro"
+  );
+  check(
+    CITAS + " lo lee de /api/auth/me y no se lo inventa",
+    citas.includes("setVeTodaLaAgenda(j?.data?.veTodaLaAgenda === true)"),
+    "sin leerlo del servidor, la pantalla vuelve a decidirlo por rol"
+  );
+}
+
 process.stdout.write(fallos ? "\nX " + fallos + " fallo(s)\n\n" : "\nTodo correcto\n\n");
 process.exit(fallos ? 1 : 0);
