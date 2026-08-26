@@ -5,13 +5,19 @@ import { useState } from "react";
 /**
  * Modal de credenciales de un solo uso.
  *
- * Enseña el usuario y la contraseña generada UNA única vez (el servidor no la
- * guarda en claro ni la vuelve a devolver). No hay email de invitación — es el
- * patrón de la casa: el admin la copia y se la pasa a la persona por el canal
- * que quiera. Por eso el modal no se cierra clicando fuera: solo con el botón,
- * para que nadie lo cierre sin querer antes de copiar.
+ * Enseña el usuario y la contraseña UNA única vez (el servidor no la guarda en
+ * claro ni la vuelve a devolver). No hay email de invitación — es el patrón de
+ * la casa: el admin la copia y se la pasa a la persona por el canal que quiera.
+ * Por eso el modal no se cierra clicando fuera: solo con el botón, para que
+ * nadie lo cierre sin querer antes de copiar.
+ *
+ * `elegida` (26/08/2026): la contraseña la escribió quien está mirando, así que
+ * el aviso de «no se volverá a mostrar» asusta de más —ella la sabe— pero sigue
+ * siendo cierto que el CRM no la va a poder recordar por nadie. Se dice de otra
+ * manera, no se calla. Cuando es elegida, el valor NO ha vuelto del servidor:
+ * lo pone la pantalla desde lo que se tecleó.
  */
-export default function CredentialsModal({ username, password, title = "Acceso creado", onClose }) {
+export default function CredentialsModal({ username, password, elegida = false, title = "Acceso creado", onClose }) {
   const [copied, setCopied] = useState(null); // "user" | "pass" | "both"
 
   async function copiar(texto, que) {
@@ -29,8 +35,18 @@ export default function CredentialsModal({ username, password, title = "Acceso c
           {title}
         </h2>
         <p className="text-xs text-neutral-500 mb-4">
-          Copia estos datos y pásaselos a la persona. <strong>La contraseña no se volverá a mostrar</strong>:
-          si se pierde, habrá que restablecerla desde su ficha.
+          {elegida ? (
+            <>
+              Copia estos datos y pásaselos a la persona. Es la contraseña que acabas de escribir;{" "}
+              <strong>el CRM no la guarda en claro</strong>, así que si se os olvida habrá que volver a
+              restablecerla desde su ficha.
+            </>
+          ) : (
+            <>
+              Copia estos datos y pásaselos a la persona. <strong>La contraseña no se volverá a mostrar</strong>:
+              si se pierde, habrá que restablecerla desde su ficha.
+            </>
+          )}
         </p>
 
         <div className="space-y-2">

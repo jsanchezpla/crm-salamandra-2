@@ -4,6 +4,7 @@ import { ok, error, forbidden, notFound, serverError } from "../../../../../../l
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { isDemoTenant } from "../../../../../../lib/demo/isDemo.js";
 import { generatePassword, loadManagedUser } from "../../../../../../lib/team/access.js";
+import { revisarContrasena } from "../../../../../../lib/auth/contrasena.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -11,11 +12,37 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * POST /api/team/[id]/access/password — restablecer la contraseña del usuario
  * de un miembro del equipo.
  *
- * Genera una nueva aleatoria, la guarda con bcrypt 12 y sube tokenVersion para
- * tumbar las sesiones vivas (mismo patrón que scripts/reset-tenant-admin-
- * password.js). La contraseña se devuelve UNA única vez y no se registra en
- * ningún log. Mismas guardas que el resto del flujo de acceso: solo admin (rol
- * fresco de BD), nunca cuentas admin, nunca uno mismo, nunca desde la demo.
+ * La guarda con bcrypt 12 y sube tokenVersion para tumbar las sesiones vivas
+ * (mismo patrón que scripts/reset-tenant-admin-password.js). Mismas guardas que
+ * el resto del flujo de acceso: solo admin (rol fresco de BD), nunca cuentas
+ * admin, nunca uno mismo, nunca desde la demo.
+ *
+ * ── LA CONTRASEÑA LA PUEDE ELEGIR QUIEN RESTABLECE (26/08/2026, Lau) ────────
+ *
+ * Hasta hoy salía siempre una aleatoria de 12 caracteres. Sobre el papel es más
+ * segura; en la práctica, en un centro de 16 personas donde la dirección
+ * restablece contraseñas por teléfono, `k3Jq_8vTz2Lm` se dicta mal, se copia
+ * peor y termina en un papel encima del monitor. Es el mismo razonamiento que
+ * ya está escrito en lib/auth/contrasena.js para «cambiar mi contraseña»: lo
+ * que hace fuerte a una contraseña es el LARGO, no que sea impronunciable.
+ *
+ * Así que ahora el cuerpo acepta `password`. Si no viene, se genera como
+ * siempre — el camino de antes sigue igual y sigue siendo el que se ofrece por
+ * defecto.
+ *
+ * Se valida con `revisarContrasena`, LA MISMA función que usa
+ * /api/auth/password, para que las reglas no se dupliquen ni se separen: diez
+ * caracteres mínimo, tope de 72 bytes (el de bcrypt, que descarta el resto en
+ * silencio), y fuera lo que se adivina en los primeros intentos —el nombre del
+ * centro, el del usuario, teclas seguidas—. Ojo al detalle: se comprueba contra
+ * el usuario de QUIEN RECIBE la contraseña, no contra el de quien la escribe.
+ *
+ * ⚠️ Una contraseña ELEGIDA no se devuelve en la respuesta. Quien la ha escrito
+ * ya la tiene delante; devolverla solo la pasearía otra vez por la red y por los
+ * registros de quien esté en medio. `elegida: true` le basta a la pantalla para
+ * enseñar la que ella misma acaba de teclear. La GENERADA sí se devuelve, una
+ * única vez, porque si no nadie la sabría. Ni una ni otra se escriben en la
+ * auditoría.
  */
 export const POST = withTenant(async (request, { params }, ctx) => {
   try {
@@ -36,7 +63,18 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     });
     if (managed.error) return error(managed.error, managed.status);
 
-    const password = generatePassword();
+    // Cuerpo opcional: el botón de siempre lo manda vacío (o no lo manda).
+    const body = await request.json().catch(() => ({}));
+    const escrita = typeof body?.password === "string" ? body.password : "";
+    const elegida = escrita !== "";
+
+    if (elegida) {
+      // Contra el usuario de QUIEN LA RECIBE, no el de quien la escribe.
+      const mal = revisarContrasena(escrita, null, { email: managed.user.email, slug: ctx.slug });
+      if (mal) return error(mal);
+    }
+
+    const password = elegida ? escrita : generatePassword();
     const passwordHash = await bcrypt.hash(password, 12);
 
     // Scope withPassword: el defaultScope excluye passwordHash y sin él el
@@ -54,13 +92,16 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         action: "team.password_reset",
         entity: "TeamMember",
         entityId: member.id,
+        // `elegida` sí, la contraseña JAMÁS: saber si se escribió a mano o se
+        // generó es lo que hace falta para entender un incidente después.
         before: null,
-        after: { username: user.email }, // jamás la contraseña
+        after: { username: user.email, elegida },
         ip: request.headers.get("x-forwarded-for") ?? null,
       });
     } catch { /* auditoría best-effort */ }
 
-    return ok({ username: user.email, password });
+    // La elegida no vuelve: quien la escribió ya la tiene (ver la cabecera).
+    return ok({ username: user.email, password: elegida ? null : password, elegida });
   } catch (err) {
     return serverError(err);
   }

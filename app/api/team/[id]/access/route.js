@@ -11,6 +11,7 @@ import {
   syncMemberModules,
   loadManagedUser,
 } from "../../../../../lib/team/access.js";
+import { revisarContrasena } from "../../../../../lib/auth/contrasena.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -24,7 +25,9 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * aquí SOLO se crean/editan filas de master.users.
  *
  *   GET    → estado: { hasUser, username, lastLoginAt, managedElsewhere, modules }
- *   POST   → crear usuario { username, modules } → 201 { username, password } (ÚNICA vez)
+ *   POST   → crear usuario { username, modules, password? } → 201 { username, password, elegida }
+ *            (`password` opcional: si no viene se genera y se devuelve UNA vez;
+ *             si viene, se valida con lib/auth/contrasena.js y NO se devuelve)
  *   PATCH  → cambiar módulos { modules } ([] = bloquear sin borrar, consciente)
  *   DELETE → quitar el acceso (borra el User; el token vivo muere en la
  *            siguiente request porque el resolver falla en cerrado)
@@ -145,7 +148,20 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     const yaExiste = await User.findOne({ where: { email: username }, attributes: ["id"] });
     if (yaExiste) return error(`El usuario «${username}» ya existe. Elige otro.`, 409);
 
-    const password = generatePassword();
+    /*
+     * La contraseña la puede ELEGIR quien da el acceso (26/08/2026, Lau).
+     * Si no viene en el cuerpo, se genera como siempre. El porqué y las
+     * reglas —las mismas que «cambiar mi contraseña»— en la cabecera de
+     * access/password/route.js y en lib/auth/contrasena.js.
+     */
+    const escrita = typeof body.password === "string" ? body.password : "";
+    const elegida = escrita !== "";
+    if (elegida) {
+      const mal = revisarContrasena(escrita, null, { email: username, slug: ctx.slug });
+      if (mal) return error(mal, 422);
+    }
+
+    const password = elegida ? escrita : generatePassword();
     const passwordHash = await bcrypt.hash(password, 12);
 
     // validate:false A PROPÓSITO: el modelo valida isEmail y los usernames sin
@@ -178,13 +194,14 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       action: "team.user_created",
       entityId: member.id,
       before: null,
-      after: { username, moduleAccess: modules }, // JAMÁS la contraseña
+      after: { username, moduleAccess: modules, elegida }, // JAMÁS la contraseña
       ip: request.headers.get("x-forwarded-for") ?? null,
     });
 
-    // Única vez que la contraseña viaja: no se guarda en claro, no se loguea,
-    // no se puede volver a consultar (solo restablecer).
-    return created({ username, password, modules });
+    // Única vez que la GENERADA viaja: no se guarda en claro, no se loguea, no
+    // se puede volver a consultar (solo restablecer). La elegida NO vuelve:
+    // quien la escribió ya la tiene delante.
+    return created({ username, password: elegida ? null : password, elegida, modules });
   } catch (err) {
     return serverError(err);
   }

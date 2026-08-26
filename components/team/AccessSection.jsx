@@ -62,10 +62,22 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
   // Edición de módulos (cuando ya hay usuario)
   const [dirty, setDirty] = useState(false);
 
-  const [credentials, setCredentials] = useState(null); // { username, password, title }
+  /*
+   * La contraseña la puede escribir quien da o restablece el acceso
+   * (26/08/2026, Lau). Vacío = se genera una, que es como funcionaba antes.
+   * Va en TEXTO VISIBLE a propósito: quien la escribe se la va a dictar a la
+   * persona, y con puntitos no hay forma de comprobar que no hay una errata.
+   * El servidor la valida con las MISMAS reglas que «cambiar mi contraseña»
+   * (lib/auth/contrasena.js) y no la devuelve.
+   */
+  const [reseteando, setReseteando] = useState(false);
+  const [nuevaPass, setNuevaPass] = useState("");
+
+  const [credentials, setCredentials] = useState(null); // { username, password, title, elegida }
 
   const load = useCallback(() => {
     setState(null); setErr(null); setCreating(false); setDirty(false);
+    setReseteando(false); setNuevaPass("");
     fetch(`/api/team/${memberId}/access`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (j.ok) setState(j.data); else setErr(j.error || "Error"); })
@@ -89,11 +101,17 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
     try {
       const res = await fetch(`/api/team/${memberId}/access`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, modules: enabledKeys() }),
+        body: JSON.stringify({ username, modules: enabledKeys(), password: nuevaPass }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "No se pudo crear el usuario");
-      setCredentials({ username: j.data.username, password: j.data.password, title: "Acceso creado" });
+      // La elegida no vuelve del servidor: se enseña la que hay aquí escrita.
+      setCredentials({
+        username: j.data.username,
+        password: j.data.password ?? nuevaPass,
+        elegida: j.data.elegida === true,
+        title: "Acceso creado",
+      });
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -120,13 +138,22 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
   }
 
   async function restablecer() {
-    if (!confirm(`¿Restablecer la contraseña de ${state.username}? La actual dejará de funcionar y se cerrarán sus sesiones.`)) return;
     setBusy(true); setErr(null);
     try {
-      const res = await fetch(`/api/team/${memberId}/access/password`, { method: "POST" });
+      const res = await fetch(`/api/team/${memberId}/access/password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: nuevaPass }),
+      });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "No se pudo restablecer");
-      setCredentials({ username: j.data.username, password: j.data.password, title: "Contraseña restablecida" });
+      // La elegida no vuelve del servidor: se enseña la que hay aquí escrita.
+      setCredentials({
+        username: j.data.username,
+        password: j.data.password ?? nuevaPass,
+        elegida: j.data.elegida === true,
+        title: "Contraseña restablecida",
+      });
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -199,8 +226,41 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
             Estos módulos controlan lo que ve y puede usar al entrar. Los cambios se aplican al momento.
           </p>
 
+          {reseteando && (
+            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 space-y-2">
+              <p className="text-xs text-neutral-600">
+                Vas a restablecer la contraseña de <span className="font-mono">{state.username}</span>.
+                La actual dejará de funcionar y se cerrarán sus sesiones abiertas.
+              </p>
+              <input
+                type="text"
+                autoComplete="off"
+                spellCheck={false}
+                value={nuevaPass}
+                onChange={(e) => setNuevaPass(e.target.value)}
+                placeholder="Contraseña nueva (o déjalo vacío)"
+                className="w-full rounded-lg px-3 py-2 text-sm font-mono text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
+              />
+              <p className="text-[10px] text-neutral-400">
+                Si lo dejas vacío, se genera una sola. Si la escribes tú: al menos 10 caracteres,
+                y que no sea el nombre del centro, el suyo de usuario ni teclas seguidas.
+                Se ve mientras la escribes para que puedas dictarla sin erratas.
+              </p>
+              <div className="flex gap-2">
+                <button onClick={restablecer} disabled={busy}
+                  className="text-[11px] px-3 py-1.5 rounded-lg font-semibold text-white disabled:opacity-50"
+                  style={{ background: "var(--color-primary, #1B3A2D)" }}>
+                  {busy ? "Restableciendo..." : nuevaPass ? "Poner esta contraseña" : "Generar una y restablecer"}
+                </button>
+                <button onClick={() => { setReseteando(false); setNuevaPass(""); setErr(null); }} disabled={busy} className={btnSecondary}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
-            <button onClick={restablecer} disabled={busy} className={btnSecondary}>Restablecer contraseña</button>
+            <button onClick={() => { setReseteando(true); setNuevaPass(""); setErr(null); }} disabled={busy || reseteando} className={btnSecondary}>Restablecer contraseña</button>
             <button onClick={quitarAcceso} disabled={busy}
               className="text-[11px] px-2.5 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50">
               Quitar acceso
@@ -224,7 +284,22 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
             <input value={username} onChange={(e) => setUsername(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm font-mono text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" />
             <p className="text-[10px] text-neutral-400">
-              Con este nombre (o un email) entrará en el CRM. La contraseña se genera sola y se enseña al crear.
+              Con este nombre (o un email) entrará en el CRM.
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Contraseña (opcional)</label>
+            <input
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              value={nuevaPass}
+              onChange={(e) => setNuevaPass(e.target.value)}
+              placeholder="Déjalo vacío y la genero yo"
+              className="w-full rounded-lg px-3 py-2 text-sm font-mono text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
+            />
+            <p className="text-[10px] text-neutral-400">
+              Al menos 10 caracteres, y que no sea el nombre del centro, el suyo de usuario ni teclas seguidas.
             </p>
           </div>
           <div>
@@ -248,6 +323,7 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
         <CredentialsModal
           username={credentials.username}
           password={credentials.password}
+          elegida={credentials.elegida}
           title={credentials.title}
           // onAccessChange avisa a la ficha de que este empleado YA tiene (o ya
           // no tiene) login: si no, su copia en memoria se queda con el userId

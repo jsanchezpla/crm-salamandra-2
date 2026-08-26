@@ -126,6 +126,47 @@ Endpoints donde aplica:
   y la whitelist de `sortBy` también los excluye para no-admins.
 
 
+### La contraseña la puede escribir quien la da (26/08/2026, Lau)
+
+Restablecer una contraseña desde Equipo daba siempre una aleatoria de 12
+caracteres. Sobre el papel es lo más seguro; en un centro de 16 personas donde
+la dirección las restablece por teléfono, `k3Jq_8vTz2Lm` se dicta mal, se copia
+peor y acaba en un papel encima del monitor. Es la misma conclusión que ya
+estaba escrita en `lib/auth/contrasena.js` para «cambiar mi contraseña»: lo que
+hace fuerte a una contraseña es el LARGO, no que sea impronunciable.
+
+`POST /api/team/[id]/access` y `POST /api/team/[id]/access/password` aceptan
+ahora un `password` **opcional** en el cuerpo. **Sin él todo funciona como
+antes**: se genera, se devuelve una vez y se enseña en el modal.
+
+Las cuatro cosas que lo sujetan, y que fija
+`scripts/_smoke-team-contrasena-elegida.mjs`:
+
+1. **Las reglas son las MISMAS** que las de `/api/auth/password`, porque es la
+   misma función: `revisarContrasena` de `lib/auth/contrasena.js`. Mínimo 10
+   caracteres, tope de 72 **bytes** (el de bcrypt, que descarta el resto en
+   silencio), y fuera lo que se adivina en los primeros intentos.
+2. **Se comprueba contra el usuario de quien RECIBE** la contraseña, no contra
+   el de quien la escribe. `elena_aumenta` es mala contraseña para Elena,
+   aunque quien la teclee sea la dirección.
+3. **Una contraseña elegida no vuelve por la red.** La respuesta trae
+   `password: null` y `elegida: true`; la pantalla enseña la que acaba de
+   teclearse. La generada sí vuelve, una vez, porque si no nadie la sabría.
+   Ninguna de las dos entra en la auditoría: el resumen guarda `elegida`, que
+   es lo que hace falta para entender un incidente después.
+4. **Las guardas de siempre siguen enteras**: solo dirección con rol fresco de
+   BD, nunca cuentas admin ni la propia (`loadManagedUser`), nunca en la demo,
+   bcrypt 12 rondas y `tokenVersion +1` para tumbar las sesiones vivas.
+
+En la pantalla el campo va en **texto visible**, a propósito: quien la escribe
+se la va a dictar a la persona, y con puntitos no hay forma de ver una errata.
+
+⚠️ **De camino apareció un agujero que era de antes.** `1234567890` se aceptaba
+como contraseña —también en «cambiar mi contraseña», desde que se escribió el
+fichero—: la lista de tiradas de teclas guardaba `0123456789`, pero la fila del
+teclado va `1234567890`, y ni la tira ni su reverso contienen esa rotación.
+Arreglado poniendo el `0` a los dos lados (`01234567890`), con su caso en
+`_smoke-contrasena.mjs`.
 ### La lista recortada: «quién trabaja aquí» no es «qué cobra quién» (26/08/2026)
 
 `GET /api/team` tiene **dos puertas**, y confundirlas rompió una pantalla:
@@ -210,10 +251,10 @@ aporta el contenido.
 | `GET/POST /api/team/me/documents` · `GET/DELETE /api/team/me/documents/[id]` | Documentación personal que el propio miembro sube en su ficha (CV, titulaciones). Reutiliza el almacén de Documentos (`source: "equipo"`, `ownerUserId` = quien sube) pero **no depende del módulo `documents`**: siempre acotado al dueño, nunca alcanza el archivo general del centro. | Gate de tenant `team` O `clinica`; solo lo propio. |
 | `GET /api/team/modules` | Módulos activos del TENANT (para los checkboxes de acceso en el alta). No confundir con `/api/auth/me → enabledModules` (esa es la intersección del usuario actual). | Solo admin (rol fresco de BD). |
 | `GET /api/team/[id]/access` | Estado del login del miembro: `{ hasUser, username, lastLoginAt, managedElsewhere, modules }`. Sin usuario, `modules` propone lo marcado en `team_member_modules`. | Solo admin (rol fresco de BD). |
-| `POST /api/team/[id]/access` | **Crea el usuario de login** en `master.users` (patrón terapeutas de Aumenta): username sin `@` con sufijo `_{slug}` forzado (o email real), rol `user`, `moduleAccess` = módulos marcados (mínimo 1). Devuelve `{ username, password }` UNA única vez. | Solo admin; nunca en demo; 409 si ya tiene usuario o el username existe. |
+| `POST /api/team/[id]/access` | **Crea el usuario de login** en `master.users` (patrón terapeutas de Aumenta): username sin `@` con sufijo `_{slug}` forzado (o email real), rol `user`, `moduleAccess` = módulos marcados (mínimo 1). `password` es OPCIONAL: sin él se genera una y se devuelve UNA única vez; con él se valida y **no se devuelve** (ver «La contraseña la puede escribir quien la da»). | Solo admin; nunca en demo; 409 si ya tiene usuario o el username existe. |
 | `PATCH /api/team/[id]/access` | Cambia `moduleAccess` (lo que ve al entrar; aplica al instante — el resolver no cachea ACLs). `[]` permitido = bloquear sin borrar. Espeja en `team_member_modules`. | Solo admin; nunca en demo; nunca sobre cuentas admin ni sobre uno mismo. |
 | `DELETE /api/team/[id]/access` | Quita el acceso: desenlaza `userId` y borra el User. El token vivo muere en la siguiente request (el resolver falla en cerrado). La ficha del empleado se conserva. | Ídem. |
-| `POST /api/team/[id]/access/password` | Restablece la contraseña (aleatoria, bcrypt 12, `tokenVersion++` para tumbar sesiones). Se devuelve una única vez. | Ídem. |
+| `POST /api/team/[id]/access/password` | Restablece la contraseña (bcrypt 12, `tokenVersion++` para tumbar sesiones). `password` OPCIONAL en el cuerpo: sin él se genera y se devuelve una única vez; con él se valida con `lib/auth/contrasena.js` y **no se devuelve** (`elegida: true`). Ver «La contraseña la puede escribir quien la da». | Ídem. |
 
 ### Acceso al CRM desde Equipo (2026-07-27)
 
