@@ -352,7 +352,8 @@ if (bMapa) {
 const DIVERGENCIAS_ACEPTADAS = {
   "nutri-laura": { consulta_agendada: 1, consulta_realizada: 1, paciente: 1 },
   "spain-enzymes": { new: 1 },
-  aumenta: {},
+  // «Ya es paciente» (26/08/2026) frente al «Paciente activo» del Excel.
+  aumenta: { paciente: 1 },
   retorika: {},
 };
 

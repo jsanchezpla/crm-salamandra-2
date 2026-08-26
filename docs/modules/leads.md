@@ -14,7 +14,7 @@
 | **Reina** | — (ni el doc ni `lib/leads/embudos.js` nombran una; desde el 18/08/2026 el base es el override de aumenta parametrizado, y a aumenta solo le queda propio el rosa `#FF1F96`) |
 | **Pantallas** | El embudo: `/leads` → `app/(dashboard)/leads/page.jsx` (server component: resuelve `UI_OVERRIDES` por `x-tenant` y le pasa al base `stages`, `titulo` y `sujeto`). El PADRE del grupo en el menú: `/leads/estadisticas` → `app/(dashboard)/leads/estadisticas/page.jsx` (mira `leads` y `formularios` juntos). Públicas: ninguna página en este repo — el formulario vive en la web del cliente y pega en el endpoint público de abajo. |
 | **Endpoints** | `app/api/leads/**` — 8 `route.js`: `route.js` (GET lista, con `desglose=1` por etapa · POST), `[id]/route.js` (GET · PATCH · DELETE, los dos últimos auditados), `[id]/convert-to-project/route.js` (POST; exige además `projects`), `estadisticas/route.js` (GET), `export/route.js` (GET Excel), `import/route.js` (POST JSON), `import/excel/route.js` (POST .xlsx), `import/template/route.js` (GET plantilla). Mutaciones solo admin/superadmin. Público: `app/api/public/leads/route.js` (OPTIONS+POST; tenant por cabecera `x-tenant`, CORS `*`, límite 30/min, `sanearCustomFields`). Sin webhooks. |
-| **Lógica** | `lib/leads/`: `stages.js` (las 15 etapas canónicas, `ALLOWED_STAGES` + `STAGE_LABELS`: la whitelist de PATCH, import y export), `embudos.js` (qué etapas ofrece cada cliente: `EMBUDOS` por slug de BD, `EMBUDO_POR_DEFECTO` de cinco, `GANADAS`/`PERDIDAS`, `etapasDe()`, `tieneEtapaGanada()`), `estadisticas.js` (las cifras de `/leads/estadisticas`: profesionales + comerciales, `calcularEstadisticas`). Fuera: `lib/home/summary.js` cuenta los abiertos para la portada con su propia `CLOSED_STAGES`. |
+| **Lógica** | `lib/leads/`: `stages.js` (las 15 etapas canónicas, `ALLOWED_STAGES` + `STAGE_LABELS`: la whitelist de PATCH, import y export), `embudos.js` (qué etapas ofrece cada cliente: `EMBUDOS` por slug de BD, `EMBUDO_POR_DEFECTO` de cinco, `GANADAS`/`PERDIDAS`, `etapasDe()`, `tieneEtapaGanada()`, `etapaAlGanar()` —a qué etapa mueve el SERVIDOR un interesado al enlazarle una ficha, `null` en booking—), `estadisticas.js` (las cifras de `/leads/estadisticas`: profesionales + comerciales, `calcularEstadisticas`). Fuera: `lib/home/summary.js` cuenta los abiertos para la portada con su propia `CLOSED_STAGES`. |
 | **UI** | `modules/leads/LeadsModule.jsx` (el base, `"use client"`, 779 líneas: tarjetas por etapa, filtro por motivo, buscador, panel lateral; color de `var(--color-primary)`). La pantalla de estadísticas lleva sus piezas dentro. No hay `components/leads/`. |
 | **Modelos** | `Lead` → `leads` (`models/tenant/Lead.model.js`; `stage` es STRING(50), no ENUM; `customFields` y `metadata` JSONB; `convertedProjectId`/`convertedToProjectAt`). Asociaciones en `lib/db/tenantDb.js`: `Lead.belongsTo(Client)` por `clientId` y `Lead.belongsTo(Project)` por `convertedProjectId`. Sin FK a `TeamMember` (`assignedTo` es un UUID suelto). |
 | **Interruptores y parámetros** | Ninguno que lea el código (ni `featureFlags` ni `logicOverrides`). Lo que varía por cliente está escrito en código: `EMBUDOS` en `lib/leads/embudos.js`, `TENANT_TITLE_OVERRIDES` («Interesados») en la página, `TENANT_LABEL_OVERRIDES` en `components/layout/Sidebar.jsx` y las plantillas de export/import por slug (`spain_enzymes` y `nutri_laura`, en `app/api/leads/export/route.js` e `import/template/route.js`). Los `schemaExtensions` que hay en producción (nutri_laura, spain_enzymes) son letrero decorativo: el código no los lee. |
@@ -22,7 +22,7 @@
 | **Scripts** | Activar: `node scripts/enable-module.js <slug> leads`. Migraciones registradas en `scripts/_module-migrations.js`: `migrate-stage-to-string.js` (MODULES.leads) y `migrate-leads-columnas-proyecto.js` (CORE). Herramientas vivas: `listar-leads.js <slug>` (solo lectura), `mover-leads-a-comerciales.js <slug> <form> [--confirm]` (leads de familias → bandeja de Comerciales), `sincronizar-ui-override.mjs` (el letrero `ui_override`). Seeds: `add-leads-module-demo.js`, `add-leads-module-nutri-laura.js`, `_hechos/seed-aumenta.js`, `_hechos/seed-spain-enzymes-data.js`. Frenados: `_hechos/clear-aumenta-leads.js` (exige `_guard-datos-reales.js`), `_hechos/cleanup-bad-leads.js` (atado a `quality_energy`, que ya no existe). |
 | **Pruebas** | `scripts/_smoke-leads-etapas.mjs` (en `npm test`; vigila que las etapas de los cuatro overrides, `embudos.js`, `stages.js` y `summary.js` no se separen) · `scripts/_smoke-leads-stages-embudos.mjs` (`node:test`, 20/08/2026, en `npm test`): lo que DEVUELVEN `lib/leads/stages.js` y `embudos.js` —las quince etapas canónicas, cada una con su rótulo y sin repetidas (`isValidStage` decide el 422 del PATCH y `STAGE_LABELS` es lo que sale en el Excel); el embudo por defecto son CINCO etapas, no quince; el embudo exacto de cada uno de los cuatro clientes con embudo propio, y en particular que aumenta NO tiene etapa de ganado: su «Convertidos» sería un 0 que no puede subir y por eso `tieneEtapaGanada` se lo tapa en `/leads/estadisticas`; y un slug desconocido —también «nutri-laura» con guión en vez de «nutri_laura» con guión bajo— cae EN SILENCIO al embudo por defecto, sin error— · `scripts/_smoke-ui-overrides.mjs` (en `npm test`; los mapas `UI_OVERRIDES` contra el disco) · `scripts/_smoke-lead-conversion-fix.js` (base de datos; conversión lead→cliente en nutri_laura y spain_enzymes). |
 | **Decisiones** | `../decisions/2026-08-01-leads-dos-origenes-un-grupo.md` · `../decisions/2026-08-12-retirada-de-sales.md` · `../decisions/2026-08-12-bajas-abarcaia-quality-healim.md` (se llevó dos overrides) · `../decisions/2026-08-18-la-piramide-invertida-de-leads.md` |
-| **En este doc** | Modelo Lead · Stages · Módulo base vs overrides · Endpoints · Validaciones · Importación / Exportación · Migración y seeds por tenant · Backlog |
+| **En este doc** | Modelo Lead · Stages · El CRM marca el ganado solo (26/08/2026) · Módulo base vs overrides · Endpoints · Validaciones · Importación / Exportación · Migración y seeds por tenant · Backlog |
 
 > Documentación de detalle. Referencia rápida en `CLAUDE.md` (sección
 > "Módulos del CRM"). Si encuentras una discrepancia con el código,
@@ -148,6 +148,36 @@ descartaba silenciosamente los 5 extendidos, lo que rompía el cambio de
 stage desde la UI de QE y abarcaia. Ahora cualquier endpoint los acepta y
 las etiquetas humanas vienen del mismo `STAGE_LABELS`. Ver
 "Incoherencias resueltas".
+
+## El CRM marca el ganado solo (26/08/2026)
+
+Hasta ese día, qué etapa ponía una conversión lo decidía **el navegador**: la
+pantalla de nutri_laura mandaba `paciente` a mano y la de spain_enzymes `won`,
+cada una escrita dentro de su componente. La de Aumenta no mandaba ninguna
+—su embudo no tenía etapa de ganado— así que allí no se podía marcar a nadie.
+
+Ahora la regla vive en el servidor:
+
+- `etapaAlGanar(slug, tieneModulo)` en `lib/leads/embudos.js` dice a qué etapa se
+  mueve un interesado en ese embudo: `paciente` en aumenta y nutri_laura, `won`
+  en retorika, spain_enzymes y el embudo por defecto.
+- `PATCH /api/leads/[id]` la aplica **al enlazar una ficha**: si `clientId` pasa
+  de vacío a puesto y quien llama no manda `stage`, el CRM mueve el interesado.
+
+Tres condiciones: solo al **enlazar** (no al desenlazar), solo si **no venía ya
+enlazado** (reenlazar no rebobina a quien movieron a mano) y solo si quien llama
+**no manda etapa** (las dos pantallas que ya convertían siguen mandando la suya).
+
+⚠️ **En `booking` devuelve `null` a propósito.** Ganar allí es que se cierre la
+FECHA, no que el contratante tenga ficha: un festival puede estar fichado sin
+haber contratado nada. Y de un embudo con varias ganadas coge la PRIMERA: en
+booking la última (`actuacion_realizada`) es algo que todavía no ha pasado.
+
+**Aumenta gana `paciente`**, rotulada «Ya es paciente». Y su pantalla gana un
+buscador para **enlazar** la ficha de la familia — no para crearla: allí la ficha
+es la FAMILIA y necesita paciente y tutor, así que una nacida de tres campos
+entraría directa en «Fichas a completar». Motivo y lo que arrastra, en
+`docs/decisions/2026-08-26-que-cuenta-como-ganado-en-aumenta.md`.
 
 ## Módulo base vs overrides
 

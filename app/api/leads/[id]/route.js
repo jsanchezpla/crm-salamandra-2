@@ -3,6 +3,7 @@ import { auditar, datosPeticion, resumen } from "../../../../lib/utils/auditoria
 import { ok, noContent, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { NotFoundError, ForbiddenError } from "../../../../lib/utils/errors.js";
 import { ALLOWED_STAGES } from "../../../../lib/leads/stages.js";
+import { etapaAlGanar } from "../../../../lib/leads/embudos.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const ADMIN_DENY = "Solo administradores pueden modificar leads";
@@ -72,7 +73,35 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
     }
   }
 
-  // Merge customFields en lugar de sobreescribir
+  /*
+   * QUE LO MARQUE EL CRM SOLO (26/08/2026, Jorge).
+   *
+   * En cuanto un interesado queda enlazado a una ficha, el CRM lo mueve él
+   * mismo a la etapa de ganado de SU embudo — «Ya es paciente» en un centro
+   * clínico, «Convertido» en una consultora, y nada en booking, donde ganar es
+   * que se cierre la fecha y no que el contratante tenga ficha.
+   *
+   * Hasta hoy lo decidía el navegador: la pantalla de Laura mandaba `paciente`
+   * a mano y la de spain_enzymes `won`. Eso dejaba dos agujeros. Uno, que una
+   * pantalla sin esa línea escrita —la de Aumenta— no podía marcar a nadie por
+   * bien que fuera. Y dos, que el navegador hace DOS llamadas (crear la ficha y
+   * mover el interesado) y está documentado que la segunda puede fallar: la
+   * ficha quedaba creada y el embudo diciendo que aquello seguía pendiente.
+   *
+   * Tres condiciones, y las tres importan:
+   *   · Solo al ENLAZAR, no al desenlazar ni al guardar otra cosa.
+   *   · Solo si NO venía ya enlazado, para que reenlazar a otra ficha no
+   *     rebobine a alguien que su equipo había movido a mano después.
+   *   · Solo si quien llama no manda etapa. Si la manda, gana ella: las dos
+   *     pantallas que ya convertían siguen mandando la suya y no se les cambia
+   *     el comportamiento por debajo.
+   */
+  if (!("stage" in updates) && updates.clientId && !lead.clientId) {
+    const ganada = etapaAlGanar(tenant.slug, hasModule);
+    if (ganada) updates.stage = ganada;
+  }
+
+  // Merge customFields en lugar de sobreescribir  // Merge customFields en lugar de sobreescribir
   if (updates.customFields) {
     updates.customFields = { ...(lead.customFields ?? {}), ...updates.customFields };
   }

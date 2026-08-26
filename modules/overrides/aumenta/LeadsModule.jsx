@@ -12,16 +12,29 @@ const ACCENT = "#E8799A";
 
 // ─── Configuración ────────────────────────────────────────────────────────────
 
+// «Ya es paciente» entra el 26/08/2026: antes no había forma de decir que un
+// interesado acabó quedándose, así que el embudo no podía medir la conversión.
+// El rótulo es el de aquí, no el canónico («Paciente activo»): en esta pantalla
+// se lee como el final del embudo, no como el estado de una ficha.
+//
+// ⚠️ La misma lista vive en `lib/leads/embudos.js` para que el SERVIDOR pueda
+// saber qué ofrece este embudo. Cambiar una sin la otra lo caza
+// `scripts/_smoke-leads-etapas.mjs`.
 const STAGES = [
   { key: "new", label: "Nuevo" },
   { key: "contacted", label: "Contactado" },
+  { key: "paciente", label: "Ya es paciente" },
   { key: "lost", label: "Descartado" },
 ];
 
 const STAGE_STYLE = {
   new: { bg: "bg-violet-100 text-violet-700", dot: "bg-violet-400" },
   contacted: { bg: "bg-sky-100 text-sky-700", dot: "bg-sky-400" },
+  // `qualified` no está en el embudo de arriba y se queda a propósito: la lista
+  // canónica la acepta, así que un import podría meter aquí a alguien y sin
+  // color perdería hasta el chip. Ver la tarea del Registro.
   qualified: { bg: "bg-emerald-100 text-emerald-700", dot: "bg-emerald-400" },
+  paciente: { bg: "bg-emerald-100 text-emerald-700", dot: "bg-emerald-400" },
   lost: { bg: "bg-red-100 text-red-600", dot: "bg-red-400" },
 };
 
@@ -153,6 +166,35 @@ export default function AumentaLeadsModule() {
         fetchLeads(true);
         if (selected?.id === leadId) setSelected((prev) => ({ ...prev, stage: newStage }));
       }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /**
+   * Enlazar (o desenlazar) la ficha de la familia.
+   *
+   * Manda SOLO `clientId`: la etapa la decide el servidor con el embudo de este
+   * cliente (`etapaAlGanar`). Si la mandara desde aquí, volveríamos a tener la
+   * regla escrita en una pantalla, que es de lo que se venía.
+   *
+   * La respuesta del PATCH trae el lead ya movido, así que se refresca con ELLA
+   * y no con lo que creemos que ha pasado: si el servidor decide otra cosa
+   * —porque el embudo cambie—, la pantalla se entera.
+   */
+  async function handleEnlazar(leadId, clientId) {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId }),
+      });
+      const data = await res.json();
+      if (!data.ok) return;
+      const actualizado = data.data;
+      setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, ...actualizado } : l)));
+      setSelected((prev) => (prev && prev.id === leadId ? { ...prev, ...actualizado } : prev));
     } finally {
       setSaving(false);
     }
@@ -421,6 +463,7 @@ export default function AumentaLeadsModule() {
         onClose={closePanel}
         onStageChange={handleStageChange}
         onNotesChange={handleNotesChange}
+        onEnlazar={handleEnlazar}
       />
     </div>
   );
@@ -467,7 +510,116 @@ function AtenderButton({ onClick }) {
 
 // ─── Panel de detalle ─────────────────────────────────────────────────────────
 
-function AumentaLeadPanel({ lead, open, saving, onClose, onStageChange, onNotesChange }) {
+/**
+ * Enlazar el interesado con la ficha de su familia (26/08/2026, Jorge).
+ *
+ * ── POR QUÉ ENLAZAR Y NO «CREAR FICHA» ─────────────────────────────────────
+ * Las otras dos pantallas que convierten —la de Laura y la de spain_enzymes—
+ * crean la ficha desde el lead con nombre, correo y teléfono. Aquí eso sería un
+ * mal negocio: en un centro infantil la ficha es la FAMILIA y necesita al menos
+ * un paciente y un tutor, así que una ficha nacida de tres campos entraría
+ * directa en «Fichas a completar» — que es justo el problema del que venimos.
+ *
+ * En una clínica el alta de verdad se hace en el mostrador, con sus hijos y sus
+ * tutores. Lo que faltaba no era crear la ficha: era poder decir «este
+ * interesado es esta familia». El resto —moverlo a «Ya es paciente»— lo hace el
+ * servidor solo (`etapaAlGanar`, en lib/leads/embudos.js).
+ */
+function EnlazarFicha({ lead, saving, onEnlazar }) {
+  const [texto, setTexto] = useState("");
+  const [resultados, setResultados] = useState([]);
+  const [buscando, setBuscando] = useState(false);
+
+  // Se busca en el SERVIDOR y no entre lo que haya pintado: son 1.083 fichas.
+  useEffect(() => {
+    const q = texto.trim();
+    if (q.length < 2) {
+      setResultados([]);
+      return;
+    }
+    let vivo = true;
+    setBuscando(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/clients?limit=5&search=${encodeURIComponent(q)}`, { cache: "no-store" });
+        const j = await r.json();
+        if (vivo) setResultados(j.ok ? (j.data?.clients ?? []) : []);
+      } catch {
+        if (vivo) setResultados([]);
+      } finally {
+        if (vivo) setBuscando(false);
+      }
+    }, 300);
+    return () => {
+      vivo = false;
+      clearTimeout(t);
+    };
+  }, [texto]);
+
+  if (lead.clientId) {
+    return (
+      <div>
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Su ficha</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <a
+            href={`/clientes/${lead.clientId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium hover:underline"
+            style={{ color: PRIMARY }}
+          >
+            Ver la ficha de la familia
+          </a>
+          <button
+            disabled={saving}
+            onClick={() => onEnlazar(lead.id, null)}
+            className="text-xs text-gray-400 hover:text-gray-700 underline disabled:opacity-50"
+            title="Solo deshace el enlace. Ni la ficha ni la etapa se tocan."
+          >
+            desenlazar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">¿Ya es paciente?</p>
+      <p className="text-[11px] text-gray-400 mb-2 leading-relaxed">
+        Busca su ficha y enlázala. Al hacerlo, el interesado pasa solo a «Ya es paciente».
+      </p>
+      <input
+        value={texto}
+        onChange={(e) => setTexto(e.target.value)}
+        placeholder="Buscar por nombre, correo o teléfono…"
+        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400"
+      />
+      {texto.trim().length >= 2 && (
+        <ul className="mt-2 space-y-1">
+          {buscando && <li className="text-xs text-gray-400">Buscando…</li>}
+          {!buscando && resultados.length === 0 && (
+            <li className="text-xs text-gray-400">Ninguna ficha con eso.</li>
+          )}
+          {resultados.map((c) => (
+            <li key={c.id}>
+              <button
+                disabled={saving}
+                onClick={() => onEnlazar(lead.id, c.id)}
+                className="w-full text-left px-3 py-2 rounded-lg border border-gray-200 hover:border-gray-400 text-sm disabled:opacity-50"
+              >
+                <span className="font-medium text-gray-800">{c.name}</span>
+                {c.email && <span className="text-gray-400 text-xs"> · {c.email}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function AumentaLeadPanel({ lead, open, saving, onClose, onStageChange, onNotesChange, onEnlazar }) {
   const [notes, setNotes] = useState("");
   const [notesDirty, setNotesDirty] = useState(false);
 
@@ -511,7 +663,7 @@ function AumentaLeadPanel({ lead, open, saving, onClose, onStageChange, onNotesC
         {/* Estado */}
         <div>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Estado</p>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {STAGES.map((s) => {
               const isActive = lead.stage === s.key;
               const style = STAGE_STYLE[s.key];
@@ -532,6 +684,9 @@ function AumentaLeadPanel({ lead, open, saving, onClose, onStageChange, onNotesC
             })}
           </div>
         </div>
+
+        {/* Su ficha */}
+        <EnlazarFicha lead={lead} saving={saving} onEnlazar={onEnlazar} />
 
         {/* Contacto */}
         <div>

@@ -40,7 +40,9 @@ import { ALLOWED_STAGES, STAGE_LABELS, isValidStage } from "../lib/leads/stages.
 import {
   GANADAS,
   PERDIDAS,
+  EMBUDO_BOOKING,
   EMBUDO_POR_DEFECTO,
+  etapaAlGanar,
   etapasDe,
   tieneEtapaGanada,
 } from "../lib/leads/embudos.js";
@@ -176,9 +178,66 @@ describe("GANADAS y PERDIDAS: qué cierra un embudo", () => {
   });
 });
 
+describe("etapaAlGanar: a dónde lo mueve el CRM al enlazar la ficha (26/08/2026)", () => {
+  /*
+   * Es la mitad que hace que «lo marque el CRM solo» sea verdad. Lo que se
+   * rompe aquí no da error: devolver la etapa equivocada mueve a alguien a un
+   * sitio del embudo donde no está, y devolver `null` de más lo deja quieto y
+   * nadie se entera de que la automatización dejó de funcionar.
+   */
+  it("en un centro clínico, a «Ya es paciente»", () => {
+    assert.equal(etapaAlGanar("aumenta"), "paciente");
+  });
+
+  it("en la consulta de nutrición, también", () => {
+    assert.equal(etapaAlGanar("nutri_laura"), "paciente");
+  });
+
+  it("en una consultora, a «Convertido»", () => {
+    assert.equal(etapaAlGanar("retorika"), "won");
+    assert.equal(etapaAlGanar("spain_enzymes"), "won");
+  });
+
+  it("un cliente sin embudo propio también tiene dónde", () => {
+    assert.equal(etapaAlGanar("somos"), "won");
+    assert.equal(etapaAlGanar("un_slug_que_no_existe"), "won");
+  });
+
+  it("en BOOKING no mueve nada, y eso no es un olvido", () => {
+    // Allí ganar es que se cierre la FECHA, no que el contratante tenga ficha.
+    // Un festival puede estar fichado en el CRM sin haber contratado nada:
+    // moverlo a «Fecha confirmada» por darle de alta sería decir que hay bolo.
+    assert.equal(etapaAlGanar("una_agencia", (k) => k === "booking"), null);
+  });
+
+  it("un cliente con embudo propio no pierde el suyo por comprar booking", () => {
+    assert.equal(etapaAlGanar("aumenta", (k) => k === "booking"), "paciente");
+  });
+
+  it("de un embudo con varias ganadas coge la PRIMERA, la más temprana", () => {
+    // La última significa algo que todavía no ha pasado.
+    const conDos = EMBUDO_BOOKING.filter((e) => GANADAS.has(e));
+    assert.ok(conDos.length > 1, "booking sigue teniendo dos ganadas");
+    assert.equal(conDos[0], "fecha_confirmada");
+  });
+
+  it("lo que devuelve es SIEMPRE una etapa de ese embudo y de las ganadas", () => {
+    for (const slug of ["aumenta", "nutri_laura", "retorika", "spain_enzymes", "somos"]) {
+      const e = etapaAlGanar(slug);
+      assert.ok(etapasDe(slug).includes(e), `${slug}: «${e}» no está en su embudo`);
+      assert.ok(GANADAS.has(e), `${slug}: «${e}» no cuenta como ganada`);
+    }
+  });
+});
+
 describe("etapasDe: el embudo de cada cliente (foto del 18/08/2026)", () => {
-  it("aumenta: tres etapas y NINGUNA de ganado — es su embudo real, no un descuido que arreglar", () => {
-    assert.deepEqual(etapasDe("aumenta"), ["new", "contacted", "lost"]);
+  it("aumenta: cuatro etapas, con «Ya es paciente» dentro (26/08/2026)", () => {
+    // Hasta el 26/08 eran tres y NINGUNA de ganado, y estaba congelado aquí
+    // como «su embudo real, no un descuido». Ese día Jorge decidió lo
+    // contrario: que el CRM pueda marcar el ganado, y que lo marque solo. La
+    // etapa no se inventó — es la misma que ya usa nutri_laura.
+    assert.deepEqual(etapasDe("aumenta"), ["new", "contacted", "paciente", "lost"]);
+    assert.equal(tieneEtapaGanada("aumenta"), true);
   });
 
   it("nutri_laura: el camino del paciente, seis etapas en su orden", () => {
@@ -277,8 +336,11 @@ describe("EMBUDO_POR_DEFECTO: cinco etapas, no quince", () => {
 });
 
 describe("tieneEtapaGanada: si /leads/estadisticas enseña «Convertidos»", () => {
-  it("aumenta, no: su 0 de convertidos no puede subir y la pantalla se lo tapa a propósito", () => {
-    assert.equal(tieneEtapaGanada("aumenta"), false);
+  it("aumenta, SÍ desde el 26/08/2026: ya tiene «Ya es paciente»", () => {
+    // Estuvo en `false` del 17 al 26 de agosto, y era verdad: su embudo no
+    // tenía ganado, así que la pantalla escondía «Convertidos» en vez de
+    // enseñar un 0 que no podía subir. Al añadirle la etapa, la tarjeta vuelve.
+    assert.equal(tieneEtapaGanada("aumenta"), true);
   });
 
   it("nutri_laura, sí: su ganado se llama «paciente»", () => {
