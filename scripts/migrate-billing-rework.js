@@ -327,6 +327,12 @@ async function processSchemaInTx(s, t, schema) {
   if (await tableExists(s, t, schema, "invoices")
       && await tableExists(s, t, schema, "payments")
       && await columnExists(s, t, schema, "invoices", "paid_amount")) {
+    // SOLO facturas que tienen cobros detrás (26/08/2026). Sin el EXISTS, este
+    // backfill ponía a CERO las 14.243 facturas importadas de Organízate, que
+    // se marcaron pagadas SIN filas en payments — y como esta migración se
+    // relanza en cada despliegue, las devolvía a cero cada vez: Cobros y
+    // Morosidad de Aumenta contaban 2 M€ como pendientes de familias que
+    // pagaron hace años.
     await s.query(`
       UPDATE "${schema}"."invoices" inv
       SET paid_amount = COALESCE((
@@ -334,8 +340,9 @@ async function processSchemaInTx(s, t, schema) {
         FROM "${schema}"."payments" p
         WHERE p.invoice_id = inv.id AND p.status = 'completed'
       ), 0)
+      WHERE EXISTS (SELECT 1 FROM "${schema}"."payments" p WHERE p.invoice_id = inv.id)
     `, { transaction: t });
-    log(`✓ ${schema}.invoices.paid_amount: backfill desde payments`);
+    log(`✓ ${schema}.invoices.paid_amount: backfill desde payments (solo facturas con cobros)`);
   }
 
   // ── Backfill invoices.lines: enriquecer con vatRate por línea ──────────
