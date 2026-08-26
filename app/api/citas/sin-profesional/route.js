@@ -39,6 +39,21 @@ function departamentoDe(texto) {
 }
 
 /**
+ * De quién era la cita en Organízate (26/08/2026). Las 1.827 huérfanas no son
+ * un bloque: 1.005 eran la agenda de tres BAJAS (Dania, Victoria, Laura A.) y
+ * 822 venían sin nadie también allí. `marcar-origen-citas-organizate.js` lo
+ * anotó al final de additionalData; aquí se lee para que quien reparte decida
+ * por agendas («las de Dania → X») y no casilla a casilla.
+ */
+function origenDe(texto) {
+  const t = String(texto ?? "");
+  const m = t.match(/Agenda de ([^·]+)$/);
+  if (m) return m[1].trim();
+  if (/Sin profesional ya en Organízate/.test(t)) return "nadie";
+  return null;
+}
+
+/**
  * ¿Quién puede ver y repartir esta cola? (19/08/2026)
  *
  * Faltaba la puerta: los dos handlers solo miraban `hasModule("citas")`, así que
@@ -113,6 +128,7 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
       patientId: j.patient?.id ?? null,
       tipo: j.eventType?.name ?? null,
       departamento: departamentoDe(j.eventType?.name ?? j.additionalData),
+      origen: origenDe(j.additionalData),
     };
   });
 

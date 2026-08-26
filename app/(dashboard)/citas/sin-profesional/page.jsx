@@ -96,6 +96,22 @@ export default function CitasSinProfesionalPage() {
     setElegidas(todasMarcadas ? new Set() : new Set(citas.map((c) => c.id)));
   }
 
+  // El reparto real va por BLOQUES: «todas las de esta niña» o «toda la agenda
+  // que era de Dania», no casilla a casilla (26/08/2026). Pulsar el nombre del
+  // paciente o el origen marca (o desmarca) su bloque entero de la vista.
+  function marcarBloque(criterio) {
+    const ids = citas.filter(criterio).map((c) => c.id);
+    if (!ids.length) return;
+    setElegidas((prev) => {
+      const s = new Set(prev);
+      const todos = ids.every((id) => s.has(id));
+      for (const id of ids) todos ? s.delete(id) : s.add(id);
+      return s;
+    });
+  }
+  const marcarPaciente = (c) => marcarBloque((x) => (c.patientId ? x.patientId === c.patientId : x.paciente === c.paciente));
+  const marcarOrigen = (origen) => marcarBloque((x) => x.origen === origen);
+
   async function asignar() {
     if (!aQuien || !elegidas.size) return;
     setAsignando(true);
@@ -205,12 +221,13 @@ export default function CitasSinProfesionalPage() {
                 <th className="text-left font-medium px-3 py-2">Paciente</th>
                 <th className="text-left font-medium px-3 py-2">Tipo</th>
                 <th className="text-left font-medium px-3 py-2">Departamento</th>
+                <th className="text-left font-medium px-3 py-2">Era de</th>
               </tr>
             </thead>
             <tbody>
-              {cargando && <tr><td colSpan={5} className="px-3 py-6 text-center text-neutral-400">Cargando…</td></tr>}
+              {cargando && <tr><td colSpan={6} className="px-3 py-6 text-center text-neutral-400">Cargando…</td></tr>}
               {!cargando && citas.length === 0 && (
-                <tr><td colSpan={5} className="px-3 py-8 text-center text-neutral-400">
+                <tr><td colSpan={6} className="px-3 py-8 text-center text-neutral-400">
                   No queda ninguna cita sin profesional. Buena señal.
                 </td></tr>
               )}
@@ -220,12 +237,33 @@ export default function CitasSinProfesionalPage() {
                     <input type="checkbox" checked={elegidas.has(c.id)} onChange={() => marcar(c.id)} />
                   </td>
                   <td className="px-3 py-2 text-neutral-700 first-letter:uppercase">{fmt(c.cuando)}</td>
-                  <td className="px-3 py-2 font-medium text-neutral-800">{c.paciente}</td>
+                  <td className="px-3 py-2 font-medium text-neutral-800">
+                    <button type="button" onClick={() => marcarPaciente(c)}
+                      title="Marcar todas las citas de este paciente"
+                      className="hover:underline decoration-dotted underline-offset-2 text-left">
+                      {c.paciente}
+                    </button>
+                  </td>
                   <td className="px-3 py-2 text-neutral-500">{c.tipo ?? "—"}</td>
                   <td className="px-3 py-2">
                     {c.departamento
                       ? <span className="text-[11.5px] px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600">{DEPTO_LABEL[c.departamento] ?? c.departamento}</span>
                       : <span className="text-neutral-300">—</span>}
+                  </td>
+                  <td className="px-3 py-2">
+                    {/* La agenda de la que viene (una baja de Organízate). Pulsar
+                        marca ese bloque entero: «las de Dania → X» es UNA decisión. */}
+                    {c.origen && c.origen !== "nadie" ? (
+                      <button type="button" onClick={() => marcarOrigen(c.origen)}
+                        title={`Marcar toda la agenda que era de ${c.origen}`}
+                        className="text-[11.5px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 hover:bg-amber-100">
+                        {c.origen}
+                      </button>
+                    ) : c.origen === "nadie" ? (
+                      <span className="text-[11.5px] text-neutral-400" title="Tampoco tenía profesional en Organízate">nadie</span>
+                    ) : (
+                      <span className="text-neutral-300">—</span>
+                    )}
                   </td>
                 </tr>
               ))}
