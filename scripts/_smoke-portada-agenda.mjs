@@ -1,5 +1,6 @@
 /**
- * _smoke-portada-agenda.mjs — quién ve qué citas en la PORTADA (19/08/2026).
+ * _smoke-portada-agenda.mjs — quién ve qué citas en la PORTADA (19/08/2026;
+ * rehecha el 26/08/2026 sobre la portada nueva «Hoy y el negocio»).
  *
  *   node scripts/_smoke-portada-agenda.mjs
  *
@@ -14,37 +15,34 @@
  * ── DE QUÉ FALLO REAL NACE ─────────────────────────────────────────────────
  *
  * Rocío, que es `user` en nutri_laura, vio en SU portada la cita de supervisión
- * que Laura se había agendado para sí misma. La cita estaba bien asignada; lo que
- * estaba mal era la portada: `buildAgenda` listaba TODAS las citas próximas del
- * cliente —con el NOMBRE DEL PACIENTE— sin mirar el rol ni el interruptor de
- * agenda compartida. El listado (`/api/citas/bookings`) y el calendario sí
- * filtraban desde el 28/07; la portada se quedó fuera y nadie lo notó.
+ * que Laura se había agendado para sí misma. La portada listaba TODAS las citas
+ * del cliente —con el NOMBRE DEL PACIENTE— sin mirar el rol ni el interruptor de
+ * agenda compartida.
  *
- * La cabecera del propio fichero explicaba por qué: decía que Booking no tenía FK
- * a usuario. La tenía —`team_member_id`—, así que la premisa estaba caducada.
- *
- * Lo que se fija aquí es el reparto de los CUATRO casos, y sobre todo el cuarto:
- * que cuando no se puede resolver quién mira, la agenda sale VACÍA y no abierta.
- * Un fallo de resolución que abriera sería el mismo agujero con otra ropa.
+ * La portada nueva hace MÁS consultas a `bookings` que la vieja (la lista de
+ * hoy, la serie de la semana, las citas sin confirmar, la vista por
+ * profesional…), así que la regla ya no se fija consulta a consulta sino como
+ * invariante: **ninguna consulta a Booking puede salir sin el filtro que le
+ * toca a quien mira**. Para quien no ve toda la agenda, TODAS llevan su ficha
+ * (o el centinela, si no se pudo resolver: se falla CERRADO); para quien sí la
+ * ve, ninguna lleva la ficha de OTRA persona.
  */
 
-import { buildHomeSummary } from "../lib/home/summary.js";
+import { buildPortada } from "../lib/home/summary.js";
 
 let fallos = 0;
-function check(etiqueta, real, esperado) {
-  const ok = JSON.stringify(real) === JSON.stringify(esperado);
+function check(etiqueta, ok, detalle = "") {
   if (!ok) fallos++;
   process.stdout.write((ok ? "OK  " : "MAL ") + etiqueta + "\n");
-  if (!ok) process.stdout.write("      esperaba " + JSON.stringify(esperado) + ", salio " + JSON.stringify(real) + "\n");
+  if (!ok && detalle) process.stdout.write("      " + detalle + "\n");
 }
 function h(t) { process.stdout.write("\n> " + t + "\n"); }
 
 const NADIE = "00000000-0000-0000-0000-000000000000";
 /**
- * El filtro ya no es un id pelado: es `{ [Op.or]: [{ [Op.eq]: id }, { [Op.is]: null }] }`.
- * Se lee por los SÍMBOLOS para no tener que importar sequelize aquí —esta prueba
- * es ligera y no debe arrastrar la base de datos— y se devuelve algo legible:
- * "tm-rocio+sin-asignar".
+ * El filtro es `{ [Op.or]: [{ [Op.eq]: id }, { [Op.is]: null }] }`. Se lee por
+ * los SÍMBOLOS para no importar sequelize aquí —esta prueba es ligera— y se
+ * devuelve algo legible: "tm-rocio+sin-asignar".
  */
 function describeFiltro(f) {
   if (f === undefined) return "(sin filtro)";
@@ -66,9 +64,9 @@ const LAURA = "tm-laura";
 const ROCIO = "tm-rocio";
 
 /**
- * Modelos de mentira que APUNTAN el where que se les pide, que es lo que se
- * quiere comprobar. Booking devuelve siempre lo mismo: no se prueba el contenido,
- * se prueba el filtro.
+ * Modelos de mentira que APUNTAN el where de cada consulta a Booking, que es lo
+ * que se quiere comprobar. Devuelven vacío: no se prueba el contenido, se
+ * prueba el filtro.
  */
 function modelos({ fichaDe = null, teamMemberRevienta = false } = {}) {
   const vistos = [];
@@ -76,8 +74,8 @@ function modelos({ fichaDe = null, teamMemberRevienta = false } = {}) {
     vistos,
     tenantModels: {
       Booking: {
-        count: async ({ where }) => { vistos.push({ q: "count", where }); return 0; },
-        findAll: async ({ where }) => { vistos.push({ q: "findAll", where }); return []; },
+        count: async ({ where }) => { vistos.push(where.teamMemberId); return 0; },
+        findAll: async ({ where }) => { vistos.push(where.teamMemberId); return []; },
       },
       EventType: {},
       TeamMember: {
@@ -85,49 +83,76 @@ function modelos({ fichaDe = null, teamMemberRevienta = false } = {}) {
           if (teamMemberRevienta) throw new Error("la tabla no existe");
           return where.userId && fichaDe ? { id: fichaDe } : null;
         },
+        findAll: async () => [],
       },
     },
   };
 }
 
-async function agendaDe({ role, agendaCompartida = false, fichaDe = null, teamMemberRevienta = false, conTeam = true, accesoTeam = true }) {
+async function filtrosDe({ role, agendaCompartida = false, fichaDe = null, teamMemberRevienta = false, conTeam = true, accesoTeam = true }) {
   const m = modelos({ fichaDe, teamMemberRevienta });
   const modulos = new Set(conTeam ? ["citas", "team"] : ["citas"]);
-  await buildHomeSummary({
+  await buildPortada({
     // `hasModule` cruza tenant ∩ usuario; `tenantHasModule` mira solo el tenant.
     // Con `accesoTeam: false` se imita a Rocío: el centro TIENE equipo, ella no
     // tiene "team" en su moduleAccess.
     hasModule: (k) => modulos.has(k) && (k !== "team" || accesoTeam),
     tenantHasModule: (k) => modulos.has(k),
     tenantModels: m.tenantModels,
+    tenantSequelize: null,
     user: { id: "u1", role },
     tenant: { settings: { citas: { agendaCompartida } } },
   });
-  // El filtro tiene que estar en LAS DOS consultas, no solo en la lista.
-  return m.vistos.map((v) => describeFiltro(v.where.teamMemberId));
+  return m.vistos.map(describeFiltro);
 }
 
-h("El jefe ve toda la agenda");
-check("admin, sin filtro en las dos consultas", await agendaDe({ role: "admin", fichaDe: LAURA }), ["(sin filtro)", "(sin filtro)"]);
-check("superadmin igual", await agendaDe({ role: "superadmin", fichaDe: LAURA }), ["(sin filtro)", "(sin filtro)"]);
+const todosSon = (filtros, esperado) => filtros.length >= 2 && filtros.every((f) => f === esperado);
+const soloEntre = (filtros, permitidos) => filtros.length >= 2 && filtros.every((f) => permitidos.includes(f));
 
-h("Con agenda compartida, todo el equipo la ve");
-check("user + agendaCompartida", await agendaDe({ role: "user", agendaCompartida: true, fichaDe: ROCIO }), ["(sin filtro)", "(sin filtro)"]);
+h("Sin agenda compartida, TODAS las consultas de citas van con lo suyo");
+{
+  const f = await filtrosDe({ role: "user", fichaDe: ROCIO });
+  check("user con su ficha: todas con su filtro (" + f.length + " consultas)", todosSon(f, ROCIO + SIN), "salio: " + JSON.stringify(f));
+}
 
-h("Sin agenda compartida, cada uno lo suyo");
-check("user con su ficha: las suyas y las que no son de nadie", await agendaDe({ role: "user", fichaDe: ROCIO }), [ROCIO + SIN, ROCIO + SIN]);
-check("y en las DOS consultas, no solo en la lista", await agendaDe({ role: "user", fichaDe: ROCIO }), [ROCIO + SIN, ROCIO + SIN]);
+h("El caso de Rocio: quitarle el acceso a Equipo NO abre la agenda");
+{
+  const f = await filtrosDe({ role: "user", fichaDe: ROCIO, accesoTeam: false });
+  check("user sin \"team\" en su moduleAccess: todas con su filtro", todosSon(f, ROCIO + SIN), "salio: " + JSON.stringify(f));
+}
 
-h("Y cuando no se sabe quien mira, NO se ensena nada");
-check("user sin ficha de equipo: ninguna ajena", await agendaDe({ role: "user", fichaDe: null }), [NADIE + SIN, NADIE + SIN]);
-check("la consulta de la ficha revienta: ninguna ajena", await agendaDe({ role: "user", fichaDe: ROCIO, teamMemberRevienta: true }), [NADIE + SIN, NADIE + SIN]);
+h("Cuando no se sabe quien mira, se cierra (centinela), nunca se abre");
+{
+  const f1 = await filtrosDe({ role: "user", fichaDe: null });
+  check("user sin ficha de equipo: ninguna ajena", todosSon(f1, NADIE + SIN), "salio: " + JSON.stringify(f1));
+  const f2 = await filtrosDe({ role: "user", fichaDe: ROCIO, teamMemberRevienta: true });
+  check("la consulta de la ficha revienta: ninguna ajena", todosSon(f2, NADIE + SIN), "salio: " + JSON.stringify(f2));
+}
+
+h("El jefe ve toda la agenda (y su pestana Mias sigue siendo SUYA)");
+{
+  const f = await filtrosDe({ role: "admin", fichaDe: LAURA });
+  check(
+    "admin: nada filtrado por OTRA persona; lo suyo o sin filtro",
+    soloEntre(f, ["(sin filtro)", LAURA + SIN]),
+    "salio: " + JSON.stringify(f)
+  );
+  check("admin: la vista de todo el centro existe (alguna consulta sin filtro)", f.includes("(sin filtro)"), "salio: " + JSON.stringify(f));
+  check("superadmin igual", soloEntre(await filtrosDe({ role: "superadmin", fichaDe: LAURA }), ["(sin filtro)", LAURA + SIN]));
+}
+
+h("Con agenda compartida, todo el equipo ve el centro");
+{
+  const f = await filtrosDe({ role: "user", agendaCompartida: true, fichaDe: ROCIO });
+  check("user + agendaCompartida: lo suyo o sin filtro", soloEntre(f, ["(sin filtro)", ROCIO + SIN]), "salio: " + JSON.stringify(f));
+  check("y el centro existe", f.includes("(sin filtro)"), "salio: " + JSON.stringify(f));
+}
 
 h("Si el CENTRO no tiene team, no hay a quien filtrar");
-check("tenant sin team, agenda entera", await agendaDe({ role: "user", conTeam: false, fichaDe: ROCIO }), ["(sin filtro)", "(sin filtro)"]);
-
-h("Pero NO tener acceso a la pantalla de Equipo no abre la agenda (el caso de Rocio)");
-check("user sin \"team\" en su moduleAccess, solo lo suyo", await agendaDe({ role: "user", fichaDe: ROCIO, accesoTeam: false }), [ROCIO + SIN, ROCIO + SIN]);
-check("y sin ficha de equipo, sigue cerrando lo ajeno", await agendaDe({ role: "user", fichaDe: null, accesoTeam: false }), [NADIE + SIN, NADIE + SIN]);
+{
+  const f = await filtrosDe({ role: "user", conTeam: false, fichaDe: ROCIO });
+  check("tenant sin team: agenda entera, sin filtro", todosSon(f, "(sin filtro)"), "salio: " + JSON.stringify(f));
+}
 
 process.stdout.write(fallos ? "\nX " + fallos + " fallo(s)\n\n" : "\nTodo correcto\n\n");
 process.exit(fallos ? 1 : 0);

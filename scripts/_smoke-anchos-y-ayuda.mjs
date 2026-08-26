@@ -109,35 +109,28 @@ describe("la ficha de cliente decide su ancho en UN sitio", () => {
 
 /* ═══ 2 · La portada ════════════════════════════════════════════════════════ */
 
-describe("la portada va centrada, y sus cuatro contenedores a la vez", () => {
-  test("los cuatro llevan max-w-6xl y mx-auto", () => {
-    // Solo las líneas que llevan un `className=`, que es lo único que puede ser
-    // una clase de verdad. La cabecera de `page.jsx` explica esta misma regla y
-    // menciona la clase dentro de su prosa —y esa prosa vive en un comentario
-    // `{/* … */}` de varias líneas, así que sus líneas interiores no empiezan
-    // por `//` y un filtro por prefijo no las caza—. Contarlas haría que la
-    // prueba dijera cuatro donde hay tres: el mismo error de leer un contador
-    // que incluye su propia documentación.
-    const soloCodigo = (rel) =>
-      lee(rel)
-        .split(/\r?\n/)
-        .filter((l) => l.includes("className="))
-        .join("\n");
-
-    const portada = soloCodigo("app/(dashboard)/page.jsx");
-    const resumen = soloCodigo("components/home/HomeSummary.jsx");
-
-    const centrados = (txt) => (txt.match(/max-w-6xl mx-auto/g) || []).length;
-    const sueltos = (txt) =>
-      (txt.match(/max-w-6xl(?! mx-auto)/g) || []).length;
-
-    assert.equal(centrados(portada), 3, "la portada tiene que llevar sus TRES secciones centradas");
-    assert.equal(centrados(resumen), 1, "«Resumen de hoy» vive en otro fichero y se olvida: también va centrado");
-    assert.equal(
-      sueltos(portada) + sueltos(resumen),
-      0,
-      "queda un max-w-6xl sin mx-auto: esa sección se desalinea de las otras tres"
+describe("la portada llena una pantalla, sin scroll en escritorio (26/08/2026, Rodrigo)", () => {
+  // La regla vieja («cuatro contenedores max-w-6xl mx-auto») murió con el
+  // rediseño «Hoy y el negocio»: la portada ya no se centra en una columna,
+  // reparte todo el ancho en dos mitades y corta su propio scroll en lg.
+  test("la raíz corta el scroll en escritorio y no vuelve el contenedor centrado", () => {
+    const portada = lee("app/(dashboard)/page.jsx");
+    assert.match(
+      portada,
+      /lg:overflow-hidden/,
+      "la portada ha perdido el corte de scroll de escritorio: todo debe caber en una pantalla"
     );
+    assert.doesNotMatch(
+      portada,
+      /max-w-6xl/,
+      "ha vuelto un contenedor centrado del diseño viejo: la portada nueva reparte todo el ancho"
+    );
+  });
+
+  test("la grafica rotatoria se para con el raton encima y va sin numeros fijos", () => {
+    const grafica = lee("components/home/GraficaRotatoria.jsx");
+    assert.match(grafica, /onMouseEnter/, "la rotacion ya no se para al pasar el raton: mareara a quien intente leerla");
+    assert.match(grafica, /group-hover:opacity-100/, "el globito del dato ha desaparecido: sin numeros fijos, es la unica forma de leer una barra");
   });
 });
 

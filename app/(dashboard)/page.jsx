@@ -1,59 +1,42 @@
 import { headers } from "next/headers";
 import { getTenantContext } from "../../lib/tenant/tenantResolver.js";
-import { buildHomeSummary } from "../../lib/home/summary.js";
-import HomeSummary from "../../components/home/HomeSummary.jsx";
-import { vocabularioCliente, VOCABULARIO_CLIENTE } from "../../lib/clients/vocabulario.js";
+import { buildPortada } from "../../lib/home/summary.js";
+import GraficaRotatoria from "../../components/home/GraficaRotatoria.jsx";
+import MiAgenda from "../../components/home/MiAgenda.jsx";
 
 /**
- * Los atajos de la portada.
+ * La portada «Hoy y el negocio» (rediseño del 26/08/2026, elegido por Rodrigo).
  *
- * ⚠️ ESTA LISTA SE QUEDA VIEJA SOLA. Es un array paralelo al sidebar: cada
- * módulo nuevo hay que acordarse de añadirlo AQUÍ además de allí, y no hay nada
- * que avise. Se notó el 08/08/2026 con Aumenta —un centro de psicología con 18
- * módulos y quince personas— que abría el CRM cada mañana y NO tenía atajo a
- * Pacientes ni a Clínica, que es todo su trabajo, mientras sí veía uno a
- * «Inventario · Materia prima y producto».
+ * Dos mitades con nombre: a la izquierda HOY (Mi agenda + lo pendiente como
+ * botones), a la derecha EL NEGOCIO (tres cifras + una gráfica que rota).
+ * El saludo baja a una línea, y en escritorio TODO cabe en una pantalla sin
+ * scroll (`lg:overflow-hidden` — lo vigila `_smoke-anchos-y-ayuda.mjs`); en
+ * móvil las mitades se apilan y ahí sí se desplaza.
  *
- * El orden importa: se pintan los que el cliente tenga, en este orden, así que
- * arriba va el trabajo del día y abajo lo de apoyo.
+ * Cada pieza llega ya gateada del servidor (lib/home/summary.js): módulo del
+ * tenant ∩ acceso del usuario, la agenda con su regla de visibilidad, y el
+ * cobrado solo para admin. Si a alguien le falta una mitad entera, la otra
+ * ocupa todo el ancho.
  */
-const QUICK_LINKS = [
-  // El día a día de una consulta o un centro clínico.
-  { moduleKey: "citas",       href: "/citas",       eyebrow: "Agenda",       title: "Citas",       hint: "Reservas y consultas" },
-  { moduleKey: "pacientes",   href: "/pacientes",   eyebrow: "Clínico",      title: "Pacientes",   hint: "Fichas e historial" },
-  { moduleKey: "clinica",     href: "/clinica",     eyebrow: "Clínico",      title: "Clínica",     hint: "Sesiones, informes y coordinaciones" },
-  { moduleKey: "clients",     href: "/clientes",    eyebrow: "Cuentas",      title: "Clientes",    hint: "Gestionar tu cartera" },
-  { moduleKey: "nutricion",   href: "/nutricion/recetas", eyebrow: "Nutrición", title: "Recetario", hint: "Recetas, menús y pautas" },
-  // Quien entra y quién lo atiende.
-  { moduleKey: "leads",       href: "/leads",       eyebrow: "Comercial",    title: "Leads",       hint: "Oportunidades activas" },
-  { moduleKey: "formularios", href: "/formularios", eyebrow: "Comercial",    title: "Solicitudes", hint: "Lo que llega desde la web" },
-  { moduleKey: "team",        href: "/equipo",      eyebrow: "Equipo",       title: "Equipo",      hint: "Plantilla y accesos" },
-  // Apoyo.
-  { moduleKey: "billing",     href: "/facturacion", eyebrow: "Finanzas",     title: "Facturación", hint: "Cobros y costes" },
-  { moduleKey: "documents",   href: "/documentos",  eyebrow: "Archivo",      title: "Documentos",  hint: "Contratos y ficheros" },
-  { moduleKey: "support",     href: "/soporte",     eyebrow: "Atención",     title: "Soporte",     hint: "Lo que preguntan tus clientes" },
-  { moduleKey: "training",    href: "/formacion",   eyebrow: "Conocimiento", title: "Formación",   hint: "Cursos y alumnos" },
-  { moduleKey: "inventory",   href: "/inventario",  eyebrow: "Operaciones",  title: "Inventario",  hint: "Productos y existencias" },
-  { moduleKey: "calendar",    href: "/calendario",  eyebrow: "Tiempo",       title: "Calendario",  hint: "Agenda del equipo" },
-  // `referidos` se cae de la lista el 12/08/2026: el módulo se retiró entero
-  // junto al cliente para el que estaba hecho a medida (abarcaia).
-  // `sales` se cae de la lista: apuntaba a /comercial, que NO EXISTE como
-  // página —da 404— y su único contenido real vive en /leads. Ver el runbook de
-  // ayudas, donde quedó anotado como código al que no se llega.
-];
 
 function greeting() {
-  const h = new Date().getHours();
+  const h = Number(
+    new Date().toLocaleString("es-ES", { hour: "2-digit", hour12: false, timeZone: "Europe/Madrid" })
+  );
   if (h < 6) return "Buenas noches";
-  if (h < 12) return "Buenos días";
-  if (h < 20) return "Buenas tardes";
+  if (h < 13) return "Buenos días";
+  if (h < 21) return "Buenas tardes";
   return "Buenas noches";
 }
 
+const eur = (n) =>
+  new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(
+    Number(n || 0)
+  );
+
 // Resuelve el contexto de tenant desde el RSC (el middleware ya inyectó
-// x-tenant / x-user-id en los headers; getTenantContext solo necesita un objeto
-// con .headers.get() y .cookies.get()) y construye el resumen "Tu día".
-async function loadHome() {
+// x-tenant / x-user-id en los headers) y construye la portada.
+async function loadPortada() {
   const h = await headers();
   const shim = {
     headers: { get: (k) => h.get(k) },
@@ -62,33 +45,18 @@ async function loadHome() {
   };
   try {
     const ctx = await getTenantContext(shim);
-    const { blocks, admin } = await buildHomeSummary(ctx);
-    // Accesos rápidos gateados por hasModule (módulo del tenant ∩ acceso del
-    // usuario), igual que los widgets. `admin` viene del agregador (fuente única).
-    const enabled = new Set(QUICK_LINKS.filter((l) => ctx.hasModule(l.moduleKey)).map((l) => l.moduleKey));
-    // En una consulta de nutrición el módulo Clientes se llama «Pacientes»; la
-    // home tiene que decirlo igual que el menú (lib/clients/vocabulario.js).
-    // `tenantHasModule` y no `hasModule`: cómo se llaman las cosas depende del
-    // CENTRO, no de a qué módulos llegue quien mira. Si no, una recepcionista
-    // sin acceso a Nutrición vería «Clientes» en la home y «Pacientes» en el
-    // menú, que sí va por el tenant.
-    return { blocks, enabled, admin, vocab: vocabularioCliente(ctx.tenantHasModule) };
+    return await buildPortada(ctx);
   } catch (err) {
-    // Fallo catastrófico (p.ej. master DB caída): degradar a solo el hero. NO se
-    // reintenta contra la misma DB dentro del catch (volvería a fallar y tumbaría
-    // la home con un 500). enabled vacío = sin accesos rápidos ni widgets, pero
-    // la home NUNCA da 500.
-    console.error("[home] resumen no disponible:", err?.message || err);
-    return { blocks: {}, enabled: new Set(), admin: false, vocab: VOCABULARIO_CLIENTE };
+    // Fallo catastrófico (p.ej. master DB caída): la portada NUNCA da 500.
+    console.error("[home] portada no disponible:", err?.message || err);
+    return { admin: false, finance: null, agenda: null, pendiente: [], vistas: [] };
   }
 }
 
 /**
- * Lo que Salamandra le ha contestado y aún no ha abierto.
- *
- * Se lee de `master` —donde vive el buzón— y NO del schema del cliente, así que
- * no depende de que tenga ningún módulo. Best-effort a conciencia: la portada
- * nunca da 500, y menos por un aviso.
+ * Lo que Salamandra le ha contestado y aún no ha abierto. Se lee de `master`
+ * —donde vive el buzón— y NO del schema del cliente, así que no depende de
+ * ningún módulo. Best-effort: la portada nunca da 500 por un aviso.
  */
 async function respuestasSinLeer() {
   try {
@@ -103,140 +71,147 @@ async function respuestasSinLeer() {
   }
 }
 
-export default async function HomePage() {
-  const today = new Date().toLocaleDateString("es-ES", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+const TONO_BOTON = {
+  rojo: "bg-red-600",
+  cobre: "bg-amber-600",
+  verde: "bg-[var(--color-primary)]",
+};
 
-  const [{ blocks, enabled, admin, vocab }, sinLeer] = await Promise.all([
-    loadHome(),
-    respuestasSinLeer(),
-  ]);
-  const visibleLinks = QUICK_LINKS.filter((l) => enabled.has(l.moduleKey)).map((l) =>
-    l.moduleKey === "clients"
-      ? { ...l, eyebrow: vocab.area, title: vocab.plural, hint: vocab.pistaHome }
-      : l
-  );
-
+function PendienteCard({ item }) {
   return (
-    <div className="min-h-full bg-[var(--color-accent)]">
-      {/*
-      ── LA PORTADA VA CENTRADA DESDE EL 24/08/2026 ──────────────────────────
-      Sus secciones llevaban `max-w-6xl` SIN `mx-auto` desde que nacieron
-      (`git log -S"mx-auto"` sobre este fichero no devuelve nada: nunca estuvo),
-      así que el contenido se pegaba al margen izquierdo y amontonaba TODO el
-      blanco a la derecha: medido en producción a 1.920, 0 px a la izquierda y
-      596 a la derecha, o sea el 35% del ancho útil.
+    <a
+      href={item.href}
+      className="bg-white border border-[var(--ink-200)] rounded-[var(--radius-card)] flex flex-col items-center gap-2 py-4 px-2 hover:border-[var(--ink-300)] transition-colors"
+    >
+      <span
+        className={`w-12 h-12 rounded-full ${TONO_BOTON[item.tono] || TONO_BOTON.verde} text-white flex items-center justify-center font-display text-[20px] shadow-sm`}
+      >
+        {item.count > 99 ? "99+" : item.count}
+      </span>
+      <span className="text-[12px] font-medium text-center leading-tight text-[var(--ink-900)]">{item.titulo}</span>
+      <span className="text-[10px] text-[var(--ink-400)]">{item.modulo}</span>
+    </a>
+  );
+}
 
-      Se centra y NO se toca ningún tamaño, que era la condición: medido antes y
-      después, las tarjetas no se mueven ni un píxel (Acceso rápido sigue en 352,
-      Resumen en 341). Lo único que cambia de sitio es el titular en serif, que
-      se va 274 px a la derecha con todo lo demás.
-
-      Lo que NO se hizo, a propósito: subirla a 1.280 como los listados. Medido,
-      la tarjeta de Acceso rápido pasaría de 352 a 395 px con ~190 muertos a la
-      derecha del texto — que es exactamente la queja de Rodrigo del 14/08 («cajas
-      grandes con el texto pegado a la izquierda») reproducida. Aquí el margen se
-      arregla centrando, no ensanchando.
-
-      ⚠️ El `max-w-6xl mx-auto` está repetido CUATRO veces y en DOS ficheros: las
-      tres secciones de aquí y la de `components/home/HomeSummary.jsx`. Si se
-      toca uno, se tocan los cuatro o la portada se desalinea sola. La deriva ya
-      empezó: dos usan `px-5` y una `px-6`.
-      */}
-      {/* Hero editorial */}
-      <section className="px-5 lg:px-12 pt-7 lg:pt-16 pb-8 lg:pb-10 max-w-6xl mx-auto">
-        <div className="eyebrow mb-3 lg:mb-5 fade-up" style={{ animationDelay: "60ms" }}>
-          {today}
-        </div>
-        <h1
-          className="font-display-lg text-[clamp(30px,7vw,72px)] leading-[1.02] text-[var(--ink-900)] mb-4 lg:mb-6 fade-up"
-          style={{ animationDelay: "120ms" }}
-        >
-          {greeting()}
-        </h1>
-        <p
-          className="text-[15px] lg:text-[17px] text-[var(--ink-500)] max-w-xl leading-relaxed fade-up"
-          style={{ animationDelay: "200ms" }}
-        >
-          Tu panel de control. Aquí ves de un vistazo lo que está pasando hoy en tu negocio —
-          clientes, ventas, facturación y todo lo que tienes activo.
-        </p>
-      </section>
-
-      {/* Le hemos contestado desde el panel y aún no lo ha abierto.
-          Va ARRIBA DEL TODO, antes de los widgets: es lo único de esta pantalla
-          que espera algo de él. Solo sale si hay algo — una portada con un hueco
-          fijo de avisos se convierte en un hueco vacío que nadie mira. */}
-      {sinLeer.length > 0 && (
-        <section className="px-5 lg:px-12 pb-8 max-w-6xl mx-auto">
-          <a
-            href="/ayuda"
-            className="block border border-[var(--ink-200)] rounded-[var(--radius-card)] px-5 py-4 hover:border-[var(--ink-300)] transition-colors bg-[var(--color-card,#fff)]"
-          >
-            <div className="eyebrow mb-2">Salamandra te ha contestado</div>
-            <ul className="space-y-1">
-              {sinLeer.map((a) => (
-                <li key={a.id} className="text-[15px] text-[var(--ink-900)] leading-snug">
-                  {a.asunto}
-                </li>
-              ))}
-            </ul>
-            <div className="text-[13px] text-[var(--ink-500)] mt-2">Verlo en Ayuda →</div>
-          </a>
-        </section>
-      )}
-
-      {/* Resumen "Tu día" — widgets de datos por módulo activo */}
-      <HomeSummary blocks={blocks} admin={admin} vocab={vocab} />
-
-      {/* Bloque de accesos rápidos */}
-      {visibleLinks.length > 0 && (
-        <section className="px-6 lg:px-12 pb-20 max-w-6xl mx-auto">
-          <div className="border-t border-[var(--ink-200)] pt-10">
-            <div className="eyebrow mb-6">Acceso rápido</div>
-            <div
-              className={`grid border border-[var(--ink-200)] rounded-[var(--radius-card)] overflow-hidden ${
-                visibleLinks.length === 1
-                  ? "grid-cols-1"
-                  : visibleLinks.length === 2
-                  ? "grid-cols-1 sm:grid-cols-2"
-                  : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-              }`}
-            >
-              {visibleLinks.map((l) => (
-                <QuickLink key={l.moduleKey} {...l} />
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
+function Kpi({ label, value, sub, danger }) {
+  return (
+    <div className="bg-white border border-[var(--ink-200)] rounded-[var(--radius-card)] px-4 py-3">
+      <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--ink-400)] mb-1">{label}</div>
+      <div className={`font-display text-[22px] leading-none tracking-tight ${danger ? "text-red-600" : "text-[var(--ink-900)]"}`}>
+        {value}
+      </div>
+      {sub && <div className={`text-[10.5px] mt-1 ${danger ? "text-red-600" : "text-[var(--ink-500)]"}`}>{sub}</div>}
     </div>
   );
 }
 
-function QuickLink({ href, eyebrow, title, hint }) {
+export default async function HomePage() {
+  const hoyLargo = new Date().toLocaleDateString("es-ES", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "Europe/Madrid",
+  });
+  const mes = new Date().toLocaleDateString("es-ES", { month: "long", timeZone: "Europe/Madrid" });
+
+  const [portada, sinLeer] = await Promise.all([loadPortada(), respuestasSinLeer()]);
+  const { admin, finance, agenda, vistas } = portada;
+
+  const pendiente = [...portada.pendiente];
+  if (sinLeer.length > 0) {
+    pendiente.push({
+      key: "buzon",
+      count: sinLeer.length,
+      titulo: sinLeer.length === 1 ? "Respuesta sin leer" : "Respuestas sin leer",
+      modulo: "Ayuda",
+      href: "/ayuda",
+      tono: "verde",
+    });
+  }
+
+  const hayHoy = Boolean(agenda) || pendiente.length > 0;
+  const hayNegocio = Boolean(finance) || vistas.length > 0;
+
   return (
-    <a
-      href={href}
-      className="group relative bg-white p-7 hover:bg-[var(--ink-50)] transition-colors block border-l border-t border-[var(--ink-200)] -ml-px -mt-px"
-    >
-      <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--ink-400)] mb-3">
-        {eyebrow}
+    <div className="lg:h-full lg:overflow-hidden flex flex-col gap-3 lg:gap-4 px-4 lg:px-7 py-4 lg:py-5 bg-[var(--color-accent)]">
+      {/* El saludo, en una línea: la portada recibe con datos, no con un titular */}
+      <div className="flex items-baseline gap-3 shrink-0">
+        <h1 className="text-[18px] font-semibold tracking-tight text-[var(--ink-900)]">Inicio</h1>
+        <span className="text-[12.5px] text-[var(--ink-500)]">
+          {greeting()} · {hoyLargo}
+        </span>
       </div>
-      <div className="font-display text-[28px] leading-tight text-[var(--ink-900)] mb-1.5 tracking-tight">
-        {title}
-      </div>
-      <div className="text-[13px] text-[var(--ink-500)] mb-5">{hint}</div>
-      <div className="flex items-center gap-1.5 text-[var(--color-primary)] text-[12px] font-medium group-hover:gap-3 transition-all">
-        Abrir
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-        </svg>
-      </div>
-    </a>
+
+      {!hayHoy && !hayNegocio ? (
+        <div className="bg-white border border-[var(--ink-200)] rounded-[var(--radius-card)] p-8 max-w-xl">
+          <div className="font-display text-[22px] text-[var(--ink-900)] mb-2">Tu panel está listo.</div>
+          <p className="text-[14px] text-[var(--ink-500)] leading-relaxed">
+            En cuanto haya actividad —citas, clientes, facturas— este panel se llena solo. Empieza por el menú
+            de la izquierda.
+          </p>
+        </div>
+      ) : (
+        <div className="lg:flex-1 lg:min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* ── HOY ── */}
+          {hayHoy && (
+            <section
+              className={`${hayNegocio ? "lg:col-span-5" : "lg:col-span-12"} flex flex-col gap-2.5 min-h-0`}
+            >
+              <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-[var(--ink-400)]">Hoy</div>
+              {agenda && <MiAgenda agenda={agenda} />}
+              {pendiente.length > 0 && (
+                <div className="shrink-0">
+                  <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-[var(--ink-400)] mb-2">
+                    Pendiente
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {pendiente.slice(0, 6).map((p) => (
+                      <PendienteCard key={p.key} item={p} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ── EL NEGOCIO ── */}
+          {hayNegocio && (
+            <section className={`${hayHoy ? "lg:col-span-7" : "lg:col-span-12"} flex flex-col gap-2.5 min-h-0`}>
+              <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-[var(--ink-400)]">
+                El negocio
+              </div>
+              {finance && (
+                <div className={`grid gap-2.5 ${admin ? "grid-cols-3" : "grid-cols-2"}`}>
+                  <Kpi
+                    label={`Facturado · ${mes}`}
+                    value={eur(finance.month.billed)}
+                    sub={`${finance.month.invoices} ${finance.month.invoices === 1 ? "factura" : "facturas"}`}
+                  />
+                  {admin && finance.collected != null && (
+                    <Kpi
+                      label={`Cobrado · ${mes}`}
+                      value={eur(finance.collected)}
+                      sub={`el ${finance.collectedPct}% de lo facturado`}
+                    />
+                  )}
+                  <Kpi
+                    label="Vencido"
+                    value={eur(finance.overdue.amount)}
+                    sub={
+                      finance.overdue.count > 0
+                        ? `${finance.overdue.count} ${finance.overdue.count === 1 ? "factura" : "facturas"}`
+                        : "nada pendiente"
+                    }
+                    danger={finance.overdue.amount > 0}
+                  />
+                </div>
+              )}
+              <GraficaRotatoria vistas={vistas} />
+            </section>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
