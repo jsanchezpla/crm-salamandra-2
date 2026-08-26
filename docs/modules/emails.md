@@ -12,7 +12,7 @@
 | **Endpoints** | ninguno de envío propio: `sendEmail` se llama DESDE los módulos — `app/api/citas/bookings/route.js`, `bookings/[id]/route.js` (+`confirm`, `reject`, `pedir-tarjeta`), `citas/avisos`, `billing/invoices/[id]/send`, `formularios/[id]/accept`, `nutricion/plans/[id]/send-email`, `outreach/leads/[id]/enviar-correo`, `outreach/leads/buscar-nuevos`, `tickets/[id]/messages`, y los públicos `public/c/[tenantSlug]/book` y `public/c/[tenantSlug]/formularios/[formSlug]` · Guardar las claves: `app/api/tenant/settings/route.js` · **Webhook ENTRANTE**: `app/api/webhooks/resend-inbound/route.js` (Soporte: `soporte-<slug>@RESEND_INBOUND_DOMAIN`, firmado con `RESEND_WEBHOOK_SECRET`; en producción aún sin dar de alta en Resend) |
 | **Lógica** | `lib/email/resendClient.js` (`sendEmail`: nunca lanza, dry-run sin clave, 1 reintento en 5xx; `envioRealizado`: traduce la respuesta a `{salio, motivo}`) · `lib/email/templates/layout.js` (`renderLayout`, HTML de tablas con la marca del tenant) · `lib/outreach/resendConfig.js` (`getTenantResendConfig`: la clave POR CLIENTE —BYOK— desde `settings.integrations`, descifrada con `lib/crypto/secretBox.js`; from/reply-to con respaldo `OUTREACH_FROM_EMAIL`/`OUTREACH_REPLY_TO`) · `lib/demo/isDemo.js` (guard obligatorio en todo endpoint del dashboard que envíe) · envíos que viven en `lib/`: `lib/citas/recordatorios.js`, `lib/citas/notificarCancelacion.js`, `lib/payments/entityHooks.js`, `lib/support/notify.js`, `lib/buzon/avisarPorCorreo.js`, `lib/configuracion/avisoCambio.js` |
 | **UI** | `modules/config/ConfigModule.jsx` (tarjeta Resend: clave, remitente, reply-to). No hay `modules/email/` ni `components/email/`; las plantillas son HTML de servidor |
-| **Modelos** | ninguno propio: no hay `email_send_log` (sigue en «Pendientes para producción»); lo único que queda escrito es lo que cada módulo apunte (`bookings.reminder_sent_at`, `client_notices.email_status`…) y la salida por stdout/stderr |
+| **Modelos** | del correo transaccional, ninguno: no hay `email_send_log` (sigue en «Pendientes para producción»); lo que queda escrito es lo que cada módulo apunte (`bookings.reminder_sent_at`, `client_notices.email_status`…) y la salida por stdout/stderr. La pantalla `/correo` sí tiene tres (26/08/2026): `CorreoLista`, `CorreoPlantilla` y `CorreoFirma` (`correo_listas`/`correo_plantillas`/`correo_firmas`, transversales, creadas por `migrate-correo-herramientas` en CORE) — ver «La pantalla /correo, para todos los oficios» |
 | **Interruptores y parámetros** | ninguno que lea el código en `featureFlags`/`logicOverrides`. Por cliente, en `tenant.settings.integrations`: `resendApiKey` (cifrada en reposo), `resendFromEmail`, `resendReplyTo`. Entorno: `RESEND_API_KEY` y `RESEND_FROM_EMAIL` (el respaldo GLOBAL de `sendEmail`; en producción la clave va vacía a propósito, así que sin clave del cliente el envío es dry-run), `OUTREACH_FROM_EMAIL`, `OUTREACH_REPLY_TO`, `RESEND_INBOUND_DOMAIN`, `RESEND_WEBHOOK_SECRET`, `APP_PUBLIC_URL` (los enlaces del recordatorio, en `scripts/enviar-recordatorios.js`) |
 | **Pantallas propias** | ninguna |
 | **Scripts** | Diagnóstico (solo lectura): `check-resend-tenant.mjs <slug>` (la clave del CLIENTE: dominios y estado, sin imprimirla), `check-resend.mjs` (la del entorno), `comprobar-citas.js` (dice si a un cliente le falta clave o remitente) · `_hechos/encrypt-tenant-secrets.js` (cifra en reposo las claves ya guardadas, `resendApiKey` incluida) · Cron: `enviar-recordatorios.js` (`scripts/deploy/crm-recordatorios.timer`, cada hora) |
@@ -322,7 +322,7 @@ plain-text para clientes que no renderizan HTML.
 
 ---
 
-## Escribir a mano, a mucha gente (24/08/2026)
+## Escribir a mano, a mucha gente (24/08/2026; generalizado el 26/08/2026)
 
 Hasta hoy este documento describía **correo automático**: una factura, un
 recordatorio, un aviso. Lo único parecido a escribir a alguien era el correo
@@ -330,7 +330,10 @@ modelo de Captación, y de uno en uno.
 
 Rodrigo pidió el 24/08/2026 «poder enviar los correos desde el CRM también a la
 gente, poder unir la cantidad de correos que quiera y elegir con qué correo
-quiero mandar el mensaje». De ahí salen dos cosas nuevas.
+quiero mandar el mensaje». De ahí salen dos cosas nuevas. El 26/08/2026 pidió
+generalizarla («el módulo de correo está pensado solo para Laura Úbeda») — el
+resultado está en la sección «La pantalla /correo, para todos los oficios», más
+abajo.
 
 ### 1. Varios remitentes, no uno
 
@@ -389,3 +392,69 @@ Tres decisiones del envío que conviene no deshacer:
 Topes: 200 destinatarios por envío, asunto 200 caracteres, cuerpo 20.000.
 La auditoría (`correo.envio_masivo`) guarda remitente, asunto y recuentos —
 **nunca el cuerpo**, que puede llevar datos de la persona.
+
+---
+
+## La pantalla /correo, para todos los oficios (26/08/2026)
+
+Rodrigo, 26/08/2026: «el módulo de correo está pensado solo para Laura Úbeda.
+Tiene que ser neutro […] y poder filtrar por profesional y por tipo de terapia
+y poder hacer listas personalizadas». Y además: pacientes y tutores en la lista
+de destinatarios, plantillas ilimitadas, adjuntos (imágenes y PDF) y pies de
+firma por persona con adjuntado automático. Todo va en el módulo BASE (escalera
+regla 16, peldaños 1–2): nada de esto es un override de nadie.
+
+### El idioma lo pone el centro
+
+`app/(dashboard)/correo/page.jsx` es ahora un componente de servidor que
+resuelve los módulos del tenant (mismo patrón que Clientes) y pasa a la
+pantalla `vocab` (`lib/clients/vocabulario.js`) y tres banderas
+(`conPacientes`, `conBooking`, `conLeads`). La fuente de fichas se rotula
+«Contratantes» solo con `booking`, «Pacientes» en la consulta de nutrición,
+«Clientes» en el resto; «Propuestas» solo con booking (si no, «Oportunidades»,
+y sin `leads` la fuente ni sale). La clave interna `contratantes` de la API se
+queda a propósito: renombrarla rompería las listas guardadas.
+
+### Familias: tutores y pacientes en la lista (`pacientes`)
+
+En centros con módulo `pacientes`, `GET /api/correo/destinatarios
+?fuente=contratantes` deja de mirar solo `clients.email`: cada familia sale con
+su correo **y el de cada tutor** (`clients.guardians`), y al lado el nombre de
+sus pacientes no dados de alta. Acepta `profesional=<teamMemberId>`
+(`Patient.mainTherapistId`) y `terapia=<clave>` (`Patient.specialties`,
+taxonomía de `lib/clinica/specialties.js`). El desplegable de filtros lo llena
+`GET /api/correo/filtros`: solo profesionales que llevan a alguien y solo
+terapias en uso. La búsqueda casa también nombre de tutor y de paciente (en JS:
+los tutores viven en un JSONB).
+
+### Listas, plantillas y firmas
+
+| Qué | Dónde | Notas |
+| --- | --- | --- |
+| Listas guardadas | `GET/POST /api/correo/listas`, `PUT/DELETE /api/correo/listas/[id]` · tabla `correo_listas` | Del centro, no de cada persona. Guardan la FOTO de los destinatarios ({email, nombre, detalle, fuente}), no el filtro. Tope 1.000 por lista. Validación en `lib/correo/listas.js`. |
+| Plantillas | `GET/POST /api/correo/plantillas`, `PUT/DELETE /api/correo/plantillas/[id]` · tabla `correo_plantillas` | **Sin tope de cuántas** (la petición dice «ilimitadas»); cada campo con los topes del envío. Validación en `lib/correo/plantillas.js`. No confundir con `lib/email/templates/` (las de sistema). |
+| Pies de firma | `GET/PUT /api/correo/firmas` · tabla `correo_firmas` (una fila por `user_id` de master) | Cada cual la suya; admin además la de cualquiera del centro (verificando en master que la cuenta ES de ese tenant). Texto plano, HTML (se SANEA: fuera scripts, `on*`, `javascript:`) o imagen ≤1 MB en JSONB. Guardar vacío = quitarla. |
+
+Las tres tablas las crea `scripts/migrate-correo-herramientas.js` (en CORE:
+los modelos están registrados para todos los tenants) y las acciones dejan
+rastro en auditoría (`correo.lista_*`, `correo.plantilla_*`, `correo.firma_*`).
+
+### Adjuntos y firma en el envío
+
+`POST /api/correo/envios` acepta ahora `adjuntos: [{nombre, base64}]` (hasta 10
+ficheros, 10 MB cada uno, 15 MB en total; solo imágenes y PDF, el tipo se
+decide por la extensión — `lib/correo/composicion.js#validarAdjuntos`; un
+adjunto malo tumba el envío ENTERO antes de mandar nada) y `conFirma`
+(por defecto, si quien envía tiene firma guardada, va).
+
+Con firma, el correo pasa a llevar **versión HTML** además del texto: el cuerpo
+tecleado viaja ESCAPADO (`componerContenido`), la firma saneada debajo, y su
+imagen como adjunto embebido `cid:firma` (`content_id`; un `data:` en el `src`
+lo bloquean Gmail y Outlook). Si el buzón no pinta `cid:`, la imagen llega como
+adjunto normal — degradación aceptable. Sin firma, el envío sigue siendo el
+texto plano de siempre. La interacción de la ficha apunta también los nombres
+de los adjuntos.
+
+Pruebas: `scripts/_smoke-correo-herramientas.mjs` (`node:test`, ligera, 25
+comprobaciones) fija el escapado del cuerpo, el saneado de la firma, la
+validación de adjuntos y la normalización de listas y plantillas.

@@ -6,6 +6,7 @@ import { assertNotDemoPaidCall } from "../../../../lib/demo/isDemo.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { sendEmail } from "../../../../lib/email/resendClient.js";
 import { esEmail, formatearFrom, resolverRemitente } from "../../../../lib/email/remitentes.js";
+import { componerContenido, validarAdjuntos } from "../../../../lib/correo/composicion.js";
 
 /**
  * POST /api/correo/envios — mandar UN mensaje a VARIOS destinatarios.
@@ -24,8 +25,9 @@ import { esEmail, formatearFrom, resolverRemitente } from "../../../../lib/email
  * lea.
  *
  * ── QUEDA EN LA FICHA ──────────────────────────────────────────────────────
- * Cada envío que acierta con una ficha de Contratante deja una `Interaction`
- * de tipo `email` en ella, con el asunto y desde qué dirección salió. Así la
+ * Cada envío que acierta con una ficha (el contratante, el cliente, la familia
+ * — según el centro) deja una `Interaction` de tipo `email` en ella, con el
+ * asunto y desde qué dirección salió. Así la
  * pestaña «Interacciones» de la ficha cuenta la historia completa sin que nadie
  * tenga que apuntarla a mano — que es justo lo que nadie hace.
  *
@@ -80,6 +82,25 @@ export const POST = withTenant(async (request, _ctxRuta, ctx) => {
   if (asunto.length > MAX_ASUNTO) throw new ValidationError(`El asunto no puede pasar de ${MAX_ASUNTO} caracteres`);
   if (!cuerpo) throw new ValidationError("El mensaje no puede quedar vacío");
   if (cuerpo.length > MAX_CUERPO) throw new ValidationError("El mensaje es demasiado largo");
+
+  // ── Adjuntos (26/08/2026): imágenes y PDF ─────────────────────────────────
+  // Un adjunto malo tumba el envío ENTERO antes de mandar nada: mejor que
+  // descubrir a mitad de tanda que media lista recibió el correo sin el PDF.
+  const adj = validarAdjuntos(body?.adjuntos);
+  if (adj.error) throw new ValidationError(adj.error);
+
+  // ── Firma (26/08/2026): el pie de QUIEN ENVÍA, añadido solo ───────────────
+  // La casilla de la pantalla manda (`conFirma: false` la quita en un envío
+  // concreto), pero por defecto, si esa persona tiene firma guardada, va.
+  let firma = null;
+  if (body?.conFirma !== false && ctx.user?.id) {
+    try {
+      const fila = await ctx.tenantModels.CorreoFirma.findOne({ where: { userId: ctx.user.id } });
+      if (fila) firma = { html: fila.html, texto: fila.texto, imagen: fila.imagen };
+    } catch {
+      // Sin firma se puede enviar igual: el pie es un extra, no un requisito.
+    }
+  }
 
   // ── Destinatarios: limpiar antes de mirar nada más ────────────────────────
   if (!Array.isArray(body?.destinatarios)) throw new ValidationError("«destinatarios» tiene que ser una lista");
@@ -151,6 +172,12 @@ export const POST = withTenant(async (request, _ctxRuta, ctx) => {
   }
 
   // ── Envío, uno a uno ──────────────────────────────────────────────────────
+  // El contenido es el MISMO para todos, así que se compone UNA vez: el cuerpo
+  // en texto y, si hay firma, además en HTML (con la imagen del pie embebida
+  // como `cid:`). Los adjuntos van en cada correo.
+  const contenido = componerContenido({ cuerpo, firma });
+  const attachments = [...adj.adjuntos, ...contenido.adjuntosFirma];
+
   const enviados = [];
   const simulados = [];
   const fallidos = [];
@@ -162,11 +189,13 @@ export const POST = withTenant(async (request, _ctxRuta, ctx) => {
       r = await sendEmail({
         to: d.email,
         subject: asunto,
-        text: cuerpo,
+        text: contenido.text,
+        html: contenido.html || undefined,
         from: formatearFrom(remitente) || undefined,
         replyTo: remitente.replyTo || undefined,
         apiKey: remitente.apiKey,
         tags: [{ name: "module", value: "correo" }],
+        attachments: attachments.length ? attachments : undefined,
       });
     } catch (err) {
       // `sendEmail` promete no propagar, pero si algún día lo hace, un envío
@@ -199,6 +228,9 @@ export const POST = withTenant(async (request, _ctxRuta, ctx) => {
             `Correo enviado desde ${remitente.email}` +
             (ficha.persona ? ` a ${ficha.persona} <${d.email}>` : ` a ${d.email}`) +
             `\nAsunto: ${asunto}` +
+            (adj.adjuntos.length
+              ? `\nAdjuntos: ${adj.adjuntos.map((a) => a.filename).join(", ")}`
+              : "") +
             `\n\n${cuerpo}`,
         });
         apuntados.push(ficha.name);
@@ -228,6 +260,8 @@ export const POST = withTenant(async (request, _ctxRuta, ctx) => {
         simulados: simulados.length,
         fallidos: fallidos.length,
         apuntadosEnFicha: apuntados.length,
+        adjuntos: adj.adjuntos.length,
+        conFirma: !!(firma && (firma.html || firma.imagen)),
       },
     });
   } catch {
@@ -246,6 +280,8 @@ export const POST = withTenant(async (request, _ctxRuta, ctx) => {
     apuntadosEnFicha: apuntados.length,
     // Direcciones que venían mal escritas y ni se intentaron.
     invalidos,
+    adjuntos: adj.adjuntos.length,
+    conFirma: !!(firma && (firma.html || firma.imagen)),
     dryRun: simulados.length > 0 && enviados.length === 0,
   });
 });
