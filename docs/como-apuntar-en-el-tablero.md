@@ -56,6 +56,26 @@ pintado ENCIMA de lo publicado: **de quién es cada tarea** (Rodrigo o Jorge),
 **un tick** que la manda a Resuelto —quitándolo, vuelve a Pendiente— y **la
 solución** escrita a mano.
 
+Y desde el 26/08/2026, en esa misma tabla, **cuándo se apuntó**
+(`apuntada_en`). Esa no la toca nadie: se pone sola al publicar, a las tareas
+que todavía no la tengan, publique el tablero o publique `registro.mjs`
+(`sellarAltas`, en `lib/tablero/documentos.js`). Nunca se pisa una que ya
+esté, y ese detalle es lo que hace que **cerrar una tarea no la rejuvenezca**:
+cerrar es publicar dos documentos, y desde el punto de vista de `resuelto` la
+tarea acaba de llegar.
+
+La fecha se ve en la fila de cada tarea, al lado del cliente, y el tablero
+**ordena por ella**: «Ordenar · Prioridad / Recientes / Antiguas», que se combina
+con el «Agrupar por» de al lado en vez de sustituirlo. Ojo con no confundir
+`apuntada_en` con `created_at`, que está en la misma tabla: `created_at` es
+cuándo nació la FILA —la primera vez que alguien tocó el tick o el reparto—, y
+puede no llegar nunca.
+
+Las que ya estaban escritas antes de esa fecha se reconstruyeron del historial
+de versiones con `scripts/sembrar-fechas-de-alta.js`; el porqué y los tres
+apaños que hicieron falta, en
+`docs/decisions/2026-08-26-cuando-se-apunto-cada-tarea.md`.
+
 **Lo que SÍ reescribe el texto y publica una versión** (24/08/2026): apuntar una
 tarea, moverla de sección —que es cambiarle la prioridad—, reescribirla,
 cerrarla y borrarla. Cada una de esas cinco deja su línea en el historial con
@@ -74,9 +94,11 @@ Tres cosas que hay que saber antes de fiarse del tick:
   Resuelto no crea ninguna fila. Cuando alguien la cierra de verdad y publica,
   el apaño desaparece solo.
 - **La clave es el título normalizado.** Si reescribes el título de una tarea a
-  mano (bajando el Registro y editando el markdown), su tick, su reparto y su
-  solución se quedan huérfanos y la tarea vuelve a salir donde diga el texto. No
-  da error; simplemente deja de casar.
+  mano (bajando el Registro y editando el markdown), su tick, su reparto, su
+  solución y su fecha de alta se quedan huérfanos y la tarea vuelve a salir
+  donde diga el texto. No da error; simplemente deja de casar — y la fecha es la
+  peor de las cuatro, porque no se queda vacía: la siguiente publicación se la
+  vuelve a poner, con la de hoy, y la tarea parece recién apuntada.
   **Reescribirla DESDE LA PANTALLA sí les mueve la clave** (24/08/2026), así que
   esa vía no pierde nada. Y las capturas no se pierden por ninguna de las dos:
   cuelgan de la ficha (§4.6), no del título.
@@ -84,7 +106,10 @@ Tres cosas que hay que saber antes de fiarse del tick:
   once títulos del 25/08/2026—, hay que MOVER también su fila: un `UPDATE` de
   `clave` (y de `titulo`) en `master.tablero_estado`, con la clave vieja y la
   nueva sacadas de `claveDeTarea()`, que es exactamente lo que hace la
-  pantalla. Sin ese paso se pierden el reparto, el tick y la solución escrita.
+  pantalla. Sin ese paso se pierden el reparto, el tick, la solución escrita y
+  la fecha de alta. Se hace ANTES de publicar el texto nuevo: publicar primero
+  deja que `sellarAltas` le ponga a la tarea la fecha de hoy, y entonces el
+  `UPDATE` ya no la puede rescatar sin pisarla.
 
 ---
 

@@ -74,6 +74,31 @@ export function defineTableroEstado(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      /**
+       * Cuándo se apuntó la tarea por primera vez (26/08/2026, Jorge: «que se
+       * apunte la fecha de cuando se añadió la tarea y que se pueda ordenar por
+       * fecha»).
+       *
+       * ⚠️ NO es `created_at`, que se le parece demasiado y está en esta misma
+       * tabla: esa dice cuándo nació ESTA FILA, o sea la primera vez que alguien
+       * tocó el tick, el reparto o la solución de la tarea — que puede ser días
+       * después de escribirla, o no pasar nunca. Esta dice cuándo entró la tarea
+       * en el Registro, que es lo que contesta «¿cuánto lleva esto ahí?».
+       *
+       * Se rellena sola: `sellarAltas` (lib/tablero/documentos.js) se la pone,
+       * después de cada publicación, a las tareas que todavía no la tengan —
+       * venga la publicación del tablero o de `scripts/registro.mjs`. Y NO se
+       * sobrescribe NUNCA, que es lo que hace que cerrar una tarea (sale del
+       * backlog, entra en resuelto) no la rejuvenezca.
+       *
+       * Las que ya estaban escritas el día que se añadió la columna no salen de
+       * la nada: se reconstruyeron del historial de versiones de
+       * `tablero_documentos` con `scripts/sembrar-fechas-de-alta.js`.
+       */
+      apuntadaEn: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       tableName: "tablero_estado",

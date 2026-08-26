@@ -44,6 +44,12 @@ async function main() {
       -- despliegue, y sin dar ningún error. Mismo motivo que el tick y el
       -- reparto, que ya viven aquí por esto.
       solucion    TEXT,
+      -- Cuándo se APUNTÓ la tarea (26/08/2026). Ojo con la de abajo, que se
+      -- llama casi igual y dice otra cosa: created_at es cuándo nació esta fila
+      -- —la primera vez que alguien tocó el tick o el reparto— y esta es cuándo
+      -- entró la tarea en el Registro. Nullable a propósito: una tarea sin fecha
+      -- se pinta sin fecha, no se le inventa una.
+      apuntada_en TIMESTAMPTZ,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     )
@@ -56,10 +62,27 @@ async function main() {
     ALTER TABLE master.tablero_estado
       ADD COLUMN IF NOT EXISTS solucion TEXT
   `);
-  process.stdout.write("✓ master.tablero_estado (con `solucion`)\n");
+  // Lo mismo con `apuntada_en` (26/08/2026): la tabla existe en producción
+  // desde el 10/08, así que el CREATE de arriba no la va a tocar. Es aditiva y
+  // sin valor por defecto, o sea invisible para el código que ya está
+  // desplegado — y por eso puede correrse ANTES del despliegue, que es como
+  // tiene que ir: el código nuevo la LEE (`estadosGuardados` la pide por
+  // nombre) y sin ella el Registro daría 42703 en cada carga.
+  await s.query(`
+    ALTER TABLE master.tablero_estado
+      ADD COLUMN IF NOT EXISTS apuntada_en TIMESTAMPTZ
+  `);
+  process.stdout.write("✓ master.tablero_estado (con `solucion` y `apuntada_en`)\n");
 
-  const [filas] = await s.query("SELECT count(*)::int AS n FROM master.tablero_estado");
-  process.stdout.write(`  · ${filas[0].n} tarea(s) con estado guardado\n`);
+  const [filas] = await s.query(
+    "SELECT count(*)::int AS n, count(apuntada_en)::int AS fechadas FROM master.tablero_estado"
+  );
+  process.stdout.write(
+    `  · ${filas[0].n} tarea(s) con estado guardado, ${filas[0].fechadas} con fecha de alta\n`
+  );
+  if (filas[0].n > filas[0].fechadas) {
+    process.stdout.write("  · las que no la tienen: node scripts/sembrar-fechas-de-alta.js\n");
+  }
 
   await s.close();
 }

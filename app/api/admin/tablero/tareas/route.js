@@ -3,7 +3,7 @@ import { ok, error, forbidden, serverError } from "../../../../../lib/utils/apiR
 import { isDemoTenant } from "../../../../../lib/demo/isDemo.js";
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
 import { SECCIONES_BACKLOG, contarTareas } from "../../../../../lib/tablero/parser.js";
-import { claveDeTarea } from "../../../../../lib/tablero/estado.js";
+import { claveDeTarea, fundirEstado } from "../../../../../lib/tablero/estado.js";
 import {
   prepararPublicacion,
   publicarVersion,
@@ -110,7 +110,8 @@ async function documentoActual(nombre) {
 async function publicar({ nombre, contenido, actual, nota, por }) {
   const plan = prepararPublicacion({ nombre, contenido, actual, base: actual.version });
   if (plan.errores.length) throw new ErrorDeEdicion(plan.errores.join(" · "));
-  if (plan.sinCambios) return { version: actual.version, tareas: contarTareas(contenido), avisos: [] };
+  if (plan.sinCambios)
+    return { version: actual.version, tareas: contarTareas(contenido), avisos: [] };
 
   const { fila } = await publicarVersion(getMasterModels(), {
     nombre,
@@ -309,7 +310,21 @@ export const PATCH = withTenant(async (request, _ctx, ctx) => {
 
 /**
  * Le cambia la clave a la fila de estado cuando se reescribe un título, para que
- * el tick y el reparto no se queden huérfanos.
+ * el tick, el reparto, la solución y la fecha de alta no se queden huérfanos.
+ *
+ * ── POR QUÉ CUANDO CHOCA HAY QUE FUNDIR Y NO BORRAR (26/08/2026) ───────────
+ * Hasta hoy, encontrarse una fila con la clave nueva era raro y se resolvía
+ * tirando la vieja. Desde que existe la fecha de alta ya NO es raro: es lo
+ * normal. `publicar` va antes que esta función y por dentro llama a
+ * `sellarAltas`, que ve una tarea con un título que no conocía —el nuevo— y le
+ * crea su fila con la fecha de HOY. O sea que al llegar aquí SIEMPRE hay
+ * choque, y borrar la vieja se llevaría por delante el tick, el reparto, la
+ * solución escrita y la fecha de verdad, dejando en su sitio una fila recién
+ * nacida que dice que la tarea se apuntó hoy.
+ *
+ * Así que se funde: lo que la fila nueva no tenga se lo queda de la vieja, y de
+ * las dos fechas manda la MÁS ANTIGUA. Reescribir un título no cambia cuándo se
+ * apuntó la tarea.
  *
  * Nunca lanza: perder un tick es una molestia; tumbar una publicación que YA se
  * ha escrito, por no poder mover una fila accesoria, sería mucho peor.
@@ -320,11 +335,20 @@ async function mudarEstado(antes, ahora) {
     const { TableroEstado } = getMasterModels();
     const fila = await TableroEstado.findOne({ where: { clave: antes } });
     if (!fila) return;
-    // Si ya hay fila con la clave nueva, la vieja sobra: se borra en vez de
-    // chocar contra la UNIQUE de `clave`.
+
+    // Sin choque, mudarse es cambiarle la clave y ya.
     const choque = await TableroEstado.findOne({ where: { clave: ahora } });
-    if (choque) await fila.destroy();
-    else await fila.update({ clave: ahora });
+    if (!choque) {
+      await fila.update({ clave: ahora });
+      return;
+    }
+
+    // Con choque, se funde y se tira la vieja: la UNIQUE de `clave` no deja
+    // tener las dos. Qué se queda de cada una lo decide `fundirEstado`, que es
+    // lógica pura y está probada aparte.
+    const funde = fundirEstado(fila, choque);
+    if (Object.keys(funde).length) await choque.update(funde);
+    await fila.destroy();
   } catch (err) {
     process.stderr.write(`[tablero] no se pudo mudar el estado de «${antes}»: ${err.message}\n`);
   }

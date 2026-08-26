@@ -103,12 +103,26 @@ async function leer(nombre) {
  * Lo guardado, por clave. Nunca lanza: si la tabla todavía no existe —el
  * despliegue va por delante de la migración— el Registro se pinta como siempre,
  * sin tick y sin reparto, en vez de responder un 500 y quedarse en blanco.
+ *
+ * ⚠️ Y lo mismo vale para una COLUMNA que falte, que es lo que pasaría si se
+ * desplegara esto antes de correr `migrate-tablero-estado.js`: Sequelize las
+ * pide por nombre, así que sin `apuntada_en` el SELECT entero da 42703 y aquí
+ * se traga — el tablero se vería sin tick, sin reparto y sin fechas, sin decir
+ * por qué. Por eso la migración va ANTES del despliegue.
  */
 async function estadosGuardados() {
   try {
     const { TableroEstado } = getMasterModels();
     const filas = await TableroEstado.findAll({
-      attributes: ["clave", "asignadoA", "resuelta", "tocadaPor", "solucion", "updatedAt"],
+      attributes: [
+        "clave",
+        "asignadoA",
+        "resuelta",
+        "tocadaPor",
+        "solucion",
+        "apuntadaEn",
+        "updatedAt",
+      ],
     });
     return new Map(filas.map((f) => [f.clave, f]));
   } catch (err) {

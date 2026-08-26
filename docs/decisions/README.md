@@ -36,6 +36,7 @@ decisión se supera, la nueva lo dice y enlaza a la anterior.
 | 21/08 | [El borrado no viaja](2026-08-21-el-borrado-no-viaja.md) — la copia externa SUMA (`rclone copy`, no `sync`) y caduca sola a los 90 días, con cinco frenos para que no pueda vaciar el destino | copias, VPS |
 | 24/08 | [El ancho de todas las pantallas](2026-08-24-el-ancho-de-todas-las-pantallas.md) — 46 contenedores pasan por `anchoPantalla()`; cuatro nombres, tres anchos; qué se dejó fuera (la portada editorial y la ficha de cliente, que comparte paneles con Laura) | UI, todos los módulos |
 | 24/08 | [El tablero aprende a escribir](2026-08-24-el-tablero-aprende-a-escribir.md) — apuntar, priorizar, cerrar y colgar capturas desde la pantalla, por la MISMA puerta que `registro.mjs`; tres colores y dos salas de espera; la ficha `<!--id:…-->` que impide que un adjunto se quede huérfano | Registro, tablero |
+| 26/08 | [Cuándo se apuntó cada tarea](2026-08-26-cuando-se-apunto-cada-tarea.md) — la fecha va en `tablero_estado` y la pone sola la publicación, sin pisar la que ya haya (o cerrar una tarea la rejuvenecería); las 152 viejas se reconstruyen del historial, siguiendo los once renombrados del 25/08 y con el techo de la fecha en que se cerró | Registro, tablero |
 
 Otras decisiones con su propio doc fuera de esta carpeta:
 `docs/sprint-aumenta-2026-07.md` (las pantallas del sprint de Aumenta),

@@ -57,6 +57,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { anchoPanel } from "@/components/admin/anchoPanel.js";
 import { seccionDeHoy } from "@/lib/tablero/parser.js";
+import { ordenarTareas } from "@/lib/tablero/estado.js";
 import { tonoDe } from "@/components/admin/tableroTonos.js";
 import {
   Capturas,
@@ -107,6 +108,41 @@ function Etiqueta({ children, color }) {
  * una etiqueta de urgencia, y tres botones más gritando dejarían el tablero
  * ilegible de un vistazo, que es justo para lo que sirve.
  */
+/**
+ * Una fila de botones para elegir UNA cosa: cómo agrupar, cómo ordenar.
+ *
+ * Existe desde el 26/08/2026, cuando el tablero pasó a tener DOS de estas. El
+ * bloque de estilos era largo y estaba escrito a pelo; con dos copias, la
+ * segunda vez que se toque un color una de las dos se queda con el viejo y
+ * nadie lo nota hasta que se ven juntas.
+ */
+function Selector({ etiqueta, valor, opciones, onElegir }) {
+  return (
+    <div className="flex items-center gap-1">
+      <Etiqueta>{etiqueta}</Etiqueta>
+      {opciones.map(([clave, texto, ayuda]) => {
+        const puesta = valor === clave;
+        return (
+          <button
+            key={clave}
+            type="button"
+            title={ayuda}
+            onClick={() => onElegir(clave)}
+            className="px-2.5 py-1 rounded-md text-[12px] transition-colors cursor-pointer"
+            style={{
+              background: puesta ? "var(--panel-alto)" : "transparent",
+              color: puesta ? "var(--text)" : "var(--tenue)",
+              border: `1px solid ${puesta ? "var(--line)" : "transparent"}`,
+            }}
+          >
+            {texto}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function BotonTarjeta({ children, onClick, ocupada = false, destacado = false }) {
   return (
     <button
@@ -307,6 +343,41 @@ function cuando(iso) {
 }
 
 /**
+ * Cuándo se apuntó una tarea, para la fila cerrada: «26/08».
+ *
+ * Sin año mientras sea el de hoy, que es el caso de todas: el sitio en esa fila
+ * es poco y el año repetido veinte veces no dice nada. En cuanto una tarea
+ * cumple el año, el año aparece — y esa es justo la que interesa ver.
+ */
+function fechaCorta(iso) {
+  if (!iso) return null;
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    const opciones = { timeZone: "Europe/Madrid", day: "2-digit", month: "2-digit" };
+    if (d.getFullYear() !== new Date().getFullYear()) opciones.year = "2-digit";
+    return new Intl.DateTimeFormat("es-ES", opciones).format(d);
+  } catch {
+    return null;
+  }
+}
+
+/** La misma fecha entera, para el globito: «26 de agosto de 2026». */
+function fechaLarga(iso) {
+  if (!iso) return null;
+  try {
+    return new Intl.DateTimeFormat("es-ES", {
+      timeZone: "Europe/Madrid",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(new Date(iso));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * De dónde sale el texto de cada pestaña (19/08/2026).
  *
  * Una línea por documento: «Pendiente · v12 · 19/08 16:40 · jorge · «apuntar el
@@ -388,6 +459,16 @@ export default function TableroPage() {
   // ahora?»). Por cliente es la del teléfono sonando («¿cómo vamos con
   // Aumenta?»), que se hace menos veces pero con más prisa.
   const [agrupacion, setAgrupacion] = useState("urgencia");
+  /*
+   * CÓMO SE ORDENA DENTRO DE CADA BLOQUE (26/08/2026, Jorge: «que se pueda
+   * ordenar por fecha, de momento solo está ordenado por prioridad»).
+   *
+   * Se abre en «prioridad», que es el orden del documento y el de siempre: la
+   * pantalla no puede cambiar de aspecto sola el día que se despliegue esto.
+   * Ordenar y agrupar son ejes distintos y se combinan — por cliente + antiguas
+   * contesta «¿qué le llevamos debiendo más tiempo a Aumenta?».
+   */
+  const [orden, setOrden] = useState("prioridad");
   // La tarea que se está guardando ahora mismo, por su clave: se le apagan los
   // botones para que dos clics seguidos no manden dos cambios cruzados.
   const [guardando, setGuardando] = useState(null);
@@ -607,7 +688,10 @@ export default function TableroPage() {
           titulo: seccionDeHoy(s.titulo),
           etiqueta: tono.etiqueta,
           color: tono.color,
-          tareas: s.tareas.map((t) => ({ ...t, tono, deSeccion: null })),
+          tareas: ordenarTareas(
+            s.tareas.map((t) => ({ ...t, tono, deSeccion: null })),
+            orden
+          ),
         };
       });
     }
@@ -624,14 +708,19 @@ export default function TableroPage() {
     }
 
     return [...mapa.entries()]
-      .map(([titulo, tareas]) => ({ titulo, etiqueta: null, color: "var(--tenue)", tareas }))
+      .map(([titulo, tareas]) => ({
+        titulo,
+        etiqueta: null,
+        color: "var(--tenue)",
+        tareas: ordenarTareas(tareas, orden),
+      }))
       .sort((a, b) => {
         const ga = NO_ES_CLIENTE.has(a.titulo) ? 1 : 0;
         const gb = NO_ES_CLIENTE.has(b.titulo) ? 1 : 0;
         if (ga !== gb) return ga - gb;
         return b.tareas.length - a.tareas.length || a.titulo.localeCompare(b.titulo);
       });
-  }, [visibles, agrupacion]);
+  }, [visibles, agrupacion, orden]);
 
   const cuantas = (clave) => (datos?.[clave] ?? []).reduce((n, s) => n + s.tareas.length, 0);
 
@@ -715,27 +804,34 @@ export default function TableroPage() {
             ))}
           </div>
 
-          {/* Agrupar. La agrupación se conserva al cambiar de pestaña, igual
-              que el filtro: «¿cómo vamos con Aumenta?» incluye lo entregado. */}
-          <div className="flex items-center gap-1">
-            <Etiqueta>Agrupar por</Etiqueta>
-            {[
-              ["urgencia", "Urgencia"],
-              ["cliente", "Cliente"],
-            ].map(([clave, texto]) => (
-              <button
-                key={clave}
-                onClick={() => setAgrupacion(clave)}
-                className="px-2.5 py-1 rounded-md text-[12px] transition-colors"
-                style={{
-                  background: agrupacion === clave ? "var(--panel-alto)" : "transparent",
-                  color: agrupacion === clave ? "var(--text)" : "var(--tenue)",
-                  border: `1px solid ${agrupacion === clave ? "var(--line)" : "transparent"}`,
-                }}
-              >
-                {texto}
-              </button>
-            ))}
+          {/* Agrupar y ordenar. Los dos se conservan al cambiar de pestaña,
+              igual que el filtro: «¿cómo vamos con Aumenta?» incluye lo
+              entregado, y «¿qué es lo último que entró?» también.
+
+              Son DOS ejes y no uno con cuatro valores: agrupar dice en qué
+              montones cae la lista, ordenar dice en qué orden va cada montón.
+              Se combinan — por cliente + antiguas contesta «¿qué le llevamos
+              debiendo más tiempo a Aumenta?», que agrupando solo no se ve. */}
+          <div className="flex items-center gap-5 flex-wrap">
+            <Selector
+              etiqueta="Agrupar por"
+              valor={agrupacion}
+              onElegir={setAgrupacion}
+              opciones={[
+                ["urgencia", "Urgencia", "Un bloque por prioridad"],
+                ["cliente", "Cliente", "Un bloque por cliente"],
+              ]}
+            />
+            <Selector
+              etiqueta="Ordenar"
+              valor={orden}
+              onElegir={setOrden}
+              opciones={[
+                ["prioridad", "Prioridad", "El orden del propio Registro"],
+                ["recientes", "Recientes", "Lo último que se apuntó, arriba"],
+                ["antiguas", "Antiguas", "Lo que lleva más tiempo esperando, arriba"],
+              ]}
+            />
           </div>
         </div>
 
@@ -877,6 +973,29 @@ export default function TableroPage() {
                           }}
                         >
                           {t.quien}
+                        </span>
+                      )}
+                      {/*
+                        CUÁNDO SE APUNTÓ (26/08/2026, Jorge).
+
+                        Va SIN cajita, a diferencia de la prioridad y del
+                        cliente, y es a propósito: la fila ya lleva dos
+                        recuadros y un tercero la convierte en un formulario.
+                        Esto es un dato de apoyo — se busca cuando se busca — y
+                        con que se lea de refilón basta.
+
+                        Y va aunque se esté ordenando por prioridad: sin la
+                        fecha delante, un orden por fecha es un salto de fe.
+                        Si no la hay se calla — no se escribe «sin fecha» en
+                        veinte filas para decir lo mismo veinte veces.
+                      */}
+                      {fechaCorta(t.apuntadaEn) && (
+                        <span
+                          className="ml-2 text-[11px] tabular-nums whitespace-nowrap"
+                          style={{ color: "var(--tenue)" }}
+                          title={`Apuntada el ${fechaLarga(t.apuntadaEn)}`}
+                        >
+                          {fechaCorta(t.apuntadaEn)}
                         </span>
                       )}
                     </span>
