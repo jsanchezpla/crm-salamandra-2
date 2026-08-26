@@ -111,6 +111,10 @@ describe("revisarContrasena: lo único que se exige es que sea larga", () => {
     assert.match(revisarContrasena("abcdefghijk"), /teclas seguidas/);
     assert.match(revisarContrasena("qwertyuiop"), /teclas seguidas/);
     assert.match(revisarContrasena("9876543210"), /teclas seguidas/);
+    // La fila del teclado va 1234567890, no 0123456789: esta se colaba y se
+    // aceptaba como contraseña hasta el 26/08/2026.
+    assert.match(revisarContrasena("1234567890"), /teclas seguidas/);
+    assert.match(revisarContrasena("0987654321"), /teclas seguidas/);
   });
 
   it("ni el nombre del centro, ni el del usuario, ni con el año detrás", () => {
