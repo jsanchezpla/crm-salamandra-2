@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { correoDeCuenta } from "../../../../lib/auth/correoCuenta.js";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { veTodaLaAgenda } from "../../../../lib/citas/visibilidad.js";
 
@@ -28,7 +29,7 @@ export async function GET(request) {
   const { User, Tenant, TenantModule } = getMasterModels();
 
   const [user, tenant] = await Promise.all([
-    User.findByPk(userId, { attributes: ["id", "email", "role", "tenantId", "moduleAccess"] }),
+    User.findByPk(userId, { attributes: ["id", "email", "role", "tenantId", "moduleAccess", "emailContacto"] }),
     // `settings` entra para poder contestar `veTodaLaAgenda` (abajo). NO se
     // devuelve NUNCA: lleva las credenciales de integraciones del cliente.
     Tenant.findOne({ where: { slug: tenantSlug }, attributes: ["id", "slug", "name", "status", "settings"] }),
@@ -63,6 +64,9 @@ export async function GET(request) {
       data: {
         id: user.id,
         email: user.email,
+        // A dónde se le escribe a esta cuenta, o null si no hay a dónde.
+        // Lo pinta Configuración; `email` de aquí arriba es el identificador.
+        correo: correoDeCuenta(user),
         role: user.role,
         tenantId: tenant.id,
         tenantSlug: tenant.slug,

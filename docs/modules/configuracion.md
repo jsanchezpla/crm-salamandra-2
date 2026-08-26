@@ -9,7 +9,7 @@
 | **moduleKey** | sin moduleKey: lo tienen todos. La página no lleva `hasModule`; el enlace del sidebar es el icono de engranaje del pie (`components/layout/Sidebar.jsx`) y solo lo ven `admin`/`superadmin`, y `GET` y `PATCH` de `/api/tenant/settings` exigen ese rol (fresco de BD, vía `withTenant`) |
 | **Reina** | — |
 | **Pantallas** | `app/(dashboard)/configuracion/page.jsx` → `/configuracion` (una página con **seis zonas en pestañas** desde el 23/08/2026: Empresa, Conexiones, Agenda, Reserva online, Portal del cliente y Módulos; la abierta viaja en `?zona=`). La página es de SERVIDOR y resuelve ahí los módulos del tenant, que el componente es `"use client"` y no puede preguntarlos · el back-office la complementa desde `app/admin/page.jsx` (ficha de Custodia, `/admin`): nosotros también podemos poner las claves |
-| **Endpoints** | `app/api/tenant/settings/route.js` (GET/PATCH, 1) · `app/api/ai-permisos/**` (2: `route.js`, `[id]/route.js`, el candado de IA) · `app/api/admin/configuraciones/route.js` (1, back-office: pone credenciales sin leerlas nunca) · la pantalla reutiliza además `app/api/billing/settings`, `app/api/outreach/settings`, `app/api/outreach/business-lines/**` y `app/api/clinica/derivaciones` · públicos: ninguno |
+| **Endpoints** | `app/api/tenant/settings/route.js` (GET/PATCH, 1) · `app/api/ai-permisos/**` (2: `route.js`, `[id]/route.js`, el candado de IA) · `app/api/admin/configuraciones/route.js` (1, back-office: pone credenciales sin leerlas nunca) · la pantalla reutiliza además `app/api/billing/settings`, `app/api/outreach/settings`, `app/api/outreach/business-lines/**` y `app/api/clinica/derivaciones` · la pestaña **Tu cuenta** usa `app/api/auth/password` (cambiarse la contraseña, 24/08/2026) y `app/api/auth/correo` (ponerse el correo de la cuenta, 26/08/2026) · públicos: ninguno |
 | **Lógica** | `lib/configuracion/pestanas.js` (**el reparto en zonas y qué módulo hace útil cada tarjeta**) · `lib/configuracion/avisoCambio.js` (recibo por correo de cada cambio, enviado con la cuenta de Salamandra) · `lib/crypto/secretBox.js` (AES-256-GCM, prefijo `enc:v1:`) · resolvers que LEEN lo que aquí se guarda: `lib/ai/anthropicKey.js`, `lib/ai/anthropicModel.js` (`ANTHROPIC_MODELS`, Sonnet por defecto), `lib/ai/openaiKey.js`, `lib/ai/aiAccess.js` (`vetoAi`, candado `settings.aiAccess`), `lib/outreach/resendConfig.js`, `lib/payments/stripeConfig.js`, `lib/analytics/cloudflareConfig.js`, `lib/whatsapp/whatsappConfig.js`, `lib/citas/videollamada.js` (`settings.citas.meetModo`), `lib/citas/coloresBloqueo.js` · back-office: `lib/provisioning/credencialesCliente.js` (solo escribir), `lib/provisioning/contactoCliente.js` (`settings.contacto`) · plantilla del recibo: `lib/email/templates/configuracion/cambioAplicado.js` |
 | **UI** | `modules/config/ConfigModule.jsx` (un fichero: `BotonZona`, `Tarjeta` —atenúa y explica—, `ApiKeyCard`, `AiPermissionsCard`, las tarjetas de Citas, `CompanyDescriptionSection`…) · no hay `components/config/`; usa `components/ui/Select.jsx` y `components/ui/HelpTooltip.jsx` |
 | **Modelos** | `models/master/Tenant.model.js` — todo va en `master.tenants.settings` (JSONB: `brand`, `integrations`, `aiAccess`, `citas`, `clientes`, `contacto`), sin migración · `models/tenant/AiPermission.model.js` (`ai_permissions`: solicitudes y concesiones del candado de IA) · `models/master/AuditLog.model.js` (`master.audit_logs`) recibe cada cambio, sin el valor de los secretos |
@@ -224,6 +224,25 @@ usa la descripción general + las líneas, y en la **ficha del lead** se puede
 elegir qué líneas analizar para esa empresa (ver `docs/modules/outreach.md`).
 
 ---
+
+## Tu cuenta — la pestaña que NO es de la empresa
+
+Las demás zonas son del centro y llevan `isAdmin &&`. Esta es de la PERSONA, y
+justo quien no es admin es quien la necesita. Lleva dos tarjetas:
+
+| Tarjeta | Qué hace | Endpoint |
+| --- | --- | --- |
+| **El correo de tu cuenta** (26/08/2026) | Poner o cambiar el correo al que llegaría el enlace si pierde la contraseña — y con el que también puede entrar. Pide la contraseña. Si no hay ninguno, avisa en ámbar. | `POST/GET /api/auth/correo` |
+| **Tu contraseña** (24/08/2026) | Cambiársela estando dentro. Sube `tokenVersion`, así que tumba las demás sesiones. | `POST/GET /api/auth/password` |
+
+Las dos zonas están declaradas en `lib/configuracion/pestanas.js`
+(`correoCuenta` y `contrasena`, las dos con `requiere: null`: no dependen de
+ningún módulo contratado y no se atenúan nunca).
+
+La del correo existe porque Equipo **no** cubre todos los casos: rechaza a
+propósito las cuentas de administrador y la de uno mismo, así que el
+administrador único de un cliente no tenía dónde ponerse el suyo. El porqué
+entero, en `../decisions/2026-08-26-el-correo-de-una-cuenta-no-es-su-usuario.md`.
 
 ## Dónde se guardan las claves (y por qué son seguras)
 

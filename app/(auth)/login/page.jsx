@@ -101,7 +101,9 @@ function LoginForm() {
         {/* type="text" a propósito: además de emails, hay cuentas con nombre de
             usuario (p. ej. las terapeutas de Aumenta: "Arantxa_Aumenta"), y
             type="email" haría que el navegador las bloquease por no llevar @.
-            El backend busca el valor tal cual (en minúsculas) en master.users. */}
+            Desde el 26/08/2026 los DOS valen para la misma cuenta: el backend
+            busca lo tecleado (en minúsculas) en `email` y, si lleva arroba,
+            también en `email_contacto`. Ver lib/auth/correoCuenta.js. */}
         <input
           id="email"
           type="text"

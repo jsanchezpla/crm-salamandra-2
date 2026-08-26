@@ -98,6 +98,10 @@ function StatusBadge({ value }) {
 export default function EquipoPage() {
   const [me, setMe] = useState(null);
   const [members, setMembers] = useState([]);
+  // Cuántas cuentas del CRM se han quedado sin correo (26/08/2026). Va aparte
+  // de `members` porque cuenta TODO el cliente, no solo la página que se ve:
+  // paginar no puede cambiar cuántas faltan.
+  const [cuentasSinCorreo, setCuentasSinCorreo] = useState(0);
   const [availableRoles, setAvailableRoles] = useState([]);
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
   // Cuantos casan con el filtro actual, segun el propio endpoint (`total` de
@@ -153,6 +157,7 @@ export default function EquipoPage() {
       setTotalFiltrado(json.data?.total ?? json.data?.members?.length ?? 0);
       setAvailableRoles(json.data?.availableRoles ?? []);
       setViewerIsAdmin(!!json.data?.viewerIsAdmin);
+      setCuentasSinCorreo(json.data?.cuentasSinCorreo ?? 0);
     } catch (e) {
       setErrorMsg(e.message);
     } finally {
@@ -404,6 +409,29 @@ export default function EquipoPage() {
         <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{errorMsg}</div>
       )}
 
+      {/*
+        CUENTAS SIN CORREO (26/08/2026, Jorge: «un aviso en cada integrante que
+        tenga una cuenta del CRM diciendo que cuanto antes se le asigne un
+        correo»).
+
+        Arriba el total y en cada fila la marca, porque son dos preguntas
+        distintas: «¿me queda trabajo?» se contesta de un vistazo, «¿a quién?»
+        mirando la lista. Sin el número de arriba habría que pasar todas las
+        páginas para saber si queda alguna.
+      */}
+      {viewerIsAdmin && cuentasSinCorreo > 0 && (
+        <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-800">
+          <strong>
+            {cuentasSinCorreo === 1
+              ? "Hay 1 cuenta del CRM sin correo."
+              : "Hay " + cuentasSinCorreo + " cuentas del CRM sin correo."}
+          </strong>{" "}
+          Sin él no pueden recuperar su contraseña solas: si la pierden, hay que
+          restablecérsela a mano. Ábreles la ficha y ponles uno en «Acceso al CRM»,
+          o que se lo pongan ellas desde Configuración → Tu cuenta.
+        </div>
+      )}
+
       {/* MÓVIL: tarjetas. La tabla de 8 columnas obligaba a hacer scroll lateral
           en el móvil, que es donde de verdad se consulta la plantilla. */}
       <div className="lg:hidden space-y-2">
@@ -432,6 +460,9 @@ export default function EquipoPage() {
                   {[m.role, m.department].filter(Boolean).join(" · ") || "—"}
                 </div>
                 {m.email && <div className="text-[11px] text-neutral-400 font-mono truncate">{m.email}</div>}
+                {m.cuentaSinCorreo && (
+                  <div className="text-[11px] text-amber-700 mt-0.5">Su cuenta no tiene correo</div>
+                )}
                 <div className="flex gap-3 mt-1.5 text-[11px] text-neutral-500">
                   <span>Tarifa <span className="text-neutral-700 tabular">{fmtMoney(m.hourlyRate, m.currency)}</span></span>
                   {viewerIsAdmin && m.monthlySalary != null && (
@@ -485,6 +516,11 @@ export default function EquipoPage() {
                       <div>
                         <div className="font-medium text-neutral-800">{m.displayName}</div>
                         {m.phone && <div className="text-[11px] text-neutral-400 font-mono">{m.phone}</div>}
+                        {m.cuentaSinCorreo && (
+                          <div className="text-[11px] text-amber-700">
+                            Su cuenta no tiene correo
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>

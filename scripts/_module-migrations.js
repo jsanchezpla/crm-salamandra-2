@@ -57,6 +57,7 @@ export const ONE_OFF = {
   "migrate-documents-avanzado": "MASTER, no toca schemas de tenant: reparte el módulo Documentos en básico/avanzado y da el avanzado a quien ya tenía Documentos, para que nadie pierda el archivo por el cambio de nomenclatura. Se corre a mano una vez, idempotente",
   "migrate-audit-logs-index": "índice en el schema MASTER (audit_logs), no por-tenant; idempotente, se corre a mano una vez",
   "migrate-clients-avanzado": "MASTER, no toca schemas de tenant: saca la lista de espera de admisión de `clients` a `clients_avanzado` y se la da solo a quien admite por cola (aumenta, demo). Se corre a mano una vez, idempotente",
+  "migrate-users-email-contacto": "MASTER, no toca schemas de tenant: añade `email_contacto` a `master.users` —a dónde se le escribe a esa cuenta, y su segundo identificador para entrar— con su índice único. Aditiva (nace NULL en todas las filas) e idempotente; NO escribe ni una fila, rellenar las que se pueda es `backfill-correo-cuenta.js`. VA ANTES del despliegue: el modelo pide esa columna por nombre en cada SELECT",
   "migrate-usuario-backoffice": "MASTER, no toca schemas de tenant: añade `solo_backoffice` a `master.users` para separar las cuentas del panel interno de las del CRM. Se corre a mano con `npm run db:migrate:backoffice`; aditiva, con default false, idempotente",
   // Faltaba desde que se escribió (12/08/2026) y dejaba `check-migration-order`
   // en rojo con dos incoherencias: «sin módulo asignado (nadie las ejecutaría)»

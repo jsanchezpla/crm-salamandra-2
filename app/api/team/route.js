@@ -4,6 +4,7 @@ import { ok, created, error, forbidden, serverError } from "../../../lib/utils/a
 import { getMasterModels } from "../../../lib/db/masterDb.js";
 import { serializeTeamMember, serializeProfesional } from "../../../lib/team/serializeTeamMember.js";
 import { normalizeSpecialties } from "../../../lib/clinica/specialties.js";
+import { correoDeCuenta } from "../../../lib/auth/correoCuenta.js";
 import { limpiaColorBloqueo } from "../../../lib/citas/coloresBloqueo.js";
 import { isValidHexColor } from "../../../lib/citas/validation.js";
 
@@ -165,11 +166,58 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
       }
     } catch { /* la lista se sirve igual, sin la marca */ }
 
+    /*
+     * ¿Quién tiene cuenta del CRM pero SIN correo? (26/08/2026, Jorge: «un aviso
+     * en cada integrante que tenga una cuenta del CRM diciendo que cuanto antes
+     * se le asigne un correo».)
+     *
+     * Misma idea que la marca de arriba y por el mismo motivo: una cuenta sin
+     * correo no puede recuperar su contraseña sola, y eso hoy no se ve en
+     * ninguna parte —había que abrir la ficha de cada uno, de uno en uno—. El
+     * día que alguien se queda fuera, la dirección se entera por teléfono.
+     *
+     * Se cuenta sobre TODAS las fichas con login del cliente, no solo las de
+     * esta página: el rótulo de arriba dice cuántas faltan en total, y paginar
+     * no puede cambiar ese número.
+     *
+     * Solo para quien ve la pantalla de Equipo de verdad: con la lista recortada
+     * no se manda (ahí no hay ni cuentas ni nada que hacer con ellas).
+     *
+     * Best-effort, como la de horarios: si master falla, la lista sale igual.
+     */
+    const cuentaSinCorreo = new Set();
+    let fichasConLogin = 0;
+    if (isAdmin && !listaReducida) {
+      try {
+        const conLogin = await TeamMember.findAll({
+          where: { userId: { [Op.ne]: null } },
+          attributes: ["id", "userId"],
+        });
+        fichasConLogin = conLogin.length;
+        if (conLogin.length) {
+          const { User } = getMasterModels();
+          const cuentas = await User.findAll({
+            where: { id: { [Op.in]: conLogin.map((m) => m.userId) } },
+            attributes: ["id", "email", "emailContacto"],
+          });
+          const mudas = new Set(cuentas.filter((u) => !correoDeCuenta(u)).map((u) => String(u.id)));
+          for (const m of conLogin) {
+            if (mudas.has(String(m.userId))) cuentaSinCorreo.add(String(m.id));
+          }
+        }
+      } catch { /* la lista se sirve igual, sin la marca */ }
+    }
+
     return ok({
       members: rows.map((m) => ({
         ...(listaReducida ? serializeProfesional(m) : serializeTeamMember(m, { isAdmin })),
         tieneHorario: conHorario.has(String(m.id)),
+        // `true` solo si TIENE cuenta y esa cuenta no tiene a dónde escribir.
+        cuentaSinCorreo: cuentaSinCorreo.has(String(m.id)),
       })),
+      // Para el rótulo de arriba: cuántas de TODO el cliente, no de esta página.
+      cuentasSinCorreo: cuentaSinCorreo.size,
+      fichasConLogin,
       total: count,
       limit,
       offset,

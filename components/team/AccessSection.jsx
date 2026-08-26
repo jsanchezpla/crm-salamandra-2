@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import CredentialsModal from "./CredentialsModal.jsx";
 import { requisitosDe, cumpleTodo } from "@/lib/auth/contrasena.js";
+// La MISMA regla que aplica el servidor: `correoCuenta.js` no importa nada
+// justo para poder usarse en el navegador, igual que `contrasena.js`.
+import { esCorreo as pareceCorreo } from "@/lib/auth/correoCuenta.js";
 
 /**
  * "Acceso al CRM" — sección de la ficha del empleado (solo admin).
@@ -85,6 +88,17 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
   // Alta de usuario
   const [creating, setCreating] = useState(false);
   const [username, setUsername] = useState("");
+  /*
+   * El correo de la cuenta, obligatorio desde el 26/08/2026. No es el nombre de
+   * usuario: es el buzón al que se le manda el enlace si pierde la contraseña, y
+   * además le sirve para entrar. Se propone el de su ficha de empleado cuando la
+   * tiene rellena, para no hacer escribir dos veces lo mismo.
+   */
+  const [correo, setCorreo] = useState("");
+  // Y el mismo dato en una cuenta que ya existe: las de antes del 26/08/2026
+  // pueden no tenerlo, y una errata al crearlo no puede dejar a nadie atrapado.
+  const [editandoCorreo, setEditandoCorreo] = useState(false);
+  const [correoEdit, setCorreoEdit] = useState("");
   const [busy, setBusy] = useState(false);
 
   // Edición de módulos (cuando ya hay usuario)
@@ -109,7 +123,8 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
 
   const load = useCallback(() => {
     setState(null); setErr(null); setCreating(false); setDirty(false);
-    setReseteando(false); setNuevaPass("");
+    setReseteando(false); setNuevaPass(""); setCorreo("");
+    setEditandoCorreo(false); setCorreoEdit("");
     fetch(`/api/team/${memberId}/access`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (j.ok) setState(j.data); else setErr(j.error || "Error"); })
@@ -133,12 +148,31 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
     try {
       const res = await fetch(`/api/team/${memberId}/access`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, modules: enabledKeys(), password: nuevaPass }),
+        body: JSON.stringify({ username, correo, modules: enabledKeys(), password: nuevaPass }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "No se pudo crear el usuario");
       // El servidor no devuelve la contraseña: se enseña la que hay aquí escrita.
       setCredentials({ username: j.data.username, password: nuevaPass, title: "Acceso creado" });
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /* Solo el correo: se manda sin `modules` para no tocar los accesos de paso. */
+  async function guardarCorreo() {
+    setBusy(true); setErr(null);
+    try {
+      const res = await fetch(`/api/team/${memberId}/access`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ correo: correoEdit }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "No se pudo guardar el correo");
+      setState((prev) => ({ ...prev, correo: j.data.correo }));
+      setEditandoCorreo(false);
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -231,12 +265,70 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
               <span className="text-[10px] uppercase tracking-widest text-neutral-400 mr-1.5">Usuario</span>
               <span className="text-sm font-mono text-neutral-800">{state.username}</span>
             </div>
+            {state.correo && !editandoCorreo && (
+              <div>
+                <span className="text-[10px] uppercase tracking-widest text-neutral-400 mr-1.5">Correo</span>
+                <span className="text-sm text-neutral-800">{state.correo}</span>
+                <button
+                  onClick={() => { setCorreoEdit(state.correo); setEditandoCorreo(true); }}
+                  className="ml-2 text-[11px] text-neutral-400 hover:text-neutral-700 underline"
+                >
+                  cambiar
+                </button>
+              </div>
+            )}
             {state.lastLoginAt && (
               <span className="text-[11px] text-neutral-400">
                 Última entrada: {new Date(state.lastLoginAt).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
               </span>
             )}
           </div>
+
+          {/*
+            Las cuentas creadas antes del 26/08/2026 pueden no tener correo. No
+            es un detalle estético: sin él esa persona no puede recuperar su
+            contraseña sola, y hay que poder VERLO en su ficha en vez de
+            descubrirlo el día que se queda fuera.
+          */}
+          {!state.correo && !editandoCorreo && (
+            <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1.5 flex flex-wrap items-center gap-2">
+              <span>Esta cuenta no tiene correo, así que no podrá recuperar su contraseña sola.</span>
+              <button
+                onClick={() => { setCorreoEdit(""); setEditandoCorreo(true); }}
+                className="font-semibold underline hover:no-underline"
+              >
+                Ponerle uno
+              </button>
+            </div>
+          )}
+
+          {editandoCorreo && (
+            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 space-y-2">
+              <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Correo de la cuenta</label>
+              <input
+                type="email"
+                autoComplete="off"
+                spellCheck={false}
+                value={correoEdit}
+                onChange={(e) => setCorreoEdit(e.target.value)}
+                placeholder="nombre@sucentro.com"
+                className="w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
+              />
+              <p className="text-[10px] text-neutral-400">
+                Es a donde se le manda el enlace si pierde la contraseña, y también le sirve para entrar.
+              </p>
+              <div className="flex gap-2">
+                <button onClick={guardarCorreo} disabled={busy || !pareceCorreo(correoEdit)}
+                  className="text-[11px] px-3 py-1.5 rounded-lg font-semibold text-white disabled:opacity-50"
+                  style={{ background: "var(--color-primary, #1B3A2D)" }}>
+                  {busy ? "Guardando..." : "Guardar correo"}
+                </button>
+                <button onClick={() => { setEditandoCorreo(false); setErr(null); }} disabled={busy} className={btnSecondary}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
 
           <ModuleChecks modules={state.modules} onToggle={toggle} disabled={busy} />
           {ninguno && (
@@ -292,7 +384,11 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
         <div className="space-y-2">
           <p className="text-xs text-neutral-500">Esta persona todavía no puede entrar al CRM.</p>
           <button
-            onClick={() => { setCreating(true); setUsername(suggestUsername(displayName, tenantSlug)); }}
+            onClick={() => {
+              setCreating(true);
+              setUsername(suggestUsername(displayName, tenantSlug));
+              setCorreo(state.correoPropuesto ?? "");
+            }}
             className="text-[11px] px-3 py-1.5 rounded-lg font-semibold text-white"
             style={{ background: "var(--color-primary, #1B3A2D)" }}>
             Crear usuario de acceso
@@ -305,7 +401,24 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
             <input value={username} onChange={(e) => setUsername(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm font-mono text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400" />
             <p className="text-[10px] text-neutral-400">
-              Con este nombre (o un email) entrará en el CRM.
+              Con este nombre (o con su correo) entrará en el CRM.
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Correo</label>
+            <input
+              type="email"
+              autoComplete="off"
+              spellCheck={false}
+              value={correo}
+              onChange={(e) => setCorreo(e.target.value)}
+              placeholder="nombre@sucentro.com"
+              className="w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
+            />
+            <p className="text-[10px] text-neutral-400">
+              Obligatorio: es a donde se le manda el enlace si pierde la contraseña, y
+              también le sirve para entrar.
+              {state.correoPropuesto && correo === state.correoPropuesto && " Cogido de su ficha."}
             </p>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -326,7 +439,8 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
             <ModuleChecks modules={state.modules} onToggle={toggle} disabled={busy} />
           </div>
           <div className="flex gap-2">
-            <button onClick={crearUsuario} disabled={busy || !username.trim() || !cumpleTodo(nuevaPass)}
+            {/* El servidor vuelve a comprobarlo todo; esto solo evita el viaje. */}
+            <button onClick={crearUsuario} disabled={busy || !username.trim() || !pareceCorreo(correo) || !cumpleTodo(nuevaPass)}
               className="text-[11px] px-3 py-1.5 rounded-lg font-semibold text-white disabled:opacity-50"
               style={{ background: "var(--color-primary, #1B3A2D)" }}>
               {busy ? "Creando..." : "Crear usuario"}

@@ -118,6 +118,7 @@ export const POST = withTenant(async (request, _rc, ctx) => {
       slug: body.slug || slugDesdeNombre(body.nombre),
       modulos: body.modulos,
       adminEmail: body.adminEmail,
+      adminCorreo: body.adminCorreo,
       contacto: body.contacto || {},
       brand: body.brand || {},
       fiscal: body.fiscal || {},

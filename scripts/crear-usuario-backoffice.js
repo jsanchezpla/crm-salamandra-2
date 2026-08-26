@@ -34,6 +34,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import bcrypt from "bcrypt";
 import { getMasterDb, getMasterModels } from "../lib/db/masterDb.js";
+import { esCorreo } from "../lib/auth/correoCuenta.js";
 
 const TENANT = "salamandra_solutions";
 const FICHERO_CLAVE = "/root/.backoffice-password";
@@ -59,6 +60,20 @@ async function main() {
 
   if (!email) {
     process.stderr.write("\n✗ Falta el email.\n  Uso: crear-usuario-backoffice.js <email> [--quitar]\n\n");
+    process.exit(1);
+  }
+
+  /*
+   * Aquí el identificador SÍ tiene que ser un correo de verdad, y por eso esta
+   * cuenta no necesita `emailContacto`: `correoDeCuenta` cae a `email` cuando
+   * lleva arroba (ver lib/auth/correoCuenta.js). Se comprueba explícitamente
+   * para dar una frase en vez de dejar que salte el hook del modelo con un
+   * volcado de pila.
+   */
+  if (!esCorreo(email)) {
+    process.stderr.write(
+      `\n✗ "${email}" no es un correo.\n  La cuenta del panel interno entra con su correo, y es a donde se le\n  escribiría si pierde la contraseña.\n\n`
+    );
     process.exit(1);
   }
 

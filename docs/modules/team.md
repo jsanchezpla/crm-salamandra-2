@@ -14,15 +14,15 @@
 | **Reina** | — · sin reina declarada; las siete pantallas de `team_avanzado` y su `adminOnly` nacieron a petición de Aumenta (comentarios en `components/layout/Sidebar.jsx`) |
 | **Pantallas** | `team`: `/equipo` → `app/(dashboard)/equipo/page.jsx` (plantilla, drawer de alta/edición, horario, «Acceso al CRM»; al no admin le pinta `MiEquipo`) · `team_avanzado`: `/equipo/mi-desempeno`, `/equipo/desempeno-config`, `/equipo/direccion`, `/equipo/productividad`, `/equipo/incidencias`, `/equipo/bandeja` (con `clinica`), `/equipo/ocupacion` (con `citas`), `/equipo/actividad` → `app/(dashboard)/equipo/<carpeta>/page.jsx`, con sus piezas en `app/(dashboard)/equipo/_components/` · `fichaje`: `/equipo/fichaje` · el grupo del menú se ve con `team` O `clinica` (`visibleModules`) |
 | **Endpoints** | `app/api/team/**` — 13 `route.js`: `route.js` (listado/alta), `[id]` (detalle, edición, baja lógica), `[id]/borrar` (GET la radiografía, DELETE el borrado definitivo), `modules` y `[id]/modules`, `[id]/access` (+ `password`: el login del miembro, escribe en `master.users`), `[id]/hours` (horario), `me` y `me/documents` (+ `[id]`) (autoservicio; gate `team` O `clinica` a nivel de tenant), `[id]/billing-summary` (gatea `billing`), `[id]/projects` (gatea `projects`) · `team_avanzado` — 18 `route.js` con `hasModule("team_avanzado")`: `app/api/actividad`, `app/api/clinica/performance/**`, `app/api/clinica/productividad/**`, `app/api/clinica/incidencias/**`, `app/api/clinica/incentive-items/**`, `app/api/clinica/dashboard`, `app/api/clinica/bandeja` y `app/api/citas/informe-ocupacion` · `app/api/auth/me` (`enabledModules`) · Públicos: ninguno |
-| **Lógica** | `lib/team/`: `serializeTeamMember.js` (BD → API; oculta coste y salario a quien no es admin) · `access.js` (crear, cambiar y quitar el login y su `moduleAccess`) · `currentTeamMember.js` (qué `TeamMember` es el usuario logueado) · `rastro.js` (qué queda de una persona en el schema y si su ficha se puede borrar) · Actividad: `lib/actividad/etiquetas.js` (acción de auditoría → frase) · las pantallas avanzadas tiran de `lib/clinica/` |
-| **UI** | `components/team/`: `AccessSection.jsx` («Acceso al CRM»), `CredentialsModal.jsx` (la contraseña una sola vez), `BorrarFichaModal.jsx` (el aviso antes de borrar, con la radiografía dentro), `TeamHoursEditor.jsx` (horario; también en `/mi-horario`, de Citas), `MiEquipo.jsx` (mini-módulo del no admin) · `components/billing/EmployeeBillingSection.jsx` embebido en la ficha · no hay `modules/team/` |
-| **Modelos** | `TeamMember` (`team_members`), `TeamMemberHours` (`team_member_hours`), `TeamMemberModule` (`team_member_modules`, espejo informativo de `moduleAccess`); en `master`: `User` (`users`; `module_access` es la segunda puerta) y `AuditLog` (`audit_logs`, lo que lee Actividad) · `team_avanzado` lee modelos de Clínica y Citas: `PerformanceMetric`, `IncentiveItem`, `Incidencia`, `IncidenciaAssignee`, `Booking` |
+| **Lógica** | `lib/team/`: `serializeTeamMember.js` (BD → API; oculta coste y salario a quien no es admin) · `access.js` (crear, cambiar y quitar el login y su `moduleAccess`) · `currentTeamMember.js` (qué `TeamMember` es el usuario logueado) · `rastro.js` (qué queda de una persona en el schema y si su ficha se puede borrar) · `lib/auth/correoCuenta.js` (el correo de una cuenta, que NO es su usuario; puro, sin imports, lo usa también el navegador) + `correoCuentaDb.js` (sus consultas) · Actividad: `lib/actividad/etiquetas.js` (acción de auditoría → frase) · las pantallas avanzadas tiran de `lib/clinica/` |
+| **UI** | `components/layout/AvisoCorreoCuenta.jsx` (la barra de «tu cuenta no tiene correo», en el shell) · `components/team/`: `AccessSection.jsx` («Acceso al CRM»: usuario + correo + contraseña al crear, y poner o cambiar el correo de una cuenta que ya existe), `CredentialsModal.jsx` (la contraseña una sola vez), `BorrarFichaModal.jsx` (el aviso antes de borrar, con la radiografía dentro), `TeamHoursEditor.jsx` (horario; también en `/mi-horario`, de Citas), `MiEquipo.jsx` (mini-módulo del no admin) · `components/billing/EmployeeBillingSection.jsx` embebido en la ficha · no hay `modules/team/` |
+| **Modelos** | `TeamMember` (`team_members`), `TeamMemberHours` (`team_member_hours`), `TeamMemberModule` (`team_member_modules`, espejo informativo de `moduleAccess`); en `master`: `User` (`users`; `module_access` es la segunda puerta; `email` es el IDENTIFICADOR y `email_contacto` el buzón —único, y también sirve para entrar—, con un hook `beforeCreate` que no deja nacer una cuenta sin correo) y `AuditLog` (`audit_logs`, lo que lee Actividad) · `team_avanzado` lee modelos de Clínica y Citas: `PerformanceMetric`, `IncentiveItem`, `Incidencia`, `IncidenciaAssignee`, `Booking` |
 | **Interruptores y parámetros** | ninguno que lea el código (ni `featureFlags` ni `logicOverrides`); lo que decide es el rol (fresco de BD en `access`), `visibleModules: ["team", "clinica"]` y `requiresAll` de `components/layout/Sidebar.jsx`, y `users.module_access` |
 | **Pantallas propias** | ninguna (letrero `ui_override` vacío en producción) |
-| **Scripts** | activar: `node scripts/enable-module.js <slug> team` (y `team_avanzado`); `MODULES.team` de `scripts/_module-migrations.js`: `migrate-team-fields`, `migrate-rename-therapist-to-employee`, `migrate-team-modules-salary`, `migrate-team-members-avatar-color`, `migrate-team-specialties`, `migrate-team-weekly-hours`, `migrate-team-member-hours` (+ CORE `migrate-team-members-block-color`); lo de `team_avanzado` va en `MODULES.clinica` (`migrate-incidencias-module`, `migrate-incentive-items`, `migrate-clinica-performance-roles`) · seeds: `seed-team-demo.js` (`npm run db:seed:team`), `_hechos/seed-aumenta-equipo-real.js` (el equipo real de Aumenta, 24/07/2026: no relanzar) · accesos: `check-module-access.js` (`npm run db:check-access`), `grant-module-access.js` (ojo: `[]` = «no tocar», al revés que el gate) · Actividad: `migrate-audit-logs-index.js` (master, ONE_OFF ya corrido), `podar-audit-logs.js` (retención) · `npm run db:check-links` (`team_member_id` en `plans`, `interactions`, `client_notes`…) |
-| **Pruebas** | `scripts/_smoke-team-borrar.mjs` (`node:test`, 26/08/2026, en `npm test`): las tres puertas del borrado, que las columnas sin FK sigan declaradas y que ni la pantalla ni el modal decidan por su cuenta · `scripts/_smoke-actividad-etiquetas.mjs` (`node:test`, 19/08/2026, en `npm test`): `lib/actividad/etiquetas.js` —las frases, el traductor genérico, módulos y prefijos— y un CRUCE que lee todos los `action: "x.y"` de `app/api` y `lib` y exige frase propia (el 19/08 faltaban 21 y ganaron la suya ese día; `DEUDA_CONOCIDA` está vacía): una acción nueva sin frase pone la prueba en rojo; y que ningún prefijo con frase caiga en «Otros» (el filtro «Configuración» buscaba `tenant.*` y se escribe `configuracion.*`) · las que nombran `TeamMember` son de Citas (`_smoke-horario-profesional.mjs`, `_smoke-bloqueos-quien-ve.mjs`, `_smoke-citas-sin-profesional.mjs`) |
-| **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` · `../decisions/2026-07-28-repaso-de-seguridad.md` (el rol fresco de `withTenant`, de lo que viven los endpoints de `access`) · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` |
-| **En este doc** | Modelos · Filtrado de campos sensibles · Eventos de auditoría · Endpoints · Frontend · Migración y backfill · Actividad (registro legible) — 2026-07-27 |
+| **Scripts** | activar: `node scripts/enable-module.js <slug> team` (y `team_avanzado`); `MODULES.team` de `scripts/_module-migrations.js`: `migrate-team-fields`, `migrate-rename-therapist-to-employee`, `migrate-team-modules-salary`, `migrate-team-members-avatar-color`, `migrate-team-specialties`, `migrate-team-weekly-hours`, `migrate-team-member-hours` (+ CORE `migrate-team-members-block-color`); lo de `team_avanzado` va en `MODULES.clinica` (`migrate-incidencias-module`, `migrate-incentive-items`, `migrate-clinica-performance-roles`) · seeds: `seed-team-demo.js` (`npm run db:seed:team`), `_hechos/seed-aumenta-equipo-real.js` (el equipo real de Aumenta, 24/07/2026: no relanzar) · accesos: `check-module-access.js` (`npm run db:check-access`), `grant-module-access.js` (ojo: `[]` = «no tocar», al revés que el gate) · Actividad: `migrate-audit-logs-index.js` (master, ONE_OFF ya corrido), `podar-audit-logs.js` (retención) · `npm run db:check-links` (`team_member_id` en `plans`, `interactions`, `client_notes`…) · correo de cuenta: `migrate-users-email-contacto.js` (`npm run db:migrate:correo-cuenta`, MASTER, va ANTES del despliegue) y `backfill-correo-cuenta.js` (copia el correo de la ficha; en seco por defecto) |
+| **Pruebas** | `scripts/_smoke-correo-cuenta.mjs` (`node:test`, 26/08/2026, en `npm test`, 28 casos): la forma de un correo, la caída a `email`, que MANDE el identificador cuando dos cuentas responden al mismo texto, que las tres puertas lo exijan y que dos identificadores no den el doble de intentos · `scripts/_smoke-team-borrar.mjs` (`node:test`, 26/08/2026, en `npm test`): las tres puertas del borrado, que las columnas sin FK sigan declaradas y que ni la pantalla ni el modal decidan por su cuenta · `scripts/_smoke-actividad-etiquetas.mjs` (`node:test`, 19/08/2026, en `npm test`): `lib/actividad/etiquetas.js` —las frases, el traductor genérico, módulos y prefijos— y un CRUCE que lee todos los `action: "x.y"` de `app/api` y `lib` y exige frase propia (el 19/08 faltaban 21 y ganaron la suya ese día; `DEUDA_CONOCIDA` está vacía): una acción nueva sin frase pone la prueba en rojo; y que ningún prefijo con frase caiga en «Otros» (el filtro «Configuración» buscaba `tenant.*` y se escribe `configuracion.*`) · las que nombran `TeamMember` son de Citas (`_smoke-horario-profesional.mjs`, `_smoke-bloqueos-quien-ve.mjs`, `_smoke-citas-sin-profesional.mjs`) |
+| **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` · `../decisions/2026-07-28-repaso-de-seguridad.md` (el rol fresco de `withTenant`, de lo que viven los endpoints de `access`) · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` · `../decisions/2026-08-26-el-correo-de-una-cuenta-no-es-su-usuario.md` |
+| **En este doc** | Modelos · Filtrado de campos sensibles · Eventos de auditoría · Endpoints · Frontend · Migración y backfill · El correo de una cuenta — 2026-08-26 · Actividad (registro legible) — 2026-07-27 |
 
 > Documentación de detalle. Referencia rápida en `CLAUDE.md` (sección
 > "Módulos del CRM"). Si encuentras una discrepancia con el código,
@@ -570,6 +570,86 @@ la unicidad. Si Ana ya está vinculada, no-op.
 (salarios mensuales de 1.900 € a 2.900 € según el miembro). Ejecutar el
 seed de equipo solo deja los empleados con `monthlySalary` en `NULL`.
 
+## El correo de una cuenta — 2026-08-26
+
+**`users.email` no es un correo: es el IDENTIFICADOR con el que se entra.** Las
+trece terapeutas de Aumenta entran con `nombre_aumenta`, sin arroba, y por eso
+las puertas que crean usuarios llaman a `User.create` con `validate: false`. De
+las 30 cuentas de producción, **18 tienen ahí un nombre de usuario** y solo 12 un
+correo de verdad; 14 no tenían ninguna dirección en ninguna parte del CRM.
+
+Desde hoy son dos columnas y dos trabajos:
+
+| | |
+| --- | --- |
+| `email` | CON QUÉ SE ENTRA. Puede no llevar arroba. No se toca. |
+| `email_contacto` | A DÓNDE SE LE ESCRIBE. Un correo de verdad, único, y **también sirve para entrar**. |
+
+La regla vive en `lib/auth/correoCuenta.js`, **sin ni un import** —como
+`contrasena.js` y por lo mismo: la usa el navegador, así que no puede arrastrar
+Sequelize al bundle—. Sus consultas, al lado en `correoCuentaDb.js`.
+
+`correoDeCuenta()` cae a `email` cuando este sí tiene forma de correo: por eso
+las 12 cuentas que ya entran con el suyo funcionan sin tocarles una fila.
+
+### En la pantalla
+
+Al crear un acceso se piden **usuario, correo y contraseña**, y el correo se
+**propone solo** desde `team_members.email` si la ficha lo tiene. En una cuenta
+que ya existe, la ficha enseña su correo con un «cambiar» al lado; si no tiene
+—las de antes de hoy pueden no tenerlo— sale un aviso en ámbar con «Ponerle
+uno», porque una cuenta que no puede recuperar su contraseña hay que poder
+VERLA, no descubrirla el día que alguien se queda fuera. Va por `PATCH` con solo
+`correo`, sin tocar los módulos.
+
+### Que se vea quién no lo tiene
+
+La lista de Equipo trae dos cosas nuevas cuando quien mira es dirección:
+`cuentasSinCorreo` (el total del CLIENTE, no de la página) para el rótulo de
+arriba, y `cuentaSinCorreo` por fila para la marca. Las dos se calculan
+best-effort, como `tieneHorario`: si master falla, la lista sale igual, sin la
+marca. En la lista recortada no viajan.
+
+Y a la persona se le avisa donde trabaja, no donde se arregla:
+`components/layout/AvisoCorreoCuenta.jsx`, montado en `DashboardShell.jsx`
+sobre el contenido. Se calla con `sessionStorage` —vuelve mañana— y nunca sale
+en las demos.
+
+### Quién puede ponérselo
+
+Un admin, a cualquiera, desde Equipo. **Pero no a una cuenta de administrador ni
+a la suya** —`loadManagedUser` las rechaza a propósito—, así que el
+administrador único de un cliente se quedaba sin sitio. Para eso está
+**Configuración → Tu cuenta → «El correo de tu cuenta»**
+(`app/api/auth/correo/route.js`): cada uno el suyo, con los mismos frenos que el
+cambio de contraseña y **pidiendo la contraseña**, porque el correo también sirve
+para entrar.
+
+### La puerta que no se puede rodear
+
+La exigencia NO está en los formularios: está en un hook `beforeCreate` de
+`models/master/User.model.js`, por debajo de las tres puertas, de los seeds y de
+cualquier script futuro. Es un hook y no una `validate` porque las puertas crean
+con `validate: false` a propósito. **Solo al crear**: un `beforeSave` tumbaría a
+las 14 cuentas sin correo en cuanto entraran, porque el login les escribe
+`lastLoginAt`.
+
+### Cuidado si tocas el login
+
+Una cuenta tiene ahora DOS identificadores, y eso toca dos cosas delicadas:
+
+- **Cuando algo empata, manda `email`** (`elegirCuenta`). Mientras el
+  identificador gane, un `email_contacto` mal metido no puede desviar el login
+  de otra persona hacia otra cuenta.
+- **Dos identificadores NO son el doble de intentos.** El cerrojo cuenta por lo
+  que se teclea (corre antes de tocar la base), así que alternar los dos daría
+  12 intentos en vez de 6. El login, ya sabiendo a quién señalaba, vuelve a
+  preguntar por el canónico (`cerrojoDeCuenta`) y apunta el fallo en los dos
+  cubos —el segundo con `barrido: false`, para no contar dos veces en el cubo de
+  la IP que protege a las quince personas de Aumenta—.
+
+Todo esto está fijado en `scripts/_smoke-correo-cuenta.mjs`. El porqué entero,
+en `../decisions/2026-08-26-el-correo-de-una-cuenta-no-es-su-usuario.md`.
 ## Actividad (registro legible) — 2026-07-27
 
 `/equipo/actividad` (hijo adminOnly del grupo Equipo con `moduleKey:

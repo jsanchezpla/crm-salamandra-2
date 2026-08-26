@@ -5,12 +5,15 @@ import { signAccessToken, signRefreshToken, setAuthCookies } from "../../../../l
 import { esPeticionDeBackoffice } from "../../../../lib/auth/backoffice.js";
 import {
   comprobarIntentoLogin,
+  cerrojoDeCuenta,
   registrarFalloLogin,
   limpiarFallosLogin,
   auditarLogin,
   bloqueoYaAvisado,
   tenantDeEmail,
 } from "../../../../lib/auth/loginGuard.js";
+import { elegirCuenta } from "../../../../lib/auth/correoCuenta.js";
+import { whereDelLogin } from "../../../../lib/auth/correoCuentaDb.js";
 
 export async function POST(request) {
   let body;
@@ -57,19 +60,79 @@ export async function POST(request) {
 
   const { User, Tenant } = getMasterModels();
 
-  const user = await User.scope("withPassword").findOne({
-    where: { email },
+  /*
+   * SE ENTRA CON EL USUARIO O CON EL CORREO (26/08/2026, Jorge: «además de
+   * utilizar el usuario para entrar puedan utilizar su correo»).
+   *
+   * `whereDelLogin` solo mira las dos columnas cuando lo tecleado tiene forma de
+   * correo: un nombre de usuario como `nombre_aumenta` nunca puede estar en
+   * `emailContacto`, así que buscarlo ahí sería recorrer la columna para nada.
+   *
+   * `findAll` y no `findOne`: si alguna vez se colara un correo repetido hay que
+   * poder DECIDIR cuál gana, no quedarse con la primera fila que devuelva la
+   * base. `elegirCuenta` da siempre la preferencia al identificador, así que un
+   * `emailContacto` mal metido no puede desviar el login de otra persona.
+   */
+  const candidatos = await User.scope("withPassword").findAll({
+    where: whereDelLogin(email),
+    limit: 2,
   });
+  const user = elegirCuenta(candidatos, email);
 
   // Siempre ejecutar bcrypt para evitar timing attacks
   const dummyHash = "$2b$12$invalidhashfortimingprotection000000000000000000000000";
   const hashToCheck = user?.passwordHash || dummyHash;
   const passwordOk = await bcrypt.compare(password, hashToCheck);
 
+  /*
+   * Con dos identificadores por cuenta, el cerrojo de arriba —que cuenta por lo
+   * que se TECLEA, porque corre antes de tocar la base— dejaría 6 intentos con
+   * el usuario y otros 6 con el correo. Aquí ya sabemos a quién señalaba, así
+   * que si vino por el correo se vuelve a preguntar por el identificador de
+   * verdad. Va DESPUÉS de bcrypt a propósito: cortar antes convertiría el tiempo
+   * de respuesta en un chivato, que es la misma razón por la que el filtro de
+   * back-office de más abajo también espera.
+   */
+  const identificador = user?.email ?? null;
+  if (identificador && identificador !== email) {
+    const cerrojoCanonico = cerrojoDeCuenta(cerrojo.ip, identificador);
+    if (cerrojoCanonico.bloqueado) {
+      if (!bloqueoYaAvisado(identificador)) {
+        await auditarLogin({
+          action: "auth.login_blocked",
+          email: identificador,
+          ip: cerrojo.ip,
+          motivo: cerrojoCanonico.motivo,
+          userId: user.id,
+          tenantId: user.tenantId,
+        });
+      }
+      console.warn(`[auth] login BLOQUEADO (por correo) motivo=${cerrojoCanonico.motivo} ip=${cerrojo.ip}`);
+      return NextResponse.json(
+        { ok: false, error: `Demasiados intentos. Prueba de nuevo en ${cerrojoCanonico.retryAfter}s.` },
+        { status: 429, headers: { "Retry-After": String(cerrojoCanonico.retryAfter), "Cache-Control": "no-store" } }
+      );
+    }
+  }
+
+  /*
+   * Un fallo se apunta bajo los DOS nombres de la cuenta. Si solo se apuntara el
+   * tecleado, alternar usuario y correo daría el doble de presupuesto. El
+   * segundo va con `barrido: false` para no contar dos veces en el cubo de la
+   * IP, que es el que protege a las 15 personas de Aumenta que salen por la
+   * misma línea.
+   */
+  const apuntarFallo = () => {
+    registrarFalloLogin(cerrojo.ip, email);
+    if (identificador && identificador !== email) {
+      registrarFalloLogin(cerrojo.ip, identificador, { barrido: false });
+    }
+  };
+
   if (!user || !passwordOk) {
     // Mismo mensaje exista o no el usuario (no se filtra qué emails son reales),
     // pero en la auditoría SÍ se distingue: es lo que permite ver un ataque.
-    registrarFalloLogin(cerrojo.ip, email);
+    apuntarFallo();
     await auditarLogin({
       action: "auth.login_failed",
       email,
@@ -93,7 +156,7 @@ export async function POST(request) {
   // hace falta verlo.
   const enBackoffice = esPeticionDeBackoffice(request);
   if (user.soloBackoffice !== enBackoffice) {
-    registrarFalloLogin(cerrojo.ip, email);
+    apuntarFallo();
     await auditarLogin({
       action: "auth.login_failed",
       email,
@@ -114,7 +177,7 @@ export async function POST(request) {
   });
 
   if (!tenant) {
-    registrarFalloLogin(cerrojo.ip, email);
+    apuntarFallo();
     await auditarLogin({
       action: "auth.login_failed",
       email,
@@ -144,7 +207,10 @@ export async function POST(request) {
     }),
   ]);
 
+  // Entrar bien borra los contadores de los DOS nombres: da igual con cuál se
+  // hayan gastado los intentos, quien acierta ya ha demostrado quién es.
   limpiarFallosLogin(email, cerrojo.ip);
+  if (identificador && identificador !== email) limpiarFallosLogin(identificador, cerrojo.ip);
   await user.update({ lastLoginAt: new Date() });
   await auditarLogin({
     action: "auth.login",

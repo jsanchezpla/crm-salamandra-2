@@ -5,6 +5,7 @@ import Sidebar from "./Sidebar.jsx";
 import Salamandrobot from "../assistant/Salamandrobot.jsx";
 import NotificationBell from "./NotificationBell.jsx";
 import DemoTabs from "./DemoTabs.jsx";
+import AvisoCorreoCuenta from "./AvisoCorreoCuenta.jsx";
 
 export default function DashboardShell({
   tenant,
@@ -117,6 +118,9 @@ export default function DashboardShell({
           </div>
         </header>
 
+        {/* Encima del contenido y dentro de la columna, no flotando: es un aviso
+            para la persona, no una notificación. Ver el componente. */}
+        <AvisoCorreoCuenta />
         <main className="flex-1 overflow-auto min-w-0 fade-in">{children}</main>
       </div>
 

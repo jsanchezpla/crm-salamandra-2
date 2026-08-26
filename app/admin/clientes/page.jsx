@@ -1,5 +1,8 @@
 "use client";
 
+// La MISMA regla del servidor para el correo de la cuenta.
+import { esCorreo as pareceCorreo } from "@/lib/auth/correoCuenta.js";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CredentialsModal from "@/components/team/CredentialsModal.jsx";
 import { MAX_ANCHO_PANEL } from "@/components/admin/anchoPanel.js";
@@ -921,6 +924,7 @@ export default function AltaClientesPage() {
     slug: "",
     slugTocado: false,
     adminEmail: "",
+    adminCorreo: "",
     // A quién se le escribe, que no es el de arriba: ver
     // lib/provisioning/contactoCliente.js.
     contactoEmail: "",
@@ -1069,6 +1073,7 @@ export default function AltaClientesPage() {
           nombre: form.nombre,
           slug: form.slug,
           adminEmail: form.adminEmail || undefined,
+          adminCorreo: form.adminCorreo,
           contacto: {
             email: form.contactoEmail,
             nombre: form.contactoNombre,
@@ -1085,7 +1090,7 @@ export default function AltaClientesPage() {
       setCredenciales({ username: j.data.adminEmail, password: j.data.password, slug: j.data.slug, modulos: j.data.modulos });
       setAvisos(Array.isArray(j.data.avisos) ? j.data.avisos : []);
       setAbierto(false);
-      setForm((f) => ({ ...f, nombre: "", slug: "", slugTocado: false, adminEmail: "", contactoEmail: "", contactoNombre: "", contactoTelefono: "", fiscalName: "", taxId: "", address: "", city: "", zip: "" }));
+      setForm((f) => ({ ...f, nombre: "", slug: "", slugTocado: false, adminEmail: "", adminCorreo: "", contactoEmail: "", contactoNombre: "", contactoTelefono: "", fiscalName: "", taxId: "", address: "", city: "", zip: "" }));
       cargar();
     } catch (e2) {
       setErr(e2.message);
@@ -1139,10 +1144,28 @@ export default function AltaClientesPage() {
             </Campo>
           </div>
 
-          <Campo etiqueta="Usuario administrador" pista="Con lo que ENTRA al CRM, no a dónde se le escribe. Si lo dejas vacío se crea admin_{identificador}. La contraseña se genera sola y se enseña una vez.">
-            <input value={form.adminEmail} onChange={(e) => setForm((f) => ({ ...f, adminEmail: e.target.value }))}
-              className={inputCls} placeholder="direccion@sucliente.com" />
-          </Campo>
+          <div className="grid md:grid-cols-2 gap-4">
+            <Campo etiqueta="Usuario administrador" pista="Con lo que ENTRA al CRM. Si lo dejas vacío se crea admin_{identificador}. La contraseña se genera sola y se enseña una vez.">
+              <input value={form.adminEmail} onChange={(e) => setForm((f) => ({ ...f, adminEmail: e.target.value }))}
+                className={inputCls} placeholder="direccion@sucliente.com" />
+            </Campo>
+            {/*
+              EL CORREO DE ESA CUENTA, OBLIGATORIO (26/08/2026, Jorge). No es el
+              campo de al lado —ese es el login y puede no llevar arroba— ni el
+              «correo de contacto» de abajo, que es de la empresa y puede ser
+              otra persona. Este es a dónde se le escribe A ÉL si pierde la
+              contraseña, y además le sirve para entrar.
+
+              Importa más de lo que parece: 11 clientes tienen UN SOLO
+              administrador, así que sin esto ese cliente se queda parado hasta
+              que uno de nosotros entre por SSH.
+            */}
+            <Campo etiqueta="Correo del administrador *" pista="A donde se le manda el enlace si pierde la contraseña. También le sirve para entrar.">
+              <input type="email" value={form.adminCorreo}
+                onChange={(e) => setForm((f) => ({ ...f, adminCorreo: e.target.value }))}
+                className={inputCls} placeholder="direccion@sucliente.com" />
+            </Campo>
+          </div>
 
           {/*
             A QUIÉN SE LE ESCRIBE (13/08/2026, el otro medio recado de Jorge del
@@ -1357,7 +1380,8 @@ export default function AltaClientesPage() {
               className="px-4 py-2 text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700">
               Cancelar
             </button>
-            <button type="submit" disabled={creando || resuelto.problemas.length > 0}
+            {/* El servidor lo vuelve a validar; esto evita el 422. */}
+            <button type="submit" disabled={creando || resuelto.problemas.length > 0 || !pareceCorreo(form.adminCorreo)}
               className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-50"
               style={{ background: "var(--color-primary, #1B3A2D)" }}>
               {creando ? "Creando cliente…" : "Crear cliente"}

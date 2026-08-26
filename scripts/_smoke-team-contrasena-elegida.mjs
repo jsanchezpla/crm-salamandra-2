@@ -190,14 +190,24 @@ test("se comprueba contra el usuario de QUIEN RECIBE la contraseña", () => {
 // ── 4. Ni por la red ni en la auditoría ────────────────────────────────────
 
 test("la respuesta NO lleva la contraseña", () => {
-  assert.ok(
-    /return ok\(\{ username: user\.email \}\);/.test(reset),
-    "el reset ha vuelto a devolver algo más que el usuario: la contraseña no tiene por qué viajar de vuelta"
-  );
-  assert.ok(
-    /return created\(\{ username, modules \}\);/.test(alta),
-    "el alta ha vuelto a devolver la contraseña"
-  );
+  /*
+   * Lo que importa es QUÉ campos vuelven, no la lista exacta: el 26/08/2026
+   * las dos respuestas ganaron un `correo` legítimo y la comparación literal
+   * las dio por rotas cuando no lo estaban. Se mira lo que de verdad no puede
+   * estar ahí.
+   */
+  const PROHIBIDOS = /password|contrase|nuevaPass|passwordHash|\bclave\b/i;
+  for (const [rel, txt, patron] of [
+    ["password/route.js", reset, /return ok\(\{([^}]*)\}\);/],
+    ["access/route.js", alta, /return created\(\{([^}]*)\}\);/],
+  ]) {
+    const m = patron.exec(txt);
+    assert.ok(m, `${rel}: no encuentro qué devuelve el endpoint`);
+    assert.ok(
+      !PROHIBIDOS.test(m[1]),
+      `${rel}: la contraseña ha vuelto a viajar de vuelta por la red (devuelve: ${m[1].trim()})`
+    );
+  }
 });
 
 test("la auditoría no guarda la contraseña", () => {
@@ -244,13 +254,20 @@ test("el alta valida ANTES de crear el usuario", () => {
 test("la pantalla no deja mandar el formulario hasta que la contraseña vale", () => {
   // No es «hay algo escrito»: es la MISMA función que decide en el servidor,
   // así que el botón no puede encenderse con algo que va a devolver un 422.
-  assert.ok(
-    ui.includes("disabled={busy || !cumpleTodo(nuevaPass)}"),
-    "el botón de restablecer ya no mira los requisitos: se podría pulsar con una que el servidor rechaza"
-  );
-  assert.ok(
-    ui.includes("disabled={busy || !username.trim() || !cumpleTodo(nuevaPass)}"),
-    "el botón de crear usuario ya no mira los requisitos"
+  /*
+   * Se miran las condiciones de los botones, no su texto exacto: el 26/08/2026
+   * el de crear ganó un `!pareceCorreo(correo)` —el correo también es
+   * obligatorio— y la comparación literal lo dio por roto. Lo que no puede
+   * caerse es que los DOS sigan preguntando por la MISMA función que decide en
+   * el servidor.
+   */
+  const condiciones = [...ui.matchAll(/disabled=\{([^}]*)\}/g)].map((m) => m[1]);
+  const conRequisitos = condiciones.filter((c) => c.includes("cumpleTodo(nuevaPass)"));
+  assert.equal(
+    conRequisitos.length,
+    2,
+    `esperaba dos botones mirando los requisitos (crear y restablecer) y encuentro ${conRequisitos.length}: ` +
+      "alguno se puede pulsar con una contraseña que el servidor va a rechazar"
   );
 });
 

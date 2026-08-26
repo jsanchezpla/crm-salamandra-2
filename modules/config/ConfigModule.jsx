@@ -1,6 +1,9 @@
 "use client";
 
 import { requisitosDe, cumpleTodo, MINIMO, MAXIMO } from "@/lib/auth/contrasena.js";
+// La MISMA regla del servidor para el correo de la cuenta. `correoCuenta.js` no
+// importa nada, justo para poder usarse también aquí.
+import { esCorreo as pareceCorreo } from "@/lib/auth/correoCuenta.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import Link from "next/link";
@@ -1081,6 +1084,7 @@ export default function ConfigModule({ modulos = null }) {
       */}
       {pestanaViva === "cuenta" && (
         <div className="space-y-4">
+          {enZona("correoCuenta", <CorreoCuentaCard />)}
           {enZona("contrasena", <ContrasenaCard />)}
         </div>
       )}
@@ -2943,6 +2947,146 @@ function PrimaryButton({ onClick, children }) {
  * ninguna parte todavía—, así que una errata al escribirla te deja fuera y hay
  * que llamar por teléfono.
  */
+/**
+ * «El correo de tu cuenta» — para que cada uno se ponga el suyo.
+ *
+ * ── POR QUÉ ESTÁ AQUÍ Y NO SOLO EN EQUIPO (26/08/2026) ─────────────────────
+ * Un admin puede ponerle el correo a cualquiera desde Equipo, pero esa ruta
+ * rechaza a propósito las cuentas de ADMINISTRADOR y la de UNO MISMO. Como hay
+ * 11 clientes con un solo administrador, la persona que más necesita poder
+ * recuperar su contraseña era justo la que no tenía dónde apuntar su correo.
+ *
+ * El aviso en ámbar cuando no hay ninguno no es decorativo: es la única señal
+ * que verá esa persona antes del día en que se quede fuera.
+ */
+function CorreoCuentaCard() {
+  const [estado, setEstado] = useState(null); // { usuario, correo, esElIdentificador, enDemo }
+  const [abierto, setAbierto] = useState(false);
+  const [correo, setCorreo] = useState("");
+  const [actual, setActual] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [fallo, setFallo] = useState(null);
+  const [hecho, setHecho] = useState(false);
+
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/auth/correo", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (vivo && j?.ok) setEstado(j.data); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+
+  // La MISMA regla que aplica el servidor (lib/auth/correoCuenta.js).
+  const puede = pareceCorreo(correo) && actual.length > 0 && !guardando;
+
+  async function guardar() {
+    setGuardando(true); setFallo(null); setHecho(false);
+    try {
+      const r = await fetch("/api/auth/correo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ correo, actual }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.ok) throw new Error(j?.error || `Error ${r.status}`);
+      setEstado((prev) => ({ ...prev, correo: j.data.correo, esElIdentificador: false }));
+      setHecho(true); setAbierto(false); setCorreo(""); setActual("");
+    } catch (e) {
+      setFallo(e.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  if (!estado) return null;
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="text-sm font-semibold text-neutral-800">El correo de tu cuenta</div>
+      <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+        Es a donde se te mandará el enlace si alguna vez pierdes la contraseña, y también te
+        sirve para entrar: puedes escribir tu usuario <strong className="text-neutral-500">o</strong> tu
+        correo en la pantalla de entrar.
+      </p>
+
+      {estado.enDemo ? (
+        <div className="mt-4 px-3 py-2 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-800 max-w-sm">
+          En la demo no se puede cambiar: esta cuenta la comparte todo el que entra a mirarla.
+        </div>
+      ) : (
+        <div className="mt-4 max-w-sm">
+          {estado.correo ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-sm text-neutral-800">{estado.correo}</span>
+              {estado.esElIdentificador && (
+                <span className="text-[11px] text-neutral-400">(el mismo con el que entras)</span>
+              )}
+              {!abierto && (
+                <button onClick={() => { setAbierto(true); setCorreo(estado.correo); setHecho(false); }}
+                  className="text-[11px] text-neutral-400 hover:text-neutral-700 underline">
+                  cambiar
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="px-3 py-2 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-800">
+              <strong>Tu cuenta no tiene correo.</strong> Entras con el usuario{" "}
+              <span className="font-mono">{estado.usuario}</span>, y eso sigue funcionando — pero si
+              pierdes la contraseña no habrá a dónde mandarte nada y hará falta que te la
+              restablezca alguien.
+              {!abierto && (
+                <button onClick={() => { setAbierto(true); setCorreo(""); setHecho(false); }}
+                  className="ml-2 font-semibold underline hover:no-underline">
+                  Ponerle uno
+                </button>
+              )}
+            </div>
+          )}
+
+          {hecho && !abierto && (
+            <p className="mt-2 text-xs text-emerald-700">Guardado.</p>
+          )}
+
+          {abierto && (
+            <div className="mt-3 grid gap-3">
+              <label className="block">
+                <span className="block text-xs text-neutral-500 mb-1">Tu correo</span>
+                <input type="email" autoComplete="email" value={correo}
+                  onChange={(e) => setCorreo(e.target.value)}
+                  placeholder="nombre@sucentro.com" className={inputCls} />
+              </label>
+              {/* La contraseña, siempre: es lo que separa «ponerme mi correo» de
+                  «quedarme con la cuenta de quien dejó la sesión abierta». */}
+              <label className="block">
+                <span className="block text-xs text-neutral-500 mb-1">Tu contraseña</span>
+                <input type="password" autoComplete="current-password" value={actual}
+                  onChange={(e) => setActual(e.target.value)} className={inputCls} />
+                <span className="block text-[11px] text-neutral-400 mt-1">
+                  Se pide para asegurar que eres tú: el correo también sirve para entrar.
+                </span>
+              </label>
+              {fallo && <p className="text-xs text-red-600">{fallo}</p>}
+              <div className="flex gap-2">
+                <button onClick={guardar} disabled={!puede}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-white disabled:opacity-40"
+                  style={{ background: "var(--color-primary, #1B3A2D)" }}>
+                  {guardando ? "Guardando…" : "Guardar correo"}
+                </button>
+                <button onClick={() => { setAbierto(false); setFallo(null); setActual(""); }}
+                  disabled={guardando}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide text-neutral-500 hover:text-neutral-800 disabled:opacity-40">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ContrasenaCard() {
   const [actual, setActual] = useState("");
   const [nueva, setNueva] = useState("");

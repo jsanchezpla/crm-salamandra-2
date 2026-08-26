@@ -11,6 +11,13 @@ import {
   loadManagedUser,
 } from "../../../../../lib/team/access.js";
 import { revisarContrasena } from "../../../../../lib/auth/contrasena.js";
+import {
+  correoDeCuenta,
+  esCorreo,
+  normalizarCorreo,
+  revisarCorreoCuenta,
+} from "../../../../../lib/auth/correoCuenta.js";
+import { correoLibre } from "../../../../../lib/auth/correoCuentaDb.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -73,7 +80,10 @@ export const GET = withTenant(async (_request, { params }, ctx) => {
 
     const { id } = await params;
     const { TeamMember, TeamMemberModule } = ctx.tenantModels;
-    const member = await TeamMember.findByPk(id, { attributes: ["id", "userId"] });
+    // `email` viene para PROPONERLO en el alta: si la ficha ya tiene el correo
+    // de esa persona, no hay que volver a escribirlo (Jorge, 26/08/2026:
+    // «quiero que se aproveche el correo que tienen asignado»).
+    const member = await TeamMember.findByPk(id, { attributes: ["id", "userId", "email"] });
     if (!member) return notFound("Miembro no encontrado");
 
     const keys = await getTenantModuleKeys(ctx.tenant.id);
@@ -89,14 +99,30 @@ export const GET = withTenant(async (_request, { params }, ctx) => {
         });
         propuesta = rows.map((r) => r.moduleKey);
       } catch { /* tabla sin migrar en algún tenant viejo: propuesta vacía */ }
-      return ok({ hasUser: false, username: null, lastLoginAt: null, managedElsewhere: false, modules: mergeModules(keys, propuesta) });
+      return ok({
+        hasUser: false,
+        username: null,
+        lastLoginAt: null,
+        managedElsewhere: false,
+        correo: null,
+        correoPropuesto: esCorreo(member.email) ? normalizarCorreo(member.email) : null,
+        modules: mergeModules(keys, propuesta),
+      });
     }
 
     const { User } = getMasterModels();
     const user = await User.findByPk(member.userId);
     if (!user || user.tenantId !== ctx.tenant.id) {
       // Enlace roto (usuario borrado a mano): se enseña como "sin usuario".
-      return ok({ hasUser: false, username: null, lastLoginAt: null, managedElsewhere: false, modules: mergeModules(keys, []) });
+      return ok({
+        hasUser: false,
+        username: null,
+        lastLoginAt: null,
+        managedElsewhere: false,
+        correo: null,
+        correoPropuesto: esCorreo(member.email) ? normalizarCorreo(member.email) : null,
+        modules: mergeModules(keys, []),
+      });
     }
 
     const managedElsewhere = user.role === "admin" || user.role === "superadmin";
@@ -106,6 +132,10 @@ export const GET = withTenant(async (_request, { params }, ctx) => {
       username: user.email,
       lastLoginAt: user.lastLoginAt,
       managedElsewhere,
+      // A dónde iría el enlace si pierde la contraseña. Se enseña porque una
+      // cuenta sin correo es un problema que hay que poder VER, no adivinar.
+      correo: correoDeCuenta(user),
+      correoPropuesto: null,
       modules: mergeModules(keys, access.includes("all") ? keys : access),
     });
   } catch (err) {
@@ -148,6 +178,21 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     if (yaExiste) return error(`El usuario «${username}» ya existe. Elige otro.`, 409);
 
     /*
+     * EL CORREO ES OBLIGATORIO (26/08/2026, Jorge: «que se tenga que poner
+     * además de usuario y contraseña el correo asignado obligatoriamente»).
+     *
+     * No es lo mismo que el nombre de usuario: `laura_aumenta` entra con eso, y
+     * este es el buzón al que se le escribe si pierde la contraseña. Además vale
+     * para entrar, y por eso se comprueba que no lo tenga ya nadie —contra las
+     * DOS columnas, o teclearlo señalaría a dos cuentas—.
+     */
+    const correo = normalizarCorreo(body.correo);
+    const malCorreo = revisarCorreoCuenta(correo);
+    if (malCorreo) return error(malCorreo, 422);
+    const ocupado = await correoLibre(User, correo);
+    if (ocupado) return error(ocupado, 409);
+
+    /*
      * La contraseña la escribe SIEMPRE quien da el acceso (26/08/2026, Lau y
      * Jorge). No hay generador; el porqué, en la cabecera de
      * access/password/route.js. Las reglas son las de «cambiar mi contraseña»
@@ -164,7 +209,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     // validate:false A PROPÓSITO: el modelo valida isEmail y los usernames sin
     // @ son decisión de producto (mismo patrón que el seed de Aumenta).
     const user = await User.create(
-      { email: username, passwordHash, role: "user", tenantId: ctx.tenant.id, moduleAccess: modules },
+      { email: username, emailContacto: correo, passwordHash, role: "user", tenantId: ctx.tenant.id, moduleAccess: modules },
       { validate: false }
     );
 
@@ -191,13 +236,13 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       action: "team.user_created",
       entityId: member.id,
       before: null,
-      after: { username, moduleAccess: modules }, // JAMÁS la contraseña
+      after: { username, correo, moduleAccess: modules }, // JAMÁS la contraseña
       ip: request.headers.get("x-forwarded-for") ?? null,
     });
 
     // La contraseña NO vuelve: quien la escribió ya la tiene delante. No se
     // guarda en claro y no se puede volver a consultar, solo restablecer.
-    return created({ username, modules });
+    return created({ username, correo, modules });
   } catch (err) {
     return serverError(err);
   }
@@ -227,7 +272,55 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
 
     let body;
     try { body = await request.json(); } catch { return error("Body inválido"); }
-    if (!Array.isArray(body.modules)) return error("Se requiere modules: [moduleKey...]");
+
+    /*
+     * Dos cosas independientes por la misma puerta: los módulos y el correo.
+     *
+     * El correo se puede tocar SOLO (sin mandar `modules`) porque hace falta
+     * para las cuentas de antes del 26/08/2026: 14 nacieron sin ninguna
+     * dirección, y sin una forma de ponérsela desde la pantalla se quedarían sin
+     * poder recuperar la contraseña para siempre.
+     */
+    const tocaModulos = Array.isArray(body.modules);
+    const tocaCorreo = typeof body.correo === "string";
+    if (!tocaModulos && !tocaCorreo) return error("Se requiere modules: [moduleKey...] o correo");
+
+    const ip = request.headers.get("x-forwarded-for") ?? null;
+    const quien = request.headers.get("x-user-id");
+
+    if (tocaCorreo) {
+      const { User } = getMasterModels();
+      const correo = normalizarCorreo(body.correo);
+      const malCorreo = revisarCorreoCuenta(correo);
+      if (malCorreo) return error(malCorreo, 422);
+      // `exceptoId`: cambiarlo por el mismo que ya tiene no puede chocar consigo.
+      const ocupado = await correoLibre(User, correo, { exceptoId: user.id });
+      if (ocupado) return error(ocupado, 409);
+
+      const correoAntes = correoDeCuenta(user);
+      if (correo !== correoAntes) {
+        await user.update({ emailContacto: correo });
+        await logAudit({
+          tenantId: ctx.tenant.id,
+          userId: quien,
+          action: "team.correo_changed",
+          entityId: member.id,
+          before: { correo: correoAntes },
+          after: { correo },
+          ip,
+        });
+      }
+    }
+
+    if (!tocaModulos) {
+      const keysSolo = await getTenantModuleKeys(ctx.tenant.id);
+      const actuales = Array.isArray(user.moduleAccess) ? user.moduleAccess : [];
+      return ok({
+        username: user.email,
+        correo: correoDeCuenta(user),
+        modules: keysSolo.map((k) => ({ moduleKey: k, enabled: actuales.includes("all") || actuales.includes(k) })),
+      });
+    }
 
     const keys = await getTenantModuleKeys(ctx.tenant.id);
     const modules = filterModules(body.modules, keys);
@@ -247,15 +340,19 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
 
     await logAudit({
       tenantId: ctx.tenant.id,
-      userId: request.headers.get("x-user-id"),
+      userId: quien,
       action: "team.access_changed",
       entityId: member.id,
       before,
       after: { moduleAccess: modules },
-      ip: request.headers.get("x-forwarded-for") ?? null,
+      ip,
     });
 
-    return ok({ username: user.email, modules: keys.map((k) => ({ moduleKey: k, enabled: modules.includes(k) })) });
+    return ok({
+      username: user.email,
+      correo: correoDeCuenta(user),
+      modules: keys.map((k) => ({ moduleKey: k, enabled: modules.includes(k) })),
+    });
   } catch (err) {
     return serverError(err);
   }
