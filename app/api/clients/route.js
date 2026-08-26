@@ -1,3 +1,4 @@
+import { esEstadoDeFicha } from "../../../lib/clients/estados.js";
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { auditar, datosPeticion, resumen } from "../../../lib/utils/auditoria.js";
 import { ok, created, forbidden, error } from "../../../lib/utils/apiResponse.js";
@@ -41,6 +42,10 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 
   const search = searchParams.get("search");
   const status = searchParams.get("status");
+  // El estado de la ficha («Activo / No vino / Baja»), que es la COLUMNA. No se
+  // llama `status` porque ese nombre ya está cogido aquí por el embudo
+  // comercial, que vive en `customFields.seStatus`.
+  const estado = searchParams.get("estado");
   const country = searchParams.get("country");
   // Qué es el contratante: festival, sala, ayuntamiento, medio… (25/08/2026).
   // Vive en `customFields.categoria` y solo lo usa quien tiene `booking`.
@@ -66,6 +71,11 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
    */
   const enCustomFields = {};
   if (status) enCustomFields.seStatus = status;
+  // Se valida contra la lista antes de tocar el WHERE: `status` es un ENUM de
+  // PostgreSQL y un valor de fuera revienta la consulta en vez de no devolver
+  // nada. Un valor desconocido se ignora, que es como se comportan los demás
+  // filtros de esta pantalla.
+  if (esEstadoDeFicha(estado)) where.status = String(estado).trim();
   if (country) enCustomFields.country = country;
   if (categoria) enCustomFields.categoria = categoria;
   if (Object.keys(enCustomFields).length) {

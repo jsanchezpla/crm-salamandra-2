@@ -103,7 +103,12 @@ describe("por defecto, las fichas archivadas no salen", () => {
       await filasDe(s, ESQUEMA, key);
       const sql = s.sqls[0];
       assert.match(sql, /p\.status IN \('paused','discharged'\)/, `${key}: no mira el estado del paciente`);
-      assert.match(sql, /coalesce\(c\.status::text,''\) = 'inactive'/, `${key}: no mira el estado de la familia`);
+      // Los DOS estados que dejan de reclamar, no solo el que había el 25/08:
+      // desde el 26/08 «No vino» (`prospect`) cuenta igual que «Baja».
+      assert.match(sql, /coalesce\(c\.status::text,''\) IN \([^)]*'inactive'[^)]*\)/,
+        `${key}: no mira si la familia está de baja`);
+      assert.match(sql, /coalesce\(c\.status::text,''\) IN \([^)]*'prospect'[^)]*\)/,
+        `${key}: una familia marcada «No vino» sigue reclamando datos`);
     }
   });
 
@@ -194,7 +199,8 @@ describe("la excepción: de baja pero con hora cogida sí sale", () => {
       await filasDe(s, ESQUEMA, key, { conCitas: false });
       const where = whereDe(s.sqls[0]);
       assert.doesNotMatch(where, /bookings/, `${key}: pregunta por bookings sin tener agenda`);
-      assert.match(where, /NOT coalesce\(c\.status::text,''\) = 'inactive'/, `${key}: y encima ya no excluye bajas`);
+      assert.match(where, /NOT \(coalesce\(c\.status::text,''\) IN \([^)]*'inactive'[^)]*\)\)/,
+        `${key}: y encima ya no excluye bajas`);
     }
   });
 });

@@ -14,15 +14,15 @@
 | **Reina** | — · sin reina declarada; lo más parecido es `lib/clients/piezasFicha.js`: «Aumenta no cambia» (Jorge, 18/08/2026), la ficha base tiene la forma de Aumenta |
 | **Pantallas** | `/clientes` → `app/(dashboard)/clientes/page.jsx` (+ `ClientesClient.jsx`: listado y alta; resuelve perfil y rótulo en servidor) · `/clientes/[id]` → `app/(dashboard)/clientes/[id]/page.jsx` (elige la ficha por `UI_OVERRIDES` y resuelve perfil, piezas y textos en servidor) · `clients_avanzado`: `/clientes/lista-espera` → `app/(dashboard)/clientes/lista-espera/page.jsx` (+ `ListaEsperaClient.jsx`) y `/clientes/urgentes` → `app/(dashboard)/clientes/urgentes/page.jsx` (+ `FichasACompletarClient.jsx`), las dos con `notFound()` sin el módulo |
 | **Endpoints** | `app/api/clients/**` — 26 `route.js`: `route.js` (listado/alta), `export`, `import`, `[id]` y debajo `notes` (+ `[noteId]`), `attachments` (+ `[attachmentId]`, `download`), `interactions`, `contact-methods` (+ `[methodId]`), `guardians`, `contract` (+ `download`, `firmado/[documentoId]`), `comunicaciones`, `portal-months`, `portal-user`, `module-assignments`, `plans` (Pautas), `projects` (gatea `projects`), `billing-summary` (gatea `billing`); `clients_avanzado`: `waitlist` (+ `[id]`) y `urgentes` · Públicos: ninguno propio (el portal de la familia, `app/api/public/c/[tenantSlug]/citas-portal/**`, es de Citas y escribe `communication_prefs` y las firmas del contrato) |
-| **Lógica** | `lib/clients/` (17 ficheros): `formularioAlta.js` (qué se pregunta en el alta, perfil salud/comercial) · `vocabulario.js` (Clientes/Pacientes) · `piezasFicha.js` (qué paneles monta la ficha) · `moduleAssignments.js` (Paciente Nutrición/Clínica, auto-marcado) · `clientContract.js` + `guardians.js` + `contratoFirma.js` + `datosFicha.js` (contrato del centro, tutores, datos y firma) · `comunicaciones.js` (permiso de aviso por canal) · `contactMethods.js` (emails/teléfonos múltiples con principal) · `consultaExterna.js` (quién ve a los pacientes de empresas) · `listaEspera.js` + `urgentes.js` (`clients_avanzado`) · `attachmentStorage.js` + `signatureStorage.js` (disco) · `avisoBorrado.js` + `borrarRastro.js` (borrar una ficha) |
+| **Lógica** | `lib/clients/` (18 ficheros): `formularioAlta.js` (qué se pregunta en el alta, perfil salud/comercial) · `estados.js` (Activo/No vino/Baja, la columna `clients.status`; solo perfil salud) · `vocabulario.js` (Clientes/Pacientes) · `piezasFicha.js` (qué paneles monta la ficha) · `moduleAssignments.js` (Paciente Nutrición/Clínica, auto-marcado) · `clientContract.js` + `guardians.js` + `contratoFirma.js` + `datosFicha.js` (contrato del centro, tutores, datos y firma) · `comunicaciones.js` (permiso de aviso por canal) · `contactMethods.js` (emails/teléfonos múltiples con principal) · `consultaExterna.js` (quién ve a los pacientes de empresas) · `listaEspera.js` + `urgentes.js` (`clients_avanzado`) · `attachmentStorage.js` + `signatureStorage.js` (disco) · `avisoBorrado.js` + `borrarRastro.js` (borrar una ficha) |
 | **UI** | `modules/default/ClientDetailModule.jsx` (ficha base: pestañas que se esconden vacías, `PanelPestana`) · `components/clients/`: paneles compartidos `ClientNotesPanel.jsx`, `ClientAttachmentsPanel.jsx`, `ClientBookingsPanel.jsx`; secciones `ClientContractSection.jsx`, `ClientGuardiansSection.jsx`, `ClientComunicacionesSection.jsx`, `ClientContactMethodsSection.jsx`, `ClientModulesSection.jsx`, `ClientProfesionalSection.jsx`, `ClientCuentaWebSection.jsx`, `ClientConsultaExternaSection.jsx`, `ClientPortalMonthsSection.jsx`, `ClientFiscalSection.jsx`, `ClientPatientsSection.jsx`, `ClientCitasSection.jsx`, `ClientBonosSection.jsx`; alta: `PacientesDelAlta.jsx`, `ProgenitoresDelAlta.jsx`, `FacturacionDelAlta.jsx` · Pautas: `modules/nutricion/ClientPlansPanel.jsx` |
 | **Modelos** | `Client` (`clients`), `Contact` (`contacts`), `Interaction` (`interactions`, legacy), `ClientNote` (`client_notes`), `ClientAttachment` (`client_attachments`), `ClientContactMethod` (`client_contact_methods`), `ClientModuleAssignment` (`client_module_assignments`), `ContractSignature` (`contract_signatures`); `clients_avanzado`: `WaitlistEntry` (`waitlist_entries`), `DataReview` (`data_reviews`) |
-| **Interruptores y parámetros** | `featureFlags` propios: ninguno; `lib/clients/moduleAssignments.js` lee `nutricion.autoAsignarEnAlta` (auto-marcado en el alta, apagado por defecto). `logicOverrides`: nadie los lee. `schemaExtensions` de `clients` en nutri_laura (edad, motivo, info_adicional): letrero decorativo, el código no lo lee. Reglas por MÓDULOS (peldaño 2): `piezasFicha.js` (Notas si no `clinica`; Documentos si no `documents_avanzado`; Citas si `citas` y no `clinica`), `vocabulario.js` (Pacientes si `nutricion` y no `pacientes`/`clinica`), `formularioAlta.js` (perfil `salud` con `pacientes`/`clinica`/`nutricion`), `avisoBorrado.js` (la frase de borrado). Rótulo por slug: `TENANT_TITLE_OVERRIDES` en `app/(dashboard)/clientes/[id]/page.jsx` (nutri_laura → «Paciente») |
+| **Interruptores y parámetros** | `featureFlags` propios: ninguno; `lib/clients/moduleAssignments.js` lee `nutricion.autoAsignarEnAlta` (auto-marcado en el alta, apagado por defecto). `logicOverrides`: nadie los lee. `schemaExtensions` de `clients` en nutri_laura (edad, motivo, info_adicional): letrero decorativo, el código no lo lee. Reglas por MÓDULOS (peldaño 2): `piezasFicha.js` (Notas si no `clinica`; Documentos si no `documents_avanzado`; Citas si `citas` y no `clinica`), `vocabulario.js` (Pacientes si `nutricion` y no `pacientes`/`clinica`), `formularioAlta.js` (perfil `salud` con `pacientes`/`clinica`/`nutricion`), `estados.js` (los tres estados de la ficha, solo en perfil salud), `avisoBorrado.js` (la frase de borrado). Rótulo por slug: `TENANT_TITLE_OVERRIDES` en `app/(dashboard)/clientes/[id]/page.jsx` (nutri_laura → «Paciente») |
 | **Pantallas propias** | `modules/overrides/nutri-laura/ClientDetailModule.jsx` (cabecera + tarjeta + 5 pestañas; los paneles vienen de `components/clients/`), cargado por `UI_OVERRIDES` de `app/(dashboard)/clientes/[id]/page.jsx`. Es la única: el letrero `ui_override` en producción dice `nutri-laura/ClientDetailModule` y lo mantiene `scripts/sincronizar-ui-override.mjs` |
 | **Scripts** | activar: `node scripts/enable-module.js <slug> clients` (y `clients_avanzado`); arrastra `MODULES.clients` de `scripts/_module-migrations.js` (12: `migrate-client-attachments-and-notes`, `migrate-client-module-assignments`, `migrate-client-communication-prefs`, `migrate-client-birthdate`, `migrate-consultas-externas`, `migrate-nutricionista-asignada`, `migrate-data-reviews`, `migrate-interactions-notes-team`, `migrate-patients-clients-phase1` y las tres `migrate-documents-*`) más las CORE que tocan `clients` (`migrate-sprint-aumenta-2026-07`, `migrate-waitlist-therapist`, `migrate-client-fiscal-taxid`, `migrate-citas-autoconfirmadas-por-paciente`) · `migrate-clients-avanzado.js` (master, una vez, ya corrido) · ONE_OFF ya ejecutados: `migrate-contract-patient-to-client.js`, `migrate-auto-asignar-nutricion.js`, `backfill-nutricion-assignments.js`, `backfill-patients-client.js` · herramientas vivas: `borrar-rastro-paciente.js`, `comprobar-admision.js` (solo lectura), `_hechos/fusionar-tutores-aumenta.js` y `corregir-emails-importados.js` (importación de Aumenta; simulan sin `--confirm`) · `npm run db:check-links` y `npm run db:check-access` (`package.json`) |
-| **Pruebas** | en `npm test`: `scripts/_smoke-clients-contactos.mjs` (`node:test`, 19/08/2026: `contactMethods.js`, el espejo del correo/teléfono principal con un `ClientContactMethod` de mentira), `_smoke-clients-lista-espera.mjs` (`node:test`: `listaEspera.js` con modelos de mentira), `scripts/_smoke-clients-comunicaciones.mjs` (`node:test`, 19/08/2026: las cuatro decisiones de `lib/clients/comunicaciones.js` y `citaPuedeAvisar` con un `Client` de mentira), `_smoke-piezas-ficha.mjs` (`// @prueba ligera`; la forma de Aumenta), `_smoke-consultas-externas.mjs` (`// @prueba ligera`), `_smoke-alta-progenitores.mjs` (`formularioAlta` + `clientContract`), `_smoke-datos-edad.mjs`, `_smoke-datos-antes-de-firmar.mjs` y `_smoke-menor-firma.mjs` (`datosFicha` + `contratoFirma`, con `check()`), `scripts/_smoke-clients-contrato-firma.mjs` (`node:test`, 19/08/2026: lo que devuelve `lib/clients/contratoFirma.js` —`letraDocumentoCorrecta` solo juzga la letra de lo que parece DNI o NIE, un pasaporte pasa; `edadEn`/`esMenor` cuentan años cumplidos en UTC, con el día del cumpleaños y el 29 de febrero, y «no lo sé» cuenta como mayor a propósito, y desde el 21/08/2026 una fecha de nacimiento **FUTURA** también cuenta como «no lo sé»: `edadEn` acota el resultado a 0..120 —el mismo tope que `edadDesde` de `formularioAlta.js`— en vez de devolver años en negativo, que `esMenor` leía como «menor de 18» y le pedía a una adulta el consentimiento de su tutor; y `validarDatos` la rechaza ya en la puerta con «"Fecha de nacimiento" no puede ser una fecha futura», reconociendo el campo por su destino (`cliente.birthDate`, `tutor.birthDate`) o por su clave (`fechaNacimiento`/`birthDate`/`fnac`) —la fecha de la FIRMA queda fuera a propósito: un desfase de reloj entre navegador y servidor dejaría a alguien sin poder firmar, y una fecha futura que YA estuviera guardada en la ficha tampoco bloquea la firma, porque quien firma ni la puso ni puede quitarla—; `camposDe`/`bloquesDe`/`serializarPlantilla` normalizan la plantilla JSONB y la mandan al portal ya resuelta contra la ficha; `validarDatos` dice qué entra y con qué frase se rechaza, tira lo que la plantilla no declara, y el DNI deja de ser obligatorio por edad con la fecha de nacimiento que SE ESTÁ ESCRIBIENDO antes que con la guardada; desde el 19/08 una fecha que no existe —31 de febrero, 31 de abril, 29/02 en año no bisiesto— se rechaza como «no es una fecha real» en vez de llegar a la ficha y tumbar Postgres; `documentosQueAplican`/`situacionDocumentos`: el consentimiento parental solo sale para menores y el contrato no está completo hasta que TODOS los firmantes han firmado TODO lo que les aplica; `validarAceptaciones`: cada anexo se acepta por separado con id, título y hora—), `scripts/_smoke-clients-module-assignments.mjs` (`node:test`, 20/08/2026: `lib/clients/moduleAssignments.js` con modelos falsos —qué casillas de módulo se pintan en la ficha; el auto-marcado de «Paciente Nutrición» en el alta lo decide el flag `nutricion.autoAsignarEnAlta`, no tener el módulo: con el flag apagado, o sin función de flags siquiera, NO se marca nada y ni se toca la tabla; `clinica` no se auto-asigna JAMÁS (quien paga no siempre asiste); `profesional_salud` es una marca gateada por `citas`, no un módulo: la pone el lead leído en el servidor —no el navegador— y es la que abre los tipos de cita de profesionales; y una tabla sin migrar (42P01) nunca tumba un alta ni una conversión—), `_smoke-borrar-paciente.mjs` (`borrarRastro`), `_smoke-ui-overrides.mjs` (cuenta la ficha de Laura) — las sin marca las clasifica el runner por texto · con base de datos: `_smoke-contrato-estructurado.mjs`, `_smoke-lead-conversion-fix.js` |
+| **Pruebas** | en `npm test`: `scripts/_smoke-clients-contactos.mjs` (`node:test`, 19/08/2026: `contactMethods.js`, el espejo del correo/teléfono principal con un `ClientContactMethod` de mentira), `_smoke-clients-lista-espera.mjs` (`node:test`: `listaEspera.js` con modelos de mentira), `scripts/_smoke-clients-comunicaciones.mjs` (`node:test`, 19/08/2026: las cuatro decisiones de `lib/clients/comunicaciones.js` y `citaPuedeAvisar` con un `Client` de mentira), `_smoke-piezas-ficha.mjs` (`// @prueba ligera`; la forma de Aumenta), `_smoke-consultas-externas.mjs` (`// @prueba ligera`), `_smoke-alta-progenitores.mjs` (`formularioAlta` + `clientContract`), `_smoke-datos-edad.mjs`, `_smoke-datos-antes-de-firmar.mjs` y `_smoke-menor-firma.mjs` (`datosFicha` + `contratoFirma`, con `check()`), `scripts/_smoke-clients-contrato-firma.mjs` (`node:test`, 19/08/2026: lo que devuelve `lib/clients/contratoFirma.js` —`letraDocumentoCorrecta` solo juzga la letra de lo que parece DNI o NIE, un pasaporte pasa; `edadEn`/`esMenor` cuentan años cumplidos en UTC, con el día del cumpleaños y el 29 de febrero, y «no lo sé» cuenta como mayor a propósito, y desde el 21/08/2026 una fecha de nacimiento **FUTURA** también cuenta como «no lo sé»: `edadEn` acota el resultado a 0..120 —el mismo tope que `edadDesde` de `formularioAlta.js`— en vez de devolver años en negativo, que `esMenor` leía como «menor de 18» y le pedía a una adulta el consentimiento de su tutor; y `validarDatos` la rechaza ya en la puerta con «"Fecha de nacimiento" no puede ser una fecha futura», reconociendo el campo por su destino (`cliente.birthDate`, `tutor.birthDate`) o por su clave (`fechaNacimiento`/`birthDate`/`fnac`) —la fecha de la FIRMA queda fuera a propósito: un desfase de reloj entre navegador y servidor dejaría a alguien sin poder firmar, y una fecha futura que YA estuviera guardada en la ficha tampoco bloquea la firma, porque quien firma ni la puso ni puede quitarla—; `camposDe`/`bloquesDe`/`serializarPlantilla` normalizan la plantilla JSONB y la mandan al portal ya resuelta contra la ficha; `validarDatos` dice qué entra y con qué frase se rechaza, tira lo que la plantilla no declara, y el DNI deja de ser obligatorio por edad con la fecha de nacimiento que SE ESTÁ ESCRIBIENDO antes que con la guardada; desde el 19/08 una fecha que no existe —31 de febrero, 31 de abril, 29/02 en año no bisiesto— se rechaza como «no es una fecha real» en vez de llegar a la ficha y tumbar Postgres; `documentosQueAplican`/`situacionDocumentos`: el consentimiento parental solo sale para menores y el contrato no está completo hasta que TODOS los firmantes han firmado TODO lo que les aplica; `validarAceptaciones`: cada anexo se acepta por separado con id, título y hora—), `scripts/_smoke-clients-module-assignments.mjs` (`node:test`, 20/08/2026: `lib/clients/moduleAssignments.js` con modelos falsos —qué casillas de módulo se pintan en la ficha; el auto-marcado de «Paciente Nutrición» en el alta lo decide el flag `nutricion.autoAsignarEnAlta`, no tener el módulo: con el flag apagado, o sin función de flags siquiera, NO se marca nada y ni se toca la tabla; `clinica` no se auto-asigna JAMÁS (quien paga no siempre asiste); `profesional_salud` es una marca gateada por `citas`, no un módulo: la pone el lead leído en el servidor —no el navegador— y es la que abre los tipos de cita de profesionales; y una tabla sin migrar (42P01) nunca tumba un alta ni una conversión—), `_smoke-clientes-estados.mjs` (`node:test`, 26/08/2026: los tres estados de `lib/clients/estados.js` —que son los del ENUM y no más, que un valor de fuera se rechaza antes de llegar al `where`, que «No vino» y «Baja» dejan de reclamar datos y un estado desconocido NO (ante la duda se enseña), y que un cliente comercial no lo usa: allí `prospect` ya significa «compró una vez»—), `_smoke-borrar-paciente.mjs` (`borrarRastro`), `_smoke-ui-overrides.mjs` (cuenta la ficha de Laura) — las sin marca las clasifica el runner por texto · con base de datos: `_smoke-contrato-estructurado.mjs`, `_smoke-lead-conversion-fix.js` |
 | **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` · `../decisions/2026-08-01-alta-de-clientes-por-perfil.md` · `../decisions/2026-08-04-clientes-se-llama-pacientes-en-nutricion.md` · `../decisions/2026-08-04-fichas-a-completar-cuelga-de-clients-avanzado.md` · `../decisions/2026-08-18-la-piramide-invertida-de-leads.md` |
-| **En este doc** | Modelo `Client` · Endpoints · Contrato del Centro (sprint Aumenta 2026-07, punto 1.1) · Comunicaciones: por dónde se le escribe a cada familia (01/08/2026) · Archivos adjuntos · UI · Asignación de clientes a módulos (Nutrición / Clínica) |
+| **En este doc** | Modelo `Client` · Endpoints · «No vino»: el estado de una ficha (26/08/2026) · Contrato del Centro (sprint Aumenta 2026-07, punto 1.1) · Comunicaciones: por dónde se le escribe a cada familia (01/08/2026) · Archivos adjuntos · UI · Asignación de clientes a módulos (Nutrición / Clínica) |
 
 ## Resumen
 
@@ -85,10 +85,10 @@ campos. Resumen:
 
 | Ruta | Método | Descripción | Auth |
 |---|---|---|---|
-| `/api/clients` | GET | Listado paginado (filtros: search, status, country) | JWT + `hasModule(clients)` |
+| `/api/clients` | GET | Listado paginado (filtros: search, country, `status` = embudo comercial en `customFields`, `estado` = estado de la ficha en la COLUMNA —`active`/`prospect`/`inactive`—; un `estado` desconocido se ignora) | JWT + `hasModule(clients)` |
 | `/api/clients` | POST | Crear cliente (acepta `customFields` libre + leadId/origin/seStatus) | JWT |
 | `/api/clients/[id]` | GET | Detalle + interactions | JWT |
-| `/api/clients/[id]` | PUT | Editar (merge `customFields`) | JWT |
+| `/api/clients/[id]` | PUT | Editar (merge `customFields`). ⚠️ Tres llaves parecidas y distintas: `status` es el embudo comercial (`customFields.seStatus`), `estado` es el estado de la ficha (la columna, 422 si no es uno de los tres) y `archivada` sigue valiendo como el interruptor de siempre —manda `estado` si vienen los dos | JWT |
 | `/api/clients/[id]` | DELETE | Borrar. Bloquea si tiene facturas. **GC** del directorio físico de attachments | JWT |
 | `/api/clients/[id]/interactions` | GET/POST | Timeline legacy de interacciones (call/email/meeting/note) | JWT |
 | `/api/clients/[id]/notes` | GET/POST | Notas internas (ver sección abajo) | JWT |
@@ -430,6 +430,80 @@ a mano y no usa `PanelPestana`, así que allí la sección avisa por `onEstado` 
 la pestaña se filtra con `hayWhatsapp`. Y el panel va **montado siempre**
 (oculto con `hidden`), no `tab === "whatsapp" && …`: si solo se montara al abrir
 su pestaña, la pestaña no aparecería nunca — no se puede abrir lo que no está.
+
+## «No vino»: el estado de una ficha, en vez de borrarla (26/08/2026)
+
+Lau (Aumenta) pidió el 14/08 sacar de en medio las fichas de «gente que llamó o
+dejó sus datos pero nunca llegó a empezar». La primera lectura fue borrarlas, y
+se cayó sola en cuanto se midió: de esas 118 fichas mudas, **21 tienen 127
+facturas cobradas** (14.820 €) repartidas en cinco ejercicios y dos series, y
+`invoices.client_id` es **ON DELETE CASCADE**. La factura, además, no guarda ni
+un dato fiscal propio —nombre, NIF y dirección se leen en vivo de `clients`
+(`lib/billing/nifCliente.js`)—, así que borrar la ficha no solo se llevaría las
+filas: dejaría un documento legalmente obligatorio que ya no se puede reimprimir.
+
+Lo que hacía falta no era borrar a nadie: era **poder decirlo**. Jorge, el
+26/08: «tampoco quiero borrar a la persona, simplemente que tenga el status de
+que no ha venido».
+
+### Dónde vive, y por qué no hizo falta ninguna columna
+
+`clients.status` ya era `ENUM('active','inactive','prospect')` y **`prospect`
+estaba sin estrenar**: 0 fichas en Aumenta. Es exactamente «no llegó a ser
+cliente», así que el estado va ahí. Los rótulos, en `lib/clients/estados.js`:
+
+| En pantalla | Columna | Qué significa |
+| --- | --- | --- |
+| **Activo** | `active` | Viene, o se cuenta con que venga |
+| **No vino** | `prospect` | Llamó o dejó sus datos y nunca llegó a empezar |
+| **Baja** | `inactive` | Vino y ya no viene |
+
+⚠️ **No es el mismo campo que el chip que se veía hasta ese día.** Aquel leía el
+embudo comercial (`customFields.seStatus`), y el embudo **no lo ha usado nadie
+nunca**: medido el 26/08 en los siete tenants con fichas, todo valor no vacío es
+el `new` que estampaba el alta o una ficha suelta que alguien tocó una vez. En
+Aumenta las 1.083 lo tienen vacío, y el respaldo a `"new"` hacía que una familia
+con cuatro años de historia y 127 facturas saliera como **«Nuevo»**.
+
+### Solo en perfil salud, y eso es una decisión
+
+En un cliente comercial la columna **ya significa otra cosa**: la tienda marca
+`prospect` a quien ha comprado una vez y todavía no es cartera
+(`lib/tienda/pedidoDesdeTienda.js`), y laura_ubeda tiene sus 183 fichas así.
+Enseñarles «No vino» sería mentir sobre gente que sí compró. Los comerciales se
+quedan con su embudo, intacto. El día que uno lo pida, se le decide el rótulo
+—que es el peldaño 1 de la escalera— y se enciende.
+
+### El archivo y el estado son el MISMO campo
+
+Archivar (25/08) ya escribía `inactive` en esa columna. Con un tercer valor, un
+interruptor de dos posiciones no llega: al desarchivar volvía siempre a `active`,
+así que archivar y desarchivar a alguien marcado «No vino» lo ascendía a Activo
+en silencio. Por eso el desplegable **sustituye** al botón donde hay estado (y el
+botón se queda donde no lo hay). Un campo, un sitio.
+
+### Qué cambia en las pantallas
+
+- **Ficha**: el chip de la cabecera dice el estado, y un desplegable al lado lo
+  cambia de un clic, sin pasar por «Editar». Fuera el botón de archivar.
+- **Listado**: las pestañas de filtro y el selector del panel son los tres
+  estados; el filtro va al SERVIDOR por `?estado=` (la columna), no por
+  `?status=` (que sigue siendo el embudo). Un valor desconocido se ignora, como
+  el resto de filtros: `status` es un ENUM y un valor de fuera reventaría la
+  consulta.
+- **Fichas a completar**: cada fila de una carpeta de FAMILIA lleva un «No vino»
+  que la marca sin abrir la ficha —eran 90 las que había que marcar en Aumenta, y
+  abrir noventa fichas no lo hace nadie— y la carpeta deja de reclamarle datos,
+  igual que ya hacía con las bajas. La casilla de arriba pasa a llamarse
+  «Incluir bajas y «No vino»».
+
+### El otro campo que dejó de inventarse
+
+El PUT de la ficha estampaba `seStatus: "new"` en cualquier guardado que no lo
+trajera, o sea en TODOS los de un centro clínico. Con el estado nuevo eso iban a
+ser 90 guardados seguidos escribiendo un embudo comercial en un cliente que no lo
+enseña. Ya no: quien lo usa lo manda, y entonces se guarda. Es el mismo arreglo
+que se le hizo a `origin` el 08/08/2026 y por el mismo motivo.
 
 ## «Fichas a completar» no reclama datos de fichas archivadas (25/08/2026)
 

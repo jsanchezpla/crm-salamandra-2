@@ -51,6 +51,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
+import {
+  ACTIVO,
+  estadosDeFicha,
+  etiquetaDeEstado,
+  tonoDeEstado,
+  usaEstadoDePerfil,
+} from "../../../lib/clients/estados.js";
 import ClientNotesPanel from "../../../components/clients/ClientNotesPanel.jsx";
 import ClientAttachmentsPanel from "../../../components/clients/ClientAttachmentsPanel.jsx";
 import ClientBookingsPanel from "../../../components/clients/ClientBookingsPanel.jsx";
@@ -144,8 +151,12 @@ function fmtDate(iso) {
   });
 }
 
-export default function NutriLauraClientDetailModule() {
+export default function NutriLauraClientDetailModule({ perfil }) {
   const { id } = useParams();
+  // El mismo estado de ficha que el módulo base (26/08/2026, Lau). La página le
+  // pasa el perfil igual que al base; Laura tiene `nutricion`, o sea salud. Si
+  // no llegara, se queda con el embudo de siempre, que es como estaba.
+  const usaEstado = usaEstadoDePerfil(perfil);
   const router = useRouter();
 
   const [me, setMe] = useState(null);
@@ -208,7 +219,11 @@ export default function NutriLauraClientDetailModule() {
       phone: client.phone || "",
       domicilio: client.customFields?.domicilio || "",
       notes: client.notes || "",
-      status: client.customFields?.seStatus || "new",
+      // El embudo comercial solo viaja donde se usa; donde hay estado de ficha
+      // viaja `estado`, que es la columna.
+      ...(usaEstado
+        ? { estado: client.status || ACTIVO }
+        : { status: client.customFields?.seStatus || "new" }),
       edad: client.customFields?.edad || "",
       motivo: client.customFields?.motivo || "",
       info_adicional: client.customFields?.info_adicional || "",
@@ -314,7 +329,7 @@ export default function NutriLauraClientDetailModule() {
   }
 
   const status = client.customFields?.seStatus || "new";
-  const st = STATUS_STYLE[status] ?? STATUS_STYLE.new;
+  const st = usaEstado ? tonoDeEstado(client.status) : (STATUS_STYLE[status] ?? STATUS_STYLE.new);
   // La edad DERIVADA de la fecha de nacimiento manda sobre la que se escribió a
   // mano (04/08/2026): guardar las dos es garantizar que dentro de un año una de
   // ellas mienta. La escrita a mano se sigue enseñando mientras no haya fecha,
@@ -345,7 +360,7 @@ export default function NutriLauraClientDetailModule() {
           <h1 className="text-gray-900 text-lg font-semibold">{client.name}</h1>
           <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${st.bg}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
-            {STATUSES.find((s) => s.key === status)?.label ?? status}
+            {usaEstado ? etiquetaDeEstado(client.status) : (STATUSES.find((s) => s.key === status)?.label ?? status)}
           </span>
         </div>
         <div className="ml-7 flex flex-wrap gap-3 text-xs text-gray-500">
@@ -707,18 +722,24 @@ function PatientCard({
             <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
               Estado
             </label>
+            {/* Los tres estados de la ficha donde los hay; el embudo comercial
+                donde no. La lista sale de `lib/clients/estados.js` en los dos
+                casos que la usan, para que su ficha y la base no se separen. */}
             <div className="flex flex-wrap gap-1.5">
-              {STATUSES.map((s) => (
+              {(usaEstado ? estadosDeFicha() : STATUSES).map((s) => (
                 <button
                   key={s.key}
-                  onClick={() => setEditForm((f) => ({ ...f, status: s.key }))}
+                  title={s.ayuda}
+                  onClick={() =>
+                    setEditForm((f) => (usaEstado ? { ...f, estado: s.key } : { ...f, status: s.key }))
+                  }
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
-                    editForm.status === s.key
-                      ? `${STATUS_STYLE[s.key].bg} border-transparent`
+                    (usaEstado ? editForm.estado : editForm.status) === s.key
+                      ? `${(usaEstado ? s : STATUS_STYLE[s.key]).bg} border-transparent`
                       : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
                   }`}
                 >
-                  <span className={`w-1.5 h-1.5 rounded-full ${STATUS_STYLE[s.key].dot}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full ${(usaEstado ? s : STATUS_STYLE[s.key]).dot}`} />
                   {s.label}
                 </button>
               ))}

@@ -15,6 +15,7 @@ import ClientModulesSection from "../../components/clients/ClientModulesSection.
 import ClientContactMethodsSection from "../../components/clients/ClientContactMethodsSection.jsx";
 import ClientFiscalSection from "../../components/clients/ClientFiscalSection.jsx";
 import { camposCliente, PERFIL_COMERCIAL } from "../../lib/clients/formularioAlta.js";
+import { ACTIVO, estadosDeFicha, etiquetaDeEstado, tonoDeEstado, usaEstadoDePerfil } from "../../lib/clients/estados.js";
 import { avisoBorradoSegunModulos } from "../../lib/clients/avisoBorrado.js";
 import { enlaceDeVuelta } from "../../lib/clients/volver.js";
 import { esAdmin } from "../../lib/auth/permisos.js";
@@ -224,6 +225,10 @@ export default function ClientDetailModule({
   textos: textosProp,
 }) {
   const textos = textosProp ?? textosPiezas();
+  // ¿Esta ficha tiene estado propio («Activo / No vino / Baja») o el embudo
+  // comercial de siempre? Va arriba porque lo miran el formulario de edición y
+  // la cabecera, y decidirlo dos veces es decidirlo mal una.
+  const usaEstado = usaEstadoDePerfil(perfil);
   const TABS = pestanasDe(textos);
   const { id } = useParams();
   const router = useRouter();
@@ -326,7 +331,10 @@ export default function ClientDetailModule({
       domicilio: client.customFields?.domicilio || "",
       postalCode: client.customFields?.postalCode || "",
       notes: client.notes || "",
-      status: client.customFields?.seStatus || "new",
+      // El embudo solo viaja donde se usa. Mandarlo desde una ficha de salud
+      // escribiría "new" en `customFields.seStatus` de las 1.083 de Aumenta —un
+      // campo que allí nadie mira— cada vez que alguien guarda la ficha.
+      ...(usaEstado ? {} : { status: client.customFields?.seStatus || "new" }),
       company: client.customFields?.company || "",
       country: client.customFields?.country || "",
       city: client.customFields?.city || "",
@@ -400,6 +408,34 @@ export default function ClientDetailModule({
    * ⚠️ Manda `archivada`, no `status`: en este endpoint `status` es el embudo
    * comercial y acaba en `customFields.seStatus`, que es otro campo distinto.
    */
+  /**
+   * Cambiar el estado de la ficha desde la cabecera (26/08/2026, Lau).
+   *
+   * Sustituye al interruptor de archivar, que solo sabía decir dos de los tres
+   * estados. Guarda al elegir, sin pasar por «Editar»: archivar era un clic y
+   * marcar «No vino» tiene que costar lo mismo — Lau tiene 90 fichas que marcar.
+   *
+   * Manda `estado`, NO `status`: en este endpoint `status` es el embudo
+   * comercial y acaba en `customFields.seStatus`, que es otro campo.
+   */
+  async function cambiarEstado(valor) {
+    if (!valor || valor === client.status) return;
+    setArchivando(true);
+    try {
+      const res = await fetch(`/api/clients/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estado: valor }),
+      });
+      const data = await res.json();
+      // Se funde, no se sustituye: el PUT no devuelve `listaEspera` ni `bonos`,
+      // y cambiarlos por el objeto entero los borraba de la cabecera.
+      if (data.ok) setClient((prev) => ({ ...prev, ...data.data }));
+    } finally {
+      setArchivando(false);
+    }
+  }
+
   async function toggleArchivada() {
     const archivar = client.status !== "inactive";
     setArchivando(true);
@@ -456,8 +492,12 @@ export default function ClientDetailModule({
   // teléfono: esos los gestiona la sección "Contactos", que admite varios.
   const CAMPOS_FICHA = camposCliente(perfil, { conPacientes }).filter((c) => c.key !== "email" && c.key !== "phone");
 
+  // El chip de la cabecera dice el ESTADO donde la ficha lo tiene (perfil
+  // salud) y el embudo comercial donde no. Hasta el 26/08/2026 decía siempre el
+  // embudo, que está vacío en las 1.083 fichas de Aumenta: el respaldo a "new"
+  // hacía que una familia con cuatro años de historia saliera como «Nuevo».
   const status = client.customFields?.seStatus || "new";
-  const st = STATUS_STYLE[status] ?? STATUS_STYLE.new;
+  const st = usaEstado ? tonoDeEstado(client.status) : (STATUS_STYLE[status] ?? STATUS_STYLE.new);
   // ⚠️ `client.status` (la columna) y `seStatus` (el embudo comercial, dos
   // líneas arriba) NO son lo mismo, aunque el nombre lo parezca.
   const archivada = client.status === "inactive";
@@ -475,11 +515,11 @@ export default function ClientDetailModule({
           <h1 className="text-gray-900 text-lg font-semibold min-w-0 [overflow-wrap:anywhere]">{client.name}</h1>
           <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${st.bg}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
-            {STATUSES.find((s) => s.key === status)?.label ?? status}
+            {usaEstado ? etiquetaDeEstado(client.status) : (STATUSES.find((s) => s.key === status)?.label ?? status)}
           </span>
           {/* Ficha archivada: lo primero que hay que ver al abrirla, porque
               explica por qué no aparece en «Fichas a completar» ni reclama nada. */}
-          {archivada && (
+          {!usaEstado && archivada && (
             <span
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-neutral-200 text-neutral-600"
               title="Dada de baja. Se conserva entera y se le puede seguir dando hora; solo deja de reclamar datos que faltan."
@@ -556,6 +596,37 @@ export default function ClientDetailModule({
                       </svg>
                       Editar
                     </button>
+                    {/*
+                      EL ESTADO, EN LA CABECERA (26/08/2026, Lau).
+
+                      Donde la ficha tiene estado propio —perfil salud— este
+                      desplegable ES el archivo: «Baja» escribe lo mismo que
+                      escribía el botón. Se decidió sustituir el interruptor y no
+                      sumarle un campo al lado porque los dos guardaban en la
+                      MISMA columna, y al desarchivar volvía siempre a «Activo»:
+                      archivar y desarchivar a alguien marcado «No vino» lo
+                      ascendía a Activo en silencio.
+
+                      Donde no lo tiene —clientes comerciales— se queda el botón
+                      de siempre: allí `prospect` ya significa otra cosa (la
+                      tienda marca así a quien compró una vez), y enseñarles «No
+                      vino» sería mentir sobre gente que sí compró.
+                    */}
+                    {usaEstado ? (
+                      <select
+                        value={client.status ?? ACTIVO}
+                        onChange={(e) => cambiarEstado(e.target.value)}
+                        disabled={archivando}
+                        aria-label="Estado de la ficha"
+                        title={estadosDeFicha().find((e) => e.key === (client.status ?? ACTIVO))?.ayuda}
+                        className="text-xs text-gray-600 border border-gray-200 hover:border-gray-300 px-3 py-1.5 rounded-lg bg-white transition-colors disabled:opacity-50"
+                      >
+                        {estadosDeFicha().map((e) => (
+                          <option key={e.key} value={e.key}>{e.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <>
                     {/* Archivar NO es de admin: se deshace con el mismo botón.
                         Lo que no se deshace —Eliminar— sí lo es. */}
                     <button
@@ -568,6 +639,8 @@ export default function ClientDetailModule({
                     >
                       {archivando ? "…" : archivada ? "Reactivar ficha" : "Archivar ficha"}
                     </button>
+                      </>
+                    )}
                     {/* Solo admin (14/08/2026, ver lib/auth/permisos.js). No
                         sale deshabilitado a propósito: un botón apagado es una
                         pregunta que alguien tiene que ir a hacer. */}
@@ -612,7 +685,11 @@ export default function ClientDetailModule({
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-primary)] resize-none"
                   />
                 </div>
-                <div>
+                {/* El estado de la ficha vive en la cabecera, que es donde se
+                    cambia de un clic; aquí solo queda el embudo comercial, para
+                    quien lo tenga. Dos sitios para el mismo campo se contradicen
+                    en cuanto uno se toca con el formulario abierto. */}
+                <div className={usaEstado ? "hidden" : undefined}>
                   <label className="block text-xs font-medium text-gray-500 mb-2">Estado</label>
                   <div className="flex flex-wrap gap-1.5">
                     {STATUSES.map((s) => (

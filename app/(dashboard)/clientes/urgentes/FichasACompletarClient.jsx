@@ -37,7 +37,7 @@ const fmt = (v) => {
   return new Date(v + "T00:00:00").toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
 };
 
-function Carpeta({ carpeta, abierta, onToggle, onRevisar, marcando }) {
+function Carpeta({ carpeta, abierta, onToggle, onRevisar, onNoVino, conEstado, marcando }) {
   const vacia = carpeta.total === 0;
   return (
     <div className={`rounded-xl border bg-white overflow-hidden ${carpeta.bloquea && !vacia ? "border-amber-200" : "border-neutral-200"}`}>
@@ -114,7 +114,31 @@ function Carpeta({ carpeta, abierta, onToggle, onRevisar, marcando }) {
                     )}
                   </td>
                   <td className="px-4 py-2 text-neutral-500 whitespace-nowrap">{fmt(f.dato)}</td>
-                  <td className="px-4 py-2 text-right">
+                  <td className="px-4 py-2 text-right whitespace-nowrap">
+                    {/*
+                      «No vino» aquí y no solo en la ficha (26/08/2026, Lau).
+                      Eran 90 fichas mudas sin una sola cita: abrir noventa
+                      fichas para tocar un desplegable no lo hace nadie, y por
+                      eso la petición había llegado como «bórralas».
+
+                      Solo en las carpetas de FAMILIA: el estado es de la ficha,
+                      y marcarlo desde la fila de un hijo diría que no vino toda
+                      la familia por lo que le falta a uno.
+
+                      Sin confirmación, igual que «Está bien así», que está al
+                      lado y también hace desaparecer la fila: se deshace desde
+                      la ficha, y la casilla de arriba las devuelve a la vista.
+                    */}
+                    {conEstado && carpeta.entidad === "client" && (
+                      <button
+                        onClick={() => onNoVino(carpeta, f)}
+                        disabled={marcando === `${carpeta.key}|${f.id}`}
+                        title="Llamó o dejó sus datos pero nunca llegó a empezar. La ficha se queda entera; solo deja de reclamar lo que le falta."
+                        className="mr-3 text-[11px] text-amber-700 hover:text-amber-900 underline disabled:opacity-40"
+                      >
+                        No vino
+                      </button>
+                    )}
                     <button
                       onClick={() => onRevisar(carpeta, f)}
                       disabled={marcando === `${carpeta.key}|${f.id}`}
@@ -138,7 +162,7 @@ function Carpeta({ carpeta, abierta, onToggle, onRevisar, marcando }) {
   );
 }
 
-export default function FichasACompletarClient() {
+export default function FichasACompletarClient({ conEstado = false }) {
   const [datos, setDatos] = useState(null);
   /*
    * La carpeta con la que se vuelve de una ficha nace ABIERTA (26/08/2026).
@@ -200,6 +224,37 @@ export default function FichasACompletarClient() {
     });
   }
 
+  /**
+   * Marcar la ficha como «No vino» sin salir de la pantalla.
+   *
+   * Escribe en la COLUMNA `clients.status` por la misma puerta que la ficha
+   * (`estado`, no `status`: ahí `status` es el embudo comercial). La fila
+   * desaparece de la carpeta porque «No vino» deja de reclamar datos
+   * (`dejaDeReclamar`, en `lib/clients/estados.js`), y vuelve con la casilla de
+   * arriba.
+   */
+  async function marcarNoVino(carpeta, fila) {
+    const clientId = fila.client_id ?? fila.id;
+    if (!clientId) return;
+    const id = `${carpeta.key}|${fila.id}`;
+    setMarcando(id);
+    setErrorMsg(null);
+    try {
+      const r = await fetch(`/api/clients/${clientId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estado: "prospect" }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || `No se pudo marcar (HTTP ${r.status})`);
+      await cargar();
+    } catch (e) {
+      setErrorMsg(e.message);
+    } finally {
+      setMarcando(null);
+    }
+  }
+
   async function revisar(carpeta, fila) {
     const id = `${carpeta.key}|${fila.id}`;
     setMarcando(id);
@@ -244,10 +299,11 @@ export default function FichasACompletarClient() {
             onChange={(e) => setIncluirBajas(e.target.checked)}
             className="w-3.5 h-3.5 rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)]"
           />
-          Incluir fichas archivadas
-          <HelpTooltip title="Fichas archivadas" placement="bottom">
-            Las fichas dadas de baja no salen: sus huecos ya no hay que rellenarlos, y estaban
-            enterrando lo que sí hay que mirar esta semana.
+          Incluir bajas y «No vino»
+          <HelpTooltip title="Fichas que no reclaman" placement="bottom">
+            Las fichas de quien ya no viene —«Baja»— y las de quien nunca llegó a empezar
+            —«No vino»— no salen: sus huecos ya no hay que rellenarlos, y estaban enterrando
+            lo que sí hay que mirar esta semana.
             {" "}
             <strong className="text-white">Con una excepción</strong>: quien está de baja pero
             tiene citas reservadas sí aparece, marcado como «Archivada». Ahí el problema no es el
@@ -283,7 +339,8 @@ export default function FichasACompletarClient() {
             {datos.bloquea.map((c) => (
               <Carpeta
                 key={c.key} carpeta={c} abierta={abiertas.has(c.key)}
-                onToggle={() => toggle(c.key)} onRevisar={revisar} marcando={marcando}
+                onToggle={() => toggle(c.key)} onRevisar={revisar} onNoVino={marcarNoVino}
+                conEstado={conEstado} marcando={marcando}
               />
             ))}
             {/* Las citas sin profesional ya tienen su pantalla, con asignación en
@@ -314,7 +371,8 @@ export default function FichasACompletarClient() {
             {datos.completar.map((c) => (
               <Carpeta
                 key={c.key} carpeta={c} abierta={abiertas.has(c.key)}
-                onToggle={() => toggle(c.key)} onRevisar={revisar} marcando={marcando}
+                onToggle={() => toggle(c.key)} onRevisar={revisar} onNoVino={marcarNoVino}
+                conEstado={conEstado} marcando={marcando}
               />
             ))}
           </section>

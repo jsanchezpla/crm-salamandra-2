@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import FichasACompletarClient from "./FichasACompletarClient.jsx";
 import { getMasterModels } from "../../../../lib/db/masterDb.js";
 import { MODULE_KEYS } from "../../../../lib/tenant/moduleKeys.js";
+import { usaEstadoDeFicha } from "../../../../lib/clients/estados.js";
 
 export const metadata = { title: "Fichas a completar" };
 
@@ -28,21 +29,29 @@ export default async function FichasACompletarPage() {
   const slug = headersList.get("x-tenant");
 
   let activo = false;
+  // Y si esta ficha tiene estado propio («Activo / No vino / Baja») o el embudo
+  // comercial. Se resuelve aquí, en el servidor, por lo mismo que el módulo: la
+  // pantalla es de cliente y no puede preguntar por los módulos del tenant.
+  let conEstado = false;
   try {
     const { Tenant, TenantModule } = getMasterModels();
     const tenant = slug ? await Tenant.findOne({ where: { slug } }) : null;
     if (tenant) {
-      const fila = await TenantModule.findOne({
-        where: { tenantId: tenant.id, moduleKey: MODULE_KEYS.CLIENTS_AVANZADO },
+      const filas = await TenantModule.findAll({
+        where: { tenantId: tenant.id },
+        attributes: ["moduleKey", "enabled"],
       });
-      activo = !!fila?.enabled;
+      const encendidos = new Set(filas.filter((f) => f.enabled).map((f) => f.moduleKey));
+      activo = encendidos.has(MODULE_KEYS.CLIENTS_AVANZADO);
+      conEstado = usaEstadoDeFicha((k) => encendidos.has(k));
     }
   } catch {
     // Ante la duda, cerrado: la API gatea igual, así que enseñar la pantalla
     // solo serviría para que diera 403 al cargar.
     activo = false;
+    conEstado = false;
   }
 
   if (!activo) notFound();
-  return <FichasACompletarClient />;
+  return <FichasACompletarClient conEstado={conEstado} />;
 }

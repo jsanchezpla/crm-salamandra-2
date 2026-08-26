@@ -8,12 +8,19 @@ import HelpTooltip from "../../../components/ui/HelpTooltip.jsx";
 import PacientesDelAlta, { PACIENTE_VACIO } from "../../../components/clients/PacientesDelAlta.jsx";
 import ProgenitoresDelAlta, { PROGENITOR_VACIO } from "../../../components/clients/ProgenitoresDelAlta.jsx";
 import FacturacionDelAlta from "../../../components/clients/FacturacionDelAlta.jsx";
-import { camposCliente, PERFIL_COMERCIAL, PERFIL_SALUD } from "../../../lib/clients/formularioAlta.js";
+import { camposCliente, PERFIL_COMERCIAL } from "../../../lib/clients/formularioAlta.js";
 import { VOCABULARIO_CLIENTE } from "../../../lib/clients/vocabulario.js";
 import { CATEGORIAS, rotuloCategoria } from "../../../lib/booking/categorias.js";
 import { avisoBorradoSegunModulos } from "../../../lib/clients/avisoBorrado.js";
 import { esAdmin } from "../../../lib/auth/permisos.js";
 import Paginador from "@/components/ui/Paginador.jsx";
+import {
+  ACTIVO,
+  estadosDeFicha,
+  etiquetaDeEstado,
+  tonoDeEstado,
+  usaEstadoDePerfil,
+} from "../../../lib/clients/estados.js";
 
 function useMounted() {
   const [m, setM] = useState(false);
@@ -107,7 +114,11 @@ export default function ClientesClient({
   // una consulta de nutrición: allí todos son pacientes. Se esconde la columna
   // y las tarjetas de recuento (Rodrigo, 04/08/2026), igual que ya se quitaron
   // «Tema» y «Producto de interés» del alta para el mismo perfil.
-  const conEmbudo = perfil !== PERFIL_SALUD;
+  // Las dos caras de la misma moneda: donde la ficha tiene estado propio
+  // («Activo / No vino / Baja», 26/08/2026) no hay embudo comercial, y al revés.
+  // Se nombran las dos para que cada sitio diga cuál de las dos cosas mira.
+  const usaEstado = usaEstadoDePerfil(perfil);
+  const conEmbudo = !usaEstado;
   const [selected, setSelected] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [editForm, setEditForm] = useState({});
@@ -141,7 +152,9 @@ export default function ClientesClient({
   const fetchClients = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams({ limit: String(POR_PAGINA), page: String(pagina), orden, dir });
-    if (activeStatus !== "all") params.set("status", activeStatus);
+    // `estado` o `status` según qué esté enseñando la barra de pestañas: son
+    // dos campos distintos y mandar el nombre equivocado filtra por otra cosa.
+    if (activeStatus !== "all") params.set(usaEstado ? "estado" : "status", activeStatus);
     if (categoria !== "all") params.set("categoria", categoria);
     if (search.trim()) params.set("search", search.trim());
     fetch(`/api/clients?${params}`)
@@ -200,7 +213,12 @@ export default function ClientesClient({
       email: client.email || "",
       phone: client.phone || "",
       notes: client.notes || "",
-      status: client.customFields?.seStatus || "new",
+      // Donde hay estado de ficha viaja `estado` (la columna); donde no, el
+      // embudo de siempre. Mandar los dos escribiría el embudo en fichas que no
+      // lo usan cada vez que alguien guarda desde el panel.
+      ...(usaEstado
+        ? { estado: client.status || ACTIVO }
+        : { status: client.customFields?.seStatus || "new" }),
       company: client.customFields?.company || "",
       country: client.customFields?.country || "",
       city: client.customFields?.city || "",
@@ -311,7 +329,7 @@ export default function ClientesClient({
     setExporting(true);
     try {
       const params = new URLSearchParams();
-      if (activeStatus !== "all") params.set("status", activeStatus);
+      if (activeStatus !== "all") params.set(usaEstado ? "estado" : "status", activeStatus);
       // El Excel sale con lo que se está viendo, filtro de tipo incluido: bajar
       // «festivales» y recibir los 183 sería una sorpresa cara.
       if (categoria !== "all") params.set("categoria", categoria);
@@ -524,7 +542,11 @@ export default function ClientesClient({
             >
               Todos
             </button>
-            {STATUSES.map((s) => (
+            {/* Las pestañas de filtro: los tres estados donde los hay, el embudo
+                donde no. Sin esto, en un centro clínico ofrecían cinco filtros
+                del embudo comercial que devolvían cero siempre, porque
+                `seStatus` está vacío en las 1.083 fichas. */}
+            {(usaEstado ? estadosDeFicha() : STATUSES).map((s) => (
               <button
                 key={s.key}
                 onClick={() => setActiveStatus(s.key)}
@@ -708,10 +730,23 @@ export default function ClientesClient({
             </button>
 
             <div className="flex items-center justify-between px-4 lg:px-6 py-3 lg:py-4 border-b border-gray-100 shrink-0 gap-3">
-              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${(STATUS_STYLE[selected.customFields?.seStatus] ?? STATUS_STYLE.new).bg}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${(STATUS_STYLE[selected.customFields?.seStatus] ?? STATUS_STYLE.new).dot}`} />
-                {STATUSES.find((s) => s.key === selected.customFields?.seStatus)?.label ?? "Nuevo"}
-              </span>
+              {/* El embudo estaba sin gatear aquí: en un centro clínico este
+                  chip decía «Nuevo» sobre familias con años de historia, porque
+                  `seStatus` está vacío y el respaldo era "new". */}
+              {(() => {
+                const tono = usaEstado
+                  ? tonoDeEstado(selected.status)
+                  : (STATUS_STYLE[selected.customFields?.seStatus] ?? STATUS_STYLE.new);
+                const texto = usaEstado
+                  ? etiquetaDeEstado(selected.status)
+                  : (STATUSES.find((s) => s.key === selected.customFields?.seStatus)?.label ?? "Nuevo");
+                return (
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${tono.bg}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${tono.dot}`} />
+                    {texto}
+                  </span>
+                );
+              })()}
               <button
                 onClick={closePanel}
                 className="hidden lg:flex w-10 h-10 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
@@ -757,16 +792,24 @@ export default function ClientesClient({
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-2">Estado</label>
+                {/* Desde aquí se marca «No vino» sin abrir la ficha: son 90 las
+                    que había que marcar en Aumenta, y abrir noventa fichas para
+                    tocar un desplegable no lo hace nadie. */}
                 <div className="flex flex-wrap gap-1.5">
-                  {STATUSES.map((s) => (
+                  {(usaEstado ? estadosDeFicha() : STATUSES).map((s) => (
                     <button
                       key={s.key}
-                      onClick={() => setEditForm((f) => ({ ...f, status: s.key }))}
+                      title={s.ayuda}
+                      onClick={() =>
+                        setEditForm((f) => (usaEstado ? { ...f, estado: s.key } : { ...f, status: s.key }))
+                      }
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                        editForm.status === s.key ? `${STATUS_STYLE[s.key].bg} border-transparent` : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
+                        (usaEstado ? editForm.estado : editForm.status) === s.key
+                          ? `${(usaEstado ? s : STATUS_STYLE[s.key]).bg} border-transparent`
+                          : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
                       }`}
                     >
-                      <span className={`w-1.5 h-1.5 rounded-full ${STATUS_STYLE[s.key].dot}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full ${(usaEstado ? s : STATUS_STYLE[s.key]).dot}`} />
                       {s.label}
                     </button>
                   ))}

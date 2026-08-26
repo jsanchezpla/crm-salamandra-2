@@ -9,6 +9,7 @@ import { getClientDir } from "../../../../lib/clients/attachmentStorage.js";
 import { borrarRastroDelCliente } from "../../../../lib/clients/borrarRastro.js";
 import { entradaDeCliente } from "../../../../lib/clients/listaEspera.js";
 import { fechaONull } from "../../../../lib/clients/formularioAlta.js";
+import { esEstadoDeFicha } from "../../../../lib/clients/estados.js";
 import { bonosDeCliente } from "../../../../lib/citas/packs.js";
 import {
   normalizeContactValue,
@@ -143,7 +144,15 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
     // aquí no hace falta ningún valor por defecto.
     origin: body.origin ?? base.origin ?? null,
     leadId: body.leadId ?? base.leadId ?? null,
-    seStatus: body.status ?? base.seStatus ?? "new",
+    // ⚠️ El embudo TAMPOCO se inventa, por lo mismo que `origin` aquí arriba
+    // (26/08/2026). El `?? "new"` alcanzaba a las fichas que no lo traían, que
+    // en un centro clínico son TODAS: en Aumenta las 1.083 tienen `seStatus`
+    // vacío, así que cualquier guardado —incluido el del estado nuevo, que se
+    // va a usar en 90 fichas seguidas— les estampaba un embudo comercial que
+    // allí no se enseña ni se mira. Quien lo usa lo manda, y entonces se guarda.
+    ...(body.status !== undefined || base.seStatus !== undefined
+      ? { seStatus: body.status ?? base.seStatus }
+      : {}),
   };
 
   // Datos fiscales (solo si vienen explícitos en el body).
@@ -187,8 +196,8 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
   if ("autoConfirmBookings" in body) baseUpdate.autoConfirmBookings = !!body.autoConfirmBookings;
 
   /*
-   * Archivar y reactivar la ficha (25/08/2026, Lau) — la llave es `archivada`,
-   * NO `status`.
+   * El estado de la ficha (25/08/2026 archivar; 26/08/2026 los tres estados).
+   * La llave es `estado` —o `archivada`, que sigue valiendo—, NUNCA `status`.
    *
    * ⚠️ En este endpoint `body.status` YA está cogido: es el embudo comercial y
    * acaba en `customFields.seStatus` (unas líneas más arriba). La columna de
@@ -211,7 +220,25 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
    * No es de admin: archivar se deshace con un clic. Borrar, que no se deshace,
    * sí lo es (ver el DELETE de abajo).
    */
-  if ("archivada" in body) {
+  if ("estado" in body) {
+    /*
+     * EL ESTADO DE LA FICHA, en la columna (26/08/2026, Lau).
+     *
+     * Lau quería marcar «no vino» a quien llamó y nunca llegó a empezar. El
+     * valor ya existía sin estrenar en el ENUM (`prospect`), así que esto no
+     * añade ni una columna. Los rótulos y quién lo usa, en
+     * `lib/clients/estados.js`.
+     *
+     * ⚠️ Se valida contra la lista, no se pasa tal cual: `status` es un ENUM de
+     * PostgreSQL, y un valor de fuera no guarda un dato raro — revienta la
+     * consulta con «la sintaxis de entrada no es válida para el enum».
+     *
+     * Manda sobre `archivada` si vinieran los dos: el estado es el campo de
+     * verdad y el interruptor solo sabía decir dos de los tres.
+     */
+    if (!esEstadoDeFicha(body.estado)) return error("Estado de ficha desconocido", 422);
+    baseUpdate.status = String(body.estado).trim();
+  } else if ("archivada" in body) {
     const quiereArchivada = !!body.archivada;
     if (quiereArchivada !== (client.status === "inactive")) {
       baseUpdate.status = quiereArchivada ? "inactive" : "active";

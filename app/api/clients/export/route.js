@@ -1,3 +1,4 @@
+import { esEstadoDeFicha } from "../../../../lib/clients/estados.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { forbidden } from "../../../../lib/utils/apiResponse.js";
 import { Op } from "sequelize";
@@ -22,6 +23,10 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   const country = searchParams.get("country");
   const search = searchParams.get("search");
 
+  // El mismo filtro por estado de ficha que el listado: si el Excel no lo
+  // respetara, exportar «los que no vinieron» daría la cartera entera.
+  const estado = searchParams.get("estado");
+  if (esEstadoDeFicha(estado)) where.status = String(estado).trim();
   if (status) where.customFields = { [Op.contains]: { seStatus: status } };
   if (country && !status) where.customFields = { [Op.contains]: { country } };
   if (country && status) where.customFields = { [Op.contains]: { seStatus: status, country } };
