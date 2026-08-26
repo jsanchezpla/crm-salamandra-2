@@ -1744,19 +1744,48 @@ export default function CitasModule() {
                   </div>
                 )}
                 {patients.length > 0 && (
-                  <div className="flex items-center">
-                    <span className="w-24 text-neutral-400">Paciente</span>
+                  <div className="flex items-center gap-2">
+                    <span className="w-24 text-neutral-400 shrink-0">Paciente</span>
                     <select
                       value={openBooking.patientId ?? ""}
                       onChange={(e) => assignPatient(e.target.value)}
                       disabled={saving}
-                      className="flex-1 text-[13px] px-2 py-1 border border-neutral-200 rounded-md bg-white text-neutral-800 disabled:opacity-50"
+                      className="flex-1 min-w-0 text-[13px] px-2 py-1 border border-neutral-200 rounded-md bg-white text-neutral-800 disabled:opacity-50"
                     >
                       <option value="">Sin asignar</option>
                       {patients.map((p) => (
                         <option key={p.id} value={p.id}>{p.name || `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim()}</option>
                       ))}
                     </select>
+                    {/*
+                      DE LA CITA A LA FICHA, EN UN CLIC (26/08/2026, Jorge).
+
+                      Este modal enseñaba todo lo de la cita —quién viene, la
+                      hora, el cobro, las notas— y ni una línea de lo clínico.
+                      Para escribir la sesión del día había que cerrarlo, cruzar
+                      el menú, teclear el nombre del paciente y abrir su ficha:
+                      siete clics y una búsqueda a mano, por sesión.
+
+                      La cita ya trae el paciente cargado, así que esto es
+                      pintar un dato que ya viaja. Abre en pestaña nueva a
+                      propósito: quien mira la agenda no quiere perderla, y el
+                      modal lleva cambios sin guardar (el enlace de Meet, las
+                      notas) que un salto en la misma pestaña se llevaría.
+
+                      Lo que NO resuelve, y sigue apuntado: preparar la sesión
+                      ANTES de darla. Hoy una sesión solo nace subiendo un audio.
+                    */}
+                    {openBooking.patientId && (
+                      <a
+                        href={`/pacientes/${openBooking.patientId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Abre la ficha del paciente en una pestaña nueva"
+                        className="shrink-0 text-[12px] px-2 py-1 rounded-md border border-neutral-200 text-neutral-600 hover:border-neutral-400 hover:text-neutral-800 transition-colors"
+                      >
+                        Ver ficha
+                      </a>
+                    )}
                   </div>
                 )}
               </div>
