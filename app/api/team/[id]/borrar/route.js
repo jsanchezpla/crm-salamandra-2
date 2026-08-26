@@ -27,7 +27,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../../../lib/db/masterDb.js";
-import { radiografiaDeLaFicha, puedeBorrarseLaFicha } from "../../../../../lib/team/rastro.js";
+import { radiografiaDeLaFicha, puedeBorrarseLaFicha, borrarLoSuyo } from "../../../../../lib/team/rastro.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -83,6 +83,9 @@ export const GET = withTenant(async (request, { params }, ctx) => {
       total: rastro.total,
       // Solo cuentas y nombres de cosa: ni un dato de nadie.
       filas: rastro.filas.map((f) => ({ tabla: f.tabla, n: f.n, texto: f.texto })),
+      // Sus propios ajustes: no bloquean, pero quien borra tiene que saber que
+      // se van con ella.
+      suyas: rastro.suyas.map((f) => ({ tabla: f.tabla, n: f.n, texto: f.texto })),
       columnasMiradas: rastro.columnas,
     });
   } catch (err) {
@@ -117,8 +120,16 @@ export const DELETE = withTenant(async (request, { params }, ctx) => {
       status: member.status,
     };
 
+    let seLlevo = [];
     try {
       await tenantSequelize.transaction(async (t) => {
+        // Sus ajustes propios primero, a mano y en la misma transacción: así da
+        // igual qué ON DELETE tenga la FK en el schema de este cliente.
+        seLlevo = await borrarLoSuyo(tenantSequelize, {
+          schema: `crm_${ctx.slug}`,
+          memberId: member.id,
+          transaction: t,
+        });
         await member.destroy({ transaction: t });
       });
     } catch (err) {
@@ -140,11 +151,15 @@ export const DELETE = withTenant(async (request, { params }, ctx) => {
       action: "team.deleted",
       entityId: member.id,
       before: resumen,
-      after: { columnasComprobadas: rastro.columnas },
+      after: {
+        columnasComprobadas: rastro.columnas,
+        // Qué ajustes suyos se fueron con ella (cuentas, no contenido).
+        ...(seLlevo.length ? { seLlevo: Object.fromEntries(seLlevo.map((x) => [x.tabla, x.n])) } : {}),
+      },
       ip,
     });
 
-    return ok({ borrada: true, displayName: resumen.displayName });
+    return ok({ borrada: true, displayName: resumen.displayName, seLlevo });
   } catch (err) {
     return serverError(err);
   }

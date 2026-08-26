@@ -89,6 +89,23 @@ export default function BorrarFichaModal({ member, onCerrar, onBorrada }) {
                 <p className="text-sm text-neutral-700">
                   No queda ningún registro suyo en el CRM. Se puede borrar la ficha.
                 </p>
+                {/* Sus propios ajustes no impiden borrar —no son historia de
+                    nadie—, pero desaparecen con ella y hay que decirlo antes,
+                    no después. */}
+                {info.suyas?.length > 0 && (
+                  <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 px-3 py-2.5">
+                    <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-1.5">
+                      Se irá con ella
+                    </div>
+                    <ul className="space-y-1">
+                      {info.suyas.map((f) => (
+                        <li key={f.tabla} className="text-sm text-neutral-700">
+                          {f.texto}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <p className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
                   Esto no se puede deshacer.
                 </p>

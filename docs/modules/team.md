@@ -63,7 +63,8 @@ en vez de avisar. Tres puertas, y las tres las mide el SERVIDOR:
 1. La ficha está `inactive`. Es la condición que puso Jorge: primero se da de
    baja, luego se borra. `on_leave` no vale: esa persona vuelve.
 2. No le cuelga ningún `userId`.
-3. **No queda ni una fila suya en todo el schema.**
+3. **No queda ni una fila suya en todo el schema** — de las que son historia
+   de OTRO. Sus propios ajustes no cuentan (ver abajo).
 
 La tercera es la interesante. La lista de dónde mirar NO está escrita a mano:
 `lib/team/rastro.js` se la pregunta a `pg_constraint`, y **a todos los schemas
@@ -82,6 +83,27 @@ que no se cuele en esa lista una columna que en realidad guarda un id de
 `recipes.created_by`…), porque eso dejaría el botón sin aparecer nunca.
 
 Son **40 columnas** de 34 tablas, y medirlas cuesta ~40 ms por ficha.
+
+**Lo suyo no bloquea** (`TABLAS_SUYAS`). Tres tablas son la ficha, no historia
+de nadie: `team_member_modules` (el espejo informativo de sus accesos),
+`team_member_hours` (su horario) y `team_blocks` (sus vacaciones). Se van CON
+ella y el aviso las enseña bajo «Se irá con ella», pero no impiden borrar.
+
+> Esto lo cazó el primer uso real, horas después de desplegar el botón. La
+> ficha de prueba de Aumenta salió BLOQUEADA por 21 filas de
+> `team_member_modules`… que se escriben SOLAS al crearle el login, una por
+> módulo del cliente. Con la regla original, **cualquier ficha que alguna vez
+> tuvo acceso al CRM era imposible de borrar para siempre**: justo el caso para
+> el que se hizo el botón. Y había una contradicción dentro: esa misma mañana
+> `team_blocks` se puso en CASCADE razonando «sus vacaciones se van con ella»,
+> y el rastro las contaba como bloqueo.
+
+Que son suyas no es una opinión: el modelo de `TeamMemberModule` lo dice en su
+cabecera («puramente informativa/organizativa: NO bloquea nada») y las tres
+están declaradas `onDelete: "CASCADE"` en `lib/db/tenantDb.js` y medidas como
+CASCADE en los 12 schemas de producción, sin excepción. Aun así, `borrarLoSuyo()`
+las borra **a mano dentro de la transacción**: el `ON DELETE` de un schema
+depende de cómo nació, y fiarse de él es fiarse de un accidente.
 
 Si algo bloquea, **no hay botón**: el modal enseña qué queda («3 facturas»,
 «15 sesiones clínicas») y explica que la ficha se queda inactiva. Sin casilla

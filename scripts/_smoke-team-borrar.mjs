@@ -35,6 +35,7 @@ import {
   puedeBorrarseLaFicha,
   enCristiano,
   COLUMNAS_SIN_FK,
+  TABLAS_SUYAS,
   NOMBRES,
 } from "../lib/team/rastro.js";
 
@@ -114,6 +115,78 @@ test("una tabla sin bautizar sale en crudo, pero sale", () => {
   // la bautiza, tiene que seguir contándose. Lo contrario —que desaparezca del
   // recuento— sería un agujero.
   assert.equal(enCristiano("tabla_que_no_existe", 3), "3 en tabla_que_no_existe");
+});
+
+// ── Lo suyo no bloquea ─────────────────────────────────────────────────────
+
+test("sus propios ajustes NO cuentan como rastro que bloquea", () => {
+  /*
+   * El fallo que cazó el primer uso real (26/08/2026): la ficha de prueba de
+   * Aumenta salió bloqueada por 21 filas de `team_member_modules`, que se
+   * escriben SOLAS al crearle el login. Con esa regla, cualquier ficha que
+   * hubiera tenido acceso al CRM era imposible de borrar para siempre — que es
+   * justo el caso para el que se hizo el botón.
+   */
+  const r = puedeBorrarseLaFicha({ status: "inactive", userId: null, total: 0 });
+  assert.equal(r.puede, true, "con 0 de rastro que bloquea tiene que poder borrarse");
+});
+
+test("las tres tablas suyas están declaradas, y solo esas tres", () => {
+  assert.deepEqual(
+    [...TABLAS_SUYAS].sort(),
+    ["team_blocks", "team_member_hours", "team_member_modules"],
+    "para entrar aquí no basta con apuntar a team_members: la fila no puede tener sentido sin esa persona"
+  );
+});
+
+test("ninguna tabla de historia se ha colado entre las suyas", () => {
+  // Si una de estas entrara ahí, borrar a alguien se llevaría por delante la
+  // historia clínica de un paciente o una factura. Es el peor fallo posible de
+  // este fichero.
+  const HISTORIA = [
+    "clinic_sessions", "clinical_reports", "coordinations", "invoices", "bookings",
+    "patients", "patient_therapists", "costs", "rates", "quotes", "cash_closes",
+    "performance_metrics", "incentive_items", "client_notes", "interactions",
+    "intervention_plans", "form_submissions", "fichajes", "tasks", "tickets",
+  ];
+  for (const t of HISTORIA) {
+    assert.ok(!TABLAS_SUYAS.includes(t), `${t} NO puede irse con la ficha: es historia de otro`);
+  }
+});
+
+test("lo suyo se borra a mano, sin fiarse del ON DELETE de la FK", () => {
+  // El ON DELETE de un schema depende de cómo NACIÓ ese schema (`sync()` por
+  // delante de las migraciones). Hoy las tres son CASCADE en los 12 schemas,
+  // pero el día que una naciera con SET NULL, un team_block sin persona
+  // significa «cierra la agenda de todo el centro».
+  const rastro = leer("lib/team/rastro.js");
+  assert.ok(/export async function borrarLoSuyo/.test(rastro), "ya no existe borrarLoSuyo");
+  assert.ok(/DELETE FROM "\$\{schema\}"\."\$\{tabla\}"/.test(rastro), "borrarLoSuyo no borra");
+  assert.ok(
+    /borrarLoSuyo\([\s\S]{0,200}transaction: t,[\s\S]{0,80}\}\);\s*[\r\n]\s*await member\.destroy\(\{ transaction: t \}\)/.test(ruta),
+    "borrarLoSuyo no va en la MISMA transacción y justo antes de borrar la ficha"
+  );
+});
+
+test("borrar lo suyo no toca los cierres de TODO el centro", () => {
+  /*
+   * `team_blocks` con `team_member_id` a NULL significa «cierra la agenda del
+   * centro entero» (models/tenant/TeamBlock.model.js). Esas filas no son de
+   * nadie, así que un DELETE sin el WHERE por persona —o con un WHERE que
+   * dejara pasar el NULL— cerraría el centro al borrar una ficha.
+   */
+  const rastro = leer("lib/team/rastro.js");
+  const cuerpo = rastro.slice(rastro.indexOf("export async function borrarLoSuyo"));
+  assert.ok(
+    /WHERE "team_member_id" = :id/.test(cuerpo),
+    "borrarLoSuyo tiene que filtrar por la persona: sin ese WHERE se lleva los cierres del centro"
+  );
+  assert.ok(!/IS NULL/.test(cuerpo), "borrarLoSuyo no puede tocar las filas sin dueño");
+});
+
+test("el modal avisa de lo que se va con ella", () => {
+  assert.ok(/info\.suyas\?\.length > 0 && \(/.test(modal), "el modal no enseña «Se irá con ella»");
+  assert.ok(/Se irá con ella/.test(modal), "falta el rótulo");
 });
 
 // ── Las columnas sin FK ────────────────────────────────────────────────────
