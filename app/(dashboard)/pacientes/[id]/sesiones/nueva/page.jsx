@@ -2,11 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
+import {
+  fechaDePreparacion,
+  paraInputLocal,
+  payloadDePreparacion,
+  pidePreparar,
+} from "@/lib/clinica/prepararSesion.js";
 
-const STATE = { IDLE: "idle", UPLOADED: "uploaded", PROCESSING: "processing", STRUCTURED: "structured" };
+const STATE = { IDLE: "idle", UPLOADED: "uploaded", PROCESSING: "processing", STRUCTURED: "structured", PREPARING: "preparing" };
 
 const PROCESSING_STEPS = [
   "Subiendo audio…",
@@ -22,10 +28,20 @@ export default function NuevaSesionPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id;
+  const query = useSearchParams();
 
   const [patient, setPatient] = useState(null);
   const [loadingPatient, setLoadingPatient] = useState(true);
-  const [state, setState] = useState(STATE.IDLE);
+  // Quien llega desde una cita («Preparar sesión») entra DIRECTO al formulario
+  // de preparación: el enlace ya dijo a qué venía, y enseñarle primero la zona
+  // de soltar el audio sería pedirle que vuelva a elegir lo que ya eligió. Va en
+  // el estado inicial y no en un efecto, para que volver a Subir audio a mano no
+  // se deshaga solo.
+  const [state, setState] = useState(() => (pidePreparar(query.get("preparar")) ? STATE.PREPARING : STATE.IDLE));
+  // La fecha de la cita, si viene; si no, ahora. Se acota en `fechaDePreparacion`
+  // porque llega por la barra de direcciones.
+  const [prepFecha, setPrepFecha] = useState(() => paraInputLocal(fechaDePreparacion(query.get("fecha")) ?? new Date()));
+  const [prepSolo, setPrepSolo] = useState("");
   const [file, setFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [processingStep, setProcessingStep] = useState(0);
@@ -97,8 +113,60 @@ export default function NuevaSesionPage() {
     setResult(null);
     setForm(null);
     setPrepFiles([]);
+    setPrepSolo("");
     setErrorMsg(null);
     if (fileRef.current) fileRef.current.value = "";
+  }
+
+  /**
+   * Guardar una sesión que TODAVÍA NO SE HA DADO.
+   *
+   * Es la mitad que faltaba: hasta hoy una sesión solo nacía subiendo un audio,
+   * así que para preparar una había que haberla dado ya. Va por el mismo
+   * endpoint de siempre —que ya aceptaba una sesión sin audio— y el cuerpo lo
+   * arma `payloadDePreparacion`, que es quien se encarga de NO mandar los campos
+   * de la IA: una sesión preparada no ha pasado por Whisper ni por Claude.
+   */
+  async function guardarPreparacion() {
+    if (!patient?.mainTherapistId) {
+      setErrorMsg("El paciente no tiene terapeuta asignado. Asígnale uno en su ficha antes de guardar.");
+      return;
+    }
+    setSaving(true);
+    setErrorMsg(null);
+    try {
+      // El input de fecha manda hora LOCAL sin zona y `new Date` la lee como
+      // local: es exactamente la hora que ve quien la escribe.
+      const escrita = prepFecha ? new Date(prepFecha) : new Date();
+      const payload = payloadDePreparacion({
+        patientId: id,
+        therapistId: patient.mainTherapistId,
+        fecha: Number.isNaN(escrita.getTime()) ? new Date() : escrita,
+        prepText: prepSolo,
+      });
+      const r = await fetch("/api/clinica/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo guardar la preparación");
+
+      // Igual que en el flujo de audio: los adjuntos necesitan el id de la
+      // sesión, así que van después y no se llevan la sesión por delante.
+      const fallidos = [];
+      for (const f of prepFiles) {
+        const fd = new FormData();
+        fd.append("file", f, f.name);
+        const up = await fetch(`/api/clinica/sessions/${j.data.id}/prep-files`, { method: "POST", body: fd });
+        if (!up.ok) fallidos.push(f.name);
+      }
+      if (fallidos.length) {
+        setErrorMsg(`Preparación guardada, pero no se pudieron subir: ${fallidos.join(", ")}. Puedes añadirlos desde la ficha.`);
+        setSaving(false);
+        return;
+      }
+      router.push(`/pacientes/${id}`);
+    } catch (e) {
+      setErrorMsg(e.message);
+      setSaving(false);
+    }
   }
 
   async function save() {
@@ -213,6 +281,114 @@ export default function NuevaSesionPage() {
             <p className="text-xs text-neutral-500 mt-1 max-w-md mx-auto leading-relaxed">Sube el audio grabado con tu móvil. La IA lo transcribirá (Whisper) y lo estructurará (Claude) en apartados.</p>
             <button type="button" className="mt-4 inline-flex items-center gap-2 text-xs font-medium px-4 py-2 rounded-lg border border-neutral-200 bg-white hover:border-neutral-400 text-neutral-700">Seleccionar archivo</button>
             <p className="text-[10px] text-neutral-400 mt-4">Formatos: m4a, mp3, wav, ogg, webm · Máx. 25 MB</p>
+          </div>
+          {/*
+            La segunda puerta (26/08/2026, Aumenta). Debajo de la zona de audio y
+            no al lado: subir el audio sigue siendo lo que se hace 22.045 veces,
+            y preparar es lo que se hace la víspera. Quien llega desde una cita
+            no ve esto — entra directo al formulario.
+          */}
+          <p className="text-center text-[11px] text-neutral-500 mt-5">
+            ¿Todavía no la has dado?{" "}
+            <button
+              type="button"
+              onClick={() => setState(STATE.PREPARING)}
+              className="font-medium text-[var(--color-primary,#1B3A2D)] hover:underline"
+            >
+              Prepárala sin audio
+            </button>
+          </p>
+
+        </div>
+      )}
+
+      {/* ── PREPARING: la sesión que aún no se ha dado ────────────────────── */}
+      {state === STATE.PREPARING && (
+        <div className="bg-white border border-neutral-100 rounded-xl p-6 lg:p-10">
+          <div className="text-center mb-6">
+            <div className="eyebrow mb-2">Preparar la sesión</div>
+            <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] tracking-tight">{patient.firstName} {patient.lastName}</h1>
+            <p className="text-xs text-neutral-500 mt-1">{therapistName}</p>
+          </div>
+
+          <div className="max-w-2xl mx-auto space-y-4">
+            <p className="text-[11px] text-neutral-600 leading-relaxed bg-neutral-50 border border-neutral-100 rounded-lg px-3 py-2.5">
+              Se guarda como <strong>borrador</strong>: queda apuntada en la ficha con lo que
+              prepares, y el día de la sesión se completa encima —subiendo el audio o
+              escribiéndola. Mientras su fecha no haya llegado no cuenta como sesión dada.
+            </p>
+
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">Día y hora de la sesión</div>
+              <input
+                type="datetime-local"
+                className={ta}
+                value={prepFecha}
+                onChange={(e) => setPrepFecha(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">Preparación</div>
+              <textarea
+                className={ta}
+                rows={6}
+                placeholder="Material previsto, hipótesis de trabajo, qué observar…"
+                value={prepSolo}
+                onChange={(e) => setPrepSolo(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline cursor-pointer">
+                + Adjuntar fotos, audio o PDF
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,audio/*,application/pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    const nuevos = Array.from(e.target.files ?? []);
+                    e.target.value = "";
+                    setPrepFiles((prev) => [...prev, ...nuevos].slice(0, 10));
+                  }}
+                />
+              </label>
+              {prepFiles.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {prepFiles.map((f, i) => (
+                    <li key={`${f.name}-${i}`} className="text-[11px] text-neutral-600 flex items-center gap-2">
+                      <span className="truncate">{f.name}</span>
+                      <span className="text-neutral-400 shrink-0">{fmtSize(f.size)}</span>
+                      <button
+                        onClick={() => setPrepFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="text-rose-500 hover:text-rose-700 shrink-0"
+                      >
+                        quitar
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-[10px] text-neutral-400 mt-1">
+                Material interno del equipo: no se comparte con la familia.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2 justify-end pt-1">
+              <button onClick={() => router.push(`/pacientes/${id}`)} disabled={saving} className="text-xs px-4 py-2 text-neutral-500 hover:underline disabled:opacity-50">Cancelar</button>
+              <button onClick={reset} disabled={saving} className="text-xs px-4 py-2 rounded-lg border border-neutral-200 hover:border-neutral-400 text-neutral-700 disabled:opacity-50">Subir un audio</button>
+              <button
+                onClick={guardarPreparacion}
+                disabled={saving || !prepSolo.trim()}
+                title={!prepSolo.trim() ? "Escribe la preparación para poder guardarla" : undefined}
+                className="text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 inline-flex items-center gap-2 disabled:opacity-50"
+                style={{ background: "var(--color-primary, #1B3A2D)" }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                {saving ? "Guardando…" : "Guardar preparación"}
+              </button>
+            </div>
           </div>
         </div>
       )}

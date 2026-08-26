@@ -22,7 +22,7 @@
 | **Scripts** | Activar: `node scripts/enable-module.js <slug> clinica` (avisa si falta `pacientes`; `ensure-tenant-schema.js` corre las 14 del bloque `clinica` de `scripts/_module-migrations.js`: `migrate-clinica-module` —crea `patients` y las cuatro tablas base—, `migrate-external-contacts`, `migrate-contactos-externos-nombre-opcional`, `migrate-talleres`, `migrate-coordinaciones-autor-libre`, `migrate-sesion-terapeuta-opcional`, `migrate-clinica-client-link`, `migrate-patients-care-type`, `migrate-patients-specialties`, `migrate-documents-patient-link`, `migrate-incidencias-module`, `migrate-incidencias-verificacion`, `migrate-incentive-items`, `migrate-clinica-performance-roles`; `intervention_plans` y `notifications` llegan por las CORE). Seed: `seed-clinica-demo.js <slug>` (pacientes + clínica; **VACÍA** la historia clínica antes, solo escaparate; lo lanza `crear-demos-por-oficio.js` para `demo_clinica`). Importación de Organízate para Aumenta, ya corrida: `_hechos/import-aumenta-sesiones.js` e `_hechos/import-aumenta-coordinaciones.js` (simulan sin `--confirm`). Backfill de datos: `backfill-patients-client.js` (dry-run; ver `pacientes.md`). `_hechos/migrate-clinica-sprint-1.js` es ONE_OFF de la maqueta (solo `crm_aumenta`, ya ejecutado): no usarlo. |
 | **Pruebas** | `scripts/_smoke-pulir-informe.mjs` — entra en `npm test`, sin base de datos: las dos reglas del informe (solo cinco apartados viajan al modelo; se rechaza lo que inventa números o meses). `scripts/_smoke-piezas-ficha.mjs` (`@prueba ligera`) fija que con la forma de Aumenta (clínica + archivo avanzado + citas) la ficha de cliente NO gana los paneles de Laura. `scripts/_smoke-fechas-trimestres-madrid-parseDate.mjs` (`node:test`, 19/08/2026, en `npm test`) en su parte de `lib/clinica/trimestres.js`: T1 septiembre–diciembre, T2 enero–marzo, T3 abril–junio y julio SOLO si `settings.clinica.trimestreConJulio === true` de verdad (Rodrigo, 28/07/2026), agosto no es de nadie, el curso se nombra por el año en que empieza, `trimesterRange` con fin exclusivo; fija también que el fichero entero mira la zona del proceso (a las 00:30 de Madrid del 1 de septiembre es T1 en Madrid y nada en UTC; por eso el contenedor corre en `Europe/Madrid` desde el 19/08/2026) y, como SOSPECHOSO, que `trimesterOf(null)` cae en 1969. `scripts/_smoke-clinica-config-incidencias-export.mjs` (`node:test`, 20/08/2026, en `npm test`): `lib/clinica/performanceConfig.js` —la promesa es la compatibilidad: un tenant sin config de desempeño guardada, o con una corrupta, se comporta EXACTAMENTE como siempre (las 7 áreas históricas, pesos intactos, semáforo 85/70); `normalizeRoles` repara lo reparable (textos, defaults, el único rol sin marcar queda como el por defecto) y devuelve null a lo irreparable, como pesos que no suman 100—; `lib/clinica/incidencias.js` —la taxonomía es fija (8 categorías del Programa de Excelencia, solo Administrativa con subcategorías) y la verificación GOBIERNA el estado con un solo control: resuelta→resolved, parcial y no_resuelta→in_progress, sin verificar→pending, nunca resuelta y pendiente a la vez; la forma exacta de `serializeIncidencia` y los responsables sincronizados (la pivote queda como el formulario y el espejo apunta al primero)—; y `lib/clinica/estadisticasExport.js` —el Excel y el PDF de dirección salen del MISMO objeto que pinta la pantalla, comprobado celda a celda abriendo el buffer que devuelven—. `scripts/_smoke-pdf-factura-informe.mjs` (`node:test`, 21/08/2026, ligera, en `npm test`) cubre en su otra mitad `lib/clinica/reportPdf.js`, el informe que recibe la FAMILIA: genera el PDF de verdad y lo lee por dentro —el nombre del fichero que ve la familia (`reportPdfFilename`: tipo, paciente y fecha, con los caracteres prohibidos borrados y sin guiones sueltos), la cabecera con el nombre del centro, la ficha de datos (las filas sin valor no se imprimen, ni su rótulo), las siete secciones SIEMPRE en el orden de lectura y solo las que tienen contenido, el respaldo al texto bruto de la IA cuando no hay secciones (y que con secciones ese texto NO se cuela además), la frase de «todavía no tiene contenido» en vez de un folio en blanco, el color de marca del cliente en la regla del título, y que un informe largo no pierde el final ni dos informes a la vez se mezclan—. Marca con `// SOSPECHOSO` que la especialidad de derivación sale del catálogo GLOBAL y no del del centro (el generador no recibe el tenant), y que la fecha se lee como instante UTC y no como día de calendario. No hay ninguna con base de datos propia del módulo. |
 | **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` · `../decisions/2026-07-28-repaso-de-seguridad.md` · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` · `../decisions/2026-08-04-clientes-se-llama-pacientes-en-nutricion.md` |
-| **En este doc** | Dónde vive cada pantalla (traslado del 2026-07-27) · Programa de Excelencia (2026-07-24) · Registro de sesión en 3 partes (sprint Aumenta 2026-07, punto 4) · Redactar un informe (31/07/2026) · Redactar con IA (14/08/2026) · «Enviar al paciente» (sprint Aumenta 2026-07, punto 3.2) · Modelos · Frontend |
+| **En este doc** | Dónde vive cada pantalla (traslado del 2026-07-27) · Programa de Excelencia (2026-07-24) · Registro de sesión en 3 partes (sprint Aumenta 2026-07, punto 4) · Preparar una sesión antes de darla (26/08/2026) · Redactar un informe (31/07/2026) · Redactar con IA (14/08/2026) · «Enviar al paciente» (sprint Aumenta 2026-07, punto 3.2) · Modelos · Frontend |
 
 > Documentación de detalle. Referencia rápida en `CLAUDE.md`. Si
 > encuentras una discrepancia con el código, **prevalece el código**:
@@ -70,6 +70,22 @@ local sin claves (auto si faltan claves y `NODE_ENV≠production`, o `CLINICA_FA
 bloqueado en producción). En la demo pública la transcripción se corta antes de
 gastar (`assertNotDemoPaidCall`, `lib/demo/isDemo.js`). **Ya no queda ninguna
 pantalla en maqueta.**
+
+**La segunda puerta: preparar sin audio (26/08/2026).** Esa misma pantalla
+acepta `?preparar=1&fecha=<ISO>` y entra directa a un formulario de preparación
+—día y hora, texto y adjuntos— que crea la sesión en `draft` por el POST de
+siempre, sin tocar ni un campo de IA. Existe porque hasta ese día **una sesión
+solo nacía subiendo un audio**, o sea que para preparar una había que haberla
+dado ya. La contradicción se ve en producción: 22.045 sesiones en Aumenta y CERO
+con `prep_text`. El contrato de la URL y el cuerpo del alta viven en
+`lib/clinica/prepararSesion.js` (`_smoke-clinica-preparar.mjs`), porque lo monta
+el modal de una cita y lo lee esta pantalla.
+
+⚠️ Es la primera vez que una sesión puede tener **fecha futura**. Por eso las
+estadísticas del centro cortan el periodo por hoy (`hastaHoy`): una sesión
+preparada para el jueves no es trabajo hecho, y contarla infla la actividad del
+equipo sin que se note. Se corta por la FECHA y no por el estado porque en las
+demos hay 39 sesiones en `draft` que sí se dieron.
 
 - Endpoints: `/api/pacientes/*` (11 `route.js`, ver `pacientes.md`) y
   `/api/clinica/**` (35 `route.js`): `sessions/**` (5: CRUD, `transcribe`,
@@ -242,6 +258,12 @@ Las partes 1 y 3 se pueden rellenar **después**: van en `PATCH
 preparación se escribe antes y la devolución llega a veces días más tarde. En
 la UI están tanto en el flujo de «Subir audio» como en el cajón de la sesión de
 la ficha del paciente.
+
+Y desde el 26/08/2026 la parte 1 se puede escribir **antes de que la sesión
+exista**: «Prepárala sin audio» en `/pacientes/[id]/sesiones/nueva`, o
+«Preparar sesión» en el modal de una cita, que además le pasa el día y la hora
+de esa cita. La sesión nace en `draft` y el cajón de la ficha la completa
+después —informe y devolución— sin crear otra.
 
 **Adjuntos de preparación**: `POST /api/clinica/sessions/[id]/prep-files`
 (multipart) y `GET/DELETE …/prep-files/[fileId]`. Máximo 10 por sesión, 25 MB

@@ -37,6 +37,7 @@ decisión se supera, la nueva lo dice y enlaza a la anterior.
 | 24/08 | [El ancho de todas las pantallas](2026-08-24-el-ancho-de-todas-las-pantallas.md) — 46 contenedores pasan por `anchoPantalla()`; cuatro nombres, tres anchos; qué se dejó fuera (la portada editorial y la ficha de cliente, que comparte paneles con Laura) | UI, todos los módulos |
 | 24/08 | [El tablero aprende a escribir](2026-08-24-el-tablero-aprende-a-escribir.md) — apuntar, priorizar, cerrar y colgar capturas desde la pantalla, por la MISMA puerta que `registro.mjs`; tres colores y dos salas de espera; la ficha `<!--id:…-->` que impide que un adjunto se quede huérfano | Registro, tablero |
 | 26/08 | [Cuándo se apuntó cada tarea](2026-08-26-cuando-se-apunto-cada-tarea.md) — la fecha va en `tablero_estado` y la pone sola la publicación, sin pisar la que ya haya (o cerrar una tarea la rejuvenecería); las 152 viejas se reconstruyen del historial, siguiendo los once renombrados del 25/08 y con el techo de la fecha en que se cerró | Registro, tablero |
+| 26/08 | [Preparar una sesión antes de darla](2026-08-26-preparar-una-sesion-antes-de-darla.md) — el alta ya aceptaba sesiones sin audio: el cerrojo estaba en la pantalla; el enlace desde la cita lleva su FECHA, y por eso las estadísticas cortan el periodo por hoy (una preparada no es una dada) | clinica, citas |
 
 Otras decisiones con su propio doc fuera de esta carpeta:
 `docs/sprint-aumenta-2026-07.md` (las pantallas del sprint de Aumenta),

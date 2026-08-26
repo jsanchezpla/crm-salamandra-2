@@ -1173,7 +1173,10 @@ Citas: `UI_OVERRIDES = {}` en `app/(dashboard)/citas/page.jsx`, solo cambia
 el rótulo («Agenda» en nutri_laura). Dos pestañas: **Calendario**
 (FullCalendar con modal «Nueva cita manual» + modal de detalle con marcar
 completada / no asistió / cancelar / eliminar / cambiar hora / enlace de
-videollamada) y **Lista de espera** (las `pending`: confirmar —y cobrar, si
+videollamada; y desde el 26/08/2026, si la cita tiene paciente, **«Ver ficha»** y
+**«Preparar sesión»** —los dos en pestaña nueva, porque el modal lleva cambios
+sin guardar; el segundo abre la preparación con el día y la hora de ESA cita,
+`lib/clinica/prepararSesion.js`) y **Lista de espera** (las `pending`: confirmar —y cobrar, si
 hay retención—, rechazar, pedir otra tarjeta; globito con las que faltan por
 atender), más las solicitudes de cambio de hora para dirección.
 **Histórico (hasta 22/07/2026):** el default no tenía lista de espera; la
