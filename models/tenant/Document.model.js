@@ -91,10 +91,20 @@ export function defineDocument(sequelize) {
         allowNull: true,
         field: "patient_id",
       },
+      // Incidencia a la que se adjuntó (2026-08-26). Nullable: casi ningún
+      // documento viene de una incidencia. Si la incidencia se borra, el
+      // documento se queda (FK ON DELETE SET NULL): puede estar en la ficha
+      // de un paciente y borrar la incidencia no debe llevárselo.
+      incidenciaId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "incidencia_id",
+      },
       // De dónde vino el documento: "manual" (subido en el módulo Documents),
       // "ficha" (adjunto desde la ficha de un cliente), "paciente" (documento de
       // un paciente), "contract_template" (contrato estándar de la clínica,
-      // reutilizable en todos los pacientes), "nota", "factura"…
+      // reutilizable en todos los pacientes), "incidencia" (adjunto a una
+      // incidencia del equipo), "nota", "factura"…
       // Sirve para filtrar el archivo central por origen.
       source: {
         type: DataTypes.STRING(40),

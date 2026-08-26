@@ -137,6 +137,14 @@ export default function IncidenciasPage() {
                         : " · sin asignar"}
                     </div>
                   </div>
+                  {r.docsCount > 0 && (
+                    <span className="shrink-0 inline-flex items-center gap-0.5 text-[11px] text-neutral-400" title={`${r.docsCount} documento${r.docsCount === 1 ? "" : "s"} adjunto${r.docsCount === 1 ? "" : "s"}`}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                      </svg>
+                      {r.docsCount}
+                    </span>
+                  )}
                   <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full ${STATUS_PILL[r.verificationLevel ?? r.statusLevel] ?? STATUS_PILL.gray}`}>
                     {r.verificationLabel ?? r.statusLabel}
                   </span>

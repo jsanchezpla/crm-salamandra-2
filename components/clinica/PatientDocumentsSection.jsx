@@ -189,7 +189,17 @@ export default function PatientDocumentsSection({ patientId }) {
             {docs.map((d) => (
               <li key={d.id} className="py-2 flex items-center gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm text-neutral-800 truncate">{d.name}</div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="text-sm text-neutral-800 truncate">{d.name}</div>
+                    {d.source === "incidencia" && (
+                      <span
+                        className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700"
+                        title="Adjunto de una incidencia del equipo. Se borra desde la incidencia, no desde aquí."
+                      >
+                        De incidencia
+                      </span>
+                    )}
+                  </div>
                   <div className="text-[11px] text-neutral-400">{fmtSize(d.fileSize)}</div>
                 </div>
                 <a
@@ -198,9 +208,14 @@ export default function PatientDocumentsSection({ patientId }) {
                 >
                   Descargar
                 </a>
-                <button onClick={() => deleteDoc(d.id)} className="text-xs text-rose-500 hover:underline shrink-0">
-                  Eliminar
-                </button>
+                {/* Los adjuntos de incidencia se borran desde SU incidencia:
+                    quitarlos desde la ficha dejaría la incidencia sin su
+                    justificante sin que nadie lo vea. */}
+                {d.source !== "incidencia" && (
+                  <button onClick={() => deleteDoc(d.id)} className="text-xs text-rose-500 hover:underline shrink-0">
+                    Eliminar
+                  </button>
+                )}
               </li>
             ))}
           </ul>

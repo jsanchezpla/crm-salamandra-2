@@ -166,7 +166,11 @@ terapeutas y sus horas/roles se cargan aparte.
   roles = un número menor, sin hardcodear a nadie.
 - API `GET /api/clinica/productividad` + `PUT /api/clinica/productividad/hours`.
   UI `/equipo/productividad`. Conecta con incentivos: botón "traer ocupación" en
-  el editor de evaluación.
+  el editor de evaluación. Desde el 26/08/2026 cada persona de la tabla es un
+  enlace a su perfil (`/equipo/mi-desempeno?therapistId=`), el mismo destino que
+  el «Ver» de Dirección; `mi-desempeno` lee ese parámetro con `useSearchParams`
+  (antes el enlace de Dirección existía pero la página lo ignoraba y abría
+  siempre el desempeño del usuario logueado).
 
 ### 3. Incidencias
 
@@ -182,6 +186,25 @@ terapeutas y sus horas/roles se cargan aparte.
   /api/clinica/incidencias/[id]` (crear/comentar/cambiar estado por cualquier
   usuario del módulo; borrar solo admin). UI `/equipo/incidencias` +
   `IncidenciaModal.jsx`. Sin auditoría a master (pueden citar datos clínicos).
+  Los responsables se eligen en un **desplegable** multi-selección
+  (`ResponsablesDropdown`, 26/08/2026): los chips de antes desbordaban la
+  columna con los 15 de Aumenta y el control se veía cortado.
+- **Documentos adjuntos** (26/08/2026, Aumenta): una incidencia admite hasta 20
+  documentos, que van al archivo central (`documents.incidencia_id`,
+  `migrate-documents-incidencia-link.js`, **CORE**; `source='incidencia'`,
+  `visibility='shared'`). Con paciente, el documento hereda su
+  `patientId`/`clientId` y aparece también en la ficha (los endpoints de
+  `/api/pacientes/[id]/documents` listan y descargan `source` paciente **e**
+  incidencia, pero solo borran los suyos: los de incidencia se borran desde la
+  incidencia). Cambiar el paciente de la incidencia re-enlaza sus documentos; sin
+  paciente quedan como internos del archivo. API
+  `GET/POST /api/clinica/incidencias/[id]/documents` +
+  `DELETE …/[docId]` + `GET …/[docId]/download` (gate clinica/pacientes +
+  `team_avanzado`; nombre obligatorio al subir, mismo patrón que pacientes). En
+  una incidencia NUEVA los ficheros quedan en cola y se suben tras crearla. El
+  listado enseña un clip con el nº de adjuntos (`docsCount`). Borrar la
+  incidencia NO borra sus documentos (FK `ON DELETE SET NULL`): pueden estar en
+  la ficha de un paciente.
 
 ### 4. Bandeja de trabajo
 

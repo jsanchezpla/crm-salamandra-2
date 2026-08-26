@@ -152,6 +152,16 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   }
 
   if (Object.keys(changes).length > 0) await row.update(changes);
+  // Si cambió el paciente, los documentos adjuntos siguen a la incidencia: se
+  // re-enlazan a la ficha nueva (o se sueltan de la vieja si se quitó). Sin
+  // esto, un documento subido antes de corregir el paciente se quedaría
+  // colgado en la ficha equivocada.
+  if ("patientId" in changes && M.Document) {
+    await M.Document.update(
+      { patientId: changes.patientId, clientId: changes.clientId ?? null },
+      { where: { incidenciaId: id, source: "incidencia" } }
+    );
+  }
   if (commentEntry) {
     // Append ATÓMICO en PostgreSQL: dos comentarios simultáneos se concatenan
     // en vez de pisarse (leer-modificar-escribir perdería uno de los dos).

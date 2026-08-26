@@ -1,4 +1,4 @@
-import { Op } from "sequelize";
+import { Op, fn, col } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
@@ -101,7 +101,25 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   });
   const patients = patientRows.map((p) => ({ id: p.id, name: [p.firstName, p.lastName].filter(Boolean).join(" ") }));
 
-  return ok({ incidencias: rows.map(serializeIncidencia), counts, therapists, patients });
+  // Nº de documentos adjuntos por incidencia (para el clip del listado), en
+  // una sola consulta agrupada en vez de una por fila.
+  const docCounts = {};
+  if (M.Document && rows.length) {
+    const cuenta = await M.Document.findAll({
+      attributes: ["incidenciaId", [fn("COUNT", col("id")), "n"]],
+      where: { incidenciaId: rows.map((r) => r.id) },
+      group: ["incidencia_id"],
+      raw: true,
+    });
+    for (const c of cuenta) docCounts[c.incidenciaId] = Number(c.n);
+  }
+
+  return ok({
+    incidencias: rows.map((r) => ({ ...serializeIncidencia(r), docsCount: docCounts[r.id] ?? 0 })),
+    counts,
+    therapists,
+    patients,
+  });
 });
 
 /**

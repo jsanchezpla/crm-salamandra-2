@@ -182,15 +182,21 @@ export default function ProductividadPage() {
                 return (
                   <tr key={r.therapistId} className="border-t border-neutral-100 hover:bg-neutral-50/50">
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
+                      {/* La persona lleva a su perfil de desempeño (26/08/2026,
+                          Aumenta): mismo destino que el «Ver» de Dirección. */}
+                      <Link
+                        href={`/equipo/mi-desempeno?therapistId=${r.therapistId}`}
+                        title={`Ver el desempeño de ${r.name}`}
+                        className="group flex items-center gap-2.5 w-fit"
+                      >
                         <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-display" style={{ backgroundColor: r.color }}>
                           {(r.name || "?").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
                         </div>
                         <div>
-                          <div className="text-[var(--ink-900)] font-medium leading-tight">{r.name}</div>
+                          <div className="text-[var(--ink-900)] font-medium leading-tight group-hover:text-[var(--color-primary,#1B3A2D)] group-hover:underline transition-colors">{r.name}</div>
                           <div className="text-[10px] text-neutral-400">{r.position}</div>
                         </div>
-                      </div>
+                      </Link>
                     </td>
                     <td className="px-4 py-3 text-right tabular text-neutral-700">{r.directHours} h</td>
                     <td className="px-4 py-3 text-right tabular text-neutral-500">{r.availableHours != null ? `${r.availableHours} h` : "—"}</td>

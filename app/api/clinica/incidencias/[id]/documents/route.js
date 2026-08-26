@@ -1,7 +1,6 @@
-import { Op } from "sequelize";
 import { randomUUID } from "node:crypto";
-import { withTenant } from "../../../../../lib/tenant/withTenant.js";
-import { ok, created, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
+import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
+import { ok, created, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import {
   MAX_FILE_SIZE_BYTES,
   TENANT_QUOTA_BYTES,
@@ -10,18 +9,19 @@ import {
   deleteDocumentFile,
   sanitizeFileName,
   extFromFileName,
-} from "../../../../../lib/documents/documentStorage.js";
+} from "../../../../../../lib/documents/documentStorage.js";
 
 /**
- * Documentos de un PACIENTE (archivo central, source='paciente').
+ * Documentos de una INCIDENCIA (archivo central, source='incidencia').
  *
- * Gated a Clínica/Pacientes (NO al módulo documents: aumenta/demo tienen la
- * tabla documents pero no el módulo). El buscador escribe el nombre y filtra;
- * al subir, el nombre es OBLIGATORIO (lo pide un modal en la UI).
+ * Van al archivo central como visibility='shared' (los ve el equipo). Si la
+ * incidencia tiene paciente, el documento hereda su patientId/clientId y por
+ * eso aparece también en la ficha del paciente; sin paciente, queda como
+ * documento interno del archivo. Mismo patrón que /api/pacientes/[id]/documents.
  */
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_FILES_PER_PATIENT = 100;
+const MAX_FILES_PER_INCIDENCIA = 20;
 
 function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
@@ -33,32 +33,28 @@ function serialize(doc) {
     name: doc.fileName,
     mimeType: doc.mimeType,
     fileSize: Number(doc.fileSize),
-    // "paciente" (subido aquí) o "incidencia" (adjunto de una incidencia del
-    // equipo): la UI lo etiqueta y decide desde dónde se puede borrar.
-    source: doc.source,
+    patientId: doc.patientId ?? null,
     createdAt: doc.createdAt,
   };
 }
 
-export const GET = withTenant(async (request, { params }, ctx) => {
+export const GET = withTenant(async (_request, { params }, ctx) => {
   try {
     if (!gate(ctx)) return forbidden("Módulo Clínica/Pacientes no activo");
+    if (!ctx.hasModule("team_avanzado")) return forbidden("Módulo Equipo avanzado no activo");
     const { id } = await params;
     if (!UUID_RE.test(id)) return error("id inválido");
-    const { Patient, Document } = ctx.tenantModels;
+    const { Incidencia, Document } = ctx.tenantModels;
 
-    const patient = await Patient.findByPk(id, { attributes: ["id"] });
-    if (!patient) return notFound("Paciente no encontrado");
+    const incidencia = await Incidencia.findByPk(id, { attributes: ["id"] });
+    if (!incidencia) return notFound("Incidencia no encontrada");
 
-    // También los adjuntos de incidencias con este paciente (26/08/2026): el
-    // documento de una incidencia forma parte de su historia. Se descargan
-    // desde aquí, pero se borran desde su incidencia.
-    const where = { patientId: id, source: { [Op.in]: ["paciente", "incidencia"] } };
-    const q = (new URL(request.url).searchParams.get("q") || "").trim();
-    if (q) where.fileName = { [Op.iLike]: `%${q}%` };
-
-    const rows = await Document.findAll({ where, order: [["createdAt", "DESC"]], limit: MAX_FILES_PER_PATIENT });
-    return ok({ documents: rows.map((d) => serialize(d.toJSON())), total: rows.length, limit: MAX_FILES_PER_PATIENT });
+    const rows = await Document.findAll({
+      where: { incidenciaId: id },
+      order: [["createdAt", "DESC"]],
+      limit: MAX_FILES_PER_INCIDENCIA,
+    });
+    return ok({ documents: rows.map((d) => serialize(d.toJSON())), total: rows.length, limit: MAX_FILES_PER_INCIDENCIA });
   } catch (err) {
     return serverError(err);
   }
@@ -67,18 +63,19 @@ export const GET = withTenant(async (request, { params }, ctx) => {
 export const POST = withTenant(async (request, { params }, ctx) => {
   try {
     if (!gate(ctx)) return forbidden("Módulo Clínica/Pacientes no activo");
+    if (!ctx.hasModule("team_avanzado")) return forbidden("Módulo Equipo avanzado no activo");
     const { id } = await params;
     if (!UUID_RE.test(id)) return error("id inválido");
     const ownerUserId = request.headers.get("x-user-id");
     if (!ownerUserId) return error("No autorizado", 401);
-    const { Patient, Document } = ctx.tenantModels;
+    const { Incidencia, Document } = ctx.tenantModels;
 
-    const patient = await Patient.findByPk(id, { attributes: ["id", "clientId"] });
-    if (!patient) return notFound("Paciente no encontrado");
+    const incidencia = await Incidencia.findByPk(id, { attributes: ["id", "patientId", "clientId"] });
+    if (!incidencia) return notFound("Incidencia no encontrada");
 
-    const count = await Document.count({ where: { patientId: id, source: "paciente" } });
-    if (count >= MAX_FILES_PER_PATIENT) {
-      return error(`Límite alcanzado: máximo ${MAX_FILES_PER_PATIENT} documentos por paciente`, 422);
+    const count = await Document.count({ where: { incidenciaId: id } });
+    if (count >= MAX_FILES_PER_INCIDENCIA) {
+      return error(`Límite alcanzado: máximo ${MAX_FILES_PER_INCIDENCIA} documentos por incidencia`, 422);
     }
 
     let form;
@@ -87,7 +84,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     const file = form.get("file");
     if (!file || typeof file === "string") return error("Campo 'file' obligatorio (multipart)", 422);
 
-    // NOMBRE obligatorio (el modal de la UI lo exige).
+    // NOMBRE obligatorio (el modal de la UI lo pide, igual que en pacientes).
     const nameRaw = form.get("name");
     const name = typeof nameRaw === "string" ? nameRaw.trim().slice(0, 200) : "";
     if (!name) return error("El nombre del documento es obligatorio", 422);
@@ -123,9 +120,12 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         storagePath,
         fileSize: realSize,
         mimeType: declaredMime,
-        clientId: patient.clientId ?? null, // enlaza también con el pagador si lo tiene
-        patientId: id,
-        source: "paciente",
+        // Con paciente, el documento hereda su ficha (y la del pagador); sin
+        // paciente se queda como documento interno del archivo central.
+        clientId: incidencia.clientId ?? null,
+        patientId: incidencia.patientId ?? null,
+        incidenciaId: id,
+        source: "incidencia",
       });
     } catch (dbErr) {
       await deleteDocumentFile(ctx.tenant.slug, storagePath);

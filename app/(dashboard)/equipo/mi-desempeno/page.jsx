@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
@@ -98,8 +99,12 @@ function HistoryChart({ data }) {
 }
 
 export default function MiDesempenoPage() {
+  const sp = useSearchParams();
   const [data, setData] = useState(null);
-  const [therapistId, setTherapistId] = useState("");
+  // ?therapistId= viene de Dirección y de Productividad («ver el desempeño de
+  // esta persona»). Hasta el 26/08/2026 el enlace existía pero esta página no
+  // leía el parámetro, así que siempre abría el desempeño del usuario logueado.
+  const [therapistId, setTherapistId] = useState(sp.get("therapistId") ?? "");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

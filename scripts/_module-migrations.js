@@ -170,6 +170,14 @@ export const CORE = [
   // tiene Citas— es un no-op.
   "migrate-team-members-block-color",
 
+  // Documento adjunto a una incidencia (`documents.incidencia_id`, 26/08/2026,
+  // Aumenta). CORE por el mismo criterio que migrate-documents-patient-link, que
+  // es su hermana: la columna vive en `documents` y el MODELO Document la declara
+  // para TODOS los tenants, así que sin ella cualquier lectura del archivo
+  // central da 42703, tenga el tenant incidencias o no. Aditiva y por existencia
+  // de tabla `documents`; la FK a `incidencias` solo donde esa tabla existe.
+  "migrate-documents-incidencia-link",
+
   // Alinea el ON DELETE de las cuatro FKs de `team_members` que decían cosas
   // distintas en cada cliente (26/08/2026). CORE porque el destrozo no depende
   // del módulo sino de CÓMO NACIÓ el schema: el alta lanza `sync()` antes que
@@ -183,6 +191,14 @@ export const CORE = [
   // `sync()` se adelante) está tapada por su lado en `lib/db/tenantDb.js`, que
   // ya declara el `onDelete` de las cuatro.
   "migrate-fks-equipo-alineadas",
+
+  // Tablas de la pantalla /correo (26/08/2026): `correo_listas`,
+  // `correo_plantillas` y `correo_firmas`. CORE por el criterio de siempre: los
+  // tres modelos están registrados en `lib/db/tenantDb.js` para TODOS los
+  // tenants (la pantalla se ve con `clients` O con `outreach`, que no comparten
+  // módulo), así que la tabla tiene que existir en todos los schemas o la
+  // primera lectura da 42703. Solo crea tablas nuevas: idempotente y aditiva.
+  "migrate-correo-herramientas",
 ];
 
 export const MODULES = {
