@@ -449,11 +449,14 @@ adjunto malo tumba el envío ENTERO antes de mandar nada) y `conFirma`
 
 Con firma, el correo pasa a llevar **versión HTML** además del texto: el cuerpo
 tecleado viaja ESCAPADO (`componerContenido`), la firma saneada debajo, y su
-imagen como adjunto embebido `cid:firma` (`content_id`; un `data:` en el `src`
-lo bloquean Gmail y Outlook). Si el buzón no pinta `cid:`, la imagen llega como
-adjunto normal — degradación aceptable. Sin firma, el envío sigue siendo el
-texto plano de siempre. La interacción de la ficha apunta también los nombres
-de los adjuntos.
+imagen como adjunto embebido `cid:firma` (un `data:` en el `src` lo bloquean
+Gmail y Outlook). ⚠️ Las claves de los adjuntos van **en el formato del SDK de
+Resend** (`resend@4.8.0`): `contentType` e `inlineContentId` — el SDK descarta
+en silencio las que no reconoce, y la primera versión (26/08/2026), que usaba
+los nombres de la API cruda (`content_type`/`content_id`), llegó al buzón con
+la imagen como adjunto suelto y un hueco roto donde iba el `cid:`. Sin firma,
+el envío sigue siendo el texto plano de siempre. La interacción de la ficha
+apunta también los nombres de los adjuntos.
 
 Pruebas: `scripts/_smoke-correo-herramientas.mjs` (`node:test`, ligera, 25
 comprobaciones) fija el escapado del cuerpo, el saneado de la firma, la

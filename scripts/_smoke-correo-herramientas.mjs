@@ -125,16 +125,20 @@ test("limpiarNombreFichero quita rutas y caracteres raros", () => {
   assert.equal(limpiarNombreFichero(""), "adjunto");
 });
 
-test("validarAdjuntos acepta imagen y PDF y les pone su content_type", () => {
+test("validarAdjuntos acepta imagen y PDF, con las claves DEL SDK de Resend", () => {
   const r = validarAdjuntos([
     { nombre: "foto.png", base64: PNG_1PX },
     { nombre: "Menú de otoño.PDF", base64: "QUJD" },
   ]);
   assert.equal(r.error, undefined);
   assert.equal(r.adjuntos.length, 2);
-  assert.equal(r.adjuntos[0].content_type, "image/png");
-  assert.equal(r.adjuntos[1].content_type, "application/pdf");
+  // `contentType`, NO `content_type`: el SDK (resend@4.8.0) descarta en
+  // silencio las claves que no reconoce — con el nombre de la API cruda el
+  // adjunto viaja sin tipo. Probado contra un buzón real el 26/08/2026.
+  assert.equal(r.adjuntos[0].contentType, "image/png");
+  assert.equal(r.adjuntos[1].contentType, "application/pdf");
   assert.equal(r.adjuntos[1].filename, "Menú de otoño.PDF");
+  assert.equal("content_type" in r.adjuntos[0], false);
 });
 
 test("validarAdjuntos rechaza extensiones que no son imagen/PDF", () => {
@@ -171,7 +175,7 @@ test("con firma, el cuerpo va ESCAPADO en el HTML y la firma en las dos versione
   assert.equal(c.text, "Hola <familia> & co\n\n--\nMaría");
 });
 
-test("la imagen de la firma va como adjunto cid:, no como data:", () => {
+test("la imagen de la firma va como adjunto incrustado (cid:), no como data:", () => {
   const c = componerContenido({
     cuerpo: "hola",
     firma: { html: null, texto: null, imagen: { nombre: "logo.png", tipo: "image/png", base64: PNG_1PX } },
@@ -179,8 +183,12 @@ test("la imagen de la firma va como adjunto cid:, no como data:", () => {
   assert.equal(c.html.includes(`src="cid:firma"`), true);
   assert.equal(c.html.includes("data:"), false);
   assert.equal(c.adjuntosFirma.length, 1);
-  assert.equal(c.adjuntosFirma[0].content_id, "firma");
-  assert.equal(c.adjuntosFirma[0].content_type, "image/png");
+  // `inlineContentId` es lo que el SDK entiende como «incrustado y con este
+  // cid». Con `content_id` (la primera versión) la imagen llegaba como
+  // adjunto suelto y el correo enseñaba un hueco roto.
+  assert.equal(c.adjuntosFirma[0].inlineContentId, "firma");
+  assert.equal(c.adjuntosFirma[0].contentType, "image/png");
+  assert.equal("content_id" in c.adjuntosFirma[0], false);
 });
 
 test("una firma guardada con maldad se vuelve a sanear al componer", () => {
