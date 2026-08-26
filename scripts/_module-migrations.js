@@ -49,7 +49,7 @@ import { computeOrder } from "./_migration-order.js";
  * muévanse a MODULES y a ORDER.
  */
 export const ONE_OFF = {
-  "migrate-quality-leads": "atada a quality_energy",
+  "migrate-quality-leads": "atada a quality_energy",
   "backfill-nutricion-assignments": "DATOS: marca «Paciente Nutrición» a los clientes previos al auto-marcado (2026-07-27); repetible, se corre a mano",
   "backfill-patients-client": "DATOS: enlaza pacientes con su ficha de pagador a partir de sus citas/sesiones; dry-run por defecto, se corre a mano con --confirm",
   "migrate-contract-patient-to-client": "DATOS: mueve el contrato del paciente a la familia (sprint 2026-07, 1.1); copia el PDF a `documents` y apunta clients.contract_document_id; dry-run por defecto, se corre a mano con --confirm",
@@ -168,6 +168,20 @@ export const CORE = [
   // Decide por existencia de `team_members`: donde no está —healim, que solo
   // tiene Citas— es un no-op.
   "migrate-team-members-block-color",
+
+  // Alinea el ON DELETE de las cuatro FKs de `team_members` que decían cosas
+  // distintas en cada cliente (26/08/2026). CORE porque el destrozo no depende
+  // del módulo sino de CÓMO NACIÓ el schema: el alta lanza `sync()` antes que
+  // las migraciones, así que la FK que quedaba era la que Sequelize se inventa
+  // —y `clinical_reports.therapist_id` salía CASCADE, o sea que borrar a un
+  // profesional le borraba sus informes clínicos—. Decide por existencia de
+  // tabla: donde no hay Clínica ni bloqueos, es un no-op.
+  //
+  // ⚠️ Va aquí ADEMÁS de haberse ejecutado a mano, porque un tenant que se
+  // reactive o que estrene Clínica tiene que nacer alineado. La causa (que
+  // `sync()` se adelante) está tapada por su lado en `lib/db/tenantDb.js`, que
+  // ya declara el `onDelete` de las cuatro.
+  "migrate-fks-equipo-alineadas",
 ];
 
 export const MODULES = {
