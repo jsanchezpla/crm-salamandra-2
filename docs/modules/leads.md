@@ -14,7 +14,7 @@
 | **Reina** | — (ni el doc ni `lib/leads/embudos.js` nombran una; desde el 18/08/2026 el base es el override de aumenta parametrizado, y a aumenta solo le queda propio el rosa `#FF1F96`) |
 | **Pantallas** | El embudo: `/leads` → `app/(dashboard)/leads/page.jsx` (server component: resuelve `UI_OVERRIDES` por `x-tenant` y le pasa al base `stages`, `titulo` y `sujeto`). El PADRE del grupo en el menú: `/leads/estadisticas` → `app/(dashboard)/leads/estadisticas/page.jsx` (mira `leads` y `formularios` juntos). Públicas: ninguna página en este repo — el formulario vive en la web del cliente y pega en el endpoint público de abajo. |
 | **Endpoints** | `app/api/leads/**` — 8 `route.js`: `route.js` (GET lista, con `desglose=1` por etapa · POST), `[id]/route.js` (GET · PATCH · DELETE, los dos últimos auditados), `[id]/convert-to-project/route.js` (POST; exige además `projects`), `estadisticas/route.js` (GET), `export/route.js` (GET Excel), `import/route.js` (POST JSON), `import/excel/route.js` (POST .xlsx), `import/template/route.js` (GET plantilla). Mutaciones solo admin/superadmin. Público: `app/api/public/leads/route.js` (OPTIONS+POST; tenant por cabecera `x-tenant`, CORS `*`, límite 30/min, `sanearCustomFields`). Sin webhooks. |
-| **Lógica** | `lib/leads/`: `stages.js` (las 15 etapas canónicas, `ALLOWED_STAGES` + `STAGE_LABELS`: la whitelist de PATCH, import y export), `embudos.js` (qué etapas ofrece cada cliente: `EMBUDOS` por slug de BD, `EMBUDO_POR_DEFECTO` de cinco, `GANADAS`/`PERDIDAS`, `etapasDe()`, `tieneEtapaGanada()`, `etapaAlGanar()` —a qué etapa mueve el SERVIDOR un interesado al enlazarle una ficha, `null` en booking—), `estadisticas.js` (las cifras de `/leads/estadisticas`: profesionales + comerciales, `calcularEstadisticas`). Fuera: `lib/home/summary.js` cuenta los abiertos para la portada con su propia `CLOSED_STAGES`. |
+| **Lógica** | `lib/leads/`: `stages.js` (las 15 etapas canónicas, `ALLOWED_STAGES` + `STAGE_LABELS`: la whitelist de PATCH, import y export), `embudos.js` (qué etapas ofrece cada cliente: `EMBUDOS` por slug de BD, `EMBUDO_POR_DEFECTO` de cinco, `GANADAS`/`PERDIDAS`, `etapasDe()`, `tieneEtapaGanada()`, `etapaAlGanar()` —a qué etapa mueve el SERVIDOR un interesado al enlazarle una ficha, `null` en booking—, `aceptaEtapa()` —la puerta de las cuatro entradas: valida contra el embudo del cliente, no contra `ALLOWED_STAGES`—), `estadisticas.js` (las cifras de `/leads/estadisticas`: profesionales + comerciales, `calcularEstadisticas`). Fuera: `lib/home/summary.js` cuenta los abiertos para la portada con su propia `CLOSED_STAGES`. |
 | **UI** | `modules/leads/LeadsModule.jsx` (el base, `"use client"`, 779 líneas: tarjetas por etapa, filtro por motivo, buscador, panel lateral; color de `var(--color-primary)`). La pantalla de estadísticas lleva sus piezas dentro. No hay `components/leads/`. |
 | **Modelos** | `Lead` → `leads` (`models/tenant/Lead.model.js`; `stage` es STRING(50), no ENUM; `customFields` y `metadata` JSONB; `convertedProjectId`/`convertedToProjectAt`). Asociaciones en `lib/db/tenantDb.js`: `Lead.belongsTo(Client)` por `clientId` y `Lead.belongsTo(Project)` por `convertedProjectId`. Sin FK a `TeamMember` (`assignedTo` es un UUID suelto). |
 | **Interruptores y parámetros** | Ninguno que lea el código (ni `featureFlags` ni `logicOverrides`). Lo que varía por cliente está escrito en código: `EMBUDOS` en `lib/leads/embudos.js`, `TENANT_TITLE_OVERRIDES` («Interesados») en la página, `TENANT_LABEL_OVERRIDES` en `components/layout/Sidebar.jsx` y las plantillas de export/import por slug (`spain_enzymes` y `nutri_laura`, en `app/api/leads/export/route.js` e `import/template/route.js`). Los `schemaExtensions` que hay en producción (nutri_laura, spain_enzymes) son letrero decorativo: el código no los lee. |
@@ -148,6 +148,41 @@ descartaba silenciosamente los 5 extendidos, lo que rompía el cambio de
 stage desde la UI de QE y abarcaia. Ahora cualquier endpoint los acepta y
 las etiquetas humanas vienen del mismo `STAGE_LABELS`. Ver
 "Incoherencias resueltas".
+
+## Una etapa solo entra si su embudo la ofrece (26/08/2026)
+
+`ALLOWED_STAGES` dice qué etapas **existen** en el CRM (20), no cuáles ofrece
+cada embudo (entre 4 y 7). Las cuatro puertas por las que puede entrar una etapa
+miraban la lista canónica, así que se podía dejar a un interesado en una etapa
+que su pantalla no tiene: chip de color, sin fila donde ponerse, y los contadores
+de la cabecera sin sumar el total.
+
+**No era un caso de un cliente**: medido el 26/08/2026, **7 de las 20 no las
+ofrece ningún embudo** (`proposal`, `negotiation`, `in_progress`,
+`demo_scheduled`, `demo_done`, `closed_yes`, `closed_no`). La puerta estaba
+abierta en los ocho clientes con leads.
+
+Ahora las cuatro pasan por `aceptaEtapa(slug, etapa, tieneModulo)`:
+
+| Puerta | Qué hace con una etapa que ese embudo no ofrece |
+| --- | --- |
+| `POST /api/leads` | **422** con la lista de las suyas. Antes no validaba NADA: `Lead.stage` es texto de 50 sin enum |
+| `PATCH /api/leads/[id]` | **422** con la lista. Antes la tiraba EN SILENCIO y devolvía 200 |
+| `POST /api/leads/import` | Entra en `new` y suma en `etapasCorregidas` de la respuesta |
+| `POST /api/leads/import/excel` | Igual |
+
+Los importadores no rechazan la fila a propósito: es masivo, y tirar a alguien
+por una columna de estado sería peor que meterlo en «Nuevo» —que está en todos
+los embudos— **diciéndolo**.
+
+⚠️ `ALLOWED_STAGES` **no se ha tocado**: sigue siendo la lista de lo que el CRM
+sabe nombrar, y de ella salen los rótulos del Excel y de las pantallas
+compartidas. Son dos preguntas distintas.
+
+Y la comprobación de arranque de `embudos.js` mira ahora también los embudos por
+slug: hasta ese día solo el por defecto y el de booking, así que una errata
+dentro de `EMBUDOS` pasaba sin ruido y dejaba al cliente con un botón que su
+propio servidor rechazaba.
 
 ## El CRM marca el ganado solo (26/08/2026)
 
