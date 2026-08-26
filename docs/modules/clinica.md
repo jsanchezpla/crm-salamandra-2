@@ -279,14 +279,25 @@ Una sesión ya no es solo el informe de lo que pasó dentro:
 Las partes 1 y 3 se pueden rellenar **después**: van en `PATCH
 /api/clinica/sessions/[id]` (además del POST de creación), porque la
 preparación se escribe antes y la devolución llega a veces días más tarde. En
-la UI están tanto en el flujo de «Subir audio» como en el cajón de la sesión de
-la ficha del paciente.
+la UI están tanto en «Nuevo registro» como en el cajón de la sesión de la
+ficha del paciente.
 
-Y desde el 26/08/2026 la parte 1 se puede escribir **antes de que la sesión
-exista**: «Prepárala sin audio» en `/pacientes/[id]/sesiones/nueva`, o
-«Preparar sesión» en el modal de una cita, que además le pasa el día y la hora
-de esa cita. La sesión nace en `draft` y el cajón de la ficha la completa
-después —informe y devolución— sin crear otra.
+**Desde el 26/08/2026 por la tarde (Rodrigo), el registro se ESCRIBE y el
+audio es opcional.** El botón de la ficha dice «Nuevo registro» (antes «Subir
+audio») y `/pacientes/[id]/sesiones/nueva` abre directamente el registro
+completo en texto —las tres partes—, con el audio como bloque opcional dentro:
+si se sube y procesa, la IA rellena SOLO los apartados vacíos del informe (lo
+escrito a mano no se pisa, la misma regla que el volcado de informes), la
+transcripción queda a la vista, y los campos de IA (`aiTranscription`,
+`aiReviewedAt`…) solo viajan al POST si de verdad hubo audio — un registro a
+mano no debe decir «transcrito por IA» (lo vigila `_smoke-clinica-preparar.mjs`
+por el lado del alta de preparación).
+
+Y desde esa misma mañana la parte 1 se puede escribir **antes de que la sesión
+exista**: «Guárdala solo como preparación» dentro de «Nuevo registro», o
+«Preparar sesión» en el modal de una cita (`?preparar=1`), que además le pasa
+el día y la hora de esa cita. La sesión nace en `draft` y el cajón de la ficha
+la completa después —informe y devolución— sin crear otra.
 
 **Adjuntos de preparación**: `POST /api/clinica/sessions/[id]/prep-files`
 (multipart) y `GET/DELETE …/prep-files/[fileId]`. Máximo 10 por sesión, 25 MB

@@ -1,5 +1,26 @@
 "use client";
 
+/**
+ * /pacientes/[id]/sesiones/nueva — «Nuevo registro» de sesión (26/08/2026,
+ * Rodrigo: «en lugar de Subir audio, Nuevo registro; que se pueda hacer todo
+ * el registro en texto, y el audio dentro y opcional»).
+ *
+ * Hasta hoy el camino principal era el audio: la página abría con la zona de
+ * soltar el fichero y el formulario solo aparecía DESPUÉS de que la IA lo
+ * estructurara (o como preparación-borrador). Ahora es al revés:
+ *
+ *   - La página abre con el REGISTRO COMPLETO en texto, las tres partes del
+ *     sprint 2026-07: 1·Preparación (con adjuntos), 2·Informe (objetivos,
+ *     actividades, desempeño, observaciones) y 3·Devolución de la familia.
+ *   - El audio es un bloque OPCIONAL dentro: si se sube y procesa, la IA
+ *     rellena SOLO los apartados vacíos del informe — lo escrito a mano no se
+ *     pisa (la regla de la casa, la misma que el volcado de informes).
+ *
+ * «Preparar la sesión» (borrador antes de darla, 26/08 por la mañana) sigue
+ * igual: se llega con ?preparar=1 desde el modal de la cita o con su enlace de
+ * abajo, y no ha cambiado nada de ese flujo.
+ */
+
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -12,7 +33,7 @@ import {
   pidePreparar,
 } from "@/lib/clinica/prepararSesion.js";
 
-const STATE = { IDLE: "idle", UPLOADED: "uploaded", PROCESSING: "processing", STRUCTURED: "structured", PREPARING: "preparing" };
+const STATE = { FORM: "form", PROCESSING: "processing", PREPARING: "preparing" };
 
 const PROCESSING_STEPS = [
   "Subiendo audio…",
@@ -20,6 +41,18 @@ const PROCESSING_STEPS = [
   "Identificando objetivos trabajados…",
   "Estructurando observaciones…",
 ];
+
+const FORM_VACIO = {
+  objectives: "",
+  activities: "",
+  performance: "",
+  familyComments: "",
+  nextSessionNotes: "",
+  homeworkTasks: "",
+  incidents: "",
+  prepText: "",
+  parentFeedback: "",
+};
 
 const fmtSize = (b) => (b == null ? "" : b < 1024 * 1024 ? `${Math.round(b / 1024)} KB` : `${(b / (1024 * 1024)).toFixed(1)} MB`);
 const fmtDur = (s) => (s == null ? "" : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`);
@@ -33,20 +66,19 @@ export default function NuevaSesionPage() {
   const [patient, setPatient] = useState(null);
   const [loadingPatient, setLoadingPatient] = useState(true);
   // Quien llega desde una cita («Preparar sesión») entra DIRECTO al formulario
-  // de preparación: el enlace ya dijo a qué venía, y enseñarle primero la zona
-  // de soltar el audio sería pedirle que vuelva a elegir lo que ya eligió. Va en
-  // el estado inicial y no en un efecto, para que volver a Subir audio a mano no
-  // se deshaga solo.
-  const [state, setState] = useState(() => (pidePreparar(query.get("preparar")) ? STATE.PREPARING : STATE.IDLE));
+  // de preparación: el enlace ya dijo a qué venía. Va en el estado inicial y no
+  // en un efecto, para que volver al registro a mano no se deshaga solo.
+  const [state, setState] = useState(() => (pidePreparar(query.get("preparar")) ? STATE.PREPARING : STATE.FORM));
   // La fecha de la cita, si viene; si no, ahora. Se acota en `fechaDePreparacion`
-  // porque llega por la barra de direcciones.
-  const [prepFecha, setPrepFecha] = useState(() => paraInputLocal(fechaDePreparacion(query.get("fecha")) ?? new Date()));
+  // porque llega por la barra de direcciones. La comparten el registro y la
+  // preparación: es «cuándo es (o fue) la sesión».
+  const [fecha, setFecha] = useState(() => paraInputLocal(fechaDePreparacion(query.get("fecha")) ?? new Date()));
   const [prepSolo, setPrepSolo] = useState("");
+  const [form, setForm] = useState(FORM_VACIO);
   const [file, setFile] = useState(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [processingStep, setProcessingStep] = useState(0);
   const [result, setResult] = useState(null); // { transcription, structured, audioDurationSec, demo }
-  const [form, setForm] = useState(null); // campos editables
+  const [avisoAudio, setAvisoAudio] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [saving, setSaving] = useState(false);
   // Adjuntos de la PREPARACIÓN (punto 4 del sprint). Se quedan en memoria hasta
@@ -70,17 +102,16 @@ export default function NuevaSesionPage() {
     return () => clearInterval(t);
   }, [state]);
 
-  function pickFile(f) {
-    if (!f) return;
-    setFile(f);
-    setErrorMsg(null);
-    setState(STATE.UPLOADED);
-  }
-
-  async function process() {
+  /**
+   * Procesa el audio y rellena SOLO los apartados vacíos del informe: lo que la
+   * profesional ya haya escrito a mano no se pisa (misma regla que el volcado
+   * de sesiones en los informes). La transcripción se queda a la vista.
+   */
+  async function procesarAudio() {
     if (!file) return;
     setState(STATE.PROCESSING);
     setErrorMsg(null);
+    setAvisoAudio(null);
     try {
       const fd = new FormData();
       fd.append("file", file, file.name);
@@ -88,8 +119,7 @@ export default function NuevaSesionPage() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo procesar el audio");
       const s = j.data.structured;
-      setResult(j.data);
-      setForm({
+      const propuesta = {
         objectives: (s.objectives ?? []).join(", "),
         activities: s.activities ?? "",
         performance: s.performance ?? "",
@@ -97,34 +127,42 @@ export default function NuevaSesionPage() {
         nextSessionNotes: s.observations?.nextSessionNotes ?? "",
         homeworkTasks: s.observations?.homeworkTasks ?? "",
         incidents: s.observations?.incidents ?? "",
-        prepText: "",
-        parentFeedback: "",
+      };
+      let rellenados = 0;
+      let respetados = 0;
+      setForm((f) => {
+        const n = { ...f };
+        for (const [k, v] of Object.entries(propuesta)) {
+          if (!String(v).trim()) continue;
+          if (String(n[k] ?? "").trim()) { respetados++; continue; }
+          n[k] = v;
+          rellenados++;
+        }
+        return n;
       });
-      setState(STATE.STRUCTURED);
+      setResult(j.data);
+      setAvisoAudio(
+        `El audio ha rellenado ${rellenados} apartado(s) vacío(s)` +
+          (respetados ? `; ${respetados} ya tenían texto tuyo y no se han tocado.` : ".") +
+          " Revisa y edita antes de guardar."
+      );
+      setState(STATE.FORM);
     } catch (e) {
       setErrorMsg(e.message);
-      setState(STATE.UPLOADED);
+      setState(STATE.FORM);
     }
   }
 
-  function reset() {
-    setState(STATE.IDLE);
+  function quitarAudio() {
     setFile(null);
     setResult(null);
-    setForm(null);
-    setPrepFiles([]);
-    setPrepSolo("");
-    setErrorMsg(null);
+    setAvisoAudio(null);
     if (fileRef.current) fileRef.current.value = "";
   }
 
   /**
-   * Guardar una sesión que TODAVÍA NO SE HA DADO.
-   *
-   * Es la mitad que faltaba: hasta hoy una sesión solo nacía subiendo un audio,
-   * así que para preparar una había que haberla dado ya. Va por el mismo
-   * endpoint de siempre —que ya aceptaba una sesión sin audio— y el cuerpo lo
-   * arma `payloadDePreparacion`, que es quien se encarga de NO mandar los campos
+   * Guardar una sesión que TODAVÍA NO SE HA DADO (flujo de la mañana del 26/08,
+   * intacto). El cuerpo lo arma `payloadDePreparacion`, que NO manda los campos
    * de la IA: una sesión preparada no ha pasado por Whisper ni por Claude.
    */
   async function guardarPreparacion() {
@@ -137,7 +175,7 @@ export default function NuevaSesionPage() {
     try {
       // El input de fecha manda hora LOCAL sin zona y `new Date` la lee como
       // local: es exactamente la hora que ve quien la escribe.
-      const escrita = prepFecha ? new Date(prepFecha) : new Date();
+      const escrita = fecha ? new Date(fecha) : new Date();
       const payload = payloadDePreparacion({
         patientId: id,
         therapistId: patient.mainTherapistId,
@@ -147,29 +185,35 @@ export default function NuevaSesionPage() {
       const r = await fetch("/api/clinica/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo guardar la preparación");
-
-      // Igual que en el flujo de audio: los adjuntos necesitan el id de la
-      // sesión, así que van después y no se llevan la sesión por delante.
-      const fallidos = [];
-      for (const f of prepFiles) {
-        const fd = new FormData();
-        fd.append("file", f, f.name);
-        const up = await fetch(`/api/clinica/sessions/${j.data.id}/prep-files`, { method: "POST", body: fd });
-        if (!up.ok) fallidos.push(f.name);
-      }
-      if (fallidos.length) {
-        setErrorMsg(`Preparación guardada, pero no se pudieron subir: ${fallidos.join(", ")}. Puedes añadirlos desde la ficha.`);
-        setSaving(false);
-        return;
-      }
-      router.push(`/pacientes/${id}`);
+      await subirAdjuntos(j.data.id, "Preparación guardada");
     } catch (e) {
       setErrorMsg(e.message);
       setSaving(false);
     }
   }
 
-  async function save() {
+  // Los adjuntos van DESPUÉS del POST: necesitan el id de la sesión recién
+  // creada. Si alguno falla no se pierde la sesión: se avisa y se queda aquí.
+  async function subirAdjuntos(sessionId, etiquetaOk) {
+    const fallidos = [];
+    for (const f of prepFiles) {
+      const fd = new FormData();
+      fd.append("file", f, f.name);
+      const up = await fetch(`/api/clinica/sessions/${sessionId}/prep-files`, { method: "POST", body: fd });
+      if (!up.ok) fallidos.push(f.name);
+    }
+    if (fallidos.length) {
+      setErrorMsg(`${etiquetaOk}, pero no se pudieron subir: ${fallidos.join(", ")}. Puedes añadirlos desde la ficha.`);
+      setSaving(false);
+      return;
+    }
+    router.push(`/pacientes/${id}`);
+  }
+
+  // Un registro sin NADA escrito no es un registro: algo tiene que llevar.
+  const hayContenido = Object.values(form).some((v) => String(v ?? "").trim());
+
+  async function guardarRegistro() {
     if (!patient?.mainTherapistId) {
       setErrorMsg("El paciente no tiene terapeuta asignado. Asígnale uno en su ficha antes de guardar.");
       return;
@@ -177,10 +221,11 @@ export default function NuevaSesionPage() {
     setSaving(true);
     setErrorMsg(null);
     try {
+      const escrita = fecha ? new Date(fecha) : new Date();
       const payload = {
         patientId: id,
         therapistId: patient.mainTherapistId,
-        sessionDate: new Date().toISOString(),
+        sessionDate: (Number.isNaN(escrita.getTime()) ? new Date() : escrita).toISOString(),
         objectives: form.objectives.split(",").map((s) => s.trim()).filter(Boolean),
         activities: form.activities,
         performance: form.performance,
@@ -190,33 +235,24 @@ export default function NuevaSesionPage() {
           homeworkTasks: form.homeworkTasks,
           incidents: form.incidents,
         },
-        aiTranscription: result.transcription,
-        aiStructured: result.structured,
-        audioDurationSec: result.audioDurationSec,
-        aiReviewedAt: new Date().toISOString(),
         prepText: form.prepText,
         parentFeedback: form.parentFeedback,
         status: "registered",
+        // Solo si hubo audio: transcripción, estructura cruda y duración. Un
+        // registro escrito a mano no ha pasado por la IA y no debe decir que sí.
+        ...(result
+          ? {
+              aiTranscription: result.transcription,
+              aiStructured: result.structured,
+              audioDurationSec: result.audioDurationSec,
+              aiReviewedAt: new Date().toISOString(),
+            }
+          : {}),
       };
       const r = await fetch("/api/clinica/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo guardar la sesión");
-
-      // Los adjuntos van DESPUÉS: necesitan el id de la sesión recién creada.
-      // Si alguno falla no se pierde la sesión: se avisa y se queda en pantalla.
-      const fallidos = [];
-      for (const f of prepFiles) {
-        const fd = new FormData();
-        fd.append("file", f, f.name);
-        const up = await fetch(`/api/clinica/sessions/${j.data.id}/prep-files`, { method: "POST", body: fd });
-        if (!up.ok) fallidos.push(f.name);
-      }
-      if (fallidos.length) {
-        setErrorMsg(`Sesión guardada, pero no se pudieron subir: ${fallidos.join(", ")}. Puedes añadirlos desde la ficha.`);
-        setSaving(false);
-        return;
-      }
-      router.push(`/pacientes/${id}`);
+      await subirAdjuntos(j.data.id, "Sesión guardada");
     } catch (e) {
       setErrorMsg(e.message);
       setSaving(false);
@@ -224,7 +260,6 @@ export default function NuevaSesionPage() {
   }
 
   const therapistName = patient?.therapist?.name ?? "—";
-  const today = new Date().toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" });
   const ta = "w-full px-3 py-2 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400 leading-relaxed";
 
   if (loadingPatient) return <div className="p-4 lg:p-8 text-sm text-neutral-400">Cargando…</div>;
@@ -239,6 +274,44 @@ export default function NuevaSesionPage() {
     );
   }
 
+  const adjuntosPrep = (
+    <div>
+      <label className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline cursor-pointer">
+        + Adjuntar fotos, audio o PDF
+        <input
+          type="file"
+          multiple
+          accept="image/*,audio/*,application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            const nuevos = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            setPrepFiles((prev) => [...prev, ...nuevos].slice(0, 10));
+          }}
+        />
+      </label>
+      {prepFiles.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {prepFiles.map((f, i) => (
+            <li key={`${f.name}-${i}`} className="text-[11px] text-neutral-600 flex items-center gap-2">
+              <span className="truncate">{f.name}</span>
+              <span className="text-neutral-400 shrink-0">{fmtSize(f.size)}</span>
+              <button
+                onClick={() => setPrepFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                className="text-rose-500 hover:text-rose-700 shrink-0"
+              >
+                quitar
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-[10px] text-neutral-400 mt-1">
+        Material interno del equipo: no se comparte con la familia.
+      </p>
+    </div>
+  );
+
   return (
     <div className={`${anchoPantalla("listado")} space-y-5`}>
       <nav className="flex items-center gap-1.5 text-xs text-neutral-500">
@@ -246,7 +319,7 @@ export default function NuevaSesionPage() {
         <span className="text-neutral-300">/</span>
         <Link href={`/pacientes/${id}`} className="hover:text-[var(--color-primary,#1B3A2D)]">{patient.firstName} {patient.lastName}</Link>
         <span className="text-neutral-300">/</span>
-        <span className="text-neutral-700">Nueva sesión</span>
+        <span className="text-neutral-700">Nuevo registro</span>
       </nav>
 
       <input
@@ -254,55 +327,167 @@ export default function NuevaSesionPage() {
         type="file"
         accept="audio/*,.m4a,.mp3,.wav,.ogg,.webm,.mp4"
         className="hidden"
-        onChange={(e) => pickFile(e.target.files?.[0])}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) { setFile(f); setErrorMsg(null); } }}
       />
 
       {errorMsg && <div className="px-4 py-3 rounded-lg bg-rose-50 border border-rose-100 text-xs text-rose-700">{errorMsg}</div>}
 
-      {/* ── IDLE ── */}
-      {state === STATE.IDLE && (
-        <div className="bg-white border border-neutral-100 rounded-xl p-6 lg:p-10">
-          <div className="text-center mb-6">
-            <div className="eyebrow mb-2">Nueva sesión</div>
-            <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] tracking-tight">{patient.firstName} {patient.lastName}</h1>
-            <p className="text-xs text-neutral-500 mt-1">{therapistName} · {today}</p>
-          </div>
-          <div
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={(e) => { e.preventDefault(); setIsDragging(false); pickFile(e.dataTransfer.files?.[0]); }}
-            onClick={() => fileRef.current?.click()}
-            className={`max-w-2xl mx-auto rounded-xl border-2 border-dashed cursor-pointer transition-all p-10 text-center ${isDragging ? "border-[var(--color-primary,#1B3A2D)] bg-[color-mix(in_srgb,var(--color-primary,#1B3A2D)_5%,white)]" : "border-neutral-200 hover:border-neutral-300 bg-neutral-50/30"}`}
-          >
-            <div className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center text-white mb-4" style={{ background: "var(--color-primary, #1B3A2D)" }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-7 h-7"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 7.5m0 0L7.5 12m4.5-4.5v13.5" /></svg>
+      {/* ── FORM: el registro completo, en texto y con el audio opcional ── */}
+      {state === STATE.FORM && (
+        <>
+          <div className="bg-white border border-neutral-100 rounded-xl p-5 lg:p-7">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <div className="eyebrow mb-1">Nuevo registro de sesión</div>
+                <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] tracking-tight">{patient.firstName} {patient.lastName}</h1>
+                <p className="text-xs text-neutral-500 mt-1">{therapistName}</p>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">Día y hora de la sesión</div>
+                <input type="datetime-local" className={ta} value={fecha} onChange={(e) => setFecha(e.target.value)} />
+              </div>
             </div>
-            <p className="font-display text-lg text-[var(--ink-900)]">Subir audio de la sesión</p>
-            <p className="text-xs text-neutral-500 mt-1 max-w-md mx-auto leading-relaxed">Sube el audio grabado con tu móvil. La IA lo transcribirá (Whisper) y lo estructurará (Claude) en apartados.</p>
-            <button type="button" className="mt-4 inline-flex items-center gap-2 text-xs font-medium px-4 py-2 rounded-lg border border-neutral-200 bg-white hover:border-neutral-400 text-neutral-700">Seleccionar archivo</button>
-            <p className="text-[10px] text-neutral-400 mt-4">Formatos: m4a, mp3, wav, ogg, webm · Máx. 25 MB</p>
           </div>
-          {/*
-            La segunda puerta (26/08/2026, Aumenta). Debajo de la zona de audio y
-            no al lado: subir el audio sigue siendo lo que se hace 22.045 veces,
-            y preparar es lo que se hace la víspera. Quien llega desde una cita
-            no ve esto — entra directo al formulario.
-          */}
-          <p className="text-center text-[11px] text-neutral-500 mt-5">
-            ¿Todavía no la has dado?{" "}
-            <button
-              type="button"
-              onClick={() => setState(STATE.PREPARING)}
-              className="font-medium text-[var(--color-primary,#1B3A2D)] hover:underline"
-            >
-              Prepárala sin audio
-            </button>
-          </p>
 
-        </div>
+          {/* Audio, opcional. Dentro del registro y no como puerta de entrada
+              (26/08/2026, Rodrigo): el registro se escribe; el audio, si lo
+              hay, lo adelanta. */}
+          <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-white" style={{ background: "var(--color-primary, #1B3A2D)" }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" /></svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-[var(--ink-900)]">
+                  ¿Tienes audio de la sesión? <span className="font-normal text-neutral-400">(opcional)</span>
+                  <HelpTooltip title="El audio no se guarda" className="ml-1.5 tracking-normal normal-case">
+                    Sirve para sacar el texto y se descarta. En la sesión quedan la transcripción y la
+                    duración, no la grabación: si quieres conservarla, guárdala tú. Lo que adjuntes en
+                    «Preparación», en cambio, sí se queda con la sesión.
+                  </HelpTooltip>
+                </div>
+                {!file ? (
+                  <p className="text-[11px] text-neutral-500 mt-0.5">La IA lo transcribe y rellena por ti los apartados vacíos del informe. m4a, mp3, wav, ogg, webm · máx. 25 MB.</p>
+                ) : (
+                  <p className="text-[11px] text-neutral-600 mt-0.5 truncate">
+                    {file.name} · {fmtSize(file.size)}{result?.audioDurationSec != null ? ` · ${fmtDur(result.audioDurationSec)}` : ""}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2 shrink-0">
+                {!file && (
+                  <button type="button" onClick={() => fileRef.current?.click()} className="text-xs font-medium px-3 py-2 rounded-lg border border-neutral-200 bg-white hover:border-neutral-400 text-neutral-700">
+                    Añadir audio
+                  </button>
+                )}
+                {file && !result && (
+                  <>
+                    <button type="button" onClick={quitarAudio} className="text-xs px-3 py-2 text-neutral-500 hover:underline">Quitar</button>
+                    <button type="button" onClick={procesarAudio} className="text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 inline-flex items-center gap-2" style={{ background: "var(--color-primary, #1B3A2D)" }}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
+                      Procesar con IA
+                    </button>
+                  </>
+                )}
+                {file && result && (
+                  <button type="button" onClick={quitarAudio} className="text-xs px-3 py-2 text-neutral-500 hover:underline">Quitar audio</button>
+                )}
+              </div>
+            </div>
+
+            {avisoAudio && (
+              <div className="mt-3 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800">
+                {avisoAudio}{result?.demo ? " (datos de demostración)" : ""}
+              </div>
+            )}
+            {result?.transcription && (
+              <div className="mt-3 border-t border-neutral-100 pt-3">
+                <div className="eyebrow mb-1.5">Transcripción literal</div>
+                <p className="text-xs text-neutral-600 leading-relaxed italic">«{result.transcription}»</p>
+              </div>
+            )}
+          </div>
+
+          {/* 1 · Preparación */}
+          <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5 space-y-3">
+            <div className="eyebrow">1 · Preparación</div>
+            <p className="text-[10px] text-neutral-400 -mt-2">
+              Lo que preparaste antes de la sesión. Se guarda con ella y sirve para redactar el informe.
+            </p>
+            <textarea
+              className={ta}
+              rows={3}
+              placeholder="Material previsto, hipótesis de trabajo, qué observar…"
+              value={form.prepText}
+              onChange={(e) => setForm({ ...form, prepText: e.target.value })}
+            />
+            {adjuntosPrep}
+          </div>
+
+          {/* 2 · Informe */}
+          <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5 space-y-4">
+            <div className="eyebrow">2 · Informe de la sesión</div>
+            <Block label="Objetivos trabajados (separados por comas)">
+              <input className={ta} value={form.objectives} onChange={(e) => setForm({ ...form, objectives: e.target.value })} />
+            </Block>
+            <Block label="Actividades realizadas">
+              <textarea className={ta} rows={3} value={form.activities} onChange={(e) => setForm({ ...form, activities: e.target.value })} />
+            </Block>
+            <Block label="Desempeño del paciente">
+              <textarea className={ta} rows={3} value={form.performance} onChange={(e) => setForm({ ...form, performance: e.target.value })} />
+            </Block>
+            <Block label="Observaciones">
+              <div className="space-y-2">
+                <SubField label="Comentarios familiares" ta={ta} value={form.familyComments} onChange={(v) => setForm({ ...form, familyComments: v })} />
+                <SubField label="Próximas sesiones" ta={ta} value={form.nextSessionNotes} onChange={(v) => setForm({ ...form, nextSessionNotes: v })} />
+                <SubField label="Tareas para casa" ta={ta} value={form.homeworkTasks} onChange={(v) => setForm({ ...form, homeworkTasks: v })} />
+                <SubField label="Incidencias" ta={ta} value={form.incidents} onChange={(v) => setForm({ ...form, incidents: v })} />
+              </div>
+            </Block>
+          </div>
+
+          {/* 3 · Devolución de la familia */}
+          <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5 space-y-3">
+            <div className="eyebrow">3 · Devolución de la familia</div>
+            <p className="text-[10px] text-neutral-400 -mt-2">
+              Lo que te han contado los padres al recoger: cómo ha ido la semana, qué han notado en casa.
+            </p>
+            <textarea
+              className={ta}
+              rows={3}
+              placeholder="Qué dice la familia…"
+              value={form.parentFeedback}
+              onChange={(e) => setForm({ ...form, parentFeedback: e.target.value })}
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 justify-end">
+            <p className="text-[11px] text-neutral-500 mr-auto">
+              ¿Todavía no la has dado?{" "}
+              <button
+                type="button"
+                onClick={() => setState(STATE.PREPARING)}
+                className="font-medium text-[var(--color-primary,#1B3A2D)] hover:underline"
+              >
+                Guárdala solo como preparación
+              </button>
+            </p>
+            <button onClick={() => router.push(`/pacientes/${id}`)} disabled={saving} className="text-xs px-4 py-2 text-neutral-500 hover:underline disabled:opacity-50">Cancelar</button>
+            <button
+              onClick={guardarRegistro}
+              disabled={saving || !hayContenido}
+              title={!hayContenido ? "Escribe algo del registro (o procesa un audio) para poder guardarlo" : undefined}
+              className="text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 inline-flex items-center gap-2 disabled:opacity-50"
+              style={{ background: "var(--color-primary, #1B3A2D)" }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              {saving ? "Guardando…" : "Guardar registro"}
+            </button>
+          </div>
+        </>
       )}
 
-      {/* ── PREPARING: la sesión que aún no se ha dado ────────────────────── */}
+      {/* ── PREPARING: la sesión que aún no se ha dado (flujo intacto) ────── */}
       {state === STATE.PREPARING && (
         <div className="bg-white border border-neutral-100 rounded-xl p-6 lg:p-10">
           <div className="text-center mb-6">
@@ -314,8 +499,8 @@ export default function NuevaSesionPage() {
           <div className="max-w-2xl mx-auto space-y-4">
             <p className="text-[11px] text-neutral-600 leading-relaxed bg-neutral-50 border border-neutral-100 rounded-lg px-3 py-2.5">
               Se guarda como <strong>borrador</strong>: queda apuntada en la ficha con lo que
-              prepares, y el día de la sesión se completa encima —subiendo el audio o
-              escribiéndola. Mientras su fecha no haya llegado no cuenta como sesión dada.
+              prepares, y el día de la sesión se completa encima —escribiéndola o con el audio.
+              Mientras su fecha no haya llegado no cuenta como sesión dada.
             </p>
 
             <div>
@@ -323,8 +508,8 @@ export default function NuevaSesionPage() {
               <input
                 type="datetime-local"
                 className={ta}
-                value={prepFecha}
-                onChange={(e) => setPrepFecha(e.target.value)}
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
               />
             </div>
 
@@ -339,45 +524,11 @@ export default function NuevaSesionPage() {
               />
             </div>
 
-            <div>
-              <label className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline cursor-pointer">
-                + Adjuntar fotos, audio o PDF
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*,audio/*,application/pdf"
-                  className="hidden"
-                  onChange={(e) => {
-                    const nuevos = Array.from(e.target.files ?? []);
-                    e.target.value = "";
-                    setPrepFiles((prev) => [...prev, ...nuevos].slice(0, 10));
-                  }}
-                />
-              </label>
-              {prepFiles.length > 0 && (
-                <ul className="mt-2 space-y-1">
-                  {prepFiles.map((f, i) => (
-                    <li key={`${f.name}-${i}`} className="text-[11px] text-neutral-600 flex items-center gap-2">
-                      <span className="truncate">{f.name}</span>
-                      <span className="text-neutral-400 shrink-0">{fmtSize(f.size)}</span>
-                      <button
-                        onClick={() => setPrepFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                        className="text-rose-500 hover:text-rose-700 shrink-0"
-                      >
-                        quitar
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className="text-[10px] text-neutral-400 mt-1">
-                Material interno del equipo: no se comparte con la familia.
-              </p>
-            </div>
+            {adjuntosPrep}
 
             <div className="flex flex-wrap gap-2 justify-end pt-1">
               <button onClick={() => router.push(`/pacientes/${id}`)} disabled={saving} className="text-xs px-4 py-2 text-neutral-500 hover:underline disabled:opacity-50">Cancelar</button>
-              <button onClick={reset} disabled={saving} className="text-xs px-4 py-2 rounded-lg border border-neutral-200 hover:border-neutral-400 text-neutral-700 disabled:opacity-50">Subir un audio</button>
+              <button onClick={() => setState(STATE.FORM)} disabled={saving} className="text-xs px-4 py-2 rounded-lg border border-neutral-200 hover:border-neutral-400 text-neutral-700 disabled:opacity-50">Hacer el registro completo</button>
               <button
                 onClick={guardarPreparacion}
                 disabled={saving || !prepSolo.trim()}
@@ -389,36 +540,6 @@ export default function NuevaSesionPage() {
                 {saving ? "Guardando…" : "Guardar preparación"}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── UPLOADED ── */}
-      {state === STATE.UPLOADED && file && (
-        <div className="bg-white border border-neutral-100 rounded-xl p-6 lg:p-10">
-          <div className="text-center mb-6">
-            <div className="eyebrow mb-2">Audio seleccionado</div>
-            <h1 className="font-display text-2xl lg:text-3xl text-[var(--ink-900)] tracking-tight">{patient.firstName} {patient.lastName}</h1>
-            <p className="text-xs text-neutral-500 mt-1">{therapistName} · {today}</p>
-          </div>
-          <div className="max-w-2xl mx-auto bg-neutral-50 border border-neutral-100 rounded-xl p-4 flex items-center gap-3">
-            <div className="shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-white" style={{ background: "var(--color-primary, #1B3A2D)" }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" /></svg>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-[var(--ink-900)] truncate">{file.name}</div>
-              <div className="text-[10px] text-neutral-400 tabular">{fmtSize(file.size)}</div>
-            </div>
-            <button onClick={reset} className="shrink-0 text-neutral-400 hover:text-neutral-700">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-          </div>
-          <div className="max-w-2xl mx-auto mt-6 flex flex-wrap gap-2 justify-end">
-            <button onClick={() => fileRef.current?.click()} className="text-xs px-4 py-2 text-neutral-500 hover:underline">Cambiar archivo</button>
-            <button onClick={process} className="text-xs font-medium px-5 py-2 rounded-lg text-white hover:opacity-90 inline-flex items-center gap-2" style={{ background: "var(--color-primary, #1B3A2D)" }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
-              Procesar con IA
-            </button>
           </div>
         </div>
       )}
@@ -447,135 +568,6 @@ export default function NuevaSesionPage() {
             })}
           </ul>
         </div>
-      )}
-
-      {/* ── STRUCTURED (revisar + editar) ── */}
-      {state === STATE.STRUCTURED && form && result && (
-        <>
-          <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 flex items-start gap-3">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            <div className="flex-1">
-              <div className="text-xs font-semibold text-emerald-900">Sesión transcrita y estructurada por IA{result.demo ? " (datos de demostración)" : ""}</div>
-              <p className="text-[11px] text-emerald-700 mt-0.5">Revisa y edita cada apartado antes de guardar.</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-3">
-            {/* Transcripción */}
-            <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
-              <div className="eyebrow mb-2">
-                Audio
-                <HelpTooltip title="El audio no se guarda" className="ml-1.5 tracking-normal normal-case">
-                  Sirve para sacar el texto y se descarta. En la sesión quedan la transcripción y la
-                  duración, no la grabación: si quieres conservarla, guárdala tú. Lo que adjuntes en
-                  «Preparación», en cambio, sí se queda con la sesión.
-                </HelpTooltip>
-              </div>
-              <p className="text-[10px] text-neutral-400 mb-4">{file?.name} · {fmtSize(file?.size)}{result.audioDurationSec != null ? ` · ${fmtDur(result.audioDurationSec)}` : ""}</p>
-              <div className="eyebrow mb-2">Transcripción literal</div>
-              <p className="text-xs text-neutral-600 leading-relaxed italic">«{result.transcription}»</p>
-            </div>
-
-            {/* Registro estructurado editable */}
-            <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5 space-y-4">
-              <div className="eyebrow">Registro clínico estructurado</div>
-              <Block label="Objetivos trabajados (separados por comas)">
-                <input className={ta} value={form.objectives} onChange={(e) => setForm({ ...form, objectives: e.target.value })} />
-              </Block>
-              <Block label="Actividades realizadas">
-                <textarea className={ta} rows={3} value={form.activities} onChange={(e) => setForm({ ...form, activities: e.target.value })} />
-              </Block>
-              <Block label="Desempeño del paciente">
-                <textarea className={ta} rows={3} value={form.performance} onChange={(e) => setForm({ ...form, performance: e.target.value })} />
-              </Block>
-              <Block label="Observaciones">
-                <div className="space-y-2">
-                  <SubField label="Comentarios familiares" ta={ta} value={form.familyComments} onChange={(v) => setForm({ ...form, familyComments: v })} />
-                  <SubField label="Próximas sesiones" ta={ta} value={form.nextSessionNotes} onChange={(v) => setForm({ ...form, nextSessionNotes: v })} />
-                  <SubField label="Tareas para casa" ta={ta} value={form.homeworkTasks} onChange={(v) => setForm({ ...form, homeworkTasks: v })} />
-                  <SubField label="Incidencias" ta={ta} value={form.incidents} onChange={(v) => setForm({ ...form, incidents: v })} />
-                </div>
-              </Block>
-            </div>
-          </div>
-
-          {/* Partes 1 y 3 del registro (sprint 2026-07, punto 4). El informe de
-              arriba es lo obligatorio; esto es opcional y a menudo se rellena
-              después, desde la ficha del paciente. */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5 space-y-3">
-              <div className="eyebrow">1 · Preparación</div>
-              <p className="text-[10px] text-neutral-400 -mt-2">
-                Lo que preparaste antes de la sesión. Se guarda con ella y sirve para redactar el informe.
-              </p>
-              <textarea
-                className={ta}
-                rows={4}
-                placeholder="Material previsto, hipótesis de trabajo, qué observar…"
-                value={form.prepText}
-                onChange={(e) => setForm({ ...form, prepText: e.target.value })}
-              />
-              <div>
-                <label className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline cursor-pointer">
-                  + Adjuntar fotos, audio o PDF
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*,audio/*,application/pdf"
-                    className="hidden"
-                    onChange={(e) => {
-                      const nuevos = Array.from(e.target.files ?? []);
-                      e.target.value = "";
-                      setPrepFiles((prev) => [...prev, ...nuevos].slice(0, 10));
-                    }}
-                  />
-                </label>
-                {prepFiles.length > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {prepFiles.map((f, i) => (
-                      <li key={`${f.name}-${i}`} className="text-[11px] text-neutral-600 flex items-center gap-2">
-                        <span className="truncate">{f.name}</span>
-                        <span className="text-neutral-400 shrink-0">{fmtSize(f.size)}</span>
-                        <button
-                          onClick={() => setPrepFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                          className="text-rose-500 hover:text-rose-700 shrink-0"
-                        >
-                          quitar
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <p className="text-[10px] text-neutral-400 mt-1">
-                  Material interno del equipo: no se comparte con la familia.
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5 space-y-3">
-              <div className="eyebrow">3 · Devolución de la familia</div>
-              <p className="text-[10px] text-neutral-400 -mt-2">
-                Lo que te han contado los padres al recoger: cómo ha ido la semana, qué han notado en casa.
-              </p>
-              <textarea
-                className={ta}
-                rows={4}
-                placeholder="Qué dice la familia…"
-                value={form.parentFeedback}
-                onChange={(e) => setForm({ ...form, parentFeedback: e.target.value })}
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2 justify-end">
-            <button onClick={() => router.push(`/pacientes/${id}`)} disabled={saving} className="text-xs px-4 py-2 text-neutral-500 hover:underline disabled:opacity-50">Cancelar</button>
-            <button onClick={reset} disabled={saving} className="text-xs px-4 py-2 rounded-lg border border-neutral-200 hover:border-neutral-400 text-neutral-700 disabled:opacity-50">Empezar de nuevo</button>
-            <button onClick={save} disabled={saving} className="text-xs font-medium px-4 py-2 rounded-lg text-white hover:opacity-90 inline-flex items-center gap-2 disabled:opacity-50" style={{ background: "var(--color-primary, #1B3A2D)" }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-              {saving ? "Guardando…" : "Guardar sesión"}
-            </button>
-          </div>
-        </>
       )}
     </div>
   );
