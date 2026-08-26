@@ -129,6 +129,9 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         clientId: patient.clientId ?? null, // enlaza también con el pagador si lo tiene
         patientId: id,
         source: "paciente",
+      // Un documento subido hoy ES de hoy: sin esto nacía sin fecha y el orden
+      // por document_date lo colocaba raro entre los 6.577 migrados con fecha.
+      documentDate: new Date().toISOString().slice(0, 10),
       });
     } catch (dbErr) {
       await deleteDocumentFile(ctx.tenant.slug, storagePath);

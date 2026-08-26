@@ -66,7 +66,11 @@ async function main() {
   for (const d of man.documentos) {
     const p = porNombre.get(norm(d.paciente));
     if (!p) { n.sinPaciente++; sinPaciente.add(d.paciente); continue; }
-    const origen = path.join(DATOS, d.rel);
+    // El mismo nombre con tilde puede venir compuesto (NFC) o descompuesto
+    // (NFD) segun quien escribiera el fichero; se prueba en las dos formas.
+    let origen = path.join(DATOS, d.rel);
+    if (!existsSync(origen)) origen = path.join(DATOS, d.rel.normalize("NFD"));
+    if (!existsSync(origen)) origen = path.join(DATOS, d.rel.normalize("NFC"));
     if (!existsSync(origen)) { n.sinFichero++; continue; }
     const fileName = path.basename(d.rel);
     const fileSize = statSync(origen).size;
