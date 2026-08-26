@@ -1,63 +1,110 @@
 // @prueba ligera — funciones puras de /lib; sin base, sin servidor, sin .env.
 /**
  * _smoke-contrasena.mjs — qué contraseña se acepta cuando alguien elige la suya
- * (24/08/2026).
+ * (24/08/2026, reescrita el 26/08/2026 al cambiar las reglas).
  *
  * Estas reglas las miran DOS sitios —el endpoint que la guarda y la pantalla que
  * la pide— y tienen que decir lo mismo, o la pantalla acepta lo que el servidor
  * rechaza. Por eso viven en `lib/auth/contrasena.js` y por eso se prueban aquí.
  *
- * La regla de la que más se olvida uno está en el máximo: bcrypt solo mira los
- * primeros 72 BYTES y tira el resto SIN DECIR NADA. Sin tope, dos contraseñas
- * larguísimas que empiecen igual abrirían la misma cuenta.
+ * Hoy son TRES: más de siete caracteres, una mayúscula y un número. Y hay una
+ * cuarta que no es una política sino un límite de bcrypt: 72 BYTES. Esa es la
+ * que más se olvida — bcrypt tira el resto SIN DECIR NADA, así que sin tope dos
+ * contraseñas larguísimas que empiecen igual abrirían la misma cuenta.
+ *
+ * ── LO QUE HUBO ENTRE MEDIAS, PARA QUE NO VUELVA SIN HABLARLO ─────────────
+ *
+ * Del 19 al 26/08/2026 la función rechazaba además cuatro cosas: el mismo
+ * carácter repetido, las tiradas de teclas seguidas, una lista de contraseñas de
+ * siempre, y el nombre del centro o del usuario con o sin el año detrás. Se
+ * quitaron las cuatro por decisión de producto, y ese mismo día el mínimo bajó
+ * de 10 a 5 y volvió a subir a 8 con la mayúscula y el número delante.
+ *
+ * Aquí se fija lo que se ACEPTA ahora —`Aumenta2026` entre otras— para que si
+ * alguien lo vuelve a cerrar sin hablarlo, la prueba se lo diga.
  */
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { MINIMO, MAXIMO, bytesDe, revisarContrasena } from "../lib/auth/contrasena.js";
+import {
+  MINIMO,
+  MAXIMO,
+  bytesDe,
+  largoDe,
+  requisitosDe,
+  cumpleTodo,
+  revisarContrasena,
+} from "../lib/auth/contrasena.js";
 
-describe("revisarContrasena: lo único que se exige es que sea larga", () => {
+describe("revisarContrasena: tres reglas y el tope de bcrypt", () => {
   it("una contraseña normal pasa", () => {
-    assert.equal(revisarContrasena("el gato de mi vecina"), null);
-    assert.equal(revisarContrasena("las cuatro puertas de la agenda"), null);
+    assert.equal(revisarContrasena("El gato de mi vecina 1"), null);
+    assert.equal(revisarContrasena("Martes3lluvia"), null);
   });
 
-  it("no se exigen mayúsculas, números ni símbolos", () => {
-    // Todo minúsculas y sin un solo número: vale. Es deliberado — las reglas de
-    // composición no hacen la contraseña más difícil de adivinar, la hacen más
-    // difícil de recordar, y de ahí sale el papelito pegado al monitor.
-    assert.equal(revisarContrasena("pardillo azul"), null);
-  });
-
-  it("vacía o corta, no", () => {
+  it("vacía dice que la escribas, no lo que le falta", () => {
     assert.match(revisarContrasena(""), /Escribe la contraseña/);
-    assert.match(revisarContrasena("corta"), new RegExp(`${MINIMO} caracteres`));
-    // Justo en el límite: MINIMO entra, MINIMO-1 no. Se usan caracteres
-    // distintos porque «aaaaaaaaaa» ahora lo rechaza otra regla.
-    assert.equal(revisarContrasena("abcxyz1234".slice(0, MINIMO)), null);
-    assert.match(revisarContrasena("abcxyz1234".slice(0, MINIMO - 1)), /al menos/);
+  });
+
+  it("sin mayúscula, no", () => {
+    assert.match(revisarContrasena("el gato de mi vecina 1"), /mayúscula/);
+  });
+
+  it("sin número, no", () => {
+    assert.match(revisarContrasena("El gato de mi vecina"), /número/);
+  });
+
+  it("corta, no — y el límite es MINIMO justo", () => {
+    assert.match(revisarContrasena("Abc123"), new RegExp(`${MINIMO - 1} caracteres`));
+    // MINIMO entra, MINIMO-1 no. La base lleva mayúscula y número para que lo
+    // único que decida sea el largo.
+    const base = "Abc12345678";
+    assert.equal(revisarContrasena(base.slice(0, MINIMO)), null);
+    assert.match(revisarContrasena(base.slice(0, MINIMO - 1)), /caracteres/);
+  });
+
+  it("se dicen TODOS los requisitos que faltan de una vez", () => {
+    // Si se dijeran de uno en uno haría falta fallar tres veces para enterarse
+    // de las tres reglas.
+    const fallo = revisarContrasena("abc");
+    assert.match(fallo, /caracteres/);
+    assert.match(fallo, /mayúscula/);
+    assert.match(fallo, /número/);
+  });
+
+  it("la mayúscula y el número cuentan también con tildes y eñes", () => {
+    // \p{Lu} y no [A-Z]: «Ñ» y «Á» son mayúsculas y alguien las va a usar.
+    assert.equal(revisarContrasena("Ñandu2024"), null);
+    assert.equal(revisarContrasena("Árbol1234"), null);
   });
 
   it("el mínimo se cuenta en caracteres de verdad, no en unidades de JS", () => {
     // Cinco emojis son cinco caracteres para una persona y DIEZ para `.length`,
     // porque cada uno ocupa dos unidades UTF-16. Contando con `.length` colaban
-    // el mínimo de diez.
+    // el mínimo.
     const cinco = "🐉".repeat(5);
     assert.equal(cinco.length, 10, "en unidades de JS parecen diez");
-    assert.match(revisarContrasena(cinco), /al menos/);
+    assert.equal(largoDe(cinco), 5, "pero son cinco");
+    assert.match(revisarContrasena(`A1${cinco}`), /caracteres/);
   });
 
   it("los espacios NO se recortan: la contraseña es lo que se escribió", () => {
     // Si se hiciera `trim`, se guardaría una distinta de la que la persona
     // escribió y al entrar no valdría. El login tampoco los recorta.
-    assert.equal(revisarContrasena("  hola que tal  "), null);
+    assert.equal(revisarContrasena("  Hola que tal 1  "), null);
     assert.equal(bytesDe("  hola  "), 8);
   });
 
   it("por encima de 72 BYTES, no — es el límite real de bcrypt", () => {
-    assert.equal(revisarContrasena("ab".repeat(MAXIMO / 2)), null);
-    assert.match(revisarContrasena("ab".repeat(MAXIMO / 2) + "c"), /demasiado larga/);
+    assert.equal(revisarContrasena("A1" + "ab".repeat(MAXIMO / 2 - 1)), null);
+    assert.match(revisarContrasena("A1" + "ab".repeat(MAXIMO / 2)), /demasiado larga/);
+  });
+
+  it("el tope se mira ANTES que los requisitos", () => {
+    // Una larguísima en minúsculas incumple las dos cosas; el aviso que importa
+    // es el del tope, porque es el que bcrypt se comería en silencio.
+    assert.match(revisarContrasena("a".repeat(MAXIMO + 10)), /demasiado larga/);
   });
 
   it("se cuenta en bytes y no en letras, que es lo que mira bcrypt", () => {
@@ -65,11 +112,6 @@ describe("revisarContrasena: lo único que se exige es que sea larga", () => {
      * 20 emojis: 40 en `.length` —porque cada uno son DOS unidades de JS— y 80
      * bytes. O sea que un contador de caracteres los daría por cortos (40 < 72)
      * y bcrypt se comería 8 bytes en silencio.
-     *
-     * El número está elegido a mano por eso mismo: con 40 emojis la prueba no
-     * probaba nada, porque `.length` ya daba 80 y saltaba el límite de largo
-     * antes de llegar a contar bytes. Es justo el despiste que esta prueba
-     * existe para cazar.
      */
     const emojis = "🐉".repeat(20);
     assert.equal(emojis.length < MAXIMO, true, "en caracteres parece corta");
@@ -77,76 +119,84 @@ describe("revisarContrasena: lo único que se exige es que sea larga", () => {
     assert.match(revisarContrasena(emojis), /demasiado larga/);
 
     // Y una con tildes que cabe justo: cada tilde ocupa dos.
-    assert.equal(bytesDe("áé".repeat(18)), 72);
-    assert.equal(revisarContrasena("áé".repeat(18)), null);
-    assert.match(revisarContrasena("áé".repeat(18) + "í"), /demasiado larga/);
+    assert.equal(bytesDe("Á1" + "áé".repeat(17)), 71);
+    assert.equal(revisarContrasena("Á1" + "áé".repeat(17)), null);
+    assert.match(revisarContrasena("Á1" + "áé".repeat(18)), /demasiado larga/);
   });
 
   it("la misma que ya tenías no cuenta como cambiarla", () => {
-    assert.match(revisarContrasena("el gato de mi vecina", "el gato de mi vecina"), /la que ya tenías/);
-    assert.equal(revisarContrasena("el gato del vecino", "el gato de mi vecina"), null);
+    assert.match(revisarContrasena("Gato vecina 1", "Gato vecina 1"), /la que ya tenías/);
+    assert.equal(revisarContrasena("Gato vecino 2", "Gato vecina 1"), null);
     // Sin la de ahora delante no se puede comparar, y no se inventa nada.
-    assert.equal(revisarContrasena("el gato de mi vecina"), null);
+    assert.equal(revisarContrasena("Gato vecina 1"), null);
   });
 
-  /*
-   * ── EL SUELO DE ADIVINABILIDAD ────────────────────────────────────────────
-   * Lo señaló una revisión adversarial el mismo día de escribirlo, y era la
-   * única regresión de seguridad que traía la función: antes la contraseña eran
-   * 12 caracteres aleatorios y para adivinarla solo quedaba la fuerza bruta;
-   * dejándola SIN suelo, lo que hay al otro lado es «nombre del centro + año».
-   *
-   * Y eso, contra logins que son adivinables por construcción (`nombre_aumenta`)
-   * y un cerrojo que permite unos 2.880 intentos al día por cuenta desde IPs
-   * distintas, se acierta. Estas dos primeras pruebas fijaban como VÁLIDAS
-   * justo «salamandra24» y «abcdefghijk», que es de lo primero que probaría
-   * cualquiera.
-   */
-  it("el mismo carácter repetido, no", () => {
-    assert.match(revisarContrasena("aaaaaaaaaa"), /mismo carácter repetido/);
-    assert.match(revisarContrasena(".........."), /mismo carácter repetido/);
+  it("lo que ANTES se rechazaba, ahora pasa si cumple las tres", () => {
+    // El mismo carácter, teclas seguidas y las de cualquier lista de las más
+    // usadas: se aceptan a propósito desde el 26/08/2026.
+    assert.equal(revisarContrasena("Aaaaaaa1"), null);
+    assert.equal(revisarContrasena("Abcdefg1"), null);
+    assert.equal(revisarContrasena("Qwertyui1"), null);
+    assert.equal(revisarContrasena("Password1"), null);
   });
 
-  it("las tiradas de teclas seguidas, tampoco — en los dos sentidos", () => {
-    assert.match(revisarContrasena("abcdefghijk"), /teclas seguidas/);
-    assert.match(revisarContrasena("qwertyuiop"), /teclas seguidas/);
-    assert.match(revisarContrasena("9876543210"), /teclas seguidas/);
-    // La fila del teclado va 1234567890, no 0123456789: esta se colaba y se
-    // aceptaba como contraseña hasta el 26/08/2026.
-    assert.match(revisarContrasena("1234567890"), /teclas seguidas/);
-    assert.match(revisarContrasena("0987654321"), /teclas seguidas/);
+  it("el nombre del centro y el del usuario también pasan, y se dice a propósito", () => {
+    /*
+     * ⚠️ Esto es lo que más pesa de lo que se quitó, y por eso tiene su propia
+     * prueba: los logins de un cliente son adivinables por construcción
+     * (`nombre_aumenta`), así que «Aumenta2026» es literalmente el primer
+     * intento de cualquiera que sepa a qué centro está atacando —y el nombre del
+     * centro es público, está en su web—.
+     *
+     * Se acepta porque se decidió aceptarlo, no porque nadie lo mirara.
+     */
+    assert.equal(revisarContrasena("Aumenta2026", null, { slug: "aumenta" }), null);
+    assert.equal(revisarContrasena("Maria2026aumenta", null, { email: "maria_aumenta@aumenta.es" }), null);
   });
 
-  it("ni el nombre del centro, ni el del usuario, ni con el año detrás", () => {
-    // Añadir el año no convierte el nombre del centro en una contraseña, y el
-    // nombre del centro es público: está en su web.
-    assert.match(revisarContrasena("aumenta2026", null, { slug: "aumenta" }), /se adivina/);
-    assert.match(revisarContrasena("Aumenta-2026", null, { slug: "aumenta" }), /se adivina/);
-    assert.match(
-      revisarContrasena("maria_aumenta1", null, { email: "maria_aumenta@aumenta.es" }),
-      /se adivina/
-    );
-    // Solo la parte de delante del correo: el dominio lo comparten todos, y
-    // prohibirlo dejaría fuera cualquier frase que lo contenga por casualidad.
-    assert.equal(revisarContrasena("el gato de mi vecina", null, { slug: "aumenta" }), null);
+  it("email y slug se siguen aceptando y no cambian nada", () => {
+    // Tres sitios los pasan. Que sobren no puede hacer que la función falle.
+    const con = revisarContrasena("El gato gris 1", null, { email: "x@y.es", slug: "aumenta" });
+    const sin = revisarContrasena("El gato gris 1");
+    assert.equal(con, sin);
+    assert.equal(con, null);
+  });
+});
+
+describe("requisitosDe: lo que la pantalla pinta es lo que el servidor exige", () => {
+  it("con el campo vacío, los tres sin cumplir", () => {
+    const r = requisitosDe("");
+    assert.equal(r.length, 3);
+    assert.deepEqual(r.map((x) => x.cumple), [false, false, false]);
+    assert.deepEqual(r.map((x) => x.id), ["largo", "mayuscula", "numero"]);
   });
 
-  it("las de siempre, tampoco", () => {
-    assert.match(revisarContrasena("contrasena123"), /se adivina/);
-    assert.match(revisarContrasena("administrador"), /se adivina/);
+  it("se van marcando de uno en uno", () => {
+    const cumplidos = (t) => requisitosDe(t).filter((x) => x.cumple).map((x) => x.id);
+    assert.deepEqual(cumplidos("abcdefgh"), ["largo"]);
+    assert.deepEqual(cumplidos("Abcdefgh"), ["largo", "mayuscula"]);
+    assert.deepEqual(cumplidos("Abcdefg1"), ["largo", "mayuscula", "numero"]);
   });
 
-  it("sin saber el centro ni el correo, se comprueba lo que se pueda", () => {
-    // El endpoint SIEMPRE los pasa, pero la función no puede dar por hecho que
-    // están: sin ellos hace las otras tres comprobaciones y no se inventa nada.
-    assert.equal(revisarContrasena("el gato de mi vecina"), null);
-    assert.match(revisarContrasena("aaaaaaaaaa"), /repetido/);
+  it("cumpleTodo dice lo mismo que revisarContrasena", () => {
+    // Es la invariante que impide que el botón se encienda con algo que el
+    // servidor va a rechazar, y al revés.
+    for (const t of ["", "abc", "abcdefgh", "Abcdefgh", "Abcdefg1", "El gato gris 1", "Ñandu2024"]) {
+      assert.equal(
+        cumpleTodo(t),
+        revisarContrasena(t) === null,
+        `«${t}»: la pantalla y el servidor no dicen lo mismo`
+      );
+    }
+  });
+
+  it("el texto de cada requisito lleva el número de verdad", () => {
+    // Si MINIMO cambia, la frase cambia sola: no hay un «8» escrito a mano.
+    assert.match(requisitosDe("")[0].texto, new RegExp(`${MINIMO - 1}`));
   });
 
   it("los topes son los que son, y se exportan para que la pantalla los diga", () => {
-    // La pantalla los enseña ANTES de que nadie escriba nada. Si cambian aquí,
-    // cambian allí solos.
-    assert.equal(MINIMO, 10);
+    assert.equal(MINIMO, 8);
     assert.equal(MAXIMO, 72);
   });
 });

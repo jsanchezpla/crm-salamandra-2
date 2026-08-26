@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import CredentialsModal from "./CredentialsModal.jsx";
+import { requisitosDe, cumpleTodo } from "@/lib/auth/contrasena.js";
 
 /**
  * "Acceso al CRM" — sección de la ficha del empleado (solo admin).
@@ -32,6 +33,33 @@ export function suggestUsername(displayName, slug) {
   const first = String(displayName ?? "").trim().split(/\s+/)[0] || "";
   const base = first.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "");
   return base && slug ? `${base}_${slug}` : base;
+}
+
+/**
+ * Los requisitos de la contraseña, marcándose mientras se escribe.
+ *
+ * Sale de `lib/auth/contrasena.js`, la MISMA función que usa el servidor para
+ * rechazarla: si algún día se añade una regla, aparece aquí sola. Una regla que
+ * solo se descubre al fallar es la que hace que la gente acabe escribiendo la
+ * contraseña en un papel.
+ *
+ * Con el campo vacío se pintan los tres en gris, que es lo que hay que ver al
+ * abrir el formulario: qué hay que poner, no qué se ha hecho mal.
+ */
+function Requisitos({ valor }) {
+  return (
+    <ul className="space-y-0.5 mt-0.5">
+      {requisitosDe(valor).map((r) => (
+        <li
+          key={r.id}
+          className={`flex items-center gap-1.5 text-[10px] ${r.cumple ? "text-emerald-600" : "text-neutral-400"}`}
+        >
+          <span aria-hidden className="w-3 shrink-0 text-center">{r.cumple ? "✓" : "·"}</span>
+          {r.texto}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function ModuleChecks({ modules, onToggle, disabled }) {
@@ -235,13 +263,12 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
                 placeholder="Contraseña nueva"
                 className="w-full rounded-lg px-3 py-2 text-sm font-mono text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
               />
+              <Requisitos valor={nuevaPass} />
               <p className="text-[10px] text-neutral-400">
-                Al menos 10 caracteres, y que no sea el nombre del centro, el suyo de usuario
-                ni teclas seguidas. Se ve mientras la escribes para que puedas dictarla sin
-                erratas.
+                Se ve mientras la escribes para que puedas dictarla sin erratas.
               </p>
               <div className="flex gap-2">
-                <button onClick={restablecer} disabled={busy || !nuevaPass}
+                <button onClick={restablecer} disabled={busy || !cumpleTodo(nuevaPass)}
                   className="text-[11px] px-3 py-1.5 rounded-lg font-semibold text-white disabled:opacity-50"
                   style={{ background: "var(--color-primary, #1B3A2D)" }}>
                   {busy ? "Restableciendo..." : "Poner esta contraseña"}
@@ -292,16 +319,14 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
               placeholder="La que le vayas a dar"
               className="w-full rounded-lg px-3 py-2 text-sm font-mono text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
             />
-            <p className="text-[10px] text-neutral-400">
-              Al menos 10 caracteres, y que no sea el nombre del centro, el suyo de usuario ni teclas seguidas.
-            </p>
+            <Requisitos valor={nuevaPass} />
           </div>
           <div>
             <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-1.5">Módulos a los que puede acceder</div>
             <ModuleChecks modules={state.modules} onToggle={toggle} disabled={busy} />
           </div>
           <div className="flex gap-2">
-            <button onClick={crearUsuario} disabled={busy || !username.trim() || !nuevaPass}
+            <button onClick={crearUsuario} disabled={busy || !username.trim() || !cumpleTodo(nuevaPass)}
               className="text-[11px] px-3 py-1.5 rounded-lg font-semibold text-white disabled:opacity-50"
               style={{ background: "var(--color-primary, #1B3A2D)" }}>
               {busy ? "Creando..." : "Crear usuario"}

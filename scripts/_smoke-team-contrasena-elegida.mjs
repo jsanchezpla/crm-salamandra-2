@@ -45,7 +45,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { revisarContrasena, MINIMO } from "../lib/auth/contrasena.js";
+import { revisarContrasena, requisitosDe, cumpleTodo, MINIMO } from "../lib/auth/contrasena.js";
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const leer = (rel) => {
@@ -173,14 +173,16 @@ test("el alta valida ANTES de crear el usuario", () => {
 
 // ── 6. La pantalla promete lo mismo que el servidor exige ─────────────────
 
-test("la pantalla no deja mandar el formulario sin contraseña", () => {
+test("la pantalla no deja mandar el formulario hasta que la contraseña vale", () => {
+  // No es «hay algo escrito»: es la MISMA función que decide en el servidor,
+  // así que el botón no puede encenderse con algo que va a devolver un 422.
   assert.ok(
-    ui.includes("disabled={busy || !nuevaPass}"),
-    "el botón de restablecer se puede pulsar sin escribir contraseña: el servidor lo rechazaría con un error feo"
+    ui.includes("disabled={busy || !cumpleTodo(nuevaPass)}"),
+    "el botón de restablecer ya no mira los requisitos: se podría pulsar con una que el servidor rechaza"
   );
   assert.ok(
-    ui.includes("disabled={busy || !username.trim() || !nuevaPass}"),
-    "el botón de crear usuario se puede pulsar sin contraseña"
+    ui.includes("disabled={busy || !username.trim() || !cumpleTodo(nuevaPass)}"),
+    "el botón de crear usuario ya no mira los requisitos"
   );
 });
 
@@ -215,25 +217,53 @@ test("la pantalla enseña la que se ha tecleado, no la que devuelve el servidor"
   assert.ok(ui.includes("password: nuevaPass"), "la pantalla ya no enseña lo que se tecleó");
 });
 
-test("la pantalla dice el mismo mínimo que exige el servidor", () => {
+test("la pantalla pinta los requisitos, no una frase suya", () => {
+  /*
+   * Antes aquí había un texto a mano («Al menos N caracteres…») y esta prueba
+   * comprobaba que el número casara con el del servidor. Desde el 26/08/2026 la
+   * pantalla pinta `requisitosDe()`, así que el texto ya no se puede desviar: si
+   * mañana se añade una regla, aparece sola en las dos pantallas.
+   */
+  assert.ok(ui.includes("requisitosDe(valor)"), "la lista de requisitos ya no sale de la regla compartida");
   assert.ok(
-    ui.includes(`Al menos ${MINIMO} caracteres`),
-    `la ayuda no dice «Al menos ${MINIMO} caracteres»: si el número se separa, el servidor rechaza lo que la pantalla prometió`
+    /import \{[^}]*requisitosDe[^}]*\} from "@\/lib\/auth\/contrasena\.js"/.test(ui),
+    "la pantalla ya no importa la regla: habrá vuelto a escribirla a mano"
   );
 });
 
 // ── 7. La regla en sí, sobre el caso de Aumenta ────────────────────────────
 
-test("rechaza lo que se adivina de una cuenta de Aumenta", () => {
+test("las tres reglas de hoy, sobre una cuenta de Aumenta", () => {
   const contexto = { email: "elena_aumenta", slug: "aumenta" };
-  for (const mala of ["", "aumenta2026", "Aumenta-2026", "elena_aumenta", "1234567890", "qwertyuiop", "aaaaaaaaaa"]) {
-    assert.ok(revisarContrasena(mala, null, contexto), `deja pasar «${mala}»`);
+  assert.match(revisarContrasena("", null, contexto), /Escribe la contraseña/);
+  assert.match(revisarContrasena("Abc123", null, contexto), new RegExp(`${MINIMO - 1} caracteres`));
+  assert.match(revisarContrasena("abcdefgh1", null, contexto), /mayúscula/);
+  assert.match(revisarContrasena("Abcdefghi", null, contexto), /número/);
+  assert.equal(revisarContrasena("Abcdefg1", null, contexto), null);
+});
+
+test("y lo que antes se rechazaba, ahora pasa — a propósito", () => {
+  /*
+   * El 26/08/2026 se quitaron los cuatro filtros de «esto se adivina» (mismo
+   * carácter, teclas seguidas, lista de siempre, nombre del centro o del
+   * usuario). Quedan tres reglas y nada más. El porqué, y lo que eso significa
+   * con logins adivinables por construcción, en lib/auth/contrasena.js.
+   */
+  const contexto = { email: "elena_aumenta", slug: "aumenta" };
+  for (const antes of ["Aumenta2026", "Elena2026aumenta", "Abcdefg1", "Qwertyui1", "Aaaaaaa1"]) {
+    assert.equal(
+      revisarContrasena(antes, null, contexto),
+      null,
+      `«${antes}» se ha vuelto a rechazar: si eso se quiere, se habla antes — es un cambio de producto`
+    );
   }
 });
 
-test("acepta una frase corta que una persona pueda recordar", () => {
-  const contexto = { email: "elena_aumenta", slug: "aumenta" };
-  for (const buena of ["el gato gris", "martes de lluvia", "tres cafes solos"]) {
-    assert.equal(revisarContrasena(buena, null, contexto), null, `rechaza «${buena}»`);
+test("la pantalla y el servidor no pueden discrepar", () => {
+  // La invariante de verdad: el botón se enciende exactamente cuando el
+  // servidor aceptaría, ni antes ni después.
+  for (const t of ["", "abc", "abcdefgh", "Abcdefgh", "Abcdefg1", "Ñandu2024"]) {
+    assert.equal(cumpleTodo(t), revisarContrasena(t) === null, `«${t}» no cuadra`);
   }
+  assert.equal(requisitosDe("").length, 3);
 });

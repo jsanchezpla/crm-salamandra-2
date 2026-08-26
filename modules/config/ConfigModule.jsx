@@ -1,5 +1,6 @@
 "use client";
 
+import { requisitosDe, cumpleTodo, MINIMO, MAXIMO } from "@/lib/auth/contrasena.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import Link from "next/link";
@@ -2961,7 +2962,7 @@ function ContrasenaCard() {
    * Mientras no llegan, se pinta con los que hay: la tarjeta no se queda en
    * blanco por una petición lenta, y el botón valida igual al pulsarlo.
    */
-  const [reglas, setReglas] = useState({ minimo: 10, maximo: 72, enDemo: false });
+  const [reglas, setReglas] = useState({ minimo: MINIMO, maximo: MAXIMO, enDemo: false });
   useEffect(() => {
     let vivo = true;
     fetch("/api/auth/password", { cache: "no-store" })
@@ -2987,10 +2988,12 @@ function ContrasenaCard() {
    * mensaje de error llega después de escribir tres campos.
    */
   const bytes = new TextEncoder().encode(nueva).length;
-  const corta = nueva.length > 0 && nueva.length < minimo;
+  // «Corta» ya no es solo el largo: son los TRES requisitos, y salen de la misma
+  // función que usa el servidor (lib/auth/contrasena.js), no de un if de aquí.
+  const incumple = nueva.length > 0 && !cumpleTodo(nueva);
   const larga = bytes > maximo;
   const noCoinciden = repetir.length > 0 && nueva !== repetir;
-  const puede = actual && nueva && repetir && !corta && !larga && !noCoinciden && !guardando;
+  const puede = actual && nueva && repetir && !incumple && !larga && !noCoinciden && !guardando;
 
   async function guardar() {
     setGuardando(true);
@@ -3057,15 +3060,27 @@ function ContrasenaCard() {
             onChange={(e) => setNueva(e.target.value)}
             className={inputCls}
           />
-          {/* La regla se dice SIEMPRE, no solo al fallar: es una sola y así
-              nadie escribe tres campos para que le digan que no vale. */}
-          <span
-            className={`block text-[11px] mt-1 ${corta || larga ? "text-red-600" : "text-neutral-400"}`}
-          >
-            {larga
-              ? `Demasiado larga: el tope son ${maximo} caracteres, algo menos si lleva tildes o emojis.`
-              : `Al menos ${minimo} caracteres. Nada de mayúsculas ni símbolos obligatorios: es más seguro que sea larga y que te la puedas acordar.`}
-          </span>
+          {/* Los requisitos se dicen SIEMPRE, no solo al fallar, y se marcan
+              mientras se escribe. Salen de lib/auth/contrasena.js, la misma
+              función que rechaza en el servidor: si se añade una regla,
+              aparece aquí sola. */}
+          {larga ? (
+            <span className="block text-[11px] mt-1 text-red-600">
+              Demasiado larga: el tope son {maximo} caracteres, algo menos si lleva tildes o emojis.
+            </span>
+          ) : (
+            <ul className="mt-1 space-y-0.5">
+              {requisitosDe(nueva).map((r) => (
+                <li
+                  key={r.id}
+                  className={`flex items-center gap-1.5 text-[11px] ${r.cumple ? "text-emerald-600" : "text-neutral-400"}`}
+                >
+                  <span aria-hidden className="w-3 shrink-0 text-center">{r.cumple ? "✓" : "·"}</span>
+                  {r.texto}
+                </li>
+              ))}
+            </ul>
+          )}
         </label>
 
         <label className="block">
