@@ -358,6 +358,12 @@ export const MODULES = {
     "migrate-billing-vat-exempt",
     "migrate-billing-irpf-partners",
     "migrate-rename-therapist-to-employee",
+    // A quién se le emitió cada factura, congelado al emitir. Sin esta columna
+    // el modelo pide `fiscal_snapshot` y toda lectura de factura da 42703.
+    "migrate-invoice-fiscal-snapshot",
+    // Borrar una ficha ya no borra sus facturas: la relación pasa de CASCADE a
+    // RESTRICT (y de paso deja UNA sola, que había hasta cuatro duplicadas).
+    "migrate-invoices-client-restrict",
   ],
 
   projects: [

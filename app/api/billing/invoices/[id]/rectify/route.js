@@ -164,6 +164,15 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
       const rect = await Invoice.create(
         {
           clientId: locked.clientId,
+          /*
+           * Hereda la foto fiscal del original (26/08/2026). Una rectificativa
+           * corrige un documento concreto, así que tiene que identificar al
+           * MISMO destinatario que aquel — aunque la ficha haya cambiado desde
+           * entonces. Si el original no tiene foto (las 14.243 de antes del
+           * cambio), la rectificativa tampoco: las dos leen del cliente vivo y
+           * al menos dicen lo mismo entre ellas.
+           */
+          fiscalSnapshot: locked.fiscalSnapshot ?? null,
           patientId: locked.patientId, // conserva el enlace factura↔paciente
           employeeId: locked.employeeId,
           partnerId: locked.partnerId, // conserva atribución por socio en KPIs

@@ -472,6 +472,60 @@ describe("buildInvoicePdfBuffer: a quién se factura", () => {
     assert.ok((await textoFactura({ client: { name: "X" } })).includes("FACTURAR A\nX\n—"));
   });
 
+  /*
+   * LA FOTO FISCAL — lo que se emitió, se emitió (26/08/2026).
+   *
+   * Hasta ese día el PDF leía los datos fiscales de la ficha CADA VEZ, así que
+   * corregir un NIF reescribía hacia atrás y en silencio las facturas ya
+   * emitidas: el papel que se reimprimiera no era el que se entregó. Se prueba
+   * aquí y no solo en `_smoke-billing-datos-fiscales.mjs` porque lo que hay que
+   * sostener no es que la función elija bien —eso ya está fijado— sino que el
+   * DOCUMENTO imprime lo que ella dice.
+   */
+  it("con foto, imprime la foto y NO la ficha de hoy", async () => {
+    const texto = await textoFactura({
+      invoice: {
+        fiscalSnapshot: {
+          nombre: "Pérez e Hijos SL",
+          nif: "B11111111",
+          direccion: "C/ Antigua 9",
+          cp: "40001",
+          ciudad: "Segovia",
+          pais: "ES",
+        },
+      },
+      // La ficha, ya corregida: otro NIF y otra ciudad.
+      client: { ...CLIENTE, fiscalTaxId: "B99999999", fiscalAddress: "C/ Nueva 2", fiscalCity: "Bilbao" },
+    });
+    assert.ok(texto.includes("NIF/CIF: B11111111"), "debía imprimir el NIF congelado");
+    assert.equal(texto.includes("B99999999"), false, "el NIF de hoy no puede salir");
+    assert.ok(texto.includes("C/ Antigua 9"), "la dirección congelada");
+    assert.ok(texto.includes("40001 Segovia"), "el CP y la ciudad congelados");
+    assert.equal(texto.includes("Bilbao"), false, "la ciudad de hoy no puede salir");
+  });
+
+  it("sin foto sigue leyendo la ficha, como las emitidas antes del cambio", async () => {
+    const texto = await textoFactura({ invoice: { fiscalSnapshot: null } });
+    assert.ok(texto.includes("NIF/CIF: 12345678Z"));
+    assert.ok(texto.includes("C/ Mayor 1"));
+  });
+
+  it("una foto rota no deja el documento sin destinatario", async () => {
+    // El fallo caro sería preferir una foto vacía y tapar el respaldo: la
+    // factura saldría sin a quién.
+    const texto = await textoFactura({ invoice: { fiscalSnapshot: { direccion: "C/ Sola 1" } } });
+    assert.ok(texto.includes("Pérez e Hijos SL"));
+    assert.ok(texto.includes("NIF/CIF: 12345678Z"));
+  });
+
+  it("el correo NO se congela: no es un dato fiscal, es por dónde se escribe hoy", async () => {
+    const texto = await textoFactura({
+      invoice: { fiscalSnapshot: { nombre: "Pérez e Hijos SL", nif: "B11111111" } },
+      client: { ...CLIENTE, email: "nuevo@ejemplo.es" },
+    });
+    assert.ok(texto.includes("nuevo@ejemplo.es"));
+  });
+
   it("las señas del cliente salen entre el nombre y la tabla: NIF, dirección, CP y correo", async () => {
     const texto = await textoFactura();
     assert.ok(texto.includes("C/ Mayor 1"));

@@ -116,7 +116,7 @@ también hace desaparecer la fila: se deshace desde la ficha.
   0 sesiones) serían **211 fichas** de las 1.083, y **90** de las 118 mudas. Es un
   cambio de datos en producción: se mide en seco y se enseña antes de tocar nada.
   Y nunca por «no tiene citas» a secas, por lo de los 16 de arriba.
-- **Romper el CASCADE de `invoices.client_id`** y **congelar los datos fiscales
-  en la factura**. No hacen falta para esto —aquí no se borra nada— pero siguen
-  siendo verdad: el día que alguien escriba un borrado en lote, los dos tienen
-  que estar hechos antes.
+- ~~**Romper el CASCADE de `invoices.client_id`** y **congelar los datos
+  fiscales en la factura**.~~ **Hechos el mismo día**, en cuanto se vio que no
+  hacían falta para esto pero sí para cualquier borrado futuro:
+  `2026-08-26-la-factura-se-sostiene-sola.md`.

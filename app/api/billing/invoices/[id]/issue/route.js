@@ -6,6 +6,7 @@ import { withEffectiveStatus } from "../../../../../../lib/billing/invoiceStatus
 import { applyStockMovementsForInvoice } from "../../../../../../lib/inventory/applyStockMovementsForInvoice.js";
 
 import { nifDeCliente } from "../../../../../../lib/billing/nifCliente.js";
+import { fotoFiscalDe } from "../../../../../../lib/billing/datosFiscales.js";
 
 /**
  * POST /api/billing/invoices/[id]/issue
@@ -80,6 +81,16 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
       });
       const updates = { number: num, status: "issued" };
       if (dueDateAtIssue && !invoice.dueDate) updates.dueDate = dueDateAtIssue;
+      /*
+       * LA FOTO FISCAL, aquí y en ningún otro sitio (26/08/2026).
+       *
+       * Este es el único momento en que se sabe a quién se le está emitiendo:
+       * cuatro líneas más arriba se acaba de exigir que la ficha tenga razón
+       * social y NIF, y a partir de este `update` la factura ya no es un
+       * borrador que se pueda rehacer. Congelarla en cualquier otro punto sería
+       * congelar un dato que todavía podía cambiar.
+       */
+      updates.fiscalSnapshot = fotoFiscalDe(c);
       await invoice.update(updates, { transaction: t });
 
       // El stock YA NO se descuenta aquí: se mueve en Pedidos (rework

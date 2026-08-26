@@ -205,6 +205,26 @@ export function defineInvoice(sequelize) {
         type: DataTypes.JSONB,
         defaultValue: {},
       },
+      /*
+       * A QUIÉN SE LE EMITIÓ, CONGELADO EL DÍA QUE SE EMITIÓ (26/08/2026).
+       *
+       * { nombre, nif, direccion, cp, ciudad, pais }. Hasta hoy la factura no
+       * guardaba ni un dato fiscal propio y todo se leía de la ficha del cliente
+       * al generar el documento: corregir un NIF cambiaba hacia atrás y en
+       * silencio todas las facturas ya emitidas de esa persona.
+       *
+       * NULLABLE a propósito, y las viejas se quedan sin foto: rellenarlas con
+       * los datos de hoy estamparía como «lo que decía la factura de 2022» algo
+       * que quizá se corrigió después. Sin foto se lee del cliente, como hasta
+       * hoy — lo decide `lib/billing/datosFiscales.js`.
+       *
+       * Columna propia y NO `customFields`: la rectificativa reinicia
+       * `customFields` a {} y se llevaría la foto por delante.
+       */
+      fiscalSnapshot: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+      },
     },
     {
       tableName: "invoices",
