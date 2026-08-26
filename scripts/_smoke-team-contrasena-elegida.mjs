@@ -1,6 +1,6 @@
 /**
- * _smoke-team-contrasena-elegida.mjs — quien da o restablece un acceso puede
- * escribir la contraseña, y eso no afloja nada (26/08/2026).
+ * _smoke-team-contrasena-elegida.mjs — la contraseña de un acceso la escribe
+ * SIEMPRE quien lo da, y eso no afloja nada (26/08/2026).
  *
  *   node scripts/_smoke-team-contrasena-elegida.mjs
  *
@@ -11,25 +11,32 @@
  *
  * ── DE DÓNDE VIENE ─────────────────────────────────────────────────────────
  *
- * Lau, de Aumenta: restablecer una contraseña desde Equipo daba siempre una
- * aleatoria de 12 caracteres. Sobre el papel es lo más seguro; en un centro de
- * 16 personas donde la dirección las restablece por teléfono, `k3Jq_8vTz2Lm` se
- * dicta mal, se copia peor y acaba en un papel encima del monitor. Es la misma
- * conclusión que ya está escrita en lib/auth/contrasena.js: lo que hace fuerte a
- * una contraseña es el LARGO.
+ * Lau, de Aumenta: dar de alta un acceso o restablecer una contraseña desde
+ * Equipo daba siempre una aleatoria de 12 caracteres. Sobre el papel es lo más
+ * seguro; en un centro de 16 personas donde la dirección las reparte por
+ * teléfono, `k3Jq_8vTz2Lm` se dicta mal, se copia peor y acaba en un papel
+ * encima del monitor. Es la misma conclusión que ya estaba escrita en
+ * lib/auth/contrasena.js: lo que hace fuerte a una contraseña es el LARGO.
+ *
+ * Primero se dejó OPCIONAL —vacío = te genero una— y duró unas horas: Jorge lo
+ * cerró el mismo día. Una opción que casi nadie va a querer sigue costando una
+ * decisión cada vez, y la que se elige por inercia era justo la aleatoria que
+ * nadie puede recordar. **Ahora es obligatoria y no hay generador.**
  *
  * ── LO QUE ESTA PRUEBA DEFIENDE ────────────────────────────────────────────
  *
- * Abrir esta puerta toca lo más delicado que tiene el CRM, así que lo que se
- * vigila no es que funcione —eso se ve— sino que no se caiga ninguna de las
- * cuatro cosas que la sujetan:
+ * Dejar que una persona escriba la contraseña de otra toca lo más delicado que
+ * tiene el CRM, así que lo que se vigila no es que funcione —eso se ve— sino
+ * que no se caiga ninguna de las cinco cosas que la sujetan:
  *
- *   1. Las reglas son LAS MISMAS que las de «cambiar mi contraseña». Una copia
+ *   1. No vuelve el generador por la puerta de atrás: sin contraseña se
+ *      RECHAZA, nunca se inventa una.
+ *   2. Las reglas son LAS MISMAS que las de «cambiar mi contraseña». Una copia
  *      a mano se separaría de la otra sin que nadie se enterase.
- *   2. Se comprueba contra el usuario de QUIEN RECIBE la contraseña, no contra
+ *   3. Se comprueba contra el usuario de QUIEN RECIBE la contraseña, no contra
  *      el de quien la escribe: la que se adivina es la del que la va a usar.
- *   3. Una contraseña ELEGIDA no vuelve por la red ni entra en la auditoría.
- *   4. Las guardas de siempre siguen enteras: solo dirección, nunca cuentas de
+ *   4. La contraseña no vuelve por la red ni entra en la auditoría.
+ *   5. Las guardas de siempre siguen enteras: solo dirección, nunca cuentas de
  *      administrador, nunca uno mismo, nunca en la demo, y bcrypt 12.
  */
 
@@ -52,73 +59,95 @@ const REL_UI = "components/team/AccessSection.jsx";
 const reset = leer(REL_RESET);
 const alta = leer(REL_ALTA);
 const ui = leer(REL_UI);
+const LOS_DOS = [[REL_RESET, reset], [REL_ALTA, alta]];
 
 test("los tres ficheros siguen donde estaban", () => {
-  for (const [rel, txt] of [[REL_RESET, reset], [REL_ALTA, alta], [REL_UI, ui]]) {
+  for (const [rel, txt] of [...LOS_DOS, [REL_UI, ui]]) {
     assert.ok(txt !== null, `no existe ${rel}: si se movió, hay que actualizar esta prueba`);
   }
 });
 
-// ── 1. Las mismas reglas que «cambiar mi contraseña» ───────────────────────
+// ── 1. No hay generador, y no puede volver por descuido ────────────────────
 
-test("los dos endpoints validan con la regla compartida, no con una copia", () => {
-  for (const [rel, txt] of [[REL_RESET, reset], [REL_ALTA, alta]]) {
+test("ninguno de los dos endpoints genera una contraseña", () => {
+  for (const [rel, txt] of LOS_DOS) {
+    assert.ok(
+      !txt.includes("generatePassword"),
+      `${rel} vuelve a generar contraseñas: la decisión de hoy es que las escriba siempre una persona`
+    );
+  }
+});
+
+test("sin contraseña se RECHAZA, no se inventa una", () => {
+  for (const [rel, txt] of LOS_DOS) {
+    // El valor por defecto es la cadena vacía y va derecho a revisarContrasena,
+    // que devuelve «Escribe la contraseña nueva.».
+    assert.ok(
+      /const password = typeof body\??\.password === "string" \? body\??\.password : "";/.test(txt),
+      `${rel}: la contraseña ya no sale del cuerpo con "" por defecto, así que no se sabe qué pasa si falta`
+    );
+    assert.ok(
+      /const mal = revisarContrasena\(password, null, \{/.test(txt),
+      `${rel}: la validación ya no es incondicional; si vuelve un \`if\`, un cuerpo vacío se colaría`
+    );
+    assert.ok(/if \(mal\) return error\(mal/.test(txt), `${rel}: ya no se corta cuando la contraseña está mal`);
+  }
+  assert.equal(revisarContrasena(""), "Escribe la contraseña nueva.");
+});
+
+// ── 2. Las mismas reglas que «cambiar mi contraseña» ───────────────────────
+
+test("los dos validan con la regla compartida, no con una copia", () => {
+  for (const [rel, txt] of LOS_DOS) {
     assert.ok(
       /import \{ revisarContrasena \} from ".*auth\/contrasena\.js"/.test(txt),
       `${rel} no importa revisarContrasena: si valida a mano, sus reglas se separarán de las de /api/auth/password`
     );
-    assert.ok(
-      txt.includes("revisarContrasena(escrita, null, {"),
-      `${rel} ya no llama a revisarContrasena sobre lo que se escribió`
-    );
   }
 });
 
+// ── 3. Contra el usuario de quien la recibe ────────────────────────────────
+
 test("se comprueba contra el usuario de QUIEN RECIBE la contraseña", () => {
-  // En el reset, el del miembro gestionado; en el alta, el que se está creando.
   assert.ok(
     reset.includes("email: managed.user.email"),
     "el reset comprueba contra otro correo: la contraseña adivinable es la del que la va a usar"
   );
-  assert.ok(
-    alta.includes("email: username"),
-    "el alta comprueba contra otro correo que no es el del usuario que crea"
-  );
-  for (const [rel, txt] of [[REL_RESET, reset], [REL_ALTA, alta]]) {
+  assert.ok(alta.includes("email: username"), "el alta comprueba contra un correo que no es el del usuario que crea");
+  for (const [rel, txt] of LOS_DOS) {
     assert.ok(txt.includes("slug: ctx.slug"), `${rel} no pasa el slug: dejaría pasar el nombre del centro`);
   }
 });
 
-// ── 2. Una elegida no vuelve, ni por la red ni en la auditoría ─────────────
+// ── 4. Ni por la red ni en la auditoría ────────────────────────────────────
 
-test("la contraseña elegida NO se devuelve", () => {
+test("la respuesta NO lleva la contraseña", () => {
   assert.ok(
-    reset.includes("password: elegida ? null : password"),
-    "el reset devuelve la contraseña elegida: quien la escribió ya la tiene, devolverla solo la pasea otra vez"
+    /return ok\(\{ username: user\.email \}\);/.test(reset),
+    "el reset ha vuelto a devolver algo más que el usuario: la contraseña no tiene por qué viajar de vuelta"
   );
   assert.ok(
-    alta.includes("password: elegida ? null : password"),
-    "el alta devuelve la contraseña elegida"
+    /return created\(\{ username, modules \}\);/.test(alta),
+    "el alta ha vuelto a devolver la contraseña"
   );
 });
 
-test("la auditoría guarda si fue elegida, nunca la contraseña", () => {
-  for (const [rel, txt] of [[REL_RESET, reset], [REL_ALTA, alta]]) {
+test("la auditoría no guarda la contraseña", () => {
+  for (const [rel, txt] of LOS_DOS) {
     const i = txt.indexOf("after: {");
     assert.ok(i > 0, `${rel}: no encuentro el resumen de auditoría`);
     const resumen = txt.slice(i, txt.indexOf("}", i) + 1);
-    assert.ok(resumen.includes("elegida"), `${rel}: la auditoría no dice si se escribió a mano o se generó`);
     assert.ok(
-      !/\bpassword\b/.test(resumen) && !/\bescrita\b/.test(resumen) && !/passwordHash/.test(resumen),
+      !/\bpassword\b/.test(resumen) && !/passwordHash/.test(resumen),
       `${rel}: la contraseña se ha colado en el resumen de auditoría (${resumen})`
     );
   }
 });
 
-// ── 3. Las guardas de siempre ──────────────────────────────────────────────
+// ── 5. Las guardas de siempre ──────────────────────────────────────────────
 
 test("sigue siendo cosa de dirección, y nunca en la demo", () => {
-  for (const [rel, txt] of [[REL_RESET, reset], [REL_ALTA, alta]]) {
+  for (const [rel, txt] of LOS_DOS) {
     assert.ok(txt.includes("ADMIN_ROLES.has(ctx.user?.role)"), `${rel}: se ha caído el freno de rol`);
     assert.ok(txt.includes("isDemoTenant(ctx)"), `${rel}: la demo pública da sesión de admin a cualquiera`);
     assert.ok(txt.includes('hasModule("team")'), `${rel}: se ha caído el gate del módulo`);
@@ -134,41 +163,70 @@ test("restablecer sigue tumbando las sesiones vivas", () => {
   );
 });
 
-test("un cuerpo vacío sigue generando una, como toda la vida", () => {
+test("el alta valida ANTES de crear el usuario", () => {
+  // Si se validara después, un rechazo dejaría un login a medias en master.
+  const iValida = alta.indexOf("const mal = revisarContrasena");
+  const iCrea = alta.indexOf("await User.create(");
+  assert.ok(iValida > 0 && iCrea > 0, "no encuentro la validación o el alta del usuario");
+  assert.ok(iValida < iCrea, "la contraseña se valida DESPUÉS de crear el usuario: un rechazo dejaría un login huérfano");
+});
+
+// ── 6. La pantalla promete lo mismo que el servidor exige ─────────────────
+
+test("la pantalla no deja mandar el formulario sin contraseña", () => {
   assert.ok(
-    reset.includes("await request.json().catch(() => ({}))"),
-    "el reset revienta si le llega el cuerpo vacío del botón de siempre"
+    ui.includes("disabled={busy || !nuevaPass}"),
+    "el botón de restablecer se puede pulsar sin escribir contraseña: el servidor lo rechazaría con un error feo"
   );
-  for (const [rel, txt] of [[REL_RESET, reset], [REL_ALTA, alta]]) {
-    assert.ok(txt.includes("elegida ? escrita : generatePassword()"), `${rel}: sin escribir nada ya no se genera`);
+  assert.ok(
+    ui.includes("disabled={busy || !username.trim() || !nuevaPass}"),
+    "el botón de crear usuario se puede pulsar sin contraseña"
+  );
+});
+
+/**
+ * El fichero SIN comentarios.
+ *
+ * Hace falta porque la cabecera de `AccessSection.jsx` cuenta la historia —«se
+ * probó dejarlo opcional y duró unas horas»— y una búsqueda a pelo por
+ * «opcional» la caza a ella en vez de a un texto de pantalla. Es el mismo
+ * tropiezo del 25/08 con la prueba del buscador de citas: una regex sobre el
+ * código fuente no distingue de quién es la palabra que está viendo.
+ */
+const sinComentarios = (txt) =>
+  txt
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split(/\r?\n/)
+    .filter((l) => !/^\s*(\/\/|\*)/.test(l))
+    .join("\n");
+
+test("la pantalla ya no ofrece generar una", () => {
+  const visible = sinComentarios(ui);
+  for (const frase of ["Generar una", "déjalo vacío", "Déjalo vacío", "opcional"]) {
+    assert.ok(!visible.includes(frase), `la pantalla sigue ofreciendo generar («${frase}»)`);
   }
 });
 
-// ── 4. Lo que la pantalla promete tiene que ser lo que el servidor exige ───
-
-test("la pantalla no se inventa la contraseña que enseña", () => {
+test("la pantalla enseña la que se ha tecleado, no la que devuelve el servidor", () => {
   assert.ok(
-    ui.includes("password: j.data.password ?? nuevaPass"),
-    "la pantalla espera que el servidor le devuelva la elegida, y no lo hace: saldría vacía"
+    !ui.includes("j.data.password"),
+    "la pantalla espera una contraseña del servidor, y el servidor ya no la manda: saldría vacía"
   );
-  assert.ok(
-    ui.includes('body: JSON.stringify({ password: nuevaPass })'),
-    "el reset de la pantalla ya no manda lo que se escribió"
-  );
+  assert.ok(ui.includes("password: nuevaPass"), "la pantalla ya no enseña lo que se tecleó");
 });
 
 test("la pantalla dice el mismo mínimo que exige el servidor", () => {
   assert.ok(
-    ui.includes(`al menos ${MINIMO} caracteres`),
-    `la ayuda de la pantalla no dice «al menos ${MINIMO} caracteres»: si el número se separa, el servidor rechaza lo que la pantalla acaba de prometer`
+    ui.includes(`Al menos ${MINIMO} caracteres`),
+    `la ayuda no dice «Al menos ${MINIMO} caracteres»: si el número se separa, el servidor rechaza lo que la pantalla prometió`
   );
 });
 
-// ── 5. La regla en sí, sobre el caso de Aumenta ────────────────────────────
+// ── 7. La regla en sí, sobre el caso de Aumenta ────────────────────────────
 
 test("rechaza lo que se adivina de una cuenta de Aumenta", () => {
   const contexto = { email: "elena_aumenta", slug: "aumenta" };
-  for (const mala of ["aumenta2026", "Aumenta-2026", "elena_aumenta", "1234567890", "qwertyuiop", "aaaaaaaaaa"]) {
+  for (const mala of ["", "aumenta2026", "Aumenta-2026", "elena_aumenta", "1234567890", "qwertyuiop", "aaaaaaaaaa"]) {
     assert.ok(revisarContrasena(mala, null, contexto), `deja pasar «${mala}»`);
   }
 });
@@ -178,10 +236,4 @@ test("acepta una frase corta que una persona pueda recordar", () => {
   for (const buena of ["el gato gris", "martes de lluvia", "tres cafes solos"]) {
     assert.equal(revisarContrasena(buena, null, contexto), null, `rechaza «${buena}»`);
   }
-});
-
-test("nueve caracteres no valen, diez sí", () => {
-  const contexto = { email: "elena_aumenta", slug: "aumenta" };
-  assert.ok(revisarContrasena("abcdefghi".slice(0, MINIMO - 1), null, contexto));
-  assert.equal(revisarContrasena("perro verde", null, contexto), null);
 });

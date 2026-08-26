@@ -3,7 +3,7 @@ import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { isDemoTenant } from "../../../../../../lib/demo/isDemo.js";
-import { generatePassword, loadManagedUser } from "../../../../../../lib/team/access.js";
+import { loadManagedUser } from "../../../../../../lib/team/access.js";
 import { revisarContrasena } from "../../../../../../lib/auth/contrasena.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
@@ -17,7 +17,7 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * el resto del flujo de acceso: solo admin (rol fresco de BD), nunca cuentas
  * admin, nunca uno mismo, nunca desde la demo.
  *
- * ── LA CONTRASEÑA LA PUEDE ELEGIR QUIEN RESTABLECE (26/08/2026, Lau) ────────
+ * ── LA CONTRASEÑA LA ESCRIBE QUIEN RESTABLECE, SIEMPRE (26/08/2026) ─────────
  *
  * Hasta hoy salía siempre una aleatoria de 12 caracteres. Sobre el papel es más
  * segura; en la práctica, en un centro de 16 personas donde la dirección
@@ -26,9 +26,11 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * ya está escrito en lib/auth/contrasena.js para «cambiar mi contraseña»: lo
  * que hace fuerte a una contraseña es el LARGO, no que sea impronunciable.
  *
- * Así que ahora el cuerpo acepta `password`. Si no viene, se genera como
- * siempre — el camino de antes sigue igual y sigue siendo el que se ofrece por
- * defecto.
+ * `password` es OBLIGATORIA y NO hay generación automática. Se probó primero
+ * dejándola opcional —vacío = te genero una— y Jorge lo cerró el mismo día: una
+ * opción que casi nadie va a querer sigue costando una decisión cada vez, y la
+ * que se elige por inercia es justo la que se venía a quitar. Sin generador no
+ * hay inercia posible.
  *
  * Se valida con `revisarContrasena`, LA MISMA función que usa
  * /api/auth/password, para que las reglas no se dupliquen ni se separen: diez
@@ -37,12 +39,9 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * centro, el del usuario, teclas seguidas—. Ojo al detalle: se comprueba contra
  * el usuario de QUIEN RECIBE la contraseña, no contra el de quien la escribe.
  *
- * ⚠️ Una contraseña ELEGIDA no se devuelve en la respuesta. Quien la ha escrito
- * ya la tiene delante; devolverla solo la pasearía otra vez por la red y por los
- * registros de quien esté en medio. `elegida: true` le basta a la pantalla para
- * enseñar la que ella misma acaba de teclear. La GENERADA sí se devuelve, una
- * única vez, porque si no nadie la sabría. Ni una ni otra se escriben en la
- * auditoría.
+ * ⚠️ La contraseña NO se devuelve en la respuesta. Quien la ha escrito ya la
+ * tiene delante; devolverla solo la pasearía otra vez por la red y por los
+ * registros de quien esté en medio. Tampoco se escribe en la auditoría.
  */
 export const POST = withTenant(async (request, { params }, ctx) => {
   try {
@@ -63,18 +62,14 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     });
     if (managed.error) return error(managed.error, managed.status);
 
-    // Cuerpo opcional: el botón de siempre lo manda vacío (o no lo manda).
+    // `.catch`: un cuerpo vacío o mal formado no revienta; cae en el aviso de
+    // `revisarContrasena`, que es el que una persona entiende.
     const body = await request.json().catch(() => ({}));
-    const escrita = typeof body?.password === "string" ? body.password : "";
-    const elegida = escrita !== "";
+    const password = typeof body?.password === "string" ? body.password : "";
 
-    if (elegida) {
-      // Contra el usuario de QUIEN LA RECIBE, no el de quien la escribe.
-      const mal = revisarContrasena(escrita, null, { email: managed.user.email, slug: ctx.slug });
-      if (mal) return error(mal);
-    }
-
-    const password = elegida ? escrita : generatePassword();
+    // Contra el usuario de QUIEN LA RECIBE, no el de quien la escribe.
+    const mal = revisarContrasena(password, null, { email: managed.user.email, slug: ctx.slug });
+    if (mal) return error(mal);
     const passwordHash = await bcrypt.hash(password, 12);
 
     // Scope withPassword: el defaultScope excluye passwordHash y sin él el
@@ -92,16 +87,14 @@ export const POST = withTenant(async (request, { params }, ctx) => {
         action: "team.password_reset",
         entity: "TeamMember",
         entityId: member.id,
-        // `elegida` sí, la contraseña JAMÁS: saber si se escribió a mano o se
-        // generó es lo que hace falta para entender un incidente después.
         before: null,
-        after: { username: user.email, elegida },
+        after: { username: user.email }, // jamás la contraseña
         ip: request.headers.get("x-forwarded-for") ?? null,
       });
     } catch { /* auditoría best-effort */ }
 
-    // La elegida no vuelve: quien la escribió ya la tiene (ver la cabecera).
-    return ok({ username: user.email, password: elegida ? null : password, elegida });
+    // La contraseña NO vuelve: quien la escribió ya la tiene delante.
+    return ok({ username: user.email });
   } catch (err) {
     return serverError(err);
   }
