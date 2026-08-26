@@ -948,7 +948,7 @@ del centro — solo exime, nunca salta el precio ni las puertas.
 | Ruta | Método | Descripción |
 |---|---|---|
 | `/api/public/c/[tenantSlug]/citas-portal/session` | POST | Canjea el `wpsso` de WordPress por sesión del portal |
-| `/api/public/c/[tenantSlug]/citas-portal/bookings` | GET | Citas de quien ha entrado |
+| `/api/public/c/[tenantSlug]/citas-portal/bookings` | GET | Citas de quien ha entrado. Desde el 26/08/2026 la respuesta lleva además `pagos`: el próximo pago de cada bono fraccionado suyo (cuota, total, importe y fecha — el aniversario mensual de la compra, `proximoPagoDe` en `lib/citas/packs.js`), y «Mi perfil» lo pinta en la sección «Mis pagos». Es el calendario prometido, no el estado real del cobro en Stripe |
 | `/api/public/c/[tenantSlug]/citas-portal/cancel/[id]` | POST | Cancelar su cita |
 | `/api/public/c/[tenantSlug]/citas-portal/admision` | GET | ¿Puede reservar ya? Su estado ante la puerta de admisión, para avisar ANTES de elegir hora (05/08) |
 | `/api/public/c/[tenantSlug]/citas-portal/avisos` | GET/POST | Los avisos del centro publicados en su área privada; POST los marca leídos (solo los suyos) |

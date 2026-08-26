@@ -28,6 +28,17 @@ function fmtLong(iso) {
   });
 }
 
+/** Solo la fecha, sin hora: para el día de un pago la hora no aporta nada. */
+function fmtFecha(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("es-ES", {
+    timeZone: "Europe/Madrid",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 const MODALITY_ES = { presencial: "Presencial", phone: "Llamada", online: "Online" };
 
 const STATUS_BADGE = {
@@ -814,6 +825,40 @@ export default function MiPerfilPage() {
               </div>
             )}
           </div>
+
+          {/* ── Mis pagos ── solo si hay un fraccionado con cuotas por delante
+              (26/08/2026, Rodrigo). El servidor calcula la fecha desde el día
+              de la compra —aquí solo se pinta— y cuando el plan se completa la
+              sección desaparece sola: una sección vacía enseña a no mirarla. */}
+          {(data?.pagos?.length ?? 0) > 0 && (
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--widget-text-faint)] mb-3">
+                Mis pagos
+              </div>
+              <div className="flex flex-col gap-3">
+                {data.pagos.map((p) => (
+                  <div
+                    key={p.id}
+                    className="bg-[var(--widget-card)] rounded-lg border border-[var(--widget-border)] p-4"
+                  >
+                    <div className="font-medium text-[var(--widget-text)]">{p.nombre}</div>
+                    <div className="mt-1 text-[14px] text-[var(--widget-text)]">
+                      Próximo pago: <b>{fmtFecha(p.fecha)}</b>
+                      {Number.isInteger(p.importe) && p.importe > 0 && (
+                        <>
+                          {" "}·{" "}
+                          {(p.importe / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
+                        </>
+                      )}
+                    </div>
+                    <div className="text-[12px] text-[var(--widget-text-faint)] mt-0.5">
+                      Cuota {p.cuota} de {p.totalCuotas} · se cobra sola en tu tarjeta, no tienes que hacer nada
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ── Mis documentos ── (siempre, aunque aún no haya citas) */}
           <MisDocumentos

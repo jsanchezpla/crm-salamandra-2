@@ -6,7 +6,7 @@ import { splitBookings } from "../../../../../../../lib/citas/clientBookingSeria
 import { normalizeEmail } from "../../../../../../../lib/citas/validation.js";
 import { noEsCarritoAbandonado } from "../../../../../../../lib/citas/booking.js";
 import { CUPO_PORTAL } from "../../../../../../../lib/citas/portalRateLimit.js";
-import { estadoPack } from "../../../../../../../lib/citas/packs.js";
+import { estadoPack, proximoPagoDe, PAGO_FRACCIONADO } from "../../../../../../../lib/citas/packs.js";
 
 /**
  * GET /api/public/c/[tenantSlug]/citas-portal/bookings
@@ -68,6 +68,7 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
      * gastadas no son un contador, salen de las propias citas— así que lo único
      * que falta de la BD es el total de cada bono.
      */
+    const ahora = new Date();
     const bonos = new Map();
     const { SessionPack } = tenantModels;
     const idsDeBono = [...new Set(rows.map((r) => r.packId).filter(Boolean))];
@@ -77,7 +78,6 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
           where: { id: { [Op.in]: idsDeBono } },
           attributes: ["id", "totalSessions"],
         });
-        const ahora = new Date();
         for (const pack of packs) {
           const suyas = rows.filter((r) => r.packId === pack.id);
           bonos.set(pack.id, estadoPack(pack, suyas, ahora).restantes);
@@ -88,9 +88,49 @@ export const GET = withPublicTenant(async (request, _ctx, { slug, tenant, tenant
       }
     }
 
+    /*
+     * El próximo pago de cada fraccionado (26/08/2026, Rodrigo): quien paga su
+     * programa por meses ve en su área privada qué día le toca la siguiente
+     * cuota. Se buscan los bonos por CORREO y no por las citas de arriba: el
+     * plan sigue cobrándose aunque hoy no tenga ninguna cita puesta.
+     *
+     * Best-effort como los bonos: si la tabla no está o algo tropieza, el
+     * portal enseña las citas igual y esta sección simplemente no sale.
+     */
+    const pagos = [];
+    if (SessionPack) {
+      try {
+        const fraccionados = await SessionPack.findAll({
+          where: {
+            clientEmail: { [Op.iLike]: normalizedEmail },
+            pricingMode: PAGO_FRACCIONADO,
+            status: { [Op.ne]: "anulado" },
+          },
+          include: [{ model: tenantModels.EventType, as: "eventType", attributes: ["name"] }],
+          order: [["purchasedAt", "ASC"]],
+        });
+        for (const pack of fraccionados) {
+          const pago = proximoPagoDe(pack, ahora);
+          if (!pago) continue; // pago único imposible aquí, pero sí un plan ya completado
+          pagos.push({
+            id: pack.id,
+            nombre: pack.eventType?.name ?? "Tu programa",
+            cuota: pago.cuota,
+            totalCuotas: pago.totalCuotas,
+            importe: pago.importe,
+            fecha: pago.fecha.toISOString(),
+          });
+        }
+      } catch {
+        // Sin sección de pagos; las citas se enseñan igual.
+      }
+    }
+
     // El tenant va porque de él depende que la cita salga como anulable: un
     // centro que gestiona sus citas por teléfono no enseña el botón.
-    return ok(splitBookings(rows, new Date(), bonos, tenant));
+    const data = splitBookings(rows, ahora, bonos, tenant);
+    data.pagos = pagos;
+    return ok(data);
   } catch (err) {
     return serverError(err);
   }
