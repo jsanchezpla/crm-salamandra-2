@@ -28,6 +28,12 @@ const EMPTY_FORM = {
   allDay: false,
   clientId: "",
   teamMemberId: "",
+  // La convocatoria (27/08/2026): el enlace de la videollamada y a quién se le
+  // manda. `enviarInvitacion` NO se guarda en el evento: es la casilla de «y
+  // además mándaselo ahora», que se decide en cada guardado.
+  meetUrl: "",
+  inviteEmail: "",
+  enviarInvitacion: false,
 };
 
 function parseISOToFields(isoString) {
@@ -72,6 +78,10 @@ export default function CalendarioPage() {
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
+  // Por qué no salió el correo de la convocatoria, cuando no sale. Separado de
+  // `formError` porque no es un error de lo que se escribió: el evento Sí se
+  // guardó, y eso hay que decirlo tal cual.
+  const [avisoEnvio, setAvisoEnvio] = useState(null);
   const [clients, setClients] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
   // Integración con Proyectos: eventos de tarjetas Kanban (dueDate) e hitos.
@@ -315,6 +325,12 @@ export default function CalendarioPage() {
         allDay: event.allDay,
         clientId: ep.clientId ?? "",
         teamMemberId: ep.teamMemberId ?? "",
+        meetUrl: ep.meetUrl ?? "",
+        inviteEmail: ep.inviteEmail ?? "",
+        // Nunca marcada al abrir: reenviar tiene que ser un acto, no algo que
+        // pasa por volver a guardar un evento que ya se había mandado.
+        enviarInvitacion: false,
+        inviteSentAt: ep.inviteSentAt ?? null,
       },
     });
   }
@@ -399,6 +415,7 @@ export default function CalendarioPage() {
   }
 
   function closeModal() {
+    setAvisoEnvio(null);
     setModal(null);
     setFormError(null);
   }
@@ -432,11 +449,36 @@ export default function CalendarioPage() {
             allDay: modal.form.allDay,
             clientId: modal.form.clientId || null,
             teamMemberId: modal.form.teamMemberId || null,
+            meetUrl: modal.form.meetUrl.trim() || null,
+            inviteEmail: modal.form.inviteEmail.trim() || null,
+            enviarInvitacion: modal.form.enviarInvitacion === true,
           }),
         }
       );
-      if (!res.ok) throw new Error("Error guardando tarea");
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || "Error guardando tarea");
       calendarRef.current?.getApi().refetchEvents();
+
+      /*
+       * Si se pidió mandar la convocatoria, se dice QUÉ pasó — y no se cierra el
+       * modal cuando NO salió.
+       *
+       * Es el incidente del 03/08/2026 escrito en `lib/email/resendClient.js`:
+       * el panel decía «✓ enviado» con la bandeja del destinatario vacía, porque
+       * sin clave de Resend el envío se queda en simulacro y devuelve ok. Aquí
+       * el servidor manda `envio: { enviado, motivo }` justo para poder
+       * distinguirlo.
+       */
+      const envio = j.data?.envio ?? j.envio ?? null;
+      if (envio && !envio.enviado) {
+        setAvisoEnvio(
+          envio.motivo === "sin_configurar"
+            ? "El evento se ha guardado, pero el correo NO ha salido: este centro no tiene configurado el envío de correo (Configuración → Correo)."
+            : "El evento se ha guardado, pero el correo NO ha salido. Vuelve a intentarlo o manda el enlace por otra vía."
+        );
+        return;
+      }
+      if (envio?.enviado) setAvisoEnvio(null);
       closeModal();
     } catch (err) {
       setFormError(err.message);
@@ -883,7 +925,84 @@ export default function CalendarioPage() {
                   className="w-full text-sm px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F0F0F]/10 focus:border-[#0F0F0F] resize-none placeholder-[#D1D5DB] transition-colors"
                 />
               </div>
+
+              {/*
+                Videollamada y convocatoria (27/08/2026, Rodrigo). El Calendario
+                es de reuniones ENTRE PROFESIONALES: el enlace se PEGA (el CRM no
+                crea salas, igual que en Citas) y se le manda por correo a la
+                persona a la que se convoca.
+              */}
+              <div className="pt-3 border-t border-[#F0F0F0] space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-[#374151] mb-1">
+                    Enlace de videollamada
+                  </label>
+                  <input
+                    type="url"
+                    inputMode="url"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={modal.form.meetUrl}
+                    onChange={(e) => updateForm("meetUrl", e.target.value)}
+                    placeholder="Pega el de Meet, Zoom, Teams…"
+                    className="w-full text-sm px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F0F0F]/10 focus:border-[#0F0F0F] placeholder-[#D1D5DB] transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#374151] mb-1">
+                    Convocar por correo a
+                  </label>
+                  <input
+                    type="email"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={modal.form.inviteEmail}
+                    onChange={(e) => updateForm("inviteEmail", e.target.value)}
+                    placeholder="nombre@donde-sea.com"
+                    className="w-full text-sm px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F0F0F]/10 focus:border-[#0F0F0F] placeholder-[#D1D5DB] transition-colors"
+                  />
+                </div>
+
+                {modal.form.inviteEmail.trim() && (
+                  <label className="flex items-start gap-2 text-xs text-[#374151] cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={modal.form.enviarInvitacion}
+                      onChange={(e) => updateForm("enviarInvitacion", e.target.checked)}
+                      className="mt-0.5 rounded border-[#D1D5DB]"
+                    />
+                    <span>
+                      Mandarle la convocatoria al guardar, con la fecha y el enlace.
+                      {modal.form.inviteSentAt && (
+                        <span className="block text-[#6B7280] mt-0.5">
+                          Ya se le envió el{" "}
+                          {new Date(modal.form.inviteSentAt).toLocaleDateString("es-ES", {
+                            day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+                          })}
+                          . Marcando esto se le vuelve a mandar.
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                )}
+              </div>
             </div>
+
+            {/* El evento se guardó, pero el correo no salió. Va aquí y no en
+                `formError` porque no es un error de lo escrito: hay que poder
+                cerrar sabiendo qué quedó a medias. */}
+            {avisoEnvio && (
+              <div className="mx-5 mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                <p className="text-xs text-amber-900">{avisoEnvio}</p>
+                <button
+                  onClick={closeModal}
+                  className="mt-1 text-[11px] font-semibold text-amber-800 underline hover:no-underline"
+                >
+                  Entendido
+                </button>
+              </div>
+            )}
 
             {/* Footer modal */}
             <div className="px-5 py-4 border-t border-[#F0F0F0] flex items-center justify-between shrink-0">

@@ -65,6 +65,29 @@ export function defineCalendarTask(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      /*
+       * La videollamada del evento (27/08/2026). El Calendario es de reuniones
+       * ENTRE PROFESIONALES, no de citas con un paciente, y hasta hoy el enlace
+       * de la sala viajaba por WhatsApp y no quedaba en ningún sitio.
+       *
+       * `meetUrl` lo PEGA quien crea el evento: el CRM no genera salas, mismo
+       * criterio que `lib/citas/videollamada.js`. `inviteEmail` es a quién se
+       * convoca —una sola dirección: convocar a una lista pide un modelo aparte
+       * que hoy no hace falta— y `inviteSentAt` permite DECIR «ya se envió» en
+       * vez de dejar a quien lo mira adivinando si pulsó.
+       */
+      meetUrl: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+      },
+      inviteEmail: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      inviteSentAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       tableName: "calendar_tasks",

@@ -6,6 +6,13 @@ import { Op } from "sequelize";
 import { NextResponse } from "next/server";
 import { toFCEvent, calendarIncludes, resolveCalendarFks } from "../../../../lib/calendar/calendarEvent.js";
 import { fetchProjectEvents } from "../../../../lib/calendar/projectEvents.js";
+import {
+  revisarEnlace,
+  revisarCorreoInvitado,
+  limpio,
+  toca,
+  enviarInvitacion,
+} from "../../../../lib/calendar/invitacion.js";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("calendar")) return forbidden();
@@ -71,6 +78,16 @@ export async function POST(request) {
     const fk = await resolveCalendarFks(body, ctx.tenantModels, ctx.hasModule);
     if (fk.error) return NextResponse.json({ ok: false, error: fk.error }, { status: 400 });
 
+    // La convocatoria: enlace de videollamada y a quién se le manda. Se valida
+    // ANTES de crear nada — un enlace mal pegado no puede dejar el evento
+    // guardado a medias y a la persona esperando un correo que no va a llegar.
+    const meetUrl = limpio(body.meetUrl);
+    const inviteEmail = limpio(body.inviteEmail);
+    const malEnlace = revisarEnlace(meetUrl);
+    if (malEnlace) return NextResponse.json({ ok: false, error: malEnlace }, { status: 422 });
+    const malCorreo = revisarCorreoInvitado(inviteEmail);
+    if (malCorreo) return NextResponse.json({ ok: false, error: malCorreo }, { status: 422 });
+
     const task = await CalendarTask.create({
       title: title.trim(),
       notes: notes?.trim() ?? null,
@@ -83,11 +100,29 @@ export async function POST(request) {
       allDay: Boolean(allDay),
       clientId: fk.updates.clientId ?? null,
       teamMemberId: fk.updates.teamMemberId ?? null,
+      meetUrl,
+      inviteEmail,
     });
+
+    /*
+     * La convocatoria sale DESPUÉS de que el evento exista, y su fallo no lo
+     * deshace: el evento guardado sin correo se ve igual en el calendario, y
+     * perderlo porque falló un email no lo arregla nadie. La pantalla recibe
+     * `envio` para poder decir qué pasó de verdad.
+     */
+    let envio = null;
+    if (toca(body, task)) {
+      envio = await enviarInvitacion({
+        evento: task,
+        tenant: ctx.tenant,
+        quienConvoca: request.headers.get("x-user-email") || null,
+      });
+      if (envio.enviado) await task.update({ inviteSentAt: new Date() });
+    }
 
     // Recarga con asociaciones para devolver los nombres al frontend.
     await task.reload({ include: calendarIncludes(ctx.tenantModels, ctx.hasModule) });
-    return NextResponse.json({ ok: true, data: toFCEvent(task) }, { status: 201 });
+    return NextResponse.json({ ok: true, data: toFCEvent(task), envio }, { status: 201 });
   } catch (err) {
     return handleRouteError(err);
   }
