@@ -315,7 +315,7 @@ test("la tarjeta de Configuración está declarada como zona", () => {
 });
 
 test("la pantalla usa la MISMA regla que el servidor, no una copia", () => {
-  for (const rel of ["modules/config/ConfigModule.jsx", "components/team/AccessSection.jsx", "app/admin/clientes/page.jsx"]) {
+  for (const rel of ["modules/config/tarjetas/Cuenta.jsx", "components/team/AccessSection.jsx", "app/admin/clientes/page.jsx"]) {
     const src = leer(rel);
     assert.match(src, /esCorreo as pareceCorreo/, `${rel} tiene que importar la regla, no escribir su propia regex`);
   }
