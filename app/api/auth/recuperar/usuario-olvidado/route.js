@@ -33,6 +33,7 @@ export async function POST(request) {
     cargo: body?.cargo,
     nombre: body?.nombre,
     correo: body?.correo,
+    usuario: body?.usuario,
     ip: getClientIp(request),
   });
   if (!res.ok) return NextResponse.json({ ok: false, error: res.error }, { status: 400 });

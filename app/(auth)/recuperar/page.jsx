@@ -93,7 +93,7 @@ export default function RecuperarPage() {
       const res = await fetch("/api/auth/recuperar/usuario-olvidado", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ empresa, nombre, cargo, correo }),
+        body: JSON.stringify({ empresa, nombre, cargo, correo, usuario: usuario || undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -116,6 +116,16 @@ export default function RecuperarPage() {
           elegir una contraseña nueva. <strong>Caduca en 30 minutos</strong> y solo
           vale una vez; si no aparece, mira la carpeta de spam.
         </p>
+        {/* La salida de emergencia (Rodrigo, 27/08/2026): si el admin ya no
+            recuerda o no puede abrir esa dirección, que pueda avisarnos — como
+            OPCIÓN, no como camino por defecto. */}
+        <button
+          type="button"
+          onClick={() => { setPaso("sin-usuario"); setError(""); }}
+          className="mt-5 text-[12px] text-[#1B3A2D]/40 hover:text-[#1B3A2D]/80 transition text-left"
+        >
+          ¿No puedes acceder a ese correo? Avísanos y lo resolvemos contigo
+        </button>
       </Shell>
     );
   }
@@ -146,11 +156,12 @@ export default function RecuperarPage() {
 
   if (paso === "sin-usuario") {
     return (
-      <Shell titulo="¿Tampoco recuerdas tu usuario?">
+      <Shell titulo="Cuéntanos quién eres">
         <form onSubmit={abrirIncidencia} className="space-y-5">
           <p className="text-[14px] text-[#1B3A2D]/60 leading-relaxed">
-            Dinos quién eres y abrimos una incidencia con Salamandra Solutions
-            para devolverte el acceso.
+            Sin tu usuario, o sin poder abrir tu correo, esto lo resuelve una
+            persona: dinos quién eres y abrimos una incidencia con Salamandra
+            Solutions para devolverte el acceso.
           </p>
           <div className="space-y-2">
             <label htmlFor="empresa" className={ETIQUETA}>Empresa o centro</label>
@@ -183,7 +194,7 @@ export default function RecuperarPage() {
           </button>
           <button type="button" onClick={() => { setPaso("usuario"); setError(""); }}
             className="w-full text-[12px] text-[#1B3A2D]/40 hover:text-[#1B3A2D]/80 transition">
-            Sí que recuerdo mi usuario
+            ← Volver a probar con mi usuario
           </button>
         </form>
       </Shell>
