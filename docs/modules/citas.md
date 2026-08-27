@@ -1173,14 +1173,56 @@ Citas: `UI_OVERRIDES = {}` en `app/(dashboard)/citas/page.jsx`, solo cambia
 el rótulo («Agenda» en nutri_laura). Dos pestañas: **Calendario**
 (FullCalendar con modal «Nueva cita manual» + modal de detalle con marcar
 completada / no asistió / cancelar / eliminar / cambiar hora / enlace de
-videollamada; y desde el 26/08/2026, si la cita tiene paciente, **«Ver ficha»** y
+videollamada; desde el 26/08/2026, si la cita tiene paciente, **«Ver ficha»** y
 **«Preparar sesión»** —los dos en pestaña nueva, porque el modal lleva cambios
 sin guardar; el segundo abre la preparación con el día y la hora de ESA cita,
-`lib/clinica/prepararSesion.js`) y **Lista de espera** (las `pending`: confirmar —y cobrar, si
+`lib/clinica/prepararSesion.js`—; y desde el 27/08/2026 un **«Ver ficha» del
+CLIENTE**, que sale siempre que la cita esté enlazada a una ficha
+(`lib/citas/fichaDeLaCita.js`)) y **Lista de espera** (las `pending`: confirmar —y cobrar, si
 hay retención—, rechazar, pedir otra tarjeta; globito con las que faltan por
 atender), más las solicitudes de cambio de hora para dirección.
 **Histórico (hasta 22/07/2026):** el default no tenía lista de espera; la
 tenía solo el override de nutri_laura, que ese día se fundió en el default.
+
+#### De la cita a la ficha, y por qué no se enseña la última sesión (27/08/2026, Jorge)
+
+La pregunta abierta desde el 26/08 era si al abrir una cita había que ver un
+**resumen de la última sesión** del paciente sin salir de la agenda. La
+respuesta es **no**: basta un botón que lleve a la ficha. Leerla sería una
+consulta clínica NUEVA en cada clic de la agenda; el botón pinta un dato que la
+cita ya trae.
+
+Lo que había no llegaba, y el motivo no era de producto: el «Ver ficha» del
+26/08 cuelga del **paciente**, así que solo aparece con módulo `pacientes` y con
+la cita enlazada a uno. Medido en producción el 27/08:
+
+| | citas | con paciente | con cliente |
+| --- | --- | --- | --- |
+| `aumenta` | 12.030 | 12.030 | 12.030 |
+| `nutri_laura` | 18 | **0** | 18 |
+| cada demo | 26 | 0 | **0** |
+
+O sea que en la consulta de Laura —donde el cliente **es** la paciente, porque
+no tiene `pacientes`— no había ni un botón en toda la agenda. El nuevo cuelga
+del **cliente**, que la cita trae siempre: en un centro clínico lleva a la
+FAMILIA (bonos, facturas, documentos) y en la consulta, a la ficha de la
+paciente.
+
+Dos cosas se resuelven en el SERVIDOR (`app/(dashboard)/citas/page.jsx`, con el
+patrón de Configuración y Clientes) porque el módulo es `"use client"`: si el
+centro tiene `clients` —o el botón llevaría a una pantalla que no existe— y
+**cómo se llama** esa ficha, que sale de `vocabularioCliente()`: «Cliente»,
+«Paciente» o «Contratante». Escribirlo a fuego dejaría la agenda de Laura
+hablando de clientes mientras su menú dice «Pacientes».
+
+La regla —las dos condiciones y el rótulo— vive en `lib/citas/fichaDeLaCita.js`
+con su prueba (`_smoke-citas-ficha.mjs`), no suelta por el JSX. Sin ficha
+enlazada no hay botón: una URL con `undefined` dentro daría un 404 con pinta de
+fallo del CRM.
+
+⚠️ **Las 26 citas de cada demo no están enlazadas a nada**, así que el
+escaparate no enseña ninguno de los tres botones. Es de los datos sembrados, no
+del código.
 
 #### Filtrar por profesional enseña SOLO las suyas (25/08/2026, Rodrigo)
 

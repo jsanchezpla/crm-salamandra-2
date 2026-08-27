@@ -24,7 +24,11 @@ import { CitaDetalleModal } from "./citas/CitaDetalleModal.jsx";
 import { NuevaCitaDrawer } from "./citas/NuevaCitaDrawer.jsx";
 import { Waitlist } from "./citas/Waitlist.jsx";
 
-export default function CitasModule() {
+/**
+ * `conClientes` y `vocabulario` los resuelve la página (servidor): son para el
+ * botón que lleva de una cita a la ficha. Ver `lib/citas/fichaDeLaCita.js`.
+ */
+export default function CitasModule({ conClientes = false, vocabulario = undefined }) {
   const calendarRef = useRef(null);
   // Vista: "calendar" (por defecto) o "waitlist". La lista de espera son las
   // reservas en estado 'pending' (solicitudes de la web sin confirmar). El
@@ -811,6 +815,8 @@ export default function CitasModule() {
         <CitaDetalleModal
           key={openBooking.id}
           booking={openBooking}
+          conClientes={conClientes}
+          vocabulario={vocabulario}
           teamMembers={teamMembers}
           patients={patients}
           viewerIsAdmin={viewerIsAdmin}

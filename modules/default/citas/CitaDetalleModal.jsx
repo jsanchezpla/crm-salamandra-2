@@ -12,6 +12,7 @@
 
 import { useState } from "react";
 import { colaDePreparacion } from "../../../lib/clinica/prepararSesion.js";
+import { fichaDeLaCita } from "../../../lib/citas/fichaDeLaCita.js";
 import {
   ModalityChip,
   PagoChip,
@@ -57,6 +58,8 @@ import {
 
 export function CitaDetalleModal({
   booking: openBooking,
+  conClientes = false,
+  vocabulario = undefined,
   teamMembers,
   patients,
   viewerIsAdmin,
@@ -366,6 +369,10 @@ export function CitaDetalleModal({
     }
   }
 
+  // Qué ficha se puede abrir desde esta cita, o nada. La regla y su porqué
+  // viven en lib/citas/fichaDeLaCita.js, con su prueba.
+  const ficha = fichaDeLaCita(openBooking, { conClientes, vocabulario });
+
   return (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -414,6 +421,36 @@ export function CitaDetalleModal({
               )}
 
               <div className="grid grid-cols-1 gap-2 text-[13px]">
+                {/*
+                  DE LA CITA A LA FICHA (27/08/2026, Jorge).
+
+                  La pregunta era si aquí había que enseñar un resumen de la
+                  última sesión. La respuesta fue que no: basta un botón. Y no
+                  cuelga del PACIENTE —como el «Ver ficha» de más abajo, que solo
+                  sale con módulo de pacientes y con la cita enlazada a uno— sino
+                  del CLIENTE, que es quien la cita trae siempre. En un centro
+                  clínico lleva a la familia (bonos, facturas, documentos) y en
+                  una consulta de nutrición, a la ficha de la paciente: la misma
+                  persona, y hasta hoy la única agenda sin ningún botón.
+
+                  Pestaña nueva a propósito, como los otros dos: el modal lleva
+                  cambios sin guardar (el enlace de Meet, las notas) que un salto
+                  en la misma pestaña se llevaría por delante.
+                */}
+                {ficha && (
+                  <div className="flex items-center">
+                    <span className="w-24 text-neutral-400 shrink-0">{ficha.rotulo}</span>
+                    <a
+                      href={ficha.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`Abre la ficha de ${openBooking.clientName || "esta persona"} en una pestaña nueva`}
+                      className="text-[12px] px-2 py-1 rounded-md border border-neutral-200 text-neutral-600 hover:border-neutral-400 hover:text-neutral-800 transition-colors"
+                    >
+                      Ver ficha
+                    </a>
+                  </div>
+                )}
                 <div className="flex">
                   <span className="w-24 text-neutral-400">Email</span>
                   <a className="text-neutral-800 hover:underline" href={`mailto:${openBooking.clientEmail}`}>
