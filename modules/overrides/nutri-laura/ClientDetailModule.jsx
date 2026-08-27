@@ -426,6 +426,7 @@ export default function NutriLauraClientDetailModule({ perfil }) {
         {tab === "info" && (
           <InfoTab
             client={client}
+            usaEstado={usaEstado}
             motivo={motivo}
             infoAdicional={infoAdicional}
             editMode={editMode}
@@ -492,6 +493,7 @@ function TabButton({ active, onClick, children }) {
 
 function InfoTab({
   client,
+  usaEstado,
   motivo,
   infoAdicional,
   editMode,
@@ -533,6 +535,7 @@ function InfoTab({
     <div className="space-y-6 min-w-0">
       <PatientCard
         client={client}
+        usaEstado={usaEstado}
         editMode={editMode}
         editForm={editForm}
         setEditForm={setEditForm}
@@ -619,6 +622,7 @@ function InfoTab({
 
 function PatientCard({
   client,
+  usaEstado,
   editMode,
   editForm,
   setEditForm,
