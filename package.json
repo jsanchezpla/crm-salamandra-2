@@ -21,6 +21,7 @@
     "db:migrate:rename-therapist": "node --env-file=.env.local scripts/migrate-rename-therapist-to-employee.js",
     "db:migrate:rename-therapist:prod": "node --env-file=.env.production scripts/migrate-rename-therapist-to-employee.js",
     "db:migrate:correo-cuenta": "node --env-file=.env.local scripts/migrate-users-email-contacto.js",
+    "db:migrate:recuperacion": "node --env-file=.env.local scripts/migrate-users-recuperacion.js",
     "db:migrate:team": "node --env-file=.env.local scripts/migrate-team-fields.js",
     "db:migrate:team:prod": "node --env-file=.env.production scripts/migrate-team-fields.js",
     "db:seed:team": "node --env-file=.env.local scripts/seed-team-demo.js",

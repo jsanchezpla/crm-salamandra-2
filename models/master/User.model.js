@@ -80,6 +80,21 @@ export function defineUser(sequelize) {
         defaultValue: 0,
       },
       /**
+       * El enlace de «¿Olvidaste tu contraseña?» (27/08/2026). Se guarda el
+       * RESUMEN sha256 del token, nunca el token: quien lea la base no puede
+       * reconstruir el enlace. `resetTokenExpira` es la caducidad; una fila
+       * lleva UN token como mucho — pedir otro pisa el anterior. La lógica
+       * entera vive en `lib/auth/recuperacion.js`.
+       */
+      resetTokenHash: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+      },
+      resetTokenExpira: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      /**
        * Esta cuenta SOLO entra por el back-office (admin.salamandrasolutions.com),
        * nunca por el CRM. Y al revés: las cuentas normales no pueden entrar por
        * el back-office.
@@ -104,7 +119,10 @@ export function defineUser(sequelize) {
     {
       tableName: "users",
       defaultScope: {
-        attributes: { exclude: ["passwordHash"] },
+        // El hash del token de recuperación se esconde igual que el de la
+        // contraseña: ninguna pantalla lo necesita y sacarlo en un listado de
+        // Equipo sería regalar la mitad del enlace.
+        attributes: { exclude: ["passwordHash", "resetTokenHash", "resetTokenExpira"] },
       },
       scopes: {
         withPassword: {

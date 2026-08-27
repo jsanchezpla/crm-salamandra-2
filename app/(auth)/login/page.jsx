@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 // Destino tras el login. Solo se acepta una ruta INTERNA ("/algo"): un
@@ -162,9 +163,12 @@ function LoginForm() {
       </div>
 
       <div className="flex justify-end">
-        <a className="text-[12px] text-[#1B3A2D]/40 hover:text-[#1B3A2D]/80 transition cursor-pointer">
+        <Link
+          href="/recuperar"
+          className="text-[12px] text-[#1B3A2D]/40 hover:text-[#1B3A2D]/80 transition cursor-pointer"
+        >
           ¿Olvidaste tu contraseña?
-        </a>
+        </Link>
       </div>
 
       <button

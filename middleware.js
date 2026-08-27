@@ -11,6 +11,8 @@ const PUBLIC_API_PATHS = [
   "/api/auth/login",
   "/api/auth/demo", // demo pública: el visitante aún no tiene cookie
   "/api/auth/refresh",
+  "/api/auth/recuperar", // quien la necesita es justo quien no puede entrar; lleva su propio cerrojo
+
   "/api/public/",
   "/api/cursos-empresas/",
   "/api/webhooks/",
@@ -18,7 +20,7 @@ const PUBLIC_API_PATHS = [
   "/api/usuarios/register/",
   "/api/external/",
 ];
-const PUBLIC_PAGE_PATHS = ["/login"];
+const PUBLIC_PAGE_PATHS = ["/login", "/recuperar"];
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
