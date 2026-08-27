@@ -336,7 +336,11 @@ en portal con `createPortal`.
 
 ### Override `nutri-laura` — `modules/overrides/nutri-laura/LeadsModule.jsx`
 
-Sector: nutrición y dietética (consulta privada).
+Sector: nutrición y dietética (consulta privada). Desde el 27/08/2026 el
+fichero es el embudo y la tabla (826 líneas); el importador de CSV y el panel
+lateral viven al lado, en `LeadsImportModal.jsx` y `LeadsDetailPanel.jsx`
+(`STAGES` y `STAGE_STYLE` siguen en `LeadsModule.jsx`, que es donde los lee
+`_smoke-leads-etapas.mjs`).
 
 Pipeline de 6 stages adaptado al embudo nutricional:
 `new` → `contacted` → `consulta_agendada` → `consulta_realizada`
