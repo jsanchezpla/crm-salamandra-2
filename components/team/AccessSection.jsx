@@ -95,6 +95,13 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
    * tiene rellena, para no hacer escribir dos veces lo mismo.
    */
   const [correo, setCorreo] = useState("");
+  /*
+   * El rol de la cuenta que se está creando (27/08/2026, Rodrigo). Por defecto
+   * `user`, que es lo que se creaba hasta hoy: el alta corriente no tiene que
+   * pararse a decidir nada. `admin` es para la segunda cuenta de dirección del
+   * centro, que hasta ahora obligaba a pedírnosla y salía por SSH.
+   */
+  const [rol, setRol] = useState("user");
   // Y el mismo dato en una cuenta que ya existe: las de antes del 26/08/2026
   // pueden no tenerlo, y una errata al crearlo no puede dejar a nadie atrapado.
   const [editandoCorreo, setEditandoCorreo] = useState(false);
@@ -123,7 +130,7 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
 
   const load = useCallback(() => {
     setState(null); setErr(null); setCreating(false); setDirty(false);
-    setReseteando(false); setNuevaPass(""); setCorreo("");
+    setReseteando(false); setNuevaPass(""); setCorreo(""); setRol("user");
     setEditandoCorreo(false); setCorreoEdit("");
     fetch(`/api/team/${memberId}/access`, { cache: "no-store" })
       .then((r) => r.json())
@@ -148,12 +155,16 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
     try {
       const res = await fetch(`/api/team/${memberId}/access`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, correo, modules: enabledKeys(), password: nuevaPass }),
+        body: JSON.stringify({ username, correo, rol, modules: enabledKeys(), password: nuevaPass }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "No se pudo crear el usuario");
       // El servidor no devuelve la contraseña: se enseña la que hay aquí escrita.
-      setCredentials({ username: j.data.username, password: nuevaPass, title: "Acceso creado" });
+      setCredentials({
+        username: j.data.username,
+        password: nuevaPass,
+        title: rol === "admin" ? "Cuenta de administrador creada" : "Acceso creado",
+      });
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -254,10 +265,24 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
       {state == null ? (
         !err && <div className="text-xs text-neutral-400">Cargando acceso...</div>
       ) : state.managedElsewhere ? (
-        <p className="text-xs text-neutral-500">
-          Esta persona entra con la cuenta de administrador <span className="font-mono">{state.username}</span>.
-          Las cuentas de administración no se gestionan desde aquí.
-        </p>
+        <div className="space-y-1.5">
+          <p className="text-xs text-neutral-500">
+            Esta persona entra con la cuenta de administrador <span className="font-mono">{state.username}</span>
+            {state.correo && <> · <span className="text-neutral-600">{state.correo}</span></>}.
+          </p>
+          {/*
+            Por qué no se puede tocar, dicho entero (27/08/2026). Antes ponía
+            solo «se gestionan aparte», y eso deja a quien lo lee sin saber qué
+            hacer cuando esa persona se queda fuera — que es justo cuando se lee.
+          */}
+          <p className="text-[11px] text-neutral-400">
+            Las cuentas de administración no se gestionan desde aquí: nadie puede cambiarle la
+            contraseña a otra dirección desde una pantalla de Equipo.
+            {state.correo
+              ? " Si la pierde, la recupera ella misma con «¿Olvidaste tu contraseña?»."
+              : " Y esta cuenta no tiene correo, así que hoy no podría recuperarla sola: escríbenos para ponerle uno."}
+          </p>
+        </div>
       ) : state.hasUser ? (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -434,16 +459,60 @@ export default function AccessSection({ memberId, displayName, tenantSlug, onAcc
             />
             <Requisitos valor={nuevaPass} />
           </div>
-          <div>
-            <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-1.5">Módulos a los que puede acceder</div>
-            <ModuleChecks modules={state.modules} onToggle={toggle} disabled={busy} />
+          {/*
+            El rol. Dos opciones y no tres: `manager` existe en la base pero hoy
+            no cambia nada que se vea, y ofrecerlo sería una decisión más sin
+            consecuencia. Si algún día significa algo, se añade aquí.
+          */}
+          <div className="flex flex-col gap-1.5">
+            <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Tipo de cuenta</div>
+            <div className="flex gap-2">
+              {[
+                { valor: "user", texto: "Empleado" },
+                { valor: "admin", texto: "Administrador" },
+              ].map((o) => (
+                <button
+                  key={o.valor}
+                  type="button"
+                  onClick={() => setRol(o.valor)}
+                  className={`text-[11px] px-3 py-1.5 rounded-lg border transition ${
+                    rol === o.valor
+                      ? "border-transparent text-white font-semibold"
+                      : "border-neutral-300 text-neutral-600 hover:bg-neutral-50"
+                  }`}
+                  style={rol === o.valor ? { background: "var(--color-primary, #1B3A2D)" } : undefined}
+                >
+                  {o.texto}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {rol === "admin" ? (
+            <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded px-2.5 py-2 space-y-1">
+              <p className="font-semibold">Una cuenta de administrador ve y puede hacerlo todo.</p>
+              <p>
+                Entra en todos los módulos, incluidas las facturas y los datos de todo el
+                equipo, y puede dar de alta a otras personas. No hace falta marcarle módulos.
+              </p>
+              <p className="text-amber-700">
+                Después no se podrá gestionar desde aquí —ni cambiarle la contraseña—: si la
+                pierde, la recupera ella desde «¿Olvidaste tu contraseña?» con el correo que
+                le pongas arriba.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-1.5">Módulos a los que puede acceder</div>
+              <ModuleChecks modules={state.modules} onToggle={toggle} disabled={busy} />
+            </div>
+          )}
           <div className="flex gap-2">
             {/* El servidor vuelve a comprobarlo todo; esto solo evita el viaje. */}
             <button onClick={crearUsuario} disabled={busy || !username.trim() || !pareceCorreo(correo) || !cumpleTodo(nuevaPass)}
               className="text-[11px] px-3 py-1.5 rounded-lg font-semibold text-white disabled:opacity-50"
               style={{ background: "var(--color-primary, #1B3A2D)" }}>
-              {busy ? "Creando..." : "Crear usuario"}
+              {busy ? "Creando..." : rol === "admin" ? "Crear administrador" : "Crear usuario"}
             </button>
             <button onClick={() => { setCreating(false); setErr(null); }} disabled={busy} className={btnSecondary}>
               Cancelar

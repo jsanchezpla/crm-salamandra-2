@@ -9,6 +9,9 @@ import {
   filterModules,
   syncMemberModules,
   loadManagedUser,
+  ROLES_CREABLES,
+  ETIQUETA_ROL,
+  modulosSegunRol,
 } from "../../../../../lib/team/access.js";
 import { revisarContrasena } from "../../../../../lib/auth/contrasena.js";
 import {
@@ -30,10 +33,12 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * El enforcement ya existe (hasModule cruza tenant ∩ moduleAccess, sin caché):
  * aquí SOLO se crean/editan filas de master.users.
  *
- *   GET    → estado: { hasUser, username, lastLoginAt, managedElsewhere, modules }
- *   POST   → crear usuario { username, modules, password } → 201 { username, modules }
+ *   GET    → estado: { hasUser, username, rol, lastLoginAt, managedElsewhere, modules }
+ *   POST   → crear usuario { username, correo, password, rol?, modules } → 201
  *            (`password` OBLIGATORIA, validada con lib/auth/contrasena.js; NO se
- *             devuelve nunca: quien la escribe ya la tiene delante)
+ *             devuelve nunca: quien la escribe ya la tiene delante.
+ *             `rol` por defecto `user`; desde el 27/08/2026 admite `admin`, y
+ *             entonces `modules` sobra: nace con todos, ver `modulosSegunRol`)
  *   PATCH  → cambiar módulos { modules } ([] = bloquear sin borrar, consciente)
  *   DELETE → quitar el acceso (borra el User; el token vivo muere en la
  *            siguiente request porque el resolver falla en cerrado)
@@ -41,6 +46,14 @@ const ADMIN_ROLES = new Set(["admin", "superadmin"]);
  * Guardas comunes: solo admin (rol FRESCO de BD, no el header del JWT con TTL
  * 15 min — esto escribe en master); nunca sobre cuentas admin/superadmin ni
  * sobre uno mismo; y nunca desde la demo pública (da sesión admin a anónimos).
+ *
+ * ⚠️ CREAR un admin sí; EDITARLO no (27/08/2026). Parece incoherente y no lo
+ * es: dar de alta a la segunda directora de un centro es una decisión suya, y
+ * hacerla pasar por nuestro SSH no protege a nadie —lo vivimos con Aumenta el
+ * 26/08—. Pero poder cambiarle la contraseña a otra directora desde una
+ * pantalla de RRHH es entrar en su cuenta, y eso sigue prohibido: PATCH, DELETE
+ * y /password rechazan cualquier cuenta admin, como antes. Quien pierda la suya
+ * la recupera por correo (`lib/auth/recuperacion.js`).
  */
 
 async function logAudit({ tenantId, userId, action, entityId, before, after, ip }) {
@@ -132,6 +145,10 @@ export const GET = withTenant(async (_request, { params }, ctx) => {
       username: user.email,
       lastLoginAt: user.lastLoginAt,
       managedElsewhere,
+      // `managedElsewhere` sigue significando lo mismo (esta cuenta no se edita
+      // desde aquí); `rol` se añade para poder DECIR cuál es en vez de dejarlo
+      // en «se gestiona aparte», ahora que un admin puede haberla creado aquí.
+      rol: user.role,
       // A dónde iría el enlace si pierde la contraseña. Se enseña porque una
       // cuenta sin correo es un problema que hay que poder VER, no adivinar.
       correo: correoDeCuenta(user),
@@ -165,13 +182,28 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     if (norm.error) return error(norm.error, 422);
     const username = norm.username;
 
+    /*
+     * EL ROL (27/08/2026, Rodrigo). Por defecto `user`, que es lo que se creaba
+     * hasta hoy y lo que hay que seguir creando en el 90 % de las altas.
+     *
+     * `admin` es la novedad: el centro puede darse su segunda cuenta de
+     * dirección sin que nosotros entremos por SSH. Lo que NO cambia es que
+     * después nadie pueda gestionarla desde aquí — ver `MANAGEABLE_ROLES`.
+     */
+    const rol = typeof body.rol === "string" && body.rol ? body.rol : "user";
+    if (!ROLES_CREABLES.has(rol)) {
+      return error(`Rol no válido: ${[...ROLES_CREABLES].join(", ")}`, 422);
+    }
+
     const keys = await getTenantModuleKeys(ctx.tenant.id);
     const modules = filterModules(body.modules, keys);
-    if (modules.length === 0) {
+    if (rol !== "admin" && modules.length === 0) {
       // moduleAccess [] = entra y no ve NADA. En el alta eso siempre es un
-      // error de manejo, no una intención.
+      // error de manejo, no una intención. (Un admin no marca módulos: los
+      // tiene todos por definición, ver `modulosSegunRol`.)
       return error("Marca al menos un módulo al que pueda acceder", 422);
     }
+    const moduleAccess = modulosSegunRol(rol, modules);
 
     const { User } = getMasterModels();
     const yaExiste = await User.findOne({ where: { email: username }, attributes: ["id"] });
@@ -209,7 +241,7 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     // validate:false A PROPÓSITO: el modelo valida isEmail y los usernames sin
     // @ son decisión de producto (mismo patrón que el seed de Aumenta).
     const user = await User.create(
-      { email: username, emailContacto: correo, passwordHash, role: "user", tenantId: ctx.tenant.id, moduleAccess: modules },
+      { email: username, emailContacto: correo, passwordHash, role: rol, tenantId: ctx.tenant.id, moduleAccess },
       { validate: false }
     );
 
@@ -226,23 +258,28 @@ export const POST = withTenant(async (request, { params }, ctx) => {
       tenantModels: ctx.tenantModels,
       tenantSequelize: ctx.tenantSequelize,
       memberId: member.id,
-      enabledKeys: modules,
+      // El espejo de la ficha enseña los módulos MARCADOS. Un admin los tiene
+      // todos, así que se marcan todos: si no, su ficha diría que no ve nada.
+      enabledKeys: rol === "admin" ? keys : modules,
       allKeys: keys,
     });
 
     await logAudit({
       tenantId: ctx.tenant.id,
       userId: request.headers.get("x-user-id"),
-      action: "team.user_created",
+      // Un alta de dirección se audita con su propia acción: es lo que alguien
+      // va a buscar dentro de seis meses («¿quién le dio el mando a esta
+      // persona?»), y mezclada con las 30 altas de empleado no se encuentra.
+      action: rol === "admin" ? "team.admin_created" : "team.user_created",
       entityId: member.id,
       before: null,
-      after: { username, correo, moduleAccess: modules }, // JAMÁS la contraseña
+      after: { username, correo, rol, moduleAccess }, // JAMÁS la contraseña
       ip: request.headers.get("x-forwarded-for") ?? null,
     });
 
     // La contraseña NO vuelve: quien la escribió ya la tiene delante. No se
     // guarda en claro y no se puede volver a consultar, solo restablecer.
-    return created({ username, correo, modules });
+    return created({ username, correo, rol, modules: moduleAccess });
   } catch (err) {
     return serverError(err);
   }

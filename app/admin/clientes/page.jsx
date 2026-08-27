@@ -874,6 +874,11 @@ function EditorCliente({ cliente, catalogo, onGuardar, onBaja, guardando, avisos
         />
       )}
 
+      {/* La RED del alta de administradores (27/08/2026). La vía normal es que
+          se la dé el propio cliente desde Equipo; esto es para cuando dentro no
+          queda nadie que pueda — once clientes tienen un solo admin. */}
+      <AdminsDelCliente slug={cliente.slug} />
+
       {cerrandoCuenta && (
         <ConfirmarBaja
           cliente={cliente}
@@ -883,6 +888,172 @@ function EditorCliente({ cliente, catalogo, onGuardar, onBaja, guardando, avisos
             onBaja(res);
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Los administradores de un cliente, y el alta de uno más.
+ *
+ * Se carga sola al abrir la ficha porque la pregunta que trae aquí a alguien
+ * suele ser «¿a quién llamo, que no puede entrar?», y esa se contesta viendo la
+ * lista —con su correo y su última entrada— antes de crear nada.
+ *
+ * No hay botón de cambiar contraseña ni de borrar, y es a propósito: este panel
+ * crea cuentas, no entra en las de nadie (el porqué entero, en la cabecera de
+ * `app/api/admin/clientes/[slug]/admins/route.js`).
+ */
+function AdminsDelCliente({ slug }) {
+  const [admins, setAdmins] = useState(null);
+  const [error, setError] = useState(null);
+  const [creando, setCreando] = useState(false);
+  const [ocupado, setOcupado] = useState(false);
+  const [nuevo, setNuevo] = useState({ usuario: "", correo: "", password: "" });
+  const [hecho, setHecho] = useState(null);
+
+  const cargar = useCallback(() => {
+    fetch(`/api/admin/clientes/${slug}/admins`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => (j.ok ? setAdmins(j.data.admins) : setError(j.error || "No se pudo leer")))
+      .catch(() => setError("No se pudo leer"));
+  }, [slug]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  async function crear() {
+    setOcupado(true); setError(null);
+    try {
+      const r = await fetch(`/api/admin/clientes/${slug}/admins`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nuevo),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo crear");
+      // La contraseña la enseñamos NOSOTROS, con la que se acaba de escribir: el
+      // servidor no la devuelve nunca.
+      setHecho({ usuario: j.data.usuario, password: nuevo.password });
+      setNuevo({ usuario: "", correo: "", password: "" });
+      setCreando(false);
+      cargar();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  const fecha = (v) =>
+    v ? new Date(v).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }) : "nunca ha entrado";
+
+  return (
+    <div className="mt-5 pt-4 border-t border-neutral-200">
+      <div className="text-[11px] font-bold uppercase tracking-wide text-neutral-500 mb-2">
+        Administradores
+      </div>
+
+      {admins === null ? (
+        <div className="text-[11px] text-neutral-400">Cargando…</div>
+      ) : admins.length === 0 ? (
+        <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1.5">
+          Este cliente no tiene ninguna cuenta de administrador. Nadie de dentro puede
+          gestionar su equipo.
+        </div>
+      ) : (
+        <ul className="space-y-1 mb-2">
+          {admins.map((a) => (
+            <li key={a.usuario} className="text-xs text-neutral-700 flex flex-wrap items-baseline gap-x-2">
+              <span className="font-mono">{a.usuario}</span>
+              {a.correo ? (
+                <span className="text-neutral-500">{a.correo}</span>
+              ) : (
+                <span className="text-amber-700">sin correo: no puede recuperar su contraseña</span>
+              )}
+              <span className="text-neutral-400">· {fecha(a.ultimaEntrada)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {admins?.length === 1 && (
+        <p className="text-[10px] text-neutral-400 mb-2">
+          Con una sola cuenta de dirección, el día que esa persona no pueda entrar no queda
+          nadie dentro que pueda arreglarlo.
+        </p>
+      )}
+
+      {hecho && (
+        <div className="mb-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+          <div className="text-[11px] font-bold text-emerald-800 mb-1">Administrador creado</div>
+          <div className="text-xs font-mono text-emerald-900 break-all">
+            {hecho.usuario} · {hecho.password}
+          </div>
+          <p className="text-[10px] text-emerald-700 mt-1">
+            Apúntala ahora: no se puede volver a consultar. Que se la cambie al entrar.
+          </p>
+          <button onClick={() => setHecho(null)} className="text-[10px] text-emerald-700 underline mt-1">
+            Ya está
+          </button>
+        </div>
+      )}
+
+      {error && <div className="text-[11px] text-red-600 mb-2">{error}</div>}
+
+      {!creando ? (
+        <button
+          type="button"
+          onClick={() => setCreando(true)}
+          className="text-[11px] px-2.5 py-1 rounded border border-neutral-300 text-neutral-700 hover:bg-neutral-50"
+        >
+          Añadir administrador
+        </button>
+      ) : (
+        <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 space-y-2">
+          <input
+            value={nuevo.usuario}
+            onChange={(e) => setNuevo((n) => ({ ...n, usuario: e.target.value }))}
+            placeholder={`usuario (se le añade _${slug} si no lo lleva)`}
+            className="w-full rounded-lg px-3 py-2 text-sm font-mono text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
+          />
+          <input
+            type="email"
+            autoComplete="off"
+            spellCheck={false}
+            value={nuevo.correo}
+            onChange={(e) => setNuevo((n) => ({ ...n, correo: e.target.value }))}
+            placeholder="correo (a donde va el enlace si pierde la contraseña)"
+            className="w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
+          />
+          <input
+            type="text"
+            autoComplete="off"
+            spellCheck={false}
+            value={nuevo.password}
+            onChange={(e) => setNuevo((n) => ({ ...n, password: e.target.value }))}
+            placeholder="contraseña con la que va a entrar"
+            className="w-full rounded-lg px-3 py-2 text-sm font-mono text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={crear}
+              disabled={ocupado || !nuevo.usuario.trim() || !nuevo.correo.trim() || !nuevo.password}
+              className="text-[11px] px-3 py-1.5 rounded-lg font-semibold text-white disabled:opacity-50"
+              style={{ background: "var(--color-primary, #1B3A2D)" }}
+            >
+              {ocupado ? "Creando…" : "Crear administrador"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setCreando(false); setError(null); }}
+              disabled={ocupado}
+              className="text-[11px] px-2.5 py-1 rounded border border-neutral-300 text-neutral-700 hover:bg-neutral-50"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

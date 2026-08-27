@@ -233,10 +233,10 @@ Las cinco cosas que lo sujetan, y que fija
    de quien la escribe. `elena_aumenta` es mala contraseña para Elena, aunque
    quien la teclee sea la dirección.
 4. **No vuelve por la red ni entra en la auditoría.** El alta responde
-   `{ username, modules }` y el reset `{ username }`; la pantalla enseña la que
+   `{ username, rol, modules }` y el reset `{ username }`; la pantalla enseña la que
    acaba de teclearse. El resumen de auditoría guarda el usuario y nada más.
 5. **Las guardas de siempre siguen enteras**: solo dirección con rol fresco de
-   BD, nunca cuentas admin ni la propia (`loadManagedUser`), nunca en la demo,
+   BD, nunca EDITAR cuentas admin ni la propia (`loadManagedUser`), nunca en la demo,
    bcrypt 12 rondas y `tokenVersion +1` para tumbar las sesiones vivas. En el
    alta, además, la contraseña se valida **antes** de crear el usuario: un
    rechazo no deja un login a medias en `master`.
@@ -340,7 +340,9 @@ aporta el contenido.
 | `GET/POST /api/team/me/documents` · `GET/DELETE /api/team/me/documents/[id]` | Documentación personal que el propio miembro sube en su ficha (CV, titulaciones). Reutiliza el almacén de Documentos (`source: "equipo"`, `ownerUserId` = quien sube) pero **no depende del módulo `documents`**: siempre acotado al dueño, nunca alcanza el archivo general del centro. | Gate de tenant `team` O `clinica`; solo lo propio. |
 | `GET /api/team/modules` | Módulos activos del TENANT (para los checkboxes de acceso en el alta). No confundir con `/api/auth/me → enabledModules` (esa es la intersección del usuario actual). | Solo admin (rol fresco de BD). |
 | `GET /api/team/[id]/access` | Estado del login del miembro: `{ hasUser, username, lastLoginAt, managedElsewhere, modules }`. Sin usuario, `modules` propone lo marcado en `team_member_modules`. | Solo admin (rol fresco de BD). |
-| `POST /api/team/[id]/access` | **Crea el usuario de login** en `master.users` (patrón terapeutas de Aumenta): username sin `@` con sufijo `_{slug}` forzado (o email real), rol `user`, `moduleAccess` = módulos marcados (mínimo 1). `password` **OBLIGATORIA**, validada con `lib/auth/contrasena.js` antes de crear nada; no se devuelve. | Solo admin; nunca en demo; 409 si ya tiene usuario o el username existe. |
+| `POST /api/team/[id]/access` | **Crea el usuario de login** en `master.users` (patrón terapeutas de Aumenta): username sin `@` con sufijo `_{slug}` forzado (o email real), rol según `rol` del cuerpo (`user` por defecto; `admin` desde el 27/08/2026,
+y entonces `moduleAccess: ["all"]` y no se piden módulos), `moduleAccess` =
+módulos marcados (mínimo 1 salvo admin). `password` **OBLIGATORIA**, validada con `lib/auth/contrasena.js` antes de crear nada; no se devuelve. | Solo admin; nunca en demo; 409 si ya tiene usuario o el username existe. |
 | `PATCH /api/team/[id]/access` | Cambia `moduleAccess` (lo que ve al entrar; aplica al instante — el resolver no cachea ACLs). `[]` permitido = bloquear sin borrar. Espeja en `team_member_modules`. | Solo admin; nunca en demo; nunca sobre cuentas admin ni sobre uno mismo. |
 | `DELETE /api/team/[id]/access` | Quita el acceso: desenlaza `userId` y borra el User. El token vivo muere en la siguiente request (el resolver falla en cerrado). La ficha del empleado se conserva. | Ídem. |
 | `POST /api/team/[id]/access/password` | Restablece la contraseña (bcrypt 12, `tokenVersion++` para tumbar sesiones). `password` **OBLIGATORIA** en el cuerpo, validada con `lib/auth/contrasena.js`; no se devuelve. Ver «La contraseña la escribe SIEMPRE quien la da». | Ídem. |
@@ -362,8 +364,13 @@ Decisiones clave:
   la página fue sustituida por `AccessSection`.
 - Estos endpoints leen el rol del solicitante FRESCO de BD (`ctx.user.role`),
   no del header `x-user-role` (JWT, TTL 15 min): escriben en master.
-- Guardas: nunca cuentas `admin`/`superadmin` (se gestionan por script), nunca
-  uno mismo, nunca desde la demo pública (que da sesión admin a anónimos).
+- Guardas: nunca se EDITA una cuenta `admin`/`superadmin` (módulos, contraseña
+  ni borrado), nunca uno mismo, nunca desde la demo pública (que da sesión
+  admin a anónimos). **Desde el 27/08/2026 sí se puede CREAR un `admin`** — la
+  asimetría es la decisión, no un descuido: ver
+  `docs/decisions/2026-08-27-alta-de-administradores.md` y la prueba
+  `scripts/_smoke-team-roles.mjs`. La red para cuando dentro no queda nadie es
+  el back-office (`/admin/clientes` → ficha → Administradores).
 - Al **desactivar** un miembro con usuario, la UI encadena primero
   `DELETE .../access` (una baja no deja un login vivo) y avisa si no puede
   (p. ej. cuenta admin).
