@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "lint:undef": "eslint --no-config-lookup -c eslint.undef.mjs --quiet app lib components modules scripts",
     "test": "node scripts/pruebas.mjs",
     "test:todo": "node scripts/pruebas.mjs --todo",
     "sql": "node --env-file=.env.local scripts/sql.mjs",
