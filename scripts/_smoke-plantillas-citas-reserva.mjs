@@ -485,6 +485,20 @@ describe("bookingConfirmed: día, hora, modalidad y qué ha pasado con el dinero
     assert.ok(tpl.html.includes("&lt;bajo&gt;"));
   });
 
+  it("presencial SIN dirección: no se queda callado (28/08/2026)", () => {
+    // La cabecera anuncia «Modalidad: Presencial» pase lo que pase. Antes, si no
+    // había dirección, los tres `else if` se agotaban sin escribir nada y la
+    // paciente recibía una cita presencial sin saber adónde ir ni a quién
+    // preguntar. No debería poder pasar —`validateModalityFields` lo impide al
+    // guardar un tipo— pero los seeds escriben directo al modelo y así nacieron
+    // los ocho tipos de las cuatro demos.
+    const tpl = bookingConfirmedTemplate({ ...CONF, modality: "presencial", location: null });
+    assert.ok(plano(tpl.html).includes("respóndenos a este correo"), "el HTML se calla");
+    assert.ok(norm(tpl.text).includes("respóndenos a este correo"), "el texto se calla");
+    // Y sigue diciendo que es presencial: la red no tapa el dato, lo completa.
+    dicenLoMismo(tpl, "Presencial");
+  });
+
   it("teléfono: se le dice que llamamos nosotros", () => {
     const tpl = bookingConfirmedTemplate({ ...CONF, modality: "phone" });
     assert.ok(plano(tpl.html).includes("Te llamaremos"), "el HTML no lo dice");
