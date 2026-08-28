@@ -23,6 +23,14 @@ Los 134 MB de `uploads/` son contratos **firmados**, informes clínicos y
 adjuntos. No se regeneran: restaurar solo la base deja las fichas apuntando a
 papeles que no existen.
 
+> ⚠️ **Las dos filas de `uploads/` de esta tabla están SUPERADAS desde el
+> 28/08/2026.** Aquellos 134 MB son hoy **6,2 GB** (la migración del OneDrive de
+> Aumenta), y el `tar.gz` diario pasó a 5,3 GB: con 14 días de retención llenaba
+> el disco. Ya no se empaqueta el archivo entero cada noche —es un espejo más lo
+> que cambió esa noche, y el paquete completo es semanal— y la rotación lleva
+> `-maxdepth 1` porque el espejo vive dentro de `backups/`. El porqué, en
+> [Los ficheros ya no caben en la copia](decisions/2026-08-28-los-ficheros-ya-no-caben-en-la-copia.md).
+
 Un fallo de la copia externa **no aborta** el script: la local ya está hecha y
 perderla por un problema de red sería peor.
 

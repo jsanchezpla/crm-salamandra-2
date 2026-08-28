@@ -12,6 +12,39 @@
 # nunca borra allí, con su propia caducidad, más larga que la de casa (ver
 # «COPIA FUERA DEL SERVIDOR»). Es idempotente.
 #
+# ─── LOS FICHEROS NO CABEN (28/08/2026) ──────────────────────────────────────
+# Hasta hoy, cada madrugada se empaquetaba el archivo ENTERO en un .tar.gz. Con
+# 127 MB era gratis. El 26/08 la migración del OneDrive de Aumenta metió 6,2 GB
+# de documentación clínica en uploads/, y esa misma noche el paquete diario pasó
+# a 5,3 GB. Con 14 días de retención eso son 74 GB donde quedaban 44 libres: el
+# disco lleno hacia el 6 de septiembre, y con él la base sin poder escribir.
+# Nadie se habría enterado — el registro decía «✅ Copia completada» cada mañana.
+#
+# Ahora los ficheros se copian así:
+#
+#   uploads-espejo/            el estado de HOY, una sola copia (6,2 GB)
+#   uploads-cambios/AAAAMMDD-HHMM/   solo lo que esa noche se pisó o se borró,
+#                              con su ruta original dentro
+#   uploads-AAAAMMDD-HHMM.tar.gz     el paquete portátil, UNA VEZ POR SEMANA
+#
+# Una noche cuesta lo que ocupa lo que cambió, no lo que ocupa el archivo. En un
+# archivo que casi solo crece, eso son kilobytes.
+#
+# POR QUÉ ASÍ Y NO UN TAR INCREMENTAL: porque aquí borrar una noche no estropea
+# ninguna otra. Cada directorio se basta solo. Con `tar --listed-incremental`,
+# la rotación por antigüedad se lleva un día el paquete entero y deja quince
+# parciales que ya no se pueden aplicar a nada — una copia rota con toda la
+# pinta de estar bien. (Lo natural sería `rsync --link-dest`; este servidor no
+# tiene rsync y no se instaló por no tocar el sistema. `rclone` sí está, y hace
+# esto mismo con --backup-dir.)
+#
+# ─── QUÉ SALE Y QUÉ NO ───────────────────────────────────────────────────────
+# Fuera del servidor van los volcados de la base y el paquete SEMANAL de
+# ficheros. El espejo y las noches de cambios NO salen, a propósito: son 6,2 GB
+# que no caben en la capa gratuita de R2 ni de B2, y cuánto se paga por guardar
+# el archivo clínico fuera es una decisión de Jorge, no de este script. Cuando
+# se decida, se quitan los `--exclude` de abajo y ya está.
+#
 # INSTALACIÓN EN EL VPS (una sola vez, como root):
 #   chmod +x /opt/crm-salamandra/scripts/backup-db.sh
 #   cp /opt/crm-salamandra/scripts/deploy/crm-backup.{service,timer} /etc/systemd/system/
@@ -34,8 +67,25 @@
 #      sigue adelante y termina con código 0 aunque no haya restaurado nada. Una
 #      restauración rota sería indistinguible de una buena.
 #
-#   2) Ficheros (contratos firmados, informes, adjuntos):
-#      tar xzf backups/uploads-AAAAMMDD-HHMM.tar.gz -C /opt/crm-salamandra
+#   2) Ficheros (contratos firmados, informes, adjuntos). Tres casos, de menos
+#      a más grave — el primero es el que pasa de verdad:
+#
+#      a) UN fichero borrado o pisado por error. Está en la noche que se lo
+#         llevó, con su ruta original dentro:
+#           ls backups/uploads-cambios/
+#           find backups/uploads-cambios -name '*loquesea*'
+#           cp backups/uploads-cambios/AAAAMMDD-HHMM/<ruta> uploads/<ruta>
+#
+#      b) TODO el archivo, a como estaba anoche:
+#           rclone copy backups/uploads-espejo /opt/crm-salamandra/uploads
+#         (`copy`, no `sync`: añade y pisa, pero no borra lo que haya de más.)
+#
+#      c) TODO el archivo, desde el paquete semanal o desde fuera del servidor:
+#           tar xzf backups/uploads-AAAAMMDD-HHMM.tar.gz -C /opt/crm-salamandra
+#
+#      ⚠️ El espejo es de ANOCHE, no de hace un rato: lo subido hoy no está en
+#      él todavía. Y para volver a un día concreto hay que ir del espejo hacia
+#      atrás aplicando las noches posteriores, de la más nueva a la más vieja.
 #
 #      Restaurar SOLO la base deja miles de filas apuntando a ficheros que no
 #      existen: la app arranca bien y los documentos fallan uno a uno.
@@ -127,6 +177,18 @@ USUARIO_DB="${USUARIO_DB:-crm_user}"
 NOMBRE_DB="${NOMBRE_DB:-salamandra}"
 RETENCION_DIAS="${RETENCION_DIAS:-14}"
 MINIMO_BYTES="${MINIMO_BYTES:-100000}" # por debajo de esto, el volcado es basura
+# ─── Los ficheros subidos, desde el 28/08/2026 ───────────────────────────────
+# Ya no se empaqueta el archivo entero cada noche (ver «LOS FICHEROS NO CABEN»
+# en la cabecera): se mantiene un ESPEJO del estado de hoy y, al lado, lo que
+# cada noche se pisó o se borró, en un directorio con la fecha.
+DIR_ESPEJO="${DIR_ESPEJO:-$DIR_BACKUPS/uploads-espejo}"
+DIR_CAMBIOS="${DIR_CAMBIOS:-$DIR_BACKUPS/uploads-cambios}"
+DIA_TAR_ENTERO="${DIA_TAR_ENTERO:-7}"  # date +%u; 7 = domingo. El paquete portátil.
+MINIMO_DIAS_CAMBIOS="${MINIMO_DIAS_CAMBIOS:-3}" # nunca dejar menos noches que esto
+# Aviso de disco. No es un adorno: la copia de ficheros pasó de 127 MB a 5,3 GB
+# de una noche a otra (migración del OneDrive de Aumenta, 26/08/2026) y nadie se
+# enteró hasta que alguien miró a mano. El disco no avisa, se acaba.
+MINIMO_LIBRE_GB="${MINIMO_LIBRE_GB:-15}"
 DESTINO_REMOTO="${DESTINO_REMOTO:-}"   # vacío = solo copia local (ver cabecera)
 RETENCION_REMOTA_DIAS="${RETENCION_REMOTA_DIAS:-90}" # días FUERA del servidor; a propósito > RETENCION_DIAS
 MINIMO_REMOTO="${MINIMO_REMOTO:-4}"    # nunca dejar el destino con menos ficheros que esto (2 noches)
@@ -173,6 +235,32 @@ cuerpo_de_fallo() {
   df -h "$DIR_BACKUPS" | tail -2
 }
 
+# ¿Queda sitio? Se mira ANTES de escribir, y avisa por correo.
+#
+# Existe porque el 26/08/2026 la copia de ficheros pasó de 127 MB a 5,3 GB en
+# una noche y el script siguió tan contento: con 14 días de retención eso son 74
+# GB donde había 44 libres, o sea el disco lleno en ocho noches y, con él, la
+# base sin poder escribir. El registro decía «✅ Copia completada» cada mañana.
+#
+# NO aborta: una copia con el disco justo sigue siendo mejor que ninguna, y
+# quien tiene que decidir es una persona. Solo grita.
+avisar_si_falta_disco() {
+  local libre_kb libre_gb
+  libre_kb=$(df -Pk "$DIR_BACKUPS" | awk 'NR==2 {print $4}')
+  # Si `df` no contesta un número, este aviso se calla en vez de reventar la
+  # copia: es un chivato, no un requisito. (Y `$(( ))` con basura dentro mata el
+  # script entero por el `set -e` de arriba.)
+  case "${libre_kb:-x}${MINIMO_LIBRE_GB:-x}" in *[!0-9]*) return 0 ;; esac
+  libre_gb=$((libre_kb / 1024 / 1024))
+  if [ "$libre_gb" -lt "$MINIMO_LIBRE_GB" ]; then
+    echo "[$(date '+%F %T')] ⚠️ Quedan $libre_gb GB libres (mínimo $MINIMO_LIBRE_GB). Las copias"
+    echo "[$(date '+%F %T')]    caben hoy, pero esto se acaba. Mira qué ha crecido."
+    avisar "⚠️ Al disco del CRM le quedan $libre_gb GB" fallo \
+      "$(cuerpo_de_fallo "quedan $libre_gb GB libres en $DIR_BACKUPS, por debajo del mínimo de $MINIMO_LIBRE_GB GB")" || true
+  fi
+  return 0
+}
+
 # El parte de los lunes. Existe para que el SILENCIO signifique algo: si el
 # servidor muere del todo tampoco llega el correo de fallo, así que hace falta
 # uno que se espere cada semana (Jorge, 20/08/2026).
@@ -187,10 +275,14 @@ cuerpo_semanal() {
     echo "Retención: $RETENCION_DIAS días aquí."
   fi
   echo ""
-  echo "Copias de la base guardadas:     $(find "$DIR_BACKUPS" -name 'auto-*.sql.gz' -type f | wc -l)"
-  echo "Copias de ficheros guardadas:    $(find "$DIR_BACKUPS" -name 'uploads-*.tar.gz' -type f | wc -l)"
+  echo "Copias de la base guardadas:     $(find "$DIR_BACKUPS" -maxdepth 1 -name 'auto-*.sql.gz' -type f | wc -l)"
+  echo "Paquetes de ficheros (semanal):  $(find "$DIR_BACKUPS" -maxdepth 1 -name 'uploads-*.tar.gz' -type f | wc -l)"
+  echo "Espejo de los ficheros:          $(du -sh "$DIR_ESPEJO" 2>/dev/null | cut -f1 || echo '—') ($(find "$DIR_ESPEJO" -type f 2>/dev/null | wc -l) ficheros)"
+  echo "Noches de cambios guardadas:     $(find "$DIR_CAMBIOS" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
   echo "Ocupan en total:                 $(du -sh "$DIR_BACKUPS" | cut -f1)"
   echo "La de esta noche:                $(basename "$destino") ($(du -h "$destino" 2>/dev/null | cut -f1))"
+  echo ""
+  echo "Disco: $(df -Pk "$DIR_BACKUPS" | awk 'NR==2 {printf "%d GB libres de %d", $4/1048576, $2/1048576}') GB."
   echo ""
   if [ -z "$DESTINO_REMOTO" ]; then
     echo "Copia FUERA del servidor: NO HAY. Todo vive en el mismo disco que la base:"
@@ -327,6 +419,8 @@ mkdir -p "$DIR_BACKUPS"
 
 echo "[$(date '+%F %T')] Copia de seguridad → $destino"
 
+avisar_si_falta_disco
+
 # El volcado va primero a un temporal: si pg_dump falla a mitad, no queda un
 # .sql.gz corrupto con nombre de copia buena.
 tmp="$destino.parcial"
@@ -352,27 +446,104 @@ echo "[$(date '+%F %T')] OK base de datos: $(du -h "$destino" | cut -f1)"
 # Contratos FIRMADOS, informes clínicos, adjuntos de clientes y de tickets. No
 # se regeneran solos: restaurar únicamente la base deja las fichas apuntando a
 # papeles que ya no existen. Siete módulos escriben aquí.
+#
+# CÓMO se copian, desde el 28/08/2026: un ESPEJO del estado de hoy, y al lado un
+# directorio por noche con lo único que esa noche se pisó o se borró. Ya no se
+# empaqueta el archivo entero cada madrugada — ver «LOS FICHEROS NO CABEN» en la
+# cabecera. El paquete .tar.gz sigue existiendo, pero UNA VEZ POR SEMANA.
 if [ -d "$DIR_UPLOADS" ]; then
-  tmp_up="$destino_uploads.parcial"
-  if tar czf "$tmp_up" -C "$(dirname "$DIR_UPLOADS")" "$(basename "$DIR_UPLOADS")"; then
-    mv "$tmp_up" "$destino_uploads"
-    echo "[$(date '+%F %T')] OK ficheros: $(du -h "$destino_uploads" | cut -f1)"
+  mkdir -p "$DIR_ESPEJO" "$DIR_CAMBIOS"
+  cambios_hoy="$DIR_CAMBIOS/$marca"
+
+  # `sync` y no `copy`: el espejo tiene que reflejar también los borrados, o un
+  # fichero borrado por error se quedaría ahí para siempre y el espejo dejaría
+  # de ser el estado de hoy. Lo que el sync quitaría o pisaría NO se pierde:
+  # `--backup-dir` lo aparta en el directorio de esta noche con su ruta original.
+  # Esa es toda la gracia — el borrado se puede deshacer, y cuesta lo que ocupa
+  # lo borrado, no lo que ocupa el archivo entero.
+  if rclone sync "$DIR_UPLOADS" "$DIR_ESPEJO" --backup-dir "$cambios_hoy"; then
+    # Una noche sin cambios no deja directorio: `rmdir` solo se lleva el vacío.
+    rmdir "$cambios_hoy" 2>/dev/null || true
+    if [ -d "$cambios_hoy" ]; then
+      echo "[$(date '+%F %T')] OK ficheros: espejo $(du -sh "$DIR_ESPEJO" | cut -f1) · esta noche cambiaron $(du -sh "$cambios_hoy" | cut -f1) ($(find "$cambios_hoy" -type f | wc -l) fichero(s))"
+    else
+      echo "[$(date '+%F %T')] OK ficheros: espejo $(du -sh "$DIR_ESPEJO" | cut -f1) · esta noche no cambió ninguno"
+    fi
   else
-    rm -f "$tmp_up"
-    echo "[$(date '+%F %T')] ⚠️ No se pudo empaquetar $DIR_UPLOADS. La base SÍ está copiada."
+    echo "[$(date '+%F %T')] ⚠️ No se pudo espejar $DIR_UPLOADS. La base SÍ está copiada."
+  fi
+
+  # El paquete portátil: un solo fichero que se lleva a cualquier sitio y se
+  # restaura con un `tar xzf`. Es lo que viaja fuera del servidor. Semanal
+  # porque son 5,3 GB: diario era justo lo que se comía el disco.
+  #
+  # También se hace si NO hay ninguno, para que un servidor recién instalado no
+  # se quede hasta el domingo sin paquete.
+  hay_tar=$(find "$DIR_BACKUPS" -maxdepth 1 -name 'uploads-*.tar.gz' -type f | wc -l)
+  if [ "$(date +%u)" = "$DIA_TAR_ENTERO" ] || [ "$hay_tar" -eq 0 ]; then
+    tmp_up="$destino_uploads.parcial"
+    if tar czf "$tmp_up" -C "$(dirname "$DIR_UPLOADS")" "$(basename "$DIR_UPLOADS")"; then
+      mv "$tmp_up" "$destino_uploads"
+      echo "[$(date '+%F %T')] OK paquete semanal: $(du -h "$destino_uploads" | cut -f1)"
+    else
+      rm -f "$tmp_up"
+      echo "[$(date '+%F %T')] ⚠️ No se pudo empaquetar $DIR_UPLOADS. El espejo SÍ está hecho."
+    fi
   fi
 else
   echo "[$(date '+%F %T')] ⚠️ No existe $DIR_UPLOADS — no hay ficheros que copiar."
 fi
 
+# ─── Caducidad de las noches de cambios ──────────────────────────────────────
+# Hermana pequeña de `caducar_en_destino`, y escrita con el mismo miedo: esto
+# borra copias, así que EN LA DUDA NO BORRA. Tres frenos:
+#
+#   1. solo mira directorios de PRIMER nivel dentro de $DIR_CAMBIOS y solo si se
+#      llaman AAAAMMDD-HHMM. Cualquier otra cosa que alguien deje ahí se queda;
+#   2. nunca deja menos de $MINIMO_DIAS_CAMBIOS noches, aunque todas sean viejas
+#      —si el servidor ha estado parado un mes, lo viejo es lo único que hay—;
+#   3. si $DIR_CAMBIOS está vacío como variable, no se ejecuta nada.
+#
+# Borrar una noche NUNCA estropea otra: cada directorio se basta solo, no hay
+# cadena que romper. Esa es la razón de haber elegido esta forma y no un tar
+# incremental encadenado, donde perder el paquete entero invalida los parciales.
+if [ -n "${DIR_CAMBIOS:-}" ] && [ -d "$DIR_CAMBIOS" ]; then
+  patron='[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9]'
+  n_noches=$(find "$DIR_CAMBIOS" -mindepth 1 -maxdepth 1 -type d -name "$patron" | wc -l)
+  if [ "$n_noches" -le "$MINIMO_DIAS_CAMBIOS" ]; then
+    echo "[$(date '+%F %T')] Cambios guardados: $n_noches noche(s); no se caduca nada (mínimo $MINIMO_DIAS_CAMBIOS)."
+  else
+    borrables=$(find "$DIR_CAMBIOS" -mindepth 1 -maxdepth 1 -type d -name "$patron" -mtime "+$RETENCION_DIAS" | sort)
+    n_borrables=$(contar_lineas "$borrables")
+    # Si caducar dejaría por debajo del mínimo, se quitan solo las más viejas
+    # hasta llegar a él: mejor guardar de más que quedarse corto.
+    max_a_borrar=$((n_noches - MINIMO_DIAS_CAMBIOS))
+    [ "$n_borrables" -gt "$max_a_borrar" ] && n_borrables="$max_a_borrar"
+    n_hechas=0
+    if [ "$n_borrables" -gt 0 ]; then
+      while IFS= read -r noche; do
+        [ -n "$noche" ] || continue
+        [ "$n_hechas" -lt "$n_borrables" ] || break
+        rm -rf "$noche" && n_hechas=$((n_hechas + 1))
+      done <<<"$borrables"
+    fi
+    echo "[$(date '+%F %T')] Cambios: $n_hechas noche(s) de más de $RETENCION_DIAS días borradas; quedan $((n_noches - n_hechas))."
+  fi
+fi
+
 # ─── Rotación ────────────────────────────────────────────────────────────────
 # Se borran las copias AUTOMÁTICAS antiguas. Las manuales (pre-deploy-*, etc.)
 # NO se tocan: son puntos de rescate deliberados.
-borradas=$(find "$DIR_BACKUPS" \( -name 'auto-*.sql.gz' -o -name 'uploads-*.tar.gz' \) \
+#
+# ⚠️ `-maxdepth 1` NO es una optimización: desde que el espejo vive DENTRO de
+# $DIR_BACKUPS, un `find` sin tope recorrería los ficheros de los clientes. Un
+# documento subido por alguien y llamado `uploads-2019.tar.gz` encajaría en el
+# patrón y se borraría de la copia de seguridad. Las copias están en la raíz.
+borradas=$(find "$DIR_BACKUPS" -maxdepth 1 \( -name 'auto-*.sql.gz' -o -name 'uploads-*.tar.gz' \) \
   -type f -mtime "+$RETENCION_DIAS" -print -delete | wc -l)
 echo "[$(date '+%F %T')] Rotación: $borradas copia(s) de más de $RETENCION_DIAS días borradas."
 
-total=$(find "$DIR_BACKUPS" -name 'auto-*.sql.gz' -type f | wc -l)
+total=$(find "$DIR_BACKUPS" -maxdepth 1 -name 'auto-*.sql.gz' -type f | wc -l)
 echo "[$(date '+%F %T')] Copias automáticas guardadas: $total · espacio: $(du -sh "$DIR_BACKUPS" | cut -f1)"
 
 # ─── Copia FUERA del servidor ────────────────────────────────────────────────
@@ -391,8 +562,10 @@ if [ -n "$DESTINO_REMOTO" ]; then
   case "$DESTINO_REMOTO" in
     *:/*|*@*:*)  # usuario@host:/ruta → rsync
       modo_remoto="rsync"
-      # SIN --delete a propósito. `--exclude` para no subir volcados a medias.
-      rsync -az --exclude '*.parcial' "$DIR_BACKUPS/" "$DESTINO_REMOTO/" && ok_remoto=1 || true
+      # SIN --delete a propósito. `--exclude` para no subir volcados a medias
+      # ni el espejo (ver «QUÉ SALE Y QUÉ NO» en la cabecera).
+      rsync -az --exclude '*.parcial' --exclude 'uploads-espejo/' --exclude 'uploads-cambios/' \
+        "$DIR_BACKUPS/" "$DESTINO_REMOTO/" && ok_remoto=1 || true
       if [ "$ok_remoto" = "1" ]; then
         echo "[$(date '+%F %T')] ⚠️ Destino rsync: aquí NO se caduca nada — este script no manda"
         echo "[$(date '+%F %T')]    órdenes de borrado a otra máquina. Que el otro servidor tenga"
@@ -402,7 +575,9 @@ if [ -n "$DESTINO_REMOTO" ]; then
     *:*)         # remoto:bucket de rclone
       modo_remoto="rclone"
       # `copy`, NUNCA `sync`: `sync` borraría allí lo que falte aquí.
-      rclone copy --exclude '*.parcial' "$DIR_BACKUPS" "$DESTINO_REMOTO" && ok_remoto=1 || true
+      # El espejo y las noches de cambios NO salen: ver «QUÉ SALE Y QUÉ NO».
+      rclone copy --exclude '*.parcial' --exclude 'uploads-espejo/**' --exclude 'uploads-cambios/**' \
+        "$DIR_BACKUPS" "$DESTINO_REMOTO" && ok_remoto=1 || true
       # Solo se caduca si lo de esta noche llegó: nada viejo se tira si no ha
       # entrado nada nuevo.
       if [ "$ok_remoto" = "1" ]; then caducar_en_destino; fi
