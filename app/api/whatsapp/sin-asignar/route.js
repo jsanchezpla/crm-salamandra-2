@@ -128,16 +128,38 @@ export const POST = withTenant(async (request, _routeContext, ctx) => {
       });
       const yaEsta = existentes.some((m) => soloDigitos(m.value).slice(-9) === phone.slice(-9));
       if (!yaEsta) {
+        // ¿Hay a quién desplazar? Solo si la ficha no tiene NINGÚN teléfono —ni
+        // método de contacto ni columna— este número pasa a ser el principal.
+        //
+        // La regla de abajo no se toca: un número que apareció en un mensaje no
+        // desplaza al que la persona dio en su alta. Lo que se arregla es el
+        // caso en que no hay alta que respetar (28/08/2026). Antes, el número
+        // se guardaba SIEMPRE como secundario y `clients.phone` se quedaba
+        // vacío; como el recuento de fichas mudas mira esa columna
+        // (`lib/clients/urgentes.js`, SQL_MUDA), la familia seguía saliendo en
+        // «Fichas a completar» como si no hubiera forma de llamarla, con el
+        // número delante en su propia pestaña Contactos.
+        const noHayAQuienDesplazar = !existentes.length && !soloDigitos(ficha.phone);
+
         await ClientContactMethod.create({
           clientId: ficha.id,
           kind: "phone",
           value: `+${phone}`,
           label: "WhatsApp",
-          // NUNCA principal: el principal es el que usa facturación, los avisos
-          // de cita y el acceso al portal. Un número que apareció en un mensaje
-          // no puede desplazar al que la persona dio en su alta.
-          isPrimary: false,
+          // NUNCA principal si ya hay uno: el principal es el que usa
+          // facturación, los avisos de cita y el acceso al portal. Un número
+          // que apareció en un mensaje no puede desplazar al que la persona dio
+          // en su alta.
+          isPrimary: noHayAQuienDesplazar,
         });
+
+        // Y que el espejo se entere. Se escribe SOLO la columna del teléfono, a
+        // mano, en vez de llamar a `syncClientMirror`: ese helper recalcula
+        // TODOS los tipos y, en una ficha con correo en `clients.email` pero sin
+        // su fila en `client_contact_methods`, lo pondría a null. Aquí el único
+        // dato nuevo es un teléfono; el correo no se toca.
+        if (noHayAQuienDesplazar) await ficha.update({ phone: `+${phone}` });
+
         recordado = true;
       }
     } catch (err) {
