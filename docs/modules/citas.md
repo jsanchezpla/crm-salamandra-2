@@ -1184,6 +1184,55 @@ atender), más las solicitudes de cambio de hora para dirección.
 **Histórico (hasta 22/07/2026):** el default no tenía lista de espera; la
 tenía solo el override de nutri_laura, que ese día se fundió en el default.
 
+#### Elegir al hijo trae a su familia y su contacto (28/08/2026, Lau)
+
+Lau, de Aumenta: «al generar una cita siempre me pide mail y teléfono … no me
+sale de forma automática, así que en pacientes que ya están registrados me tengo
+que salir, buscar esa info, anotarla a lápiz y papel y luego hacer la cita».
+
+Rodrigo llevaba razón a medias —«puedes seleccionar un paciente y automáticamente
+te salen los datos de contacto»— y Jorge no la llevaba al sospechar que «no le
+había caído el update a Aumenta»: **no hay pantalla propia de Citas** para nadie
+(`UI_OVERRIDES = {}`) y el contenedor es uno, así que a Aumenta no se le puede
+quedar atrás un despliegue. El autorrelleno existe desde el 22/07/2026
+(`8775f90`), pero colgaba de elegir la FAMILIA en la caja de arriba. El
+desplegable «Paciente» solo ponía el terapeuta — y **no podía hacer más**:
+`Patient` no tiene ni correo ni teléfono, el contacto es de la familia que paga.
+
+Lo decidió Jorge: «cada paciente está asociado a una familia, así que solo
+eligiendo el paciente el resto de datos tendrían que salir automáticos». Tres
+piezas:
+
+| Qué | Dónde |
+| --- | --- |
+| La familia viaja con cada paciente (`client`: id, nombre, correo y teléfono) | `app/api/pacientes/route.js`, `include` de `Client` |
+| Elegir paciente pone familia + contacto + terapeuta, y busca su bono | `modules/default/citas/NuevaCitaDrawer.jsx`, rama `patientId` de `updateCreateForm` |
+| El correo que estaba en el padre o en la madre | `lib/clients/contactoDeFicha.js` (+ `scripts/_smoke-contacto-ficha.mjs`) |
+
+**Lo del tutor es lo que más rescata sin pedirle nada a nadie.** En un centro de
+menores el correo suele estar en `Client.guardians`, no en la ficha de la
+familia, y ninguna pantalla de Citas lo miraba. Medido en producción ese día
+sobre las 1.083 fichas de Aumenta: de las 330 sin correo, **65 lo tienen en un
+tutor**; de las 234 sin teléfono, **ninguna**. La regla manda siempre lo que hay
+en la ficha y usa el tutor solo como respaldo, y **`guardians` no sale hacia el
+navegador**: lleva el DNI de los progenitores dentro, así que se pide para
+resolver el contacto y se queda en el servidor.
+
+⚠️ **Lo que esto NO arregla, y hay que decirlo.** De los 1.050 pacientes activos
+de Aumenta, **886 quedan desbloqueados y 164 siguen sin poder tener cita**:
+su familia no tiene correo ni teléfono en ningún sitio del CRM. Ese dato no
+existe y ningún cambio de código lo inventa — hay que pedírselo a la familia, o
+relajar la obligatoriedad del alta manual (que hoy exige los dos, en la pantalla
+y en el servidor). Decisión abierta.
+
+**El tope de 300, tapado solo donde importa.** `/api/pacientes` corta en 300 por
+diseño y Aumenta tiene 1.174: 874 pacientes (el 74%) no estaban en el
+desplegable, y escribir su nombre contestaba «Sin opciones» —lo mismo que
+contesta cuando ese paciente no existe—. Eso rompía las dos entradas nuevas, así
+que **en cuanto hay familia elegida se le piden SUS pacientes**
+(`/api/pacientes?clientId=`) y se suman a la lista. El tope general sigue ahí y
+tiene ficha propia en el Registro.
+
 #### De la cita a la ficha, y por qué no se enseña la última sesión (27/08/2026, Jorge)
 
 La pregunta abierta desde el 26/08 era si al abrir una cita había que ver un

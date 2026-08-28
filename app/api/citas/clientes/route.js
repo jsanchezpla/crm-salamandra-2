@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 import { agruparPorFamilia, conPacientes, idsDeFamilia } from "../../../../lib/citas/familiasDePacientes.js";
+import { fichaConContacto } from "../../../../lib/clients/contactoDeFicha.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 
@@ -181,10 +182,18 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
      */
     const CUPO_ARCHIVADAS = 5;
 
+    /*
+     * `guardians` se pide para RESOLVER el contacto, no para mandarlo
+     * (28/08/2026, Lau de Aumenta). En un centro de menores el correo suele
+     * estar en el padre o en la madre, no en la ficha de la familia: 65 de las
+     * 330 fichas de Aumenta sin correo lo tienen ahí, y esta caja no lo miraba.
+     * `fichaConContacto` lo rescata y BORRA `guardians` de la respuesta —lleva
+     * el DNI de los progenitores dentro—. Ver `lib/clients/contactoDeFicha.js`.
+     */
     const buscar = (estado, tope) =>
       Client.findAll({
         where: { ...where, status: estado },
-        attributes: ["id", "name", "email", "phone", "status"],
+        attributes: ["id", "name", "email", "phone", "status", "guardians"],
         order: [["name", "ASC"]],
         limit: tope,
       });
@@ -198,7 +207,7 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       // Cada ficha lleva colgados los pacientes por los que ha salido, para que
       // el desplegable pueda decir POR QUÉ aparece esa familia y el alta pueda
       // dejar elegido a ese paciente.
-      clientes: conPacientes([...vivas, ...archivadas].map((c) => c.toJSON()), porFamilia),
+      clientes: conPacientes([...vivas, ...archivadas].map((c) => fichaConContacto(c.toJSON())), porFamilia),
       soloPacientes: Boolean(idsAsistenciales),
       totalPacientes: idsAsistenciales ? idsAsistenciales.length : null,
       /*

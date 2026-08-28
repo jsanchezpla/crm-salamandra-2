@@ -5,6 +5,7 @@ import { serializePatient } from "../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../lib/clinica/audit.js";
 import { normalizeConsents } from "../../../lib/clinica/consents.js";
 import { filtroPorNombre } from "../../../lib/utils/busquedaDb.js";
+import { fichaConContacto } from "../../../lib/clients/contactoDeFicha.js";
 import { normalizeSpecialties, deriveCareType, SPECIALTY_KEYS } from "../../../lib/clinica/specialties.js";
 import {
   terapeutasDe, referenciaDe, conReferencia, listaDe, terapeutasEfectivos,
@@ -36,7 +37,7 @@ async function sessionAgg(ClinicSession, patientIds) {
 
 export const GET = withTenant(async (request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica/Pacientes no activo");
-  const { Patient, ClinicSession, TeamMember } = ctx.tenantModels;
+  const { Patient, ClinicSession, TeamMember, Client } = ctx.tenantModels;
   const sp = new URL(request.url).searchParams;
 
   const where = {};
@@ -110,9 +111,30 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   const page = Math.max(1, parseInt(sp.get("page") ?? "1"));
   const limit = Math.min(parseInt(sp.get("limit") ?? "300"), 300);
 
+  /*
+   * ── LA FAMILIA VIAJA CON EL PACIENTE (28/08/2026, Lau de Aumenta) ─────────
+   *
+   * Lau: «me tengo que salir, buscar esa info, anotarla a lápiz y papel y luego
+   * hacer la cita». Y Jorge, al decidirlo: «cada paciente está asociado a una
+   * familia, así que solo eligiendo el paciente el resto de datos tendrían que
+   * salir automáticos».
+   *
+   * `Patient` no tiene ni correo ni teléfono —el contacto es de la familia que
+   * paga—, así que sin este `include` el desplegable «Paciente» del alta de
+   * cita no PODRÍA rellenar nada aunque quisiera. Es un `belongsTo`, así que no
+   * multiplica filas y el `count` se mantiene.
+   *
+   * `required: false` a propósito: un paciente sin familia tiene que seguir
+   * saliendo en la lista, no desaparecer de la pantalla de Pacientes.
+   */
   const { rows, count } = await Patient.findAndCountAll({
     where,
-    include: [{ model: TeamMember, as: "mainTherapist", attributes: ["id", "displayName", "position", "avatarColor"] }],
+    include: [
+      { model: TeamMember, as: "mainTherapist", attributes: ["id", "displayName", "position", "avatarColor"] },
+      ...(Client
+        ? [{ model: Client, as: "client", attributes: ["id", "name", "email", "phone", "guardians"], required: false }]
+        : []),
+    ],
     order: [["lastName", "ASC"], ["firstName", "ASC"]],
     limit,
     offset: (page - 1) * limit,
@@ -125,12 +147,23 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   // arriba. Con un include hacia la tabla de muchos a muchos, `findAndCountAll`
   // contaría filas del JOIN y la paginación se iría (lib/clinica/terapeutas.js).
   const equipos = await listaDe(ctx.tenantModels, ctx.tenantSequelize, rows.map((r) => r.id));
-  const patients = rows.map((p) =>
-    serializePatient(p, {
+  const patients = rows.map((p) => ({
+    ...serializePatient(p, {
       ...(agg[p.id] ?? { sessionsCount: 0, lastSession: null }),
       therapists: terapeutasEfectivos(p, equipos[p.id]),
-    })
-  );
+    }),
+    /*
+     * La familia, DELGADA y con el contacto ya resuelto: id, nombre, correo y
+     * teléfono, y nada más.
+     *
+     * ⚠️ Se pisa a propósito lo que pone `serializePatient`, que devolvería
+     * también `guardians` —con el DNI de los progenitores dentro— en cuanto el
+     * `include` de arriba los trae. Un listado de pacientes no tiene por qué
+     * llevar eso al navegador; se piden para RESCATAR el correo del tutor
+     * (`lib/clients/contactoDeFicha.js`) y se quedan en el servidor.
+     */
+    client: p.client ? fichaConContacto(p.client.toJSON()) : null,
+  }));
 
   // Resumen sobre TODOS los pacientes que cumplen el filtro, no solo la página.
   // Sin esto, al paginar los indicadores de la cabecera contarían 50 y dirían

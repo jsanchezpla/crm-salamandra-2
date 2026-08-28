@@ -6,9 +6,10 @@
 // monta con el hueco pulsado en el calendario (`inicial` = { date, time },
 // vacíos si se abre desde el botón) y refresca al crearse (onCreated).
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
 import BuscadorPaciente from "../../../components/citas/BuscadorPaciente.jsx";
+import { datosAlElegirFicha } from "../../../lib/clients/contactoDeFicha.js";
 import { MODALITY_LABELS, inputCls } from "./chips.jsx";
 
 const EMPTY_BOOKING_FORM = {
@@ -52,6 +53,58 @@ export function NuevaCitaDrawer({
     return eventTypes.find((e) => e.id === createForm.eventTypeId) ?? null;
   }, [eventTypes, createForm.eventTypeId]);
 
+  /*
+   * ── LOS HIJOS DE LA FAMILIA ELEGIDA, SIEMPRE (28/08/2026) ─────────────────
+   *
+   * `patients` viene del padre, que pide `/api/pacientes` sin más: ese endpoint
+   * corta en 300 por diseño y Aumenta tiene 1.174. O sea que 874 pacientes —el
+   * 74%— no están en el desplegable, y escribir su nombre contesta «Sin
+   * opciones»: exactamente lo mismo que contesta cuando ese paciente no existe.
+   * Es el techo callado de siempre, aquí otra vez.
+   *
+   * Eso rompía las dos entradas nuevas: elegir al hijo para que salgan los
+   * datos de su familia, y el paciente que la caja de arriba deja ya elegido al
+   * buscar por su nombre —que si no estaba entre los 300, el desplegable pintaba
+   * «Sin paciente asignado» aunque la cita fuera a nacer con él—.
+   *
+   * Se arregla por donde se puede arreglar entero: en cuanto hay familia se le
+   * piden SUS pacientes, que son uno o dos, y se suman a la lista. El tope
+   * general sigue ahí y tiene ficha propia en el Registro.
+   */
+  const [pacientesDeLaFamilia, setPacientesDeLaFamilia] = useState([]);
+  useEffect(() => {
+    const familia = createForm.clientId;
+    if (!familia) { setPacientesDeLaFamilia([]); return; }
+    let vigente = true;
+    fetch(`/api/pacientes?clientId=${encodeURIComponent(familia)}`, { cache: "no-store" })
+      .then(async (r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vigente) setPacientesDeLaFamilia(j?.data?.patients ?? []); })
+      .catch(() => {});
+    // Si se cambia de familia antes de que conteste, la respuesta vieja se tira:
+    // pintar los hijos de la familia anterior sería peor que no pintar ninguno.
+    return () => { vigente = false; };
+  }, [createForm.clientId]);
+
+  /** Todos los pacientes que este formulario puede ofrecer, sin repetidos. */
+  const pacientesConocidos = useMemo(() => {
+    const porId = new Map();
+    for (const p of patients) porId.set(p.id, p);
+    // Los de la familia elegida van DESPUÉS y pisan: vienen recién traídos.
+    for (const p of pacientesDeLaFamilia) porId.set(p.id, p);
+    return [...porId.values()];
+  }, [patients, pacientesDeLaFamilia]);
+
+  const opcionesPaciente = useMemo(() => {
+    const yaEstan = new Set(patientOptions.map((o) => o.value));
+    const nombre = (p) => p.name || `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim();
+    return [
+      ...patientOptions,
+      ...pacientesDeLaFamilia
+        .filter((p) => !yaEstan.has(p.id))
+        .map((p) => ({ value: p.id, label: nombre(p) })),
+    ];
+  }, [patientOptions, pacientesDeLaFamilia]);
+
   function updateCreateForm(field, value) {
     // Al cambiar de tipo de cita (arreglo 2026-07-23): si la modalidad elegida
     // ya no la ofrece el tipo nuevo, se limpia. Antes quedaba una modalidad
@@ -69,10 +122,49 @@ export function NuevaCitaDrawer({
     // (Rodrigo: la reserva pública es general y el terapeuta se decide en el CRM,
     // primando el asignado al paciente). Si el paciente no tiene terapeuta, se
     // conserva el profesional que hubiera. El usuario siempre puede cambiarlo.
+    //
+    /*
+     * ── Y ARRASTRA A SU FAMILIA, CON SU CONTACTO (28/08/2026) ───────────────
+     *
+     * Lau, de Aumenta: «al generar una cita siempre me pide mail y teléfono …
+     * no me sale de forma automática, es difícil en pacientes que ya están
+     * registrados, me tengo que salir, buscar esa info, anotarla a lápiz y
+     * papel y luego hacer la cita».
+     *
+     * Rodrigo daba por hecho que ya pasaba —«puedes seleccionar un paciente y
+     * automáticamente te salen los datos de contacto»— y llevaba razón a
+     * medias: el autorrelleno existía desde julio, pero colgaba de elegir la
+     * FAMILIA en la caja de arriba. Este desplegable solo ponía el terapeuta, y
+     * no podía hacer más: `Patient` no tiene ni correo ni teléfono. Ahora la
+     * familia viaja con cada paciente (`app/api/pacientes/route.js`), que es lo
+     * que decidió Jorge: «cada paciente está asociado a una familia, así que
+     * solo eligiendo el paciente el resto de datos tendrían que salir
+     * automáticos».
+     *
+     * Qué se rellena y qué se respeta lo decide `datosAlElegirFicha`
+     * (`lib/clients/contactoDeFicha.js`), la MISMA regla que usa la caja de
+     * arriba: al cambiar de familia el contacto se reemplaza entero —aunque
+     * venga vacío—, y dentro de la misma familia se respeta lo tecleado a mano
+     * en los huecos que la ficha deja.
+     */
     if (field === "patientId") {
-      const p = patients.find((x) => x.id === value);
+      const p = pacientesConocidos.find((x) => x.id === value);
       const terapeuta = p?.mainTherapistId ?? p?.therapistId ?? null;
-      setCreateForm((prev) => ({ ...prev, patientId: value, teamMemberId: terapeuta ?? prev.teamMemberId }));
+      const familia = p?.client ?? null;
+      setCreateForm((prev) => ({
+        ...prev,
+        patientId: value,
+        teamMemberId: terapeuta ?? prev.teamMemberId,
+        ...datosAlElegirFicha(prev, familia),
+      }));
+      // El bono de esa familia pone el tipo de cita solo, igual que al elegirla
+      // en la caja de arriba (13/08/2026, Rodrigo). Antes, llegar por el
+      // paciente se lo saltaba.
+      //
+      // Solo se busca cuando hay familia. Volver a «Sin paciente asignado» no
+      // toca el cartel del bono: la familia sigue elegida arriba y su bono
+      // sigue siendo verdad.
+      if (familia) buscarBono(familia);
       return;
     }
     setCreateForm((prev) => ({ ...prev, [field]: value }));
@@ -320,14 +412,21 @@ export function NuevaCitaDrawer({
                    */
                   const unico = Array.isArray(c.pacientes) && c.pacientes.length === 1 ? c.pacientes[0] : null;
                   // El mismo respaldo que al elegir paciente a mano, arriba.
-                  const suyo = unico ? patients.find((p) => p.id === unico.id) : null;
+                  const suyo = unico ? pacientesConocidos.find((p) => p.id === unico.id) : null;
                   const terapeuta = suyo?.mainTherapistId ?? suyo?.therapistId ?? null;
                   setCreateForm((prev) => ({
                     ...prev,
-                    clientId: c.id,
-                    clientName: c.name || "",
-                    clientEmail: c.email || prev.clientEmail,
-                    clientPhone: c.phone || prev.clientPhone,
+                    /*
+                     * El contacto lo decide `datosAlElegirFicha`, no un
+                     * `c.email || prev` (28/08/2026). Con ese `||`, elegir una
+                     * familia con correo y cambiar después a otra sin correo
+                     * dejaba puesto el de la primera: la cita de la segunda se
+                     * creaba Y SE ENVIABA a la dirección de la otra familia,
+                     * con el nombre del hijo dentro, y el campo se veía relleno
+                     * y con buena pinta. Con 330 de las 1.083 fichas de Aumenta
+                     * sin correo, esa pareja sale todos los días.
+                     */
+                    ...datosAlElegirFicha(prev, c),
                     ...(unico ? { patientId: unico.id, teamMemberId: terapeuta ?? prev.teamMemberId } : {}),
                   }));
                   buscarBono(c);
@@ -352,7 +451,7 @@ export function NuevaCitaDrawer({
                   <Select
                     value={createForm.patientId}
                     onChange={(v) => updateCreateForm("patientId", v)}
-                    options={patientOptions}
+                    options={opcionesPaciente}
                     placeholder="Sin paciente asignado"
                     searchable
                   />
