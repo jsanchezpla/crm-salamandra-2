@@ -92,8 +92,20 @@ export const POST = withPublicTenant(async (request, _ctx, { slug, tenantModels,
      * theme en la próxima versión (`nutrilaura-registro-crm.php`) y entonces
      * esta ruta se puede borrar entera.
      */
-    void nombre;
-    void wpUserId;
+    /*
+     * Aquí había un `void nombre; void wpUserId;` — restos de cuando este código
+     * leía esos dos datos del cuerpo. Al quitar las declaraciones, esas dos
+     * líneas se quedaron señalando a nada: en un módulo ESM (modo estricto) eso
+     * lanza `ReferenceError`, lo recoge el `catch` de abajo y el endpoint
+     * contestaba **500**. Justo lo contrario de lo que dice el comentario de
+     * arriba, que es la única razón por la que esta ruta sigue viva: responder
+     * 200 para que el WordPress que la llama no registre errores en cada alta.
+     *
+     * Lo encontró `eslint.undef.mjs` el 28/08/2026. Ni el lint ni el build lo
+     * daban: `eslint-config-next` no lleva `no-undef` y Next compila sin
+     * quejarse. Se veía solo llamando al endpoint, y como es de WordPress a
+     * servidor, nadie lo estaba mirando.
+     */
     return ok({ creada: false, motivo: "registro_no_es_solicitud" });
   } catch (err) {
     return serverError(err);
