@@ -1,7 +1,7 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, noContent, serverError } from "../../../../../lib/utils/apiResponse.js";
-import { tipoSinDinero } from "../../../../../lib/citas/dinero.js";
+import { tipoSegunRol } from "../../../../../lib/citas/dinero.js";
 import {
   normalizeString,
   isValidSlug,
@@ -26,9 +26,23 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
     if (!row) return notFound("Tipo de cita no encontrado");
 
     const bookingCount = await Booking.count({ where: { eventTypeId: id } });
-    // Sin la tarifa si no es dirección. Es la puerta de atrás del listado:
-    // tapar solo aquel dejaría sacar el precio de uno en uno por este.
-    return ok({ ...tipoSinDinero(row.toJSON()), bookingCount });
+    /*
+     * Sin la tarifa si no es dirección. Es la puerta de atrás del listado:
+     * tapar solo aquel dejaría sacar el precio de uno en uno por este.
+     *
+     * ⚠️ SEGÚN EL ROL, y no es un matiz (28/08/2026). Hasta hoy tapaba SIEMPRE:
+     * el comentario decía «si no es dirección» pero el `if` nunca se escribió.
+     * Como el formulario de Tipos de cita se rellena con lo que devuelve esto,
+     * «Precio (€)» se abría VACÍO también para un admin, y al guardar —aunque
+     * solo se cambiara el color— ese vacío viajaba como «sin precio» y BORRABA
+     * la tarifa. Ni avisaba ni fallaba: guardaba bien.
+     *
+     * Los únicos 3 tipos con precio de toda la producción son de Laura, que es
+     * quien cobra las citas por la web: no era un campo en blanco, era su
+     * reserva pública dejando de cobrar sin que nadie se enterase.
+     */
+    const rol = request.headers.get("x-user-role");
+    return ok({ ...tipoSegunRol(row.toJSON(), rol), bookingCount });
   } catch (err) {
     return serverError(err);
   }

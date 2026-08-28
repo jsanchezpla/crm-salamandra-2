@@ -47,6 +47,7 @@ import {
   citaSinDinero,
   tipoSinDinero,
   citaSegunRol,
+  tipoSegunRol,
   filtrarCitas,
   filtrarTipos,
 } from "../lib/citas/dinero.js";
@@ -232,6 +233,55 @@ describe("filtrarCitas / filtrarTipos: los listados", () => {
     assert.deepEqual(filtrarCitas(null, "user"), []);
     assert.deepEqual(filtrarCitas(undefined, "user"), []);
     assert.deepEqual(filtrarTipos(null, "user"), []);
+  });
+});
+
+
+describe("tipoSegunRol: UN tipo de cita, según quién lo pida", () => {
+  /*
+   * Faltaba, y su ausencia borró tarifas (28/08/2026). El detalle de un tipo
+   * llamaba a `tipoSinDinero` a secas: el formulario abría «Precio (€)» vacío
+   * TAMBIÉN para un admin, y al guardar ese vacío pisaba el precio. De los 71
+   * tipos de producción, los 3 con precio son de Laura, que cobra por la web.
+   */
+  it("a dirección le da el tipo entero, con su tarifa", () => {
+    const tipo = tipoCompleto();
+    assert.equal(tipoSegunRol(tipo, "admin"), tipo);
+    assert.equal(tipoSegunRol(tipo, "superadmin").price, tipo.price);
+  });
+  it("a una usuaria le quita la tarifa", () => {
+    assert.ok(SIN(tipoSegunRol(tipoCompleto(), "user"), TARIFA_DE_UN_TIPO));
+  });
+  it("sin rol, tapa (nunca se abre por defecto)", () => {
+    assert.ok(SIN(tipoSegunRol(tipoCompleto(), undefined), TARIFA_DE_UN_TIPO));
+  });
+});
+
+describe("el detalle de un tipo NO puede tapar el precio a quien puede editarlo", () => {
+  /*
+   * Esto sí es texto: lo que hay que impedir es que alguien vuelva a escribir
+   * `tipoSinDinero(...)` a secas en el detalle. No es una función que se pueda
+   * llamar desde aquí — es una llamada que tiene que NO estar.
+   */
+  const fuente = readFileSync(
+    new URL("../app/api/citas/event-types/[id]/route.js", import.meta.url),
+    "utf8"
+  );
+  it("usa tipoSegunRol con el rol de quien pregunta", () => {
+    assert.ok(
+      fuente.includes("tipoSegunRol(row.toJSON(), rol)"),
+      "el detalle tiene que mirar el rol, como hace el listado con filtrarTipos"
+    );
+    assert.ok(
+      fuente.includes('request.headers.get("x-user-role")'),
+      "sin leer el rol, tapar «según quién» es imposible"
+    );
+  });
+  it("ya no queda ningún tapado incondicional", () => {
+    assert.ok(
+      !fuente.includes("tipoSinDinero("),
+      "tapar siempre es lo que borraba la tarifa al guardar"
+    );
   });
 });
 
