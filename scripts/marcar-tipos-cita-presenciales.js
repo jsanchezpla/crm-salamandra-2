@@ -70,7 +70,7 @@ import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getMasterDb } from "../lib/db/masterDb.js";
-import { VALID_MODALITIES } from "../lib/citas/validation.js";
+import { VALID_MODALITIES, validateModalityFields } from "../lib/citas/validation.js";
 
 const argv = process.argv.slice(2);
 const valorDe = (bandera) => (argv.includes(bandera) ? argv[argv.indexOf(bandera) + 1] : null);
@@ -136,7 +136,11 @@ if (!tablas.length) {
 }
 
 const [filas] = await master.query(
-  `SELECT id, name, active, modalities, location
+  // `phone_number` y `meet_url` se traen aunque no se toquen: hacen falta para
+  // validar el estado FINAL con la misma función que la API (ver más abajo).
+  // Sin ellos, un tipo con modalidad telefónica y su teléfono puesto saldría
+  // rechazado por un teléfono que sí tiene.
+  `SELECT id, name, active, modalities, location, phone_number, meet_url
      FROM "${SCHEMA}"."event_types"
     ORDER BY name`
 );
@@ -174,15 +178,65 @@ const yaEsta = (f) =>
   mismaLista(listaDe(f.modalities), finalDe(f)) &&
   (!MODALIDADES.includes("presencial") || (f.location ?? "") === DIRECCION);
 
-const porTocar = filas.filter((f) => !yaEsta(f));
+/*
+ * ── NO DEJAR UN TIPO QUE LA PANTALLA YA NO PUEDA GUARDAR (28/08/2026) ───────
+ *
+ * Este script escribe en la base directamente, así que se salta la comprobación
+ * que hace la API (`validateModalityFields`): 'presencial' exige una dirección y
+ * 'phone' exige un teléfono. Un tipo que las incumpla se queda «inguardable»:
+ * se ve bien, pero cualquier PATCH desde Citas → Tipos de cita devuelve 400.
+ *
+ * No es hipotético. Medido en producción ese día: **los 8 tipos de cita de las
+ * cuatro demos están así** —aceptan presencial sin dirección, y la mitad además
+ * teléfono sin teléfono—, de antes y sin que nadie lo tocara. Aumenta no: sus
+ * 57 no ofrecen presencial todavía, que es justo lo que viene a arreglar esto.
+ *
+ * El caso que este script podría crear: añadir una modalidad a un tipo que YA
+ * traía 'presencial' sin dirección. Ahí no se le pide `--direccion` —no la está
+ * poniendo él— y saldría tocado y roto igual.
+ *
+ * Así que cada fila se valida con LA MISMA función que usa la API antes de
+ * escribirla, y la que no pase se deja EXACTAMENTE como está y se dice por qué.
+ * Mejor no tocar una fila que dejarla en un estado que solo se arregla por SQL.
+ */
+const estadoFinalDe = (f) => ({
+  modalities: finalDe(f),
+  location: MODALIDADES.includes("presencial") ? DIRECCION : (f.location ?? null),
+  phoneNumber: f.phone_number ?? null,
+  meetUrl: f.meet_url ?? null,
+});
+
+const candidatas = filas.filter((f) => !yaEsta(f));
+const rechazadas = [];
+const porTocar = [];
+for (const f of candidatas) {
+  const problema = validateModalityFields(estadoFinalDe(f));
+  if (problema) rechazadas.push({ f, problema });
+  else porTocar.push(f);
+}
 const intactos = filas.length - porTocar.length;
 
 log(`Tipos de cita: ${filas.length} (${filas.filter((f) => f.active).length} activos)`);
 log(`Ya están como se pide: ${intactos}`);
 log(`Se van a cambiar: ${porTocar.length}`);
+if (rechazadas.length) log(`⚠️  Se dejan sin tocar: ${rechazadas.length} (quedarían inguardables)`);
 process.stdout.write("\n");
 
+if (rechazadas.length) {
+  log("⚠️  ESTOS NO SE TOCAN. Cambiarlos los dejaría en un estado que la pantalla");
+  log("    de Tipos de cita ya no puede guardar (devolvería 400 al editarlos):");
+  for (const { f, problema } of rechazadas.slice(0, 10)) log(`    · ${f.name} — ${problema}`);
+  if (rechazadas.length > 10) log(`    … y ${rechazadas.length - 10} más.`);
+  log("    Se arreglan poniéndoles lo que les falta desde Citas → Tipos de cita.");
+  process.stdout.write("\n");
+}
+
 if (!porTocar.length) {
+  if (rechazadas.length) {
+    log("✗ No queda nada que se pueda cambiar sin romperlo. Arregla antes lo de arriba.\n");
+    await master.close();
+    process.exit(1);
+  }
   log("✓ Todos están ya como se pide. Nada que hacer.\n");
   await master.close();
   process.exit(0);
