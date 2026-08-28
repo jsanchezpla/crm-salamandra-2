@@ -49,11 +49,12 @@
  * producto. Comprobado en producción el 28/08/2026: hoy no hay ni un tipo
  * activo en ningún cliente al que el filtro público esté escondiendo.
  *
- * Efecto lateral pequeño y conocido: el enlace «Añadir a Google Calendar» usa
- * `meetUrl || location` sin mirar la modalidad, así que en cuanto los tipos
- * tengan dirección, una cita online de Aumenta —que no tiene sala— la llevará
- * en el calendario. En este centro apunta al sitio correcto; en otro sería
- * incoherente con el «Modalidad: Online» del propio correo.
+ * (Aquí había apuntado un efecto lateral: el enlace «Añadir a Google Calendar»
+ * usaba `meetUrl || location` sin mirar la modalidad, así que en cuanto los
+ * tipos tuvieran dirección, una cita online se habría llevado la dirección
+ * física al calendario de la paciente. **Arreglado**: ahora ese enlace elige por
+ * modalidad —online→sala, presencial→dirección, telefónica→nada—, igual que el
+ * cuerpo del correo. `lib/email/templates/citas/bookingConfirmed.js`.)
  *
  * ── LA DIRECCIÓN ES OBLIGATORIA, Y NO SE INVENTA ────────────────────────────
  * `lib/citas/validation.js` exige `location` para aceptar 'presencial', y con
@@ -62,9 +63,17 @@
  * centro**. Si tiene más de una sede, esto deja de valer y hay que ir tipo a
  * tipo.
  *
- * ── IDEMPOTENTE ─────────────────────────────────────────────────────────────
- * Un tipo que ya ofrece 'presencial' Y ya tiene la dirección pedida se deja
- * como está y se cuenta aparte. Lanzarlo dos veces no cambia nada la segunda.
+ * ── IDEMPOTENTE, Y NO PISA UNA DIRECCIÓN QUE YA HAYA ────────────────────────
+ * Un tipo que ya ofrece 'presencial' y ya tiene UNA dirección —la suya, no
+ * necesariamente la de `--direccion`— se deja como está y se cuenta aparte.
+ * Lanzarlo dos veces no cambia nada la segunda.
+ *
+ * Lo segundo se arregló el 28/08/2026 al ejecutarlo por primera vez: hasta ese
+ * día escribía `--direccion` encima de TODOS los tipos, y en el ensayo contra la
+ * base local le cambió la dirección a dos que no había que tocar. Para Aumenta
+ * era inocuo (sus 57 tienen `location` a NULL, comprobado en producción), pero
+ * el cliente entra por `--tenant` y en otro se habría llevado por delante
+ * direcciones reales, que son las que salen impresas en el correo de la familia.
  *
  * ── VUELTA ATRÁS ────────────────────────────────────────────────────────────
  * Con `--aplicar` deja un `.rollback.sql` con el UPDATE exacto que devuelve
@@ -191,9 +200,31 @@ const finalDe = (f) => {
   return [...ya, ...MODALIDADES.filter((m) => !ya.includes(m))];
 };
 const mismaLista = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+/*
+ * ── LA DIRECCIÓN SE RELLENA, NO SE PISA (28/08/2026) ───────────────────────
+ *
+ * Este script no se había ejecutado nunca —ni en seco— hasta el ensayo contra
+ * la base local del 28/08, y el ensayo destapó esto: escribía `--direccion` en
+ * TODOS los tipos, incluidos los que ya tenían una puesta y las modalidades
+ * correctas. En local le cambió «C/ Gran Vía 42, Madrid» por la de prueba a dos
+ * tipos que no había que tocar.
+ *
+ * Para Aumenta da igual —comprobado en producción ese mismo día: sus 57 tipos
+ * tienen `location` a NULL, los 57— pero el script recibe el cliente por
+ * `--tenant` y el día que alguien lo lance sobre otro se llevaría por delante
+ * direcciones de verdad, que son las que salen impresas en el correo de la
+ * familia. Y contradecía su propia cabecera, que promete sumar sin quitar.
+ *
+ * Así que la dirección se pone SOLO donde falta. Un tipo con dirección propia
+ * se queda con la suya.
+ */
+const direccionFinalDe = (f) =>
+  MODALIDADES.includes("presencial") ? (f.location || DIRECCION) : (f.location ?? null);
+
 const yaEsta = (f) =>
   mismaLista(listaDe(f.modalities), finalDe(f)) &&
-  (!MODALIDADES.includes("presencial") || (f.location ?? "") === DIRECCION);
+  (!MODALIDADES.includes("presencial") || Boolean(f.location));
 
 /*
  * ── NO DEJAR UN TIPO QUE LA PANTALLA YA NO PUEDA GUARDAR (28/08/2026) ───────
@@ -218,7 +249,7 @@ const yaEsta = (f) =>
  */
 const estadoFinalDe = (f) => ({
   modalities: finalDe(f),
-  location: MODALIDADES.includes("presencial") ? DIRECCION : (f.location ?? null),
+  location: direccionFinalDe(f),
   phoneNumber: f.phone_number ?? null,
   meetUrl: f.meet_url ?? null,
 });
@@ -262,8 +293,8 @@ if (!porTocar.length) {
 for (const f of porTocar.slice(0, 10)) {
   log(`· ${f.name}${f.active ? "" : " (inactivo)"}`);
   log(`    ${JSON.stringify(listaDe(f.modalities))} → ${JSON.stringify(finalDe(f))}`);
-  if (MODALIDADES.includes("presencial") && (f.location ?? "") !== DIRECCION) {
-    log(`    dirección: ${f.location ? `«${f.location}»` : "(vacía)"} → «${DIRECCION}»`);
+  if (MODALIDADES.includes("presencial") && !f.location) {
+    log(`    dirección: (vacía) → «${DIRECCION}»`);
   }
 }
 if (porTocar.length > 10) log(`… y ${porTocar.length - 10} más.`);
@@ -304,7 +335,7 @@ try {
         replacements: {
           modalidades: JSON.stringify(finalDe(f)),
           // Si no se pide presencial, la dirección se deja como estaba.
-          direccion: MODALIDADES.includes("presencial") ? DIRECCION : (f.location ?? null),
+          direccion: direccionFinalDe(f),
           id: f.id,
         },
         transaction: t,
