@@ -228,46 +228,51 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
      * una FK rota tumbaría el insert con un error feo.
      */
     let clientId = null;
-    let fichaExterna = false;
     if (body.clientId != null && body.clientId !== "") {
       if (typeof body.clientId !== "string" || !UUID_RE.test(body.clientId)) {
         return error("clientId inválido");
       }
       const { Client } = tenantModels;
-      const ficha = Client
-        ? await Client.findByPk(body.clientId, { attributes: ["id", "esConsultaExterna"] })
-        : null;
+      // Ya no hace falta traerse `esConsultaExterna`: era lo único que decidía
+      // si se podía crear la cita sin correo, y ahora se puede siempre (ver el
+      // bloque de abajo). La columna sigue existiendo y la marca sigue
+      // significando lo que significaba para el resto del CRM.
+      const ficha = Client ? await Client.findByPk(body.clientId, { attributes: ["id"] }) : null;
       if (!ficha) return error("La ficha de cliente indicada no existe", 422);
       clientId = ficha.id;
-      fichaExterna = !!ficha.esConsultaExterna;
     }
 
     /*
-     * ⚠️ EL CORREO ES OBLIGATORIO... SALVO EN UNA CONSULTA EXTERNA (07/08/2026,
-     * Rodrigo).
+     * ⚠️ EL CONTACTO NO ES OBLIGATORIO, Y ESO ES A PROPÓSITO (28/08/2026, Jorge).
      *
-     * Para una paciente normal se sigue exigiendo, y a propósito: la cita nace
-     * confirmada y sin correo no hay confirmación, ni recordatorio, ni enlace
-     * para cancelar — se queda sin nada por escrito.
+     * Antes se exigía el correo salvo en una «consulta externa», y el teléfono
+     * siempre. El motivo que escribió Rodrigo el 07/08 para esa excepción era
+     * bueno —«exigirle un correo obligaba a inventarse uno, que es peor que no
+     * tenerlo: acaba habiendo citas apuntadas a direcciones falsas»— y resulta
+     * que vale igual fuera de las consultas externas.
      *
-     * Una consulta externa es otra cosa: viene por un acuerdo con una empresa,
-     * no tiene cuenta en la web, y muchas veces lo único que hay de ella es un
-     * teléfono. Exigirle un correo obligaba a inventarse uno, que es peor que
-     * no tenerlo: acaba habiendo citas apuntadas a direcciones falsas.
+     * Medido en producción: de los 1.050 pacientes activos de Aumenta, **164 no
+     * se podían citar** porque su familia no tiene correo ni teléfono en ningún
+     * sitio del CRM. Ese dato no existe y ningún código lo inventa.
      *
-     * Si lo tiene, se valida igual y se le avisa como a cualquiera.
+     * Y la excepción de la consulta externa se subsume sin perder nada: medido
+     * el mismo día, `es_consulta_externa` está a `false` en las 1.083 fichas de
+     * Aumenta y en las de TODOS los demás clientes. No la ha usado nadie nunca,
+     * entre otras cosas porque la pantalla era más dura que el servidor y la
+     * hacía inalcanzable.
+     *
+     * Lo que NO desaparece es el aviso: quien apunta la cita ve, antes de
+     * crearla, qué se pierde esa familia (`lib/citas/contactoCita.js`, la misma
+     * regla que usa la pantalla), y este endpoint sigue diciendo por qué no se
+     * mandó el correo (`emailEnviado` / `emailMotivo`, más abajo).
+     *
+     * El formato SÍ se sigue validando: un correo escrito a medias es un error,
+     * no un hueco.
      */
     const clientEmail = normalizeEmail(body.clientEmail);
     if (clientEmail && !isValidEmail(clientEmail)) return error("clientEmail inválido");
-    if (!clientEmail && !fichaExterna) {
-      return error(
-        "Falta el correo del paciente. Solo se puede dejar vacío en las consultas externas.",
-        422
-      );
-    }
 
     const clientPhone = normalizeString(body.clientPhone);
-    if (!clientPhone) return error("clientPhone es obligatorio");
 
     const additionalData = body.additionalData != null ? String(body.additionalData) : null;
     if (eventType.additionalDataRequired && (!additionalData || additionalData.trim() === "")) {

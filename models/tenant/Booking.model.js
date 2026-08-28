@@ -46,7 +46,15 @@ export function defineBooking(sequelize) {
       },
       clientPhone: {
         type: DataTypes.STRING,
-        allowNull: false,
+        // Opcional desde el 28/08/2026, por el mismo motivo que el correo y con
+        // seis días de retraso: aquella migración quitó la obligación del correo
+        // y dejó la del teléfono, y como la pantalla exigía los dos nadie lo
+        // notó. De los 1.050 pacientes activos de Aumenta, 164 no se podían
+        // citar porque su familia no tiene ninguno de los dos en ningún sitio
+        // del CRM. Un requisito que no se puede cumplir no protege el dato: la
+        // gente escribe cualquier cosa para poder seguir.
+        // La migración que lo suelta en la base: migrate-booking-telefono-opcional.js
+        allowNull: true,
       },
       additionalData: {
         type: DataTypes.TEXT,

@@ -286,6 +286,13 @@ export const MODULES = {
     // apunta recepción por teléfono, o que llega importada, puede no tenerlo.
     // SIN ESTO la importación de una agenda revienta a mitad.
     "migrate-booking-email-opcional",
+    // Y el teléfono, por lo mismo (28/08/2026). Aquella migración dejó el
+    // trabajo a medias sin querer: quitó la obligación del correo y dejó la del
+    // teléfono, y como la pantalla exigía los dos nadie lo notó. De los 1.050
+    // pacientes activos de Aumenta había 164 a los que no se podía citar porque
+    // su familia no tiene ninguno de los dos. SIN ESTO, crear una cita sin
+    // teléfono revienta con un 500 en vez de crearse.
+    "migrate-booking-telefono-opcional",
     // Horario propio del profesional (team_member_hours): lo usa la generación
     // de huecos de citas, pero su tabla base es team_members (por eso está
     // también en `team`).

@@ -11,6 +11,7 @@ import Select from "@/components/ui/Select.jsx";
 import BuscadorPaciente from "../../../components/citas/BuscadorPaciente.jsx";
 import SelectorPaciente from "../../../components/citas/SelectorPaciente.jsx";
 import { datosAlElegirFicha } from "../../../lib/clients/contactoDeFicha.js";
+import { repasarContactoDeCita, avisoDeContacto } from "../../../lib/citas/contactoCita.js";
 import { MODALITY_LABELS, inputCls } from "./chips.jsx";
 
 const EMPTY_BOOKING_FORM = {
@@ -288,14 +289,34 @@ export function NuevaCitaDrawer({
     if (!createForm.eventTypeId) { setFormError("Selecciona tipo de cita"); return; }
     if (!createForm.date || !createForm.time) { setFormError("Fecha y hora son obligatorias"); return; }
     if (!createForm.clientName.trim()) { setFormError("Nombre del cliente obligatorio"); return; }
-    if (!createForm.clientEmail.trim()) { setFormError("Email del cliente obligatorio"); return; }
-    if (!createForm.clientPhone.trim()) { setFormError("Teléfono del cliente obligatorio"); return; }
     // Solo si hay equipo del que elegir: sin módulo `team` el campo ni se pinta.
     if (teamMembers.length > 0 && !createForm.teamMemberId) {
       setFormError("Elige el profesional que la atiende");
       return;
     }
     if (!createForm.modality) { setFormError("Selecciona modalidad"); return; }
+
+    /*
+     * ── SIN CORREO NI TELÉFONO SE PUEDE, PERO NO EN SILENCIO (28/08/2026) ────
+     *
+     * Antes esto eran dos cortes duros y no dejaban guardar. De los 1.050
+     * pacientes activos de Aumenta, 164 no se podían citar por eso: su familia
+     * no tiene ninguno de los dos en ningún sitio del CRM, y ese dato no existe.
+     *
+     * Va aquí, al final y no arriba con los demás, porque no es un error: es una
+     * decisión. Preguntarlo antes de saber si el resto del formulario está bien
+     * sería hacerla decidir dos veces.
+     *
+     * La regla y el texto viven en `lib/citas/contactoCita.js`, los mismos que
+     * usa el servidor. Estaban escritos cuatro veces y ya divergían.
+     */
+    const aviso = avisoDeContacto(
+      repasarContactoDeCita({
+        clientEmail: createForm.clientEmail,
+        clientPhone: createForm.clientPhone,
+      })
+    );
+    if (aviso && !(await confirmar(aviso))) return;
 
     setSaving(true);
     try {
