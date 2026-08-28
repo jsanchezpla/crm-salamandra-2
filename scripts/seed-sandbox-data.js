@@ -12,6 +12,8 @@
 
 import { getTenantDb, closeAllConnections } from "../lib/db/tenantDb.js";
 import { calculateInvoice } from "../lib/billing/calculateInvoice.js";
+import { TIPOS_CITA_DEMO } from "../lib/demo/tiposCitaDemo.js";
+import { validateModalityFields } from "../lib/citas/validation.js";
 
 // Tenant destino: por defecto "sandbox", pero acepta un slug como argumento
 // (p.ej. "demo") para reutilizar este seed en otros tenants de escaparate.
@@ -344,10 +346,15 @@ async function main() {
   // ── 9. CITAS ────────────────────────────────────────────────────────────────
   await tryModule("Citas", async () => {
     const { EventType, Availability, Booking } = models;
-    const types = [
-      { name: "Primera consulta", slug: "primera-consulta", duration: 60, color: "#3B82F6", modalities: ["presencial", "online"] },
-      { name: "Sesión seguimiento", slug: "sesion-seguimiento", duration: 45, color: "#10B981", modalities: ["presencial", "online", "phone"] },
-    ];
+    const types = TIPOS_CITA_DEMO;
+    // La misma comprobación que hace la pantalla al guardar. Sembrar saltándose
+    // esta regla es lo que dejó los 8 tipos de las demos imposibles de guardar
+    // (28/08/2026): nacían aceptando presencial sin dirección. Aquí revienta el
+    // seed en vez de dejarlo pasar en silencio.
+    for (const t of types) {
+      const error = validateModalityFields(t);
+      if (error) throw new Error(`Tipo de cita "${t.name}" inválido: ${error}`);
+    }
     const ets = [];
     for (let i = 0; i < types.length; i++) {
       const [e] = await EventType.findOrCreate({ where: { slug: types[i].slug }, defaults: { ...types[i], bufferBefore: 5, bufferAfter: 5, active: true, order: i, minNoticeHours: 3, maxAdvanceDays: 60, description: "Cita de ejemplo." } });
