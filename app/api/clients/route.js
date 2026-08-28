@@ -20,6 +20,7 @@ import { normalizeGuardians } from "../../../lib/clients/guardians.js";
 import { entrarEnListaEspera } from "../../../lib/clients/listaEspera.js";
 import { filtroDeVisibilidad, normalizarCategoria, veTodasLasExternas } from "../../../lib/clients/consultaExterna.js";
 import { resolveCurrentTeamMemberId } from "../../../lib/team/currentTeamMember.js";
+import { filtroPorNombre } from "../../../lib/utils/busquedaDb.js";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("clients")) return forbidden();
@@ -82,12 +83,17 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     where.customFields = { [Op.contains]: enCustomFields };
   }
 
+  /*
+   * Todas las palabras, cada una en cualquiera de los campos (28/08/2026). Antes
+   * se buscaba la frase entera dentro de cada columna, así que «castro hugo» o
+   * «hugo díaz» no encontraban a «Hugo Castro Díaz», ni «diaz» sin tilde. El
+   * porqué, en `lib/utils/busqueda.js`.
+   */
   if (search) {
-    where[Op.or] = [
-      { name: { [Op.iLike]: `%${search}%` } },
-      { email: { [Op.iLike]: `%${search}%` } },
-      { phone: { [Op.iLike]: `%${search}%` } },
-    ];
+    const porNombre = await filtroPorNombre(Client.sequelize, search, [
+      "Client.name", "Client.email", "Client.phone",
+    ]);
+    if (porNombre) (where[Op.and] ||= []).push(porNombre);
   }
 
   // ── Ordenación (04/08/2026) ───────────────────────────────────────────────

@@ -14,13 +14,13 @@
 | **Pantallas** | Panel: `app/(dashboard)/soporte/page.jsx` (`/soporte`, el único `page.jsx`; bandeja, detalle, informes y configuración son vistas dentro; deep-links `?ticket=` y `?client=`). Se llega desde la llave inglesa del pie del sidebar (`components/layout/Sidebar.jsx`), sin entrada de menú propia. Públicas (portal del cliente final): `app/widget/c/[tenantSlug]/soporte/page.jsx` (abrir ticket) y `app/widget/c/[tenantSlug]/soporte/t/[token]/page.jsx` (seguimiento y respuesta). |
 | **Endpoints** | `app/api/tickets/**` — 11 `route.js` con `hasModule("support")`: raíz (bandeja y alta), `[id]`, `[id]/messages`, `[id]/ai`, `categories` (+ `[id]`), `templates` (+ `[id]`), `settings`, `stats`, `attachments/[attachmentId]`. Públicos: `app/api/public/c/[tenantSlug]/soporte/**` — 3 (`soporte`, `t/[token]`, `t/[token]/attachments/[attachmentId]`), con `withPublicTenant` + `enforceRateLimit`. Webhook: `app/api/webhooks/resend-inbound/route.js` (correo entrante de Resend, firma svix a mano; encamina por `soporte-{slug}@…`). |
 | **Lógica** | `lib/support/` (6): `sla.js` (plazos por prioridad, `computeDueDates`, estado por hito; desde el 20/08/2026 `DEFAULT_SLA` está congelado también por dentro y un `from` ilegible cuenta desde AHORA en vez de dar `Invalid Date`), `notify.js` (campana + emails por Resend, `captureAddress`, reply-to; guard de demo), `serialize.js` (forma de la API y del portal, `ticketRef`), `context.js` (settings, rol admin, autor efectivo), `ai.js` (resumen/borrador/clasificación con la clave BYOK), `ticketStorage.js` (adjuntos en `uploads/support/{slug}/{ticketId}/`, 10 MB). Fuera: `lib/email/templates/soporte/{ticketClient,ticketTeam}.js`, `lib/notifications/alerts.js` (`syncSupportAlerts`, tipo `ticket_sla`), `lib/demo/isDemo.js` (`demoForcesFakeAi`, `isDemoTenant`). |
-| **UI** | `modules/support/`: `SupportModule.jsx` (bandeja + fallback sin módulo), `TicketDetail.jsx` (drawer: hilo, propiedades, composer, SLA por ticket), `NewTicketModal.jsx`, `SupportReports.jsx`, `SupportConfig.jsx` (portal, SLA, avisos, correo, IA, categorías, plantillas), `supportUi.js` (etiquetas y colores). Sin `components/support/`. |
+| **UI** | `modules/support/`: `SupportModule.jsx` (bandeja + fallback sin módulo), `TicketDetail.jsx` (drawer: hilo, propiedades, composer, SLA por ticket), `NewTicketModal.jsx` (su selector de cliente pregunta al SERVIDOR según se escribe desde el 28/08/2026 — ver abajo), `SupportReports.jsx`, `SupportConfig.jsx` (portal, SLA, avisos, correo, IA, categorías, plantillas), `supportUi.js` (etiquetas y colores). Sin `components/support/`. |
 | **Modelos** | `models/tenant/`: `Ticket` (`tickets`), `TicketMessage` (`ticket_messages`), `TicketAttachment` (`ticket_attachments`), `TicketCategory` (`ticket_categories`), `TicketTemplate` (`ticket_templates`), `SupportSettings` (`support_settings`, una fila). El nº TK lo pone la secuencia `ticket_number_seq` de cada schema, no la app. |
 | **Interruptores y parámetros** | ninguno que lea el código. Lo configurable vive en `support_settings` (`slaEnabled`, `slaConfig`, `portalEnabled`, `portalIntro`, `autoClassify`, `notifyEmails`, `supportEmail`) y en dos variables de plataforma, `RESEND_INBOUND_DOMAIN` + `RESEND_WEBHOOK_SECRET` (las DOS, o no hay dirección de captura). |
 | **Pantallas propias** | ninguna (`app/(dashboard)/soporte/page.jsx` tiene el mapa `UI_OVERRIDES` vacío; en producción ningún `support` lleva `ui_override`). |
 | **Scripts** | Activación: `node scripts/enable-module.js <slug> support` (corre `migrate-support-module.js`, la única de `MODULES.support` en `scripts/_module-migrations.js`: crea por módulo activo y blinda por existencia de `tickets`). Seed: `seed-support-demo.js` (solo demo; después `demo-golden-snapshot.js` para que el reset del login la conserve). Comprobar el correo: `check-resend-tenant.mjs` (solo lectura, cliente a cliente) y `check-resend.mjs` (la cuenta de plataforma). |
 | **Pruebas** | `scripts/_smoke-correo-entrante.mjs` (firma svix, encaminado, alta por correo, hilo, `TK-0042` en el asunto, duplicados, reapertura) — necesita servidor y base de datos, NO entra en `npm test` · `scripts/_smoke-support-sla.mjs` (`node:test`, 19/08/2026, en `npm test`): lo que devuelve `lib/support/sla.js` (plazos por prioridad con `from` fijo, `effectiveSla` sobre los ajustes del tenant sin tocar `DEFAULT_SLA`, los cinco estados de `slaState`, `isSlaBreached`; desde el 20/08/2026 también que las cuatro prioridades de `DEFAULT_SLA` están congeladas —escribir en ellas revienta— y que con un `from` roto salen dos fechas de verdad contadas desde ahora, mientras `null` sigue queriendo decir solo «SLA apagado») · `scripts/_smoke-support-serialize-buzon.mjs` (`node:test`, 20/08/2026, en `npm test`) en su mitad de soporte: `lib/support/serialize.js` —la vista pública del portal fijada campo a campo con un `deepEqual`, para que cualquier campo que se cuele reviente en rojo: ni notas internas del hilo, ni correo o teléfono del solicitante, ni plazos del SLA, ni `portalToken` salen por `serializePortalTicket`; y la forma exacta de lo que ve el equipo (`serializeTicket`, mensajes, adjuntos, categorías, plantillas, ajustes) con sus defaults—; su otra mitad es del Buzón (ver `buzon.md`) · `scripts/_smoke-plantillas-resto-layout.mjs` (`node:test`, 21/08/2026, ligera, en `npm test`) fija los dos correos de ticket —`soporte/ticketClient` y `soporte/ticketTeam`— y sus variantes por `kind`: cada una con su asunto y su titular, un `kind` desconocido (o ninguno) cae en la variante genérica y no en blanco, el número y el asunto del ticket salen en las DOS versiones, y la respuesta solo se pega en el `kind` `reply` —respetando los saltos de línea— sin dejar una cita vacía si falta |
-| **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (auditoría con RESUMEN: los tickets llevan datos personales; guard de la demo en los envíos) · `../decisions/2026-08-10-las-listas-copiadas-a-mano-mienten.md` (la tarea falsa «`support` solo en local» salió de la tabla de módulos). |
+| **Decisiones** | `../decisions/2026-08-28-buscar-por-nombre-y-apellidos.md` (el techo de 200 fichas del selector de cliente) · `../decisions/2026-07-28-repaso-de-seguridad.md` (auditoría con RESUMEN: los tickets llevan datos personales; guard de la demo en los envíos) · `../decisions/2026-08-10-las-listas-copiadas-a-mano-mienten.md` (la tarea falsa «`support` solo en local» salió de la tabla de módulos). |
 | **En este doc** | Modelos (`models/tenant/`) · SLA (`lib/support/sla.js`) · Flujo de estados · API interna (`app/api/tickets/*`, gate `hasModule("support")`) · Portal público (`/widget/c/{slug}/soporte`) · UI dashboard (`modules/support/`) · Conversación por CORREO (bidireccional, 2026-07-27 tarde) · Campana y emails |
 
 Helpdesk con el que el TENANT atiende a **sus** clientes: tickets numerados
@@ -37,6 +37,42 @@ público para el cliente final. Implementado 2026-07-27 (fases 1–3 completas).
   nosotros). La llave inglesa del pie del sidebar la ve todo el mundo, con o
   sin módulo.
 - `Incidencia` (Clínica): helpdesk interno del Programa de Excelencia.
+
+
+## El selector de cliente del ticket nuevo (28/08/2026)
+
+La caja «Buscar cliente…» de «Nuevo ticket» **pregunta al servidor** según se
+escribe, con 300 ms de espera, como el buscador de Pacientes.
+
+Antes no: se bajaba `/api/clients?limit=200` al abrir el modal y se filtraba esa
+lista en el navegador. Con las **1.083 fichas** de Aumenta eso dejaba a **883
+familias** fuera del alcance escribieras lo que escribieras — y la caja
+contestaba «Sin resultados», que es exactamente lo que contesta cuando una ficha
+no existe. **Un techo callado se lee como una ausencia.**
+
+Y no se arreglaba subiendo el número: `app/api/clients/route.js` corta el
+`limit` en 200 por su cuenta (`Math.min(..., 200)`), así que pedir más no trae
+más.
+
+Cómo quedó, y por qué cada pieza:
+
+- **Al abrir** se piden 8 fichas. Sirven para dos cosas: saber si el centro
+  tiene el módulo (un 403 esconde el campo entero y el ticket nace con el
+  solicitante escrito a mano) y no recibir a nadie con una caja vacía.
+- **Al escribir** se piden 20 con `?search=`. Cada petición lleva número: si una
+  lenta contesta después de otra más nueva, se tira. Sin eso, escribir deprisa
+  deja en pantalla el resultado de una consulta vieja.
+- **Si hay más coincidencias que sitio, se dice** («N fichas coinciden; se
+  enseñan 20»). Es la mitad que faltaba: el problema no era solo el tope, era
+  que el tope no se veía.
+- **La ficha prefijada** (cuando se abre el modal desde la bandeja filtrada por
+  un cliente) se pide por su id, `/api/clients/{id}`. Antes se buscaba dentro de
+  la lista descargada, así que una ficha que no estuviera en ella salía como
+  «sin elegir» aunque el ticket sí fuera a nacer con ella.
+
+Las guardas están en `scripts/_smoke-busqueda-nombre.mjs`: que no vuelva el
+`limit=200`, que lo escrito viaje al servidor, que no se vuelva a filtrar en el
+navegador lo que ya viene filtrado, y que el aviso de «hay más» siga puesto.
 
 ## Modelos (`models/tenant/`)
 

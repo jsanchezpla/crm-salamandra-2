@@ -9,6 +9,7 @@ import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 import Select from "@/components/ui/Select.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
+import { coincidePorNombre } from "../../../../lib/utils/busqueda.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -107,16 +108,19 @@ export default function CobrosPage() {
   // method y status se filtran en backend; aquí solo búsqueda libre por texto
   const filtered = useMemo(() => {
     if (!search) return payments;
-    return payments.filter((p) => {
-      const hay = [
+  // Todas las palabras, cada una en cualquiera de los campos (28/08/2026): antes
+  // había que escribirlo en el mismo orden que la ficha y con las tildes puestas.
+  // Los campos van en ARRAY a propósito: pegados con join(" ") la búsqueda podía
+  // casar a caballo entre dos campos y marcar a quien no era.
+    return payments.filter((p) =>
+      coincidePorNombre(search, [
         p.clientName,
         p.invoice?.number,
         METHOD_LABELS[p.method] ?? p.method,
         p.notes,
         p.amount?.toString(),
-      ].filter(Boolean).join(" ").toLowerCase();
-      return hay.includes(search);
-    });
+      ])
+    );
   }, [payments, search]);
 
   const totalCollected = useMemo(

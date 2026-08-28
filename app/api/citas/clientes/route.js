@@ -1,4 +1,5 @@
 import { Op } from "sequelize";
+import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 
@@ -57,13 +58,14 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
      * verlas.
      */
     const where = {};
+    // Todas las palabras, cada una en cualquiera de los campos (28/08/2026): en
+    // recepción se teclea el nombre como lo dice quien llama, y antes «castro
+    // hugo» o «diaz» sin tilde no encontraban la ficha.
     if (q) {
-      const patron = `%${q}%`;
-      where[Op.or] = [
-        { name: { [Op.iLike]: patron } },
-        { email: { [Op.iLike]: patron } },
-        { phone: { [Op.iLike]: patron } },
-      ];
+      const porNombre = await filtroPorNombre(Client.sequelize, q, [
+        "Client.name", "Client.email", "Client.phone",
+      ]);
+      if (porNombre) (where[Op.and] ||= []).push(porNombre);
     }
 
     // Restricción a quienes son pacientes de algún módulo asistencial.

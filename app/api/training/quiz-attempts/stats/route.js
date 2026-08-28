@@ -1,5 +1,7 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, serverError } from "../../../../../lib/utils/apiResponse.js";
+import { palabrasDe, escaparLike } from "../../../../../lib/utils/busqueda.js";
+import { hasUnaccentSupport } from "../../../../../lib/utils/busquedaDb.js";
 
 /**
  * GET /api/training/quiz-attempts/stats?search=&companyName=&courseId=&quizId=
@@ -42,6 +44,22 @@ export const GET = withTenant(async (request, _ctx, { tenantSequelize, hasModule
     const courseId = courseIdRaw ? parseInt(courseIdRaw, 10) : null;
     const quizId = quizIdRaw ? parseInt(quizIdRaw, 10) : null;
 
+    /*
+     * ¿Se pueden ignorar las tildes? Se pregunta UNA vez aquí porque
+     * `buildRawWhere` es síncrona y se llama varias veces. Si la base no
+     * tuviera `unaccent`, se busca igual pero distinguiendo tildes: se pierde
+     * comodidad, no resultados de los que ya salían.
+     */
+    const conTildes = await hasUnaccentSupport(tenantSequelize);
+    const campo = (c) => (conTildes ? `unaccent(lower(${c}))` : `lower(${c})`);
+    // El `$` del parámetro y el `::text` NO son adorno. Sin el `$` se escribe el
+    // número a pelo y sale `unaccent(5)`; sin el tipo, un parámetro suelto dentro
+    // de `unaccent()` no tiene tipo y Postgres no sabe cuál de sus dos versiones
+    // usar. Las dos cosas dan lo mismo: «no existe la función unaccent(integer)»,
+    // un 500 en cuanto alguien escribe algo en la caja. Aquí no hay modelo que
+    // ponga el tipo por nosotros, como sí hace Sequelize en el resto.
+    const patron = (n) => (conTildes ? `unaccent($${n}::text)` : `$${n}`);
+
     // WHERE crudo compartido. includeQuizId controla si añadimos el filtro
     // por wp_quiz_id (necesario en modo B, omitido en modo A para los
     // rankings globales).
@@ -64,12 +82,29 @@ export const GET = withTenant(async (request, _ctx, { tenantSequelize, hasModule
         binds.push(quizId);
         idx++;
       }
+      /*
+       * Todas las palabras, cada una en cualquiera de los cuatro campos
+       * (28/08/2026) — la MISMA regla que la tabla de abajo
+       * (`app/api/training/quiz-attempts/route.js`). Tienen que ir a la par: si
+       * la cabecera contara con una regla y la tabla con otra, quien busque
+       * «hugo castro» vería tres filas debajo de un total que dice 0.
+       *
+       * Una cláusula por palabra, con su propio parámetro, respetando la
+       * numeración que lleva `idx` (los rankings arrancan en `startIdx`). Los
+       * nombres de columna son constantes escritas aquí, nunca vienen de la
+       * petición; lo que escribe la persona viaja SOLO por `binds`.
+       */
       if (search) {
-        clauses.push(
-          `(student_name ILIKE $${idx} OR student_email ILIKE $${idx} OR quiz_title ILIKE $${idx} OR course_title ILIKE $${idx})`
-        );
-        binds.push(`%${search}%`);
-        idx++;
+        for (const palabra of palabrasDe(search)) {
+          clauses.push(
+            `(${campo("student_name")} LIKE ${patron(idx)}` +
+            ` OR ${campo("student_email")} LIKE ${patron(idx)}` +
+            ` OR ${campo("quiz_title")} LIKE ${patron(idx)}` +
+            ` OR ${campo("course_title")} LIKE ${patron(idx)})`
+          );
+          binds.push(`%${escaparLike(palabra)}%`);
+          idx++;
+        }
       }
       return {
         whereSql: clauses.length ? "WHERE " + clauses.join(" AND ") : "",

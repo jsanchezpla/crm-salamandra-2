@@ -1,4 +1,7 @@
 import { esEstadoDeFicha } from "../../../../lib/clients/estados.js";
+import { filtroDeVisibilidad } from "../../../../lib/clients/consultaExterna.js";
+import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
+import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { forbidden } from "../../../../lib/utils/apiResponse.js";
 import { Op } from "sequelize";
@@ -22,22 +25,56 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   const status = searchParams.get("status");
   const country = searchParams.get("country");
   const search = searchParams.get("search");
+  // Qué es el contratante (festival, sala, ayuntamiento…). La pantalla YA lo
+  // mandaba —con un comentario que decía que bajar «festivales» y recibir los
+  // 183 sería una sorpresa cara— y este fichero no lo leía: la sorpresa estaba
+  // pasando (28/08/2026).
+  const categoria = searchParams.get("categoria");
 
   // El mismo filtro por estado de ficha que el listado: si el Excel no lo
   // respetara, exportar «los que no vinieron» daría la cartera entera.
   const estado = searchParams.get("estado");
   if (esEstadoDeFicha(estado)) where.status = String(estado).trim();
-  if (status) where.customFields = { [Op.contains]: { seStatus: status } };
-  if (country && !status) where.customFields = { [Op.contains]: { country } };
-  if (country && status) where.customFields = { [Op.contains]: { seStatus: status, country } };
-  if (search) {
-    where[Op.or] = [
-      { name: { [Op.iLike]: `%${search}%` } },
-      { email: { [Op.iLike]: `%${search}%` } },
-    ];
+  // Los filtros de `customFields` se juntan en UN solo `Op.contains`, igual que
+  // en el listado: escritos como `if` encadenados, cada filtro nuevo duplicaba
+  // las combinaciones y siempre se quedaba alguna sin escribir.
+  const enCustomFields = {};
+  if (status) enCustomFields.seStatus = status;
+  if (country) enCustomFields.country = country;
+  if (categoria) enCustomFields.categoria = categoria;
+  if (Object.keys(enCustomFields).length) {
+    where.customFields = { [Op.contains]: enCustomFields };
   }
 
-  const clients = await Client.findAll({ where, order: [["createdAt", "DESC"]] });
+  /*
+   * Todas las palabras, cada una en cualquiera de los campos (28/08/2026). Antes
+   * se buscaba la frase entera dentro de cada columna, así que «castro hugo» o
+   * «hugo díaz» no encontraban a «Hugo Castro Díaz», ni «diaz» sin tilde. El
+   * porqué, en `lib/utils/busqueda.js`.
+   */
+  if (search) {
+    // Se busca también por teléfono, como en la lista: si el Excel busca
+    // distinto que la pantalla, trae filas que no se estaban viendo.
+    const porNombre = await filtroPorNombre(Client.sequelize, search, [
+      "Client.name", "Client.email", "Client.phone",
+    ]);
+    if (porNombre) (where[Op.and] ||= []).push(porNombre);
+  }
+
+  /*
+   * «Consultas externas»: el Excel NO lo respetaba y la lista sí (28/08/2026).
+   * Era una puerta lateral a la regla de Rodrigo del 07/08/2026 —esos pacientes
+   * solo los ven admin y quien los lleva—: cualquiera con el módulo podía
+   * bajarse un Excel con los de otra profesional. Hoy no hay ni una ficha
+   * marcada como externa en producción, así que no se ha escapado nada; se
+   * cierra antes de que la haya.
+   */
+  const rolQuienMira = request.headers.get("x-user-role") ?? "user";
+  const soyDelEquipo = hasModule("team") ? await resolveCurrentTeamMemberId(request, tenantModels) : null;
+  const filtroExternas = filtroDeVisibilidad(rolQuienMira, soyDelEquipo);
+  const whereFinal = filtroExternas ? { [Op.and]: [where, filtroExternas] } : where;
+
+  const clients = await Client.findAll({ where: whereFinal, order: [["createdAt", "DESC"]] });
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "CRM Salamandra";

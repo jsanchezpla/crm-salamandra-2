@@ -1,4 +1,5 @@
 import { Op } from "sequelize";
+import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { filtrarCitas } from "../../../../lib/citas/dinero.js";
@@ -101,14 +102,14 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
     else if (filtroCliente.length > 1) grupos.push({ [Op.or]: filtroCliente });
 
     const q = (searchParams.get("search") || "").trim();
+      // Todas las palabras, cada una en cualquiera de los campos (28/08/2026):
+      // antes «castro hugo» no encontraba a «Hugo Castro Díaz», ni «diaz» sin
+      // tilde. Ver `lib/utils/busqueda.js`.
     if (q) {
-      grupos.push({
-        [Op.or]: [
-          { clientName: { [Op.iLike]: `%${q}%` } },
-          { clientEmail: { [Op.iLike]: `%${q}%` } },
-          { clientPhone: { [Op.iLike]: `%${q}%` } },
-        ],
-      });
+      const porNombre = await filtroPorNombre(Booking.sequelize, q, [
+        "Booking.client_name", "Booking.client_email", "Booking.client_phone",
+      ]);
+      if (porNombre) grupos.push(porNombre);
     }
     // Fuera los carritos abandonados: alguien empezó a reservar, se fue a pagar
     // y no volvió. Esas filas se quedan en 'pending' y aparecían en la lista de

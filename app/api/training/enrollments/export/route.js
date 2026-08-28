@@ -2,7 +2,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { error } from "../../../../../lib/utils/apiResponse.js";
 import { ForbiddenError } from "../../../../../lib/utils/errors.js";
 import { Op } from "sequelize";
-import { filtroPorNombre } from "../../../../../lib/utils/busqueda.js";
+import { filtroPorNombre } from "../../../../../lib/utils/busquedaDb.js";
 import ExcelJS from "exceljs";
 
 export const GET = withTenant(async (request, _ctx, { tenantModels, tenantSequelize, hasModule }) => {

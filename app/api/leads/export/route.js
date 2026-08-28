@@ -1,6 +1,7 @@
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ForbiddenError } from "../../../../lib/utils/errors.js";
 import { Op } from "sequelize";
+import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 import ExcelJS from "exceljs";
 import { STAGE_LABELS } from "../../../../lib/leads/stages.js";
 
@@ -94,12 +95,18 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule, t
 
   if (stage) where.stage = stage;
   if (empresa) where.customFields = { [Op.contains]: { empresa } };
+  /*
+   * Todas las palabras, cada una en cualquiera de los campos (28/08/2026). Antes
+   * se buscaba la frase entera dentro de cada columna, así que «castro hugo» o
+   * «hugo díaz» no encontraban a «Hugo Castro Díaz», ni «diaz» sin tilde. El
+   * porqué, en `lib/utils/busqueda.js`.
+   */
   if (search) {
-    where[Op.or] = [
-      { name: { [Op.iLike]: `%${search}%` } },
-      { email: { [Op.iLike]: `%${search}%` } },
-      { phone: { [Op.iLike]: `%${search}%` } },
-    ];
+    // Con `title`, como la lista: el Excel tiene que traer lo que se ve.
+    const porNombre = await filtroPorNombre(Lead.sequelize, search, [
+      "Lead.name", "Lead.email", "Lead.phone", "Lead.title",
+    ]);
+    if (porNombre) (where[Op.and] ||= []).push(porNombre);
   }
 
   const leads = await Lead.findAll({ where, order: [["createdAt", "DESC"]] });

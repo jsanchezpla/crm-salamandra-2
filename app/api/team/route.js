@@ -1,4 +1,5 @@
 import { Op } from "sequelize";
+import { filtroPorNombre } from "../../../lib/utils/busquedaDb.js";
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../lib/db/masterDb.js";
@@ -121,10 +122,16 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
     if (q) {
       // Con la lista recortada NO se busca por correo: devolver un correo está
       // cerrado, así que poder adivinarlo letra a letra también.
-      const porNombre = { displayName: { [Op.iLike]: `%${q}%` } };
-      where[Op.and] = [
-        listaReducida ? porNombre : { [Op.or]: [porNombre, { email: { [Op.iLike]: `%${q}%` } }] },
-      ];
+      //
+      // Y todas las palabras, cada una en cualquiera de los campos (28/08/2026):
+      // antes «gómez laura» no encontraba a «Laura Gómez Ruiz», ni «gomez» sin
+      // tilde. Ver `lib/utils/busqueda.js`.
+      const porNombre = await filtroPorNombre(TeamMember.sequelize, q, ["TeamMember.display_name"]);
+      const porNombreYCorreo = await filtroPorNombre(TeamMember.sequelize, q, [
+        "TeamMember.display_name", "TeamMember.email",
+      ]);
+      const filtro = listaReducida ? porNombre : porNombreYCorreo;
+      if (filtro) (where[Op.and] ||= []).push(filtro);
     }
 
     const { count, rows } = await TeamMember.findAndCountAll({

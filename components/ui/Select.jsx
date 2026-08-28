@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { coincidePorNombre } from "../../lib/utils/busqueda.js";
 
 /**
  * Select — desplegable propio con control total del estilo.
@@ -43,10 +44,14 @@ export default function Select({
   // Sin searchable (o sin texto) => todas las opciones, comportamiento idéntico al previo.
   const filtered = useMemo(() => {
     if (!searchable || !query.trim()) return options;
-    const q = query.trim().toLowerCase();
     // Las opciones `pinned` (p.ej. acciones "+ Añadir nuevo" o "Texto libre") no se
     // filtran nunca: deben seguir visibles justo cuando la búsqueda no encuentra nada.
-    return options.filter((o) => o.pinned || String(o.label).toLowerCase().includes(q));
+    //
+    // Todas las palabras, en cualquier orden y sin tildes (28/08/2026): antes
+    // «laura ruiz» no encontraba a «Laura Gómez Ruiz» y «gomez» no encontraba a
+    // «Gómez». Este desplegable lo usa medio CRM, así que se arregla en todos a
+    // la vez. Ver `lib/utils/busqueda.js`.
+    return options.filter((o) => o.pinned || coincidePorNombre(query, [o.label]));
   }, [options, query, searchable]);
 
   // La seleccionada se calcula sobre TODAS las opciones (para el texto del trigger).

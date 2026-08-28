@@ -7,6 +7,7 @@ import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import { fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
+import { coincidePorNombre } from "../../../../lib/utils/busqueda.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -65,10 +66,22 @@ export default function RecurrentesPage() {
   // Sort en backend; búsqueda libre en cliente sobre el array ya ordenado.
   const filtered = useMemo(() => {
     if (!search) return items;
-    return items.filter((r) => {
-      const hay = [r.client?.name, r.frequency, r.active ? "activa" : "pausada"].filter(Boolean).join(" ").toLowerCase();
-      return hay.includes(search);
-    });
+  // Todas las palabras, cada una en cualquiera de los campos (28/08/2026): antes
+  // había que escribirlo en el mismo orden que la ficha y con las tildes puestas.
+  // Los campos van en ARRAY a propósito: pegados con join(" ") la búsqueda podía
+  // casar a caballo entre dos campos y marcar a quien no era.
+    //
+    // La frecuencia se busca por su ETIQUETA además de por la clave: la caja
+    // promete «Buscar por cliente, frecuencia, estado…» y la tabla pinta
+    // «Mensual», pero aquí solo se miraba `monthly`.
+    return items.filter((r) =>
+      coincidePorNombre(search, [
+        r.client?.name,
+        FREQ_LABELS[r.frequency] ?? r.frequency,
+        r.frequency,
+        r.active ? "activa" : "pausada",
+      ])
+    );
   }, [items, search]);
 
   async function handleCreate(e) {

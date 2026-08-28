@@ -1,4 +1,5 @@
 import { Op } from "sequelize";
+import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { logBillingAudit, resumenImporte, datosPeticion } from "../../../../lib/billing/audit.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
@@ -24,13 +25,18 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     if (searchParams.get("projectId")) where.projectId = searchParams.get("projectId");
 
     const q = (searchParams.get("q") || "").trim();
+    /*
+     * Todas las palabras, cada una en cualquiera de los campos (28/08/2026):
+     * antes «castro hugo» no encontraba la factura de «Hugo Castro Díaz», ni
+     * «diaz» sin tilde. Ver `lib/utils/busqueda.js`.
+     *
+     * El cliente va con el alias de la ASOCIACIÓN en minúscula (`client`), que
+     * es lo mismo a lo que apuntaba `"$client.name$"`. El número de factura,
+     * con el del modelo.
+     */
     if (q) {
-      where[Op.and] = [{
-        [Op.or]: [
-          { number: { [Op.iLike]: `%${q}%` } },
-          { "$client.name$": { [Op.iLike]: `%${q}%` } },
-        ],
-      }];
+      const porNombre = await filtroPorNombre(Quote.sequelize, q, ["Quote.number", "client.name"]);
+      if (porNombre) (where[Op.and] ||= []).push(porNombre);
     }
 
     const allowedSort = {

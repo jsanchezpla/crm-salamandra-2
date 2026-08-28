@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Op } from "sequelize";
 import { verifyApiKey } from "../../../../../lib/utils/apiKeyAuth.js";
 import { getTenantDb } from "../../../../../lib/db/tenantDb.js";
-import { filtroPorNombre } from "../../../../../lib/utils/busqueda.js";
+import { filtroPorNombre } from "../../../../../lib/utils/busquedaDb.js";
 
 const SLUG = "retorika";
 const AUTO_PAGINATE_THRESHOLD = 500;

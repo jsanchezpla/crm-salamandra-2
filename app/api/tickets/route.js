@@ -16,6 +16,7 @@ import { computeDueDates } from "@/lib/support/sla.js";
 import { serializeTicket } from "@/lib/support/serialize.js";
 import { notifyAssignment, emailClient, requestBaseUrl } from "@/lib/support/notify.js";
 import { resolveCurrentTeamMemberId } from "@/lib/team/currentTeamMember.js";
+import { filtroPorNombre } from "@/lib/utils/busquedaDb.js";
 
 /**
  * GET /api/tickets — la bandeja.
@@ -65,11 +66,13 @@ export const GET = withTenant(async (request, _rc, ctx) => {
       if (num) {
         where.number = Number(num[1]);
       } else {
-        where[Op.or] = [
-          { title: { [Op.iLike]: `%${q}%` } },
-          { requesterName: { [Op.iLike]: `%${q}%` } },
-          { requesterEmail: { [Op.iLike]: `%${q}%` } },
-        ];
+        // Todas las palabras, cada una en cualquiera de los campos
+        // (28/08/2026): antes «castro hugo» no encontraba el ticket de «Hugo
+        // Castro Díaz», ni «diaz» sin tilde. Ver `lib/utils/busqueda.js`.
+        const porNombre = await filtroPorNombre(Ticket.sequelize, q, [
+          "Ticket.title", "Ticket.requester_name", "Ticket.requester_email",
+        ]);
+        if (porNombre) (where[Op.and] ||= []).push(porNombre);
       }
     }
 

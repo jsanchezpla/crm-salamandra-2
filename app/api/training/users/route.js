@@ -2,7 +2,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, forbidden, error } from "../../../../lib/utils/apiResponse.js";
 import { ForbiddenError, ValidationError } from "../../../../lib/utils/errors.js";
 import { Op } from "sequelize";
-import { filtroPorNombre } from "../../../../lib/utils/busqueda.js";
+import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const ADMIN_DENY = "Solo administradores pueden modificar este recurso";

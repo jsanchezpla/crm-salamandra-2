@@ -4,7 +4,7 @@ import { ok, created, error, forbidden } from "../../../lib/utils/apiResponse.js
 import { serializePatient } from "../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../lib/clinica/audit.js";
 import { normalizeConsents } from "../../../lib/clinica/consents.js";
-import { filtroPorNombre } from "../../../lib/utils/busqueda.js";
+import { filtroPorNombre } from "../../../lib/utils/busquedaDb.js";
 import { normalizeSpecialties, deriveCareType, SPECIALTY_KEYS } from "../../../lib/clinica/specialties.js";
 import {
   terapeutasDe, referenciaDe, conReferencia, listaDe, terapeutasEfectivos,

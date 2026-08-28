@@ -1,6 +1,7 @@
 import { withTenant } from "../../../lib/tenant/withTenant.js";
 import { ok, created, forbidden, error } from "../../../lib/utils/apiResponse.js";
 import { Op } from "sequelize";
+import { filtroPorNombre } from "../../../lib/utils/busquedaDb.js";
 
 /**
  * Proveedores — a quién le compra el centro.
@@ -29,12 +30,17 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 
   const where = {};
   if (!incluirInactivos) where.active = true;
+  /*
+   * Todas las palabras, cada una en cualquiera de los campos (28/08/2026). Antes
+   * se buscaba la frase entera dentro de cada columna, así que «castro hugo» o
+   * «hugo díaz» no encontraban a «Hugo Castro Díaz», ni «diaz» sin tilde. El
+   * porqué, en `lib/utils/busqueda.js`.
+   */
   if (search) {
-    where[Op.or] = [
-      { name: { [Op.iLike]: `%${search}%` } },
-      { taxId: { [Op.iLike]: `%${search}%` } },
-      { contactName: { [Op.iLike]: `%${search}%` } },
-    ];
+    const porNombre = await filtroPorNombre(Supplier.sequelize, search, [
+      "Supplier.name", "Supplier.tax_id", "Supplier.contact_name",
+    ]);
+    if (porNombre) (where[Op.and] ||= []).push(porNombre);
   }
 
   const suppliers = await Supplier.findAll({ where, order: [["name", "ASC"]] });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { coincidePorNombre } from "../../lib/utils/busqueda.js";
 
 /**
  * MultiSelect — el hermano de `Select.jsx` para elegir VARIAS cosas.
@@ -66,8 +67,10 @@ export default function MultiSelect({
 
   const filtered = useMemo(() => {
     if (!searchable || !query.trim()) return options;
-    const q = query.trim().toLowerCase();
-    return options.filter((o) => String(o.label).toLowerCase().includes(q));
+    // Todas las palabras, en cualquier orden y sin tildes (28/08/2026). En la
+    // agenda de Aumenta son 15 profesionales y 57 tipos de cita: quien recordaba
+    // el segundo apellido y no el primero se quedaba sin filtro.
+    return options.filter((o) => coincidePorNombre(query, [o.label]));
   }, [options, query, searchable]);
 
   const close = useCallback(() => {

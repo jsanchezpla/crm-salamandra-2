@@ -134,31 +134,97 @@ Se cuenta aquí porque es la moraleja de la tarde: **el arreglo no estaba
 probado hasta que se probó contra la base**. Leído, el código de Matrículas
 parecía correcto.
 
-## Lo que NO se ha tocado
+## La segunda tanda: los quince que quedaban
 
-Hay unos quince buscadores más que comparten el fondo del problema pero **no el
-síntoma**: los que miran una sola columna con el nombre completo (`clients.name`,
-`team_members.display_name`, `bookings.client_name`, `leads.name`…). Ahí «hugo
-castro» **sí** encuentra a «Hugo Castro Díaz», porque esa frase está entera
-dentro de la columna. Lo que falla es escribirlo al revés («castro hugo»),
-saltarse un apellido («hugo díaz») o escribirlo sin tildes.
+El mismo día, Jorge: «ponte a hacerlas». Los quince buscadores que se habían
+dejado fuera **no tenían el síntoma** —miran una sola columna con el nombre
+completo, así que «hugo castro» sí encontraba a «Hugo Castro Díaz»— pero sí el
+fondo: había que escribirlo **en el mismo orden que la ficha y con las tildes
+puestas**. Ya están todos con la misma regla.
 
-No se han tocado, y es una decisión, no un olvido: son quince pantallas de seis
-módulos, no es lo que se rompió, y cambiarlas todas a la vez sin que nadie lo
-haya pedido es mucho más riesgo del que resuelve. Queda apuntado en el Registro
-con la lista exacta para decidirlo con calma. Cuando se haga, la pieza ya está
-escrita: es una línea por endpoint.
+En el **servidor** (`filtroPorNombre`): Clientes y su Excel, Leads y su Excel,
+Equipo, Proveedores, Citas (la lista de reservas y el selector del alta
+manual), Soporte, Correo → destinatarios (sus cuatro fuentes), Facturas,
+Presupuestos y su Excel, y Cuestionarios por sus tres puertas.
 
-Dos cosas que salieron del barrido y **tampoco** son esto, apuntadas para no
-perderlas:
+En el **navegador** (`coincidePorNombre`): el desplegable con buscador que
+comparte todo el CRM (`components/ui/Select.jsx`), el filtro de profesional de
+la agenda (`MultiSelect.jsx`), las Pautas de Laura y las cinco pantallas de
+Facturación.
 
-- **Soporte → Nuevo ticket** solo descarga las 200 primeras fichas de cliente,
-  así que en Aumenta (1.083) la mayoría de la gente no aparece **escribas lo que
-  escribas**. Eso no es un problema de búsqueda, es un techo.
-- **Correo → destinatarios** junta el nombre de la familia, su correo, los
-  tutores y los pacientes en una sola cadena antes de buscar, así que puede dar
-  **falsos positivos**: una búsqueda casa a caballo entre dos campos pegados.
+### Lo que obligó a partir la pieza en dos
 
+`lib/utils/busqueda.js` nació importando Sequelize. En cuanto tocó usarla en
+`components/ui/Select.jsx` —un componente de cliente— eso habría metido
+Sequelize en el paquete del navegador. Se partió en el acto:
+
+| Fichero | Qué lleva | Regla |
+| --- | --- | --- |
+| `lib/utils/busqueda.js` | la regla pura: `palabrasDe`, `coincidePorNombre`, `sinTildes` | **no importa NADA**, y hay una prueba que lo vigila |
+| `lib/utils/busquedaDb.js` | `filtroPorNombre`, `condicionPorPalabras`, `hasUnaccentSupport` | aquí vive Sequelize |
+
+Es el mismo reparto que `lib/auth/contrasena.js` y `correoCuentaDb.js`, y por el
+mismo motivo. Que las dos orillas normalicen IGUAL no es un detalle: si el
+servidor quitara tildes y el navegador no, la misma búsqueda daría resultados
+distintos según quién la resolviera.
+
+### Tres cosas que aparecieron al hacerlo, y no eran de búsqueda
+
+**El Excel de Clientes se saltaba dos filtros que la pantalla sí aplica.** No
+respetaba «consultas externas» —la regla de Rodrigo del 07/08/2026: esos
+pacientes solo los ven admin y quien los lleva— así que era una puerta lateral
+a un permiso. Medido antes de tocar nada: **cero fichas marcadas como externas
+en toda la producción**, o sea que no se ha escapado nada; se cierra antes de
+que la haya. Y tampoco leía el filtro por tipo de contratante, que la pantalla
+sí le manda — con un comentario en la pantalla que avisaba de que «bajar
+festivales y recibir los 183 sería una sorpresa cara». La sorpresa estaba
+pasando.
+
+**En Gastos y en Recurrentes el buscador contradecía a su propia tabla.** La
+tabla pinta «Alquiler», «Fijo», «Mensual»; el buscador solo miraba `salary`,
+`fixed`, `monthly`. Escribir exactamente lo que se está viendo no devolvía
+nada, y en Recurrentes la caja promete literalmente «Buscar por cliente,
+frecuencia, estado…». Ahora se busca por la etiqueta **y** por la clave.
+
+**El buscador de Correo podía escribirle a quien no era.** Pegaba en una sola
+cadena el nombre de la familia, su correo, los tutores y los pacientes, y
+buscaba dentro. Eso deja que una búsqueda case a caballo entre el final de un
+campo y el principio del siguiente. En una pantalla desde la que se manda
+correo, un falso positivo no es «no sale nadie»: es marcar la casilla de quien
+no era. Pasando los campos como LISTA, cada palabra tiene que caber dentro de
+uno.
+
+### Y el techo del selector de Soporte
+
+«Nuevo ticket» se bajaba 200 fichas al abrir y filtraba encima. Con las 1.083
+de Aumenta eso dejaba a **883 familias** fuera del alcance escribieras lo que
+escribieras — y la caja contestaba «Sin resultados», lo mismo que si no
+existieran. **Un techo callado se lee como una ausencia.** Ahora pregunta al
+servidor según se escribe y, cuando hay más coincidencias que sitio, lo dice.
+Detalle en `docs/modules/support.md`.
+
+## La red que faltaba: `no-undef`
+
+Al aplicar los quince se olvidaron **dos imports** —Soporte y el Excel de
+Presupuestos—. Lint verde, build verde, `npm test` verde, y los dos daban 500
+en cuanto alguien escribía en la caja. Salieron solo al llamar a los endpoints
+uno a uno.
+
+El motivo: `eslint-config-next` **no lleva `no-undef`** (esa red la da
+TypeScript, y aquí no hay) y el build de Next tampoco. Así que se añadió una
+config aparte que hace una sola cosa:
+
+```bash
+npm run lint:undef
+```
+
+Once segundos sobre todo el repo. Y lo primero que encontró al pasarlo entero
+fue un fallo que llevaba semanas: `app/api/public/c/[tenantSlug]/registro-web`
+tenía dos `void nombre; void wpUserId;` señalando a variables que ya no
+existían. En un módulo ESM eso lanza `ReferenceError`, lo recoge el `catch` y
+el endpoint contestaba **500** — cuando la única razón por la que esa ruta
+sigue viva es responder 200 para que el WordPress que la llama no registre
+errores en cada alta. Es de WordPress a servidor, así que nadie lo veía.
 ## Y de paso: el listado vacío mentía
 
 En la segunda captura de Jorge, la búsqueda sin resultados contestaba:
@@ -174,9 +240,11 @@ no se pintaba nunca. Ahora se decide por si hay algún filtro puesto.
 
 | Qué | Dónde |
 | --- | --- |
-| La regla | `lib/utils/busqueda.js` |
+| La regla, con Sequelize | `lib/utils/busquedaDb.js` |
 | Pacientes | `app/api/pacientes/route.js` |
 | El listado vacío | `app/(dashboard)/pacientes/page.jsx` |
 | Formación | `app/api/training/users/route.js` (+ `export/`), `app/api/training/enrollments/route.js` (+ `export/`), `app/api/external/retorika/alumnos/route.js` |
-| La prueba (49 casos) | `scripts/_smoke-busqueda-nombre.mjs` |
+| La prueba | `scripts/_smoke-busqueda-nombre.mjs` |
+| La regla pura (también para el navegador) | `lib/utils/busqueda.js` — sin un solo import |
+| La red de identificadores sin importar | `eslint.undef.mjs` · `npm run lint:undef` |
 | Detectar `unaccent` | vivía en `lib/nutricion/foods.js`; se ha mudado a `lib/utils/busqueda.js` y se sigue exportando desde allí |

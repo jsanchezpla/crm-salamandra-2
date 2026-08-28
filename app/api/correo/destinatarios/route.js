@@ -6,6 +6,8 @@ import { rotuloCategoria } from "../../../../lib/booking/categorias.js";
 import { clienteEsPaciente } from "../../../../lib/clients/vocabulario.js";
 import { GUARDIAN_RELATIONSHIP_LABEL } from "../../../../lib/clients/guardians.js";
 import { SPECIALTY_KEYS } from "../../../../lib/clinica/specialties.js";
+import { coincidePorNombre } from "../../../../lib/utils/busqueda.js";
+import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
 
 /**
  * GET /api/correo/destinatarios?fuente=…&q=…&profesional=…&terapia=…
@@ -107,7 +109,6 @@ async function destinatariosFamilias(ctx, { q, profesional, terapia }) {
     order: [["name", "ASC"]],
   });
 
-  const busca = q ? q.toLowerCase() : null;
   const candidatos = [];
   for (const c of clientes) {
     if (soloEstas && !soloEstas.has(c.id)) continue;
@@ -115,17 +116,31 @@ async function destinatariosFamilias(ctx, { q, profesional, terapia }) {
     const tutores = (Array.isArray(c.guardians) ? c.guardians : []).filter((g) => g?.email);
     const pacs = porFamilia.get(c.id) ?? [];
 
-    if (busca) {
-      const pajar = [
+    /*
+     * Todas las palabras, cada una DENTRO DE UN MISMO CAMPO (28/08/2026).
+     *
+     * Antes se pegaban todos los campos en una sola cadena con espacios y se
+     * buscaba la frase entera dentro. Eso fallaba por los dos lados: no
+     * encontraba «ana garcía» (la frase no estaba entera en ningún campo) y, lo
+     * que es peor, SÍ encontraba cosas que no existían, porque una búsqueda
+     * podía casar a caballo entre el final de un campo y el principio del
+     * siguiente —el correo de la familia pegado al nombre del tutor, el
+     * apellido de la familia pegado al nombre del paciente—. En una pantalla
+     * desde la que se manda correo, un falso positivo no es que no salga nadie:
+     * es marcar la casilla de quien no era y escribirle.
+     *
+     * Pasando los campos como LISTA, cada palabra tiene que caber dentro de uno.
+     * El nombre del paciente entra entero (nombre + apellidos) a propósito, para
+     * que «hugo castro» siga casando dentro de él.
+     */
+    if (q) {
+      const campos = [
         c.name,
         c.email,
         ...tutores.flatMap((g) => [g.name, g.email]),
         ...pacs.map((p) => `${p.firstName} ${p.lastName}`),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      if (!pajar.includes(busca)) continue;
+      ];
+      if (!coincidePorNombre(q, campos)) continue;
     }
 
     const dePacientes = nombresPacientes(pacs);
@@ -162,14 +177,24 @@ export const GET = withTenant(async (request, _ctxRuta, ctx) => {
   if (!ctx.hasModule(MODULO)) throw new ForbiddenError();
 
   const q = (sp.get("q") || "").trim();
-  const like = q ? { [Op.iLike]: `%${q}%` } : null;
   const { Client, Contact, Lead } = ctx.tenantModels;
 
   // `email: { [Op.ne]: null }` no basta: en estas tablas el correo vacío se
   // guarda a veces como cadena vacía, y una fila sin correo en la lista es una
   // casilla que se puede marcar y no manda nada.
   const conCorreo = { email: { [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: "" }] } };
-  const buscar = (campos) => (like ? { [Op.or]: campos.map((c) => ({ [c]: like })) } : {});
+  /*
+   * El trozo de `where` del buscador, para esparcir en el de cada fuente.
+   *
+   * Recibe COLUMNAS con su alias, no atributos, porque la cláusula se monta con
+   * `col()` y el alias correcto es distinto en cada llamada: el de `Client` y
+   * `Lead` es el del modelo raíz, y el de `Contact` también —aunque esa consulta
+   * lleve un include de `client`, el `where` es el de la principal—.
+   *
+   * Devuelve `{}` cuando no hay nada escrito, así que el where queda igual.
+   */
+  const buscar = async (columnas) =>
+    (await filtroPorNombre(ctx.tenantSequelize, q, columnas)) ?? {};
 
   if (fuente === "contratantes") {
     // Centro con pacientes: la familia entera — su correo, sus tutores y el
@@ -190,7 +215,7 @@ export const GET = withTenant(async (request, _ctxRuta, ctx) => {
     }
 
     const filas = await Client.findAll({
-      where: { ...conCorreo, ...buscar(["name", "email"]) },
+      where: { ...conCorreo, ...(await buscar(["Client.name", "Client.email"])) },
       attributes: ["id", "name", "email", "type", "customFields"],
       order: [["name", "ASC"]],
       limit: LIMITE,
@@ -219,7 +244,7 @@ export const GET = withTenant(async (request, _ctxRuta, ctx) => {
 
   if (fuente === "contactos") {
     const filas = await Contact.findAll({
-      where: { ...conCorreo, ...buscar(["name", "email"]) },
+      where: { ...conCorreo, ...(await buscar(["Contact.name", "Contact.email"])) },
       attributes: ["id", "name", "email", "role", "clientId"],
       // El alias es `client` (lib/db/tenantDb.js): sin él Sequelize no sabe por
       // qué asociación entrar y revienta la consulta entera.
@@ -241,7 +266,7 @@ export const GET = withTenant(async (request, _ctxRuta, ctx) => {
 
   if (fuente === "propuestas") {
     const filas = await Lead.findAll({
-      where: { ...conCorreo, ...buscar(["name", "email", "title"]) },
+      where: { ...conCorreo, ...(await buscar(["Lead.name", "Lead.email", "Lead.title"])) },
       attributes: ["id", "name", "email", "title", "stage"],
       order: [["createdAt", "DESC"]],
       limit: LIMITE,

@@ -5,6 +5,7 @@ import { parseSortOrder } from "@/lib/billing/parseSort.js";
 import { xlsxResponse, MONEY_FMT, fmtDateEs } from "@/lib/billing/exportXlsx.js";
 
 import { ATRIBUTOS_CLIENTE_FACTURA } from "../../../../../lib/billing/nifCliente.js";
+import { filtroPorNombre } from "@/lib/utils/busquedaDb.js";
 const STATUS = {
   draft: "Borrador", sent: "Enviado", viewed: "Visto", accepted: "Aceptado",
   rejected: "Rechazado", expired: "Caducado", converted: "Facturado",
@@ -23,8 +24,12 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, tenant, hasM
     const where = {};
     if (status) where.status = status;
     if (clientId) where.clientId = clientId;
+    // Igual que la lista de Presupuestos: la pantalla reenvía aquí su misma
+    // búsqueda, así que si una cambia de regla y la otra no, el Excel trae filas
+    // distintas de las que se están viendo (28/08/2026).
     if (q) {
-      where[Op.and] = [{ [Op.or]: [{ number: { [Op.iLike]: `%${q}%` } }, { "$client.name$": { [Op.iLike]: `%${q}%` } }] }];
+      const porNombre = await filtroPorNombre(Quote.sequelize, q, ["Quote.number", "client.name"]);
+      if (porNombre) (where[Op.and] ||= []).push(porNombre);
     }
 
     const SORT = {

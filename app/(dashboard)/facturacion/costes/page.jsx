@@ -9,6 +9,7 @@ import { paramsFiltrosGasto, urlConFiltros } from "@/lib/billing/filtrosGasto.js
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
+import { coincidePorNombre } from "../../../../lib/utils/busqueda.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -123,14 +124,23 @@ export default function CostesPage() {
   // La búsqueda libre se aplica en cliente sobre el array ya ordenado.
   const filtered = useMemo(() => {
     if (!search) return costs;
-    return costs.filter((c) => {
-      const hay = [
-        c.description, c.type, c.category,
+  // Todas las palabras, cada una en cualquiera de los campos (28/08/2026): antes
+  // había que escribirlo en el mismo orden que la ficha y con las tildes puestas.
+  // Los campos van en ARRAY a propósito: pegados con join(" ") la búsqueda podía
+  // casar a caballo entre dos campos y marcar a quien no era.
+    //
+    // Y se busca por la ETIQUETA además de por la clave: la tabla pinta
+    // «Salario» y «Fijo», pero aquí solo se miraba `salary` y `fixed`, así que
+    // escribir exactamente lo que se está viendo no devolvía nada.
+    return costs.filter((c) =>
+      coincidePorNombre(search, [
+        c.description,
+        TYPE_LABELS[c.type] ?? c.type,
+        CATEGORY_LABELS[c.category] ?? c.category,
         c.employee?.displayName, c.client?.name, c.supplier?.name,
         c.taxBase?.toString(), c.total?.toString(),
-      ].filter(Boolean).join(" ").toLowerCase();
-      return hay.includes(search);
-    });
+      ])
+    );
   }, [costs, search]);
 
   const totalBase = filtered.reduce((s, c) => s + Number(c.taxBase || 0), 0);

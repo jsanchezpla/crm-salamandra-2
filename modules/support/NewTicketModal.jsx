@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ORDEN_PRIORIDADES, PRIORIDADES } from "./supportUi.js";
 
 const CAMPO =
@@ -25,27 +25,76 @@ export default function NewTicketModal({ categorias, equipo, clientePrefijado, o
     requesterEmail: "",
     notifyClient: false,
   });
+  // El buscador de fichas pregunta al SERVIDOR según se escribe (28/08/2026).
+  // Antes se bajaba una lista de 200 al abrir y se filtraba encima: en Aumenta,
+  // con 1.083 fichas, 883 familias no aparecían ESCRIBIERAS LO QUE ESCRIBIERAS,
+  // y la caja contestaba «sin resultados» — lo mismo que si no existieran. El
+  // tope tampoco se podía subir: el endpoint corta en 200 por su cuenta.
   const [clientes, setClientes] = useState([]);
   const [buscaCliente, setBuscaCliente] = useState("");
+  const [hayFichas, setHayFichas] = useState(false);
+  const [buscando, setBuscando] = useState(false);
+  const [coincidencias, setCoincidencias] = useState(0);
+  const [clienteElegido, setClienteElegido] = useState(null);
+  // Cada búsqueda lleva número: si una lenta contesta después de otra más nueva,
+  // se tira. Sin esto, escribir deprisa deja en pantalla el resultado de una
+  // consulta vieja.
+  const peticion = useRef(0);
   const [enviando, setEnviando] = useState(false);
   const [fallo, setFallo] = useState(null);
 
-  // Clientes para el selector. Si el tenant no tiene el módulo clients (403),
-  // el selector no aparece y el ticket nace con solicitante a mano.
+  // ¿Este centro tiene fichas? Si no tiene el módulo (403), el selector no
+  // aparece y el ticket nace con el solicitante escrito a mano. De paso deja unas
+  // pocas a la vista, para no recibir a nadie con una caja vacía.
   useEffect(() => {
-    fetch("/api/clients?limit=200")
+    fetch("/api/clients?limit=8")
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => setClientes(j?.data?.clients || []))
+      .then((j) => {
+        if (!j?.data) return;
+        setHayFichas(true);
+        setClientes(j.data.clients || []);
+        setCoincidencias(j.data.total ?? 0);
+      })
       .catch(() => {});
   }, []);
 
-  const clientesFiltrados = useMemo(() => {
-    const q = buscaCliente.trim().toLowerCase();
-    if (!q) return clientes.slice(0, 50);
-    return clientes.filter((c) => (c.name || "").toLowerCase().includes(q)).slice(0, 50);
-  }, [clientes, buscaCliente]);
+  // La ficha prefijada se pide por su id. Antes se buscaba dentro de la lista
+  // descargada, así que una que no estuviera en ella salía como «sin elegir»
+  // aunque el ticket sí fuera a nacer con ella.
+  useEffect(() => {
+    if (!clientePrefijado) return;
+    fetch(`/api/clients/${clientePrefijado}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (j?.data) setClienteElegido({ id: j.data.id, name: j.data.name, email: j.data.email });
+      })
+      .catch(() => {});
+  }, [clientePrefijado]);
 
-  const clienteElegido = clientes.find((c) => c.id === form.clientId) || null;
+  // Buscar de verdad, con 300 ms de espera para no preguntar en cada tecla.
+  useEffect(() => {
+    if (!hayFichas) return undefined;
+    const texto = buscaCliente.trim();
+    const mia = ++peticion.current;
+    setBuscando(Boolean(texto));
+    const t = setTimeout(() => {
+      const url = texto
+        ? `/api/clients?limit=20&search=${encodeURIComponent(texto)}`
+        : "/api/clients?limit=8";
+      fetch(url)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (mia !== peticion.current) return; // llegó tarde: manda la última
+          setClientes(j?.data?.clients || []);
+          setCoincidencias(j?.data?.total ?? 0);
+          setBuscando(false);
+        })
+        .catch(() => {
+          if (mia === peticion.current) setBuscando(false);
+        });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [buscaCliente, hayFichas]);
 
   async function crear(e) {
     e.preventDefault();
@@ -107,14 +156,17 @@ export default function NewTicketModal({ categorias, equipo, clientePrefijado, o
             />
           </Campo>
 
-          {clientes.length > 0 && (
+          {hayFichas && (
             <Campo etiqueta="Cliente">
               {clienteElegido ? (
                 <div className="flex items-center gap-2 text-sm bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
                   <span className="flex-1 truncate font-medium text-gray-800">{clienteElegido.name}</span>
                   <button
                     type="button"
-                    onClick={() => setForm({ ...form, clientId: "" })}
+                    onClick={() => {
+                      setForm({ ...form, clientId: "" });
+                      setClienteElegido(null);
+                    }}
                     className="text-gray-400 hover:text-red-500 text-xs"
                   >
                     Quitar
@@ -129,25 +181,37 @@ export default function NewTicketModal({ categorias, equipo, clientePrefijado, o
                     className={CAMPO}
                     placeholder="Buscar cliente…"
                   />
-                  {buscaCliente.trim() && (
-                    <div className="mt-1 border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-44 overflow-y-auto">
-                      {clientesFiltrados.length === 0 && (
-                        <div className="px-3 py-2 text-xs text-gray-400">Sin resultados. El ticket puede ir sin ficha.</div>
-                      )}
-                      {clientesFiltrados.map((c) => (
+                  <div className="mt-1 border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-44 overflow-y-auto">
+                    {buscando && <div className="px-3 py-2 text-xs text-gray-400">Buscando…</div>}
+                    {!buscando && clientes.length === 0 && (
+                      <div className="px-3 py-2 text-xs text-gray-400">Sin resultados. El ticket puede ir sin ficha.</div>
+                    )}
+                    {!buscando &&
+                      clientes.map((c) => (
                         <button
                           key={c.id}
                           type="button"
                           onClick={() => {
                             setForm({ ...form, clientId: c.id });
+                            setClienteElegido(c);
                             setBuscaCliente("");
                           }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                         >
                           {c.name}
+                          {c.email && <span className="block text-[11px] text-gray-400">{c.email}</span>}
                         </button>
                       ))}
-                    </div>
+                  </div>
+                  {/*
+                    Cuántas quedan fuera. Un tope callado es justo lo que tenía esto
+                    roto: la caja enseñaba lo que le cabía y no decía que hubiera más,
+                    así que «no está» y «no cabe» se veían igual.
+                  */}
+                  {!buscando && coincidencias > clientes.length && (
+                    <p className="mt-1 text-[11px] text-gray-400">
+                      {coincidencias} fichas coinciden; se enseñan {clientes.length}. Escribe un poco más para afinar.
+                    </p>
                   )}
                 </div>
               )}

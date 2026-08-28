@@ -25,6 +25,7 @@ import PlanEditorModal from "./PlanEditorModal.jsx";
 import AssignPlanModal from "./AssignPlanModal.jsx";
 import Select from "@/components/ui/Select.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
+import { coincidePorNombre } from "../../lib/utils/busqueda.js";
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -143,12 +144,15 @@ export default function NutricionAsignadosModule() {
   const filtered = useMemo(() => {
     let out = items;
     if (templateFilter) out = out.filter((p) => p.templateId === templateFilter);
+  // Todas las palabras, cada una en cualquiera de los campos (28/08/2026): antes
+  // había que escribirlo en el mismo orden que la ficha y con las tildes puestas.
+  // Los campos van en ARRAY a propósito: pegados con join(" ") la búsqueda podía
+  // casar a caballo entre dos campos y marcar a quien no era.
+    // Y de paso: «hugo dieta» —«la dieta de Hugo», que es como lo diría una
+    // persona— ahora encuentra la pauta, porque las dos palabras pueden caer en
+    // campos distintos. Antes las dos tenían que estar en el MISMO.
     if (debouncedSearch) {
-      const q = debouncedSearch.toLowerCase();
-      out = out.filter((p) =>
-        (p.clientName || "").toLowerCase().includes(q) ||
-        (p.name || "").toLowerCase().includes(q)
-      );
+      out = out.filter((p) => coincidePorNombre(debouncedSearch, [p.clientName, p.name]));
     }
     return out;
   }, [items, templateFilter, debouncedSearch]);

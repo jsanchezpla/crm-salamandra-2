@@ -9,6 +9,7 @@ import { useSortState, SortableTh } from "../../_components/tableSort.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
+import { coincidePorNombre } from "../../../../../lib/utils/busqueda.js";
 
 export default function AnaliticaEmpleadosPage() {
   const sp = useSearchParams();
@@ -58,10 +59,11 @@ export default function AnaliticaEmpleadosPage() {
   // Sort viaja al backend; búsqueda libre en cliente sobre el array ordenado.
   const filtered = useMemo(() => {
     if (!search) return rows;
-    return rows.filter((r) => {
-      const hay = [r.employeeName, r.position].filter(Boolean).join(" ").toLowerCase();
-      return hay.includes(search);
-    });
+  // Todas las palabras, cada una en cualquiera de los campos (28/08/2026): antes
+  // había que escribirlo en el mismo orden que la ficha y con las tildes puestas.
+  // Los campos van en ARRAY a propósito: pegados con join(" ") la búsqueda podía
+  // casar a caballo entre dos campos y marcar a quien no era.
+    return rows.filter((r) => coincidePorNombre(search, [r.employeeName, r.position]));
   }, [rows, search]);
 
   const totals = filtered.reduce((acc, r) => ({

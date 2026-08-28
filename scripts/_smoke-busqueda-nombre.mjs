@@ -29,14 +29,17 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Op } from "sequelize";
+// La regla pura y la mitad que habla con Sequelize viven en ficheros
+// distintos: `busqueda.js` no importa nada para que la pueda usar el
+// navegador. Si algún día vuelven a juntarse, esta prueba deja de compilar.
 import {
   palabrasDe,
   escaparLike,
   sinTildes,
   coincidePorNombre,
-  condicionPorPalabras,
   MAX_PALABRAS,
 } from "../lib/utils/busqueda.js";
+import { condicionPorPalabras } from "../lib/utils/busquedaDb.js";
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 const leer = (p) => readFileSync(join(RAIZ, p), "utf8");
@@ -343,4 +346,87 @@ describe("El buscador de Matrículas llega a aplicarse", () => {
       assert.ok(src.includes("Reflect.ownKeys"), `${ruta}: falta el Reflect.ownKeys`);
     });
   }
+});
+
+describe("El selector de cliente de un ticket llega a TODAS las fichas", () => {
+  /*
+   * 28/08/2026. No es un fallo de búsqueda: era un TECHO. La caja «Buscar
+   * cliente…» de Soporte → «Nuevo ticket» no preguntaba al servidor: se bajaba
+   * una lista al abrir el modal y filtraba encima. La lista venía cortada a 200
+   * fichas, y el endpoint corta en 200 por su cuenta, así que subir el número no
+   * arreglaba nada.
+   *
+   * En Aumenta, con 1.083 fichas y Soporte encendido, eso dejaba a 883 familias
+   * —el 82%— fuera del alcance ESCRIBIERAS LO QUE ESCRIBIERAS. Y lo peor: la
+   * caja contestaba «Sin resultados», exactamente lo mismo que si esa familia no
+   * existiera. Un techo callado se lee como una ausencia.
+   */
+  const modal = leer("modules/support/NewTicketModal.jsx");
+
+  it("no se baja una lista entera para filtrarla en el navegador", () => {
+    assert.ok(
+      !modal.includes("/api/clients?limit=200"),
+      "ha vuelto la lista de 200: en Aumenta deja 883 familias sin alcanzar"
+    );
+  });
+
+  it("le pasa lo escrito al servidor", () => {
+    assert.ok(
+      modal.includes("search=${encodeURIComponent("),
+      "la búsqueda ya no viaja al servidor: vuelve a filtrar sobre lo descargado"
+    );
+  });
+
+  it("no filtra por su cuenta la lista que le devuelve el servidor", () => {
+    assert.ok(
+      !/clientes\.filter\(/.test(modal),
+      "filtrar en el navegador lo que ya viene filtrado reintroduce el techo"
+    );
+  });
+
+  // Si hay más fichas que las que caben, hay que DECIRLO. Que la caja enseñe lo
+  // que le cabe y calle el resto es lo que hacía que «no está» y «no cabe» se
+  // vieran igual.
+  it("avisa cuando hay más coincidencias que sitio", () => {
+    assert.ok(modal.includes("coincidencias > clientes.length"));
+    assert.ok(modal.includes("coinciden"));
+  });
+
+  // La ficha prefijada puede no estar entre las que se han traído, así que se
+  // pide por su id. Antes se buscaba dentro de la lista descargada y salía como
+  // «sin elegir» aunque el ticket sí fuera a nacer con ella.
+  it("la ficha prefijada se pide por su id, no se busca en la lista", () => {
+    assert.ok(modal.includes("/api/clients/${clientePrefijado}"));
+  });
+});
+
+describe("La regla se puede usar también en el navegador", () => {
+  /*
+   * `lib/utils/busqueda.js` NO puede importar nada. La misma regla hace falta
+   * en las dos orillas —el servidor cuando la lista sale de una consulta, el
+   * navegador cuando ya está descargada y se filtra encima— y si buscar
+   * significara una cosa en cada sitio, la misma palabra daría resultados
+   * distintos según quién la resolviera.
+   *
+   * Como los desplegables con buscador son componentes de cliente, un import de
+   * Sequelize aquí arrastraría Sequelize al paquete del navegador. Es el mismo
+   * reparto que `lib/auth/contrasena.js` (pura) y `correoCuentaDb.js`, y se
+   * rompió una vez: nació junto y hubo que partirlo al ir a usarlo en
+   * `components/ui/`.
+   */
+  it("busqueda.js no importa NADA", () => {
+    const src = leer("lib/utils/busqueda.js");
+    const imports = src.split(/\r?\n/).filter((l) => /^\s*import\s/.test(l));
+    assert.deepEqual(
+      imports,
+      [],
+      "un import aquí mete esa dependencia en el paquete del navegador: llévalo a busquedaDb.js"
+    );
+  });
+
+  it("y la mitad de Sequelize está en busquedaDb.js", () => {
+    const db = leer("lib/utils/busquedaDb.js");
+    assert.match(db, /from "sequelize"/);
+    assert.match(db, /export async function filtroPorNombre/);
+  });
 });

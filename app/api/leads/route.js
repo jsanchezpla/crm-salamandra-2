@@ -6,6 +6,7 @@ import { handleRouteError } from "../../../lib/utils/errors.js";
 import { aceptaEtapa, etapasDe } from "../../../lib/leads/embudos.js";
 import { getTenantContext } from "../../../lib/tenant/tenantResolver.js";
 import { Op } from "sequelize";
+import { filtroPorNombre } from "../../../lib/utils/busquedaDb.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const ADMIN_DENY = "Solo administradores pueden modificar leads";
@@ -127,13 +128,17 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
   if (motivo) where.motivo = motivo;
   if (promo) where.metadata = { [Op.contains]: { promo } };
   if (empresa) where.customFields = { [Op.contains]: { empresa } };
+  /*
+   * Todas las palabras, cada una en cualquiera de los campos (28/08/2026). Antes
+   * se buscaba la frase entera dentro de cada columna, así que «castro hugo» o
+   * «hugo díaz» no encontraban a «Hugo Castro Díaz», ni «diaz» sin tilde. El
+   * porqué, en `lib/utils/busqueda.js`.
+   */
   if (search) {
-    where[Op.or] = [
-      { name: { [Op.iLike]: `%${search}%` } },
-      { email: { [Op.iLike]: `%${search}%` } },
-      { phone: { [Op.iLike]: `%${search}%` } },
-      { title: { [Op.iLike]: `%${search}%` } },
-    ];
+    const porNombre = await filtroPorNombre(Lead.sequelize, search, [
+      "Lead.name", "Lead.email", "Lead.phone", "Lead.title",
+    ]);
+    if (porNombre) (where[Op.and] ||= []).push(porNombre);
   }
 
   // Se guarda ANTES de meter la etapa: es el conjunto que el desglose describe.
