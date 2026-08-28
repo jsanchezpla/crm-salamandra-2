@@ -7,6 +7,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import listPlugin from "@fullcalendar/list";
 import interactionPlugin from "@fullcalendar/interaction";
 import Select from "@/components/ui/Select.jsx";
+import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 
 const PRIORITY_COLORS = { high: "#ef4444", medium: "#f97316", low: "#22c55e" };
 const PRIORITY_LABELS = { high: "Alta", medium: "Media", low: "Baja" };
@@ -82,7 +83,6 @@ export default function CalendarioPage() {
   // `formError` porque no es un error de lo que se escribió: el evento Sí se
   // guardó, y eso hay que decirlo tal cual.
   const [avisoEnvio, setAvisoEnvio] = useState(null);
-  const [clients, setClients] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
   // Integración con Proyectos: eventos de tarjetas Kanban (dueDate) e hitos.
   const [hasProjects, setHasProjects] = useState(false); // ¿el tenant/usuario tiene el módulo?
@@ -96,10 +96,6 @@ export default function CalendarioPage() {
 
   // Datos para los desplegables de cliente / responsable (opcionales).
   useEffect(() => {
-    fetch("/api/clients?limit=500", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => setClients(j.data?.clients ?? []))
-      .catch(() => {});
     fetch("/api/team?status=all&limit=500", { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => setTeamMembers(j.data?.members ?? []))
@@ -111,10 +107,10 @@ export default function CalendarioPage() {
       .catch(() => {});
   }, []);
 
-  const clientOptions = [
-    { value: "", label: "Sin cliente" },
-    ...clients.map((c) => ({ value: c.id, label: c.name })),
-  ];
+  // Las fichas ya no se bajan aquí (28/08/2026). Este `limit=500` recibía 200,
+  // porque /api/clients corta por su cuenta: con las 1.083 de Aumenta faltaban
+  // 883 familias. Ahora pregunta SelectorCliente al servidor según se escribe.
+  const clientOptions = [{ value: "", label: "Sin cliente" }];
   const teamOptions = [
     { value: "", label: "Sin asignar" },
     ...teamMembers.map((m) => ({ value: m.id, label: m.displayName })),
@@ -896,10 +892,10 @@ export default function CalendarioPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-[#374151] mb-1">Cliente</label>
-                  <Select
+                  <SelectorCliente
                     value={modal.form.clientId}
                     onChange={(v) => updateForm("clientId", v)}
-                    options={clientOptions}
+                    opcionesFijas={clientOptions}
                     className="w-full text-sm px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F0F0F]/10 focus:border-[#0F0F0F] bg-white transition-colors"
                   />
                 </div>

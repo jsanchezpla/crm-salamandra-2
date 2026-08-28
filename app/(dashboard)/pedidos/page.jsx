@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import Select from "@/components/ui/Select.jsx";
+import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 const STATUSES = [
@@ -40,7 +40,6 @@ export default function PedidosPage() {
   const [activeStatus, setActiveStatus] = useState("all");
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
-  const [clients, setClients] = useState([]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -63,14 +62,6 @@ export default function PedidosPage() {
     return () => clearTimeout(t);
   }, [load, search]);
 
-  // Cargar clientes para el selector de "Nuevo pedido"
-  useEffect(() => {
-    fetch("/api/clients?limit=200")
-      .then((r) => r.json())
-      .then((j) => {
-        if (j.ok) setClients(j.data.clients ?? []);
-      });
-  }, []);
 
   const statusCounts = orders.reduce((acc, o) => {
     acc[o.status] = (acc[o.status] || 0) + 1;
@@ -112,7 +103,7 @@ export default function PedidosPage() {
           >
             Configuración
           </Link>
-          <NuevoPedido clients={clients} onCreate={createOrder} creating={creating} />
+          <NuevoPedido onCreate={createOrder} creating={creating} />
         </div>
       </div>
 
@@ -228,7 +219,7 @@ export default function PedidosPage() {
   );
 }
 
-function NuevoPedido({ clients, onCreate, creating }) {
+function NuevoPedido({ onCreate, creating }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState("");
 
@@ -250,16 +241,11 @@ function NuevoPedido({ clients, onCreate, creating }) {
             <label className="block text-[11px] font-medium text-neutral-500 mb-1.5">
               Cliente
             </label>
-            <Select
+            <SelectorCliente
               value={selected}
               onChange={(v) => setSelected(v)}
-              options={[
-                { value: "", label: "— Selecciona un cliente —" },
-                ...clients.map((c) => ({
-                  value: c.id,
-                  label: `${c.name}${c.customFields?.company ? ` (${c.customFields.company})` : ""}`,
-                })),
-              ]}
+              opcionesFijas={[{ value: "", label: "— Selecciona un cliente —" }]}
+              etiqueta={(c) => `${c.name}${c.customFields?.company ? ` (${c.customFields.company})` : ""}`}
               className="w-full border border-neutral-200 rounded-md px-2 py-1.5 text-sm mb-2 focus:outline-none focus:border-[var(--color-primary)]"
             />
             <button
@@ -269,11 +255,8 @@ function NuevoPedido({ clients, onCreate, creating }) {
             >
               {creating ? "Creando…" : "Crear pedido"}
             </button>
-            {clients.length === 0 && (
-              <p className="text-[11px] text-neutral-400 mt-2">
-                No hay clientes. Crea uno desde la pestaña Clientes primero.
-              </p>
-            )}
+            {/* El aviso de «no hay fichas» lo da ahora el propio selector, que
+                es quien lo sabe: esta pantalla ya no se baja la lista. */}
           </div>
         </>
       )}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import Select from "@/components/ui/Select.jsx";
+import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import { fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
@@ -31,7 +31,6 @@ export default function RecurrentesPage() {
    */
   const puedeFacturar = Boolean(me);
 
-  const [clients, setClients] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -47,7 +46,9 @@ export default function RecurrentesPage() {
 
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" }).then((r) => r.json()).then((j) => j.ok && setMe(j.data)).catch(() => {});
-    fetch("/api/clients?limit=200", { cache: "no-store" }).then((r) => r.json()).then((j) => setClients(j.data?.clients ?? [])).catch(() => {});
+    // Las fichas ya no se bajan aquí: las pide SelectorCliente al servidor
+    // según se escribe (28/08/2026). Las 200 de antes dejaban fuera al 82% de
+    // las familias de Aumenta.
   }, []);
 
   const load = useCallback(async () => {
@@ -233,10 +234,10 @@ export default function RecurrentesPage() {
             </div>
             <form onSubmit={handleCreate} className="px-6 py-5 space-y-3">
               <FormRow label="Cliente *">
-                <Select
+                <SelectorCliente
                   value={form.clientId}
                   onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
-                  options={[{ value: "", label: "Selecciona..." }, ...clients.map((c) => ({ value: c.id, label: c.name }))]}
+                  opcionesFijas={[{ value: "", label: "Selecciona..." }]}
                   className={inputCls}
                 />
               </FormRow>

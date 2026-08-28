@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import Select from "../../../../components/ui/Select.jsx";
+import SelectorCliente from "../../../../components/clients/SelectorCliente.jsx";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
@@ -42,7 +42,6 @@ export default function PresupuestosPage() {
   const [q, setQ] = useState("");
   const [error, setError] = useState(null);
 
-  const [clients, setClients] = useState([]);
   const [showNew, setShowNew] = useState(false);
   const [newClientId, setNewClientId] = useState("");
   const [creating, setCreating] = useState(false);
@@ -76,12 +75,6 @@ export default function PresupuestosPage() {
     return () => clearTimeout(t);
   }, [load]);
 
-  useEffect(() => {
-    fetch("/api/clients?limit=200", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => setClients(j.data?.clients ?? []))
-      .catch(() => {});
-  }, []);
 
   async function createQuote() {
     if (!newClientId) return;
@@ -121,7 +114,6 @@ export default function PresupuestosPage() {
       const j = await res.json();
       if (!j.ok) throw new Error(j.error || "Error creando cliente");
       const nuevo = j.data;
-      setClients((prev) => [nuevo, ...prev]);
       setNewClientId(nuevo.id);
       setShowClientDrawer(false);
       setClientForm({ type: "company", name: "", email: "", phone: "", taxId: "", fiscalName: "" });
@@ -253,11 +245,9 @@ export default function PresupuestosPage() {
                 + Nuevo cliente
               </button>
             </div>
-            <Select
+            <SelectorCliente
               value={newClientId}
               onChange={(v) => setNewClientId(v)}
-              placeholder="— Seleccionar cliente —"
-              options={clients.map((c) => ({ value: c.id, label: c.name }))}
             />
             <div className="flex justify-end gap-2 mt-5">
               <button onClick={() => setShowNew(false)} disabled={creating} className="px-3 py-1.5 text-xs font-medium rounded-md border border-neutral-200 text-neutral-600 hover:bg-neutral-50">

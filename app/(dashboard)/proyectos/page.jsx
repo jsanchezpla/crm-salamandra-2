@@ -7,6 +7,7 @@ import StatusBadge, { STATUS_OPTIONS } from "../../../components/projects/Status
 import PriorityBadge, { PRIORITY_OPTIONS } from "../../../components/projects/PriorityBadge.jsx";
 import AiProjectModal from "../../../components/projects/AiProjectModal.jsx";
 import Select from "../../../components/ui/Select.jsx";
+import SelectorCliente from "../../../components/clients/SelectorCliente.jsx";
 import HelpTooltip from "../../../components/ui/HelpTooltip.jsx";
 
 const inputCls =
@@ -41,7 +42,6 @@ export default function ProyectosPage() {
   const router = useRouter();
   const [me, setMe] = useState(null);
   const [projects, setProjects] = useState([]);
-  const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
@@ -74,13 +74,6 @@ export default function ProyectosPage() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  // ── Cargar clientes (para el selector y filtro) ────────────────────────
-  useEffect(() => {
-    fetch("/api/clients?limit=200")
-      .then((r) => r.json())
-      .then((j) => setClients(j?.data?.clients ?? j?.data ?? []))
-      .catch(() => {});
-  }, []);
 
   // ── Listar proyectos ───────────────────────────────────────────────────
   const loadProjects = useCallback(async () => {
@@ -188,14 +181,11 @@ export default function ProyectosPage() {
             ...STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
           ]}
         />
-        <Select
+        <SelectorCliente
           className={inputCls}
           value={filterClient}
           onChange={(v) => setFilterClient(v)}
-          options={[
-            { value: "", label: "Todos los clientes" },
-            ...clients.map((c) => ({ value: c.id, label: c.name })),
-          ]}
+          opcionesFijas={[{ value: "", label: "Todos los clientes" }]}
         />
         <label className="flex items-center gap-2 text-sm text-neutral-600 px-2">
           <input
@@ -337,10 +327,7 @@ export default function ProyectosPage() {
                   value={form.clientId}
                   onChange={(v) => setForm({ ...form, clientId: v })}
                   placeholder="— Sin cliente (proyecto interno) —"
-                  options={[
-                    { value: "", label: "— Sin cliente (proyecto interno) —" },
-                    ...clients.map((c) => ({ value: c.id, label: c.name })),
-                  ]}
+                  opcionesFijas={[{ value: "", label: "— Sin cliente (proyecto interno) —" }]}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -430,7 +417,7 @@ export default function ProyectosPage() {
 
       {/* Drawer "Crear con IA" */}
       {showAiCreate && (
-        <AiProjectModal clients={clients} onClose={() => setShowAiCreate(false)} />
+        <AiProjectModal onClose={() => setShowAiCreate(false)} />
       )}
     </div>
   );

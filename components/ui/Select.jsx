@@ -21,6 +21,19 @@ import { coincidePorNombre } from "../../lib/utils/busqueda.js";
  *     searchable            // opt-in: añade un buscador que filtra por label
  *     className="..."   // clases extra para el botón trigger
  *   />
+ *
+ * BUSCAR EN EL SERVIDOR (28/08/2026). `searchable` filtra sobre las opciones
+ * que le den, y eso solo vale cuando caben todas. Con 1.083 fichas no caben:
+ * la pantalla se bajaba 200 y el buscador filtraba encima, así que 883 familias
+ * no aparecían escribieras lo que escribieras. Para eso están estos cuatro:
+ *
+ *     onQueryChange={(texto) => ...}   lo tecleado, para ir a preguntar
+ *     filtrarEnCliente={false}         no filtrar aquí: el servidor ya filtró
+ *     mensajeVacio="Buscando…"         qué poner cuando no hay nada que enseñar
+ *     pie={<p>…</p>}                   una línea bajo la lista (el «hay más»)
+ *
+ * Quien los use NO debería hablar con la API a mano: para fichas de cliente ya
+ * está `components/clients/SelectorCliente.jsx`, que es quien sabe la regla.
  */
 export default function Select({
   value,
@@ -32,6 +45,10 @@ export default function Select({
   id,
   "aria-label": ariaLabel,
   searchable = false,
+  onQueryChange,
+  filtrarEnCliente = true,
+  mensajeVacio = "Sin opciones",
+  pie = null,
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -43,6 +60,9 @@ export default function Select({
   // Opciones visibles: si es searchable y hay texto, se filtran por label.
   // Sin searchable (o sin texto) => todas las opciones, comportamiento idéntico al previo.
   const filtered = useMemo(() => {
+    // Con el servidor buscando, filtrar aquí otra vez solo puede QUITAR: la
+    // lista que llega ya es la respuesta a lo tecleado.
+    if (!filtrarEnCliente) return options;
     if (!searchable || !query.trim()) return options;
     // Las opciones `pinned` (p.ej. acciones "+ Añadir nuevo" o "Texto libre") no se
     // filtran nunca: deben seguir visibles justo cuando la búsqueda no encuentra nada.
@@ -52,7 +72,7 @@ export default function Select({
     // «Gómez». Este desplegable lo usa medio CRM, así que se arregla en todos a
     // la vez. Ver `lib/utils/busqueda.js`.
     return options.filter((o) => o.pinned || coincidePorNombre(query, [o.label]));
-  }, [options, query, searchable]);
+  }, [options, query, searchable, filtrarEnCliente]);
 
   // La seleccionada se calcula sobre TODAS las opciones (para el texto del trigger).
   const selected = options.find((o) => String(o.value) === String(value)) ?? null;
@@ -85,6 +105,15 @@ export default function Select({
   // Al teclear en el buscador, reposicionar el resalte al principio de la lista filtrada
   useEffect(() => {
     if (open && searchable) setActive(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  // Lo tecleado, hacia fuera. Va en un efecto y no en el `onChange` del input
+  // para que al cerrar (que vacía la caja) el de fuera también se entere y
+  // vuelva a su lista corta; si no, reabrir enseñaría el resultado de la
+  // búsqueda anterior con la caja en blanco.
+  useEffect(() => {
+    onQueryChange?.(query);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
@@ -186,7 +215,7 @@ export default function Select({
             className="max-h-60 overflow-auto py-1"
           >
             {filtered.length === 0 && (
-              <li className="px-3 py-2 text-sm text-neutral-400">Sin opciones</li>
+              <li className="px-3 py-2 text-sm text-neutral-400">{mensajeVacio}</li>
             )}
             {filtered.map((opt, idx) => {
               const isSelected = String(opt.value) === String(value);
@@ -217,6 +246,7 @@ export default function Select({
               );
             })}
           </ul>
+          {pie}
         </div>
       )}
     </div>

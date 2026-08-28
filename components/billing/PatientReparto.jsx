@@ -15,12 +15,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
+import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 
 const eur = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(Number(n) || 0);
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 export default function PatientReparto({ patientId, defaultPayerClientId, onClose, onCreated }) {
-  const [clients, setClients] = useState([]);
   const [mode, setMode] = useState("split"); // 'single' | 'split'
   const [concept, setConcept] = useState("Cuota");
   const [period, setPeriod] = useState("");
@@ -33,19 +33,11 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    let alive = true;
-    fetch(`/api/clients?limit=200`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => { if (alive && d.ok) setClients(d.data.clients || []); })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, []);
-
-  const clientOptions = useMemo(
-    () => [{ value: "", label: "Selecciona pagador…" }, ...clients.map((c) => ({ value: c.id, label: c.name }))],
-    [clients]
-  );
+  // Las fichas ya no se bajan aquí (28/08/2026). Había buscador, sí, pero
+  // filtraba sobre las 200 que cabían: con las 1.083 de Aumenta se quedaban
+  // fuera 883 familias y escribir su nombre no las traía. Ahora pregunta
+  // SelectorCliente al servidor.
+  const opcionesPagador = useMemo(() => [{ value: "", label: "Selecciona pagador…" }], []);
   const repartido = useMemo(() => round2(rows.reduce((s, r) => s + (Number(r.amount) || 0), 0)), [rows]);
   const totalNum = round2(total);
   const cuadra = totalNum > 0 && Math.abs(repartido - totalNum) < 0.005;
@@ -160,7 +152,7 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
         {mode === "single" ? (
           <div>
             <label className={labelCls}>Pagador</label>
-            <Select value={singlePayer} onChange={setSinglePayer} options={clientOptions} searchable className={inputCls} />
+            <SelectorCliente value={singlePayer} onChange={setSinglePayer} opcionesFijas={opcionesPagador} className={inputCls} />
           </div>
         ) : (
           <>
@@ -169,7 +161,7 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
                 <div key={i} className="flex items-end gap-2">
                   <div className="flex-1 min-w-0">
                     {i === 0 && <label className={labelCls}>Pagador</label>}
-                    <Select value={r.clientId} onChange={(v) => setRow(i, "clientId", v)} options={clientOptions} searchable className={inputCls} />
+                    <SelectorCliente value={r.clientId} onChange={(v) => setRow(i, "clientId", v)} opcionesFijas={opcionesPagador} className={inputCls} />
                   </div>
                   <div className="w-28">
                     {i === 0 && <label className={labelCls}>Importe (€)</label>}

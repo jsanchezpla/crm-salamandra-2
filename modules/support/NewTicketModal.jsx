@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ORDEN_PRIORIDADES, PRIORIDADES } from "./supportUi.js";
+// La MISMA regla que el desplegable de fichas de las otras once pantallas
+// (`components/clients/SelectorCliente.jsx`). Aquí la lista se pinta abierta y
+// allí colgando de un botón, pero cuántas se piden y cuánto se espera al
+// teclear tiene que ser una sola cosa.
+import { ESPERA_MS, urlDeFichas } from "../../lib/clients/buscarFichas.js";
 
 const CAMPO =
   "w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white outline-none transition-colors focus:border-gray-400";
@@ -47,7 +52,7 @@ export default function NewTicketModal({ categorias, equipo, clientePrefijado, o
   // aparece y el ticket nace con el solicitante escrito a mano. De paso deja unas
   // pocas a la vista, para no recibir a nadie con una caja vacía.
   useEffect(() => {
-    fetch("/api/clients?limit=8")
+    fetch(urlDeFichas(""))
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (!j?.data) return;
@@ -78,10 +83,7 @@ export default function NewTicketModal({ categorias, equipo, clientePrefijado, o
     const mia = ++peticion.current;
     setBuscando(Boolean(texto));
     const t = setTimeout(() => {
-      const url = texto
-        ? `/api/clients?limit=20&search=${encodeURIComponent(texto)}`
-        : "/api/clients?limit=8";
-      fetch(url)
+      fetch(urlDeFichas(texto))
         .then((r) => (r.ok ? r.json() : null))
         .then((j) => {
           if (mia !== peticion.current) return; // llegó tarde: manda la última
@@ -92,7 +94,7 @@ export default function NewTicketModal({ categorias, equipo, clientePrefijado, o
         .catch(() => {
           if (mia === peticion.current) setBuscando(false);
         });
-    }, 300);
+    }, ESPERA_MS);
     return () => clearTimeout(t);
   }, [buscaCliente, hayFichas]);
 

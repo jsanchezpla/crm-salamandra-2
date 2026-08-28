@@ -7,6 +7,7 @@ import StatusBadge, { INVOICE_STATUS_LABELS } from "../_components/StatusBadge.j
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 import Select from "@/components/ui/Select.jsx";
+import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 
 import { nifDeCliente } from "../../../../lib/billing/nifCliente.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
@@ -62,7 +63,9 @@ export default function FacturasPage() {
   const { sortKey, sortDir, toggle: toggleSort } = useSortState("issueDate", "desc");
 
   // Datos auxiliares
-  const [clients, setClients] = useState([]);
+  // La ficha del pagador, tal y como la resuelve SelectorCliente: se usa para
+  // avisar de que le faltan razón social o NIF antes de emitir.
+  const [clienteElegido, setClienteElegido] = useState(null);
   // Alta rápida de cliente sin salir del editor.
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClient, setNewClient] = useState({ name: "", taxId: "" });
@@ -102,7 +105,7 @@ export default function FacturasPage() {
   // Carga inicial
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" }).then((r) => r.json()).then((j) => j.ok && setMe(j.data)).catch(() => {});
-    fetch("/api/clients?limit=200", { cache: "no-store" }).then((r) => r.json()).then((j) => setClients(j.data?.clients ?? [])).catch(() => {});
+    // Las fichas ya no se bajan aquí: las pide SelectorCliente según se escribe.
     fetch("/api/team?status=all&limit=200", { cache: "no-store" }).then((r) => r.json()).then((j) => setEmployees(j.data?.members ?? [])).catch(() => {});
     fetch("/api/billing/series", { cache: "no-store" }).then((r) => r.json()).then((j) => setSeries(j.data ?? [])).catch(() => {});
     fetch("/api/billing/settings", { cache: "no-store" }).then((r) => r.json()).then((j) => setSettings(j.data)).catch(() => {});
@@ -155,7 +158,7 @@ export default function FacturasPage() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "No se pudo crear el cliente");
       const c = j.data;
-      setClients((cs) => [c, ...cs]);
+      setClienteElegido(c);
       setForm((f) => ({ ...f, clientId: c.id }));
       setNewClient({ name: "", taxId: "" });
       setShowNewClient(false);
@@ -537,8 +540,11 @@ export default function FacturasPage() {
               {editing && (
                 <form onSubmit={handleSubmit} className="space-y-4">
                   {(() => {
-                    const sel = clients.find((c) => c.id === form.clientId);
-                    if (!sel) return null;
+                    // La ficha elegida la da SelectorCliente, que es quien la
+                    // tiene: buscarla en una lista descargada era el fallo —
+                    // una que no estuviera entre las 200 no avisaba de nada.
+                    const sel = clienteElegido;
+                    if (!sel || String(sel.id) !== String(form.clientId)) return null;
                     const missing = [];
                     if (!sel.fiscalName) missing.push("razón social");
                     if (!nifDeCliente(sel)) missing.push("NIF/CIF");
@@ -566,13 +572,12 @@ export default function FacturasPage() {
                     <FormRow label="Cliente (pagador) *">
                       <div className="flex items-center gap-2">
                         <div className="flex-1 min-w-0">
-                          <Select
+                          <SelectorCliente
                             value={form.clientId}
                             onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
-                            options={[
-                              { value: "", label: "Selecciona..." },
-                              ...clients.map((c) => ({ value: c.id, label: `${c.fiscalName || c.name}${!nifDeCliente(c) ? "  ⚠" : ""}` })),
-                            ]}
+                            onFicha={setClienteElegido}
+                            etiqueta={(c) => `${c.fiscalName || c.name}${!nifDeCliente(c) ? "  ⚠" : ""}`}
+                            opcionesFijas={[{ value: "", label: "Selecciona..." }]}
                             className={inputCls}
                           />
                         </div>

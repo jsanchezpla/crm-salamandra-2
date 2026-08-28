@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
+import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import { fmtDate } from "./ui.jsx";
 export function PatientPanel({ client, clientId }) {
   if (!client && clientId) {
@@ -87,7 +88,6 @@ export function TemplateSidePanel({ plan }) {
 
 export function TemplateAssignPanel({ plan }) {
   const [assignments, setAssignments] = useState([]);
-  const [clients, setClients] = useState([]);
   const [pickedClientId, setPickedClientId] = useState("");
   const [assigning, setAssigning] = useState(false);
   const [msg, setMsg] = useState(null); // { kind: 'ok'|'err', text }
@@ -108,13 +108,6 @@ export function TemplateAssignPanel({ plan }) {
 
   useEffect(() => { loadAssignments(); }, [loadAssignments]);
 
-  // Pacientes (clientes) para el selector — carga única.
-  useEffect(() => {
-    fetch(`/api/clients?limit=200`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => setClients(j.data?.clients ?? []))
-      .catch(() => {});
-  }, []);
 
   async function assign() {
     if (!pickedClientId || assigning) return;
@@ -139,13 +132,9 @@ export function TemplateAssignPanel({ plan }) {
     }
   }
 
-  const clientOptions = useMemo(
-    () => [
-      { value: "", label: "Asignar a paciente…" },
-      ...clients.map((c) => ({ value: c.id, label: c.name })),
-    ],
-    [clients]
-  );
+  // Aquí SÍ había buscador, pero filtraba sobre las 200 descargadas: el techo
+  // callado de siempre. Ahora pregunta al servidor (28/08/2026).
+  const clientOptions = useMemo(() => [{ value: "", label: "Asignar a paciente…" }], []);
 
   return (
     <div className="pt-2 border-t border-gray-100 space-y-2">
@@ -164,11 +153,10 @@ export function TemplateAssignPanel({ plan }) {
       )}
       <div className="flex items-center gap-1.5">
         <div className="flex-1 min-w-0">
-          <Select
+          <SelectorCliente
             value={pickedClientId}
             onChange={setPickedClientId}
-            options={clientOptions}
-            searchable
+            opcionesFijas={clientOptions}
             className="w-full px-2 py-1.5 text-xs rounded border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 bg-white"
           />
         </div>

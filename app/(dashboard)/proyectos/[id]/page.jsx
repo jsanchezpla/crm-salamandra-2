@@ -7,6 +7,7 @@ import StatusBadge, { STATUS_OPTIONS } from "../../../../components/projects/Sta
 import PriorityBadge, { PRIORITY_OPTIONS } from "../../../../components/projects/PriorityBadge.jsx";
 import AiEditModal from "../../../../components/projects/AiEditModal.jsx";
 import Select from "@/components/ui/Select.jsx";
+import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 
 const TABS = [
@@ -56,7 +57,6 @@ export default function ProyectoDetallePage() {
   const [milestones, setMilestones] = useState([]);
   const [columns, setColumns] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
-  const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAiEdit, setShowAiEdit] = useState(false);
@@ -78,14 +78,13 @@ export default function ProyectoDetallePage() {
     setLoading(true);
     setError(null);
     try {
-      const [pRes, mRes, phRes, miRes, cRes, teamRes, clRes] = await Promise.all([
+      const [pRes, mRes, phRes, miRes, cRes, teamRes] = await Promise.all([
         fetch(`/api/projects/${id}`).then((r) => r.json()),
         fetch(`/api/projects/${id}/members`).then((r) => r.json()),
         fetch(`/api/projects/${id}/phases`).then((r) => r.json()),
         fetch(`/api/projects/${id}/milestones`).then((r) => r.json()),
         fetch(`/api/projects/${id}/columns`).then((r) => r.json()),
         fetch(`/api/team?limit=200`).then((r) => r.json()).catch(() => null),
-        fetch(`/api/clients?limit=200`).then((r) => r.json()).catch(() => null),
       ]);
       if (!pRes?.ok) throw new Error(pRes?.error || "Proyecto no encontrado");
       setProject(pRes.data);
@@ -94,7 +93,6 @@ export default function ProyectoDetallePage() {
       setMilestones(miRes?.data ?? []);
       setColumns(cRes?.data ?? []);
       setTeamMembers(teamRes?.data?.members ?? teamRes?.data ?? []);
-      setClients(clRes?.data?.clients ?? clRes?.data ?? []);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -205,7 +203,6 @@ export default function ProyectoDetallePage() {
         <SettingsTab
           project={project}
           columns={columns}
-          clients={clients}
           isAdmin={isAdmin}
           onChange={fetchAll}
           onArchive={() => { router.push("/proyectos"); }}
@@ -514,7 +511,7 @@ function PhasesTab({ projectId, phases, onChange }) {
 
 // ─── Pestaña: Configuración ──────────────────────────────────────────────
 
-function SettingsTab({ project, columns, clients, isAdmin, onChange, onArchive }) {
+function SettingsTab({ project, columns, isAdmin, onChange, onArchive }) {
   const [form, setForm] = useState({
     name: project.name,
     description: project.description ?? "",
@@ -585,14 +582,11 @@ function SettingsTab({ project, columns, clients, isAdmin, onChange, onArchive }
               options={PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
             />
           </div>
-          <Select
+          <SelectorCliente
             className={inputCls}
             value={form.clientId}
             onChange={(v) => setForm({ ...form, clientId: v })}
-            options={[
-              { value: "", label: "— Sin cliente —" },
-              ...clients.map((c) => ({ value: c.id, label: c.name })),
-            ]}
+            opcionesFijas={[{ value: "", label: "— Sin cliente —" }]}
           />
           <div className="grid grid-cols-2 gap-2">
             <input type="date" className={inputCls} value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />

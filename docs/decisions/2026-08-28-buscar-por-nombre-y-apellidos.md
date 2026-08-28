@@ -203,6 +203,58 @@ existieran. **Un techo callado se lee como una ausencia.** Ahora pregunta al
 servidor según se escribe y, cuando hay más coincidencias que sitio, lo dice.
 Detalle en `docs/modules/support.md`.
 
+## Tercera tanda: el mismo techo estaba en OTRAS ONCE pantallas
+
+Se arregló en Soporte y se dio por hecho que era una pantalla. **Lo tenían
+once más.** Apareció al día siguiente, con Rodrigo apuntando en el tablero que
+en Presupuestos no se puede ni escribir el nombre del cliente.
+
+Todas hacían literalmente lo mismo: `fetch("/api/clients?limit=200")` al
+abrirse y filtrar encima de esa lista. Presupuestos, Nueva factura, Cobros,
+Recurrentes, Gastos, Pedidos, Proyectos (el filtro Y el formulario), la ficha
+de proyecto, el Calendario, el modal de IA de Proyectos, el reparto por
+paciente de Facturación y las Pautas de Laura.
+
+**Y algunas ni siquiera tenían dónde escribir**: había que bajar por el
+desplegable hasta encontrar la familia, entre las 200 que hubieran cabido.
+
+Dos cosas que solo se ven al medirlo:
+
+- **Subir el número no arreglaba nada.** `/api/clients` corta en 200 por su
+  cuenta (`Math.min(limit, 200)`), así que el `limit=300` de Cobros y el
+  `limit=500` del Calendario **ya estaban recibiendo 200** desde el día que se
+  escribieron. Quien los puso creyó que había resuelto el problema.
+- **Donde SÍ había buscador era igual de malo**, y más engañoso: el reparto por
+  paciente y las Pautas de Laura tenían caja de búsqueda, pero filtraba sobre
+  las 200 descargadas. Escribes el nombre correcto y no sale nadie.
+
+### La pieza, y por qué es una y no once
+
+`components/clients/SelectorCliente.jsx`. Es un reemplazo directo del `<Select>`
+que había —mismas pintas, mismo teclado— y la pantalla **ya no se baja la lista**.
+Pregunta al servidor según se escribe, dice cuántas coinciden cuando no caben, y
+pide **por su id** la ficha ya elegida: buscarla dentro de la lista descargada
+era el otro fallo, porque una que no estuviera en las 200 salía como «sin
+elegir» aunque el registro estuviera bien guardado.
+
+Debajo, `components/ui/Select.jsx` aprendió cuatro props opcionales
+(`onQueryChange`, `filtrarEnCliente`, `mensajeVacio`, `pie`) para poder buscar
+fuera. Sin pasarlas se comporta exactamente igual que antes, que es lo que
+protege a los otros cuarenta sitios que lo usan.
+
+Y la regla de CUÁNTAS se piden vive en `lib/clients/buscarFichas.js`, compartida
+con el buscador de Soporte —que se pinta distinto, abierto en vez de colgando de
+un botón—. Ahí no puede haber dos ideas de cuántas fichas se traen ni de cuánto
+se espera al teclear.
+
+### Tres silencios que antes eran uno
+
+El desplegable vacío decía «Sin opciones» pasara lo que pasara. Ahora distingue
+**«estoy mirando»** (Buscando…), **«he mirado y no está»** (Ninguna ficha
+coincide) y **«aquí todavía no hay nada»** (Aún no hay fichas. Se crean en
+Clientes). Confundirlos es exactamente lo que hacía daño: la familia que no
+cabía se leía igual que la que no existe.
+
 ## La red que faltaba: `no-undef`
 
 Al aplicar los quince se olvidaron **dos imports** —Soporte y el Excel de

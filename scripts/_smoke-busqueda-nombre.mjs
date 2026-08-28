@@ -371,8 +371,12 @@ describe("El selector de cliente de un ticket llega a TODAS las fichas", () => {
   });
 
   it("le pasa lo escrito al servidor", () => {
+    // Desde el 28/08/2026 la dirección la arma `lib/clients/buscarFichas.js`,
+    // compartida con el desplegable de las otras once pantallas. Lo que se
+    // vigila aquí es que el modal SIGA preguntando con lo tecleado; que esa
+    // dirección esté bien montada lo prueba `_smoke-selector-fichas.mjs`.
     assert.ok(
-      modal.includes("search=${encodeURIComponent("),
+      modal.includes("urlDeFichas(texto)"),
       "la búsqueda ya no viaja al servidor: vuelve a filtrar sobre lo descargado"
     );
   });

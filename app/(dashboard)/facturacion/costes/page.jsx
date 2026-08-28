@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Link from "next/link";
 import Select from "@/components/ui/Select.jsx";
+import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import { paramsFiltrosGasto, urlConFiltros } from "@/lib/billing/filtrosGasto.js";
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
@@ -61,7 +62,6 @@ export default function CostesPage() {
   }, [searchInput]);
 
   const [employees, setEmployees] = useState([]);
-  const [clients, setClients] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [settings, setSettings] = useState(null);
   const [me, setMe] = useState(null);
@@ -87,7 +87,7 @@ export default function CostesPage() {
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" }).then((r) => r.json()).then((j) => j.ok && setMe(j.data)).catch(() => {});
     fetch("/api/team?status=all&limit=200", { cache: "no-store" }).then((r) => r.json()).then((j) => setEmployees(j.data?.members ?? [])).catch(() => {});
-    fetch("/api/clients?limit=200", { cache: "no-store" }).then((r) => r.json()).then((j) => setClients(j.data?.clients ?? [])).catch(() => {});
+    // Las fichas ya no se bajan aquí: las pide SelectorCliente según se escribe.
     // Solo los activos: la lista sirve para ELEGIR, y aquí no se dan de alta
     // proveedores (eso vive en Facturación → Proveedores).
     fetch("/api/proveedores", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j?.ok) setSuppliers(j.data?.suppliers ?? []); }).catch(() => {});
@@ -405,7 +405,7 @@ export default function CostesPage() {
                   <Select value={form.employeeId} onChange={(v) => setForm((f) => ({ ...f, employeeId: v }))} className={inputCls} options={[{ value: "", label: "Quien lo registra" }, ...employees.map((m) => ({ value: m.id, label: m.displayName }))]} />
                 </FormRow>
                 <FormRow label="Cliente (opcional)">
-                  <Select value={form.clientId} onChange={(v) => setForm((f) => ({ ...f, clientId: v }))} className={inputCls} options={[{ value: "", label: "—" }, ...clients.map((c) => ({ value: c.id, label: c.name }))]} />
+                  <SelectorCliente value={form.clientId} onChange={(v) => setForm((f) => ({ ...f, clientId: v }))} className={inputCls} opcionesFijas={[{ value: "", label: "—" }]} />
                 </FormRow>
               </div>
               <FormRow label="Proveedor (opcional)">

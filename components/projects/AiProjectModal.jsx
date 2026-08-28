@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Select from "@/components/ui/Select.jsx";
+import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import PriorityBadge, { PRIORITY_OPTIONS } from "@/components/projects/PriorityBadge.jsx";
 
 /**
@@ -36,7 +37,7 @@ function initials(name) {
   return name.trim().split(/\s+/).slice(0, 2).map((s) => s[0]?.toUpperCase()).join("");
 }
 
-export default function AiProjectModal({ clients = [], onClose }) {
+export default function AiProjectModal({ onClose }) {
   const router = useRouter();
 
   const [step, setStep] = useState("prompt"); // "prompt" | "preview"
@@ -185,15 +186,12 @@ export default function AiProjectModal({ clients = [], onClose }) {
             </div>
             <div>
               <label className="block text-xs font-medium text-neutral-600 mb-1">Cliente (opcional)</label>
-              <Select
+              <SelectorCliente
                 className={inputCls}
                 value={clientId}
                 onChange={(v) => setClientId(v)}
                 placeholder="— Sin cliente (proyecto interno) —"
-                options={[
-                  { value: "", label: "— Sin cliente (proyecto interno) —" },
-                  ...clients.map((c) => ({ value: c.id, label: c.name })),
-                ]}
+                opcionesFijas={[{ value: "", label: "— Sin cliente (proyecto interno) —" }]}
               />
             </div>
           </div>

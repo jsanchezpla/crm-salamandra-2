@@ -7,6 +7,7 @@ import StatusBadge from "../_components/StatusBadge.jsx";
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 import Select from "@/components/ui/Select.jsx";
+import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { coincidePorNombre } from "../../../../lib/utils/busqueda.js";
@@ -45,7 +46,6 @@ export default function CobrosPage() {
   // abre los documentos de esa familia en su área privada.
   const [form, setForm] = useState({ modo: "factura", invoiceId: "", clientId: "", periodMonth: new Date().toISOString().slice(0, 7), amount: "", method: "transfer", paidAt: new Date().toISOString().slice(0, 10), notes: "" });
   const [editing, setEditing] = useState(null); // cobro que se está editando
-  const [clientes, setClientes] = useState([]);
   const [morosidad, setMorosidad] = useState(null);
   const [mesMorosidad, setMesMorosidad] = useState(new Date().toISOString().slice(0, 7));
   const [saving, setSaving] = useState(false);
@@ -64,10 +64,10 @@ export default function CobrosPage() {
 
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" }).then((r) => r.json()).then((j) => j.ok && setMe(j.data)).catch(() => {});
-    fetch("/api/clients?limit=300", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => setClientes(j?.data?.clients ?? j?.data ?? []))
-      .catch(() => {});
+    // Las fichas ya no se bajan aquí (28/08/2026). Este `limit=300` recibía 200,
+    // porque /api/clients corta por su cuenta: con las 1.083 de Aumenta se
+    // quedaban fuera 883 familias y no había forma de llegar a ellas. Ahora
+    // pregunta SelectorCliente al servidor según se escribe.
   }, []);
 
   const load = useCallback(async () => {
@@ -417,11 +417,11 @@ export default function CobrosPage() {
               {form.modo === "cuota" && (
                 <>
                   <FormRow label="Cliente *">
-                    <Select
+                    <SelectorCliente
                       value={form.clientId}
                       onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
                       className={inputCls}
-                      options={[{ value: "", label: "Selecciona cliente..." }, ...clientes.map((c) => ({ value: c.id, label: c.name }))]}
+                      opcionesFijas={[{ value: "", label: "Selecciona cliente..." }]}
                     />
                   </FormRow>
                   <FormRow label="Mes que se paga *">
