@@ -1225,13 +1225,35 @@ existe y ningún cambio de código lo inventa — hay que pedírselo a la famili
 relajar la obligatoriedad del alta manual (que hoy exige los dos, en la pantalla
 y en el servidor). Decisión abierta.
 
-**El tope de 300, tapado solo donde importa.** `/api/pacientes` corta en 300 por
-diseño y Aumenta tiene 1.174: 874 pacientes (el 74%) no estaban en el
+**El tope de 300, levantado del todo (28/08/2026).** `/api/pacientes` corta en
+300 por diseño y Aumenta tiene 1.174: 874 pacientes (el 74%) no estaban en el
 desplegable, y escribir su nombre contestaba «Sin opciones» —lo mismo que
-contesta cuando ese paciente no existe—. Eso rompía las dos entradas nuevas, así
-que **en cuanto hay familia elegida se le piden SUS pacientes**
-(`/api/pacientes?clientId=`) y se suman a la lista. El tope general sigue ahí y
-tiene ficha propia en el Registro.
+contesta cuando ese paciente no existe—.
+
+Primero se tapó por donde más dolía: con familia elegida se le pedían SUS
+pacientes. Servía para el camino normal, pero entrar por el desplegable **sin**
+familia seguía llegando solo a 300. Ahora el desplegable es
+`components/citas/SelectorPaciente.jsx`, que **pregunta al servidor según se
+escribe** y dice cuántos coinciden cuando no caben todos. El tope de 300 NO se
+toca: la pantalla de Pacientes calcula sus indicadores sobre todo lo que recibe.
+
+Tres cosas que ese selector tiene que seguir haciendo, y que se rompen sin
+enterarse:
+
+- **Traer al paciente ya elegido POR SU ID.** Al buscar por el nombre del hijo,
+  la caja de arriba deja el paciente puesto. Si el desplegable solo pintara lo
+  que ha traído, saldría «Sin paciente asignado» con la cita a punto de nacer
+  con él.
+- **Pasar la ficha ENTERA hacia arriba.** Cada paciente viene con su `client`
+  colgado, y de ahí salen el correo y el teléfono de la cita. Antes se buscaba
+  en la lista descargada: para los 874 que no cabían, la cita se creaba sin
+  terapeuta y sin contacto, en silencio.
+- **Poder volver a «Sin paciente asignado».** La cita de la familia sin
+  atribuir a un hijo concreto es un caso real.
+
+La mecánica la comparte con el selector de fichas de Facturación
+(`components/ui/SelectorRemoto.jsx`); lo propio de pacientes —que el parámetro
+es `q` y no `search`— vive en `lib/citas/buscarPacientes.js`, con su prueba.
 
 #### De la cita a la ficha, y por qué no se enseña la última sesión (27/08/2026, Jorge)
 

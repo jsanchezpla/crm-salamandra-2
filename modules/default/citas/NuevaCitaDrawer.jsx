@@ -6,9 +6,10 @@
 // monta con el hueco pulsado en el calendario (`inicial` = { date, time },
 // vacíos si se abre desde el botón) y refresca al crearse (onCreated).
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
 import BuscadorPaciente from "../../../components/citas/BuscadorPaciente.jsx";
+import SelectorPaciente from "../../../components/citas/SelectorPaciente.jsx";
 import { datosAlElegirFicha } from "../../../lib/clients/contactoDeFicha.js";
 import { MODALITY_LABELS, inputCls } from "./chips.jsx";
 
@@ -32,7 +33,6 @@ export function NuevaCitaDrawer({
   eventTypes,
   teamMembers,
   patients,
-  patientOptions,
   confirmar,
   avisar,
   onClose,
@@ -54,58 +54,46 @@ export function NuevaCitaDrawer({
   }, [eventTypes, createForm.eventTypeId]);
 
   /*
-   * ── LOS HIJOS DE LA FAMILIA ELEGIDA, SIEMPRE (28/08/2026) ─────────────────
+   * ── EL TECHO DE LOS 300 PACIENTES (28/08/2026) ────────────────────────────
    *
-   * `patients` viene del padre, que pide `/api/pacientes` sin más: ese endpoint
+   * `patients` venía del padre, que pedía `/api/pacientes` sin más: ese endpoint
    * corta en 300 por diseño y Aumenta tiene 1.174. O sea que 874 pacientes —el
-   * 74%— no están en el desplegable, y escribir su nombre contesta «Sin
+   * 74%— no estaban en el desplegable, y escribir su nombre contestaba «Sin
    * opciones»: exactamente lo mismo que contesta cuando ese paciente no existe.
-   * Es el techo callado de siempre, aquí otra vez.
    *
-   * Eso rompía las dos entradas nuevas: elegir al hijo para que salgan los
-   * datos de su familia, y el paciente que la caja de arriba deja ya elegido al
-   * buscar por su nombre —que si no estaba entre los 300, el desplegable pintaba
-   * «Sin paciente asignado» aunque la cita fuera a nacer con él—.
+   * Aquí vivía una tapa parcial: se pedían los pacientes de la familia elegida y
+   * se sumaban a los 300. Servía para el camino normal, pero entrar por el
+   * desplegable sin familia seguía llegando solo a 300.
    *
-   * Se arregla por donde se puede arreglar entero: en cuanto hay familia se le
-   * piden SUS pacientes, que son uno o dos, y se suman a la lista. El tope
-   * general sigue ahí y tiene ficha propia en el Registro.
+   * Ya no hace falta ninguna de las dos cosas: `SelectorPaciente` pregunta al
+   * servidor según se escribe, acota por familia cuando hay una elegida, y trae
+   * por su id al que venga ya elegido. Lo que antes había que remendar aquí
+   * ahora lo sabe la pieza. `patients` se queda SOLO como puerta del módulo
+   * («¿este centro tiene pacientes?»), no como lista de la que elegir.
    */
-  const [pacientesDeLaFamilia, setPacientesDeLaFamilia] = useState([]);
-  useEffect(() => {
-    const familia = createForm.clientId;
-    if (!familia) { setPacientesDeLaFamilia([]); return; }
-    let vigente = true;
-    fetch(`/api/pacientes?clientId=${encodeURIComponent(familia)}`, { cache: "no-store" })
-      .then(async (r) => (r.ok ? r.json() : null))
-      .then((j) => { if (vigente) setPacientesDeLaFamilia(j?.data?.patients ?? []); })
-      .catch(() => {});
-    // Si se cambia de familia antes de que conteste, la respuesta vieja se tira:
-    // pintar los hijos de la familia anterior sería peor que no pintar ninguno.
-    return () => { vigente = false; };
-  }, [createForm.clientId]);
 
-  /** Todos los pacientes que este formulario puede ofrecer, sin repetidos. */
-  const pacientesConocidos = useMemo(() => {
-    const porId = new Map();
-    for (const p of patients) porId.set(p.id, p);
-    // Los de la familia elegida van DESPUÉS y pisan: vienen recién traídos.
-    for (const p of pacientesDeLaFamilia) porId.set(p.id, p);
-    return [...porId.values()];
-  }, [patients, pacientesDeLaFamilia]);
+  /**
+   * Trae un paciente por su id. Lo necesita la caja de la familia cuando el
+   * hijo es único: de ahí solo llega `{id, nombre}`, y para poner su terapeuta
+   * hace falta la ficha entera. Antes se buscaba en la lista de 300 — y si el
+   * paciente no estaba, la cita nacía sin profesional y sin que nadie lo dijera.
+   */
+  const traerPaciente = useCallback(async (idPaciente) => {
+    try {
+      const r = await fetch(`/api/pacientes/${idPaciente}`, { cache: "no-store" });
+      if (!r.ok) return null;
+      return (await r.json())?.data ?? null;
+    } catch {
+      return null;
+    }
+  }, []);
 
-  const opcionesPaciente = useMemo(() => {
-    const yaEstan = new Set(patientOptions.map((o) => o.value));
-    const nombre = (p) => p.name || `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim();
-    return [
-      ...patientOptions,
-      ...pacientesDeLaFamilia
-        .filter((p) => !yaEstan.has(p.id))
-        .map((p) => ({ value: p.id, label: nombre(p) })),
-    ];
-  }, [patientOptions, pacientesDeLaFamilia]);
-
-  function updateCreateForm(field, value) {
+  /**
+   * @param objeto la fila entera cuando el campo la tiene detrás (hoy solo el
+   *   paciente). Se pasa en vez de buscarla en una lista descargada, que es
+   *   justo lo que no se puede hacer cuando hay más de las que caben.
+   */
+  function updateCreateForm(field, value, objeto = null) {
     // Al cambiar de tipo de cita (arreglo 2026-07-23): si la modalidad elegida
     // ya no la ofrece el tipo nuevo, se limpia. Antes quedaba una modalidad
     // huérfana (p. ej. 'online') que colaba la validación cliente y el servidor
@@ -148,7 +136,11 @@ export function NuevaCitaDrawer({
      * en los huecos que la ficha deja.
      */
     if (field === "patientId") {
-      const p = pacientesConocidos.find((x) => x.id === value);
+      // El paciente llega ENTERO desde el selector, que lo acaba de traer del
+      // servidor. Antes se buscaba en la lista de 300 que bajaba el padre, así
+      // que para 874 de los 1.174 de Aumenta esto no encontraba nada: la cita
+      // se creaba sin terapeuta y sin los datos de su familia, en silencio.
+      const p = objeto ?? null;
       const terapeuta = p?.mainTherapistId ?? p?.therapistId ?? null;
       const familia = p?.client ?? null;
       setCreateForm((prev) => ({
@@ -411,9 +403,27 @@ export function NuevaCitaDrawer({
                    * el hermano que no es.
                    */
                   const unico = Array.isArray(c.pacientes) && c.pacientes.length === 1 ? c.pacientes[0] : null;
-                  // El mismo respaldo que al elegir paciente a mano, arriba.
-                  const suyo = unico ? pacientesConocidos.find((p) => p.id === unico.id) : null;
-                  const terapeuta = suyo?.mainTherapistId ?? suyo?.therapistId ?? null;
+                  /*
+                   * El terapeuta se pide DESPUÉS, por su id (28/08/2026). La
+                   * familia trae solo `{id, nombre}` de cada hijo, y antes su
+                   * terapeuta se buscaba en la lista de 300: para los 874
+                   * pacientes que no cabían, la cita nacía sin profesional y sin
+                   * decirlo. Va en dos pasos a propósito — los datos de la
+                   * familia se pintan YA y el terapeuta cuando llegue, en vez de
+                   * dejar el formulario quieto esperando una consulta.
+                   */
+                  if (unico) {
+                    traerPaciente(unico.id).then((p) => {
+                      const terapeuta = p?.mainTherapistId ?? p?.therapistId ?? null;
+                      if (terapeuta) {
+                        setCreateForm((prev) =>
+                          prev.patientId === unico.id && !prev.teamMemberId
+                            ? { ...prev, teamMemberId: terapeuta }
+                            : prev
+                        );
+                      }
+                    });
+                  }
                   setCreateForm((prev) => ({
                     ...prev,
                     /*
@@ -427,7 +437,7 @@ export function NuevaCitaDrawer({
                      * sin correo, esa pareja sale todos los días.
                      */
                     ...datosAlElegirFicha(prev, c),
-                    ...(unico ? { patientId: unico.id, teamMemberId: terapeuta ?? prev.teamMemberId } : {}),
+                    ...(unico ? { patientId: unico.id } : {}),
                   }));
                   buscarBono(c);
                 }}
@@ -448,12 +458,22 @@ export function NuevaCitaDrawer({
               {patients.length > 0 && (
                 <div>
                   <label className="block text-[11px] font-medium text-neutral-500 mb-1">Paciente</label>
-                  <Select
+                  {/*
+                    Pregunta al SERVIDOR según se escribe (28/08/2026). Antes se
+                    elegía sobre la lista que bajaba el padre, cortada en 300:
+                    con los 1.174 de Aumenta, 874 pacientes contestaban «Sin
+                    opciones», que es lo mismo que contesta cuando no existen.
+                    Con familia elegida se acota a los suyos, que es lo que se
+                    quiere ver aquí.
+                  */}
+                  <SelectorPaciente
                     value={createForm.patientId}
-                    onChange={(v) => updateCreateForm("patientId", v)}
-                    options={opcionesPaciente}
+                    familia={createForm.clientId || null}
+                    onChange={(v, p) => updateCreateForm("patientId", v, p)}
                     placeholder="Sin paciente asignado"
-                    searchable
+                    // Poder volver a «ninguno»: la cita de la familia sin
+                    // atribuir a un hijo concreto es un caso real.
+                    opcionesFijas={[{ value: "", label: "Sin paciente asignado" }]}
                   />
                   <p className="text-[10px] text-neutral-400 mt-1">
                     Quién viene a la sesión. Si la familia tiene varios, elige de quién es la cita.

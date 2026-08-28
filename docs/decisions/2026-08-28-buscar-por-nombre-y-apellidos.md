@@ -255,6 +255,41 @@ coincide) y **«aquí todavía no hay nada»** (Aún no hay fichas. Se crean en
 Clientes). Confundirlos es exactamente lo que hacía daño: la familia que no
 cabía se leía igual que la que no existe.
 
+## Cuarta tanda: el mismo techo en pacientes, y la pieza se parte
+
+Al día siguiente de las once pantallas apareció la doce: el desplegable de
+paciente del alta de una cita se bajaba la lista y ese endpoint corta en **300**.
+Aumenta tiene 1.174, así que **874 pacientes (el 74%)** contestaban «Sin
+opciones». Mismo fallo, otra tabla.
+
+Aquí la tentación era copiar `SelectorCliente` y cambiarle la URL. Sería repetir
+exactamente el error que causó todo esto —arreglar una pantalla y dejar las
+demás atrás—, así que se partió en tres:
+
+| Fichero | Qué sabe |
+| --- | --- |
+| `components/ui/SelectorRemoto.jsx` | preguntar al servidor, esperar al teclear, numerar consultas, traer la elegida por su id y avisar de que hay más |
+| `components/clients/SelectorCliente.jsx` | que las fichas están en `/api/clients` y el parámetro es `search` |
+| `components/citas/SelectorPaciente.jsx` | que los pacientes están en `/api/pacientes`, el parámetro es **`q`**, y `clientId` acota a una familia |
+
+**El nombre del parámetro no es un detalle**: `search` en fichas, `q` en
+pacientes. Equivocarse no da error — el servidor lo ignora y devuelve los
+primeros, así que *parecería* que busca y estaría enseñando cualquier cosa. Por
+eso la dirección se arma en `lib/citas/buscarPacientes.js`, un `.js` normal que
+se puede probar llamándolo, y no dentro del `.jsx` (que Node no sabe importar).
+
+### El borde que más fácil se escapa
+
+Al buscar por el nombre del hijo, la caja de la familia deja el paciente **ya
+elegido**. Si el desplegable solo pinta lo que ha traído, ese paciente sale como
+«Sin paciente asignado» con la cita a punto de nacer con él. Por eso la elegida
+se pide SIEMPRE por su id y va la primera de la lista, esté o no en lo que se ve.
+
+Y por lo mismo, elegir un paciente pasa su ficha ENTERA hacia arriba: de ella
+salen su terapeuta y el contacto de su familia. Antes se buscaba en la lista
+descargada, así que para los 874 que no cabían la cita se creaba **sin terapeuta
+y sin contacto, en silencio**.
+
 ## La red que faltaba: `no-undef`
 
 Al aplicar los quince se olvidaron **dos imports** —Soporte y el Excel de

@@ -244,13 +244,13 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
       .catch(() => {});
   }, []);
 
-  const patientOptions = useMemo(
-    () => [
-      { value: "", label: "Sin paciente asignado" }, // permite volver a "ninguno"
-      ...patients.map((p) => ({ value: p.id, label: p.name || `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() })),
-    ],
-    [patients]
-  );
+  /*
+   * Aquí se montaban las opciones del desplegable de paciente a partir de los
+   * 300 que cabían. Ya no: el alta pregunta al servidor según se escribe
+   * (`components/citas/SelectorPaciente.jsx`). `patients` se queda solo como
+   * puerta del módulo —si el endpoint contesta 403 llega vacío y la caja ni
+   * aparece—, no como lista de la que elegir.
+   */
 
   const fetchEvents = useCallback(async (info, success, failure) => {
     try {
@@ -848,7 +848,6 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           eventTypes={eventTypes}
           teamMembers={teamMembers}
           patients={patients}
-          patientOptions={patientOptions}
           confirmar={confirmar}
           avisar={avisar}
           onClose={() => setCreacion(null)}

@@ -19,6 +19,7 @@
 import { test, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { urlDePacientes } from "../lib/citas/buscarPacientes.js";
 
 import {
   CUANTAS_AL_ABRIR,
@@ -126,25 +127,84 @@ describe("ninguna pantalla vuelve a bajarse la lista entera", () => {
   }
 });
 
+const remoto = readFileSync(new URL("../components/ui/SelectorRemoto.jsx", import.meta.url), "utf8");
+
 test("el desplegable no filtra en el navegador lo que ya filtró el servidor", () => {
-  const sel = readFileSync(new URL("../components/clients/SelectorCliente.jsx", import.meta.url), "utf8");
   assert.ok(
-    sel.includes("filtrarEnCliente={false}"),
+    remoto.includes("filtrarEnCliente={false}"),
     "volver a filtrar aquí solo puede QUITAR resultados que el servidor sí encontró"
   );
-  assert.ok(sel.includes("urlDeFichas("), "la dirección se arma en lib/clients/buscarFichas.js");
   assert.ok(
-    sel.includes("consulta.current"),
+    remoto.includes("consulta.current"),
     "sin numerar las consultas, una lenta pisa a una nueva y se elige a quien no era"
-  );
-  assert.ok(
-    sel.includes("/api/clients/${value}"),
-    "la ficha ya elegida se pide por su id: buscarla en la lista descargada era el fallo"
   );
 });
 
+test("la ya elegida se trae por su id, no se busca en la lista", () => {
+  // Es el borde que más fácil se escapa: al buscar por el nombre del hijo, la
+  // caja de la familia deja el paciente ya elegido. Si el desplegable solo
+  // pinta lo que ha traído, sale «Sin paciente asignado» con la cita a punto de
+  // nacer con él.
+  assert.ok(remoto.includes("traerRef.current(value)"), "no se resuelve la elegida por id");
+  assert.ok(
+    remoto.includes("lista.unshift("),
+    "la elegida tiene que ir en la lista aunque no esté en lo que se ve, o el botón enseña el placeholder"
+  );
+
+  const cli = readFileSync(new URL("../components/clients/SelectorCliente.jsx", import.meta.url), "utf8");
+  assert.ok(cli.includes("/api/clients/${idFicha}"), "la ficha se pide por su id");
+  const pac = readFileSync(new URL("../components/citas/SelectorPaciente.jsx", import.meta.url), "utf8");
+  assert.ok(pac.includes("/api/pacientes/${idPaciente}"), "el paciente se pide por su id");
+});
+
 test("el aviso del techo se pinta con los números de verdad", () => {
-  const sel = readFileSync(new URL("../components/clients/SelectorCliente.jsx", import.meta.url), "utf8");
-  assert.ok(sel.includes("hayMasDeLasQueCaben("));
-  assert.ok(sel.includes("coinciden"), "un techo callado se lee como una ausencia");
+  assert.ok(remoto.includes("hayMasDeLasQueCaben("));
+  assert.ok(remoto.includes("coinciden"), "un techo callado se lee como una ausencia");
+});
+
+describe("el selector de pacientes", () => {
+  const pac = readFileSync(new URL("../components/citas/SelectorPaciente.jsx", import.meta.url), "utf8");
+
+  it("pregunta con `q`, que es como se llama en pacientes", () => {
+    // En fichas de cliente el parámetro es `search`; aquí es `q`. Equivocarse
+    // no da error: el servidor ignora el parámetro y devuelve los primeros,
+    // así que parecería que busca y estaría enseñando cualquier cosa.
+    const lib = readFileSync(new URL("../lib/citas/buscarPacientes.js", import.meta.url), "utf8");
+    assert.ok(lib.includes('p.set("q", q)'), "el parámetro de búsqueda de pacientes es `q`");
+    assert.ok(!lib.includes('p.set("search"'), "`search` no lo lee este endpoint");
+    assert.ok(pac.includes("urlDePacientes("), "el componente usa la regla compartida");
+  });
+
+  it("con familia elegida trae a los SUYOS y sin cortarlos", () => {
+    const p = new URLSearchParams(urlDePacientes("", "fam-1").split("?")[1]);
+    assert.equal(p.get("clientId"), "fam-1");
+    assert.ok(Number(p.get("limit")) >= 100, "los hijos de una familia son pocos: no se cortan");
+  });
+
+  it("sin familia pide pocas al abrir y más al buscar", () => {
+    const alAbrir = new URLSearchParams(urlDePacientes("", null).split("?")[1]);
+    const alBuscar = new URLSearchParams(urlDePacientes("hugo", null).split("?")[1]);
+    assert.equal(alAbrir.get("q"), null);
+    assert.equal(alBuscar.get("q"), "hugo");
+    assert.ok(Number(alBuscar.get("limit")) > Number(alAbrir.get("limit")));
+    assert.ok(Number(alBuscar.get("limit")) <= 300, "el listado de pacientes corta en 300");
+  });
+});
+
+test("el alta de cita ya no elige sobre una lista descargada", () => {
+  const drawer = readFileSync(
+    new URL("../modules/default/citas/NuevaCitaDrawer.jsx", import.meta.url),
+    "utf8"
+  );
+  assert.ok(drawer.includes("<SelectorPaciente"), "el desplegable de paciente tiene que preguntar al servidor");
+  assert.ok(
+    !drawer.includes("pacientesConocidos"),
+    "la tapa parcial (unir los 300 con los de la familia) sobra y no debe convivir con el selector"
+  );
+  assert.ok(
+    drawer.includes('opcionesFijas={[{ value: "", label: "Sin paciente asignado" }]}'),
+    "hay que poder volver a «sin paciente»: la cita de la familia sin atribuir es un caso real"
+  );
+  const padre = readFileSync(new URL("../modules/default/CitasModule.jsx", import.meta.url), "utf8");
+  assert.ok(!padre.includes("patientOptions"), "el padre ya no monta las opciones");
 });
