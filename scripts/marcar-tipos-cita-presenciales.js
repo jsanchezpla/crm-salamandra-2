@@ -22,21 +22,38 @@
  * centro está en modo manual—. Es información falsa saliendo por correo.
  *
  * ── POR QUÉ UN SCRIPT Y NO LA PANTALLA ──────────────────────────────────────
- * Dos motivos, y el segundo es el serio:
+ * Porque son 57 tipos, uno a uno, y solo puede un administrador.
  *
- *   1. Son 57 tipos, uno a uno, y solo puede un administrador.
- *   2. **Abrir un tipo de cita en /citas/tipos y guardarlo le BORRA el precio**
- *      (28/08/2026, apuntado en el Registro): el detalle tapa la tarifa sin
- *      mirar el rol, así que el formulario abre «Precio (€)» vacío y ese vacío
- *      pisa lo que había al guardar. A Aumenta le da igual —sus 57 tipos nunca
- *      tuvieron precio—, pero la misma instrucción repetida en `nutri_laura`,
- *      que cobra por la web, le borraría la tarifa de 3 de sus 8 tipos.
- *      Hasta que eso esté arreglado, los tipos de cita se tocan con esto.
+ * Hubo un segundo motivo, más serio, y **ya no vale**: abrir un tipo en
+ * /citas/tipos y guardarlo le borraba el precio. Lo arregló `a2835c9`, que está
+ * desplegado desde el 28/08/2026. Se deja escrito en vez de borrarlo porque el
+ * motivo se apuntó aquí, y quitarlo sin más deja a quien lo lea sin saber si la
+ * pantalla es de fiar: lo es. Para UN tipo suelto, usa la pantalla.
  *
  * ── QUÉ TOCA, Y NADA MÁS ────────────────────────────────────────────────────
  * DOS columnas de `event_types`: `modalities` y `location`. No crea ni borra
  * ningún tipo, no toca citas, ni precios, ni duraciones, ni nombres, ni la
  * agenda. Al terminar hay exactamente los mismos tipos que había.
+ *
+ * ── LO QUE ESTO **NO** ARREGLA: LA RESERVA PÚBLICA ──────────────────────────
+ * Esto desbloquea el alta MANUAL. El widget público sigue creando citas online
+ * pase lo que pase: `app/api/public/c/[tenantSlug]/book/route.js:803` escribe
+ * `modality: "online"` como literal, y los tres endpoints públicos
+ * (`event-types:83`, `availability:51`, `book:194`) solo aceptan tipos que
+ * incluyan online. La reserva pública presencial no existe todavía.
+ *
+ * Como esto DEJA online en la lista (suma, no reemplaza), el widget sigue
+ * viendo los 57 tipos igual que antes: no rompe nada. Pero tampoco los arregla,
+ * y en un centro cuyas 12.030 citas son presenciales, una reserva por la web
+ * seguiría naciendo online. Está apuntado en el Registro como pregunta de
+ * producto. Comprobado en producción el 28/08/2026: hoy no hay ni un tipo
+ * activo en ningún cliente al que el filtro público esté escondiendo.
+ *
+ * Efecto lateral pequeño y conocido: el enlace «Añadir a Google Calendar» usa
+ * `meetUrl || location` sin mirar la modalidad, así que en cuanto los tipos
+ * tengan dirección, una cita online de Aumenta —que no tiene sala— la llevará
+ * en el calendario. En este centro apunta al sitio correcto; en otro sería
+ * incoherente con el «Modalidad: Online» del propio correo.
  *
  * ── LA DIRECCIÓN ES OBLIGATORIA, Y NO SE INVENTA ────────────────────────────
  * `lib/citas/validation.js` exige `location` para aceptar 'presencial', y con
