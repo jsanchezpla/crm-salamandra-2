@@ -432,6 +432,32 @@ describe("buildReportPdfBuffer · el documento que sale", () => {
     assert.ok(paginasDe(con) > paginasDe(sin), `con=${paginasDe(con)} sin=${paginasDe(sin)}`);
   });
 
+  it("el isotipo NO abre página por su cuenta: cierra la que ya hay", async () => {
+    /*
+     * Se vio en el primer informe generado con la marca real de Aumenta. Como
+     * todavía no tienen escrito el aviso de protección de datos, el documento
+     * acababa en una hoja vacía con el isotipo pequeño abajo: parece un fallo
+     * de impresión, no un sello. La página nueva la abre el TEXTO legal; sin
+     * él, el isotipo cierra la última página que hubiera.
+     */
+    const marcaConIso = { ...BRAND, logoUrl: "/aumenta-logo.png", isotipoUrl: "/aumenta-isotipo.png" };
+    const sinTextoLegal = { ...CENTRO, proteccionDatos: "" };
+
+    const conTexto = await buildReportPdfBuffer(
+      argumentos({ brand: marcaConIso, tenant: { name: "C", settings: { centro: CENTRO, brand: marcaConIso } } })
+    );
+    const sinTexto = await buildReportPdfBuffer(
+      argumentos({ brand: marcaConIso, tenant: { name: "C", settings: { centro: sinTextoLegal, brand: marcaConIso } } })
+    );
+
+    assert.equal(
+      paginasDe(sinTexto),
+      paginasDe(conTexto) - 1,
+      `sin aviso legal tiene que haber UNA página menos: con=${paginasDe(conTexto)} sin=${paginasDe(sinTexto)}`
+    );
+    assert.equal(tieneImagen(sinTexto), true, "y el isotipo sigue estando, al pie de la última");
+  });
+
   it("no se cae con el informe más roto que se pueda imaginar", async () => {
     const buf = await buildReportPdfBuffer({
       report: { reportType: "no-existe", reportDate: null, contentSections: "basura", aiGenerated: 42 },
