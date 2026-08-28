@@ -308,12 +308,27 @@ export function NuevaCitaDrawer({
                   setCreateForm((prev) => ({ ...prev, clientName: texto, clientId: "" }));
                 }}
                 onElegir={(c) => {
+                  /*
+                   * Si esta familia ha salido porque coincidía UN paciente suyo
+                   * (28/08/2026, Lau), ese paciente es de quien es la cita: se
+                   * deja elegido. Recepción teclea el nombre del hijo, así que
+                   * pedirle que lo vuelva a elegir abajo sobra.
+                   *
+                   * Con VARIOS hermanos coincidiendo no se elige por ella: ahí
+                   * la pregunta es de verdad, y equivocarse pondría la sesión en
+                   * el hermano que no es.
+                   */
+                  const unico = Array.isArray(c.pacientes) && c.pacientes.length === 1 ? c.pacientes[0] : null;
+                  // El mismo respaldo que al elegir paciente a mano, arriba.
+                  const suyo = unico ? patients.find((p) => p.id === unico.id) : null;
+                  const terapeuta = suyo?.mainTherapistId ?? suyo?.therapistId ?? null;
                   setCreateForm((prev) => ({
                     ...prev,
                     clientId: c.id,
                     clientName: c.name || "",
                     clientEmail: c.email || prev.clientEmail,
                     clientPhone: c.phone || prev.clientPhone,
+                    ...(unico ? { patientId: unico.id, teamMemberId: terapeuta ?? prev.teamMemberId } : {}),
                   }));
                   buscarBono(c);
                 }}

@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import { filtroPorNombre } from "../../../../lib/utils/busquedaDb.js";
+import { agruparPorFamilia, conPacientes, idsDeFamilia } from "../../../../lib/citas/familiasDePacientes.js";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 
@@ -57,6 +58,51 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
      * propósito: es justo lo que se pidió, y tiene su casilla para volver a
      * verlas.
      */
+    /*
+     * ── TAMBIÉN POR EL NOMBRE DEL HIJO (28/08/2026, Lau de Aumenta) ─────────
+     *
+     * Esta caja se llama «Cliente (la familia)» y buscaba SOLO entre fichas de
+     * cliente. Pero quien viene a la sesión es el hijo, y recepción teclea su
+     * nombre: escribir «thiago» —un paciente dado de alta— respondía «Nadie con
+     * ese nombre». Medido en producción ese día: de los 1.174 pacientes de
+     * Aumenta, 934 (el 80%) no se podían encontrar por su nombre, porque su
+     * familia no se apellida como ellos.
+     *
+     * Y no era solo incomodidad: esta caja tiene salida a mano a propósito, así
+     * que quien no encontraba a alguien escribía el nombre y creaba la cita
+     * SUELTA de su ficha — el mismo fallo que este buscador vino a arreglar en
+     * julio, entrando por otra puerta.
+     *
+     * Se busca primero entre los pacientes, y sus familias se suman a las que
+     * coinciden por su propio nombre. El reparto (qué familia sale por qué
+     * paciente) lo hace `lib/citas/familiasDePacientes.js`, que tiene prueba.
+     */
+    const { Patient } = tenantModels;
+    let porFamilia = new Map();
+    if (q && Patient && (hasModule("pacientes") || hasModule("clinica"))) {
+      try {
+        const filtroPaciente = await filtroPorNombre(Patient.sequelize, q, [
+          "Patient.first_name", "Patient.last_name",
+        ]);
+        if (filtroPaciente) {
+          const encontrados = await Patient.findAll({
+            where: filtroPaciente,
+            attributes: ["id", "firstName", "lastName", "clientId"],
+            // Tope alto y propio: no compite con el de las fichas, y con 1.174
+            // pacientes una palabra corta puede traer muchos.
+            limit: 200,
+            raw: true,
+          });
+          porFamilia = agruparPorFamilia(encontrados);
+        }
+      } catch (err) {
+        // Mismo criterio que abajo: un tenant con citas pero sin tabla de
+        // pacientes se queda como estaba, no se cae el buscador.
+        const code = err?.parent?.code || err?.original?.code;
+        if (code !== "42P01") throw err;
+      }
+    }
+
     const where = {};
     // Todas las palabras, cada una en cualquiera de los campos (28/08/2026): en
     // recepción se teclea el nombre como lo dice quien llama, y antes «castro
@@ -65,7 +111,15 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       const porNombre = await filtroPorNombre(Client.sequelize, q, [
         "Client.name", "Client.email", "Client.phone",
       ]);
-      if (porNombre) (where[Op.and] ||= []).push(porNombre);
+      const familias = idsDeFamilia(porFamilia);
+      /*
+       * ⚠️ La lista de familias SOLO se añade si tiene algo. Un `IN ()` vacío no
+       * devuelve nada, y metido en el `Op.or` se llevaría por delante la
+       * búsqueda por el nombre de la familia — que es la que funcionaba.
+       */
+      const alternativas = [porNombre, familias.length ? { id: { [Op.in]: familias } } : null].filter(Boolean);
+      if (alternativas.length === 1) (where[Op.and] ||= []).push(alternativas[0]);
+      else if (alternativas.length > 1) (where[Op.and] ||= []).push({ [Op.or]: alternativas });
     }
 
     // Restricción a quienes son pacientes de algún módulo asistencial.
@@ -141,7 +195,10 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     ]);
 
     return ok({
-      clientes: [...vivas, ...archivadas].map((c) => c.toJSON()),
+      // Cada ficha lleva colgados los pacientes por los que ha salido, para que
+      // el desplegable pueda decir POR QUÉ aparece esa familia y el alta pueda
+      // dejar elegido a ese paciente.
+      clientes: conPacientes([...vivas, ...archivadas].map((c) => c.toJSON()), porFamilia),
       soloPacientes: Boolean(idsAsistenciales),
       totalPacientes: idsAsistenciales ? idsAsistenciales.length : null,
       /*

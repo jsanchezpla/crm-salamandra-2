@@ -17,6 +17,13 @@ import { useEffect, useState } from "react";
  * (nutrición o clínica) la lista se acota a esos; donde esa marca no la usa
  * nadie, se ofrecen todos — ver `/api/citas/clientes`.
  *
+ * Y SE BUSCA TAMBIÉN POR EL NOMBRE DEL HIJO (28/08/2026, Lau de Aumenta):
+ * recepción teclea el nombre de quien viene a la sesión, no el de la familia
+ * que paga. Escribir «thiago» respondía «Nadie con ese nombre» aunque el
+ * paciente estuviera dado de alta — de los 1.174 pacientes de Aumenta, 934 no
+ * se podían encontrar así. Cuando la ficha sale por un paciente suyo, se enseña
+ * cuál debajo del nombre de la familia.
+ *
  * CON SALIDA A PROPÓSITO: si la persona no está en la lista se puede seguir
  * escribiendo el nombre a mano y crear la cita igual. Es el caso de quien
  * llama por teléfono sin ser cliente todavía; un desplegable cerrado dejaría
@@ -170,6 +177,20 @@ export default function BuscadorPaciente({
                   <div className="text-[11px] text-gray-500 truncate">
                     {[c.email, c.phone].filter(Boolean).join(" · ") || "sin email ni teléfono en la ficha"}
                   </div>
+                  {/*
+                    POR QUÉ SALE ESTA FAMILIA (28/08/2026, Lau de Aumenta). Al
+                    buscar por el nombre del hijo, la ficha que aparece es la de
+                    la familia — y sin decirlo, quien teclea «thiago» ve un
+                    apellido que no reconoce y da por hecho que no es. Aquí se
+                    enseña el paciente que ha hecho la coincidencia; si es uno
+                    solo, el alta lo deja además ya elegido.
+                  */}
+                  {Array.isArray(c.pacientes) && c.pacientes.length > 0 && (
+                    <div className="text-[11px] text-[var(--color-primary,#1B3A2D)] truncate mt-0.5">
+                      {c.pacientes.length === 1 ? "Paciente: " : "Pacientes: "}
+                      {c.pacientes.map((p) => p.nombre).join(" · ")}
+                    </div>
+                  )}
                 </button>
               ))}
 
