@@ -299,6 +299,38 @@ exista**: «Guárdala solo como preparación» dentro de «Nuevo registro», o
 el día y la hora de esa cita. La sesión nace en `draft` y el cajón de la ficha
 la completa después —informe y devolución— sin crear otra.
 
+### Arrastrar y soltar ficheros (28/08/2026, Lau de Aumenta)
+
+El audio de la sesión le llega por WhatsApp: lo descarga y le queda a la vista
+en la barra de descargas del navegador. Pero «Añadir audio» abría el explorador
+de Windows y la obligaba a ir a **buscar en Descargas el fichero que ya tenía
+delante**. Pidió poder arrastrarlo, y de paso lo mismo en los documentos de la
+ficha.
+
+Tres zonas admiten ahora soltar (y siguen admitiendo el clic de siempre):
+el **audio** y los **adjuntos de preparación** de `/pacientes/[id]/sesiones/nueva`,
+y **Documentos del paciente** (`PatientDocumentsSection`), donde soltar abre el
+mismo modal del nombre que el botón. En el audio, además, **Ctrl+V**.
+
+- La pieza es `components/ui/useZonaSoltar.js`, un gancho que se esparce sobre
+  el elemento que ya existe (`{...zona.props}`) en vez de envolverlo: estas
+  zonas son tarjetas con contenido, no recuadros vacíos como el
+  `UploadDropzone` de Documentos.
+- **Qué se acepta lo decide `lib/utils/ficherosSoltados.js`**, con prueba
+  (`_smoke-ficheros-soltados.mjs`): al pinchar en un input el navegador ya
+  filtra por su `accept`, pero **al soltar no filtra nadie**, y sin esto un PDF
+  soltado en la zona del audio se guardaría como si fuera la grabación. Se mira
+  el nombre además del tipo porque una nota de voz `.ogg` a veces llega con el
+  `type` vacío.
+- Lo rechazado se **dice** («informe.pdf: aquí solo se puede soltar un audio de
+  la sesión»), nunca se traga en silencio; y si en la misma tanda hay cosas
+  buenas y malas, se quedan las buenas Y se avisa de las otras.
+- `useEvitarSoltarFuera()` impide que fallar la puntería al soltar haga que el
+  navegador se vaya a abrir el fichero — en un registro a medio escribir eso
+  era perder lo escrito.
+- La tarjeta del **contrato estándar NO** es zona de soltar a propósito: es el
+  contrato de toda la clínica y un fallo de puntería lo reemplazaría para todos.
+
 **Adjuntos de preparación**: `POST /api/clinica/sessions/[id]/prep-files`
 (multipart) y `GET/DELETE …/prep-files/[fileId]`. Máximo 10 por sesión, 25 MB
 cada uno, solo fotos / audio / PDF (`lib/clinica/prepFiles.js`).

@@ -25,6 +25,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
+import useZonaSoltar, { useEvitarSoltarFuera } from "@/components/ui/useZonaSoltar.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import {
   fechaDePreparacion,
@@ -34,6 +35,13 @@ import {
 } from "@/lib/clinica/prepararSesion.js";
 
 const STATE = { FORM: "form", PROCESSING: "processing", PREPARING: "preparing" };
+
+// Lo que admite cada campo de fichero. En una constante porque ahora lo leen
+// DOS sitios: el `accept` del input (filtra el explorador) y la zona de soltar
+// (filtra lo que llega arrastrado, que el navegador no filtra por su cuenta).
+const ACEPTA_AUDIO = "audio/*,.m4a,.mp3,.wav,.ogg,.webm,.mp4";
+const ACEPTA_PREP = "image/*,audio/*,application/pdf";
+const MAX_PREP = 10;
 
 const PROCESSING_STEPS = [
   "Subiendo audio…",
@@ -259,6 +267,42 @@ export default function NuevaSesionPage() {
     }
   }
 
+  /*
+   * ── ARRASTRAR Y SOLTAR (28/08/2026, Lau de Aumenta) ───────────────────────
+   * El audio le llega por WhatsApp y lo descarga: le queda a la vista en la
+   * barra de descargas del navegador. Pulsar «Añadir audio» abría el explorador
+   * de Windows y la obligaba a ir a buscar en Descargas el fichero que ya tenía
+   * delante. Ahora se puede soltar encima de la tarjeta (y pegar con Ctrl+V),
+   * sin quitar el clic de siempre para quien lo prefiera.
+   *
+   * Los ganchos van AQUÍ, antes de los `return` de carga: son hooks.
+   */
+  useEvitarSoltarFuera();
+
+  const zonaAudio = useZonaSoltar({
+    accept: ACEPTA_AUDIO,
+    queSeEspera: "un audio de la sesión",
+    // Con el audio ya procesado no se admite otro: primero hay que quitarlo.
+    apagada: state !== STATE.FORM || !!result,
+    pegar: true,
+    onFicheros: ([f]) => {
+      setFile(f);
+      setErrorMsg(null);
+    },
+    onAviso: setErrorMsg,
+  });
+
+  const zonaPrep = useZonaSoltar({
+    accept: ACEPTA_PREP,
+    varios: true,
+    queSeEspera: "fotos, audios o PDF",
+    onFicheros: (nuevos) => {
+      setPrepFiles((prev) => [...prev, ...nuevos].slice(0, MAX_PREP));
+      setErrorMsg(null);
+    },
+    onAviso: setErrorMsg,
+  });
+
   const therapistName = patient?.therapist?.name ?? "—";
   const ta = "w-full px-3 py-2 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400 leading-relaxed";
 
@@ -275,18 +319,23 @@ export default function NuevaSesionPage() {
   }
 
   const adjuntosPrep = (
-    <div>
+    <div
+      {...zonaPrep.props}
+      className={`-mx-2 px-2 py-1.5 rounded-lg border border-dashed transition-colors ${
+        zonaPrep.arrastrando ? "border-[var(--color-primary,#1B3A2D)] bg-neutral-50" : "border-transparent"
+      }`}
+    >
       <label className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline cursor-pointer">
-        + Adjuntar fotos, audio o PDF
+        {zonaPrep.arrastrando ? "Suelta aquí los archivos" : "+ Adjuntar fotos, audio o PDF (o arrástralos aquí)"}
         <input
           type="file"
           multiple
-          accept="image/*,audio/*,application/pdf"
+          accept={ACEPTA_PREP}
           className="hidden"
           onChange={(e) => {
             const nuevos = Array.from(e.target.files ?? []);
             e.target.value = "";
-            setPrepFiles((prev) => [...prev, ...nuevos].slice(0, 10));
+            setPrepFiles((prev) => [...prev, ...nuevos].slice(0, MAX_PREP));
           }}
         />
       </label>
@@ -325,7 +374,7 @@ export default function NuevaSesionPage() {
       <input
         ref={fileRef}
         type="file"
-        accept="audio/*,.m4a,.mp3,.wav,.ogg,.webm,.mp4"
+        accept={ACEPTA_AUDIO}
         className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) { setFile(f); setErrorMsg(null); } }}
       />
@@ -352,7 +401,14 @@ export default function NuevaSesionPage() {
           {/* Audio, opcional. Dentro del registro y no como puerta de entrada
               (26/08/2026, Rodrigo): el registro se escribe; el audio, si lo
               hay, lo adelanta. */}
-          <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
+          <div
+            {...zonaAudio.props}
+            className={`bg-white rounded-xl p-4 lg:p-5 border transition-colors ${
+              zonaAudio.arrastrando
+                ? "border-2 border-dashed border-[var(--color-primary,#1B3A2D)] bg-neutral-50"
+                : "border-neutral-100"
+            }`}
+          >
             <div className="flex flex-wrap items-center gap-3">
               <div className="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-white" style={{ background: "var(--color-primary, #1B3A2D)" }}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" /></svg>
@@ -367,7 +423,11 @@ export default function NuevaSesionPage() {
                   </HelpTooltip>
                 </div>
                 {!file ? (
-                  <p className="text-[11px] text-neutral-500 mt-0.5">La IA lo transcribe y rellena por ti los apartados vacíos del informe. m4a, mp3, wav, ogg, webm · máx. 25 MB.</p>
+                  <p className="text-[11px] text-neutral-500 mt-0.5">
+                    {zonaAudio.arrastrando
+                      ? "Suéltalo aquí."
+                      : "Arrastra el audio aquí, pégalo con Ctrl+V o búscalo. La IA lo transcribe y rellena por ti los apartados vacíos del informe. m4a, mp3, wav, ogg, webm · máx. 25 MB."}
+                  </p>
                 ) : (
                   <p className="text-[11px] text-neutral-600 mt-0.5 truncate">
                     {file.name} · {fmtSize(file.size)}{result?.audioDurationSec != null ? ` · ${fmtDur(result.audioDurationSec)}` : ""}

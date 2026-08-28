@@ -12,6 +12,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import useZonaSoltar, { useEvitarSoltarFuera } from "@/components/ui/useZonaSoltar.js";
+
 function fmtSize(n) {
   if (!n) return "";
   if (n < 1024) return `${n} B`;
@@ -89,8 +91,11 @@ export default function PatientDocumentsSection({ patientId }) {
     return () => clearTimeout(t);
   }, [q, loadDocs]);
 
-  function pickFile(target, ref) {
-    const f = ref.current?.files?.[0];
+  /**
+   * Un fichero elegido (por el explorador o soltado) pasa al modal del nombre.
+   * Separado de `pickFile` porque ahora hay DOS formas de traerlo.
+   */
+  function proponer(f, target) {
     if (!f) return;
     // Nombre por defecto = nombre del fichero sin extensión.
     const base = f.name.replace(/\.[^.]+$/, "");
@@ -98,6 +103,28 @@ export default function PatientDocumentsSection({ patientId }) {
     setPendingName(target === "contrato" ? "Contrato estándar" : base);
     setError(null);
   }
+
+  function pickFile(target, ref) {
+    proponer(ref.current?.files?.[0], target);
+  }
+
+  /*
+   * Soltar encima (28/08/2026, Lau de Aumenta: «la casilla también en la zona
+   * de documentación, para subirlo de una»). Sin `accept`: aquí cabe cualquier
+   * documento, igual que al pulsar el botón — quien valida tipo, tamaño y cuota
+   * es el backend.
+   *
+   * La tarjeta del CONTRATO no es zona de soltar a propósito: es el contrato
+   * de TODA la clínica, y fallar la puntería con el informe de un paciente lo
+   * reemplazaría para todos.
+   */
+  const zonaDocs = useZonaSoltar({
+    onFicheros: ([f]) => proponer(f, "paciente"),
+    onAviso: setError,
+  });
+  // Fallar la puntería al soltar no puede sacar de la ficha para abrir el
+  // fichero en una pestaña, que es lo que hace el navegador por defecto.
+  useEvitarSoltarFuera();
 
   async function confirmUpload() {
     if (!pending) return;
@@ -176,9 +203,21 @@ export default function PatientDocumentsSection({ patientId }) {
       </div>
 
       {/* 2. Documentos del paciente */}
-      <div className="bg-white border border-neutral-200 rounded-xl p-4">
+      <div
+        {...zonaDocs.props}
+        className={`bg-white rounded-xl p-4 border transition-colors ${
+          zonaDocs.arrastrando
+            ? "border-2 border-dashed border-[var(--color-primary,#1B3A2D)] bg-neutral-50"
+            : "border-neutral-200"
+        }`}
+      >
         <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-          <div className="text-sm font-semibold text-neutral-800">Documentos del paciente</div>
+          <div className="text-sm font-semibold text-neutral-800">
+            Documentos del paciente
+            <span className="ml-2 font-normal text-xs text-neutral-400">
+              {zonaDocs.arrastrando ? "suelta aquí el archivo" : "o arrastra un archivo aquí"}
+            </span>
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
             {enlaces.map((e, i) => (
               <a key={i} href={e.url} target="_blank" rel="noreferrer"
