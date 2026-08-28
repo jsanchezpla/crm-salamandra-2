@@ -291,10 +291,30 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       return error("Ese día está marcado como festivo o cierre del centro. Vuelve a enviarlo confirmando si quieres crearla igualmente.", 409);
     }
 
+    /*
+     * ⚠️ AQUÍ NO SE COMPRUEBA CONTRA `eventType.modalities`, Y ES A PROPÓSITO
+     * (28/08/2026, Jorge).
+     *
+     * Antes sí: una cita cuya modalidad no estuviera en la lista del tipo se
+     * rechazaba. Eso dejó a Aumenta sin poder apuntar una sola cita presencial,
+     * porque sus 57 tipos están en `["online"]` por un error del importador de
+     * julio, mientras sus 12.030 citas son TODAS presenciales. La base llevaba
+     * desde agosto contradiciéndose consigo misma: aquellas filas entraron por
+     * SQL, sin pasar por aquí.
+     *
+     * El arreglo del dato sigue pendiente (hace falta la dirección del centro,
+     * `scripts/marcar-tipos-cita-presenciales.js`), pero la comprobación estaba
+     * mal puesta igualmente: **la lista de modalidades de un tipo es el catálogo
+     * PÚBLICO** —lo que una familia puede elegir en el widget— y ahí se sigue
+     * respetando a rajatabla (`app/api/public/c/[tenantSlug]/book/route.js`).
+     * Esto otro es el alta que hace el propio centro, donde quien apunta la cita
+     * sabe mejor que el catálogo si la persona viene o se conecta.
+     *
+     * Lo que SÍ se sigue validando es que la modalidad exista.
+     */
     const modality = String(body.modality || "").toLowerCase();
-    if (!VALID_MODALITIES.includes(modality)) return error("modality inválida");
-    if (!eventType.modalities.includes(modality)) {
-      return error(`modality '${modality}' no está permitida para este tipo de cita`);
+    if (!VALID_MODALITIES.includes(modality)) {
+      return error("modality inválida");
     }
 
     /*

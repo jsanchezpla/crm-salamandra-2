@@ -263,10 +263,12 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
     if ("modality" in body) {
       const v = String(body.modality || "").toLowerCase();
       if (!VALID_MODALITIES.includes(v)) return error("modality inválida");
-      const eventType = await EventType.findByPk(row.eventTypeId);
-      if (eventType && !eventType.modalities.includes(v)) {
-        return error(`modality '${v}' no está permitida para este tipo de cita`);
-      }
+      // Igual que al crear (28/08/2026): no se comprueba contra
+      // `eventType.modalities`. Esa lista es el catálogo PÚBLICO —lo que una
+      // familia puede elegir en el widget— y ahí se sigue respetando. Si aquí se
+      // mantuviera, se podría CREAR una cita presencial y luego no poder
+      // cambiarle nada, que es la trampa de dejar las dos reglas descompasadas.
+      // El motivo largo, en `app/api/citas/bookings/route.js`.
       updates.modality = v;
       modalityFinal = v;
       // Derivar meetUrl SOLO si el usuario no lo envió manualmente en esta
@@ -276,7 +278,14 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       //   - online con enlace ya existente → se conserva.
       if (!meetUrlInBody) {
         if (v !== "online") updates.meetUrl = null;
-        else if (!row.meetUrl && eventType) updates.meetUrl = eventType.meetUrl;
+        else if (!row.meetUrl) {
+          // El tipo solo se consulta para heredar su sala, que es el único uso
+          // que le quedaba aquí desde que la modalidad dejó de validarse contra
+          // su lista. Si no tiene, se queda sin enlace y ya está: el modo manual
+          // es que la profesional lo pegue en la cita concreta.
+          const tipo = await EventType.findByPk(row.eventTypeId, { attributes: ["meetUrl"] });
+          if (tipo?.meetUrl) updates.meetUrl = tipo.meetUrl;
+        }
       }
     }
 

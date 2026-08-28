@@ -12,7 +12,7 @@ import BuscadorPaciente from "../../../components/citas/BuscadorPaciente.jsx";
 import SelectorPaciente from "../../../components/citas/SelectorPaciente.jsx";
 import { datosAlElegirFicha } from "../../../lib/clients/contactoDeFicha.js";
 import { repasarContactoDeCita, avisoDeContacto } from "../../../lib/citas/contactoCita.js";
-import { MODALITY_LABELS, inputCls } from "./chips.jsx";
+import { inputCls } from "./chips.jsx";
 
 const EMPTY_BOOKING_FORM = {
   eventTypeId: "",
@@ -22,7 +22,9 @@ const EMPTY_BOOKING_FORM = {
   clientName: "",
   clientEmail: "",
   clientPhone: "",
-  modality: "",
+  // Presencial por defecto (Jorge, 28/08/2026): en una consulta se cita en
+  // persona salvo excepción, y la excepción se marca con un clic.
+  modality: "presencial",
   additionalData: "",
   notes: "",
   patientId: "",
@@ -53,32 +55,6 @@ export function NuevaCitaDrawer({
   const selectedEventType = useMemo(() => {
     return eventTypes.find((e) => e.id === createForm.eventTypeId) ?? null;
   }, [eventTypes, createForm.eventTypeId]);
-
-  /*
-   * ── SI SOLO HAY UNA MODALIDAD, NO SE PREGUNTA (28/08/2026) ────────────────
-   *
-   * Lau, de Aumenta: «me pide seleccionar modalidad pero solo sale la modalidad
-   * online». Los 57 tipos del centro están en `["online"]`, así que la pantalla
-   * pintaba UN radio sin marcar y, si no lo pulsabas, el envío moría con
-   * «Selecciona modalidad». Una pregunta con una sola respuesta posible.
-   *
-   * Se hace en un efecto y no dentro de `updateCreateForm` a propósito: la
-   * modalidad se vacía desde TRES sitios (al cambiar de tipo, al romperse el
-   * enlace con el bono, y al abrir el cajón), y ponerlo en el reductor obligaba
-   * a acordarse en los tres. Aquí se rellena venga el hueco de donde venga.
-   *
-   * Solo actúa si está vacía y si hay exactamente una: no pisa nunca una
-   * elección de la persona, y con dos o más sigue preguntando como siempre.
-   *
-   * ⚠️ Esto NO arregla el problema de Lau, solo el ruido. Que sus citas puedan
-   * ser presenciales es un cambio de datos —los 57 tipos—, no de pantalla:
-   * `scripts/marcar-tipos-cita-presenciales.js`.
-   */
-  useEffect(() => {
-    const unica = selectedEventType?.modalities?.length === 1 ? selectedEventType.modalities[0] : null;
-    if (!unica) return;
-    setCreateForm((prev) => (prev.modality ? prev : { ...prev, modality: unica }));
-  }, [selectedEventType]);
 
   /*
    * ── EL TECHO DE LOS 300 PACIENTES (28/08/2026) ────────────────────────────
@@ -121,18 +97,10 @@ export function NuevaCitaDrawer({
    *   justo lo que no se puede hacer cuando hay más de las que caben.
    */
   function updateCreateForm(field, value, objeto = null) {
-    // Al cambiar de tipo de cita (arreglo 2026-07-23): si la modalidad elegida
-    // ya no la ofrece el tipo nuevo, se limpia. Antes quedaba una modalidad
-    // huérfana (p. ej. 'online') que colaba la validación cliente y el servidor
-    // rechazaba con un error confuso.
-    if (field === "eventTypeId") {
-      const nuevoTipo = eventTypes.find((e) => e.id === value);
-      setCreateForm((prev) => {
-        const modalidadValida = nuevoTipo?.modalities?.includes(prev.modality);
-        return { ...prev, eventTypeId: value, modality: modalidadValida ? prev.modality : "" };
-      });
-      return;
-    }
+    // Cambiar de tipo YA NO toca la modalidad (28/08/2026). Antes se limpiaba si
+    // el tipo nuevo no la ofrecía, porque el servidor la rechazaba; ahora, en una
+    // cita que apunta el propio centro, la modalidad la decide quien la apunta y
+    // no el catálogo público. Ver `app/api/citas/bookings/route.js`.
     // Al elegir paciente, PRIMA su terapeuta asignado como profesional de la cita
     // (Rodrigo: la reserva pública es general y el terapeuta se decide en el CRM,
     // primando el asignado al paciente). Si el paciente no tiene terapeuta, se
@@ -279,7 +247,8 @@ export function NuevaCitaDrawer({
   /** Se rompe el enlace con la ficha → el bono deja de aplicar. */
   function olvidarBono() {
     if (bonoAviso?.eventTypeId && createForm.eventTypeId === bonoAviso.eventTypeId) {
-      setCreateForm((prev) => ({ ...prev, eventTypeId: "", modality: "" }));
+      // La modalidad se queda como estaba: ya no depende del tipo de cita.
+      setCreateForm((prev) => ({ ...prev, eventTypeId: "" }));
     }
     setBonoAviso(null);
   }
@@ -641,57 +610,50 @@ export function NuevaCitaDrawer({
                 </div>
               )}
 
-              {selectedEventType && (
-                <div>
-                  {/* El asterisco no estaba y el campo SÍ es obligatorio (submitCreate
-                      corta con «Selecciona modalidad»): se veía opcional y no lo era. */}
-                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Modalidad *</label>
-                  <div className="flex gap-2 flex-wrap">
-                    {selectedEventType.modalities.map((m) => (
-                      <label key={m} className="flex items-center gap-1.5 text-[13px] cursor-pointer">
-                        <input
-                          type="radio"
-                          name="modality"
-                          value={m}
-                          checked={createForm.modality === m}
-                          onChange={(e) => updateCreateForm("modality", e.target.value)}
-                        />
-                        {MODALITY_LABELS[m] ?? m}
-                      </label>
-                    ))}
-                  </div>
-                  {selectedEventType.modalities.length === 1 && (
-                    /*
-                     * Con una sola modalidad se preselecciona (arriba, en su
-                     * efecto) pero NO se hace en silencio, y el motivo importa:
-                     *
-                     * Aumenta tiene hoy los 57 tipos en «solo online» y es un
-                     * error de datos —sus 12.030 citas son presenciales—. Si el
-                     * formulario se limitara a marcar «Online» solo y callarse,
-                     * dejaría de pedir el clic que hizo quejarse a Lau y el
-                     * fallo se volvería invisible: las citas seguirían naciendo
-                     * online y los correos seguirían prometiendo videollamada,
-                     * pero ya sin nada que lo delatara.
-                     *
-                     * Así que se dice en voz alta y se dice DÓNDE se arregla.
-                     * Para un centro cuyo tipo es de verdad de una sola
-                     * modalidad, es información; para uno con los datos mal, es
-                     * el hilo del que tirar.
-                     */
-                    <p className="mt-1.5 text-[11px] text-neutral-500">
-                      Este tipo de cita solo admite{" "}
-                      <strong className="font-medium">
-                        {MODALITY_LABELS[selectedEventType.modalities[0]] ?? selectedEventType.modalities[0]}
-                      </strong>
-                      . Para ofrecer otras, edítalo en{" "}
-                      <a href="/citas/tipos" className="underline hover:no-underline">
-                        Tipos de cita
-                      </a>
-                      .
-                    </p>
-                  )}
-                </div>
-              )}
+              {/*
+                ── UN SOLO CHECKBOX, Y PRESENCIAL POR DEFECTO (Jorge, 28/08/2026) ──
+
+                Antes esto eran tantos botones como modalidades declarase el tipo
+                de cita, y el servidor rechazaba cualquier otra. Con los 57 tipos
+                de Aumenta en «solo online» —un error de datos: sus 12.030 citas
+                son presenciales— la pantalla solo podía ofrecer «Online», que es
+                justo lo que hizo quejarse a Lau.
+
+                El arreglo de fondo era el dato, y sigue pendiente de que el
+                centro nos dé su dirección. Pero la pregunta estaba mal planteada
+                igualmente: en una cita que apunta el PROPIO CENTRO, la modalidad
+                la sabe quien la apunta. La lista del tipo de cita es el catálogo
+                PÚBLICO —lo que una familia puede reservar por la web— y eso
+                sigue mandando en el widget, que no se toca.
+
+                Así que aquí queda un interruptor: marcado es presencial, que es
+                lo que pasa casi siempre en una consulta; desmarcado, online. La
+                modalidad telefónica desaparece del alta manual: no la usa ningún
+                cliente real (medido en producción, solo aparece en los datos
+                sembrados de las demos) y sigue disponible en el tipo de cita y
+                en la reserva pública.
+              */}
+              <div>
+                <label className="flex items-center gap-2 text-[13px] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={createForm.modality === "presencial"}
+                    onChange={(e) =>
+                      updateCreateForm("modality", e.target.checked ? "presencial" : "online")
+                    }
+                  />
+                  <span>
+                    La cita es <strong className="font-medium">presencial</strong>
+                  </span>
+                </label>
+                <p className="mt-1 text-[11px] text-neutral-500">
+                  {createForm.modality === "presencial"
+                    ? selectedEventType && !selectedEventType.location
+                      ? "Sin dirección en el tipo de cita, la confirmación no dirá dónde es."
+                      : "Desmárcala si es una videollamada."
+                    : "Será una videollamada."}
+                </p>
+              </div>
 
               <div>
                 <label className="block text-[11px] font-medium text-neutral-500 mb-1">
