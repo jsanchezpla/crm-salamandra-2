@@ -623,6 +623,7 @@ function EditorCliente({ cliente, catalogo, onGuardar, onBaja, guardando, avisos
     primaryColor: cliente.marca?.primaryColor ?? "",
     secondaryColor: cliente.marca?.secondaryColor ?? "",
     logoUrl: cliente.marca?.logoUrl ?? "",
+    isotipoUrl: cliente.marca?.isotipoUrl ?? "",
   });
 
   const [confirmando, setConfirmando] = useState(false);
@@ -680,7 +681,8 @@ function EditorCliente({ cliente, catalogo, onGuardar, onBaja, guardando, avisos
   const marcaTocada =
     (f.primaryColor || "") !== (cliente.marca?.primaryColor ?? "") ||
     (f.secondaryColor || "") !== (cliente.marca?.secondaryColor ?? "") ||
-    (f.logoUrl || "") !== (cliente.marca?.logoUrl ?? "");
+    (f.logoUrl || "") !== (cliente.marca?.logoUrl ?? "") ||
+    (f.isotipoUrl || "") !== (cliente.marca?.isotipoUrl ?? "");
 
   const contraste = contrasteConBlanco(f.primaryColor);
   const menuIlegible = contraste !== null && contraste < 4.5;
@@ -692,7 +694,14 @@ function EditorCliente({ cliente, catalogo, onGuardar, onBaja, guardando, avisos
     nombre: f.nombre,
     modulos: resuelto.modulos,
     ...(marcaTocada
-      ? { brand: { primaryColor: f.primaryColor, secondaryColor: f.secondaryColor, logoUrl: f.logoUrl } }
+      ? {
+          brand: {
+            primaryColor: f.primaryColor,
+            secondaryColor: f.secondaryColor,
+            logoUrl: f.logoUrl,
+            isotipoUrl: f.isotipoUrl,
+          },
+        }
       : {}),
   });
 
@@ -744,9 +753,13 @@ function EditorCliente({ cliente, catalogo, onGuardar, onBaja, guardando, avisos
                 className={inputCls + " font-mono"} placeholder="#3E6B54" />
             </div>
           </Campo>
-          <Campo etiqueta="Logo (URL)">
+          <Campo etiqueta="Logo (ruta o URL)" pista="Para que salga en los PDF tiene que ser una ruta de este servidor, como /aumenta-logo.png.">
             <input value={f.logoUrl} onChange={(e) => setF((p) => ({ ...p, logoUrl: e.target.value }))}
-              className={inputCls} placeholder="https://…/logo.png" />
+              className={inputCls} placeholder="/aumenta-logo.png" />
+          </Campo>
+          <Campo etiqueta="Isotipo (ruta)" pista="La marca sin el texto. Cierra la última página del informe clínico.">
+            <input value={f.isotipoUrl} onChange={(e) => setF((p) => ({ ...p, isotipoUrl: e.target.value }))}
+              className={inputCls} placeholder="/aumenta-isotipo.png" />
           </Campo>
         </div>
         {menuIlegible && (
@@ -1105,6 +1118,7 @@ export default function AltaClientesPage() {
     primaryColor: "",
     secondaryColor: "",
     logoUrl: "",
+    isotipoUrl: "",
     fiscalName: "",
     taxId: "",
     address: "",
@@ -1252,7 +1266,12 @@ export default function AltaClientesPage() {
           },
           // La lista RESUELTA: lo que la pantalla acaba de enseñar marcado.
           modulos: resuelto.modulos,
-          brand: { primaryColor: form.primaryColor, secondaryColor: form.secondaryColor, logoUrl: form.logoUrl },
+          brand: {
+            primaryColor: form.primaryColor,
+            secondaryColor: form.secondaryColor,
+            logoUrl: form.logoUrl,
+            isotipoUrl: form.isotipoUrl,
+          },
           fiscal: { fiscalName: form.fiscalName, taxId: form.taxId, address: form.address, city: form.city, zip: form.zip },
         }),
       });

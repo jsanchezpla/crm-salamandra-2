@@ -10,15 +10,15 @@
 | **Reina** | — |
 | **Pantallas** | `app/(dashboard)/configuracion/page.jsx` → `/configuracion` (una página con **seis zonas en pestañas** desde el 23/08/2026: Empresa, Conexiones, Agenda, Reserva online, Portal del cliente y Módulos; la abierta viaja en `?zona=`). La página es de SERVIDOR y resuelve ahí los módulos del tenant, que el componente es `"use client"` y no puede preguntarlos · el back-office la complementa desde `app/admin/page.jsx` (ficha de Custodia, `/admin`): nosotros también podemos poner las claves |
 | **Endpoints** | `app/api/tenant/settings/route.js` (GET/PATCH, 1) · `app/api/ai-permisos/**` (2: `route.js`, `[id]/route.js`, el candado de IA) · `app/api/admin/configuraciones/route.js` (1, back-office: pone credenciales sin leerlas nunca) · la pantalla reutiliza además `app/api/billing/settings`, `app/api/outreach/settings`, `app/api/outreach/business-lines/**` y `app/api/clinica/derivaciones` · la pestaña **Tu cuenta** usa `app/api/auth/password` (cambiarse la contraseña, 24/08/2026) y `app/api/auth/correo` (ponerse el correo de la cuenta, 26/08/2026) · públicos: ninguno |
-| **Lógica** | `lib/configuracion/pestanas.js` (**el reparto en zonas y qué módulo hace útil cada tarjeta**) · `lib/configuracion/avisoCambio.js` (recibo por correo de cada cambio, enviado con la cuenta de Salamandra) · `lib/crypto/secretBox.js` (AES-256-GCM, prefijo `enc:v1:`) · resolvers que LEEN lo que aquí se guarda: `lib/ai/anthropicKey.js`, `lib/ai/anthropicModel.js` (`ANTHROPIC_MODELS`, Sonnet por defecto), `lib/ai/openaiKey.js`, `lib/ai/aiAccess.js` (`vetoAi`, candado `settings.aiAccess`), `lib/outreach/resendConfig.js`, `lib/payments/stripeConfig.js`, `lib/analytics/cloudflareConfig.js`, `lib/whatsapp/whatsappConfig.js`, `lib/citas/videollamada.js` (`settings.citas.meetModo`), `lib/citas/coloresBloqueo.js` · back-office: `lib/provisioning/credencialesCliente.js` (solo escribir), `lib/provisioning/contactoCliente.js` (`settings.contacto`) · plantilla del recibo: `lib/email/templates/configuracion/cambioAplicado.js` |
-| **UI** | `modules/config/ConfigModule.jsx` (el armazón: pestañas, aviso de solo-lectura y la sección fiscal) + `modules/config/tarjetas/` (las 34 tarjetas, un fichero por pestaña: `Empresa`, `Conexiones`, `Agenda`, `Reservas`, `Portal`, `Modulos`, `Cuenta`, más `ui.jsx` con `BotonZona`, `Tarjeta` —atenúa y explica—, `Section`, `Field`; partido el 27/08/2026) · no hay `components/config/`; usa `components/ui/Select.jsx` y `components/ui/HelpTooltip.jsx` |
-| **Modelos** | `models/master/Tenant.model.js` — todo va en `master.tenants.settings` (JSONB: `brand`, `integrations`, `aiAccess`, `citas`, `clientes`, `contacto`), sin migración · `models/tenant/AiPermission.model.js` (`ai_permissions`: solicitudes y concesiones del candado de IA) · `models/master/AuditLog.model.js` (`master.audit_logs`) recibe cada cambio, sin el valor de los secretos |
-| **Interruptores y parámetros** | ninguno que lea el código (no hay fila en `tenant_modules`). Lo que esta pantalla escribe vive en `master.tenants.settings`, no en `featureFlags`: `integrations.*` (Anthropic, OpenAI, Google Places, Resend, Stripe, WhatsApp, Cloudflare; los secretos cifrados, `anthropicModel` en claro), `aiAccess` (`libre` / `restringido`), `citas.*` (`meetModo`, `recordatoriosCitas`, `agendaCompartida`, `avisosWhatsapp`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `identidadObligatoria`, `formularioUrl`, `portalUrl`, `reservaUrl`, `colorBloqueos`), `clientes.categoriasExternas`, `brand`, `name` |
+| **Lógica** | `lib/configuracion/pestanas.js` (**el reparto en zonas y qué módulo hace útil cada tarjeta**) · `lib/tenant/normalizarCentro.js` (28/08/2026: qué se guarda en `settings.centro` —recorta, tira las sedes vacías y descarta lo que no es texto—; `LIMITES`, `normalizarCentro`, `normalizarSede`, `centroVacio`) · `lib/configuracion/avisoCambio.js` (recibo por correo de cada cambio, enviado con la cuenta de Salamandra) · `lib/crypto/secretBox.js` (AES-256-GCM, prefijo `enc:v1:`) · resolvers que LEEN lo que aquí se guarda: `lib/ai/anthropicKey.js`, `lib/ai/anthropicModel.js` (`ANTHROPIC_MODELS`, Sonnet por defecto), `lib/ai/openaiKey.js`, `lib/ai/aiAccess.js` (`vetoAi`, candado `settings.aiAccess`), `lib/outreach/resendConfig.js`, `lib/payments/stripeConfig.js`, `lib/analytics/cloudflareConfig.js`, `lib/whatsapp/whatsappConfig.js`, `lib/citas/videollamada.js` (`settings.citas.meetModo`), `lib/citas/coloresBloqueo.js` · back-office: `lib/provisioning/credencialesCliente.js` (solo escribir), `lib/provisioning/contactoCliente.js` (`settings.contacto`) · plantilla del recibo: `lib/email/templates/configuracion/cambioAplicado.js` |
+| **UI** | `modules/config/ConfigModule.jsx` (el armazón: pestañas, aviso de solo-lectura y la sección fiscal) + `modules/config/tarjetas/` (un fichero por pestaña: `Empresa`, `Conexiones`, `Agenda`, `Reservas`, `Portal`, `Modulos`, `Cuenta`, más `DatosCentro.jsx` —la tarjeta «Datos del centro», 28/08/2026— y `ui.jsx` con `BotonZona`, `Tarjeta` —atenúa y explica—, `Section`, `Field`; partido el 27/08/2026) · no hay `components/config/`; usa `components/ui/Select.jsx` y `components/ui/HelpTooltip.jsx` |
+| **Modelos** | `models/master/Tenant.model.js` — todo va en `master.tenants.settings` (JSONB: `brand`, `integrations`, `aiAccess`, `citas`, `clientes`, `centro`, `contacto`), sin migración · `models/tenant/AiPermission.model.js` (`ai_permissions`: solicitudes y concesiones del candado de IA) · `models/master/AuditLog.model.js` (`master.audit_logs`) recibe cada cambio, sin el valor de los secretos |
+| **Interruptores y parámetros** | ninguno que lea el código (no hay fila en `tenant_modules`). Lo que esta pantalla escribe vive en `master.tenants.settings`, no en `featureFlags`: `integrations.*` (Anthropic, OpenAI, Google Places, Resend, Stripe, WhatsApp, Cloudflare; los secretos cifrados, `anthropicModel` en claro), `aiAccess` (`libre` / `restringido`), `citas.*` (`meetModo`, `recordatoriosCitas`, `agendaCompartida`, `avisosWhatsapp`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `identidadObligatoria`, `formularioUrl`, `portalUrl`, `reservaUrl`, `colorBloqueos`), `clientes.categoriasExternas`, `centro` (los datos que imprime el informe clínico), `brand`, `name` |
 | **Pantallas propias** | ninguna (`app/(dashboard)/configuracion/page.jsx` no tiene mapa `UI_OVERRIDES`) |
 | **Scripts** | no hay activación: no es módulo · `_hechos/encrypt-tenant-secrets.js` (cifra en reposo claves guardadas antes en claro; idempotente) · `migrate-ai-permissions.js` (crea `ai_permissions` en todos los schemas) · `configure-stripe-tenant.js` (claves de Stripe leídas de variables de entorno, nunca de argumentos) · solo lectura: `inspect-tenant-modules.js <slug>` |
-| **Pruebas** | `scripts/_smoke-config-pestanas.mjs` (`node:test`, 23/08/2026, ligera, en `npm test`): el reparto en zonas, que ninguna tarjeta se cae ni se duplica, y que el aviso «necesita el módulo X» solo sale cuando falta de verdad · `_smoke-backoffice-ciclo.mjs` (base de datos; el camino del back-office: la clave se guarda cifrada, no se devuelve jamás, a una demo no se le pone) · `scripts/_smoke-plantillas-resto-layout.mjs` (`node:test`, 21/08/2026, ligera, en `npm test`) fija el recibo de cambio de configuración (`configuracion/cambioAplicado`): que el asunto avisa distinto según haya tocado o no una credencial, que traduce las tres acciones (puesta / cambiada / borrada) y que **NUNCA lleva el valor de una credencial**, solo qué pasó con ella · nada cubre `/api/tenant/settings` ni `/api/ai-permisos` directamente; `_smoke-retencion-viva-o-muerta.mjs` solo usa `secretBox` para sembrar |
+| **Pruebas** | `scripts/_smoke-config-pestanas.mjs` (`node:test`, 23/08/2026, ligera, en `npm test`): el reparto en zonas, que ninguna tarjeta se cae ni se duplica, y que el aviso «necesita el módulo X» solo sale cuando falta de verdad · `scripts/_smoke-datos-centro.mjs` (`node:test`, 28/08/2026, ligera, en `npm test`): lo que se guarda en `settings.centro` —que la forma no cambia nunca, que lo que no es texto no entra, que las sedes vacías se tiran y cuándo se BORRA la clave— · `_smoke-backoffice-ciclo.mjs` (base de datos; el camino del back-office: la clave se guarda cifrada, no se devuelve jamás, a una demo no se le pone) · `scripts/_smoke-plantillas-resto-layout.mjs` (`node:test`, 21/08/2026, ligera, en `npm test`) fija el recibo de cambio de configuración (`configuracion/cambioAplicado`): que el asunto avisa distinto según haya tocado o no una credencial, que traduce las tres acciones (puesta / cambiada / borrada) y que **NUNCA lleva el valor de una credencial**, solo qué pasó con ella · nada cubre `/api/tenant/settings` ni `/api/ai-permisos` directamente; `_smoke-retencion-viva-o-muerta.mjs` solo usa `secretBox` para sembrar |
 | **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (guard de la demo en escrituras a master, auditoría con resumen) · `../decisions/2026-08-13-ciclo-de-vida-de-un-cliente.md` (`credencialesCliente.js`: nosotros también ponemos las claves, y solo escribimos) |
-| **En este doc** | «Las seis zonas (2026-08-23)» · «Secciones» · «Dónde se guardan las claves (y por qué son seguras)» · «API — `/api/tenant/settings`» · «Ficheros» · «Permisos de IA del equipo (2026-07-27)» · «WhatsApp (Meta Cloud API) — 2026-07-27» · «Enlace de videollamada de las citas — 2026-07-27» |
+| **En este doc** | «Las seis zonas (2026-08-23)» · «Datos del centro (2026-08-28)» · «Secciones» · «Dónde se guardan las claves (y por qué son seguras)» · «API — `/api/tenant/settings`» · «Ficheros» · «Permisos de IA del equipo (2026-07-27)» · «WhatsApp (Meta Cloud API) — 2026-07-27» · «Enlace de videollamada de las citas — 2026-07-27» |
 
 Ruta: `/configuracion` · API: `/api/tenant/settings` · UI: `modules/config/ConfigModule.jsx`
 
@@ -57,7 +57,7 @@ El reparto es por PREGUNTA, no por orden de llegada:
 
 | Zona | La pregunta que responde | Tarjetas |
 | --- | --- | --- |
-| **Empresa** | ¿Quién eres? | Datos fiscales · Descripción de empresa y líneas de negocio |
+| **Empresa** | ¿Quién eres? | **Datos del centro** (lo que imprime el informe clínico) · Datos fiscales · Descripción de empresa y líneas de negocio |
 | **Conexiones** | ¿Con qué te conectas? | Anthropic, OpenAI, Google Places, Resend (+ remitente), Cloudflare, WhatsApp · Cobro online con Stripe |
 | **Agenda** | ¿Cómo funciona tu agenda? | Recordatorios · Agenda compartida · Color de bloqueos · Videollamada · Avisos por WhatsApp |
 | **Reserva online** | ¿Qué puede reservar la gente sola? | Reserva abierta/cerrada · Cancelación · Las cuatro puertas · Página de reservas |
@@ -124,6 +124,89 @@ lo que ya pagó. Lo fija `scripts/_smoke-config-pestanas.mjs`, que además
 comprueba contra el fuente que cada tarjeta declarada se monta exactamente una
 vez — el modo de fallar de un reordenado de 27 bloques es perder uno, y no da
 error: simplemente deja de estar.
+
+---
+
+## Datos del centro (2026-08-28)
+
+La primera tarjeta de «Empresa», y la única **universal** de esa zona. Guarda lo
+que el **informe clínico** imprime en la portada y en el pie: hasta esta fecha
+el CRM no tenía dónde guardarlo, así que el PDF no podía imprimirlo.
+
+Se escribe en **`master.tenants.settings.centro`** (JSONB, sin migración: la
+clave estaba libre). Forma exacta —la que lee el generador del PDF—:
+
+```json
+{
+  "centro": {
+    "razonSocial": "Centro de Psicología Ejemplo S.L.",
+    "cif": "B12345678",
+    "telefonos": ["900 000 000", "600 000 000"],
+    "proteccionDatos": "Sus datos se tratan conforme al RGPD…",
+    "sedes": [
+      {
+        "nombre": "Sede centro",
+        "direccion": "Calle Mayor 1",
+        "cp": "28001",
+        "ciudad": "Madrid",
+        "registroSanitario": "CS-12345",
+        "telefono": "910 000 000"
+      }
+    ]
+  }
+}
+```
+
+El **primer teléfono es el principal** (el de la cabecera del informe) y el nº
+de **Registro Sanitario es de la SEDE**, no del centro: dos locales tienen dos
+números y el informe imprime el de donde se atendió.
+
+### Todo es opcional, y eso manda en el diseño
+
+Hoy en producción **falta todo** (el `settings` de aumenta solo tiene `brand`).
+El informe se genera igual, sin la línea que falte, así que aquí no se inventa
+nada: ni un campo obligatorio, ni un valor por defecto, ni un «—» de relleno. Lo
+que no está, no se imprime.
+
+Consecuencias en el código, todas en `lib/tenant/normalizarCentro.js`
+(`normalizarCentro`, `normalizarSede`, `centroVacio`, `LIMITES`):
+
+- **Lo que no es texto no entra.** Un número o un objeto colados en el JSON no
+  se convierten con `String()` — saldrían impresos como `[object Object]` en la
+  portada de un documento formal—: se descartan.
+- **Una sede sin un solo dato se tira.** La pantalla añade filas en blanco para
+  poder teclear; guardarlas dejaría un renglón hueco en el informe.
+- **Si no queda nada, se BORRA `settings.centro`** en vez de guardar un objeto
+  con cinco huecos, que le diría al lector del PDF que hay datos puestos.
+- **Se recorta, no se rechaza**: pasarse en un campo no puede impedir guardar
+  todos los demás. Topes en `LIMITES` (2.000 caracteres el párrafo legal, 6
+  teléfonos, 6 sedes), y son los mismos que pone la tarjeta en su `maxLength`.
+- La función devuelve **siempre las cinco claves**, y es **idempotente**: por
+  eso el GET y la respuesta del PATCH la usan sobre lo que ya está en la base.
+
+### Por qué aquí y no en Facturación
+
+La razón social y el CIF ya existen en `TenantBillingSettings`, y aun así se
+vuelven a pedir. Colgar de allí el informe clínico ataría un **documento
+sanitario** al módulo `billing`:
+
+- la tarjeta de Facturación **se esconde sola** en quien no tiene el módulo (su
+  GET responde 403), o sea que el centro no podría ni rellenarla;
+- el alta de un cliente **no siembra esa fila**: el dato no existe hasta que
+  alguien entra en Facturación;
+- `PUT /api/billing/settings` **no comprueba rol ni audita**: las 13 personas
+  con rol `user` de Aumenta podrían reescribir el CIF de un informe sin dejar
+  rastro.
+
+Y la regla #14: la Configuración es universal. Aquí la escritura es **solo
+admin**, está vetada en la demo (`assertNotDemoMasterWrite`) y **deja fila en
+`AuditLog`** + recibo por correo.
+
+⚠️ En el registro y en el correo los datos del centro van **resumidos**, no
+enteros: el párrafo legal son hasta 2.000 caracteres y cada sede lleva su
+dirección, y `master.audit_logs` lo comparten todos los clientes. El cambio se
+**detecta** comparando el valor entero, así que tocar el nº de Registro
+Sanitario de una sede sí queda auditado aunque el resumen se lea igual.
 
 ---
 
@@ -263,6 +346,7 @@ al resto de lo que guarda esta pantalla:
   "aiAccess": "libre",
   "citas": { "meetModo": "manual", "recordatorios": false, "…": "…" },
   "clientes": { "categoriasExternas": [] },
+  "centro": { "razonSocial": "…", "cif": "…", "telefonos": [], "proteccionDatos": "…", "sedes": [] },
   "contacto": { ... }
 }
 ```
@@ -322,8 +406,8 @@ cualquiera.
 
 | Método | Qué hace |
 | ------ | -------- |
-| `GET` | Devuelve `name`, `slug`, `plan`, `readOnly` (la demo), `brand`, `aiAccess`, `meetModo`, `salasVideollamada`, los diez booleanos de Citas (`recordatoriosCitas`, `agendaCompartida`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `avisosWhatsapp`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `identidadObligatoria`), `formularioUrl`, `portalUrl`, `reservaUrl`, `colorBloqueos`, `categoriasExternas` e `integrations: { anthropic:{configured,hint,model}, googlePlaces, openai, cloudflare:{…,accountId,siteTag,ready}, whatsapp:{…,phoneNumberId}, resend:{…,fromEmail,replyTo}, stripe:{…,publishableKey,webhook,ready,liveMode} }`. Cada clave, solo `{ configured, hint }`; nunca en claro, y **en la demo ni la pista** (`hint: null`) |
-| `PATCH` | Acepta `name`, `brand`; los secretos `anthropicApiKey`, `openaiApiKey`, `googlePlacesApiKey`, `resendApiKey`, `whatsappToken`, `cloudflareApiToken`, `stripeSecretKey`, `stripeWebhookSecret` (cifrados con `applyKey`; **500 si falta `SETTINGS_ENCRYPTION_KEY`**, para no guardar nunca uno en claro); los planos `anthropicModel` (lista cerrada), `resendFromEmail`, `resendReplyTo`, `whatsappPhoneNumberId`, `cloudflareAccountId`, `cloudflareSiteTag`, `stripePublishableKey`; `aiAccess` (`libre`/`restringido`); `meetModo` (`manual`/`automatico`); los diez booleanos de Citas; `formularioUrl`, `portalUrl`, `reservaUrl` (solo http(s) absolutas: se le sirven a un tercero en un enlace); `colorBloqueos` (hex); `categoriasExternas` (lista, se guarda limpia y deduplicada). Calcula el diff, audita `configuracion.updated` (sin el valor de los secretos), manda el recibo por correo e invalida la caché de tenant |
+| `GET` | Devuelve `name`, `slug`, `plan`, `readOnly` (la demo), `brand`, `aiAccess`, `meetModo`, `salasVideollamada`, los diez booleanos de Citas (`recordatoriosCitas`, `agendaCompartida`, `portalBloqueoImpago`, `cancelacionBloqueada`, `reservaOnlineCerrada`, `avisosWhatsapp`, `formularioObligatorio`, `contratoObligatorio`, `soloConPago`, `identidadObligatoria`), `formularioUrl`, `portalUrl`, `reservaUrl`, `colorBloqueos`, `categoriasExternas`, `centro` (siempre con sus cinco claves, aunque en la base no haya nada) e `integrations: { anthropic:{configured,hint,model}, googlePlaces, openai, cloudflare:{…,accountId,siteTag,ready}, whatsapp:{…,phoneNumberId}, resend:{…,fromEmail,replyTo}, stripe:{…,publishableKey,webhook,ready,liveMode} }`. Cada clave, solo `{ configured, hint }`; nunca en claro, y **en la demo ni la pista** (`hint: null`) |
+| `PATCH` | Acepta `name`, `brand`; los secretos `anthropicApiKey`, `openaiApiKey`, `googlePlacesApiKey`, `resendApiKey`, `whatsappToken`, `cloudflareApiToken`, `stripeSecretKey`, `stripeWebhookSecret` (cifrados con `applyKey`; **500 si falta `SETTINGS_ENCRYPTION_KEY`**, para no guardar nunca uno en claro); los planos `anthropicModel` (lista cerrada), `resendFromEmail`, `resendReplyTo`, `whatsappPhoneNumberId`, `cloudflareAccountId`, `cloudflareSiteTag`, `stripePublishableKey`; `aiAccess` (`libre`/`restringido`); `meetModo` (`manual`/`automatico`); los diez booleanos de Citas; `formularioUrl`, `portalUrl`, `reservaUrl` (solo http(s) absolutas: se le sirven a un tercero en un enlace); `colorBloqueos` (hex); `categoriasExternas` (lista, se guarda limpia y deduplicada); `centro` (objeto; `undefined` = no se toca, `null` o todo vacío = se borra la clave; se guarda normalizado por `lib/tenant/normalizarCentro.js`, y si no es un objeto → 400). Calcula el diff, audita `configuracion.updated` (sin el valor de los secretos), manda el recibo por correo e invalida la caché de tenant |
 
 Semántica de las claves en `PATCH`:
 
@@ -378,6 +462,9 @@ en `AuditLog` al cambiarlos.
   todo en un fichero).
 - `app/api/tenant/settings/route.js` — GET/PATCH, enmascarado, diff para la
   auditoría, recibo por correo e `invalidateTenantCache`.
+- `lib/tenant/normalizarCentro.js` — qué se guarda en `settings.centro` (los
+  datos que imprime el informe clínico). Su prueba: `scripts/_smoke-datos-centro.mjs`.
+- `modules/config/tarjetas/DatosCentro.jsx` — la tarjeta que los rellena.
 - `lib/configuracion/avisoCambio.js` — el recibo por correo de cada cambio.
 - `app/(dashboard)/layout.jsx` — elimina `settings.integrations` antes del cliente.
 - `components/layout/Sidebar.jsx` — el engranaje del pie (solo admin); ya no es

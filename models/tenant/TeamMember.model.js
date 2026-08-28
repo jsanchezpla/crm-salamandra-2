@@ -141,6 +141,33 @@ export function defineTeamMember(sequelize) {
         allowNull: true,
         validate: { min: 0, max: 80 },
       },
+      /*
+       * LOS DOS DATOS QUE FIRMAN UN INFORME (28/08/2026, Aumenta)
+       *
+       * El informe clínico rediseñado —el que la familia presenta en el colegio
+       * o para la beca del Ministerio— cierra con quién lo firma: su nº de
+       * colegiada y su titulación. Hasta hoy el CRM no guardaba ni uno ni otro
+       * en ninguna parte.
+       *
+       * Nacen NULL y SIN valor por defecto a propósito: hoy no los tiene nadie
+       * —ninguna de las 18 personas de Aumenta—, y un default inventado saldría
+       * IMPRESO bajo una firma profesional. Un dato que no está, no se imprime:
+       * el generador del PDF se salta la fila que falte.
+       *
+       * No se reutilizan `position` (ya se expone como `role` y se pinta en
+       * media docena de desplegables), `customFields` ni `specialties`: son
+       * otras preguntas, y mezclarlas haría que cambiar una tocara la otra.
+       *
+       * Columnas: collegiate_number, qualification (underscored global).
+       */
+      collegiateNumber: {
+        type: DataTypes.STRING(40),
+        allowNull: true,
+      },
+      qualification: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
+      },
     },
     {
       tableName: "team_members",

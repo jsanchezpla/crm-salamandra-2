@@ -12,6 +12,7 @@ import { getTenantCloudflareConfig } from "../../../../lib/analytics/cloudflareC
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { avisarCambioDeConfiguracion } from "../../../../lib/configuracion/avisoCambio.js";
 import { exigeIdentidad } from "../../../../lib/citas/puertaIdentidad.js";
+import { centroVacio, normalizarCentro } from "../../../../lib/tenant/normalizarCentro.js";
 import { limpiaColorBloqueo, COLOR_BLOQUEO_POR_DEFECTO } from "../../../../lib/citas/coloresBloqueo.js";
 import { isValidHexColor } from "../../../../lib/citas/validation.js";
 import {
@@ -97,6 +98,59 @@ const CAMPOS_ABIERTOS_AUDIT = [
   "whatsappPhoneNumberId",
 ];
 
+/*
+ * ── CÓMO SE CUENTA UN CAMBIO EN LOS DATOS DEL CENTRO (28/08/2026) ───────────
+ * Los datos del centro van al registro RESUMIDOS, no enteros. El párrafo de
+ * protección de datos son hasta 2.000 caracteres y cada sede lleva su dirección
+ * completa: volcarlos tal cual llenaría `master.audit_logs` —que comparten
+ * todos los clientes— y el recibo por correo con un texto que nadie va a leer
+ * ahí. Lo que hace falta saber es QUÉ cambió y lo justo para reconocerlo.
+ *
+ * El cambio se DETECTA comparando el valor entero (lo hace `anota`), así que
+ * tocar el nº de Registro Sanitario de una sede sí se audita aunque el resumen
+ * se lea igual. Resumir es solo cómo se escribe, no qué se mira.
+ */
+function resumenTelefonos(v) {
+  if (!Array.isArray(v) || v.length === 0) return "(ninguno)";
+  return v.join(", ");
+}
+
+/*
+ * ⚠️ EL RESUMEN TIENE QUE CAMBIAR CUANDO CAMBIA EL DATO.
+ *
+ * La primera versión de esto reducía cada sede a su nombre, así que tocar el nº
+ * de Registro Sanitario, el CP o la dirección dejaba `antes === después`: la
+ * auditoría guardaba una fila que decía «1: Sede centro → 1: Sede centro» y el
+ * recibo por correo enseñaba esa misma línea, que parece un error del sistema.
+ *
+ * Y auditar esto no es un capricho: el nº de Registro Sanitario va IMPRESO en
+ * un informe que la familia presenta en el colegio o en el Ministerio. Si no se
+ * puede reconstruir quién lo cambió, la fila no vale para nada. Van los campos
+ * cortos que identifican la sede; el teléfono se queda fuera para no engordar
+ * `master.audit_logs` con lo que ya está en «Teléfonos».
+ */
+function resumenSedes(v) {
+  if (!Array.isArray(v) || v.length === 0) return "(ninguna)";
+  const una = (s) =>
+    [s?.nombre, s?.direccion, [s?.cp, s?.ciudad].filter(Boolean).join(" "), s?.registroSanitario]
+      .map((x) => (typeof x === "string" ? x.trim() : ""))
+      .filter(Boolean)
+      .join(", ") || "sin datos";
+  return `${v.length}: ${v.map(una).join(" | ")}`;
+}
+
+/**
+ * El párrafo legal, resumido pero SIN colisiones: dos textos distintos que
+ * empiecen igual y midan lo mismo daban el mismo resumen, y entonces cambiarlo
+ * tampoco dejaba rastro. Se añaden los últimos caracteres.
+ */
+function resumenTexto(v) {
+  const t = typeof v === "string" ? v.trim() : "";
+  if (!t) return "(sin texto)";
+  if (t.length <= 60) return `«${t}» (${t.length} caracteres)`;
+  return `«${t.slice(0, 45)}…${t.slice(-15)}» (${t.length} caracteres)`;
+}
+
 /**
  * Qué ha cambiado en la configuración, en forma auditable.
  *
@@ -127,17 +181,30 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
 
   const before = {};
   const after = {};
-  const anota = (clave, va, vd) => {
+  /*
+   * `resumir` es opcional y solo cambia CÓMO se escribe lo que cambió, nunca si
+   * se considera que cambió: eso se sigue decidiendo sobre el valor entero. Lo
+   * usan los datos del centro, que son largos (ver arriba).
+   */
+  const anota = (clave, va, vd, resumir) => {
     if (JSON.stringify(va ?? null) === JSON.stringify(vd ?? null)) return;
-    before[clave] = va ?? null;
-    after[clave] = vd ?? null;
+    before[clave] = resumir ? resumir(va) : (va ?? null);
+    after[clave] = resumir ? resumir(vd) : (vd ?? null);
   };
 
   if (nombreDespues !== undefined) anota("name", nombreAntes, nombreDespues);
   for (const campo of CAMPOS_ABIERTOS_AUDIT) anota(campo, iAntes[campo], iDespues[campo]);
-  for (const campo of ["primaryColor", "secondaryColor", "logoUrl"]) {
+  for (const campo of ["primaryColor", "secondaryColor", "logoUrl", "isotipoUrl"]) {
     anota(`brand.${campo}`, antes?.brand?.[campo], despues?.brand?.[campo]);
   }
+  // Los datos del centro que imprime el informe clínico (28/08/2026). Cambiar
+  // el CIF o el nº de Registro Sanitario de una sede altera un documento que la
+  // familia presenta en el colegio o en el Ministerio: tiene que dejar rastro.
+  anota("centro.razonSocial", antes?.centro?.razonSocial, despues?.centro?.razonSocial);
+  anota("centro.cif", antes?.centro?.cif, despues?.centro?.cif);
+  anota("centro.telefonos", antes?.centro?.telefonos, despues?.centro?.telefonos, resumenTelefonos);
+  anota("centro.proteccionDatos", antes?.centro?.proteccionDatos, despues?.centro?.proteccionDatos, resumenTexto);
+  anota("centro.sedes", antes?.centro?.sedes, despues?.centro?.sedes, resumenSedes);
   anota("aiAccess", antes?.aiAccess, despues?.aiAccess);
   anota("citas.meetModo", antes?.citas?.meetModo, despues?.citas?.meetModo);
   anota("citas.recordatorios", antes?.citas?.recordatorios, despues?.citas?.recordatorios);
@@ -273,6 +340,14 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
      * mañana quiera usarlo tiene que poder rellenarlo solo.
      */
     categoriasExternas: categoriasDe(t),
+    /*
+     * Los datos del centro que imprime el informe clínico (28/08/2026). Se
+     * devuelven SIEMPRE y ya normalizados —o sea, con las cinco claves aunque
+     * en la base no haya nada—: así la pantalla no tiene que inventarse la
+     * forma, y lo guardado a medias por una versión anterior sale completo.
+     * Universal como el resto de la Configuración (regla 14).
+     */
+    centro: normalizarCentro(t.settings?.centro),
     formularioUrl: t.settings?.citas?.formularioUrl ?? "",
     // Página de la web del cliente donde está incrustado el portal.
     portalUrl: t.settings?.citas?.portalUrl ?? "",
@@ -284,6 +359,10 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
       primaryColor: brand.primaryColor ?? null,
       secondaryColor: brand.secondaryColor ?? null,
       logoUrl: brand.logoUrl ?? null,
+      // El isotipo —la marca sin el texto— cierra la última página del informe
+      // clínico (28/08/2026). Hermano de `logoUrl` en todo: misma validación,
+      // mismo sitio, y ninguno de los dos es obligatorio.
+      isotipoUrl: brand.isotipoUrl ?? null,
     },
     integrations: {
       anthropic: {
@@ -411,12 +490,38 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
 
   // Marca.
   if (body.brand && typeof body.brand === "object") {
-    for (const k of ["primaryColor", "secondaryColor", "logoUrl"]) {
+    for (const k of ["primaryColor", "secondaryColor", "logoUrl", "isotipoUrl"]) {
       if (k in body.brand) {
         const v = body.brand[k];
         settings.brand[k] = typeof v === "string" && v.trim() ? v.trim() : null;
       }
     }
+  }
+
+  /*
+   * ── DATOS DEL CENTRO (28/08/2026) ─────────────────────────────────────────
+   * Razón social, CIF, teléfonos, sedes con su nº de Registro Sanitario y el
+   * párrafo de protección de datos: lo que el informe clínico imprime en la
+   * portada y en el pie. Antes de hoy el CRM no los guardaba en ninguna parte.
+   *
+   * Va aquí y NO en `/api/billing/settings` aunque la razón social y el CIF
+   * existan también allí: ese endpoint no comprueba rol ni audita, su tarjeta
+   * se esconde sin el módulo `billing` y el alta no siembra su fila. Atar un
+   * documento sanitario a eso dejaría a las 13 personas con rol `user` de
+   * Aumenta reescribiendo el CIF de un informe sin dejar rastro. El porqué
+   * entero, en `lib/tenant/normalizarCentro.js`.
+   *
+   * `undefined` = no se tocó (como el resto del PATCH). `null` o todo vacío =
+   * se borra la clave entera: un `centro` presente con cinco huecos le diría al
+   * generador del PDF que hay datos puestos, y no los hay.
+   */
+  if (body.centro !== undefined) {
+    if (body.centro !== null && (typeof body.centro !== "object" || Array.isArray(body.centro))) {
+      throw new ValidationError("«centro» tiene que ser un objeto");
+    }
+    const centro = normalizarCentro(body.centro);
+    if (centroVacio(centro)) delete settings.centro;
+    else settings.centro = centro;
   }
 
   // Claves de IA (secretos).
@@ -708,6 +813,12 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     contratoObligatorio: settings.citas?.contratoObligatorio === true,
     soloConPago: settings.citas?.soloConPago === true,
     identidadObligatoria: exigeIdentidad({ settings }),
+    // Los datos del centro TIENEN que volver aquí por lo mismo que las cuatro
+    // puertas: la pantalla hace `setCfg({...c, ...data})`, así que lo que no
+    // vuelva se queda pintado con lo viejo. Y aquí se nota más que en un
+    // interruptor: al guardar, la tarjeta adopta lo normalizado —las sedes
+    // vacías fuera, los textos recortados—, que es lo que de verdad se imprime.
+    centro: normalizarCentro(settings.centro),
     colorBloqueos: settings.citas?.colorBloqueos ?? COLOR_BLOQUEO_POR_DEFECTO,
     brand: {
       primaryColor: settings.brand.primaryColor ?? null,

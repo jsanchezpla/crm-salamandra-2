@@ -12,6 +12,9 @@ import { isValidHexColor } from "../../../../lib/citas/validation.js";
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["active", "inactive", "on_leave"]);
 const VALID_PERIODS = new Set([12, 14]);
+// Lo que aguantan las columnas de TeamMember (VARCHAR). Ver el modelo.
+const MAX_COLEGIADA = 40;
+const MAX_TITULACION = 120;
 
 function normalizeEmail(value) {
   if (value == null) return null;
@@ -28,6 +31,16 @@ function normalizeAmount(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0) return undefined;
   return Math.round(n * 100) / 100;
+}
+/**
+ * Texto de una columna VARCHAR(n): vacío → NULL, y recortado a lo que cabe.
+ * Igual que en POST /api/team, y por lo mismo: un pegado de más sería un 22001
+ * de PostgreSQL (500 sin explicación), y una cadena vacía imprimiría una línea
+ * en blanco en el informe donde va la colegiada. Borrar el campo = NULL.
+ */
+function normalizeTextoCorto(value, max) {
+  const v = normalizeString(value);
+  return v == null ? null : v.slice(0, max);
 }
 
 async function userBelongsToTenant(userId, tenantId) {
@@ -173,6 +186,15 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       updates.blockColor = c;
     }
     if ("notes" in body) updates.notes = body.notes != null ? String(body.notes) : null;
+    // Los dos datos con los que esta persona firma un informe clínico
+    // (28/08/2026). Vaciarlos es legítimo: se guarda NULL y el PDF deja de
+    // imprimir esa línea, en vez de sacar una vacía bajo la firma.
+    if ("collegiateNumber" in body) {
+      updates.collegiateNumber = normalizeTextoCorto(body.collegiateNumber, MAX_COLEGIADA);
+    }
+    if ("qualification" in body) {
+      updates.qualification = normalizeTextoCorto(body.qualification, MAX_TITULACION);
+    }
     if ("startDate" in body) updates.hiredAt = normalizeString(body.startDate);
     if ("currency" in body) {
       const c = normalizeString(body.currency);

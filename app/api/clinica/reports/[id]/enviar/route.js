@@ -5,7 +5,11 @@ import { logClinicaAudit } from "../../../../../../lib/clinica/audit.js";
 import { serializeReport } from "../../../../../../lib/clinica/serialize.js";
 import { clientIdOfPatient } from "../../../../../../lib/clinica/patientClient.js";
 import { buildReportPdfBuffer, reportPdfFilename } from "../../../../../../lib/clinica/reportPdf.js";
-import { sesionesDelInforme } from "../../../../../../lib/clinica/sesionesDelInforme.js";
+import {
+  argumentosDelPdf,
+  includesDelInforme,
+  nombreDePaciente,
+} from "../../../../../../lib/clinica/argumentosDelPdf.js";
 import {
   TENANT_QUOTA_BYTES,
   quotaBytesDe,
@@ -47,18 +51,13 @@ export const POST = withTenant(async (request, rc, ctx) => {
     const { id } = await rc.params;
     if (!UUID_RE.test(id)) return error("id inválido", 422);
 
-    const { ClinicalReport, Patient, TeamMember, Document } = ctx.tenantModels;
+    const { ClinicalReport, Document } = ctx.tenantModels;
     if (!Document) return error("Este cliente no tiene el archivo de documentos activado", 503);
 
-    const report = await ClinicalReport.findByPk(id, {
-      include: [
-        { model: Patient, as: "patient", attributes: ["id", "firstName", "lastName", "clientId", "specialties"] },
-        { model: TeamMember, as: "therapist", attributes: ["id", "displayName"] },
-      ],
-    });
+    const report = await ClinicalReport.findByPk(id, { include: includesDelInforme(ctx.tenantModels) });
     if (!report) return notFound("Informe no encontrado");
 
-    const patientName = `${report.patient?.firstName ?? ""} ${report.patient?.lastName ?? ""}`.trim();
+    const patientName = nombreDePaciente(report.patient);
     const clientId = report.clientId ?? report.patient?.clientId ?? (await clientIdOfPatient(ctx.tenantModels, report.patientId));
     if (!clientId) {
       return error(
@@ -69,22 +68,13 @@ export const POST = withTenant(async (request, rc, ctx) => {
 
     let buffer;
     try {
-      buffer = await buildReportPdfBuffer({
-        report,
-        patientName,
-        therapistName: report.therapist?.displayName ?? null,
-        tenantName: ctx.tenant.name,
-        brand: ctx.tenant.settings?.brand ?? {},
-        // Para que la especialidad de derivación salga con la etiqueta que el
-        // centro escribió en Configuración y no con su clave interna.
-        tenant: ctx.tenant,
-        // El informe de beca traduce estas claves a los nombres oficiales de la
-        // convocatoria en su cabecera (lib/clinica/beca.js).
-        patientSpecialties: report.patient?.specialties ?? [],
-        // La portada imprime el periodo y las fechas de estas sesiones; el
-        // contenido literal solo va en el anexo opcional (26/08/2026, Rodrigo).
-        sourceSessions: await sesionesDelInforme(ctx.tenantModels, report),
-      });
+      /*
+       * Los mismos argumentos que «Ver PDF», armados en el mismo sitio
+       * (`lib/clinica/argumentosDelPdf.js`, 28/08/2026). Antes estaban copiados
+       * en las dos rutas y bastaba con añadir un dato en una sola para que la
+       * profesional previsualizara un documento y la familia recibiera otro.
+       */
+      buffer = await buildReportPdfBuffer(await argumentosDelPdf(report, ctx));
     } catch (err) {
       process.stderr.write(`[clinica:enviar] PDF falló: ${err.message}\n`);
       return error("No se pudo generar el PDF del informe", 500);

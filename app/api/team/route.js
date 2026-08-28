@@ -12,6 +12,9 @@ import { isValidHexColor } from "../../../lib/citas/validation.js";
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const VALID_STATUS = new Set(["active", "inactive", "on_leave"]);
 const VALID_PERIODS = new Set([12, 14]);
+// Lo que aguantan las columnas de TeamMember (VARCHAR). Ver el modelo.
+const MAX_COLEGIADA = 40;
+const MAX_TITULACION = 120;
 
 function normalizeEmail(value) {
   if (value == null) return null;
@@ -30,6 +33,19 @@ function normalizeAmount(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0) return undefined; // sentinel: inválido
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * Texto de una columna VARCHAR(n): vacío → NULL, y recortado a lo que cabe.
+ *
+ * El recorte no es cosmético: un pegado de más lo rechaza PostgreSQL con 22001
+ * y la pantalla se lleva un 500 sin decir qué pasa. Y el NULL tampoco: en el
+ * informe firmado, «no lo tenemos» y «una cadena vacía» tienen que ser lo
+ * mismo, o el PDF imprimiría una línea en blanco donde va la colegiada.
+ */
+function normalizeTextoCorto(value, max) {
+  const v = normalizeString(value);
+  return v == null ? null : v.slice(0, max);
 }
 
 async function userBelongsToTenant(userId, tenantId) {
@@ -269,6 +285,10 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const blockColor = limpiaColorBloqueo(body.blockColor);
     if (!isValidHexColor(blockColor)) return error("El color de los bloqueos tiene que ser un hex tipo #RRGGBB");
     const notes = body.notes != null ? String(body.notes) : null;
+    // Los dos datos con los que esta persona firma un informe clínico
+    // (28/08/2026). Opcionales: quien no los tenga, no los imprime.
+    const collegiateNumber = normalizeTextoCorto(body.collegiateNumber, MAX_COLEGIADA);
+    const qualification = normalizeTextoCorto(body.qualification, MAX_TITULACION);
     const status = body.status ?? "active";
     const linkedUserId = body.userId || null;
     const startDate = normalizeString(body.startDate);
@@ -323,6 +343,8 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       status,
       hiredAt: startDate,
       notes,
+      collegiateNumber,
+      qualification,
       specialties: normalizeSpecialties(body.specialties),
       customFields: {},
     });

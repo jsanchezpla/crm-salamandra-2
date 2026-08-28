@@ -178,6 +178,18 @@ export const CORE = [
   // tiene Citas— es un no-op.
   "migrate-team-members-block-color",
 
+  // Nº de colegiada y titulación de quien firma un informe
+  // (`team_members.collegiate_number` y `.qualification`, 28/08/2026, Aumenta).
+  // CORE y NO en `team` por el criterio de la cabecera, que es el mismo caso
+  // EXACTO de `migrate-team-members-block-color` aquí arriba: el modelo
+  // TeamMember se registra para TODOS los tenants (`lib/db/tenantDb.js`), así
+  // que Sequelize hace SELECT de las dos columnas en cualquier consulta de
+  // `team_members` —tenga el cliente el módulo Equipo o no—. Dejarlas en `team`
+  // sería un 42703 en la pantalla de Equipo, en los desplegables de
+  // profesionales y en la agenda del primer cliente con la tabla y sin el
+  // módulo. Decide por existencia de `team_members`: donde no está, es un no-op.
+  "migrate-team-colegiada",
+
   // Documento adjunto a una incidencia (`documents.incidencia_id`, 26/08/2026,
   // Aumenta). CORE por el mismo criterio que migrate-documents-patient-link, que
   // es su hermana: la columna vive en `documents` y el MODELO Document la declara

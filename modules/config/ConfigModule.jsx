@@ -16,6 +16,7 @@ import {
 } from "../../lib/configuracion/pestanas.js";
 import { BotonZona, Field, PrimaryButton, Section, Tarjeta, inputCls } from "./tarjetas/ui.jsx";
 import { CompanyDescriptionSection } from "./tarjetas/Empresa.jsx";
+import DatosCentro from "./tarjetas/DatosCentro.jsx";
 import {
   AI_PROVIDERS,
   ApiKeyCard,
@@ -290,6 +291,19 @@ export default function ConfigModule({ modulos = null }) {
 
       {pestanaViva === "empresa" && (
         <div className="space-y-4">
+          {/* Los datos que imprime el informe clínico (28/08/2026). Va la
+              primera porque las otras dos de esta zona se esconden solas sin
+              `billing` ni `outreach`: sin ella, a un cliente sin esos módulos
+              «Empresa» se le abría en blanco. */}
+          {enZona(
+            "datosCentro",
+            <DatosCentro
+              centro={cfg.centro}
+              readOnly={!isAdmin || !!cfg.readOnly}
+              onGuardar={(centro) => patchTenant({ centro }, "Datos del centro guardados")}
+            />
+          )}
+
           {enZona(
             "fiscal",
              billing && (

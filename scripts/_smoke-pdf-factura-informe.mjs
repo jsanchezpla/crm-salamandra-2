@@ -95,6 +95,7 @@ import { fileURLToPath } from "node:url";
 
 import { buildInvoicePdfBuffer, invoicePdfFilename } from "../lib/billing/invoicePdf.js";
 import { buildReportPdfBuffer, reportPdfFilename } from "../lib/clinica/reportPdf.js";
+import { paletaDeInforme } from "../lib/clinica/marcaInforme.js";
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -1013,29 +1014,36 @@ describe("buildReportPdfBuffer: la cabecera y la ficha de datos", () => {
     assert.ok(buffer.toString("latin1").includes("Poppins"), "debería llevar Poppins dentro");
   });
 
-  it("arriba va el centro y debajo el tipo de informe", async () => {
-    assert.match(await textoInforme(), /^Centro Aumenta\nEvolutivo\n/);
+  /*
+   * 28/08/2026 — EL DOCUMENTO CAMBIÓ DE FORMA, NO DE CONTENIDO.
+   *
+   * El informe pasó de ser una hoja (cabecera + ficha de rótulos + secciones) a
+   * un documento con portada a sangre, índice, apartados numerados y firma. Las
+   * aserciones de aquí abajo se han reescrito al formato nuevo, pero comprueban
+   * lo MISMO que comprobaban: que el centro sale, que el tipo de informe se
+   * nombra, que el paciente y la profesional van bajo su rótulo, y que la
+   * especialidad de destino sale con la etiqueta del centro y no con su clave.
+   */
+
+  it("la portada nombra el centro y el documento", async () => {
+    assert.match(await textoInforme(), /^Centro Aumenta\nInforme de evolución\n/);
+    // Sin nombre de centro no se pinta una línea en blanco: empieza el título.
     assert.match(
       await textoInforme({ tenantName: null, report: { reportType: "referral" } }),
-      /^Informe clínico\nDerivación\n/
+      /^Informe de derivación\n/
     );
     // Un tipo que no está en el catálogo cae en «Informe» también DENTRO del
     // documento, no solo en el nombre del fichero (son dos respaldos distintos).
-    assert.match(
-      await textoInforme({ report: { reportType: "wat" } }),
-      /^Centro Aumenta\nInforme\n/
-    );
-    assert.match(
-      await textoInforme({ report: { reportType: null } }),
-      /^Centro Aumenta\nInforme\n/
-    );
+    assert.match(await textoInforme({ report: { reportType: "wat" } }), /^Centro Aumenta\nInforme\n/);
+    assert.match(await textoInforme({ report: { reportType: null } }), /^Centro Aumenta\nInforme\n/);
   });
 
-  it("la ficha lleva paciente, fecha y profesional, cada uno bajo su rótulo", async () => {
+  it("la portada lleva paciente, profesional y fecha, cada uno bajo su rótulo", async () => {
     const texto = await textoInforme();
-    assert.ok(texto.includes("PACIENTE\nAna López"));
-    assert.ok(texto.includes("FECHA DEL INFORME\n10 de agosto de 2026"));
-    assert.ok(texto.includes("PROFESIONAL\nMarta García"));
+    assert.ok(texto.includes("PACIENTE\nAna López"), texto);
+    assert.ok(texto.includes("PROFESIONAL RESPONSABLE\nMarta García"), texto);
+    // La fecha cierra la portada junto al nombre del centro.
+    assert.ok(texto.includes("Centro Aumenta · 10 de agosto de 2026"), texto);
   });
 
   it("las filas de la ficha que no tienen valor no se imprimen (ni su rótulo)", async () => {
@@ -1052,8 +1060,8 @@ describe("buildReportPdfBuffer: la cabecera y la ficha de datos", () => {
         contentSections: { referralSpecialty: "neuropediatria", motiveOfIntervention: "M" },
       },
     });
-    assert.ok(derivacion.includes("ESPECIALIDAD DE DESTINO\nNeuropediatra"));
-    assert.equal((await textoInforme()).includes("ESPECIALIDAD DE DESTINO"), false);
+    assert.ok(derivacion.includes("Especialidad de destino: Neuropediatra"));
+    assert.equal((await textoInforme()).includes("Especialidad de destino"), false);
   });
 
   it("la especialidad sale con la etiqueta que escribió EL CENTRO, no con su clave", async () => {
@@ -1083,7 +1091,7 @@ describe("buildReportPdfBuffer: la cabecera y la ficha de datos", () => {
         contentSections: { referralSpecialty: "terapia_ocupacional", motiveOfIntervention: "M" },
       },
     });
-    assert.ok(conCentro.includes("ESPECIALIDAD DE DESTINO\nTerapia ocupacional"), "la etiqueta del centro");
+    assert.ok(conCentro.includes("Especialidad de destino: Terapia ocupacional"), "la etiqueta del centro");
     assert.ok(!conCentro.includes("terapia_ocupacional"), "y la clave ya no se ve por ninguna parte");
   });
 
@@ -1094,32 +1102,42 @@ describe("buildReportPdfBuffer: la cabecera y la ficha de datos", () => {
     const sinTenant = await textoInforme({
       report: { contentSections: { referralSpecialty: "neuropediatria", motiveOfIntervention: "M" } },
     });
-    assert.ok(sinTenant.includes("ESPECIALIDAD DE DESTINO\nNeuropediatra"), "cae al catálogo global");
+    assert.ok(sinTenant.includes("Especialidad de destino: Neuropediatra"), "cae al catálogo global");
 
     const claveRetirada = await textoInforme({
       tenant: { settings: { clinica: { referralSpecialties: [{ key: "logopeda", label: "Logopeda" }] } } },
       report: { contentSections: { referralSpecialty: "neuropediatria", motiveOfIntervention: "M" } },
     });
-    assert.ok(claveRetirada.includes("ESPECIALIDAD DE DESTINO\nNeuropediatra"), "un informe viejo se sigue leyendo");
+    assert.ok(claveRetirada.includes("Especialidad de destino: Neuropediatra"), "un informe viejo se sigue leyendo");
   });
 
-  it("la regla bajo el título usa el color del cliente, y el verde de Salamandra si no hay marca", async () => {
+  it("los colores del documento salen de la marca del cliente, y son neutros sin ella", async () => {
+    /*
+     * 28/08/2026: antes esto miraba UN color —la regla bajo el título—. Con el
+     * rediseño el color está por todo el documento (fondo de la portada,
+     * manchas, número de cada apartado, filetes), y todos salen derivados de la
+     * marca por `lib/clinica/marcaInforme.js`. Lo que se comprueba sigue siendo
+     * lo mismo: que el cliente pone el color y que sin marca no se le inventa
+     * ninguno.
+     */
     const colores = (buffer) =>
-      [...abrirPdf(buffer).paginas[0].contenido.matchAll(/([\d.]+) ([\d.]+) ([\d.]+) SCN/g)].map(
-        (m) => m.slice(1, 4).map(Number)
-      );
+      [...abrirPdf(buffer).paginas[0].contenido.matchAll(/([\d.]+) ([\d.]+) ([\d.]+) (?:SCN|scn|rg)/g)]
+        .map((m) => m.slice(1, 4).map((v) => Math.round(Number(v) * 255)).join(","));
+
     const conMarca = await buildReportPdfBuffer({
       report: informe(),
       patientName: "Ana",
-      brand: { primaryColor: "#124A55" },
+      brand: { primaryColor: "#124A55", secondaryColor: "#F59C00" },
     });
-    assert.deepEqual(colores(conMarca)[0], [18 / 255, 74 / 255, 85 / 255]);
-    const sinMarca = await buildReportPdfBuffer({
-      report: informe(),
-      patientName: "Ana",
-      brand: null,
-    });
-    assert.deepEqual(colores(sinMarca)[0], [27 / 255, 58 / 255, 45 / 255]); // #1B3A2D
+    const paleta = paletaDeInforme({ primaryColor: "#124A55", secondaryColor: "#F59C00" });
+    const aRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(",");
+    assert.ok(colores(conMarca).includes(aRgb(paleta.tinteSuave)), "el fondo de la portada es el tinte de su marca");
+    assert.ok(colores(conMarca).includes(aRgb(paleta.oscuro)), "y el titular, su color secundario");
+
+    const sinMarca = await buildReportPdfBuffer({ report: informe(), patientName: "Ana", brand: null });
+    const neutra = paletaDeInforme(null);
+    assert.ok(colores(sinMarca).includes(aRgb(neutra.oscuro)), "sin marca, pizarra neutra");
+    assert.ok(!colores(sinMarca).includes(aRgb(paleta.oscuro)), "y ni rastro del color de otro cliente");
   });
 });
 
@@ -1138,18 +1156,34 @@ describe("buildReportPdfBuffer: las secciones, en su orden y solo las que tienen
         },
       },
     });
-    assert.ok(
-      texto.includes(
-        "Motivo de intervención\nM\n" +
-          "Objetivos\n•  O\n" +
-          "Evolución\n•  E\n" +
-          "Logros\n•  A\n" +
-          "Dificultades que persisten\n•  D\n" +
-          "Recomendaciones\n•  R\n" +
-          "Propuesta de continuidad\nC"
-      ),
-      texto
-    );
+    /*
+     * 28/08/2026: los apartados van ahora numerados, así que ya no se pueden
+     * concatenar en una sola cadena. Se comprueba lo mismo —que salen los siete
+     * en el orden de lectura y no en el que vinieron— por su POSICIÓN en el
+     * documento, que además aguanta que mañana cambie el adorno.
+     */
+    const ORDEN = [
+      "Motivo de intervención",
+      "Objetivos",
+      "Evolución",
+      "Logros",
+      "Dificultades que persisten",
+      "Recomendaciones",
+      "Propuesta de continuidad",
+    ];
+    // Se busca en el CUERPO, saltándose la portada y el índice (que repiten los
+    // mismos rótulos y descolocarían las posiciones).
+    const cuerpo = texto.slice(texto.lastIndexOf("Motivo de intervención"));
+    const posiciones = ORDEN.map((t) => cuerpo.indexOf(t));
+    for (const [i, p] of posiciones.entries()) {
+      assert.ok(p >= 0, `falta el apartado «${ORDEN[i]}»:\n${cuerpo}`);
+      if (i > 0) {
+        assert.ok(p > posiciones[i - 1], `«${ORDEN[i]}» va detrás de «${ORDEN[i - 1]}»:\n${cuerpo}`);
+      }
+    }
+    // Y correlativos hasta el 7, que es lo que casa el índice con el cuerpo.
+    assert.match(cuerpo, /2\nObjetivos/, cuerpo);
+    assert.match(cuerpo, /7\nPropuesta de continuidad/, cuerpo);
   });
 
   it("una sección vacía, en blanco o con lista vacía no se imprime ni con su titular", async () => {
@@ -1174,14 +1208,22 @@ describe("buildReportPdfBuffer: las secciones, en su orden y solo las que tienen
     const texto = await textoInforme({
       report: { contentSections: { evolution: ["  ", "Primero", "", "Segundo"] } },
     });
-    assert.ok(texto.includes("Evolución\n•  Primero\n•  Segundo"));
+    // 28/08/2026: la viñeta pasó de «•» a una raya, y se dibuja aparte del
+    // texto para que la segunda línea sangre bajo la primera. Lo que se
+    // comprueba es lo de siempre: los dos elementos salen, en orden, y los
+    // vacíos no dejan una viñeta suelta.
+    const vinetas = (texto.match(/—/g) || []).length;
+    assert.equal(vinetas, 2, `dos elementos, dos viñetas — y ninguna huérfana:\n${texto}`);
+    assert.ok(texto.indexOf("Primero") < texto.indexOf("Segundo"), texto);
+    assert.ok(texto.indexOf("Evolución") < texto.indexOf("Primero"), texto);
   });
 
   it("una cadena suelta en un campo de lista se imprime como una sola viñeta", async () => {
     const texto = await textoInforme({
       report: { contentSections: { objectives: "una sola cadena" } },
     });
-    assert.ok(texto.includes("Objetivos\n•  una sola cadena"));
+    assert.equal((texto.match(/—/g) || []).length, 1, `una cadena, una sola viñeta:\n${texto}`);
+    assert.ok(texto.includes("una sola cadena"), texto);
   });
 
   it("un informe sin secciones pero con el texto de la IA lo imprime tal cual, bajo «Informe»", async () => {

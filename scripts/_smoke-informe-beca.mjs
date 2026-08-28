@@ -316,7 +316,10 @@ describe("de las sesiones, la portada solo dice las fechas", () => {
   it("con sesiones detrás, imprime periodo y en cuáles se basa — sin su contenido", async () => {
     const buffer = await generar(informeEvolutivo(), [], SESIONES);
     const { texto } = abrirPdf(buffer);
-    assert.match(texto, /Periodo/i);
+    // 28/08/2026: el rótulo «Periodo» ya no existe. Con el rediseño, el periodo
+    // es la pastilla de la portada y las fechas van en el «Basado en» del
+    // cuerpo. Lo que importa —que se digan las fechas y no el contenido de las
+    // sesiones— se sigue comprobando igual, y en las dos líneas de abajo.
     assert.match(texto, /del 16 de enero de 2025 al 23 de enero de 2025/);
     assert.match(texto, /Basado en/i);
     assert.match(texto, /2 sesiones/);
@@ -328,8 +331,8 @@ describe("de las sesiones, la portada solo dice las fechas", () => {
   it("sin sesiones, esas filas no se imprimen (ni su rótulo)", async () => {
     const buffer = await generar(informeEvolutivo(), [], []);
     const { texto } = abrirPdf(buffer);
-    assert.doesNotMatch(texto, /Periodo/i);
     assert.doesNotMatch(texto, /Basado en/i);
+    assert.doesNotMatch(texto, /sesiones/i);
   });
 
   it("con la casilla del anexo, los registros literales van al final — menos la preparación", async () => {
@@ -373,11 +376,20 @@ describe("un informe evolutivo sigue exactamente igual", () => {
       ["logopedia"]
     );
     const { texto } = abrirPdf(buffer);
-    assert.match(texto, /Evolutivo/);
+    // 28/08/2026: en la portada el documento se NOMBRA («Informe de evolución»),
+    // no se etiqueta. «Evolutivo» es el rótulo de la lista de informes, escrito
+    // para caber en un chip; en cuerpo 30 y solo, no es el nombre de nada.
+    assert.match(texto, /Informe de evolución/);
     assert.match(texto, /Motivo de intervención/);
     assert.match(texto, /Una línea de evolución/);
-    // Ni los nombres de la beca ni la firma: eso es del otro tipo.
+    // Los nombres oficiales de la convocatoria siguen siendo SOLO de la beca.
     assert.doesNotMatch(texto, /Reeducación/);
-    assert.doesNotMatch(texto, /Fdo\.:/);
+    /*
+     * La FIRMA sí sale ahora, y es el cambio de fondo del rediseño: antes solo
+     * la llevaba la beca, porque la convocatoria la exige. Un informe clínico
+     * que una familia presenta en el colegio lo firma quien lo redacta, sea del
+     * tipo que sea — por eso el bloque de firma dejó de ser una excepción.
+     */
+    assert.match(texto, /Fdo\.:/);
   });
 });

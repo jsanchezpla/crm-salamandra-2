@@ -2,7 +2,7 @@ import { withTenant } from "@/lib/tenant/withTenant.js";
 import { forbidden, notFound, error, serverError } from "@/lib/utils/apiResponse.js";
 import { contentDisposition } from "@/lib/documents/helpers.js";
 import { buildReportPdfBuffer, reportPdfFilename } from "@/lib/clinica/reportPdf.js";
-import { sesionesDelInforme } from "@/lib/clinica/sesionesDelInforme.js";
+import { argumentosDelPdf, includesDelInforme, nombreDePaciente } from "@/lib/clinica/argumentosDelPdf.js";
 
 /**
  * GET /api/clinica/reports/[id]/pdf — ver el PDF del informe SIN entregárselo a
@@ -53,36 +53,21 @@ export const GET = withTenant(async (request, rc, ctx) => {
     const { id } = await rc.params;
     if (!UUID_RE.test(id)) return error("id inválido", 422);
 
-    const { ClinicalReport, Patient, TeamMember } = ctx.tenantModels;
-    const report = await ClinicalReport.findByPk(id, {
-      include: [
-        { model: Patient, as: "patient", attributes: ["id", "firstName", "lastName", "clientId", "specialties"] },
-        { model: TeamMember, as: "therapist", attributes: ["id", "displayName"] },
-      ],
-    });
+    const { ClinicalReport } = ctx.tenantModels;
+    const report = await ClinicalReport.findByPk(id, { include: includesDelInforme(ctx.tenantModels) });
     if (!report) return notFound("Informe no encontrado");
 
-    const patientName =
-      `${report.patient?.firstName ?? ""} ${report.patient?.lastName ?? ""}`.trim();
+    const patientName = nombreDePaciente(report.patient);
 
     let buffer;
     try {
-      buffer = await buildReportPdfBuffer({
-        report,
-        patientName,
-        therapistName: report.therapist?.displayName ?? null,
-        tenantName: ctx.tenant.name,
-        brand: ctx.tenant.settings?.brand ?? {},
-        // Para que la especialidad de derivación salga con la etiqueta que el
-        // centro escribió en Configuración y no con su clave interna.
-        tenant: ctx.tenant,
-        // El informe de beca traduce estas claves a los nombres oficiales de la
-        // convocatoria en su cabecera (lib/clinica/beca.js).
-        patientSpecialties: report.patient?.specialties ?? [],
-        // La portada imprime el periodo y las fechas de estas sesiones; el
-        // contenido literal solo va en el anexo opcional (26/08/2026, Rodrigo).
-        sourceSessions: await sesionesDelInforme(ctx.tenantModels, report),
-      });
+      /*
+       * Los argumentos se arman en `lib/clinica/argumentosDelPdf.js` y NO aquí
+       * (28/08/2026). Esta ruta y la de «Enviar al paciente» los tenían
+       * copiados uno a uno: un dato añadido en una sola de las dos hacía que la
+       * profesional previsualizara un documento y la familia recibiera otro.
+       */
+      buffer = await buildReportPdfBuffer(await argumentosDelPdf(report, ctx));
     } catch (err) {
       process.stderr.write(`[clinica:pdf] PDF falló: ${err.message}\n`);
       return error("No se pudo generar el PDF del informe", 500);

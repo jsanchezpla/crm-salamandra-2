@@ -13,6 +13,7 @@ import BorrarFichaModal from "@/components/team/BorrarFichaModal.jsx";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import { COLOR_BLOQUEO_POR_DEFECTO } from "@/lib/citas/coloresBloqueo.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
+import { pideAcreditacionProfesional } from "@/lib/clinica/firmaProfesional.js";
 
 const STATUS_LABELS = { active: "Activo", inactive: "Inactivo", on_leave: "De baja" };
 const STATUS_FILTER_OPTIONS = [
@@ -67,6 +68,9 @@ const EMPTY_FORM = {
   annualGross: "", paymentPeriods: 12,
   currency: "EUR", startDate: "", notes: "", status: "active",
   specialties: [],
+  // Con lo que firma sus informes clínicos. Opcionales: en blanco no se
+  // imprimen, y no se rellenan con nada inventado.
+  collegiateNumber: "", qualification: "",
   // Color de SUS bloqueos en la agenda. Vacío = hereda el general del centro.
   blockColor: "",
   // Acceso al CRM en el alta (solo modo crear): si crearAcceso, tras crear el
@@ -171,6 +175,25 @@ export default function EquipoPage() {
   const meIsAdmin = me?.role === "admin" || me?.role === "superadmin";
   useEffect(() => { if (meIsAdmin) load(); }, [load, meIsAdmin]);
 
+  /*
+   * Los módulos del tenant se cargan al entrar y no solo al abrir el alta: los
+   * necesitan también las casillas de «Acceso al CRM» y la puerta de los dos
+   * campos de acreditación (nº de colegiación y titulación), que solo se
+   * enseñan donde hay informes clínicos que firmar.
+   */
+  useEffect(() => {
+    if (!meIsAdmin || tenantModules != null) return;
+    let vivo = true;
+    fetch("/api/team/modules", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (vivo && j.ok) setTenantModules(j.data.modules); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [meIsAdmin, tenantModules]);
+
+  // La regla, con nombre y con prueba, en lib/clinica/firmaProfesional.js.
+  const firmaInformes = pideAcreditacionProfesional(tenantModules ?? []);
+
   // Con una busqueda o un rol puestos, el numero ya no es «la plantilla»: es lo
   // que ha casado con el filtro, y hay que decirlo o vuelve a leerse mal.
   const leyenda = leyendaDelConteo(totalFiltrado, filterStatus, !!(search || filterRole));
@@ -223,6 +246,8 @@ export default function EquipoPage() {
       status: openMember.status ?? "active",
       specialties: openMember.specialties ?? [],
       blockColor: openMember.blockColor ?? "",
+      collegiateNumber: openMember.collegiateNumber ?? "",
+      qualification: openMember.qualification ?? "",
     });
     setEditing(true);
   }
@@ -573,6 +598,16 @@ export default function EquipoPage() {
                   <DetailRow label="Email" value={openMember.email} mono />
                   <DetailRow label="Teléfono" value={openMember.phone} mono />
                   <DetailRow label="Departamento" value={openMember.department} />
+                  {/* Los dos que firman sus informes clínicos. Vacíos no son un
+                      olvido de la pantalla: es que no los tenemos, y entonces el
+                      informe sale sin esa línea. Solo donde hay informes que
+                      firmar (lib/clinica/firmaProfesional.js). */}
+                  {firmaInformes && (
+                    <>
+                      <DetailRow label="Nº de colegiación" value={openMember.collegiateNumber} mono />
+                      <DetailRow label="Titulación" value={openMember.qualification} />
+                    </>
+                  )}
                   <DetailRow label="Fecha de incorporación" value={openMember.startDate} />
                   {/* La muestra de color dice más que el hex, y el texto explica
                       el hueco: vacío no es un olvido, es «el del centro». */}
@@ -685,6 +720,35 @@ export default function EquipoPage() {
                     value={form.specialties}
                     onChange={(v) => setForm((f) => ({ ...f, specialties: v }))}
                   />
+                  {/* Lo que acredita a quien firma. Los dos son opcionales y se
+                      quedan vacíos mientras no se sepan: lo que se escriba aquí
+                      sale IMPRESO en un informe que la familia lleva al colegio
+                      o al Ministerio, así que nada de rellenar por rellenar.
+
+                      Solo se enseñan donde hay informes que firmar: la regla
+                      tiene nombre y prueba en lib/clinica/firmaProfesional.js.
+                      En una academia o una agencia, estos dos campos no
+                      significan nada y su ayuda sería falsa. */}
+                  {firmaInformes && (
+                  <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <FormRow label="Nº de colegiación">
+                      <input value={form.collegiateNumber} maxLength={40}
+                        onChange={(e) => setForm((f) => ({ ...f, collegiateNumber: e.target.value }))}
+                        className={inputCls} placeholder="M-12345" />
+                    </FormRow>
+                    <FormRow label="Titulación">
+                      <input value={form.qualification} maxLength={120}
+                        onChange={(e) => setForm((f) => ({ ...f, qualification: e.target.value }))}
+                        className={inputCls} placeholder="Graduada en Psicología" />
+                    </FormRow>
+                  </div>
+                  <p className="text-[10px] text-neutral-400 -mt-1">
+                    Salen impresos en los informes clínicos que firma esta persona. Si se dejan
+                    vacíos, el informe se genera igual: simplemente no aparece esa línea.
+                  </p>
+                  </>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <FormRow label="Teléfono">
                       <input value={form.phone}
