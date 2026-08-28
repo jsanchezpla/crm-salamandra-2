@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Op } from "sequelize";
 import { verifyApiKey } from "../../../../../lib/utils/apiKeyAuth.js";
 import { getTenantDb } from "../../../../../lib/db/tenantDb.js";
+import { filtroPorNombre } from "../../../../../lib/utils/busqueda.js";
 
 const SLUG = "retorika";
 const AUTO_PAGINATE_THRESHOLD = 500;
@@ -20,15 +21,23 @@ export async function GET(request) {
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limitParam = parseInt(searchParams.get("limit") || "0", 10);
 
-    const { models } = getTenantDb(SLUG);
+    const { models, sequelize } = getTenantDb(SLUG);
     const { TrainingUser, Company, CourseEnrollment, Course } = models;
 
     const where = {};
+    /*
+     * Todas las palabras, cada una en cualquiera de los campos (28/08/2026), y
+     * ahora también en el apellido, que no se buscaba. Lo consume la web de
+     * Retorika, así que el cambio se ha hecho de forma que solo puede AÑADIR
+     * resultados: lo que hoy encuentra, lo seguirá encontrando (una frase que
+     * cabe entera en una columna tiene todas sus palabras en esa columna).
+     * Ver `lib/utils/busqueda.js`.
+     */
     if (search) {
-      where[Op.or] = [
-        { name: { [Op.iLike]: `%${search}%` } },
-        { email: { [Op.iLike]: `%${search}%` } },
-      ];
+      const porNombre = await filtroPorNombre(sequelize, search, [
+        "TrainingUser.name", "TrainingUser.last_name", "TrainingUser.email",
+      ]);
+      if (porNombre) (where[Op.and] ||= []).push(porNombre);
     }
     if (companyId) {
       where.companyId = companyId;
@@ -55,7 +64,12 @@ export async function GET(request) {
             model: CourseEnrollment,
             as: "enrollment",
             attributes: ["enrolledAt"],
-            where: Object.keys(enrollmentWhere).length ? enrollmentWhere : undefined,
+            // Aquí enrollmentWhere solo lleva courseId, una clave normal, así
+            // que esto sí funcionaba. Se iguala a Reflect.ownKeys para que no
+            // dependa de eso: una clave de Sequelize (Op.*) es un symbol y
+            // Object.keys no la ve — es lo que tenía roto el buscador de
+            // Matrículas.
+            where: Reflect.ownKeys(enrollmentWhere).length ? enrollmentWhere : undefined,
           },
           attributes: ["id", "name", "wpCourseId", "wcProductId"],
           required: !!courseId,

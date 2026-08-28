@@ -97,6 +97,9 @@ export default function PacientesPage() {
   // tocar toda la tabla, pero ya viene filtrado de la API.
   const filtered = patients;
 
+  // ¿Hay algo escrito o elegido? Decide qué se dice cuando no sale nada.
+  const hayFiltro = Boolean(busqueda) || therapistFilter !== "all" || statusFilter !== "all";
+
   // Los tres primeros salen del RESUMEN del servidor, no de la página cargada.
   // Las sesiones siguen siendo de la página: sumarlas de todo el centro pide
   // otra consulta y no compensa por un indicador.
@@ -299,7 +302,17 @@ export default function PacientesPage() {
               {!loading && filtered.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center text-neutral-400 text-xs">
-                    {patients.length === 0 ? "Aún no hay pacientes. Crea el primero con «Nuevo paciente»." : "Sin resultados para esos filtros."}
+                    {/*
+                      Qué se dice cuando la tabla sale vacía (28/08/2026). Antes
+                      miraba `patients.length`, y como el filtrado lo hace el
+                      SERVIDOR eso siempre es 0 cuando una búsqueda no encuentra
+                      nada: buscar un paciente que no salía contestaba «Aún no hay
+                      pacientes», o sea que el centro parecía vacío teniendo 1.174.
+                      La rama de «sin resultados» no se pintaba nunca.
+                    */}
+                    {hayFiltro
+                      ? "Sin resultados para esos filtros."
+                      : "Aún no hay pacientes. Crea el primero con «Nuevo paciente»."}
                   </td>
                 </tr>
               )}

@@ -4,6 +4,7 @@ import { ok, created, error, forbidden } from "../../../lib/utils/apiResponse.js
 import { serializePatient } from "../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../lib/clinica/audit.js";
 import { normalizeConsents } from "../../../lib/clinica/consents.js";
+import { filtroPorNombre } from "../../../lib/utils/busqueda.js";
 import { normalizeSpecialties, deriveCareType, SPECIALTY_KEYS } from "../../../lib/clinica/specialties.js";
 import {
   terapeutasDe, referenciaDe, conReferencia, listaDe, terapeutasEfectivos,
@@ -40,7 +41,21 @@ export const GET = withTenant(async (request, _rc, ctx) => {
 
   const where = {};
   const q = sp.get("q")?.trim();
-  if (q) where[Op.or] = [{ firstName: { [Op.iLike]: `%${q}%` } }, { lastName: { [Op.iLike]: `%${q}%` } }];
+  /*
+   * El buscador parte lo escrito en PALABRAS y las exige TODAS (28/08/2026).
+   * Antes buscaba la frase entera dentro de cada columna por separado, así que
+   * «hugo castro» no encontraba a «Hugo Castro Díaz»: esa cadena no está entera
+   * ni en `first_name` ni en `last_name`. Medido antes de tocarlo: los 1.174
+   * pacientes de Aumenta, los 1.174, eran imposibles de encontrar escribiendo su
+   * propio nombre y su primer apellido. El porqué entero, en `lib/utils/busqueda.js`.
+   *
+   * Va a `Op.and` y no a `where[Op.or]` a propósito: ver la nota del filtro por
+   * terapeuta, aquí debajo. Dos `Op.or` en el mismo objeto se pisan en silencio.
+   */
+  if (q) {
+    const porNombre = await filtroPorNombre(ctx.tenantSequelize, q, ["Patient.first_name", "Patient.last_name"]);
+    if (porNombre) (where[Op.and] ||= []).push(porNombre);
+  }
   /*
    * Filtrar por terapeuta mira la LISTA ENTERA, no solo al de referencia
    * (25/08/2026). Si mirara solo la columna, una terapeuta que se filtra por sí

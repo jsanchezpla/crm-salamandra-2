@@ -20,14 +20,40 @@
 | **Interruptores y parámetros** | ninguno que lea el código. |
 | **Pantallas propias** | ninguna. |
 | **Scripts** | Activar: `node scripts/enable-module.js <slug> pacientes` (avisa si falta `clients`; `ensure-tenant-schema.js` corre las 7 del bloque `pacientes` de `scripts/_module-migrations.js`: `migrate-clinica-module` (la primera: crea `patients` y las tablas clínicas; desde el 19/08/2026 está también en este bloque), `migrate-patients-clients-phase1`, `migrate-client-module-assignments`, `migrate-patients-multi-per-client`, `migrate-patients-care-type`, `migrate-patients-specialties`, `migrate-documents-patient-link`, `migrate-patients-terapeutas`). Seed: `seed-clinica-demo.js <slug>` (pacientes + clínica; **VACÍA** antes, solo escaparate). Datos, a mano y con dry-run: `backfill-patients-client.js` (paciente → pagador deducido de sus citas/sesiones, `--confirm`; no cruza por nombre a propósito) y `migrate-contract-patient-to-client.js` (contrato del paciente → familia, ya corrido) y `backfill-patients-terapeutas.js` (copia el terapeuta de la ficha a la lista; **opcional**, ver abajo). ONE_OFF de la maqueta, no usar: `_hechos/migrate-pacientes-sprint-1.js` (solo `crm_aumenta`). |
-| **Pruebas** | `scripts/_smoke-alta-progenitores.mjs` — entra en `npm test`, sin base de datos: `normalizarPacientes` (el motivo llega hasta lo que se guarda) y el alta con dos progenitores. Ninguna otra toca `patients`: `_smoke-borrar-paciente.mjs` y `_smoke-paciente-borrado.mjs` son de `clients` (la «paciente» de una consulta de nutrición es un `Client`). |
-| **Decisiones** | `../decisions/2026-07-23-conexion-cliente-equipo.md` · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` · `../decisions/2026-08-01-alta-de-clientes-por-perfil.md` · `../decisions/2026-08-04-clientes-se-llama-pacientes-en-nutricion.md` |
+| **Pruebas** | `scripts/_smoke-busqueda-nombre.mjs` (`node:test`, 28/08/2026, en `npm test`, 49 casos): la regla del buscador —todas las palabras, cada una en cualquier columna, sin importar orden ni tildes— y que el endpoint sigue llamándola con las columnas cualificadas. · `scripts/_smoke-alta-progenitores.mjs` — entra en `npm test`, sin base de datos: `normalizarPacientes` (el motivo llega hasta lo que se guarda) y el alta con dos progenitores. Ninguna otra toca `patients`: `_smoke-borrar-paciente.mjs` y `_smoke-paciente-borrado.mjs` son de `clients` (la «paciente» de una consulta de nutrición es un `Client`). |
+| **Decisiones** | `../decisions/2026-08-28-buscar-por-nombre-y-apellidos.md` · `../decisions/2026-07-23-conexion-cliente-equipo.md` · `../decisions/2026-08-01-activar-un-modulo-tiene-dos-puertas.md` · `../decisions/2026-08-01-alta-de-clientes-por-perfil.md` · `../decisions/2026-08-04-clientes-se-llama-pacientes-en-nutricion.md` |
 | **En este doc** | Decisión arquitectónica: `patients` ≠ `clients` · Estado: Fase 1 (backend real) · Modelo · Frontend · Migración · Decisiones cerradas |
 
 > Documentación de detalle. Referencia rápida en `CLAUDE.md`. Si
 > encuentras una discrepancia con el código, **prevalece el código**:
 > actualiza este fichero.
 
+
+## El buscador: nombre y apellidos
+
+El nombre de un paciente está partido en `first_name` y `last_name`, y el
+buscador de `/pacientes` **parte lo escrito en palabras y las exige todas**,
+cada una en cualquiera de las dos columnas (`lib/utils/busqueda.js`). Así
+«hugo castro» encuentra a «Hugo Castro Díaz» —cosa que antes no hacía **para
+ninguno de los 1.174 pacientes de Aumenta**—, y también «castro hugo», «hugo
+díaz» y «hugo castro diaz» sin tilde.
+
+Dos cosas que conviene saber antes de tocarlo:
+
+- Las columnas se pasan **con el alias del modelo por delante**
+  (`"Patient.first_name"`), porque la condición se monta con `col()` y la
+  consulta lleva un `include`: una columna suelta puede salir ambigua.
+- La cláusula va a **`Op.and`**, nunca a `where[Op.or]`: el filtro por
+  terapeuta ya usa `Op.and`, y dos `Op.or` en el mismo objeto se pisan en
+  silencio.
+
+El filtrado lo hace el SERVIDOR (la caja manda `?q=` con 300 ms de espera), y
+por eso el mensaje del listado vacío se decide por si hay algún filtro puesto
+y no por `patients.length`: con el filtrado en el servidor, eso es 0 en cuanto
+una búsqueda no encuentra nada, y la pantalla contestaba «Aún no hay
+pacientes» a un centro con 1.174.
+
+Historia y números: `../decisions/2026-08-28-buscar-por-nombre-y-apellidos.md`.
 ## Visión general
 
 Módulo de gestión de pacientes pediátricos para un centro de

@@ -22,7 +22,7 @@
 | **Scripts** | Activación: `node scripts/enable-module.js <slug> training` (corre `migrate-training-fields`, `migrate-training-archive` y `migrate-course-registrations`, declaradas en `scripts/_module-migrations.js`) · Interruptor: `scripts/formacion-abierta.js` · Cron: `scripts/sync-formacion-nocturno.js` (timer systemd del VPS a las 04:30, vía `docker exec`) |
 | | Altas históricas con datos: `scripts/add-training-module-demo.js`, `_hechos/add-training-module-nutri-laura.js`, `add-training-module-aumenta.js`, `_hechos/seed-retorika.js`, `setup-retorika-tenant-local.js` (solo local) · Seeds de prueba: `seed-cuestionarios-demo.js`, `_hechos/seed-cuestionarios-retorika.js` (solo local), `_hechos/seed-nutri-laura-training-data.js`, `_hechos/seed-nutri-laura-course-registrations.js` · ONE_OFF ya ejecutado: `_hechos/retirar-modulo-cuestionarios.js` (10/08/2026) · Diagnóstico: `test-tutorlms-webhook.js`, `_check-retorika-tables.mjs` |
 | **Pruebas** | `scripts/_smoke-formacion-abierta.mjs` (`@prueba ligera`: entra en `npm test`) · `scripts/_smoke-fechas-trimestres-madrid-parseDate.mjs` (`node:test`, 19/08/2026, en `npm test`) en su parte de `lib/training/parseDate.js`: `parseFlexibleDate` con texto —ISO, DD-MM-AAAA y DD/MM/AAAA dan el mismo día y el día va DELANTE («05-12-1985» es el 5 de diciembre, por eso no se usa `new Date(str)`), medianoche UTC sin hora, bisiestos (el 31/02 y el 31/04 no existen), años de 1900 a 2100, el orden de los motivos de rechazo y la forma `{ ok, date }` / `{ ok: false, reason }`—, con Date por componentes UTC (como las entrega ExcelJS) y con serial de Excel (31092 → 14/02/1985; un decimal pierde la hora; desde el serial 61 coincide con Excel), los casos de `_smokeTests()` siguen en verde, y una Date construida en hora LOCAL sí depende de la zona del proceso. · `scripts/_smoke-training-registration-labels.mjs` (`node:test`, 20/08/2026, en `npm test`): los rótulos del Registro previo (`lib/training/registrationLabels.js`, los que pintan el drawer de la matrícula, el panel de stats y el export CSV) —un slug del form de WordPress conocido sale con su rótulo humano y uno desconocido sale CRUDO sin reventar (WP puede añadirlo antes que el diccionario; si esa caída se pierde, un slug nuevo tumbaría el CSV de las 526 inscripciones de Retorika), null es celda en blanco en el CSV; cada escala `*_ORDER` cubre exactamente las categorías de su diccionario (una fuera del orden desaparecería del panel en silencio) y las preguntas del diagnóstico comparten claves con sus títulos completos—. Fuera del runner —el nombre no empieza por `_smoke-`— y con servidor en `localhost:3000` + base de datos: `scripts/_hechos/smoke-training-f2.mjs`, `_hechos/smoke-training-f3.mjs`, `smoke-retorika-registros.mjs`, `smoke-retorika-check-empresa.mjs`. |
-| **Decisiones** | `../decisions/2026-08-10-cuestionarios-deja-de-ser-modulo.md` · `../decisions/2026-08-18-la-piramide-invertida-de-leads.md` |
+| **Decisiones** | `../decisions/2026-08-28-buscar-por-nombre-y-apellidos.md` (los cinco buscadores de alumnos, y el de Matrículas que no filtraba nunca) · `../decisions/2026-08-10-cuestionarios-deja-de-ser-modulo.md` · `../decisions/2026-08-18-la-piramide-invertida-de-leads.md` |
 | **En este doc** | Integraciones externas · Flujo end-to-end de pre-aprobación de usuarios empresa · Modelos · Endpoints internos (con JWT) · Frontend · Seed y configuración inicial · Activación en Aumenta (B2C, sin cuestionarios) · Registros previos al curso (sprint Retorika · junio 2026) |
 
 > Documentación de detalle. Referencia rápida en `CLAUDE.md` (sección
@@ -36,6 +36,39 @@
 > secas. La pantalla (`/formacion/cuestionarios`), el código y la tabla
 > `quiz_attempts` no se han tocado.
 
+
+## Los buscadores de alumnos (28/08/2026)
+
+`training_users` guarda el nombre **partido**: `name` es el nombre de pila y
+`last_name` los apellidos. Es, con `patients`, la única tabla del CRM que lo
+hace, y por eso sus buscadores tenían el mismo fallo que Pacientes: buscaban
+la frase entera dentro de cada columna, así que escribir nombre y apellido no
+encontraba a nadie. Los cinco pasan ya por `lib/utils/busqueda.js`:
+
+| Endpoint | Qué es | Qué le pasaba además |
+| --- | --- | --- |
+| `training/users` | Alumnos | — |
+| `training/users/export` | su Excel | — |
+| `training/enrollments` | Matrículas | el apellido **no se buscaba**, y el filtro **no se aplicaba nunca** |
+| `training/enrollments/export` | su Excel | lo mismo |
+| `external/retorika/alumnos` | lo consume la web de Retorika | el apellido no se buscaba |
+
+⚠️ **El alias de las columnas cambia según dónde vaya el filtro.** En Alumnos
+y en el de Retorika el `where` es del modelo raíz, así que va
+`"TrainingUser.name"`. En Matrículas viaja DENTRO del `include`, y ahí hay que
+poner el alias de la asociación, `"trainingUser.name"`: con el del modelo,
+Postgres contesta «falta una entrada para la tabla en la cláusula FROM» y sale
+un 500 en cuanto alguien escribe algo.
+
+⚠️ Y el include decide si poner el filtro con **`Reflect.ownKeys`**, no con
+`Object.keys`: las claves de Sequelize (`Op.and`, `Op.or`) son symbols y
+`Object.keys` no las ve. Eso es lo que tenía el buscador de Matrículas
+devolviendo la lista entera escribieras lo que escribieras.
+
+Impacto real medido en producción: de los 102 alumnos de Retorika solo 12
+tienen el apellido relleno (TutorLMS manda el nombre entero en `name`), así
+que la mejora se nota poco ahí; lo que sí cambia de verdad es que Matrículas
+**filtra**.
 ## Visión general
 
 Gestión de la oferta formativa: catálogo de cursos, alumnos privados
