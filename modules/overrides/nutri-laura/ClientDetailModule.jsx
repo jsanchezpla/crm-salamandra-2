@@ -61,6 +61,7 @@ import {
 import ClientNotesPanel from "../../../components/clients/ClientNotesPanel.jsx";
 import ClientAttachmentsPanel from "../../../components/clients/ClientAttachmentsPanel.jsx";
 import ClientBookingsPanel from "../../../components/clients/ClientBookingsPanel.jsx";
+import AvisoSinContacto from "../../../components/clients/AvisoSinContacto.jsx";
 import ClientPlansPanel from "../../nutricion/ClientPlansPanel.jsx";
 import ClientModulesSection from "../../../components/clients/ClientModulesSection.jsx";
 import ClientCitasSection from "../../../components/clients/ClientCitasSection.jsx";
@@ -362,6 +363,10 @@ export default function NutriLauraClientDetailModule({ perfil }) {
             <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
             {usaEstado ? etiquetaDeEstado(client.status) : (STATUSES.find((s) => s.key === status)?.label ?? status)}
           </span>
+          {/* La misma pieza que la ficha base. Esta pantalla es propia de Laura,
+              pero «a esta familia no se la puede avisar» no es suyo: es del
+              producto. Montarlo aquí evita que se quede atrás en silencio. */}
+          <AvisoSinContacto client={client} />
         </div>
         <div className="ml-7 flex flex-wrap gap-3 text-xs text-gray-500">
           {edad && <span>Edad: <strong className="text-gray-700">{edad}</strong></span>}

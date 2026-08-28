@@ -33,6 +33,7 @@ import ClientCuentaWebSection from "../../components/clients/ClientCuentaWebSect
 import ClientNotesPanel from "../../components/clients/ClientNotesPanel.jsx";
 import ClientAttachmentsPanel from "../../components/clients/ClientAttachmentsPanel.jsx";
 import ClientBookingsPanel from "../../components/clients/ClientBookingsPanel.jsx";
+import AvisoSinContacto from "../../components/clients/AvisoSinContacto.jsx";
 import ClientPlansPanel from "../nutricion/ClientPlansPanel.jsx";
 import { PIEZAS_NINGUNA, textosPiezas } from "../../lib/clients/piezasFicha.js";
 
@@ -517,6 +518,12 @@ export default function ClientDetailModule({
             <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
             {usaEstado ? etiquetaDeEstado(client.status) : (STATUSES.find((s) => s.key === status)?.label ?? status)}
           </span>
+          {/* Sin forma de avisar a esta familia (28/08/2026, Jorge). Va aquí, en
+              la cabecera y no en una pestaña, porque es lo que decide si se le
+              puede mandar un recordatorio o una factura, y porque la ficha es
+              justo el sitio donde se arregla. En Aumenta son 102 familias vivas
+              sin ningún contacto y otras 210 sin correo. */}
+          <AvisoSinContacto client={client} />
           {/* Ficha archivada: lo primero que hay que ver al abrirla, porque
               explica por qué no aparece en «Fichas a completar» ni reclama nada. */}
           {!usaEstado && archivada && (

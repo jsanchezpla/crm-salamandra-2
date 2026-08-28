@@ -24,7 +24,7 @@
 
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { contactoDeFicha, fichaConContacto, datosAlElegirFicha } from "../lib/clients/contactoDeFicha.js";
+import { contactoDeFicha, fichaConContacto, datosAlElegirFicha, avisoFaltaContacto } from "../lib/clients/contactoDeFicha.js";
 
 const tutor = (extra) => ({ id: "g1", name: "Madre", relationship: "madre", dni: "00000000T", ...extra });
 
@@ -192,5 +192,42 @@ describe("datosAlElegirFicha — el correo NO se pega a la familia anterior", ()
 
   test("aguanta un formulario nulo", () => {
     assert.equal(datosAlElegirFicha(null, conCorreo).clientId, "A");
+  });
+});
+
+describe("avisoFaltaContacto — el chip de la ficha (28/08/2026)", () => {
+  test("con los dos canales, no hay aviso", () => {
+    assert.equal(avisoFaltaContacto({ email: "a@b.com", phone: "600" }), null);
+    // Y tampoco si los datos vienen de un tutor: se puede avisar igual.
+    assert.equal(
+      avisoFaltaContacto({ guardians: [{ email: "a@b.com", phone: "600" }] }),
+      null,
+      "el tutor cuenta: si no, saldría el aviso en fichas que sí son localizables"
+    );
+  });
+
+  test("sin ninguno de los dos: grave (las 102 de Aumenta)", () => {
+    const a = avisoFaltaContacto({ email: "", phone: null, guardians: [] });
+    assert.equal(a.grave, true);
+    assert.match(a.falta, /teléfono ni correo/);
+    assert.ok(a.explicacion.length > 30, "un aviso sin explicación no dice qué hacer");
+  });
+
+  test("solo sin correo: avisa, pero no es grave (las 210 activas)", () => {
+    const a = avisoFaltaContacto({ phone: "600 000 000" });
+    assert.equal(a.grave, false);
+    assert.equal(a.falta, "correo");
+    assert.match(a.explicacion, /área privada/);
+  });
+
+  test("solo sin teléfono: avisa, y no habla del correo", () => {
+    const a = avisoFaltaContacto({ email: "a@b.com" });
+    assert.equal(a.grave, false);
+    assert.equal(a.falta, "teléfono");
+  });
+
+  test("no revienta sin ficha", () => {
+    assert.equal(avisoFaltaContacto(null), null);
+    assert.equal(avisoFaltaContacto(undefined), null);
   });
 });
