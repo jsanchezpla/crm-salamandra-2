@@ -622,6 +622,7 @@ function EditorCliente({ cliente, catalogo, onGuardar, onBaja, guardando, avisos
     // escribirla a ciegas.
     primaryColor: cliente.marca?.primaryColor ?? "",
     secondaryColor: cliente.marca?.secondaryColor ?? "",
+    accentColor: cliente.marca?.accentColor ?? "",
     logoUrl: cliente.marca?.logoUrl ?? "",
     isotipoUrl: cliente.marca?.isotipoUrl ?? "",
   });
@@ -681,6 +682,7 @@ function EditorCliente({ cliente, catalogo, onGuardar, onBaja, guardando, avisos
   const marcaTocada =
     (f.primaryColor || "") !== (cliente.marca?.primaryColor ?? "") ||
     (f.secondaryColor || "") !== (cliente.marca?.secondaryColor ?? "") ||
+    (f.accentColor || "") !== (cliente.marca?.accentColor ?? "") ||
     (f.logoUrl || "") !== (cliente.marca?.logoUrl ?? "") ||
     (f.isotipoUrl || "") !== (cliente.marca?.isotipoUrl ?? "");
 
@@ -698,6 +700,7 @@ function EditorCliente({ cliente, catalogo, onGuardar, onBaja, guardando, avisos
           brand: {
             primaryColor: f.primaryColor,
             secondaryColor: f.secondaryColor,
+            accentColor: f.accentColor,
             logoUrl: f.logoUrl,
             isotipoUrl: f.isotipoUrl,
           },
@@ -751,6 +754,15 @@ function EditorCliente({ cliente, catalogo, onGuardar, onBaja, guardando, avisos
                 className="h-9 w-12 rounded border border-neutral-200 bg-white shrink-0" />
               <input value={f.secondaryColor} onChange={(e) => setF((p) => ({ ...p, secondaryColor: e.target.value }))}
                 className={inputCls + " font-mono"} placeholder="#3E6B54" />
+            </div>
+          </Campo>
+          <Campo etiqueta="Color de acento (opcional)" pista="El tercer color del logo, si lo hay. Solo lo usa el PDF del informe clínico.">
+            <div className="flex items-center gap-2">
+              <input type="color" value={f.accentColor || "#563EA6"}
+                onChange={(e) => setF((p) => ({ ...p, accentColor: e.target.value }))}
+                className="h-9 w-12 rounded border border-neutral-200 bg-white shrink-0" />
+              <input value={f.accentColor} onChange={(e) => setF((p) => ({ ...p, accentColor: e.target.value }))}
+                className={inputCls + " font-mono"} placeholder="#FF0188" />
             </div>
           </Campo>
           <Campo etiqueta="Logo (ruta o URL)" pista="Para que salga en los PDF tiene que ser una ruta de este servidor, como /aumenta-logo.png.">
@@ -1117,6 +1129,7 @@ export default function AltaClientesPage() {
     modulos: [],
     primaryColor: "",
     secondaryColor: "",
+    accentColor: "",
     logoUrl: "",
     isotipoUrl: "",
     fiscalName: "",
@@ -1269,6 +1282,7 @@ export default function AltaClientesPage() {
           brand: {
             primaryColor: form.primaryColor,
             secondaryColor: form.secondaryColor,
+            accentColor: form.accentColor,
             logoUrl: form.logoUrl,
             isotipoUrl: form.isotipoUrl,
           },

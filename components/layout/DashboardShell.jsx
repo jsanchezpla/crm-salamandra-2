@@ -104,9 +104,16 @@ export default function DashboardShell({
               className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
               style={{ backgroundColor: primaryColor }}
             >
-              {tenant?.settings?.brand?.logoUrl ? (
+              {/*
+                Este hueco es CUADRADO (24×24), así que manda el isotipo si el
+                cliente lo tiene: es literalmente para lo que existe un isotipo
+                (28/08/2026). El logo completo suele ser apaisado —el de Aumenta
+                mide 3,5:1— y metido aquí queda como una tira ilegible. Si solo
+                hay logo, se usa el logo, que es lo que pasaba hasta hoy.
+              */}
+              {tenant?.settings?.brand?.isotipoUrl || tenant?.settings?.brand?.logoUrl ? (
                 <img
-                  src={tenant.settings.brand.logoUrl}
+                  src={tenant.settings.brand.isotipoUrl || tenant.settings.brand.logoUrl}
                   alt={tenant?.name ?? "Logo"}
                   className="w-full h-full object-contain"
                 />

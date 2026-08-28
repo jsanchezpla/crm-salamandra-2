@@ -194,7 +194,7 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
 
   if (nombreDespues !== undefined) anota("name", nombreAntes, nombreDespues);
   for (const campo of CAMPOS_ABIERTOS_AUDIT) anota(campo, iAntes[campo], iDespues[campo]);
-  for (const campo of ["primaryColor", "secondaryColor", "logoUrl", "isotipoUrl"]) {
+  for (const campo of ["primaryColor", "secondaryColor", "accentColor", "logoUrl", "isotipoUrl"]) {
     anota(`brand.${campo}`, antes?.brand?.[campo], despues?.brand?.[campo]);
   }
   // Los datos del centro que imprime el informe clínico (28/08/2026). Cambiar
@@ -362,6 +362,10 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
       // El isotipo —la marca sin el texto— cierra la última página del informe
       // clínico (28/08/2026). Hermano de `logoUrl` en todo: misma validación,
       // mismo sitio, y ninguno de los dos es obligatorio.
+      // Tercer color de la marca. Opcional y hoy solo lo lee el PDF del
+      // informe clínico: es el filete de cada titular y la mancha cálida de la
+      // portada. Sin él, el documento sale a un solo color.
+      accentColor: brand.accentColor ?? null,
       isotipoUrl: brand.isotipoUrl ?? null,
     },
     integrations: {
@@ -490,7 +494,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
 
   // Marca.
   if (body.brand && typeof body.brand === "object") {
-    for (const k of ["primaryColor", "secondaryColor", "logoUrl", "isotipoUrl"]) {
+    for (const k of ["primaryColor", "secondaryColor", "accentColor", "logoUrl", "isotipoUrl"]) {
       if (k in body.brand) {
         const v = body.brand[k];
         settings.brand[k] = typeof v === "string" && v.trim() ? v.trim() : null;
