@@ -3,6 +3,7 @@ import { getTenantContext } from "../../lib/tenant/tenantResolver.js";
 import { buildPortada } from "../../lib/home/summary.js";
 import GraficaRotatoria from "../../components/home/GraficaRotatoria.jsx";
 import MiAgenda from "../../components/home/MiAgenda.jsx";
+import MiTrabajo from "../../components/home/MiTrabajo.jsx";
 
 /**
  * La portada «Hoy y el negocio» (rediseño del 26/08/2026, elegido por Rodrigo).
@@ -17,6 +18,11 @@ import MiAgenda from "../../components/home/MiAgenda.jsx";
  * tenant ∩ acceso del usuario, la agenda con su regla de visibilidad, y el
  * cobrado solo para admin. Si a alguien le falta una mitad entera, la otra
  * ocupa todo el ancho.
+ *
+ * Quien NO está adherido a facturación no ve gráficas de ningún tipo (Rodrigo,
+ * 29/08/2026): su mitad derecha es «Mi trabajo» (bandeja, semana, tareas), con
+ * la misma disposición de cajas. La regla vive en el servidor; aquí solo se
+ * elige qué sección pintar.
  */
 
 function greeting() {
@@ -49,7 +55,7 @@ async function loadPortada() {
   } catch (err) {
     // Fallo catastrófico (p.ej. master DB caída): la portada NUNCA da 500.
     console.error("[home] portada no disponible:", err?.message || err);
-    return { admin: false, finance: null, agenda: null, pendiente: [], vistas: [] };
+    return { admin: false, finance: null, agenda: null, pendiente: [], vistas: [], trabajo: null };
   }
 }
 
@@ -116,7 +122,7 @@ export default async function HomePage() {
   const mes = new Date().toLocaleDateString("es-ES", { month: "long", timeZone: "Europe/Madrid" });
 
   const [portada, sinLeer] = await Promise.all([loadPortada(), respuestasSinLeer()]);
-  const { admin, finance, agenda, vistas } = portada;
+  const { admin, finance, agenda, vistas, trabajo } = portada;
 
   const pendiente = [...portada.pendiente];
   if (sinLeer.length > 0) {
@@ -132,6 +138,10 @@ export default async function HomePage() {
 
   const hayHoy = Boolean(agenda) || pendiente.length > 0;
   const hayNegocio = Boolean(finance) || vistas.length > 0;
+  // «Mi trabajo» solo llega del servidor cuando las gráficas están vetadas
+  // (sin adhesión a facturación), así que nunca compite con «El negocio».
+  const hayTrabajo = !hayNegocio && Boolean(trabajo);
+  const hayDerecha = hayNegocio || hayTrabajo;
 
   return (
     <div className="lg:h-full lg:overflow-hidden flex flex-col gap-3 lg:gap-4 px-4 lg:px-7 py-4 lg:py-5 bg-[var(--color-accent)]">
@@ -143,7 +153,7 @@ export default async function HomePage() {
         </span>
       </div>
 
-      {!hayHoy && !hayNegocio ? (
+      {!hayHoy && !hayDerecha ? (
         <div className="bg-white border border-[var(--ink-200)] rounded-[var(--radius-card)] p-8 max-w-xl">
           <div className="font-display text-[22px] text-[var(--ink-900)] mb-2">Tu panel está listo.</div>
           <p className="text-[14px] text-[var(--ink-500)] leading-relaxed">
@@ -156,7 +166,7 @@ export default async function HomePage() {
           {/* ── HOY ── */}
           {hayHoy && (
             <section
-              className={`${hayNegocio ? "lg:col-span-5" : "lg:col-span-12"} flex flex-col gap-2.5 min-h-0`}
+              className={`${hayDerecha ? "lg:col-span-5" : "lg:col-span-12"} flex flex-col gap-2.5 min-h-0`}
             >
               <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-[var(--ink-400)]">Hoy</div>
               {agenda && <MiAgenda agenda={agenda} />}
@@ -208,6 +218,16 @@ export default async function HomePage() {
                 </div>
               )}
               <GraficaRotatoria vistas={vistas} />
+            </section>
+          )}
+
+          {/* ── MI TRABAJO (sin adhesión a facturación: cero gráficas) ── */}
+          {hayTrabajo && (
+            <section className={`${hayHoy ? "lg:col-span-7" : "lg:col-span-12"} flex flex-col gap-2.5 min-h-0`}>
+              <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-[var(--ink-400)]">
+                Mi trabajo
+              </div>
+              <MiTrabajo trabajo={trabajo} />
             </section>
           )}
         </div>

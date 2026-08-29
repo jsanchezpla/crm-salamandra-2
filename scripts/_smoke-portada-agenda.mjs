@@ -49,6 +49,10 @@ function describeFiltro(f) {
   if (typeof f === "string") return f;
   const partes = [];
   for (const s of Object.getOwnPropertySymbols(f)) {
+    // `{ [Op.ne]: null }` = «cualquiera del equipo»: es el agregado de la vista
+    // de ocupación (solo-admin), no la ficha de una persona. Se describe aparte
+    // para que las comprobaciones de abajo puedan permitirlo SOLO al jefe.
+    if (String(s) === "Symbol(ne)" && f[s] === null) return "equipo-entero";
     if (String(s) !== "Symbol(or)") continue;
     for (const rama of f[s]) {
       for (const s2 of Object.getOwnPropertySymbols(rama)) {
@@ -131,14 +135,15 @@ h("Cuando no se sabe quien mira, se cierra (centinela), nunca se abre");
 
 h("El jefe ve toda la agenda (y su pestana Mias sigue siendo SUYA)");
 {
+  // "equipo-entero" es el agregado de la vista de ocupacion: solo el jefe.
   const f = await filtrosDe({ role: "admin", fichaDe: LAURA });
   check(
-    "admin: nada filtrado por OTRA persona; lo suyo o sin filtro",
-    soloEntre(f, ["(sin filtro)", LAURA + SIN]),
+    "admin: nada filtrado por OTRA persona; lo suyo, sin filtro o el agregado",
+    soloEntre(f, ["(sin filtro)", LAURA + SIN, "equipo-entero"]),
     "salio: " + JSON.stringify(f)
   );
   check("admin: la vista de todo el centro existe (alguna consulta sin filtro)", f.includes("(sin filtro)"), "salio: " + JSON.stringify(f));
-  check("superadmin igual", soloEntre(await filtrosDe({ role: "superadmin", fichaDe: LAURA }), ["(sin filtro)", LAURA + SIN]));
+  check("superadmin igual", soloEntre(await filtrosDe({ role: "superadmin", fichaDe: LAURA }), ["(sin filtro)", LAURA + SIN, "equipo-entero"]));
 }
 
 h("Con agenda compartida, todo el equipo ve el centro");

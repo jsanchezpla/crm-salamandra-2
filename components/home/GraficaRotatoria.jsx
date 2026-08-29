@@ -15,6 +15,7 @@ const eur = (n) =>
 
 function formatea(valor, unidad) {
   if (unidad === "eur") return eur(valor);
+  if (unidad === "pct") return `${valor} %`;
   const [sing, plur] = unidad;
   if (valor === 0) return `sin ${plur}`;
   return `${valor} ${valor === 1 ? sing : plur}`;
@@ -35,7 +36,10 @@ export default function GraficaRotatoria({ vistas }) {
   if (!vistas || vistas.length === 0) return null;
   const actual = Math.min(idx, vistas.length - 1);
   const v = vistas[actual];
-  const max = Math.max(...v.datos.map((d) => d.valor), 1);
+  // Un porcentaje se mide contra 100, no contra el máximo de la serie: media
+  // agenda ocupada tiene que verse como media barra (puede pasar de 100 si
+  // alguien hizo más horas que su objetivo).
+  const max = Math.max(...v.datos.map((d) => d.valor), v.unidad === "pct" ? 100 : 1);
   const ultimo = v.datos.length - 1;
 
   return (
