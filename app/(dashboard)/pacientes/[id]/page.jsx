@@ -99,6 +99,9 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
   const [editando, setEditando] = useState(false);
   const [prepText, setPrepText] = useState(session.prepText ?? "");
   const [parentFeedback, setParentFeedback] = useState(session.parentFeedback ?? "");
+  // Notas internas (29/08/2026): se editan aquí junto a las otras dos porque
+  // lo que hay que apuntar de la familia se suele ver DESPUÉS de la sesión.
+  const [internalNotes, setInternalNotes] = useState(session.internalNotes ?? "");
   const [guardando, setGuardando] = useState(false);
   const [errorPartes, setErrorPartes] = useState(null);
 
@@ -109,7 +112,7 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
       const r = await fetch(`/api/clinica/sessions/${session.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prepText, parentFeedback }),
+        body: JSON.stringify({ prepText, parentFeedback, internalNotes }),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo guardar");
@@ -213,10 +216,10 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
           {/* ── Registro en 3 partes: preparación y devolución de la familia ── */}
           <div className="border-t border-neutral-100 pt-4 space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="eyebrow">Preparación y devolución</div>
+              <div className="eyebrow">Preparación, devolución y notas internas</div>
               {!editando && (
                 <button onClick={() => setEditando(true)} className="text-[11px] text-[var(--color-primary,#1B3A2D)] hover:underline">
-                  {session.prepText || session.parentFeedback ? "Editar" : "Añadir"}
+                  {session.prepText || session.parentFeedback || session.internalNotes ? "Editar" : "Añadir"}
                 </button>
               )}
             </div>
@@ -231,12 +234,18 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
                   <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Devolución de la familia</div>
                   <textarea className={ta} rows={3} value={parentFeedback} onChange={(e) => setParentFeedback(e.target.value)} placeholder="Qué cuentan los padres…" />
                 </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-amber-700 mb-1">
+                    Notas internas <span className="normal-case tracking-normal text-neutral-400">(no las ve la familia)</span>
+                  </div>
+                  <textarea className={ta} rows={3} value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} placeholder="Implicación de la familia, cómo están los padres, actitudes…" />
+                </div>
                 <div className="flex items-center gap-2">
                   <button onClick={guardarPartes} disabled={guardando} className="text-xs font-medium px-3 py-1.5 rounded-lg text-white disabled:opacity-50" style={{ background: "var(--color-primary, #1B3A2D)" }}>
                     {guardando ? "Guardando…" : "Guardar"}
                   </button>
                   <button
-                    onClick={() => { setEditando(false); setPrepText(session.prepText ?? ""); setParentFeedback(session.parentFeedback ?? ""); }}
+                    onClick={() => { setEditando(false); setPrepText(session.prepText ?? ""); setParentFeedback(session.parentFeedback ?? ""); setInternalNotes(session.internalNotes ?? ""); }}
                     className="text-xs text-neutral-500"
                   >
                     Cancelar
@@ -247,6 +256,7 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
               <div className="space-y-3">
                 <SubField label="Preparación previa" value={session.prepText} />
                 <SubField label="Devolución de la familia" value={session.parentFeedback} />
+                <SubField label="Notas internas (no las ve la familia)" value={session.internalNotes} />
               </div>
             )}
 

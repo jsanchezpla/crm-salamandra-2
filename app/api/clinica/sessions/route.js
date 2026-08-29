@@ -66,6 +66,10 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     prepText: typeof body.prepText === "string" && body.prepText.trim() ? body.prepText.trim() : null,
     parentFeedback:
       typeof body.parentFeedback === "string" && body.parentFeedback.trim() ? body.parentFeedback.trim() : null,
+    // Notas internas (29/08/2026, Aumenta): solo para el equipo, nunca salen al
+    // informe ni al portal de la familia.
+    internalNotes:
+      typeof body.internalNotes === "string" && body.internalNotes.trim() ? body.internalNotes.trim() : null,
     // Apartados del registro (29/08/2026): la foto de con qué apartados se
     // escribió y el cuerpo de los que no son de fábrica. Los de siempre siguen
     // llegando por sus campos de arriba — el formulario los reparte con

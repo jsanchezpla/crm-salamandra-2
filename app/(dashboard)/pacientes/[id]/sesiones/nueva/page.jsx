@@ -72,6 +72,7 @@ const PROCESSING_STEPS = [
 const FORM_VACIO = {
   prepText: "",
   parentFeedback: "",
+  internalNotes: "",
 };
 
 // Cómo entra en el registro lo que devuelve la IA del audio, por si el apartado
@@ -310,6 +311,7 @@ export default function NuevaSesionPage() {
         ...reparto,
         prepText: form.prepText,
         parentFeedback: form.parentFeedback,
+        internalNotes: form.internalNotes,
         status: "registered",
         // Solo si hubo audio: transcripción, estructura cruda y duración. Un
         // registro escrito a mano no ha pasado por la IA y no debe decir que sí.
@@ -583,6 +585,22 @@ export default function NuevaSesionPage() {
               placeholder="Qué dice la familia…"
               value={form.parentFeedback}
               onChange={(e) => setForm({ ...form, parentFeedback: e.target.value })}
+            />
+          </div>
+
+          {/* 4 · Notas internas — el único apartado que la familia no puede leer. */}
+          <div className="bg-white border border-amber-200 rounded-xl p-4 lg:p-5 space-y-3">
+            <div className="eyebrow text-amber-700">4 · Notas internas del equipo</div>
+            <p className="text-[10px] text-neutral-400 -mt-2">
+              Solo para vosotros: implicación de la familia, cómo están los padres, actitudes.
+              No sale en el informe que recibe la familia ni en su área privada, aunque se anexen los registros.
+            </p>
+            <textarea
+              className={ta}
+              rows={3}
+              placeholder="Lo que conviene que sepa el equipo y no la familia…"
+              value={form.internalNotes}
+              onChange={(e) => setForm({ ...form, internalNotes: e.target.value })}
             />
           </div>
 

@@ -377,6 +377,11 @@ export const MODULES = {
     // MODELO lo declara, así que sin esta migración el primer SELECT de
     // /pacientes/[id] revienta con 42703 en el schema que no la tenga.
     "migrate-clinica-apartados-sesion",
+    // Notas internas del registro de sesión (29/08/2026, Aumenta): lo que el
+    // equipo escribe para sí mismo y la familia no lee. El MODELO ClinicSession
+    // declara la columna, así que sin esta migración el primer SELECT de
+    // /pacientes/[id] revienta con 42703 en el schema que no la tenga.
+    "migrate-clinica-notas-internas",
   ],
 
   // Control horario. Depende de `team_members`, que crea el módulo Equipo: la

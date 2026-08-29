@@ -209,6 +209,11 @@ const SESIONES = [
     observations: { familyComments: "Comentario familiar literal.", nextSessionNotes: "", homeworkTasks: "", incidents: "" },
     parentFeedback: "DEVOLUCION LITERAL DE LA FAMILIA",
     prepText: "PREPARACION INTERNA QUE NUNCA DEBE SALIR",
+    // Notas internas (29/08/2026): van en la sesión a propósito aunque hoy
+    // `sesionesDelInforme.js` ni las cargue. Si mañana alguien añade la columna
+    // a ese SELECT «para tenerlo todo», esta prueba lo caza aquí y no en el PDF
+    // que ya tiene la familia.
+    internalNotes: "NOTA INTERNA SOBRE LA FAMILIA QUE NUNCA DEBE SALIR",
   },
   {
     sessionDate: "2025-01-23",
@@ -345,6 +350,9 @@ describe("de las sesiones, la portada solo dice las fechas", () => {
     assert.match(texto, /DEVOLUCION LITERAL DE LA FAMILIA/);
     // La preparación es material interno del equipo: JAMÁS en el PDF de la familia.
     assert.doesNotMatch(texto, /PREPARACION INTERNA/);
+    // Y las notas internas, lo mismo y con más motivo: ahí se escribe lo que el
+    // equipo piensa de la familia (Aumenta, 29/08/2026).
+    assert.doesNotMatch(texto, /NOTA INTERNA SOBRE LA FAMILIA/);
   });
 
   it("la beca no lleva ni periodo ni anexo, aunque haya sesiones y casilla", async () => {

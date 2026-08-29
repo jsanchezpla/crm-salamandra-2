@@ -94,6 +94,19 @@ export function defineClinicSession(sequelize) {
         allowNull: false,
         defaultValue: {},
       },
+      // ── Notas internas (29/08/2026, Aumenta por Rodrigo) ────────────────
+      // Lo que el equipo anota para sí mismo y la familia NO debe leer nunca:
+      // falta de implicación de los padres, su estado, actitudes. Va en su
+      // propia columna —y no como una clave más de `observations`— justo por
+      // eso: `observations` viaja entero al anexo del informe y al volcado que
+      // redacta el borrador, así que una clave nueva ahí acabaría en el PDF que
+      // recibe la familia el día que alguien recorra el objeto en vez de sus
+      // cuatro campos. Aquí la regla es la misma que la de `prepText`: material
+      // interno, nunca sale del CRM.
+      internalNotes: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       aiTranscription: {
         type: DataTypes.TEXT,
         allowNull: true,

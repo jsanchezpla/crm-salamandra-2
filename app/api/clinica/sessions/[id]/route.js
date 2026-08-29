@@ -13,7 +13,9 @@ const STATUSES = ["draft", "ai_pending", "registered", "published"];
 // se pueden rellenar DESPUÉS — la preparación se escribe antes de la sesión y
 // la devolución de la familia a veces llega días más tarde. Los adjuntos de
 // preparación van por su propio endpoint (son ficheros, no texto).
-const PATCH_FIELDS = ["sessionDate", "duration", "objectives", "activities", "performance", "observations", "status", "prepText", "parentFeedback", "contentSections"];
+// `internalNotes` (29/08/2026) va por el mismo motivo: lo que el equipo anota
+// para sí mismo se escribe y se corrige cuando toca, no solo al crear.
+const PATCH_FIELDS = ["sessionDate", "duration", "objectives", "activities", "performance", "observations", "status", "prepText", "parentFeedback", "internalNotes", "contentSections"];
 
 export const GET = withTenant(async (request, rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
