@@ -464,8 +464,8 @@ export const MODULES = {
     "migrate-invoices-client-restrict",
   ],
 
-  // Conciliación bancaria (29/08/2026; submódulo de Facturación desde el
-  // 30/08, clave con el prefijo del padre como los `_avanzado`). Su migración
+  // Conciliación bancaria (29/08/2026; submódulo de Facturación desde esa
+  // misma tarde, clave con el prefijo del padre como los `_avanzado`). Su migración
   // ya es CORE (ver arriba: los modelos están registrados para todos), así que
   // esto no añade trabajo; se declara para que `enable-module.js` conozca la
   // clave y para que quien lea este mapa sepa qué estructura usa el módulo.
