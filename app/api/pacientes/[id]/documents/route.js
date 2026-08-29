@@ -55,7 +55,11 @@ export const GET = withTenant(async (request, { params }, ctx) => {
     // También los adjuntos de incidencias con este paciente (26/08/2026): el
     // documento de una incidencia forma parte de su historia. Se descargan
     // desde aquí, pero se borran desde su incidencia.
-    const where = { patientId: id, source: { [Op.in]: ["paciente", "incidencia"] } };
+    // Y los registros de sesión ENVIADOS a la familia (29/08/2026): el PDF que
+    // la familia tiene en su área privada se ve aquí, para que quien abra la
+    // ficha sepa qué se le ha mandado sin ir a buscarlo sesión a sesión. Se
+    // borra desde su sesión (reenviar reemplaza), no desde aquí.
+    const where = { patientId: id, source: { [Op.in]: ["paciente", "incidencia", "sesion"] } };
     const q = (new URL(request.url).searchParams.get("q") || "").trim();
     if (q) where.fileName = { [Op.iLike]: `%${q}%` };
 

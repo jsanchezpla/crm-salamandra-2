@@ -104,6 +104,26 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
   const [internalNotes, setInternalNotes] = useState(session.internalNotes ?? "");
   const [guardando, setGuardando] = useState(false);
   const [errorPartes, setErrorPartes] = useState(null);
+  // Enviar ESTE registro al área privada de la familia (29/08/2026). Lo que
+  // sube es el PDF; el servidor manda sobre si se puede (sin pagador, 409).
+  const [enviando, setEnviando] = useState(false);
+  const [errorEnvio, setErrorEnvio] = useState(null);
+
+  async function enviarALaFamilia() {
+    if (session.deliveredDocumentId && !window.confirm("Se sube un PDF nuevo y se retira el anterior de su área privada. ¿Seguimos?")) return;
+    setEnviando(true);
+    setErrorEnvio(null);
+    try {
+      const r = await fetch(`/api/clinica/sessions/${session.id}/enviar`, { method: "POST" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo enviar el registro");
+      onSaved?.();
+    } catch (e) {
+      setErrorEnvio(e.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
 
   async function guardarPartes() {
     setGuardando(true);
@@ -312,15 +332,27 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
             >
               Ver PDF
             </a>
+            {/* Subir ESTE registro al área privada de la familia (29/08/2026,
+                Rodrigo). Lo que sube es el PDF, el mismo de «Ver PDF»: sin
+                preparación, sin adjuntos internos y sin las notas internas.
+                Reenviar reemplaza, así que la familia nunca tiene dos. */}
+            <button
+              onClick={enviarALaFamilia}
+              disabled={enviando}
+              title="Sube el PDF de este registro a su área privada. No lleva la preparación ni las notas internas."
+              className="text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-50"
+            >
+              {enviando ? "Enviando…" : session.deliveredDocumentId ? "Volver a enviar" : "Enviar al paciente"}
+            </button>
             {/* Cierra el registro para el equipo y nada más. Se llamaba «Marcar
                 como publicada» y se leía como que subía la sesión al portal de la
-                familia, que no tiene endpoint de sesiones (29/08/2026: Aumenta
-                preguntó justo eso). El estado en BD sigue siendo 'published'. */}
+                familia (29/08/2026: Aumenta preguntó justo eso, y de ahí salió el
+                botón de arriba). El estado en BD sigue siendo 'published'. */}
             {session.status !== "published" && (
               <button
                 onClick={() => onPublish(session.id)}
                 disabled={busy}
-                title="Cierra el registro para el equipo. La familia no lo ve: para compartirle algo, crea un informe y usa «Enviar al paciente»."
+                title="Cierra el registro para el equipo. No lo comparte con nadie: para eso está «Enviar al paciente»."
                 className="text-xs px-3 py-2 rounded-lg text-white hover:opacity-90 ml-auto disabled:opacity-50"
                 style={{ background: "var(--color-primary, #1B3A2D)" }}
               >
@@ -328,6 +360,13 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
               </button>
             )}
           </div>
+
+          {session.deliveredAt && (
+            <p className="text-[11px] text-emerald-700">
+              La familia tiene este registro en su área privada desde el {fmtDate(session.deliveredAt)}.
+            </p>
+          )}
+          {errorEnvio && <div className="text-[11px] text-rose-600">{errorEnvio}</div>}
         </div>
       </aside>
     </>

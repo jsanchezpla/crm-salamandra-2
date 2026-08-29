@@ -290,6 +290,14 @@ export default function PatientDocumentsSection({ patientId }) {
                         De incidencia
                       </span>
                     )}
+                    {d.source === "sesion" && (
+                      <span
+                        className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700"
+                        title="Registro de sesión enviado a la familia: lo tiene en su área privada. Se retira desde su sesión, no desde aquí."
+                      >
+                        Enviado a la familia
+                      </span>
+                    )}
                   </div>
                   <div className="text-[11px] text-neutral-400">{fmtSize(d.fileSize)}</div>
                 </div>
@@ -301,8 +309,11 @@ export default function PatientDocumentsSection({ patientId }) {
                 </a>
                 {/* Los adjuntos de incidencia se borran desde SU incidencia:
                     quitarlos desde la ficha dejaría la incidencia sin su
-                    justificante sin que nadie lo vea. */}
-                {d.source !== "incidencia" && (
+                    justificante sin que nadie lo vea. Y un registro ENVIADO se
+                    retira desde su sesión (29/08/2026): borrarlo aquí lo quitaría
+                    del área privada de la familia sin que la sesión se entere y
+                    seguiría diciendo «Volver a enviar». */}
+                {d.source === "paciente" && (
                   <button onClick={() => deleteDoc(d.id)} className="text-xs text-rose-500 hover:underline shrink-0">
                     Eliminar
                   </button>

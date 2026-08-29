@@ -107,6 +107,20 @@ export function defineClinicSession(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // ── Enviado al área privada de la familia (29/08/2026) ──────────────
+      // El PDF publicado en `documents` y cuándo se envió por primera vez. Sin
+      // FK: borrar el documento desde el archivo no debe borrar la sesión; el
+      // puntero se queda colgando y la pantalla vuelve a ofrecer «Enviar».
+      // El `status` NO se toca: «Cerrada» es del equipo y «enviado» es de la
+      // familia, y una sesión puede estar enviada sin estar cerrada.
+      deliveredDocumentId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      deliveredAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
       aiTranscription: {
         type: DataTypes.TEXT,
         allowNull: true,
