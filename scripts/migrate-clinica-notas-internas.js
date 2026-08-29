@@ -19,23 +19,23 @@
  * interna, y moverla a ojo sería inventar. Las 22.045 sesiones que ya existen
  * se quedan como están, con la columna vacía.
  *
- * Idempotente (ADD COLUMN IF NOT EXISTS). Lee los tenants de master.tenants en
- * runtime (regla #12).
+ * Idempotente (ADD COLUMN IF NOT EXISTS). Los schemas salen de `byModule`
+ * (`scripts/_schema-targets.js`) y no de una consulta a mano: además de los
+ * tenants con el módulo, eso arrastra las FOTOS DORADAS de las demos. Sin ellas
+ * el aviso del final de `deploy.sh` salta y, lo que importa, el día que una demo
+ * se restaura desde su foto volvería sin la columna y cada lectura de sesión
+ * daría 42703, porque el modelo la declara. Corregido el 29/08/2026 a la vez que
+ * `migrate-clinica-apartados-sesion.js`, que nació con el mismo fallo.
  *
  * Uso local:  node --env-file=.env.local scripts/migrate-clinica-notas-internas.js
  * Uso VPS:    docker exec crm-salamandra-app-1 node scripts/migrate-clinica-notas-internas.js
  */
 
 import { Sequelize } from "sequelize";
-import { acotarSlugs } from "./_solo-este-tenant.js";
+import { byModule } from "./_schema-targets.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
-
-async function schemaExists(s, schema) {
-  const [rows] = await s.query(`SELECT 1 FROM information_schema.schemata WHERE schema_name = $1`, { bind: [schema] });
-  return rows.length > 0;
-}
 
 async function tableExists(s, schema, table) {
   const [rows] = await s.query(
@@ -43,19 +43,6 @@ async function tableExists(s, schema, table) {
     { bind: [schema, table] }
   );
   return rows.length > 0;
-}
-
-async function fetchTargetSlugs(s) {
-  const [rows] = await s.query(`
-    SELECT DISTINCT t.slug
-    FROM master.tenants t
-    JOIN master.tenant_modules tm ON tm.tenant_id = t.id
-    WHERE tm.enabled = TRUE AND tm.module_key IN ('clinica','pacientes')
-    ORDER BY t.slug
-  `);
-  // Acotado si viene de `ensure-tenant-schema.js` (ONLY_SCHEMAS); global si se
-  // lanza a mano, que es como se escribió. Ver scripts/_solo-este-tenant.js.
-  return acotarSlugs(rows.map((r) => r.slug));
 }
 
 async function processSchema(s, schema) {
@@ -79,21 +66,16 @@ async function main() {
   }
   const sequelize = new Sequelize(process.env.DATABASE_URL, { dialect: "postgres", logging: false });
 
-  const slugs = await fetchTargetSlugs(sequelize);
-  if (slugs.length === 0) {
+  const { schemas } = await byModule(sequelize, ["clinica", "pacientes"]);
+  if (schemas.length === 0) {
     log("· Ningún tenant con clinica/pacientes activo.");
     await sequelize.close();
     process.exit(0);
   }
-  log(`✓ ${slugs.length} tenants: ${slugs.join(", ")}`);
+  log(`✓ ${schemas.length} schemas: ${schemas.join(", ")}`);
 
-  for (const slug of slugs) {
-    const schema = `crm_${slug}`;
-    header(`Tenant ${slug} (${schema})`);
-    if (!(await schemaExists(sequelize, schema))) {
-      log(`✗ schema ${schema} no existe, se salta`);
-      continue;
-    }
+  for (const schema of schemas) {
+    header(schema);
     await processSchema(sequelize, schema);
   }
 
