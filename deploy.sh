@@ -76,9 +76,13 @@ echo "Deploy completado — $(date '+%H:%M:%S')"
 #
 # ── POR QUÉ ESTO VIVE EN EL DEPLOY (13/08/2026) ──────────────────────────────
 # Cada demo se restaura sola desde su foto `crm_{slug}_golden`, y esa foto es
-# una FOTO: se saca un día y ahí se queda. Las migraciones no la tocan —y hacen
-# bien: no es un tenant de `master`—, así que cada columna que se añade desde
-# entonces existe en el schema vivo y no en la foto.
+# una FOTO: se saca un día y ahí se queda.
+#
+# Desde el 29/08/2026 las migraciones tocan TAMBIÉN las fotos (byTable/byModule
+# en scripts/_schema-targets.js incluyen los dorados), así que una columna nueva
+# ya no las deja atrás. Esta comprobación sigue aquí como red: pilla la
+# migración vieja que se relance con ONLY_SCHEMAS, la que no usa el helper, y
+# la deriva de DATOS (seeds nuevos sin re-foto).
 #
 # Rehacerla es UN COMANDO. Nunca fue un problema de dificultad: es que nada
 # avisaba. La diferencia era CERO el 27/07 y en dos semanas y media había vuelto
@@ -121,6 +125,9 @@ if docker ps --format '{{.Names}}' | grep -q '^crm-salamandra-app-1$'; then
     echo ""
     echo "     MÍRALAS ANTES: la foto congela lo que haya en la demo ahora mismo,"
     echo "     incluido lo que haya dejado un visitante."
+    echo ""
+    echo "     (Desde el 29/08/2026 las migraciones migran también las fotos:"
+    echo "     si esto salta, lo raro es la migración — ¿usa _schema-targets?)"
     echo ""
   fi
 fi

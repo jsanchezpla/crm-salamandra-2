@@ -39,17 +39,35 @@
  *
  * Por eso ya no se mira el estado en ninguno de los dos modos: el estado decide
  * quién PUEDE ENTRAR, no qué FORMA tiene su schema. Un schema que existe se
- * mantiene al día, y punto. `crm_demo_golden` sigue fuera porque no es un
- * tenant de `master` (su restore ya tolera columnas que le falten: ver
- * `lib/demo/resetDemo.js`).
+ * mantiene al día, y punto.
+ *
+ * ── LAS FOTOS DORADAS TAMBIÉN SE MIGRAN (29/08/2026, Rodrigo) ───────────────
+ * `crm_{demo}_golden` estuvo fuera («no es un tenant de master») y el precio
+ * fueron TRES pasadas manuales en dos días (26–27/08): cada migración que
+ * añadía columnas dejaba las fotos atrás, el aviso del deploy saltaba y había
+ * que rehacerlas a mano. Rehacerlas, además, congela lo que haya en la demo EN
+ * ESE MOMENTO —incluido lo que acabe de ensuciar un visitante—, así que el
+ * remedio manual tenía su propio riesgo.
+ *
+ * Ahora los dos modos incluyen los schemas dorados de las demos: la migración
+ * les añade las mismas columnas (y los mismos backfills) que al schema vivo, y
+ * la foto no se queda atrás nunca. Rehacer la foto queda SOLO para cuando
+ * cambian los DATOS a propósito (seeds nuevos, rebuild del escaparate).
+ *
+ * OJO si tu migración deriva el slug del nombre del schema: usa slugDeSchema()
+ * de aquí abajo, no `schema.replace(/^crm_/, "")` — con los dorados esa cuenta
+ * sale «demo_golden», que no es ningún tenant.
  *
  * Ambos respetan las variables de entorno que ya usaba Jorge en
  * migrate-nutricion-recipes.js:
- *   ONLY_SCHEMAS=crm_a,crm_b   modo EXCLUSIVO: ignora la lista calculada.
+ *   ONLY_SCHEMAS=crm_a,crm_b   modo EXCLUSIVO: ignora la lista calculada
+ *                              (y entonces los dorados tampoco se añaden solos).
  *   EXTRA_SCHEMAS=crm_staging  modo ADITIVO: añade schemas a la lista.
  *
  * Devuelven siempre nombres de schema completos (`crm_<slug>`), sin duplicados.
  */
+
+import { DEMO_SLUGS, schemaDorado } from "../lib/demo/demos.js";
 
 function envList(name) {
   return (process.env[name] || "")
@@ -69,6 +87,40 @@ function applyEnvOverrides(schemas) {
 async function tenantSlugs(s) {
   const [rows] = await s.query(`SELECT slug FROM master.tenants ORDER BY slug`);
   return rows.map((r) => r.slug);
+}
+
+/** ¿Existe el schema? (las fotos doradas no salen de master.tenants) */
+async function schemaExists(s, schema) {
+  const [rows] = await s.query(
+    `SELECT 1 FROM information_schema.schemata WHERE schema_name = :schema`,
+    { replacements: { schema } }
+  );
+  return rows.length > 0;
+}
+
+/**
+ * El slug de un schema, entendiendo también los dorados:
+ * `crm_demo` → `demo`, `crm_demo_golden` → `demo`. Para las migraciones que
+ * consultan master (módulos, settings) por el slug del schema que recorren.
+ */
+export function slugDeSchema(schema) {
+  const sinPrefijo = String(schema).replace(/^crm_/, "");
+  const sinDorado = sinPrefijo.replace(/_golden$/, "");
+  return DEMO_SLUGS.includes(sinDorado) ? sinDorado : sinPrefijo;
+}
+
+/**
+ * Los schemas dorados que deben acompañar a los vivos de `vivos`
+ * (`condicion` decide si un dorado concreto entra: tiene la tabla, existe…).
+ */
+async function doradosQueAcompanan(vivos, condicion) {
+  const dorados = [];
+  for (const slug of DEMO_SLUGS) {
+    if (!vivos.includes(`crm_${slug}`)) continue;
+    const golden = schemaDorado(slug);
+    if (await condicion(golden)) dorados.push(golden);
+  }
+  return dorados;
 }
 
 /** ¿Existe la tabla en ese schema? */
@@ -94,6 +146,10 @@ export async function byTable(s, table) {
     if (await tableExists(s, schema, table)) withTable.push(schema);
     else skipped.push(schema);
   }
+  // Las fotos doradas de las demos van detrás de su vivo: misma tabla, mismas
+  // columnas nuevas. Si la foto no tiene la tabla, no hay nada que blindar (el
+  // restore ya tolera tablas que le falten y el deploy avisa de la deriva).
+  withTable.push(...(await doradosQueAcompanan(withTable, (g) => tableExists(s, g, table))));
   const { schemas, exclusive } = applyEnvOverrides(withTable);
   return { schemas, skipped: exclusive ? [] : skipped, exclusive };
 }
@@ -113,6 +169,9 @@ export async function byModule(s, moduleKeys) {
     { replacements: { keys } }
   );
   const base = rows.map((r) => `crm_${r.slug}`);
+  // Si una demo tiene el módulo, su foto dorada recibe las mismas tablas: si
+  // no, la siguiente migración byTable las encontraría solo en el vivo.
+  base.push(...(await doradosQueAcompanan(base, (g) => schemaExists(s, g))));
   const { schemas, exclusive } = applyEnvOverrides(base);
   return { schemas, skipped: [], exclusive };
 }
