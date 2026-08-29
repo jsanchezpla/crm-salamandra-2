@@ -204,6 +204,14 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   anota("centro.cif", antes?.centro?.cif, despues?.centro?.cif);
   anota("centro.telefonos", antes?.centro?.telefonos, despues?.centro?.telefonos, resumenTelefonos);
   anota("centro.proteccionDatos", antes?.centro?.proteccionDatos, despues?.centro?.proteccionDatos, resumenTexto);
+  // El aviso de mayores de edad se audita igual que el otro: los dos acaban
+  // impresos en un documento sanitario, así que quién los cambió importa.
+  anota(
+    "centro.proteccionDatosAdultos",
+    antes?.centro?.proteccionDatosAdultos,
+    despues?.centro?.proteccionDatosAdultos,
+    resumenTexto
+  );
   anota("centro.sedes", antes?.centro?.sedes, despues?.centro?.sedes, resumenSedes);
   anota("aiAccess", antes?.aiAccess, despues?.aiAccess);
   anota("citas.meetModo", antes?.citas?.meetModo, despues?.citas?.meetModo);
