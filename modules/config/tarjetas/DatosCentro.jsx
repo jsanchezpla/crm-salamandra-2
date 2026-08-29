@@ -44,6 +44,7 @@ function desdeProps(centro) {
     cif: centro?.cif ?? "",
     telefonos: telefonos.length ? [...telefonos] : [""],
     proteccionDatos: centro?.proteccionDatos ?? "",
+    proteccionDatosAdultos: centro?.proteccionDatosAdultos ?? "",
     sedes: Array.isArray(centro?.sedes) ? centro.sedes.map((s) => ({ ...SEDE_VACIA, ...s })) : [],
   };
 }
@@ -103,6 +104,8 @@ export default function DatosCentro({ centro, readOnly, onGuardar }) {
 
   const largoAviso = borrador.proteccionDatos.length;
   const cercaDelTope = largoAviso > LIMITES.proteccionDatos - 100;
+  const largoAvisoAdultos = borrador.proteccionDatosAdultos.length;
+  const cercaDelTopeAdultos = largoAvisoAdultos > LIMITES.proteccionDatosAdultos - 100;
 
   return (
     <div className="bg-white border border-neutral-200 rounded-xl p-5">
@@ -311,6 +314,32 @@ export default function DatosCentro({ centro, readOnly, onGuardar }) {
           </p>
           <span className={`text-[11px] tabular-nums ${cercaDelTope ? "text-amber-600" : "text-neutral-400"}`}>
             {largoAviso} / {LIMITES.proteccionDatos}
+          </span>
+        </div>
+      </div>
+
+      {/* El segundo aviso, para cuando el paciente es mayor de edad. Muchos
+          centros tienen dos textos distintos —el de un menor habla del tutor y
+          dice que el informe queda en poder de los padres— y no se pueden
+          intercambiar. Quien no tenga dos, deja este vacío y no cambia nada. */}
+      <div className="mt-5">
+        <Field label="Aviso de protección de datos para pacientes adultos (opcional)" full>
+          <textarea
+            disabled={readOnly}
+            rows={6}
+            maxLength={LIMITES.proteccionDatosAdultos}
+            value={borrador.proteccionDatosAdultos}
+            onChange={(e) => cambia("proteccionDatosAdultos", e.target.value)}
+            placeholder="Solo si tu asesoría te ha dado un texto distinto para mayores de edad. Si lo dejas en blanco, todos los informes llevan el aviso de arriba."
+            className={inputCls}
+          />
+        </Field>
+        <div className="flex items-center justify-between gap-2 mt-1">
+          <p className="text-[11px] text-neutral-400">
+            Se usa cuando el paciente tenía 18 años o más en la fecha del informe.
+          </p>
+          <span className={`text-[11px] tabular-nums ${cercaDelTopeAdultos ? "text-amber-600" : "text-neutral-400"}`}>
+            {largoAvisoAdultos} / {LIMITES.proteccionDatosAdultos}
           </span>
         </div>
       </div>

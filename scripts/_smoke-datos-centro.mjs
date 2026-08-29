@@ -39,7 +39,7 @@ import {
 } from "../lib/tenant/normalizarCentro.js";
 
 /** La forma acordada con el generador del PDF. Si cambia, el PDF se entera. */
-const CLAVES = ["razonSocial", "cif", "telefonos", "proteccionDatos", "sedes"];
+const CLAVES = ["razonSocial", "cif", "telefonos", "proteccionDatos", "proteccionDatosAdultos", "sedes"];
 const CAMPOS_SEDE = ["nombre", "direccion", "cp", "ciudad", "registroSanitario", "telefono"];
 
 const CENTRO_LLENO = {
@@ -47,6 +47,9 @@ const CENTRO_LLENO = {
   cif: "B12345678",
   telefonos: ["900 000 000", "600 000 000"],
   proteccionDatos: "Sus datos se tratan conforme al RGPD.",
+  // El segundo aviso, el de mayores de edad: opcional, pero si está tiene que
+  // sobrevivir al guardado igual que el otro.
+  proteccionDatosAdultos: "Sus datos se tratan conforme al RGPD. Este informe queda en su poder.",
   sedes: [
     {
       nombre: "Sede centro",
@@ -77,6 +80,7 @@ describe("la forma que lee el generador del PDF", () => {
       cif: "",
       telefonos: [],
       proteccionDatos: "",
+      proteccionDatosAdultos: "",
       sedes: [],
     });
   });
@@ -129,9 +133,17 @@ describe("lo que no es texto, fuera", () => {
       cif: undefined,
       telefonos: null,
       proteccionDatos: undefined,
+      proteccionDatosAdultos: null,
       sedes: null,
     });
-    assert.deepEqual(c, { razonSocial: "", cif: "", telefonos: [], proteccionDatos: "", sedes: [] });
+    assert.deepEqual(c, {
+      razonSocial: "",
+      cif: "",
+      telefonos: [],
+      proteccionDatos: "",
+      proteccionDatosAdultos: "",
+      sedes: [],
+    });
   });
 });
 
