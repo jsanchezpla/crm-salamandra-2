@@ -10,6 +10,7 @@ import { isAllowedAnthropicModel, DEFAULT_ANTHROPIC_MODEL } from "../../../../li
 import { getTenantStripeConfig } from "../../../../lib/payments/stripeConfig.js";
 import { getTenantCloudflareConfig } from "../../../../lib/analytics/cloudflareConfig.js";
 import { getTenantGocardlessConfig } from "../../../../lib/banco/gocardlessConfig.js";
+import { getTenantGoogleCalendarConfig } from "../../../../lib/calendar/googleCalendar.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { avisarCambioDeConfiguracion } from "../../../../lib/configuracion/avisoCambio.js";
 import { exigeIdentidad } from "../../../../lib/citas/puertaIdentidad.js";
@@ -81,6 +82,7 @@ const CAMPOS_SECRETOS_AUDIT = [
   "anthropicApiKey",
   "cloudflareApiToken",
   "gocardlessSecretKey",
+  "googleCalendarClientSecret",
   "googlePlacesApiKey",
   "openaiApiKey",
   "resendApiKey",
@@ -95,6 +97,7 @@ const CAMPOS_ABIERTOS_AUDIT = [
   "cloudflareAccountId",
   "cloudflareSiteTag",
   "gocardlessSecretId",
+  "googleCalendarClientId",
   "resendFromEmail",
   "resendReplyTo",
   "stripePublishableKey",
@@ -449,6 +452,13 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
         // Mismo criterio que Stripe: hay que poder DESCIFRAR la clave.
         ready: getTenantGocardlessConfig({ tenant: t }).configured,
       },
+      // Google Calendar del módulo Calendario (29/08/2026). El ID de cliente no
+      // es secreto (viaja en la URL de OAuth); el secreto va con pista.
+      googleCalendar: {
+        ...ks(integ.googleCalendarClientSecret),
+        clientId: integ.googleCalendarClientId ?? null,
+        ready: getTenantGoogleCalendarConfig({ tenant: t }).configured,
+      },
     },
   });
 });
@@ -490,6 +500,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     "anthropicApiKey",
     "cloudflareApiToken",
     "gocardlessSecretKey",
+    "googleCalendarClientSecret",
     "googlePlacesApiKey",
     "openaiApiKey",
     "resendApiKey",
@@ -566,6 +577,11 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   // Key es SECRETO; el Secret ID identifica el par y va a la vista.
   applyKey(settings.integrations, "gocardlessSecretKey", body.gocardlessSecretKey);
   applyPlain(settings.integrations, "gocardlessSecretId", body.gocardlessSecretId);
+
+  // Google Calendar (módulo Calendario, 29/08/2026). El secreto del cliente
+  // OAuth es SECRETO; el ID de cliente va a la vista, como el par de GoCardless.
+  applyKey(settings.integrations, "googleCalendarClientSecret", body.googleCalendarClientSecret);
+  applyPlain(settings.integrations, "googleCalendarClientId", body.googleCalendarClientId);
 
   // Modelo de Claude (no es un secreto). Solo se guarda si es un id válido.
   if (typeof body.anthropicModel === "string" && isAllowedAnthropicModel(body.anthropicModel)) {
@@ -896,6 +912,11 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
         ...keyStatus(settings.integrations.gocardlessSecretKey),
         secretId: settings.integrations.gocardlessSecretId ?? null,
         ready: getTenantGocardlessConfig({ tenant: { settings } }).configured,
+      },
+      googleCalendar: {
+        ...keyStatus(settings.integrations.googleCalendarClientSecret),
+        clientId: settings.integrations.googleCalendarClientId ?? null,
+        ready: getTenantGoogleCalendarConfig({ tenant: { settings } }).configured,
       },
     },
   });

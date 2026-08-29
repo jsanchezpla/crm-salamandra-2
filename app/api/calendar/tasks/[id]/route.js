@@ -1,7 +1,14 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, noContent, forbidden } from "../../../../../lib/utils/apiResponse.js";
 import { NotFoundError } from "../../../../../lib/utils/errors.js";
-import { toFCEvent, calendarIncludes, resolveCalendarFks } from "../../../../../lib/calendar/calendarEvent.js";
+import {
+  toFCEvent,
+  calendarIncludes,
+  resolveCalendarFks,
+  resolveAttendees,
+  reconciliarAsistentes,
+} from "../../../../../lib/calendar/calendarEvent.js";
+import { sincronizarTareaConGoogle, quitarCopiasDeGoogle } from "../../../../../lib/calendar/googleSync.js";
 import { error as errorResponse } from "../../../../../lib/utils/apiResponse.js";
 import { auditar, datosPeticion, resumen } from "../../../../../lib/utils/auditoria.js";
 import {
@@ -19,7 +26,8 @@ async function resolveTask(tenantModels, id) {
   return task;
 }
 
-export const PUT = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
+export const PUT = withTenant(async (request, { params }, ctx) => {
+  const { tenant, tenantModels, hasModule } = ctx;
   if (!hasModule("calendar")) return forbidden();
 
   const { id } = await params;
@@ -40,6 +48,12 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
   const fk = await resolveCalendarFks(body, tenantModels, hasModule);
   if (fk.error) return errorResponse(fk.error);
   Object.assign(updates, fk.updates);
+
+  // «Afecta a» (29/08/2026): validada ANTES de escribir, como todo lo demás.
+  // Solo se toca si viene en el body — el arrastre manda cuatro fechas y nada
+  // más, y no puede vaciar la lista de convocados de paso.
+  const asistentes = await resolveAttendees(body, tenantModels, hasModule);
+  if (asistentes.error) return errorResponse(asistentes.error);
 
   if (updates.title !== undefined) updates.title = updates.title?.trim() || task.title;
   if (updates.priority && !VALID_PRIORITY.includes(updates.priority)) delete updates.priority;
@@ -76,6 +90,17 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
 
   await task.update(updates);
 
+  // La lista de convocados, y el espejo en Google. A quien SALE de la lista se
+  // le quita su copia ANTES de borrar la fila (el CASCADE se llevaría el id);
+  // después se sincroniza a los que quedan — que cubre también el arrastre de
+  // fechas, donde la lista no viene pero las copias tienen que moverse.
+  if (asistentes.present) {
+    const rec = await reconciliarAsistentes({ taskId: task.id, ids: asistentes.ids, tenantModels });
+    await quitarCopiasDeGoogle({ links: rec.sobran, ctx });
+    await rec.aplicar();
+  }
+  await sincronizarTareaConGoogle({ task, ctx });
+
   /*
    * Reenviar es un acto explícito: la casilla «mandarle el enlace» de la
    * pantalla. Aquí no hay disparo automático al detectar que apareció el
@@ -104,13 +129,18 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
   return ok({ ...toFCEvent(task), envio });
 });
 
-export const DELETE = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
+export const DELETE = withTenant(async (request, { params }, ctx) => {
+  const { tenant, tenantModels, hasModule } = ctx;
   if (!hasModule("calendar")) return forbidden();
 
   const { id } = await params;
   const task = await resolveTask(tenantModels, id);
   const antesBorrar = resumen(task, ["title", "startDate", "status"]);
   const idBorrado = task.id;
+  // Las copias de Google se quitan ANTES del destroy: el CASCADE borra las
+  // filas de asistentes, y con ellas el único sitio donde vive cada googleEventId.
+  const links = await tenantModels.CalendarTaskAttendee.findAll({ where: { taskId: task.id } }).catch(() => []);
+  await quitarCopiasDeGoogle({ links, ctx });
   await task.destroy();
   await auditar({
     tenantId: tenant.id,

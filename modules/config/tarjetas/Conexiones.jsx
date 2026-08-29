@@ -149,6 +149,24 @@ export const AI_PROVIDERS = {
     ],
     note: "El acceso es de SOLO LECTURA (PSD2): con estas claves no se puede mover dinero. El consentimiento del banco dura 90 días y se renueva desde la pantalla de Banco.",
   },
+  googleCalendar: {
+    title: "Google Calendar",
+    subtitle:
+      "Cada miembro del equipo conecta su cuenta de Google desde el Calendario, y los eventos donde aparece se le crean en un calendario «CRM Salamandra» suyo (puede renombrarlo en Google).",
+    field: "googleCalendarClientSecret",
+    prefix: "GOCSPX-",
+    platformUrl: "https://console.cloud.google.com/apis/credentials",
+    platformLabel: "Abrir credenciales de Google Cloud",
+    steps: [
+      "Entra en console.cloud.google.com y crea un proyecto (si ya tienes uno para Places, vale el mismo).",
+      'En "APIs y servicios → Biblioteca" busca y activa "Google Calendar API". Es gratis.',
+      'En "Pantalla de consentimiento de OAuth" configura la app (tipo Externo) con el nombre de tu centro, y añade como usuarios de prueba los correos de Google de tu equipo.',
+      '"Credenciales → Crear credenciales → ID de cliente de OAuth", tipo "Aplicación web".',
+      'En "URIs de redireccionamiento autorizados" pega la dirección que aparece justo debajo de este recuadro.',
+      "Copia el secreto de cliente (empieza por GOCSPX-) y pégalo abajo; el ID de cliente va en su propio campo.",
+    ],
+    note: "Mientras la app de Google esté «en pruebas» (sin verificar por Google), solo pueden conectar los correos añadidos como usuarios de prueba: para un equipo es suficiente y no cuesta nada. El permiso que se pide es el mínimo: solo puede tocar calendarios creados por el propio CRM, nunca la agenda personal de nadie.",
+  },
   stripeWebhook: {
     title: "Stripe — secreto del webhook",
     subtitle: "Es lo que nos avisa de que un pago se ha completado. Sin esto, el paciente paga y su cita no se confirma nunca.",
@@ -490,6 +508,82 @@ export function BancoIdField({ value, ready, isAdmin, onSave }) {
           </a>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * El ID de cliente OAuth de Google Calendar (no es secreto: viaja en la URL de
+ * autorización) + la URI de retorno que hay que registrar en Google Cloud — el
+ * paso que más se olvida, como la URL del webhook en Stripe.
+ */
+export function GoogleCalendarIdField({ value, ready, isAdmin, onSave }) {
+  const [v, setV] = useState(value ?? "");
+  const [busy, setBusy] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+  useEffect(() => { setV(value ?? ""); }, [value]);
+  const sucio = (v ?? "").trim() !== (value ?? "");
+  const urlRetorno = typeof window !== "undefined" ? `${window.location.origin}/api/calendar/google/callback` : "";
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(urlRetorno);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      /* sin portapapeles: queda visible para copiar a mano */
+    }
+  }
+
+  return (
+    <div className="mt-4 pt-4 border-t border-neutral-100">
+      <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">ID de cliente</label>
+      <p className="text-[11px] text-neutral-400 mt-0.5 mb-2">
+        La pareja del secreto: Google los da juntos al crear el ID de cliente de OAuth.
+      </p>
+      <div className="flex gap-2">
+        <input
+          disabled={!isAdmin}
+          value={v}
+          onChange={(e) => setV(e.target.value)}
+          placeholder="p. ej. 1234567890-abc123.apps.googleusercontent.com"
+          className={inputCls + " font-mono flex-1"}
+        />
+        {isAdmin && sucio && (
+          <button
+            onClick={async () => { setBusy(true); try { await onSave(v.trim() || null); } finally { setBusy(false); } }}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-40"
+            style={{ background: "var(--color-primary, #1B3A2D)" }}
+          >
+            {busy ? "..." : "Guardar"}
+          </button>
+        )}
+      </div>
+
+      <div className="mt-3">
+        <div className="text-xs text-neutral-500 mb-2">
+          Esta es la URI de redireccionamiento que hay que autorizar en Google Cloud:
+        </div>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 min-w-0 truncate text-[12px] bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-700">
+            {urlRetorno}
+          </code>
+          <button
+            type="button"
+            onClick={copiar}
+            className="shrink-0 text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-600 hover:border-neutral-400 transition"
+          >
+            {copiado ? "Copiada" : "Copiar"}
+          </button>
+        </div>
+      </div>
+
+      <p className={`text-[11px] mt-3 ${ready ? "text-emerald-600" : "text-amber-600"}`}>
+        {ready
+          ? "Credenciales listas: cada miembro del equipo ya puede conectar su Google desde el Calendario."
+          : "Faltan datos: hacen falta el ID de cliente y el secreto."}
+      </p>
     </div>
   );
 }

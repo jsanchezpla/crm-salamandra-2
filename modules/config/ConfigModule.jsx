@@ -24,6 +24,7 @@ import {
   CloudflareIdsField,
   EstadoCobro,
   EventosWebhook,
+  GoogleCalendarIdField,
   UrlWebhook,
   WhatsappPhoneField,
 } from "./tarjetas/Conexiones.jsx";
@@ -715,6 +716,28 @@ export default function ConfigModule({ modulos = null }) {
                   ready={!!cfg.integrations?.gocardless?.ready}
                   isAdmin={isAdmin}
                   onSave={(v) => patchTenant({ gocardlessSecretId: v }, "Secret ID del banco guardado")}
+                />
+              }
+            />
+          )}
+
+          {/* ── Google Calendar (29/08/2026) ─────────────────────────────────
+              Credenciales OAuth del tenant (BYOK, como el banco): con ellas
+              puestas, cada miembro conecta SU Google desde /calendario. */}
+          {enZona(
+            "googleCalendar",
+            <ApiKeyCard
+              provider={AI_PROVIDERS.googleCalendar}
+              status={cfg.integrations?.googleCalendar}
+              isAdmin={isAdmin}
+              onSave={(value) => patchTenant({ googleCalendarClientSecret: value }, "Secreto de Google Calendar guardado")}
+              onClear={() => patchTenant({ googleCalendarClientSecret: null }, "Secreto de Google Calendar eliminado")}
+              extra={
+                <GoogleCalendarIdField
+                  value={cfg.integrations?.googleCalendar?.clientId ?? ""}
+                  ready={!!cfg.integrations?.googleCalendar?.ready}
+                  isAdmin={isAdmin}
+                  onSave={(v) => patchTenant({ googleCalendarClientId: v }, "ID de cliente de Google guardado")}
                 />
               }
             />

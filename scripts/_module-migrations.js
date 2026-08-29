@@ -231,6 +231,15 @@ export const CORE = [
   // (42P01 sin sus tablas). Aditiva, por existencia de tabla, idempotente.
   "migrate-banco-conciliacion",
 
+  // El Calendario convoca a una lista y se espeja en Google (29/08/2026):
+  // tablas `calendar_task_attendees` y `google_calendar_connections`. CORE por
+  // el criterio de `migrate-banco-conciliacion`: los dos modelos están
+  // registrados en `lib/db/tenantDb.js` para TODOS los tenants, y el listado de
+  // /calendario los incluye en cuanto el tenant tiene `team` — sin las tablas,
+  // 42P01. Decide por existencia de `calendar_tasks` + `team_members` (las
+  // dianas de sus FK): donde falte una, es un no-op.
+  "migrate-calendar-google",
+
   // El hilo de WhatsApp (`whatsapp_messages`, 23/08/2026). CORE porque no hay
   // módulo que la reclame A PROPÓSITO (regla 14, la configuración es universal:
   // cualquier cliente conecta su número mañana sin que nadie toque código) y el

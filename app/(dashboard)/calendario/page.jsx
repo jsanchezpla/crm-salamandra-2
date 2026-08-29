@@ -29,6 +29,9 @@ const EMPTY_FORM = {
   allDay: false,
   clientId: "",
   teamMemberId: "",
+  // A quién afecta (29/08/2026): los miembros del equipo convocados. Es lo que
+  // decide en qué Google Calendar aparece el evento.
+  attendeeIds: [],
   // La convocatoria (27/08/2026): el enlace de la videollamada y a quién se le
   // manda. `enviarInvitacion` NO se guarda en el evento: es la casilla de «y
   // además mándaselo ahora», que se decide en cada guardado.
@@ -48,6 +51,112 @@ function parseISOToFields(isoString) {
 
 function todayStr() {
   return new Date().toISOString().split("T")[0];
+}
+
+// Qué se le dice a quien vuelve de /api/calendar/google/conectar con un error.
+// Las claves son los `motivo=` que mandan conectar y callback.
+const GOOGLE_ERRORES = {
+  modulo: "Google Calendar necesita los módulos Calendario y Equipo.",
+  demo: "En la demo no se puede conectar Google Calendar.",
+  credenciales: "Faltan las credenciales de Google. Un administrador tiene que pegarlas en Configuración → Conexiones.",
+  ficha: "Tu usuario no tiene ficha en Equipo, así que no hay a quién crearle el calendario. Pídele al administrador que te dé de alta en la plantilla.",
+  estado: "La conexión caducó a mitad de camino. Vuelve a darle a «Conectar».",
+  rechazado: "Se canceló en la pantalla de Google: no se ha conectado nada.",
+  google: "Google no aceptó la conexión. Revisa las credenciales de Configuración → Conexiones y vuelve a intentarlo.",
+  interno: "Algo falló al conectar con Google. Vuelve a intentarlo en un momento.",
+};
+
+/**
+ * El desplegable «Afecta a» (29/08/2026): varios miembros a la vez, con la
+ * opción «Todos» que los marca de golpe — tal cual lo pidió Rodrigo. No es el
+ * MultiSelect de la agenda a propósito: aquel es un FILTRO donde null significa
+ * «no filtres», y aquí la lista vacía significa «no afecta a nadie», que es un
+ * estado real de un evento (una tarea propia de quien la apunta).
+ */
+function SelectorAfectados({ value, onChange, options, className }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e) {
+      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const marcados = new Set(value);
+  const todos = options.length > 0 && value.length === options.length;
+  let texto = "Nadie";
+  if (todos) texto = "Todo el equipo";
+  else if (value.length === 1) texto = options.find((o) => o.value === value[0])?.label ?? "1 miembro";
+  else if (value.length > 1) texto = `${value.length} miembros`;
+
+  function alternar(id) {
+    onChange(marcados.has(id) ? value.filter((x) => x !== id) : [...value, id]);
+  }
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={`${className} flex items-center justify-between gap-2 text-left`}
+      >
+        <span className={`truncate ${value.length ? "text-[#111827]" : "text-[#9CA3AF]"}`}>{texto}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+          className={`w-3.5 h-3.5 text-[#9CA3AF] shrink-0 transition-transform ${open ? "rotate-180" : ""}`}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute z-50 left-0 right-0 mt-1 rounded-lg border border-[#E5E7EB] bg-white shadow-lg overflow-hidden">
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onChange(todos ? [] : options.map((o) => o.value))}
+            className="w-full text-left px-3 py-2 text-xs font-medium text-[#374151] border-b border-[#F0F0F0] hover:bg-neutral-50"
+          >
+            {todos ? "Quitar a todos" : "Todos"}
+          </button>
+          <ul role="listbox" aria-multiselectable="true" className="max-h-52 overflow-auto py-1">
+            {options.length === 0 && <li className="px-3 py-2 text-xs text-[#9CA3AF]">No hay equipo</li>}
+            {options.map((opt) => {
+              const isMarcado = marcados.has(opt.value);
+              return (
+                <li
+                  key={opt.value}
+                  role="option"
+                  aria-selected={isMarcado}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => alternar(opt.value)}
+                  className="px-3 py-1.5 text-xs cursor-pointer flex items-center gap-2 hover:bg-neutral-50 text-[#374151]"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-[3px] border shrink-0 ${
+                      isMarcado ? "bg-[#0F0F0F] border-[#0F0F0F]" : "border-[#D1D5DB]"
+                    }`}
+                  >
+                    {isMarcado && (
+                      <svg viewBox="0 0 24 24" fill="none" strokeWidth={3.5} stroke="#fff" className="w-2.5 h-2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </span>
+                  <span className="truncate">{opt.label}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function addDaysStr(iso, n) {
@@ -93,6 +202,11 @@ export default function CalendarioPage() {
   const [reorg, setReorg] = useState(null); // { loading, err, proposals, model, taskCount } | null
   const [reorgIndex, setReorgIndex] = useState(0); // propuesta activa (0..2)
   const [reorgApplying, setReorgApplying] = useState(false);
+  // Google Calendar (29/08/2026): el estado de MI conexión y sus carteles.
+  const [google, setGoogle] = useState(null); // GET /api/calendar/google
+  const [googleModal, setGoogleModal] = useState(false);
+  const [googleAviso, setGoogleAviso] = useState(null); // { tono: "ok"|"error", texto }
+  const [googleBusy, setGoogleBusy] = useState(false);
 
   // Datos para los desplegables de cliente / responsable (opcionales).
   useEffect(() => {
@@ -105,7 +219,42 @@ export default function CalendarioPage() {
     fetch("/api/projects?limit=1", { cache: "no-store" })
       .then((r) => setHasProjects(r.ok))
       .catch(() => {});
+    // Mi conexión con Google Calendar (si el tenant tiene Calendario + Equipo).
+    fetch("/api/calendar/google", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => j.ok && setGoogle(j.data))
+      .catch(() => {});
+    // La vuelta del OAuth llega con ?google=conectado|error en la URL. Se lee,
+    // se cuenta y se limpia la dirección para que un F5 no repita el cartel.
+    const params = new URLSearchParams(window.location.search);
+    const resultado = params.get("google");
+    if (resultado) {
+      setGoogleAviso(
+        resultado === "conectado"
+          ? { tono: "ok", texto: "Google Calendar conectado: ya tienes un calendario «CRM Salamandra» en tu Google (puedes renombrarlo allí) con los próximos eventos que te afectan." }
+          : { tono: "error", texto: GOOGLE_ERRORES[params.get("motivo")] ?? GOOGLE_ERRORES.interno }
+      );
+      const url = new URL(window.location.href);
+      url.searchParams.delete("google");
+      url.searchParams.delete("motivo");
+      window.history.replaceState(null, "", url);
+    }
   }, []);
+
+  async function desconectarGoogle() {
+    setGoogleBusy(true);
+    try {
+      const res = await fetch("/api/calendar/google", { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setGoogle((g) => ({ ...g, conectado: false, googleEmail: null }));
+      setGoogleModal(false);
+      setGoogleAviso({ tono: "ok", texto: "Google Calendar desconectado. Tu calendario «CRM Salamandra» sigue en tu Google, pero ya no se le añadirá nada." });
+    } catch {
+      setGoogleAviso({ tono: "error", texto: "No se pudo desconectar. Vuelve a intentarlo." });
+    } finally {
+      setGoogleBusy(false);
+    }
+  }
 
   // Las fichas ya no se bajan aquí (28/08/2026). Este `limit=500` recibía 200,
   // porque /api/clients corta por su cuenta: con las 1.083 de Aumenta faltaban
@@ -321,6 +470,7 @@ export default function CalendarioPage() {
         allDay: event.allDay,
         clientId: ep.clientId ?? "",
         teamMemberId: ep.teamMemberId ?? "",
+        attendeeIds: ep.attendeeIds ?? [],
         meetUrl: ep.meetUrl ?? "",
         inviteEmail: ep.inviteEmail ?? "",
         // Nunca marcada al abrir: reenviar tiene que ser un acto, no algo que
@@ -445,6 +595,7 @@ export default function CalendarioPage() {
             allDay: modal.form.allDay,
             clientId: modal.form.clientId || null,
             teamMemberId: modal.form.teamMemberId || null,
+            attendeeIds: modal.form.attendeeIds ?? [],
             meetUrl: modal.form.meetUrl.trim() || null,
             inviteEmail: modal.form.inviteEmail.trim() || null,
             enviarInvitacion: modal.form.enviarInvitacion === true,
@@ -514,6 +665,27 @@ export default function CalendarioPage() {
           </h1>
         </div>
         <div className="flex items-center gap-2">
+          {google?.disponible && (
+            <button
+              onClick={() => {
+                if (google.conectado || !google.configurado || google.sinFicha) setGoogleModal(true);
+                else window.location.href = "/api/calendar/google/conectar";
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 border text-xs font-medium rounded-md transition-colors ${
+                google.conectado
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-[var(--ink-200)] text-[var(--ink-700)] hover:bg-[var(--ink-100)]"
+              }`}
+              title={
+                google.conectado
+                  ? `Conectado como ${google.googleEmail ?? "tu cuenta de Google"}`
+                  : "Sincroniza con tu Google Calendar los eventos donde apareces"
+              }
+            >
+              <span className={`w-2 h-2 rounded-full ${google.conectado ? "bg-emerald-500" : "bg-neutral-300"}`} />
+              {google.conectado ? "Google Calendar" : "Conectar Google Calendar"}
+            </button>
+          )}
           {hasProjects && (
             <button
               onClick={toggleProjects}
@@ -542,6 +714,25 @@ export default function CalendarioPage() {
           </button>
         </div>
       </div>
+
+      {/* El resultado de conectar/desconectar Google, con botón de cerrar. */}
+      {googleAviso && (
+        <div
+          className={`mx-6 mt-3 rounded-lg border px-3 py-2 flex items-start justify-between gap-3 ${
+            googleAviso.tono === "ok" ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"
+          }`}
+        >
+          <p className={`text-xs ${googleAviso.tono === "ok" ? "text-emerald-800" : "text-amber-900"}`}>
+            {googleAviso.texto}
+          </p>
+          <button
+            onClick={() => setGoogleAviso(null)}
+            className={`text-xs font-semibold shrink-0 ${googleAviso.tono === "ok" ? "text-emerald-700" : "text-amber-800"}`}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Calendario */}
       <div className="flex-1 p-6 min-h-0">
@@ -579,6 +770,63 @@ export default function CalendarioPage() {
           }}
         />
       </div>
+
+      {/* Mini-modal de Google Calendar: conectado (desconectar) o por qué no se puede aún */}
+      {googleModal && google && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget) setGoogleModal(false); }}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm">
+            <div className="px-5 py-4 border-b border-[#F0F0F0] flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-neutral-400 mb-1">Google Calendar</div>
+                <div className="text-[14px] font-semibold text-neutral-900 leading-snug">
+                  {google.conectado ? "Conectado" : "Sin conectar"}
+                </div>
+              </div>
+              <button onClick={() => setGoogleModal(false)} className="text-neutral-400 hover:text-neutral-700 p-1 -m-1" aria-label="Cerrar">✕</button>
+            </div>
+            <div className="px-5 py-4 space-y-2 text-[12.5px] text-neutral-600">
+              {google.conectado ? (
+                <>
+                  <p>
+                    Conectado como <strong className="text-neutral-900">{google.googleEmail ?? "tu cuenta de Google"}</strong>.
+                  </p>
+                  <p>
+                    Los eventos donde apareces en «Afecta a» se escriben en tu calendario{" "}
+                    <strong className="text-neutral-900">«CRM Salamandra»</strong> — puedes renombrarlo en Google y seguirá
+                    funcionando. Tu agenda personal ni se lee ni se toca.
+                  </p>
+                  <p className="text-[11.5px] text-neutral-400">
+                    Al desconectar, ese calendario y sus eventos se quedan en tu Google: solo se deja de añadir cosas.
+                  </p>
+                </>
+              ) : google.sinFicha ? (
+                <p>{GOOGLE_ERRORES.ficha}</p>
+              ) : !google.configurado ? (
+                <>
+                  <p>{GOOGLE_ERRORES.credenciales}</p>
+                  <a href="/configuracion?zona=conexiones" className="inline-block text-[12px] font-semibold underline text-neutral-800">
+                    Abrir Configuración → Conexiones
+                  </a>
+                </>
+              ) : (
+                <p>Todo listo para conectar.</p>
+              )}
+            </div>
+            <div className="px-5 py-3.5 border-t border-[#F0F0F0] flex justify-end gap-2">
+              <button onClick={() => setGoogleModal(false)} className="text-xs text-neutral-500 px-3 py-1.5">Cerrar</button>
+              {google.conectado && (
+                <button
+                  onClick={desconectarGoogle}
+                  disabled={googleBusy}
+                  className="text-xs font-medium px-3 py-1.5 rounded-md border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                >
+                  {googleBusy ? "Desconectando…" : "Desconectar"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mini-modal de evento de PROYECTO (fecha límite / hito) */}
       {projectInfo && (
@@ -909,6 +1157,23 @@ export default function CalendarioPage() {
                   />
                 </div>
               </div>
+
+              {/* A quién afecta (29/08/2026): la lista de convocados, con su
+                  «Todos». Es lo que decide en qué Google Calendar aparece. */}
+              {teamMembers.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-[#374151] mb-1">Afecta a</label>
+                  <SelectorAfectados
+                    value={modal.form.attendeeIds}
+                    onChange={(v) => updateForm("attendeeIds", v)}
+                    options={teamMembers.map((m) => ({ value: m.id, label: m.displayName }))}
+                    className="w-full text-sm px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F0F0F]/10 focus:border-[#0F0F0F] bg-white transition-colors"
+                  />
+                  <p className="text-[11px] text-[#9CA3AF] mt-1">
+                    Quien aparezca aquí verá el evento en su Google Calendar si lo tiene conectado.
+                  </p>
+                </div>
+              )}
 
               {/* Notas */}
               <div>

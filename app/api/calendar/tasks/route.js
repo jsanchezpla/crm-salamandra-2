@@ -4,7 +4,8 @@ import { ForbiddenError, handleRouteError } from "../../../../lib/utils/errors.j
 import { getTenantContext } from "../../../../lib/tenant/tenantResolver.js";
 import { Op } from "sequelize";
 import { NextResponse } from "next/server";
-import { toFCEvent, calendarIncludes, resolveCalendarFks } from "../../../../lib/calendar/calendarEvent.js";
+import { toFCEvent, calendarIncludes, resolveCalendarFks, resolveAttendees } from "../../../../lib/calendar/calendarEvent.js";
+import { sincronizarTareaConGoogle } from "../../../../lib/calendar/googleSync.js";
 import { fetchProjectEvents } from "../../../../lib/calendar/projectEvents.js";
 import {
   revisarEnlace,
@@ -78,6 +79,10 @@ export async function POST(request) {
     const fk = await resolveCalendarFks(body, ctx.tenantModels, ctx.hasModule);
     if (fk.error) return NextResponse.json({ ok: false, error: fk.error }, { status: 400 });
 
+    // A quién afecta (29/08/2026): validada ANTES de crear, como las FKs.
+    const asistentes = await resolveAttendees(body, ctx.tenantModels, ctx.hasModule);
+    if (asistentes.error) return NextResponse.json({ ok: false, error: asistentes.error }, { status: 400 });
+
     // La convocatoria: enlace de videollamada y a quién se le manda. Se valida
     // ANTES de crear nada — un enlace mal pegado no puede dejar el evento
     // guardado a medias y a la persona esperando un correo que no va a llegar.
@@ -103,6 +108,18 @@ export async function POST(request) {
       meetUrl,
       inviteEmail,
     });
+
+    // Los convocados, una fila por cabeza. Después del create: sin evento no
+    // hay a qué convocar, y si esto fallara la tarea guardada sigue siendo útil.
+    if (asistentes.present && asistentes.ids.length) {
+      await ctx.tenantModels.CalendarTaskAttendee.bulkCreate(
+        asistentes.ids.map((teamMemberId) => ({ taskId: task.id, teamMemberId }))
+      );
+    }
+
+    // El espejo en el Google de cada asistente conectado. Nunca lanza y nunca
+    // deshace el evento: la regla de oro está escrita en lib/calendar/googleSync.js.
+    await sincronizarTareaConGoogle({ task, ctx });
 
     /*
      * La convocatoria sale DESPUÉS de que el evento exista, y su fallo no lo
