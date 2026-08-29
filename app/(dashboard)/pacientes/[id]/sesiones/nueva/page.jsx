@@ -19,6 +19,15 @@
  * «Preparar la sesión» (borrador antes de darla, 26/08 por la mañana) sigue
  * igual: se llega con ?preparar=1 desde el modal de la cita o con su enlace de
  * abajo, y no ha cambiado nada de ese flujo.
+ *
+ * ── LOS APARTADOS DEL PUNTO 2 SALEN DE UNA PLANTILLA (29/08/2026) ──────────
+ * El «Informe de la sesión» tenía siete campos escritos a mano aquí dentro.
+ * Ahora los da `lib/clinica/plantillas.js` —la plantilla de registro del centro
+ * o los siete de fábrica—, se pintan con `ApartadosEditor` (el mismo del cajón
+ * del informe) y se pueden añadir apartados sueltos para ESTA sesión, que se
+ * aplican aquí y no se guardan en ninguna plantilla. Los puntos 1 y 3
+ * —preparación y devolución de la familia— siguen fuera: no son apartados del
+ * informe de la sesión, son el envoltorio del registro.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -33,6 +42,13 @@ import {
   payloadDePreparacion,
   pidePreparar,
 } from "@/lib/clinica/prepararSesion.js";
+import ApartadosEditor from "@/components/clinica/ApartadosEditor.jsx";
+import {
+  CLAVE_PLANTILLA,
+  PLANTILLA_BASE,
+  desdeFormulario,
+  repartirValoresDeSesion,
+} from "@/lib/clinica/plantillas.js";
 
 const STATE = { FORM: "form", PROCESSING: "processing", PREPARING: "preparing" };
 
@@ -50,17 +66,27 @@ const PROCESSING_STEPS = [
   "Estructurando observaciones…",
 ];
 
+// Lo que NO es un apartado de plantilla: los puntos 1 y 3 del registro. Los del
+// punto 2 se añaden a este mismo objeto según los pida la plantilla, con la
+// clave del apartado; por eso aquí solo están estos dos.
 const FORM_VACIO = {
-  objectives: "",
-  activities: "",
-  performance: "",
-  familyComments: "",
-  nextSessionNotes: "",
-  homeworkTasks: "",
-  incidents: "",
   prepText: "",
   parentFeedback: "",
 };
+
+// Cómo entra en el registro lo que devuelve la IA del audio, por si el apartado
+// no está en la plantilla del centro y hay que crearlo al vuelo: un botón que
+// trae contenido no puede escribirlo en un sitio que no se ve.
+const NOMBRES_AUDIO = {
+  objectives: "Objetivos trabajados",
+  activities: "Actividades realizadas",
+  performance: "Desempeño",
+  familyComments: "Comentarios familiares",
+  nextSessionNotes: "Próximas sesiones",
+  homeworkTasks: "Tareas para casa",
+  incidents: "Incidencias",
+};
+const TIPO_AUDIO = { objectives: "lista" };
 
 const fmtSize = (b) => (b == null ? "" : b < 1024 * 1024 ? `${Math.round(b / 1024)} KB` : `${(b / (1024 * 1024)).toFixed(1)} MB`);
 const fmtDur = (s) => (s == null ? "" : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`);
@@ -83,6 +109,13 @@ export default function NuevaSesionPage() {
   const [fecha, setFecha] = useState(() => paraInputLocal(fechaDePreparacion(query.get("fecha")) ?? new Date()));
   const [prepSolo, setPrepSolo] = useState("");
   const [form, setForm] = useState(FORM_VACIO);
+  // Los apartados del punto 2. Arrancan con los de fábrica para que la pantalla
+  // se pinte entera antes de que conteste /api/clinica/plantillas; en cuanto
+  // llega la plantilla del centro se sustituyen (el formulario está vacío
+  // todavía, así que no se pierde nada escrito).
+  const [apartados, setApartados] = useState(() => PLANTILLA_BASE.registro.apartados.map((a) => ({ ...a })));
+  const [plantillas, setPlantillas] = useState([]);
+  const [plantillaKey, setPlantillaKey] = useState("");
   const [file, setFile] = useState(null);
   const [processingStep, setProcessingStep] = useState(0);
   const [result, setResult] = useState(null); // { transcription, structured, audioDurationSec, demo }
@@ -100,7 +133,42 @@ export default function NuevaSesionPage() {
       .then((j) => j.ok && setPatient(j.data))
       .catch(() => {})
       .finally(() => setLoadingPatient(false));
+    fetch("/api/clinica/plantillas", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        const lista = j?.data?.registro ?? [];
+        if (!lista.length) return;
+        setPlantillas(lista);
+        setPlantillaKey(lista[0].key);
+        setApartados(lista[0].apartados.map((a) => ({ ...a })));
+      })
+      .catch(() => {});
   }, [id]);
+
+  /**
+   * Cambiar de plantilla rehace la lista de apartados. Lo escrito no se pierde:
+   * los que compartan clave conservan su texto y el resto sigue en `form` por si
+   * se vuelve atrás — al registro solo va lo que esté en la lista al guardar.
+   */
+  function elegirPlantilla(key) {
+    const p = plantillas.find((x) => x.key === key);
+    if (!p) return;
+    setPlantillaKey(key);
+    setApartados(p.apartados.map((a) => ({ ...a })));
+  }
+
+  /**
+   * Mete contenido en el registro y, si un apartado no está en la plantilla de
+   * esta sesión, lo AÑADE al final en vez de escribir en un sitio invisible.
+   */
+  function ponerContenido(nuevos) {
+    setForm((f) => ({ ...f, ...nuevos }));
+    setApartados((prev) => {
+      const faltan = Object.keys(nuevos).filter((k) => !prev.some((a) => a.key === k));
+      if (!faltan.length) return prev;
+      return [...prev, ...faltan.map((k) => ({ key: k, label: NOMBRES_AUDIO[k] ?? k, tipo: TIPO_AUDIO[k] ?? "texto" }))];
+    });
+  }
 
   // Animación de los pasos mientras la petición está en vuelo.
   useEffect(() => {
@@ -128,7 +196,8 @@ export default function NuevaSesionPage() {
       if (!r.ok) throw new Error(j.error || "No se pudo procesar el audio");
       const s = j.data.structured;
       const propuesta = {
-        objectives: (s.objectives ?? []).join(", "),
+        // Una línea por objetivo: es como entra un apartado de tipo lista.
+        objectives: (s.objectives ?? []).join("\n"),
         activities: s.activities ?? "",
         performance: s.performance ?? "",
         familyComments: s.observations?.familyComments ?? "",
@@ -138,16 +207,14 @@ export default function NuevaSesionPage() {
       };
       let rellenados = 0;
       let respetados = 0;
-      setForm((f) => {
-        const n = { ...f };
-        for (const [k, v] of Object.entries(propuesta)) {
-          if (!String(v).trim()) continue;
-          if (String(n[k] ?? "").trim()) { respetados++; continue; }
-          n[k] = v;
-          rellenados++;
-        }
-        return n;
-      });
+      const nuevos = {};
+      for (const [k, v] of Object.entries(propuesta)) {
+        if (!String(v).trim()) continue;
+        if (String(form[k] ?? "").trim()) { respetados++; continue; }
+        nuevos[k] = v;
+        rellenados++;
+      }
+      ponerContenido(nuevos);
       setResult(j.data);
       setAvisoAudio(
         `El audio ha rellenado ${rellenados} apartado(s) vacío(s)` +
@@ -230,19 +297,17 @@ export default function NuevaSesionPage() {
     setErrorMsg(null);
     try {
       const escrita = fecha ? new Date(fecha) : new Date();
+      // Los apartados de fábrica van a sus columnas de siempre y los nuevos a
+      // `contentSections`, junto con la foto de con qué apartados se escribió
+      // esto (lib/clinica/plantillas.js). Ese reparto NO se hace a mano aquí: lo
+      // comparten este formulario y el cajón del informe.
+      const reparto = repartirValoresDeSesion(desdeFormulario(form, apartados), apartados);
+      reparto.contentSections[CLAVE_PLANTILLA] = plantillaKey;
       const payload = {
         patientId: id,
         therapistId: patient.mainTherapistId,
         sessionDate: (Number.isNaN(escrita.getTime()) ? new Date() : escrita).toISOString(),
-        objectives: form.objectives.split(",").map((s) => s.trim()).filter(Boolean),
-        activities: form.activities,
-        performance: form.performance,
-        observations: {
-          familyComments: form.familyComments,
-          nextSessionNotes: form.nextSessionNotes,
-          homeworkTasks: form.homeworkTasks,
-          incidents: form.incidents,
-        },
+        ...reparto,
         prepText: form.prepText,
         parentFeedback: form.parentFeedback,
         status: "registered",
@@ -484,26 +549,26 @@ export default function NuevaSesionPage() {
             {adjuntosPrep}
           </div>
 
-          {/* 2 · Informe */}
+          {/* 2 · Informe — sus apartados salen de la plantilla del centro
+              (29/08/2026), y aquí se pueden añadir sueltos para esta sesión. */}
           <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5 space-y-4">
             <div className="eyebrow">2 · Informe de la sesión</div>
-            <Block label="Objetivos trabajados (separados por comas)">
-              <input className={ta} value={form.objectives} onChange={(e) => setForm({ ...form, objectives: e.target.value })} />
-            </Block>
-            <Block label="Actividades realizadas">
-              <textarea className={ta} rows={3} value={form.activities} onChange={(e) => setForm({ ...form, activities: e.target.value })} />
-            </Block>
-            <Block label="Desempeño del paciente">
-              <textarea className={ta} rows={3} value={form.performance} onChange={(e) => setForm({ ...form, performance: e.target.value })} />
-            </Block>
-            <Block label="Observaciones">
-              <div className="space-y-2">
-                <SubField label="Comentarios familiares" ta={ta} value={form.familyComments} onChange={(v) => setForm({ ...form, familyComments: v })} />
-                <SubField label="Próximas sesiones" ta={ta} value={form.nextSessionNotes} onChange={(v) => setForm({ ...form, nextSessionNotes: v })} />
-                <SubField label="Tareas para casa" ta={ta} value={form.homeworkTasks} onChange={(v) => setForm({ ...form, homeworkTasks: v })} />
-                <SubField label="Incidencias" ta={ta} value={form.incidents} onChange={(v) => setForm({ ...form, incidents: v })} />
-              </div>
-            </Block>
+            <ApartadosEditor
+              apartados={apartados}
+              valores={form}
+              onValor={(clave, v) => setForm((f) => ({ ...f, [clave]: v }))}
+              onApartados={setApartados}
+              plantillas={plantillas}
+              plantillaKey={plantillaKey}
+              onPlantilla={elegirPlantilla}
+              clavesDePlantilla={
+                new Set(
+                  (plantillas.find((x) => x.key === plantillaKey)?.apartados ?? PLANTILLA_BASE.registro.apartados).map(
+                    (a) => a.key
+                  )
+                )
+              }
+            />
           </div>
 
           {/* 3 · Devolución de la familia */}
@@ -633,19 +698,3 @@ export default function NuevaSesionPage() {
   );
 }
 
-function Block({ label, children }) {
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1.5">{label}</div>
-      {children}
-    </div>
-  );
-}
-function SubField({ label, value, onChange, ta }) {
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-0.5">{label}</div>
-      <textarea className={ta} rows={2} value={value} onChange={(e) => onChange(e.target.value)} />
-    </div>
-  );
-}

@@ -13,11 +13,30 @@
  * sesiones y luego, si acaso, se le pide que lo pula. Lo que no puede pasar es
  * que el CRM no sepa hacer un informe sin ella.
  *
+ * ── LOS APARTADOS DEJAN DE SER SIETE (29/08/2026, Aumenta por Rodrigo) ─────
+ * Este cajón tenía siete textarea escritos a mano, uno por apartado, y el PDF
+ * imprimía esos mismos siete. Ahora la lista sale de `lib/clinica/plantillas.js`
+ * —la del propio informe, la plantilla del centro o los siete de fábrica— y se
+ * pinta con `ApartadosEditor`, que además deja añadir apartados sueltos para
+ * ESTE informe sin tocar ninguna plantilla. El título que se ve aquí es el que
+ * se imprime.
+ *
+ * El informe de beca es la excepción: sus tres apartados los manda la
+ * convocatoria (`lib/clinica/beca.js`), así que ni plantilla ni añadidos.
+ *
  * (Componente propio y no dentro de la página: lo comparten la pantalla de
  * Informes y, en cuanto haga falta, la ficha del paciente.)
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import ApartadosEditor from "./ApartadosEditor.jsx";
+import {
+  CLAVE_APARTADOS,
+  CLAVE_PLANTILLA,
+  aFormulario,
+  desdeFormulario,
+} from "@/lib/clinica/plantillas.js";
+import { SECCIONES_BECA } from "@/lib/clinica/beca.js";
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
@@ -43,6 +62,16 @@ const NOMBRES_IA = {
   persistentDifficulties: "Dificultades que persisten",
   recommendations: "Recomendaciones",
 };
+// Con qué forma entra en el informe lo que devuelven el volcado y la IA, por si
+// el apartado no estaba en la plantilla y hay que crearlo.
+const TIPO_IA = { objectives: "lista", evolution: "lista", achievements: "lista", persistentDifficulties: "lista", recommendations: "lista" };
+
+// Pistas bajo el título de algunos apartados de fábrica. Un apartado que el
+// centro se invente no lleva ninguna: nadie sabe qué poner ahí mejor que quien
+// lo creó.
+const AYUDAS = {
+  evolution: "Un párrafo por línea; lo volcado viene con su fecha delante.",
+};
 
 function Campo({ label, ayuda, children }) {
   return (
@@ -66,16 +95,17 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
   // volcado/IA se esconden en ese tipo (lib/clinica/beca.js).
   const esBeca = report.type === "beca";
 
-  const [form, setForm] = useState({
-    motiveOfIntervention: c.motiveOfIntervention ?? "",
-    objectives: (c.objectives ?? []).join("\n"),
-    evolution: (c.evolution ?? []).join("\n"),
-    achievements: (c.achievements ?? []).join("\n"),
-    persistentDifficulties: (c.persistentDifficulties ?? []).join("\n"),
-    recommendations: (c.recommendations ?? []).join("\n"),
-    continuityProposal: c.continuityProposal ?? "",
+  // Los apartados de ESTE informe. Vienen ya resueltos del servidor
+  // (`serializeReport`): su propia foto si la tiene, la plantilla del centro si
+  // no, los siete de siempre si nadie ha tocado nada.
+  const [apartados, setApartados] = useState(() =>
+    esBeca ? SECCIONES_BECA.map((s) => ({ ...s })) : (report.apartados ?? []).map((a) => ({ ...a }))
+  );
+  const [plantillaKey, setPlantillaKey] = useState(c[CLAVE_PLANTILLA] ?? "");
+  const [plantillas, setPlantillas] = useState([]);
+  const [form, setForm] = useState(() => aFormulario(c, esBeca ? SECCIONES_BECA : report.apartados ?? []));
+  const [extra, setExtra] = useState({
     referralSpecialty: c.referralSpecialty ?? "",
-    methodology: c.methodology ?? "",
     // Anexar al PDF los registros literales de las sesiones (26/08/2026,
     // Rodrigo): apagado por defecto — el informe es la redacción; de las
     // sesiones, el PDF solo dice las fechas.
@@ -94,6 +124,13 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
   const [avisosIa, setAvisosIa] = useState([]);
   const [simulado, setSimulado] = useState(false);
 
+  // Qué apartados trae la plantilla elegida, para marcar en pantalla los que se
+  // han añadido solo para este informe.
+  const clavesDePlantilla = useMemo(() => {
+    const p = plantillas.find((x) => x.key === plantillaKey) ?? plantillas[0];
+    return p ? new Set(p.apartados.map((a) => a.key)) : null;
+  }, [plantillas, plantillaKey]);
+
   // Solo tiene sentido pulir lo que ya está volcado: la IA redacta anotaciones,
   // no las inventa. Con los cinco apartados vacíos el botón no hace nada útil.
   const hayQuePulir = CLAVES_IA.some((k) => (form[k] ?? "").trim().length > 0);
@@ -111,9 +148,43 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
         .then((j) => setDerivaciones(j?.data?.especialidades ?? []))
         .catch(() => {});
     }
+    if (report.type !== "beca") {
+      fetch("/api/clinica/plantillas", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => setPlantillas(j?.data?.informe ?? []))
+        .catch(() => {});
+    }
   }, [report.patientId, report.type]);
 
-  const lineas = (v) => v.split("\n").map((x) => x.trim()).filter(Boolean);
+  /**
+   * Cambiar de plantilla rehace la lista de apartados con los de la nueva. Lo
+   * escrito NO se pierde: los apartados que compartan clave conservan su texto,
+   * y el de los que se van sigue en `form` por si se vuelve atrás — al PDF solo
+   * va lo que esté en la lista al guardar.
+   */
+  function elegirPlantilla(key) {
+    const p = plantillas.find((x) => x.key === key);
+    if (!p) return;
+    setPlantillaKey(key);
+    setApartados(p.apartados.map((a) => ({ ...a })));
+    setForm((f) => ({ ...aFormulario({}, p.apartados), ...f }));
+  }
+
+  /**
+   * Mete en el informe lo que devuelven el volcado y la IA. Si un apartado no
+   * está en la lista de este informe —porque el centro lo quitó de su
+   * plantilla— se AÑADE al final en vez de escribirse en un sitio que no se ve:
+   * el botón ha traído contenido y ese contenido tiene que aparecer.
+   */
+  function ponerContenido(nuevos) {
+    const claves = Object.keys(nuevos);
+    setForm((f) => ({ ...f, ...nuevos }));
+    setApartados((prev) => {
+      const faltan = claves.filter((k) => !prev.some((a) => a.key === k));
+      if (!faltan.length) return prev;
+      return [...prev, ...faltan.map((k) => ({ key: k, label: NOMBRES_IA[k] ?? k, tipo: TIPO_IA[k] ?? "texto" }))];
+    });
+  }
 
   async function guardar() {
     setGuardando(true);
@@ -126,16 +197,14 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
         body: JSON.stringify({
           contentSections: {
             ...c,
-            motiveOfIntervention: form.motiveOfIntervention.trim(),
-            objectives: lineas(form.objectives),
-            evolution: lineas(form.evolution),
-            achievements: lineas(form.achievements),
-            persistentDifficulties: lineas(form.persistentDifficulties),
-            recommendations: lineas(form.recommendations),
-            continuityProposal: form.continuityProposal.trim(),
-            referralSpecialty: form.referralSpecialty || "",
-            methodology: form.methodology.trim(),
-            anexarRegistros: !!form.anexarRegistros,
+            ...desdeFormulario(form, apartados),
+            // La FOTO: con qué apartados se escribió este informe. Es lo que
+            // hace que dentro de un año siga imprimiéndose con estos títulos
+            // aunque el centro haya cambiado su plantilla entera.
+            [CLAVE_APARTADOS]: apartados,
+            [CLAVE_PLANTILLA]: plantillaKey,
+            referralSpecialty: extra.referralSpecialty || "",
+            anexarRegistros: !!extra.anexarRegistros,
             sourceSessionIds: [...elegidas],
           },
         }),
@@ -170,14 +239,7 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) throw new Error(j.error || "No se pudo redactar");
       const nc = j.data.contentSections ?? {};
-      setForm((f) => ({
-        ...f,
-        objectives: (nc.objectives ?? []).join("\n"),
-        evolution: (nc.evolution ?? []).join("\n"),
-        achievements: (nc.achievements ?? []).join("\n"),
-        persistentDifficulties: (nc.persistentDifficulties ?? []).join("\n"),
-        recommendations: (nc.recommendations ?? []).join("\n"),
-      }));
+      ponerContenido(Object.fromEntries(CLAVES_IA.map((k) => [k, (nc[k] ?? []).join("\n")])));
       const a = j.data.aporte ?? {};
       // Decir QUÉ ha traído: si no, se pulsa el botón, la pantalla cambia poco
       // y parece que no ha hecho nada.
@@ -227,7 +289,7 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
   function aceptarApartado(clave) {
     const lineas = propuesta?.[clave];
     if (!Array.isArray(lineas)) return;
-    setForm((f) => ({ ...f, [clave]: lineas.join("\n") }));
+    ponerContenido({ [clave]: lineas.join("\n") });
     setPropuesta((p) => {
       const resto = { ...p };
       delete resto[clave];
@@ -238,13 +300,11 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
 
   function aceptarTodo() {
     if (!propuesta) return;
-    setForm((f) => {
-      const n = { ...f };
-      for (const [clave, lineas] of Object.entries(propuesta)) {
-        if (Array.isArray(lineas)) n[clave] = lineas.join("\n");
-      }
-      return n;
-    });
+    const nuevos = {};
+    for (const [clave, lineas] of Object.entries(propuesta)) {
+      if (Array.isArray(lineas)) nuevos[clave] = lineas.join("\n");
+    }
+    ponerContenido(nuevos);
     setPropuesta(null);
     setAviso("Informe actualizado con la propuesta. Repásalo y guarda.");
   }
@@ -281,9 +341,10 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
           {esBeca && (
             <div className="bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2.5 text-[11px] text-neutral-600">
               Este informe es el de la <span className="font-medium">beca de apoyo educativo</span>: lleva
-              solo motivo de consulta, objetivos y metodología, y en el PDF la cabecera dice el
-              servicio con su nombre oficial («Reeducación del lenguaje» o «Reeducación pedagógica
-              y habilidades sociales») y la firma del terapeuta al pie.
+              solo motivo de consulta, objetivos y metodología —los que pide la convocatoria, y por eso
+              no se pueden cambiar ni añadir—, y en el PDF la cabecera dice el servicio con su nombre
+              oficial («Reeducación del lenguaje» o «Reeducación pedagógica y habilidades sociales») y
+              la firma del terapeuta al pie.
             </div>
           )}
 
@@ -362,8 +423,8 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
             <label className="mt-3 flex items-start gap-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={form.anexarRegistros}
-                onChange={(e) => setForm((f) => ({ ...f, anexarRegistros: e.target.checked }))}
+                checked={extra.anexarRegistros}
+                onChange={(e) => setExtra((x) => ({ ...x, anexarRegistros: e.target.checked }))}
                 className="mt-0.5 w-3.5 h-3.5 rounded border-neutral-300 accent-[var(--color-primary,#1B3A2D)]"
               />
               <span className="text-[11px] text-neutral-600 leading-snug">
@@ -435,8 +496,8 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
             <Campo label="Especialidad de destino">
               <select
                 className={TA}
-                value={form.referralSpecialty}
-                onChange={(e) => setForm((f) => ({ ...f, referralSpecialty: e.target.value }))}
+                value={extra.referralSpecialty}
+                onChange={(e) => setExtra((x) => ({ ...x, referralSpecialty: e.target.value }))}
               >
                 <option value="">Sin especificar</option>
                 {derivaciones.map((d) => (
@@ -446,44 +507,19 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
             </Campo>
           )}
 
-          <Campo label={esBeca ? "Motivo de consulta" : "Motivo de intervención"}>
-            <textarea rows={3} className={TA} value={form.motiveOfIntervention}
-              onChange={(e) => setForm((f) => ({ ...f, motiveOfIntervention: e.target.value }))} />
-          </Campo>
-          <Campo label={esBeca ? "Objetivos" : "Objetivos terapéuticos"} ayuda="Uno por línea.">
-            <textarea rows={3} className={TA} value={form.objectives}
-              onChange={(e) => setForm((f) => ({ ...f, objectives: e.target.value }))} />
-          </Campo>
-          {esBeca && (
-            <Campo label="Metodología" ayuda="Cómo se trabaja con el paciente: enfoque, técnicas y frecuencia.">
-              <textarea rows={5} className={TA} value={form.methodology}
-                onChange={(e) => setForm((f) => ({ ...f, methodology: e.target.value }))} />
-            </Campo>
-          )}
-          {!esBeca && (
-            <>
-              <Campo label="Evolución observada" ayuda="Un párrafo por línea; lo volcado viene con su fecha delante.">
-                <textarea rows={7} className={TA} value={form.evolution}
-                  onChange={(e) => setForm((f) => ({ ...f, evolution: e.target.value }))} />
-              </Campo>
-              <Campo label="Logros alcanzados" ayuda="Uno por línea.">
-                <textarea rows={3} className={TA} value={form.achievements}
-                  onChange={(e) => setForm((f) => ({ ...f, achievements: e.target.value }))} />
-              </Campo>
-              <Campo label="Dificultades que persisten" ayuda="Una por línea.">
-                <textarea rows={3} className={TA} value={form.persistentDifficulties}
-                  onChange={(e) => setForm((f) => ({ ...f, persistentDifficulties: e.target.value }))} />
-              </Campo>
-              <Campo label="Recomendaciones" ayuda="Una por línea.">
-                <textarea rows={3} className={TA} value={form.recommendations}
-                  onChange={(e) => setForm((f) => ({ ...f, recommendations: e.target.value }))} />
-              </Campo>
-              <Campo label="Propuesta de continuidad">
-                <textarea rows={3} className={TA} value={form.continuityProposal}
-                  onChange={(e) => setForm((f) => ({ ...f, continuityProposal: e.target.value }))} />
-              </Campo>
-            </>
-          )}
+          <ApartadosEditor
+            apartados={apartados}
+            valores={form}
+            onValor={(clave, v) => setForm((f) => ({ ...f, [clave]: v }))}
+            onApartados={setApartados}
+            plantillas={esBeca ? [{ key: "beca", name: "Informe para beca", apartados: SECCIONES_BECA }] : plantillas}
+            plantillaKey={plantillaKey}
+            // En la beca no hay ni plantilla que elegir ni apartados que tocar.
+            onPlantilla={esBeca ? null : elegirPlantilla}
+            permiteOrdenar={!esBeca}
+            ayudas={AYUDAS}
+            clavesDePlantilla={esBeca ? null : clavesDePlantilla}
+          />
 
           {aviso && <div className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">{aviso}</div>}
           {errorMsg && <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">{errorMsg}</div>}

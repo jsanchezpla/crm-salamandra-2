@@ -2,6 +2,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound } from "../../../../../lib/utils/apiResponse.js";
 import { serializeReport, REPORT_TYPES } from "../../../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../../../lib/clinica/audit.js";
+import { limpiarContentSections } from "../../../../../lib/clinica/plantillas.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function gate(ctx) {
@@ -44,6 +45,9 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
   const before = auditSummary(r);
   const updates = {};
   for (const k of PATCH_FIELDS) if (k in body) updates[k] = body[k];
+  // Los apartados (título, tipo y orden) los escribe un navegador desde el
+  // cajón del informe: se limpian antes de guardarlos (lib/clinica/plantillas.js).
+  if ("contentSections" in updates) updates.contentSections = limpiarContentSections(updates.contentSections);
   // Al marcar como entregado, sellar deliveredAt; al revertir, limpiarla.
   if ("status" in updates) {
     if (updates.status === "delivered" && !r.deliveredAt) updates.deliveredAt = new Date();

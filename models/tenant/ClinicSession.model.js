@@ -77,6 +77,23 @@ export function defineClinicSession(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // ── Apartados del registro (29/08/2026, Aumenta por Rodrigo) ────────
+      // El registro deja de tener campos fijos: se compone de apartados
+      // (título + cuerpo) que salen de una PLANTILLA del centro, más los que se
+      // añadan sueltos a esta sesión (lib/clinica/plantillas.js).
+      //
+      // Aquí van DOS cosas y solo dos: la foto de con qué apartados se escribió
+      // (`apartados`, para que dentro de un año siga imprimiéndose con SUS
+      // títulos aunque la plantilla haya cambiado) y el cuerpo de los apartados
+      // NUEVOS. Los de siempre —objetivos, actividades, desempeño y las cuatro
+      // observaciones— siguen en sus columnas de toda la vida: de ellas comen el
+      // volcado a informes, las estadísticas y el anexo, y las 22.045 sesiones
+      // de Aumenta no se tocan.
+      contentSections: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: {},
+      },
       aiTranscription: {
         type: DataTypes.TEXT,
         allowNull: true,
@@ -97,7 +114,9 @@ export function defineClinicSession(sequelize) {
         allowNull: true,
       },
       // Estados: 'draft' (borrador) · 'ai_pending' (audio subido, esperando IA) ·
-      // 'registered' (sesión guardada, estado normal) · 'published' (publicada).
+      // 'registered' (sesión guardada, estado normal) · 'published' (cerrada: la
+      // pantalla lo rotula «Cerrada» desde el 29/08/2026 — cierra el registro para
+      // el equipo, NO lo comparte con la familia).
       status: {
         type: DataTypes.ENUM("draft", "ai_pending", "registered", "published"),
         allowNull: false,

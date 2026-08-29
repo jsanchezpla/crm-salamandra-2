@@ -14,6 +14,7 @@ import PatientExternalContactsSection from "@/components/clinica/PatientExternal
 import InterventionPlanSection from "@/components/clinica/InterventionPlanSection.jsx";
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
 import { REPORT_TYPES, REPORT_TYPE_LABEL } from "@/lib/clinica/serialize.js";
+import { apartadosConPlantillas, valorDeApartado, valoresDeSesion } from "@/lib/clinica/plantillas.js";
 import { SPECIALTY_LABEL } from "@/lib/clinica/specialties.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { enlaceDeVuelta } from "@/lib/clients/volver.js";
@@ -79,6 +80,19 @@ function Field({ label, value }) {
 
 function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) {
   const ss = sStatus(session.status);
+  // Con qué apartados se escribió esta sesión (29/08/2026). Se piden las
+  // plantillas del centro para que la pantalla enseñe exactamente los mismos
+  // títulos que imprime el PDF: un registro viejo no trae su propia foto y los
+  // dos caen a la plantilla por defecto.
+  const [plantillasRegistro, setPlantillasRegistro] = useState([]);
+  useEffect(() => {
+    fetch("/api/clinica/plantillas", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setPlantillasRegistro(j?.data?.registro ?? []))
+      .catch(() => {});
+  }, []);
+  const apartados = apartadosConPlantillas(session.contentSections, plantillasRegistro);
+  const valores = valoresDeSesion(session);
   // Partes 1 y 3 del registro (sprint 2026-07, punto 4): la preparación se
   // escribe antes de la sesión y la devolución de la familia llega a veces
   // días después, así que se pueden rellenar aquí en cualquier momento.
@@ -176,19 +190,25 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
             </div>
           )}
 
-          {session.objectives?.length > 0 && (
-            <Section title="Objetivos trabajados"><div className="flex flex-wrap gap-1.5">{session.objectives.map((o) => <span key={o} className="text-[11px] bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded-full">{o}</span>)}</div></Section>
-          )}
-          {session.activities && <Section title="Actividades realizadas"><p>{session.activities}</p></Section>}
-          {session.performance && <Section title="Desempeño del paciente"><p>{session.performance}</p></Section>}
-          <Section title="Observaciones">
-            <div className="space-y-3">
-              <SubField label="Comentarios familiares" value={session.observations.familyComments} />
-              <SubField label="Próximas sesiones" value={session.observations.nextSessionNotes} />
-              <SubField label="Tareas para casa" value={session.observations.homeworkTasks} />
-              <SubField label="Incidencias" value={session.observations.incidents} />
-            </div>
-          </Section>
+          {/* El registro, con SUS apartados: los de la plantilla con la que se
+              escribió, y los sueltos que le añadieran (lib/clinica/plantillas.js).
+              Los vacíos no se enseñan, igual que en el PDF. */}
+          {apartados.map((a) => {
+            const v = valorDeApartado(valores, a);
+            if (!v.length) return null;
+            if (a.tipo === "lista") {
+              return (
+                <Section key={a.key} title={a.label}>
+                  <div className="flex flex-wrap gap-1.5">
+                    {v.map((o, i) => (
+                      <span key={`${a.key}-${i}`} className="text-[11px] bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded-full">{o}</span>
+                    ))}
+                  </div>
+                </Section>
+              );
+            }
+            return <Section key={a.key} title={a.label}><p className="whitespace-pre-line">{v}</p></Section>;
+          })}
 
           {/* ── Registro en 3 partes: preparación y devolución de la familia ── */}
           <div className="border-t border-neutral-100 pt-4 space-y-4">
@@ -269,10 +289,32 @@ function SessionDrawer({ session, patient, onClose, onPublish, onSaved, busy }) 
             {errorPartes && <div className="text-[11px] text-rose-600">{errorPartes}</div>}
           </div>
 
-          <div className="border-t border-neutral-100 pt-4 flex flex-wrap gap-2">
+          <div className="border-t border-neutral-100 pt-4 flex flex-wrap gap-2 items-center">
+            {/* El PDF del registro (29/08/2026, Rodrigo). Abre en pestaña nueva
+                y no publica nada: lleva los apartados y la devolución de la
+                familia, nunca la preparación ni las notas internas. */}
+            <a
+              href={`/api/clinica/sessions/${session.id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Abre el PDF de este registro en una pestaña nueva. No lo envía a nadie: la preparación y el material interno no salen."
+              className="text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400"
+            >
+              Ver PDF
+            </a>
+            {/* Cierra el registro para el equipo y nada más. Se llamaba «Marcar
+                como publicada» y se leía como que subía la sesión al portal de la
+                familia, que no tiene endpoint de sesiones (29/08/2026: Aumenta
+                preguntó justo eso). El estado en BD sigue siendo 'published'. */}
             {session.status !== "published" && (
-              <button onClick={() => onPublish(session.id)} disabled={busy} className="text-xs px-3 py-2 rounded-lg text-white hover:opacity-90 ml-auto disabled:opacity-50" style={{ background: "var(--color-primary, #1B3A2D)" }}>
-                {busy ? "Guardando…" : "Marcar como publicada"}
+              <button
+                onClick={() => onPublish(session.id)}
+                disabled={busy}
+                title="Cierra el registro para el equipo. La familia no lo ve: para compartirle algo, crea un informe y usa «Enviar al paciente»."
+                className="text-xs px-3 py-2 rounded-lg text-white hover:opacity-90 ml-auto disabled:opacity-50"
+                style={{ background: "var(--color-primary, #1B3A2D)" }}
+              >
+                {busy ? "Guardando…" : "Marcar como cerrada"}
               </button>
             )}
           </div>

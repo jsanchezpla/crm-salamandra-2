@@ -342,6 +342,28 @@ cada uno, solo fotos / audio / PDF (`lib/clinica/prepFiles.js`).
 > cuarto almacén. La metadata vive en `clinic_sessions.prep_files` (JSONB) y el
 > serializador NO expone `storagePath`.
 
+### «Marcar como cerrada» (29/08/2026)
+
+El botón del cajón de la sesión se llamaba «Marcar como publicada» y el badge
+violeta, «Publicada». No publica nada: pone `status='published'` y ahí se acaba.
+El portal de la familia **no tiene ningún endpoint que sirva sesiones** —lo único
+que la familia ve son documentos—, así que ese estado no sale del equipo. Sus dos
+únicos consumidores son el propio badge (`SESSION_STATUS_LABEL`) y el filtro de
+sesiones «completadas» del volcado de informes, que acepta `registered` **o**
+`published`: o sea que el botón tampoco decide si una sesión entra en un informe.
+
+Es la misma enfermedad que el viejo «Marcar como entregado» (ver «Enviar al
+paciente»), un escalón más abajo: un cambio de estado con nombre de acción. El
+29/08/2026 Aumenta preguntó «cómo se hace para subir al portal del paciente», y
+una terapeuta podía pulsarlo creyendo que compartía la sesión con la familia.
+
+Se renombra **solo la pantalla**: botón «Marcar como cerrada» y rótulo «Cerrada»
+(`SESSION_STATUS_LABEL` en `lib/clinica/serialize.js`, que alimenta el badge de
+la ficha y el selector de sesiones del volcado). El valor en BD sigue siendo
+`published` y el enum del modelo no se toca — son 22.045 sesiones en Aumenta y
+ninguna razón para migrarlas por un texto. El botón lleva además un `title` que
+dice a dónde ir de verdad: crear un informe y usar «Enviar al paciente».
+
 ## Redactar un informe (31/07/2026)
 
 El informe **se escribe en el CRM**. Hasta el 31/07 el cajón solo mostraba lo
@@ -362,7 +384,8 @@ que hubiera y, sin contenido, decía que la redacción asistida por IA llegaría
   - **No inventa**: cada línea sale literal de un registro, con su fecha. Un
     informe clínico acaba en manos de una familia y a veces de un juzgado.
   - Solo sesiones **del mismo paciente** y **completadas** (`registered` o
-    `published`). Cruzar pacientes sería un incidente de datos de salud.
+    `published`; en pantalla, «Registrada» o «Cerrada»). Cruzar pacientes sería un
+    incidente de datos de salud.
   - Un informe ya **entregado** no se puede volcar: la familia tiene un PDF que
     dejaría de coincidir con el CRM.
   - Devuelve `aporte` (cuántas líneas ha traído cada apartado) para que la
@@ -547,7 +570,7 @@ Tabla: `clinic_sessions`. Registro estructurado de una sesión clínica.
 | `aiStructured` | JSONB | Resultado IA crudo (Claude). |
 | `audioDurationSec` | INTEGER nullable | Duración del audio original, en segundos. |
 | `aiReviewedAt` | TIMESTAMPTZ nullable | Cuándo terminó la IA de procesar/estructurar. |
-| `status` | ENUM | `draft`, `ai_pending`, `registered`, `published`. Default **`registered`** (`migrate-clinica-module.js` añade los dos valores nuevos al enum). |
+| `status` | ENUM | `draft`, `ai_pending`, `registered`, `published`. Default **`registered`** (`migrate-clinica-module.js` añade los dos valores nuevos al enum). `published` se rotula «Cerrada» en pantalla y **no comparte la sesión con la familia** — ver ««Marcar como cerrada»». |
 | `clientId` | UUID nullable | `client_id`: pagador, foto del paciente al crear. |
 
 Índices: `(patient_id, session_date)`, `(therapist_id, session_date)`.

@@ -3,6 +3,7 @@ import { clientIdOfPatient } from "../../../../lib/clinica/patientClient.js";
 import { ok, created, error, forbidden } from "../../../../lib/utils/apiResponse.js";
 import { serializeSession } from "../../../../lib/clinica/serialize.js";
 import { logClinicaAudit, auditSummary } from "../../../../lib/clinica/audit.js";
+import { limpiarContentSections } from "../../../../lib/clinica/plantillas.js";
 
 function gate(ctx) {
   return ctx.hasModule("clinica") || ctx.hasModule("pacientes");
@@ -65,6 +66,11 @@ export const POST = withTenant(async (request, _rc, ctx) => {
     prepText: typeof body.prepText === "string" && body.prepText.trim() ? body.prepText.trim() : null,
     parentFeedback:
       typeof body.parentFeedback === "string" && body.parentFeedback.trim() ? body.parentFeedback.trim() : null,
+    // Apartados del registro (29/08/2026): la foto de con qué apartados se
+    // escribió y el cuerpo de los que no son de fábrica. Los de siempre siguen
+    // llegando por sus campos de arriba — el formulario los reparte con
+    // `repartirValoresDeSesion`, así que este cuerpo es el de siempre MÁS esto.
+    contentSections: limpiarContentSections(body.contentSections),
     status: STATUSES.includes(body.status) ? body.status : "registered",
     // Cliente/pagador del paciente (foto al crear la sesión).
     clientId: await clientIdOfPatient(ctx.tenantModels, body.patientId),

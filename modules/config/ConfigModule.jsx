@@ -43,7 +43,7 @@ import {
   ReservaOnlineCard,
 } from "./tarjetas/Reservas.jsx";
 import { AreaPrivadaCard, BloqueoImpagoCard } from "./tarjetas/Portal.jsx";
-import { AiPermissionsCard, CategoriasExternasCard, DerivacionesCard } from "./tarjetas/Modulos.jsx";
+import { AiPermissionsCard, CategoriasExternasCard, DerivacionesCard, PlantillasClinicaCard } from "./tarjetas/Modulos.jsx";
 import { ContrasenaCard, CorreoCuentaCard } from "./tarjetas/Cuenta.jsx";
 
 /**
@@ -942,6 +942,11 @@ export default function ConfigModule({ modulos = null }) {
           {enZona(
             "derivaciones",
             isAdmin && <DerivacionesCard /> 
+          )}
+
+          {enZona(
+            "plantillasClinica",
+            isAdmin && <PlantillasClinicaCard />
           )}
 
           {enZona(

@@ -372,6 +372,11 @@ export const MODULES = {
     // El informe para la beca NEAE (26/08/2026, Aumenta): añade 'beca' al enum
     // de tipos de informe. Sus apartados van en contentSections (JSONB).
     "migrate-informe-beca",
+    // Apartados del registro de sesión (29/08/2026, Aumenta): content_sections
+    // JSONB en clinic_sessions, el mismo cajón que ya tenían los informes. El
+    // MODELO lo declara, así que sin esta migración el primer SELECT de
+    // /pacientes/[id] revienta con 42703 en el schema que no la tenga.
+    "migrate-clinica-apartados-sesion",
   ],
 
   // Control horario. Depende de `team_members`, que crea el módulo Equipo: la
