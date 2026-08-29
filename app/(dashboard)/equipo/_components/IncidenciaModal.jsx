@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
-import { INCIDENCIA_CATEGORIES, INCIDENCIA_PRIORITY, INCIDENCIA_VERIFICATIONS } from "@/lib/clinica/incidencias.js";
+import { INCIDENCIA_CATEGORIES, INCIDENCIA_PRIORITY, INCIDENCIA_VERIFICATIONS, exigeSubcategoria } from "@/lib/clinica/incidencias.js";
 
 /**
  * Un solo control para el resultado: la VERIFICACIÓN, que arrastra el estado
@@ -253,6 +253,12 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
   const createOrSaveFields = async () => {
     setErr(null);
     if (!title.trim()) { setErr("El título es obligatorio."); return; }
+    // «Otros» sin decir cuál no informa de nada: la categoría existe para que
+    // quepa lo que no encaja, no para esconderlo (Aumenta, 29/08/2026).
+    if (exigeSubcategoria(category) && !subcategory.trim()) {
+      setErr("En «Otros» hay que especificar de qué se trata en la subcategoría.");
+      return;
+    }
     const fields = {
       title: title.trim(), category, subcategory: subcategory || null, priority,
       incidenceDate: date, patientId: patientId || null, assigneeIds,
@@ -357,13 +363,19 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
                 className={`mt-1 ${inputCls} bg-white`} />
             </div>
             <div>
-              <label className="text-[10px] uppercase tracking-wider text-neutral-400">Subcategoría</label>
+              <label className="text-[10px] uppercase tracking-wider text-neutral-400">
+                Subcategoría
+                {exigeSubcategoria(category) && (
+                  <span className="normal-case tracking-normal text-neutral-300"> · especifica cuál</span>
+                )}
+              </label>
               {subs.length ? (
                 <Select value={subcategory} onChange={setSubcategory}
                   options={[{ value: "", label: "—" }, ...subs.map((s) => ({ value: s, label: s }))]}
                   className={`mt-1 ${inputCls} bg-white`} />
               ) : (
-                <input value={subcategory} onChange={(e) => setSubcategory(e.target.value)} className={`mt-1 ${inputCls}`} placeholder="Opcional" />
+                <input value={subcategory} onChange={(e) => setSubcategory(e.target.value)} className={`mt-1 ${inputCls}`}
+                  placeholder={exigeSubcategoria(category) ? "De qué se trata" : "Opcional"} />
               )}
             </div>
           </div>

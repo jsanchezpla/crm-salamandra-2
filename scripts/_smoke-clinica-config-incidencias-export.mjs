@@ -58,6 +58,7 @@ import {
   INCIDENCIA_CATEGORIES,
   INCIDENCIA_STATUS_ORDER,
   INCIDENCIA_VERIFICATIONS,
+  exigeSubcategoria,
   isValidCategory,
   isValidStatus,
   isValidPriority,
@@ -334,7 +335,7 @@ describe("slugifyAreaKey: claves nuevas legibles, únicas y de por vida", () => 
 /* ═══ incidencias ══════════════════════════════════════════════════════════ */
 
 describe("incidencias: la taxonomía es fija y la verificación gobierna el estado", () => {
-  it("las 8 categorías del Programa de Excelencia, y solo Administrativa trae subcategorías", () => {
+  it("las 10 categorías en el orden que las escribió el centro, y solo Administrativa trae subcategorías", () => {
     assert.deepEqual(
       INCIDENCIA_CATEGORIES.map((c) => c.key),
       [
@@ -342,10 +343,12 @@ describe("incidencias: la taxonomía es fija y la verificación gobierna el esta
         "organizativa",
         "documental",
         "administrativa",
+        "coordinacion",
         "tecnologica",
         "comunicativa",
-        "coordinacion",
+        "solicitud_laboral",
         "informacion",
+        "otros",
       ]
     );
     const conSub = INCIDENCIA_CATEGORIES.filter((c) => c.subcategories.length);
@@ -354,6 +357,26 @@ describe("incidencias: la taxonomía es fija y la verificación gobierna el esta
       ["administrativa"]
     );
     assert.equal(conSub[0].subcategories.length, 6);
+  });
+
+  /* Las claves de las ocho viejas están escritas en `incidencias.category`: si
+     alguien renombra una para que "cuadre" con la etiqueta nueva, las filas que
+     ya existan se quedan apuntando a una categoría que no existe y la pantalla
+     las pinta con la clave cruda. La etiqueta se cambia; la clave, no. */
+  it("las claves históricas siguen siendo válidas aunque su etiqueta haya cambiado", () => {
+    for (const k of ["comunicativa", "informacion", "coordinacion", "tecnologica"]) {
+      assert.equal(isValidCategory(k), true, `la clave ${k} tiene que seguir existiendo`);
+    }
+    assert.equal(categoryLabel("comunicativa"), "Comunicación oficial");
+    assert.equal(categoryLabel("informacion"), "Solicitud de información");
+    assert.equal(categoryLabel("coordinacion"), "Coordinación / apoyo");
+  });
+
+  it("solo «Otros» obliga a especificar la subcategoría", () => {
+    assert.equal(exigeSubcategoria("otros"), true);
+    for (const c of INCIDENCIA_CATEGORIES) {
+      if (c.key !== "otros") assert.equal(exigeSubcategoria(c.key), false, `${c.key} no debería exigirla`);
+    }
   });
 
   it("verificar mueve el estado solo: resuelta → resolved; parcial y no_resuelta → in_progress", () => {
