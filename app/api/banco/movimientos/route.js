@@ -11,7 +11,7 @@ import { ok, forbidden } from "../../../../lib/utils/apiResponse.js";
  * paginación page/limit como el resto de Facturación.
  */
 export const GET = withTenant(async (request, _ctx, ctx) => {
-  if (!ctx.hasModule("banco")) return forbidden("Módulo banco no activo");
+  if (!ctx.hasModule("billing_banco")) return forbidden("Módulo billing_banco no activo");
   const { BankAccount, BankTransaction, Payment, Cost, Client, Invoice } = ctx.tenantModels;
   const { searchParams } = new URL(request.url);
 

@@ -2,7 +2,7 @@ import { DataTypes } from "sequelize";
 
 /**
  * BankAccount — una cuenta bancaria REAL del tenant, conectada por PSD2
- * (GoCardless Bank Account Data). Módulo `banco`, 29/08/2026.
+ * (GoCardless Bank Account Data). Submódulo `billing_banco`, 29/08/2026.
  *
  * Cada fila nace al terminar el consentimiento en la web del banco: la
  * requisición de GoCardless devuelve una o varias cuentas y aquí se guarda lo

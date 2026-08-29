@@ -11,7 +11,7 @@ import { listarBancos } from "../../../../lib/banco/gocardless.js";
  * convierte withTenant en respuestas con su estado — no se tapan aquí.
  */
 export const GET = withTenant(async (request, _ctx, ctx) => {
-  if (!ctx.hasModule("banco")) return forbidden("Módulo banco no activo");
+  if (!ctx.hasModule("billing_banco")) return forbidden("Módulo billing_banco no activo");
   const { searchParams } = new URL(request.url);
   const pais = (searchParams.get("pais") || "es").toLowerCase().slice(0, 2);
   const bancos = await listarBancos(ctx, pais);

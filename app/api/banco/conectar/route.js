@@ -21,7 +21,7 @@ import { isDemoTenant } from "../../../../lib/demo/isDemo.js";
  * admin, y esto arranca un consentimiento contra un banco REAL.
  */
 export const POST = withTenant(async (request, _ctx, ctx) => {
-  if (!ctx.hasModule("banco")) return forbidden("Módulo banco no activo");
+  if (!ctx.hasModule("billing_banco")) return forbidden("Módulo billing_banco no activo");
   const role = ctx.user?.role;
   if (role !== "admin" && role !== "superadmin") {
     return forbidden("Solo los administradores pueden conectar el banco");

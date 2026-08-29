@@ -440,7 +440,7 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
         // aparte: así no puede desincronizarse.
         liveMode: getTenantStripeConfig({ tenant: t }).liveMode,
       },
-      // El banco de verdad (GoCardless Bank Account Data, módulo `banco`). El
+      // El banco de verdad (GoCardless Bank Account Data, submódulo `billing_banco`). El
       // Secret ID no es secreto —identifica el par y solo no abre nada, como
       // los ids de Cloudflare—; la Secret Key sí, y va con pista enmascarada.
       gocardless: {
@@ -562,7 +562,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   applyKey(settings.integrations, "stripeWebhookSecret", body.stripeWebhookSecret);
   applyPlain(settings.integrations, "stripePublishableKey", body.stripePublishableKey);
 
-  // Banco de verdad (GoCardless Bank Account Data, módulo `banco`). La Secret
+  // Banco de verdad (GoCardless Bank Account Data, submódulo `billing_banco`). La Secret
   // Key es SECRETO; el Secret ID identifica el par y va a la vista.
   applyKey(settings.integrations, "gocardlessSecretKey", body.gocardlessSecretKey);
   applyPlain(settings.integrations, "gocardlessSecretId", body.gocardlessSecretId);

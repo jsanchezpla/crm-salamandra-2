@@ -18,9 +18,9 @@
  *   3. CREA `bank_accounts` y `bank_transactions` en TODOS los schemas (los que
  *      tienen `clients`, o sea todos): los modelos están registrados en
  *      `lib/db/tenantDb.js` para todos los tenants, así que sin la tabla el
- *      primer SELECT daría 42P01. Quién puede USAR el banco lo decide el módulo
- *      `banco` en los endpoints, no la existencia de la tabla (mismo criterio
- *      que whatsapp_messages y notifications).
+ *      primer SELECT daría 42P01. Quién puede USAR el banco lo decide el
+ *      submódulo `billing_banco` en los endpoints, no la existencia de la
+ *      tabla (mismo criterio que whatsapp_messages y notifications).
  *
  * Es CORE en `_module-migrations.js`: las columnas de payments/costs las
  * declara el MODELO para todos los tenants, y dejarlas en el módulo sería el

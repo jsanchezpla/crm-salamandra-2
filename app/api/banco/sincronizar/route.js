@@ -27,7 +27,7 @@ function haceDias(dias) {
 }
 
 export const POST = withTenant(async (request, _ctx, ctx) => {
-  if (!ctx.hasModule("banco")) return forbidden("Módulo banco no activo");
+  if (!ctx.hasModule("billing_banco")) return forbidden("Módulo billing_banco no activo");
   const { BankAccount, BankTransaction } = ctx.tenantModels;
 
   const cuentas = await BankAccount.findAll({ order: [["createdAt", "ASC"]] });

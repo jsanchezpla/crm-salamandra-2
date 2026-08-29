@@ -13,7 +13,7 @@ import { auditar, datosPeticion } from "../../../../../lib/utils/auditoria.js";
  * enlace. La pantalla lo avisa antes de pedirlo.
  */
 export const DELETE = withTenant(async (request, routeContext, ctx) => {
-  if (!ctx.hasModule("banco")) return forbidden("Módulo banco no activo");
+  if (!ctx.hasModule("billing_banco")) return forbidden("Módulo billing_banco no activo");
   const role = ctx.user?.role;
   if (role !== "admin" && role !== "superadmin") {
     return forbidden("Solo los administradores pueden quitar una cuenta");

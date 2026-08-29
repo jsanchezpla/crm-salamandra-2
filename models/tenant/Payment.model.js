@@ -75,7 +75,7 @@ export function definePayment(sequelize) {
         allowNull: true,
       },
       // El movimiento del banco con el que se concilió (bank_transactions, del
-      // módulo `banco`). Sin FK a propósito: la tabla del banco existe en todos
+      // submódulo `billing_banco`). Sin FK a propósito: la tabla del banco existe en todos
       // los schemas, pero el enlace lo escribe solo quien tiene el módulo.
       bankTransactionId: {
         type: DataTypes.UUID,

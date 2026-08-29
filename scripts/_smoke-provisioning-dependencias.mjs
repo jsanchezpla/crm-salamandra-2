@@ -75,10 +75,11 @@ const NO_SE_VENDEN_SOLOS = [
   "orders",
   "fichaje", // en la matriz desde el 19/08/2026 (antes solo lo protegía el catálogo)
   "billing",
-  // Banco (29/08/2026): el extracto se casa con cobros y gastos de Facturación
-  // y su pantalla vive en la pestaña de Facturación — sin `billing` no hay ni
-  // con qué casar ni por dónde entrar.
-  "banco",
+  // Banco (29/08/2026; `billing_banco` desde el 30/08: submódulo de
+  // Facturación con la clave prefijada, como los `_avanzado`): el extracto se
+  // casa con cobros y gastos de Facturación y su pantalla vive en la pestaña
+  // de Facturación — sin `billing` no hay ni con qué casar ni por dónde entrar.
+  "billing_banco",
   "nutricion",
   "formularios",
   "pacientes",

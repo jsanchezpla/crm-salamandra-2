@@ -224,7 +224,7 @@ export const CORE = [
   // El puente entre cobros y dinero real (29/08/2026): columnas
   // `payment_session_id`, `stripe_payment_intent_id` y `bank_transaction_id`
   // en `payments` (y `bank_transaction_id` en `costs`), más las tablas
-  // `bank_accounts` y `bank_transactions` del módulo `banco`. CORE por el
+  // `bank_accounts` y `bank_transactions` del submódulo `billing_banco`. CORE por el
   // criterio de la cabecera, dos veces: los modelos Payment y Cost declaran las
   // columnas para TODOS los tenants (42703 sin ellas), y BankAccount /
   // BankTransaction están registrados globalmente en `lib/db/tenantDb.js`
@@ -455,11 +455,12 @@ export const MODULES = {
     "migrate-invoices-client-restrict",
   ],
 
-  // Conciliación bancaria (29/08/2026). Su migración ya es CORE (ver arriba:
-  // los modelos están registrados para todos), así que esto no añade trabajo;
-  // se declara para que `enable-module.js` conozca la clave y para que quien
-  // lea este mapa sepa qué estructura usa el módulo.
-  banco: ["migrate-banco-conciliacion"],
+  // Conciliación bancaria (29/08/2026; submódulo de Facturación desde el
+  // 30/08, clave con el prefijo del padre como los `_avanzado`). Su migración
+  // ya es CORE (ver arriba: los modelos están registrados para todos), así que
+  // esto no añade trabajo; se declara para que `enable-module.js` conozca la
+  // clave y para que quien lea este mapa sepa qué estructura usa el módulo.
+  billing_banco: ["migrate-banco-conciliacion"],
 
   projects: [
     "migrate-projects-sprint-1",

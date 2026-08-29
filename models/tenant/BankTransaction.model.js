@@ -1,7 +1,7 @@
 import { DataTypes } from "sequelize";
 
 /**
- * BankTransaction — un movimiento REAL de la cuenta del banco (módulo `banco`,
+ * BankTransaction — un movimiento REAL de la cuenta del banco (submódulo `billing_banco`,
  * 29/08/2026). Los trae la sincronización con GoCardless y son SOLO LECTURA:
  * el CRM no inventa, edita ni borra movimientos del banco.
  *

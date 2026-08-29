@@ -9,7 +9,7 @@ import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
  * movimiento vuelve a «sin casar» y el cobro/gasto queda como estaba.
  */
 export const POST = withTenant(async (request, _ctx, ctx) => {
-  if (!ctx.hasModule("banco")) return forbidden("Módulo banco no activo");
+  if (!ctx.hasModule("billing_banco")) return forbidden("Módulo billing_banco no activo");
   const { BankTransaction, Payment, Cost } = ctx.tenantModels;
 
   let body;

@@ -12,7 +12,7 @@ import { ladoDe, sugerenciasPara } from "../../../../lib/banco/conciliacion.js";
  * parecido de nombre lo pone `sugerenciasPara`, que es lo que fija la prueba.
  */
 export const GET = withTenant(async (request, _ctx, ctx) => {
-  if (!ctx.hasModule("banco")) return forbidden("Módulo banco no activo");
+  if (!ctx.hasModule("billing_banco")) return forbidden("Módulo billing_banco no activo");
   const { BankTransaction, Payment, Cost, Client, Invoice } = ctx.tenantModels;
   const { searchParams } = new URL(request.url);
 

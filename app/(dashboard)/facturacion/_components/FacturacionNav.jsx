@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 /**
  * La barra de pestañas de Facturación. Era el propio layout hasta el
  * 29/08/2026; se partió en dos cuando llegó la primera pestaña que depende de
- * un módulo (`banco`): un "use client" no puede preguntar por los módulos, así
+ * un submódulo (`billing_banco`): un "use client" no puede preguntar por los módulos, así
  * que el layout (servidor) los resuelve y esta barra solo pinta lo que le den
  * — el mismo reparto que la página de Configuración con ConfigModule.
  */
@@ -25,9 +25,9 @@ function pillars(conBanco) {
         // gasto eliges proveedor. No es una pantalla de configuración.
         { href: "/facturacion/proveedores", label: "Proveedores" },
         { href: "/facturacion/arqueo", label: "Arqueo" },
-        // Banco: el extracto real y la conciliación. Solo con el módulo `banco`
-        // (las tres puertas: esta pestaña, la página con notFound() y los
-        // endpoints con hasModule).
+        // Banco: el extracto real y la conciliación. Solo con el submódulo
+        // `billing_banco` (las tres puertas: esta pestaña, la página con
+        // notFound() y los endpoints con hasModule).
         ...(conBanco ? [{ href: "/facturacion/banco", label: "Banco" }] : []),
       ],
     },

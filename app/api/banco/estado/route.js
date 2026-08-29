@@ -12,7 +12,7 @@ import { tenantTieneBanco } from "../../../../lib/banco/gocardlessConfig.js";
  */
 export const GET = withTenant(async (request, _ctx, ctx) => {
   try {
-    if (!ctx.hasModule("banco")) return forbidden("Módulo banco no activo");
+    if (!ctx.hasModule("billing_banco")) return forbidden("Módulo billing_banco no activo");
     const { BankAccount, BankTransaction, Payment, Cost } = ctx.tenantModels;
 
     const cuentas = await BankAccount.findAll({ order: [["createdAt", "ASC"]] });

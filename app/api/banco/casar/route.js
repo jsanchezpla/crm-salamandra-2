@@ -15,7 +15,7 @@ import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
  * venir con comisión descontada, y eso lo decide quien concilia, no un if.
  */
 export const POST = withTenant(async (request, _ctx, ctx) => {
-  if (!ctx.hasModule("banco")) return forbidden("Módulo banco no activo");
+  if (!ctx.hasModule("billing_banco")) return forbidden("Módulo billing_banco no activo");
   const { BankTransaction, Payment, Cost } = ctx.tenantModels;
 
   let body;

@@ -19,7 +19,7 @@ import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
  * reconectar un banco caducado actualiza su fila y la devuelve a `linked`.
  */
 export const POST = withTenant(async (request, _ctx, ctx) => {
-  if (!ctx.hasModule("banco")) return forbidden("Módulo banco no activo");
+  if (!ctx.hasModule("billing_banco")) return forbidden("Módulo billing_banco no activo");
   const role = ctx.user?.role;
   if (role !== "admin" && role !== "superadmin") {
     return forbidden("Solo los administradores pueden conectar el banco");

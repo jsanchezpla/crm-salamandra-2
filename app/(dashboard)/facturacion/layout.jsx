@@ -5,7 +5,7 @@ import { tieneModuloBanco } from "../../../lib/banco/moduloBanco.js";
 
 /**
  * Layout de Facturación. Servidor desde el 29/08/2026: la pestaña «Banco»
- * depende del módulo `banco` y un "use client" no puede preguntarlo — el mismo
+ * depende del submódulo `billing_banco` y un "use client" no puede preguntarlo — el mismo
  * patrón que la página de Configuración. La barra vive en
  * `_components/FacturacionNav.jsx`; la regla del módulo, en
  * `lib/banco/moduloBanco.js` (la comparte con la página de Banco).

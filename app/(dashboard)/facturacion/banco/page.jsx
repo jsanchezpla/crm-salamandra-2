@@ -9,7 +9,7 @@ export const metadata = { title: "Banco" };
 /**
  * /facturacion/banco — el extracto real del banco y la conciliación.
  *
- * Segunda de las tres puertas del módulo `banco` (la pestaña la esconde el
+ * Segunda de las tres puertas del submódulo `billing_banco` (la pestaña la esconde el
  * layout, los endpoints comprueban hasModule): sin módulo, esta URL escrita a
  * mano responde 404, como /clientes/urgentes.
  */
