@@ -60,6 +60,18 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       updates.patientId = patRes.patientId;
     }
 
+    // eventTypeId (enlace factura↔tipo de cita, 29/08/2026): null desenlaza.
+    if ("eventTypeId" in body) {
+      if (body.eventTypeId) {
+        const { EventType } = tenantModels;
+        const et = EventType ? await EventType.findByPk(body.eventTypeId, { attributes: ["id"] }).catch(() => null) : null;
+        if (!et) return error("eventTypeId no corresponde a ningún tipo de cita de este centro");
+        updates.eventTypeId = et.id;
+      } else {
+        updates.eventTypeId = null;
+      }
+    }
+
     // Recalcular totales si cambian las líneas o el tipo de IRPF. El IRPF se
     // aplica sobre la base, así que un cambio de tipo recalcula el total.
     const irpfChanged = "irpfRate" in body;

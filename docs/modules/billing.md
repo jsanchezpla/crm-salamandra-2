@@ -21,7 +21,7 @@
 | **Scripts** | Activación: `node scripts/enable-module.js <slug> billing` — corre las 11 migraciones de `MODULES.billing` en `scripts/_module-migrations.js` (`migrate-suppliers`, `migrate-arqueo`, `migrate-impuestos-y-arqueo`, `migrate-billing-rework`, `migrate-billing-fix-kind-enum`, `migrate-billing-quotes`, `migrate-billing-correction-reason`, `migrate-billing-tax-regime`, `migrate-billing-vat-exempt`, `migrate-billing-irpf-partners`, `migrate-rename-therapist-to-employee`, `migrate-invoice-fiscal-snapshot` —la foto fiscal, **va ANTES del despliegue**: el modelo la pide por nombre—, `migrate-invoices-client-restrict` —borrar una ficha ya no borra sus facturas—); el NIF de facturación va en CORE (`migrate-client-fiscal-taxid`). Seeds: `seed-billing-demo.js` (`npm run db:seed:billing-demo`, solo demo) y `_hechos/seed-billing-spain-enzymes.js`. ONE_OFF ya ejecutado: `_hechos/import-aumenta-contabilidad.js` (proveedores, gastos, facturas y cierres de Aumenta). |
 | **Pruebas** | `scripts/_smoke-campos-gasto.mjs` (`node:test`, 20/08/2026, en `npm test`) fija `lib/billing/camposGasto.js`: `supplierId` entra, el desplegable vacío lo borra en vez de guardar `""`, una clave que no viene no se inventa, y `taxAmount`/`total` no se aceptan nunca del cuerpo; y `lib/billing/totalesGasto.js`: los cuatro importes que devuelve `computeCostTotals`, el redondeo a céntimos de la base y del IVA, el gasto de 0 €, el IVA nulo (0 %, no el 21 % de fábrica) y que una base ilegible sale como `NaN` en vez de colarse valiendo cero. `scripts/_smoke-filtros-gasto.mjs` (`node:test`, 21/08/2026, en `npm test`) fija `lib/billing/filtrosGasto.js`: qué filtros viajan a `GET /costs` y al Excel de gastos, que un desplegable sin elegir no se manda, que no se inventa un filtro que la pantalla no ofrece, y que para los mismos filtros la tabla y el Excel piden exactamente lo mismo (la tabla solo añade `sortBy`/`sortDir`). `scripts/_smoke-fechas-trimestres-madrid-parseDate.mjs` (`node:test`, 19/08/2026, en `npm test`) en su parte de `lib/billing/invoiceStatus.js`: `effectiveStatus` pasa `issued`/`sent`/`partially_paid` a `overdue` el día DESPUÉS del vencimiento y no el mismo, cobrada entera no vence (con 0,0049 € de margen por redondeo), los importes DECIMAL en texto se comparan como números, 0 € o sin vencimiento no vence, los estados terminales se devuelven tal cual y el `overdue` persistido a mano prevalece, «hoy» puede ser `YYYY-MM-DD`, ISO con hora o Date; `withEffectiveStatus(List)` devuelve copias sin tocar el original; **desde el 21/08/2026 fija que el «hoy» en Date es el día de MADRID y no el de UTC** —a las 00:30 de Madrid la factura de ayer ya vence, a las 23:59 todavía no, y el corte se mueve con el horario de verano—, y siguen marcados SOSPECHOSO un `dueDate` que llegue como Date (nunca vence) y un «hoy» vacío (tampoco). `scripts/_smoke-pdf-factura-informe.mjs` (`node:test`, 21/08/2026, ligera, en `npm test`, 76 comprobaciones) abre el buffer de `buildInvoicePdfBuffer` y lee el TEXTO de dentro —descomprime los flujos y traduce los glifos con el `/ToUnicode` que pdfkit ya mete—: emisor y cliente, el NIF con la regla de `nifCliente.js` (manda `fiscalTaxId`, respaldo en `taxId`), los totales (base, desglose de IVA por tipo de mayor a menor, IRPF solo si se retuvo, TOTAL y «Cobrado/Pendiente» solo en cobro parcial), las ocho etiquetas de estado —contrastadas contra el enum del modelo—, el salto de página con 60 líneas y el nombre de fichero. Ahí vive el arreglo del 21/08/2026: **una razón social de dos líneas ya no pisa el NIF**. Deja escritos cinco `it` marcados `// SOSPECHOSO`, entre ellos que un TOTAL de seis cifras se parte en dos líneas (la casilla solo admite hasta 99.999,99 €). El correo de envío de factura (`invoiceSent`) se prueba en `scripts/_smoke-plantillas-resto-layout.mjs`. Lo rozan `scripts/_smoke-alta-progenitores.mjs` (fija `lib/billing/nifCliente.js`) y `scripts/_smoke-paquetes.mjs` (que `billing` exige `clients`); todas entran en `npm test` y ninguna necesita base de datos. |
 | **Decisiones** | `../decisions/2026-07-28-repaso-de-seguridad.md` (el envío de facturas por correo desde la demo; auditar lo que mueve dinero) · `../decisions/2026-08-13-ciclo-de-vida-de-un-cliente.md` (la baja aparta y no destruye: las facturas se conservan por ley). |
-| **En este doc** | Visión general · Modelos · La factura guarda a quién se le emitió (26/08/2026) · Estados de factura y transiciones · Lógica de cálculos KPI · Numeración correlativa · Libro IVA y Modelo 303 · Endpoints · Páginas frontend |
+| **En este doc** | Visión general · Modelos · La factura guarda a quién se le emitió (26/08/2026) · La factura sabe qué tipo de cita cobró (29/08/2026) · Estados de factura y transiciones · Lógica de cálculos KPI · Numeración correlativa · Libro IVA y Modelo 303 · Endpoints · Páginas frontend |
 
 > Documentación de detalle del módulo. Referencia rápida en
 > `CLAUDE.md` (sección "Módulos del CRM"). Si encuentras una discrepancia entre
@@ -650,6 +650,29 @@ paso las restricciones duplicadas de esa columna se dejan en una. El `if` de
 `DELETE /api/clients/[id]` sigue estando, ahora como mensaje por delante de una
 garantía real. Motivo y cifras en
 `docs/decisions/2026-08-26-la-factura-se-sostiene-sola.md`.
+
+## La factura sabe qué tipo de cita cobró (29/08/2026)
+
+`invoices.event_type_id` (UUID, nullable, FK a `event_types` con `ON DELETE SET
+NULL` donde esa tabla existe; migración `migrate-invoice-tipo-cita.js`). Es el
+enlace del que la portada saca **«Ingresos por servicio»**: la decisión de
+Rodrigo fue que el dinero por servicio no se sabe por el precio del tipo de
+cita (valor de agenda) sino por lo FACTURADO, y para eso la factura tiene que
+llevar aparejado el tipo que cobró — «aunque sea internamente».
+
+- **Opcional e interno**: sin pantalla por ahora. Lo aceptan `POST
+  /api/billing/invoices` y `PATCH /api/billing/invoices/[id]` (`eventTypeId`,
+  validado contra los tipos del tenant; `null` desenlaza). Hoy lo ponen los
+  seeds de las demos.
+- La **rectificativa lo hereda** del original (`[id]/rectify`): nace con base
+  negativa y estado activo, así que arrastrar el tipo es lo que hace que la
+  gráfica RESTE lo anulado.
+- Una factura sin tipo simplemente **no cuenta** en esa gráfica: enseña lo
+  atribuible por servicio, el total ya lo dice la cifra de Facturado.
+- Las facturas anteriores quedan a NULL a propósito (nadie sabe hoy qué cita
+  cobró una factura vieja).
+
+Motivo y contexto: `docs/decisions/2026-08-29-el-dinero-se-sabe-por-facturas.md`.
 
 ## Numeración correlativa
 

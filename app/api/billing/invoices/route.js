@@ -93,6 +93,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       patientId,
       employeeId,
       partnerId,
+      eventTypeId,
       issueDate,
       dueDate,
       lines = [],
@@ -111,6 +112,17 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // Enlace opcional factura↔paciente (el pagador sigue siendo clientId).
     const patRes = await resolveInvoicePatientId(patientId, tenantModels, hasModule);
     if (patRes.err) return error(patRes.err);
+
+    // Enlace opcional factura↔tipo de cita (29/08/2026, interno): de aquí
+    // salen los «Ingresos por servicio» de la portada. Sin él, la factura
+    // simplemente no cuenta en esa gráfica.
+    let resolvedEventTypeId = null;
+    if (eventTypeId) {
+      const { EventType } = tenantModels;
+      const et = EventType ? await EventType.findByPk(eventTypeId, { attributes: ["id"] }).catch(() => null) : null;
+      if (!et) return error("eventTypeId no corresponde a ningún tipo de cita de este centro");
+      resolvedEventTypeId = et.id;
+    }
 
     // Aplicar defaults del tenant: vatRate por línea, IRPF y dueDate desde
     // defaultPaymentTermsDays si no llegan explícitos.
@@ -142,6 +154,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       patientId: patRes.patientId,
       employeeId: employeeId || null,
       partnerId: partnerId || null,
+      eventTypeId: resolvedEventTypeId,
       issueDate,
       dueDate: resolvedDueDate,
       lines: calc.lines,

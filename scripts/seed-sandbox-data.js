@@ -88,16 +88,22 @@ async function main() {
   });
 
   // ── 2. EQUIPO ──────────────────────────────────────────────────────────────
+  // `weeklyDirectHours` es el objetivo semanal de horas directas: el
+  // denominador de la «Ocupación del equipo» de la portada (29/08/2026). Sin
+  // él, nadie tiene porcentaje y la vista sale vacía. Valores desiguales a
+  // mano —quien dirige pasa poca consulta, quien atiende pasa mucha— y
+  // Administración SIN objetivo a propósito: la demo también enseña que quien
+  // no lo tiene configurado no sale en la gráfica.
   let equipo = [];
   await tryModule("Equipo", async () => {
     const { TeamMember } = models;
     const roles = [
-      { position: "Socio · Consultor", department: "Dirección" },
-      { position: "Socio · Desarrollo", department: "Tecnología" },
-      { position: "Diseñadora", department: "Creatividad" },
-      { position: "Project Manager", department: "Operaciones" },
-      { position: "Comercial", department: "Ventas" },
-      { position: "Administración", department: "Soporte" },
+      { position: "Socio · Consultor", department: "Dirección", weeklyDirectHours: 4 },
+      { position: "Socio · Desarrollo", department: "Tecnología", weeklyDirectHours: 6 },
+      { position: "Diseñadora", department: "Creatividad", weeklyDirectHours: 10 },
+      { position: "Project Manager", department: "Operaciones", weeklyDirectHours: 8 },
+      { position: "Comercial", department: "Ventas", weeklyDirectHours: 6 },
+      { position: "Administración", department: "Soporte", weeklyDirectHours: null },
     ];
     for (let i = 0; i < roles.length; i++) {
       const nombre = pick(NOMBRES), apellido = pick(APELLIDOS);
@@ -107,6 +113,7 @@ async function main() {
         position: roles[i].position, department: roles[i].department,
         phone: `+34 ${rand(600, 699)} ${rand(100, 999)} ${rand(100, 999)}`,
         hourlyCost: rand(18, 40, 2), hourlyRate: rand(50, 95, 2), monthlySalary: rand(1900, 3400, 2),
+        weeklyDirectHours: roles[i].weeklyDirectHours,
         status: "active", hiredAt: daysAgo(rand(60, 1400)),
         avatarColor: "#" + Math.floor(rand(0, 16777215)).toString(16).padStart(6, "0"),
       });
@@ -265,7 +272,59 @@ async function main() {
     return `${catalogo.length} productos · ${movimientos} movimientos · ${assets.length} activos`;
   });
 
-  // ── 6. FACTURACIÓN (con IRPF + socio) ───────────────────────────────────────
+  // ── 6. CITAS ────────────────────────────────────────────────────────────────
+  // Va ANTES de Facturación a propósito (29/08/2026): las facturas de cita se
+  // ligan a estos tipos (invoices.event_type_id), que es de donde la portada
+  // saca «Ingresos por servicio». Y cada reserva lleva su PROFESIONAL y cae en
+  // el MES EN CURSO: sin eso, la «Ocupación del equipo» no tiene numerador.
+  let tiposCita = [];
+  await tryModule("Citas", async () => {
+    const { EventType, Availability, Booking } = models;
+    const types = TIPOS_CITA_DEMO;
+    // La misma comprobación que hace la pantalla al guardar. Sembrar saltándose
+    // esta regla es lo que dejó los 8 tipos de las demos imposibles de guardar
+    // (28/08/2026): nacían aceptando presencial sin dirección. Aquí revienta el
+    // seed en vez de dejarlo pasar en silencio.
+    for (const t of types) {
+      const error = validateModalityFields(t);
+      if (error) throw new Error(`Tipo de cita "${t.name}" inválido: ${error}`);
+    }
+    for (let i = 0; i < types.length; i++) {
+      const [e] = await EventType.findOrCreate({ where: { slug: types[i].slug }, defaults: { ...types[i], bufferBefore: 5, bufferAfter: 5, active: true, order: i, minNoticeHours: 3, maxAdvanceDays: 60, description: "Cita de ejemplo." } });
+      tiposCita.push(e);
+    }
+    for (const day of [1, 2, 3, 4, 5]) await Availability.findOrCreate({ where: { eventTypeId: null, dayOfWeek: day, startTime: "09:00:00", endTime: "14:00:00" }, defaults: { eventTypeId: null, dayOfWeek: day, startTime: "09:00:00", endTime: "14:00:00" } });
+
+    const diaHoy = new Date().getDate();
+    let n = 0;
+    const reserva = async (teamMemberId, off) => {
+      const et = pick(tiposCita);
+      const d = new Date(); d.setDate(d.getDate() + off); d.setHours(rand(9, 18), pick([0, 15, 30, 45]), 0, 0);
+      await Booking.create({
+        eventTypeId: et.id, teamMemberId,
+        clientName: `${pick(NOMBRES)} ${pick(APELLIDOS)}`, clientEmail: `cita${n}@example.com`,
+        clientPhone: `+34 ${rand(600, 699)} ${rand(100, 999)} ${rand(100, 999)}`,
+        scheduledAt: d, duration: et.duration, modality: pick(et.modalities),
+        // Pasadas casi todas atendidas (la ocupación cuenta confirmed/completed;
+        // un no_show de vez en cuando es lo realista); futuras, confirmadas.
+        status: off < 0 ? pick(["completed", "completed", "completed", "completed", "no_show"]) : "confirmed",
+      });
+      n++;
+    };
+    // La agenda de cada profesional, repartida entre el día 1 y dentro de ~10
+    // días. Cargas DESIGUALES a propósito: una ocupación donde todos rondan el
+    // mismo % canta a dato inventado.
+    for (const m of equipo) {
+      const cuantas = rand(9, 18);
+      for (let i = 0; i < cuantas; i++) await reserva(m.id, rand(1 - diaHoy, 10));
+    }
+    // Y unas pocas sin profesional: alimentan «Citas sin profesional» y la
+    // barra «Sin asignar» de la vista por profesional.
+    for (let i = 0; i < 5; i++) await reserva(null, rand(-10, 15));
+    return `${tiposCita.length} tipos · ${n} reservas`;
+  });
+
+  // ── 7. FACTURACIÓN (con IRPF + socio) ───────────────────────────────────────
   await tryModule("Facturación", async () => {
     const { Invoice, Payment, Cost, InvoiceSeries, TenantBillingSettings, Rate } = models;
     await TenantBillingSettings.findOrCreate({ where: {}, defaults: { fiscalName: "Sandbox Consultores CB", taxId: "E12345678", fiscalCity: "Madrid", fiscalCountry: "ES", defaultVatRate: 21, defaultIrpfRate: 15, partners: [{ id: "jorge", name: "Jorge" }, { id: "rodrigo", name: "Rodrigo" }] } });
@@ -296,6 +355,46 @@ async function main() {
       nInv++;
       if (paidAmount > 0) { await Payment.create({ invoiceId: inv.id, amount: paidAmount, paidAt: paidAt ?? dateAgo(rand(5, 40)), method: pick(["transfer", "card", "direct_debit"]), status: "completed" }); nPay++; }
     }
+
+    // Facturas de CITAS del mes en curso, ligadas a su tipo (29/08/2026):
+    // «Ingresos por servicio» de la portada agrupa facturas por
+    // invoices.event_type_id — el precio del tipo de cita no pinta nada ahí
+    // (el dinero se sabe por facturas, no por precios de agenda). Reparto e
+    // importes desiguales a mano: tres barras clavadas en la misma cifra
+    // cantan a dato inventado.
+    let nCitas = 0;
+    if (tiposCita.length) {
+      const PRECIO_CITA = { "primera-consulta": 70, "sesion-seguimiento": 48, "sesion-online": 35 };
+      const diaHoy = new Date().getDate();
+      const cupo = [];
+      // El rango de cada tipo mantiene el orden (seguimiento > primera > online)
+      // pero el total cambia de una siembra a otra: cuatro demos con las tres
+      // barras clavadas en la misma cifra también cantarían.
+      for (const [slug, veces] of [["sesion-seguimiento", rand(7, 11)], ["primera-consulta", rand(4, 7)], ["sesion-online", rand(2, 6)]]) {
+        const et = tiposCita.find((t) => t.slug === slug);
+        if (et) for (let k = 0; k < veces; k++) cupo.push(et);
+      }
+      for (const et of cupo) {
+        const unit = PRECIO_CITA[et.slug] ?? 45;
+        const calc = calculateInvoice({ lines: [{ description: et.name, quantity: 1, unitPrice: unit, discountPct: 0, vatRate: 21 }], irpfRate: 0 });
+        const pagada = Math.random() < 0.7;
+        const emitida = daysAgo(rand(0, Math.max(0, diaHoy - 1)));
+        num++;
+        const inv = await Invoice.create({
+          clientId: pick(clientes).id, employeeId: pick(equipo)?.id ?? null, partnerId: pick(PARTNERS),
+          eventTypeId: et.id,
+          series: "F", number: `F-2026-${String(100 + num).padStart(4, "0")}`,
+          status: pagada ? "paid" : "sent", issueDate: emitida, dueDate: daysAgo(-15),
+          paidAt: pagada ? dateAgo(rand(0, 3)) : null,
+          lines: calc.lines, taxBase: calc.taxBase, vatAmount: calc.vatAmount,
+          irpfRate: calc.irpfRate, irpfAmount: calc.irpfAmount,
+          total: calc.total, paidAmount: pagada ? calc.total : 0, subtotal: calc.taxBase, vatRate: 0,
+        });
+        if (pagada) { await Payment.create({ invoiceId: inv.id, amount: calc.total, paidAt: inv.paidAt, method: pick(["card", "transfer"]), status: "completed" }); nPay++; }
+        nInv++; nCitas++;
+      }
+    }
+
     const costTpl = [
       { type: "rent", category: "fixed", desc: "Alquiler oficina" }, { type: "software", category: "fixed", desc: "Licencias SaaS" },
       { type: "salary", category: "fixed", desc: "Nómina equipo" }, { type: "material", category: "variable", desc: "Material de oficina" },
@@ -308,10 +407,10 @@ async function main() {
       await Cost.create({ type: t.type, category: t.category, description: t.desc, taxBase: base, vatRate, taxAmount, total: +(base + taxAmount).toFixed(2), vatDeductible: true, incurredAt: daysAgo(rand(1, 170)), employeeId: t.type === "salary" ? pick(equipo)?.id : null, partnerId: pick(PARTNERS) });
       nCost++;
     }
-    return `${nInv} facturas · ${nPay} cobros · ${nCost} gastos`;
+    return `${nInv} facturas (${nCitas} de citas) · ${nPay} cobros · ${nCost} gastos`;
   });
 
-  // ── 7. PEDIDOS ──────────────────────────────────────────────────────────────
+  // ── 8. PEDIDOS ──────────────────────────────────────────────────────────────
   await tryModule("Pedidos", async () => {
     const { Order, OrderLine, OrderSettings } = models;
     await OrderSettings.findOrCreate({ where: {}, defaults: { transportPrice: 15 } }).catch(() => {});
@@ -331,7 +430,7 @@ async function main() {
     return `${n} pedidos`;
   });
 
-  // ── 8. CALENDARIO ───────────────────────────────────────────────────────────
+  // ── 9. CALENDARIO ───────────────────────────────────────────────────────────
   await tryModule("Calendario", async () => {
     const { CalendarTask } = models;
     const titles = ["Reunión equipo semanal", "Llamada con cliente", "Revisión de proyecto", "Preparar propuesta", "Demo producto", "Planificación mensual", "Entrega a cliente", "Formación interna"];
@@ -341,33 +440,6 @@ async function main() {
       n++;
     }
     return `${n} eventos`;
-  });
-
-  // ── 9. CITAS ────────────────────────────────────────────────────────────────
-  await tryModule("Citas", async () => {
-    const { EventType, Availability, Booking } = models;
-    const types = TIPOS_CITA_DEMO;
-    // La misma comprobación que hace la pantalla al guardar. Sembrar saltándose
-    // esta regla es lo que dejó los 8 tipos de las demos imposibles de guardar
-    // (28/08/2026): nacían aceptando presencial sin dirección. Aquí revienta el
-    // seed en vez de dejarlo pasar en silencio.
-    for (const t of types) {
-      const error = validateModalityFields(t);
-      if (error) throw new Error(`Tipo de cita "${t.name}" inválido: ${error}`);
-    }
-    const ets = [];
-    for (let i = 0; i < types.length; i++) {
-      const [e] = await EventType.findOrCreate({ where: { slug: types[i].slug }, defaults: { ...types[i], bufferBefore: 5, bufferAfter: 5, active: true, order: i, minNoticeHours: 3, maxAdvanceDays: 60, description: "Cita de ejemplo." } });
-      ets.push(e);
-    }
-    for (const day of [1, 2, 3, 4, 5]) await Availability.findOrCreate({ where: { eventTypeId: null, dayOfWeek: day, startTime: "09:00:00", endTime: "14:00:00" }, defaults: { eventTypeId: null, dayOfWeek: day, startTime: "09:00:00", endTime: "14:00:00" } });
-    let n = 0;
-    for (let i = 0; i < 26; i++) {
-      const et = pick(ets); const off = rand(-15, 20); const d = new Date(); d.setDate(d.getDate() + off); d.setHours(rand(9, 18), pick([0, 15, 30, 45]), 0, 0);
-      await Booking.create({ eventTypeId: et.id, clientName: `${pick(NOMBRES)} ${pick(APELLIDOS)}`, clientEmail: `cita${i}@example.com`, clientPhone: `+34 ${rand(600, 699)} ${rand(100, 999)} ${rand(100, 999)}`, scheduledAt: d, duration: et.duration, modality: pick(et.modalities), status: off < 0 ? pick(["completed", "completed", "no_show", "cancelled"]) : "confirmed" });
-      n++;
-    }
-    return `${ets.length} tipos · ${n} reservas`;
   });
 
   // ── 10. FORMACIÓN + CUESTIONARIOS ───────────────────────────────────────────

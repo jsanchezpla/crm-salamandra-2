@@ -33,6 +33,21 @@ export function defineInvoice(sequelize) {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      /*
+       * QUÉ TIPO DE CITA SE COBRÓ CON ESTA FACTURA (29/08/2026, Rodrigo).
+       *
+       * El dinero por servicio no se sabe por el precio del tipo de cita
+       * (valor de agenda): solo se sabe por lo FACTURADO. Este enlace es la
+       * pieza que lo permite — «Ingresos por servicio» de la portada agrupa
+       * facturas del mes por esta columna. Interno y opcional: una factura sin
+       * tipo simplemente no cuenta en esa gráfica. Columna propia y NO
+       * customFields, por lo mismo que patientId: la rectificativa reinicia
+       * customFields a {}.
+       */
+      eventTypeId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       invoiceType: {
         type: DataTypes.ENUM("session", "pack", "subscription"),
         allowNull: true,

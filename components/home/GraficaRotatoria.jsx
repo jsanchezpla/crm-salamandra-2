@@ -90,7 +90,9 @@ export default function GraficaRotatoria({ vistas }) {
       </div>
 
       {/* Las barras, siempre hacia arriba. El globito se ancla al borde en la
-          primera y la última para no salirse de la tarjeta. */}
+          primera y la última para no salirse de la tarjeta. Una vista SIN datos
+          no desaparece (29/08/2026, Rodrigo): pinta su `vacio`, que dice por
+          qué está así y qué falta por rellenar. */}
       <div
         className="flex-1 min-h-0 flex items-end gap-2 sm:gap-3 border-b border-[var(--ink-200)]"
         style={{
@@ -98,6 +100,14 @@ export default function GraficaRotatoria({ vistas }) {
             "repeating-linear-gradient(to top, transparent 0, transparent calc(25% - 1px), var(--ink-100) calc(25% - 1px), var(--ink-100) 25%)",
         }}
       >
+        {v.datos.length === 0 && (
+          <div className="w-full h-full flex items-center justify-center px-6 text-center">
+            {/* Fondo blanco para que la línea de la retícula no tache el texto */}
+            <span className="bg-white px-3 py-1 text-[12px] leading-relaxed text-[var(--ink-400)]">
+              {v.vacio || "Sin datos todavía."}
+            </span>
+          </div>
+        )}
         {v.datos.map((d, i) => {
           const pct = Math.round((d.valor / max) * 100);
           const anclaje =
@@ -120,7 +130,7 @@ export default function GraficaRotatoria({ vistas }) {
           );
         })}
       </div>
-      <div className="flex gap-2 sm:gap-3 mt-1.5">
+      <div className={`flex gap-2 sm:gap-3 ${v.datos.length ? "mt-1.5" : ""}`}>
         {v.datos.map((d, i) => (
           <div
             key={i}

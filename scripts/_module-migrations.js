@@ -426,6 +426,10 @@ export const MODULES = {
     // A quién se le emitió cada factura, congelado al emitir. Sin esta columna
     // el modelo pide `fiscal_snapshot` y toda lectura de factura da 42703.
     "migrate-invoice-fiscal-snapshot",
+    // Qué tipo de cita se cobró con cada factura (29/08/2026): de aquí salen
+    // los «Ingresos por servicio» de la portada. Sin esta columna el modelo
+    // pide `event_type_id` y toda lectura de factura da 42703.
+    "migrate-invoice-tipo-cita",
     // Borrar una ficha ya no borra sus facturas: la relación pasa de CASCADE a
     // RESTRICT (y de paso deja UNA sola, que había hasta cuatro duplicadas).
     "migrate-invoices-client-restrict",

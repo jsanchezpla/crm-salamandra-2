@@ -98,10 +98,18 @@ async function main() {
     console.log("   ✓ índices de slug y publicados");
 
     // ── 2. Variantes ─────────────────────────────────────────────────────
+    // La FK solo donde products TIENE clave que referenciar (29/08/2026):
+    // byTable incluye ahora las fotos doradas, y esas se copian con CREATE
+    // TABLE AS TABLE — datos sí, restricciones NO. Ahí la FK revienta con
+    // 42830 y tampoco hace falta: una foto solo-datos no valida nada.
+    const [pkProducts] = await s.query(
+      `SELECT 1 FROM pg_constraint
+        WHERE conrelid = to_regclass('"${schema}"."products"') AND contype IN ('p', 'u')`
+    );
     await q(`
       CREATE TABLE IF NOT EXISTS {S}.product_variants (
         id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        product_id  UUID NOT NULL REFERENCES {S}.products(id) ON DELETE CASCADE,
+        product_id  UUID NOT NULL${pkProducts.length ? " REFERENCES {S}.products(id) ON DELETE CASCADE" : ""},
         name        VARCHAR(120) NOT NULL,
         sku         VARCHAR(80),
         sale_price  NUMERIC(10,2),

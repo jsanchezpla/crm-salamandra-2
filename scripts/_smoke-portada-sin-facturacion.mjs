@@ -20,10 +20,13 @@ const FICHA = "tm-terapeuta";
 
 // Modelos de mentira con actividad por todas partes: si una gráfica se pinta,
 // tiene datos con los que pintarse; si no se pinta, es por la regla.
+// La fila de Invoice lleva TODAS las formas a la vez (contadores de finanzas,
+// serie mensual y el group-by por tipo de cita de «Ingresos por servicio»,
+// que desde el 29/08/2026 sale de las FACTURAS, no del precio del tipo).
 function modelos() {
   const serie = [{ mes: "2026-08", v: 5 }];
   return {
-    Invoice: { findAll: async () => [{ n: 2, sum: 100, billed: 100, mes: "2026-08", v: 100 }] },
+    Invoice: { findAll: async () => [{ n: 2, sum: 100, billed: 100, mes: "2026-08", v: 100, eventTypeId: "et1", importe: 200 }] },
     Booking: {
       count: async () => 3,
       findAll: async ({ attributes = [] } = {}) => {
@@ -107,8 +110,35 @@ test("la ocupación por miembro es solo para admin, y los ingresos piden factura
   assert.equal(ocupacion.unidad, "pct");
   const ingresos = admin.vistas.find((v) => v.key === "ingresos-servicio");
   assert.equal(ingresos.unidad, "eur");
-  assert.equal(ingresos.datos[0].valor, 200); // 4 citas × 50 € (5000 céntimos)
+  assert.equal(ingresos.datos[0].valor, 200); // SUM(tax_base) de las facturas ligadas al tipo et1
+  assert.equal(ingresos.datos[0].tooltip, "Sesión"); // el nombre sale del tipo de cita enlazado
 
   const user = await buildPortada(ctxDe({ tenantTiene: TODO, usuarioTiene: TODO, role: "user" }));
   assert.ok(!user.vistas.some((v) => v.key === "ocupacion"), "un no-admin no ve la ocupación del equipo");
+});
+
+test("las dos vistas nuevas no se esconden sin datos: salen vacías y dicen por qué (29/08/2026)", async () => {
+  // Sin facturas ligadas a tipo y sin objetivos semanales: antes las dos
+  // vistas devolvían null y desaparecían del rotador. Ahora llegan con
+  // datos: [] y su texto `vacio`, que es lo que pinta la tarjeta.
+  const ctx = ctxDe({ tenantTiene: TODO, usuarioTiene: TODO, role: "admin" });
+  ctx.tenantModels.Invoice = { findAll: async () => [] };
+  ctx.tenantModels.TeamMember = {
+    findOne: async () => ({ id: FICHA }),
+    findAll: async () => [{ id: FICHA, displayName: "Tera Peuta", weeklyDirectHours: null }],
+  };
+  const p = await buildPortada(ctx);
+
+  const ingresos = p.vistas.find((v) => v.key === "ingresos-servicio");
+  assert.ok(ingresos, "sin facturas ligadas, la vista tiene que seguir saliendo");
+  assert.deepEqual(ingresos.datos, []);
+  assert.match(ingresos.vacio, /tipo de cita/);
+
+  const ocupacion = p.vistas.find((v) => v.key === "ocupacion");
+  assert.ok(ocupacion, "sin objetivos semanales, la vista tiene que seguir saliendo");
+  assert.deepEqual(ocupacion.datos, []);
+  assert.match(ocupacion.vacio, /objetivo semanal/);
+
+  // Y la regla vieja sigue para las demás: una serie a cero NO se enseña.
+  assert.ok(!p.vistas.some((v) => v.key === "facturacion"), "la serie de facturación a cero se sigue escondiendo");
 });

@@ -174,6 +174,11 @@ export const POST = withTenant(async (request, { params }, { tenantModels, hasMo
            */
           fiscalSnapshot: locked.fiscalSnapshot ?? null,
           patientId: locked.patientId, // conserva el enlace factura↔paciente
+          // Conserva el enlace factura↔tipo de cita: la rectificativa nace con
+          // base NEGATIVA y estado activo, así que arrastrar el tipo es lo que
+          // hace que «Ingresos por servicio» RESTE lo anulado en vez de dejar
+          // el importe original contando como si nada.
+          eventTypeId: locked.eventTypeId ?? null,
           employeeId: locked.employeeId,
           partnerId: locked.partnerId, // conserva atribución por socio en KPIs
           projectId: locked.projectId,
