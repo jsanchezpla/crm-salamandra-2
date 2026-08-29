@@ -9,6 +9,7 @@ import { encryptSecret, decryptSecret, isEncryptionConfigured } from "../../../.
 import { isAllowedAnthropicModel, DEFAULT_ANTHROPIC_MODEL } from "../../../../lib/ai/anthropicModel.js";
 import { getTenantStripeConfig } from "../../../../lib/payments/stripeConfig.js";
 import { getTenantCloudflareConfig } from "../../../../lib/analytics/cloudflareConfig.js";
+import { getTenantGocardlessConfig } from "../../../../lib/banco/gocardlessConfig.js";
 import { auditar, datosPeticion } from "../../../../lib/utils/auditoria.js";
 import { avisarCambioDeConfiguracion } from "../../../../lib/configuracion/avisoCambio.js";
 import { exigeIdentidad } from "../../../../lib/citas/puertaIdentidad.js";
@@ -79,6 +80,7 @@ function applyPlain(target, field, value) {
 const CAMPOS_SECRETOS_AUDIT = [
   "anthropicApiKey",
   "cloudflareApiToken",
+  "gocardlessSecretKey",
   "googlePlacesApiKey",
   "openaiApiKey",
   "resendApiKey",
@@ -92,6 +94,7 @@ const CAMPOS_ABIERTOS_AUDIT = [
   "anthropicModel",
   "cloudflareAccountId",
   "cloudflareSiteTag",
+  "gocardlessSecretId",
   "resendFromEmail",
   "resendReplyTo",
   "stripePublishableKey",
@@ -437,6 +440,15 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
         // aparte: así no puede desincronizarse.
         liveMode: getTenantStripeConfig({ tenant: t }).liveMode,
       },
+      // El banco de verdad (GoCardless Bank Account Data, módulo `banco`). El
+      // Secret ID no es secreto —identifica el par y solo no abre nada, como
+      // los ids de Cloudflare—; la Secret Key sí, y va con pista enmascarada.
+      gocardless: {
+        ...ks(integ.gocardlessSecretKey),
+        secretId: integ.gocardlessSecretId ?? null,
+        // Mismo criterio que Stripe: hay que poder DESCIFRAR la clave.
+        ready: getTenantGocardlessConfig({ tenant: t }).configured,
+      },
     },
   });
 });
@@ -477,6 +489,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   const CAMPOS_SECRETOS = [
     "anthropicApiKey",
     "cloudflareApiToken",
+    "gocardlessSecretKey",
     "googlePlacesApiKey",
     "openaiApiKey",
     "resendApiKey",
@@ -548,6 +561,11 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
   applyKey(settings.integrations, "stripeSecretKey", body.stripeSecretKey);
   applyKey(settings.integrations, "stripeWebhookSecret", body.stripeWebhookSecret);
   applyPlain(settings.integrations, "stripePublishableKey", body.stripePublishableKey);
+
+  // Banco de verdad (GoCardless Bank Account Data, módulo `banco`). La Secret
+  // Key es SECRETO; el Secret ID identifica el par y va a la vista.
+  applyKey(settings.integrations, "gocardlessSecretKey", body.gocardlessSecretKey);
+  applyPlain(settings.integrations, "gocardlessSecretId", body.gocardlessSecretId);
 
   // Modelo de Claude (no es un secreto). Solo se guarda si es un id válido.
   if (typeof body.anthropicModel === "string" && isAllowedAnthropicModel(body.anthropicModel)) {
@@ -871,6 +889,13 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
         // para cobrar" mientras todos los cobros fallan.
         ready: getTenantStripeConfig({ tenant: { settings } }).configured,
         liveMode: getTenantStripeConfig({ tenant: { settings } }).liveMode,
+      },
+      // TIENE que volver aquí por lo mismo que las cuatro puertas: la pantalla
+      // hace `setCfg({...c, ...data})` y lo que no vuelva se pinta con lo viejo.
+      gocardless: {
+        ...keyStatus(settings.integrations.gocardlessSecretKey),
+        secretId: settings.integrations.gocardlessSecretId ?? null,
+        ready: getTenantGocardlessConfig({ tenant: { settings } }).configured,
       },
     },
   });

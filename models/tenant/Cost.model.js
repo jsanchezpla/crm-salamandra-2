@@ -104,9 +104,18 @@ export function defineCost(sequelize) {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      // El movimiento del banco con el que se concilió este gasto (módulo
+      // `banco`, 29/08/2026). `attachmentUrl` es el justificante que sube el
+      // usuario; esto es el cargo real en la cuenta. Sin FK a propósito, como
+      // su gemelo en Payment.
+      bankTransactionId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
     },
     {
       tableName: "costs",
+      indexes: [{ fields: ["bank_transaction_id"], name: "costs_bank_tx_idx" }],
     }
   );
 }

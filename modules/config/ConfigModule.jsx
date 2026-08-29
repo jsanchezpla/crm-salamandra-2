@@ -20,6 +20,7 @@ import DatosCentro from "./tarjetas/DatosCentro.jsx";
 import {
   AI_PROVIDERS,
   ApiKeyCard,
+  BancoIdField,
   CloudflareIdsField,
   EstadoCobro,
   EventosWebhook,
@@ -694,6 +695,29 @@ export default function ConfigModule({ modulos = null }) {
 
                       {/* Remitente + reply-to del correo de captación (no son secretos). */}
             </>
+          )}
+
+          {/* ── Banco de verdad (29/08/2026) ─────────────────────────────────
+              Credenciales de GoCardless Bank Account Data: el extracto y la
+              conciliación de Facturación → Banco. Elegir el banco y autorizar
+              se hace en esa pantalla; aquí solo se pegan las claves. */}
+          {enZona(
+            "gocardless",
+            <ApiKeyCard
+              provider={AI_PROVIDERS.gocardless}
+              status={cfg.integrations?.gocardless}
+              isAdmin={isAdmin}
+              onSave={(value) => patchTenant({ gocardlessSecretKey: value }, "Clave del banco guardada")}
+              onClear={() => patchTenant({ gocardlessSecretKey: null }, "Clave del banco eliminada")}
+              extra={
+                <BancoIdField
+                  value={cfg.integrations?.gocardless?.secretId ?? ""}
+                  ready={!!cfg.integrations?.gocardless?.ready}
+                  isAdmin={isAdmin}
+                  onSave={(v) => patchTenant({ gocardlessSecretId: v }, "Secret ID del banco guardado")}
+                />
+              }
+            />
           )}
         </div>
       )}

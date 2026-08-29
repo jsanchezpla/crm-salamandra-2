@@ -33,6 +33,7 @@ actualiza el doc.
 | `booking.md` | `booking` | `tienda.md` | `tienda` |
 | `fichaje.md` | `fichaje` | `configuracion.md` | — (siempre visible) |
 | `emails.md` | — (infra transversal) | `buzon.md` | — (todos, `/ayuda`) |
+| `banco.md` | `banco` | | |
 
 Sin doc dedicado: `calendar`, `orders`, `provisioning` (`lib/provisioning/`).
 `docs/base/` es una foto técnica del 07/08/2026 (léela con su aviso);
@@ -215,7 +216,8 @@ comercial es `leads`), `referidos` (12/08), `cuestionarios` (10/08: pantalla de
 | `clients` / `clients_avanzado` | Fichas (o «Pacientes» donde el cliente ES el paciente) / lista de espera de admisión + «Fichas a completar» (`/clientes/urgentes`) | Rótulo por módulos en `lib/clients/vocabulario.js`; alta por perfil (`salud`/`comercial`) en `lib/clients/formularioAlta.js`; paneles de la ficha por módulos en `lib/clients/piezasFicha.js`. `urgentes` gatea las TRES puertas (menú, página con `notFound()`, endpoint). |
 | `leads` / `formularios` | Grupo «Leads»: Profesionales (embudo, `/leads`) / Comerciales (web → bandeja, `/formularios`); el padre del grupo es `/leads/estadisticas` | `formularios` requiere `leads`. Etapas por cliente en `lib/leads/embudos.js`. |
 | `projects` | Kanban | — |
-| `billing` | Facturas, cobros, morosidad, gastos, tarifas, recurrentes, arqueo, Verifactu | FK a equipo = `employeeId`. |
+| `billing` | Facturas, cobros, morosidad, gastos, tarifas, recurrentes, arqueo, Verifactu | FK a equipo = `employeeId`. Desde el 29/08/2026 el webhook de Stripe registra los cobros online solo (`lib/billing/cobroDesdeStripe.js`) y Cobros enlaza a Stripe y al banco. |
+| `banco` | Extracto real del banco (PSD2, solo lectura, GoCardless) y conciliación con cobros y gastos; del cobro se salta al movimiento | Requiere `billing`. Credenciales BYOK en Configuración → Conexiones; pantalla `/facturacion/banco`. |
 | `team` / `team_avanzado` | Plantilla, usuarios, roles / Desempeño, Dirección, Productividad, Incidencias, Bandeja, Ocupación, Actividad | Los submenús del avanzado exigen `requiresAll` (avanzado + el módulo que aporta el contenido). |
 | `documents` / `documents_avanzado` | Solo el contrato del centro / archivo completo (carpetas, buscador, cuota) | **Ya NO exige `citas`** (24/08/2026, Rodrigo): era una regla de venta, no del código. Sin Citas se sube, se ve y se descarga, pero no hay área privada donde firmarlo. Sigue exigiendo `clients`. |
 | `inventory` | Productos, entradas, movimientos; `Supplier` compartido con Gastos | — |

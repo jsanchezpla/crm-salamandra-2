@@ -131,6 +131,24 @@ export const AI_PROVIDERS = {
     ],
     note: "Con una clave sk_test_ no se cobra dinero real: sirve para probar el circuito entero antes de abrir a pacientes.",
   },
+  gocardless: {
+    title: "Banco (GoCardless) — Secret Key",
+    subtitle:
+      "Conecta tu cuenta del banco de verdad: el CRM trae los movimientos (solo lectura, vía PSD2) y los casa con tus cobros y gastos.",
+    field: "gocardlessSecretKey",
+    prefix: "",
+    platformUrl: "https://bankaccountdata.gocardless.com/user-secrets/",
+    platformLabel: "Abrir GoCardless Bank Account Data",
+    steps: [
+      "Entra en bankaccountdata.gocardless.com y crea una cuenta gratuita (no es el GoCardless de cobros: es su portal de datos bancarios).",
+      'En el menú, abre "User secrets" y pulsa "Create new".',
+      'Ponle un nombre (p. ej. "CRM Salamandra") y créalo.',
+      "Copia el Secret ID y la Secret Key (la clave solo se enseña una vez).",
+      "Pega la Secret Key aquí y el Secret ID en el campo de abajo, y guarda los dos.",
+      "Después, en Facturación → Banco, elige tu banco y autoriza el acceso en su web.",
+    ],
+    note: "El acceso es de SOLO LECTURA (PSD2): con estas claves no se puede mover dinero. El consentimiento del banco dura 90 días y se renueva desde la pantalla de Banco.",
+  },
   stripeWebhook: {
     title: "Stripe — secreto del webhook",
     subtitle: "Es lo que nos avisa de que un pago se ha completado. Sin esto, el paciente paga y su cita no se confirma nunca.",
@@ -416,6 +434,62 @@ export function EventosWebhook() {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/**
+ * El Secret ID de GoCardless (no es secreto de verdad: identifica el par y sin
+ * la Secret Key no abre nada, así que se enseña entero — como los ids de
+ * Cloudflare). Con las dos piezas puestas, el botón lleva a conectar el banco.
+ */
+export function BancoIdField({ value, ready, isAdmin, onSave }) {
+  const [v, setV] = useState(value ?? "");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setV(value ?? ""); }, [value]);
+  const sucio = (v ?? "").trim() !== (value ?? "");
+
+  return (
+    <div className="mt-4 pt-4 border-t border-neutral-100">
+      <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Secret ID</label>
+      <p className="text-[11px] text-neutral-400 mt-0.5 mb-2">
+        La pareja de la clave: GoCardless los da juntos en «User secrets».
+      </p>
+      <div className="flex gap-2">
+        <input
+          disabled={!isAdmin}
+          value={v}
+          onChange={(e) => setV(e.target.value)}
+          placeholder="p. ej. 1b2f3a4c-…"
+          className={inputCls + " font-mono flex-1"}
+        />
+        {isAdmin && sucio && (
+          <button
+            onClick={async () => { setBusy(true); try { await onSave(v.trim() || null); } finally { setBusy(false); } }}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-40"
+            style={{ background: "var(--color-primary, #1B3A2D)" }}
+          >
+            {busy ? "..." : "Guardar"}
+          </button>
+        )}
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <p className={`text-[11px] ${ready ? "text-emerald-600" : "text-amber-600"}`}>
+          {ready
+            ? "Credenciales listas: ya se puede conectar tu banco."
+            : "Faltan datos: hacen falta la Secret Key y el Secret ID."}
+        </p>
+        {ready && (
+          <a
+            href="/facturacion/banco"
+            className="shrink-0 inline-flex items-center px-3 py-2 rounded-lg text-xs font-semibold text-white hover:opacity-90 transition"
+            style={{ background: "var(--color-primary, #1B3A2D)" }}
+          >
+            Conectar tu banco
+          </a>
+        )}
+      </div>
     </div>
   );
 }

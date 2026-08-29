@@ -12,6 +12,7 @@ import {
 } from "../../../../../lib/payments/entityHooks.js";
 import { leerCaducidadAutorizacion } from "../../../../../lib/payments/autorizacion.js";
 import { sesionDeFactura, suscripcionDeFactura } from "../../../../../lib/payments/fraccionado.js";
+import { conCobroRegistrado, marcarCobroDevuelto } from "../../../../../lib/billing/cobroDesdeStripe.js";
 
 /**
  * POST /api/webhooks/stripe/[tenantSlug]
@@ -218,7 +219,9 @@ async function procesar(ctx, { PaymentSession, event, t, caducaEn = null }) {
         { status: "paid", paidAt: new Date(), stripePaymentIntentId: obj.id },
         { transaction: t }
       );
-      return await onEntityPaid(ctx, ps, t);
+      // El dinero acaba de entrar de verdad: el cobro cruza a Facturación
+      // (lib/billing/cobroDesdeStripe.js). Sin módulo billing, no hace nada.
+      return await conCobroRegistrado(ctx, ps, t, await onEntityPaid(ctx, ps, t));
     }
 
     // La retención se soltó (rechazo, cancelación o caducidad). No hubo cobro.
@@ -366,7 +369,10 @@ async function procesar(ctx, { PaymentSession, event, t, caducaEn = null }) {
           : {}),
       }, { transaction: t });
 
-      const resultado = await onEntityPaid(ctx, ps, t);
+      // Con dinero confirmado, el cobro cruza a Facturación (la 1ª cuota de un
+      // fraccionado incluida: es la que cobra el checkout; las siguientes dejan
+      // su rastro en metadata, ver lib/billing/cobroDesdeStripe.js).
+      const resultado = await conCobroRegistrado(ctx, ps, t, await onEntityPaid(ctx, ps, t));
       if (!suscripcion) return resultado;
 
       // El TOPE de cuotas se pone fuera de la transacción: son dos llamadas a
@@ -485,7 +491,13 @@ async function procesar(ctx, { PaymentSession, event, t, caducaEn = null }) {
       if (!esTotal) {
         return `reembolso parcial (${devuelto}/${ps.amount}) — la cita sigue pagada`;
       }
-      return await onEntityRefunded(ctx, ps, t);
+      // Y si aquel cobro había cruzado a Facturación, allí también consta
+      // devuelto: el total del mes no puede sumar dinero que ya no está.
+      const cobroDevuelto = await marcarCobroDevuelto(ctx, ps, t);
+      const resultado = await onEntityRefunded(ctx, ps, t);
+      if (!cobroDevuelto) return resultado;
+      if (typeof resultado === "string") return `${resultado} · ${cobroDevuelto.outcome}`;
+      return { ...resultado, outcome: `${resultado?.outcome ?? "ok"} · ${cobroDevuelto.outcome}` };
     }
 
     // ── CUOTAS DEL PAGO FRACCIONADO (05/08/2026) ─────────────────────────────

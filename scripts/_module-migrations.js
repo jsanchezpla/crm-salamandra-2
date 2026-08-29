@@ -67,6 +67,7 @@ export const ONE_OFF = {
   // flujo, no de nadie: una migración de MASTER no cae sola en ningún módulo.
   "migrate-tablero-estado": "MASTER, no toca schemas de tenant: crea `master.tablero_estado`, donde el Registro guarda el tick, el reparto, la solución y —desde el 26/08/2026— la fecha en que se apuntó cada tarea (`apuntada_en`, que añade sobre la tabla que ya existía). Se corre a mano, idempotente, y VA ANTES del despliegue: el código nuevo pide esa columna por nombre",
   "migrate-tablero-documentos": "MASTER, no toca schemas de tenant: crea `master.tablero_documentos`, donde vive el TEXTO del Registro (backlog y resuelto, una fila por versión) desde el 19/08/2026, cuando dejó de viajar en la imagen de Docker. Solo crea tabla e índice; el texto lo carga `tablero-doc.js publicar` cuando se le dice. Se corre a mano una vez, idempotente",
+  "migrate-tablero-adjuntos": "MASTER, no toca schemas de tenant: crea `master.tablero_adjuntos`, las capturas del Registro (24/08/2026). Cuelgan de la ficha `<!--id:…-->` escrita dentro del texto —no de una tabla—, así que van SIN FK a propósito; lo que caduca lo poda `podar-tablero-adjuntos.js`. Se corre a mano una vez, idempotente y aditiva. Tercera del trío del tablero, y tercera vez que una de ellas se queda sin apuntar aquí: ver la nota de `migrate-tablero-estado`",
   "migrate-paquetes-modulos": "MASTER, no toca schemas de tenant: crea `master.paquetes_modulos` y siembra los dos paquetes que hasta ahora estaban escritos en `catalogo.js`. Se corre a mano con `npm run db:migrate:paquetes`; idempotente, y la semilla NO restaura lo que se haya borrado después",
   "migrate-auto-asignar-nutricion":
     "MASTER, no toca schemas de tenant: enciende `featureFlags.autoAsignarEnAlta` en la fila de `nutricion` de quien ya dependía del auto-marcado (nutri_laura). El flag nace apagado para todos los demás a propósito — antes, tener el módulo bastaba para que TODA ficha nueva se marcara como paciente de nutrición. Se corre a mano una vez, idempotente",
@@ -219,6 +220,25 @@ export const CORE = [
   // módulo), así que la tabla tiene que existir en todos los schemas o la
   // primera lectura da 42703. Solo crea tablas nuevas: idempotente y aditiva.
   "migrate-correo-herramientas",
+
+  // El puente entre cobros y dinero real (29/08/2026): columnas
+  // `payment_session_id`, `stripe_payment_intent_id` y `bank_transaction_id`
+  // en `payments` (y `bank_transaction_id` en `costs`), más las tablas
+  // `bank_accounts` y `bank_transactions` del módulo `banco`. CORE por el
+  // criterio de la cabecera, dos veces: los modelos Payment y Cost declaran las
+  // columnas para TODOS los tenants (42703 sin ellas), y BankAccount /
+  // BankTransaction están registrados globalmente en `lib/db/tenantDb.js`
+  // (42P01 sin sus tablas). Aditiva, por existencia de tabla, idempotente.
+  "migrate-banco-conciliacion",
+
+  // El hilo de WhatsApp (`whatsapp_messages`, 23/08/2026). CORE porque no hay
+  // módulo que la reclame A PROPÓSITO (regla 14, la configuración es universal:
+  // cualquier cliente conecta su número mañana sin que nadie toque código) y el
+  // modelo WhatsappMessage está registrado en `lib/db/tenantDb.js` para TODOS
+  // los tenants, así que sin la tabla el primer SELECT del hilo revienta con
+  // «relation does not exist». Decide por existencia de `clients` —o sea,
+  // todos—; solo crea tabla e índices: idempotente y aditiva.
+  "migrate-whatsapp-messages",
 ];
 
 export const MODULES = {
@@ -434,6 +454,12 @@ export const MODULES = {
     // RESTRICT (y de paso deja UNA sola, que había hasta cuatro duplicadas).
     "migrate-invoices-client-restrict",
   ],
+
+  // Conciliación bancaria (29/08/2026). Su migración ya es CORE (ver arriba:
+  // los modelos están registrados para todos), así que esto no añade trabajo;
+  // se declara para que `enable-module.js` conozca la clave y para que quien
+  // lea este mapa sepa qué estructura usa el módulo.
+  banco: ["migrate-banco-conciliacion"],
 
   projects: [
     "migrate-projects-sprint-1",

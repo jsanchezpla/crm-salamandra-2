@@ -75,6 +75,10 @@ const NO_SE_VENDEN_SOLOS = [
   "orders",
   "fichaje", // en la matriz desde el 19/08/2026 (antes solo lo protegía el catálogo)
   "billing",
+  // Banco (29/08/2026): el extracto se casa con cobros y gastos de Facturación
+  // y su pantalla vive en la pestaña de Facturación — sin `billing` no hay ni
+  // con qué casar ni por dónde entrar.
+  "banco",
   "nutricion",
   "formularios",
   "pacientes",
@@ -837,9 +841,9 @@ describe("matrizCompleta / sinEstudiar: la tabla del back-office, lo más roto a
         pesos.filter((p) => p === 1).length,
         pesos.filter((p) => p === 2).length,
       ],
-      // 13 rojos desde el 25/08/2026: entró `tienda` (exige Inventario, Pedidos
-      // y Clientes) sobre los 12 que dejó `booking`. Ámbar y verdes no se mueven.
-      [13, 7, 4]
+      // 14 rojos desde el 29/08/2026: entró `banco` (exige Facturación) sobre
+      // los 13 que dejó `tienda`. Ámbar y verdes no se mueven.
+      [14, 7, 4]
     );
   });
 

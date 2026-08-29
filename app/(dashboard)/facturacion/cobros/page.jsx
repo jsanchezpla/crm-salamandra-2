@@ -330,15 +330,19 @@ export default function CobrosPage() {
                 <SortableTh k="paidAt" label="Fecha" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                 <SortableTh k="status" label="Estado" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                 <SortableTh k="amount" label="Importe" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
+                {/* El salto al dinero de verdad (29/08/2026): el movimiento del
+                    banco casado (módulo Banco) o la página del cobro en Stripe.
+                    Sin ordenar: es un enlace, no un dato. */}
+                <th className="px-4 py-3 text-left text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Movimiento</th>
                 {puedeFacturar && <th className="px-4 py-3" />}
               </tr>
             </thead>
             <tbody>
               {loading && filtered.length === 0 && (
-                <tr><td colSpan={6} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
+                <tr><td colSpan={8} className="text-center py-12 text-xs text-neutral-400">Cargando...</td></tr>
               )}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={6} className="text-center py-12 text-xs text-neutral-400">Sin cobros{(search || filterMethod || filterStatus) ? " que coincidan con los filtros" : " registrados"}</td></tr>
+                <tr><td colSpan={8} className="text-center py-12 text-xs text-neutral-400">Sin cobros{(search || filterMethod || filterStatus) ? " que coincidan con los filtros" : " registrados"}</td></tr>
               )}
               {filtered.map((p) => (
                 <tr key={p.id} className="border-b border-neutral-50 hover:bg-neutral-50/70 transition-colors">
@@ -361,6 +365,35 @@ export default function CobrosPage() {
                   <td className="px-4 py-3 text-neutral-500 text-xs">{fmtDate(p.paidAt)}</td>
                   <td className="px-4 py-3"><StatusBadge status={p.status} kind="payment" /></td>
                   <td className="px-4 py-3 text-right font-semibold text-neutral-900 tabular">{fmtMoney(p.amount)}</td>
+                  {/* De un cobro al dinero de verdad, en un clic: el movimiento
+                      del banco si está conciliado, y la página de Stripe si el
+                      cobro entró por tarjeta online. Un cobro a mano sin
+                      conciliar no tiene a dónde saltar todavía. */}
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1.5">
+                      {p.bankTransactionId && (
+                        <Link
+                          href={`/facturacion/banco?mov=${p.bankTransactionId}`}
+                          className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 hover:bg-emerald-100 transition-colors"
+                          title="Ver el movimiento del banco con el que está conciliado"
+                        >
+                          Banco
+                        </Link>
+                      )}
+                      {p.stripeUrl && (
+                        <a
+                          href={p.stripeUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100 transition-colors"
+                          title="Ver este cobro en el panel de Stripe"
+                        >
+                          Stripe ↗
+                        </a>
+                      )}
+                      {!p.bankTransactionId && !p.stripeUrl && <span className="text-neutral-300 text-xs">—</span>}
+                    </div>
+                  </td>
                   {puedeFacturar && (
                     <td className="px-4 py-3 text-right">
                       <button

@@ -52,12 +52,42 @@ export function definePayment(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // ── El puente con el dinero de verdad (29/08/2026) ──────────────────
+      // Hasta hoy un cobro era una anotación a mano: importe, fecha, método y
+      // notas. No había NINGÚN identificador externo, así que desde un cobro no
+      // se podía llegar ni al pago de Stripe ni al movimiento del banco. Estas
+      // tres columnas son ese puente, y las tres son opcionales: el cobro
+      // apuntado a mano de siempre sigue naciendo igual, con las tres a NULL.
+      //
+      // De qué sesión de pago online nació este cobro (payment_sessions). La
+      // escribe SOLO el webhook de Stripe (lib/billing/cobroDesdeStripe.js) y
+      // es única: una sesión pagada = un cobro, aunque Stripe reintente el
+      // webhook tres días.
+      paymentSessionId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        unique: true,
+      },
+      // El PaymentIntent de Stripe: con él, el botón «Ver en Stripe» lleva a la
+      // página de ese cobro en el panel (dashboard.stripe.com/payments/pi_…).
+      stripePaymentIntentId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      // El movimiento del banco con el que se concilió (bank_transactions, del
+      // módulo `banco`). Sin FK a propósito: la tabla del banco existe en todos
+      // los schemas, pero el enlace lo escribe solo quien tiene el módulo.
+      bankTransactionId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
     },
     {
       tableName: "payments",
       indexes: [
         { fields: ["client_id"], name: "payments_client_idx" },
         { fields: ["period_month"], name: "payments_period_idx" },
+        { fields: ["bank_transaction_id"], name: "payments_bank_tx_idx" },
       ],
     }
   );

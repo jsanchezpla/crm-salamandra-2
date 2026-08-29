@@ -4,8 +4,10 @@ import { logBillingAudit, resumenImporte, datosPeticion } from "../../../../lib/
 import { ok, created, error, forbidden, notFound, serverError } from "../../../../lib/utils/apiResponse.js";
 import { updateInvoiceStatus } from "../../../../lib/billing/updateInvoiceStatus.js";
 import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
+import { getTenantStripeConfig } from "../../../../lib/payments/stripeConfig.js";
+import { urlPanelStripe } from "../../../../lib/billing/cobroDesdeStripe.js";
 
-export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
+export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const { Payment, Invoice } = tenantModels;
@@ -62,12 +64,22 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 
     // `clientName`/`clientId` planos para que la tabla no tenga que saber por
     // cuál de los dos caminos llegó el dato.
+    //
+    // `stripeUrl` se calcula AQUÍ y no en la pantalla: prueba y producción
+    // tienen paneles distintos y el modo se deduce de la clave del tenant, que
+    // el navegador no ve (29/08/2026 — el botón «Ver en Stripe» de Cobros).
+    const { liveMode } = getTenantStripeConfig({ tenant });
     const payments = rows.map((p) => {
       const fila = p.toJSON();
       const directo = fila.client ?? null;
       const porFactura = fila.invoice?.client ?? null;
       const cliente = directo ?? porFactura;
-      return { ...fila, clientId: cliente?.id ?? fila.clientId ?? null, clientName: cliente?.name ?? null };
+      return {
+        ...fila,
+        clientId: cliente?.id ?? fila.clientId ?? null,
+        clientName: cliente?.name ?? null,
+        stripeUrl: urlPanelStripe(liveMode, fila.stripePaymentIntentId),
+      };
     });
 
     return ok({ payments, total: count, page, limit });
