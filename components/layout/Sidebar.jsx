@@ -520,6 +520,21 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
     onClose?.();
   }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /**
+   * Submódulos DESPLEGABLES (30/08/2026, Rodrigo): estaban fijos, siempre
+   * abiertos, y entre los ocho de Equipo y los cinco de Formación el menú era
+   * una columna interminable. Plegados por defecto; la rama de la ruta activa
+   * se abre sola (`branchActive` hace de valor por defecto, ver abajo).
+   *
+   * El chevron manda mientras no se navegue: al cambiar de ruta se vacía el
+   * estado manual y se vuelve al automático, para que entrar en una rama
+   * siempre la enseñe abierta aunque alguien la hubiera plegado antes.
+   */
+  const [ramasAbiertas, setRamasAbiertas] = useState({});
+  useEffect(() => {
+    setRamasAbiertas({});
+  }, [pathname]);
+
   const primaryColor = tenant?.settings?.brand?.primaryColor ?? "#1B3A2D";
 
   const enabledModules = new Set(modules.filter((m) => m.enabled).map((m) => m.moduleKey));
@@ -674,6 +689,18 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
     });
   };
 
+  // Solo lo que BLOQUEA el trabajo lleva número: son decenas y se pueden
+  // terminar. Poner ahí los 1.800 «por completar» sería un número que no baja
+  // nunca, y un contador que no baja se deja de mirar en dos días.
+  // (Sacado del JSX de los hijos el 30/08/2026: con las ramas plegables el
+  // padre también lo necesita, para sumar lo que sus hijos esconden.)
+  const cuentaDeHijo = (child) =>
+    child.key === "clients-urgentes" && urgentes?.bloquea
+      ? urgentes.bloquea
+      : child.key === "clients-whatsapp" && waSueltos
+        ? waSueltos
+        : null;
+
   const initials = user?.email ? user.email.slice(0, 2).toUpperCase() : "??";
 
   async function handleLogout() {
@@ -785,62 +812,94 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
                         item.children.some(
                           (c) => pathname === c.href || pathname?.startsWith(c.href + "/")
                         ));
-                    // Sub-ítems SIEMPRE visibles bajo su grupo (antes solo al
-                    // estar dentro de la rama). Así "Mi desempeño", "Dirección",
-                    // etc. se descubren sin tener que entrar primero en Clínica.
+                    // Los sub-ítems fueron «siempre visibles» del 27/07 al
+                    // 30/08/2026, para que Desempeño, Dirección, etc. se
+                    // descubrieran sin entrar en la rama. Desde el 30/08
+                    // (Rodrigo) se pliegan: el chevron los enseña, la rama
+                    // activa se abre sola, y descubrirlos cuesta un clic en
+                    // vez de comerse trece filas de menú.
                     const hijosVisibles = hasChildren ? item.children.filter(puedeVerHijo) : [];
                     const showChildren = hijosVisibles.length > 0;
                     const parentVisuallyActive = hasChildren ? branchActive : isActive;
+                    const abierta = ramasAbiertas[item.key] ?? branchActive;
+                    // Con la rama plegada, los números de trabajo pendiente de
+                    // los hijos («Fichas a completar», «WhatsApp sin asignar»)
+                    // no pueden desaparecer con ellos: se suman en el padre.
+                    const cuentaPlegada =
+                      showChildren && !abierta
+                        ? hijosVisibles.reduce((n, c) => n + (cuentaDeHijo(c) ?? 0), 0)
+                        : 0;
                     return (
                       <div key={item.key}>
-                        <Link
-                          href={item.href}
-                          className={`relative flex items-center gap-2.5 pl-3 pr-2.5 py-2 rounded-md transition-all group ${
+                        <div
+                          className={`relative flex items-center rounded-md transition-all group ${
                             parentVisuallyActive ? "bg-white/[0.08]" : "hover:bg-white/[0.04]"
                           }`}
                         >
                           {parentVisuallyActive && (
                             <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-white" />
                           )}
-                          <span
-                            className={`shrink-0 transition-colors ${
-                              parentVisuallyActive
-                                ? "text-white"
-                                : "text-white/35 group-hover:text-white/65"
-                            }`}
+                          <Link
+                            href={item.href}
+                            className={`flex items-center gap-2.5 pl-3 py-2 flex-1 min-w-0 ${showChildren ? "" : "pr-2.5"}`}
                           >
-                            {item.icon}
-                          </span>
-                          <span
-                            className={`text-[13px] transition-colors flex-1 truncate ${
-                              parentVisuallyActive
-                                ? "text-white font-medium"
-                                : "text-white/50 group-hover:text-white/80"
-                            }`}
-                          >
-                            {labelOverrides[item.key] ?? item.label}
-                          </span>
-                          {item.badge != null && (
-                            <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-white/10 text-white/70 tabular">
-                              {item.badge}
+                            <span
+                              className={`shrink-0 transition-colors ${
+                                parentVisuallyActive
+                                  ? "text-white"
+                                  : "text-white/35 group-hover:text-white/65"
+                              }`}
+                            >
+                              {item.icon}
                             </span>
+                            <span
+                              className={`text-[13px] transition-colors flex-1 truncate ${
+                                parentVisuallyActive
+                                  ? "text-white font-medium"
+                                  : "text-white/50 group-hover:text-white/80"
+                              }`}
+                            >
+                              {labelOverrides[item.key] ?? item.label}
+                            </span>
+                            {cuentaPlegada > 0 && (
+                              <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-white/10 text-white/70 shrink-0">
+                                {cuentaPlegada}
+                              </span>
+                            )}
+                            {item.badge != null && (
+                              <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-white/10 text-white/70 tabular">
+                                {item.badge}
+                              </span>
+                            )}
+                          </Link>
+                          {showChildren && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setRamasAbiertas((prev) => ({ ...prev, [item.key]: !abierta }))
+                              }
+                              className="shrink-0 p-2 pr-2.5 text-white/35 hover:text-white/70 transition-colors cursor-pointer"
+                              aria-expanded={abierta}
+                              aria-label={`${abierta ? "Plegar" : "Desplegar"} ${labelOverrides[item.key] ?? item.label}`}
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth={1.5}
+                                className={`w-3 h-3 transition-transform duration-200 ${abierta ? "" : "-rotate-90"}`}
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                              </svg>
+                            </button>
                           )}
-                        </Link>
-                        {showChildren && (
+                        </div>
+                        {showChildren && abierta && (
                           <div className="ml-7 mt-0.5 mb-1 space-y-0.5 border-l border-white/[0.08] pl-2.5">
                             {hijosVisibles.map((child) => {
                               const childActive = pathname === child.href;
-                              // Solo lo que BLOQUEA el trabajo lleva número: son
-                              // decenas y se pueden terminar. Poner ahí los
-                              // 1.800 «por completar» sería un número que no
-                              // baja nunca, y un contador que no baja se deja de
-                              // mirar en dos días.
-                              const cuenta =
-                                child.key === "clients-urgentes" && urgentes?.bloquea
-                                  ? urgentes.bloquea
-                                  : child.key === "clients-whatsapp" && waSueltos
-                                    ? waSueltos
-                                    : null;
+                              // Qué hijo lleva número y por qué, en `cuentaDeHijo`.
+                              const cuenta = cuentaDeHijo(child);
                               return (
                                 <Link
                                   key={child.key}
