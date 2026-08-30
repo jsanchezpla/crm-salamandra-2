@@ -1,25 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import ContratoServiciosCard from "@/components/documents/ContratoServiciosCard.jsx";
 import FileTypeIcon from "@/components/documents/FileTypeIcon.jsx";
 import UploadDropzone from "@/components/documents/UploadDropzone.jsx";
 import PdfPreviewModal from "@/components/documents/PdfPreviewModal.jsx";
+import { fmtSize, fmtDate } from "@/components/documents/formato.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
 const MAX_LEVEL = 3; // 0..3 → 4 niveles
-
-function fmtSize(bytes) {
-  const b = Number(bytes) || 0;
-  if (b < 1024) return `${b} B`;
-  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
-  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
-}
-function fmtDate(d) {
-  if (!d) return "";
-  return new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
-}
+// En la raíz la lista de archivos se corta para que las carpetas se vean sin
+// hacer scroll; el resto vive en /documentos/todos (Rodrigo, 30/08/2026).
+const DOCS_EN_PORTADA = 4;
 
 export default function DocumentsModule({ avanzado = true }) {
   const [me, setMe] = useState(null);
@@ -175,6 +169,9 @@ export default function DocumentsModule({ avanzado = true }) {
   const quotaColor = pct >= 90 ? "bg-rose-500" : pct >= 70 ? "bg-amber-500" : "bg-emerald-500";
   const empty = !loading && folders.length === 0 && documents.length === 0;
 
+  const enRaiz = path.length === 0;
+  const docsVisibles = enRaiz ? documents.slice(0, DOCS_EN_PORTADA) : documents;
+
   return (
     <div className={`${anchoPantalla("listado")} space-y-5`}>
       {/* Header + cuota */}
@@ -259,17 +256,27 @@ export default function DocumentsModule({ avanzado = true }) {
             </span>
           ))}
         </nav>
-        {canCreateFolder && !showNewFolder && (
-          <button
-            onClick={() => {
-              setShowNewFolder(true);
-              setNewFolderName("");
-            }}
-            className="shrink-0 text-xs font-semibold text-neutral-600 hover:text-neutral-900 border border-neutral-200 rounded-lg px-3 py-1.5"
-          >
-            + Nueva carpeta
-          </button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {enRaiz && (
+            <Link
+              href={`/documentos/todos?visibilidad=${visibility}`}
+              className="text-xs font-semibold text-neutral-600 hover:text-neutral-900 border border-neutral-200 rounded-lg px-3 py-1.5"
+            >
+              Ver todos
+            </Link>
+          )}
+          {canCreateFolder && !showNewFolder && (
+            <button
+              onClick={() => {
+                setShowNewFolder(true);
+                setNewFolderName("");
+              }}
+              className="text-xs font-semibold text-neutral-600 hover:text-neutral-900 border border-neutral-200 rounded-lg px-3 py-1.5"
+            >
+              + Nueva carpeta
+            </button>
+          )}
+        </div>
       </div>
 
       {actionError && (
@@ -375,10 +382,10 @@ export default function DocumentsModule({ avanzado = true }) {
         </div>
       )}
 
-      {/* Documentos */}
+      {/* Documentos (en la raíz, solo los primeros; el resto en /documentos/todos) */}
       {documents.length > 0 && (
         <div className="rounded-xl border border-neutral-200 bg-white divide-y divide-neutral-100">
-          {documents.map((doc) => (
+          {docsVisibles.map((doc) => (
             <div key={doc.id} className="group flex items-center gap-3 px-3 py-2.5">
               <FileTypeIcon mimeType={doc.mimeType} />
               <div className="min-w-0 flex-1">
@@ -424,6 +431,14 @@ export default function DocumentsModule({ avanzado = true }) {
               </div>
             </div>
           ))}
+          {enRaiz && documents.length > DOCS_EN_PORTADA && (
+            <Link
+              href={`/documentos/todos?visibilidad=${visibility}`}
+              className="block px-3 py-2.5 text-center text-xs font-semibold text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 transition-colors"
+            >
+              Ver todos los documentos ({documents.length - DOCS_EN_PORTADA} más)
+            </Link>
+          )}
         </div>
       )}
 

@@ -26,27 +26,28 @@ import {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// GET /api/documents?folderId=<uuid|null>&visibility=private|shared|all
+// GET /api/documents?folderId=<uuid|null>&visibility=private|shared|all&q=&all=1
 export const GET = withTenant(async (request, _rc, ctx) => {
   try {
     if (!ctx.hasModule(MODULE_KEYS.DOCUMENTS_AVANZADO)) return forbidden("El archivo de documentos exige el módulo Documentos avanzado");
     const userId = request.headers.get("x-user-id");
     if (!userId) return unauthorized();
 
-    const { Document } = ctx.tenantModels;
+    const { Document, DocumentFolder } = ctx.tenantModels;
     const sp = new URL(request.url).searchParams;
     const visibility = ["private", "shared", "all"].includes(sp.get("visibility")) ? sp.get("visibility") : "all";
 
     const where = visibilityWhere(userId, visibility);
 
     // Modo BÚSQUEDA (archivo central): filtrar por cliente, origen o texto
-    // recorre TODO el archivo, ignorando la carpeta. Modo NAVEGACIÓN: se
+    // recorre TODO el archivo, ignorando la carpeta. `all=1` es lo mismo sin
+    // filtro (la pantalla «Todos los documentos»). Modo NAVEGACIÓN: se
     // mantiene el comportamiento por carpeta de siempre.
     const clientId = sp.get("clientId");
     const patientId = sp.get("patientId");
     const source = sp.get("source");
     const q = (sp.get("q") || "").trim();
-    const modoBusqueda = clientId || patientId || source || q;
+    const modoBusqueda = sp.get("all") === "1" || clientId || patientId || source || q;
 
     if (clientId && clientId !== "null") {
       if (!UUID_RE.test(clientId)) return error("clientId inválido", 400);
@@ -72,7 +73,34 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     // LIMIT defensivo (sin paginación aún; la UI del Sprint 2 la añadirá).
     const rows = await Document.findAll({ where, order: [["fileName", "ASC"]], limit: 1000 });
     const names = await resolveOwnerNames(rows.map((r) => r.ownerUserId));
-    return ok({ documents: rows.map((d) => serializeDocument(d, names.get(d.ownerUserId))) });
+
+    // En modo búsqueda el documento sale de su carpeta, así que hay que decir
+    // de cuál: se resuelve la ruta completa («Carpeta / Subcarpeta») en memoria.
+    let rutaDeCarpeta = null;
+    if (modoBusqueda) {
+      const folders = await DocumentFolder.findAll({
+        where: visibilityWhere(userId, visibility),
+        attributes: ["id", "name", "parentFolderId"],
+      });
+      const porId = new Map(folders.map((f) => [f.id, f]));
+      rutaDeCarpeta = (folderId) => {
+        const partes = [];
+        let actual = folderId ? porId.get(folderId) : null;
+        let guarda = 0; // el árbol tiene 4 niveles como mucho; esto para cualquier ciclo raro
+        while (actual && guarda++ < 8) {
+          partes.unshift(actual.name);
+          actual = actual.parentFolderId ? porId.get(actual.parentFolderId) : null;
+        }
+        return partes.length ? partes.join(" / ") : null;
+      };
+    }
+
+    return ok({
+      documents: rows.map((d) => {
+        const base = serializeDocument(d, names.get(d.ownerUserId));
+        return rutaDeCarpeta ? { ...base, folderPath: rutaDeCarpeta(d.folderId) } : base;
+      }),
+    });
   } catch (err) {
     return serverError(err);
   }
