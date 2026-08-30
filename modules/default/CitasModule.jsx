@@ -773,13 +773,36 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
             }}
             headerToolbar={
               esMovil
-                ? { left: "prev,next", center: "title", right: "listWeek,timeGridDay" }
-                : { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek" }
+                ? { left: "prev,next", center: "title", right: "listWeek,timeGridTresDias,timeGridDay" }
+                : { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridTresDias,timeGridDay,listWeek" }
             }
+            /*
+             * Vista «3 días» (30/08/2026, Rodrigo): entre el día suelto y la
+             * semana entera faltaba el término medio con el que se trabaja una
+             * agenda llena — hoy y los dos días siguientes, con columnas el
+             * doble de anchas que en semana. prev/next salta de tres en tres.
+             * En el móvil es además la primera vista de rejilla que cabe.
+             */
+            views={{
+              timeGridTresDias: {
+                type: "timeGrid",
+                duration: { days: 3 },
+                buttonText: "3 días",
+              },
+            }}
             locale="es"
             firstDay={1}
             slotMinTime="07:00:00"
             slotMaxTime="22:00:00"
+            /*
+             * Solo la hora de INICIO en la caja (30/08/2026, Rodrigo): el
+             * «12:00 - 12:30» de antes se comía el ancho y el nombre salía
+             * cortado justo en las citas de media hora, que son la mayoría.
+             * El final ya lo dice el alto de la caja, y la ficha lo trae
+             * exacto. El otro medio arreglo (cortar con «…» lo que aun así no
+             * quepa) es CSS y vive en app/globals.css.
+             */
+            displayEventEnd={false}
             allDaySlot={false}
             events={fetchEvents}
             eventClick={handleEventClick}

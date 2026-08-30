@@ -318,6 +318,19 @@ body {
 .fc .fc-daygrid-event-dot { border-color: currentColor; }
 .fc .fc-toolbar.fc-header-toolbar { margin-bottom: 1rem; }
 
+/* Que el nombre quepa en la caja de la cita (30/08/2026, Rodrigo). La mitad
+   del arreglo está en CitasModule (`displayEventEnd`): sin el «- 12:30» el
+   nombre tiene el doble de sitio. Esta es la otra mitad: lo que aun así no
+   quepa se corta con «…», no a lo bruto — «Rocío Guerre» parecía otra
+   persona, «Rocío Guerre…» se lee como lo que es. Solo en las cajas de UNA
+   línea (citas cortas y vista de mes); en las altas el nombre parte en dos
+   líneas, que FullCalendar ya hace solo. */
+.fc .fc-timegrid-event-short .fc-event-title {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.fc .fc-daygrid-dot-event .fc-event-title { text-overflow: ellipsis; }
+
 /* Días cerrados del centro (festivos, puentes, formación) — sprint 2026-07-29.
    Se pintan atenuados en el calendario para que se distinga de un vistazo un
    día sin agenda de un día simplemente vacío. */

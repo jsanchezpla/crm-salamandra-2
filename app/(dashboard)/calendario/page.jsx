@@ -16,6 +16,13 @@ const STATUS_OPTIONS = [
   { value: "done", label: "Completada" },
   { value: "cancelled", label: "Cancelada" },
 ];
+const STATUS_LABELS = Object.fromEntries(STATUS_OPTIONS.map((o) => [o.value, o.label]));
+// Colores del chip de estado en la ficha del evento (lectura).
+const STATUS_CHIP = {
+  pending: "bg-amber-50 text-amber-700 border-amber-100",
+  done: "bg-emerald-50 text-emerald-700 border-emerald-100",
+  cancelled: "bg-neutral-100 text-neutral-500 border-neutral-200",
+};
 
 const EMPTY_FORM = {
   title: "",
@@ -51,6 +58,27 @@ function parseISOToFields(isoString) {
 
 function todayStr() {
   return new Date().toISOString().split("T")[0];
+}
+
+// La fecha de la ficha de un evento, para leerla de un vistazo: «mié, 20 ago
+// 2026 · 16:15–17:00». Mismo formato es-ES que usa la agenda de Citas.
+function fmtFechaDetalle(form) {
+  const f = (iso) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString("es-ES", {
+      weekday: "short", day: "2-digit", month: "short", year: "numeric",
+    });
+  };
+  if (!form.startDate) return "—";
+  const otroDia = form.endDate && form.endDate !== form.startDate;
+  if (form.allDay) {
+    return otroDia ? `${f(form.startDate)} – ${f(form.endDate)} · todo el día` : `${f(form.startDate)} · todo el día`;
+  }
+  let out = f(form.startDate);
+  if (form.startTime) out += ` · ${form.startTime}`;
+  if (otroDia) out += ` – ${f(form.endDate)}${form.endTime ? ` · ${form.endTime}` : ""}`;
+  else if (form.endTime) out += `–${form.endTime}`;
+  return out;
 }
 
 // Qué se le dice a quien vuelve de /api/calendar/google/conectar con un error.
@@ -186,6 +214,12 @@ function buildPreviewEvents(weekEvents, moves) {
 export default function CalendarioPage() {
   const calendarRef = useRef(null);
   const [modal, setModal] = useState(null);
+  // Ficha de un evento del calendario, en modo LECTURA (30/08/2026, Rodrigo):
+  // pulsar un evento abría directamente el formulario de edición, que ni se
+  // lee como «los detalles» ni perdona un clic despistado (tocar un campo sin
+  // querer y darle a Guardar). Ahora primero la ficha, como en Citas, y desde
+  // ella el botón «Editar» abre el formulario de siempre.
+  const [detalle, setDetalle] = useState(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
   // Por qué no salió el correo de la convocatoria, cuando no sale. Separado de
@@ -454,10 +488,13 @@ export default function CalendarioPage() {
     }
     const start = parseISOToFields(event.startStr);
     const end = parseISOToFields(event.endStr);
-    setFormError(null);
-    setModal({
-      mode: "edit",
+    // La ficha en modo lectura (ver `detalle` arriba). Se guarda también el
+    // formulario ya montado: «Editar» lo pasa tal cual al modal de edición.
+    setDetalle({
       taskId: event.id,
+      // Nombres para enseñar (los ids del form solo sirven a los desplegables).
+      clientName: ep.clientName ?? null,
+      teamMemberName: ep.teamMemberName ?? null,
       form: {
         title: event.title,
         notes: ep.notes ?? "",
@@ -479,6 +516,14 @@ export default function CalendarioPage() {
         inviteSentAt: ep.inviteSentAt ?? null,
       },
     });
+  }
+
+  // De la ficha al formulario de edición de siempre, con lo ya montado.
+  function editarDesdeDetalle() {
+    if (!detalle) return;
+    setFormError(null);
+    setModal({ mode: "edit", taskId: detalle.taskId, form: detalle.form });
+    setDetalle(null);
   }
 
   // Arrastrar un evento de PROYECTO = cambiar su fecha límite real (PATCH en el
@@ -827,6 +872,111 @@ export default function CalendarioPage() {
           </div>
         </div>
       )}
+
+      {/* Ficha del evento, en modo LECTURA (30/08/2026, Rodrigo): lo que se
+          abre al pulsar un evento, como en Citas. «Editar» lleva al
+          formulario de siempre. */}
+      {detalle && (() => {
+        const form = detalle.form;
+        const afectados = (form.attendeeIds ?? [])
+          .map((id) => teamMembers.find((m) => m.id === id)?.displayName)
+          .filter(Boolean);
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+            onClick={(e) => { if (e.target === e.currentTarget) setDetalle(null); }}
+          >
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[92vh] flex flex-col">
+              <div className="px-5 py-4 border-b border-neutral-100 flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="text-base font-semibold text-neutral-900 leading-snug">{form.title}</div>
+                  <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full border ${STATUS_CHIP[form.status] ?? STATUS_CHIP.pending}`}>
+                      {STATUS_LABELS[form.status] ?? form.status}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[11px] text-neutral-500">
+                      <span className="w-2 h-2 rounded-full" style={{ background: PRIORITY_COLORS[form.priority] ?? PRIORITY_COLORS.medium }} />
+                      Prioridad {(PRIORITY_LABELS[form.priority] ?? PRIORITY_LABELS.medium).toLowerCase()}
+                    </span>
+                  </div>
+                </div>
+                <button onClick={() => setDetalle(null)} className="text-neutral-400 hover:text-neutral-700 p-0.5" aria-label="Cerrar">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="px-5 py-4 space-y-2 overflow-y-auto flex-1 text-[13px]">
+                <div className="flex">
+                  <span className="w-24 text-neutral-400 shrink-0">Fecha</span>
+                  <span className="text-neutral-800">{fmtFechaDetalle(form)}</span>
+                </div>
+                {detalle.clientName && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400 shrink-0">Cliente</span>
+                    <span className="text-neutral-800">{detalle.clientName}</span>
+                  </div>
+                )}
+                {detalle.teamMemberName && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400 shrink-0">Responsable</span>
+                    <span className="text-neutral-800">{detalle.teamMemberName}</span>
+                  </div>
+                )}
+                {afectados.length > 0 && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400 shrink-0">Afecta a</span>
+                    <span className="text-neutral-800">{afectados.join(", ")}</span>
+                  </div>
+                )}
+                {form.meetUrl && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400 shrink-0">Videollamada</span>
+                    <a
+                      href={form.meetUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-neutral-800 underline break-all"
+                    >
+                      {form.meetUrl}
+                    </a>
+                  </div>
+                )}
+                {form.inviteEmail && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400 shrink-0">Invitación</span>
+                    <span className="text-neutral-800">
+                      {form.inviteEmail}
+                      <span className="text-neutral-400">
+                        {form.inviteSentAt
+                          ? ` · enviada el ${new Date(form.inviteSentAt).toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}`
+                          : " · aún sin enviar"}
+                      </span>
+                    </span>
+                  </div>
+                )}
+                {form.notes && (
+                  <div className="flex">
+                    <span className="w-24 text-neutral-400 shrink-0">Notas</span>
+                    <span className="text-neutral-700 whitespace-pre-wrap">{form.notes}</span>
+                  </div>
+                )}
+              </div>
+              <div className="px-5 py-3.5 border-t border-[#F0F0F0] flex justify-end gap-2">
+                <button onClick={() => setDetalle(null)} className="text-xs text-neutral-500 px-3 py-1.5">Cerrar</button>
+                <button
+                  onClick={editarDesdeDetalle}
+                  className="text-xs font-medium px-3 py-1.5 rounded-md text-white"
+                  style={{ backgroundColor: "var(--color-primary,#1B3A2D)" }}
+                >
+                  Editar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Mini-modal de evento de PROYECTO (fecha límite / hito) */}
       {projectInfo && (
