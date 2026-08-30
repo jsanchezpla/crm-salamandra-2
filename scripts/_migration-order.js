@@ -108,6 +108,28 @@ export const EXTRA_EDGES = [
     after: "migrate-fichaje-module",
     why: "fichajes.team_member_id apunta a `team_members`, y la migración se SALTA el schema que no la tenga en vez de fallar. Sin esta arista, un tenant que estrene Equipo y Fichaje a la vez podría quedarse sin las tablas del fichaje y nadie se enteraría hasta que alguien abriera la pantalla.",
   },
+  // ── Clínica: el enum del informe de beca (26/08/2026) ─────────────────────
+  {
+    before: "migrate-clinica-module",
+    after: "migrate-informe-beca",
+    why: "informe-beca hace ALTER TYPE sobre enum_clinical_reports_report_type, que nace con la tabla clinical_reports de clinica-module. El analizador solo lee ALTER TABLE, no ALTER TYPE, así que este fichero le resulta ilegible entero.",
+  },
+  // ── Las FKs de equipo se alinean DESPUÉS de que existan sus tablas ────────
+  // fks-equipo-alineadas no tiene un solo SQL estático (recorre OBJETIVO y
+  // construye los ALTER con variables), así que el analizador no ve nada. Y
+  // como elige schemas por EXISTENCIA de tabla y se salta sin quejarse el que
+  // no la tenga, correrla antes de los creadores sería el no-op silencioso de
+  // siempre: el tenant nacería con las FK que inventa sync().
+  {
+    before: "migrate-clinica-module",
+    after: "migrate-fks-equipo-alineadas",
+    why: "tres de las cuatro FK que alinea (clinical_reports, clinic_sessions, coordinations) viven en tablas que crea clinica-module; antes de ella se las saltaría en silencio.",
+  },
+  {
+    before: "migrate-vacaciones",
+    after: "migrate-fks-equipo-alineadas",
+    why: "la cuarta FK es team_blocks.team_member_id, y `team_blocks` la crea migrate-vacaciones. Mismo caso que la de arriba.",
+  },
   {
     before: "migrate-nutricion-base",
     after: "migrate-nutricion-recipes",
