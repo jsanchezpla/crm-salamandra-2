@@ -164,8 +164,15 @@ export function defineTeamMember(sequelize) {
         type: DataTypes.STRING(40),
         allowNull: true,
       },
+      /*
+       * UN TÍTULO POR LÍNEA (29/08/2026). Era STRING(120) y no cabía: Aumenta
+       * mandó las titulaciones de sus 16 profesionales y la más larga son 184
+       * caracteres en seis líneas («Logopeda», el máster, el postgrado…). TEXT
+       * y el formulario con un textarea; el PDF imprime la primera línea junto
+       * al nº de colegiada y las demás debajo (lib/clinica/firmaProfesional.js).
+       */
       qualification: {
-        type: DataTypes.STRING(120),
+        type: DataTypes.TEXT,
         allowNull: true,
       },
     },

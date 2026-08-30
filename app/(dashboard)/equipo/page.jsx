@@ -738,14 +738,22 @@ export default function EquipoPage() {
                         className={inputCls} placeholder="M-12345" />
                     </FormRow>
                     <FormRow label="Titulación">
-                      <input value={form.qualification} maxLength={120}
+                      {/* Un título por línea (29/08/2026): Aumenta mandó las suyas y
+                          ninguna es una sola —la profesión, y debajo el máster, el
+                          postgrado, el experto—. La PRIMERA línea es la que sale junto
+                          al nº de colegiada; las demás, debajo. */}
+                      <textarea value={form.qualification} rows={4}
                         onChange={(e) => setForm((f) => ({ ...f, qualification: e.target.value }))}
-                        className={inputCls} placeholder="Graduada en Psicología" />
+                        className={`${inputCls} leading-relaxed`}
+                        placeholder={"Logopeda\nMáster en Neuropsicología Clínica\nPostgrado en Autismo"} />
                     </FormRow>
                   </div>
                   <p className="text-[10px] text-neutral-400 -mt-1">
-                    Salen impresos en los informes clínicos que firma esta persona. Si se dejan
-                    vacíos, el informe se genera igual: simplemente no aparece esa línea.
+                    Salen impresos en los informes clínicos que firma esta persona.{" "}
+                    <span className="text-neutral-500">Un título por línea</span>: el primero es el
+                    que acompaña al nº de colegiación («Logopeda · Nº Col. 28/0256») y el resto van
+                    debajo. Si se dejan vacíos, el informe se genera igual: simplemente no aparece
+                    esa línea.
                   </p>
                   </>
                   )}
@@ -1013,7 +1021,9 @@ function DetailRow({ label, value, mono }) {
   return (
     <div>
       <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-0.5">{label}</div>
-      <div className={`text-sm text-neutral-700 ${mono ? "font-mono" : ""}`}>{value || "—"}</div>
+      {/* `whitespace-pre-line`: la titulación son varias líneas desde el
+          29/08/2026 y sin esto se leían todas pegadas en una sola. */}
+      <div className={`text-sm text-neutral-700 whitespace-pre-line ${mono ? "font-mono" : ""}`}>{value || "—"}</div>
     </div>
   );
 }

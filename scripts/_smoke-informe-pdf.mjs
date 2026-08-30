@@ -205,9 +205,55 @@ describe("lineaDeFirma · sin separadores colgando", () => {
     assert.deepEqual(bloqueDeFirma({ nombre: "M", titulacion: "T", colegiado: "1" }), {
       nombre: "M",
       acreditacion: "T · Nº Col. 1",
+      titulos: [],
     });
-    assert.deepEqual(bloqueDeFirma({ nombre: "M" }), { nombre: "M", acreditacion: "" });
-    assert.deepEqual(bloqueDeFirma(), { nombre: "", acreditacion: "" });
+    assert.deepEqual(bloqueDeFirma({ nombre: "M" }), { nombre: "M", acreditacion: "", titulos: [] });
+    assert.deepEqual(bloqueDeFirma(), { nombre: "", acreditacion: "", titulos: [] });
+  });
+});
+
+/*
+ * ── VARIOS TÍTULOS POR PERSONA (29/08/2026) ────────────────────────────────
+ * Aumenta mandó las titulaciones de sus 16 profesionales y ninguna es una sola
+ * línea: la profesión y, debajo, el máster, el postgrado y el experto — hasta
+ * seis en una persona. Se guarda un título por línea; la PRIMERA acompaña al nº
+ * de colegiada y las demás van debajo.
+ */
+describe("la titulación son varias líneas, y el documento las reparte", () => {
+  const ISABEL = ["Logopeda", "Experto en Práctica Clínica en Logoterapia", "Postgrado en Autismo"].join("\n");
+
+  it("la primera línea acompaña al número; el resto van debajo", () => {
+    assert.deepEqual(bloqueDeFirma({ nombre: "Isabel Alberca", titulacion: ISABEL, colegiado: "28/0256" }), {
+      nombre: "Isabel Alberca",
+      acreditacion: "Logopeda · Nº Col. 28/0256",
+      titulos: ["Experto en Práctica Clínica en Logoterapia", "Postgrado en Autismo"],
+    });
+  });
+
+  it("la PORTADA sigue siendo una sola línea: ahí no caben seis", () => {
+    assert.equal(
+      lineaDeFirma({ nombre: "Isabel Alberca", titulacion: ISABEL, colegiado: "28/0256" }),
+      "Isabel Alberca · Logopeda · Nº Col. 28/0256"
+    );
+  });
+
+  it("sin nº de colegiada —hay dos que no lo tienen— salen solo los títulos", () => {
+    const b = bloqueDeFirma({ nombre: "Blanca Márquez", titulacion: ["Maestra en Educación Infantil", "Máster en NEE"].join("\n") });
+    assert.equal(b.acreditacion, "Maestra en Educación Infantil");
+    assert.deepEqual(b.titulos, ["Máster en NEE"]);
+    assert.ok(!b.acreditacion.includes("Nº Col."), "sin número no se inventa la coletilla");
+  });
+
+  it("una sola línea se comporta EXACTAMENTE como antes del cambio", () => {
+    const b = bloqueDeFirma({ nombre: "M", titulacion: "Graduada en Logopedia", colegiado: "28/1" });
+    assert.equal(b.acreditacion, "Graduada en Logopedia · Nº Col. 28/1");
+    assert.deepEqual(b.titulos, []);
+  });
+
+  it("las líneas en blanco y los espacios sobrantes no cuentan como título", () => {
+    const b = bloqueDeFirma({ nombre: "M", titulacion: ["  Logopeda  ", "", "   ", "Máster"].join("\n") });
+    assert.equal(b.acreditacion, "Logopeda");
+    assert.deepEqual(b.titulos, ["Máster"]);
   });
 });
 

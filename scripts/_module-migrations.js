@@ -190,6 +190,10 @@ export const CORE = [
   // profesionales y en la agenda del primer cliente con la tabla y sin el
   // módulo. Decide por existencia de `team_members`: donde no está, es un no-op.
   "migrate-team-colegiada",
+    // La titulación admite varias líneas (29/08/2026, Aumenta mandó las suyas y
+    // ninguna es una sola): qualification VARCHAR(120) → TEXT. Va con las de
+    // clínica y no con las de equipo porque solo la usa quien firma informes.
+    "migrate-team-titulacion-varias-lineas",
 
   // Documento adjunto a una incidencia (`documents.incidencia_id`, 26/08/2026,
   // Aumenta). CORE por el mismo criterio que migrate-documents-patient-link, que
