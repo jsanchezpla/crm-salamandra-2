@@ -14,6 +14,7 @@ import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import PatientReparto from "@/components/billing/PatientReparto.jsx";
 import { ordenarConSugeridos } from "../../../../lib/billing/empleadosSugeridos.js";
 import { lineaDesdeConcepto } from "../../../../lib/billing/conceptosCatalogo.js";
+import { haySocios } from "../../../../lib/billing/socios.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -671,6 +672,8 @@ export default function FacturasPage() {
                         className={inputCls}
                       />
                     </FormRow>
+                    {/* Solo en centros con socios configurados (lib/billing/socios.js) */}
+                    {haySocios(settings) && (
                     <FormRow label="Socio (quién factura)">
                       <Select
                         value={form.partnerId}
@@ -682,6 +685,7 @@ export default function FacturasPage() {
                         className={inputCls}
                       />
                     </FormRow>
+                    )}
                     <FormRow label="IRPF % (retención sobre base)">
                       <input type="number" min="0" max="47" step="0.01" value={form.irpfRate}
                         onChange={(e) => setForm((f) => ({ ...f, irpfRate: e.target.value }))} className={inputCls} />

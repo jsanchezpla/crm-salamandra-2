@@ -11,6 +11,7 @@ import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { coincidePorNombre } from "../../../../lib/utils/busqueda.js";
+import { haySocios } from "../../../../lib/billing/socios.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -404,9 +405,14 @@ export default function CostesPage() {
                 <FormRow label="Empleado">
                   <Select value={form.employeeId} onChange={(v) => setForm((f) => ({ ...f, employeeId: v }))} className={inputCls} options={[{ value: "", label: "Quien lo registra" }, ...employees.map((m) => ({ value: m.id, label: m.displayName }))]} />
                 </FormRow>
+                {/* Atribuir un gasto a un cliente es facturación de despacho,
+                    el mismo rasgo que los socios: comparten vara
+                    (lib/billing/socios.js). En un centro sin socios sobraba. */}
+                {haySocios(settings) && (
                 <FormRow label="Cliente (opcional)">
                   <SelectorCliente value={form.clientId} onChange={(v) => setForm((f) => ({ ...f, clientId: v }))} className={inputCls} opcionesFijas={[{ value: "", label: "—" }]} />
                 </FormRow>
+                )}
               </div>
               <FormRow label="Proveedor (opcional)">
                 <Select value={form.supplierId} onChange={(v) => setForm((f) => ({ ...f, supplierId: v }))} className={inputCls} options={opcionesProveedor} />
@@ -416,9 +422,11 @@ export default function CostesPage() {
                   </span>
                 )}
               </FormRow>
+              {haySocios(settings) && (
               <FormRow label="Socio (quién se lo desgrava)">
                 <Select value={form.partnerId} onChange={(v) => setForm((f) => ({ ...f, partnerId: v }))} className={inputCls} options={[{ value: "", label: "Sin asignar" }, ...(settings?.partners ?? []).map((p) => ({ value: p.id, label: p.name }))]} />
               </FormRow>
+              )}
 
               {/* Preview totales */}
               <div className="bg-neutral-50 border border-neutral-100 rounded-lg p-3 text-xs space-y-1">

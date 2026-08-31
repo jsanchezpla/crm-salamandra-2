@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 
 import FacturacionNav from "./_components/FacturacionNav.jsx";
 import { tieneModuloBanco } from "../../../lib/banco/moduloBanco.js";
+import { centroConSocios } from "../../../lib/billing/sociosServidor.js";
 
 /**
  * Layout de Facturación. Servidor desde el 29/08/2026: la pestaña «Banco»
@@ -13,10 +14,11 @@ import { tieneModuloBanco } from "../../../lib/banco/moduloBanco.js";
 export default async function FacturacionLayout({ children }) {
   const headersList = await headers();
   const conBanco = await tieneModuloBanco(headersList.get("x-tenant"));
+  const conSocios = await centroConSocios(headersList.get("x-tenant"));
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <FacturacionNav conBanco={conBanco} />
+      <FacturacionNav conBanco={conBanco} conSocios={conSocios} />
       <div className="flex-1 min-h-0 overflow-auto">{children}</div>
     </div>
   );
