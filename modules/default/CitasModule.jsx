@@ -575,6 +575,11 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
 
   // Clic y arrastrar sobre un rango horario → nueva cita a esa hora de inicio.
   function handleDateSelect(info) {
+    // Un clic suelto también dispara `select` (además de `dateClick`): con el
+    // portapapeles cargado, ese clic está PEGANDO una cita — abrir encima el
+    // drawer de «Nueva cita» era un segundo efecto no pedido. El pegado ya lo
+    // hace handleDateClick; aquí solo se deshace la selección.
+    if (portapapeles) { info.view?.calendar?.unselect(); return; }
     abrirCreacionEn(info.startStr);
     info.view?.calendar?.unselect();
   }
