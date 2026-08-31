@@ -10,6 +10,7 @@ import Select from "@/components/ui/Select.jsx";
 import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 
 import { nifDeCliente } from "../../../../lib/billing/nifCliente.js";
+import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -171,7 +172,7 @@ export default function FacturasPage() {
   function openCreate() {
     setOpenInvoice(null);
     setForm(emptyForm(
-      settings?.defaultVatRate ?? 21,
+      ivaPorDefecto(settings),
       Number(settings?.defaultPaymentTermsDays ?? 30),
       Number(settings?.defaultIrpfRate ?? 0)
     ));
@@ -200,7 +201,7 @@ export default function FacturasPage() {
         quantity: l.quantity ?? 0,
         unitPrice: l.unitPrice ?? 0,
         discountPct: l.discountPct ?? 0,
-        vatRate: l.vatRate ?? settings?.defaultVatRate ?? 21,
+        vatRate: l.vatRate ?? ivaPorDefecto(settings),
         productId: l.productId ?? "",
         kind: l.kind ?? "",
       })),
@@ -216,7 +217,7 @@ export default function FacturasPage() {
     });
   }
   function addLine() {
-    setForm((f) => ({ ...f, lines: [...f.lines, { ...EMPTY_LINE, vatRate: settings?.defaultVatRate ?? 21 }] }));
+    setForm((f) => ({ ...f, lines: [...f.lines, { ...EMPTY_LINE, vatRate: ivaPorDefecto(settings) }] }));
   }
   function removeLine(idx) {
     setForm((f) => ({ ...f, lines: f.lines.filter((_, i) => i !== idx) }));

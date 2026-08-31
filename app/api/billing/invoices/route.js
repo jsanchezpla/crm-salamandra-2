@@ -4,6 +4,7 @@ import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { logBillingAudit, resumenFactura, datosPeticion } from "../../../../lib/billing/audit.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../lib/billing/calculateInvoice.js";
+import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
 import { withEffectiveStatusList } from "../../../../lib/billing/invoiceStatus.js";
 import { resolveInvoicePatientId, invoicePatientInclude } from "../../../../lib/billing/patientLink.js";
@@ -130,7 +131,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     // Exención general de IVA: si el emisor no repercute IVA, las líneas sin tipo
     // explícito nacen a 0 y se congela la nota legal en la factura.
     const vatExempt = !!(settings && settings.vatExempt);
-    const defaultVat = vatExempt ? 0 : settings ? Number(settings.defaultVatRate) : 21;
+    const defaultVat = ivaPorDefecto(settings);
     const defaultIrpf = settings ? Number(settings.defaultIrpfRate ?? 0) : 0;
     const termsDays = settings ? Number(settings.defaultPaymentTermsDays ?? 30) : 30;
     const linesWithVat = lines.map((l) => ({

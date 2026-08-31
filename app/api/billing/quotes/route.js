@@ -5,6 +5,7 @@ import { logBillingAudit, resumenImporte, datosPeticion } from "../../../../lib/
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../lib/billing/calculateInvoice.js";
 import { assignQuoteNumber } from "../../../../lib/billing/generateQuoteNumber.js";
+import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
 
 import { ATRIBUTOS_CLIENTE_FACTURA } from "../../../../lib/billing/nifCliente.js";
@@ -93,7 +94,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     const issue = issueDate || new Date().toISOString().slice(0, 10);
 
     const settings = await TenantBillingSettings.findOne();
-    const defaultVat = settings ? Number(settings.defaultVatRate) : 21;
+    const defaultVat = ivaPorDefecto(settings);
     const linesWithVat = (Array.isArray(lines) ? lines : []).map((l) => ({
       ...l,
       vatRate: l.vatRate != null ? Number(l.vatRate) : defaultVat,

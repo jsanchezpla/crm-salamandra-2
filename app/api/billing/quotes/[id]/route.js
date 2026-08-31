@@ -2,6 +2,7 @@ import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { logBillingAudit, datosPeticion } from "../../../../../lib/billing/audit.js";
 import { ok, noContent, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../../lib/billing/calculateInvoice.js";
+import { ivaPorDefecto } from "../../../../../lib/billing/ivaPorDefecto.js";
 
 
 // GET /api/billing/quotes/[id] — detalle
@@ -45,7 +46,7 @@ export const PATCH = withTenant(async (request, { params }, { tenantModels, hasM
 
     if (Array.isArray(body.lines)) {
       const settings = await TenantBillingSettings.findOne();
-      const defaultVat = settings ? Number(settings.defaultVatRate) : 21;
+      const defaultVat = ivaPorDefecto(settings);
       const linesWithVat = body.lines.map((l) => ({
         ...l,
         vatRate: l.vatRate != null ? Number(l.vatRate) : defaultVat,

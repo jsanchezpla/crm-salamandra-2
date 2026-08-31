@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import HelpTooltip from "../../../../../components/ui/HelpTooltip.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
+import { ivaPorDefecto } from "../../../../../lib/billing/ivaPorDefecto.js";
 
 const STATUS = {
   draft: { label: "Borrador", cls: "bg-neutral-100 text-neutral-600" },
@@ -41,6 +42,16 @@ export default function PresupuestoDetallePage() {
   const [lines, setLines] = useState([]);
   const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
+  const [settings, setSettings] = useState(null);
+
+  // El IVA de una línea nueva sale de la configuración del emisor (exento → 0),
+  // la misma regla que aplica el servidor: lib/billing/ivaPorDefecto.js.
+  useEffect(() => {
+    fetch("/api/billing/settings", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setSettings(j.data))
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,7 +90,7 @@ export default function PresupuestoDetallePage() {
     setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
   }
   function addLine() {
-    setLines((prev) => [...prev, { description: "", quantity: 1, unitPrice: 0, discountPct: 0, vatRate: 21 }]);
+    setLines((prev) => [...prev, { description: "", quantity: 1, unitPrice: 0, discountPct: 0, vatRate: ivaPorDefecto(settings) }]);
   }
   function removeLine(idx) {
     setLines((prev) => prev.filter((_, i) => i !== idx));
