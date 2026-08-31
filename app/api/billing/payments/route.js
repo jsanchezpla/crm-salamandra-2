@@ -6,6 +6,7 @@ import { updateInvoiceStatus } from "../../../../lib/billing/updateInvoiceStatus
 import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
 import { getTenantStripeConfig } from "../../../../lib/payments/stripeConfig.js";
 import { urlPanelStripe } from "../../../../lib/billing/cobroDesdeStripe.js";
+import { whereDeBusquedaCobros } from "../../../../lib/billing/busquedaCobros.js";
 
 export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasModule }) => {
   try {
@@ -21,6 +22,11 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
     if (searchParams.get("invoiceId")) where.invoiceId = searchParams.get("invoiceId");
     if (searchParams.get("status")) where.status = searchParams.get("status");
     if (searchParams.get("method")) where.method = searchParams.get("method");
+    // Búsqueda en el SERVIDOR (31/08/2026): el filtro del navegador solo veía
+    // los 100 cargados. La regla, en lib/billing/busquedaCobros.js.
+    const busqueda = whereDeBusquedaCobros(searchParams.get("q"));
+    if (busqueda) Object.assign(where, busqueda);
+
     if (searchParams.get("from") || searchParams.get("to")) {
       where.paidAt = {};
       if (searchParams.get("from")) where.paidAt[Op.gte] = `${searchParams.get("from")} 00:00:00`;
@@ -60,6 +66,9 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
       include,
       order,
       limit, offset,
+      // Con búsqueda, las columnas `$client.name$` viven en el JOIN: el
+      // subquery de Sequelize no las ve. Solo belongsTo: el count no duplica.
+      ...(busqueda ? { subQuery: false } : {}),
     });
 
     // `clientName`/`clientId` planos para que la tabla no tenga que saber por

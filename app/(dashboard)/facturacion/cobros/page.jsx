@@ -11,7 +11,6 @@ import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import FacturarMesDrawer from "../_components/FacturarMesDrawer.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
-import { coincidePorNombre } from "../../../../lib/utils/busqueda.js";
 import { prorrateoDeCuota } from "../../../../lib/billing/prorrateo.js";
 
 const inputCls =
@@ -135,6 +134,9 @@ export default function CobrosPage() {
       const params = new URLSearchParams({ limit: 100, sortBy: sortKey, sortDir });
       if (filterMethod) params.set("method", filterMethod);
       if (filterStatus) params.set("status", filterStatus);
+      // La búsqueda va al SERVIDOR (31/08/2026): filtrar aquí solo veía los
+      // 100 cargados y un cobro antiguo no aparecía por mucho que se buscara.
+      if (search) params.set("q", search);
       const res = await fetch(`/api/billing/payments?${params}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
@@ -142,7 +144,7 @@ export default function CobrosPage() {
     } catch (e) {
       setErrorMsg(e.message);
     } finally { setLoading(false); }
-  }, [sortKey, sortDir, filterMethod, filterStatus]);
+  }, [sortKey, sortDir, filterMethod, filterStatus, search]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -192,22 +194,11 @@ export default function CobrosPage() {
   }, [editing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // method y status se filtran en backend; aquí solo búsqueda libre por texto
-  const filtered = useMemo(() => {
-    if (!search) return payments;
-  // Todas las palabras, cada una en cualquiera de los campos (28/08/2026): antes
-  // había que escribirlo en el mismo orden que la ficha y con las tildes puestas.
-  // Los campos van en ARRAY a propósito: pegados con join(" ") la búsqueda podía
-  // casar a caballo entre dos campos y marcar a quien no era.
-    return payments.filter((p) =>
-      coincidePorNombre(search, [
-        p.clientName,
-        p.invoice?.number,
-        METHOD_LABELS[p.method] ?? p.method,
-        p.notes,
-        p.amount?.toString(),
-      ])
-    );
-  }, [payments, search]);
+  // La búsqueda ya la hizo el SERVIDOR (31/08/2026, lib/billing/busquedaCobros):
+  // volver a filtrar aquí solo podía QUITAR resultados que el servidor sí
+  // encontró (p. ej. por el nombre del cliente de la factura, que esta lista
+  // no siempre trae plano).
+  const filtered = payments;
 
   const totalCollected = useMemo(
     () => filtered.filter((p) => p.status === "completed").reduce((s, p) => s + Number(p.amount || 0), 0),
