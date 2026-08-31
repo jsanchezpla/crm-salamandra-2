@@ -21,14 +21,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import HelpTooltip from "../ui/HelpTooltip.jsx";
-
-const CAMPOS = [
-  { key: "fiscalName", label: "Nombre o razón social", placeholder: "Javier Pérez Ruiz · o Empresa S.L." },
-  { key: "fiscalTaxId", label: "NIF / CIF", placeholder: "12345678Z · o B12345678" },
-  { key: "fiscalAddress", label: "Dirección fiscal", placeholder: "C/ Mallorca 210, 3º 2ª" },
-  { key: "fiscalZip", label: "Código postal", placeholder: "28013" },
-  { key: "fiscalCity", label: "Ciudad", placeholder: "Madrid" },
-];
+// La lista de campos vive en lib/ y la comparte el panel «Editar ficha» del
+// listado (31/08/2026): así los dos sitios enseñan y guardan LO MISMO.
+import { CAMPOS_FISCALES as CAMPOS } from "../../lib/clients/camposFiscales.js";
 
 export default function ClientFiscalSection({ clientId }) {
   const [datos, setDatos] = useState(null);
