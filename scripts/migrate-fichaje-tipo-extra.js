@@ -23,6 +23,18 @@ async function main() {
   for (const sinTabla of skipped) process.stdout.write(`  · ${sinTabla} sin tabla fichajes, nada que blindar\n`);
 
   for (const schema of schemas) {
+    // Las fotos doradas no tienen enum propio: su tabla apunta al tipo del
+    // schema VIVO (medido el 31/08/2026), así que ampliar el del vivo las
+    // cubre y aquí no hay nada que tocar.
+    const [tipos] = await s.query(
+      `SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+       WHERE n.nspname = :schema AND t.typname = 'enum_fichajes_tipo'`,
+      { replacements: { schema } }
+    );
+    if (!tipos.length) {
+      process.stdout.write(`  · ${schema} sin enum propio (usa el de su vivo), nada que ampliar\n`);
+      continue;
+    }
     await s.query(`ALTER TYPE "${schema}"."enum_fichajes_tipo" ADD VALUE IF NOT EXISTS 'extra'`);
     process.stdout.write(`  ✓ ${schema}\n`);
   }
