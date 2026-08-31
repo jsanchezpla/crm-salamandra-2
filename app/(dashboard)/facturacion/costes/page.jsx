@@ -31,6 +31,7 @@ function emptyForm(defaultVat = 21) {
     taxBase: "", vatRate: defaultVat, vatDeductible: true,
     incurredAt: new Date().toISOString().slice(0, 10),
     employeeId: "", partnerId: "", clientId: "", supplierId: "",
+    irpfRate: "", attachmentUrl: "", attachmentName: "",
   };
 }
 
@@ -84,6 +85,7 @@ export default function CostesPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [subiendoAdjunto, setSubiendoAdjunto] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" }).then((r) => r.json()).then((j) => j.ok && setMe(j.data)).catch(() => {});
@@ -189,6 +191,8 @@ export default function CostesPage() {
       vatDeductible: !!c.vatDeductible, incurredAt: c.incurredAt?.slice(0, 10) ?? "",
       employeeId: c.employeeId ?? "", partnerId: c.partnerId ?? "", clientId: c.clientId ?? "",
       supplierId: c.supplierId ?? "",
+      irpfRate: c.irpfRate != null && Number(c.irpfRate) !== 0 ? Number(c.irpfRate) : "",
+      attachmentUrl: c.attachmentUrl ?? "", attachmentName: "",
     });
     setShowForm(true);
     setFormError(null);
@@ -205,6 +209,8 @@ export default function CostesPage() {
         vatDeductible: !!form.vatDeductible, incurredAt: form.incurredAt,
         employeeId: form.employeeId || null, partnerId: form.partnerId || null,
         clientId: form.clientId || null, supplierId: form.supplierId || null,
+        irpfRate: form.irpfRate === "" ? null : Number(form.irpfRate),
+        attachmentUrl: form.attachmentUrl || null,
       };
       const url = editingId ? `/api/billing/costs/${editingId}` : "/api/billing/costs";
       const method = editingId ? "PATCH" : "POST";
@@ -214,6 +220,27 @@ export default function CostesPage() {
       closeForm();
       load();
     } catch (e) { setFormError(e.message); } finally { setSaving(false); }
+  }
+
+  // Sube la factura externa del gasto ANTES de guardar el gasto: el endpoint
+  // devuelve la URL (servida por billing, no por Documentos avanzado) y el
+  // formulario la guarda en attachmentUrl.
+  async function subirAdjunto(file) {
+    if (!file) return;
+    setSubiendoAdjunto(true);
+    setFormError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await fetch("/api/billing/costs/adjunto", { method: "POST", body: fd });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "No se pudo subir el adjunto");
+      setForm((f) => ({ ...f, attachmentUrl: j.data.url, attachmentName: j.data.fileName }));
+    } catch (e) {
+      setFormError(e.message);
+    } finally {
+      setSubiendoAdjunto(false);
+    }
   }
 
   async function handleDelete(id) {
@@ -229,10 +256,11 @@ export default function CostesPage() {
     } catch (e) { alert(e.message); } finally { setDeleting(null); }
   }
 
-  // IVA preview
+  // IVA preview (con la retención de IRPF restando, como totalesGasto.js)
   const previewBase = Number(form.taxBase) || 0;
   const previewVat = Math.round(previewBase * Number(form.vatRate) / 100 * 100) / 100;
-  const previewTotal = Math.round((previewBase + previewVat) * 100) / 100;
+  const previewIrpf = Math.round(previewBase * (Number(form.irpfRate) || 0) / 100 * 100) / 100;
+  const previewTotal = Math.round((previewBase + previewVat - previewIrpf) * 100) / 100;
 
   // El Excel se baja con los MISMOS filtros que hay puestos en la tabla (sin la
   // búsqueda libre, que se aplica en cliente sobre lo ya cargado).
@@ -332,7 +360,16 @@ export default function CostesPage() {
                       {CATEGORY_LABELS[c.category] ?? c.category}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-neutral-700 max-w-[260px] truncate">{c.description}</td>
+                  <td className="px-4 py-3 text-neutral-700 max-w-[260px] truncate">
+                    {c.attachmentUrl && (
+                      <a href={c.attachmentUrl} target="_blank" rel="noreferrer" title="Abrir la factura adjunta"
+                        className="mr-1 no-underline hover:opacity-70">📎</a>
+                    )}
+                    {c.description}
+                    {c.irpfAmount != null && Number(c.irpfAmount) !== 0 && (
+                      <span className="ml-1 text-[10px] text-amber-700">IRPF −{Number(c.irpfRate)}%</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-xs text-neutral-500">{c.employee?.displayName ?? "—"}</td>
                   <td className="px-4 py-3 text-xs text-neutral-500 max-w-[160px] truncate">{c.supplier?.name ?? "—"}</td>
                   <td className="px-4 py-3 text-right text-neutral-700 tabular">{fmtMoney(c.taxBase)}</td>
@@ -395,6 +432,31 @@ export default function CostesPage() {
                   <Select value={form.vatRate} onChange={(v) => setForm((f) => ({ ...f, vatRate: v }))} className={inputCls} options={(settings?.availableVatRates ?? [21, 10, 4, 0]).map((rate) => ({ value: rate, label: `${rate}%` }))} />
                 </FormRow>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <FormRow label="Retención IRPF % (opcional)">
+                  {/* La de la factura del profesional: resta del total a pagar
+                      y SE GUARDA (antes solo había una estimación informativa). */}
+                  <input type="number" min="0" max="47" step="0.5" value={form.irpfRate} placeholder="0"
+                    onChange={(e) => setForm((f) => ({ ...f, irpfRate: e.target.value }))} className={inputCls} />
+                </FormRow>
+                <FormRow label="Factura adjunta">
+                  {form.attachmentUrl ? (
+                    <div className="flex items-center gap-2 text-xs">
+                      <a href={form.attachmentUrl} target="_blank" rel="noreferrer"
+                        className="text-[var(--color-primary,#1B3A2D)] underline truncate">
+                        {form.attachmentName || "Ver adjunto"}
+                      </a>
+                      <button type="button" onClick={() => setForm((f) => ({ ...f, attachmentUrl: "", attachmentName: "" }))}
+                        className="text-neutral-300 hover:text-red-500 shrink-0">✕</button>
+                    </div>
+                  ) : (
+                    <input type="file" accept=".pdf,.png,.jpg,.jpeg,image/*,application/pdf" disabled={subiendoAdjunto}
+                      onChange={(e) => subirAdjunto(e.target.files?.[0])}
+                      className="block w-full text-xs text-neutral-500 file:mr-2 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-neutral-100 file:text-neutral-700 file:text-xs file:cursor-pointer" />
+                  )}
+                  {subiendoAdjunto && <span className="text-[10px] text-neutral-400">Subiendo…</span>}
+                </FormRow>
+              </div>
               <FormRow label="">
                 <label className="flex items-center gap-2 text-xs text-neutral-600">
                   <input type="checkbox" checked={form.vatDeductible} onChange={(e) => setForm((f) => ({ ...f, vatDeductible: e.target.checked }))} />
@@ -431,6 +493,9 @@ export default function CostesPage() {
               {/* Preview totales */}
               <div className="bg-neutral-50 border border-neutral-100 rounded-lg p-3 text-xs space-y-1">
                 <div className="flex justify-between text-neutral-500"><span>Base imponible</span><span className="tabular">{fmtMoney(previewBase)}</span></div>
+                {previewIrpf > 0 && (
+                  <div className="flex justify-between text-amber-700"><span>Retención IRPF {Number(form.irpfRate)}%</span><span className="tabular">−{fmtMoney(previewIrpf)}</span></div>
+                )}
                 <div className="flex justify-between text-neutral-500"><span>IVA {form.vatRate}%</span><span className="tabular">{fmtMoney(previewVat)}</span></div>
                 <div className="flex justify-between font-semibold text-neutral-900 pt-1 border-t border-neutral-200"><span>Total</span><span className="tabular">{fmtMoney(previewTotal)}</span></div>
                 {previewBase > 0 && (

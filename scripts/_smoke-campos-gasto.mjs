@@ -133,6 +133,8 @@ describe("computeCostTotals — base más IVA", () => {
       taxBase: 100,
       vatRate: 21,
       taxAmount: 21,
+      irpfRate: 0,
+      irpfAmount: 0,
       total: 121,
     });
   });
@@ -142,6 +144,8 @@ describe("computeCostTotals — base más IVA", () => {
       taxBase: 100,
       vatRate: 4,
       taxAmount: 4,
+      irpfRate: 0,
+      irpfAmount: 0,
       total: 104,
     });
   });
@@ -151,8 +155,28 @@ describe("computeCostTotals — base más IVA", () => {
       taxBase: 1200.5,
       vatRate: 10,
       taxAmount: 120.05,
+      irpfRate: 0,
+      irpfAmount: 0,
       total: 1320.55,
     });
+  });
+});
+
+describe("computeCostTotals — la retención de IRPF (31/08/2026)", () => {
+  it("resta del total a pagar: base + IVA − retención", () => {
+    assert.deepEqual(computeCostTotals({ taxBase: 100, vatRate: 21, irpfRate: 15 }), {
+      taxBase: 100,
+      vatRate: 21,
+      taxAmount: 21,
+      irpfRate: 15,
+      irpfAmount: 15,
+      total: 106,
+    });
+  });
+
+  it("sin retención (null o ausente) todo queda como siempre", () => {
+    assert.equal(computeCostTotals({ taxBase: 100, vatRate: 21, irpfRate: null }).total, 121);
+    assert.equal(computeCostTotals({ taxBase: 100, vatRate: 21 }).irpfAmount, 0);
   });
 });
 
@@ -162,6 +186,8 @@ describe("computeCostTotals — el redondeo a céntimos", () => {
       taxBase: 19.99,
       vatRate: 21,
       taxAmount: 4.2,
+      irpfRate: 0,
+      irpfAmount: 0,
       total: 24.19,
     });
   });
@@ -184,12 +210,14 @@ describe("computeCostTotals — los ceros y los huecos", () => {
       taxBase: 0,
       vatRate: 21,
       taxAmount: 0,
+      irpfRate: 0,
+      irpfAmount: 0,
       total: 0,
     });
   });
 
   it("sin base ni tipo, todo a cero en vez de reventar", () => {
-    assert.deepEqual(computeCostTotals({}), { taxBase: 0, vatRate: 0, taxAmount: 0, total: 0 });
+    assert.deepEqual(computeCostTotals({}), { taxBase: 0, vatRate: 0, taxAmount: 0, irpfRate: 0, irpfAmount: 0, total: 0 });
   });
 
   it("un IVA nulo es 0 %, no el 21 % de fábrica: ese default es del endpoint", () => {
@@ -197,6 +225,8 @@ describe("computeCostTotals — los ceros y los huecos", () => {
       taxBase: 100,
       vatRate: 0,
       taxAmount: 0,
+      irpfRate: 0,
+      irpfAmount: 0,
       total: 100,
     });
     assert.equal(computeCostTotals({ taxBase: 100 }).vatRate, 0);
@@ -207,6 +237,8 @@ describe("computeCostTotals — los ceros y los huecos", () => {
       taxBase: 250.4,
       vatRate: 0,
       taxAmount: 0,
+      irpfRate: 0,
+      irpfAmount: 0,
       total: 250.4,
     });
   });

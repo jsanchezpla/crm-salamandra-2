@@ -85,7 +85,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       if (!proveedor) return notFound("Proveedor no encontrado");
     }
 
-    const totals = computeCostTotals({ taxBase, vatRate });
+    const totals = computeCostTotals({ taxBase, vatRate, irpfRate: campos.irpfRate });
 
     // Empleado por defecto: el TeamMember cuyo userId coincide con el del
     // solicitante. employeeId del body siempre prevalece.
