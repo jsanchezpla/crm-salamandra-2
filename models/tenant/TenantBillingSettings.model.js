@@ -105,6 +105,9 @@ export function defineTenantBillingSettings(sequelize) {
         ],
       },
       // ── Branding documento ──────────────────────────────────────────────
+      // El membrete es POR DOCUMENTO (31/08/2026): `logoUrl` +
+      // `invoiceFooterText` visten la factura; el presupuesto tiene los suyos
+      // y, si están vacíos, cae a los de la factura (lib/billing/membrete.js).
       invoiceFooterText: {
         type: DataTypes.TEXT,
         allowNull: true,
@@ -112,6 +115,16 @@ export function defineTenantBillingSettings(sequelize) {
       logoUrl: {
         type: DataTypes.STRING,
         allowNull: true,
+      },
+      quoteFooterText: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: "quote_footer_text",
+      },
+      quoteLogoUrl: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        field: "quote_logo_url",
       },
     },
     {

@@ -2,6 +2,8 @@ import { withTenant } from "../../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, notFound, serverError } from "../../../../../../lib/utils/apiResponse.js";
 import { getMasterModels } from "../../../../../../lib/db/masterDb.js";
 import { buildQuotePdfBuffer, quotePdfFilename } from "../../../../../../lib/billing/invoicePdf.js";
+import { membreteDe } from "../../../../../../lib/billing/membrete.js";
+import { cargarLogo } from "../../../../../../lib/billing/logoMembrete.js";
 import { quoteSentTemplate } from "../../../../../../lib/email/templates/billing/quoteSent.js";
 import { sendEmail } from "../../../../../../lib/email/resendClient.js";
 import { getTenantResendConfig } from "../../../../../../lib/outreach/resendConfig.js";
@@ -54,7 +56,8 @@ export const POST = withTenant(async (request, { params }, ctx) => {
     } else if (quiereEmail && destino) {
       try {
         const settings = (await TenantBillingSettings.findOne()) || {};
-        const pdf = await buildQuotePdfBuffer({ quote, client: cliente, settings });
+        const logo = await cargarLogo(membreteDe(settings, "presupuesto").logoUrl);
+        const pdf = await buildQuotePdfBuffer({ quote, client: cliente, settings, logo });
 
         const total = `${Number(quote.total ?? 0).toLocaleString("es-ES", {
           minimumFractionDigits: 2,

@@ -5,6 +5,8 @@ import { withTenant } from "@/lib/tenant/withTenant.js";
 import { forbidden, error, serverError } from "@/lib/utils/apiResponse.js";
 import { contentDisposition } from "@/lib/documents/helpers.js";
 import { buildInvoicePdfBuffer, invoicePdfFilename } from "@/lib/billing/invoicePdf.js";
+import { membreteDe } from "@/lib/billing/membrete.js";
+import { cargarLogo } from "@/lib/billing/logoMembrete.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -27,6 +29,8 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
     const { Invoice, Client, TenantBillingSettings } = tenantModels;
     const settings = (await TenantBillingSettings.findOne()) || {};
     const partners = Array.isArray(settings.partners) ? settings.partners : [];
+    // El logo se trae UNA vez para todo el lote: mismo membrete que el PDF suelto.
+    const logo = await cargarLogo(membreteDe(settings, "factura").logoUrl);
 
     const invoices = await Invoice.findAll({
       where: {
@@ -55,6 +59,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
             client: inv.client,
             settings,
             partnerName,
+            logo,
           });
           archive.append(buf, { name: invoicePdfFilename(inv) });
         } catch {

@@ -2,6 +2,8 @@ import { withTenant } from "@/lib/tenant/withTenant.js";
 import { forbidden, notFound, error, serverError } from "@/lib/utils/apiResponse.js";
 import { contentDisposition } from "@/lib/documents/helpers.js";
 import { buildInvoicePdfBuffer, invoicePdfFilename } from "@/lib/billing/invoicePdf.js";
+import { membreteDe } from "@/lib/billing/membrete.js";
+import { cargarLogo } from "@/lib/billing/logoMembrete.js";
 
 /**
  * GET /api/billing/invoices/[id]/pdf
@@ -27,11 +29,13 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
       ? partners.find((p) => p.id === invoice.partnerId)?.name || null
       : null;
 
+    const logo = await cargarLogo(membreteDe(settings, "factura").logoUrl);
     const buffer = await buildInvoicePdfBuffer({
       invoice,
       client: invoice.client,
       settings,
       partnerName,
+      logo,
     });
 
     return new Response(buffer, {

@@ -30,6 +30,8 @@ export const PUT = withTenant(async (request, _ctx, { tenantModels, hasModule })
       "fiscalName", "taxId", "fiscalAddress", "fiscalCity", "fiscalZip",
       "fiscalCountry", "defaultVatRate", "defaultIrpfRate", "defaultPaymentTermsDays",
       "invoiceFooterText", "logoUrl",
+      // Membrete propio del presupuesto (31/08/2026); vacío = el de la factura.
+      "quoteFooterText", "quoteLogoUrl",
     ];
     const updates = {};
     for (const k of allowed) {

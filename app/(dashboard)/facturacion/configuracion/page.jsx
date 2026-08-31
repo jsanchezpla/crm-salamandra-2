@@ -65,6 +65,8 @@ export default function ConfiguracionPage() {
           defaultPaymentTermsDays: Number(settings.defaultPaymentTermsDays),
           invoiceFooterText: settings.invoiceFooterText,
           logoUrl: settings.logoUrl,
+          quoteFooterText: settings.quoteFooterText,
+          quoteLogoUrl: settings.quoteLogoUrl,
         }),
       });
       const j = await res.json();
@@ -178,11 +180,17 @@ export default function ConfiguracionPage() {
           <Field label="Días de vencimiento por defecto">
             <input disabled={!puedeFacturar} type="number" min="0" value={settings.defaultPaymentTermsDays} onChange={(e) => setField("defaultPaymentTermsDays", Number(e.target.value))} className={inputCls} />
           </Field>
-          <Field label="URL del logo">
-            <input disabled={!puedeFacturar} value={settings.logoUrl ?? ""} onChange={(e) => setField("logoUrl", e.target.value)} className={inputCls} />
+          <Field label="URL del logo (facturas)">
+            <input disabled={!puedeFacturar} value={settings.logoUrl ?? ""} onChange={(e) => setField("logoUrl", e.target.value)} placeholder="https://… (PNG o JPG)" className={inputCls} />
+          </Field>
+          <Field label="URL del logo (presupuestos)">
+            <input disabled={!puedeFacturar} value={settings.quoteLogoUrl ?? ""} onChange={(e) => setField("quoteLogoUrl", e.target.value)} placeholder="Vacío = el de las facturas" className={inputCls} />
           </Field>
           <Field label="Texto al pie de la factura" full>
             <textarea disabled={!puedeFacturar} rows={2} value={settings.invoiceFooterText ?? ""} onChange={(e) => setField("invoiceFooterText", e.target.value)} className={inputCls + " resize-y"} />
+          </Field>
+          <Field label="Texto al pie del presupuesto" full>
+            <textarea disabled={!puedeFacturar} rows={2} placeholder="Vacío = el de las facturas" value={settings.quoteFooterText ?? ""} onChange={(e) => setField("quoteFooterText", e.target.value)} className={inputCls + " resize-y"} />
           </Field>
         </div>
       </Section>

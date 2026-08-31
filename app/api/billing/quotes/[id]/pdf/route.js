@@ -2,6 +2,8 @@ import { withTenant } from "@/lib/tenant/withTenant.js";
 import { forbidden, notFound, serverError } from "@/lib/utils/apiResponse.js";
 import { contentDisposition } from "@/lib/documents/helpers.js";
 import { buildQuotePdfBuffer, quotePdfFilename } from "@/lib/billing/invoicePdf.js";
+import { membreteDe } from "@/lib/billing/membrete.js";
+import { cargarLogo } from "@/lib/billing/logoMembrete.js";
 
 /**
  * GET /api/billing/quotes/[id]/pdf
@@ -23,7 +25,8 @@ export const GET = withTenant(async (_request, { params }, { tenantModels, hasMo
     if (!quote) return notFound("Presupuesto no encontrado");
 
     const settings = (await TenantBillingSettings.findOne()) || {};
-    const buffer = await buildQuotePdfBuffer({ quote, client: quote.client, settings });
+    const logo = await cargarLogo(membreteDe(settings, "presupuesto").logoUrl);
+    const buffer = await buildQuotePdfBuffer({ quote, client: quote.client, settings, logo });
 
     return new Response(buffer, {
       status: 200,

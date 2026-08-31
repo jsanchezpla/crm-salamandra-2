@@ -130,6 +130,13 @@ test("el borrador de presupuesto SÍ lleva su número (no dice BORRADOR a secas)
   assert.match(texto, /Estado: Borrador/);
 });
 
+test("el presupuesto lleva SU pie cuando el emisor tiene membrete propio", async () => {
+  const settings = { ...SETTINGS, quoteFooterText: "Presupuesto válido treinta días" };
+  const texto = textoDe(await buildQuotePdfBuffer({ quote: QUOTE, client: CLIENT, settings }));
+  assert.match(texto, /Presupuesto válido treinta días/);
+  assert.ok(!/Gracias por su confianza/.test(texto), "se coló el pie de la factura");
+});
+
 test("el nombre del fichero sale del número", () => {
   assert.equal(quotePdfFilename(QUOTE), "presupuesto-P-2026-0042.pdf");
   assert.equal(quotePdfFilename({ id: "deadbeef99" }), "presupuesto-deadbeef.pdf");
