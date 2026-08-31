@@ -430,7 +430,8 @@ export const MODULES = {
   // arista está declarada en _migration-order.js porque la migración se salta
   // sola el schema que no tenga esa tabla, y saltarse algo en silencio es
   // justo lo que no se puede permitir aquí.
-  fichaje: ["migrate-fichaje-module"],
+  // tipo-extra (31/08/2026): valor 'extra' en el enum — las horas extra a mano.
+  fichaje: ["migrate-fichaje-module", "migrate-fichaje-tipo-extra"],
 
   team: [
     "migrate-team-fields",
