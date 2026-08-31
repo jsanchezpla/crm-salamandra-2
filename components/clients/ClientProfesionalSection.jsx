@@ -157,7 +157,8 @@ export default function ClientProfesionalSection({ clientId }) {
           Con quién lleva su seguimiento esta ficha.
           {conCitas && " Sin asignar, al pedir cita ve la agenda del centro entera; asignada, solo los huecos de esa persona."}
           {esExterna && " En una consulta externa es además quien la ve, junto con la dirección."}
-          {conPacientes && " El terapeuta de cada paciente se pone en la ficha del paciente, no aquí."}
+          {conPacientes &&
+            " Al asignar aquí, los pacientes de esta familia que no tengan terapeuta lo reciben como suyo; el de cada paciente se afina en su ficha."}
         </p>
 
         {/*

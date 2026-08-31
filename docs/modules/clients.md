@@ -346,6 +346,15 @@ debajo de «Consulta externa», en la ficha default **y** en la de nutri_laura.
 Enseña quién lleva el seguimiento y lo cambia en un desplegable
 (`PUT /api/clients/:id` con `assignedTeamMemberId`).
 
+**Asignar aquí llega también a los pacientes de la familia** (31/08/2026,
+Rodrigo: «es confuso que no esté en los dos lados igual»): el profesional nuevo
+pasa a ser el terapeuta de referencia de los pacientes SIN terapeuta, por
+`terapeutaAPacientesDeFamilia` (`lib/clients/profesionalFamilia.js`, prueba
+`_smoke-profesional-familia.mjs`) — la misma regla que al dar plaza en la lista
+de espera. A un paciente que ya tiene terapeuta no se le pisa (familias con dos
+hijos y terapeutas distintos), y re-guardar la ficha con el mismo profesional no
+re-propaga.
+
 Antes el campo solo se podía poner UNA vez y en un sitio: al aceptar la
 solicitud en la bandeja (`lib/formularios/accept.js`). No había forma de verlo
 ni de corregirlo desde la ficha.
