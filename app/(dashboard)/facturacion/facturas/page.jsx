@@ -14,12 +14,16 @@ import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import PatientReparto from "@/components/billing/PatientReparto.jsx";
 import { ordenarConSugeridos } from "../../../../lib/billing/empleadosSugeridos.js";
 import { lineaDesdeConcepto } from "../../../../lib/billing/conceptosCatalogo.js";
+import { prorrateoDeCuota, rotuloDeProrrateo } from "../../../../lib/billing/prorrateo.js";
 import { haySocios } from "../../../../lib/billing/socios.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
 
-const EMPTY_LINE = { description: "", quantity: 1, unitPrice: 0, discountPct: 0, vatRate: 21, productId: "", kind: "" };
+// `inicioServicio`/`precioCompleto` son de la PANTALLA: al guardar, el precio
+// viaja ya prorrateado y el desglose escrito en el texto de la línea (el
+// motor del servidor, calculateInvoice, tira los campos que no conoce).
+const EMPTY_LINE = { description: "", quantity: 1, unitPrice: 0, discountPct: 0, vatRate: 21, productId: "", kind: "", inicioServicio: "", precioCompleto: null };
 
 function addDaysIso(isoDate, days) {
   if (!isoDate || !Number.isFinite(days) || days <= 0) return "";
@@ -251,6 +255,29 @@ export default function FacturasPage() {
       return { ...f, lines };
     });
   }
+  // Fecha de inicio POR SERVICIO (31/08/2026, Rodrigo): empezó el 13 con
+  // logopedia y el 17 con psicología → cada línea se prorratea sola desde su
+  // precio de mes entero (`precioCompleto`, que se guarda al poner la fecha
+  // para que cambiarla después no prorratee sobre lo ya prorrateado).
+  function setInicioLinea(idx, fecha) {
+    setForm((f) => {
+      const lines = [...f.lines];
+      const l = { ...lines[idx], inicioServicio: fecha };
+      const base = l.precioCompleto ?? (Number(l.unitPrice) || 0);
+      if (!fecha) {
+        if (l.precioCompleto != null) l.unitPrice = l.precioCompleto;
+        l.precioCompleto = null;
+      } else {
+        const p = prorrateoDeCuota(base, fecha);
+        if (p) {
+          l.precioCompleto = base;
+          l.unitPrice = p.importe;
+        }
+      }
+      lines[idx] = l;
+      return { ...f, lines };
+    });
+  }
   function addLine() {
     setForm((f) => ({ ...f, lines: [...f.lines, { ...EMPTY_LINE, vatRate: ivaPorDefecto(settings) }] }));
   }
@@ -293,16 +320,22 @@ export default function FacturasPage() {
         series: form.series,
         irpfRate: Number(form.irpfRate || 0),
         notes: form.notes || null,
-        lines: form.lines.map((l) => ({
-          description: l.description,
-          quantity: Number(l.quantity),
-          unitPrice: Number(l.unitPrice),
-          discountPct: Number(l.discountPct),
-          vatRate: Number(l.vatRate),
-          productId: l.productId || null,
-          kind: l.kind || null,
-          employeeId: l.employeeId || null,
-        })),
+        lines: form.lines.map((l) => {
+          // El prorrateo viaja HORNEADO: precio ya prorrateado y el desglose
+          // escrito en el texto de la línea, que es lo que imprime el PDF y
+          // lo que la familia entiende. El campo de fecha no sale de aquí.
+          const rotulo = l.inicioServicio ? rotuloDeProrrateo(l.inicioServicio) : null;
+          return {
+            description: rotulo ? `${l.description} · ${rotulo}` : l.description,
+            quantity: Number(l.quantity),
+            unitPrice: Number(l.unitPrice),
+            discountPct: Number(l.discountPct),
+            vatRate: Number(l.vatRate),
+            productId: l.productId || null,
+            kind: l.kind || null,
+            employeeId: l.employeeId || null,
+          };
+        }),
       };
 
       const url = openInvoice ? `/api/billing/invoices/${openInvoice.id}` : "/api/billing/invoices";
@@ -728,7 +761,18 @@ export default function FacturasPage() {
                                   if (!linea) return;
                                   setForm((f) => {
                                     const lines = [...f.lines];
-                                    lines[idx] = { ...lines[idx], ...linea };
+                                    const next = { ...lines[idx], ...linea, precioCompleto: null };
+                                    // Si la línea ya tenía fecha de inicio, el
+                                    // precio nuevo del catálogo se prorratea al
+                                    // momento con esa misma fecha.
+                                    if (next.inicioServicio) {
+                                      const p = prorrateoDeCuota(linea.unitPrice, next.inicioServicio);
+                                      if (p) {
+                                        next.precioCompleto = linea.unitPrice;
+                                        next.unitPrice = p.importe;
+                                      }
+                                    }
+                                    lines[idx] = next;
                                     return { ...f, lines };
                                   });
                                 }}
@@ -820,6 +864,29 @@ export default function FacturasPage() {
                                 />
                               </FormRow>
                             </div>
+                            {/* Fecha de inicio POR SERVICIO (31/08/2026): si el
+                                paciente empezó a mitad de mes, la línea se
+                                prorratea sola y el desglose queda escrito en la
+                                factura. Sin fecha, nada cambia. */}
+                            {l.kind !== "titulo" && l.kind !== "shipping" && (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <label className="text-[11px] text-neutral-500 shrink-0">Empezó a mitad de mes:</label>
+                                <input
+                                  type="date"
+                                  value={l.inicioServicio || ""}
+                                  onChange={(e) => setInicioLinea(idx, e.target.value)}
+                                  className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs text-neutral-600 focus:outline-none focus:border-neutral-400"
+                                />
+                                {l.inicioServicio && l.precioCompleto != null && (() => {
+                                  const p = prorrateoDeCuota(l.precioCompleto, l.inicioServicio);
+                                  return p ? (
+                                    <span className="text-[10px] text-neutral-400">
+                                      {p.diasCobrados} de {p.diasDelMes} días → {fmtMoney(p.importe)} (el mes entero son {fmtMoney(l.precioCompleto)})
+                                    </span>
+                                  ) : null;
+                                })()}
+                              </div>
+                            )}
                             {/* Empleado POR LÍNEA (31/08/2026): una factura con
                                 sesiones de dos terapeutas reparte cada línea al
                                 suyo en Analítica → Por empleado. Vacío = el de

@@ -11,7 +11,7 @@ import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import FacturarMesDrawer from "../_components/FacturarMesDrawer.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
-import { prorrateoDeCuota } from "../../../../lib/billing/prorrateo.js";
+import { partesConProrrateo } from "../../../../lib/billing/prorrateo.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -60,40 +60,49 @@ export default function CobrosPage() {
   // si la familia empieza a mitad de mes, la parte proporcional se calcula
   // sola (lib/billing/prorrateo.js). Los conceptos van por índice, no por Set:
   // el mismo concepto dos veces es legítimo (dos hermanos, misma cuota).
+  // La fecha de inicio va POR CONCEPTO (31/08/2026, Rodrigo): empezó el 13
+  // con logopedia y el 17 con psicología, y cada servicio paga lo suyo.
   const [conceptosCatalogo, setConceptosCatalogo] = useState([]);
-  const [lineasCuota, setLineasCuota] = useState([]);
-  const [inicioCuota, setInicioCuota] = useState("");
+  const [lineasCuota, setLineasCuota] = useState([]); // [{ id, inicio }]
 
   const conceptosElegidos = lineasCuota
-    .map((id) => conceptosCatalogo.find((c) => String(c.id) === String(id)))
+    .map(({ id, inicio }) => {
+      const c = conceptosCatalogo.find((c2) => String(c2.id) === String(id));
+      return c ? { c, inicio } : null;
+    })
     .filter(Boolean);
-  const baseCuota = Math.round(conceptosElegidos.reduce((s, c) => s + Number(c.unitPrice || 0), 0) * 100) / 100;
-  const prorrateoCuota = inicioCuota && conceptosElegidos.length ? prorrateoDeCuota(baseCuota, inicioCuota) : null;
+  const cuentaCuota = partesConProrrateo(
+    conceptosElegidos.map(({ c, inicio }) => ({ importe: Number(c.unitPrice || 0), inicio }))
+  );
 
   // El importe se rellena solo al tocar conceptos o fecha de inicio, desde el
   // HANDLER (no un efecto): así un importe retocado a mano solo se pisa cuando
   // el usuario vuelve a tocar la composición de la cuota.
-  function aplicarImporteCuota(ids, inicio) {
-    const elegidos = ids.map((id) => conceptosCatalogo.find((c) => String(c.id) === String(id))).filter(Boolean);
-    if (!elegidos.length) return;
-    const base = Math.round(elegidos.reduce((s, c) => s + Number(c.unitPrice || 0), 0) * 100) / 100;
-    const p = inicio ? prorrateoDeCuota(base, inicio) : null;
-    setForm((f) => ({ ...f, amount: String(p ? p.importe : base) }));
+  function aplicarImporteCuota(items) {
+    const partes = items
+      .map(({ id, inicio }) => {
+        const c = conceptosCatalogo.find((c2) => String(c2.id) === String(id));
+        return c ? { importe: Number(c.unitPrice || 0), inicio } : null;
+      })
+      .filter(Boolean);
+    if (!partes.length) return;
+    setForm((f) => ({ ...f, amount: String(partesConProrrateo(partes).total) }));
   }
   function addConceptoCuota(id) {
     if (!id) return;
-    const ids = [...lineasCuota, id];
-    setLineasCuota(ids);
-    aplicarImporteCuota(ids, inicioCuota);
+    const items = [...lineasCuota, { id, inicio: "" }];
+    setLineasCuota(items);
+    aplicarImporteCuota(items);
   }
   function quitarConceptoCuota(idx) {
-    const ids = lineasCuota.filter((_, i) => i !== idx);
-    setLineasCuota(ids);
-    aplicarImporteCuota(ids, inicioCuota);
+    const items = lineasCuota.filter((_, i) => i !== idx);
+    setLineasCuota(items);
+    aplicarImporteCuota(items);
   }
-  function cambiarInicioCuota(v) {
-    setInicioCuota(v);
-    aplicarImporteCuota(lineasCuota, v);
+  function cambiarInicioConcepto(idx, fecha) {
+    const items = lineasCuota.map((it, i) => (i === idx ? { ...it, inicio: fecha } : it));
+    setLineasCuota(items);
+    aplicarImporteCuota(items);
   }
 
   const [searchInput, setSearchInput] = useState("");
@@ -222,11 +231,16 @@ export default function CobrosPage() {
       const porFactura = form.modo === "factura";
       if (porFactura && !form.invoiceId) throw new Error("Selecciona una factura");
       if (!porFactura && !form.clientId) throw new Error("Selecciona el cliente que ha pagado");
-      // Qué conceptos componen la cuota (y el prorrateo, si lo hay) queda
-      // escrito en la nota del cobro: es lo que Rosa lee meses después.
+      // Qué conceptos componen la cuota (y el prorrateo de cada uno, si lo
+      // hay) queda escrito en la nota del cobro: es lo que Rosa lee meses
+      // después.
       const notaConceptos = !porFactura && conceptosElegidos.length
-        ? `Cuota: ${conceptosElegidos.map((c) => c.name).join(" + ")}` +
-          (prorrateoCuota ? ` · desde el ${inicioCuota.split("-").reverse().join("/")} (${prorrateoCuota.diasCobrados}/${prorrateoCuota.diasDelMes} días)` : "")
+        ? `Cuota: ${conceptosElegidos
+            .map(({ c }, i) => {
+              const r = cuentaCuota.partes[i]?.rotulo;
+              return r ? `${c.name} (${r})` : c.name;
+            })
+            .join(" + ")}`
         : "";
       const res = await fetch("/api/billing/payments", {
         method: "POST",
@@ -242,14 +256,13 @@ export default function CobrosPage() {
           // La terapia del cobro, para que «Facturar el mes» pueda agrupar por
           // concepto: solo cuando la cuota es de UN concepto (una compuesta no
           // se puede partir por terapia).
-          conceptId: !porFactura && conceptosElegidos.length === 1 ? conceptosElegidos[0].id : null,
+          conceptId: !porFactura && conceptosElegidos.length === 1 ? conceptosElegidos[0].c.id : null,
         }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
       setForm((f) => ({ ...f, invoiceId: "", clientId: "", amount: "", notes: "" }));
       setLineasCuota([]);
-      setInicioCuota("");
       setShowForm(false);
       load();
       loadMorosidad();
@@ -572,16 +585,33 @@ export default function CobrosPage() {
                   {conceptosCatalogo.length > 0 && (
                     <FormRow label="Conceptos de la cuota">
                       <div className="space-y-1.5">
-                        {conceptosElegidos.map((c, i) => (
-                          <div key={i} className="flex items-center justify-between gap-2 text-xs bg-neutral-50 border border-neutral-100 rounded-lg px-2.5 py-1.5">
-                            <span className="text-neutral-700 truncate">{c.name}</span>
-                            <span className="flex items-center gap-2 shrink-0">
-                              <span className="text-neutral-500">{fmtMoney(c.unitPrice)}</span>
-                              <button type="button" onClick={() => quitarConceptoCuota(i)}
-                                className="text-neutral-300 hover:text-red-500 transition-colors" aria-label="Quitar concepto">✕</button>
-                            </span>
-                          </div>
-                        ))}
+                        {conceptosElegidos.map(({ c, inicio }, i) => {
+                          const parte = cuentaCuota.partes[i];
+                          return (
+                            <div key={i} className="text-xs bg-neutral-50 border border-neutral-100 rounded-lg px-2.5 py-1.5 space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-neutral-700 truncate">{c.name}</span>
+                                <span className="flex items-center gap-2 shrink-0">
+                                  <span className="text-neutral-500">{fmtMoney(parte.importe)}</span>
+                                  <button type="button" onClick={() => quitarConceptoCuota(i)}
+                                    className="text-neutral-300 hover:text-red-500 transition-colors" aria-label="Quitar concepto">✕</button>
+                                </span>
+                              </div>
+                              {/* Cada servicio con SU fecha: empezó el 13 con logopedia,
+                                  el 17 con psicología… y cada uno paga lo suyo. */}
+                              <div className="flex items-center gap-2">
+                                <label className="text-[10px] text-neutral-400 shrink-0">Empezó el</label>
+                                <input type="date" value={inicio} onChange={(e) => cambiarInicioConcepto(i, e.target.value)}
+                                  className="flex-1 rounded-md border border-neutral-200 bg-white px-1.5 py-0.5 text-[11px] text-neutral-600 focus:outline-none focus:border-neutral-400" />
+                                {parte.prorrateo && (
+                                  <span className="text-[10px] text-neutral-400 shrink-0">
+                                    {parte.prorrateo.diasCobrados}/{parte.prorrateo.diasDelMes} días (de {fmtMoney(parte.importeCompleto)})
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                         <Select
                           value=""
                           onChange={addConceptoCuota}
@@ -591,16 +621,19 @@ export default function CobrosPage() {
                             ...conceptosCatalogo.map((c) => ({ value: String(c.id), label: `${c.name} · ${fmtMoney(c.unitPrice)}` })),
                           ]}
                         />
+                        {conceptosElegidos.length > 0 && (
+                          <p className="text-[10px] text-neutral-400">
+                            La fecha «Empezó el» solo hace falta si ese servicio empezó a mitad de mes:
+                            su parte se prorratea sola.
+                          </p>
+                        )}
                       </div>
                     </FormRow>
                   )}
-                  <FormRow label="¿Empieza a mitad de mes?">
-                    <input type="date" value={inicioCuota} onChange={(e) => cambiarInicioCuota(e.target.value)} className={inputCls} />
-                  </FormRow>
-                  {prorrateoCuota && (
+                  {cuentaCuota.hayProrrateo && (
                     <p className="text-[10px] text-neutral-400 -mt-1">
-                      Parte proporcional: {prorrateoCuota.diasCobrados} de {prorrateoCuota.diasDelMes} días
-                      → <strong className="text-neutral-600">{fmtMoney(prorrateoCuota.importe)}</strong> (la cuota entera son {fmtMoney(baseCuota)}).
+                      Con la parte proporcional: <strong className="text-neutral-600">{fmtMoney(cuentaCuota.total)}</strong>
+                      {" "}(el mes entero serían {fmtMoney(cuentaCuota.totalCompleto)}).
                       El importe se ha rellenado solo; puedes retocarlo.
                     </p>
                   )}
