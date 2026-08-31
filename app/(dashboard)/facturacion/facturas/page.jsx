@@ -12,6 +12,7 @@ import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import { nifDeCliente } from "../../../../lib/billing/nifCliente.js";
 import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import PatientReparto from "@/components/billing/PatientReparto.jsx";
+import { ordenarConSugeridos } from "../../../../lib/billing/empleadosSugeridos.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -76,6 +77,25 @@ export default function FacturasPage() {
   const [series, setSeries] = useState([]);
   const [settings, setSettings] = useState(null);
   const [showReparto, setShowReparto] = useState(false);
+  // Los terapeutas del paciente elegido, para sugerirlos arriba en «Empleado»
+  // (31/08/2026). El CRM ya sabía quién lleva a cada niño; el formulario no
+  // lo preguntaba y enseñaba la plantilla entera en orden alfabético.
+  const [terapeutasSugeridos, setTerapeutasSugeridos] = useState([]);
+  useEffect(() => {
+    if (!form.patientId) { setTerapeutasSugeridos([]); return; }
+    let vivo = true;
+    fetch(`/api/pacientes/${form.patientId}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { data: {} }))
+      .then((j) => {
+        if (!vivo) return;
+        const ids = (j?.data?.therapists ?? []).map((t) => t.id).filter(Boolean);
+        setTerapeutasSugeridos(ids);
+        // Si aún no hay empleado elegido, entra el de referencia (el primero).
+        if (ids.length) setForm((f) => (f.employeeId ? f : { ...f, employeeId: ids[0] }));
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [form.patientId]);
   const [outboundCatalog, setOutboundCatalog] = useState([]);
   const [me, setMe] = useState(null);
   /*
@@ -631,7 +651,10 @@ export default function FacturasPage() {
                         onChange={(v) => setForm((f) => ({ ...f, employeeId: v }))}
                         options={[
                           { value: "", label: "Sin asignar" },
-                          ...employees.map((m) => ({ value: m.id, label: m.displayName })),
+                          ...ordenarConSugeridos(employees, terapeutasSugeridos).map((m) => ({
+                            value: m.id,
+                            label: m.sugerido ? `★ ${m.displayName} · del paciente` : m.displayName,
+                          })),
                         ]}
                         className={inputCls}
                       />
