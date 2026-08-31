@@ -138,7 +138,8 @@
     "react-dom": "19.2.3",
     "resend": "^4.0.0",
     "sequelize": "^6.37.8",
-    "stripe": "^22.3.2"
+    "stripe": "^22.3.2",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.1",

@@ -149,7 +149,7 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
                   </span>
                   <input
                     type="file"
-                    accept=".xlsx"
+                    accept=".xlsx,.xls"
                     onChange={(e) => {
                       setFile(e.target.files?.[0] || null);
                       setPreview(null);
@@ -159,8 +159,8 @@ export default function ImportarFichajeModal({ periodo: periodoInicial, onClose,
                 </label>
               </div>
               <p className="text-xs text-gray-500">
-                El mes no se saca del fichero: las hojas se llaman «02-6» o «9-13» y ahí no pone
-                marzo por ningún lado. Elígelo tú.
+                El mes lo eliges tú, no se adivina del fichero. Si el fichero sí dice de qué mes es
+                (el volcado del reloj lo dice), se comprueba y no te deja equivocarte.
               </p>
 
               {!preview && (
