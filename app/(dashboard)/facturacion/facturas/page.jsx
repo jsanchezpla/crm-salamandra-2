@@ -300,6 +300,7 @@ export default function FacturasPage() {
           vatRate: Number(l.vatRate),
           productId: l.productId || null,
           kind: l.kind || null,
+          employeeId: l.employeeId || null,
         })),
       };
 
@@ -815,6 +816,24 @@ export default function FacturasPage() {
                                 />
                               </FormRow>
                             </div>
+                            {/* Empleado POR LÍNEA (31/08/2026): una factura con
+                                sesiones de dos terapeutas reparte cada línea al
+                                suyo en Analítica → Por empleado. Vacío = el de
+                                la factura, como siempre. */}
+                            {employees.length > 0 && l.kind !== "titulo" && (
+                              <Select
+                                value={l.employeeId || ""}
+                                onChange={(v) => setLine(idx, "employeeId", v)}
+                                options={[
+                                  { value: "", label: "Empleado: el de la factura" },
+                                  ...ordenarConSugeridos(employees, terapeutasSugeridos).map((m) => ({
+                                    value: m.id,
+                                    label: (m.sugerido ? "★ " : "") + m.displayName,
+                                  })),
+                                ]}
+                                className={inputCls + " text-xs"}
+                              />
+                            )}
                             <div className="grid grid-cols-3 gap-2 text-xs text-neutral-500 tabular pt-1 border-t border-neutral-100">
                               <div>Base: <span className="text-neutral-800 font-medium">{fmtMoney(c.base)}</span></div>
                               <div>IVA: <span className="text-neutral-800 font-medium">{fmtMoney(c.vat)}</span></div>

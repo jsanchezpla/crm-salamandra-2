@@ -1,8 +1,9 @@
-import { fn, col, Op } from "sequelize";
+import { fn, col, Op, literal } from "sequelize";
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { monthsBetween } from "../../../../../lib/billing/billingSummary.js";
 import { activeInvoiceScope } from "../../../../../lib/billing/invoiceScope.js";
+import { basePorEmpleado } from "../../../../../lib/billing/repartoPorEmpleado.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
@@ -32,12 +33,20 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const to = searchParams.get("to");
     if (!from || !to) return error("Parámetros from y to obligatorios (YYYY-MM-DD)");
 
-    // Ingresos por empleado (sobre base imponible)
+    // Ingresos por empleado (sobre base imponible). Desde el 31/08/2026 una
+    // línea puede llevar SU empleado (factura con dos terapeutas): esas
+    // facturas se apartan del agregado SQL y se reparten línea a línea en JS
+    // (lib/billing/repartoPorEmpleado.js). El resto —la inmensa mayoría—
+    // sigue sumándose en SQL como siempre.
+    const scope = activeInvoiceScope(Invoice);
+    const SIN_REPARTO = literal(`lines::text NOT LIKE '%"employeeId"%'`);
+    const CON_REPARTO = literal(`lines::text LIKE '%"employeeId"%'`);
     const invoiceRows = await Invoice.findAll({
       where: {
         employeeId: { [Op.ne]: null },
         issueDate: { [Op.between]: [from, to] },
-        ...activeInvoiceScope(Invoice),
+        status: scope.status,
+        [Op.and]: [...scope[Op.and], SIN_REPARTO],
       },
       attributes: [
         "employeeId",
@@ -48,6 +57,29 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       group: ["employeeId"],
       raw: true,
     });
+
+    // Las repartidas, una a una. Sin filtrar por employeeId de factura: una
+    // factura puede repartirse entera por líneas con el campo de arriba vacío.
+    const repartidas = await Invoice.findAll({
+      where: {
+        issueDate: { [Op.between]: [from, to] },
+        status: scope.status,
+        [Op.and]: [...scope[Op.and], CON_REPARTO],
+      },
+      attributes: ["id", "employeeId", "clientId", "lines"],
+      raw: true,
+    });
+    // employeeId → { base, facturas, clientes } acumulado de las repartidas.
+    const extra = new Map();
+    for (const inv of repartidas) {
+      for (const [empId, base] of basePorEmpleado(inv)) {
+        const acc = extra.get(empId) ?? { base: 0, facturas: 0, clientes: new Set() };
+        acc.base = round2(acc.base + base);
+        acc.facturas += 1;
+        if (inv.clientId) acc.clientes.add(inv.clientId);
+        extra.set(empId, acc);
+      }
+    }
 
     // Cancelaciones
     const cancelledRows = await Invoice.findAll({
@@ -75,8 +107,27 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     });
     const salaryMap = new Map(salaryRows.map((r) => [r.employeeId, round2(Number(r.salaryCost || 0))]));
 
+    // Un solo listado por empleado: el agregado SQL + su parte de las
+    // repartidas. `clientCount` suma los clientes distintos de cada origen;
+    // si un cliente aparece en los dos, se cuenta dos veces — es el precio de
+    // no bajarse todas las facturas, y solo desvía ese contador, nunca el dinero.
+    const porEmpleado = new Map(
+      invoiceRows.map((r) => [r.employeeId, {
+        billedBase: round2(Number(r.billedBase || 0)),
+        invoiceCount: Number(r.invoiceCount || 0),
+        clientCount: Number(r.clientCount || 0),
+      }])
+    );
+    for (const [empId, acc] of extra) {
+      const fila = porEmpleado.get(empId) ?? { billedBase: 0, invoiceCount: 0, clientCount: 0 };
+      fila.billedBase = round2(fila.billedBase + acc.base);
+      fila.invoiceCount += acc.facturas;
+      fila.clientCount += acc.clientes.size;
+      porEmpleado.set(empId, fila);
+    }
+
     // Datos del empleado
-    const employeeIds = [...new Set(invoiceRows.map((r) => r.employeeId))];
+    const employeeIds = [...porEmpleado.keys()];
     const employees = await TeamMember.findAll({
       where: { id: employeeIds },
       attributes: ["id", "displayName", "position", "monthlySalary"],
@@ -85,11 +136,12 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 
     const months = monthsBetween(from, to);
 
-    const result = invoiceRows.map((row) => {
+    const result = [...porEmpleado.entries()].map(([employeeId, fila]) => {
+      const row = { employeeId };
       const emp = empMap.get(row.employeeId);
-      const billedBase = round2(Number(row.billedBase || 0));
-      const invoiceCount = Number(row.invoiceCount || 0);
-      const clientCount = Number(row.clientCount || 0);
+      const billedBase = fila.billedBase;
+      const invoiceCount = fila.invoiceCount;
+      const clientCount = fila.clientCount;
       const cancelledCount = cancelledMap.get(row.employeeId) || 0;
       const salaryCost = salaryMap.get(row.employeeId) || 0;
       const monthlySalary = emp?.monthlySalary != null ? Number(emp.monthlySalary) : null;
