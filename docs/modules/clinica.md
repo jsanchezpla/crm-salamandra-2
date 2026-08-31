@@ -860,7 +860,7 @@ REALES de la API (ya no hay datos hardcoded).
 | `/clinica` | Landing del módulo. KPIs (sesiones, informes pendientes, coordinaciones, próxima entrega), accesos rápidos a Pacientes e Informes, pacientes recientes. H1: "Área clínica". |
 | `/clinica/informes` | Listado de informes con filtros. Click en fila abre **drawer** con el informe completo (`InformeDrawer.jsx`: editor, volcado desde sesiones, IA, envío). |
 | `/clinica/coordinaciones` | Listado GENERAL de coordinaciones del centro con filtros por tipo y ámbito, y alta (`NuevaCoordinacionModal.jsx`). Hasta el sprint 2026-07 solo se veían paciente a paciente. |
-| `/clinica/talleres` | Talleres: actividades de grupo e inscripciones (02/08/2026). |
+| `/clinica/talleres` | Talleres: actividades de grupo e inscripciones (02/08/2026). Desde el 31/08/2026 el taller puede llevar su concepto de cobro del catálogo (`talleres.concept_id` → `billing_concepts`, FK suave; migración `migrate-talleres-concepto`): el formulario ofrece el selector si el centro tiene catálogo y el detalle dice al apuntar qué se cobrará; el GET del listado y el del detalle cuelgan `concepto` a mano. |
 | `/clinica/estadisticas` | Estadísticas del centro (solo admin): actividad clínica, agenda y ausencias, captación; Excel y PDF. El dinero vive en Facturación a propósito. |
 
 **En `app/(dashboard)/equipo/` (6 páginas, gestión de equipo; menú
