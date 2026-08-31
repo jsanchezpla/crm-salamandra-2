@@ -111,7 +111,7 @@ campos. Resumen:
 | `/api/clients/[id]/projects` | GET | Proyectos del cliente | JWT + `hasModule(projects)` |
 | `/api/clients/[id]/billing-summary` | GET | Resumen facturas | JWT + `hasModule(billing)` |
 | `/api/clients/waitlist` | GET/POST/PATCH | Lista de espera de ADMISIÓN (`lib/clients/listaEspera.js`; no es la de Citas) | JWT + `hasModule(clients_avanzado)` |
-| `/api/clients/waitlist/[id]` | PATCH | Editar una entrada de la cola, sacarla (`status: "removed"`) o convertirla en cliente (`convertir: true`; la entrada queda `converted` con su `clientId`) | JWT + `hasModule(clients_avanzado)` |
+| `/api/clients/waitlist/[id]` | PATCH | Editar una entrada de la cola, sacarla (`status: "removed"`) o convertirla en cliente (`convertir: true`; la entrada queda `converted` con su `clientId`). **Dar plaza propaga el terapeuta asignado en la cola** (31/08/2026, `propagarTerapeutaAlAceptar` en `lib/clients/listaEspera.js`, prueba `_smoke-lista-espera-propaga.mjs`): a los pacientes de la familia sin terapeuta (vía `sincronizarTerapeutas`) y al `assignedTeamMemberId` de la ficha si estaba vacío; `convertir: true` crea la ficha nueva ya con él | JWT + `hasModule(clients_avanzado)` |
 | `/api/clients/urgentes` | GET/POST | «Fichas a completar» por carpetas (`lib/clients/urgentes.js`; `?soloTotales=1` para el menú, `?incluirBajas=1` para ver también las fichas archivadas) / marcar revisado (`data_reviews`) | JWT + `hasModule(clients_avanzado)` |
 | `/api/clients/export` | GET | XLSX de listado | JWT |
 | `/api/clients/import` | POST | Importar JSON | JWT |

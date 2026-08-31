@@ -5,7 +5,7 @@ import { MODULE_KEYS } from "../../../../../lib/tenant/moduleKeys.js";
 // Se reutiliza la validación del alta en vez de duplicarla: asignar un
 // profesional que no existe tiene que fallar igual se haga al entrar en la cola
 // o al editarla después.
-import { terapeutaValido } from "../../../../../lib/clients/listaEspera.js";
+import { terapeutaValido, propagarTerapeutaAlAceptar } from "../../../../../lib/clients/listaEspera.js";
 
 /**
  * /api/clients/waitlist/[id] — una entrada de la lista de espera de admisión.
@@ -66,6 +66,9 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
         email: fila.email || null,
         phone: fila.phone || null,
         status: "active",
+        // El terapeuta asignado esperando sale de la cola CON la familia
+        // (31/08/2026): es quien lleva su seguimiento desde el primer día.
+        assignedTeamMemberId: fila.assignedTherapistId ?? null,
         customFields: { origin: "lista_espera" },
       });
       await fila.update({ status: "converted", clientId: cliente.id });
@@ -106,14 +109,32 @@ export const PATCH = withTenant(async (request, rc, ctx) => {
     }
     if (Object.keys(updates).length === 0) return ok({ id });
 
-    await fila.update(updates);
+    /*
+     * Dar plaza («ya tiene plaza» → converted) PROPAGA el terapeuta de la cola
+     * (31/08/2026): a los pacientes de esa familia que no tengan y al
+     * profesional de referencia de la ficha si está vacío. Va en una
+     * transacción con el cambio de estado: si la propagación falla, la entrada
+     * sigue en la cola y aceptar de nuevo lo reintenta todo — la asignación no
+     * puede evaporarse entre medias, que es justo el fallo que arregla esto.
+     */
+    const daPlaza = updates.status === "converted" && fila.status !== "converted";
+    let propagado = null;
+    if (daPlaza) {
+      const terapeuta = "assignedTherapistId" in updates ? updates.assignedTherapistId : fila.assignedTherapistId;
+      propagado = await ctx.tenantSequelize.transaction(async (transaction) => {
+        await fila.update(updates, { transaction });
+        return propagarTerapeutaAlAceptar({ ctx, clientId: fila.clientId, terapeutaId: terapeuta, transaction });
+      });
+    } else {
+      await fila.update(updates);
+    }
     await auditar({
       tenantId: ctx.tenant.id,
       ...datosPeticion(request),
       action: updates.status === "removed" ? "client.waitlist.removed" : "client.waitlist.updated",
       entity: "WaitlistEntry",
       entityId: id,
-      after: { estado: fila.status },
+      after: { estado: fila.status, ...(propagado ? { terapeutaPropagado: propagado } : {}) },
     });
     return ok({ id, status: fila.status });
   } catch (err) {
