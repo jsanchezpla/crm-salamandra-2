@@ -16,7 +16,7 @@ const tablaAusente = (err) => err?.parent?.code === "42P01" || err?.original?.co
 export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("clinica")) return forbidden();
 
-  const { Taller, TallerInscripcion, TeamMember } = tenantModels;
+  const { Taller, TallerInscripcion, TeamMember, BillingConcept } = tenantModels;
   const { searchParams } = new URL(request.url);
   const verInactivos = searchParams.get("verInactivos") === "1";
 
@@ -36,8 +36,25 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
     const cuenta = {};
     for (const i of abiertas) cuenta[i.tallerId] = (cuenta[i.tallerId] ?? 0) + 1;
 
+    // El concepto de cobro de cada taller (31/08/2026), colgado a mano: no
+    // hay asociación (FK suave a propósito) y un concepto borrado sale null.
+    const conceptIds = [...new Set(talleres.map((t) => t.conceptId).filter(Boolean))];
+    const conceptos = new Map();
+    if (BillingConcept && conceptIds.length) {
+      const filas = await BillingConcept.findAll({
+        where: { id: conceptIds },
+        attributes: ["id", "name", "unitPrice", "periodicity"],
+        raw: true,
+      });
+      for (const c of filas) conceptos.set(c.id, c);
+    }
+
     return ok({
-      talleres: talleres.map((t) => ({ ...t.toJSON(), apuntados: cuenta[t.id] ?? 0 })),
+      talleres: talleres.map((t) => ({
+        ...t.toJSON(),
+        apuntados: cuenta[t.id] ?? 0,
+        concepto: (t.conceptId && conceptos.get(t.conceptId)) || null,
+      })),
       total: talleres.length,
     });
   } catch (err) {
@@ -51,11 +68,20 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
 export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }) => {
   if (!hasModule("clinica")) return forbidden();
 
-  const { Taller } = tenantModels;
+  const { Taller, BillingConcept } = tenantModels;
   const body = await request.json();
 
   const name = body.name?.trim();
   if (!name) return error("El nombre del taller es obligatorio", 422);
+
+  // El concepto de cobro, opcional (31/08/2026): un id que no existe se
+  // descarta en vez de guardar un enlace roto.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let conceptId = null;
+  if (typeof body.conceptId === "string" && UUID_RE.test(body.conceptId) && BillingConcept) {
+    const c = await BillingConcept.findByPk(body.conceptId, { attributes: ["id"] });
+    if (c) conceptId = body.conceptId;
+  }
 
   const yaExiste = await Taller.findOne({ where: { name: { [Op.iLike]: name } } });
   if (yaExiste) return error(`Ya existe un taller llamado «${yaExiste.name}»`, 409, { id: yaExiste.id });
@@ -66,6 +92,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
     teamMemberId: body.teamMemberId || null,
     schedule: body.schedule?.trim() || null,
     notes: body.notes?.trim() || null,
+    conceptId,
   });
 
   return created({ ...taller.toJSON(), apuntados: 0 });

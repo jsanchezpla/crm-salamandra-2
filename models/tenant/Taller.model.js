@@ -52,6 +52,14 @@ export function defineTaller(sequelize) {
         type: DataTypes.STRING(120),
         allowNull: true,
       },
+      // El concepto del catálogo (billing_concepts) con el que se cobra este
+      // taller (31/08/2026): al inscribir a un paciente la pantalla dice qué
+      // se le cobrará. Sin FK dura a propósito — borrar el concepto no debe
+      // romper el taller — y nullable: un taller puede no cobrarse.
+      conceptId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       // Se desactiva en vez de borrarse: sus inscripciones históricas siguen
       // apuntando aquí y borrarlo dejaría el histórico sin nombre.
       active: {

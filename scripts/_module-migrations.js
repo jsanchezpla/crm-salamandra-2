@@ -389,6 +389,9 @@ export const MODULES = {
     // Talleres: actividades de grupo (02/08/2026). Necesita `patients`, que la
     // crea migrate-pacientes-sprint-1; el orden lo resuelve el analizador.
     "migrate-talleres",
+    // El concepto de cobro del taller (31/08/2026): sin concept_id el modelo
+    // lo pide y todo GET de talleres da 42703.
+    "migrate-talleres-concepto",
     "migrate-clinica-module",
     // El autor del acta puede no estar en la plantilla (02/08/2026): campo de
     // texto libre y created_by_id opcional.

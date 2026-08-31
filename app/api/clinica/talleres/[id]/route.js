@@ -53,6 +53,18 @@ export const PUT = withTenant(async (request, { params }, { tenant, tenantModels
   for (const c of ["description", "schedule", "notes"]) if (c in body) cambios[c] = body[c]?.trim() || null;
   if ("teamMemberId" in body) cambios.teamMemberId = body.teamMemberId || null;
   if ("active" in body) cambios.active = !!body.active;
+  // El concepto de cobro (31/08/2026): null desenlaza; un id que no existe se
+  // descarta en vez de guardar un enlace roto.
+  if ("conceptId" in body) {
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const { BillingConcept } = tenantModels;
+    if (body.conceptId == null || body.conceptId === "") {
+      cambios.conceptId = null;
+    } else if (typeof body.conceptId === "string" && UUID_RE.test(body.conceptId) && BillingConcept) {
+      const c = await BillingConcept.findByPk(body.conceptId, { attributes: ["id"] });
+      if (c) cambios.conceptId = body.conceptId;
+    }
+  }
 
   await taller.update(cambios);
   await auditar({

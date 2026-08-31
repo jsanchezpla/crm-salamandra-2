@@ -19,7 +19,7 @@ const nombreDe = (p) => [p?.firstName, p?.lastName].filter(Boolean).join(" ") ||
 const fmtFecha = (f) => (f ? new Date(f).toLocaleDateString("es-ES") : "—");
 
 function nuevoTaller() {
-  return { name: "", description: "", schedule: "", teamMemberId: "", notes: "" };
+  return { name: "", description: "", schedule: "", teamMemberId: "", notes: "", conceptId: "" };
 }
 
 export default function TalleresPage() {
@@ -38,6 +38,15 @@ export default function TalleresPage() {
   const [formError, setFormError] = useState(null);
 
   const [detalle, setDetalle] = useState(null);
+  // El catálogo de conceptos para atar el cobro del taller (31/08/2026).
+  // Sin módulo billing o sin conceptos, el campo no se enseña.
+  const [conceptosCatalogo, setConceptosCatalogo] = useState([]);
+  useEffect(() => {
+    fetch("/api/billing/conceptos", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j?.ok) setConceptosCatalogo(j.data?.conceptos ?? []); })
+      .catch(() => {});
+  }, []);
   const [aApuntar, setAApuntar] = useState("");
 
   const cargar = useCallback(async () => {
@@ -82,7 +91,7 @@ export default function TalleresPage() {
     setEditandoId(t?.id ?? null);
     setForm(t ? {
       name: t.name ?? "", description: t.description ?? "", schedule: t.schedule ?? "",
-      teamMemberId: t.teamMemberId ?? "", notes: t.notes ?? "",
+      teamMemberId: t.teamMemberId ?? "", notes: t.notes ?? "", conceptId: t.conceptId ?? "",
     } : nuevoTaller());
     setFormError(null);
     setPanelAbierto(true);
@@ -246,6 +255,11 @@ export default function TalleresPage() {
                   {detalle.schedule || "Sin horario indicado"}
                   {detalle.responsable?.displayName ? ` · ${detalle.responsable.displayName}` : ""}
                 </p>
+                {detalle.concepto && (
+                  <p className="text-[12px] mt-1 text-emerald-700">
+                    Al apuntar se cobra: {detalle.concepto.name} — {Number(detalle.concepto.unitPrice).toLocaleString("es-ES", { minimumFractionDigits: 2 })} €{detalle.concepto.periodicity ? ` /${detalle.concepto.periodicity}` : ""}
+                  </p>
+                )}
               </div>
               <button onClick={() => setDetalle(null)} className="text-neutral-400 hover:text-neutral-700 text-[12.5px]">Cerrar</button>
             </div>
@@ -353,6 +367,19 @@ export default function TalleresPage() {
               <span className="text-[12px] text-neutral-500">Notas</span>
               <textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={inputCls} />
             </label>
+            {conceptosCatalogo.length > 0 && (
+              <label className="block">
+                <span className="text-[12px] text-neutral-500">Concepto de cobro (del catálogo)</span>
+                <select value={form.conceptId} onChange={(e) => setForm({ ...form, conceptId: e.target.value })} className={inputCls}>
+                  <option value="">— Sin concepto: no se cobra desde aquí —</option>
+                  {conceptosCatalogo.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} — {Number(c.unitPrice).toLocaleString("es-ES", { minimumFractionDigits: 2 })} €{c.periodicity ? ` /${c.periodicity}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             <button
               onClick={guardar}
