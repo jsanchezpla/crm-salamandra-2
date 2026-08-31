@@ -39,6 +39,7 @@ const CONCEPTOS = [
   // Otros servicios
   { name: "Tutorización de alumno en prácticas", description: "Tutorización de alumno en prácticas — alumno: ", unitPrice: 0, periodicity: null, category: "Otros servicios" }, // precio a confirmar; el nombre del alumno se completa en la línea
   { name: "Reserva de plaza", description: "Reserva de plaza", unitPrice: 30, periodicity: null, category: "Otros servicios" },
+  { name: "Descuento reserva ya abonada", description: "Descuento por reserva de plaza ya abonada", unitPrice: -30, periodicity: null, category: "Descuentos" },
   { name: "Diagnóstico Completo", description: "Servicio de Diagnóstico Completo", unitPrice: 650, periodicity: null, category: "Diagnóstico" },
   { name: "Diagnóstico Simple", description: "Servicio de Diagnóstico Simple", unitPrice: 350, periodicity: null, category: "Diagnóstico" },
   { name: "Sesión de Asesoramiento", description: "Sesión de Asesoramiento", unitPrice: 75, periodicity: null, category: "Otros servicios" },

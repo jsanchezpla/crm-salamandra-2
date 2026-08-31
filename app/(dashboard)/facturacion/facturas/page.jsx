@@ -798,7 +798,10 @@ export default function FacturasPage() {
                                 <input type="number" min="0" step="0.01" value={l.quantity} onChange={(e) => setLine(idx, "quantity", e.target.value)} className={inputCls} />
                               </FormRow>
                               <FormRow label="Precio">
-                                <input type="number" min="0" step="0.01" value={l.unitPrice} onChange={(e) => setLine(idx, "unitPrice", e.target.value)} className={inputCls} />
+                                {/* Sin min=0 (31/08/2026): un precio NEGATIVO es una línea de
+                                    descuento por importe fijo — «Reserva ya abonada: −30 €».
+                                    El motor ya los suma bien (las rectificativas viven de ello). */}
+                                <input type="number" step="0.01" value={l.unitPrice} onChange={(e) => setLine(idx, "unitPrice", e.target.value)} className={inputCls} />
                               </FormRow>
                               <FormRow label="Dto %">
                                 <input type="number" min="0" max="100" step="0.01" value={l.discountPct} onChange={(e) => setLine(idx, "discountPct", e.target.value)} className={inputCls} />

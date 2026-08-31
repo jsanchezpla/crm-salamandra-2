@@ -264,7 +264,8 @@ export default function PresupuestoDetallePage() {
                     <div key={idx} className="grid grid-cols-[1fr_60px_84px_56px_60px_84px_28px] gap-2 px-4 py-2 items-center">
                       <input value={l.description || ""} onChange={(e) => updateLine(idx, { description: e.target.value })} disabled={readOnly} placeholder="Concepto" className={inputCls} />
                       <input type="number" min="0" step="0.01" value={l.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} disabled={readOnly} className={`${inputCls} text-right`} />
-                      <input type="number" min="0" step="0.01" value={l.unitPrice} onChange={(e) => updateLine(idx, { unitPrice: e.target.value })} disabled={readOnly} className={`${inputCls} text-right`} />
+                      {/* Sin min=0: un precio negativo es un descuento fijo (31/08/2026). */}
+                      <input type="number" step="0.01" value={l.unitPrice} onChange={(e) => updateLine(idx, { unitPrice: e.target.value })} disabled={readOnly} className={`${inputCls} text-right`} />
                       <input type="number" min="0" max="100" step="1" value={l.discountPct ?? 0} onChange={(e) => updateLine(idx, { discountPct: e.target.value })} disabled={readOnly} className={`${inputCls} text-right`} />
                       <input type="number" min="0" step="1" value={l.vatRate ?? 21} onChange={(e) => updateLine(idx, { vatRate: e.target.value })} disabled={readOnly} className={`${inputCls} text-right`} />
                       <span className="text-right tabular-nums text-sm text-neutral-800">{fmtMoney(lineTotal)}</span>

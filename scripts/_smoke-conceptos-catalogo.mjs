@@ -22,8 +22,16 @@ test("un alta buena entra saneada", () => {
 
 test("sin nombre no hay concepto; importes e IVA raros se rechazan con frase", () => {
   assert.match(limpiarConcepto({ name: "  " }).problema, /nombre/);
-  assert.match(limpiarConcepto({ name: "X", unitPrice: -5 }).problema, /importe/);
+  assert.match(limpiarConcepto({ name: "X", unitPrice: "no sé" }).problema, /importe/);
   assert.match(limpiarConcepto({ name: "X", unitPrice: 10, vatRate: 130 }).problema, /IVA/);
+});
+
+test("un importe NEGATIVO vale: es un concepto de descuento fijo (reserva ya abonada)", () => {
+  const { valores, problema } = limpiarConcepto({ name: "Descuento reserva ya abonada", unitPrice: -30, vatRate: 0 });
+  assert.equal(problema, null);
+  assert.equal(valores.unitPrice, -30);
+  const linea = lineaDesdeConcepto({ name: "Descuento reserva ya abonada", unitPrice: "-30.00", vatRate: 0 });
+  assert.equal(linea.unitPrice, -30);
 });
 
 test("la edición parcial solo toca lo que viaja", () => {

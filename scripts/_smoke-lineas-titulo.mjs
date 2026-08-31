@@ -19,6 +19,18 @@ test("un título no suma ni aparece en el desglose de IVA", () => {
   assert.deepEqual(Object.keys(r.vatBreakdown), ["21"]);
 });
 
+test("una línea de descuento fijo (precio negativo) resta del total sin trucos", () => {
+  const r = calculateInvoice({
+    lines: [
+      { description: "Cuota septiembre", quantity: 1, unitPrice: 190, vatRate: 0 },
+      { description: "Descuento reserva ya abonada", quantity: 1, unitPrice: -30, vatRate: 0 },
+    ],
+  });
+  assert.equal(r.taxBase, 160);
+  assert.equal(r.total, 160);
+  assert.equal(r.lines[1].lineTotal, -30);
+});
+
 test("el título conserva su sitio y su texto, con todo a cero", () => {
   const r = calculateInvoice({
     lines: [
