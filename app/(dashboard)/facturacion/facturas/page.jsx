@@ -189,6 +189,7 @@ export default function FacturasPage() {
     if (!openInvoice) return;
     setForm({
       clientId: openInvoice.clientId ?? "",
+      patientId: openInvoice.patientId ?? "",
       employeeId: openInvoice.employeeId ?? "",
       partnerId: openInvoice.partnerId ?? "",
       irpfRate: openInvoice.irpfRate ?? settings?.defaultIrpfRate ?? 0,
@@ -250,6 +251,7 @@ export default function FacturasPage() {
 
       const payload = {
         clientId: form.clientId,
+        patientId: form.patientId || null,
         employeeId: form.employeeId || null,
         partnerId: form.partnerId || null,
         issueDate: form.issueDate,
@@ -599,14 +601,17 @@ export default function FacturasPage() {
                         </div>
                       )}
                     </FormRow>
-                    {openInvoice?.patient && (
-                      <FormRow label="Paciente">
-                        <div className="text-sm text-neutral-700 px-1 py-1.5">
-                          {openInvoice.patient.firstName} {openInvoice.patient.lastName}
-                          <span className="block text-[10px] text-neutral-400">La factura es de este paciente; el pagador es el cliente de arriba (editable).</span>
-                        </div>
-                      </FormRow>
-                    )}
+    {/* El paciente ya se ELIGE (31/08/2026): una factura a una fundación
+        o a un tutor dice de qué niño es. El pagador sigue siendo el
+        cliente de arriba. Sin módulo de pacientes, el buscador se esconde
+        solo (el endpoint responde 403). */}
+                    <FormRow label="Paciente (beneficiario)">
+                      <PacientePicker
+                        elegido={openInvoice?.patient ?? null}
+                        value={form.patientId ?? ""}
+                        onChange={(id) => setForm((f) => ({ ...f, patientId: id }))}
+                      />
+                    </FormRow>
                     <FormRow label="Empleado">
                       <Select
                         value={form.employeeId}
@@ -803,6 +808,89 @@ export default function FacturasPage() {
   );
 }
 
+/**
+ * PacientePicker — buscar y elegir el paciente beneficiario de la factura
+ * (31/08/2026). Busca contra /api/pacientes (mismo buscador por palabras que
+ * la pantalla de Pacientes); si el tenant no tiene el módulo, el endpoint
+ * responde 403 y el campo se esconde solo, como ClientFiscalSection.
+ */
+function PacientePicker({ elegido, value, onChange }) {
+  const [disponible, setDisponible] = useState(true);
+  const [texto, setTexto] = useState("");
+  const [resultados, setResultados] = useState([]);
+  const [etiqueta, setEtiqueta] = useState(
+    elegido ? `${elegido.firstName || ""} ${elegido.lastName || ""}`.trim() : ""
+  );
+
+  useEffect(() => {
+    setEtiqueta(elegido ? `${elegido.firstName || ""} ${elegido.lastName || ""}`.trim() : "");
+  }, [elegido]);
+
+  useEffect(() => {
+    if (!texto.trim()) { setResultados([]); return; }
+    const t = setTimeout(() => {
+      fetch(`/api/pacientes?q=${encodeURIComponent(texto.trim())}&limit=8`, { cache: "no-store" })
+        .then(async (r) => {
+          if (r.status === 403) { setDisponible(false); return { data: {} }; }
+          return r.json();
+        })
+        .then((j) => setResultados(j?.data?.patients ?? []))
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(t);
+  }, [texto]);
+
+  if (!disponible) return null;
+
+  if (value && etiqueta) {
+    return (
+      <div className="flex items-center gap-2 px-1 py-1.5">
+        <span className="text-sm text-neutral-700">{etiqueta}</span>
+        <button
+          type="button"
+          onClick={() => { onChange(""); setEtiqueta(""); setTexto(""); }}
+          className="text-[11px] text-neutral-400 hover:text-red-500"
+        >
+          Quitar
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <input
+        value={texto}
+        onChange={(e) => setTexto(e.target.value)}
+        placeholder="Buscar paciente por nombre…"
+        className={inputCls}
+      />
+      {resultados.length > 0 && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+          {resultados.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => {
+                onChange(p.id);
+                setEtiqueta(`${p.firstName || ""} ${p.lastName || ""}`.trim());
+                setResultados([]);
+                setTexto("");
+              }}
+              className="block w-full text-left px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
+            >
+              {(p.firstName || "") + " " + (p.lastName || "")}
+            </button>
+          ))}
+        </div>
+      )}
+      <span className="block text-[10px] text-neutral-400 mt-1">
+        Opcional: de qué paciente es la factura. El pagador es el cliente de arriba.
+      </span>
+    </div>
+  );
+}
+
 function FormRow({ label, children }) {
   return (
     <div className="flex flex-col gap-1">
@@ -813,6 +901,10 @@ function FormRow({ label, children }) {
 }
 
 function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, saving }) {
+  // La descarga del PDF puede llevar u omitir el nombre del paciente y el
+  // sello (31/08/2026); por defecto salen los dos si existen.
+  const [conPaciente, setConPaciente] = useState(true);
+  const [conSello, setConSello] = useState(true);
   const totalPaid = Number(invoice.paidAmount || 0);
   const remaining = Math.max(0, Number(invoice.total) - totalPaid);
   const lineBreakdown = (invoice.lines ?? []).reduce((map, l) => {
@@ -924,9 +1016,12 @@ function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, sa
       )}
 
       {invoice.status !== "draft" && (
-        <div className="pt-1">
+        <div className="pt-1 space-y-1.5">
           <a
-            href={`/api/billing/invoices/${invoice.id}/pdf`}
+            href={`/api/billing/invoices/${invoice.id}/pdf${[
+              !conPaciente ? "paciente=0" : null,
+              !conSello ? "sello=0" : null,
+            ].filter(Boolean).length ? "?" + [!conPaciente ? "paciente=0" : null, !conSello ? "sello=0" : null].filter(Boolean).join("&") : ""}`}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide border border-neutral-300 text-neutral-700 hover:bg-neutral-50 transition"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
@@ -934,6 +1029,19 @@ function DetailView({ invoice, puedeFacturar, onAction, onEdit, onOpenLinked, sa
             </svg>
             Descargar PDF
           </a>
+          {/* Con o sin nombre del paciente y sello, eligiéndolo (31/08/2026). */}
+          <div className="flex items-center gap-4 text-[11px] text-neutral-500">
+            {invoice.patient && (
+              <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={conPaciente} onChange={(e) => setConPaciente(e.target.checked)} className="rounded border-neutral-300" />
+                Nombre del paciente
+              </label>
+            )}
+            <label className="inline-flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={conSello} onChange={(e) => setConSello(e.target.checked)} className="rounded border-neutral-300" />
+              Sello del centro
+            </label>
+          </div>
         </div>
       )}
 

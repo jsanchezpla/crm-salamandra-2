@@ -126,6 +126,13 @@ export function defineTenantBillingSettings(sequelize) {
         allowNull: true,
         field: "quote_logo_url",
       },
+      // El sello del centro: se pinta junto a los totales del PDF de factura
+      // y se puede quitar por descarga (?sello=0). 31/08/2026.
+      stampUrl: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        field: "stamp_url",
+      },
     },
     {
       tableName: "tenant_billing_settings",

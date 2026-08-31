@@ -67,6 +67,7 @@ export default function ConfiguracionPage() {
           logoUrl: settings.logoUrl,
           quoteFooterText: settings.quoteFooterText,
           quoteLogoUrl: settings.quoteLogoUrl,
+          stampUrl: settings.stampUrl,
         }),
       });
       const j = await res.json();
@@ -182,6 +183,9 @@ export default function ConfiguracionPage() {
           </Field>
           <Field label="URL del logo (facturas)">
             <input disabled={!puedeFacturar} value={settings.logoUrl ?? ""} onChange={(e) => setField("logoUrl", e.target.value)} placeholder="https://… (PNG o JPG)" className={inputCls} />
+          </Field>
+          <Field label="URL del sello del centro">
+            <input disabled={!puedeFacturar} value={settings.stampUrl ?? ""} onChange={(e) => setField("stampUrl", e.target.value)} placeholder="https://… (PNG o JPG); sale junto a los totales" className={inputCls} />
           </Field>
           <Field label="URL del logo (presupuestos)">
             <input disabled={!puedeFacturar} value={settings.quoteLogoUrl ?? ""} onChange={(e) => setField("quoteLogoUrl", e.target.value)} placeholder="Vacío = el de las facturas" className={inputCls} />
