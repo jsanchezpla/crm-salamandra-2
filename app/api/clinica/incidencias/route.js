@@ -36,7 +36,7 @@ const INCLUDES = (M) => [
 
 /**
  * GET /api/clinica/incidencias — lista con filtros.
- * ?status= ?category= ?patientId= ?assignedToId= ?mine=1
+ * ?status= ?category= ?patientId= ?assignedToId= ?reportedById= ?mine=1
  */
 export const GET = withTenant(async (request, _rc, ctx) => {
   if (!gate(ctx)) return forbidden("Módulo Clínica no activo");
@@ -54,6 +54,13 @@ export const GET = withTenant(async (request, _rc, ctx) => {
   if (category && isValidCategory(category)) where.category = category;
   const patientId = sp.get("patientId");
   if (patientId && UUID_RE.test(patientId)) where.patientId = patientId;
+
+  // Quién la registró (31/08/2026, Rodrigo): la pareja del filtro de
+  // responsable — «las que he mandado yo u otra persona a una persona
+  // concreta» son los dos filtros combinados. Este es columna directa: a
+  // diferencia del responsable, quien registra es siempre UNO.
+  const reportedById = sp.get("reportedById");
+  if (reportedById && UUID_RE.test(reportedById)) where.reportedById = reportedById;
 
   let assignedToId = sp.get("assignedToId");
   if (sp.get("mine") === "1") {
