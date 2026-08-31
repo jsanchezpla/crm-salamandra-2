@@ -125,6 +125,31 @@ export default function PresupuestoDetallePage() {
     }
   }
 
+  const [avisoEnvio, setAvisoEnvio] = useState(null);
+
+  // Envío REAL por correo con el PDF adjunto (31/08/2026). Best-effort como en
+  // facturas: si el correo falla, el presupuesto queda marcado y se dice.
+  async function enviarPorCorreo() {
+    setBusy(true);
+    setError(null);
+    setAvisoEnvio(null);
+    try {
+      const res = await fetch(`/api/billing/quotes/${id}/send`, { method: "POST" });
+      const j = await res.json();
+      if (!j.ok) throw new Error(j.error || "Error enviando");
+      setAvisoEnvio(
+        j.data?.emailEnviado
+          ? `Enviado por correo a ${j.data?.customFields?.sentTo || "su email"}.`
+          : `Marcado como enviado, pero el correo no ha salido: ${j.data?.emailError || "sin detalle"}.`
+      );
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function action(path, patchBody) {
     setBusy(true);
     setError(null);
@@ -262,14 +287,29 @@ export default function PresupuestoDetallePage() {
             </ul>
           </div>
 
+          <div className="bg-white border border-neutral-200 rounded-xl p-4 space-y-2">
+            <a
+              href={`/api/billing/quotes/${id}/pdf`}
+              className="block text-center w-full px-3 py-2 text-xs font-medium rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50"
+            >
+              Descargar PDF
+            </a>
+            {avisoEnvio && (
+              <div className="text-[11px] text-neutral-500 bg-neutral-50 border border-neutral-100 rounded-md px-2.5 py-1.5">{avisoEnvio}</div>
+            )}
+          </div>
+
           {!readOnly && (
             <div className="bg-white border border-neutral-200 rounded-xl p-4 space-y-2">
               <button onClick={save} disabled={saving} className="w-full px-3 py-2 text-xs font-medium rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">
                 {saving ? "Guardando…" : "Guardar cambios"}
               </button>
+              <button onClick={enviarPorCorreo} disabled={busy} className="w-full px-3 py-2 text-xs font-medium rounded-md border border-sky-200 text-sky-700 bg-sky-50 hover:bg-sky-100 disabled:opacity-50">
+                {busy ? "Enviando…" : "Enviar por correo (PDF adjunto)"}
+              </button>
               {!quote.sentAt && (
-                <button onClick={() => action("", { status: "sent" })} disabled={busy} className="w-full px-3 py-2 text-xs font-medium rounded-md border border-sky-200 text-sky-700 bg-sky-50 hover:bg-sky-100 disabled:opacity-50">
-                  Marcar como enviado
+                <button onClick={() => action("", { status: "sent" })} disabled={busy} className="w-full px-3 py-1.5 text-[11px] font-medium rounded-md text-neutral-400 hover:text-neutral-600">
+                  Marcar como enviado sin mandar correo
                 </button>
               )}
               {quote.status !== "accepted" && (
