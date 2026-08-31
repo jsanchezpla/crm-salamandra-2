@@ -77,25 +77,7 @@ export default function FacturasPage() {
   const [series, setSeries] = useState([]);
   const [settings, setSettings] = useState(null);
   const [showReparto, setShowReparto] = useState(false);
-  // Los terapeutas del paciente elegido, para sugerirlos arriba en «Empleado»
-  // (31/08/2026). El CRM ya sabía quién lleva a cada niño; el formulario no
-  // lo preguntaba y enseñaba la plantilla entera en orden alfabético.
   const [terapeutasSugeridos, setTerapeutasSugeridos] = useState([]);
-  useEffect(() => {
-    if (!form.patientId) { setTerapeutasSugeridos([]); return; }
-    let vivo = true;
-    fetch(`/api/pacientes/${form.patientId}`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : { data: {} }))
-      .then((j) => {
-        if (!vivo) return;
-        const ids = (j?.data?.therapists ?? []).map((t) => t.id).filter(Boolean);
-        setTerapeutasSugeridos(ids);
-        // Si aún no hay empleado elegido, entra el de referencia (el primero).
-        if (ids.length) setForm((f) => (f.employeeId ? f : { ...f, employeeId: ids[0] }));
-      })
-      .catch(() => {});
-    return () => { vivo = false; };
-  }, [form.patientId]);
   const [outboundCatalog, setOutboundCatalog] = useState([]);
   const [me, setMe] = useState(null);
   /*
@@ -115,6 +97,25 @@ export default function FacturasPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(() => emptyForm(21, 30));
+  // Los terapeutas del paciente elegido, para sugerirlos arriba en «Empleado»
+  // (31/08/2026). VA DESPUÉS de declarar `form`: leerlo antes tumba la página
+  // entera con «Cannot access before initialization» (pasó en el primer
+  // despliegue de esta pieza, minutos el 31/08).
+  useEffect(() => {
+    if (!form.patientId) { setTerapeutasSugeridos([]); return; }
+    let vivo = true;
+    fetch(`/api/pacientes/${form.patientId}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { data: {} }))
+      .then((j) => {
+        if (!vivo) return;
+        const ids = (j?.data?.therapists ?? []).map((t) => t.id).filter(Boolean);
+        setTerapeutasSugeridos(ids);
+        // Si aún no hay empleado elegido, entra el de referencia (el primero).
+        if (ids.length) setForm((f) => (f.employeeId ? f : { ...f, employeeId: ids[0] }));
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [form.patientId]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
   const [rectifyOpen, setRectifyOpen] = useState(false); // modal de rectificación

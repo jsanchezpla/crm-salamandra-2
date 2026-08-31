@@ -313,6 +313,14 @@ body {
 .fc .fc-list-event-title a { font-size: 0.8rem; color: var(--ink-900); }
 .fc .fc-list-day-cushion { background: var(--ink-100); }
 .fc .fc-timegrid-slot-label-cushion { font-size: 0.67rem; color: var(--ink-400); }
+/* Franjas de media hora más altas que las de fábrica (31/08/2026). Con 1,5em
+   (~24 px) una cita de un cuarto de hora medía ~12 px, menos que el mínimo de
+   15 px que FullCalendar impone a toda caja; al estirarla hasta el mínimo
+   «pisaba» en píxeles a la cita siguiente, que se pintaba montada y a media
+   anchura. Con 2em el cuarto de hora mide 16 px: le cabe una línea de texto y
+   no pisa a nadie. La otra mitad del arreglo (eventMinHeight bajado y
+   slotEventOverlap apagado) va en las opciones del calendario de CitasModule. */
+.fc .fc-timegrid-slot { height: 2em; }
 /* El resaltado de una selección, igual: lo pinta la librería leyendo
    `--fc-highlight-color`, por el mismo motivo que el día de hoy. */
 .fc .fc-daygrid-event-dot { border-color: currentColor; }
@@ -330,6 +338,15 @@ body {
   text-overflow: ellipsis;
 }
 .fc .fc-daygrid-dot-event .fc-event-title { text-overflow: ellipsis; }
+
+/* El botón «Meses» (la columna de meses tipo Organízate, 31/08/2026) se
+   enciende con la marca mientras la columna está desplegada, igual que el
+   botón de la vista puesta: se ve de un vistazo por qué el calendario está
+   más estrecho. La clase la pone CitasModule en el contenedor. */
+.meses-abiertos .fc .fc-meses-button {
+  background: var(--color-primary, #1B3A2D) !important;
+  border-color: var(--color-primary, #1B3A2D) !important;
+}
 
 /* Días cerrados del centro (festivos, puentes, formación) — sprint 2026-07-29.
    Se pintan atenuados en el calendario para que se distinga de un vistazo un

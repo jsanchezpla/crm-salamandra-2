@@ -23,6 +23,7 @@ import { fmtDateTime, toDateInput, toTimeInput } from "./citas/chips.jsx";
 import { CitaDetalleModal } from "./citas/CitaDetalleModal.jsx";
 import { NuevaCitaDrawer } from "./citas/NuevaCitaDrawer.jsx";
 import { Waitlist } from "./citas/Waitlist.jsx";
+import MiniMeses from "./citas/MiniMeses.jsx";
 
 /**
  * `conClientes` y `vocabulario` los resuelve la página (servidor): son para el
@@ -72,6 +73,28 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
 
   const calViewRef = useRef({ view: "timeGridWeek", date: null });
   const [calView, setCalView] = useState({ view: "timeGridWeek", date: null });
+
+  /*
+   * La columna de meses «tipo Organízate» (31/08/2026, Rodrigo): dos meses en
+   * miniatura a la izquierda para saltar a un día de un clic. En Organízate
+   * está siempre; aquí se abre con el botón «Meses» de la botonera y se
+   * cierra para recuperar el calendario a todo lo ancho. Se queda como se
+   * dejó (localStorage): quien venía de Organízate la querrá siempre puesta.
+   * Arranca cerrada y el guardado se lee tras montar, que es como se evita
+   * que el HTML del servidor y el del navegador digan cosas distintas.
+   */
+  const [mesesAbiertos, setMesesAbiertos] = useState(false);
+  useEffect(() => {
+    try { setMesesAbiertos(localStorage.getItem("citas.miniMeses") === "1"); } catch { /* sin memoria, arranca cerrada */ }
+  }, []);
+  // Lo que enseña el calendario grande, en milisegundos, para que la columna
+  // marque esos días y pinte el mes que se está mirando (datesSet lo rellena).
+  const [vistaRango, setVistaRango] = useState(null);
+  // Al abrir o cerrar la columna cambia el ancho disponible sin que cambie la
+  // ventana, y FullCalendar solo se re-mide solo con la ventana: se le pide.
+  useEffect(() => {
+    calendarRef.current?.getApi()?.updateSize();
+  }, [mesesAbiertos]);
   const [eventTypes, setEventTypes] = useState([]);
   const [visibleEtIds, setVisibleEtIds] = useState(null); // null = todos
   const [openBooking, setOpenBooking] = useState(null); // booking abierto en modal detalle
@@ -462,8 +485,10 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           byte y ya divergiendo en una regla. Al ser CSS global daba igual dónde
           se declararan, así que la copia que quedó es una. */}
 
-      {/* Header */}
-      <div className="px-6 lg:px-10 pt-8 pb-5 flex items-end justify-between shrink-0 border-b border-[var(--ink-200)] gap-6 flex-wrap">
+      {/* Header. Más recogido que el resto de cabeceras (31/08/2026, Rodrigo):
+          aquí cada píxel de arriba se lo come al calendario, que es lo que se
+          viene a mirar. */}
+      <div className="px-6 lg:px-10 pt-5 pb-4 flex items-end justify-between shrink-0 border-b border-[var(--ink-200)] gap-6 flex-wrap">
         <div>
           <div className="eyebrow mb-1.5 lg:mb-2">Tiempo · Agenda de citas</div>
           <h1 className="font-display text-[24px] lg:text-[34px] leading-[1.05] text-[var(--ink-900)] tracking-tight">
@@ -501,57 +526,165 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
         </div>
       </div>
 
-      {/* Pestañas: Calendario · Lista de espera (con globito de pendientes) */}
-      <div className="px-6 lg:px-10 pt-3 flex items-center gap-1 shrink-0">
-        <button
-          onClick={() => { setCalView(calViewRef.current); setTab("calendar"); }}
-          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-            tab === "calendar" ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
-          }`}
-        >
-          Calendario
-        </button>
-        <button
-          onClick={() => { setTab("waitlist"); setWaitlistKey((k) => k + 1); }}
-          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${
-            tab === "waitlist" ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
-          }`}
-        >
-          Lista de espera
-          {pendingCount > 0 && (
-            <span className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold ${
-              tab === "waitlist" ? "bg-white/25 text-white" : "bg-red-500 text-white"
-            }`}>
-              {pendingCount}
-            </span>
-          )}
-        </button>
-        {/* Fuera del botón: leer qué es no debe obligar a cambiar de pestaña. */}
-        <HelpTooltip title="Lista de espera" placement="bottom">
-          Citas que alguien ha pedido desde la web y esperan tu visto bueno. Si la cita tiene
-          precio, aquí el paciente <strong className="text-white">ya tiene el dinero retenido en
-          su tarjeta, pero todavía no se le ha cobrado</strong>: se le cobra al confirmar, y si la
-          rechazas se le suelta.
-          {" "}
-          No la confundas con la lista de espera de admisión, en Clientes: esa es gente esperando
-          plaza, sin fecha ni hora.
-        </HelpTooltip>
-        {viewerIsAdmin && (
+      {/*
+        Pestañas y filtros en UNA sola fila (31/08/2026, Rodrigo). Eran tres
+        bandas apiladas —pestañas, debajo Tipo/Profesional, y Festivos con fila
+        propia ya dentro del calendario— y la agenda arrancaba tres dedos más
+        abajo de lo necesario. Todo lo que gobierna la vista comparte ahora
+        fila: pestañas a la izquierda, filtros y Festivos pegados a la derecha;
+        donde no caben (móvil), la fila envuelve sola.
+
+        Los filtros son dos desplegables y no chips desde el 12/08/2026: en
+        Aumenta eran 74 botones en 10 filas, más alto que el propio calendario.
+      */}
+      <div className="px-6 lg:px-10 py-2.5 flex items-center gap-x-4 gap-y-2 flex-wrap shrink-0 border-b border-neutral-100">
+        <div className="flex items-center gap-1">
           <button
-            onClick={() => { setTab("requests"); loadChangeRequests(); }}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${
-              tab === "requests" ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
+            onClick={() => { setCalView(calViewRef.current); setTab("calendar"); }}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              tab === "calendar" ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
             }`}
           >
-            Solicitudes
-            {changeReqPending > 0 && (
+            Calendario
+          </button>
+          <button
+            onClick={() => { setTab("waitlist"); setWaitlistKey((k) => k + 1); }}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${
+              tab === "waitlist" ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
+            }`}
+          >
+            Lista de espera
+            {pendingCount > 0 && (
               <span className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold ${
-                tab === "requests" ? "bg-white/25 text-white" : "bg-red-500 text-white"
+                tab === "waitlist" ? "bg-white/25 text-white" : "bg-red-500 text-white"
               }`}>
-                {changeReqPending}
+                {pendingCount}
               </span>
             )}
           </button>
+          {/* Fuera del botón: leer qué es no debe obligar a cambiar de pestaña. */}
+          <HelpTooltip title="Lista de espera" placement="bottom">
+            Citas que alguien ha pedido desde la web y esperan tu visto bueno. Si la cita tiene
+            precio, aquí el paciente <strong className="text-white">ya tiene el dinero retenido en
+            su tarjeta, pero todavía no se le ha cobrado</strong>: se le cobra al confirmar, y si la
+            rechazas se le suelta.
+            {" "}
+            No la confundas con la lista de espera de admisión, en Clientes: esa es gente esperando
+            plaza, sin fecha ni hora.
+          </HelpTooltip>
+          {viewerIsAdmin && (
+            <button
+              onClick={() => { setTab("requests"); loadChangeRequests(); }}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${
+                tab === "requests" ? "bg-[var(--color-primary,#0F0F0F)] text-white" : "text-neutral-600 hover:bg-neutral-100"
+              }`}
+            >
+              Solicitudes
+              {changeReqPending > 0 && (
+                <span className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold ${
+                  tab === "requests" ? "bg-white/25 text-white" : "bg-red-500 text-white"
+                }`}>
+                  {changeReqPending}
+                </span>
+              )}
+            </button>
+          )}
+        </div>
+
+        {/* Lo que gobierna el calendario, solo con el calendario delante.
+            Sin rotulitos «TIPO»/«PROFESIONAL» delante de los desplegables
+            (31/08/2026): lo que enseñan ya lo dice — «Todos los tipos»,
+            «Todo el equipo», «3 tipos»… — y sus ~110 px eran justo los que
+            hacían saltar la fila a dos líneas en un portátil. */}
+        {tab === "calendar" && (
+          <div className="flex items-center gap-x-4 gap-y-2 flex-wrap lg:ml-auto">
+            {eventTypes.length > 0 && (
+            <>
+            <div className="w-[190px]">
+              <MultiSelect
+                aria-label="Filtrar por tipo de cita"
+                value={visibleEtIds}
+                onChange={setVisibleEtIds}
+                options={eventTypes.map((et) => ({
+                  value: et.id,
+                  label: et.name,
+                  color: et.color ?? "#3F6E5B",
+                }))}
+                etiquetaTodos="Todos los tipos"
+                resumen={(n) => `${n} tipos`}
+                // Con 57 tipos, encontrar uno a ojo es el trabajo de verdad.
+                searchable={eventTypes.length > 8}
+              />
+            </div>
+
+            {/* El filtro es de quien ve más de una agenda, no de quien manda:
+                con agenda compartida una terapeuta ve las de todo el centro y
+                necesita separarlas igual que dirección. */}
+            {veTodaLaAgenda && teamMembers.length > 1 && (
+              <div className="w-[190px]">
+                <MultiSelect
+                  aria-label="Filtrar por profesional"
+                  value={visibleTmIds}
+                  onChange={setVisibleTmIds}
+                  options={[
+                    ...teamMembers.map((m) => ({
+                      value: m.id,
+                      label: m.displayName,
+                      // El color casa con el de sus citas en el calendario.
+                      color: m.avatarColor ?? COLOR_CITA_POR_DEFECTO,
+                    })),
+                    /*
+                     * «Sin asignar», una más de la lista (25/08/2026, Rodrigo).
+                     *
+                     * Hasta hoy las citas sin profesional se colaban SIEMPRE al
+                     * filtrar por una persona, sin manera de apagarlas: 70 de
+                     * las 103 que veía en pantalla. Ahora no salen salvo que se
+                     * pidan, y se piden aquí. Repartirlas sigue siendo trabajo
+                     * de «Citas → Sin profesional», que es donde viven.
+                     */
+                    { value: SIN_PROFESIONAL, label: "Sin asignar", color: COLOR_CITA_POR_DEFECTO },
+                  ]}
+                  etiquetaTodos="Todo el equipo"
+                  resumen={(n) => `${n} profesionales`}
+                  searchable={teamMembers.length > 8}
+                />
+              </div>
+            )}
+
+            {/* Y si solo ve la suya, su nombre fijo en el mismo sitio: no se
+                elige porque no hay nada que elegir. Iba por rol y mentía —con
+                agenda compartida ponía «solo tus citas» encima de las citas de
+                todo el centro—, así que ahora pregunta lo mismo que el filtro. */}
+            {!veTodaLaAgenda && miFichaDeEquipo && (
+              <span
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] text-neutral-600 bg-neutral-50 border border-neutral-200"
+                title="Ves tu agenda. Para ver la de otra persona hace falta dirección."
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                  style={{ background: miFichaDeEquipo.avatarColor ?? "#3F6E5B" }}
+                />
+                {miFichaDeEquipo.displayName}
+                <span className="text-neutral-400">· solo tus citas</span>
+              </span>
+            )}
+            </>
+            )}
+
+            {/* Festivos y cierres del centro. Solo admin: cerrar un día afecta
+                a la agenda de todo el equipo y a la reserva pública. El
+                recuento de días cerrados en la vista va dentro del botón. */}
+            {viewerIsAdmin && (
+              <button
+                type="button"
+                onClick={() => setFestivosAbierto(true)}
+                title={festivos.size > 0 ? `${festivos.size} día(s) cerrado(s) en la vista actual` : undefined}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-neutral-200 text-neutral-600 hover:bg-neutral-50 transition-colors whitespace-nowrap"
+              >
+                Festivos y cierres{festivos.size > 0 ? ` · ${festivos.size}` : ""}
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -623,94 +756,6 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
       )}
 
       {/*
-        Filtros de la agenda — una sola línea, dos desplegables (12/08/2026).
-        Antes eran dos bandas de chips: en Aumenta, 74 botones en 10 filas y
-        379 px de alto, más que los 335 px que le quedaban al calendario.
-        El de profesional sigue siendo solo del jefe y solo si hay más de uno.
-      */}
-      {tab === "calendar" && eventTypes.length > 0 && (
-        <div className="px-6 lg:px-10 py-2.5 flex items-center gap-x-5 gap-y-2 flex-wrap shrink-0 border-b border-neutral-100">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[11px] uppercase tracking-wider text-neutral-400">Tipo</span>
-            <div className="w-[190px]">
-              <MultiSelect
-                aria-label="Filtrar por tipo de cita"
-                value={visibleEtIds}
-                onChange={setVisibleEtIds}
-                options={eventTypes.map((et) => ({
-                  value: et.id,
-                  label: et.name,
-                  color: et.color ?? "#3F6E5B",
-                }))}
-                etiquetaTodos="Todos los tipos"
-                resumen={(n) => `${n} tipos`}
-                // Con 57 tipos, encontrar uno a ojo es el trabajo de verdad.
-                searchable={eventTypes.length > 8}
-              />
-            </div>
-          </div>
-
-          {/* El filtro es de quien ve más de una agenda, no de quien manda:
-              con agenda compartida una terapeuta ve las de todo el centro y
-              necesita separarlas igual que dirección. */}
-          {veTodaLaAgenda && teamMembers.length > 1 && (
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[11px] uppercase tracking-wider text-neutral-400">Profesional</span>
-              <div className="w-[190px]">
-                <MultiSelect
-                  aria-label="Filtrar por profesional"
-                  value={visibleTmIds}
-                  onChange={setVisibleTmIds}
-                  options={[
-                    ...teamMembers.map((m) => ({
-                      value: m.id,
-                      label: m.displayName,
-                      // El color casa con el de sus citas en el calendario.
-                      color: m.avatarColor ?? COLOR_CITA_POR_DEFECTO,
-                    })),
-                    /*
-                     * «Sin asignar», una más de la lista (25/08/2026, Rodrigo).
-                     *
-                     * Hasta hoy las citas sin profesional se colaban SIEMPRE al
-                     * filtrar por una persona, sin manera de apagarlas: 70 de
-                     * las 103 que veía en pantalla. Ahora no salen salvo que se
-                     * pidan, y se piden aquí. Repartirlas sigue siendo trabajo
-                     * de «Citas → Sin profesional», que es donde viven.
-                     */
-                    { value: SIN_PROFESIONAL, label: "Sin asignar", color: COLOR_CITA_POR_DEFECTO },
-                  ]}
-                  etiquetaTodos="Todos"
-                  resumen={(n) => `${n} profesionales`}
-                  searchable={teamMembers.length > 8}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Y si solo ve la suya, su nombre fijo en el mismo sitio: no se
-              elige porque no hay nada que elegir. Iba por rol y mentía —con
-              agenda compartida ponía «solo tus citas» encima de las citas de
-              todo el centro—, así que ahora pregunta lo mismo que el filtro. */}
-          {!veTodaLaAgenda && miFichaDeEquipo && (
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[11px] uppercase tracking-wider text-neutral-400">Profesional</span>
-              <span
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] text-neutral-600 bg-neutral-50 border border-neutral-200"
-                title="Ves tu agenda. Para ver la de otra persona hace falta dirección."
-              >
-                <span
-                  className="w-1.5 h-1.5 rounded-full shrink-0"
-                  style={{ background: miFichaDeEquipo.avatarColor ?? "#3F6E5B" }}
-                />
-                {miFichaDeEquipo.displayName}
-                <span className="text-neutral-400">· solo tus citas</span>
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/*
         Calendario.
 
         ⚠️ SIN SCROLL EN LA PÁGINA (12/08/2026, Rodrigo). Antes el alto de
@@ -722,29 +767,20 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
         no puede desbordar.
       */}
       {tab === "calendar" && (
-        <div className="flex-1 min-h-0 flex flex-col px-6 lg:px-10 pt-3 pb-4">
+        <div className={`flex-1 min-h-0 flex flex-col px-6 lg:px-10 pt-3 pb-4 ${mesesAbiertos ? "meses-abiertos" : ""}`}>
           <p className="text-[11px] text-neutral-400 mb-2 lg:hidden shrink-0">
             Toca una cita para ver su ficha. Para crear o mover citas, mejor desde el ordenador.
           </p>
-          {/* Festivos y cierres del centro. Solo admin: cerrar un día afecta a
-              la agenda de todo el equipo y a la reserva pública. */}
-          {viewerIsAdmin && (
-            <div className="flex items-center gap-2 mb-2 flex-wrap shrink-0">
-              <button
-                type="button"
-                onClick={() => setFestivosAbierto(true)}
-                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-neutral-200 text-neutral-600 hover:bg-neutral-50 transition-colors"
-              >
-                Festivos y cierres
-              </button>
-              {festivos.size > 0 && (
-                <span className="text-[11px] text-neutral-400">
-                  {festivos.size} día(s) cerrado(s) en la vista actual
-                </span>
-              )}
-            </div>
+          <div className="flex-1 min-h-0 flex gap-4">
+          {/* La columna de meses, cuando está desplegada: achata el calendario
+              y desaparece al cerrarla. En móvil nunca: no cabe. */}
+          {mesesAbiertos && !esMovil && (
+            <MiniMeses
+              vista={vistaRango}
+              alPulsarDia={(d) => calendarRef.current?.getApi()?.gotoDate(d)}
+            />
           )}
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-w-0 min-h-0">
           <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
@@ -753,6 +789,20 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
             datesSet={(arg) => {
               calViewRef.current = { view: arg.view.type, date: arg.startStr };
               cargarFestivos(arg.startStr.slice(0, 10), arg.endStr.slice(0, 10));
+              /*
+               * Para la columna de meses. OJO: `render()` también dispara
+               * datesSet (ver la nota de firmaFestivos), así que si la vista
+               * no ha cambiado se devuelve el MISMO objeto — un objeto nuevo
+               * con los mismos números re-renderizaría a cada repintado.
+               */
+              const s = arg.view.activeStart.getTime();
+              const e = arg.view.activeEnd.getTime();
+              const c = arg.view.currentStart.getTime();
+              setVistaRango((prev) =>
+                prev && prev.start === s && prev.end === e && prev.current === c
+                  ? prev
+                  : { start: s, end: e, current: c }
+              );
             }}
             // Los festivos se pintan atenuados y con la etiqueta del cierre.
             dayCellClassNames={(arg) => (festivos.has(ymdLocal(arg.date)) ? ["dia-festivo"] : [])}
@@ -774,8 +824,26 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
             headerToolbar={
               esMovil
                 ? { left: "prev,next", center: "title", right: "listWeek,timeGridTresDias,timeGridDay" }
-                : { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridTresDias,timeGridDay,listWeek" }
+                : { left: "meses prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridTresDias,timeGridDay,listWeek" }
             }
+            /*
+             * El botón que abre y cierra la columna de meses. Va DENTRO de la
+             * botonera de FullCalendar y no suelto por la página: es un mando
+             * del calendario y ahí queda pegado a lo que gobierna. En móvil ni
+             * aparece: la columna no cabe y no se pinta.
+             */
+            customButtons={{
+              meses: {
+                text: "Meses",
+                hint: "Enseñar u ocultar los meses para saltar a un día",
+                click: () => {
+                  setMesesAbiertos((v) => {
+                    try { localStorage.setItem("citas.miniMeses", v ? "0" : "1"); } catch { /* sin memoria, solo esta visita */ }
+                    return !v;
+                  });
+                },
+              },
+            }}
             /*
              * Vista «3 días» (30/08/2026, Rodrigo): entre el día suelto y la
              * semana entera faltaba el término medio con el que se trabaja una
@@ -803,6 +871,23 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
              * quepa) es CSS y vive en app/globals.css.
              */
             displayEventEnd={false}
+            /*
+             * Citas pegadas SIN montarse (31/08/2026, Rodrigo). FullCalendar
+             * estira toda caja hasta un mínimo de 15 px y usa la caja YA
+             * estirada para decidir si dos eventos chocan (computeSegVCoords
+             * de timegrid, con un «:(» del propio autor en esa línea). Un
+             * bloqueo de un cuarto de hora medía ~12 px, se estiraba, e
+             * invadía a la cita de las «y cuarto», que salía montada encima,
+             * a media anchura y con el nombre cortado. Tres piezas que van
+             * juntas: la rejilla es más alta (`.fc-timegrid-slot` en
+             * globals.css) para que un cuarto de hora ya mida más de 15 px y
+             * le quepa su línea de texto; el mínimo baja a 8 px para que una
+             * caja nunca ocupe más tiempo del que dura; y los solapes DE
+             * VERDAD (dos citas a la misma hora) se reparten lado a lado en
+             * vez de pintarse una tapando a la otra.
+             */
+            eventMinHeight={8}
+            slotEventOverlap={false}
             allDaySlot={false}
             events={fetchEvents}
             eventClick={handleEventClick}
@@ -825,6 +910,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
             height="100%"
             buttonText={{ today: "Hoy", month: "Mes", week: "Semana", day: "Día", list: "Lista" }}
           />
+          </div>
           </div>
         </div>
       )}
