@@ -7,13 +7,23 @@ import { Op } from "sequelize";
 export const GET = withTenant(async (request, { params }, { tenantModels, hasModule }) => {
   if (!hasModule("clinica")) return forbidden();
 
-  const { Taller, TallerInscripcion, Patient, TeamMember } = tenantModels;
+  const { Taller, TallerInscripcion, Patient, TeamMember, BillingConcept } = tenantModels;
   const { id } = await params;
 
   const taller = await Taller.findByPk(id, {
     include: [{ model: TeamMember, as: "responsable", attributes: ["id", "displayName"] }],
   });
   if (!taller) return notFound("Taller no encontrado");
+
+  // El concepto de cobro, a mano (FK suave a propósito): el detalle es donde
+  // se apunta a la gente, y ahí es donde hay que decir qué se cobrará.
+  let concepto = null;
+  if (taller.conceptId && BillingConcept) {
+    concepto = await BillingConcept.findByPk(taller.conceptId, {
+      attributes: ["id", "name", "unitPrice", "periodicity"],
+      raw: true,
+    });
+  }
 
   const inscripciones = await TallerInscripcion.findAll({
     where: { tallerId: id },
@@ -23,6 +33,7 @@ export const GET = withTenant(async (request, { params }, { tenantModels, hasMod
 
   return ok({
     ...taller.toJSON(),
+    concepto,
     // Separados a propósito: al abrir un taller lo que se quiere ver es quién
     // está AHORA; los que pasaron por él son consulta de histórico.
     apuntados: inscripciones.filter((i) => !i.leftAt),
