@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import HelpTooltip from "../../components/ui/HelpTooltip.jsx";
 import FullCalendar from "@fullcalendar/react";
@@ -21,6 +22,9 @@ import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "@/lib/citas/coloresB
 import { SIN_PROFESIONAL, COLOR_CITA_POR_DEFECTO } from "@/lib/citas/filtros.js";
 import { fmtDateTime, toDateInput, toTimeInput } from "./citas/chips.jsx";
 import { CitaDetalleModal } from "./citas/CitaDetalleModal.jsx";
+import { CitaMenuContextual } from "./citas/CitaMenuContextual.jsx";
+import { destinoDePegado, sePuedeMover } from "@/lib/citas/pegarCita.js";
+import { fichaDeLaCita } from "@/lib/citas/fichaDeLaCita.js";
 import { NuevaCitaDrawer } from "./citas/NuevaCitaDrawer.jsx";
 import { Waitlist } from "./citas/Waitlist.jsx";
 import MiniMeses from "./citas/MiniMeses.jsx";
@@ -31,6 +35,13 @@ import MiniMeses from "./citas/MiniMeses.jsx";
  */
 export default function CitasModule({ conClientes = false, vocabulario = undefined }) {
   const calendarRef = useRef(null);
+  const router = useRouter();
+  // Menú contextual de una cita (clic derecho sobre la caja): { x, y, titulo,
+  // cita: { id, startStr, props } } o null. Y el portapapeles de cortar/copiar:
+  // { modo: "cortar" | "copiar", cita } — el siguiente clic sobre el
+  // calendario pega (lib/citas/pegarCita.js).
+  const [menuCita, setMenuCita] = useState(null);
+  const [portapapeles, setPortapapeles] = useState(null);
   // Vista: "calendar" (por defecto) o "waitlist". La lista de espera son las
   // reservas en estado 'pending' (solicitudes de la web sin confirmar). El
   // globito rojo de la pestaña muestra cuántas hay sin atender.
@@ -428,12 +439,129 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
     setCreacion({ date, time });
   }
 
+  /*
+   * ── MENÚ CONTEXTUAL DE LA CITA (31/08/2026, Rodrigo en la formación) ──────
+   * Clic derecho sobre una cita → información del paciente, cortar, copiar y
+   * cobrar. Cortar y copiar dejan la cita en `portapapeles` y el SIGUIENTE
+   * clic sobre el calendario la pega (cortar reprograma la misma cita; copiar
+   * crea una nueva con los mismos datos). Cobrar salta a Cobros con el
+   * cliente ya puesto. Las reglas puras viven en lib/citas/pegarCita.js.
+   */
+  function handleEventContextMenu(e, info) {
+    if (info.event.extendedProps?.esBloqueo) return;
+    e.preventDefault();
+    setMenuCita({
+      x: e.clientX,
+      y: e.clientY,
+      titulo: info.event.title,
+      cita: { id: info.event.id, startStr: info.event.startStr, props: info.event.extendedProps },
+    });
+  }
+
+  function accionesDeMenu() {
+    if (!menuCita) return [];
+    const { cita } = menuCita;
+    const ficha = fichaDeLaCita(cita.props, { conClientes, vocabulario });
+    const viva = sePuedeMover(cita.props?.status);
+    const cerrar = () => setMenuCita(null);
+    return [
+      {
+        id: "ficha",
+        icono: "👤",
+        rotulo: ficha ? `Información de ${ficha.rotulo.toLowerCase()}` : "Información del paciente",
+        deshabilitada: !ficha,
+        motivo: "La cita no está enlazada a ninguna ficha",
+        onClick: () => { cerrar(); if (ficha) router.push(ficha.href); },
+      },
+      {
+        id: "cortar",
+        icono: "✂️",
+        rotulo: "Cortar (mover a otro hueco)",
+        deshabilitada: !viva,
+        motivo: "Una cita cancelada o pasada ya no se mueve",
+        onClick: () => { cerrar(); setPortapapeles({ modo: "cortar", cita }); },
+      },
+      {
+        id: "copiar",
+        icono: "📋",
+        rotulo: "Copiar a otro hueco",
+        deshabilitada: false,
+        onClick: () => { cerrar(); setPortapapeles({ modo: "copiar", cita }); },
+      },
+      {
+        id: "cobrar",
+        icono: "💶",
+        rotulo: "Cobrar",
+        deshabilitada: !cita.props?.clientId,
+        motivo: "Sin ficha enlazada no se sabe a quién cobrar",
+        onClick: () => {
+          cerrar();
+          router.push(`/facturacion/cobros?abrir=cuota&cliente=${cita.props.clientId}`);
+        },
+      },
+    ];
+  }
+
+  // Pegar lo cortado/copiado en el hueco pulsado. Cortar = reprogramar la
+  // MISMA cita (el PATCH ya valida solapamientos); copiar = alta nueva con los
+  // datos de la original (el POST valida festivos, bloqueos y solapes igual
+  // que el drawer de «Nueva cita»).
+  async function pegarEn(dateStr) {
+    const { modo, cita } = portapapeles;
+    setPortapapeles(null);
+    const destino = destinoDePegado(dateStr, cita.startStr);
+    if (!destino) return;
+    try {
+      if (modo === "cortar") {
+        const res = await fetch(`/api/citas/bookings/${cita.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scheduledAt: destino }),
+        });
+        const j = await res.json();
+        if (!j.ok) throw new Error(j.error || "No se pudo mover la cita");
+      } else {
+        const p = cita.props ?? {};
+        const res = await fetch("/api/citas/bookings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            eventTypeId: p.eventTypeId,
+            clientName: p.clientName,
+            clientId: p.clientId || null,
+            patientId: p.patientId || null,
+            clientEmail: p.clientEmail || null,
+            clientPhone: p.clientPhone || null,
+            teamMemberId: p.teamMemberId || null,
+            modality: p.modality,
+            scheduledAt: destino,
+          }),
+        });
+        const j = await res.json();
+        if (!j.ok) throw new Error(j.error || "No se pudo copiar la cita");
+      }
+      calendarRef.current?.getApi().refetchEvents();
+    } catch (err) {
+      await avisar({ titulo: modo === "cortar" ? "La cita no se ha movido" : "La cita no se ha copiado", texto: err.message });
+    }
+  }
+
+  // Con el portapapeles cargado, Escape cancela sin pegar nada.
+  useEffect(() => {
+    if (!portapapeles) return;
+    function tecla(e) { if (e.key === "Escape") setPortapapeles(null); }
+    document.addEventListener("keydown", tecla);
+    return () => document.removeEventListener("keydown", tecla);
+  }, [portapapeles]);
+
   // Doble clic en un hueco vacío → nueva cita lista para editar. FullCalendar
   // no distingue el doble clic, así que lo detectamos: dos `dateClick` sobre
   // la MISMA hora en menos de 400 ms. Un clic suelto no hace nada (evita abrir
   // el formulario cada vez que rozas el calendario).
   const lastClickRef = useRef({ at: 0, key: "" });
   function handleDateClick(info) {
+    // Con algo en el portapapeles, el clic PEGA en vez de crear.
+    if (portapapeles) { pegarEn(info.dateStr); return; }
     const key = info.dateStr;
     const now = Date.now();
     const prev = lastClickRef.current;
@@ -891,6 +1019,12 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
             allDaySlot={false}
             events={fetchEvents}
             eventClick={handleEventClick}
+            // Clic derecho sobre la caja → menú contextual. FullCalendar no
+            // trae onContextMenu: se engancha al montarse cada evento (el
+            // listener muere con el elemento, no hay que soltarlo a mano).
+            eventDidMount={(info) => {
+              info.el.addEventListener("contextmenu", (e) => handleEventContextMenu(e, info));
+            }}
             selectable={true}
             selectMirror={true}
             dateClick={handleDateClick}
@@ -912,6 +1046,21 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           />
           </div>
           </div>
+        </div>
+      )}
+
+      {/* Menú contextual de la cita (clic derecho) y el aviso del pegado. */}
+      {menuCita && (
+        <CitaMenuContextual menu={menuCita} acciones={accionesDeMenu()} onCerrar={() => setMenuCita(null)} />
+      )}
+      {portapapeles && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-neutral-900 text-white text-xs rounded-full px-4 py-2 shadow-pop flex items-center gap-3">
+          <span>
+            {portapapeles.modo === "cortar" ? "✂️ Cortando" : "📋 Copiando"} «{portapapeles.cita.props?.clientName ?? "cita"}» — haz clic en el hueco de destino
+          </span>
+          <button type="button" onClick={() => setPortapapeles(null)} className="text-white/60 hover:text-white transition-colors">
+            Cancelar (Esc)
+          </button>
         </div>
       )}
 

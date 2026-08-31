@@ -108,6 +108,18 @@ export default function CobrosPage() {
     return () => clearTimeout(id);
   }, [searchInput]);
 
+  // «Cobrar» desde el menú contextual de la agenda (31/08/2026): llega como
+  // /facturacion/cobros?abrir=cuota&cliente=<id> y el drawer se abre solo en
+  // modo cuota con el cliente puesto. window.location y no useSearchParams:
+  // se lee UNA vez al montar y no obliga a suspender la página.
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("abrir") !== "cuota") return;
+    const clientId = sp.get("cliente") || "";
+    setForm((f) => ({ ...f, modo: "cuota", clientId: clientId || f.clientId }));
+    setShowForm(true);
+  }, []);
+
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" }).then((r) => r.json()).then((j) => j.ok && setMe(j.data)).catch(() => {});
     // Las fichas ya no se bajan aquí (28/08/2026). Este `limit=300` recibía 200,

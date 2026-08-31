@@ -125,6 +125,10 @@ export const GET = withTenant(async (request, _ctx, { tenant, tenantModels, hasM
         extendedProps: {
           status: b.status,
           modality: b.modality,
+          // Para el menú contextual (31/08/2026): saltar a la ficha y cobrar
+          // necesitan saber DE QUIÉN es la cita sin otro viaje al servidor.
+          clientId: b.clientId ?? null,
+          patientId: b.patientId ?? null,
           clientEmail: b.clientEmail,
           clientPhone: b.clientPhone,
           eventTypeId: b.eventTypeId,
