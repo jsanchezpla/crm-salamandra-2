@@ -108,7 +108,8 @@ export default function FacturasPage() {
       .then((r) => (r.ok ? r.json() : { data: {} }))
       .then((j) => {
         if (!vivo) return;
-        const ids = (j?.data?.therapists ?? []).map((t) => t.id).filter(Boolean);
+        // La lista viene con `teamMemberId` (terapeutasEfectivos), no `id`.
+        const ids = (j?.data?.therapists ?? []).map((t) => t.teamMemberId ?? t.id).filter(Boolean);
         setTerapeutasSugeridos(ids);
         // Si aún no hay empleado elegido, entra el de referencia (el primero).
         if (ids.length) setForm((f) => (f.employeeId ? f : { ...f, employeeId: ids[0] }));
