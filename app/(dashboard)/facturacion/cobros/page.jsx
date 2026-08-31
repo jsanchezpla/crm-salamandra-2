@@ -9,6 +9,7 @@ import { useSortState, SortableTh } from "../_components/tableSort.jsx";
 import Select from "@/components/ui/Select.jsx";
 import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
+import FacturarMesDrawer from "../_components/FacturarMesDrawer.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { coincidePorNombre } from "../../../../lib/utils/busqueda.js";
 
@@ -46,6 +47,10 @@ export default function CobrosPage() {
   // abre los documentos de esa familia en su área privada.
   const [form, setForm] = useState({ modo: "factura", invoiceId: "", clientId: "", periodMonth: new Date().toISOString().slice(0, 7), amount: "", method: "transfer", paidAt: new Date().toISOString().slice(0, 10), notes: "" });
   const [editing, setEditing] = useState(null); // cobro que se está editando
+  // Facturas abiertas del cliente del cobro que se edita, para poder ASOCIAR
+  // un cobro suelto a la factura que se emitió después (31/08/2026).
+  const [facturasCliente, setFacturasCliente] = useState([]);
+  const [showFacturarMes, setShowFacturarMes] = useState(false);
   const [morosidad, setMorosidad] = useState(null);
   const [mesMorosidad, setMesMorosidad] = useState(new Date().toISOString().slice(0, 7));
   const [saving, setSaving] = useState(false);
@@ -104,6 +109,23 @@ export default function CobrosPage() {
       setUnpaidInvoices(merged);
     }).catch(() => {});
   }, [showForm]);
+
+  // Al abrir la edición de un cobro SIN factura, se cargan las facturas
+  // abiertas de su cliente para el desplegable de «Asociar a factura». Solo
+  // las suyas: asociar a la de otro cliente lo rechaza igualmente el PATCH.
+  useEffect(() => {
+    if (!editing || editing.invoice?.id || !editing.clientId) { setFacturasCliente([]); return; }
+    Promise.all(
+      ["issued", "sent", "partially_paid", "overdue"].map((st) =>
+        fetch(`/api/billing/invoices?clientId=${editing.clientId}&status=${st}&limit=100`, { cache: "no-store" }).then((r) => r.json())
+      )
+    ).then((results) => {
+      const merged = [];
+      for (const r of results) merged.push(...(r.data?.invoices ?? []));
+      merged.sort((a, b) => (b.issueDate || "").localeCompare(a.issueDate || ""));
+      setFacturasCliente(merged);
+    }).catch(() => setFacturasCliente([]));
+  }, [editing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // method y status se filtran en backend; aquí solo búsqueda libre por texto
   const filtered = useMemo(() => {
@@ -185,6 +207,9 @@ export default function CobrosPage() {
           paidAt: editing.paidAt,
           notes: editing.notes || null,
           status: editing.status,
+          // La clave solo viaja si se ELIGIÓ factura: mandarla vacía sería
+          // pedirle al PATCH que desasocie.
+          ...(editing.asociarFacturaId ? { invoiceId: editing.asociarFacturaId } : {}),
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -233,6 +258,12 @@ export default function CobrosPage() {
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           <Link href="/facturacion" className="text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700 transition-colors">← Volver</Link>
           <ExportButtons xlsxUrl={exportUrl} />
+          {puedeFacturar && (
+            <button
+              onClick={() => setShowFacturarMes(true)}
+              className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-[var(--color-primary,#1B3A2D)] border border-[var(--color-primary,#1B3A2D)] hover:bg-neutral-50 transition-colors"
+            >Facturar el mes</button>
+          )}
           {puedeFacturar && (
             <button
               onClick={() => setShowForm(true)}
@@ -556,6 +587,25 @@ export default function CobrosPage() {
                     { value: "refunded", label: "Devuelto" },
                   ]} />
               </FormRow>
+              {/* Un cobro suelto se puede enganchar a la factura que se emitió
+                  después (31/08/2026): la factura pasa a cobrada y el cobro
+                  deja de salir como «sin factura». El mes de cuota no se toca. */}
+              {!editing.invoice?.id && facturasCliente.length > 0 && (
+                <FormRow label="Asociar a factura (opcional)">
+                  <Select
+                    value={editing.asociarFacturaId ?? ""}
+                    onChange={(v) => setEditing((p) => ({ ...p, asociarFacturaId: v }))}
+                    className={inputCls}
+                    options={[
+                      { value: "", label: "Dejar sin factura" },
+                      ...facturasCliente.map((i) => {
+                        const remaining = Math.max(0, Number(i.total) - Number(i.paidAmount || 0));
+                        return { value: i.id, label: `${i.number} · pendiente ${fmtMoney(remaining)}` };
+                      }),
+                    ]}
+                  />
+                </FormRow>
+              )}
               <FormRow label="Notas">
                 <textarea rows={3} value={editing.notes ?? ""}
                   onChange={(e) => setEditing((p) => ({ ...p, notes: e.target.value }))} className={inputCls + " resize-y"} />
@@ -572,6 +622,14 @@ export default function CobrosPage() {
           </aside>
         </>
       )}
+
+      {/* FACTURAR EL MES — la Facturación múltiple de Organízate: las cuotas
+          cobradas del mes se convierten en facturas de una pasada. */}
+      <FacturarMesDrawer
+        open={showFacturarMes}
+        onClose={() => setShowFacturarMes(false)}
+        onDone={() => { load(); loadMorosidad(); }}
+      />
     </div>
   );
 }

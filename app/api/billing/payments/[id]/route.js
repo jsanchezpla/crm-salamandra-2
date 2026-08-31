@@ -42,6 +42,37 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       return error("amount debe ser mayor que 0");
     }
 
+    // Asociar (o desasociar) el cobro a una factura (31/08/2026): el flujo real
+    // es cobrar ANTES de facturar, y hasta hoy un cobro suelto no tenía forma
+    // de engancharse a la factura emitida después — la factura se quedaba
+    // «emitida» con el dinero ya cobrado. Mismas garantías que el POST:
+    // factura viva, mismo cliente y sin exceder el pendiente. El
+    // `period_month` NO se toca: morosidad y portal siguen leyendo lo mismo.
+    const facturaAnteriorId = payment.invoiceId;
+    if ("invoiceId" in body) {
+      if (body.invoiceId) {
+        const destino = await Invoice.findByPk(body.invoiceId);
+        if (!destino) return notFound("Factura no encontrada");
+        if (["draft", "cancelled", "rectified"].includes(destino.status)) {
+          return error(`No se puede asociar un cobro a una factura en estado '${destino.status}'`, 409);
+        }
+        if (payment.clientId && destino.clientId && String(payment.clientId) !== String(destino.clientId)) {
+          return error("El cobro es de un cliente distinto al de la factura", 409);
+        }
+        const importeFinal = updates.amount != null ? Number(updates.amount) : Number(payment.amount);
+        const pendiente = Number(destino.total) - Number(destino.paidAmount);
+        if (String(facturaAnteriorId ?? "") !== String(destino.id) && importeFinal > pendiente + 0.0049) {
+          return error(`El importe (${importeFinal}) excede el pendiente de la factura (${pendiente.toFixed(2)})`, 400);
+        }
+        updates.invoiceId = destino.id;
+        if (!payment.clientId) updates.clientId = destino.clientId;
+      } else {
+        // Desasociar deja el cobro suelto: sin cliente quedaría huérfano.
+        if (!payment.clientId) return error("No se puede desasociar: el cobro se quedaría sin cliente", 409);
+        updates.invoiceId = null;
+      }
+    }
+
     const antes = resumenImporte(payment);
     await payment.update(updates);
     await logBillingAudit({
@@ -54,8 +85,14 @@ export const PATCH = withTenant(async (request, { params }, { tenant, tenantMode
       after: resumenImporte(payment),
     });
 
-    const invoice = await Invoice.findByPk(payment.invoiceId);
-    if (invoice) await updateInvoiceStatus(invoice, Payment);
+    // Se recalculan las DOS facturas tocadas: a la que llega el cobro y de la
+    // que se va (si cambió). Si no, la antigua se quedaría contando un dinero
+    // que ya no es suyo.
+    const tocadas = new Set([payment.invoiceId, facturaAnteriorId].filter(Boolean).map(String));
+    for (const invId of tocadas) {
+      const invoice = await Invoice.findByPk(invId);
+      if (invoice) await updateInvoiceStatus(invoice, Payment);
+    }
 
     return ok(payment);
   } catch (err) {
