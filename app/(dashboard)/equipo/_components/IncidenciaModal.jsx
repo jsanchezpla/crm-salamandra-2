@@ -337,7 +337,11 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
   const inputCls = "w-full px-3 py-2 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start lg:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClick={() => !busy && onClose?.()}>
+    {/* items-start SIEMPRE (31/08/2026): con lg:items-center, un modal más
+        alto que la ventana se centraba y su cabecera quedaba POR ENCIMA del
+        área de scroll — imposible de alcanzar sin hacer zoom. Es el patrón de
+        TiendaModule: arriba y con scroll del wrapper. */}
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto" onClick={() => !busy && onClose?.()}>
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl my-4" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-neutral-100 flex items-start justify-between gap-4">
           <div>
@@ -581,7 +585,7 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
         {/* Modal de NOMBRE obligatorio al adjuntar (mismo patrón que la ficha
             de paciente: el buscador del archivo filtra por este nombre). */}
         {pendingDoc && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.45)" }}>
+          <div className="fixed inset-0 z-[60] flex items-start sm:items-center justify-center p-4 overflow-y-auto" style={{ background: "rgba(0,0,0,0.45)" }}>
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5">
               <div className="text-sm font-semibold text-neutral-800 mb-1">Nombre del documento</div>
               <div className="text-xs text-neutral-500 mb-3 truncate">Archivo: {pendingDoc.file.name}</div>
