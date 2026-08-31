@@ -16,36 +16,92 @@
 import { useEffect, useMemo, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
 import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
+import { repartoIgual, repartoPorPorcentajes, porcentajesCuadran } from "@/lib/billing/repartoImportes.js";
 
 const eur = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(Number(n) || 0);
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 export default function PatientReparto({ patientId, defaultPayerClientId, onClose, onCreated }) {
   const [mode, setMode] = useState("split"); // 'single' | 'split'
+  // Cómo se escribe el reparto (31/08/2026, «tipo Tricount»): por importes en
+  // euros o por porcentajes; el botón 50/50 rellena a partes iguales. La
+  // matemática del cierre al céntimo vive en lib/billing/repartoImportes.js.
+  const [porPct, setPorPct] = useState(false);
   const [concept, setConcept] = useState("Cuota");
   const [period, setPeriod] = useState("");
   const [total, setTotal] = useState("");
   const [singlePayer, setSinglePayer] = useState(defaultPayerClientId || "");
   const [rows, setRows] = useState([
-    { clientId: defaultPayerClientId || "", amount: "" },
-    { clientId: "", amount: "" },
+    { clientId: defaultPayerClientId || "", amount: "", pct: "" },
+    { clientId: "", amount: "", pct: "" },
   ]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // Alta rápida de una empresa pagadora (p. ej. una fundación) sin salir del
+  // modal — el mismo POST que el «+ Nuevo cliente» de Facturas.
+  const [nuevaEmpresa, setNuevaEmpresa] = useState(null); // null | {name, taxId}
+  const [creandoEmpresa, setCreandoEmpresa] = useState(false);
 
   // Las fichas ya no se bajan aquí (28/08/2026). Había buscador, sí, pero
   // filtraba sobre las 200 que cabían: con las 1.083 de Aumenta se quedaban
   // fuera 883 familias y escribir su nombre no las traía. Ahora pregunta
   // SelectorCliente al servidor.
   const opcionesPagador = useMemo(() => [{ value: "", label: "Selecciona pagador…" }], []);
-  const repartido = useMemo(() => round2(rows.reduce((s, r) => s + (Number(r.amount) || 0), 0)), [rows]);
   const totalNum = round2(total);
-  const cuadra = totalNum > 0 && Math.abs(repartido - totalNum) < 0.005;
+  // En modo porcentajes los importes se DERIVAN (con el cierre al céntimo en
+  // la última parte); en modo importes se leen tal cual.
+  const importesEfectivos = useMemo(() => {
+    if (!porPct) return rows.map((r) => round2(r.amount));
+    return repartoPorPorcentajes(totalNum, rows.map((r) => r.pct));
+  }, [porPct, rows, totalNum]);
+  const repartido = useMemo(() => round2(importesEfectivos.reduce((s, x) => s + (Number(x) || 0), 0)), [importesEfectivos]);
+  const pctsCuadran = !porPct || porcentajesCuadran(rows.map((r) => r.pct));
+  const cuadra = totalNum > 0 && Math.abs(repartido - totalNum) < 0.005 && pctsCuadran;
   const restante = round2(totalNum - repartido);
 
   const setRow = (i, k, v) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, [k]: v } : r)));
-  const addRow = () => setRows((rs) => [...rs, { clientId: "", amount: "" }]);
+  const addRow = () => setRows((rs) => [...rs, { clientId: "", amount: "", pct: "" }]);
   const removeRow = (i) => setRows((rs) => (rs.length <= 1 ? rs : rs.filter((_, idx) => idx !== i)));
+  const repartirIgual = () => {
+    if (!(totalNum > 0)) { setError("Indica antes el importe total."); return; }
+    setError(null);
+    if (porPct) {
+      const pct = round2(100 / rows.length);
+      setRows((rs) => rs.map((r, i) => ({ ...r, pct: i === rs.length - 1 ? round2(100 - pct * (rs.length - 1)) : pct })));
+    } else {
+      const partes = repartoIgual(totalNum, rows.length);
+      setRows((rs) => rs.map((r, i) => ({ ...r, amount: String(partes[i]) })));
+    }
+  };
+
+  async function crearEmpresa() {
+    const name = (nuevaEmpresa?.name || "").trim();
+    if (!name || creandoEmpresa) return;
+    setCreandoEmpresa(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, taxId: (nuevaEmpresa?.taxId || "").trim() || null, type: "company" }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "No se pudo crear la empresa");
+      const id = d.data.id;
+      // Entra como pagador en la primera fila libre (o en la última).
+      setRows((rs) => {
+        const idx = rs.findIndex((x) => !x.clientId);
+        const donde = idx === -1 ? rs.length - 1 : idx;
+        return rs.map((r2, i) => (i === donde ? { ...r2, clientId: id } : r2));
+      });
+      if (mode === "single" && !singlePayer) setSinglePayer(id);
+      setNuevaEmpresa(null);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setCreandoEmpresa(false);
+    }
+  }
 
   const lineDesc = () => `${concept.trim() || "Cuota"}${period.trim() ? ` (${period.trim()})` : ""}`;
 
@@ -79,9 +135,13 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
 
   async function submitSplit() {
     if (busy) return;
-    const valid = rows.filter((r) => r.clientId && Number(r.amount) > 0);
+    // Los importes que valen son los EFECTIVOS: los tecleados en euros, o los
+    // derivados de los porcentajes con su cierre al céntimo.
+    const conImporte = rows.map((r, i) => ({ clientId: r.clientId, amount: importesEfectivos[i] }));
+    const valid = conImporte.filter((r) => r.clientId && Number(r.amount) > 0);
     if (valid.length < 2) { setError("Añade al menos dos pagadores con importe."); return; }
     if (!(totalNum > 0)) { setError("Indica el importe total del servicio."); return; }
+    if (porPct && !pctsCuadran) { setError("Los porcentajes tienen que sumar 100."); return; }
     if (!cuadra) { setError(`La suma (${eur(repartido)}) no cuadra con el total (${eur(totalNum)}).`); return; }
     setBusy(true); setError(null);
     const created = [];
@@ -156,6 +216,14 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
           </div>
         ) : (
           <>
+            {/* Por importes o por porcentajes, y el 50/50 de un botón */}
+            <div className="flex items-center gap-2 mb-2">
+              <button type="button" onClick={() => setPorPct(false)} className={tabCls(!porPct)} style={!porPct ? { backgroundColor: "var(--color-primary,#1B3A2D)" } : undefined}>Por importes</button>
+              <button type="button" onClick={() => setPorPct(true)} className={tabCls(porPct)} style={porPct ? { backgroundColor: "var(--color-primary,#1B3A2D)" } : undefined}>Por porcentajes</button>
+              <button type="button" onClick={repartirIgual} className="ml-auto text-[11px] font-medium border border-neutral-200 rounded-md px-2 py-1 text-neutral-600 hover:bg-neutral-50" title="Repartir a partes iguales entre los pagadores">
+                {rows.length === 2 ? "50/50" : "A partes iguales"}
+              </button>
+            </div>
             <div className="space-y-2">
               {rows.map((r, i) => (
                 <div key={i} className="flex items-end gap-2">
@@ -163,10 +231,20 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
                     {i === 0 && <label className={labelCls}>Pagador</label>}
                     <SelectorCliente value={r.clientId} onChange={(v) => setRow(i, "clientId", v)} opcionesFijas={opcionesPagador} className={inputCls} />
                   </div>
-                  <div className="w-28">
-                    {i === 0 && <label className={labelCls}>Importe (€)</label>}
-                    <input type="number" min="0" step="0.01" className={inputCls} value={r.amount} onChange={(e) => setRow(i, "amount", e.target.value)} placeholder="0,00" />
-                  </div>
+                  {porPct ? (
+                    <>
+                      <div className="w-20">
+                        {i === 0 && <label className={labelCls}>%</label>}
+                        <input type="number" min="0" max="100" step="0.01" className={inputCls} value={r.pct} onChange={(e) => setRow(i, "pct", e.target.value)} placeholder="0" />
+                      </div>
+                      <span className="w-20 mb-1.5 text-right text-[11px] tabular-nums text-neutral-500">{eur(importesEfectivos[i])}</span>
+                    </>
+                  ) : (
+                    <div className="w-28">
+                      {i === 0 && <label className={labelCls}>Importe (€)</label>}
+                      <input type="number" min="0" step="0.01" className={inputCls} value={r.amount} onChange={(e) => setRow(i, "amount", e.target.value)} placeholder="0,00" />
+                    </div>
+                  )}
                   <button onClick={() => removeRow(i)} disabled={rows.length <= 1} className="mb-1 text-neutral-400 hover:text-rose-600 disabled:opacity-30 px-1" title="Quitar pagador">✕</button>
                 </div>
               ))}
@@ -183,6 +261,34 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
             </div>
           </>
         )}
+
+        {/* Alta rápida de una empresa pagadora (fundación, aseguradora…) */}
+        <div className="mt-3">
+          {nuevaEmpresa === null ? (
+            <button type="button" onClick={() => setNuevaEmpresa({ name: "", taxId: "" })} className="text-[11px] font-medium text-neutral-500 hover:text-neutral-800">
+              + Nueva empresa pagadora (fundación, aseguradora…)
+            </button>
+          ) : (
+            <div className="border border-neutral-200 rounded-lg p-3 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className={labelCls}>Nombre de la empresa</label>
+                  <input className={inputCls} value={nuevaEmpresa.name} onChange={(e) => setNuevaEmpresa((v) => ({ ...v, name: e.target.value }))} placeholder="Fundación Ejemplo" />
+                </div>
+                <div>
+                  <label className={labelCls}>CIF (opcional)</label>
+                  <input className={inputCls} value={nuevaEmpresa.taxId} onChange={(e) => setNuevaEmpresa((v) => ({ ...v, taxId: e.target.value }))} placeholder="G12345678" />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={crearEmpresa} disabled={creandoEmpresa || !(nuevaEmpresa.name || "").trim()} className="text-xs font-medium px-2.5 py-1 rounded-md bg-[var(--color-primary,#1B3A2D)] text-white disabled:opacity-40">
+                  {creandoEmpresa ? "Creando…" : "Crear y usar como pagador"}
+                </button>
+                <button type="button" onClick={() => setNuevaEmpresa(null)} className="text-xs text-neutral-500">Cancelar</button>
+              </div>
+            </div>
+          )}
+        </div>
 
         {error && <p className="text-[11px] text-rose-600 mt-2">{error}</p>}
 

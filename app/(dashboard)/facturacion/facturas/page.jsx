@@ -11,6 +11,7 @@ import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 
 import { nifDeCliente } from "../../../../lib/billing/nifCliente.js";
 import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
+import PatientReparto from "@/components/billing/PatientReparto.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -74,6 +75,7 @@ export default function FacturasPage() {
   const [employees, setEmployees] = useState([]);
   const [series, setSeries] = useState([]);
   const [settings, setSettings] = useState(null);
+  const [showReparto, setShowReparto] = useState(false);
   const [outboundCatalog, setOutboundCatalog] = useState([]);
   const [me, setMe] = useState(null);
   /*
@@ -611,6 +613,17 @@ export default function FacturasPage() {
                         value={form.patientId ?? ""}
                         onChange={(id) => setForm((f) => ({ ...f, patientId: id }))}
                       />
+                      {/* Repartir entre pagadores (31/08/2026): 50/50, por
+                          porcentajes o por importes — una factura por pagador. */}
+                      {!openInvoice && form.patientId ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowReparto(true)}
+                          className="mt-1 text-[11px] font-medium text-[var(--color-primary,#1B3A2D)] hover:underline"
+                        >
+                          Repartir entre varios pagadores (50/50, %, importes)…
+                        </button>
+                      ) : null}
                     </FormRow>
                     <FormRow label="Empleado">
                       <Select
@@ -802,6 +815,20 @@ export default function FacturasPage() {
           saving={saving}
           onClose={() => setRectifyOpen(false)}
           onSubmit={submitRectify}
+        />
+      )}
+
+      {/* MODAL REPARTO ENTRE PAGADORES (31/08/2026) */}
+      {showReparto && form.patientId && (
+        <PatientReparto
+          patientId={form.patientId}
+          defaultPayerClientId={form.clientId || ""}
+          onClose={() => setShowReparto(false)}
+          onCreated={async (n) => {
+            setShowReparto(false);
+            closePanel();
+            await load();
+          }}
         />
       )}
     </div>
