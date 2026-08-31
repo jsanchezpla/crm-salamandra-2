@@ -326,7 +326,13 @@ export default function CobrosPage() {
               {morosidad.morosos.length} sin pagar · {morosidad.alDia} al día · {morosidad.familias} familias con paciente activo
             </span>
           </div>
-          {morosidad.morosos.length === 0 ? (
+          {morosidad.sinCobros ? (
+            <div className="px-4 py-5 text-xs text-amber-800 bg-amber-50/60">
+              Aún no hay ningún cobro registrado en el CRM, así que aquí no se acusa a nadie:
+              la morosidad empezará a decir la verdad con los primeros cobros que registres
+              (a mano o con «Facturar el mes»).
+            </div>
+          ) : morosidad.morosos.length === 0 ? (
             <div className="px-4 py-6 text-center text-xs text-neutral-400">Nadie debe este mes.</div>
           ) : (
             <ul className="divide-y divide-neutral-50 max-h-64 overflow-y-auto">

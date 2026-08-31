@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
+import { mesesSeguidosSinPagar } from "../../../../lib/billing/mesesSinPagar.js";
 
 /**
  * GET /api/billing/morosidad?mes=AAAA-MM — quién no ha pagado el mes
@@ -61,6 +62,19 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const ids = [...porCliente.keys()];
     if (ids.length === 0) return ok({ mes, morosos: [], alDia: 0, aplicable: true });
 
+    // ¿Desde cuándo cobra este centro por el CRM? Con CERO cobros registrados
+    // la pantalla no acusa a nadie: dice que la caja está de estreno
+    // (31/08/2026 — el día que Aumenta la estrenó, esta lista pintaba a las
+    // 1.083 familias como morosas de 6 meses). Y con cobros, los «meses
+    // seguidos» no cuentan más atrás del primer mes cobrado.
+    const primerPeriodo = await Payment.min("periodMonth", {
+      where: { status: "completed", periodMonth: { [Op.ne]: null } },
+    });
+    if (!primerPeriodo) {
+      return ok({ mes, morosos: [], alDia: 0, aplicable: true, familias: ids.length, sinCobros: true });
+    }
+    const primerMes = String(primerPeriodo).slice(0, 7);
+
     const meses = ventana(mes, MESES_ATRAS);
     const desde = `${meses[meses.length - 1]}-01`;
     const cobros = await Payment.findAll({
@@ -97,12 +111,10 @@ export const GET = withTenant(async (request, _rc, ctx) => {
         alDia++;
         continue;
       }
-      // Meses seguidos sin pagar, contando hacia atrás desde el mes pedido.
-      let seguidos = 0;
-      for (const m of meses) {
-        if (suyos.has(m)) break;
-        seguidos++;
-      }
+      // Meses seguidos sin pagar, hacia atrás desde el mes pedido y sin
+      // acusar de meses anteriores al primer cobro del centro (regla con
+      // nombre y prueba: lib/billing/mesesSinPagar.js).
+      const seguidos = mesesSeguidosSinPagar({ meses, pagados: suyos, primerMes });
       const cli = nombres.get(cid);
       morosos.push({
         clientId: cid,
@@ -117,7 +129,7 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     // Primero quien más meses acumula: es a quien hay que llamar hoy.
     morosos.sort((a, b) => b.mesesSeguidos - a.mesesSeguidos || a.name.localeCompare(b.name));
 
-    return ok({ mes, morosos, alDia, aplicable: true, familias: ids.length });
+    return ok({ mes, morosos, alDia, aplicable: true, familias: ids.length, primerMes });
   } catch (err) {
     return serverError(err);
   }
