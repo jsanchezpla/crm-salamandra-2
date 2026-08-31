@@ -457,6 +457,7 @@ export const MODULES = {
     "migrate-billing-irpf-partners",
     "migrate-billing-membretes",
     "migrate-billing-sello",
+    "migrate-billing-conceptos",
     "migrate-rename-therapist-to-employee",
     // A quién se le emitió cada factura, congelado al emitir. Sin esta columna
     // el modelo pide `fiscal_snapshot` y toda lectura de factura da 42703.

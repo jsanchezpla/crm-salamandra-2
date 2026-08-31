@@ -13,6 +13,7 @@ import { nifDeCliente } from "../../../../lib/billing/nifCliente.js";
 import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import PatientReparto from "@/components/billing/PatientReparto.jsx";
 import { ordenarConSugeridos } from "../../../../lib/billing/empleadosSugeridos.js";
+import { lineaDesdeConcepto } from "../../../../lib/billing/conceptosCatalogo.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -79,6 +80,14 @@ export default function FacturasPage() {
   const [showReparto, setShowReparto] = useState(false);
   const [terapeutasSugeridos, setTerapeutasSugeridos] = useState([]);
   const [outboundCatalog, setOutboundCatalog] = useState([]);
+  // Catálogo de conceptos y cuotas (31/08/2026).
+  const [conceptosCatalogo, setConceptosCatalogo] = useState([]);
+  useEffect(() => {
+    fetch("/api/billing/conceptos", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => j.ok && setConceptosCatalogo(j.data.conceptos ?? []))
+      .catch(() => {});
+  }, []);
   const [me, setMe] = useState(null);
   /*
    * Facturar lo hace quien tiene el MÓDULO de Facturación, no solo quien manda
@@ -703,6 +712,31 @@ export default function FacturasPage() {
                         const c = calcLine(l);
                         return (
                           <div key={idx} className="bg-neutral-50/70 border border-neutral-100 rounded-lg p-3 space-y-2">
+                            {/* Catálogo de conceptos y cuotas (31/08/2026):
+                                elegir uno rellena texto, precio e IVA de una vez. */}
+                            {conceptosCatalogo.length > 0 && (
+                              <Select
+                                value=""
+                                onChange={(v) => {
+                                  const concepto = conceptosCatalogo.find((c2) => c2.id === v);
+                                  const linea = lineaDesdeConcepto(concepto);
+                                  if (!linea) return;
+                                  setForm((f) => {
+                                    const lines = [...f.lines];
+                                    lines[idx] = { ...lines[idx], ...linea };
+                                    return { ...f, lines };
+                                  });
+                                }}
+                                options={[
+                                  { value: "", label: "— Elegir del catálogo de conceptos —" },
+                                  ...conceptosCatalogo.map((c2) => ({
+                                    value: c2.id,
+                                    label: `${c2.category ? c2.category + " · " : ""}${c2.name} — ${Number(c2.unitPrice).toLocaleString("es-ES", { minimumFractionDigits: 2 })} €${c2.periodicity ? " /" + c2.periodicity : ""}`,
+                                  })),
+                                ]}
+                                className={inputCls + " text-xs"}
+                              />
+                            )}
                             <div className="flex items-start gap-2">
                               <input value={l.description} placeholder="Concepto" onChange={(e) => setLine(idx, "description", e.target.value)} className={inputCls} />
                               {form.lines.length > 1 && (
