@@ -121,6 +121,13 @@ export function defineBooking(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // La cita que RECUPERA esta falta (31/08/2026): solo con sentido en una
+      // falta recuperable (justificada). Sin FK dura a propósito — borrar la
+      // cita que recuperaba no debe reventar el histórico de la falta.
+      recoveredByBookingId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       // Miembro del equipo (profesional) asignado a la cita. Nullable/aditivo:
       // las citas existentes (incl. nutri_laura en prod) quedan sin asignar.
       // underscored global → columna team_member_id.

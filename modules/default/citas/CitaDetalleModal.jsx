@@ -10,9 +10,10 @@
 // antes hacían los resets de handleEventClick). Guardar avisa por onChanged
 // (el padre refresca calendario y pendientes), borrar por onDeleted.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { colaDePreparacion } from "../../../lib/clinica/prepararSesion.js";
 import { fichaDeLaCita } from "../../../lib/citas/fichaDeLaCita.js";
+import { esRecuperable, rotuloFalta, citasQuePuedenRecuperar } from "../../../lib/citas/recuperacionFalta.js";
 import {
   ModalityChip,
   PagoChip,
@@ -97,6 +98,30 @@ export function CitaDetalleModal({
   const [avisoCuerpo, setAvisoCuerpo] = useState("");
   const [enviandoAviso, setEnviandoAviso] = useState(false);
   const [avisoResultado, setAvisoResultado] = useState(null);
+  // Recuperación de una falta recuperable (31/08/2026): las citas candidatas
+  // a recuperarla (mismo cliente, vivas, posteriores — la regla en
+  // lib/citas/recuperacionFalta.js) y, si ya está enlazada, la cita que la
+  // recupera para poder decir CUÁNDO.
+  const [candidatas, setCandidatas] = useState(null);
+  const [recuperadora, setRecuperadora] = useState(null);
+
+  useEffect(() => {
+    if (!esRecuperable(openBooking)) return;
+    let vivo = true;
+    if (openBooking.recoveredByBookingId) {
+      fetch(`/api/citas/bookings/${openBooking.recoveredByBookingId}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => { if (vivo) setRecuperadora(j.ok ? j.data : null); })
+        .catch(() => {});
+    } else if (openBooking.clientId) {
+      setRecuperadora(null);
+      fetch(`/api/citas/bookings?clientId=${openBooking.clientId}&limit=100`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => { if (vivo) setCandidatas(citasQuePuedenRecuperar(j.data?.bookings ?? [], openBooking)); })
+        .catch(() => {});
+    }
+    return () => { vivo = false; };
+  }, [openBooking.id, openBooking.status, openBooking.noShowJustified, openBooking.recoveredByBookingId, openBooking.clientId]);
 
   /*
    * Guardar la fecha y la hora tecleadas.
@@ -226,8 +251,10 @@ export function CitaDetalleModal({
       titulo: "Marcar la falta",
       texto: "No es lo mismo un niño con fiebre que una familia que no aparece sin avisar: solo las faltas sin justificar avisan a administración.",
       opciones: [
-        { valor: "justificada", label: "Estaba justificada", pista: "Avisaron, enfermedad, un imprevisto…" },
-        { valor: "sin_justificar", label: "No avisaron", tono: "peligro" },
+        // «Recuperable» delante (31/08/2026, Rodrigo): es la palabra del
+        // centro. La equivalencia vive en lib/citas/recuperacionFalta.js.
+        { valor: "justificada", label: "Recuperable (justificada)", pista: "Avisaron, enfermedad, un imprevisto… podrá recuperarla con otra cita" },
+        { valor: "sin_justificar", label: "No recuperable (no avisaron)", tono: "peligro" },
       ],
     });
     if (respuesta === null) return;
@@ -933,7 +960,7 @@ export function CitaDetalleModal({
                 )}
                 {openBooking.status === "no_show" && (
                   <span className={`text-[12px] px-2.5 py-1.5 rounded-md ${openBooking.noShowJustified ? "bg-neutral-100 text-neutral-600" : "bg-red-50 text-red-700"}`}>
-                    {openBooking.noShowJustified ? "Falta justificada" : "Falta sin justificar"}
+                    {rotuloFalta(openBooking)}
                     {openBooking.noShowReason ? ` · ${openBooking.noShowReason}` : ""}
                   </span>
                 )}
@@ -973,6 +1000,54 @@ export function CitaDetalleModal({
                 Eliminar
               </button>
             </div>
+
+            {/* Recuperación de la falta (31/08/2026): una recuperable puede
+                quedar enlazada a la cita que la recupera. */}
+            {esRecuperable(openBooking) && (
+              <div className="mt-3 bg-neutral-50 border border-neutral-100 rounded-lg px-3 py-2.5 text-xs space-y-1.5">
+                {openBooking.recoveredByBookingId ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-emerald-700">
+                      ✓ Recuperada con la cita{recuperadora ? ` del ${fmtDateTime(recuperadora.scheduledAt)}` : ""}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => patchBooking({ recoveredByBookingId: null })}
+                      className="text-neutral-400 hover:text-red-600 transition-colors shrink-0"
+                    >
+                      Quitar enlace
+                    </button>
+                  </div>
+                ) : !openBooking.clientId ? (
+                  <span className="text-neutral-400">
+                    Sin ficha enlazada no se puede apuntar con qué cita se recupera.
+                  </span>
+                ) : candidatas === null ? (
+                  <span className="text-neutral-400">Buscando citas que puedan recuperarla…</span>
+                ) : candidatas.length === 0 ? (
+                  <span className="text-neutral-500">
+                    Pendiente de recuperar: este cliente no tiene citas posteriores. Crea la cita
+                    de recuperación y enlázala desde aquí.
+                  </span>
+                ) : (
+                  <label className="flex items-center gap-2">
+                    <span className="text-neutral-500 shrink-0">Recuperada con…</span>
+                    <select
+                      disabled={saving}
+                      defaultValue=""
+                      onChange={(e) => e.target.value && patchBooking({ recoveredByBookingId: e.target.value })}
+                      className="flex-1 rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs text-neutral-700"
+                    >
+                      <option value="">Elegir la cita que la recupera…</option>
+                      {candidatas.map((c) => (
+                        <option key={c.id} value={c.id}>{fmtDateTime(c.scheduledAt)}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+            )}
           </div>
         </div>
   );

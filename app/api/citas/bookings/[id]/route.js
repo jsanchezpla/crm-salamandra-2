@@ -357,6 +357,37 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
       updates.cancellationReason = body.cancellationReason != null ? String(body.cancellationReason) : null;
     }
 
+    /*
+     * ── LA CITA QUE RECUPERA UNA FALTA (31/08/2026) ─────────────────────────
+     * Solo se enlaza sobre una falta RECUPERABLE (justificada): la regla del
+     * nombre vive en lib/citas/recuperacionFalta.js. La cita enlazada tiene
+     * que existir, ser del MISMO cliente y no ser la propia falta. `null`
+     * desenlaza. Sin FK dura: validar aquí es la valla.
+     */
+    if ("recoveredByBookingId" in body) {
+      const v = body.recoveredByBookingId;
+      const statusFinalFalta = updates.status ?? row.status;
+      const justificadaFinal = "noShowJustified" in updates ? updates.noShowJustified : row.noShowJustified;
+      if (v == null) {
+        updates.recoveredByBookingId = null;
+      } else {
+        if (statusFinalFalta !== "no_show" || justificadaFinal !== true) {
+          return error("Solo una falta recuperable (justificada) se puede enlazar a la cita que la recupera", 422);
+        }
+        const idRec = String(v).trim();
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idRec)) {
+          return error("recoveredByBookingId inválido", 422);
+        }
+        if (idRec === row.id) return error("Una falta no se recupera consigo misma", 422);
+        const recuperadora = await Booking.findByPk(idRec, { attributes: ["id", "clientId", "status"] });
+        if (!recuperadora) return error("Esa cita no existe", 422);
+        if (row.clientId && recuperadora.clientId !== row.clientId) {
+          return error("La cita que recupera tiene que ser del mismo cliente", 422);
+        }
+        updates.recoveredByBookingId = idRec;
+      }
+    }
+
     // Validar solapamiento. Antes solo se comprobaba al cambiar la hora; eso
     // dejaba pasar dos casos que también pueden crear un solape real del MISMO
     // profesional: (a) reasignar la cita a otro profesional que ya tiene esa

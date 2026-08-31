@@ -308,6 +308,10 @@ export const MODULES = {
     "migrate-booking-change-requests",
     // Marca de "ya se le mandó el recordatorio de la víspera".
     "migrate-booking-reminder",
+    // La falta recuperable apunta a la cita que la recupera (31/08/2026). Sin
+    // esta columna el modelo pide recovered_by_booking_id y toda lectura de
+    // citas da 42703.
+    "migrate-bookings-recuperacion",
     // Retención de tarjeta (autorizado sin cobrar): valores nuevos del enum de
     // payment_status y `authorization_expires_at`. Va aquí porque un tenant que
     // estrene Citas nace con `bookings`, y sin esta migración el modelo pide una
