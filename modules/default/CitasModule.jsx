@@ -23,6 +23,7 @@ import { SIN_PROFESIONAL, COLOR_CITA_POR_DEFECTO } from "@/lib/citas/filtros.js"
 import { fmtDateTime, toDateInput, toTimeInput } from "./citas/chips.jsx";
 import { CitaDetalleModal } from "./citas/CitaDetalleModal.jsx";
 import { CitaMenuContextual } from "./citas/CitaMenuContextual.jsx";
+import { BloqueoModal } from "./citas/BloqueoModal.jsx";
 import { destinoDePegado, sePuedeMover } from "@/lib/citas/pegarCita.js";
 import { fichaDeLaCita } from "@/lib/citas/fichaDeLaCita.js";
 import { NuevaCitaDrawer } from "./citas/NuevaCitaDrawer.jsx";
@@ -42,6 +43,9 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
   // calendario pega (lib/citas/pegarCita.js).
   const [menuCita, setMenuCita] = useState(null);
   const [portapapeles, setPortapapeles] = useState(null);
+  // El bloqueo pulsado en el calendario, para su modal pequeño (31/08/2026):
+  // { id, titulo, label, start, end } o null.
+  const [bloqueoAbierto, setBloqueoAbierto] = useState(null);
   // Vista: "calendar" (por defecto) o "waitlist". La lista de espera son las
   // reservas en estado 'pending' (solicitudes de la web sin confirmar). El
   // globito rojo de la pestaña muestra cuántas hay sin atender.
@@ -380,10 +384,16 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
               // La letra se calcula contra el fondo elegido: en un color claro
               // el blanco de antes no se leería.
               textColor: colorTextoSobre(b.color || COLOR_BLOQUEO_POR_DEFECTO),
-              // No se arrastra ni se cambia de hora tirando de él: se quita y
-              // se vuelve a poner desde Tipos de cita.
-              editable: false,
-              extendedProps: { esBloqueo: true },
+              /*
+               * Arrastrable desde el 31/08/2026 (Rodrigo): mover un bloqueo
+               * es reprogramarlo, igual que una cita — el PATCH de
+               * /api/citas/bloqueos pone las vallas (cada cual lo suyo, los
+               * cierres del centro solo dirección). Pulsar uno abre el modal
+               * pequeño (BloqueoModal) para concepto, fecha y duración; la
+               * gestión completa sigue en la pestaña de Bloqueos.
+               */
+              editable: true,
+              extendedProps: { esBloqueo: true, bloqueoId: b.id, label: b.label },
             }));
         }
       } catch { /* la agenda se ve igual, sin sombrear */ }
@@ -419,9 +429,18 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
    */
 
   async function handleEventClick(info) {
-    // Los bloqueos de vacaciones son fondo, no citas: no hay ficha que abrir y
-    // pedirla daría un 404. Se quitan desde Tipos de cita.
-    if (info.event.extendedProps?.esBloqueo) return;
+    // Un bloqueo no tiene ficha que abrir: pulsar abre su modal pequeño
+    // (concepto, fecha y duración — 31/08/2026).
+    if (info.event.extendedProps?.esBloqueo) {
+      setBloqueoAbierto({
+        id: info.event.extendedProps.bloqueoId,
+        titulo: info.event.title,
+        label: info.event.extendedProps.label,
+        start: info.event.start,
+        end: info.event.end ?? info.event.start,
+      });
+      return;
+    }
     const id = info.event.id;
     const res = await fetch(`/api/citas/bookings/${id}`, { cache: "no-store" });
     const j = await res.json();
@@ -591,7 +610,28 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
   // canceladas/completadas no son arrastrables (startEditable=false desde el
   // endpoint del calendario).
   async function handleEventDrop(info) {
-    if (info.event.extendedProps?.esBloqueo) { info.revert(); return; }
+    // Un bloqueo también se reprograma arrastrando (31/08/2026): FullCalendar
+    // ya movió inicio Y fin (la duración no cambia, resize desactivado); el
+    // PATCH valida permisos y orden de fechas, y si no deja, se revierte.
+    if (info.event.extendedProps?.esBloqueo) {
+      try {
+        const res = await fetch(`/api/citas/bloqueos?id=${info.event.extendedProps.bloqueoId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            startAt: info.event.start?.toISOString(),
+            endAt: info.event.end?.toISOString(),
+          }),
+        });
+        const j = await res.json();
+        if (!j.ok) throw new Error(j.error || "No se pudo mover el bloqueo");
+        calendarRef.current?.getApi().refetchEvents();
+      } catch (err) {
+        info.revert();
+        await avisar({ titulo: "El bloqueo no se ha movido", texto: err.message });
+      }
+      return;
+    }
     const nuevoIso = info.event.start ? info.event.start.toISOString() : null;
     if (!nuevoIso) { info.revert(); return; }
     try {
@@ -1052,6 +1092,19 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           </div>
           </div>
         </div>
+      )}
+
+      {/* El modal pequeño del bloqueo pulsado (concepto, fecha, duración). */}
+      {bloqueoAbierto && (
+        <BloqueoModal
+          key={bloqueoAbierto.id}
+          bloqueo={bloqueoAbierto}
+          onClose={() => setBloqueoAbierto(null)}
+          onSaved={() => {
+            setBloqueoAbierto(null);
+            calendarRef.current?.getApi().refetchEvents();
+          }}
+        />
       )}
 
       {/* Menú contextual de la cita (clic derecho) y el aviso del pegado. */}
