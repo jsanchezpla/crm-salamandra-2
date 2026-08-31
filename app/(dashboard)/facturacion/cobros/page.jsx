@@ -12,6 +12,7 @@ import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import FacturarMesDrawer from "../_components/FacturarMesDrawer.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { coincidePorNombre } from "../../../../lib/utils/busqueda.js";
+import { prorrateoDeCuota } from "../../../../lib/billing/prorrateo.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -55,6 +56,46 @@ export default function CobrosPage() {
   const [mesMorosidad, setMesMorosidad] = useState(new Date().toISOString().slice(0, 7));
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
+  // Cuota compuesta desde el catálogo (31/08/2026, formación con Rosa): la
+  // cuota puede llevar VARIOS conceptos (dos hermanos, cuota + descuento) y,
+  // si la familia empieza a mitad de mes, la parte proporcional se calcula
+  // sola (lib/billing/prorrateo.js). Los conceptos van por índice, no por Set:
+  // el mismo concepto dos veces es legítimo (dos hermanos, misma cuota).
+  const [conceptosCatalogo, setConceptosCatalogo] = useState([]);
+  const [lineasCuota, setLineasCuota] = useState([]);
+  const [inicioCuota, setInicioCuota] = useState("");
+
+  const conceptosElegidos = lineasCuota
+    .map((id) => conceptosCatalogo.find((c) => String(c.id) === String(id)))
+    .filter(Boolean);
+  const baseCuota = Math.round(conceptosElegidos.reduce((s, c) => s + Number(c.unitPrice || 0), 0) * 100) / 100;
+  const prorrateoCuota = inicioCuota && conceptosElegidos.length ? prorrateoDeCuota(baseCuota, inicioCuota) : null;
+
+  // El importe se rellena solo al tocar conceptos o fecha de inicio, desde el
+  // HANDLER (no un efecto): así un importe retocado a mano solo se pisa cuando
+  // el usuario vuelve a tocar la composición de la cuota.
+  function aplicarImporteCuota(ids, inicio) {
+    const elegidos = ids.map((id) => conceptosCatalogo.find((c) => String(c.id) === String(id))).filter(Boolean);
+    if (!elegidos.length) return;
+    const base = Math.round(elegidos.reduce((s, c) => s + Number(c.unitPrice || 0), 0) * 100) / 100;
+    const p = inicio ? prorrateoDeCuota(base, inicio) : null;
+    setForm((f) => ({ ...f, amount: String(p ? p.importe : base) }));
+  }
+  function addConceptoCuota(id) {
+    if (!id) return;
+    const ids = [...lineasCuota, id];
+    setLineasCuota(ids);
+    aplicarImporteCuota(ids, inicioCuota);
+  }
+  function quitarConceptoCuota(idx) {
+    const ids = lineasCuota.filter((_, i) => i !== idx);
+    setLineasCuota(ids);
+    aplicarImporteCuota(ids, inicioCuota);
+  }
+  function cambiarInicioCuota(v) {
+    setInicioCuota(v);
+    aplicarImporteCuota(lineasCuota, v);
+  }
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -108,6 +149,17 @@ export default function CobrosPage() {
       merged.sort((a, b) => (b.issueDate || "").localeCompare(a.issueDate || ""));
       setUnpaidInvoices(merged);
     }).catch(() => {});
+  }, [showForm]);
+
+  // El catálogo de conceptos, para componer la cuota. Si está vacío o el
+  // fetch falla, el bloque no se enseña y el formulario queda como siempre:
+  // importe a mano.
+  useEffect(() => {
+    if (!showForm) return;
+    fetch("/api/billing/conceptos", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setConceptosCatalogo(j.data?.conceptos ?? []))
+      .catch(() => {});
   }, [showForm]);
 
   // Al abrir la edición de un cobro SIN factura, se cargan las facturas
@@ -167,6 +219,12 @@ export default function CobrosPage() {
       const porFactura = form.modo === "factura";
       if (porFactura && !form.invoiceId) throw new Error("Selecciona una factura");
       if (!porFactura && !form.clientId) throw new Error("Selecciona el cliente que ha pagado");
+      // Qué conceptos componen la cuota (y el prorrateo, si lo hay) queda
+      // escrito en la nota del cobro: es lo que Rosa lee meses después.
+      const notaConceptos = !porFactura && conceptosElegidos.length
+        ? `Cuota: ${conceptosElegidos.map((c) => c.name).join(" + ")}` +
+          (prorrateoCuota ? ` · desde el ${inicioCuota.split("-").reverse().join("/")} (${prorrateoCuota.diasCobrados}/${prorrateoCuota.diasDelMes} días)` : "")
+        : "";
       const res = await fetch("/api/billing/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -177,12 +235,14 @@ export default function CobrosPage() {
           amount: Number(form.amount),
           method: form.method,
           paidAt: form.paidAt,
-          notes: form.notes || null,
+          notes: [notaConceptos, form.notes].filter(Boolean).join(" — ") || null,
         }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
       setForm((f) => ({ ...f, invoiceId: "", clientId: "", amount: "", notes: "" }));
+      setLineasCuota([]);
+      setInicioCuota("");
       setShowForm(false);
       load();
       loadMorosidad();
@@ -502,6 +562,41 @@ export default function CobrosPage() {
                     Al registrarlo, si el centro tiene activado el bloqueo por impago, la familia
                     pasa a ver los documentos de ese mes en su área privada.
                   </p>
+                  {conceptosCatalogo.length > 0 && (
+                    <FormRow label="Conceptos de la cuota">
+                      <div className="space-y-1.5">
+                        {conceptosElegidos.map((c, i) => (
+                          <div key={i} className="flex items-center justify-between gap-2 text-xs bg-neutral-50 border border-neutral-100 rounded-lg px-2.5 py-1.5">
+                            <span className="text-neutral-700 truncate">{c.name}</span>
+                            <span className="flex items-center gap-2 shrink-0">
+                              <span className="text-neutral-500">{fmtMoney(c.unitPrice)}</span>
+                              <button type="button" onClick={() => quitarConceptoCuota(i)}
+                                className="text-neutral-300 hover:text-red-500 transition-colors" aria-label="Quitar concepto">✕</button>
+                            </span>
+                          </div>
+                        ))}
+                        <Select
+                          value=""
+                          onChange={addConceptoCuota}
+                          className={inputCls}
+                          options={[
+                            { value: "", label: conceptosElegidos.length ? "Añadir otro concepto..." : "Elegir del catálogo (rellena el importe)..." },
+                            ...conceptosCatalogo.map((c) => ({ value: String(c.id), label: `${c.name} · ${fmtMoney(c.unitPrice)}` })),
+                          ]}
+                        />
+                      </div>
+                    </FormRow>
+                  )}
+                  <FormRow label="¿Empieza a mitad de mes?">
+                    <input type="date" value={inicioCuota} onChange={(e) => cambiarInicioCuota(e.target.value)} className={inputCls} />
+                  </FormRow>
+                  {prorrateoCuota && (
+                    <p className="text-[10px] text-neutral-400 -mt-1">
+                      Parte proporcional: {prorrateoCuota.diasCobrados} de {prorrateoCuota.diasDelMes} días
+                      → <strong className="text-neutral-600">{fmtMoney(prorrateoCuota.importe)}</strong> (la cuota entera son {fmtMoney(baseCuota)}).
+                      El importe se ha rellenado solo; puedes retocarlo.
+                    </p>
+                  )}
                 </>
               )}
 
