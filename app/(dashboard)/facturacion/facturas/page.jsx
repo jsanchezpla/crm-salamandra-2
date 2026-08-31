@@ -399,7 +399,7 @@ export default function FacturasPage() {
         <input
           value={searchInput}
           onChange={(e) => { setSearchInput(e.target.value); setPage(1); }}
-          placeholder="Buscar por número o cliente..."
+          placeholder="Buscar por número, cliente o paciente..."
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
         />
         <Select

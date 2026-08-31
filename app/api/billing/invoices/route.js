@@ -5,6 +5,7 @@ import { logBillingAudit, resumenFactura, datosPeticion } from "../../../../lib/
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { calculateInvoice } from "../../../../lib/billing/calculateInvoice.js";
 import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
+import { idsDeFamiliaPorPaciente } from "../../../../lib/clients/familiasPorPaciente.js";
 import { parseSortOrder } from "../../../../lib/billing/parseSort.js";
 import { withEffectiveStatusList } from "../../../../lib/billing/invoiceStatus.js";
 import { resolveInvoicePatientId, invoicePatientInclude } from "../../../../lib/billing/patientLink.js";
@@ -44,7 +45,14 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
      */
     if (q) {
       const porNombre = await filtroPorNombre(Invoice.sequelize, q, ["Invoice.number", "client.name"]);
-      if (porNombre) (where[Op.and] ||= []).push(porNombre);
+      // También por el nombre del paciente (31/08/2026): al niño se le conoce
+      // por su nombre y la familia paga con otro. Mismo reparto que en Citas,
+      // vía lib/clients/familiasPorPaciente.js. La lista SOLO entra si tiene
+      // algo: un IN () vacío en el Op.or mataría la búsqueda por nombre.
+      const familias = await idsDeFamiliaPorPaciente({ q, Patient: tenantModels.Patient, hasModule });
+      const alternativas = [porNombre, familias.length ? { clientId: { [Op.in]: familias } } : null].filter(Boolean);
+      if (alternativas.length === 1) (where[Op.and] ||= []).push(alternativas[0]);
+      else if (alternativas.length > 1) (where[Op.and] ||= []).push({ [Op.or]: alternativas });
     }
 
     const allowedSort = {

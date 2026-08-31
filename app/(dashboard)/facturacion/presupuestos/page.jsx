@@ -172,7 +172,7 @@ export default function PresupuestosPage() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar nº o cliente…"
+          placeholder="Buscar nº, cliente o paciente…"
           className="flex-1 min-w-[180px] rounded-md px-3 py-2 text-sm bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400"
         />
       </div>
