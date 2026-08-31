@@ -92,6 +92,11 @@ export default function PresupuestoDetallePage() {
   function addLine() {
     setLines((prev) => [...prev, { description: "", quantity: 1, unitPrice: 0, discountPct: 0, vatRate: ivaPorDefecto(settings) }]);
   }
+  // Apartado con título (31/08/2026): un rótulo de sección («Septiembre»,
+  // «Material»…) que no suma — para presupuestos largos desglosados por meses.
+  function addTitulo() {
+    setLines((prev) => [...prev, { kind: "titulo", description: "" }]);
+  }
   function removeLine(idx) {
     setLines((prev) => prev.filter((_, i) => i !== idx));
   }
@@ -104,13 +109,17 @@ export default function PresupuestoDetallePage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          lines: lines.map((l) => ({
-            description: l.description,
-            quantity: Number(l.quantity || 0),
-            unitPrice: Number(l.unitPrice || 0),
-            discountPct: Number(l.discountPct || 0),
-            vatRate: Number(l.vatRate || 0),
-          })),
+          lines: lines.map((l) =>
+            l.kind === "titulo"
+              ? { kind: "titulo", description: l.description }
+              : {
+                  description: l.description,
+                  quantity: Number(l.quantity || 0),
+                  unitPrice: Number(l.unitPrice || 0),
+                  discountPct: Number(l.discountPct || 0),
+                  vatRate: Number(l.vatRate || 0),
+                }
+          ),
           validUntil: validUntil || null,
           notes: notes?.trim() || null,
         }),
@@ -216,7 +225,12 @@ export default function PresupuestoDetallePage() {
           <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-neutral-100 flex items-center justify-between">
               <h2 className="font-semibold text-neutral-800 text-sm">Líneas</h2>
-              {!readOnly && <button onClick={addLine} className="text-xs px-2.5 py-1 rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50">+ Añadir línea</button>}
+              {!readOnly && (
+                <div className="flex items-center gap-1.5">
+                  <button onClick={addTitulo} className="text-xs px-2.5 py-1 rounded-md border border-neutral-200 text-neutral-500 hover:bg-neutral-50">+ Apartado</button>
+                  <button onClick={addLine} className="text-xs px-2.5 py-1 rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-50">+ Añadir línea</button>
+                </div>
+              )}
             </div>
             {lines.length === 0 ? (
               <div className="px-4 py-8 text-sm text-neutral-400 text-center">Sin líneas todavía.</div>
@@ -226,6 +240,24 @@ export default function PresupuestoDetallePage() {
                   <span>Descripción</span><span className="text-right">Cant.</span><span className="text-right">Precio</span><span className="text-right">Dto%</span><span className="text-right">IVA%</span><span className="text-right">Total</span><span />
                 </div>
                 {lines.map((l, idx) => {
+                  if (l.kind === "titulo") {
+                    return (
+                      <div key={idx} className="grid grid-cols-[1fr_28px] gap-2 px-4 py-2 items-center bg-neutral-50/60">
+                        <input
+                          value={l.description || ""}
+                          onChange={(e) => updateLine(idx, { description: e.target.value })}
+                          disabled={readOnly}
+                          placeholder="Título del apartado (Septiembre, Material…)"
+                          className={`${inputCls} font-semibold`}
+                        />
+                        {!readOnly ? (
+                          <button onClick={() => removeLine(idx)} className="text-neutral-400 hover:text-red-500" aria-label="Eliminar">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        ) : <span />}
+                      </div>
+                    );
+                  }
                   const base = Number(l.quantity || 0) * Number(l.unitPrice || 0) * (1 - Number(l.discountPct || 0) / 100);
                   const lineTotal = base * (1 + Number(l.vatRate || 0) / 100);
                   return (

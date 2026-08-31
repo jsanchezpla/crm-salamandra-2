@@ -137,6 +137,22 @@ test("el presupuesto lleva SU pie cuando el emisor tiene membrete propio", async
   assert.ok(!/Gracias por su confianza/.test(texto), "se coló el pie de la factura");
 });
 
+test("un apartado con título sale como rótulo, sin colarse en los totales", async () => {
+  const quote = {
+    ...QUOTE,
+    lines: [
+      { kind: "titulo", description: "Septiembre", lineBase: 0, lineVat: 0 },
+      ...QUOTE.lines,
+    ],
+  };
+  const texto = textoDe(await buildQuotePdfBuffer({ quote, client: CLIENT, settings: SETTINGS }));
+  assert.match(texto, /Septiembre/);
+  // El desglose de IVA no gana ninguna fila por el título (las líneas reales
+  // van a 0 % en este presupuesto, así que solo debe haber UNA fila de IVA).
+  const filasIva = texto.match(/IVA 0,00 %/g) || [];
+  assert.equal(filasIva.length, 1);
+});
+
 test("el nombre del fichero sale del número", () => {
   assert.equal(quotePdfFilename(QUOTE), "presupuesto-P-2026-0042.pdf");
   assert.equal(quotePdfFilename({ id: "deadbeef99" }), "presupuesto-deadbeef.pdf");
