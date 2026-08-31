@@ -24,7 +24,8 @@ async function main() {
     process.exit(1);
   }
   const s = new Sequelize(process.env.DATABASE_URL, { dialect: "postgres", logging: false });
-  const schemas = await byTable(s, "payments");
+  const { schemas, skipped } = await byTable(s, "payments");
+  for (const sinTabla of skipped) process.stdout.write(`  · ${sinTabla} sin tabla payments, nada que blindar\n`);
 
   for (const schema of schemas) {
     await s.query(`ALTER TABLE "${schema}"."payments" ADD COLUMN IF NOT EXISTS "patient_id" UUID`);
