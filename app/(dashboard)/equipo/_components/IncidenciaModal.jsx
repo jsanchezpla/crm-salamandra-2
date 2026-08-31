@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Select from "@/components/ui/Select.jsx";
+import SelectorPaciente from "@/components/citas/SelectorPaciente.jsx";
 import { INCIDENCIA_CATEGORIES, INCIDENCIA_PRIORITY, INCIDENCIA_VERIFICATIONS, exigeSubcategoria } from "@/lib/clinica/incidencias.js";
 
 /**
@@ -114,6 +115,9 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
   const [priority, setPriority] = useState(inc?.priority ?? "medium");
   const [date, setDate] = useState(inc?.date ?? new Date().toISOString().slice(0, 10));
   const [patientId, setPatientId] = useState(inc?.patientId ?? "");
+  // El nombre del paciente elegido en el buscador (31/08/2026): la lista de
+  // `patients` corta en 1.000 y con 1.174 el elegido puede no estar en ella.
+  const [pacienteNombre, setPacienteNombre] = useState(null);
   // Multi-responsable: se parte de `assignees` (nuevo) y se cae al legacy
   // `assignedToId` para las incidencias creadas antes del cambio.
   const [assigneeIds, setAssigneeIds] = useState(() => {
@@ -417,9 +421,18 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] uppercase tracking-wider text-neutral-400">Paciente (si procede)</label>
-              <Select value={patientId} onChange={setPatientId}
-                options={[{ value: "", label: "Ninguno" }, ...patients.map((p) => ({ value: p.id, label: p.name }))]}
-                className={`mt-1 ${inputCls} bg-white`} />
+              {/* Buscador que pregunta al SERVIDOR (31/08/2026): el desplegable
+                  cargaba como mucho 1.000 y con los 1.174 de Aumenta unos 174
+                  no salían — el mismo agujero ya arreglado en el alta de citas.
+                  El selector de Citas vale tal cual (el parámetro es `q`). */}
+              <SelectorPaciente
+                value={patientId}
+                onChange={setPatientId}
+                onPaciente={(p) => setPacienteNombre(p?.name ?? null)}
+                opcionesFijas={[{ value: "", label: "Ninguno" }]}
+                placeholder="Ninguno"
+                className={`mt-1 ${inputCls} bg-white`}
+              />
             </div>
             <div>
               {/* Quién la registra sale relleno con quien está usando el CRM,
@@ -488,7 +501,7 @@ export default function IncidenciaModal({ mode = "create", incidencia = null, th
             </div>
             <p className="text-[10px] text-neutral-400 mb-2">
               {patientId
-                ? `Se guarda también en la ficha de ${patients.find((p) => p.id === patientId)?.name ?? "su paciente"}.`
+                ? `Se guarda también en la ficha de ${pacienteNombre ?? patients.find((p) => p.id === patientId)?.name ?? "su paciente"}.`
                 : "Sin paciente, queda como documento interno en el archivo de Documentos."}
             </p>
             {docs.length === 0 && queuedDocs.length === 0 && <p className="text-[11px] text-neutral-400">Sin documentos.</p>}

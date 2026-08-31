@@ -191,6 +191,18 @@ describe("el selector de pacientes", () => {
   });
 });
 
+test("la incidencia tampoco elige paciente sobre una lista descargada (31/08/2026)", () => {
+  const modal = readFileSync(
+    new URL("../app/(dashboard)/equipo/_components/IncidenciaModal.jsx", import.meta.url),
+    "utf8"
+  );
+  assert.ok(modal.includes("<SelectorPaciente"), "el campo Paciente de la incidencia tiene que preguntar al servidor");
+  assert.ok(
+    !/options=\{\[\{ value: "", label: "Ninguno" \}, \.\.\.patients\.map/.test(modal),
+    "el desplegable viejo cortaba en 1.000 y con 1.174 pacientes dejaba fuera a 174 sin avisar"
+  );
+});
+
 test("el alta de cita ya no elige sobre una lista descargada", () => {
   const drawer = readFileSync(
     new URL("../modules/default/citas/NuevaCitaDrawer.jsx", import.meta.url),
