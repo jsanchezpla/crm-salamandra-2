@@ -248,6 +248,10 @@ export default function CobrosPage() {
           method: form.method,
           paidAt: form.paidAt,
           notes: [notaConceptos, form.notes].filter(Boolean).join(" — ") || null,
+          // La terapia del cobro, para que «Facturar el mes» pueda agrupar por
+          // concepto: solo cuando la cuota es de UN concepto (una compuesta no
+          // se puede partir por terapia).
+          conceptId: !porFactura && conceptosElegidos.length === 1 ? conceptosElegidos[0].id : null,
         }),
       });
       const json = await res.json();

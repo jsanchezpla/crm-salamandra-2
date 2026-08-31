@@ -458,6 +458,9 @@ export const MODULES = {
     "migrate-billing-membretes",
     "migrate-billing-sello",
     "migrate-billing-conceptos",
+    // De quién y de qué terapia es cada cobro (31/08/2026): sin estas dos
+    // columnas el modelo pide patient_id/concept_id y todo GET de cobros da 42703.
+    "migrate-payments-terapia",
     "migrate-rename-therapist-to-employee",
     // A quién se le emitió cada factura, congelado al emitir. Sin esta columna
     // el modelo pide `fiscal_snapshot` y toda lectura de factura da 42703.

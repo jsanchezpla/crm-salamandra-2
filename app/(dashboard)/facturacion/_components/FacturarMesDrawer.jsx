@@ -28,6 +28,10 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
   const [fecha, setFecha] = useState("");
   const [emitting, setEmitting] = useState(false);
   const [resultado, setResultado] = useState(null);
+  // "pagador" = una factura por cliente (lo de siempre); "terapia" = una por
+  // concepto del catálogo (31/08/2026, Rodrigo) — los cobros sin concepto van
+  // juntos en un grupo «resto» del mismo pagador.
+  const [agrupacion, setAgrupacion] = useState("pagador");
 
   useEffect(() => {
     if (!open) return;
@@ -35,7 +39,7 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
     setExcluidos(new Set());
     setErrorMsg(null);
     setLoading(true);
-    fetch(`/api/billing/invoices/bulk-issue?mes=${mes}`, { cache: "no-store" })
+    fetch(`/api/billing/invoices/bulk-issue?mes=${mes}&agrupacion=${agrupacion}`, { cache: "no-store" })
       .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
       .then(({ ok, j }) => {
         if (!ok) throw new Error(j.error || "Error");
@@ -44,10 +48,10 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
       })
       .catch((e) => { setPreview(null); setErrorMsg(e.message); })
       .finally(() => setLoading(false));
-  }, [open, mes]);
+  }, [open, mes, agrupacion]);
 
   const seleccionadas = useMemo(
-    () => (preview?.facturables ?? []).filter((g) => !excluidos.has(g.clientId)),
+    () => (preview?.facturables ?? []).filter((g) => !excluidos.has(g.grupoId ?? g.clientId)),
     [preview, excluidos]
   );
   const importeSeleccionado = seleccionadas.reduce((s, g) => s + Number(g.importe || 0), 0);
@@ -68,7 +72,7 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
       const res = await fetch("/api/billing/invoices/bulk-issue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mes, issueDate: fecha || undefined, exclude: [...excluidos] }),
+        body: JSON.stringify({ mes, issueDate: fecha || undefined, exclude: [...excluidos], agrupacion }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
@@ -112,8 +116,11 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
             </div>
             <ul className="divide-y divide-neutral-50 border border-neutral-100 rounded-xl overflow-hidden">
               {resultado.resultados.map((r) => (
-                <li key={r.clientId} className="px-4 py-2.5 flex items-center gap-3 text-xs">
-                  <span className="min-w-0 flex-1 truncate text-neutral-800">{r.nombre}</span>
+                <li key={r.grupoId ?? r.clientId} className="px-4 py-2.5 flex items-center gap-3 text-xs">
+                  <span className="min-w-0 flex-1 truncate text-neutral-800">
+                    {r.nombre}
+                    {r.terapia && <span className="text-neutral-400"> · {r.terapia}</span>}
+                  </span>
                   {r.resultado === "emitida" ? (
                     <Link href={`/facturacion/facturas/${r.invoiceId}`} className="font-mono text-[var(--color-primary,#1B3A2D)] hover:underline">
                       {r.numero}
@@ -136,6 +143,29 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Mes a facturar</label>
               <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} className={inputCls} />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Cómo agrupar</label>
+              <div className="flex gap-2">
+                {[["pagador", "Todo junto por pagador"], ["terapia", "Una factura por terapia"]].map(([k, lbl]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => { setAgrupacion(k); setExcluidos(new Set()); }}
+                    className={`px-3 py-1.5 rounded-lg text-xs border transition ${agrupacion === k ? "border-transparent text-white" : "bg-white border-neutral-200 text-neutral-500"}`}
+                    style={agrupacion === k ? { background: "var(--color-primary, #1B3A2D)" } : undefined}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+              {agrupacion === "terapia" && (
+                <p className="text-[10px] text-neutral-400">
+                  La terapia sale del concepto del cobro. Los cobros sin concepto (o compuestos de
+                  varios) no se pueden partir: van juntos en una factura del mismo pagador.
+                </p>
+              )}
             </div>
 
             {loading && <div className="text-xs text-neutral-400 py-6 text-center">Recogiendo los cobros del mes...</div>}
@@ -179,14 +209,17 @@ export default function FacturarMesDrawer({ open, onClose, onDone }) {
                 {preview.facturables.length > 0 && (
                   <ul className="divide-y divide-neutral-50 border border-neutral-100 rounded-xl overflow-hidden max-h-72 overflow-y-auto ink-scroll">
                     {preview.facturables.map((g) => (
-                      <li key={g.clientId} className="px-4 py-2.5 flex items-center gap-3 text-xs">
+                      <li key={g.grupoId ?? g.clientId} className="px-4 py-2.5 flex items-center gap-3 text-xs">
                         <input
                           type="checkbox"
-                          checked={!excluidos.has(g.clientId)}
-                          onChange={() => toggle(g.clientId)}
+                          checked={!excluidos.has(g.grupoId ?? g.clientId)}
+                          onChange={() => toggle(g.grupoId ?? g.clientId)}
                           className="accent-[var(--color-primary,#1B3A2D)]"
                         />
-                        <span className="min-w-0 flex-1 truncate text-neutral-800">{g.nombre}</span>
+                        <span className="min-w-0 flex-1 truncate text-neutral-800">
+                          {g.nombre}
+                          {g.terapia && <span className="text-neutral-400"> · {g.terapia}</span>}
+                        </span>
                         {g.facturaPrevia && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100"
                             title="Este pagador ya tiene una factura emitida este mes. Puede ser de otra cosa; revisa antes de emitirle otra.">

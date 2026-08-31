@@ -92,9 +92,9 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
   try {
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
 
-    const { Payment, Invoice, Client } = tenantModels;
+    const { Payment, Invoice, Client, BillingConcept } = tenantModels;
     const body = await request.json();
-    const { invoiceId, clientId, periodMonth, amount, paidAt, method, notes } = body;
+    const { invoiceId, clientId, periodMonth, amount, paidAt, method, notes, patientId, conceptId } = body;
 
     // COBRO SIN FACTURA (sprint Aumenta 2026-07, punto 8): en el centro se
     // cobra primero y se factura después, así que exigir factura obligaba a
@@ -130,6 +130,16 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       if (!cliente) return notFound("Cliente no encontrado");
     }
 
+    // De quién y de qué terapia es la cuota (31/08/2026): opcionales, y un id
+    // que no existe se descarta en vez de romper el cobro — el dinero manda.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let conceptoValido = null;
+    if (typeof conceptId === "string" && UUID_RE.test(conceptId) && BillingConcept) {
+      const c = await BillingConcept.findByPk(conceptId, { attributes: ["id"] });
+      if (c) conceptoValido = conceptId;
+    }
+    const pacienteValido = typeof patientId === "string" && UUID_RE.test(patientId) ? patientId : null;
+
     const payment = await Payment.create({
       invoiceId: invoiceId || null,
       // Con factura, el cliente se hereda de ella; sin factura viene en el body.
@@ -140,6 +150,8 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
       method,
       status: "completed",
       notes: notes || null,
+      patientId: pacienteValido,
+      conceptId: conceptoValido,
     });
 
     if (invoice) await updateInvoiceStatus(invoice, Payment);

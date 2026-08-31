@@ -26,14 +26,27 @@ import { madridToday } from "../../../../../lib/utils/madridDate.js";
  * Aumenta no pueden tumbar a las demás); la lista es el trabajo de recepción.
  */
 
-async function recogerLote({ tenantModels, mes }) {
-  const { Payment, Client, Invoice } = tenantModels;
+// `agrupacion`: "pagador" (una factura por cliente, lo de siempre) o
+// "terapia" (31/08/2026: una por concepto del catálogo; los cobros sin
+// concepto van juntos en un grupo «resto» del mismo pagador). La regla vive
+// en lib/billing/lotesCuotas.js.
+function agrupacionValida(v) {
+  return v === "terapia" ? "terapia" : "pagador";
+}
+
+async function recogerLote({ tenantModels, mes, agrupacion = "pagador" }) {
+  const { Payment, Client, Invoice, BillingConcept } = tenantModels;
 
   const cobros = await Payment.findAll({
     where: { status: "completed", periodMonth: `${mes}-01`, invoiceId: null },
-    attributes: ["id", "clientId", "amount", "method", "paidAt", "notes"],
+    attributes: ["id", "clientId", "amount", "method", "paidAt", "notes", "conceptId"],
     order: [["paidAt", "ASC"]],
   });
+
+  const conceptos =
+    agrupacion === "terapia" && BillingConcept
+      ? await BillingConcept.findAll({ attributes: ["id", "name"] })
+      : [];
 
   const ids = [...new Set(cobros.map((c) => String(c.clientId)).filter(Boolean))];
   const clientes = ids.length
@@ -57,6 +70,8 @@ async function recogerLote({ tenantModels, mes }) {
     cobros: cobros.map((c) => c.toJSON()),
     clientes: clientes.map((c) => c.toJSON()),
     clientesConFacturaDelMes: facturasMes.map((f) => String(f.clientId)),
+    agrupacion,
+    conceptos: conceptos.map((c) => ({ id: c.id, name: c.name })),
   });
   return { ...lote, fichas: new Map(clientes.map((c) => [String(c.id), c])) };
 }
@@ -83,7 +98,9 @@ async function ultimaFechaSerie({ tenantModels, year }) {
 }
 
 const vistaGrupo = (g) => ({
+  grupoId: g.grupoId,
   clientId: g.clientId,
+  terapia: g.terapia ?? null,
   nombre: g.nombre,
   nif: g.nif,
   importe: g.importe,
@@ -97,15 +114,18 @@ export const GET = withTenant(async (request, _rc, { tenantModels, hasModule }) 
     if (!hasModule("billing")) return forbidden("Módulo billing no activo");
     const { TenantBillingSettings } = tenantModels;
 
-    const mes = new URL(request.url).searchParams.get("mes");
+    const params = new URL(request.url).searchParams;
+    const mes = params.get("mes");
     if (!mesValido(mes)) return error("El mes debe ser 'AAAA-MM'", 422);
+    const agrupacion = agrupacionValida(params.get("agrupacion"));
 
     const settings = await TenantBillingSettings.findOne();
-    const { facturables, sinNif } = await recogerLote({ tenantModels, mes });
+    const { facturables, sinNif } = await recogerLote({ tenantModels, mes, agrupacion });
     const hoy = madridToday();
 
     return ok({
       mes,
+      agrupacion,
       emisor: { ok: faltaEmisor(settings).length === 0, faltan: faltaEmisor(settings) },
       facturables: facturables.map(vistaGrupo),
       sinNif: sinNif.map(vistaGrupo),
@@ -135,6 +155,7 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
     const fecha = body?.issueDate ? String(body.issueDate) : madridToday();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return error("issueDate debe ser 'AAAA-MM-DD'", 422);
     const excluidos = new Set((Array.isArray(body?.exclude) ? body.exclude : []).map(String));
+    const agrupacion = agrupacionValida(body?.agrupacion);
 
     const settings = await TenantBillingSettings.findOne();
     const faltan = faltaEmisor(settings);
@@ -164,13 +185,13 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
       ? settings?.vatExemptNote || "Operación exenta de IVA conforme al artículo 20 de la Ley 37/1992 del IVA."
       : null;
 
-    const { facturables, sinNif, fichas } = await recogerLote({ tenantModels, mes });
+    const { facturables, sinNif, fichas } = await recogerLote({ tenantModels, mes, agrupacion });
     const sequelize = Invoice.sequelize;
     const resultados = [];
     const auditoria = [];
 
     for (const grupo of sinNif) {
-      resultados.push({ clientId: grupo.clientId, nombre: grupo.nombre, importe: grupo.importe, resultado: "saltada", motivo: grupo.motivo });
+      resultados.push({ grupoId: grupo.grupoId, clientId: grupo.clientId, terapia: grupo.terapia ?? null, nombre: grupo.nombre, importe: grupo.importe, resultado: "saltada", motivo: grupo.motivo });
     }
 
     // EN SERIE a propósito: el número correlativo bloquea la fila de la serie
@@ -178,8 +199,10 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
     // transacción POR familia: si la 37 falla, las 36 emitidas son válidas y
     // relanzar el mes retoma solo lo pendiente.
     for (const grupo of facturables) {
-      if (excluidos.has(grupo.clientId)) {
-        resultados.push({ clientId: grupo.clientId, nombre: grupo.nombre, importe: grupo.importe, resultado: "excluida", motivo: "excluida a mano" });
+      // Excluir a mano va por `grupoId`: con agrupación por pagador es el
+      // clientId de siempre; por terapia, cliente:concepto.
+      if (excluidos.has(grupo.grupoId) || excluidos.has(grupo.clientId)) {
+        resultados.push({ grupoId: grupo.grupoId, clientId: grupo.clientId, terapia: grupo.terapia ?? null, nombre: grupo.nombre, importe: grupo.importe, resultado: "excluida", motivo: "excluida a mano" });
         continue;
       }
       try {
@@ -229,11 +252,13 @@ export const POST = withTenant(async (request, _rc, { tenant, tenantModels, hasM
           }
           return factura;
         });
-        resultados.push({ clientId: grupo.clientId, nombre: grupo.nombre, importe: grupo.importe, resultado: "emitida", numero: invoice.number, invoiceId: invoice.id });
+        resultados.push({ grupoId: grupo.grupoId, clientId: grupo.clientId, terapia: grupo.terapia ?? null, nombre: grupo.nombre, importe: grupo.importe, resultado: "emitida", numero: invoice.number, invoiceId: invoice.id });
         auditoria.push(invoice);
       } catch (err) {
         resultados.push({
+          grupoId: grupo.grupoId,
           clientId: grupo.clientId,
+          terapia: grupo.terapia ?? null,
           nombre: grupo.nombre,
           importe: grupo.importe,
           resultado: "saltada",

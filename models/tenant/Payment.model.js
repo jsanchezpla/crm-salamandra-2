@@ -52,6 +52,20 @@ export function definePayment(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // ── De quién y de qué terapia es la cuota (31/08/2026) ──────────────
+      // «Facturar el mes» solo sabía agrupar por pagador porque el cobro no
+      // guardaba ni el paciente ni el concepto. Ambos opcionales: el cobro a
+      // mano de siempre sigue naciendo con los dos a NULL. `conceptId` apunta
+      // al catálogo (billing_concepts) y solo se rellena cuando la cuota es de
+      // UN concepto — una cuota compuesta no se puede partir por terapia.
+      patientId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      conceptId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       // ── El puente con el dinero de verdad (29/08/2026) ──────────────────
       // Hasta hoy un cobro era una anotación a mano: importe, fecha, método y
       // notas. No había NINGÚN identificador externo, así que desde un cobro no
