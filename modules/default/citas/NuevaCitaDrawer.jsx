@@ -12,6 +12,7 @@ import BuscadorPaciente from "../../../components/citas/BuscadorPaciente.jsx";
 import SelectorPaciente from "../../../components/citas/SelectorPaciente.jsx";
 import { datosAlElegirFicha } from "../../../lib/clients/contactoDeFicha.js";
 import { repasarContactoDeCita, avisoDeContacto } from "../../../lib/citas/contactoCita.js";
+import { CADENCIAS, fechasDeRepeticion } from "../../../lib/citas/recurrencia.js";
 import { inputCls } from "./chips.jsx";
 
 const EMPTY_BOOKING_FORM = {
@@ -29,6 +30,10 @@ const EMPTY_BOOKING_FORM = {
   notes: "",
   patientId: "",
   teamMemberId: "",
+  // Repetición (31/08/2026): "" (no se repite) | "semana" | "quincena" | "mes",
+  // hasta una fecha inclusive. Materializa citas INDEPENDIENTES, sin serie.
+  repetir: "",
+  repetirHasta: "",
 };
 
 export function NuevaCitaDrawer({
@@ -287,25 +292,41 @@ export function NuevaCitaDrawer({
     );
     if (aviso && !(await confirmar(aviso))) return;
 
+    // La repetición se calcula ANTES de crear nada: si el «hasta» no da
+    // ninguna fecha, mejor decirlo que crear una cita suelta en silencio.
+    let repeticion = null;
+    if (createForm.repetir) {
+      if (!createForm.repetirHasta) { setFormError("Di hasta qué día se repite"); return; }
+      repeticion = fechasDeRepeticion(`${createForm.date}T${createForm.time}`, createForm.repetir, createForm.repetirHasta);
+      if (repeticion.fechas.length === 0 && repeticion.sinDia === 0) {
+        setFormError("Con ese «hasta» no sale ninguna repetición (¿la fecha es anterior a la cita?)");
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const scheduledAt = new Date(`${createForm.date}T${createForm.time}`).toISOString();
+      // El mismo cuerpo para la primera cita y para sus repeticiones.
+      const cuerpoCita = {
+        eventTypeId: createForm.eventTypeId,
+        clientId: createForm.clientId || null,
+        clientName: createForm.clientName.trim(),
+        clientEmail: createForm.clientEmail.trim(),
+        clientPhone: createForm.clientPhone.trim(),
+        modality: createForm.modality,
+        additionalData: createForm.additionalData.trim() || null,
+        notes: createForm.notes.trim() || null,
+        patientId: createForm.patientId || null,
+        teamMemberId: createForm.teamMemberId || null,
+      };
       const enviar = (insistir) =>
         fetch("/api/citas/bookings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            eventTypeId: createForm.eventTypeId,
+            ...cuerpoCita,
             scheduledAt,
-            clientId: createForm.clientId || null,
-            clientName: createForm.clientName.trim(),
-            clientEmail: createForm.clientEmail.trim(),
-            clientPhone: createForm.clientPhone.trim(),
-            modality: createForm.modality,
-            additionalData: createForm.additionalData.trim() || null,
-            notes: createForm.notes.trim() || null,
-            patientId: createForm.patientId || null,
-            teamMemberId: createForm.teamMemberId || null,
             /*
              * Las DOS puertas que avisan pero no imponen: el festivo del centro
              * y el tramo de vacaciones (07/08/2026). Antes solo se reenviaba
@@ -354,6 +375,46 @@ export function NuevaCitaDrawer({
           texto: `Al paciente NO le ha llegado el correo: ${porQue}.\n\nAvísale tú.`,
         });
       }
+
+      /*
+       * ── LAS REPETICIONES (31/08/2026) ────────────────────────────────────
+       * Citas INDEPENDIENTES por el POST de siempre, que ya valida festivos,
+       * bloqueos y solapes: la que choca NO se crea y se cuenta al final —
+       * aquí no se insiste con permitirFestivo, que doce preguntas seguidas
+       * no las contesta nadie. Sin correo (`omitirCorreo`): a la familia le
+       * llega solo el de la primera.
+       */
+      if (repeticion) {
+        const chocadas = [];
+        let creadas = 0;
+        for (const f of repeticion.fechas) {
+          try {
+            const r = await fetch("/api/citas/bookings", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...cuerpoCita, scheduledAt: f.toISOString(), omitirCorreo: true }),
+            });
+            const jr = await r.json();
+            if (jr.ok) creadas += 1;
+            else chocadas.push({ fecha: f, motivo: jr.error || "no se pudo crear" });
+          } catch {
+            chocadas.push({ fecha: f, motivo: "no se pudo crear" });
+          }
+        }
+        const dia = (f) => f.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" });
+        const lineas = chocadas.slice(0, 8).map((c) => `· ${dia(c.fecha)}: ${c.motivo}`);
+        if (chocadas.length > 8) lineas.push(`· … y ${chocadas.length - 8} más`);
+        if (chocadas.length || repeticion.sinDia) {
+          await avisar({
+            titulo: "Repetición creada, con huecos",
+            texto:
+              `Creadas ${creadas + 1} citas (la de hoy y ${creadas} repeticiones).` +
+              (chocadas.length ? `\n\nEstas NO se han creado:\n${lineas.join("\n")}` : "") +
+              (repeticion.sinDia ? `\n\n${repeticion.sinDia} ${repeticion.sinDia === 1 ? "mes no tiene" : "meses no tienen"} ese día del mes y se ${repeticion.sinDia === 1 ? "salta" : "saltan"}.` : ""),
+          });
+        }
+      }
+
       // El padre refresca el calendario y cierra el drawer (que muere con
       // su formulario dentro: no hay nada que vaciar).
       onCreated();
@@ -564,6 +625,38 @@ export function NuevaCitaDrawer({
                   />
                 </div>
               </div>
+
+              {/* Repetición (31/08/2026): citas independientes hasta una fecha,
+                  la regla en lib/citas/recurrencia.js. */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-medium text-neutral-500 mb-1">Repetir</label>
+                  <Select
+                    value={createForm.repetir}
+                    onChange={(v) => updateCreateForm("repetir", v)}
+                    className={inputCls}
+                    options={[{ value: "", label: "No se repite" }, ...CADENCIAS]}
+                  />
+                </div>
+                {createForm.repetir && (
+                  <div>
+                    <label className="block text-[11px] font-medium text-neutral-500 mb-1">Hasta el día (incluido)</label>
+                    <input
+                      type="date"
+                      value={createForm.repetirHasta}
+                      min={createForm.date || undefined}
+                      onChange={(e) => updateCreateForm("repetirHasta", e.target.value)}
+                      className={inputCls}
+                    />
+                  </div>
+                )}
+              </div>
+              {createForm.repetir && (
+                <p className="text-[10px] text-neutral-400 -mt-2">
+                  Se crean citas sueltas (cada una se mueve o cancela sola). Las que caigan en
+                  festivo o bloqueo no se crean y se avisa. El correo a la familia sale solo con la primera.
+                </p>
+              )}
 
               <div className="grid grid-cols-2 gap-2">
                 <div>

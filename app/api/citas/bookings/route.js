@@ -440,7 +440,12 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
      */
     let emailEnviado = false;
     let emailMotivo = null;
-    try {
+    // Las repeticiones de una cita (31/08/2026) llegan con `omitirCorreo`:
+    // doce correos idénticos a la misma familia no avisan mejor, molestan.
+    // El drawer manda el de la PRIMERA cita y las demás nacen calladas.
+    if (body.omitirCorreo === true) {
+      emailMotivo = "omitido";
+    } else try {
       if (!row.clientEmail) throw new Error("SIN_EMAIL");
       if (!(await citaPuedeAvisar(tenantModels, row, "citasEmail"))) throw new Error("SIN_CONSENTIMIENTO");
       // Devuelve null si el centro no deja anular a la familia, y entonces la
