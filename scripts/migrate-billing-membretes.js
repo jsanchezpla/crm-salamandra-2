@@ -8,49 +8,19 @@
  * `invoice_footer_text`, que ya existían) — la regla vive en
  * lib/billing/membrete.js.
  *
- * Para CADA tenant con tabla `tenant_billing_settings` (master.tenants en
- * runtime, regla #12). Idempotente (ADD COLUMN IF NOT EXISTS), sin defaults
- * que escriban filas; NO toca ningún dato. Correr ANTES de deploy.sh en el VPS
- * (el modelo nuevo SELECT-a estas columnas).
+ * Recorre los schemas con `_schema-targets.js` (`byTable`): TODOS los que
+ * tengan la tabla, fotos doradas de las demos incluidas — la primera versión
+ * de este script (misma mañana) leía master.tenants a mano y se las saltó, y
+ * el aviso de deploy.sh lo cantó. Idempotente (ADD COLUMN IF NOT EXISTS), sin
+ * defaults que escriban filas; NO toca ningún dato. Correr ANTES de deploy.sh
+ * (el modelo pide las columnas por nombre).
  *
  * Uso local:  node --env-file=.env.local scripts/migrate-billing-membretes.js
  * Uso VPS:    docker exec crm-salamandra-app-1 node scripts/migrate-billing-membretes.js
  */
 
 import { Sequelize } from "sequelize";
-import { acotarSlugs } from "./_solo-este-tenant.js";
-
-function log(m) { process.stdout.write(`  ${m}\n`); }
-function header(m) { process.stdout.write(`\n▶ ${m}\n`); }
-
-async function schemaExists(s, schema) {
-  const [r] = await s.query(`SELECT 1 FROM information_schema.schemata WHERE schema_name = $1`, { bind: [schema] });
-  return r.length > 0;
-}
-async function tableExists(s, schema, table) {
-  const [r] = await s.query(
-    `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
-    { bind: [schema, table] }
-  );
-  return r.length > 0;
-}
-async function fetchSlugs(s) {
-  const [rows] = await s.query(`SELECT DISTINCT slug FROM master.tenants ORDER BY slug`);
-  return acotarSlugs(rows.map((x) => x.slug));
-}
-
-async function processSchema(s, schema) {
-  if (!(await tableExists(s, schema, "tenant_billing_settings"))) {
-    log(`· ${schema}: sin tenant_billing_settings — se omite`);
-    return;
-  }
-  await s.query(
-    `ALTER TABLE "${schema}"."tenant_billing_settings"
-       ADD COLUMN IF NOT EXISTS quote_logo_url VARCHAR(255),
-       ADD COLUMN IF NOT EXISTS quote_footer_text TEXT`
-  );
-  log(`✓ ${schema}: quote_logo_url + quote_footer_text listas`);
-}
+import { byTable } from "./_schema-targets.js";
 
 async function main() {
   process.stdout.write("\n════════════════════════════════════════════════════\n");
@@ -63,14 +33,17 @@ async function main() {
   }
   const s = new Sequelize(process.env.DATABASE_URL, { dialect: "postgres", logging: false });
 
-  const slugs = await fetchSlugs(s);
-  log(`✓ ${slugs.length} tenants activos: ${slugs.join(", ")}`);
-
-  for (const slug of slugs) {
-    const schema = `crm_${slug}`;
-    header(`Tenant ${slug} (${schema})`);
-    if (!(await schemaExists(s, schema))) { log(`✗ schema ${schema} no existe, se salta`); continue; }
-    await processSchema(s, schema);
+  const { schemas, skipped } = await byTable(s, "tenant_billing_settings");
+  for (const schema of skipped) {
+    process.stdout.write(`  · ${schema}: sin tenant_billing_settings — se omite\n`);
+  }
+  for (const schema of schemas) {
+    await s.query(
+      `ALTER TABLE "${schema}"."tenant_billing_settings"
+         ADD COLUMN IF NOT EXISTS quote_logo_url VARCHAR(255),
+         ADD COLUMN IF NOT EXISTS quote_footer_text TEXT`
+    );
+    process.stdout.write(`  ✓ ${schema}: quote_logo_url + quote_footer_text listas\n`);
   }
 
   await s.close();
