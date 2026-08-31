@@ -31,6 +31,18 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(periodo)) return error("Falta el mes o no tiene formato AAAA-MM");
     if (file.size > MAX_BYTES) return error(`El fichero pasa de ${MAX_BYTES / 1024 / 1024} MB`);
 
+    // Los nombres ya asignados en el modal, para recontar con ellos puestos.
+    // Sigue sin escribirse NADA: el alias se guarda al aplicar, no aquí.
+    let mapeos = {};
+    const crudo = form.get("mapeos");
+    if (crudo) {
+      try {
+        mapeos = JSON.parse(String(crudo));
+      } catch {
+        return error("`mapeos` no es un JSON válido");
+      }
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
     let workbook;
     try {
@@ -45,6 +57,7 @@ export const POST = withTenant(async (request, _ctx, { tenantModels, hasModule }
       slug: request.headers.get("x-tenant"),
       tenantModels,
       fileHash: hashDeFichero(buffer),
+      mapeos,
     });
 
     return ok({ ...preview, fileName: file.name || null });
