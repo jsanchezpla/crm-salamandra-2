@@ -118,8 +118,11 @@ export default function PanelOperativo() {
 
       {/* Acción requerida */}
       <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-neutral-100">
+        <div className="px-4 py-3 border-b border-neutral-100 flex items-center justify-between gap-3">
           <h2 className="eyebrow">Acción requerida</h2>
+          <Link href="/facturacion/acciones" className="text-[11.5px] font-medium text-neutral-500 hover:text-neutral-800 transition">
+            Ver todas →
+          </Link>
         </div>
         {actionItems.length === 0 ? (
           <div className="px-4 py-8 text-sm text-neutral-400 text-center">
