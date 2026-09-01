@@ -11,7 +11,9 @@ import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import ExportButtons from "@/components/billing/ExportButtons.jsx";
 import FacturarMesDrawer from "../_components/FacturarMesDrawer.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
+import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import { partesConProrrateo } from "../../../../lib/billing/prorrateo.js";
+import { conceptosDeCuotas, importePactado } from "../../../../lib/billing/cuotaParaRellenar.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -39,6 +41,11 @@ export default function CobrosPage() {
    * enseñar botones que a lo mejor luego se quitan.
    */
   const puedeFacturar = Boolean(me);
+
+  // Revertir un cobro no tiene vuelta atrás: se pregunta con el diálogo del
+  // CRM, no con el del navegador (que Chrome deja silenciar y devuelve `false`
+  // siempre — ver components/ui/Dialogo.jsx).
+  const { confirmar, dialogo } = useDialogo();
 
   const [unpaidInvoices, setUnpaidInvoices] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -150,8 +157,9 @@ export default function CobrosPage() {
       const jCuotas = await pedir(`/api/billing/cuotas?clientId=${encodeURIComponent(form.clientId)}`);
       if (turno !== turnoCuota.current) return; // ya hay otra familia elegida
       const cuotas = jCuotas?.data?.cuotas ?? [];
-      // Sin deduplicar: dos hermanos con la misma terapia son dos líneas.
-      let ids = cuotas.flatMap((c) => (Array.isArray(c.conceptIds) ? c.conceptIds : []));
+      // Aquí no hay selector de paciente: se cobra a la FAMILIA, así que entran
+      // todas sus cuotas (`cuotaParaRellenar.js`, con su prueba).
+      let ids = conceptosDeCuotas(cuotas);
       // El respaldo es para quien NO tiene cuota asignada. Una cuota asignada
       // con importe pero sin conceptos manda igual: rellenarla con lo que se
       // le cobró hace meses sería contar otra historia.
@@ -171,11 +179,7 @@ export default function CobrosPage() {
       // TODAS sus cuotas lo tienen escrito; mezclado con las que van «a lo que
       // digan sus conceptos» no se puede sumar sin mentir, y ahí manda el
       // catálogo — que es lo que el usuario ve línea a línea.
-      const pactadas = cuotas.filter((c) => c.amount !== null && c.amount !== undefined && c.amount !== "");
-      const todasPactadas = cuotas.length > 0 && pactadas.length === cuotas.length;
-      const pactado = todasPactadas
-        ? Math.round(pactadas.reduce((s, c) => s + (Number(c.amount) || 0), 0) * 100) / 100
-        : null;
+      const pactado = importePactado(cuotas);
       if (pactado !== null) setForm((f) => ({ ...f, amount: String(pactado) }));
       else aplicarImporteCuota(items);
       if (cuotas.length) setCuotaDeLaFamilia({ n: cuotas.length, pactado });
@@ -384,6 +388,56 @@ export default function CobrosPage() {
     }
   }
 
+  /**
+   * Revertir un cobro (01/09/2026, Rodrigo: «debería poder editar un cobro o
+   * revertirlo si quiero»).
+   *
+   * REVERTIR NO ES «DEVUELTO». Son las dos formas de deshacer y significan
+   * cosas distintas, así que la pantalla las separa:
+   *   · «Devuelto» (el estado de arriba) = el dinero entró y se ha devuelto.
+   *     El cobro se queda en el histórico, porque pasó.
+   *   · «Revertir» = el cobro NUNCA debió existir: se apuntó dos veces, o en la
+   *     familia equivocada. Se borra y la factura vuelve a estar pendiente.
+   * Un cobro apuntado por error que se dejara como «devuelto» ensuciaría el
+   * arqueo y la morosidad de un mes que estaba bien.
+   *
+   * El endpoint ya lo audita (`payment.deleted`, con el importe de antes) y
+   * recalcula el estado de la factura; aquí solo hace falta preguntar primero,
+   * que esto no tiene vuelta atrás.
+   */
+  async function revertirCobro() {
+    if (!editing) return;
+    const quien = editing.clientName ? ` de ${editing.clientName}` : "";
+    const ok = await confirmar({
+      titulo: "Revertir el cobro",
+      texto:
+        `Se borrará el cobro${quien} de ${fmtMoney(editing.amount)}` +
+        (editing.invoice?.number ? `, y la factura ${editing.invoice.number} volverá a quedar pendiente` : "") +
+        ". Queda apuntado en el registro de actividad, pero el cobro no se puede recuperar.\n\n" +
+        "Si el dinero SÍ entró y se ha devuelto, no reviertas: cambia el estado a «Devuelto».",
+      confirmar: "Revertir",
+      tono: "peligro",
+    });
+    if (!ok) return;
+    setSaving(true);
+    setFormError(null);
+    try {
+      const res = await fetch(`/api/billing/payments/${editing.id}`, { method: "DELETE" });
+      // El DELETE responde 204 sin cuerpo: no hay JSON que leer.
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "No se pudo revertir el cobro");
+      }
+      setEditing(null);
+      load();
+      loadMorosidad();
+    } catch (err) {
+      setFormError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function selectInvoice(invId) {
     const inv = unpaidInvoices.find((i) => i.id === invId);
     if (!inv) return;
@@ -531,7 +585,10 @@ export default function CobrosPage() {
                     banco casado (módulo Banco) o la página del cobro en Stripe.
                     Sin ordenar: es un enlace, no un dato. */}
                 <th className="px-4 py-3 text-left text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">Movimiento</th>
-                {puedeFacturar && <th className="px-4 py-3" />}
+                {/* La columna iba sin rótulo y el «Editar» quedaba al final de
+                    una tabla ancha: en Aumenta llegaron a corregir un método de
+                    pago por otra vía creyendo que no se podía (01/09/2026). */}
+                {puedeFacturar && <th className="px-4 py-3 text-right">Acciones</th>}
               </tr>
             </thead>
             <tbody>
@@ -859,12 +916,20 @@ export default function CobrosPage() {
                   onChange={(e) => setEditing((p) => ({ ...p, notes: e.target.value }))} className={inputCls + " resize-y"} />
               </FormRow>
               {formError && <div className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{formError}</div>}
-              <div className="flex gap-2 justify-end pt-3 border-t border-neutral-100">
-                <button type="button" onClick={() => setEditing(null)}
-                  className="px-4 py-2 text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700">Cancelar</button>
-                <button type="submit" disabled={saving}
-                  className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-50"
-                  style={{ background: "var(--color-primary, #1B3A2D)" }}>{saving ? "Guardando..." : "Guardar"}</button>
+              <div className="flex gap-2 justify-between items-center pt-3 border-t border-neutral-100 flex-wrap">
+                {/* Deshacer del todo, a la izquierda y separado de Guardar: es
+                    lo único de este cajón que borra algo. */}
+                <button type="button" onClick={revertirCobro} disabled={saving}
+                  className="px-3 py-2 text-xs font-semibold text-red-600 uppercase tracking-wide hover:bg-red-50 rounded-lg disabled:opacity-50">
+                  Revertir cobro
+                </button>
+                <div className="flex gap-2 justify-end">
+                  <button type="button" onClick={() => setEditing(null)}
+                    className="px-4 py-2 text-xs font-semibold text-neutral-400 uppercase tracking-widest hover:text-neutral-700">Cancelar</button>
+                  <button type="submit" disabled={saving}
+                    className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-50"
+                    style={{ background: "var(--color-primary, #1B3A2D)" }}>{saving ? "Guardando..." : "Guardar"}</button>
+                </div>
               </div>
             </form>
           </aside>
@@ -878,6 +943,8 @@ export default function CobrosPage() {
         onClose={() => setShowFacturarMes(false)}
         onDone={() => { load(); loadMorosidad(); }}
       />
+
+      {dialogo}
     </div>
   );
 }
