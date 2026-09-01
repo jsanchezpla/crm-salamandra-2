@@ -123,6 +123,14 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
   const [propuesta, setPropuesta] = useState(null);
   const [avisosIa, setAvisosIa] = useState([]);
   const [simulado, setSimulado] = useState(false);
+  /*
+   * La dirección del PDF recién guardado, SOLO cuando el navegador no ha
+   * dejado abrir la pestaña (ver `verPdf`). Se pinta como enlace de verdad
+   * junto al aviso: un `<a target="_blank">` es navegación del usuario y no hay
+   * bloqueador que lo pare, así que el peor caso es un clic de más — no
+   * quedarse sin poder ver el informe.
+   */
+  const [pdfDeRespaldo, setPdfDeRespaldo] = useState(null);
 
   // Qué apartados trae la plantilla elegida, para marcar en pantalla los que se
   // han añadido solo para este informe.
@@ -220,6 +228,81 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
     } finally {
       setGuardando(false);
     }
+  }
+
+  /**
+   * «Ver PDF» — GUARDA lo que hay en pantalla y LUEGO abre el PDF
+   * (01/09/2026, Rodrigo).
+   *
+   * ── LA QUEJA ───────────────────────────────────────────────────────────────
+   * «Vuelco las sesiones, le doy a ver PDF y se ve perfectamente; pero si luego
+   * quiero anexar los mismos registros literales no se anexan, el PDF ya se ha
+   * generado y no cambia.»
+   *
+   * El PDF no se cachea en ninguna parte — se genera entero en cada petición y
+   * sale con `Cache-Control: private, no-store`. Lo que pasaba es otra cosa, y
+   * el orden de los botones la escondía:
+   *
+   *   1. «Volcar sesiones» llama a un endpoint que ESCRIBE en la base de datos.
+   *      Por eso ese primer PDF sale perfecto: lo volcado ya está guardado.
+   *   2. La casilla «Anexar al PDF los registros literales» solo mueve el estado
+   *      de este cajón. Hasta pulsar «Guardar informe» no llega a ninguna parte.
+   *   3. «Ver PDF» era un `<a href>`: el servidor lee el informe de la base de
+   *      datos, donde `anexarRegistros` seguía en false. Mismo PDF que antes.
+   *
+   * O sea que el botón pintaba «lo último guardado» mientras la pantalla
+   * enseñaba otra cosa, y la única pista era el `title` al pasar el ratón. Un
+   * botón que dice «Ver PDF» tiene que enseñar el informe que se está viendo.
+   *
+   * ── POR QUÉ SE ABRE LA PESTAÑA ANTES DE GUARDAR ───────────────────────────
+   * `window.open` solo se permite dentro del gesto del usuario. Después de un
+   * `await` ya no lo está, y el bloqueador de ventanas emergentes se la come sin
+   * decir nada — sería cambiar un fallo mudo por otro. Así que se abre en blanco
+   * aquí mismo y se le da la dirección cuando el guardado ha ido bien; si falla,
+   * se cierra y el error se lee en el cajón.
+   */
+  async function verPdf() {
+    setErrorMsg(null);
+    setAviso(null);
+    setPdfDeRespaldo(null);
+    /*
+     * SIN `noopener`: con esa opción `window.open` devuelve `null` POR
+     * ESPECIFICACIÓN, aunque la pestaña se abra. Con ella puesta nunca se
+     * conseguía la referencia y siempre se caía al aviso de abajo (visto en
+     * pantalla al probarlo). Aquí no hace falta: la pestaña va a un PDF de
+     * nuestro propio dominio, no a una página ajena.
+     */
+    const pestana = window.open("", "_blank");
+    // El sello de tiempo no es por la cache del servidor (no la hay): es para
+    // que el visor del navegador no reutilice el documento que ya tenía pintado
+    // de la vez anterior, que es justo lo que Rodrigo estaba viendo.
+    const url = `/api/clinica/reports/${report.id}/pdf?v=${Date.now()}`;
+    const ok = await guardar();
+    if (!ok) {
+      pestana?.close();
+      return;
+    }
+    if (pestana) {
+      pestana.location.replace(url);
+    } else if (!window.open(url, "_blank")) {
+      // Ni con esas: se deja el enlace a mano en vez de una pantalla quieta.
+      setPdfDeRespaldo(url);
+      setAviso("Informe guardado. El navegador no ha dejado abrir la pestaña:");
+    }
+  }
+
+  /**
+   * «Enviar al paciente» — también guarda antes (01/09/2026).
+   *
+   * El endpoint de envío genera el PDF leyendo el informe de la base de datos,
+   * igual que «Ver PDF». Con la casilla del anexo marcada y sin guardar, la
+   * familia recibía un documento distinto del que la profesional tenía delante,
+   * y aquí eso ya no es una molestia: es un informe clínico entregado que no
+   * coincide con lo que se firmó en pantalla.
+   */
+  async function enviar() {
+    if (!(await guardar())) return;
+    onDeliver(report.id);
   }
 
   async function volcarSesiones() {
@@ -521,7 +604,27 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
             clavesDePlantilla={esBeca ? null : clavesDePlantilla}
           />
 
-          {aviso && <div className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">{aviso}</div>}
+          {aviso && (
+            <div className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+              {aviso}
+              {/* El enlace solo aparece cuando el navegador ha bloqueado la
+                  pestaña de «Ver PDF»: el informe ya está guardado, esto es
+                  para poder verlo igualmente sin tocar la configuración. */}
+              {pdfDeRespaldo && (
+                <>
+                  {" "}
+                  <a
+                    href={pdfDeRespaldo}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium underline"
+                  >
+                    abrir el PDF
+                  </a>
+                </>
+              )}
+            </div>
+          )}
           {errorMsg && <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">{errorMsg}</div>}
 
           <div className="border-t border-neutral-100 pt-4 flex flex-wrap gap-2 items-center">
@@ -542,15 +645,14 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
               usan: mirar, corregir, mandar. Y abre en pestaña nueva para no
               perder lo que se esté escribiendo en este cajón.
             */}
-            <a
-              href={`/api/clinica/reports/${report.id}/pdf`}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Abre el PDF de lo ÚLTIMO GUARDADO, en una pestaña nueva. No lo envía a nadie."
-              className="ml-auto text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400"
+            <button
+              onClick={verPdf}
+              disabled={guardando}
+              title="Guarda lo que hay en pantalla y abre el PDF en una pestaña nueva. No lo envía a nadie."
+              className="ml-auto text-xs px-3 py-2 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-50"
             >
               Ver PDF
-            </a>
+            </button>
             <button
               onClick={guardar}
               disabled={guardando}
@@ -559,7 +661,7 @@ export default function InformeDrawer({ report, onClose, onDeliver, onGuardado, 
               {guardando ? "Guardando…" : "Guardar informe"}
             </button>
             <button
-              onClick={() => onDeliver(report.id)}
+              onClick={enviar}
               disabled={busy || guardando}
               className="text-xs px-3 py-2 rounded-lg text-white hover:opacity-90 disabled:opacity-50"
               style={{ background: "var(--color-primary, #1B3A2D)" }}
