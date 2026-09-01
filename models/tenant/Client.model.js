@@ -68,6 +68,18 @@ export function defineClient(sequelize) {
         allowNull: true,
       },
       /**
+       * La cuota del mes de esta familia: los ids de los conceptos del
+       * catálogo que la componen (31/08/2026, Rodrigo — «al pulsar el cliente
+       * debería rellenarse su cuota»). La rellena el volcado del Organízate y
+       * la RE-APRENDE cada cobro de cuota: lo último que se le cobró es su
+       * cuota. Vacío o null = sin cuota conocida, el drawer no rellena nada.
+       */
+      cuotaConceptIds: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        field: "cuota_concept_ids",
+      },
+      /**
        * Fecha de nacimiento (04/08/2026). No existía: la tenía `Patient`, y en
        * un centro de nutrición el paciente ES el cliente, así que no había
        * dónde guardarla.

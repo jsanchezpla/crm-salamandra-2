@@ -644,6 +644,7 @@ export default function FacturasPage() {
                       <div className="flex items-center gap-2">
                         <div className="flex-1 min-w-0">
                           <SelectorCliente
+                            fuente="billing"
                             value={form.clientId}
                             onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
                             onFicha={setClienteElegido}

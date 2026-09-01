@@ -235,6 +235,7 @@ export default function RecurrentesPage() {
             <form onSubmit={handleCreate} className="px-6 py-5 space-y-3">
               <FormRow label="Cliente *">
                 <SelectorCliente
+                  fuente="billing"
                   value={form.clientId}
                   onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
                   opcionesFijas={[{ value: "", label: "Selecciona..." }]}

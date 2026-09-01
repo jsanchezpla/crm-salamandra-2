@@ -469,6 +469,7 @@ export const MODULES = {
     // De quién y de qué terapia es cada cobro (31/08/2026): sin estas dos
     // columnas el modelo pide patient_id/concept_id y todo GET de cobros da 42703.
     "migrate-payments-terapia",
+    "migrate-clients-cuota",
     // La retención de IRPF del gasto (31/08/2026): sin irpf_rate/irpf_amount
     // el modelo las pide y todo GET de gastos da 42703.
     "migrate-costs-irpf",

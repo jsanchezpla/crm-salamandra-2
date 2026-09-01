@@ -246,6 +246,7 @@ export default function PresupuestosPage() {
               </button>
             </div>
             <SelectorCliente
+              fuente="billing"
               value={newClientId}
               onChange={(v) => setNewClientId(v)}
             />

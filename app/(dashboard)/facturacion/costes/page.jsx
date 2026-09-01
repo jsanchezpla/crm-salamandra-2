@@ -472,7 +472,7 @@ export default function CostesPage() {
                     (lib/billing/socios.js). En un centro sin socios sobraba. */}
                 {haySocios(settings) && (
                 <FormRow label="Cliente (opcional)">
-                  <SelectorCliente value={form.clientId} onChange={(v) => setForm((f) => ({ ...f, clientId: v }))} className={inputCls} opcionesFijas={[{ value: "", label: "—" }]} />
+                  <SelectorCliente fuente="billing" value={form.clientId} onChange={(v) => setForm((f) => ({ ...f, clientId: v }))} className={inputCls} opcionesFijas={[{ value: "", label: "—" }]} />
                 </FormRow>
                 )}
               </div>

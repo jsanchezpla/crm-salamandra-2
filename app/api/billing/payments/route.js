@@ -103,7 +103,7 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
 
     const { Payment, Invoice, Client, BillingConcept } = tenantModels;
     const body = await request.json();
-    const { invoiceId, clientId, periodMonth, amount, paidAt, method, notes, patientId, conceptId } = body;
+    const { invoiceId, clientId, periodMonth, amount, paidAt, method, notes, patientId, conceptId, conceptIds } = body;
 
     // COBRO SIN FACTURA (sprint Aumenta 2026-07, punto 8): en el centro se
     // cobra primero y se factura después, así que exigir factura obligaba a
@@ -164,6 +164,24 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
     });
 
     if (invoice) await updateInvoiceStatus(invoice, Payment);
+
+    // La ficha APRENDE su cuota (31/08/2026, Rodrigo): lo que se le acaba de
+    // cobrar ES su cuota, y es lo que el drawer rellenará la próxima vez.
+    // Solo en cobros de cuota (sin factura), solo ids que existen en el
+    // catálogo, y conservando duplicados (dos hermanos, misma cuota).
+    if (!invoiceId && payment.clientId && Client && BillingConcept && Array.isArray(conceptIds)) {
+      const candidatos = conceptIds.filter((x) => typeof x === "string" && UUID_RE.test(x));
+      if (candidatos.length) {
+        const existen = await BillingConcept.findAll({
+          where: { id: [...new Set(candidatos)] }, attributes: ["id"],
+        });
+        const reales = new Set(existen.map((c) => String(c.id)));
+        const aprendida = candidatos.filter((x) => reales.has(String(x)));
+        if (aprendida.length) {
+          await Client.update({ cuotaConceptIds: aprendida }, { where: { id: payment.clientId } });
+        }
+      }
+    }
 
     await logBillingAudit({
       tenantId: tenant.id,

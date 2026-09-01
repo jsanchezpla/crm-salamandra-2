@@ -105,6 +105,24 @@ export default function CobrosPage() {
     aplicarImporteCuota(items);
   }
 
+  // La cuota CONOCIDA de la familia elegida (clients.cuota_concept_ids,
+  // 31/08/2026, Rodrigo: «al pulsar el cliente debería rellenarse su cuota»).
+  // Se guarda aparte y se aplica en un efecto porque la ficha y el catálogo
+  // llegan por fetches distintos y en cualquier orden.
+  const [cuotaDeFicha, setCuotaDeFicha] = useState(null);
+  useEffect(() => {
+    if (!cuotaDeFicha || form.modo !== "cuota" || !conceptosCatalogo.length) return;
+    const items = cuotaDeFicha
+      .filter((id) => conceptosCatalogo.some((c) => String(c.id) === String(id)))
+      .map((id) => ({ id: String(id), inicio: "" }));
+    if (!items.length) return;
+    setLineasCuota(items);
+    aplicarImporteCuota(items);
+    // Se aplica UNA vez por familia elegida: quitarla del estado deja a Rosa
+    // retocar la composición sin que el efecto se la vuelva a pisar.
+    setCuotaDeFicha(null);
+  }, [cuotaDeFicha, conceptosCatalogo, form.modo]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [filterMethod, setFilterMethod] = useState("");
@@ -257,6 +275,9 @@ export default function CobrosPage() {
           // concepto: solo cuando la cuota es de UN concepto (una compuesta no
           // se puede partir por terapia).
           conceptId: !porFactura && conceptosElegidos.length === 1 ? conceptosElegidos[0].c.id : null,
+          // La composición entera, para que la ficha APRENDA su cuota: lo que
+          // se le acaba de cobrar es lo que se le rellenará el mes que viene.
+          conceptIds: !porFactura && conceptosElegidos.length ? conceptosElegidos.map(({ c }) => c.id) : null,
         }),
       });
       const json = await res.json();
@@ -566,10 +587,18 @@ export default function CobrosPage() {
 
               {form.modo === "cuota" && (
                 <>
-                  <FormRow label="Cliente *">
+                  <FormRow label="Cliente o paciente *">
+                    {/* fuente billing: Rosa y Olga cobran sin el módulo de
+                        fichas — /api/billing/fichas abre con `billing` y
+                        busca también por el nombre del NIÑO (31/08/2026). */}
                     <SelectorCliente
+                      fuente="billing"
                       value={form.clientId}
                       onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
+                      onFicha={(ficha) => {
+                        const ids = Array.isArray(ficha?.cuotaConceptIds) ? ficha.cuotaConceptIds : [];
+                        setCuotaDeFicha(ids.length ? ids : null);
+                      }}
                       className={inputCls}
                       opcionesFijas={[{ value: "", label: "Selecciona cliente..." }]}
                     />
