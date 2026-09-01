@@ -112,15 +112,16 @@ export default function IncidenciasPage() {
             </button>
           ))}
         </div>
-        {/* Cada opción lleva el filtro escrito («Registrada por X»,
-            «Responsable: X»): los dos desplegables listan a la misma gente y,
-            cerrados, un nombre a secas no diría cuál de los dos está puesto. */}
+        {/* Cada persona sale con su NOMBRE a secas (01/09/2026, Rodrigo):
+            repetir «Registrada por X» / «Responsable: X» en cada línea de los
+            dos desplegables era ruido. Cuál es cuál lo dice la opción neutra
+            de cada uno, que es la que se ve mientras no hay filtro puesto. */}
         <div className="sm:ml-auto flex flex-wrap gap-2">
-          <Select value={registroId} onChange={setRegistroId}
-            options={[{ value: "", label: "Registrada por cualquiera" }, ...(data?.therapists ?? []).map((t) => ({ value: t.id, label: `Registrada por ${t.name}` }))]}
+          <Select value={registroId} onChange={setRegistroId} aria-label="Filtrar por quién registró la incidencia"
+            options={[{ value: "", label: "Registrada por cualquiera" }, ...(data?.therapists ?? []).map((t) => ({ value: t.id, label: t.name }))]}
             className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer" />
-          <Select value={responsableId} onChange={setResponsableId}
-            options={[{ value: "", label: "Cualquier responsable" }, ...(data?.therapists ?? []).map((t) => ({ value: t.id, label: `Responsable: ${t.name}` }))]}
+          <Select value={responsableId} onChange={setResponsableId} aria-label="Filtrar por responsable"
+            options={[{ value: "", label: "Cualquier responsable" }, ...(data?.therapists ?? []).map((t) => ({ value: t.id, label: t.name }))]}
             className="text-xs border border-neutral-200 rounded-lg px-3 py-2 bg-white hover:border-neutral-300 cursor-pointer" />
           <Select value={category} onChange={setCategory}
             options={[{ value: "", label: "Todas las categorías" }, ...INCIDENCIA_CATEGORIES.map((c) => ({ value: c.key, label: c.label }))]}
