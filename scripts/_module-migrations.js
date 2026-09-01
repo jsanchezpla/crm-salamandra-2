@@ -203,6 +203,27 @@ export const CORE = [
   // de tabla `documents`; la FK a `incidencias` solo donde esa tabla existe.
   "migrate-documents-incidencia-link",
 
+  // El documento que HAY QUE LEER y el bloqueo al que va aparejado
+  // (`documents.team_block_id` + tabla `document_reads`, 01/09/2026, Rodrigo).
+  // CORE por el mismo criterio que su hermana de aquí arriba: la columna vive
+  // en `documents` y el MODELO Document la declara para TODOS los tenants, así
+  // que sin ella cualquier lectura del archivo central da 42703 — tenga el
+  // cliente Citas o no. La tabla va con ella y por el mismo conjunto: el modelo
+  // DocumentRead también está registrado para todos y la portada lo consulta en
+  // cada carga. Aditiva y por existencia de tabla `documents`; las FK a
+  // `team_blocks` (SET NULL) y a `team_members` (CASCADE), solo donde existen.
+  "migrate-documentos-lecturas",
+
+  // Con quién está compartida una carpeta del archivo (tabla
+  // `document_folder_members`, 01/09/2026, Rodrigo: «un selector de equipo»).
+  // CORE por el mismo criterio que la de arriba: el modelo
+  // `DocumentFolderMember` está registrado para TODOS los tenants y el archivo
+  // lo consulta en cada carga para saber qué carpetas ve quien mira. NO toca
+  // `document_folders.visibility` —que es un ENUM de Postgres— a propósito.
+  // Por existencia de tabla `document_folders`; la FK a `team_members`, solo
+  // donde esa tabla existe.
+  "migrate-carpetas-compartidas",
+
   // Alinea el ON DELETE de las cuatro FKs de `team_members` que decían cosas
   // distintas en cada cliente (26/08/2026). CORE porque el destrozo no depende
   // del módulo sino de CÓMO NACIÓ el schema: el alta lanza `sync()` antes que
@@ -365,6 +386,12 @@ export const MODULES = {
     // de Citas y el modelo declara `taller_id` para todos: un centro con Citas
     // y sin Clínica se quedaría sin la columna. VA ANTES del despliegue.
     "migrate-citas-bloqueo-taller",
+    // El ACTA de una reunión de equipo (01/09/2026): tres columnas más en
+    // `team_blocks` —el acta escrita, de qué texto salió y cuándo—. Mismo aviso
+    // que sus dos vecinas: el modelo `TeamBlock` las declara para todos, así
+    // que sin ellas CUALQUIER lectura de bloqueos da 42703. VA ANTES del
+    // despliegue. El porqué del sitio, en `lib/reuniones/acta.js`.
+    "migrate-reuniones-acta",
   ],
 
   calendar: ["migrate-calendar-citas-fks"],
@@ -387,6 +414,12 @@ export const MODULES = {
     // tabla `patient_therapists`: `main_therapist_id` se queda y sigue siendo el
     // de referencia, así que no hay nada que rellenar para que funcione.
     "migrate-patients-terapeutas",
+    // De qué CITA es un registro de sesión (01/09/2026): `clinic_sessions.
+    // booking_id`. Está en los DOS bloques —aquí y en `clinica`— porque los
+    // endpoints de sesiones abren con «clinica O pacientes» y el MODELO
+    // declara la columna: a un tenant con `pacientes` suelto le reventaría
+    // igual con 42703. VA ANTES del despliegue.
+    "migrate-clinica-sesion-de-cita",
   ],
 
   clinica: [
@@ -442,6 +475,11 @@ export const MODULES = {
     // MODELO las declara, así que sin esta migración el primer SELECT de
     // /pacientes/[id] revienta con 42703 en el schema que no las tenga.
     "migrate-clinica-registro-enviado",
+    // Una cita, un registro (01/09/2026, Aumenta): `clinic_sessions.booking_id`
+    // + su índice. El MODELO ClinicSession la declara, así que sin esta
+    // migración el primer SELECT de /pacientes/[id] revienta con 42703 en el
+    // schema que no la tenga. VA ANTES del despliegue.
+    "migrate-clinica-sesion-de-cita",
   ],
 
   // Control horario. Depende de `team_members`, que crea el módulo Equipo: la

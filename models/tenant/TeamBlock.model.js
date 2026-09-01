@@ -107,6 +107,40 @@ export function defineTeamBlock(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      /**
+       * EL ACTA de la reunión (01/09/2026, Rodrigo): «una plantilla para actas
+       * de reunión para que las haga directamente el CRM a través de un audio o
+       * unas notas, como los registros de sesión».
+       *
+       * Va aquí y no en una tabla aparte porque un acta es de UNA reunión y una
+       * reunión ya es esta fila: uno a uno, sin segunda acta posible. El porqué
+       * entero y la forma del JSONB, en `lib/reuniones/acta.js`.
+       *
+       * Mismo contenido que el `content_sections` de una sesión clínica: la
+       * foto de apartados con los que se escribió más un valor por clave. Las
+       * tres son nullable y así nacen — la inmensa mayoría de los bloqueos no
+       * son reuniones, y un bloqueo sin acta se comporta como siempre.
+       */
+      actaSections: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        field: "acta_sections",
+      },
+      /**
+       * De qué texto salió el acta: la transcripción del audio y/o las notas
+       * pegadas. Se guarda porque el acta es un RESUMEN, y cuando alguien
+       * discute un acuerdo tres semanas después la pregunta es «¿eso se dijo?».
+       */
+      actaTranscript: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: "acta_transcript",
+      },
+      actaUpdatedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "acta_updated_at",
+      },
       createdById: {
         type: DataTypes.UUID,
         allowNull: true,
