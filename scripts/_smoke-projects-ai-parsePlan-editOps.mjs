@@ -141,9 +141,41 @@ describe("normalizePlan: lo que no es un plan lanza ValidationError con el mensa
     lanzaPlanInvalido(() => normalizePlan({ name: 42 }));
   });
 
-  it("texto ANTES o DESPUÉS del JSON (aunque lleve vallas) no se rescata: se pide JSON y solo JSON", () => {
-    lanzaPlanInvalido(() => normalizePlan('Aquí va: {"name":"X"}'));
-    lanzaPlanInvalido(() => normalizePlan('```json\n{"name":"X"}\n```\nEspero que te sirva.'));
+  it("un texto SIN ningún JSON dentro sigue siendo un plan inválido", () => {
+    lanzaPlanInvalido(() => normalizePlan("Lo siento, no puedo planificar eso."));
+    lanzaPlanInvalido(() => normalizePlan('{"name": esto no cierra'));
+  });
+});
+
+/* ── normalizePlan: el JSON se busca dentro del texto ─────────────────────── */
+
+describe("normalizePlan rescata el JSON aunque el modelo lo envuelva (01/09/2026)", () => {
+  /*
+   * CAMBIO DE CRITERIO. Hasta hoy, una respuesta con una frase delante del JSON
+   * se tiraba entera y el usuario leía «La IA no ha devuelto un plan válido» —
+   * sin que la IA hubiera hecho nada mal: el plan estaba ahí, entero y bien
+   * formado. Era una de las tres formas que tenía la IA de Proyectos de «no
+   * funcionar» (Rodrigo, 01/09/2026).
+   *
+   * Se le sigue PIDIENDO solo JSON, y lo normal es que obedezca. Lo que cambia
+   * es qué se hace cuando no: buscarlo, en vez de tirar el trabajo hecho.
+   */
+  it("con una frase delante", () => {
+    assert.equal(normalizePlan('Aquí va: {"name":"X"}').name, "X");
+  });
+
+  it("con una despedida detrás de la valla", () => {
+    assert.equal(normalizePlan('```json\n{"name":"X"}\n```\nEspero que te sirva.').name, "X");
+  });
+
+  it("con texto por delante y por detrás, sin vallas", () => {
+    assert.equal(normalizePlan('Claro.\n{"name":"X","phases":[]}\n¿Te encaja?').name, "X");
+  });
+
+  it("una llave dentro de una descripción no corta el objeto por la mitad", () => {
+    const plan = normalizePlan('Nota. {"name":"El plan {definitivo}","phases":[{"name":"Fase 1","tasks":[]}]}');
+    assert.equal(plan.name, "El plan {definitivo}");
+    assert.equal(plan.phases.length, 1);
   });
 });
 

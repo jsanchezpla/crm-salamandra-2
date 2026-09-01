@@ -70,7 +70,10 @@ export default function AiEditModal({ projectId, onClose, onApplied }) {
         body: JSON.stringify({ instruction: instruction.trim() }),
       });
       const j = await r.json();
-      if (!r.ok) throw new Error(j?.error || "Error proponiendo cambios");
+      // `j.ok` y no solo `r.ok`: /ai/edit contesta siempre 200 porque la
+      // respuesta empieza a viajar antes de saber cómo acaba (ver
+      // lib/ai/respuestaConLatido.js). El fallo viene dentro del cuerpo.
+      if (!r.ok || j?.ok === false) throw new Error(j?.error || "Error proponiendo cambios");
       setProposal(j?.data ?? null);
       setExcluded(new Set());
       setStep("review");
