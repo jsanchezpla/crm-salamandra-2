@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import Link from "next/link";
 import StatusBadge from "../_components/StatusBadge.jsx";
@@ -88,40 +88,99 @@ export default function CobrosPage() {
     if (!partes.length) return;
     setForm((f) => ({ ...f, amount: String(partesConProrrateo(partes).total) }));
   }
+  // Recomponer a mano vuelve al cálculo por catálogo: si venía un importe
+  // pactado con la familia, deja de mandar (y el aviso de pantalla se va).
   function addConceptoCuota(id) {
     if (!id) return;
     const items = [...lineasCuota, { id, inicio: "" }];
     setLineasCuota(items);
+    setCuotaDeLaFamilia(null);
     aplicarImporteCuota(items);
   }
   function quitarConceptoCuota(idx) {
     const items = lineasCuota.filter((_, i) => i !== idx);
     setLineasCuota(items);
+    setCuotaDeLaFamilia(null);
     aplicarImporteCuota(items);
   }
   function cambiarInicioConcepto(idx, fecha) {
     const items = lineasCuota.map((it, i) => (i === idx ? { ...it, inicio: fecha } : it));
     setLineasCuota(items);
+    setCuotaDeLaFamilia(null);
     aplicarImporteCuota(items);
   }
 
-  // La cuota CONOCIDA de la familia elegida (clients.cuota_concept_ids,
-  // 31/08/2026, Rodrigo: «al pulsar el cliente debería rellenarse su cuota»).
-  // Se guarda aparte y se aplica en un efecto porque la ficha y el catálogo
-  // llegan por fetches distintos y en cualquier orden.
-  const [cuotaDeFicha, setCuotaDeFicha] = useState(null);
+  // ── LA CUOTA DE LA FAMILIA ELEGIDA ─────────────────────────────────────────
+  //
+  // Al cambiar de familia la composición se BORRA SIEMPRE y se vuelve a montar
+  // desde cero (01/09/2026, Rodrigo: «cuando cambio de paciente se queda fija
+  // la cuota del paciente anterior»). El fallo era salir por la puerta de atrás
+  // —familia sin cuota conocida, o con conceptos que ya no existen— sin haber
+  // limpiado antes: en pantalla se quedaban los conceptos Y EL IMPORTE del
+  // paciente anterior, y ese importe es el que se cobra. Con 827 de las 1.087
+  // fichas de Aumenta sin cuota conocida, tocaba a cada paso.
+  //
+  // De dónde sale, por este orden:
+  //   1. Sus cuotas ASIGNADAS vigentes (`billing_cuotas`) — TODAS, no una: una
+  //      familia puede tener una cuota por hijo, y entonces paga las dos. Es la
+  //      única fuente que sabe el importe PACTADO con esa familia, que manda
+  //      sobre la tarifa del catálogo.
+  //   2. Si no tiene ninguna asignada, la aprendida del último cobro
+  //      (`clients.cuota_concept_ids`), que es lo único que hay en las familias
+  //      a las que nadie ha asignado cuota todavía.
+  //
+  // Se preguntan aquí —y no por `onFicha` del selector— para que no haya
+  // carrera: la respuesta que llega tarde de una familia que ya no está
+  // elegida se descarta por el turno. La aprendida solo se pide si NO tiene
+  // cuota asignada, que es cuando de verdad se usa.
+  const [cuotaDeLaFamilia, setCuotaDeLaFamilia] = useState(null); // { n, pactado }
+  const turnoCuota = useRef(0);
   useEffect(() => {
-    if (!cuotaDeFicha || form.modo !== "cuota" || !conceptosCatalogo.length) return;
-    const items = cuotaDeFicha
-      .filter((id) => conceptosCatalogo.some((c) => String(c.id) === String(id)))
-      .map((id) => ({ id: String(id), inicio: "" }));
-    if (!items.length) return;
-    setLineasCuota(items);
-    aplicarImporteCuota(items);
-    // Se aplica UNA vez por familia elegida: quitarla del estado deja a Rosa
-    // retocar la composición sin que el efecto se la vuelva a pisar.
-    setCuotaDeFicha(null);
-  }, [cuotaDeFicha, conceptosCatalogo, form.modo]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (form.modo !== "cuota") return;
+    const turno = ++turnoCuota.current;
+    // Primero limpiar, siempre: más vale el importe en blanco que el de otra familia.
+    setLineasCuota([]);
+    setCuotaDeLaFamilia(null);
+    setForm((f) => (f.amount === "" ? f : { ...f, amount: "" }));
+    if (!form.clientId || !conceptosCatalogo.length) return;
+
+    const pedir = (url) =>
+      fetch(url, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    (async () => {
+      const jCuotas = await pedir(`/api/billing/cuotas?clientId=${encodeURIComponent(form.clientId)}`);
+      if (turno !== turnoCuota.current) return; // ya hay otra familia elegida
+      const cuotas = jCuotas?.data?.cuotas ?? [];
+      // Sin deduplicar: dos hermanos con la misma terapia son dos líneas.
+      let ids = cuotas.flatMap((c) => (Array.isArray(c.conceptIds) ? c.conceptIds : []));
+      // El respaldo es para quien NO tiene cuota asignada. Una cuota asignada
+      // con importe pero sin conceptos manda igual: rellenarla con lo que se
+      // le cobró hace meses sería contar otra historia.
+      if (!cuotas.length) {
+        const jFicha = await pedir(`/api/billing/fichas?id=${encodeURIComponent(form.clientId)}`);
+        if (turno !== turnoCuota.current) return;
+        ids = Array.isArray(jFicha?.data?.cuotaConceptIds) ? jFicha.data.cuotaConceptIds : [];
+      }
+
+      const items = ids
+        .filter((id) => conceptosCatalogo.some((c) => String(c.id) === String(id)))
+        .map((id) => ({ id: String(id), inicio: "" }));
+      setLineasCuota(items);
+
+      // El importe pactado (`amount` escrito en la cuota) manda sobre la suma
+      // del catálogo: es el precio acordado con esa familia. Solo se toma si
+      // TODAS sus cuotas lo tienen escrito; mezclado con las que van «a lo que
+      // digan sus conceptos» no se puede sumar sin mentir, y ahí manda el
+      // catálogo — que es lo que el usuario ve línea a línea.
+      const pactadas = cuotas.filter((c) => c.amount !== null && c.amount !== undefined && c.amount !== "");
+      const todasPactadas = cuotas.length > 0 && pactadas.length === cuotas.length;
+      const pactado = todasPactadas
+        ? Math.round(pactadas.reduce((s, c) => s + (Number(c.amount) || 0), 0) * 100) / 100
+        : null;
+      if (pactado !== null) setForm((f) => ({ ...f, amount: String(pactado) }));
+      else aplicarImporteCuota(items);
+      if (cuotas.length) setCuotaDeLaFamilia({ n: cuotas.length, pactado });
+    })();
+  }, [form.clientId, form.modo, conceptosCatalogo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -591,14 +650,12 @@ export default function CobrosPage() {
                     {/* fuente billing: Rosa y Olga cobran sin el módulo de
                         fichas — /api/billing/fichas abre con `billing` y
                         busca también por el nombre del NIÑO (31/08/2026). */}
+                    {/* La cuota se rellena en el efecto de arriba, mirando el
+                        clientId: por `onFicha` llegaba tarde y descolocada. */}
                     <SelectorCliente
                       fuente="billing"
                       value={form.clientId}
                       onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
-                      onFicha={(ficha) => {
-                        const ids = Array.isArray(ficha?.cuotaConceptIds) ? ficha.cuotaConceptIds : [];
-                        setCuotaDeFicha(ids.length ? ids : null);
-                      }}
                       className={inputCls}
                       opcionesFijas={[{ value: "", label: "Selecciona cliente..." }]}
                     />
@@ -658,6 +715,27 @@ export default function CobrosPage() {
                         )}
                       </div>
                     </FormRow>
+                  )}
+                  {/* De dónde ha salido lo que se acaba de rellenar. Callarlo era
+                      lo que dejaba dudar de si salían TODAS sus cuotas o solo una. */}
+                  {form.clientId && conceptosCatalogo.length > 0 && (
+                    <p className="text-[10px] text-neutral-400 -mt-1">
+                      {cuotaDeLaFamilia ? (
+                        <>
+                          {cuotaDeLaFamilia.n === 1
+                            ? "Tiene 1 cuota asignada"
+                            : `Tiene ${cuotaDeLaFamilia.n} cuotas asignadas y se han sumado todas`}
+                          {cuotaDeLaFamilia.pactado !== null
+                            ? <> · importe <strong className="text-neutral-600">pactado con la familia</strong>, no la tarifa del catálogo.</>
+                            : "."}{" "}
+                          <Link href="/facturacion/cuotas" className="underline hover:text-neutral-600">Ver sus cuotas</Link>
+                        </>
+                      ) : conceptosElegidos.length ? (
+                        "Sin cuota asignada: se ha rellenado con lo último que se le cobró."
+                      ) : (
+                        "Esta familia no tiene cuota asignada ni cobros anteriores: elige sus conceptos."
+                      )}
+                    </p>
                   )}
                   {cuentaCuota.hayProrrateo && (
                     <p className="text-[10px] text-neutral-400 -mt-1">
