@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import HelpTooltip from "../../../../components/ui/HelpTooltip.jsx";
 import StatusBadge, { INVOICE_STATUS_LABELS } from "../_components/StatusBadge.jsx";
@@ -14,6 +14,7 @@ import { ivaPorDefecto } from "../../../../lib/billing/ivaPorDefecto.js";
 import PatientReparto from "@/components/billing/PatientReparto.jsx";
 import { ordenarConSugeridos } from "../../../../lib/billing/empleadosSugeridos.js";
 import { lineaDesdeConcepto } from "../../../../lib/billing/conceptosCatalogo.js";
+import { cuotasQueEntran, conceptosDeCuotas, huellaLineas, sePuedeRellenar } from "../../../../lib/billing/cuotaParaRellenar.js";
 import { prorrateoDeCuota, rotuloDeProrrateo } from "../../../../lib/billing/prorrateo.js";
 import { haySocios } from "../../../../lib/billing/socios.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
@@ -203,14 +204,36 @@ export default function FacturasPage() {
    *
    * Manda la cuota ASIGNADA (`billing_cuotas`, la que se programa cada mes) y,
    * si esa familia no tiene, la APRENDIDA de la ficha
-   * (`clients.cuota_concept_ids`: lo último que se le cobró). Con paciente
-   * elegido gana la cuota DE ESE paciente — dos hermanos pagan cosas distintas.
+   * (`clients.cuota_concept_ids`: lo último que se le cobró).
    *
-   * Solo se rellena solo cuando las líneas siguen EN BLANCO: pisar lo que
-   * alguien acaba de escribir sería peor que no rellenar nada. Para lo demás
-   * está el botón «Poner su cuota».
+   * ── CUÁNTAS CUOTAS ENTRAN (01/09/2026) ────────────────────────────────────
+   * Con paciente elegido, las DE ESE paciente: dos hermanos pagan cosas
+   * distintas y la factura es de uno. Sin paciente, TODAS las de la familia,
+   * porque la factura es de la familia y la familia paga las dos.
+   *
+   * Esto era `cuotas[0]`: la familia con dos hijos facturaba solo al primero,
+   * en silencio. Y no bastaba con mirar el paciente, porque una cuota puede no
+   * tener paciente asignado —las 260 de Aumenta vienen así del volcado—: si
+   * ninguna casa con el elegido, entran todas las de la familia, que es lo que
+   * de verdad se sabe.
+   *
+   * ── CUÁNDO SE PISAN LAS LÍNEAS ────────────────────────────────────────────
+   * Se rellena cuando las líneas están EN BLANCO o cuando son EXACTAMENTE las
+   * que puso esta misma cuota (nadie las ha tocado). Lo escrito a mano no se
+   * pisa nunca; para eso está el botón «Poner su cuota».
+   *
+   * La segunda mitad es lo que arregla cambiar de familia: antes, las líneas
+   * puestas para la familia anterior ya no estaban «en blanco», así que se
+   * quedaban tal cual y la nueva factura salía con los conceptos de otra.
    */
-  const [cuotaSugerida, setCuotaSugerida] = useState(null); // { lineas, origen }
+  const [cuotaSugerida, setCuotaSugerida] = useState(null); // { lineas, origen, n, porPaciente }
+
+  // Quién decide todo esto: `lib/billing/cuotaParaRellenar.js`, con su prueba
+  // (`_smoke-cuota-para-rellenar.mjs`). `lineasRef` tiene las líneas frescas
+  // sin ser dependencia del efecto (si no, se recalcularía a cada tecla).
+  const lineasRef = useRef(form.lines);
+  lineasRef.current = form.lines;
+  const puestoPorLaCuota = useRef(null); // huella de lo último que rellenó la cuota
 
   const lineasDesdeConceptos = useCallback(
     (ids) => (Array.isArray(ids) ? ids : [])
@@ -229,19 +252,45 @@ export default function FacturasPage() {
       .then((j) => {
         if (cancelado) return;
         const cuotas = j?.data?.cuotas ?? [];
-        const delPaciente = form.patientId
-          ? cuotas.find((c) => String(c.patientId ?? "") === String(form.patientId))
-          : null;
-        const elegida = delPaciente ?? cuotas[0] ?? null;
-        const ids = elegida ? elegida.conceptIds : clienteElegido?.cuotaConceptIds;
+        const usadas = cuotasQueEntran(cuotas, form.patientId);
+        const ids = usadas.length ? conceptosDeCuotas(usadas) : clienteElegido?.cuotaConceptIds;
         const lineas = lineasDesdeConceptos(ids);
-        if (!lineas.length) { setCuotaSugerida(null); return; }
-        setCuotaSugerida({ lineas, origen: elegida ? "cuota" : "aprendida" });
-        setForm((f) => (lineasEnBlanco(f.lines) ? { ...f, lines: lineas } : f));
+
+        const actuales = lineasRef.current;
+        const reemplazable = sePuedeRellenar({
+          lineas: actuales,
+          enBlanco: lineasEnBlanco(actuales),
+          huellaPuesta: puestoPorLaCuota.current,
+        });
+
+        if (!lineas.length) {
+          setCuotaSugerida(null);
+          // La familia nueva no tiene cuota: si lo que hay puesto lo puso la
+          // cuota de la anterior, se quita. Facturar a esta familia los
+          // conceptos de otra es peor que no rellenar nada.
+          if (reemplazable && !lineasEnBlanco(actuales)) {
+            puestoPorLaCuota.current = null;
+            setForm((f) => ({ ...f, lines: [{ ...EMPTY_LINE, vatRate: ivaPorDefecto(settings) }] }));
+          }
+          return;
+        }
+
+        setCuotaSugerida({
+          lineas,
+          origen: usadas.length ? "cuota" : "aprendida",
+          n: usadas.length,
+          // Si se ha filtrado por el paciente, decirlo: explica por qué no
+          // salen los conceptos de su hermano.
+          porPaciente: Boolean(form.patientId) && usadas.length < cuotas.length,
+        });
+        if (reemplazable) {
+          puestoPorLaCuota.current = huellaLineas(lineas);
+          setForm((f) => ({ ...f, lines: lineas.map((l) => ({ ...l })) }));
+        }
       })
       .catch(() => {});
     return () => { cancelado = true; };
-  }, [openInvoice, editing, form.clientId, form.patientId, conceptosCatalogo, clienteElegido, lineasDesdeConceptos]);
+  }, [openInvoice, editing, form.clientId, form.patientId, conceptosCatalogo, clienteElegido, lineasDesdeConceptos, settings]);
 
   // Debounce búsqueda
   useEffect(() => {
@@ -913,7 +962,12 @@ export default function FacturasPage() {
                         {!openInvoice && cuotaSugerida && (
                           <button
                             type="button"
-                            onClick={() => setForm((f) => ({ ...f, lines: cuotaSugerida.lineas.map((l) => ({ ...l })) }))}
+                            onClick={() => {
+                              // Puestas por la cuota: si luego se cambia de
+                              // familia sin haberlas tocado, se reemplazan solas.
+                              puestoPorLaCuota.current = huellaLineas(cuotaSugerida.lineas);
+                              setForm((f) => ({ ...f, lines: cuotaSugerida.lineas.map((l) => ({ ...l })) }));
+                            }}
                             className="text-xs font-semibold text-neutral-500 hover:text-neutral-800 hover:underline"
                             title={cuotaSugerida.origen === "cuota"
                               ? "Los conceptos de la cuota mensual de esta familia"
@@ -927,9 +981,13 @@ export default function FacturasPage() {
                     </div>
                     {!openInvoice && cuotaSugerida && (
                       <p className="text-[11px] text-neutral-400 mb-2">
-                        {cuotaSugerida.origen === "cuota"
-                          ? "Los conceptos vienen de la cuota mensual de esta familia."
-                          : "Los conceptos vienen del último cobro de cuota de esta familia."}
+                        {cuotaSugerida.origen !== "cuota"
+                          ? "Los conceptos vienen del último cobro de cuota de esta familia."
+                          : cuotaSugerida.porPaciente
+                            ? `Los conceptos vienen de la cuota del paciente elegido${cuotaSugerida.n > 1 ? ` (${cuotaSugerida.n} cuotas suyas)` : ""}.`
+                            : cuotaSugerida.n > 1
+                              ? `Los conceptos vienen de las ${cuotaSugerida.n} cuotas de esta familia: están todas. Elige el paciente para facturar solo la suya.`
+                              : "Los conceptos vienen de la cuota mensual de esta familia."}
                       </p>
                     )}
                     <div className="space-y-2">
