@@ -181,6 +181,8 @@ async function main() {
   const abiertaDe = new Map(inscripciones.filter((i) => !i.left_at).map((i) => [i.patient_id, i]));
 
   const sinCasar = [];
+  // Los grupos que ESTA pasada crea o usa: el cajón nunca puede ser uno de ellos.
+  const gruposUsados = new Set();
   const dudosos = [];
   const reclamados = new Set();
   let movidos = 0;
@@ -210,6 +212,8 @@ async function main() {
         grupoId = creado[0].id;
       }
     }
+
+    if (grupoId) gruposUsados.add(grupoId);
 
     // Sus miembros
     for (const nombre of g.miembros ?? []) {
@@ -253,10 +257,17 @@ async function main() {
   }
 
   // ── El cajón ─────────────────────────────────────────────────────────────
-  const viejos = await q(
+  /*
+   * ⚠️ El cajón NO puede ser un grupo de esta pasada (fallo del 01/09/2026, la
+   * primera vez que se usó con un taller NUEVO): en «Mente Activa» el único
+   * grupo se llamaba «Grupo 1» —porque así lo pedía su JSON— y esto lo
+   * renombró a «Por revisar» con sus dos pacientes dentro. El cajón es el
+   * grupo huérfano que dejó la migración, y ese nunca sale en las listas.
+   */
+  const viejos = (await q(
     `SELECT id FROM "${schema}"."taller_grupos" WHERE taller_id = $1 AND name = 'Grupo 1'`,
     [taller.id]
-  );
+  )).filter((g) => !gruposUsados.has(g.id));
   let sobran = 0;
   if (viejos.length) {
     const enElViejo = inscripciones.filter((i) => !i.left_at && i.grupo_id === viejos[0].id);
