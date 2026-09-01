@@ -35,18 +35,22 @@ async function main() {
   }
 
   for (const schema of schemas) {
-    // El enum vive en el schema del tenant, como el resto de los suyos.
-    await s.query(
-      `DO $$ BEGIN
-         CREATE TYPE "${schema}"."enum_cash_movements_direction" AS ENUM ('in', 'out');
-       EXCEPTION WHEN duplicate_object THEN NULL; END $$;`
-    );
+    /*
+     * `direction` es VARCHAR con CHECK y NO un enum de Postgres (01/09/2026,
+     * corregido el mismo día): un tipo enum es PROPIEDAD del schema, y la
+     * restauración de las demos abandona cuando la foto dorada tiene tipos
+     * propios — lo canta el chequeo de `deploy.sh`. Lo que se vería por fuera
+     * es una demo sucia con lo que dejó el visitante anterior.
+     *
+     * Mismo patrón que `taller_sesiones.status`: el modelo lo declara ENUM de
+     * Sequelize (valida en Node) y esto es el cinturón por debajo.
+     */
     await s.query(
       `CREATE TABLE IF NOT EXISTS "${schema}"."cash_movements" (
          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
          cash_point_id UUID NOT NULL,
          date DATE NOT NULL,
-         direction "${schema}"."enum_cash_movements_direction" NOT NULL,
+         direction VARCHAR(3) NOT NULL,
          amount NUMERIC(10,2) NOT NULL,
          concept VARCHAR(200) NOT NULL,
          notes TEXT,
@@ -55,6 +59,32 @@ async function main() {
          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
        )`
     );
+    /*
+     * Y si la tabla YA existía con el enum (los schemas que corrieron la
+     * primera versión de esta migración, producción incluida), se convierte
+     * aquí y se tira el tipo. Idempotente: sin enum, las tres consultas no
+     * hacen nada. La tabla está vacía en ese momento, pero el USING convierte
+     * igual si algo hubiera.
+     */
+    await s.query(
+      `DO $$ BEGIN
+         IF EXISTS (
+           SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+           WHERE t.typname = 'enum_cash_movements_direction' AND n.nspname = '${schema}'
+         ) THEN
+           ALTER TABLE "${schema}"."cash_movements"
+             ALTER COLUMN direction TYPE VARCHAR(3) USING direction::text;
+           DROP TYPE "${schema}"."enum_cash_movements_direction";
+         END IF;
+       END $$;`
+    );
+    await s.query(
+      `DO $$ BEGIN
+         ALTER TABLE "${schema}"."cash_movements"
+           ADD CONSTRAINT cash_movements_direction_chk CHECK (direction IN ('in', 'out'));
+       EXCEPTION WHEN duplicate_object THEN NULL; END $$;`
+    );
+
     await s.query(`CREATE INDEX IF NOT EXISTS cash_movements_point_date_idx ON "${schema}"."cash_movements" (cash_point_id, date)`);
     await s.query(`CREATE INDEX IF NOT EXISTS cash_movements_date_idx ON "${schema}"."cash_movements" (date)`);
 
