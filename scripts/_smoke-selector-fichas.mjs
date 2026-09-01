@@ -203,6 +203,25 @@ test("la incidencia tampoco elige paciente sobre una lista descargada (31/08/202
   );
 });
 
+test("el informe nuevo tampoco elige paciente sobre una lista descargada (01/09/2026)", () => {
+  const pantalla = readFileSync(
+    new URL("../app/(dashboard)/clinica/informes/page.jsx", import.meta.url),
+    "utf8"
+  );
+  assert.ok(
+    pantalla.includes("<SelectorPaciente"),
+    "«Nuevo informe» elige paciente: tiene que preguntar al servidor"
+  );
+  assert.ok(
+    !/fetch\("\/api\/pacientes"/.test(pantalla),
+    "bajarse la lista entera deja fuera al 75% (300 de 1.178 en Aumenta) y no salir se lee igual que no existir"
+  );
+  assert.ok(
+    !/\.\.\.patients\.map/.test(pantalla),
+    "el desplegable viejo se montaba sobre la lista cortada"
+  );
+});
+
 test("el alta de cita ya no elige sobre una lista descargada", () => {
   const drawer = readFileSync(
     new URL("../modules/default/citas/NuevaCitaDrawer.jsx", import.meta.url),
