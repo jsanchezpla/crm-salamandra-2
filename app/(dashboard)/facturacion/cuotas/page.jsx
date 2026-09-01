@@ -20,6 +20,7 @@ import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import Select from "@/components/ui/Select.jsx";
 import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
+import { cuotaDeBaja } from "../../../../lib/billing/cuotas.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -52,9 +53,13 @@ export default function CuotasPage() {
   const [errorMsg, setErrorMsg] = useState(null);
   const [okMsg, setOkMsg] = useState(null);
 
-  const [verBajas, setVerBajas] = useState(false);
   const [filtroMetodo, setFiltroMetodo] = useState("");
+  // Filtrar por LA CUOTA, no solo por quién la paga (01/09/2026, Rodrigo:
+  // «necesito poder filtrar por las mismas cuotas»): elegir una enseña sus
+  // miembros, y el alta desde ahí nace con esa cuota puesta.
+  const [filtroConcepto, setFiltroConcepto] = useState("");
   const [busca, setBusca] = useState("");
+  const [buscaBajas, setBuscaBajas] = useState("");
 
   const [showAlta, setShowAlta] = useState(false);
   const [editando, setEditando] = useState(null); // cuota que se edita
@@ -65,7 +70,9 @@ export default function CuotasPage() {
     setErrorMsg(null);
     try {
       const qs = new URLSearchParams();
-      if (verBajas) qs.set("todas", "1");
+      // Siempre TODAS: las de baja no se esconden tras un interruptor, viven
+      // en su propio cuadro abajo, con buscador y reintegro (01/09/2026).
+      qs.set("todas", "1");
       if (filtroMetodo) qs.set("metodo", filtroMetodo);
       const r = await fetch(`/api/billing/cuotas?${qs}`, { cache: "no-store" });
       const j = await r.json();
@@ -76,7 +83,7 @@ export default function CuotasPage() {
     } finally {
       setLoading(false);
     }
-  }, [verBajas, filtroMetodo]);
+  }, [filtroMetodo]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -100,14 +107,38 @@ export default function CuotasPage() {
     [porId]
   );
 
+  const nombreDe = (c) =>
+    `${c.client?.fiscalName || c.client?.name || ""} ${c.patient ? `${c.patient.firstName} ${c.patient.lastName}` : ""}`.toLowerCase();
+  const conEsaCuota = useCallback(
+    (c) => !filtroConcepto || (Array.isArray(c.conceptIds) && c.conceptIds.map(String).includes(filtroConcepto)),
+    [filtroConcepto]
+  );
+
+  // Dos cuadros: las vivas arriba y las BAJAS abajo (de baja = apagada o con
+  // la fecha de fin ya pasada — los «de enero a marzo» caducan solos y caen
+  // aquí sin salir del grupo, listos para reintegrarse).
+  const hoy = hoyIso();
   const visibles = useMemo(() => {
     const t = busca.trim().toLowerCase();
-    if (!t) return cuotas;
-    return cuotas.filter((c) => {
-      const nombre = `${c.client?.fiscalName || c.client?.name || ""} ${c.patient ? `${c.patient.firstName} ${c.patient.lastName}` : ""}`;
-      return nombre.toLowerCase().includes(t);
-    });
-  }, [cuotas, busca]);
+    return cuotas.filter((c) => !cuotaDeBaja(c, hoy) && conEsaCuota(c) && (!t || nombreDe(c).includes(t)));
+  }, [cuotas, busca, conEsaCuota, hoy]);
+
+  const bajas = useMemo(() => {
+    const t = buscaBajas.trim().toLowerCase();
+    return cuotas.filter((c) => cuotaDeBaja(c, hoy) && conEsaCuota(c) && (!t || nombreDe(c).includes(t)));
+  }, [cuotas, buscaBajas, conEsaCuota, hoy]);
+
+  // Cuántos miembros VIVOS tiene cada cuota, para el desplegable del filtro.
+  const miembrosPorConcepto = useMemo(() => {
+    const m = new Map();
+    for (const c of cuotas) {
+      if (cuotaDeBaja(c, hoy)) continue;
+      for (const id of Array.isArray(c.conceptIds) ? c.conceptIds : []) {
+        m.set(String(id), (m.get(String(id)) ?? 0) + 1);
+      }
+    }
+    return m;
+  }, [cuotas, hoy]);
 
   const totalMes = visibles.filter((c) => c.active).reduce((s, c) => s + importeDe(c), 0);
 
@@ -198,15 +229,23 @@ export default function CuotasPage() {
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
         />
         <Select
+          value={filtroConcepto}
+          onChange={setFiltroConcepto}
+          options={[
+            { value: "", label: "Todas las cuotas" },
+            ...conceptos.map((c) => ({
+              value: String(c.id),
+              label: `${c.name}${miembrosPorConcepto.get(String(c.id)) ? ` (${miembrosPorConcepto.get(String(c.id))})` : ""}`,
+            })),
+          ]}
+          className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 max-w-72"
+        />
+        <Select
           value={filtroMetodo}
           onChange={setFiltroMetodo}
           options={[{ value: "", label: "Todos los métodos" }, ...METODOS]}
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200"
         />
-        <label className="flex items-center gap-2 text-xs text-neutral-600">
-          <input type="checkbox" checked={verBajas} onChange={(e) => setVerBajas(e.target.checked)} />
-          Ver también las de baja
-        </label>
       </div>
 
       {errorMsg && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">{errorMsg}</div>}
@@ -280,9 +319,67 @@ export default function CuotasPage() {
         </div>
       </div>
 
+      {/* ── BAJAS (01/09/2026, Rodrigo) ─────────────────────────────────────
+          Quien termina sus meses o se da de baja NO sale del grupo: cae aquí,
+          con su buscador, y un clic lo reintegra. */}
+      <div className="mt-6 bg-white border border-neutral-100 rounded-xl overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-neutral-100 bg-neutral-50/50">
+          <h2 className="text-[11px] font-bold uppercase tracking-wide text-neutral-500">
+            Bajas{bajas.length > 0 ? ` · ${bajas.length}` : ""}
+          </h2>
+          <input
+            value={buscaBajas}
+            onChange={(e) => setBuscaBajas(e.target.value)}
+            placeholder="Buscar una baja para reintegrarla..."
+            className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
+          />
+        </div>
+        {bajas.length === 0 ? (
+          <p className="px-4 py-6 text-xs text-neutral-400">
+            {buscaBajas.trim() ? "Ninguna baja casa con esa búsqueda." : "Nadie de baja. Cuando una cuota termine sus meses o se dé de baja, aparecerá aquí."}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[720px]">
+              <tbody>
+                {bajas.map((c) => {
+                  const nombres = (Array.isArray(c.conceptIds) ? c.conceptIds : [])
+                    .map((id) => porId.get(String(id))?.name)
+                    .filter(Boolean);
+                  return (
+                    <tr key={c.id} className="border-b border-neutral-50 text-neutral-400">
+                      <td className="px-4 py-2.5 text-neutral-600">
+                        <Link href={`/clientes/${c.clientId}`} className="hover:underline">
+                          {c.client?.fiscalName || c.client?.name || "—"}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs">
+                        {c.patient ? `${c.patient.firstName} ${c.patient.lastName}` : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs">
+                        {nombres.length ? nombres.join(" + ") : <span className="italic text-neutral-300">sin conceptos</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs whitespace-nowrap">
+                        desde {fmtDate(c.startDate)}
+                        {c.endDate && <span className="text-rose-400"> · baja {fmtDate(c.endDate)}</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                        <button onClick={() => reactivar(c)} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-800 mr-2">Reintegrar</button>
+                        <button onClick={() => borrar(c)} className="text-[11px] text-rose-400 hover:text-rose-600">Borrar</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {showAlta && (
         <DrawerCuota
           conceptos={conceptos}
+          inicial={filtroConcepto ? { conceptIds: [filtroConcepto] } : null}
           onClose={() => setShowAlta(false)}
           onDone={(msg) => { setShowAlta(false); setOkMsg(msg); cargar(); }}
         />
@@ -310,7 +407,7 @@ export default function CuotasPage() {
  * —conceptos, importe, método, día, fechas— es idéntico, y separarlo en dos
  * formularios era garantizar que dentro de un mes divergieran.
  */
-function DrawerCuota({ conceptos, cuota = null, onClose, onDone }) {
+function DrawerCuota({ conceptos, cuota = null, inicial = null, onClose, onDone }) {
   const editando = !!cuota;
   const [form, setForm] = useState(() =>
     cuota
@@ -323,7 +420,9 @@ function DrawerCuota({ conceptos, cuota = null, onClose, onDone }) {
           endDate: cuota.endDate ? String(cuota.endDate).slice(0, 10) : "",
           notes: cuota.notes ?? "",
         }
-      : CUOTA_VACIA()
+      // Desde el filtro de una cuota, el alta nace con ESA cuota puesta:
+      // «añadir un paciente al grupo» es abrir y elegirlo.
+      : { ...CUOTA_VACIA(), ...(inicial ?? {}) }
   );
   const [destinatarios, setDestinatarios] = useState([]);
   const [guardando, setGuardando] = useState(false);

@@ -42,6 +42,9 @@ import {
   planDeCuotasDelMes,
   limpiarCuota,
   metodosValidos,
+  mesVigente,
+  debeElMes,
+  cuotaDeBaja,
 } from "../lib/billing/cuotas.js";
 import { prorrateoDeCuota } from "../lib/billing/prorrateo.js";
 
@@ -311,5 +314,49 @@ describe("lo que acepta el alta de una cuota", () => {
   it("los conceptos repetidos se colapsan y los ids falsos se caen", () => {
     const { valores } = limpiarCuota({ ...base, conceptIds: [LOGO, LOGO, "no-soy-un-uuid"] });
     assert.deepEqual(valores.conceptIds, [LOGO]);
+  });
+});
+
+// ── La morosidad salta a día 1, y la vigencia manda (01/09/2026, Rodrigo) ──
+
+describe("mesVigente: el mes de HOY en Madrid, no en UTC", () => {
+  it("la noche del 31 en UTC ya es día 1 en Madrid", () => {
+    // 31/12 a las 23:30 UTC = 01/01 a las 00:30 en Madrid (invierno, UTC+1).
+    assert.equal(mesVigente(new Date("2026-12-31T23:30:00Z")), "2027-01");
+  });
+  it("a media tarde da el mes que es", () => {
+    assert.equal(mesVigente(new Date("2026-09-15T16:00:00Z")), "2026-09");
+  });
+});
+
+describe("debeElMes: la familia de enero a marzo solo debe enero, febrero y marzo", () => {
+  const cuotas = [{ startDate: "2027-01-01", endDate: "2027-03-31", active: true }];
+  it("dentro del tramo debe", () => {
+    assert.equal(debeElMes(cuotas, "2027-01"), true);
+    assert.equal(debeElMes(cuotas, "2027-03"), true);
+  });
+  it("antes y después, no", () => {
+    assert.equal(debeElMes(cuotas, "2026-12"), false);
+    assert.equal(debeElMes(cuotas, "2027-04"), false);
+  });
+  it("apagada sin fecha de baja = en pausa: no debe nada", () => {
+    assert.equal(debeElMes([{ startDate: "2027-01-01", active: false }], "2027-02"), false);
+  });
+  it("con dos cuotas basta que UNA cubra el mes", () => {
+    const dos = [...cuotas, { startDate: "2027-04-01", endDate: null, active: true }];
+    assert.equal(debeElMes(dos, "2027-04"), true);
+  });
+});
+
+describe("cuotaDeBaja: apagada o caducada, y cae al cuadro de bajas sola", () => {
+  it("apagada es baja aunque no tenga fecha", () => {
+    assert.equal(cuotaDeBaja({ active: false }, "2026-09-01"), true);
+  });
+  it("con la fecha de fin ya pasada es baja aunque nadie la apagara", () => {
+    assert.equal(cuotaDeBaja({ active: true, endDate: "2026-08-31" }, "2026-09-01"), true);
+  });
+  it("viva y sin caducar no es baja (la fecha de fin futura no adelanta nada)", () => {
+    assert.equal(cuotaDeBaja({ active: true, endDate: "2026-12-31" }, "2026-09-01"), false);
+    assert.equal(cuotaDeBaja({ active: true }, "2026-09-01"), false);
   });
 });
