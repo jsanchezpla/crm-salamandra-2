@@ -1,4 +1,4 @@
-import { Op } from "sequelize";
+import { Op, fn, col } from "sequelize";
 import { withTenant } from "../../../../lib/tenant/withTenant.js";
 import { ok, created, error, forbidden, serverError } from "../../../../lib/utils/apiResponse.js";
 import { logCitasAudit } from "../../../../lib/citas/audit.js";
@@ -8,6 +8,7 @@ import { categoriaDe, categoriasDe, claveValida } from "../../../../lib/citas/ca
 // `lib/citas/visibilidad.js` ya no se usa aquí: desde el 14/08/2026 los bloqueos
 // los ve todo el equipo y no siguen la regla de las citas (ver cabecera del GET).
 import { resolveCurrentTeamMemberId } from "../../../../lib/team/currentTeamMember.js";
+import { idsDeAdministracion } from "../../../../lib/team/departamentos.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
@@ -186,6 +187,61 @@ async function talleresDelCentro(tenantModels) {
 }
 
 /**
+ * El EQUIPO del centro para el desplegable de «¿quién tiene que leer esto?»
+ * (01/09/2026): `{ equipo: [{ id, displayName }], administracion: [id] }` de la
+ * gente en activo.
+ *
+ * Viaja con el listado por lo mismo que las categorías y los talleres: quien
+ * abre un bloqueo puede colgarle un documento y elegir a sus lectores, y sacar
+ * la lista de aquí ahorra otra llamada en cada carga del calendario. Un centro
+ * sin `team_members` devuelve `[]` y el modal simplemente no enseña el
+ * desplegable.
+ */
+async function equipoDelCentro(tenantModels) {
+  const { TeamMember } = tenantModels ?? {};
+  if (!TeamMember) return { equipo: [], administracion: [] };
+  try {
+    const filas = await TeamMember.findAll({
+      where: { status: { [Op.in]: ["active", "on_leave"] } },
+      // `department` se lee pero NO se manda: solo sirve para calcular aquí
+      // quién es administración (`lib/team/departamentos.js`).
+      attributes: ["id", "displayName", "department"],
+      order: [["displayName", "ASC"]],
+      raw: true,
+    });
+    return {
+      equipo: filas.map((f) => ({ id: f.id, displayName: f.displayName })),
+      administracion: idsDeAdministracion(filas),
+    };
+  } catch {
+    return { equipo: [], administracion: [] }; // un desplegable no puede tumbar la agenda
+  }
+}
+
+/**
+ * Cuántos documentos cuelga cada bloqueo: `Map id → n` (01/09/2026).
+ *
+ * Es lo que le pone el clip a un bloqueo en el calendario, para que se vea que
+ * hay algo dentro SIN abrirlo. Una sola consulta agrupada para toda la lista;
+ * si falla, todos salen a cero y la agenda se pinta igual.
+ */
+async function documentosPorBloqueo(tenantModels, ids) {
+  const { Document } = tenantModels ?? {};
+  if (!Document || !ids.length) return new Map();
+  try {
+    const filas = await Document.findAll({
+      attributes: ["teamBlockId", [fn("COUNT", col("id")), "n"]],
+      where: { teamBlockId: { [Op.in]: ids } },
+      group: ["teamBlockId"],
+      raw: true,
+    });
+    return new Map(filas.map((f) => [f.teamBlockId, Number(f.n || 0)]));
+  } catch {
+    return new Map();
+  }
+}
+
+/**
  * `colorGeneral` es el del centro. El color viaja YA RESUELTO (categoría →
  * persona → centro → negro de siempre) para que la agenda solo tenga que
  * pintarlo: la regla de quién gana vive en un sitio, no repartida por cada
@@ -196,7 +252,7 @@ async function talleresDelCentro(tenantModels) {
  * comporta como si el bloqueo no tuviera: sin rótulo y con el color de siempre
  * (ver `lib/citas/categoriasBloqueo.js`).
  */
-function serializa(f, colorGeneral, autores, categorias = [], talleres = null) {
+function serializa(f, colorGeneral, autores, categorias = [], talleres = null, documentos = null) {
   const cat = categoriaDe(f.categoryKey, categorias);
   return {
     id: f.id,
@@ -219,6 +275,9 @@ function serializa(f, colorGeneral, autores, categorias = [], talleres = null) {
     // llega sin nombre y el bloqueo se lee como uno cualquiera.
     tallerId: f.tallerId ?? null,
     tallerName: talleres?.get(f.tallerId)?.name ?? null,
+    // Cuántos documentos cuelgan del tramo (01/09/2026). La agenda le pone un
+    // clip al bloqueo que tiene alguno: se ve que hay algo dentro sin abrirlo.
+    documentos: documentos?.get(f.id) ?? 0,
     color: colorDeBloqueo({
       categoria: cat?.color ?? null,
       persona: f.teamMember?.blockColor,
@@ -258,15 +317,20 @@ export const GET = withTenant(async (request, _rc, ctx) => {
     const categorias = categoriasDe(ctx.tenant);
     const autores = await nombresDeQuienApunto(filas, ctx.tenantModels);
     const talleres = await talleresDelCentro(ctx.tenantModels);
-    // Las categorías y los talleres del centro viajan con el listado
-    // (01/09/2026): quien pinta la agenda o el formulario necesita las dos
-    // listas para sus desplegables, y sacarlas de aquí ahorra dos llamadas más
+    const documentos = await documentosPorBloqueo(ctx.tenantModels, filas.map((f) => f.id));
+    // Las categorías, los talleres y el equipo del centro viajan con el listado
+    // (01/09/2026): quien pinta la agenda o el formulario necesita esas listas
+    // para sus desplegables, y sacarlas de aquí ahorra otras tantas llamadas
     // en cada carga del calendario.
+    const { equipo, administracion } = await equipoDelCentro(ctx.tenantModels);
     return ok({
-      bloqueos: filas.map((f) => serializa(f, colorGeneral, autores, categorias, talleres)),
+      bloqueos: filas.map((f) => serializa(f, colorGeneral, autores, categorias, talleres, documentos)),
       yo,
       categorias,
       talleres: [...(talleres?.values() ?? [])],
+      equipo,
+      // Para el botón «Todos menos Administración» del selector de lectores.
+      administracion,
     });
   } catch (err) {
     return serverError(err);

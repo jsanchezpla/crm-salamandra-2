@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import LectoresPicker from "@/components/documents/LectoresPicker.jsx";
 import { inputCls, toDateInput, toTimeInput } from "./chips.jsx";
 
 /**
@@ -13,8 +14,27 @@ import { inputCls, toDateInput, toTimeInput } from "./chips.jsx";
  * `categorias` son las del centro (01/09/2026), tal como las devuelve el
  * listado de bloqueos. Vacías —el centro no las usa— y el desplegable no se
  * enseña: el modal se queda exactamente como estaba.
+ *
+ * ── Y LOS DOCUMENTOS DEL TRAMO (01/09/2026, Rodrigo) ───────────────────────
+ * «Quiero poder aparejarlo a un bloqueo concreto, por ejemplo el miércoles 2 en
+ * la Reunión de equipo de 12:00-13:00, para que si entran en la cita del
+ * bloqueo vean el documento aparejado. También se tiene que poder hacer a la
+ * inversa, subir el documento a través del modal de ese bloqueo concreto.»
+ *
+ * Esta es la parte de abajo: lo que cuelga del tramo, con quién tiene que
+ * leerlo. Se sube AQUÍ mismo, eligiendo a la vez a los lectores — que es lo que
+ * evita el paso que nadie da: subirlo y luego acordarse de avisar.
+ *
+ * Los documentos van al ARCHIVO CENTRAL como todos los demás; este modal es
+ * solo la puerta del bloqueo (ver `/api/citas/bloqueos/[id]/documents`).
  */
-export function BloqueoModal({ bloqueo, categorias = [], talleres = [], onClose, onSaved }) {
+
+const fmtSize = (n) => {
+  const kb = Number(n || 0) / 1024;
+  return kb < 1024 ? `${Math.max(1, Math.round(kb))} KB` : `${(kb / 1024).toFixed(1)} MB`;
+};
+
+export function BloqueoModal({ bloqueo, categorias = [], talleres = [], equipo = [], administracion = [], onClose, onSaved }) {
   const [label, setLabel] = useState(bloqueo.label ?? "");
   const [categoryKey, setCategoryKey] = useState(bloqueo.categoryKey ?? "");
   const [tallerId, setTallerId] = useState(bloqueo.tallerId ?? "");
@@ -24,6 +44,24 @@ export function BloqueoModal({ bloqueo, categorias = [], talleres = [], onClose,
   const [endTime, setEndTime] = useState(toTimeInput(bloqueo.end));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
+
+  // ── Documentos aparejados ────────────────────────────────────────────────
+  const [docs, setDocs] = useState([]);
+  const [docBusy, setDocBusy] = useState(false);
+  const [docErr, setDocErr] = useState(null);
+  // Un archivo elegido y aún sin subir: se le pone nombre y lectores antes.
+  const [pendiente, setPendiente] = useState(null); // { file, nombre, lectores: [] }
+  // Qué documento tiene abierto el panel de «¿quién lo lee?».
+  const [editandoLectores, setEditandoLectores] = useState(null); // { docId, lectores: [] }
+  const fileRef = useRef(null);
+
+  const cargarDocs = useCallback(() => {
+    fetch(`/api/citas/bloqueos/${bloqueo.id}/documents`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (j.ok) setDocs(j.data.documents ?? []); })
+      .catch(() => {});
+  }, [bloqueo.id]);
+  useEffect(() => { cargarDocs(); }, [cargarDocs]);
 
   async function guardar() {
     setErr(null);
@@ -62,6 +100,79 @@ export function BloqueoModal({ bloqueo, categorias = [], talleres = [], onClose,
     }
   }
 
+  function elegirArchivo() {
+    const f = fileRef.current?.files?.[0];
+    if (!f) return;
+    setDocErr(null);
+    // El nombre del fichero es el punto de partida, sin extensión: la pone el
+    // servidor al guardar, para que la descarga siga teniendo tipo.
+    setPendiente({ file: f, nombre: f.name.replace(/\.[^.]+$/, ""), lectores: [] });
+  }
+
+  function limpiarInput() {
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  async function subir() {
+    if (!pendiente) return;
+    const nombre = pendiente.nombre.trim();
+    if (!nombre) { setDocErr("El nombre es obligatorio"); return; }
+    setDocBusy(true); setDocErr(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", pendiente.file);
+      fd.append("name", nombre);
+      fd.append("lectores", JSON.stringify(pendiente.lectores));
+      const r = await fetch(`/api/citas/bloqueos/${bloqueo.id}/documents`, { method: "POST", body: fd });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || "No se pudo subir el documento");
+      setPendiente(null);
+      limpiarInput();
+      cargarDocs();
+    } catch (e) {
+      setDocErr(e.message);
+    } finally {
+      setDocBusy(false);
+    }
+  }
+
+  async function guardarLectores() {
+    if (!editandoLectores) return;
+    setDocBusy(true); setDocErr(null);
+    try {
+      const r = await fetch("/api/documents/lecturas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId: editandoLectores.docId, teamMemberIds: editandoLectores.lectores }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || "No se pudo guardar quién tiene que leerlo");
+      setEditandoLectores(null);
+      cargarDocs();
+    } catch (e) {
+      setDocErr(e.message);
+    } finally {
+      setDocBusy(false);
+    }
+  }
+
+  async function quitarDoc(docId) {
+    if (!window.confirm("¿Quitar este documento del bloqueo? Se elimina también del archivo.")) return;
+    setDocBusy(true); setDocErr(null);
+    try {
+      const r = await fetch(`/api/citas/bloqueos/${bloqueo.id}/documents/${docId}`, { method: "DELETE" });
+      if (!r.ok && r.status !== 204) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || "No se pudo quitar");
+      }
+      cargarDocs();
+    } catch (e) {
+      setDocErr(e.message);
+    } finally {
+      setDocBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-40" onClick={() => !saving && onClose()} />
@@ -69,7 +180,7 @@ export function BloqueoModal({ bloqueo, categorias = [], talleres = [], onClose,
           modal de incidencias (31/08/2026) — centrado, en pantallas grandes se
           cortaba por arriba. */}
       <div className="fixed top-14 lg:top-0 inset-x-0 bottom-0 z-50 flex items-start justify-center pt-16 px-4 overflow-y-auto pointer-events-none">
-        <div className="bg-white rounded-xl shadow-pop w-full max-w-sm pointer-events-auto">
+        <div className="bg-white rounded-xl shadow-pop w-full max-w-md pointer-events-auto mb-10">
           <div className="px-5 pt-4 pb-3 border-b border-neutral-100">
             <div className="eyebrow">Bloqueo</div>
             <h3 className="font-display text-lg text-neutral-900 mt-0.5 truncate">{bloqueo.titulo}</h3>
@@ -135,6 +246,170 @@ export function BloqueoModal({ bloqueo, categorias = [], talleres = [], onClose,
               </div>
             </div>
             {err && <div className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{err}</div>}
+
+            {/* ── Documentos del tramo ───────────────────────────────────── */}
+            <div className="pt-3 border-t border-neutral-100">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-[11px] font-medium text-neutral-500">Documentos</label>
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={docBusy || !!pendiente}
+                  className="text-[11px] font-semibold text-[var(--color-primary,#1B3A2D)] hover:underline disabled:opacity-40"
+                >
+                  + Adjuntar
+                </button>
+              </div>
+              <input ref={fileRef} type="file" className="hidden" onChange={elegirArchivo} />
+
+              {docs.length === 0 && !pendiente && (
+                <p className="text-[11px] text-neutral-400">
+                  Nada aparejado a este bloqueo. Lo que subas aquí lo verá quien abra el tramo en la agenda.
+                </p>
+              )}
+
+              {docs.map((d) => {
+                const editando = editandoLectores?.docId === d.id;
+                return (
+                  <div key={d.id} className="border-t border-neutral-100 py-2 first:border-t-0">
+                    <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs text-neutral-800 truncate">{d.name}</div>
+                        <div className="text-[10px] text-neutral-400">
+                          {fmtSize(d.fileSize)}
+                          {d.lectura.total > 0 &&
+                            ` · leído por ${d.lectura.leidas} de ${d.lectura.total}`}
+                        </div>
+                      </div>
+                      <a
+                        href={`/api/citas/bloqueos/${bloqueo.id}/documents/${d.id}/download`}
+                        title="Descargar"
+                        className="shrink-0 text-[11px] text-neutral-500 hover:text-neutral-900"
+                      >
+                        Abrir
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditandoLectores(
+                            editando
+                              ? null
+                              : { docId: d.id, lectores: d.lectores.map((l) => l.teamMemberId) }
+                          )
+                        }
+                        className="shrink-0 text-[11px] text-neutral-500 hover:text-neutral-900"
+                      >
+                        Quién lo lee
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => quitarDoc(d.id)}
+                        disabled={docBusy}
+                        title="Quitar"
+                        className="shrink-0 text-[11px] text-neutral-400 hover:text-rose-600 disabled:opacity-40"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    {d.lectura.total > 0 && !editando && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {d.lectores.map((l) => (
+                          <span
+                            key={l.teamMemberId}
+                            className={`text-[9px] rounded-full px-1.5 py-0.5 ${
+                              l.leido ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+                            }`}
+                          >
+                            {l.nombre || "—"}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {editando && (
+                      <div className="mt-2 space-y-2">
+                        <LectoresPicker
+                          equipo={equipo.length ? equipo : null}
+                          administracion={equipo.length ? administracion : null}
+                          valor={editandoLectores.lectores}
+                          leidos={d.lectores.filter((l) => l.leido).map((l) => l.teamMemberId)}
+                          onChange={(ids) => setEditandoLectores((p) => ({ ...p, lectores: ids }))}
+                          disabled={docBusy}
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditandoLectores(null)}
+                            className="text-[11px] text-neutral-400 hover:text-neutral-700"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={guardarLectores}
+                            disabled={docBusy}
+                            className="text-[11px] font-semibold text-[var(--color-primary,#1B3A2D)] hover:underline disabled:opacity-40"
+                          >
+                            {docBusy ? "Guardando…" : "Guardar"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* El archivo elegido, antes de subirlo: nombre + a quién se le
+                  pide que lo lea. Las dos cosas de una vez, que es lo que evita
+                  subirlo y no avisar a nadie. */}
+              {pendiente && (
+                <div className="mt-2 rounded-lg border border-neutral-200 p-2.5 space-y-2">
+                  <div className="text-[10px] text-neutral-400 truncate">Archivo: {pendiente.file.name}</div>
+                  <input
+                    autoFocus
+                    value={pendiente.nombre}
+                    onChange={(e) => setPendiente((p) => ({ ...p, nombre: e.target.value }))}
+                    placeholder="Nombre del documento"
+                    maxLength={200}
+                    className={inputCls}
+                  />
+                  <div>
+                    <div className="text-[10px] text-neutral-500 mb-1">¿Quién tiene que leerlo?</div>
+                    <LectoresPicker
+                      equipo={equipo.length ? equipo : null}
+                      administracion={equipo.length ? administracion : null}
+                      valor={pendiente.lectores}
+                      onChange={(ids) => setPendiente((p) => ({ ...p, lectores: ids }))}
+                      disabled={docBusy}
+                    />
+                    <p className="text-[10px] text-neutral-400 mt-1">
+                      A quien marques le saldrá el aviso en su pantalla de inicio hasta que lo abra.
+                    </p>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setPendiente(null); limpiarInput(); }}
+                      disabled={docBusy}
+                      className="text-[11px] text-neutral-400 hover:text-neutral-700 disabled:opacity-40"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={subir}
+                      disabled={docBusy}
+                      className="text-[11px] font-semibold text-[var(--color-primary,#1B3A2D)] hover:underline disabled:opacity-40"
+                    >
+                      {docBusy ? "Subiendo…" : "Subir"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {docErr && (
+                <div className="mt-2 text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{docErr}</div>
+              )}
+            </div>
           </div>
           <div className="px-5 py-3 border-t border-neutral-100 flex justify-end gap-2">
             <button type="button" onClick={() => !saving && onClose()}

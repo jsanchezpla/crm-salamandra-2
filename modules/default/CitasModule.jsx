@@ -57,6 +57,12 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
   // Y los talleres del centro, por lo mismo: el modal de un bloqueo pregunta si
   // ese tramo es un taller (01/09/2026).
   const talleresRef = useRef([]);
+  // Y el equipo, por lo mismo otra vez: al colgar un documento de un bloqueo se
+  // elige a quién se le pide que lo lea (01/09/2026). `administracionRef` son
+  // los ids de quien lleva la administración del centro, para el botón «Todos
+  // menos Administración» del selector.
+  const equipoRef = useRef([]);
+  const administracionRef = useRef([]);
   // Vista: "calendar" (por defecto) o "waitlist". La lista de espera son las
   // reservas en estado 'pending' (solicitudes de la web sin confirmar). El
   // globito rojo de la pestaña muestra cuántas hay sin atender.
@@ -343,6 +349,8 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
         if (jb.ok) {
           categoriasBloqueoRef.current = jb.data.categorias ?? [];
           talleresRef.current = jb.data.talleres ?? [];
+          equipoRef.current = jb.data.equipo ?? [];
+          administracionRef.current = jb.data.administracion ?? [];
           fondos = (jb.data.bloqueos ?? [])
             .filter((b) => {
               // Los cierres del centro (sin persona) los ve todo el mundo:
@@ -381,11 +389,18 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
                * si en algún sitio pone qué es. No se repite si el motivo libre
                * dice ya lo mismo («Descanso · Descanso» no informa de nada).
                */
-              title: [
-                b.categoryLabel && b.categoryLabel !== b.label ? b.categoryLabel : null,
-                b.label,
-                b.teamMemberName || "Todo el centro",
-              ].filter(Boolean).join(" · "),
+              /*
+               * Y con un clip al final cuando cuelga algún documento
+               * (01/09/2026): el acta de la reunión se ve que está SIN abrir el
+               * bloqueo, que es justo lo que se pidió («si entran en la cita
+               * del bloqueo vean el documento aparejado»).
+               */
+              title:
+                [
+                  b.categoryLabel && b.categoryLabel !== b.label ? b.categoryLabel : null,
+                  b.label,
+                  b.teamMemberName || "Todo el centro",
+                ].filter(Boolean).join(" · ") + (b.documentos > 0 ? " 📎" : ""),
               start: b.startAt,
               end: b.endAt,
               /*
@@ -1129,6 +1144,8 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           bloqueo={bloqueoAbierto}
           categorias={categoriasBloqueoRef.current}
           talleres={talleresRef.current}
+          equipo={equipoRef.current}
+          administracion={administracionRef.current}
           onClose={() => setBloqueoAbierto(null)}
           onSaved={() => {
             setBloqueoAbierto(null);

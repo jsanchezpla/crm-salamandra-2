@@ -2,8 +2,9 @@
 // facturación (29/08/2026, Rodrigo: sin gráficas de ningún tipo; a cambio, lo
 // operativo). Tres cajas con la misma receta visual que el resto de la portada,
 // cada una solo si su dueño tiene algo que ver: la bandeja (informes +
-// incidencias asignadas), la semana que viene y las tareas propias. El gating
-// vive en el servidor (lib/home/summary.js → buildTrabajo); aquí solo se pinta.
+// incidencias asignadas), la semana que viene, los documentos que le han pedido
+// leer y las tareas propias. El gating vive en el servidor
+// (lib/home/summary.js → buildTrabajo); aquí solo se pinta.
 //
 // Componente de SERVIDOR a propósito: no hay estado que mantener, y las horas
 // se formatean en Madrid explícitamente (no en la zona del servidor).
@@ -58,7 +59,7 @@ function Caja({ titulo, href, hrefLabel, className = "", children }) {
 
 export default function MiTrabajo({ trabajo }) {
   if (!trabajo) return null;
-  const { bandeja, proximas, tareas } = trabajo;
+  const { bandeja, proximas, tareas, lecturas } = trabajo;
 
   return (
     <>
@@ -118,6 +119,24 @@ export default function MiTrabajo({ trabajo }) {
               </div>
             ))}
           </div>
+        </Caja>
+      )}
+
+      {lecturas && (
+        <Caja titulo="Por leer" href="/documentos/lecturas" hrefLabel="Ver todos" className="shrink-0">
+          {/* El enlace ES la descarga: abrir el documento es lo que sella la
+              lectura (lib/documents/lecturas.js), así que no hay un paso
+              intermedio entre verlo aquí y darlo por leído. */}
+          {lecturas.map((d) => (
+            <a
+              key={d.id}
+              href={d.href}
+              className="flex items-center gap-2.5 py-1.5 border-t border-[var(--ink-100)] first:border-t-0 text-[13px] hover:text-[var(--color-primary)] transition-colors"
+            >
+              <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-amber-400" />
+              <span className="flex-1 min-w-0 truncate text-[var(--ink-900)]">{d.nombre}</span>
+            </a>
+          ))}
         </Caja>
       )}
 

@@ -107,11 +107,25 @@ export function defineDocument(sequelize) {
         allowNull: true,
         field: "incidencia_id",
       },
+      // BLOQUEO de la agenda al que está aparejado (01/09/2026, Rodrigo): «el
+      // miércoles 2, en la Reunión de equipo de 12:00 a 13:00, que si entran en
+      // la cita del bloqueo vean el documento aparejado». Nullable: casi ningún
+      // documento cuelga de un tramo de agenda.
+      //
+      // FK suave con ON DELETE SET NULL (migración): borrar el bloqueo del
+      // miércoles no puede llevarse por delante el acta de la reunión, que
+      // sigue estando en el archivo y puede estar pedida en lectura.
+      teamBlockId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: "team_block_id",
+      },
       // De dónde vino el documento: "manual" (subido en el módulo Documents),
       // "ficha" (adjunto desde la ficha de un cliente), "paciente" (documento de
       // un paciente), "contract_template" (contrato estándar de la clínica,
       // reutilizable en todos los pacientes), "incidencia" (adjunto a una
-      // incidencia del equipo), "nota", "factura"…
+      // incidencia del equipo), "bloqueo" (aparejado a un tramo de la agenda),
+      // "nota", "factura"…
       // Sirve para filtrar el archivo central por origen.
       source: {
         type: DataTypes.STRING(40),

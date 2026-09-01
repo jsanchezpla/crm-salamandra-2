@@ -7,6 +7,8 @@ import ContratoServiciosCard from "@/components/documents/ContratoServiciosCard.
 import FileTypeIcon from "@/components/documents/FileTypeIcon.jsx";
 import UploadDropzone from "@/components/documents/UploadDropzone.jsx";
 import PdfPreviewModal from "@/components/documents/PdfPreviewModal.jsx";
+import PedirLecturaModal from "@/components/documents/PedirLecturaModal.jsx";
+import CompartirCarpetaModal from "@/components/documents/CompartirCarpetaModal.jsx";
 import { fmtSize, fmtDate } from "@/components/documents/formato.js";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 
@@ -31,6 +33,10 @@ export default function DocumentsModule({ avanzado = true }) {
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState("");
   const [preview, setPreview] = useState(null);
+  // El documento al que se le está pidiendo lectura (01/09/2026, Rodrigo).
+  const [pidiendoLectura, setPidiendoLectura] = useState(null);
+  // Y la carpeta a la que se le está eligiendo quién la ve (01/09/2026).
+  const [compartiendo, setCompartiendo] = useState(null);
   const [actionError, setActionError] = useState(null);
 
   const currentFolderId = path.length ? path[path.length - 1].id : null;
@@ -348,12 +354,33 @@ export default function DocumentsModule({ avanzado = true }) {
                     <span className="block text-[11px] text-neutral-400">
                       {f.subfolderCount} carpetas · {f.documentCount} archivos
                       {visibility === "shared" && f.ownerName ? ` · ${f.ownerName}` : ""}
+                      {/* Con quién la comparte su dueño, o que a mí me la han
+                          pasado: dos cosas distintas y se dicen distinto. */}
+                      {f.compartidaConmigo
+                        ? " · te la han compartido"
+                        : f.sharedWith > 0
+                        ? ` · compartida con ${f.sharedWith}`
+                        : ""}
                     </span>
                   </span>
                 </button>
               )}
               {canManage(f) && renamingId !== f.id && (
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  {/* Quién la ve (01/09/2026, Rodrigo). Solo en las privadas:
+                      una carpeta compartida con todo el centro ya la ve todo
+                      el mundo, y el endpoint lo rechaza con esas palabras. */}
+                  {f.visibility !== "shared" && (
+                    <button
+                      title="Quién ve esta carpeta"
+                      onClick={() => setCompartiendo(f)}
+                      className="w-7 h-7 flex items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.5a4.2 4.2 0 018-1.8M4 19v-1.5A3.5 3.5 0 017.5 14h1M8 7.5a2.5 2.5 0 105 0 2.5 2.5 0 00-5 0zM15 20h5m-2.5-2.5v5" />
+                      </svg>
+                    </button>
+                  )}
                   <button
                     title="Renombrar"
                     onClick={() => {
@@ -408,6 +435,18 @@ export default function DocumentsModule({ avanzado = true }) {
                     </svg>
                   </button>
                 )}
+                {/* Pedir que lo lea alguien del equipo (01/09/2026, Rodrigo):
+                    la puerta del archivo al mismo aviso que se elige al subir
+                    un documento desde un bloqueo de la agenda. */}
+                <button
+                  onClick={() => setPidiendoLectura(doc)}
+                  title="Pedir lectura al equipo"
+                  className="w-8 h-8 flex items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.5a4.2 4.2 0 018-1.8M4 19v-1.5A3.5 3.5 0 017.5 14h1M8 7.5a2.5 2.5 0 105 0 2.5 2.5 0 00-5 0zM14 20l2 2 4-4.5" />
+                  </svg>
+                </button>
                 <a
                   href={`/api/documents/${doc.id}/download`}
                   title="Descargar"
@@ -450,6 +489,12 @@ export default function DocumentsModule({ avanzado = true }) {
       )}
 
       <PdfPreviewModal doc={preview} onClose={() => setPreview(null)} />
+      {pidiendoLectura && (
+        <PedirLecturaModal doc={pidiendoLectura} onClose={() => setPidiendoLectura(null)} onSaved={refresh} />
+      )}
+      {compartiendo && (
+        <CompartirCarpetaModal carpeta={compartiendo} onClose={() => setCompartiendo(null)} onSaved={refresh} />
+      )}
       </>
       )}
     </div>
