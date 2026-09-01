@@ -7,6 +7,10 @@
 // scroll cuando hay más citas de las que caben: la página no se mueve.
 
 import { useState } from "react";
+// Una cita confirmada que ya terminó se enseña como hecha aunque nadie la
+// marcara (01/09/2026, Rodrigo): la portada no puede decir otra cosa que la
+// ficha de la cita. El porqué, en lib/citas/asistencia.js.
+import { estadoEfectivo } from "@/lib/citas/asistencia.js";
 
 const CHIP = {
   pending: { texto: "Sin confirmar", clase: "bg-amber-100 text-amber-800" },
@@ -23,8 +27,9 @@ function hora(iso) {
 }
 
 function Fila({ cita, conProfesional }) {
-  const chip = CHIP[cita.status] || null;
-  const hecha = cita.status === "completed";
+  const estado = estadoEfectivo(cita);
+  const chip = CHIP[estado] || null;
+  const hecha = estado === "completed";
   const detalle = [cita.tipo, conProfesional ? cita.profesional || "Sin asignar" : null]
     .filter(Boolean)
     .join(" · ");

@@ -15,6 +15,7 @@ import SelectorPaciente from "../../../components/citas/SelectorPaciente.jsx";
 import { colaDePreparacion } from "../../../lib/clinica/prepararSesion.js";
 import { fichaDeLaCita } from "../../../lib/citas/fichaDeLaCita.js";
 import { esRecuperable, rotuloFalta, citasQuePuedenRecuperar } from "../../../lib/citas/recuperacionFalta.js";
+import { esPresunta, estadoEfectivo } from "../../../lib/citas/asistencia.js";
 import {
   ModalityChip,
   PagoChip,
@@ -108,6 +109,22 @@ export function CitaDetalleModal({
   // recupera para poder decir CUÁNDO.
   const [candidatas, setCandidatas] = useState(null);
   const [recuperadora, setRecuperadora] = useState(null);
+  // ¿Esta cita ya tiene registro de sesión? (01/09/2026, Rodrigo). Solo para
+  // que el botón diga la verdad —«Seguir con la sesión» en vez de «Preparar
+  // sesión»—: quien lo pulsa acaba en el mismo sitio de todas formas, porque
+  // la regla «una cita, un registro» la aplica la pantalla de destino. Por eso
+  // un fallo aquí no se enseña ni se reintenta: se queda el rótulo de siempre.
+  const [sesionDeEstaCita, setSesionDeEstaCita] = useState(null);
+
+  useEffect(() => {
+    if (!openBooking.patientId) return;
+    let vivo = true;
+    fetch(`/api/clinica/sessions?bookingId=${encodeURIComponent(openBooking.id)}&limit=1`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo) setSesionDeEstaCita(j?.data?.sessions?.[0] ?? null); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [openBooking.id, openBooking.patientId]);
 
   useEffect(() => {
     if (!esRecuperable(openBooking)) return;
@@ -417,7 +434,10 @@ export function CitaDetalleModal({
                   {openBooking.clientName}
                 </div>
                 <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                  <StatusChip value={openBooking.status} />
+                  {/* El estado con el que se TRATA la cita: una confirmada que
+                      ya terminó se da por asistida (lib/citas/asistencia.js).
+                      Abajo, junto a los botones, se dice que es una suposición. */}
+                  <StatusChip value={estadoEfectivo(openBooking)} />
                   <PagoChip
                     estado={openBooking.paymentStatus}
                     motivoCancelacion={openBooking.cancellationReason}
@@ -700,6 +720,12 @@ export function CitaDetalleModal({
                       paciente: preparar la del jueves y que la sesión nazca con
                       la fecha de hoy sería apuntarla en el sitio equivocado, y
                       nadie lo miraría al corregirlo.
+
+                      Y desde el 01/09/2026 lleva también la CITA (Rodrigo):
+                      «si salgo y entro no me tiene que generar una sesión
+                      nueva, tiene que seguir editando la misma hasta que le dé
+                      a finalizar». Sin ese id, cada vuelta abría un formulario
+                      en blanco y guardarlo creaba otra sesión del mismo día.
                     */}
                     {openBooking.patientId && (
                       <>
@@ -713,13 +739,17 @@ export function CitaDetalleModal({
                           Ver ficha
                         </a>
                         <a
-                          href={`/pacientes/${openBooking.patientId}/sesiones/nueva${colaDePreparacion(openBooking.scheduledAt)}`}
+                          href={`/pacientes/${openBooking.patientId}/sesiones/nueva${colaDePreparacion(openBooking.scheduledAt, { bookingId: openBooking.id })}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          title="Escribe la preparación de esta sesión antes de darla. Se guarda como borrador con el día y la hora de la cita."
+                          title={
+                            sesionDeEstaCita
+                              ? "Sigue con el registro que ya empezaste para esta cita. No se crea uno nuevo."
+                              : "Escribe la preparación de esta sesión antes de darla. Se guarda como borrador con el día y la hora de la cita."
+                          }
                           className="shrink-0 text-[12px] px-2 py-1 rounded-md border border-neutral-200 text-neutral-600 hover:border-neutral-400 hover:text-neutral-800 transition-colors"
                         >
-                          Preparar sesión
+                          {sesionDeEstaCita ? "Seguir con la sesión" : "Preparar sesión"}
                         </a>
                       </>
                     )}
@@ -1005,14 +1035,38 @@ export function CitaDetalleModal({
 
             <div className="px-5 py-3 border-t border-neutral-100 flex flex-wrap gap-2 justify-between">
               <div className="flex flex-wrap gap-2">
-                {openBooking.status !== "completed" && (
-                  <button
-                    onClick={markCompleted}
-                    disabled={saving}
-                    className="text-[12px] px-3 py-1.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
-                  >
-                    Marcar completada
-                  </button>
+                {/*
+                 * Una cita confirmada que ya terminó SE DA POR ASISTIDA
+                 * (01/09/2026, Rodrigo). Aquí se dice con todas las letras que
+                 * es una suposición del programa y no algo que comprobara
+                 * nadie: si se pintara un «Completada» a secas, «No asistió»
+                 * parecería un cambio de opinión en vez de la corrección que
+                 * es. El botón verde sigue estando, ahora para dar el visto
+                 * bueno de verdad.
+                 */}
+                {esPresunta(openBooking) ? (
+                  <>
+                    <span className="text-[12px] px-2.5 py-1.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100">
+                      Se da por asistida
+                    </span>
+                    <button
+                      onClick={markCompleted}
+                      disabled={saving}
+                      className="text-[12px] px-3 py-1.5 rounded-md border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                    >
+                      Confirmar asistencia
+                    </button>
+                  </>
+                ) : (
+                  openBooking.status !== "completed" && (
+                    <button
+                      onClick={markCompleted}
+                      disabled={saving}
+                      className="text-[12px] px-3 py-1.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      Marcar completada
+                    </button>
+                  )
                 )}
                 {openBooking.status === "no_show" && (
                   <span className={`text-[12px] px-2.5 py-1.5 rounded-md ${openBooking.noShowJustified ? "bg-neutral-100 text-neutral-600" : "bg-red-50 text-red-700"}`}>
