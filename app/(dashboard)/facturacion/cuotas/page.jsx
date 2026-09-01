@@ -78,9 +78,6 @@ export default function CuotasPage() {
   const [buscaBajas, setBuscaBajas] = useState("");
 
   const [showAlta, setShowAlta] = useState(false);
-  // Al abrir el alta desde «+ Crear cuota nueva», el formulario del catálogo
-  // viene ya desplegado: el usuario venía justamente a crearla.
-  const [altaConCatalogo, setAltaConCatalogo] = useState(false);
   const [editando, setEditando] = useState(null); // cuota que se edita
   const [showGenerar, setShowGenerar] = useState(false);
 
@@ -307,8 +304,25 @@ export default function CuotasPage() {
             onClick={() => setShowGenerar(true)}
             className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide border border-neutral-300 text-neutral-700 hover:bg-neutral-50 transition"
           >Generar el mes</button>
+          {/*
+            UN SOLO BOTÓN, Y ABRE EL ALTA COMPLETA (01/09/2026, Rodrigo).
+
+            Había dos: este daba de alta a QUIÉN paga, y otro con borde
+            discontinuo entre los filtros abría lo mismo pero con el formulario
+            de la cuota del catálogo ya desplegado. Dos botones que llevan al
+            mismo sitio y se llaman casi igual —«+ Nueva cuota» y «+ Crear cuota
+            nueva»— no son dos opciones: son una pregunta que hay que
+            resolver antes de pulsar.
+
+            Ahora entra siempre con el catálogo desplegado (`abrirCatalogo`),
+            que es el camino largo: quien solo venía a asignar una cuota que ya
+            existe la elige del desplegable de arriba y no baja hasta ahí.
+
+            Por eso el alta ya no lleva interruptor: era el estado que
+            distinguía a los dos botones y con uno solo no distinguía nada.
+          */}
           <button
-            onClick={() => { setAltaConCatalogo(false); setShowAlta(true); }}
+            onClick={() => setShowAlta(true)}
             className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white"
             style={{ background: "var(--color-primary, #1B3A2D)" }}
           >+ Nueva cuota</button>
@@ -334,14 +348,6 @@ export default function CuotasPage() {
           ]}
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 w-full sm:w-72"
         />
-        {/* Crear una cuota NUEVA del catálogo sin salir de aquí (01/09/2026,
-            Rodrigo: «no hay una opción de añadir cuota en la lista de cuotas»).
-            El desplegable de al lado solo deja ELEGIR entre las que ya existen;
-            esto abre el alta con el formulario de la cuota nueva desplegado. */}
-        <button
-          onClick={() => { setAltaConCatalogo(true); setShowAlta(true); }}
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-600 bg-white border border-dashed border-neutral-300 hover:border-neutral-400 hover:text-neutral-900 transition"
-        >+ Crear cuota nueva</button>
         <Select
           value={filtroMetodo}
           onChange={setFiltroMetodo}
@@ -487,7 +493,7 @@ export default function CuotasPage() {
           conceptos={conceptos}
           ivaSugerido={ivaSugerido}
           onConceptoCreado={conceptoCreado}
-          abrirCatalogo={altaConCatalogo}
+          abrirCatalogo
           inicial={filtroConcepto ? { conceptIds: [filtroConcepto] } : null}
           onClose={() => setShowAlta(false)}
           onDone={(msg) => { setShowAlta(false); setOkMsg(msg); cargar(); }}
