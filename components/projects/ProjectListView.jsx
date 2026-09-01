@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import TaskDrawer from "./TaskDrawer.jsx";
+import Select from "@/components/ui/Select.jsx";
 import { priorityMeta, priorityRank } from "@/lib/projects/taskPriority.js";
 
 /**
@@ -71,7 +72,7 @@ function compareTasks(a, b) {
   return (a.title ?? "").localeCompare(b.title ?? "", "es");
 }
 
-export default function ProjectListView({ projectId, filters = {}, teamMembers = [] }) {
+export default function ProjectListView({ projectId, filters = {}, teamMembers = [], phases = [] }) {
   const [tasks, setTasks] = useState(null);
   const [columns, setColumns] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -121,6 +122,7 @@ export default function ProjectListView({ projectId, filters = {}, teamMembers =
     () => [...columns].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     [columns]
   );
+  const fasePorId = useMemo(() => new Map(phases.map((p) => [p.id, p])), [phases]);
   const doneColumn = useMemo(() => sortedColumns.find((c) => c.isDoneColumn) ?? null, [sortedColumns]);
   const firstOpenColumn = useMemo(() => sortedColumns.find((c) => !c.isDoneColumn) ?? null, [sortedColumns]);
 
@@ -170,10 +172,44 @@ export default function ProjectListView({ projectId, filters = {}, teamMembers =
     [firstOpenColumn, doneColumn, refresh]
   );
 
+  /*
+   * Cambiar la FASE desde la tabla (01/09/2026, Rodrigo: «cuando se pongan en
+   * las tablas debería haber un desplegable para las distintas Fases»).
+   *
+   * Antes solo se podía desde el drawer: abrir la tarea, buscar el campo,
+   * cambiarlo y cerrar, una por una. Repartir veinte tareas entre tres fases
+   * eran sesenta clics. Aquí se cambia en la fila, sin salir de la lista.
+   *
+   * Optimista con vuelta atrás: si el PATCH falla —el endpoint pide admin o
+   * lead— la fila vuelve a su fase y se dice por qué, en vez de quedarse
+   * enseñando un cambio que no se guardó.
+   */
+  const cambiarFase = useCallback(async (task, phaseId) => {
+    const anterior = task.phaseId ?? null;
+    const nueva = phaseId || null;
+    if (anterior === nueva) return;
+    setActionError(null);
+    setTasks((prev) => (prev ?? []).map((t) => (t.id === task.id ? { ...t, phaseId: nueva } : t)));
+    try {
+      const r = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phaseId: nueva }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => null);
+        throw new Error(j?.error || "No se pudo cambiar la fase");
+      }
+    } catch (e) {
+      setTasks((prev) => (prev ?? []).map((t) => (t.id === task.id ? { ...t, phaseId: anterior } : t)));
+      setActionError(e.message || "No se pudo cambiar la fase");
+    }
+  }, []);
+
   // Filtro (cliente, mismo criterio que el Kanban) + orden multinivel.
   const rows = useMemo(() => {
     if (!tasks) return [];
-    const { search, assigneeId, tag } = filters;
+    const { search, assigneeId, tag, phaseId } = filters;
     const filtered = tasks.filter((t) => {
       if (search) {
         const q = search.toLowerCase();
@@ -181,6 +217,8 @@ export default function ProjectListView({ projectId, filters = {}, teamMembers =
       }
       if (assigneeId && !(t.assignees ?? []).some((a) => (a.id ?? a.teamMemberId) === assigneeId)) return false;
       if (tag && !(t.tags ?? []).includes(tag)) return false;
+      // "sin" = las que no cuelgan de ninguna fase (ver la barra del tablero).
+      if (phaseId && (phaseId === "sin" ? t.phaseId : t.phaseId !== phaseId)) return false;
       return true;
     });
     return [...filtered].sort(compareTasks);
@@ -220,11 +258,12 @@ export default function ProjectListView({ projectId, filters = {}, teamMembers =
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto rounded-xl border border-neutral-200 bg-white">
-        <table className="w-full text-sm border-collapse min-w-[680px]">
+        <table className="w-full text-sm border-collapse min-w-[860px]">
           <thead className="sticky top-0 z-10 bg-neutral-50 text-xs text-neutral-500">
             <tr className="border-b border-neutral-200">
               <th className="w-10 px-3 py-2.5" aria-label="Hecha" />
               <th className="text-left font-medium px-4 py-2.5">Tarea</th>
+              <th className="text-left font-medium px-4 py-2.5 w-48">Fase</th>
               <th className="text-left font-medium px-4 py-2.5 w-44">Fecha de entrega</th>
               <th className="text-left font-medium px-4 py-2.5 w-28">Prioridad</th>
               <th className="text-left font-medium px-4 py-2.5 w-48">Estado</th>
@@ -279,6 +318,29 @@ export default function ProjectListView({ projectId, filters = {}, teamMembers =
                         </span>
                       )}
                     </div>
+                  </td>
+                  {/* `stopPropagation`: abrir el desplegable no puede abrir
+                      además el drawer de la tarea. */}
+                  <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                    {phases.length === 0 ? (
+                      <span className="text-neutral-300">Sin fases</span>
+                    ) : (
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ background: fasePorId.get(t.phaseId)?.color || "#D4D4D4" }}
+                        />
+                        <Select
+                          className="w-full rounded-lg px-2 py-1 text-[12.5px] text-neutral-700 bg-white border border-transparent hover:border-neutral-200 focus:outline-none focus:border-neutral-400 transition"
+                          value={t.phaseId ?? ""}
+                          onChange={(v) => cambiarFase(t, v)}
+                          options={[
+                            { value: "", label: "— Sin fase —" },
+                            ...phases.map((p) => ({ value: p.id, label: p.name })),
+                          ]}
+                        />
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-2.5 whitespace-nowrap">
                     {t.dueDate ? (
