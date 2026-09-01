@@ -34,16 +34,21 @@
  * Sin backfill: nada cambia para las sesiones y los bloqueos que ya existen.
  * Nacen a NULL, que es «esto no es de ningún taller», y se leen igual que ayer.
  *
- * Idempotente (IF NOT EXISTS en todo). Los schemas salen de `byModule`, que
- * arrastra también las FOTOS DORADAS de las demos: sin ellas, restaurar una
- * demo la devolvería sin estas columnas.
+ * Idempotente (IF NOT EXISTS en todo). Los schemas salen de `byTable` y NO de
+ * `byModule`, y esa distinción costó un arreglo el mismo 01/09/2026: la TABLA
+ * solo hace falta donde hay `talleres`, pero la COLUMNA hace falta donde exista
+ * `clinic_sessions` —tenga el tenant el módulo activo o no—, porque el modelo
+ * `ClinicSession` la declara para todos y Sequelize la pide en cada SELECT. El
+ * módulo dice quién puede ENTRAR, no qué forma tiene el schema (regla 12).
+ * `byTable` arrastra además las FOTOS DORADAS de las demos: sin ellas, restaurar
+ * una demo la devolvería sin estas columnas.
  *
  * Uso local:  node --env-file=.env.local scripts/migrate-taller-sesiones.js
  * Uso VPS:    docker exec crm-salamandra-app-1 node scripts/migrate-taller-sesiones.js
  */
 
 import { Sequelize } from "sequelize";
-import { byModule } from "./_schema-targets.js";
+import { byTable } from "./_schema-targets.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -56,11 +61,11 @@ async function tableExists(s, schema, table) {
   return rows.length > 0;
 }
 
-async function processSchema(s, schema) {
-  // 1. La tabla. Necesita `talleres`, que crea migrate-talleres; el orden lo
-  //    resuelve el analizador de _migration-order.js leyendo este SQL.
+async function creaTabla(s, schema) {
+  // La tabla. Necesita `talleres`, que crea migrate-talleres; el orden lo
+  // resuelve el analizador de _migration-order.js leyendo este SQL.
   if (!(await tableExists(s, schema, "talleres"))) {
-    log(`✗ ${schema}: no existe talleres. Se salta el bloque entero.`);
+    log(`✗ ${schema}: no existe talleres. Se salta.`);
     return;
   }
 
@@ -123,24 +128,27 @@ async function processSchema(s, schema) {
   );
   log(`✓ ${schema}.taller_sesiones asegurada`);
 
-  // 2. El puntero desde la sesión de cada paciente.
-  if (await tableExists(s, schema, "clinic_sessions")) {
-    await s.query(
-      `ALTER TABLE "${schema}"."clinic_sessions"
-         ADD COLUMN IF NOT EXISTS taller_sesion_id UUID`
-    );
-    // El camino que se recorre al re-propagar el registro común: «las sesiones
-    // de ESTA sesión de taller». Parcial, porque la inmensa mayoría son null.
-    await s.query(
-      `CREATE INDEX IF NOT EXISTS clinic_sessions_taller_sesion_idx
-         ON "${schema}"."clinic_sessions" (taller_sesion_id)
-         WHERE taller_sesion_id IS NOT NULL`
-    );
-    log(`✓ ${schema}.clinic_sessions: columna taller_sesion_id asegurada`);
-  } else {
-    log(`· ${schema}: sin clinic_sessions, se salta el puntero de la sesión`);
-  }
+}
 
+/**
+ * El puntero desde la sesión de cada paciente. Va APARTE de la tabla, y sobre
+ * todos los schemas que tengan `clinic_sessions`: el modelo `ClinicSession`
+ * declara `taller_sesion_id` para todos, así que Sequelize la pide en cualquier
+ * schema que tenga la tabla, tenga el tenant el módulo activo o no.
+ */
+async function ponePuntero(s, schema) {
+  await s.query(
+    `ALTER TABLE "${schema}"."clinic_sessions"
+       ADD COLUMN IF NOT EXISTS taller_sesion_id UUID`
+  );
+  // El camino que se recorre al re-propagar el registro común: «las sesiones
+  // de ESTA sesión de taller». Parcial, porque la inmensa mayoría son null.
+  await s.query(
+    `CREATE INDEX IF NOT EXISTS clinic_sessions_taller_sesion_idx
+       ON "${schema}"."clinic_sessions" (taller_sesion_id)
+       WHERE taller_sesion_id IS NOT NULL`
+  );
+  log(`✓ ${schema}.clinic_sessions: columna taller_sesion_id asegurada`);
 }
 
 async function main() {
@@ -154,17 +162,26 @@ async function main() {
   }
   const sequelize = new Sequelize(process.env.DATABASE_URL, { dialect: "postgres", logging: false });
 
-  const { schemas } = await byModule(sequelize, ["clinica"]);
-  if (schemas.length === 0) {
-    log("· Ningún tenant con clinica activo.");
+  // Dos conjuntos distintos, y la diferencia importa (arreglo del 01/09/2026):
+  // la TABLA solo hace falta donde hay talleres, pero la COLUMNA hace falta
+  // donde exista `clinic_sessions`, tenga el tenant el módulo o no — el modelo
+  // la declara para todos y Sequelize la pide en cada SELECT.
+  const { schemas: conTalleres } = await byTable(sequelize, "talleres");
+  const { schemas: conSesiones } = await byTable(sequelize, "clinic_sessions");
+  if (conTalleres.length === 0 && conSesiones.length === 0) {
+    log("· Ningún schema con talleres ni clinic_sessions.");
     await sequelize.close();
     process.exit(0);
   }
-  log(`✓ ${schemas.length} schemas: ${schemas.join(", ")}`);
+  log(`✓ ${conTalleres.length} con talleres · ${conSesiones.length} con clinic_sessions`);
 
-  for (const schema of schemas) {
+  for (const schema of conTalleres) {
     header(schema);
-    await processSchema(sequelize, schema);
+    await creaTabla(sequelize, schema);
+  }
+  for (const schema of conSesiones) {
+    header(`${schema} (puntero)`);
+    await ponePuntero(sequelize, schema);
   }
 
   process.stdout.write("\n✓ Hecho\n\n");

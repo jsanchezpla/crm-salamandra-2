@@ -27,18 +27,23 @@
  * cuentan exactamente igual que ayer. Nada cambia para nadie hasta que un
  * centro dé de alta sus categorías desde Configuración → Agenda.
  *
- * Idempotente (ADD COLUMN IF NOT EXISTS). Los schemas salen de `byModule`
- * (`scripts/_schema-targets.js`), que además de los tenants con el módulo
- * arrastra las FOTOS DORADAS de las demos: sin ellas, el día que una demo se
- * restaure desde su foto volvería sin la columna y cada lectura de la agenda
- * daría 42703 (lo cazó el propio despliegue el 29/08/2026).
+ * Idempotente (ADD COLUMN IF NOT EXISTS). Los schemas salen de `byTable` y NO
+ * de `byModule`, y esa distinción costó un arreglo el mismo 01/09/2026: con
+ * `byModule("citas")` se quedaron fuera SIETE tenants que tienen la tabla
+ * `team_blocks` de cuando usaron Citas pero ya no tienen el módulo activo —y
+ * sus fotos doradas—. El MODELO `TeamBlock` se declara para todos, así que
+ * Sequelize pide `category_key` en cualquier schema que tenga la tabla: el
+ * módulo dice quién puede ENTRAR, no qué forma tiene el schema (regla 12).
+ * `byTable` arrastra además las FOTOS DORADAS de las demos: sin ellas, el día
+ * que una demo se restaure desde su foto volvería sin la columna y cada lectura
+ * de la agenda daría 42703 (lo cazó el despliegue del 29/08/2026).
  *
  * Uso local:  node --env-file=.env.local scripts/migrate-citas-categorias-bloqueo.js
  * Uso VPS:    docker exec crm-salamandra-app-1 node scripts/migrate-citas-categorias-bloqueo.js
  */
 
 import { Sequelize } from "sequelize";
-import { byModule } from "./_schema-targets.js";
+import { byTable } from "./_schema-targets.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -75,9 +80,9 @@ async function main() {
   }
   const sequelize = new Sequelize(process.env.DATABASE_URL, { dialect: "postgres", logging: false });
 
-  const { schemas } = await byModule(sequelize, ["citas"]);
+  const { schemas } = await byTable(sequelize, "team_blocks");
   if (schemas.length === 0) {
-    log("· Ningún tenant con citas activo.");
+    log("· Ningún schema con team_blocks.");
     await sequelize.close();
     process.exit(0);
   }

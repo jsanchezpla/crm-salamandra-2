@@ -27,15 +27,17 @@
  * es lo que son todos los que ya existen; y dar de baja un taller no puede
  * borrar las horas que ya estaban puestas en la agenda.
  *
- * Idempotente (ADD COLUMN IF NOT EXISTS). Los schemas salen de `byModule`, que
- * arrastra también las fotos doradas de las demos.
+ * Idempotente (ADD COLUMN IF NOT EXISTS). Los schemas salen de `byTable` y no de
+ * `byModule`: la tabla existe en tenants que tuvieron Citas y ya no la tienen
+ * activa, y el modelo pide la columna en todos ellos. Ver la cabecera de
+ * `migrate-citas-categorias-bloqueo.js`, donde costó el arreglo.
  *
  * Uso local:  node --env-file=.env.local scripts/migrate-citas-bloqueo-taller.js
  * Uso VPS:    docker exec crm-salamandra-app-1 node scripts/migrate-citas-bloqueo-taller.js
  */
 
 import { Sequelize } from "sequelize";
-import { byModule } from "./_schema-targets.js";
+import { byTable } from "./_schema-targets.js";
 
 function log(msg) { process.stdout.write(`  ${msg}\n`); }
 function header(msg) { process.stdout.write(`\n▶ ${msg}\n`); }
@@ -72,9 +74,9 @@ async function main() {
   }
   const sequelize = new Sequelize(process.env.DATABASE_URL, { dialect: "postgres", logging: false });
 
-  const { schemas } = await byModule(sequelize, ["citas"]);
+  const { schemas } = await byTable(sequelize, "team_blocks");
   if (schemas.length === 0) {
-    log("· Ningún tenant con citas activo.");
+    log("· Ningún schema con team_blocks.");
     await sequelize.close();
     process.exit(0);
   }
