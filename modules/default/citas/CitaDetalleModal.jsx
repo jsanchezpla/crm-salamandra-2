@@ -703,6 +703,14 @@ export function CitaDetalleModal({
                       nueva, tiene que seguir editando la misma hasta que le dé
                       a finalizar». Sin ese id, cada vuelta abría un formulario
                       en blanco y guardarlo creaba otra sesión del mismo día.
+
+                      Y el PROFESIONAL de la cita, del desplegable de aquí
+                      arriba (01/09/2026, Rodrigo): el registro que se prepara
+                      desde esta cita nace a nombre de quien la da, no del
+                      terapeuta de referencia del paciente. Se lee de
+                      `openBooking`, que el padre repone con lo que devuelve el
+                      PATCH: asignar a alguien y pulsar «Preparar sesión» a
+                      continuación se lleva a la persona recién puesta.
                     */}
                     {openBooking.patientId && (
                       <>
@@ -716,7 +724,7 @@ export function CitaDetalleModal({
                           Ver ficha
                         </a>
                         <a
-                          href={`/pacientes/${openBooking.patientId}/sesiones/nueva${colaDePreparacion(openBooking.scheduledAt, { bookingId: openBooking.id })}`}
+                          href={`/pacientes/${openBooking.patientId}/sesiones/nueva${colaDePreparacion(openBooking.scheduledAt, { bookingId: openBooking.id, profesionalId: openBooking.teamMemberId })}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           title={

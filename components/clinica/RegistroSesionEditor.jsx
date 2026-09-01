@@ -103,6 +103,7 @@ import {
   paraInputLocal,
   payloadDePreparacion,
   pidePreparar,
+  profesionalDePreparacion,
   proximasSesionesPendientes,
   sesionDeLaCita,
 } from "@/lib/clinica/prepararSesion.js";
@@ -245,6 +246,9 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
   // efecto en cada uno, y ese efecto pide sesiones y hace `router.replace`.
   const fechaDeLaUrl = query.get("fecha");
   const abrirPreparacion = pidePreparar(query.get("preparar"));
+  // El profesional QUE DA ESA CITA (01/09/2026). Solo estrenando registro: una
+  // sesión que ya existe lleva su firma dentro y no se toca desde una URL.
+  const profDeLaCita = sessionId ? "" : profesionalDePreparacion(query.get("prof"));
 
   const [patient, setPatient] = useState(null);
   const [loadingPatient, setLoadingPatient] = useState(true);
@@ -355,14 +359,42 @@ export default function RegistroSesionEditor({ patientId, sessionId = null }) {
       .catch(() => {});
   }, []);
 
-  // Estrenando registro, la firma arranca en el terapeuta principal del
-  // paciente —que es lo que hacía antes—, pero ahora se puede cambiar antes de
-  // guardar. Solo se pone si no hay nada elegido: no puede pisar lo que acabe
-  // de elegir quien escribe, ni la firma de la sesión que se está editando.
+  /**
+   * ── CON QUIÉN NACE FIRMADO UN REGISTRO QUE SE ESTRENA ────────────────────
+   *
+   * 1. El PROFESIONAL DE LA CITA desde la que se prepara, si se viene de una.
+   * 2. Y si esa cita no tiene a nadie (o no se viene de ninguna), el terapeuta
+   *    de referencia del paciente — que es lo de siempre, y lo que sigue
+   *    pasando al escribir desde su ficha.
+   *
+   * El orden lo pidió Rodrigo el 01/09/2026: «si Isabel Vara es la terapeuta de
+   * un paciente pero la cita desde la que se prepara la sesión está asignada a
+   * Silvia Hernández, el registro debe estar a cargo de Silvia Hernández».
+   * Antes ganaba SIEMPRE el del paciente, así que una compañera que cubre, un
+   * cambio de turno o una segunda especialidad se registraban a nombre de quien
+   * no dio la sesión — y quien lo notaba tenía que corregir la firma a mano.
+   *
+   * Sigue siendo solo el arranque: el desplegable manda, y por eso el guardia
+   * es `terapeutaId` (lo ya elegido no se pisa nunca) y `sessionId` (una sesión
+   * que ya existe lleva su firma dentro).
+   *
+   * El id de la cita llega por la barra de direcciones, así que no basta con
+   * que tenga forma de id: tiene que estar en el EQUIPO del centro, como exige
+   * el PATCH de la sesión. Y mientras la lista no ha contestado no se decide
+   * nada — adelantar aquí el terapeuta del paciente dejaría la firma
+   * equivocada, y el propio guardia de arriba impediría corregirla después.
+   */
   useEffect(() => {
-    if (sessionId || terapeutaId || !patient?.mainTherapistId) return;
-    setTerapeutaId(patient.mainTherapistId);
-  }, [sessionId, terapeutaId, patient?.mainTherapistId]);
+    if (sessionId || terapeutaId) return;
+    if (profDeLaCita) {
+      if (!equipo.length) return;
+      if (equipo.some((m) => m.id === profDeLaCita)) {
+        setTerapeutaId(profDeLaCita);
+        return;
+      }
+    }
+    if (patient?.mainTherapistId) setTerapeutaId(patient.mainTherapistId);
+  }, [sessionId, terapeutaId, profDeLaCita, equipo, patient?.mainTherapistId]);
 
   /**
    * Las plantillas del centro y, si se está editando, LA SESIÓN — en el mismo
