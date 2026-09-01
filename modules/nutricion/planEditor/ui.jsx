@@ -52,7 +52,7 @@ export function ModalShell({ onClose, children }) {
           relative bg-white shadow-2xl overflow-hidden
           flex flex-col
           w-full h-full
-          lg:max-w-[1400px] lg:max-h-[95vh] lg:rounded-xl
+          lg:max-w-[1400px] lg:max-h-[95dvh] lg:rounded-xl
           mt-14 lg:mt-0
         "
         onClick={(e) => e.stopPropagation()}

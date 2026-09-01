@@ -722,7 +722,7 @@ export default function Sidebar({ tenant, user, modules = [], mobileOpen, onClos
       {/* Sidebar */}
       <aside
         className={`
-          fixed lg:sticky top-0 left-0 h-screen z-50 lg:z-auto
+          fixed lg:sticky top-0 left-0 alto-ventana z-50 lg:z-auto
           w-[260px] lg:w-[220px] flex flex-col shrink-0
           transition-transform duration-300 ease-in-out
           ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}

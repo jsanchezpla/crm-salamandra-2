@@ -66,7 +66,7 @@ export default function RecipePickerModal({ title, onPick, onClose }) {
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/55" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80dvh] flex flex-col overflow-hidden">
         <header className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3 shrink-0">
           <div className="min-w-0">
             <div className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Añadir receta</div>

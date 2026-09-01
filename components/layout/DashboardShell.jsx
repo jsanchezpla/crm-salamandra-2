@@ -68,7 +68,7 @@ export default function DashboardShell({
   }
 
   return (
-    <div className="dashboard-shell flex h-screen" style={shellStyle}>
+    <div className="dashboard-shell flex alto-ventana" style={shellStyle}>
       <NotificationBell />
       <Sidebar
         tenant={tenant}

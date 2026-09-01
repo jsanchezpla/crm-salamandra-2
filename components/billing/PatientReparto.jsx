@@ -169,7 +169,7 @@ export default function PatientReparto({ patientId, defaultPayerClientId, onClos
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} aria-hidden="true" />
-      <div className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-lg bg-white rounded-xl shadow-2xl p-5 max-h-[88vh] overflow-y-auto">
+      <div className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-lg bg-white rounded-xl shadow-2xl p-5 max-h-[88dvh] overflow-y-auto">
         <div className="flex items-start justify-between mb-3">
           <div>
             <div className="eyebrow">Reparto de cuota</div>

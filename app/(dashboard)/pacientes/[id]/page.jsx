@@ -953,7 +953,7 @@ export default function PacienteFichaPage() {
       {/* Modal editar ficha */}
       {showEdit && editForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !modalBusy && setShowEdit(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-5 max-h-[90dvh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-display text-xl text-[var(--ink-900)] mb-3">Editar ficha</h3>
             <form onSubmit={saveEdit} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">

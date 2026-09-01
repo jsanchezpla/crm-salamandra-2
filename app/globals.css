@@ -138,6 +138,48 @@ body {
   background-color: var(--color-card, #ffffff);
 }
 
+/* ── El alto de la ventana en tablet y móvil (01/09/2026, Rodrigo) ─────────
+ *
+ * `100vh` NO mide lo que se ve. El Safari del iPad y el Chrome de Android lo
+ * calculan COMO SI la barra del navegador estuviera escondida, así que el
+ * armazón del CRM se dibujaba ~60-100 px más alto que el hueco real y esa
+ * franja de abajo quedaba DEBAJO de la barra. Y como aquí la página no hace
+ * scroll —el scroll va dentro de <main>—, lo que cayera ahí era INALCANZABLE:
+ * el pie del menú lateral (ajustes, cerrar sesión) y la última fila de
+ * cualquier listado. En el ordenador no se ve nunca, porque ahí `vh` y el hueco
+ * real coinciden: por eso el fallo salía solo «en la tablet».
+ *
+ * `100dvh` es esa misma medida pero de lo que se ve AHORA. El `100vh` de
+ * arriba es el respaldo para navegadores sin `dvh` (Chrome anterior al 108,
+ * Safari al 15.4): se quedan como estaban hasta hoy.
+ *
+ * ⚠️ EL `@supports` NO SOBRA, y el respaldo escrito a la manera clásica —dos
+ * `height` seguidas, la buena detrás— SÍ sobraba: se probó primero así y el
+ * compilador de CSS BORRÓ la línea del `100vh`, porque da por soportado el
+ * `dvh` en los navegadores a los que apunta el proyecto. Es el mismo tropiezo
+ * que está contado más abajo con `color-mix` en el calendario, y se ve igual:
+ * pidiendo el .css que sirve el servidor, no leyendo este fichero. Dentro de
+ * un `@supports` las dos ramas sobreviven.
+ *
+ * El `padding-bottom` vale 0 en un navegador normal —él ya descuenta sus
+ * barras— y solo suma donde hace falta: la barra de gestos del iPad sin botón,
+ * la navegación por gestos de Android, o el CRM abierto desde el icono de la
+ * pantalla de inicio.
+ *
+ * Por lo mismo, los 22 `max-h-[NNvh]` de los modales del CRM pasaron a `dvh`
+ * el mismo día: un modal al 92% de un alto que mide de más se sale por abajo
+ * justo por donde están los botones de Guardar. Ahí no hay respaldo escrito
+ * porque son clases sueltas de Tailwind; un navegador sin `dvh` se queda sin
+ * tope de alto, que es como estar sin la clase — molesto, no roto.
+ */
+.alto-ventana {
+  height: 100vh;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@supports (height: 100dvh) {
+  .alto-ventana { height: 100dvh; }
+}
+
 /* ── Selección y focos ───────────────────────────────────────────────── */
 ::selection {
   background: var(--color-primary);

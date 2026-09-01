@@ -229,7 +229,7 @@ export function ImportModal({ onClose, onImported }) {
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4"
       onClick={(e) => e.target === e.currentTarget && handleClose()}
     >
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl max-h-[90dvh] flex flex-col">
         {/* Header */}
         <div className="px-5 pt-5 pb-4 border-b border-gray-100 flex items-center justify-between">
           <div>

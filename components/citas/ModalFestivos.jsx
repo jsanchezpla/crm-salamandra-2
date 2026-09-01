@@ -125,7 +125,7 @@ export default function ModalFestivos({ onCerrar, onCambio }) {
       <div
         role="dialog"
         aria-modal="true"
-        className="relative z-50 w-full max-w-lg max-h-[88vh] bg-white rounded-xl shadow-2xl flex flex-col"
+        className="relative z-50 w-full max-w-lg max-h-[88dvh] bg-white rounded-xl shadow-2xl flex flex-col"
       >
         <div className="px-5 py-4 border-b border-neutral-100 flex items-start justify-between gap-3">
           <div>

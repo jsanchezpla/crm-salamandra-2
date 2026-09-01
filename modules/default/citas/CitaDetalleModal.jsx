@@ -406,7 +406,7 @@ export function CitaDetalleModal({
           style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
           onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[92dvh] flex flex-col">
             <div className="px-5 py-4 border-b border-neutral-100 flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="text-base font-semibold text-neutral-900 truncate">

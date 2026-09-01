@@ -68,7 +68,7 @@ const referirse = (t) => (t.id ? { id: t.id } : { clave: t.clave });
  * lo come la página de detrás).
  *
  * Las capas son las de la regla 13 de CLAUDE.md: fondo en `z-40`, panel en
- * `z-50`. Y `max-h-[85vh] overflow-auto` porque el formulario de apuntar no cabe
+ * `z-50`. Y `max-h-[85dvh] overflow-auto` porque el formulario de apuntar no cabe
  * en un móvil en horizontal.
  */
 function Modal({ titulo, etiqueta, acento, children, onCerrar, ocupada }) {
@@ -96,7 +96,7 @@ function Modal({ titulo, etiqueta, acento, children, onCerrar, ocupada }) {
         role="dialog"
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}
-        className="relative z-50 w-full max-w-lg rounded-xl p-5 max-h-[85vh] overflow-auto"
+        className="relative z-50 w-full max-w-lg rounded-xl p-5 max-h-[85dvh] overflow-auto"
         style={{
           background: "var(--panel)",
           border: "1px solid var(--line)",
@@ -859,7 +859,7 @@ function Visor({ captura: c, onCerrar }) {
         <div className="flex-1 overflow-auto grid place-items-center p-3" style={{ minHeight: "40vh" }}>
           {esImagen(c) ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={enlaceDe(c, true)} alt={c.nombre} className="max-h-[78vh] max-w-full" />
+            <img src={enlaceDe(c, true)} alt={c.nombre} className="max-h-[78dvh] max-w-full" />
           ) : (
             <object
               data={enlaceDe(c, true)}
