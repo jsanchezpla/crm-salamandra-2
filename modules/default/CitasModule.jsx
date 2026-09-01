@@ -154,7 +154,7 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
   const [festivosAbierto, setFestivosAbierto] = useState(false);
 
   // Preguntas y avisos, dentro del CRM y no del navegador (12/08/2026, Rodrigo).
-  const { confirmar, avisar, pedirTexto, elegir, dialogo } = useDialogo();
+  const { confirmar, avisar, pedirTexto, dialogo } = useDialogo();
 
   // Cuántas solicitudes pendientes hay (para el globito de la pestaña). No
   // cambia de vista: el usuario decidió arrancar SIEMPRE en el calendario.
@@ -289,6 +289,30 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
    * Rocío dio por suyas unas citas que no lo eran.
    */
   const miFichaDeEquipo = teamMembers.find((m) => m.userId === viewerUserId) ?? null;
+
+  /*
+   * ── LA AGENDA SE ABRE EN LA MÍA (01/09/2026, Rodrigo) ──────────────────────
+   *
+   * «Que de forma predeterminada salgan las que me atañen a mí.» Con la agenda
+   * compartida encendida, Aumenta pinta las citas de dieciocho personas a la
+   * vez: quien entra a mirar lo suyo tenía que filtrarse a sí mismo cada vez
+   * que abría la pantalla.
+   *
+   * Es un valor INICIAL, no una restricción: el filtro sigue ahí y «Todo el
+   * equipo» está a un clic. Por eso se pone una sola vez (`ref`) y no en cada
+   * repintado — si no, elegir «Todo el equipo» duraría hasta el siguiente
+   * render y la pantalla se sentiría embrujada.
+   *
+   * Solo cuando hay filtro que preseleccionar (`veTodaLaAgenda`) y quien mira
+   * TIENE ficha de equipo: dirección sin ficha propia sigue abriendo el centro
+   * entero, que es lo suyo.
+   */
+  const filtroInicialPuesto = useRef(false);
+  useEffect(() => {
+    if (filtroInicialPuesto.current || !veTodaLaAgenda || !miFichaDeEquipo) return;
+    filtroInicialPuesto.current = true;
+    setVisibleTmIds([miFichaDeEquipo.id]);
+  }, [veTodaLaAgenda, miFichaDeEquipo]);
 
   // Pacientes para asignar la cita (sólo tenants con módulo Clínica/Pacientes:
   // si el endpoint responde 403, `patients` queda vacío y el selector se oculta).
@@ -1186,7 +1210,6 @@ export default function CitasModule({ conClientes = false, vocabulario = undefin
           confirmar={confirmar}
           avisar={avisar}
           pedirTexto={pedirTexto}
-          elegir={elegir}
           onClose={() => setOpenBooking(null)}
           onChanged={(data) => {
             setOpenBooking(data);

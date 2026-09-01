@@ -16,6 +16,7 @@ import { colaDePreparacion } from "../../../lib/clinica/prepararSesion.js";
 import { fichaDeLaCita } from "../../../lib/citas/fichaDeLaCita.js";
 import { esRecuperable, rotuloFalta, citasQuePuedenRecuperar } from "../../../lib/citas/recuperacionFalta.js";
 import { esPresunta, estadoEfectivo } from "../../../lib/citas/asistencia.js";
+import { cuerpoDelResultado, resultadoPorClave } from "../../../lib/citas/resultadoCita.js";
 import {
   ModalityChip,
   PagoChip,
@@ -69,7 +70,6 @@ export function CitaDetalleModal({
   confirmar,
   avisar,
   pedirTexto,
-  elegir,
   onClose,
   onChanged,
   onDeleted,
@@ -255,55 +255,32 @@ export function CitaDetalleModal({
       setSaving(false);
     }
   }
-  async function markCompleted() { await patchBooking({ status: "completed" }); }
+  async function markCompleted() { await patchBooking(cuerpoDelResultado("completada")); }
   /**
-   * Falta: se pregunta si estaba JUSTIFICADA (punto 6.1 del sprint). No es lo
-   * mismo un niño con fiebre que una familia que no aparece sin avisar; y solo
-   * las NO justificadas avisan a administración.
+   * Falta justificada o injustificada: DOS BOTONES (01/09/2026, Rodrigo).
+   *
+   * Antes había uno solo —«No asistió»— y detrás salía un diálogo preguntando
+   * cuál de las dos era. Dos respuestas distintas escondidas tras un botón que
+   * no decía ninguna: mirando la ficha no se sabía qué se iba a apuntar, y la
+   * diferencia no es cosmética (una se recupera; la otra abre incidencia y
+   * avisa a administración).
+   *
+   * Lo que se manda al servidor lo arma `lib/citas/resultadoCita.js`, que es lo
+   * que comparten esta ficha y las citas de la ficha del paciente.
    */
-  async function markNoShow() {
-    /*
-     * Las dos respuestas, cada una con su frase. Antes esto era un `confirm`
-     * con «Aceptar = justificada · Cancelar = sin justificar» dentro: dos
-     * respuestas distintas metidas a la fuerza en un sí/no, donde además
-     * cancelar no cancelaba nada — marcaba la falta como injustificada.
-     */
-    const respuesta = await elegir({
-      titulo: "Marcar la falta",
-      texto: "No es lo mismo un niño con fiebre que una familia que no aparece sin avisar: solo las faltas sin justificar avisan a administración.",
-      opciones: [
-        // «Recuperable» delante (31/08/2026, Rodrigo): es la palabra del
-        // centro. La equivalencia vive en lib/citas/recuperacionFalta.js.
-        { valor: "justificada", label: "Recuperable (justificada)", pista: "Avisaron, enfermedad, un imprevisto… podrá recuperarla con otra cita" },
-        { valor: "sin_justificar", label: "No recuperable (no avisaron)", tono: "peligro" },
-      ],
-    });
-    if (respuesta === null) return;
-    const justificada = respuesta === "justificada";
+  async function marcarFalta(clave) {
+    const resultado = resultadoPorClave(clave);
     const motivo = await pedirTexto({
-      titulo: justificada ? "Motivo de la falta" : "¿Qué ha pasado?",
-      etiqueta: "Opcional",
-      confirmar: "Marcar la falta",
-      tono: justificada ? "normal" : "peligro",
+      ...resultado.motivo,
+      tono: clave === "falta_injustificada" ? "peligro" : "normal",
     });
     if (motivo === null) return;
-    await patchBooking({
-      status: "no_show",
-      noShowJustified: justificada,
-      noShowReason: motivo.trim() || null,
-    });
+    await patchBooking(cuerpoDelResultado(clave, motivo));
   }
   async function cancelBooking() {
-    const reason = await pedirTexto({
-      titulo: "Cancelar la cita",
-      texto: "Se le avisará por correo si tiene consentimiento y correo en su ficha.",
-      etiqueta: "Motivo (opcional)",
-      confirmar: "Cancelar la cita",
-      cancelar: "Volver",
-      tono: "peligro",
-    });
+    const reason = await pedirTexto({ ...resultadoPorClave("cancelada").motivo, tono: "peligro" });
     if (reason === null) return;
-    await patchBooking({ status: "cancelled", cancellationReason: reason.trim() || null });
+    await patchBooking(cuerpoDelResultado("cancelada", reason));
   }
   async function saveNotes() { await patchBooking({ notes: detailNotes.trim() || null }); }
   /**
@@ -1074,14 +1051,31 @@ export function CitaDetalleModal({
                     {openBooking.noShowReason ? ` · ${openBooking.noShowReason}` : ""}
                   </span>
                 )}
+                {/*
+                 * Las dos faltas, cada una con su botón (01/09/2026, Rodrigo):
+                 * «así queda claro cuándo han venido y cuándo no». Antes era un
+                 * «No asistió» que abría un diálogo para elegir cuál de las dos
+                 * era; la diferencia se decide igual, pero ahora se ve.
+                 */}
                 {openBooking.status !== "no_show" && (
-                  <button
-                    onClick={markNoShow}
-                    disabled={saving}
-                    className="text-[12px] px-3 py-1.5 rounded-md bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
-                  >
-                    No asistió
-                  </button>
+                  <>
+                    <button
+                      onClick={() => marcarFalta("falta_justificada")}
+                      disabled={saving}
+                      title={resultadoPorClave("falta_justificada").ayuda}
+                      className="text-[12px] px-3 py-1.5 rounded-md bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
+                    >
+                      Falta justificada
+                    </button>
+                    <button
+                      onClick={() => marcarFalta("falta_injustificada")}
+                      disabled={saving}
+                      title={resultadoPorClave("falta_injustificada").ayuda}
+                      className="text-[12px] px-3 py-1.5 rounded-md bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50"
+                    >
+                      Falta injustificada
+                    </button>
+                  </>
                 )}
                 {openBooking.status !== "cancelled" && (
                   <button

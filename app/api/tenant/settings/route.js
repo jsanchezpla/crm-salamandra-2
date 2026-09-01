@@ -24,6 +24,10 @@ import {
 } from "../../../../lib/citas/categoriasBloqueo.js";
 import { isValidHexColor } from "../../../../lib/citas/validation.js";
 import {
+  responsablesDeIncidenciaPorFalta,
+  limpiarResponsables,
+} from "../../../../lib/citas/incidenciaPorFalta.js";
+import {
   listarCuentas,
   listarRemitentes,
   normalizarCuentas,
@@ -258,6 +262,14 @@ function diffConfiguracion(antes, despues, nombreAntes, nombreDespues) {
   // centro y no hace falta duplicarlas en el log compartido de master. Se
   // compara la lista entera (título y color incluidos), así que renombrar una
   // categoría deja rastro aunque el resumen se lea igual.
+  // Quien recibe las incidencias de las faltas: se audita CUANTOS son, no
+  // quienes. Es un reparto de trabajo interno y el log vive en master, donde no
+  // se duplican nombres de personas del cliente.
+  anota(
+    "citas.incidenciaPorFalta",
+    (antes?.citas?.incidenciaPorFalta ?? []).length,
+    (despues?.citas?.incidenciaPorFalta ?? []).length
+  );
   anota(
     "citas.categoriasBloqueo",
     resumenCategorias(antes?.citas?.categoriasBloqueo),
@@ -400,6 +412,10 @@ export const GET = withTenant(async (request, _routeContext, ctx) => {
     // NO se cae a las de fábrica, que se cargan con un botón (ver
     // lib/citas/categoriasBloqueo.js).
     categoriasBloqueo: categoriasBloqueoDe(t),
+    // A quien se le abre una incidencia cuando se marca una falta en la agenda
+    // (01/09/2026). Lista vacia = apagado, que es como nace cualquier centro
+    // (lib/citas/incidenciaPorFalta.js).
+    incidenciaPorFalta: responsablesDeIncidenciaPorFalta(t),
     brand: {
       primaryColor: brand.primaryColor ?? null,
       secondaryColor: brand.secondaryColor ?? null,
@@ -856,6 +872,23 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     };
   }
 
+  /*
+   * A quien se le manda la incidencia de una falta (01/09/2026, Rodrigo).
+   *
+   * Se guarda la lista tal cual la manda la pantalla, ya limpia: ids de
+   * `team_members`, sin repetidos. Vacia es una respuesta legitima —«no quiero
+   * incidencias por falta»— y por eso se guarda igual en vez de ignorarse; es
+   * ademas el estado de fabrica. Que las personas EXISTAN se comprueba al
+   * abrir la incidencia, no aqui: alguien puede darse de baja del equipo
+   * despues de haberse elegido, y ese caso hay que soportarlo de todas formas.
+   */
+  if (Array.isArray(body.incidenciaPorFalta)) {
+    settings.citas = {
+      ...(settings.citas ?? {}),
+      incidenciaPorFalta: limpiarResponsables(body.incidenciaPorFalta),
+    };
+  }
+
   // Candado de la IA para empleados (no es un secreto): lista cerrada.
   if (body.aiAccess === "libre" || body.aiAccess === "restringido") {
     settings.aiAccess = body.aiAccess;
@@ -922,6 +955,7 @@ export const PATCH = withTenant(async (request, _routeContext, ctx) => {
     centro: normalizarCentro(settings.centro),
     colorBloqueos: settings.citas?.colorBloqueos ?? COLOR_BLOQUEO_POR_DEFECTO,
     categoriasBloqueo: categoriasBloqueoDe({ settings }),
+    incidenciaPorFalta: responsablesDeIncidenciaPorFalta({ settings }),
     brand: {
       primaryColor: settings.brand.primaryColor ?? null,
       secondaryColor: settings.brand.secondaryColor ?? null,

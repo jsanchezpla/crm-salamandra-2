@@ -23,6 +23,7 @@ import { emailCancelacionAlCliente } from "../../../../../lib/citas/notificarCan
 import { getTenantResendConfig } from "../../../../../lib/outreach/resendConfig.js";
 import { reembolsarCitaSiProcede } from "../../../../../lib/citas/reembolsoCita.js";
 import { tieneRetencionPendiente } from "../../../../../lib/citas/cobroCita.js";
+import { abrirIncidenciaPorFalta } from "../../../../../lib/citas/incidenciaPorFalta.js";
 
 /*
  * Aquí vivía una segunda copia del «tu cita ha sido cancelada», y era la que se
@@ -464,6 +465,32 @@ export const PATCH = withTenant(async (request, { params }, ctx) => {
           dedupe: true,
         });
       }
+    }
+
+    /*
+     * Y LAS DOS FALTAS ABREN UNA INCIDENCIA (01/09/2026, Rodrigo).
+     *
+     * El aviso de campana de arriba es solo para la que no avisó. Esto es otra
+     * cosa: la falta —justificada o no— deja trabajo pendiente en
+     * administración (cuadrar la recuperación, decidir si se cobra, llamar a la
+     * familia), y ese trabajo tiene que quedar registrado y con dueño, no en la
+     * cabeza de quien vio la falta.
+     *
+     * A quién se le manda lo dice `settings.citas.incidenciaPorFalta` (una lista
+     * de miembros del equipo, Configuración → Agenda). Vacía = no se abre nada,
+     * que es como nace cualquier centro. El módulo se pregunta con
+     * `tenantHasModule`: la incidencia es del CENTRO, y quien marca la falta
+     * puede ser una terapeuta que no tenga Clínica en sus accesos.
+     */
+    if (statusChanged && updates.status === "no_show") {
+      await abrirIncidenciaPorFalta({
+        tenant,
+        tenantModels,
+        hasModule: tenantHasModule,
+        booking: row,
+        reportedById: await resolveCurrentTeamMemberId(request, tenantModels),
+        notificar: (aviso) => notifyUsers({ tenantModels, dedupe: true, ...aviso }),
+      });
     }
 
     await logCitasAudit({

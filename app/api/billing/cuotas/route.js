@@ -9,7 +9,8 @@ import { billingHasPatients } from "../../../../lib/billing/patientLink.js";
  * GET/POST /api/billing/cuotas — las cuotas asignadas (01/09/2026).
  *
  * GET: las vigentes por defecto (`?todas=1` trae también las de baja), con su
- * pagador y su paciente ya resueltos; filtrable por cliente, paciente y método.
+ * pagador, su paciente y —cuando no tiene— LOS PACIENTES DE SU FAMILIA ya
+ * resueltos; filtrable por cliente, paciente y método.
  *
  * POST: el alta, individual **o EN GRUPO** — que es lo que pidió Aumenta
  * («crear cuotas para grupos de pacientes»). Se manda UNA vez lo que comparten
@@ -47,7 +48,25 @@ export const GET = withTenant(async (request, _ctx, { tenantModels, hasModule })
       order: [["active", "DESC"], ["startDate", "DESC"]],
     });
 
-    return ok({ cuotas, total: cuotas.length });
+    /*
+     * A cada cuota se le cuelgan los pacientes DE SU FAMILIA (01/09/2026).
+     *
+     * Sin esto, filtrar por paciente en la pantalla de Cuotas no encontraba
+     * nada en 259 de las 274 cuotas de Aumenta: las del volcado del Organizate
+     * son de la familia y tienen `patientId` a NULL. La regla de que una cuota
+     * sin paciente cubre a los pacientes de su familia vive en
+     * `lib/billing/cuotaPacientes.js`, con su prueba.
+     *
+     * Una sola consulta para todas las familias de la pagina, no una por fila.
+     * Solo viajan id y nombre, que es lo que la pantalla pinta y busca.
+     */
+    const familiaPacientes = await pacientesPorFamilia(tenantModels, hasModule, cuotas);
+    const filas = cuotas.map((c) => ({
+      ...c.toJSON(),
+      familiaPacientes: familiaPacientes.get(String(c.clientId)) ?? [],
+    }));
+
+    return ok({ cuotas: filas, total: filas.length });
   } catch (err) {
     return serverError(err);
   }
@@ -131,4 +150,34 @@ export const POST = withTenant(async (request, _ctx, { tenant, tenantModels, has
 function valoresImporte(body) {
   const v = body?.amount;
   return v === null || v === undefined || v === "" ? null : String(v);
+}
+
+/**
+ * Los pacientes de cada familia que aparece en la lista, en UNA consulta.
+ * Mapa clientId -> [{ id, firstName, lastName }]. Vacio si el centro no tiene
+ * modulo asistencial (una gestoria no tiene pacientes) o si la tabla no esta.
+ */
+async function pacientesPorFamilia(tenantModels, hasModule, cuotas) {
+  const mapa = new Map();
+  if (!billingHasPatients(hasModule) || !tenantModels.Patient) return mapa;
+  const ids = [...new Set(cuotas.map((c) => c.clientId).filter(Boolean))];
+  if (!ids.length) return mapa;
+  try {
+    const filas = await tenantModels.Patient.findAll({
+      where: { clientId: ids },
+      attributes: ["id", "firstName", "lastName", "clientId"],
+      order: [["firstName", "ASC"]],
+      raw: true,
+    });
+    for (const p of filas) {
+      const clave = String(p.clientId);
+      if (!mapa.has(clave)) mapa.set(clave, []);
+      mapa.get(clave).push({ id: p.id, firstName: p.firstName, lastName: p.lastName });
+    }
+  } catch (err) {
+    // Tenant sin tabla de pacientes migrada: la pantalla sigue como estaba.
+    const code = err?.parent?.code || err?.original?.code;
+    if (code !== "42P01") throw err;
+  }
+  return mapa;
 }

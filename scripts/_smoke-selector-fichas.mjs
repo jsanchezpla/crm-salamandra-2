@@ -257,7 +257,10 @@ test("la etiqueta dice el niño cuando fue la llave, y calla cuando no", async (
   const { etiquetaDeFicha } = await import("../lib/clients/buscarFichas.js");
   assert.equal(
     etiquetaDeFicha({ name: "Vanesa Muñoz Álvarez", porPaciente: "Hugo Castro" }),
-    "Vanesa Muñoz Álvarez — paciente: Hugo Castro"
+    // Primero el paciente y luego quien paga (01/09/2026, Rodrigo): quien cobra
+    // busca por el nombre del niño y tiene que reconocerlo al principio de la
+    // línea, no al final de veinte apellidos distintos.
+    "Hugo Castro — Vanesa Muñoz Álvarez"
   );
   assert.equal(etiquetaDeFicha({ name: "Vanesa Muñoz Álvarez", porPaciente: null }), "Vanesa Muñoz Álvarez");
   assert.equal(etiquetaDeFicha(null), "");

@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { COLOR_BLOQUEO_POR_DEFECTO, colorTextoSobre } from "../../../lib/citas/coloresBloqueo.js";
 import { CATEGORIAS_CLINICA_BASE, MAX_CATEGORIAS } from "../../../lib/citas/categoriasBloqueo.js";
-import { PrimaryButton } from "./ui.jsx";
+import { PrimaryButton, inputCls } from "./ui.jsx";
 export function RecordatoriosCard({ activo, readOnly, onChange }) {
   return (
     <div className="bg-white border border-neutral-200 rounded-xl p-5">
@@ -467,6 +467,107 @@ export function AvisosWhatsappCard({ activo, readOnly, configurado, onChange, ir
         Meta cobra por conversación iniciada por el negocio, y si la persona no te ha escrito en las
         últimas 24 h exige una <strong>plantilla aprobada</strong>: esos mensajes los rechaza hasta
         que la tengas dada de alta.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * A quién se le abre una incidencia cuando se marca una falta (01/09/2026,
+ * Rodrigo: «que se abra una incidencia y se le mande automáticamente a Olga»).
+ *
+ * La tarjeta existe para que ese «Olga» sea un DATO del centro y no una línea
+ * de código: quien lo lleve mañana se elige aquí, sin desplegar nada. Sin nadie
+ * elegido no se abre ninguna incidencia, que es como nace cualquier cliente.
+ *
+ * Se baja la plantilla ella sola (`/api/team`): es la única tarjeta de
+ * Configuración que necesita la lista de personas, y bajarla en `ConfigModule`
+ * la pediría también a los clientes que no tienen Equipo.
+ */
+export function IncidenciaPorFaltaCard({ responsables = [], readOnly, onGuardar }) {
+  const [equipo, setEquipo] = useState([]);
+  const [disponible, setDisponible] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/team?status=active&limit=500", { cache: "no-store" })
+      .then(async (r) => {
+        if (!r.ok) { setDisponible(false); return null; }
+        return r.json();
+      })
+      .then((j) => setEquipo(j?.data?.members ?? []))
+      .catch(() => setDisponible(false));
+  }, []);
+
+  // Sin módulo de Equipo no hay a quién mandársela: la tarjeta no se enseña en
+  // vez de quedarse con un desplegable vacío que no explica nada.
+  if (!disponible) return null;
+
+  const elegidos = Array.isArray(responsables) ? responsables : [];
+  const nombreDe = (id) => equipo.find((m) => m.id === id)?.displayName ?? "Alguien que ya no está en el equipo";
+
+  async function cambiar(lista) {
+    setGuardando(true);
+    await onGuardar(lista);
+    setGuardando(false);
+  }
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl p-5">
+      <div className="text-sm font-semibold text-neutral-800">Incidencia automática por falta</div>
+      <p className="text-xs text-neutral-400 mt-0.5 max-w-lg">
+        Cuando alguien marca una falta en la agenda —justificada o no— se abre una incidencia
+        (Administrativa · Citas) y se le manda a estas personas. Las dos faltas dejan trabajo
+        pendiente: una hay que recuperarla y la otra, reclamarla. Sin nadie elegido no se abre
+        ninguna.
+      </p>
+
+      {elegidos.length > 0 && (
+        <ul className="mt-3 flex flex-wrap gap-1.5">
+          {elegidos.map((id) => (
+            <li key={id} className="flex items-center gap-1.5 rounded-full bg-neutral-100 pl-3 pr-1.5 py-1 text-xs text-neutral-700">
+              {nombreDe(id)}
+              {!readOnly && (
+                <button
+                  type="button"
+                  disabled={guardando}
+                  onClick={() => cambiar(elegidos.filter((x) => x !== id))}
+                  className="text-neutral-400 hover:text-red-600 transition-colors disabled:opacity-40"
+                  aria-label={`Quitar a ${nombreDe(id)}`}
+                >
+                  ✕
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!readOnly && (
+        <select
+          value=""
+          disabled={guardando}
+          onChange={(e) => e.target.value && cambiar([...elegidos, e.target.value])}
+          className={`${inputCls} mt-3 max-w-sm`}
+          aria-label="Añadir a quien recibe las incidencias por falta"
+        >
+          <option value="">{elegidos.length ? "Añadir a otra persona…" : "Elegir a quién se le manda…"}</option>
+          {equipo
+            .filter((m) => !elegidos.includes(m.id))
+            .map((m) => (
+              <option key={m.id} value={m.id}>{m.displayName}</option>
+            ))}
+        </select>
+      )}
+
+      <div className="mt-2 text-[11px] font-medium">
+        {elegidos.length
+          ? <span className="text-emerald-700">Activo: cada falta abrirá una incidencia con {elegidos.length === 1 ? "esa persona" : "esas personas"} al cargo.</span>
+          : <span className="text-neutral-400">Apagado: marcar una falta no abre ninguna incidencia.</span>}
+      </div>
+      <p className="text-[10px] text-neutral-400 mt-2">
+        La falta <strong>sin justificar</strong> entra con prioridad alta y sigue avisando por la
+        campana, como hasta ahora. La justificada entra con prioridad media.
       </p>
     </div>
   );

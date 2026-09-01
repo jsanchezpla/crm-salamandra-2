@@ -13,8 +13,8 @@ test("recuperable = falta justificada; lo demás, no", () => {
 });
 
 test("el rótulo lleva la palabra del centro delante", () => {
-  assert.equal(rotuloFalta({ status: "no_show", noShowJustified: true }), "Falta recuperable (justificada)");
-  assert.equal(rotuloFalta({ status: "no_show", noShowJustified: false }), "Falta no recuperable (sin justificar)");
+  assert.equal(rotuloFalta({ status: "no_show", noShowJustified: true }), "Falta justificada (recuperable)");
+  assert.equal(rotuloFalta({ status: "no_show", noShowJustified: false }), "Falta injustificada (no se recupera)");
   assert.equal(rotuloFalta({ status: "completed" }), null);
 });
 

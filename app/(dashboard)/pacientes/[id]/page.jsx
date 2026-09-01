@@ -10,6 +10,7 @@ import SpecialtyPicker from "@/components/clinica/SpecialtyPicker.jsx";
 import TerapeutasPicker from "@/components/clinica/TerapeutasPicker.jsx";
 import NuevaCoordinacionModal from "../../../../components/clinica/NuevaCoordinacionModal.jsx";
 import PatientDocumentsSection from "@/components/clinica/PatientDocumentsSection.jsx";
+import CitasDelPaciente from "@/components/citas/CitasDelPaciente.jsx";
 import PatientExternalContactsSection from "@/components/clinica/PatientExternalContactsSection.jsx";
 import InterventionPlanSection from "@/components/clinica/InterventionPlanSection.jsx";
 import PreviewBanner from "../../clinica/_components/PreviewBanner.jsx";
@@ -75,7 +76,6 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("es-ES", { day: "2-di
 const fmtDateTime = (iso) => (iso ? new Date(iso).toLocaleString("es-ES", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
 const inputCls = "w-full px-3 py-2 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400";
 
-const CITA_STATUS = { pending: "Pendiente", confirmed: "Confirmada", completed: "Realizada", cancelled: "Cancelada", no_show: "No asistió" };
 
 function Section({ title, children }) {
   return (<div><div className="eyebrow mb-2">{title}</div><div className="text-xs text-neutral-700 leading-relaxed">{children}</div></div>);
@@ -921,36 +921,17 @@ export default function PacienteFichaPage() {
                   Solo salen las citas que tengan asignado a este paciente. Las que se reservan
                   por internet llegan sin paciente y aquí no se ven hasta que se le asigna,
                   abriendo la cita en la Agenda.
+                  {" "}
+                  <strong className="text-white">En «Cambiar» se pone cómo acabó</strong>: completada,
+                  falta justificada, falta injustificada o cancelada — lo mismo que en la Agenda.
                 </HelpTooltip>
               </div>
-              {citas.length ? (
-                <div className="space-y-2">
-                  {[...citas]
-                    .sort((a, b) => new Date(b.scheduledAt) - new Date(a.scheduledAt))
-                    .map((c) => {
-                      const d = new Date(c.scheduledAt);
-                      const past = d < new Date();
-                      return (
-                        <div key={c.id} className={`flex items-center justify-between gap-2 ${past ? "opacity-60" : ""}`}>
-                          <div className="min-w-0">
-                            <div className="text-xs font-medium text-neutral-800 truncate">{c.eventType?.name || "Cita"}</div>
-                            <div className="text-[11px] text-neutral-500">
-                              {d.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" })}
-                              {" · "}
-                              {d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
-                              {c.teamMember?.displayName ? ` · ${c.teamMember.displayName}` : ""}
-                            </div>
-                          </div>
-                          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-100 text-neutral-600">
-                            {CITA_STATUS[c.status] || c.status}
-                          </span>
-                        </div>
-                      );
-                    })}
-                </div>
-              ) : (
-                <p className="text-[11px] text-neutral-400">Sin citas registradas para este paciente.</p>
-              )}
+              <CitasDelPaciente
+                citas={citas}
+                onActualizada={(cita) =>
+                  setCitas((prev) => prev.map((c) => (c.id === cita.id ? { ...c, ...cita } : c)))
+                }
+              />
             </div>
             <div className="bg-white border border-neutral-100 rounded-xl p-4 lg:p-5">
               <div className="eyebrow mb-3">Contacto (pagador)</div>

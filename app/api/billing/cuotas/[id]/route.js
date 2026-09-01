@@ -1,5 +1,5 @@
 import { withTenant } from "../../../../../lib/tenant/withTenant.js";
-import { ok, error, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
+import { ok, error, errorConDatos, forbidden, notFound, serverError } from "../../../../../lib/utils/apiResponse.js";
 import { logBillingAudit, datosPeticion } from "../../../../../lib/billing/audit.js";
 import { limpiarCuota } from "../../../../../lib/billing/cuotas.js";
 
@@ -13,8 +13,10 @@ import { limpiarCuota } from "../../../../../lib/billing/cuotas.js";
  * explicando por qué se cobró lo que se cobró, y el mes de la baja se prorratea
  * solo. Es lo que hay que hacer casi siempre.
  * ELIMINAR (`DELETE`) es para el alta equivocada de hace cinco minutos. Con
- * cobros generados detrás, la ruta se niega y manda dar de baja: borrarla
- * dejaría cobros huérfanos sin explicación.
+ * cobros generados detrás **se avisa y se pregunta** (409 con el desglose:
+ * cuántos hay, cuántos siguen pendientes), y se borra con `?confirmar=1`
+ * (01/09/2026, Rodrigo: «que me pida confirmación en lugar de no dejarme»).
+ * Los cobros nunca se borran aquí: el dinero no se toca por detrás de nadie.
  */
 export const PATCH = withTenant(async (request, { params }, { tenant, tenantModels, hasModule }) => {
   try {
@@ -66,15 +68,35 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
     const cuota = await Cuota.findByPk(id);
     if (!cuota) return notFound("Cuota no encontrada");
 
-    // Con cobros detrás no se borra: se da de baja. Un cobro cuya cuota ya no
-    // existe no se puede explicar, y en un mes es exactamente la pregunta que
-    // alguien va a hacer.
+    /*
+     * ── CON COBROS DETRÁS SE PREGUNTA, NO SE PROHÍBE (01/09/2026, Rodrigo) ───
+     *
+     * Hasta hoy esto era un portazo: «ya ha generado N cobros, no se puede
+     * borrar, dale de baja». La recomendación sigue siendo buena —dar de baja
+     * conserva lo cobrado y deja de generar— pero no es asunto del programa
+     * decidirlo: la cuota mal creada de hace diez minutos ya tiene su cobro
+     * pendiente generado, y ahí la baja deja una fila muerta y un cobro que
+     * nadie va a pagar.
+     *
+     * Así que la ruta cuenta qué hay detrás y lo devuelve (409 + el desglose)
+     * para que la pantalla lo pregunte con esos números en la mano; con
+     * `?confirmar=1` borra. Los cobros NO se tocan: el dinero cobrado no se
+     * borra por detrás de nadie. Se quedan con su `cuotaId` apuntando a una
+     * cuota que ya no existe, que es exactamente lo que pasó.
+     */
     const cobros = await Payment.count({ where: { cuotaId: cuota.id } });
-    if (cobros > 0) {
-      return error(
-        `Esta cuota ya ha generado ${cobros} ${cobros === 1 ? "cobro" : "cobros"}: no se puede borrar. Dale de baja con su fecha y dejará de generar, conservando lo cobrado.`,
+    const pendientes = cobros
+      ? await Payment.count({ where: { cuotaId: cuota.id, status: "pending" } })
+      : 0;
+    const confirmado = new URL(request.url).searchParams.get("confirmar") === "1";
+    if (cobros > 0 && !confirmado) {
+      // `errorConDatos` y no `error`: el tercer argumento de `error()` es
+      // `details` y en PRODUCCION no viaja, asi que la pantalla se habria
+      // quedado sin el desglose justo donde hace falta (lib/utils/apiResponse.js).
+      return errorConDatos(
+        `Esta cuota ya ha generado ${cobros} ${cobros === 1 ? "cobro" : "cobros"}.`,
         409,
-        { cobros }
+        { code: "TIENE_COBROS", cobros, pendientes, cobrados: cobros - pendientes }
       );
     }
 
@@ -86,11 +108,14 @@ export const DELETE = withTenant(async (request, { params }, { tenant, tenantMod
       action: "cuota.deleted",
       entity: "Cuota",
       entityId: id,
-      before: antes,
+      // Cuántos cobros se quedan sin cuota que los explique: es LO que hay que
+      // poder mirar dentro de un mes, cuando alguien pregunte de dónde salió un
+      // cobro cuya cuota no aparece.
+      before: { ...antes, cobros, cobrosPendientes: pendientes },
       after: null,
     });
 
-    return ok({ borrada: true });
+    return ok({ borrada: true, cobros, pendientes });
   } catch (err) {
     return serverError(err);
   }

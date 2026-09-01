@@ -30,6 +30,7 @@ import {
 } from "./tarjetas/Conexiones.jsx";
 import {
   AgendaCompartidaCard,
+  IncidenciaPorFaltaCard,
   AvisosWhatsappCard,
   CategoriasBloqueoCard,
   ColorBloqueosCard,
@@ -1007,6 +1008,22 @@ export default function ConfigModule({ modulos = null }) {
           {enZona(
             "plantillasClinica",
             isAdmin && <PlantillasClinicaCard />
+          )}
+
+          {enZona(
+            "incidenciaPorFalta",
+            isAdmin && (
+              <IncidenciaPorFaltaCard
+                responsables={cfg.incidenciaPorFalta ?? []}
+                readOnly={!!cfg.readOnly}
+                onGuardar={(v) =>
+                  patchTenant(
+                    { incidenciaPorFalta: v },
+                    v.length ? "Guardado: las faltas abrirán una incidencia" : "Las faltas ya no abrirán incidencia"
+                  )
+                }
+              />
+            )
           )}
 
           {enZona(

@@ -13,7 +13,7 @@ import FacturarMesDrawer from "../_components/FacturarMesDrawer.jsx";
 import { anchoPantalla } from "@/components/layout/anchoPantalla.js";
 import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import { partesConProrrateo } from "../../../../lib/billing/prorrateo.js";
-import { conceptosDeCuotas, importePactado } from "../../../../lib/billing/cuotaParaRellenar.js";
+import { cuotasQueEntran, conceptosDeCuotas, importePactado } from "../../../../lib/billing/cuotaParaRellenar.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -52,7 +52,13 @@ export default function CobrosPage() {
   // `modo`: "factura" (cobro de una factura emitida) o "cuota" (el flujo real
   // del centro: se cobra la mensualidad y se factura después). El mes es lo que
   // abre los documentos de esa familia en su área privada.
-  const [form, setForm] = useState({ modo: "factura", invoiceId: "", clientId: "", periodMonth: new Date().toISOString().slice(0, 7), amount: "", method: "transfer", paidAt: new Date().toISOString().slice(0, 10), notes: "" });
+  // `patientId`: de QUIÉN es la cuota que se cobra (01/09/2026, Rodrigo). Vacío
+  // = de la familia entera, que es como funcionaba hasta hoy.
+  const [form, setForm] = useState({ modo: "factura", invoiceId: "", clientId: "", patientId: "", periodMonth: new Date().toISOString().slice(0, 7), amount: "", method: "transfer", paidAt: new Date().toISOString().slice(0, 10), notes: "" });
+  // Los pacientes de la familia elegida, para poder cobrar lo de UNO. Vacío
+  // cuando el centro no tiene módulo asistencial (el endpoint responde 403) o
+  // cuando esa ficha no tiene pacientes: entonces el selector no se enseña.
+  const [pacientesFamilia, setPacientesFamilia] = useState([]);
   const [editing, setEditing] = useState(null); // cobro que se está editando
   // Facturas abiertas del cliente del cobro que se edita, para poder ASOCIAR
   // un cobro suelto a la factura que se emitió después (31/08/2026).
@@ -140,7 +146,26 @@ export default function CobrosPage() {
   // carrera: la respuesta que llega tarde de una familia que ya no está
   // elegida se descarta por el turno. La aprendida solo se pide si NO tiene
   // cuota asignada, que es cuando de verdad se usa.
-  const [cuotaDeLaFamilia, setCuotaDeLaFamilia] = useState(null); // { n, pactado }
+  const [cuotaDeLaFamilia, setCuotaDeLaFamilia] = useState(null); // { n, pactado, delPaciente }
+
+  /*
+   * Los pacientes de la familia elegida (01/09/2026, Rodrigo: «cuando un tutor
+   * tiene dos pacientes y cada uno está en una cuota distinta, al poner a uno
+   * me salen las dos»). Se piden aparte de las cuotas porque contestan a
+   * preguntas distintas —quiénes son sus hijos vs. qué paga— y porque el
+   * módulo asistencial puede no estar: entonces esto vuelve vacío (403) y el
+   * selector no se enseña, como hasta hoy.
+   */
+  useEffect(() => {
+    if (form.modo !== "cuota" || !form.clientId) { setPacientesFamilia([]); return; }
+    let vivo = true;
+    fetch(`/api/pacientes?clientId=${encodeURIComponent(form.clientId)}&limit=100`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo) setPacientesFamilia(j?.data?.patients ?? []); })
+      .catch(() => { if (vivo) setPacientesFamilia([]); });
+    return () => { vivo = false; };
+  }, [form.clientId, form.modo]);
+
   const turnoCuota = useRef(0);
   useEffect(() => {
     if (form.modo !== "cuota") return;
@@ -156,9 +181,15 @@ export default function CobrosPage() {
     (async () => {
       const jCuotas = await pedir(`/api/billing/cuotas?clientId=${encodeURIComponent(form.clientId)}`);
       if (turno !== turnoCuota.current) return; // ya hay otra familia elegida
-      const cuotas = jCuotas?.data?.cuotas ?? [];
-      // Aquí no hay selector de paciente: se cobra a la FAMILIA, así que entran
-      // todas sus cuotas (`cuotaParaRellenar.js`, con su prueba).
+      const todas = jCuotas?.data?.cuotas ?? [];
+      /*
+       * CON PACIENTE ELEGIDO, SOLO LA SUYA (01/09/2026, Rodrigo). Un tutor con
+       * dos hijos en cuotas distintas veía las dos sumadas aunque estuviera
+       * cobrando lo de uno: el importe salía del doble. La regla —y qué pasa
+       * cuando NINGUNA cuota es del paciente— vive en `cuotaParaRellenar.js`,
+       * con su prueba; Facturas ya la usaba.
+       */
+      const cuotas = cuotasQueEntran(todas, form.patientId);
       let ids = conceptosDeCuotas(cuotas);
       // El respaldo es para quien NO tiene cuota asignada. Una cuota asignada
       // con importe pero sin conceptos manda igual: rellenarla con lo que se
@@ -182,9 +213,17 @@ export default function CobrosPage() {
       const pactado = importePactado(cuotas);
       if (pactado !== null) setForm((f) => ({ ...f, amount: String(pactado) }));
       else aplicarImporteCuota(items);
-      if (cuotas.length) setCuotaDeLaFamilia({ n: cuotas.length, pactado });
+      if (cuotas.length) {
+        setCuotaDeLaFamilia({
+          n: cuotas.length,
+          pactado,
+          // Si se ha dejado fuera alguna cuota de la familia, decirlo: es lo que
+          // explica por qué no sale lo del hermano.
+          delPaciente: Boolean(form.patientId) && cuotas.length < todas.length,
+        });
+      }
     })();
-  }, [form.clientId, form.modo, conceptosCatalogo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form.clientId, form.patientId, form.modo, conceptosCatalogo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -329,6 +368,10 @@ export default function CobrosPage() {
         body: JSON.stringify({
           invoiceId: porFactura ? form.invoiceId : null,
           clientId: porFactura ? null : form.clientId,
+          // De quién es la cuota que se cobra. `payments.patient_id` ya existía
+          // (31/08/2026) y lo rellenaba solo la generación mensual; el cobro a
+          // mano lo dejaba a NULL aunque se supiera de quién era.
+          patientId: porFactura ? null : form.patientId || null,
           periodMonth: porFactura ? null : form.periodMonth,
           amount: Number(form.amount),
           method: form.method,
@@ -345,7 +388,7 @@ export default function CobrosPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error");
-      setForm((f) => ({ ...f, invoiceId: "", clientId: "", amount: "", notes: "" }));
+      setForm((f) => ({ ...f, invoiceId: "", clientId: "", patientId: "", amount: "", notes: "" }));
       setLineasCuota([]);
       setShowForm(false);
       load();
@@ -712,11 +755,34 @@ export default function CobrosPage() {
                     <SelectorCliente
                       fuente="billing"
                       value={form.clientId}
-                      onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
+                      onChange={(v) => setForm((f) => ({ ...f, clientId: v, patientId: "" }))}
                       className={inputCls}
                       opcionesFijas={[{ value: "", label: "Selecciona cliente..." }]}
                     />
                   </FormRow>
+                  {/*
+                   * De QUIÉN es la cuota (01/09/2026, Rodrigo). Solo sale si la
+                   * familia tiene pacientes: en un centro sin módulo asistencial
+                   * la lista vuelve vacía y el cobro es de la familia, como
+                   * siempre. Con un solo hijo también se enseña —es la forma de
+                   * que el cobro quede apuntado a él— pero no hace falta tocarlo.
+                   */}
+                  {pacientesFamilia.length > 0 && (
+                    <FormRow label="¿De qué paciente?">
+                      <Select
+                        value={form.patientId}
+                        onChange={(v) => setForm((f) => ({ ...f, patientId: v }))}
+                        className={inputCls}
+                        options={[
+                          { value: "", label: "Toda la familia" },
+                          ...pacientesFamilia.map((p) => ({
+                            value: p.id,
+                            label: [p.firstName, p.lastName].filter(Boolean).join(" "),
+                          })),
+                        ]}
+                      />
+                    </FormRow>
+                  )}
                   <FormRow label="Mes que se paga *">
                     <input type="month" required value={form.periodMonth}
                       onChange={(e) => setForm((f) => ({ ...f, periodMonth: e.target.value }))} className={inputCls} />
@@ -779,9 +845,11 @@ export default function CobrosPage() {
                     <p className="text-[10px] text-neutral-400 -mt-1">
                       {cuotaDeLaFamilia ? (
                         <>
-                          {cuotaDeLaFamilia.n === 1
-                            ? "Tiene 1 cuota asignada"
-                            : `Tiene ${cuotaDeLaFamilia.n} cuotas asignadas y se han sumado todas`}
+                          {cuotaDeLaFamilia.delPaciente
+                            ? `Se ha puesto solo la cuota de ese paciente (${cuotaDeLaFamilia.n === 1 ? "1 cuota" : `${cuotaDeLaFamilia.n} cuotas`}); las de sus hermanos quedan fuera`
+                            : cuotaDeLaFamilia.n === 1
+                              ? "Tiene 1 cuota asignada"
+                              : `Tiene ${cuotaDeLaFamilia.n} cuotas asignadas y se han sumado todas`}
                           {cuotaDeLaFamilia.pactado !== null
                             ? <> · importe <strong className="text-neutral-600">pactado con la familia</strong>, no la tarifa del catálogo.</>
                             : "."}{" "}

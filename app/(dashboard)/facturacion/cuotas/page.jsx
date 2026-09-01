@@ -19,8 +19,10 @@ import Link from "next/link";
 import HelpTooltip from "@/components/ui/HelpTooltip.jsx";
 import Select from "@/components/ui/Select.jsx";
 import SelectorCliente from "@/components/clients/SelectorCliente.jsx";
+import { useDialogo } from "@/components/ui/Dialogo.jsx";
 import { fmtMoney, fmtDate } from "../_components/Kpi.jsx";
 import { cuotaDeBaja } from "../../../../lib/billing/cuotas.js";
+import { cuotaCasaCon, rotuloPacienteDeCuota } from "../../../../lib/billing/cuotaPacientes.js";
 
 const inputCls =
   "w-full rounded-lg px-3 py-2 text-sm text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition placeholder-neutral-300";
@@ -65,6 +67,11 @@ export default function CuotasPage() {
   const [editando, setEditando] = useState(null); // cuota que se edita
   const [showGenerar, setShowGenerar] = useState(false);
 
+  // Preguntar dentro del CRM y no con el diálogo del navegador (12/08/2026,
+  // Rodrigo): Chrome deja silenciar los `confirm`, y silenciado devuelve
+  // `false` siempre — el botón deja de funcionar sin decir nada.
+  const { confirmar, dialogo } = useDialogo();
+
   const cargar = useCallback(async () => {
     setLoading(true);
     setErrorMsg(null);
@@ -107,8 +114,6 @@ export default function CuotasPage() {
     [porId]
   );
 
-  const nombreDe = (c) =>
-    `${c.client?.fiscalName || c.client?.name || ""} ${c.patient ? `${c.patient.firstName} ${c.patient.lastName}` : ""}`.toLowerCase();
   const conEsaCuota = useCallback(
     (c) => !filtroConcepto || (Array.isArray(c.conceptIds) && c.conceptIds.map(String).includes(filtroConcepto)),
     [filtroConcepto]
@@ -118,15 +123,21 @@ export default function CuotasPage() {
   // la fecha de fin ya pasada — los «de enero a marzo» caducan solos y caen
   // aquí sin salir del grupo, listos para reintegrarse).
   const hoy = hoyIso();
-  const visibles = useMemo(() => {
-    const t = busca.trim().toLowerCase();
-    return cuotas.filter((c) => !cuotaDeBaja(c, hoy) && conEsaCuota(c) && (!t || nombreDe(c).includes(t)));
-  }, [cuotas, busca, conEsaCuota, hoy]);
+  /*
+   * Buscar por FAMILIA o por PACIENTE (01/09/2026, Rodrigo). Quién cubre cada
+   * cuota lo decide `lib/billing/cuotaPacientes.js`: la que no tiene paciente
+   * asignado —259 de las 274 de Aumenta— cubre a los pacientes de su familia,
+   * así que escribir el nombre del niño la encuentra igual.
+   */
+  const visibles = useMemo(
+    () => cuotas.filter((c) => !cuotaDeBaja(c, hoy) && conEsaCuota(c) && cuotaCasaCon(c, busca)),
+    [cuotas, busca, conEsaCuota, hoy]
+  );
 
-  const bajas = useMemo(() => {
-    const t = buscaBajas.trim().toLowerCase();
-    return cuotas.filter((c) => cuotaDeBaja(c, hoy) && conEsaCuota(c) && (!t || nombreDe(c).includes(t)));
-  }, [cuotas, buscaBajas, conEsaCuota, hoy]);
+  const bajas = useMemo(
+    () => cuotas.filter((c) => cuotaDeBaja(c, hoy) && conEsaCuota(c) && cuotaCasaCon(c, buscaBajas)),
+    [cuotas, buscaBajas, conEsaCuota, hoy]
+  );
 
   // Cuántos miembros VIVOS tiene cada cuota, para el desplegable del filtro.
   const miembrosPorConcepto = useMemo(() => {
@@ -172,17 +183,70 @@ export default function CuotasPage() {
     }
   }
 
+  /**
+   * Eliminar una cuota. Con cobros generados detrás el servidor YA NO se niega:
+   * devuelve 409 con el desglose y aquí se pregunta con esos números delante
+   * (01/09/2026, Rodrigo: «que me pida confirmación en lugar de no dejarme»).
+   *
+   * Dos preguntas y no una: la primera es la de siempre —eliminar es para el
+   * alta equivocada— y la segunda solo sale si de verdad hay cobros, diciendo
+   * cuántos y cuántos siguen pendientes. Los cobros se quedan donde están: el
+   * dinero no se borra de paso.
+   */
   async function borrar(cuota) {
-    if (!window.confirm(`¿Eliminar la cuota de ${cuota.client?.name ?? "esta familia"}?\n\nSolo se puede si todavía no ha generado ningún cobro. Si ya cobró algo, dale de baja.`)) return;
+    const quien = cuota.client?.fiscalName || cuota.client?.name || "esta familia";
+    const seguro = await confirmar({
+      titulo: "Eliminar la cuota",
+      texto: `Se elimina la cuota de ${quien} y dejará de generar cobros. Si lo que quieres es que deje de cobrarse a partir de una fecha, usa «Dar de baja»: así se conserva por qué se cobró lo que se cobró.`,
+      confirmar: "Eliminar",
+      cancelar: "Volver",
+      tono: "peligro",
+    });
+    if (!seguro) return;
+
+    const respuesta = await pedirBorrado(cuota, false);
+    if (respuesta?.code !== "TIENE_COBROS") return;
+
+    const { cobros, pendientes, cobrados } = respuesta;
+    const detalle = [
+      pendientes ? `${pendientes} pendiente${pendientes === 1 ? "" : "s"} de cobro` : null,
+      cobrados ? `${cobrados} ya cobrado${cobrados === 1 ? "" : "s"}` : null,
+    ]
+      .filter(Boolean)
+      .join(" y ");
+    const insiste = await confirmar({
+      titulo: "Esta cuota ya ha generado cobros",
+      texto: `Hay ${cobros} cobro${cobros === 1 ? "" : "s"} que nació de esta cuota (${detalle}). Si la eliminas, esos cobros SE QUEDAN —no se borra ningún cobro— pero se quedan sin la cuota que los explica. Si alguno ya no procede, bórralo tú en Cobros.`,
+      confirmar: "Eliminar de todas formas",
+      cancelar: "Volver",
+      tono: "peligro",
+    });
+    if (!insiste) return;
+    await pedirBorrado(cuota, true);
+  }
+
+  /** El DELETE. Devuelve el 409 con su código cuando el servidor pregunta. */
+  async function pedirBorrado(cuota, confirmado) {
     setErrorMsg(null);
     try {
-      const r = await fetch(`/api/billing/cuotas/${cuota.id}`, { method: "DELETE" });
+      const r = await fetch(`/api/billing/cuotas/${cuota.id}${confirmado ? "?confirmar=1" : ""}`, {
+        method: "DELETE",
+      });
       const j = await r.json();
-      if (!j.ok) throw new Error(j.error || "No se pudo eliminar");
-      setOkMsg("Cuota eliminada");
+      if (!j.ok) {
+        if (j.code === "TIENE_COBROS") return j;
+        throw new Error(j.error || "No se pudo eliminar");
+      }
+      setOkMsg(
+        j.data?.cobros
+          ? `Cuota eliminada. Sus ${j.data.cobros} cobros siguen en Cobros.`
+          : "Cuota eliminada"
+      );
       await cargar();
+      return null;
     } catch (e) {
       setErrorMsg(e.message);
+      return null;
     }
   }
 
@@ -225,7 +289,7 @@ export default function CuotasPage() {
         <input
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar por familia o paciente..."
+          placeholder="Buscar por familia o por paciente..."
           className="rounded-lg px-3 py-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 focus:outline-none focus:border-neutral-400 transition w-full sm:w-72"
         />
         <Select
@@ -287,7 +351,7 @@ export default function CuotasPage() {
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-xs text-neutral-500">
-                      {c.patient ? `${c.patient.firstName} ${c.patient.lastName}` : "—"}
+                      {rotuloPacienteDeCuota(c)}
                     </td>
                     <td className="px-4 py-3 text-xs text-neutral-500">
                       {nombres.length ? nombres.join(" + ") : <span className="italic text-neutral-300">sin conceptos</span>}
@@ -354,7 +418,7 @@ export default function CuotasPage() {
                         </Link>
                       </td>
                       <td className="px-4 py-2.5 text-xs">
-                        {c.patient ? `${c.patient.firstName} ${c.patient.lastName}` : "—"}
+                        {rotuloPacienteDeCuota(c)}
                       </td>
                       <td className="px-4 py-2.5 text-xs">
                         {nombres.length ? nombres.join(" + ") : <span className="italic text-neutral-300">sin conceptos</span>}
@@ -397,6 +461,8 @@ export default function CuotasPage() {
       {showGenerar && (
         <DrawerGenerar onClose={() => setShowGenerar(false)} onDone={() => cargar()} />
       )}
+
+      {dialogo}
     </div>
   );
 }
